@@ -1,6 +1,5 @@
-
 import
-  strformat,
+  strformat, macros,
   value, ../errors, ../validation, ../utils_numeric, ../constants, ../logging
 
 type
@@ -14,47 +13,53 @@ template ensureStackLimit: untyped =
   if len(stack.values) > 1023:
     raise newException(FullStack, "Stack limit reached")
 
-method len*(stack: Stack): int =
+proc len*(stack: Stack): int =
   len(stack.values)
 
-method push*(stack: var Stack; value: Value) =
+proc push*(stack: var Stack; value: Value) =
   ## Push an item onto the stack
   ensureStackLimit()
 
   stack.values.add(value)
 
-method push*(stack: var Stack; value: int) =
+proc push*(stack: var Stack; value: int) =
+  ## Push an integer onto the stack
+  ensureStackLimit()
+
+  stack.values.add(Value(kind: VInt, i: value.Int256))
+
+proc push*(stack: var Stack; value: Int256) =
   ## Push an integer onto the stack
   ensureStackLimit()
 
   stack.values.add(Value(kind: VInt, i: value))
 
-method push*(stack: var Stack; value: cstring) =
+proc push*(stack: var Stack; value: cstring) =
   ## Push a binary onto the stack
   ensureStackLimit()
 
   stack.values.add(Value(kind: VBinary, b: value))
 
-method internalPop(stack: var Stack; numItems: int): seq[Value] =
+proc internalPop(stack: var Stack; numItems: int): seq[Value] =
   if len(stack) < numItems: 
     result = @[]
   else:
     result = stack.values[^numItems .. ^1]
     stack.values = stack.values[0 ..< ^numItems]
 
-template toType(i: int, _: typedesc[int]): int =
+template toType(i: Int256, _: typedesc[Int256]): Int256 =
   i
 
-template toType(i: int, _: typedesc[cstring]): cstring =
+template toType(i: Int256, _: typedesc[cstring]): cstring =
   intToBigEndian(i)
 
-template toType(b: cstring, _: typedesc[int]): int =
+template toType(b: cstring, _: typedesc[Int256]): Int256 =
   bigEndianToInt(b)
 
 template toType(b: cstring, _: typedesc[cstring]): cstring =
   b
 
-method internalPop(stack: var Stack; numItems: int, T: typedesc): seq[T] =
+proc internalPop(stack: var Stack; numItems: int, T: typedesc): seq[T] =
   result = @[]
   if len(stack) < numItems: 
     return
@@ -71,40 +76,75 @@ template ensurePop(elements: untyped, a: untyped): untyped =
   if len(`elements`) < `a`:
     raise newException(InsufficientStack, "No stack items")
 
-method pop*(stack: var Stack): Value =
+proc pop*(stack: var Stack): Value =
   ## Pop an item off the stack
   var elements = stack.internalPop(1)
   ensurePop(elements, 1)
   result = elements[0]
 
-method pop*(stack: var Stack; numItems: int): seq[Value] =
+proc pop*(stack: var Stack; numItems: int): seq[Value] =
   ## Pop many items off the stack
   result = stack.internalPop(numItems)
   ensurePop(result, numItems)
 
-method popInt*(stack: var Stack): int =
-  var elements = stack.internalPop(1, int)
-  ensurePop(elements, 1)
-  result = elements[0]
+# proc popInt*(stack: var Stack): Int256 =
+#   var elements = stack.internalPop(1, Int256)
+#   ensurePop(elements, 1)
+#   result = elements[0]
 
-method popInt*(stack: var Stack; numItems: int): seq[int] =
-  result = stack.internalPop(numItems, int)
-  ensurePop(result, numItems)
+macro internalPopTuple(numItems: static[int]): untyped =
+  var name = ident(%"internalPopTuple{numItems}")
+  var typ = nnkPar.newTree()
+  var t = ident("T")
+  for z in 0 ..< numItems:
+    typ.add(t)
+  result = quote:
+    proc `name`(stack: var Stack, `t`: typedesc): `typ` =
+      for z in 0 ..< `numItems`:
+        var value = stack.values.pop()
+        case value.kind:
+        of VInt:
+          result[z] = toType(value.i, `t`)
+        of VBinary:
+          result[z] = toType(value.b, `t`)
 
-method popBinary*(stack: var Stack): cstring =
+# define pop<T> for tuples
+internalPopTuple(2)
+internalPopTuple(3)
+internalPopTuple(4)
+internalPopTuple(5)
+internalPopTuple(6)
+internalPopTuple(7)
+
+macro popInt*(stack: typed; numItems: static[int]): untyped =
+  var resultNode = ident("result")
+  if numItems >= 8:
+    result = quote:
+      `resultNode` = `stack`.internalPop(`numItems`, Int256)
+  else:
+    var name = ident(%"internalPopTuple{numItems}")
+    result = quote:
+      `resultNode` = `name`(`stack`, Int256)
+  
+# proc popInt*(stack: var Stack, numItems: int): seq[Int256] =
+#   result = stack.internalPop(numItems, Int256)
+#   ensurePop(result, numItems)
+
+proc popBinary*(stack: var Stack): cstring =
   var elements = stack.internalPop(1, cstring)
   ensurePop(elements, 1)
   result = elements[0]
 
-method popBinary*(stack: var Stack; numItems: int): seq[cstring] =
+proc popBinary*(stack: var Stack; numItems: int): seq[cstring] =
   result = stack.internalPop(numItems, cstring)
   ensurePop(result, numItems)
 
-proc makeStack*(): Stack =
-  # result.logger = logging.getLogger("evm.vm.stack.Stack")
+proc newStack*(): Stack =
+  new(result)
+  result.logger = logging.getLogger("evm.vm.stack.Stack")
   result.values = @[]
 
-method swap*(stack: var Stack; position: int) =
+proc swap*(stack: var Stack; position: int) =
   ##  Perform a SWAP operation on the stack
   var idx = position + 1
   if idx < len(stack) + 1:
@@ -113,7 +153,7 @@ method swap*(stack: var Stack; position: int) =
     raise newException(InsufficientStack,
                       %"Insufficient stack items for SWAP{position}")
 
-method dup*(stack: var Stack; position: int) =
+proc dup*(stack: var Stack; position: int) =
   ## Perform a DUP operation on the stack
   if position < len(stack) + 1:
     stack.push(stack.values[^position])

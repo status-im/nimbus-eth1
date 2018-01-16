@@ -30,6 +30,15 @@ type
     internalStorageAddress:   cstring
     shouldTransferValue*:     bool
     isStatic*:                bool
+    isCreate*:                bool
+
+  MessageOptions* = ref object
+    origin*:                  cstring
+    depth*:                   Int256
+    createAddress*:           cstring
+    codeAddress*:             cstring
+    shouldTransferValue*:     bool
+    isStatic*:                bool
 
 proc `origin=`*(message: var Message, value: cstring) =
   message.internalOrigin = value
@@ -40,6 +49,22 @@ proc `codeAddress=`*(message: var Message, value: cstring) =
 proc `storageAddress=`*(message: var Message, value: cstring) =
   message.internalStorageAddress = value
 
+proc newMessageOptions*(
+    origin: cstring = nil,
+    depth: Int256 = 0.Int256,
+    createAddress: cstring = nil,
+    codeAddress: cstring = nil,
+    shouldTransferValue: bool = true,
+    isStatic: bool = false): MessageOptions =
+
+  result = MessageOptions(
+    origin: origin,
+    depth: depth,
+    createAddress: createAddress,
+    codeAddress: codeAddress,
+    shouldTransferValue: shouldTransferValue,
+    isStatic: isStatic)
+
 proc newMessage*(
     gas: Int256,
     gasPrice: Int256,
@@ -48,12 +73,7 @@ proc newMessage*(
     value: Int256,
     data: cstring,
     code: cstring,
-    origin: cstring = nil,
-    depth: Int256 = 0.Int256,
-    createAddress: cstring = nil,
-    codeAddress: cstring = nil,
-    shouldTransferValue: bool = true,
-    isStatic: bool = false): Message =
+    options: MessageOptions = newMessageOptions()): Message =
     
   new(result)
   result.gas = gas
@@ -70,26 +90,26 @@ proc newMessage*(
 
   result.data = data
 
-  if not origin.isNil:
-    validateCanonicalAddress(origin, title="Message.origin")
-  result.internalOrigin = origin
+  if not options.origin.isNil:
+    validateCanonicalAddress(options.origin, title="Message.origin")
+  result.internalOrigin = options.origin
 
-  validateGte(depth, minimum=0, title="Message.depth")
-  result.depth = depth
+  validateGte(options.depth, minimum=0, title="Message.depth")
+  result.depth = options.depth
 
   result.code = code
 
-  if not createAddress.isNil:
-    validateCanonicalAddress(createAddress, title="Message.storage_address")
-  result.storageAddress = createAddress
+  if not options.createAddress.isNil:
+    validateCanonicalAddress(options.createAddress, title="Message.storage_address")
+  result.storageAddress = options.createAddress
 
-  if not codeAddress.isNil:
-    validateCanonicalAddress(codeAddress, title="Message.code_address")
-  result.codeAddress = codeAddress
+  if not options.codeAddress.isNil:
+    validateCanonicalAddress(options.codeAddress, title="Message.code_address")
+  result.codeAddress = options.codeAddress
 
-  result.shouldTransferValue = shouldTransferValue
+  result.shouldTransferValue = options.shouldTransferValue
 
-  result.isStatic = isStatic
+  result.isStatic = options.isStatic
 
 proc origin*(message: Message): cstring =
   if not message.internalOrigin.isNil:

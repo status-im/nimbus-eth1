@@ -7,22 +7,44 @@ type
 
   Int256* = distinct int # TODO
 
+proc `==`*(a: Int256, b: Int256): bool =
+  a.int == b.int
+
+proc `==`*(a: Int256, b: int): bool =
+  a.int == b
+
+proc `!=`*(a: Int256, b: Int256): bool =
+  a.int != b.int
+
+proc `!=`*(a: Int256, b: int): bool =
+  a.int != b
+
+proc `^`*(a: Int256, b: Int256): Int256 =
+  (a.int ^ b.int).Int256
+
+proc `^`*(a: Int256, b: int): Int256 =
+  (a.int ^ b).Int256
+
 proc `>`*(a: Int256, b: Int256): bool =
   a.int > b.int
+
+proc `>`*(a: Int256, b: int): bool =
+  a.int > b
+
+proc `>=`*(a: Int256, b: Int256): bool =
+  a.int >= b.int
 
 proc `<`*(a: Int256, b: Int256): bool =
   a.int < b.int
 
+proc `<`*(a: Int256, b: int): bool =
+  a.int < b
+
+proc `<=`*(a: Int256, b: Int256): bool =
+  a.int <= b.int
+
 proc `$`*(a: Int256): string =
   $(a.int)
-
-# proc `-`*(a: Int256, b: Int256): Int256 {.borrow.}
-
-# proc `+`*(a: Int256, b: Int256): Int256 {.borrow.}
-
-# proc `-=`*(a: var Int256, b: Int256) {.borrow.}
-
-# proc `+=`*(a: var Int256, b: Int256) {.borrow.}
 
 proc `-`*(a: Int256, b: Int256): Int256 =
   (a.int - b.int).Int256
@@ -36,36 +58,67 @@ proc `-=`*(a: var Int256, b: Int256) =
 proc `+=`*(a: var Int256, b: Int256) =
   a = (a + b).Int256
 
+proc `*`*(a: Int256, b: Int256): Int256 =
+  (a.int * b.int).Int256
+
+proc `mod`*(a: Int256, b: Int256): Int256 =
+  (a.int mod b.int).Int256
+
+proc `mod`*(a: Int256, b: int): Int256 =
+  (a.int mod b).Int256
+
+proc `div`*(a: Int256, b: Int256): Int256 =
+  (a.int div b.int).Int256
+
+proc `div`*(a: Int256, b: int): Int256 =
+  (a.int div b).Int256
+
+proc `abs`*(a: Int256): Int256 =
+  a.int.abs.Int256
+
+proc `and`*(a: Int256, b: Int256): Int256 =
+  (a.int and b.int).Int256
+
+proc `or`*(a: Int256, b: Int256): Int256 =
+  (a.int or b.int).Int256
+
+proc max*(a: Int256, b: Int256): Int256 =
+  max(a.int, b.int).Int256
+
+proc min*(a: Int256, b: Int256): Int256 =
+  min(a.int, b.int).Int256
+
 proc repeat(b: cstring, count: int): cstring =
   # TODO: faster
   var s = $b
   result = cstring(repeat(s, count))
 
 const
-  # UINT256MAX = 2 ^ 256 - 1
-  # UINT256CEILING = 2 ^ 256
-  # UINT255MAX = 2 ^ 255 - 1
-  # UINT255CEILING = 2 ^ 255
+  X = 62 # 256
+  UINT_256_MAX* = (2 ^ X - 1).Int256
+  UINT_256_CEILING* = (2 ^ X).Int256
+  UINT_255_MAX* = (2 ^ (X - 1) - 1).Int256
+  UINT_255_CEILING* = (2 ^ (X - 1)).Int256
   NULLBYTE = cstring"\\x00"
   EMPTYWORD = repeat(NULLBYTE, 32)
   # UINT160CEILING = 2 ^ 160
   CREATE_CONTRACT_ADDRESS* = cstring""
-  ZEROADDRESS = repeat(cstring"\\x00", 20)
-  ZEROHASH32 = repeat(cstring"\\x00", 20)
-  STACKDEPTHLIMIT = 1024
-  GASNULL = 0
-  GASZERO = 0
-  GASBASE = 2
-  GASVERYLOW = 3
-  GASLOW = 5
-  GASMID = 8
-  GASHIGH = 10
-  GASEXTCODE = 20
-  GASBALANCE = 20
-  GASSLOAD = 50
-  GASJUMPDEST = 1
-  GASSSET = 20000
-  GASSRESET = 5000
+  ZERO_ADDRESS* = repeat(cstring"\x00", 20)
+  ZERO_HASH32* = repeat(cstring"\x00", 20)
+  STACKDEPTHLIMIT* = 1024
+  GAS_NULL* = 0.Int256
+  GAS_ZERO* = 0.Int256
+  GAS_BASE* = 2.Int256
+  GAS_VERY_LOW* = 3.Int256
+  GAS_LOW* = 5.Int256
+  GAS_MID* = 8.Int256
+  GAS_HIGH* = 10.Int256
+  GAS_EXT_CODE* = 20.Int256
+  GAS_BALANCE* = 20.Int256
+  GAS_SLOAD* = 50.Int256
+  GAS_JUMP_DEST* = 1.Int256
+  GAS_SSET* = 20000.Int256
+  GAS_SRESET* = 5000.Int256
   REFUNDSCLEAR = 15000
   GASSELFDESTRUCT = 0
   GASSELFDESTRUCTNEWACCOUNT = 25000
@@ -76,8 +129,8 @@ const
   GASNEWACCOUNT = 25000
   GASEXP = 10
   GASEXPBYTE = 10
-  GASMEMORY = 3
-  GASTXCREATE = 32000
+  GAS_MEMORY* = 3.Int256
+  GAS_TX_CREATE* = 32000.Int256
   GASTXDATAZERO = 4
   GASTXDATANONZERO = 68
   GASTX = 21000
@@ -89,8 +142,8 @@ const
   GASCOPY = 3
   GASBLOCKHASH = 20
   GASCODEDEPOSIT = 200
-  GASMEMORYQUADRATICDENOMINATOR = 512
-  GASSHA256 = 60
+  GAS_MEMORY_QUADRATIC_DENOMINATOR* = 512.Int256
+  GAS_SHA256 = 60.Int256
   GASSHA256WORD = 12
   GASRIPEMD160 = 600
   GASRIPEMD160WORD = 120
