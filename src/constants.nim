@@ -7,6 +7,9 @@ type
 
   Int256* = distinct int # TODO
 
+# TODO
+# We'll have a fast fixed Int256, for now this
+
 proc `==`*(a: Int256, b: Int256): bool =
   a.int == b.int
 
@@ -82,11 +85,23 @@ proc `and`*(a: Int256, b: Int256): Int256 =
 proc `or`*(a: Int256, b: Int256): Int256 =
   (a.int or b.int).Int256
 
+proc `xor`*(a: Int256, b: Int256): Int256 =
+  (a.int xor b.int).Int256
+
 proc max*(a: Int256, b: Int256): Int256 =
   max(a.int, b.int).Int256
 
 proc min*(a: Int256, b: Int256): Int256 =
   min(a.int, b.int).Int256
+
+proc `-`*(a: Int256): Int256 =
+  (-(a.int)).Int256
+
+proc `shl`*(a: Int256, b: Int256): Int256 =
+  (a.int shl b.int).Int256
+
+proc `shr`*(a: Int256, b: Int256): Int256 =
+  (a.int shr b.int).Int256
 
 proc repeat(b: cstring, count: int): cstring =
   # TODO: faster

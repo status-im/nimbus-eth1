@@ -87,26 +87,32 @@ proc pop*(stack: var Stack; numItems: int): seq[Value] =
   result = stack.internalPop(numItems)
   ensurePop(result, numItems)
 
-# proc popInt*(stack: var Stack): Int256 =
-#   var elements = stack.internalPop(1, Int256)
-#   ensurePop(elements, 1)
-#   result = elements[0]
+proc popInt*(stack: var Stack): Int256 =
+  var elements = stack.internalPop(1, Int256)
+  ensurePop(elements, 1)
+  result = elements[0]
 
 macro internalPopTuple(numItems: static[int]): untyped =
   var name = ident(%"internalPopTuple{numItems}")
   var typ = nnkPar.newTree()
   var t = ident("T")
+  var resultNode = ident("result")
+  var stackNode = ident("stack")
   for z in 0 ..< numItems:
     typ.add(t)
   result = quote:
-    proc `name`(stack: var Stack, `t`: typedesc): `typ` =
-      for z in 0 ..< `numItems`:
-        var value = stack.values.pop()
-        case value.kind:
-        of VInt:
-          result[z] = toType(value.i, `t`)
-        of VBinary:
-          result[z] = toType(value.b, `t`)
+    proc `name`*(`stackNode`: var Stack, `t`: typedesc): `typ`
+  result[^1] = nnkStmtList.newTree()
+  for z in 0 ..< numItems:
+    var zNode = newLit(z)
+    var element = quote:
+      var value = `stackNode`.values.pop()
+      case value.kind:
+      of VInt:
+        `resultNode`[`zNode`] = toType(value.i, `t`)
+      of VBinary:
+        `resultNode`[`zNode`] = toType(value.b, `t`)
+    result[^1].add(element)
 
 # define pop<T> for tuples
 internalPopTuple(2)
@@ -120,11 +126,11 @@ macro popInt*(stack: typed; numItems: static[int]): untyped =
   var resultNode = ident("result")
   if numItems >= 8:
     result = quote:
-      `resultNode` = `stack`.internalPop(`numItems`, Int256)
+      `stack`.internalPop(`numItems`, Int256)
   else:
     var name = ident(%"internalPopTuple{numItems}")
     result = quote:
-      `resultNode` = `name`(`stack`, Int256)
+      `name`(`stack`, Int256)
   
 # proc popInt*(stack: var Stack, numItems: int): seq[Int256] =
 #   result = stack.internalPop(numItems, Int256)
