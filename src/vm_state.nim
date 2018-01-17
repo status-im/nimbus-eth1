@@ -1,15 +1,15 @@
 import
-  strformat,
-  logging, constants, errors, utils/state
+  strformat, tables,
+  logging, constants, errors, transaction, db/chain, utils/state, utils/header
 
 type
   BaseVMState* = ref object of RootObj
-    prevHeaders*: bool
-    receipts*: bool
-    computationClass*: bool
-    chaindb*: bool
-    accessLogs*: seq[bool]
-    blockHeader*: bool
+    prevHeaders*: seq[Header]
+    receipts*: seq[string]
+    # computationClass*: bool
+    chaindb*: BaseChainDB
+    accessLogs*: seq[string]
+    blockHeader*: Header
     name*: string
 
 proc newBaseVMState*: BaseVMState =
