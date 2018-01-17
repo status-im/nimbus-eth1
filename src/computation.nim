@@ -214,7 +214,12 @@ method getGasRemaining*(c: BaseComputation): Int256 =
 # Context Manager API
 #
 
-template inBaseComputation*(c: untyped, handler: untyped): untyped =
+template inComputation*(c: untyped, handler: untyped): untyped =
+  # use similarly to the python manager
+  #
+  # inComputation(computation):
+  #   stuff
+
   `c`.logger.debug(
     "COMPUTATION STARTING: gas: $1 | from: $2 | to: $3 | value: $4 | depth: $5 | static: $6" % [
       $`c`.msg.gas,
