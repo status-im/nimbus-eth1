@@ -13,6 +13,16 @@ proc validateCanonicalAddress*(value: cstring, title: string = "Value") =
 
 
 proc validateGte*(value: Int256, minimum: int, title: string = "Value") =
+  if value <= minimum.Int256:
+    raise newException(ValidationError,
+      fmt"{title} {value} is not greater than or equal to {minimum}")
+
+proc validateGt*(value: Int256, minimum: int, title: string = "Value") =
   if value < minimum.Int256:
+    raise newException(ValidationError,
+      fmt"{title} {value} is not greater than or equal to {minimum}")
+
+proc validateGt*(value: int, minimum: int, title: string = "Value") =
+  if value < minimum:
     raise newException(ValidationError,
       fmt"{title} {value} is not greater than or equal to {minimum}")

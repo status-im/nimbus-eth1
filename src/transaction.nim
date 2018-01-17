@@ -30,3 +30,7 @@ proc validate*(t: BaseTransaction) =
   if t.intrinsic_gas() > t.gas:
     raise newException(ValidationError, "Insufficient gas")
   #  self.check_signature_validity()
+
+proc sender*(t: BaseTransaction): cstring =
+  # TODO
+  cstring""

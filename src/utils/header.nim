@@ -1,5 +1,10 @@
+import ../constants
+
 type
   Header* = ref object
+    timestamp*: int
+    difficulty*: Int256
+    blockNumber*: Int256
   # TODO
 
 proc generateHeaderFromParentHeader*(
@@ -35,3 +40,15 @@ proc generateHeaderFromParentHeader*(
   #   )
 
   #   return header
+
+proc computeGasLimit*(header: Header, gasLimitFloor: Int256): Int256 =
+  # TODO
+  gasLimitFloor
+
+proc gasUsed*(header: Header): Int256 =
+  # TODO
+  0.Int256
+
+proc gasLimit*(header: Header): Int256 =
+  # TODO
+  0.Int256
