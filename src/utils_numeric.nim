@@ -1,10 +1,10 @@
-import constants, strformat, macros
+import bigints, constants, strformat, macros
 
 proc intToBigEndian*(value: Int256): cstring =
   result = cstring""
 
 proc bigEndianToInt*(value: cstring): Int256 =
-  result = 0.Int256
+  result = 0.int256
 
 proc unsignedToSigned*(value: Int256): Int256 =
   if value <= UINT_255_MAX:
@@ -19,14 +19,14 @@ proc signedToUnsigned*(value: Int256): Int256 =
     return value
 
 macro ceilXX(ceiling: static[int]): untyped =
-  var name = ident(%"ceil{ceiling}")
+  var name = ident(&"ceil{ceiling}")
   result = quote:
     proc `name`*(value: Int256): Int256 =
-      var remainder = value mod `ceiling`.Int256
+      var remainder = value mod `ceiling`.int256
       if remainder == 0:
         return value
       else:
-        return value + `ceiling`.Int256 - remainder
+        return value + `ceiling`.int256 - remainder
 
 
 ceilXX(32)

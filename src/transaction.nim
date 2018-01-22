@@ -1,5 +1,5 @@
 import
-  constants, errors
+  constants, bigints, errors
 
 type
   BaseTransaction* = ref object
@@ -27,7 +27,7 @@ proc intrinsicGas*(t: BaseTransaction): Int256 =
 proc validate*(t: BaseTransaction) =
   # Hook called during instantiation to ensure that all transaction
   # parameters pass validation rules
-  if t.intrinsic_gas() > t.gas:
+  if t.intrinsicGas() > t.gas:
     raise newException(ValidationError, "Insufficient gas")
   #  self.check_signature_validity()
 

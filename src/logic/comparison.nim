@@ -1,6 +1,6 @@
 import
   ../constants, ../utils_numeric, ../computation, ../vm/stack,
-  helpers
+  helpers, bigints
 
 quasiBoolean(lt, `<`) # Lesser Comparison
     

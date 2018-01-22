@@ -1,9 +1,10 @@
 import macros
 
   
-template pushRes* =
+macro pushRes*: untyped =
   let resNode = ident("res")
-  computation.stack.push(`resNode`)
+  result = quote:
+    computation.stack.push(`resNode`)
 
 macro quasiBoolean*(name: untyped, op: untyped, signed: untyped = nil, nonzero: untyped = nil): untyped =
   var signedNode = newEmptyNode()
@@ -28,6 +29,6 @@ macro quasiBoolean*(name: untyped, op: untyped, signed: untyped = nil, nonzero: 
       var (`leftNode`, `rightNode`) = computation.stack.popInt(2)
       `signedNode`
       
-      var `resNode` = if `test`: 1.Int256 else: 0.Int256
+      var `resNode` = if `test`: 1.int256 else: 0.int256
       `finishSignedNode`
       computation.stack.push(`resNode`)

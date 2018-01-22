@@ -5,6 +5,8 @@ type
     timestamp*: int
     difficulty*: Int256
     blockNumber*: Int256
+    hash*: cstring
+    coinbase*: cstring
   # TODO
 
 proc generateHeaderFromParentHeader*(
@@ -47,8 +49,8 @@ proc computeGasLimit*(header: Header, gasLimitFloor: Int256): Int256 =
 
 proc gasUsed*(header: Header): Int256 =
   # TODO
-  0.Int256
+  0.int256
 
 proc gasLimit*(header: Header): Int256 =
   # TODO
-  0.Int256
+  0.int256

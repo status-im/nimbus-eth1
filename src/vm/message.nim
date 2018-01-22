@@ -51,7 +51,7 @@ proc `storageAddress=`*(message: var Message, value: cstring) =
 
 proc newMessageOptions*(
     origin: cstring = nil,
-    depth: Int256 = 0.Int256,
+    depth: Int256 = 0.int256,
     createAddress: cstring = nil,
     codeAddress: cstring = nil,
     shouldTransferValue: bool = true,

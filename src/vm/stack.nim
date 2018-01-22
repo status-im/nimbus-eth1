@@ -26,7 +26,7 @@ proc push*(stack: var Stack; value: int) =
   ## Push an integer onto the stack
   ensureStackLimit()
 
-  stack.values.add(Value(kind: VInt, i: value.Int256))
+  stack.values.add(Value(kind: VInt, i: value.int256))
 
 proc push*(stack: var Stack; value: Int256) =
   ## Push an integer onto the stack
@@ -93,7 +93,7 @@ proc popInt*(stack: var Stack): Int256 =
   result = elements[0]
 
 macro internalPopTuple(numItems: static[int]): untyped =
-  var name = ident(%"internalPopTuple{numItems}")
+  var name = ident(&"internalPopTuple{numItems}")
   var typ = nnkPar.newTree()
   var t = ident("T")
   var resultNode = ident("result")
@@ -128,7 +128,7 @@ macro popInt*(stack: typed; numItems: static[int]): untyped =
     result = quote:
       `stack`.internalPop(`numItems`, Int256)
   else:
-    var name = ident(%"internalPopTuple{numItems}")
+    var name = ident(&"internalPopTuple{numItems}")
     result = quote:
       `name`(`stack`, Int256)
   
@@ -157,7 +157,7 @@ proc swap*(stack: var Stack; position: int) =
     (stack.values[^1], stack.values[^idx]) = (stack.values[^idx], stack.values[^1])
   else:
     raise newException(InsufficientStack,
-                      %"Insufficient stack items for SWAP{position}")
+                      &"Insufficient stack items for SWAP{position}")
 
 proc dup*(stack: var Stack; position: int) =
   ## Perform a DUP operation on the stack
@@ -165,5 +165,5 @@ proc dup*(stack: var Stack; position: int) =
     stack.push(stack.values[^position])
   else:
     raise newException(InsufficientStack,
-                      %"Insufficient stack items for DUP{position}")
+                      &"Insufficient stack items for DUP{position}")
 

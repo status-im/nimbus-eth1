@@ -1,5 +1,5 @@
 import
-  strformat, strutils, sequtils, tables, macros,
+  strformat, strutils, sequtils, tables, macros, bigints,
   constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging,
   vm / [code_stream, gas_meter, memory, message, stack]
 
@@ -86,7 +86,7 @@ method prepareChildMessage*(
   # ? kwargs.setdefault('sender', self.msg.storage_address)
 
   var childOptions = options
-  childOptions.depth = c.msg.depth + 1.Int256
+  childOptions.depth = c.msg.depth + 1.int256
   result = newMessage(
     gas,
     c.msg.gasPrice,
@@ -104,20 +104,20 @@ method extendMemory*(c: var BaseComputation, startPosition: Int256, size: Int256
   # validate_uint256(start_position, title="Memory start position")
   # validate_uint256(size, title="Memory size")
 
-  let beforeSize = ceil32(len(c.memory).Int256)
+  let beforeSize = ceil32(len(c.memory).int256)
   let afterSize = ceil32(startPosition + size)
 
   let beforeCost = memoryGasCost(beforeSize)
   let afterCost = memoryGasCost(afterSize)
 
-  c.logger.debug(%"MEMORY: size ({beforeSize} -> {afterSize}) | cost ({beforeCost} -> {afterCost})")
+  c.logger.debug(&"MEMORY: size ({beforeSize} -> {afterSize}) | cost ({beforeCost} -> {afterCost})")
 
   if size > 0:
     if beforeCost < afterCost:
       var gasFee = afterCost - beforeCost
       c.gasMeter.consumeGas(
         gasFee,
-        reason = %"Expanding memory {beforeSize} -> {afterSize}")
+        reason = &"Expanding memory {beforeSize} -> {afterSize}")
 
       c.memory.extend(startPosition, size)
 
@@ -132,7 +132,7 @@ method `output=`*(c: var BaseComputation, value: cstring) =
 
 macro generateChildBaseComputation*(t: typed, vmState: typed, childMsg: typed): untyped =
   var typ = repr(getType(t)[1]).split(":", 1)[0]
-  var name = ident(%"new{typ}")
+  var name = ident(&"new{typ}")
   var typName = ident(typ)
   result = quote:
     block:
@@ -194,19 +194,19 @@ method getLogEntries*(c: BaseComputation): seq[(cstring, seq[Int256], cstring)] 
       
 method getGasRefund*(c: BaseComputation): Int256 =
   if c.isError:
-    result = 0.Int256
+    result = 0.int256
   else:
-    result = c.gasMeter.gasRefunded + c.children.mapIt(it.getGasRefund()).foldl(a + b, 0.Int256)
+    result = c.gasMeter.gasRefunded + c.children.mapIt(it.getGasRefund()).foldl(a + b, 0.int256)
 
 method getGasUsed*(c: BaseComputation): Int256 =
   if c.shouldBurnGas:
     result = c.msg.gas
   else:
-    result = max(0.Int256, c.msg.gas - c.gasMeter.gasRemaining)
+    result = max(0.int256, c.msg.gas - c.gasMeter.gasRemaining)
 
 method getGasRemaining*(c: BaseComputation): Int256 =
   if c.shouldBurnGas:
-    result = 0.Int256
+    result = 0.int256
   else:
     result = c.gasMeter.gasRemaining
 
@@ -258,7 +258,7 @@ template inComputation*(c: untyped, handler: untyped): untyped =
 macro applyComputation(t: typed, vmState: untyped, message: untyped): untyped =
   #     Perform the computation that would be triggered by the VM message
   var typ = repr(getType(t)[1]).split(":", 1)[0]
-  var name = ident(%"new{typ}")
+  var name = ident(&"new{typ}")
   var typName = ident(typ)
   result = quote:
     block:
