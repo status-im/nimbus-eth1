@@ -30,24 +30,24 @@ proc read*(c: var CodeStream, size: int): seq[byte] =
 proc len*(c: CodeStream): int =
   len(c.bytes)
 
-proc next*(c: var CodeStream): byte =
+proc next*(c: var CodeStream): Op =
   var nextOpcode = c.read(1)
   if nextOpcode[0] != 0x0.byte:
-    return nextOpcode[0]
+    return Op(nextOpcode[0])
   else:
-    return opcode_values.STOP
+    return Op.STOP
 
 
-iterator items*(c: var CodeStream): byte =
+iterator items*(c: var CodeStream): Op =
   var nextOpcode = c.next()
-  while nextOpcode != opcode_values.STOP:
+  while nextOpcode != Op.STOP:
     yield nextOpcode
     nextOpcode = c.next()
 
 proc `[]`*(c: CodeStream, offset: int): byte =
   c.bytes[offset]
 
-proc peek*(c: var CodeStream): byte =
+proc peek*(c: var CodeStream): Op =
   var currentPc = c.pc
   result = c.next()
   c.pc = currentPc
@@ -74,8 +74,8 @@ proc isValidOpcode*(c: var CodeStream, position: int): bool =
   else:
     var i = c.depthProcessed
     while i <= position:
-      var opcode = c[i]
-      if opcode >= opcode_values.PUSH1 and opcode <= opcode_values.PUSH32:
+      var opcode = Op(c[i])
+      if opcode >= Op.PUSH1 and opcode <= Op.PUSH32:
         var leftBound = (i + 1)
         var rightBound = leftBound + (opcode.int - 95)
         for z in leftBound ..< rightBound:

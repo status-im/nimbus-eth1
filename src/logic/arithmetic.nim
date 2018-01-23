@@ -1,6 +1,6 @@
 import 
   ../constants, ../utils_numeric, ../computation,
-  .. / vm / [gas_meter, stack],
+  .. / vm / [gas_meter, stack], ../opcode, ../opcode_values,
   helpers, bigints
 
 proc add*(computation: var BaseComputation) =
@@ -101,3 +101,19 @@ proc signextend(computation: var BaseComputation) =
   else:
     res = value
   pushRes()
+
+# TODO: why fail
+# newOpcode(Op.Mul, GAS_VERY_LOW, mul)
+
+# type
+#   OpcodeMul* = ref object of Opcode
+# method kind*(opcode247321: OpcodeMul): Op =
+#   Op.Mul
+
+# method gasCost*(opcode247323: OpcodeMul): Int256 =
+#   GAS_VERY_LOW
+
+# method run*(opcode247325: OpcodeMul; computation: var BaseComputation) =
+#   computation.gasMeter.consumeGas(GAS_VERY_LOW, reason = $Op.Mul)
+#   mul(computation)
+
