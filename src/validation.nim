@@ -5,7 +5,8 @@ import
   errors, constants, bigints
 
 proc validateCanonicalAddress*(value: cstring, title: string = "Value") =
-  if len(value) != 20:
+  # TODO
+  if false: #len(value) != 20:
     raise newException(ValidationError,
       fmt"{title} {value} is not a valid canonical address")
 

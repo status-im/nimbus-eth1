@@ -2,8 +2,6 @@ import
   strformat, strutils, sequtils, sets,
   ../logging, ../constants, ../opcode_values
 
-# I don't see why would we wrap our in memory stream in something like BytesIO
-
 type
   CodeStream* = ref object
     bytes: seq[byte]

@@ -5,21 +5,16 @@ import
 type
   BaseVMState* = ref object of RootObj
     prevHeaders*: seq[Header]
-    receipts*: seq[string]
-    # computationClass*: bool
+    # receipts*:
     chaindb*: BaseChainDB
-    accessLogs*: seq[string]
+    # accessLogs*:
     blockHeader*: Header
     name*: string
 
 proc newBaseVMState*: BaseVMState =
   new(result)
-  # result.chaindb = nil
-  # result.blockHeader = nil
-  # result.prevHeaders = nil
-  # result.computationClass = nil
-  # result.accessLogs = nil
-  # result.receipts = nil
+  result.prevHeaders = @[]
+  result.name = "BaseVM"
 
 method logger*(vmState: BaseVMState): Logger =
   logging.getLogger(&"evm.vmState.{vmState.name}")

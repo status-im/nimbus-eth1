@@ -14,6 +14,7 @@ proc newGasMeter*(startGas: Int256): GasMeter =
   result.startGas = startGas
   result.gasRemaining = result.startGas
   result.gasRefunded = 0.int256
+  result.logger = logging.getLogger("gas")
 
 proc consumeGas*(gasMeter: var GasMeter; amount: Int256; reason: string) =
   if amount < 0.int256:

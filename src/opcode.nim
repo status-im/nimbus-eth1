@@ -2,49 +2,34 @@ import
   strformat, strutils, sequtils, macros,
   constants, logging, errors, opcode_values, computation, vm/stack, bigints
 
-type
-  Opcode* = ref object of RootObj
-
-method run*(opcode: var Opcode, computation: var BaseComputation) {.base.} =
-  # Hook for performing the actual VM execution.
-  raise newException(ValueError, "Must be implemented by subclasses")
-
-method kind*(opcode: Opcode): Op {.base.} =
-  raise newException(ValueError, "Must be implemented by subclasses")
-
-method gasCost*(opcode: Opcode): Op {.base.} =
-  raise newException(ValueError, "Must be implemented by subclasses")
+template run*(opcode: Opcode, computation: var BaseComputation) =
+  # Hook for performing the actual VM execution
+  computation.gasMeter.consumeGas(opcode.gasCost, reason = $opcode.kind)
+  opcode.runLogic(computation)
 
 method logger*(opcode: Opcode): Logger =
-  logging.getLogger(&"vm.logic.call.{$opcode.kind}")
+  logging.getLogger(&"vm.opcode.{opcode.kind}")
 
-# TODO: not extremely happy with the method approach, maybe optimize
-# a bit the run, so we directly replace it with handler's body
-macro newOpcode*(kind: untyped, gasCost: untyped, handler: untyped): untyped =
-  # newOpcode(Op.Mul, GAS_LOW, mul)
-  let name = ident(&"Opcode{kind[1].repr}")
-  let computation = ident("computation")
+proc newOpcode*(kind: Op, gasCost: Int256, logic: proc(computation: var BaseComputation)): Opcode =
+  Opcode(kind: kind, gasCost: gasCost, runLogic: logic)
+
+
+method `$`*(opcode: Opcode): string =
+  &"{opcode.kind}(0x{opcode.kind.int.toHex(2)}: {opcode.gasCost})"
+
+macro initOpcodes*(spec: untyped): untyped =
+  var value = ident("value")
   result = quote:
-    type
-      `name`* = ref object of Opcode
+    block:
+      var `value` = initTable[Op, Opcode]()
 
-    method kind*(opcode: `name`): Op =
-      `kind`
-
-    method gasCost*(opcode: `name`): Int256 =
-      `gasCost`
-
-  var code: NimNode
-  if handler.kind != nnkStmtList:
-    code = quote:
-      method `run`*(opcode: `name`, `computation`: var BaseComputation) =
-        `computation`.gasMeter.consumeGas(`gasCost`, reason = $`kind`)
-        `handler`(`computation`)
-  else:
-    code = quote:
-      method `run*`(opcode: `name`, `computation`: var BaseComputation) =
-        `computation`.gasMeter.consumeGas(`gasCost`, reason = $`kind`)
-        `handler`
+  for child in spec:
+    let op = child[0]
+    let gasCost = child[1][0][0]
+    let handler = child[1][0][1]
+    var opcode = quote:
+      `value`[`op`] = newOpcode(`op`, `gasCost`, `handler`)
+    result[1].add(opcode)
   
-  result.add(code)
-  echo result.repr
+  result[1].add(value)
+

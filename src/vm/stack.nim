@@ -1,5 +1,5 @@
 import
-  strformat, macros,
+  strformat, strutils, sequtils, macros,
   value, ../errors, ../validation, ../utils_numeric, ../constants, ../logging
 
 type
@@ -167,3 +167,7 @@ proc dup*(stack: var Stack; position: int) =
     raise newException(InsufficientStack,
                       &"Insufficient stack items for DUP{position}")
 
+
+proc `$`*(stack: Stack): string =
+  let values = stack.values.mapIt(&"  {$it}").join("\n")
+  &"Stack:\n{values}"

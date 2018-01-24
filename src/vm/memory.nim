@@ -24,6 +24,10 @@ proc extend*(memory: var Memory; startPosition: Int256; size: Int256) =
   var sizeToExtend = newSize - len(memory).int256
   memory.bytes = memory.bytes.concat(repeat(0.byte, sizeToExtend.getInt))
 
+proc newMemory*(size: Int256): Memory =
+  result = newMemory()
+  result.extend(0.int256, size)
+
 proc read*(self: var Memory; startPosition: Int256; size: Int256): cstring =
   return cstring""
 

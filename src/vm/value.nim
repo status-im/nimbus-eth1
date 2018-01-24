@@ -1,4 +1,6 @@
-import ../constants
+import
+  strformat, strutils,
+  ../constants, bigints
 
 type
   ValueKind* = enum VInt, VBinary
@@ -9,4 +11,20 @@ type
       i*: Int256
     of VBinary:
       b*: cstring
+
+proc `$`*(value: Value): string =
+  case value.kind:
+  of VInt:
+    &"Int({value.i})"
+  of VBinary:
+    &"Binary({value.b})"
+
+proc vint*(i: int): Value =
+  Value(kind: VInt, i: i.int256)
+
+proc vint*(i: Int256): Value =
+  Value(kind: VInt, i: i)
+
+proc vbinary*(b: cstring): Value =
+  Value(kind: VBinary, b: b)
 

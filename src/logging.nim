@@ -7,7 +7,7 @@ type
 const DEBUG = true
 
 proc log*(l: Logger, msg: string) =
-  echo fmt"#{l.name}: {msg}"
+  echo &"#{l.name}: {msg}"
 
 proc debug*(l: Logger, msg: string) =
   if DEBUG:

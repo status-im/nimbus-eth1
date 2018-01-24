@@ -1,6 +1,6 @@
 import
   strformat, strutils, sequtils, tables, macros, bigints,
-  constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging,
+  constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values,
   vm / [code_stream, gas_meter, memory, message, stack]
 
 proc memoryGasCost*(sizeInBytes: Int256): Int256 =
@@ -27,15 +27,18 @@ type
     logEntries*:            seq[(cstring, seq[Int256], cstring)]
     shouldEraseReturnData*: bool
     accountsToDelete*:      Table[cstring, cstring]
-    opcodes*:               cstring
-    precompiles:            cstring
-    logs*:                  bool
-    logger*:                Logger
+    opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
+    precompiles*:           Table[cstring, Opcode]
 
   Error* = ref object
     info*:                  string
     burnsGas*:              bool
     erasesReturnData*:      bool
+
+  Opcode* = ref object of RootObj
+    kind*:      Op
+    gasCost*:   Int256
+    runLogic*:  proc(computation: var BaseComputation)
 
 proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation =
   new(result)
@@ -48,7 +51,9 @@ proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputatio
   result.accountsToDelete = initTable[cstring, cstring]()
   result.logEntries = @[]
   result.code = newCodeStream(message.code)
-  result.logger = logging.getLogger("evm.vm.computation.BaseComputation")
+
+method logger*(computation: BaseComputation): Logger =
+  logging.getLogger("vm.computation.BaseComputation")
 
 method applyMessage*(c: var BaseComputation): BaseComputation =
   # Execution of an VM message
@@ -238,7 +243,7 @@ template inComputation*(c: untyped, handler: untyped): untyped =
         $c.msg.depth,
         if c.msg.isStatic: "y" else: "n",
         $(c.msg.gas - c.gasMeter.gasRemaining),
-        $c.msg.gasRemaining])
+        $c.gasMeter.gasRemaining])
   except VMError:
     `c`.logger.debug(
       "COMPUTATION ERROR: gas: $1 | from: $2 | to: $3 | value: $4 | depth: $5 | static: $6 | error: $7" % [
@@ -255,8 +260,17 @@ template inComputation*(c: untyped, handler: untyped): untyped =
         c.gasMeter.gasRemaining,
         reason="Zeroing gas due to VM Exception: $1" % getCurrentExceptionMsg())
 
-macro applyComputation(t: typed, vmState: untyped, message: untyped): untyped =
-  #     Perform the computation that would be triggered by the VM message
+
+method getOpcodeFn*(computation: var BaseComputation, op: Op): Opcode =
+  if computation.opcodes.hasKey(op):
+    computation.opcodes[op]
+  else:
+    raise newException(InvalidInstruction,
+      &"Invalid opcode {op}")
+
+macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
+  # Perform the computation that would be triggered by the VM message
+  # c.applyComputation(vmState, message)
   var typ = repr(getType(t)[1]).split(":", 1)[0]
   var name = ident(&"new{typ}")
   var typName = ident(typ)
@@ -266,54 +280,19 @@ macro applyComputation(t: typed, vmState: untyped, message: untyped): untyped =
       var c = `name`(`vmState`, `message`)
       var handler = proc: `typName` =
         if `message`.codeAddress in c.precompiles:
-          c.precompiles[`message`.codeAddress](c)
+          c.precompiles[`message`.codeAddress].run(c)
           return c
 
-        for opcode in c.code:
-          var opcodeFn = c.getOpcodeFn(c.opcodes, opcode)
+        for op in c.code:
+          var opcode = c.getOpcodeFn(op)
           c.logger.trace(
-            "OPCODE: 0x$1 ($2) | pc: $3" % [$opcode, $opcodeFn, $max(0, c.code.pc - 1)])
+            "OPCODE: 0x$1 ($2) | pc: $3" % [opcode.kind.int.toHex(2), $opcode.kind, $max(0, c.code.pc - 1)])
 
-          #try:
-            # somehow call opcodeFn(c)
-          #except halt:
-          #  break
+          try:
+            opcode.run(c)
+          except Halt:
+            break
         return c
       inComputation(c):
         res = handler()
       res
-
-    # #
-    # # Opcode API
-    # #
-    # @property
-    # def precompiles(self):
-    #     if self._precompiles is None:
-    #         return dict()
-    #     else:
-    #         return self._precompiles
-
-    # def get_opcode_fn(self, opcodes, opcode):
-    #     try:
-    #         return opcodes[opcode]
-    #     except KeyError:
-    #         return InvalidOpcode(opcode)
-
-    # #
-    # # classmethod
-    # #
-    # @classmethod
-    # def configure(cls,
-    #               name,
-    #               **overrides):
-    #     """
-    #     Class factory method for simple inline subclassing.
-    #     """
-    #     for key in overrides:
-    #         if not hasattr(cls, key):
-    #             raise TypeError(
-    #                 "The BaseComputation.configure cannot set attributes that are not "
-    #                 "already present on the base class.  The attribute `{0}` was "
-    #                 "not found on the base class `{1}`".format(key, cls)
-    #             )
-    #     return type(name, (cls,), overrides)
