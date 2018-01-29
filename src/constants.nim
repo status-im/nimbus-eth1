@@ -10,6 +10,9 @@ type
 proc int256*(i: int): Int256 =
   i.initBigInt
 
+template i256*(i: int): Int256 =
+  i.int256
+
 # TODO
 # We'll have a fast fixed int256, for now this works
 
@@ -46,6 +49,10 @@ proc `mod`*(a: Int256, b: int): Int256 =
 
 proc `div`*(a: Int256, b: int): Int256 =
   a div b.int256
+
+proc log256*(a: Int256): Int256 =
+  # TODO
+  2.int256
 
 proc setXLen[T](s: var seq[T]; newlen: Natural) =
   if s.isNil:

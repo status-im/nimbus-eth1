@@ -61,6 +61,10 @@ type
     ## Error raised to indicate an attempt was made to read data beyond the
     ## boundaries of the buffer (such as with RETURNDATACOPY)
 
+  TypeError* = object of VMError
+    ## Error when invalid values are found
+
+
 proc makeVMError*(): VMError =
   result.burnsGas = true
   result.erasesReturnData = true

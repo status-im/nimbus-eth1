@@ -1,14 +1,30 @@
 import
   strformat, strutils, tables, macros,
   constants, bigints, errors, logging, vm_state,
-  vm / [gas_meter, stack, code_stream, memory, message, value], db / chain, computation, opcode, opcode_values, utils / [header, address],
+  vm / [gas_meter, stack, code_stream, memory, message, value, gas_costs], db / chain, computation, opcode, opcode_values, utils / [header, address],
   logic / [arithmetic, comparison]
 
 var opcodes = initOpcodes:
-  Op.Add: GAS_VERY_LOW add
-  Op.Sub: GAS_VERY_LOW sub
-  Op.Mul: GAS_LOW      mul
-  Op.Div: GAS_LOW      divide
+  # arithmetic
+  Op.Add:         GAS_VERY_LOW        add
+  Op.Mul:         GAS_LOW             mul
+  Op.Sub:         GAS_VERY_LOW        sub
+  Op.Div:         GAS_LOW             divide
+  Op.SDiv:        GAS_LOW             sdiv
+  Op.Mod:         GAS_LOW             modulo
+  Op.SMod:        GAS_LOW             smod
+  Op.AddMod:      GAS_MID             addmod
+  Op.MulMod:      GAS_MID             mulmod
+  Op.Exp:         expGasCost          arithmetic.exp
+  Op.SignExtend:  GAS_LOW             signextend
+
+
+  # comparison
+  Op.Lt:          GAS_VERY_LOW        lt
+  Op.Gt:          GAS_VERY_LOW        gt
+  Op.SLt:         GAS_VERY_LOW        slt
+  Op.SGt:         GAS_VERY_LOW        sgt
+  Op.Eq:          GAS_VERY_LOW        eq
 
 var mem = newMemory(pow(1024.int256, 2))
 
@@ -81,8 +97,12 @@ macro runOpcodes*(computation: untyped, program: untyped): untyped =
 
 # useful for testing simple cases
 runOpcodes(c):
-  stack: @[2.vint, 2.vint, 2.vint]
+  stack: @[2.vint, 2.vint, 2.vint, 2.vint, 2.vint, 2.vint, 4.vint]
 
   Op.Add
   Op.Mul
+  Op.Div
+  Op.Sub
+  Op.Mul
+  Op.Mul  
 

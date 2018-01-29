@@ -76,20 +76,20 @@ proc sdiv*(computation: var BaseComputation) =
   pushRes()
 
 # no curry
-proc exp*(computation: var BaseComputation, gasPerByte: Int256) =
+proc exp*(computation: var BaseComputation) =
   # Exponentiation
   var (base, exponent) = computation.stack.popInt(2)
   
   var bitSize = 0.int256 # TODO exponent.bitLength()
   var byteSize = ceil8(bitSize) div 8
   var res = if base == 0: 0.int256 else: (base ^ exponent.getInt) mod constants.UINT_256_CEILING
-  computation.gasMeter.consumeGas(
-    gasPerByte * byteSize,
-    reason="EXP: exponent bytes"
-  )
+  # computation.gasMeter.consumeGas(
+  #   gasPerByte * byteSize,
+  #   reason="EXP: exponent bytes"
+  # )
   pushRes()
 
-proc signextend(computation: var BaseComputation) =
+proc signextend*(computation: var BaseComputation) =
   # Signed Extend
   var (bits, value) = computation.stack.popInt(2)
 

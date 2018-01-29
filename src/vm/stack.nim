@@ -168,6 +168,22 @@ proc dup*(stack: var Stack; position: int) =
                       &"Insufficient stack items for DUP{position}")
 
 
+proc getInt*(stack: Stack, position: int): Int256 =
+  let element = stack.values[position]
+  case element.kind:
+  of VInt:
+    result = element.i
+  else:
+    raise newException(TypeError, "Expected int")
+
+proc getBinary*(stack: Stack, position: int): cstring =
+  let element = stack.values[position]
+  case element.kind:
+  of VBinary:
+    result = element.b
+  else:
+    raise newException(TypeError, "Expected binary")
+
 proc `$`*(stack: Stack): string =
   let values = stack.values.mapIt(&"  {$it}").join("\n")
   &"Stack:\n{values}"
