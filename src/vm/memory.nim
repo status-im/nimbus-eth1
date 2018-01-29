@@ -1,11 +1,11 @@
 import
   sequtils, bigints,
-  ../constants, ../errors, ../logging, ../validation, ../utils_numeric
+  ../constants, ../errors, ../logging, ../validation, ../utils_numeric, ../utils/bytes
 
 type
   Memory* = ref object
     logger*: Logger
-    bytes*: seq[byte]
+    bytes*:  seq[byte]
 
 proc newMemory*: Memory =
   new(result)
@@ -28,8 +28,11 @@ proc newMemory*(size: Int256): Memory =
   result = newMemory()
   result.extend(0.int256, size)
 
-proc read*(self: var Memory; startPosition: Int256; size: Int256): cstring =
-  return cstring""
+proc read*(memory: var Memory, startPosition: Int256, size: Int256): seq[byte] =
+  result = memory.bytes[startPosition.getInt ..< (startPosition + size).getInt]
 
-proc write*(self: var Memory, startPosition: Int256, size: Int256, value: cstring) =
+proc write*(memory: var Memory, startPosition: Int256, size: Int256, value: seq[byte]) =
   echo value
+
+template write*(memory: var Memory, startPosition: Int256, size: Int256, value: cstring) =
+  memory.write(startPosition, size, value.toBytes)

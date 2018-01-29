@@ -89,14 +89,12 @@ method prepareChildMessage*(
     gas: Int256,
     to: cstring,
     value: Int256,
-    data: cstring,
+    data: seq[byte],
     code: cstring,
     options: MessageOptions = newMessageOptions()): Message =
-  
-  # ? kwargs.setdefault('sender', self.msg.storage_address)
 
   var childOptions = options
-  childOptions.depth = c.msg.depth + 1.int256
+  childOptions.depth = c.msg.depth + 1.i256
   result = newMessage(
     gas,
     c.msg.gasPrice,
@@ -107,7 +105,6 @@ method prepareChildMessage*(
     code,
     childOptions)
 
-  #
 method extendMemory*(c: var BaseComputation, startPosition: Int256, size: Int256) =
   # Memory Management
   #
@@ -150,7 +147,7 @@ macro generateChildBaseComputation*(t: typed, vmState: typed, childMsg: typed): 
       if childMsg.isCreate:
         var child = `name`(`vmState`, `childMsg`)
         c = child.applyCreateMessage()
-      else: 
+      else:
         var child = `name`(`vmState`, `childMsg`)
         c = child.applyMessage()
       c
@@ -201,7 +198,7 @@ method getLogEntries*(c: BaseComputation): seq[(cstring, seq[Int256], cstring)] 
     result = @[]
   else:
     result = @[]
-      
+
 method getGasRefund*(c: BaseComputation): Int256 =
   if c.isError:
     result = 0.int256

@@ -22,7 +22,7 @@ type
     to*:                      cstring
     sender*:                  cstring    
     value*:                   Int256
-    data*:                    cstring
+    data*:                    seq[byte]
     code*:                    cstring
     internalOrigin:           cstring
     internalCodeAddress:      cstring
@@ -71,7 +71,7 @@ proc newMessage*(
     to: cstring,
     sender: cstring,
     value: Int256,
-    data: cstring,
+    data: seq[byte],
     code: cstring,
     options: MessageOptions = newMessageOptions()): Message =
     

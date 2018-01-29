@@ -2,29 +2,49 @@ import
   strformat, strutils, tables, macros,
   constants, bigints, errors, logging, vm_state,
   vm / [gas_meter, stack, code_stream, memory, message, value, gas_costs], db / chain, computation, opcode, opcode_values, utils / [header, address],
-  logic / [arithmetic, comparison]
+  logic / [arithmetic, comparison, sha3, context]
 
 var opcodes = initOpcodes:
   # arithmetic
-  Op.Add:         GAS_VERY_LOW        add
-  Op.Mul:         GAS_LOW             mul
-  Op.Sub:         GAS_VERY_LOW        sub
-  Op.Div:         GAS_LOW             divide
-  Op.SDiv:        GAS_LOW             sdiv
-  Op.Mod:         GAS_LOW             modulo
-  Op.SMod:        GAS_LOW             smod
-  Op.AddMod:      GAS_MID             addmod
-  Op.MulMod:      GAS_MID             mulmod
-  Op.Exp:         expGasCost          arithmetic.exp
-  Op.SignExtend:  GAS_LOW             signextend
+  Op.Add:           GAS_VERY_LOW        add
+  Op.Mul:           GAS_LOW             mul
+  Op.Sub:           GAS_VERY_LOW        sub
+  Op.Div:           GAS_LOW             divide
+  Op.SDiv:          GAS_LOW             sdiv
+  Op.Mod:           GAS_LOW             modulo
+  Op.SMod:          GAS_LOW             smod
+  Op.AddMod:        GAS_MID             addmod
+  Op.MulMod:        GAS_MID             mulmod
+  Op.Exp:           expGasCost          arithmetic.exp
+  Op.SignExtend:    GAS_LOW             signextend
 
 
   # comparison
-  Op.Lt:          GAS_VERY_LOW        lt
-  Op.Gt:          GAS_VERY_LOW        gt
-  Op.SLt:         GAS_VERY_LOW        slt
-  Op.SGt:         GAS_VERY_LOW        sgt
-  Op.Eq:          GAS_VERY_LOW        eq
+  Op.Lt:            GAS_VERY_LOW        lt
+  Op.Gt:            GAS_VERY_LOW        gt
+  Op.SLt:           GAS_VERY_LOW        slt
+  Op.SGt:           GAS_VERY_LOW        sgt
+  Op.Eq:            GAS_VERY_LOW        eq
+  Op.IsZero:        GAS_VERY_LOW        iszero
+  Op.And:           GAS_VERY_LOW        andOp
+  Op.Or:            GAS_VERY_LOW        orOp
+  Op.Xor:           GAS_VERY_LOW        xorOp
+  Op.Not:           GAS_VERY_LOW        notOp
+  Op.Byte:          GAS_VERY_LOW        byteOp
+
+
+  # sha3
+  Op.SHA3:          GAS_SHA3            sha3op
+
+
+  # context
+  Op.Address:       GAS_BASE            context.address
+  Op.Balance:       GAS_COST_BALANCE    balance
+  Op.Origin:        GAS_BASE            origin
+  Op.Caller:        GAS_BASE            caller
+  Op.CallValue:     GAS_BASE            callValue
+  Op.CallDataLoad:  GAS_VERY_LOW        callDataLoad
+  Op.CallDataSize:  GAS_BASE            callDataSize
 
 var mem = newMemory(pow(1024.int256, 2))
 
@@ -32,6 +52,7 @@ var to = toCanonicalAddress(cstring"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
 var sender = toCanonicalAddress(cstring"0xcd1722f3947def4cf144679da39c4c32bdc35681")
 
 var code = cstring""
+var data: seq[byte] = @[]
 
 var msg = newMessage(
   25.int256,
@@ -39,7 +60,7 @@ var msg = newMessage(
   to,
   sender,
   0.int256,
-  cstring"",
+  data,
   code,
   MessageOptions(depth: 1.int256))
 

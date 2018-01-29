@@ -1,6 +1,6 @@
-import strformat, strutils, encodings
+import strformat, strutils, encodings, keccak, padding
 
-proc toText(c: cstring): string =
+proc toText*(c: cstring): string =
   ($c).convert(destEncoding="iso-8859-1")
 
 proc toCanonicalAddress*(address: string): string =
@@ -8,8 +8,18 @@ proc toCanonicalAddress*(address: string): string =
   address
   # address.toNormalizedAddress.decodeHex
 
-proc toCanonicalAddress*(address: cstring): string =
+template toCanonicalAddress*(address: cstring): string =
   address.toText.toCanonicalAddress
+
+proc forceBytesToAddress*(address: string): string =
+  padLeft(address[^20..^1], 20, "\x00")
+
+template forceBytesToAddress*(address: cstring): string =
+  address.toText.forceBytesToAddress
+
+proc generateContractAddress*(address: string, nonce: string): string =
+  ""
+  # keccak(rlp.encode(@[address, nonce]))[^20..^1]
 
 # proc isNormalizedAddress*(value: string): bool =
 #   # Returns whether the provided value is an address in it's normalized form
