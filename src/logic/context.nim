@@ -1,6 +1,7 @@
 import
-  ../constants, ../utils_numeric, ../computation, ../vm_state, ../account, ../db/state_db, ../validation, 
-  .. / vm / [stack, message], .. / utils / [address, padding, bytes]
+  strformat,
+  ../constants, ../errors, ../utils_numeric, ../computation, ../vm_state, ../account, ../db/state_db, ../validation, 
+  .. / vm / [stack, message, gas_meter, memory, code_stream], .. / utils / [address, padding, bytes], bigints
 
 proc balance*(computation: var BaseComputation) =
   let address = forceBytesToAddress(computation.stack.popBinary)
@@ -35,124 +36,84 @@ proc callDataSize*(computation: var BaseComputation) =
   let size = computation.msg.data.len
   computation.stack.push(size)
 
-# def calldatacopy(computation):
-#     (
-#         mem_start_position,
-#         calldata_start_position,
-#         size,
-#     ) = computation.stack.pop(num_items=3, type_hint=constants.UINT256)
+proc callDataCopy*(computation: var BaseComputation) =
+  let (memStartPosition,
+       calldataStartPosition,
+       size) = computation.stack.popInt(3)
+  computation.extendMemory(memStartPosition, size)
 
-#     computation.extend_memory(mem_start_position, size)
-
-#     word_count = ceil32(size) // 32
-#     copy_gas_cost = word_count * constants.GAS_COPY
-
-#     computation.gas_meter.consume_gas(copy_gas_cost, reason="CALLDATACOPY fee")
-
-#     value = computation.msg.data[calldata_start_position: calldata_start_position + size]
-#     padded_value = pad_right(value, size, b'\x00')
-
-#     computation.memory.write(mem_start_position, size, padded_value)
+  let wordCount = ceil32(size) div 32
+  let copyGasCost = wordCount * constants.GAS_COPY
+  computation.gasMeter.consumeGas(copyGasCost, reason="CALLDATACOPY fee")
+  let value = computation.msg.data[calldataStartPosition.getInt ..< (calldataStartPosition + size).getInt].toCString
+  let paddedValue = padRight(value, size.getInt, cstring"\x00")
+  computation.memory.write(memStartPosition, size, paddedValue)
 
 
-# def codesize(computation):
-#     size = len(computation.code)
-#     computation.stack.push(size)
+proc codesize*(computation: var BaseComputation) =
+  let size = computation.code.len.i256
+  computation.stack.push(size)
 
 
-# def codecopy(computation):
-#     (
-#         mem_start_position,
-#         code_start_position,
-#         size,
-#     ) = computation.stack.pop(num_items=3, type_hint=constants.UINT256)
+proc codecopy*(computation: var BaseComputation) =
+  let (memStartPosition,
+       codeStartPosition,
+       size) = computation.stack.popInt(3)
+  computation.extendMemory(memStartPosition, size)
+  let wordCount = ceil32(size) div 32
+  let copyGasCost = constants.GAS_COPY * wordCount
 
-#     computation.extend_memory(mem_start_position, size)
-
-#     word_count = ceil32(size) // 32
-#     copy_gas_cost = constants.GAS_COPY * word_count
-
-#     computation.gas_meter.consume_gas(
-#         copy_gas_cost,
-#         reason="CODECOPY: word gas cost",
-#     )
-
-#     with computation.code.seek(code_start_position):
-#         code_bytes = computation.code.read(size)
-
-#     padded_code_bytes = pad_right(code_bytes, size, b'\x00')
-
-#     computation.memory.write(mem_start_position, size, padded_code_bytes)
+  computation.gasMeter.consumeGas(copyGasCost, reason="CODECOPY: word gas cost")
+  # TODO
+  # with computation.code.seek(code_start_position):
+  #   code_bytes = computation.code.read(size)
+  #   padded_code_bytes = pad_right(code_bytes, size, b'\x00')
+  # computation.memory.write(mem_start_position, size, padded_code_bytes)
 
 
-# def gasprice(computation):
-#     computation.stack.push(computation.msg.gas_price)
+proc gasprice*(computation: var BaseComputation) =
+  computation.stack.push(computation.msg.gasPrice)
 
 
-# def extcodesize(computation):
-#     account = force_bytes_to_address(computation.stack.pop(type_hint=constants.BYTES))
-#     with computation.vm_state.state_db(read_only=True) as state_db:
-#         code_size = len(state_db.get_code(account))
+proc extCodeSize*(computation: var BaseComputation) =
+  let account = forceBytesToAddress(computation.stack.popBinary)
+  # TODO
+  #     with computation.vm_state.state_db(read_only=True) as state_db:
+  #         code_size = len(state_db.get_code(account))
 
-#     computation.stack.push(code_size)
+  #     computation.stack.push(code_size)
 
+proc extCodeCopy*(computation: var BaseComputation) =
+  let account = forceBytesToAddress(computation.stack.popBinary)
+  let (memStartPosition, codeStartPosition, size) = computation.stack.popInt(3)
+  computation.extendMemory(memStartPosition, size)
+  let wordCount = ceil32(size) div 32
+  let copyGasCost = constants.GAS_COPY * wordCount
 
-# def extcodecopy(computation):
-#     account = force_bytes_to_address(computation.stack.pop(type_hint=constants.BYTES))
-#     (
-#         mem_start_position,
-#         code_start_position,
-#         size,
-#     ) = computation.stack.pop(num_items=3, type_hint=constants.UINT256)
+  computation.gasMeter.consumeGas(copyGasCost, reason="EXTCODECOPY: word gas cost")
 
-#     computation.extend_memory(mem_start_position, size)
+  # TODO:
+  #     with computation.vm_state.state_db(read_only=True) as state_db:
+  #         code = state_db.get_code(account)
+  #     code_bytes = code[code_start_position:code_start_position + size]
+  #     padded_code_bytes = pad_right(code_bytes, size, b'\x00')
+  #     computation.memory.write(mem_start_position, size, padded_code_bytes)
 
-#     word_count = ceil32(size) // 32
-#     copy_gas_cost = constants.GAS_COPY * word_count
+proc returnDataSize*(computation: var BaseComputation) =
+  let size = computation.returnData.len
+  computation.stack.push(size)
 
-#     computation.gas_meter.consume_gas(
-#         copy_gas_cost,
-#         reason='EXTCODECOPY: word gas cost',
-#     )
+proc returnDataCopy*(computation: var BaseComputation) =
+  let (memStartPosition, returnDataStartPosition, size) = computation.stack.popInt(3)
+  if returnDataStartPosition + size > computation.returnData.len:
+    raise newException(OutOfBoundsRead, 
+      "Return data length is not sufficient to satisfy request.  Asked \n" &
+      &"for data from index {returnDataStartPosition} to {returnDataStartPosition + size}. Return data is {computation.returnData.len} in \n" &
+      "length")      
 
-#     with computation.vm_state.state_db(read_only=True) as state_db:
-#         code = state_db.get_code(account)
-#     code_bytes = code[code_start_position:code_start_position + size]
-#     padded_code_bytes = pad_right(code_bytes, size, b'\x00')
-
-#     computation.memory.write(mem_start_position, size, padded_code_bytes)
-
-
-# def returndatasize(computation):
-#     size = len(computation.return_data)
-#     computation.stack.push(size)
-
-
-# def returndatacopy(computation):
-#     (
-#         mem_start_position,
-#         returndata_start_position,
-#         size,
-#     ) = computation.stack.pop(num_items=3, type_hint=constants.UINT256)
-
-#     if returndata_start_position + size > len(computation.return_data):
-#         raise OutOfBoundsRead(
-#             "Return data length is not sufficient to satisfy request.  Asked "
-#             "for data from index {0} to {1}.  Return data is {2} bytes in "
-#             "length.".format(
-#                 returndata_start_position,
-#                 returndata_start_position + size,
-#                 len(computation.return_data),
-#             )
-#         )
-
-#     computation.extend_memory(mem_start_position, size)
-
-#     word_count = ceil32(size) // 32
-#     copy_gas_cost = word_count * constants.GAS_COPY
-
-#     computation.gas_meter.consume_gas(copy_gas_cost, reason="RETURNDATACOPY fee")
-
-#     value = computation.return_data[returndata_start_position: returndata_start_position + size]
-
-#     computation.memory.write(mem_start_position, size, value)
+  computation.extendMemory(memStartPosition, size)
+  let wordCount = ceil32(size) div 32
+  let copyGasCost = wordCount * constants.GAS_COPY
+  computation.gasMeter.consumeGas(copyGasCost, reason="RETURNDATACOPY fee")
+  let value = cstring(($computation.returnData)[returnDataStartPosition.getInt ..< (returnDataStartPosition + size).getInt])
+  computation.memory.write(memStartPosition, size, value)

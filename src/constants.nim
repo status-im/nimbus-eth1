@@ -107,6 +107,10 @@ let
   GAS_JUMP_DEST* =                1.i256
   GAS_SSET* =                     20_000.i256
   GAS_SRESET* =                   5000.i256
+  GAS_EXT_CODE_COST* =            700.i256
+  GAS_COINBASE* =                 20.i256
+  GAS_SLOAD_COST* =               20.i256
+  GAS_SELF_DESTRUCT_COST* =       5_000.i256
   
   REFUNDS_CLEAR* =                15_000.i256
   

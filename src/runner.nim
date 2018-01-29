@@ -45,6 +45,49 @@ var opcodes = initOpcodes:
   Op.CallValue:     GAS_BASE            callValue
   Op.CallDataLoad:  GAS_VERY_LOW        callDataLoad
   Op.CallDataSize:  GAS_BASE            callDataSize
+  Op.CallDataCopy:  GAS_BASE            callDataCopy
+  Op.CodeSize:      GAS_BASE            codesize
+  Op.CodeCopy:      GAS_BASE            codecopy
+  Op.ExtCodeSize:   GAS_EXT_CODE_COST   extCodeSize
+  Op.ExtCodeCopy:   GAS_EXT_CODE_COST   extCodeCopy
+
+
+  # Op.Blockhash:     GAS_BASE            blockhash
+  # Op.Coinbase:      GAS_COINBASE        coinbase
+  # Op.Timestamp:     GAS_BASE            timestamp
+  # Op.Number:        GAS_BASE            number
+  # Op.Difficulty:    GAS_BASE            difficulty
+  # Op.GasLimit:      GAS_BASE            gasLimitOp
+  # Op.Pop:           GAS_BASE            popOp
+  # Op.MLoad:         GAS_VERY_LOW        mload
+  # Op.MStore:        GAS_VERY_LOW        mstore
+  # Op.MStore8:       GAS_VERY_LOW        mstore8
+  # Op.SLoad:         GAS_SLOAD_COST      sload
+  # Op.SStore:        0.i256              sstore
+
+
+  # Op.Jump:          GAS_MID             jump
+  # Op.JumpI:         GAS_MID             jumpI
+  # Op.PC:            GAS_HIGH            pc
+  # Op.MSize:         GAS_BASE            msize
+  # Op.Gas:           GAS_BASE            gasOp
+  # Op.JumpDest:      GAS_JUMP_DEST       jumpDest
+  # Op.Push:          GAS_VERY_LOW        push
+  # Op.Dup:           GAS_VERY_LOW        dup
+  # Op.Swap:          GAS_VERY_LOW        swap
+  # Op.Log0:          GAS_LOG             log0
+  # Op.Log1:          2 * GAS_LOG         log1
+  # Op.Log2:          3 * GAS_LOG         log2
+  # Op.Log3:          4 * GAS_LOG         log3
+  # Op.Log4:          5 * GAS_LOG         log4
+
+  # Op.Create:        GAS_CREATE          create
+  # Op.Call:          0.i256              callOp
+  # Op.CallCode:      0.i256              callCodeOp
+  # Op.Return:        0.i256              returnOp
+  # Op.DelegateCall:  0.i256              delegateCall
+  # Op.Invalid:       0.i256              invalidOp
+  # Op.SelfDestruct:  GAS_SELF_DESTRUCT_COST selfDestruct
 
 var mem = newMemory(pow(1024.int256, 2))
 
@@ -90,7 +133,7 @@ var c = BaseComputation(
 macro runOpcodes*(computation: untyped, program: untyped): untyped =
   # runOpcodes(c):
   #   stack: @[Value..]
-  #   
+  #
   #   Op
   #   Op
   #
@@ -125,5 +168,5 @@ runOpcodes(c):
   Op.Div
   Op.Sub
   Op.Mul
-  Op.Mul  
+  Op.Mul
 
