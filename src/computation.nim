@@ -94,7 +94,7 @@ method prepareChildMessage*(
     options: MessageOptions = newMessageOptions()): Message =
 
   var childOptions = options
-  childOptions.depth = c.msg.depth + 1.i256
+  childOptions.depth = c.msg.depth + 1
   result = newMessage(
     gas,
     c.msg.gasPrice,

@@ -64,6 +64,8 @@ type
   TypeError* = object of VMError
     ## Error when invalid values are found
 
+  NotImplementedError* = object of VMError
+    ## Not implemented error
 
 proc makeVMError*(): VMError =
   result.burnsGas = true

@@ -2,7 +2,7 @@ import
   strformat, strutils, tables, macros,
   constants, bigints, errors, logging, vm_state,
   vm / [gas_meter, stack, code_stream, memory, message, value, gas_costs], db / chain, computation, opcode, opcode_values, utils / [header, address],
-  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid]
+  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid, call]
 
 var opcodes = initOpcodes:
   # arithmetic
@@ -97,12 +97,16 @@ var opcodes = initOpcodes:
 
 
 
-  # Op.Create:        GAS_CREATE          create
-  # Op.Call:          0.i256              callOp
-  # Op.CallCode:      0.i256              callCodeOp
-  # Op.Return:        0.i256              returnOp
-  # Op.DelegateCall:  0.i256              delegateCall
-  # Op.SelfDestruct:  GAS_SELF_DESTRUCT_COST selfDestruct
+# call
+opcodes[Op.Call] = Call(kind: Op.Call)
+opcodes[Op.CallCode] = CallCode(kind: Op.CallCode)
+opcodes[Op.DelegateCall] = DelegateCall(kind: Op.DelegateCall)
+
+
+# system
+# Op.Create:        GAS_CREATE          create
+# Op.Return:        0.i256              returnOp
+# Op.SelfDestruct:  GAS_SELF_DESTRUCT_COST selfDestruct
 
 var mem = newMemory(pow(1024.int256, 2))
 
@@ -120,7 +124,7 @@ var msg = newMessage(
   0.int256,
   data,
   code,
-  MessageOptions(depth: 1.int256))
+  MessageOptions(depth: 1))
 
 var c = BaseComputation(
   vmState: BaseVMState(

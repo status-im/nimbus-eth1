@@ -26,7 +26,7 @@ type
     code*:                    cstring
     internalOrigin:           cstring
     internalCodeAddress:      cstring
-    depth*:                   Int256
+    depth*:                   int
     internalStorageAddress:   cstring
     shouldTransferValue*:     bool
     isStatic*:                bool
@@ -34,7 +34,7 @@ type
 
   MessageOptions* = ref object
     origin*:                  cstring
-    depth*:                   Int256
+    depth*:                   int
     createAddress*:           cstring
     codeAddress*:             cstring
     shouldTransferValue*:     bool
@@ -51,7 +51,7 @@ proc `storageAddress=`*(message: var Message, value: cstring) =
 
 proc newMessageOptions*(
     origin: cstring = nil,
-    depth: Int256 = 0.int256,
+    depth: int = 0,
     createAddress: cstring = nil,
     codeAddress: cstring = nil,
     shouldTransferValue: bool = true,

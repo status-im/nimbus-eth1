@@ -18,6 +18,11 @@ proc validateGte*(value: Int256, minimum: int, title: string = "Value") =
     raise newException(ValidationError,
       fmt"{title} {value} is not greater than or equal to {minimum}")
 
+proc validateGte*(value: int, minimum: int, title: string = "Value") =
+  if value <= minimum:
+    raise newException(ValidationError,
+      fmt"{title} {value} is not greater than or equal to {minimum}")
+
 proc validateGt*(value: Int256, minimum: int, title: string = "Value") =
   if value < minimum.int256:
     raise newException(ValidationError,

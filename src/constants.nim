@@ -92,7 +92,7 @@ let
   CREATE_CONTRACT_ADDRESS* =      cstring""
   ZERO_ADDRESS* =                 repeat(cstring"\x00", 20)
   ZERO_HASH32* =                  repeat(cstring"\x00", 20)
-  STACKDEPTHLIMIT* =              1024
+  STACK_DEPTH_LIMIT* =            1024
   
   GAS_NULL* =                     0.i256
   GAS_ZERO* =                     0.i256
@@ -118,7 +118,7 @@ let
   GAS_SELF_DESTRUCT_NEW_ACCOUNT* = 25_000.i256
   GAS_CREATE* =                   32_000.i256
   GAS_CALL* =                     40.i256
-  GASCALLVALUE =                  9_000.i256
+  GAS_CALL_VALUE* =               9_000.i256
   GAS_CALL_STIPEND* =             2_300.i256
   GAS_NEW_ACCOUNT* =              25_000.i256
   
