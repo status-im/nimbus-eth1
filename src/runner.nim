@@ -88,11 +88,9 @@ var opcodes = initOpcodes:
   Op.Stop:          GAS_ZERO            stop
 
 
-  # Op.Log0:          GAS_LOG             log0
-  # Op.Log1:          2 * GAS_LOG         log1
-  # Op.Log2:          3 * GAS_LOG         log2
-  # Op.Log3:          4 * GAS_LOG         log3
-  # Op.Log4:          5 * GAS_LOG         log4
+
+  # logging
+  0..4 Op.LogXX:    GAS_IN_HANDLER      logXX
 
   # Op.Create:        GAS_CREATE          create
   # Op.Call:          0.i256              callOp

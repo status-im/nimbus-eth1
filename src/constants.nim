@@ -111,7 +111,7 @@ let
   GAS_COINBASE* =                 20.i256
   GAS_SLOAD_COST* =               20.i256
   GAS_SELF_DESTRUCT_COST* =       5_000.i256
-
+  GAS_IN_HANDLER* =               0.i256 # to be calculated in handler
   REFUNDS_CLEAR* =                15_000.i256
   
   GAS_SELF_DESTRUCT* =            0.i256
