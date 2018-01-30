@@ -158,3 +158,5 @@ type
     STATICCALL,    # 250
     REVERT,        # 253
     SELFDESTRUCT   # 255
+    INVALID        # invalid
+

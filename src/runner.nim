@@ -2,7 +2,7 @@ import
   strformat, strutils, tables, macros,
   constants, bigints, errors, logging, vm_state,
   vm / [gas_meter, stack, code_stream, memory, message, value, gas_costs], db / chain, computation, opcode, opcode_values, utils / [header, address],
-  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow]
+  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid]
 
 var opcodes = initOpcodes:
   # arithmetic
@@ -88,16 +88,20 @@ var opcodes = initOpcodes:
   Op.Stop:          GAS_ZERO            stop
 
 
-
   # logging
   0..4 Op.LogXX:    GAS_IN_HANDLER      logXX
+
+
+  # invalid
+  Op.Invalid:       GAS_ZERO            invalidOp
+
+
 
   # Op.Create:        GAS_CREATE          create
   # Op.Call:          0.i256              callOp
   # Op.CallCode:      0.i256              callCodeOp
   # Op.Return:        0.i256              returnOp
   # Op.DelegateCall:  0.i256              delegateCall
-  # Op.Invalid:       0.i256              invalidOp
   # Op.SelfDestruct:  GAS_SELF_DESTRUCT_COST selfDestruct
 
 var mem = newMemory(pow(1024.int256, 2))
