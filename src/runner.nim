@@ -2,7 +2,7 @@ import
   strformat, strutils, tables, macros,
   constants, bigints, errors, logging, vm_state,
   vm / [gas_meter, stack, code_stream, memory, message, value, gas_costs], db / chain, computation, opcode, opcode_values, utils / [header, address],
-  logic / [arithmetic, comparison, sha3, context]
+  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap]
 
 var opcodes = initOpcodes:
   # arithmetic
@@ -52,13 +52,21 @@ var opcodes = initOpcodes:
   Op.ExtCodeCopy:   GAS_EXT_CODE_COST   extCodeCopy
 
 
-  # Op.Blockhash:     GAS_BASE            blockhash
-  # Op.Coinbase:      GAS_COINBASE        coinbase
-  # Op.Timestamp:     GAS_BASE            timestamp
-  # Op.Number:        GAS_BASE            number
-  # Op.Difficulty:    GAS_BASE            difficulty
-  # Op.GasLimit:      GAS_BASE            gasLimitOp
-  # Op.Pop:           GAS_BASE            popOp
+  # block
+  Op.Blockhash:     GAS_BASE            block_ops.blockhash
+  Op.Coinbase:      GAS_COINBASE        coinbase
+  Op.Timestamp:     GAS_BASE            timestamp
+  Op.Number:        GAS_BASE            number
+  Op.Difficulty:    GAS_BASE            difficulty
+  Op.GasLimit:      GAS_BASE            gaslimit
+  
+
+  # stack
+  Op.Pop:           GAS_BASE            stack_ops.pop
+  1..32 Op.PushXX:  GAS_VERY_LOW        pushXX # XX replaced by macro
+  1..16 Op.DupXX:   GAS_VERY_LOW        dupXX
+  1..16 Op.SwapXX:  GAS_VERY_LOW        swapXX
+
   # Op.MLoad:         GAS_VERY_LOW        mload
   # Op.MStore:        GAS_VERY_LOW        mstore
   # Op.MStore8:       GAS_VERY_LOW        mstore8
@@ -72,9 +80,6 @@ var opcodes = initOpcodes:
   # Op.MSize:         GAS_BASE            msize
   # Op.Gas:           GAS_BASE            gasOp
   # Op.JumpDest:      GAS_JUMP_DEST       jumpDest
-  # Op.Push:          GAS_VERY_LOW        push
-  # Op.Dup:           GAS_VERY_LOW        dup
-  # Op.Swap:          GAS_VERY_LOW        swap
   # Op.Log0:          GAS_LOG             log0
   # Op.Log1:          2 * GAS_LOG         log1
   # Op.Log2:          3 * GAS_LOG         log2
@@ -167,6 +172,5 @@ runOpcodes(c):
   Op.Mul
   Op.Div
   Op.Sub
-  Op.Mul
   Op.Mul
 

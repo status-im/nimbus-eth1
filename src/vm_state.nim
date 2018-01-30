@@ -28,7 +28,7 @@ method coinbase*(vmState: BaseVMState): cstring =
 method timestamp*(vmState: BaseVMState): int =
   vmState.blockHeader.timestamp
 
-method blockBumber*(vmState: BaseVMState): Int256 =
+method blockNumber*(vmState: BaseVMState): Int256 =
   vmState.blockHeader.blockNumber
 
 method difficulty*(vmState: BaseVMState): Int256 =

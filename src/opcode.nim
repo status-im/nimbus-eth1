@@ -36,16 +36,31 @@ macro initOpcodes*(spec: untyped): untyped =
       var `value` = initTable[Op, Opcode]()
 
   for child in spec:
-    let op = child[0]
-    let gasCost = child[1][0][0]
-    let handler = child[1][0][1]
-    let opcode = if gasCost.repr[0].isLowerAscii():
-      quote:
-        `value`[`op`] = Opcode(kind: `op`, gasCostHandler: `gasCost`, runLogic: `handler`)
+    var ops, gasCosts, handlers: seq[NimNode]
+    if child.kind == nnkInfix and child[0].repr == "..":
+      ops = @[]
+      gasCosts = @[]
+      handlers = @[]
+      let first = child[1].repr.parseInt
+      let last = child[2][0].repr.parseInt
+      let op = child[2][1][1].repr
+      for z in first .. last:
+        ops.add(nnkDotExpr.newTree(ident("Op"), ident(op.replace("XX", $z))))
+        gasCosts.add(child[3][0][0])
+        handlers.add(ident(child[3][0][1].repr.replace("XX", $z)))
     else:
-      quote:
-        `value`[`op`] = Opcode(kind: `op`, gasCostConstant: `gasCost`, runLogic: `handler`)
-    result[1].add(opcode)
+      ops = @[child[0]]
+      gasCosts = @[child[1][0][0]]
+      handlers = @[child[1][0][1]]
+    for z in 0 ..< ops.len:
+      let (op, gasCost, handler) = (ops[z], gasCosts[z], handlers[z])
+      let opcode = if gasCost.repr[0].isLowerAscii():
+        quote:
+          `value`[`op`] = Opcode(kind: `op`, gasCostHandler: `gasCost`, runLogic: `handler`)
+      else:
+        quote:
+          `value`[`op`] = Opcode(kind: `op`, gasCostConstant: `gasCost`, runLogic: `handler`)
+      result[1].add(opcode)
   
   result[1].add(value)
 
