@@ -2,7 +2,7 @@ import
   strformat, strutils, tables, macros,
   constants, bigints, errors, logging, vm_state,
   vm / [gas_meter, stack, code_stream, memory, message, value, gas_costs], db / chain, computation, opcode, opcode_values, utils / [header, address],
-  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap]
+  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage]
 
 var opcodes = initOpcodes:
   # arithmetic
@@ -67,11 +67,16 @@ var opcodes = initOpcodes:
   1..16 Op.DupXX:   GAS_VERY_LOW        dupXX
   1..16 Op.SwapXX:  GAS_VERY_LOW        swapXX
 
-  # Op.MLoad:         GAS_VERY_LOW        mload
+
+  # memory
+  Op.MLoad:         GAS_VERY_LOW        mload
   # Op.MStore:        GAS_VERY_LOW        mstore
   # Op.MStore8:       GAS_VERY_LOW        mstore8
-  # Op.SLoad:         GAS_SLOAD_COST      sload
-  # Op.SStore:        0.i256              sstore
+  
+
+  # storage
+  Op.SLoad:         GAS_SLOAD_COST      sload
+  Op.SStore:        GAS_ZERO            sstore
 
 
   # Op.Jump:          GAS_MID             jump
