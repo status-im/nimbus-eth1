@@ -18,10 +18,12 @@ proc mstoreX(computation; x: int) =
   extendMemory(start, x.int256)
   memory.write(start, 32.int256, normalizedValue)
 
-proc mstore*(computation) {.inline.} =
+# TODO template handler
+
+proc mstore*(computation) =
   mstoreX(32)
 
-proc mstore8*(computation) {.inline.} =
+proc mstore8*(computation) =
   mstoreX(1)
 
 proc mload*(computation) =

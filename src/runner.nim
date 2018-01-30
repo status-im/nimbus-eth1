@@ -2,7 +2,7 @@ import
   strformat, strutils, tables, macros,
   constants, bigints, errors, logging, vm_state,
   vm / [gas_meter, stack, code_stream, memory, message, value, gas_costs], db / chain, computation, opcode, opcode_values, utils / [header, address],
-  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage]
+  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow]
 
 var opcodes = initOpcodes:
   # arithmetic
@@ -70,21 +70,24 @@ var opcodes = initOpcodes:
 
   # memory
   Op.MLoad:         GAS_VERY_LOW        mload
-  # Op.MStore:        GAS_VERY_LOW        mstore
-  # Op.MStore8:       GAS_VERY_LOW        mstore8
-  
+  Op.MStore:        GAS_VERY_LOW        mstore
+  Op.MStore8:       GAS_VERY_LOW        mstore8
+  Op.MSize:         GAS_BASE            msize
 
   # storage
   Op.SLoad:         GAS_SLOAD_COST      sload
   Op.SStore:        GAS_ZERO            sstore
 
 
-  # Op.Jump:          GAS_MID             jump
-  # Op.JumpI:         GAS_MID             jumpI
-  # Op.PC:            GAS_HIGH            pc
-  # Op.MSize:         GAS_BASE            msize
-  # Op.Gas:           GAS_BASE            gasOp
-  # Op.JumpDest:      GAS_JUMP_DEST       jumpDest
+  # flow
+  Op.Jump:          GAS_MID             jump
+  Op.JumpI:         GAS_MID             jumpi
+  Op.PC:            GAS_HIGH            pc
+  Op.Gas:           GAS_BASE            flow.gas
+  Op.JumpDest:      GAS_JUMP_DEST       jumpdest
+  Op.Stop:          GAS_ZERO            stop
+
+
   # Op.Log0:          GAS_LOG             log0
   # Op.Log1:          2 * GAS_LOG         log1
   # Op.Log2:          3 * GAS_LOG         log2
