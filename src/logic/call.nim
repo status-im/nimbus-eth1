@@ -200,7 +200,7 @@ method callParams(call: DelegateCall, computation): (Int256, Int256, cstring, cs
    false,  # should_transfer_value,
    computation.msg.isStatic)
 
-proc maxChildGasEIP150(gas: Int256): Int256 =
+proc maxChildGasEIP150*(gas: Int256): Int256 =
   gas - gas div 64
 
 proc computeEIP150MsgGas(computation; gas: Int256, extraGas: Int256, value: Int256, name: string, callStipend: Int256): (Int256, Int256) =
