@@ -50,7 +50,7 @@ method runLogic*(create: Create, computation) =
         #     )
 
         #     is_collision = state_db.account_has_code_or_nonce(contract_address)
-  let contractAddress = cstring""
+  let contractAddress = ""
   let isCollision = false
 
   if isCollision:
@@ -63,7 +63,7 @@ method runLogic*(create: Create, computation) =
     to=constants.CREATE_CONTRACT_ADDRESS,
     value=value,
     data=cast[seq[byte]](@[]),
-    code=callData.toCString,
+    code=callData.toString,
     options=MessageOptions(createAddress: contractAddress))
 
   # let childComputation = computation.applyChildComputation(childMsg)
@@ -109,7 +109,7 @@ proc selfdestructEIP161(computation) =
   #          )
   #  _selfdestruct(computation, beneficiary)
 
-proc selfdestruct(computation; beneficiary: cstring) =
+proc selfdestruct(computation; beneficiary: string) =
   discard # TODO: with
   # with computation.vm_state.state_db() as state_db:
   #     local_balance = state_db.get_balance(computation.msg.storage_address)
@@ -136,14 +136,14 @@ proc selfdestruct(computation; beneficiary: cstring) =
 proc returnOp*(computation) =
   let (startPosition, size) = stack.popInt(2)
   computation.extendMemory(startPosition, size)
-  let output = memory.read(startPosition, size).toCString
+  let output = memory.read(startPosition, size).toString
   computation.output = output
   raise newException(Halt, "RETURN")
 
 proc revert*(computation) =
   let (startPosition, size) = stack.popInt(2)
   computation.extendMemory(startPosition, size)
-  let output = memory.read(startPosition, size).toCString
+  let output = memory.read(startPosition, size).toString
   computation.output = output
   raise newException(Revert, $output)
 

@@ -1,7 +1,7 @@
 # TODO : hex
 type
   Op* {.pure.} = enum
-    STOP,          # 0
+    STOP = 0x0,    # 0
     ADD,           # 1
     MUL,           # 2
     SUB,           # 3
@@ -14,7 +14,7 @@ type
     EXP,           # 10
     SIGNEXTEND,    # 11
 
-    LT,            # 16
+    LT = 0x10,     # 16
     GT,            # 17
     SLT,           # 18
     SGT,           # 19
@@ -26,9 +26,9 @@ type
     NOT,           # 25
     BYTE,          # 26
 
-    SHA3,          # 32
+    SHA3 = 0x20,   # 32
     
-    ADDRESS,       # 48
+    ADDRESS = 0x30,# 48
     BALANCE,       # 49
     ORIGIN,        # 50
 
@@ -49,7 +49,7 @@ type
     RETURNDATASIZE, # 61
     RETURNDATACOPY, # 62
 
-    BLOCKHASH,     # 64
+    BLOCKHASH = 0x40,# 64
 
     COINBASE,      # 65
 
@@ -61,7 +61,7 @@ type
 
     GASLIMIT,      # 69
     
-    POP,           # 80
+    POP = 0x50,    # 80
 
     MLOAD,         # 81
     MSTORE,        # 82
@@ -81,7 +81,7 @@ type
 
     JUMPDEST,      # 91
     
-    PUSH1,         # 96
+    PUSH1 = 0x60,  # 96
     PUSH2,         # 97
     PUSH3,         # 98
     PUSH4,         # 99
@@ -150,13 +150,13 @@ type
     LOG2,          # 162
     LOG3,          # 163
     LOG4,          # 164
-    CREATE,        # 240
+    CREATE = 0xf0, # 240
     CALL,          # 241
     CALLCODE,      # 242
     RETURN,        # 243
     DELEGATECALL,  # 244
-    STATICCALL,    # 250
-    REVERT,        # 253
-    SELFDESTRUCT   # 255
+    STATICCALL = 0xfa,# 250
+    REVERT = 0xfd, # 253
+    SELFDESTRUCT = 0xff,# 255
     INVALID        # invalid
 

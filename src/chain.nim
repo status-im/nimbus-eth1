@@ -13,7 +13,7 @@ type
     ## current block number.
     header*: BlockHeader
     logger*: Logger
-    networkId*: cstring
+    networkId*: string
     vmsByRange*: seq[tuple[blockNumber: Int256, vm: VM]] # TODO
     importBlock*: bool
     validateBlock*: bool
@@ -23,18 +23,18 @@ type
     blockNumber*: Int256
     difficulty*: Int256
     gasLimit*: Int256
-    parentHash*: cstring
-    coinbase*: cstring
-    nonce: cstring
-    mixHash: cstring
-    extraData: cstring
+    parentHash*: string
+    coinbase*: string
+    nonce: string
+    mixHash: string
+    extraData: string
     timestamp: int,
-    stateRoot: cstring
+    stateRoot: string
 
   FundedAddress* = ref object
     balance*: Int256
     nonce*: int
-    code*: cstring
+    code*: string
 
 
 proc configureChain*(name: string, blockNumber: Int256, vm: VM, importBlock: bool = true, validateBlock: bool = true): Chain =

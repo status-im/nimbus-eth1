@@ -34,7 +34,7 @@ proc push*(stack: var Stack; value: Int256) =
 
   stack.values.add(Value(kind: VInt, i: value))
 
-proc push*(stack: var Stack; value: cstring) =
+proc push*(stack: var Stack; value: string) =
   ## Push a binary onto the stack
   ensureStackLimit()
 
@@ -50,13 +50,13 @@ proc internalPop(stack: var Stack; numItems: int): seq[Value] =
 template toType(i: Int256, _: typedesc[Int256]): Int256 =
   i
 
-template toType(i: Int256, _: typedesc[cstring]): cstring =
+template toType(i: Int256, _: typedesc[string]): string =
   intToBigEndian(i)
 
-template toType(b: cstring, _: typedesc[Int256]): Int256 =
+template toType(b: string, _: typedesc[Int256]): Int256 =
   bigEndianToInt(b)
 
-template toType(b: cstring, _: typedesc[cstring]): cstring =
+template toType(b: string, _: typedesc[string]): string =
   b
 
 proc internalPop(stack: var Stack; numItems: int, T: typedesc): seq[T] =
@@ -136,13 +136,13 @@ macro popInt*(stack: typed; numItems: static[int]): untyped =
 #   result = stack.internalPop(numItems, Int256)
 #   ensurePop(result, numItems)
 
-proc popBinary*(stack: var Stack): cstring =
-  var elements = stack.internalPop(1, cstring)
+proc popBinary*(stack: var Stack): string =
+  var elements = stack.internalPop(1, string)
   ensurePop(elements, 1)
   result = elements[0]
 
-proc popBinary*(stack: var Stack; numItems: int): seq[cstring] =
-  result = stack.internalPop(numItems, cstring)
+proc popBinary*(stack: var Stack; numItems: int): seq[string] =
+  result = stack.internalPop(numItems, string)
   ensurePop(result, numItems)
 
 proc newStack*(): Stack =
@@ -176,7 +176,7 @@ proc getInt*(stack: Stack, position: int): Int256 =
   else:
     raise newException(TypeError, "Expected int")
 
-proc getBinary*(stack: Stack, position: int): cstring =
+proc getBinary*(stack: Stack, position: int): string =
   let element = stack.values[position]
   case element.kind:
   of VBinary:

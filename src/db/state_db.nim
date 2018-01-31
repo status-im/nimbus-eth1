@@ -4,15 +4,15 @@ import
 
 type
   AccountStateDB* = ref object
-    db*: Table[cstring, Int256]
+    db*: Table[string, Int256]
 
-proc newAccountStateDB*(db: Table[cstring, Int256], readOnly: bool = false): AccountStateDB =
+proc newAccountStateDB*(db: Table[string, Int256], readOnly: bool = false): AccountStateDB =
   result = AccountStateDB(db: db)
 
 proc logger*(db: AccountStateDB): Logger =
   logging.getLogger("db.State")
 
-proc getAccount(db: AccountStateDB, address: cstring): Account = 
+proc getAccount(db: AccountStateDB, address: string): Account = 
   # let rlpAccount = db.trie[address]
   # if not rlpAccount.isNil:
   #   account = rlp.decode[Account](rlpAccount)
@@ -21,23 +21,23 @@ proc getAccount(db: AccountStateDB, address: cstring): Account =
   #   account = newAccount()
   result = newAccount() # TODO
 
-proc setAccount(db: AccountStateDB, address: cstring, account: Account) =
+proc setAccount(db: AccountStateDB, address: string, account: Account) =
   # db.trie[address] = rlp.encode[Account](account)
   discard # TODO 
 
 # public
 
-proc getBalance*(db: AccountStateDB, address: cstring): Int256 =
+proc getBalance*(db: AccountStateDB, address: string): Int256 =
   validateCanonicalAddress(address, title="Storage Address")
   let account = db.getAccount(address)
   account.balance
 
-proc setBalance*(db: var AccountStateDB, address: cstring, balance: Int256) =
+proc setBalance*(db: var AccountStateDB, address: string, balance: Int256) =
   validateCanonicalAddress(address, title="Storage Address")
   let account = db.getAccount(address)
   account.balance = balance
   db.setAccount(address, account)
 
-proc deltaBalance*(db: var AccountStateDB, address: cstring, delta: Int256) =
+proc deltaBalance*(db: var AccountStateDB, address: string, delta: Int256) =
   db.setBalance(address, db.getBalance(address) + delta)
 

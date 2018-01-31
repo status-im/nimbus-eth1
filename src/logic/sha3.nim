@@ -8,5 +8,5 @@ proc sha3op*(computation: var BaseComputation) =
   let wordCount = sha3Bytes.len.i256.ceil32 div 32
   let gasCost = constants.GAS_SHA3_WORD * wordCount
   computation.gasMeter.consumeGas(gasCost, reason="SHA3: word gas cost")
-  var res = keccak(cstring"")
+  var res = keccak("")
   pushRes()

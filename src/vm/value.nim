@@ -10,7 +10,7 @@ type
     of VInt:
       i*: Int256
     of VBinary:
-      b*: cstring
+      b*: string
 
 proc `$`*(value: Value): string =
   case value.kind:
@@ -25,6 +25,6 @@ proc vint*(i: int): Value =
 proc vint*(i: Int256): Value =
   Value(kind: VInt, i: i)
 
-proc vbinary*(b: cstring): Value =
+proc vbinary*(b: string): Value =
   Value(kind: VBinary, b: b)
 

@@ -88,3 +88,9 @@ proc rStrip*(value: cstring, c: char): cstring =
 
 proc strip*(value: cstring, c: char): cstring =
   result = value.lStrip(c).rStrip(c)
+
+proc lStrip*(value: string, c: char): string =
+  value.strip(chars={c}, trailing=false)
+
+proc rStip*(value: string, c: char): string =
+  value.strip(chars={c}, leading=false)

@@ -4,7 +4,7 @@ import
   strformat,
   errors, constants, bigints
 
-proc validateCanonicalAddress*(value: cstring, title: string = "Value") =
+proc validateCanonicalAddress*(value: string, title: string = "Value") =
   # TODO
   if false: #len(value) != 20:
     raise newException(ValidationError,

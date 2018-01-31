@@ -26,8 +26,8 @@ proc callValue*(computation: var BaseComputation) =
 proc callDataLoad*(computation: var BaseComputation) =
   # Load call data into memory
   let startPosition = computation.stack.popInt.getInt
-  let value = computation.msg.data[startPosition ..< startPosition + 32].toCString
-  let paddedValue = padRight(value, 32, cstring"\x00")
+  let value = computation.msg.data[startPosition ..< startPosition + 32].toString
+  let paddedValue = padRight(value, 32, "\x00")
   let normalizedValue = paddedValue.lStrip(0.char)
   computation.stack.push(normalizedValue)
 
@@ -45,8 +45,8 @@ proc callDataCopy*(computation: var BaseComputation) =
   let wordCount = ceil32(size) div 32
   let copyGasCost = wordCount * constants.GAS_COPY
   computation.gasMeter.consumeGas(copyGasCost, reason="CALLDATACOPY fee")
-  let value = computation.msg.data[calldataStartPosition.getInt ..< (calldataStartPosition + size).getInt].toCString
-  let paddedValue = padRight(value, size.getInt, cstring"\x00")
+  let value = computation.msg.data[calldataStartPosition.getInt ..< (calldataStartPosition + size).getInt].toString
+  let paddedValue = padRight(value, size.getInt, "\x00")
   computation.memory.write(memStartPosition, size, paddedValue)
 
 
@@ -115,5 +115,5 @@ proc returnDataCopy*(computation: var BaseComputation) =
   let wordCount = ceil32(size) div 32
   let copyGasCost = wordCount * constants.GAS_COPY
   computation.gasMeter.consumeGas(copyGasCost, reason="RETURNDATACOPY fee")
-  let value = cstring(($computation.returnData)[returnDataStartPosition.getInt ..< (returnDataStartPosition + size).getInt])
+  let value = ($computation.returnData)[returnDataStartPosition.getInt ..< (returnDataStartPosition + size).getInt]
   computation.memory.write(memStartPosition, size, value)

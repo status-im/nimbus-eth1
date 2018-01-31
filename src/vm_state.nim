@@ -19,10 +19,10 @@ proc newBaseVMState*: BaseVMState =
 method logger*(vmState: BaseVMState): Logger =
   logging.getLogger(&"evm.vmState.{vmState.name}")
 
-method blockhash*(vmState: BaseVMState): cstring =
+method blockhash*(vmState: BaseVMState): string =
   vmState.blockHeader.hash
 
-method coinbase*(vmState: BaseVMState): cstring =
+method coinbase*(vmState: BaseVMState): string =
   vmState.blockHeader.coinbase
 
 method timestamp*(vmState: BaseVMState): int =
@@ -37,11 +37,11 @@ method difficulty*(vmState: BaseVMState): Int256 =
 method gasLimit*(vmState: BaseVMState): Int256 =
   vmState.blockHeader.gasLimit
 
-method getAncestorHash*(vmState: BaseVMState, blockNumber: Int256): cstring =
+method getAncestorHash*(vmState: BaseVMState, blockNumber: Int256): string =
   var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1.int256
   if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH or
      ancestorDepth < 0 or
      ancestorDepth >= vmState.prevHeaders.len.int256:
-    return cstring""
+    return ""
   var header = vmState.prevHeaders[ancestorDepth.getInt]
   result = header.hash

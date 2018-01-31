@@ -86,12 +86,12 @@ let
   UINT_255_MAX*: Int256 =         2 ^ (256 - 1) - 1
   UINT_255_CEILING*: Int256 =     2 ^ (256 - 1)
 
-  NULLBYTE* =                     cstring"\x00"
+  NULLBYTE* =                     "\x00"
   EMPTYWORD* =                    repeat(NULLBYTE, 32)
   UINT160CEILING*: Int256 =       2 ^ 160
-  CREATE_CONTRACT_ADDRESS* =      cstring""
-  ZERO_ADDRESS* =                 repeat(cstring"\x00", 20)
-  ZERO_HASH32* =                  repeat(cstring"\x00", 20)
+  CREATE_CONTRACT_ADDRESS* =      ""
+  ZERO_ADDRESS* =                 repeat("\x00", 20)
+  ZERO_HASH32* =                  repeat("\x00", 20)
   STACK_DEPTH_LIMIT* =            1024
   
   GAS_NULL* =                     0.i256
@@ -178,19 +178,19 @@ let
   SECPK1_Gy* =                    0.i256
   SECPK1_G* =                     (SECPK1Gx, SECPK1Gy)
   
-  EMPTY_UNCLE_HASH* =             cstring"\x1d\xccM\xe8\xde\xc7]z\xab\x85\xb5g\xb6\xcc\xd4\x1a\xd3\x12E\x1b\x94\x8at\x13\xf0\xa1B\xfd@\xd4\x93G"
+  EMPTY_UNCLE_HASH* =             "\x1d\xccM\xe8\xde\xc7]z\xab\x85\xb5g\xb6\xcc\xd4\x1a\xd3\x12E\x1b\x94\x8at\x13\xf0\xa1B\xfd@\xd4\x93G"
   
   GENESIS_BLOCK_NUMBER* =         0.i256
   GENESIS_DIFFICULTY* =           131_072.i256
   GENESIS_GAS_LIMIT* =            3_141_592.i256
   GENESIS_PARENT_HASH* =          ZERO_HASH32
   GENESIS_COINBASE* =             ZERO_ADDRESS
-  GENESIS_NONCE* =                cstring"\x00\x00\x00\x00\x00\x00\x00B"
+  GENESIS_NONCE* =                "\x00\x00\x00\x00\x00\x00\x00B"
   GENESIS_MIX_HASH* =             ZERO_HASH32
-  GENESIS_EXTRA_DATA =            cstring""
+  GENESIS_EXTRA_DATA =            ""
   
-  EMPTYSHA3 =                     cstring"\xc5\xd2F\x01\x86\xf7#<\x92~}\xb2\xdc\xc7\x03\xc0\xe5\x00\xb6S\xca\x82';{\xfa\xd8\x04]\x85\xa4p"  
-  BLANK_ROOT_HASH* =              cstring"V\xe8\x1f\x17\x1b\xccU\xa6\xff\x83E\xe6\x92\xc0\xf8n[H\xe0\x1b\x99l\xad\xc0\x01b/\xb5\xe3c\xb4!"
+  EMPTYSHA3 =                     "\xc5\xd2F\x01\x86\xf7#<\x92~}\xb2\xdc\xc7\x03\xc0\xe5\x00\xb6S\xca\x82';{\xfa\xd8\x04]\x85\xa4p"  
+  BLANK_ROOT_HASH* =              "V\xe8\x1f\x17\x1b\xccU\xa6\xff\x83E\xe6\x92\xc0\xf8n[H\xe0\x1b\x99l\xad\xc0\x01b/\xb5\xe3c\xb4!"
   
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* = 20.i256
 

@@ -5,16 +5,16 @@ type
     timestamp*: int
     difficulty*: Int256
     blockNumber*: Int256
-    hash*: cstring
-    coinbase*: cstring
+    hash*: string
+    coinbase*: string
   # TODO
 
 proc generateHeaderFromParentHeader*(
     computeDifficultyFn: proc(parentHeader: Header, timestamp: int): int,
     parentHeader: Header,
-    coinbase: cstring,
+    coinbase: string,
     timestamp: int = -1,
-    extraData: cstring = cstring""): Header =
+    extraData: string = string""): Header =
   Header()
   # Generate BlockHeader from state_root and parent_header
   # if timestamp is None:

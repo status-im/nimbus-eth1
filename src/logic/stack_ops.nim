@@ -17,12 +17,12 @@ macro pushXX(size: static[int]): untyped =
   let name = ident(&"push{size}")
   result = quote:
     proc `name`*(`computation`: var BaseComputation) =
-      let `value` = `computation`.code.read(`size`).toCString
+      let `value` = `computation`.code.read(`size`).toString
       let stripped = `value`.strip(0.char)
       if stripped.len == 0:
         `computation`.stack.push(0.i256)
       else:
-        let paddedValue = `value`.padRight(`size`, cstring"\x00")
+        let paddedValue = `value`.padRight(`size`, "\x00")
         `computation`.stack.push(paddedValue)
 
 

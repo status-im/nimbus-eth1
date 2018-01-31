@@ -112,10 +112,10 @@ opcodes[Op.Create] = Create(kind: Op.Create)
 
 var mem = newMemory(pow(1024.int256, 2))
 
-var to = toCanonicalAddress(cstring"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
-var sender = toCanonicalAddress(cstring"0xcd1722f3947def4cf144679da39c4c32bdc35681")
+var to = toCanonicalAddress("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+var sender = toCanonicalAddress("0xcd1722f3947def4cf144679da39c4c32bdc35681")
 
-var code = cstring""
+var code = ""
 var data: seq[byte] = @[]
 
 var msg = newMessage(
@@ -140,14 +140,14 @@ var c = BaseComputation(
   gasMeter: newGasMeter(msg.gas),
   code: newCodeStream(code),
   children: @[],
-  rawOutput: cstring"",
-  returnData: cstring"",
+  rawOutput: "",
+  returnData: "",
   error: nil,
   logEntries: @[],
   shouldEraseReturnData: false,
-  accountsToDelete: initTable[cstring, cstring](),
+  accountsToDelete: initTable[string, string](),
   opcodes: opcodes,
-  precompiles: initTable[cstring, Opcode]())
+  precompiles: initTable[string, Opcode]())
 
 # var c2 = c.applyComputation(c.vmState, c.msg)
 

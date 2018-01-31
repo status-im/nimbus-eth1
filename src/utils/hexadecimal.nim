@@ -1,11 +1,11 @@
 import strutils
 
-proc encodeHex*(value: cstring): string =
+proc encodeHex*(value: string): string =
   # return "0x" & codecs.decode(codecs.encode(value, "hex"), "utf8")
-  return $value
+  return value
 
-proc decodeHex*(value: string): cstring =
+proc decodeHex*(value: string): string =
   # var hexPart = value.rsplit("x", 1)[1]
-  return cstring(value)
+  return value
   # return codecs.decode(hexPart, "hex")
 

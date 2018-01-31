@@ -19,41 +19,41 @@ type
 
     gas*:                     Int256
     gasPrice*:                Int256
-    to*:                      cstring
-    sender*:                  cstring    
+    to*:                      string
+    sender*:                  string    
     value*:                   Int256
     data*:                    seq[byte]
-    code*:                    cstring
-    internalOrigin:           cstring
-    internalCodeAddress:      cstring
+    code*:                    string
+    internalOrigin:           string
+    internalCodeAddress:      string
     depth*:                   int
-    internalStorageAddress:   cstring
+    internalStorageAddress:   string
     shouldTransferValue*:     bool
     isStatic*:                bool
     isCreate*:                bool
 
   MessageOptions* = ref object
-    origin*:                  cstring
+    origin*:                  string
     depth*:                   int
-    createAddress*:           cstring
-    codeAddress*:             cstring
+    createAddress*:           string
+    codeAddress*:             string
     shouldTransferValue*:     bool
     isStatic*:                bool
 
-proc `origin=`*(message: var Message, value: cstring) =
+proc `origin=`*(message: var Message, value: string) =
   message.internalOrigin = value
 
-proc `codeAddress=`*(message: var Message, value: cstring) =
+proc `codeAddress=`*(message: var Message, value: string) =
   message.internalCodeAddress = value
 
-proc `storageAddress=`*(message: var Message, value: cstring) =
+proc `storageAddress=`*(message: var Message, value: string) =
   message.internalStorageAddress = value
 
 proc newMessageOptions*(
-    origin: cstring = nil,
+    origin: string = "",
     depth: int = 0,
-    createAddress: cstring = nil,
-    codeAddress: cstring = nil,
+    createAddress: string = "",
+    codeAddress: string = "",
     shouldTransferValue: bool = true,
     isStatic: bool = false): MessageOptions =
 
@@ -68,11 +68,11 @@ proc newMessageOptions*(
 proc newMessage*(
     gas: Int256,
     gasPrice: Int256,
-    to: cstring,
-    sender: cstring,
+    to: string,
+    sender: string,
     value: Int256,
     data: seq[byte],
-    code: cstring,
+    code: string,
     options: MessageOptions = newMessageOptions()): Message =
     
   new(result)
@@ -111,8 +111,8 @@ proc newMessage*(
 
   result.isStatic = options.isStatic
 
-proc origin*(message: Message): cstring =
-  if not message.internalOrigin.isNil:
+proc origin*(message: Message): string =
+  if not message.internalOrigin.len == 0:
     message.internalOrigin
   else:
     message.sender
@@ -120,14 +120,14 @@ proc origin*(message: Message): cstring =
 proc isOrigin*(message: Message): bool =
   message.sender == message.origin
 
-proc codeAddress*(message: Message): cstring =
-  if not message.internalCodeAddress.isNil:
+proc codeAddress*(message: Message): string =
+  if not message.internalCodeAddress.len == 0:
     message.internalCodeAddress
   else:
     message.to
 
-proc `storageAddress`*(message: Message): cstring =
-  if not message.internalStorageAddress.isNil:
+proc `storageAddress`*(message: Message): string =
+  if not message.internalStorageAddress.len == 0:
     message.internalStorageAddress
   else:
     message.to

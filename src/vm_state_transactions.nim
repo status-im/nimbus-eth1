@@ -7,7 +7,7 @@ method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction
   raise newException(ValueError, "Must be implemented by subclasses")
 
 
-method addTransaction*(vmState: var BaseVMState, transaction: BaseTransaction, computation: BaseComputation, b: Block): (Block, Table[cstring, cstring]) =
+method addTransaction*(vmState: var BaseVMState, transaction: BaseTransaction, computation: BaseComputation, b: Block): (Block, Table[string, string]) =
   # Add a transaction to the given block and
   # return `trieData` to store the transaction data in chaindb in VM layer
   # Update the bloomFilter, transaction trie and receipt trie roots, bloom_filter,
@@ -34,13 +34,13 @@ method addTransaction*(vmState: var BaseVMState, transaction: BaseTransaction, c
   #       block.header.gas_used = receipt.gas_used
 
   #       return block, trie_data
-  result = (b, initTable[cstring, cstring]())
+  result = (b, initTable[string, string]())
 
 method applyTransaction*(
     vmState: var BaseVMState,
     transaction: BaseTransaction,
     b: Block,
-    isStateless: bool): (BaseComputation, Block, Table[cstring, cstring]) =
+    isStateless: bool): (BaseComputation, Block, Table[string, string]) =
   # Apply transaction to the given block
   # transaction: the transaction need to be applied
   # b: the block which the transaction applies on
@@ -52,10 +52,10 @@ method applyTransaction*(
     var (computation, blockHeader) = vmState.executeTransaction(transaction)
 
     ourBlock.header = blockHeader
-    var trieData: Table[cstring, cstring]
+    var trieData: Table[string, string]
     (ourBlock, trieData) = vmState.addTransaction(transaction, computation, ourBlock)
 
     result = (computation, ourBlock, trieData)
   else:
     var (computation, blockHeader) = vmState.executeTransaction(transaction)
-    return (computation, nil, initTable[cstring, cstring]())
+    return (computation, nil, initTable[string, string]())

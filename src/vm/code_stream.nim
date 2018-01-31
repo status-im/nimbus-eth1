@@ -1,5 +1,5 @@
 import
-  strformat, strutils, sequtils, sets,
+  strformat, strutils, sequtils, sets, macros,
   ../logging, ../constants, ../opcode_values
 
 type
@@ -13,28 +13,34 @@ type
 proc `$`*(b: byte): string =
   $(b.int)
 
-proc newCodeStream*(codeBytes: cstring): CodeStream =
+proc newCodeStream*(codeBytes: seq[byte]): CodeStream =
   new(result)
-  result.bytes = codeBytes.mapIt(it.byte)
+  result.bytes = codeBytes
   result.pc = 0
   result.invalidPositions = initSet[int]()
   result.depthProcessed = 0
-  result.logger = logging.getLogger("evm.vm.CodeStream")
+  result.logger = logging.getLogger("vm.code_stream")
+
+proc newCodeStream*(codeBytes: string): CodeStream =
+  newCodeStream(codeBytes.mapIt(it.byte))
 
 proc read*(c: var CodeStream, size: int): seq[byte] =
-  result = c.bytes[c.pc .. c.pc + size - 1]
-  c.pc += size
+  if c.pc + size - 1 < c.bytes.len:
+    result = c.bytes[c.pc .. c.pc + size - 1]
+    c.pc += size
+  else:
+    result = @[]
+    c.pc = c.bytes.len
 
 proc len*(c: CodeStream): int =
   len(c.bytes)
 
 proc next*(c: var CodeStream): Op =
   var nextOpcode = c.read(1)
-  if nextOpcode[0] != 0x0.byte:
+  if nextOpcode.len != 0:
     return Op(nextOpcode[0])
   else:
     return Op.STOP
-
 
 iterator items*(c: var CodeStream): Op =
   var nextOpcode = c.next()
@@ -42,8 +48,8 @@ iterator items*(c: var CodeStream): Op =
     yield nextOpcode
     nextOpcode = c.next()
 
-proc `[]`*(c: CodeStream, offset: int): byte =
-  c.bytes[offset]
+proc `[]`*(c: CodeStream, offset: int): Op =
+  Op(c.bytes[offset])
 
 proc peek*(c: var CodeStream): Op =
   var currentPc = c.pc
@@ -53,14 +59,16 @@ proc peek*(c: var CodeStream): Op =
 proc updatePc*(c: var CodeStream, value: int) =
   c.pc = min(value, len(c))
 
-template seek*(c: var CodeStream, pc: int, handler: untyped): untyped =
-  var anchorPc = pc
-  `c`.pc = pc
-  try:
-    var c = `c` {.inject.}
-    `handler`
-  finally:
-    `c`.pc = anchorPc
+macro seek*(c: var CodeStream, pc: int, handler: untyped): untyped =
+  let c2 = ident("c")
+  result = quote:
+    var anchorPc = `c`.pc
+    `c`.pc = `pc`
+    try:
+      var `c2` = `c`
+      `handler`
+    finally:
+      `c`.pc = anchorPc
 
 proc isValidOpcode*(c: var CodeStream, position: int): bool =
   if position >= len(c):

@@ -1,9 +1,9 @@
 import bigints, constants, strformat, macros
 
-proc intToBigEndian*(value: Int256): cstring =
-  result = cstring""
+proc intToBigEndian*(value: Int256): string =
+  result = ""
 
-proc bigEndianToInt*(value: cstring): Int256 =
+proc bigEndianToInt*(value: string): Int256 =
   result = 0.int256
 
 proc unsignedToSigned*(value: Int256): Int256 =

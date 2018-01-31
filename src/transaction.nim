@@ -6,9 +6,9 @@ type
     nonce*: Int256
     gasPrice*: Int256
     gas*: Int256
-    to*: cstring
+    to*: string
     value*: Int256
-    data*: cstring
+    data*: string
     v*: Int256
     r*: Int256
     s*: Int256
@@ -31,6 +31,6 @@ proc validate*(t: BaseTransaction) =
     raise newException(ValidationError, "Insufficient gas")
   #  self.check_signature_validity()
 
-proc sender*(t: BaseTransaction): cstring =
+proc sender*(t: BaseTransaction): string =
   # TODO
-  cstring""
+  ""

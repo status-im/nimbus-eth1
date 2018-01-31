@@ -30,16 +30,16 @@ type
 using
   computation: var BaseComputation
 
-method msgExtraGas*(call: BaseCall, computation; gas: Int256, to: cstring, value: Int256): Int256 {.base.} =
+method msgExtraGas*(call: BaseCall, computation; gas: Int256, to: string, value: Int256): Int256 {.base.} =
   raise newException(NotImplementedError, "Must be implemented by subclasses")
 
-method msgGas*(call: BaseCall, computation; gas: Int256, to: cstring, value: Int256): (Int256, Int256) {.base.} =
+method msgGas*(call: BaseCall, computation; gas: Int256, to: string, value: Int256): (Int256, Int256) {.base.} =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   let totalFee = gas + extraGas
   let childMsgGas = gas + (if value != 0: GAS_CALL_STIPEND else: 0.i256)
   (childMsgGas, totalFee)
 
-method callParams*(call: BaseCall, computation): (Int256, Int256, cstring, cstring, cstring, Int256, Int256, Int256, Int256, bool, bool) {.base.} =
+method callParams*(call: BaseCall, computation): (Int256, Int256, string, string, string, Int256, Int256, Int256, Int256, bool, bool) {.base.} =
   raise newException(NotImplementedError, "Must be implemented subclasses")
 
 method runLogic*(call: BaseCall, computation) =
@@ -67,7 +67,7 @@ method runLogic*(call: BaseCall, computation) =
   let stackTooDeep = computation.msg.depth + 1 > constants.STACK_DEPTH_LIMIT
 
   if insufficientFunds or stackTooDeep:
-    computation.returnData = cstring""
+    computation.returnData = ""
     var errMessage: string
     if insufficientFunds:
       errMessage = &"Insufficient Funds: have: {senderBalance} | need: {value}"
@@ -86,7 +86,7 @@ method runLogic*(call: BaseCall, computation) =
     #         code = state_db.get_code(code_address)
     #     else:
     #         code = state_db.get_code(to)
-    let code = cstring""
+    let code = ""
     
     let childMsg = computation.prepareChildMessage(
       childMsgGas,
@@ -115,7 +115,7 @@ method runLogic*(call: BaseCall, computation) =
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-method msgExtraGas(call: Call, computation; gas: Int256, to: cstring, value: Int256): Int256 =
+method msgExtraGas(call: Call, computation; gas: Int256, to: string, value: Int256): Int256 =
   # TODO: db
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #  let accountExists = db.accountExists(to)
@@ -125,9 +125,9 @@ method msgExtraGas(call: Call, computation; gas: Int256, to: cstring, value: Int
   let createGasFee = if not accountExists: GAS_NEW_ACCOUNT else: 0.i256
   transferGasFee + createGasFee
 
-method callParams(call: CallCode, computation): (Int256, Int256, cstring, cstring, cstring, Int256, Int256, Int256, Int256, bool, bool) =
+method callParams(call: CallCode, computation): (Int256, Int256, string, string, string, Int256, Int256, Int256, Int256, bool, bool) =
   let gas = computation.stack.popInt()
-  let to = cstring(forceBytesToAddress(computation.stack.popBinary))
+  let to = forceBytesToAddress(computation.stack.popBinary)
 
   let (value,
        memoryInputStartPosition, memoryInputSize,
@@ -145,12 +145,12 @@ method callParams(call: CallCode, computation): (Int256, Int256, cstring, cstrin
    true,  # should_transfer_value,
    computation.msg.isStatic)
 
-method msgExtraGas(call: CallCode, computation; gas: Int256, to: cstring, value: Int256): Int256 =
+method msgExtraGas(call: CallCode, computation; gas: Int256, to: string, value: Int256): Int256 =
   if value != 0: GAS_CALL_VALUE else: 0.i256
 
-method callParams(call: Call, computation): (Int256, Int256, cstring, cstring, cstring, Int256, Int256, Int256, Int256, bool, bool) =
+method callParams(call: Call, computation): (Int256, Int256, string, string, string, Int256, Int256, Int256, Int256, bool, bool) =
   let gas = computation.stack.popInt()
-  let codeAddress = cstring(forceBytesToAddress(computation.stack.popBinary))
+  let codeAddress = forceBytesToAddress(computation.stack.popBinary)
 
   let (value,
        memoryInputStartPosition, memoryInputSize,
@@ -171,15 +171,15 @@ method callParams(call: Call, computation): (Int256, Int256, cstring, cstring, c
    true,  # should_transfer_value,
    computation.msg.isStatic)
 
-method msgGas(call: DelegateCall, computation; gas: Int256, to: cstring, value: Int256): (Int256, Int256) =
+method msgGas(call: DelegateCall, computation; gas: Int256, to: string, value: Int256): (Int256, Int256) =
   (gas, gas)
 
-method msgExtraGas(call: DelegateCall, computation; gas: Int256, to: cstring, value: Int256): Int256 =
+method msgExtraGas(call: DelegateCall, computation; gas: Int256, to: string, value: Int256): Int256 =
   0.i256
 
-method callParams(call: DelegateCall, computation): (Int256, Int256, cstring, cstring, cstring, Int256, Int256, Int256, Int256, bool, bool) =
+method callParams(call: DelegateCall, computation): (Int256, Int256, string, string, string, Int256, Int256, Int256, Int256, bool, bool) =
   let gas = computation.stack.popInt()
-  let codeAddress = cstring(forceBytesToAddress(computation.stack.popBinary))
+  let codeAddress = forceBytesToAddress(computation.stack.popBinary)
 
   let (memoryInputStartPosition, memoryInputSize,
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
@@ -211,19 +211,19 @@ proc computeEIP150MsgGas(computation; gas: Int256, extraGas: Int256, value: Int2
   let childMsgGas = gas + (if value != 0: callStipend else: 0.i256)
   (childMsgGas, totalFee)
 
-method msgGas(call: CallEIP150, computation; gas: Int256, to: cstring, value: Int256): (Int256, Int256) =
+method msgGas(call: CallEIP150, computation; gas: Int256, to: string, value: Int256): (Int256, Int256) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, GAS_CALL_STIPEND)
 
-method msgGas(call: CallCodeEIP150, computation; gas: Int256, to: cstring, value: Int256): (Int256, Int256) =
+method msgGas(call: CallCodeEIP150, computation; gas: Int256, to: string, value: Int256): (Int256, Int256) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, GAS_CALL_STIPEND)
 
-method msgGas(call: DelegateCallEIP150, computation; gas: Int256, to: cstring, value: Int256): (Int256, Int256) =
+method msgGas(call: DelegateCallEIP150, computation; gas: Int256, to: string, value: Int256): (Int256, Int256) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, 0.i256)
 
-proc msgExtraGas*(call: CallEIP161, computation; gas: Int256, to: cstring, value: Int256): Int256 =
+proc msgExtraGas*(call: CallEIP161, computation; gas: Int256, to: string, value: Int256): Int256 =
   # TODO: with
   #  with computation.vm_state.state_db(read_only=True) as state_db:
   #            account_is_dead = (
@@ -236,9 +236,9 @@ proc msgExtraGas*(call: CallEIP161, computation; gas: Int256, to: cstring, value
   transferGasFee + createGasFee
 
 
-method callParams(call: StaticCall, computation): (Int256, Int256, cstring, cstring, cstring, Int256, Int256, Int256, Int256, bool, bool) =
+method callParams(call: StaticCall, computation): (Int256, Int256, string, string, string, Int256, Int256, Int256, Int256, bool, bool) =
   let gas = computation.stack.popInt()
-  let to = cstring(forceBytesToAddress(computation.stack.popBinary))
+  let to = forceBytesToAddress(computation.stack.popBinary)
 
   let (memoryInputStartPosition, memoryInputSize,
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
@@ -256,7 +256,7 @@ method callParams(call: StaticCall, computation): (Int256, Int256, cstring, cstr
    true) # is_static
 
 
-method callParams(call: CallByzantium, computation): (Int256, Int256, cstring, cstring, cstring, Int256, Int256, Int256, Int256, bool, bool) =
+method callParams(call: CallByzantium, computation): (Int256, Int256, string, string, string, Int256, Int256, Int256, Int256, bool, bool) =
   result = procCall callParams(call, computation)
   if computation.msg.isStatic and result[1] != 0:
     raise newException(WriteProtection, "Cannot modify state while inside of a STATICCALL context")

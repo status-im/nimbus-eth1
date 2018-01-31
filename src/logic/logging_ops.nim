@@ -48,7 +48,7 @@ macro logXX(topicCount: static[int]): untyped =
     let totalGasCost = dataGasCost + topicGasCost
     `computation`.gasMeter.consumeGas(totalGasCost, reason="Log topic and data gas cost")
     `computation`.extendMemory(`memStartPosition`, `size`)
-    let logData = `computation`.memory.read(`memStartPosition`, `size`).toCString
+    let logData = `computation`.memory.read(`memStartPosition`, `size`).toString
     `computation`.addLogEntry(
         account=`computation`.msg.storageAddress,
         topics=`topics`,

@@ -23,14 +23,14 @@ type
     gasMeter*:              GasMeter
     code*:                  CodeStream
     children*:              seq[BaseComputation]
-    rawOutput*:             cstring
-    returnData*:            cstring
+    rawOutput*:             string
+    returnData*:            string
     error*:                 Error
-    logEntries*:            seq[(cstring, seq[Int256], cstring)]
+    logEntries*:            seq[(string, seq[Int256], string)]
     shouldEraseReturnData*: bool
-    accountsToDelete*:      Table[cstring, cstring]
+    accountsToDelete*:      Table[string, string]
     opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
-    precompiles*:           Table[cstring, Opcode]
+    precompiles*:           Table[string, Opcode]
 
   Error* = ref object
     info*:                  string
@@ -53,7 +53,7 @@ proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputatio
   result.stack = newStack()
   result.gasMeter = newGasMeter(message.gas)
   result.children = @[]
-  result.accountsToDelete = initTable[cstring, cstring]()
+  result.accountsToDelete = initTable[string, string]()
   result.logEntries = @[]
   result.code = newCodeStream(message.code)
 
@@ -87,10 +87,10 @@ method shouldEraseReturnData*(c: BaseComputation): bool =
 method prepareChildMessage*(
     c: var BaseComputation,
     gas: Int256,
-    to: cstring,
+    to: string,
     value: Int256,
     data: seq[byte],
-    code: cstring,
+    code: string,
     options: MessageOptions = newMessageOptions()): Message =
 
   var childOptions = options
@@ -128,13 +128,13 @@ method extendMemory*(c: var BaseComputation, startPosition: Int256, size: Int256
 
       c.memory.extend(startPosition, size)
 
-method output*(c: BaseComputation): cstring =
+method output*(c: BaseComputation): string =
   if c.shouldEraseReturnData:
-    cstring""
+    ""
   else:
     c.rawOutput
 
-method `output=`*(c: var BaseComputation, value: cstring) =
+method `output=`*(c: var BaseComputation, value: string) =
   c.rawOutput = value
 
 macro generateChildBaseComputation*(t: typed, vmState: typed, childMsg: typed): untyped =
@@ -157,12 +157,12 @@ method addChildBaseComputation*(c: var BaseComputation, childBaseComputation: Ba
     if childBaseComputation.msg.isCreate:
       c.returnData = childBaseComputation.output
     elif childBaseComputation.shouldBurnGas:
-      c.returnData = cstring""
+      c.returnData = ""
     else:
       c.returnData = childBaseComputation.output
   else:
     if childBaseComputation.msg.isCreate:
-      c.returnData = cstring""
+      c.returnData = ""
     else:
       c.returnData = childBaseComputation.output
       c.children.add(childBaseComputation)
@@ -172,7 +172,7 @@ method applyChildBaseComputation*(c: var BaseComputation, childMsg: Message): Ba
   c.addChildBaseComputation(childBaseComputation)
   result = childBaseComputation
 
-method registerAccountForDeletion*(c: var BaseComputation, beneficiary: cstring) =
+method registerAccountForDeletion*(c: var BaseComputation, beneficiary: string) =
   validateCanonicalAddress(beneficiary, title="self destruct beneficiary address")
 
   if c.msg.storageAddress in c.accountsToDelete:
@@ -181,18 +181,18 @@ method registerAccountForDeletion*(c: var BaseComputation, beneficiary: cstring)
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
-method addLogEntry*(c: var BaseComputation, account: cstring, topics: seq[Int256], data: cstring) =
+method addLogEntry*(c: var BaseComputation, account: string, topics: seq[Int256], data: string) =
   validateCanonicalAddress(account, title="log entry address")
   c.logEntries.add((account, topics, data))
 
-method getAccountsForDeletion*(c: BaseComputation): seq[(cstring, cstring)] =
+method getAccountsForDeletion*(c: BaseComputation): seq[(string, string)] =
   # TODO
   if c.isError:
     result = @[]
   else:
     result = @[]
 
-method getLogEntries*(c: BaseComputation): seq[(cstring, seq[Int256], cstring)] =
+method getLogEntries*(c: BaseComputation): seq[(string, seq[Int256], string)] =
   # TODO
   if c.isError:
     result = @[]
