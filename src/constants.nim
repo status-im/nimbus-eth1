@@ -11,7 +11,13 @@ proc int256*(i: int): Int256 =
   i.initBigInt
 
 template i256*(i: int): Int256 =
-  i.int256
+  i.initBigInt
+
+template i256*(i: Int256): Int256 =
+  i
+
+template getInt*(i: int): int =
+  i
 
 # TODO
 # We'll have a fast fixed i256, for now this works
@@ -77,7 +83,7 @@ mapOp(`xor`)
 proc `abs`*(a: Int256): Int256 =
   if a >= 0.i256: a else: -a
 
-proc `getInt`*(a: Int256): int =
+template `getInt`*(a: Int256): int =
   a.limbs[0].int
 
 let

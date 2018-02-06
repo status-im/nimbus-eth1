@@ -19,24 +19,31 @@ proc len*(stack: Stack): int =
 proc push*(stack: var Stack; value: Value) =
   ## Push an item onto the stack
   ensureStackLimit()
+  if value.kind == VInt:
+    validateGte(value.i, 0)
+  else:
+    validateStackItem(value.b)
 
   stack.values.add(value)
 
 proc push*(stack: var Stack; value: int) =
   ## Push an integer onto the stack
   ensureStackLimit()
-
+  validateGte(value, 0)
+  
   stack.values.add(Value(kind: VInt, i: value.int256))
 
 proc push*(stack: var Stack; value: Int256) =
   ## Push an integer onto the stack
   ensureStackLimit()
+  validateGte(value, 0)
 
   stack.values.add(Value(kind: VInt, i: value))
 
 proc push*(stack: var Stack; value: string) =
   ## Push a binary onto the stack
   ensureStackLimit()
+  validateStackItem(value)
 
   stack.values.add(Value(kind: VBinary, b: value))
 
@@ -159,10 +166,10 @@ proc swap*(stack: var Stack; position: int) =
     raise newException(InsufficientStack,
                       &"Insufficient stack items for SWAP{position}")
 
-proc dup*(stack: var Stack; position: int) =
+proc dup*(stack: var Stack; position: int | Int256) =
   ## Perform a DUP operation on the stack
-  if position < len(stack) + 1:
-    stack.push(stack.values[^position])
+  if (position != 0 and position.getInt < stack.len + 1) or (position == 0 and position.getInt < stack.len):
+    stack.push(stack.values[^position.getInt])
   else:
     raise newException(InsufficientStack,
                       &"Insufficient stack items for DUP{position}")

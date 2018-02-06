@@ -28,3 +28,11 @@ proc vint*(i: Int256): Value =
 proc vbinary*(b: string): Value =
   Value(kind: VBinary, b: b)
 
+proc `==`*(a: Value, b: Value): bool =
+  if a.kind != b.kind:
+    return false
+  case a.kind:
+  of VInt:
+    a.i == b.i
+  of VBinary:
+    a.b == b.b
