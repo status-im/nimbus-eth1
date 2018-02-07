@@ -1,5 +1,7 @@
 # Nimbus
 
+[![Build Status](https://travis-ci.org/status-im/nimbus.svg?branch=master)](https://travis-ci.org/status-im/nimbus)
+
 An Ethereum 2.0 Sharding Client for Resource-Restricted Devices
 
 Rationale
