@@ -5,4 +5,4 @@ before_install:
   - docker pull yglukhov/nim-base
 script:
   - docker run yglukhov/nim-base nim --version
-  - docker run -v "$(pwd):/project" -w /project yglukhov/nim-base nimble install -y && ./tests/build_travis.sh && ./tests/test.sh
+  - docker run -v "$(pwd):/project" -w /project yglukhov/nim-base /bin/bash -c "nimble install -y && ./tests/build_test.sh && ./tests/test.sh"
