@@ -3,7 +3,7 @@ import
   ../constants, ../errors, ../computation, ../opcode, ../opcode_values, ../logging, 
   .. / vm / [stack, memory, gas_meter, message],
   .. / utils / [address, bytes],
-  bigints
+  ttmath
 
 type
   BaseCall* = ref object of Opcode

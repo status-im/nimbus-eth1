@@ -1,4 +1,4 @@
-import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, vm / [stack, value], bigints
+import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, vm / [stack, value], ttmath
 
 suite "stack":
   test "push only valid":

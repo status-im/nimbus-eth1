@@ -1,7 +1,7 @@
 import 
   ../constants, ../utils_numeric, ../computation,
   .. / vm / [gas_meter, stack], ../opcode, ../opcode_values,
-  helpers, bigints
+  helpers, ttmath
 
 proc add*(computation: var BaseComputation) =
   # Addition

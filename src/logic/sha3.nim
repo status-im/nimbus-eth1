@@ -1,5 +1,5 @@
 import
-  ../constants, ../utils_numeric, .. / utils / [keccak, bytes], .. / vm / [stack, memory, gas_meter], ../computation, helpers, bigints
+  ../constants, ../utils_numeric, .. / utils / [keccak, bytes], .. / vm / [stack, memory, gas_meter], ../computation, helpers, ttmath
 
 proc sha3op*(computation: var BaseComputation) =
   let (startPosition, size) = computation.stack.popInt(2)

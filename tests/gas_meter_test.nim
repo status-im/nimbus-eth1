@@ -1,4 +1,4 @@
-import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, logging, vm / gas_meter, bigints
+import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, logging, vm / gas_meter, ttmath
 
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful

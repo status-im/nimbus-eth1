@@ -1,17 +1,17 @@
 
 import
-  bigints, math, strutils, tables, utils/padding
+  ttmath, math, strutils, tables, utils/padding
 
 type
   TypeHint* {.pure.} = enum UInt256, Bytes, Any
 
-  Int256* = BigInt #distinct int # TODO
+  # Int256* = BigInt #distinct int # TODO
 
 proc int256*(i: int): Int256 =
-  i.initBigInt
+  i.i256
 
-template i256*(i: int): Int256 =
-  i.initBigInt
+# template i256*(i: int): Int256 =
+#   i.initBigInt
 
 template i256*(i: Int256): Int256 =
   i
@@ -29,16 +29,16 @@ proc `!=`*(a: Int256, b: int): bool =
   a != b.i256
 
 proc `^`*(base: int; exp: int): Int256 =
-  let base = base.initBigInt
+  let base = base.i256
   var ex = exp
-  result = 1.initBigInt
+  result = 1.i256
   while ex > 0:
     result *= base
     dec(ex)
 
 proc `^`*(left: Int256, right: int): Int256 =
-  var value = right.initBigInt
-  result = 1.initBigInt
+  var value = right.i256
+  result = 1.i256
   var m = right.i256
   while value > 0.i256:
     result = result * m
@@ -67,14 +67,15 @@ proc setXLen[T](s: var seq[T]; newlen: Natural) =
     s.setLen(newlen)
 
 template mapOp(op: untyped): untyped =
-  proc `op`*(left: Int256, right: Int256): Int256 =
-    result = left.initBigInt
-    var maxRight = right.initBigInt
-    var l = max(left.limbs.len, right.limbs.len)
-    result.limbs.setXLen(l)
-    maxRight.limbs.setXLen(l)
-    for z in 0 ..< l:
-      result.limbs[z] = `op`(result.limbs[z], maxRight.limbs[z])
+  proc `op`*(left: Int256, right: int): Int256 =
+    result = left.i256
+    result = `op`(result, right.i256) # for now we dont have so many bits
+    # var maxRight = right.i256
+    # var l = max(left.limbs.len, right.limbs.len)
+    # result.limbs.setXLen(l)
+    # maxRight.limbs.setXLen(l)
+    # for z in 0 ..< l:
+    #   result.limbs[z] = `op`(result.limbs[z], maxRight.limbs[z])
 
 mapOp(`and`)
 mapOp(`or`)
@@ -83,13 +84,10 @@ mapOp(`xor`)
 proc `abs`*(a: Int256): Int256 =
   if a >= 0.i256: a else: -a
 
-template `getInt`*(a: Int256): int =
-  a.limbs[0].int
-
 let
-  UINT_256_MAX*: Int256 =         2 ^ 256 - 1
+  UINT_256_MAX*: Int256 =         2 ^ 256 - 1.i256
   UINT_256_CEILING*: Int256 =     2 ^ 256
-  UINT_255_MAX*: Int256 =         2 ^ (256 - 1) - 1
+  UINT_255_MAX*: Int256 =         2 ^ (256 - 1) - 1.i256
   UINT_255_CEILING*: Int256 =     2 ^ (256 - 1)
 
   NULLBYTE* =                     "\x00"
@@ -159,7 +157,7 @@ let
   GAS_ECPAIRING_PER_POINT* =      80_000.i256
   GAS_LIMIT_EMA_DENOMINATOR* =    1_024.i256
   GAS_LIMIT_ADJUSTMENT_FACTOR* =  1_024.i256
-  GAS_LIMIT_MAXIMUM*: Int256 =    2 ^ 63 - 1
+  GAS_LIMIT_MAXIMUM*: Int256 =    2 ^ 63 - 1.i256
   GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* = 3.i256
   GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2.i256
   
@@ -176,8 +174,8 @@ let
   MAX_UNCLE_DEPTH* =              6.i256
   MAX_UNCLES* =                   2.i256
   
-  SECPK1_P*: Int256 =             2 ^ 256 - 2 ^ 32 - 977
-  SECPK1_N*: Int256 =             "115792089237316195423570985008687907852837564279074904382605163141518161494337".initBigInt
+  SECPK1_P*: Int256 =             2 ^ 256 - 2 ^ 32 - 977.i256
+  SECPK1_N*: Int256 =             "115792089237316195423570985008687907852837564279074904382605163141518161494337".i256
   SECPK1_A* =                     0.i256
   SECPK1_B* =                     7.i256
   SECPK1_Gx* =                    0.i256

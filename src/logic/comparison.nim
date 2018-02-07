@@ -1,6 +1,6 @@
 import
   ../constants, ../utils_numeric, ../computation, ../vm/stack,
-  helpers, bigints
+  helpers, ttmath
 
 quasiBoolean(lt, `<`) # Lesser Comparison
     
@@ -34,6 +34,6 @@ proc byteOp*(computation: var BaseComputation) =
   # Bitwise And
   var (position, value) = computation.stack.popInt(2)
 
-  var res = if position >= 32.i256: 0.i256 else: (value div (256.i256.pow(31.i256 - position))) mod 256
+  var res = if position >= 32.i256: 0.i256 else: (value div (256.i256.pow(31 - position.getInt))) mod 256
   pushRes()
 

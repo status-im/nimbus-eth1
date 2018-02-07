@@ -1,5 +1,5 @@
 import
-  constants, bigints, errors
+  constants, ttmath, errors
 
 type
   BaseTransaction* = ref object

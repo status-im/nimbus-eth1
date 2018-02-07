@@ -1,6 +1,6 @@
 import
   strformat, macros,
-  ../constants, ../errors, ../computation, .. / vm / [stack, memory, gas_meter, message], .. / utils / bytes, bigints
+  ../constants, ../errors, ../computation, .. / vm / [stack, memory, gas_meter, message], .. / utils / bytes, ttmath
 
 {.this: computation.}
 {.experimental.}

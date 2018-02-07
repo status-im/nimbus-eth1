@@ -1,4 +1,4 @@
-import ../constants
+import ../constants, ttmath
 
 type
   Header* = ref object

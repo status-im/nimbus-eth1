@@ -1,4 +1,4 @@
-import bigints, constants, strformat, macros
+import ttmath, constants, strformat, macros
 
 proc intToBigEndian*(value: Int256): string =
   result = ""

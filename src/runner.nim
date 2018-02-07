@@ -1,6 +1,6 @@
 import
   strformat, strutils, tables, macros,
-  constants, bigints, errors, logging, vm_state,
+  constants, ttmath, errors, logging, vm_state,
   vm / [gas_meter, stack, code_stream, memory, message, value, gas_costs], db / chain, computation, opcode, opcode_values, utils / [header, address],
   logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid, call, system_ops]
 

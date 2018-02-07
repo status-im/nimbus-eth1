@@ -1,5 +1,5 @@
 import
-  strformat, strutils, sequtils, tables, macros, bigints,
+  strformat, strutils, sequtils, tables, macros, ttmath,
   constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values,
   vm / [code_stream, gas_meter, memory, message, stack]
 

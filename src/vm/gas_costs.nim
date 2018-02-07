@@ -1,5 +1,5 @@
 import
-  strformat, bigints,
+  strformat, ttmath,
   ../constants, ../opcode, ../computation, stack
 
 proc expGasCost*(computation: var BaseComputation): Int256 =

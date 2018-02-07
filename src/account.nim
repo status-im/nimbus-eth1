@@ -1,5 +1,5 @@
 import
-  constants, errors, bigints, rlp
+  constants, errors, ttmath, rlp
 
 type
   Account* = ref object

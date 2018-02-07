@@ -1,5 +1,5 @@
 import
-  ../constants, ../computation, ../vm/stack, ../vm_state
+  ../constants, ../computation, ../vm/stack, ../vm_state, ttmath
 
 proc blockhash*(computation: var BaseComputation) =
   var blockNumber = computation.stack.popInt()

@@ -1,6 +1,6 @@
 import
   strformat,
-  ../logging, ../errors, ../constants, bigints
+  ../logging, ../errors, ../constants, ttmath
 
 type
   GasMeter* = ref object

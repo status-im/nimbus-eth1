@@ -1,5 +1,5 @@
 import
-  sequtils, bigints,
+  sequtils, ttmath,
   ../constants, ../errors, ../logging, ../validation, ../utils_numeric, ../utils/bytes
 
 type
@@ -34,11 +34,12 @@ proc read*(memory: var Memory, startPosition: Int256, size: Int256): seq[byte] =
 proc write*(memory: var Memory, startPosition: Int256, size: Int256, value: seq[byte]) =
   if size == 0:
     return
+  #echo size 
+  #echo startPosition
   validateGte(startPosition, 0)
   validateGte(size, 0)
   validateLength(value, size.getInt)
   validateLte(startPosition + size, memory.len)
-
   let index = memory.len
   if memory.len.i256 < startPosition + size:
     memory.bytes = memory.bytes.concat(repeat(0.byte, memory.len - (startPosition + size).getInt)) # TODO: better logarithmic scaling?

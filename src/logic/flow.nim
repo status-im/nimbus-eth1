@@ -1,5 +1,5 @@
 import
-  strformat, bigints,
+  strformat, ttmath,
   ../constants, ../opcode_values, ../logging, ../errors, ../computation, .. /vm / [code_stream, stack]
 
 

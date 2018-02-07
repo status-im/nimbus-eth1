@@ -1,6 +1,6 @@
 import
   strformat, tables,
-  ../constants, ../errors, ../validation, ../account, ../logging, bigints
+  ../constants, ../errors, ../validation, ../account, ../logging, ttmath
 
 type
   AccountStateDB* = ref object

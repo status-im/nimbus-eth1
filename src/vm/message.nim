@@ -1,5 +1,5 @@
 import 
-    ../logging, ../constants, ../validation
+    ../logging, ../constants, ../validation, ttmath
 
 type
   Message* = ref object

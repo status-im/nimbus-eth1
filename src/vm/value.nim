@@ -1,6 +1,6 @@
 import
   strformat, strutils,
-  ../constants, bigints
+  ../constants, ttmath
 
 type
   ValueKind* = enum VInt, VBinary
