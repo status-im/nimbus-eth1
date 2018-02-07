@@ -10,7 +10,7 @@ type
 proc newMemory*: Memory =
   new(result)
   result.bytes = @[]
-  result.logger = logging.getLogger("evm.vm.memory.Memory")
+  result.logger = logging.getLogger("memory.Memory")
 
 proc len*(memory: Memory): int =
   result = memory.bytes.len

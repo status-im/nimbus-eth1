@@ -1,7 +1,9 @@
-import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, vm / gas_meter, bigints
+import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, logging, vm / gas_meter, bigints
 
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful
+
+disableLogging()
 
 proc gasMeters: seq[GasMeter] =
   @[newGasMeter(10.i256), newGasMeter(100.i256), newGasMeter(999.i256)]
@@ -66,7 +68,7 @@ suite "gasMeter":
       check(gasMeter.gasRemaining == gasMeter.startGas)
       let consume = gasMeter.startGas
       gasMeter.consumeGas(consume, "0")
-      check(gasMeter.gasRemaining == gasMeter.startGas - consume)
+      check(gasMeter.gasRemaining - (gasMeter.startGas - consume) == 0)
 
   test "consume errors":
     all(gasMeter):

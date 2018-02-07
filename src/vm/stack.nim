@@ -154,7 +154,7 @@ proc popBinary*(stack: var Stack; numItems: int): seq[string] =
 
 proc newStack*(): Stack =
   new(result)
-  result.logger = logging.getLogger("evm.vm.stack.Stack")
+  result.logger = logging.getLogger("stack.Stack")
   result.values = @[]
 
 proc swap*(stack: var Stack; position: int) =
