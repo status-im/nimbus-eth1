@@ -1,6 +1,6 @@
 import
   strformat,
-  constants, errors, vm_state, transaction, utils/header
+  constants, errors, ttmath, vm_state, transaction, utils/header
 
 proc validateFrontierTransaction*(vmState: BaseVmState, transaction: BaseTransaction) =
   let gasCost = transaction.gas * transaction.gasPrice
@@ -9,7 +9,7 @@ proc validateFrontierTransaction*(vmState: BaseVmState, transaction: BaseTransac
   #   senderBalance = db.getBalance(transaction.sender)
   senderBalance = gasCost # TODO
   if senderBalance < gasCost:
-    raise newException(ValidationError, %"Sender account balance cannot afford txn gas: {transaction.sender}")
+    raise newException(ValidationError, &"Sender account balance cannot afford txn gas: {transaction.sender}")
 
   let totalCost = transaction.value + gasCost
 

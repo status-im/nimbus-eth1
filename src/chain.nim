@@ -1,6 +1,6 @@
 import
-  tables,
-  logging, constants, errors, validation, utils / [hexadecimal]
+  tables, ttmath,
+  logging, constants, errors, validation, utils / hexadecimal, vm / base, db / db_chain
 
 type
   BlockHeader* = ref object
@@ -18,6 +18,9 @@ type
     importBlock*: bool
     validateBlock*: bool
     db*: BaseChainDB
+    fundedAddress*: string
+    fundedAddressInitialBalance*: int
+    fundedAddressPrivateKey*: string
 
   GenesisParams* = ref object
     blockNumber*: Int256
@@ -25,11 +28,11 @@ type
     gasLimit*: Int256
     parentHash*: string
     coinbase*: string
-    nonce: string
-    mixHash: string
-    extraData: string
-    timestamp: int,
-    stateRoot: string
+    nonce*: string
+    mixHash*: string
+    extraData*: string
+    timestamp*: int
+    stateRoot*: string
 
   FundedAddress* = ref object
     balance*: Int256
@@ -40,6 +43,8 @@ type
 proc configureChain*(name: string, blockNumber: Int256, vm: VM, importBlock: bool = true, validateBlock: bool = true): Chain =
   new(result)
   result.vmsByRange = @[(blockNumber: blockNumber, vm: vm)]
+  result.importBlock = importBlock
+  result.validateBlock = validateBlock
 
 proc fromGenesis*(
     chain: Chain,
@@ -48,13 +53,18 @@ proc fromGenesis*(
     genesisState: Table[string, FundedAddress]): Chain =
   ## Initialize the Chain from a genesis state
   var stateDB = chaindb.getStateDB(BLANK_ROOT_HASH)
-  for account, accountData in genesisState:
-    stateDB.setBalance(account, accountData.balance)
-    stateDB.setNonce(account, accountData.nonce)
-    stateDB.setCode(account, accountData.code)
-  
+  # TODO
+  # for account, accountData in genesisState:
+  #   stateDB.setBalance(account, accountData.balance)
+  #   stateDB.setNonce(account, accountData.nonce)
+  #   stateDB.setCode(account, accountData.code)
+
   new(result)
   result.db = chainDB
   result.header = BlockHeader()
   result.logger = logging.getLogger("evm.chain.chain.Chain")
-  chainDB.persistBlockToDB(result.getBlock())
+  result.importBlock = chain.importBlock
+  result.validateBlock = chain.validateBlock
+  result.vmsByRange = chain.vmsByRange
+  # TODO
+  # chainDB.persistBlockToDB(result.getBlock)

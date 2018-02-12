@@ -1,5 +1,5 @@
 import
-  logging, constants, errors, vm_state, utils/header, db/chain
+  logging, constants, errors, vm_state, utils/header, db/db_chain
 
 type
   FrontierVMState* = object of BaseVMState

@@ -1,6 +1,6 @@
 import
   strformat, tables,
-  logging, constants, ttmath, errors, transaction, db/chain, utils/state, utils/header
+  logging, constants, ttmath, errors, transaction, db/db_chain, utils/state, utils/header
 
 type
   BaseVMState* = ref object of RootObj

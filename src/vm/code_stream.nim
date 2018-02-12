@@ -94,3 +94,19 @@ proc isValidOpcode*(c: var CodeStream, position: int): bool =
       return false
     else:
       return true
+
+proc decompile*(original: CodeStream): seq[(int, Op, string)] =
+  # behave as https://etherscan.io/opcode-tool
+  # TODO
+  result = @[]
+  var c = newCodeStream(original.bytes)
+  while true:
+    var op = c.next
+    if op >= PUSH1 and op <= PUSH32:
+      let bytes = c.read(op.int - 95)
+      result.add((c.pc - 1, op, "0x" & bytes.mapIt($(it.BiggestInt.toHex(2))).join("")))
+    elif op != Op.Stop:
+      result.add((c.pc - 1, op, ""))
+    else:
+      result.add((-1, Op.STOP, ""))
+      break

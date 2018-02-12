@@ -1,12 +1,15 @@
+import strformat, tables, ttmath, state_db, backends / memory_backend
+
 type
   BaseChainDB* = ref object
+    db*: MemoryDB
     # TODO db*: JournalDB
 
-# proc makeBaseChainDB*(db: MemoryDB): BaseChainDB =
-#   result.db = JournalDB(db)
+proc newBaseChainDB*(db: MemoryDB): BaseChainDB =
+  result.db = db
 
-# proc exists*(self: BaseChainDB; key: cstring): bool =
-#   return self.db.exists(key)
+proc exists*(self: BaseChainDB; key: string): bool =
+  return self.db.exists(key)
 
 # proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
 #   if notself.exists(CANONICALHEADHASHDBKEY):
@@ -145,7 +148,7 @@ type
 # proc clear*(self: BaseChainDB): void =
 #   self.db.clear()
 
-# proc getStateDb*(self: BaseChainDB; stateRoot: cstring; readOnly: bool): AccountStateDB =
-#   return AccountStateDB()
+method getStateDb*(self: BaseChainDB; stateRoot: string; readOnly: bool = false): AccountStateDB =
+  return newAccountStateDB(initTable[string, Int256]())
 
 # var CANONICALHEADHASHDBKEY = cstring"v1:canonical_head_hash"

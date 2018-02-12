@@ -191,7 +191,7 @@ let
   GENESIS_COINBASE* =             ZERO_ADDRESS
   GENESIS_NONCE* =                "\x00\x00\x00\x00\x00\x00\x00B"
   GENESIS_MIX_HASH* =             ZERO_HASH32
-  GENESIS_EXTRA_DATA =            ""
+  GENESIS_EXTRA_DATA* =           ""
   
   EMPTYSHA3 =                     "\xc5\xd2F\x01\x86\xf7#<\x92~}\xb2\xdc\xc7\x03\xc0\xe5\x00\xb6S\xca\x82';{\xfa\xd8\x04]\x85\xa4p"  
   BLANK_ROOT_HASH* =              "V\xe8\x1f\x17\x1b\xccU\xa6\xff\x83E\xe6\x92\xc0\xf8n[H\xe0\x1b\x99l\xad\xc0\x01b/\xb5\xe3c\xb4!"

@@ -1,5 +1,5 @@
 import
-  logging, constants, errors, "block", vm / [base, stack], db / chain,  utils / header,
+  logging, constants, errors, ttmath, "block", vm / [base, stack], db / db_chain,  utils / header,
   frontier_block, frontier_vm_state, frontier_validation
 
 
