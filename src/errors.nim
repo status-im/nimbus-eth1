@@ -67,11 +67,11 @@ type
   NotImplementedError* = object of VMError
     ## Not implemented error
 
-proc makeVMError*(): VMError =
-  result.burnsGas = true
-  result.erasesReturnData = true
+# proc makeVMError*(): VMError =
+#   result.burnsGas = true
+#   result.erasesReturnData = true
 
-proc makeRevert*(): Revert =
-  result.burnsGas = false
-  result.erasesReturnData = false
+# proc makeRevert*(): Revert =
+#   result.burnsGas = false
+#   result.erasesReturnData = false
 

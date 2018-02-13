@@ -5,8 +5,8 @@ type
   Account* = ref object
     nonce*:             Int256
     balance*:           Int256
-    #storageRoot*:       
-    #codeHash*:
+    storageRoot*:       string
+    codeHash*:          string
 
 rlpFields Account, nonce, balance
 

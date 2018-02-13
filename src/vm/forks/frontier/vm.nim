@@ -12,7 +12,7 @@ method name*(vm: FrontierVM): string =
 method getBlockReward(vm: FrontierVM): Int256 =
   BLOCK_REWARD
 
-method getetUncleReward(vm: FrontierVM, blockNumber: Int256, uncle: Block): Int256 =
+method getUncleReward(vm: FrontierVM, blockNumber: Int256, uncle: Block): Int256 =
   BLOCK_REWARD * (UNCLE_DEPTH_PENALTY_FACTOR + uncle.blockNumber - blockNumber) div UNCLE_DEPTH_PENALTY_FACTOR
 
 

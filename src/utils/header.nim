@@ -7,6 +7,9 @@ type
     blockNumber*: Int256
     hash*: string
     coinbase*: string
+    gasLimit*: Int256
+    stateRoot*: string
+
   # TODO
 
 proc generateHeaderFromParentHeader*(

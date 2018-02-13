@@ -281,9 +281,10 @@ macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
       var res: `typName`
       var c = `name`(`vmState`, `message`)
       var handler = proc: `typName` =
-        if `message`.codeAddress in c.precompiles:
-          c.precompiles[`message`.codeAddress].run(c)
-          return c
+        # TODO
+        # if `message`.codeAddress in c.precompiles:
+        #   c.precompiles[`message`.codeAddress].run(c)
+        #   return c
 
         for op in c.code:
           var opcode = c.getOpcodeFn(op)

@@ -149,6 +149,7 @@ proc exists*(self: BaseChainDB; key: string): bool =
 #   self.db.clear()
 
 method getStateDb*(self: BaseChainDB; stateRoot: string; readOnly: bool = false): AccountStateDB =
-  return newAccountStateDB(initTable[string, Int256]())
+  # TODO
+  result = newAccountStateDB(initTable[string, string]())
 
 # var CANONICALHEADHASHDBKEY = cstring"v1:canonical_head_hash"
