@@ -1,6 +1,6 @@
 import
   unittest,
-  helpers, .. / src / [db / backends / memory, db / chain, constants, utils / hexadecimal]
+  test_helpers, .. / src / [db / backends / memory, db / chain, constants, utils / hexadecimal]
 
 suite "vm":
   test "apply no validation":

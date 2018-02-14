@@ -23,3 +23,4 @@ proc newFrontierVM*(header: Header, chainDB: BaseChainDB): FrontierVM =
   new(result)
   result.chainDB = chainDB
   result.isStateless = true
+  result.state = newFrontierVMState()

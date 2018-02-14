@@ -1,5 +1,5 @@
 import
-  ../constants, ../errors, ../computation, .. / db / state_db, .. / vm / [stack, gas_meter, message]
+  ../constants, ../errors, ../computation, .. / db / state_db, .. / vm / [stack, gas_meter, message], strformat
 
 {.this: computation.}
 {.experimental.}
@@ -9,8 +9,10 @@ using
 
 proc sstore*(computation) =
   let (slot, value) = stack.popInt(2)
-
-  # TODO: stateDB
+  #if value != 0: #and slot == 0:
+  computation.gasMeter.consumeGas(GAS_SSET, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} (TODO)")
+  #else:
+  #computation.gasMeter.consumeGas(GAS_SRESET, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} (TODO)")
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #      current_value = state_db.get_storage(
   #          address=computation.msg.storage_address,

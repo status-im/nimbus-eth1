@@ -1,4 +1,4 @@
-import ../constants, ttmath
+import ../constants, ttmath, strformat
 
 type
   Header* = ref object
@@ -11,6 +11,12 @@ type
     stateRoot*: string
 
   # TODO
+
+proc `$`*(header: Header): string =
+  if header.isNil:
+    result = "nil"
+  else:
+    result = &"Header(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.blockNumber} gasLimit: {header.gasLimit})"
 
 proc generateHeaderFromParentHeader*(
     computeDifficultyFn: proc(parentHeader: Header, timestamp: int): int,

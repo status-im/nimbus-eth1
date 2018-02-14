@@ -2,10 +2,17 @@ import
   logging, constants, errors, vm_state, utils/header, db/db_chain
 
 type
-  FrontierVMState* = object of BaseVMState
+  FrontierVMState* = ref object of BaseVMState
     # receipts*: 
     # computationClass*: Any
     # accessLogs*: AccessLogs
+
+proc newFrontierVMState*: FrontierVMState =
+  new(result)
+  result.prevHeaders = @[]
+  result.name = "FrontierVM"
+  result.accessLogs = newAccessLogs()
+  result.blockHeader = Header(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
 
 # import
 #   py2nim_helpers, __future__, rlp, evm, evm.constants, evm.exceptions, evm.rlp.logs,

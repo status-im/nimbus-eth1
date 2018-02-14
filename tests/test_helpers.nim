@@ -1,5 +1,5 @@
 import
-  os, macros, json, strformat, strutils, ttmath, utils / [hexadecimal, address], chain, vm_state, constants, db / [db_chain, state_db], vm / forks / frontier / vm
+  os, macros, json, strformat, strutils, ttmath, utils / [hexadecimal, address], chain, vm_state, constants, db / [db_chain, state_db], vm / forks / frontier / vm, parseutils
 
 # TODO 
 # This block is a child of the genesis defined in the chain fixture above and contains a single tx
@@ -56,14 +56,21 @@ import
 # 
 proc generateTest(filename: string, handler: NimNode): NimNode =
   echo filename
+  let testStatusIMPL = ident("testStatusIMPL")
   result = quote:
     test `filename`:
-      `handler`(parseJSON(readFile(`filename`)))
+      `handler`(parseJSON(readFile(`filename`)), `testStatusIMPL`)
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
   result = nnkStmtList.newTree()
-  for filename in walkDir(&"tests/{s}", relative=true):
-    result.add(generateTest(filename.path, handler))
+  echo &"tests/fixtures/{s}"
+  var z = 0
+  for filename in walkDirRec(&"tests/fixtures/{s}"):
+    if "mul" in filename:
+      if z >= 4:
+        break
+      result.add(generateTest(filename, handler))
+      z += 1
 
 proc setupStateDB*(desiredState: JsonNode, stateDB: var AccountStateDB) =
   for account, accountData in desiredState:
@@ -77,3 +84,6 @@ proc setupStateDB*(desiredState: JsonNode, stateDB: var AccountStateDB) =
     stateDB.setNonce(account, nonce)
     stateDB.setCode(account, code)
     stateDB.setBalance(account, balance)
+
+proc getHexadecimalInt*(j: JsonNode): int =
+  discard parseHex(j.getStr, result)

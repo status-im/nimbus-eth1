@@ -55,7 +55,8 @@ proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputatio
   result.children = @[]
   result.accountsToDelete = initTable[string, string]()
   result.logEntries = @[]
-  result.code = newCodeStream(message.code)
+  result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
+  result.rawOutput = "0x"
 
 method logger*(computation: BaseComputation): Logger =
   logging.getLogger("vm.computation.BaseComputation")
@@ -264,7 +265,7 @@ template inComputation*(c: untyped, handler: untyped): untyped =
 
 
 method getOpcodeFn*(computation: var BaseComputation, op: Op): Opcode =
-  if computation.opcodes.hasKey(op):
+  if computation.opcodes.len > 0 and computation.opcodes.hasKey(op):
     computation.opcodes[op]
   else:
     raise newException(InvalidInstruction,
@@ -279,7 +280,7 @@ macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
   result = quote:
     block:
       var res: `typName`
-      var c = `name`(`vmState`, `message`)
+      var c = `t` # `name`(`vmState`, `message`)
       var handler = proc: `typName` =
         # TODO
         # if `message`.codeAddress in c.precompiles:
@@ -290,7 +291,6 @@ macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
           var opcode = c.getOpcodeFn(op)
           c.logger.trace(
             "OPCODE: 0x$1 ($2) | pc: $3" % [opcode.kind.int.toHex(2), $opcode.kind, $max(0, c.code.pc - 1)])
-
           try:
             opcode.run(c)
           except Halt:
@@ -298,4 +298,4 @@ macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
         return c
       inComputation(c):
         res = handler()
-      res
+      c

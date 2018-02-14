@@ -6,10 +6,14 @@ type
     # TODO db*: JournalDB
 
 proc newBaseChainDB*(db: MemoryDB): BaseChainDB =
+  new(result)
   result.db = db
 
 proc exists*(self: BaseChainDB; key: string): bool =
   return self.db.exists(key)
+
+proc `$`*(db: BaseChainDB): string =
+  result = "BaseChainDB"
 
 # proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
 #   if notself.exists(CANONICALHEADHASHDBKEY):

@@ -1,38 +1,55 @@
 import
   unittest, strformat, strutils, sequtils, tables, ttmath, json,
-  helpers, constants, errors, logging,
-  chain, vm_state, computation, opcode, utils / header, vm / [gas_meter, message, code_stream], vm / forks / frontier / vm, db / [db_chain, state_db], db / backends / memory_backend
+  test_helpers, constants, errors, logging,
+  chain, vm_state, computation, opcode, opcode_table, utils / header, vm / [gas_meter, message, code_stream], vm / forks / frontier / vm, db / [db_chain, state_db], db / backends / memory_backend
 
 
-proc testFixture(fixture: JsonNode)
+proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
 suite "vm json tests":
   jsonTest("VMTests", testFixture)
 
-proc testFixture(fixture: JsonNode) =
+proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
+  var fixture: JsonNode
+  for label, child in fixtures:
+    fixture = child
+    break
   var vm = newFrontierVM(Header(), newBaseChainDB(newMemoryDB()))
   let header = Header(
     coinbase: fixture{"env"}{"currentCoinbase"}.getStr,
-    difficulty: fixture{"env"}{"currentDifficulty"}.getInt.i256,
-    blockNumber: fixture{"env"}{"currentNumber"}.getInt.i256,
-    gasLimit: fixture{"env"}{"currentGasLimit"}.getInt.i256,
-    timestamp: fixture{"env"}{"currentTimestamp"}.getInt)
+    difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.i256,
+    blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.i256,
+    gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.i256,
+    timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt)
   
   var code = ""
   vm.state.db(readOnly=false):
     setupStateDB(fixture{"pre"}, db)
     code = db.getCode(fixture{"exec"}{"address"}.getStr)
 
+  code = fixture{"exec"}{"code"}.getStr
   let message = newMessage(
       to=fixture{"exec"}{"address"}.getStr,
       sender=fixture{"exec"}{"caller"}.getStr,
-      value=fixture{"exec"}{"value"}.getInt.i256,
+      value=fixture{"exec"}{"value"}.getHexadecimalInt.i256,
       data=fixture{"exec"}{"data"}.getStr.mapIt(it.byte),
       code=code,
-      gas=fixture{"exec"}{"gas"}.getInt.i256,
-      gasPrice=fixture{"exec"}{"gasPrice"}.getInt.i256,
+      gas=fixture{"exec"}{"gas"}.getHexadecimalInt.i256,
+      gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt.i256,
       options=newMessageOptions(origin=fixture{"exec"}{"origin"}.getStr))
-  let computation = newBaseComputation(vm.state, message).applyComputation(vm.state, message)
+
+  echo fixture{"exec"}
+  var c = newCodeStreamFromUnescaped(code)
+  var opcodes = c.decompile
+  for opcode in opcodes:
+    echo opcode[0], " ", opcode[1], " ", opcode[2]
+
+  var computation = newBaseComputation(vm.state, message)
+  computation.accountsToDelete = initTable[string, string]()
+  computation.opcodes = OPCODE_TABLE
+  computation.precompiles = initTable[string, Opcode]()
+
+  computation = computation.applyComputation(vm.state, message)
 
   if not fixture{"post"}.isNil:
     # Success checks
@@ -50,10 +67,9 @@ proc testFixture(fixture: JsonNode) =
 
     let expectedOutput = fixture{"out"}.getStr
     check(computation.output == expectedOutput)
-
     let gasMeter = computation.gasMeter
 
-    let expectedGasRemaining = fixture{"gas"}.getInt.i256
+    let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt.i256
     let actualGasRemaining = gasMeter.gasRemaining
     let gasDelta = actualGasRemaining - expectedGasRemaining
     check(gasDelta == 0)
@@ -69,8 +85,8 @@ proc testFixture(fixture: JsonNode) =
       var (childComputation, createdCall) = child
       let toAddress = createdCall{"destination"}.getStr
       let data = createdCall{"data"}.getStr.mapIt(it.byte)
-      let gasLimit = createdCall{"gasLimit"}.getInt.i256
-      let value = createdCall{"value"}.getInt.i256
+      let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt.i256
+      let value = createdCall{"value"}.getHexadecimalInt.i256
 
       check(childComputation.msg.to == toAddress)
       check(data == childComputation.msg.data or childComputation.msg.code.len > 0)

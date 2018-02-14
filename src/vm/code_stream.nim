@@ -1,5 +1,5 @@
 import
-  strformat, strutils, sequtils, sets, macros,
+  strformat, strutils, sequtils, parseutils, sets, macros,
   ../logging, ../constants, ../opcode_values
 
 type
@@ -23,6 +23,16 @@ proc newCodeStream*(codeBytes: seq[byte]): CodeStream =
 
 proc newCodeStream*(codeBytes: string): CodeStream =
   newCodeStream(codeBytes.mapIt(it.byte))
+
+proc newCodeStreamFromUnescaped*(code: string): CodeStream =
+  # from 0xunescaped
+  var codeBytes: seq[byte] = @[]
+  for z, c in code[2..^1]:
+    if z mod 2 == 1:
+      var value: int
+      discard parseHex(&"0x{code[z+1..z+2]}", value)
+      codeBytes.add(value.byte)
+  newCodeStream(codeBytes)
 
 proc read*(c: var CodeStream, size: int): seq[byte] =
   if c.pc + size - 1 < c.bytes.len:

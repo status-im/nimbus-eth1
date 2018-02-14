@@ -22,11 +22,18 @@ proc update*[K, V](t: var Table[K, V], elements: Table[K, V]) =
   for k, v in elements:
     t[k] = v
 
+proc `$`*(vmState: BaseVMState): string =
+  if vmState.isNil:
+    result = "nil"
+  else:
+    result = &"VMState {vmState.name}:\n  header: {vmState.blockHeader}\n  chaindb:  {vmState.chaindb}"
+
 proc newBaseVMState*: BaseVMState =
   new(result)
   result.prevHeaders = @[]
   result.name = "BaseVM"
   result.accessLogs = newAccessLogs()
+  result.blockHeader = Header(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
 
 method logger*(vmState: BaseVMState): Logger =
   logging.getLogger(&"evm.vmState.{vmState.name}")
@@ -65,6 +72,7 @@ macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
   let db = ident("db")
   result = quote:
     block:
+      echo `vmState`
       var `db` = `vmState`.chaindb.getStateDB(`vmState`.blockHeader.stateRoot, `readOnly`)
       `handler`
       if `readOnly`:
