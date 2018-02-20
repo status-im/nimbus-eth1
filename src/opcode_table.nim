@@ -97,7 +97,7 @@ var OPCODE_TABLE* = initOpcodes:
 
 
   # system
-  Op.Return:        0.i256              returnOp
+  Op.Return:        0.u256              returnOp
   Op.SelfDestruct:  GAS_SELF_DESTRUCT_COST selfdestruct
 
 

@@ -10,25 +10,26 @@ macro quasiBoolean*(name: untyped, op: untyped, signed: untyped = nil, nonzero: 
   var signedNode = newEmptyNode()
   var finishSignedNode = newEmptyNode()
   let resNode = ident("res")
-  let leftNode = ident("left")
-  let rightNode = ident("right")
+  var leftNode = ident("left")
+  var rightNode = ident("right")
+  var actualLeftNode = leftNode
+  var actualRightNode = rightNode
   if not signed.isNil:
+    actualLeftNode = ident("leftSigned")
+    actualRightNode = ident("rightSigned")
     signedNode = quote:
-      `leftNode` = unsignedToSigned(`leftNode`)
-      `rightNode` = unsignedToSigned(`rightNode`)
-    finishSignedNode = quote:
-      `resNode` = signedToUnsigned(`resNode`)
+      let `actualLeftNode` = unsignedToSigned(`leftNode`)
+      let `actualRightNode` = unsignedToSigned(`rightNode`)
   var test = if nonzero.isNil:
       quote:
-        `op`(`leftNode`, `rightNode`)
+        `op`(`actualLeftNode`, `actualRightNode`)
     else:
       quote:
-        `op`(`leftNode`, `rightNode`) != 0
+        `op`(`actualLeftNode`, `actualRightNode`) != 0
   result = quote:
     proc `name`*(computation: var BaseComputation) =
       var (`leftNode`, `rightNode`) = computation.stack.popInt(2)
       `signedNode`
       
-      var `resNode` = if `test`: 1.int256 else: 0.int256
-      `finishSignedNode`
+      var `resNode` = if `test`: 1.u256 else: 0.u256
       computation.stack.push(`resNode`)

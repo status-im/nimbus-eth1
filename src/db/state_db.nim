@@ -1,14 +1,14 @@
 import
   strformat, tables,
-  ../constants, ../errors, ../validation, ../account, ../logging, ../utils/keccak, ttmath
+  ../constants, ../errors, ../validation, ../account, ../logging, ../utils_numeric, .. / utils / [padding, bytes, keccak], ttmath, rlp
 
 type
   AccountStateDB* = ref object
-    db*: Table[string, string]
+    db*: Table[string, UInt256]
     rootHash*: string # TODO trie
 
 proc newAccountStateDB*(db: Table[string, string], readOnly: bool = false): AccountStateDB =
-  result = AccountStateDB(db: db)
+  result = AccountStateDB(db: initTable[string, UInt256]())
 
 proc logger*(db: AccountStateDB): Logger =
   logging.getLogger("db.State")
@@ -32,68 +32,72 @@ proc getCodeHash*(db: AccountStateDB, address: string): string =
   let account = db.getAccount(address)
   result = account.codeHash
 
-proc getBalance*(db: AccountStateDB, address: string): Int256 =
+proc getBalance*(db: AccountStateDB, address: string): UInt256 =
   validateCanonicalAddress(address, title="Storage Address")
   let account = db.getAccount(address)
   account.balance
 
-proc setBalance*(db: var AccountStateDB, address: string, balance: Int256) =
+proc setBalance*(db: var AccountStateDB, address: string, balance: UInt256) =
   validateCanonicalAddress(address, title="Storage Address")
   let account = db.getAccount(address)
   account.balance = balance
   db.setAccount(address, account)
 
-proc deltaBalance*(db: var AccountStateDB, address: string, delta: Int256) =
+proc deltaBalance*(db: var AccountStateDB, address: string, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) + delta)
 
 
-proc setStorage*(db: var AccountStateDB, address: string, slot: Int256, value: Int256) =
-  validateGte(value, 0, title="Storage Value")
-  validateGte(slot, 0, title="Storage Slot")
+proc setStorage*(db: var AccountStateDB, address: string, slot: UInt256, value: UInt256) =
+  #validateGte(value, 0, title="Storage Value")
+  #validateGte(slot, 0, title="Storage Slot")
   validateCanonicalAddress(address, title="Storage Address")
-
-  let account = db.getAccount(address)
+  
   # TODO
+  # let account = db.getAccount(address)
   # var storage = HashTrie(HexaryTrie(self.db, account.storageRoot))
 
-  # let slotAsKey = pad32(intToBigEndian(slot))
-
-  # if value:
-  #   let encodedValue = rlp.encode(value)
-  #   storage[slotAsKey] = encodedValue
-  # else:
-  #   del storage[slotAsKey]
-
+  let slotAsKey = slot.intToBigEndian.pad32.toString
+  var storage = db.db
+  # TODO fix
+  #if value > 0:
+  #  let encodedValue = rlp.encode(value)
+  #  storage[slotAsKey] = encodedValue
+  #else:
+  #  storage.del(slotAsKey)
+  storage[slotAsKey] = value
   # account.storageRoot = storage.rootHash
   # db.setAccount(address, account)
 
-proc getStorage*(db: var AccountStateDB, address: string, slot: Int256): Int256 =
+proc getStorage*(db: var AccountStateDB, address: string, slot: UInt256): UInt256 =
   validateCanonicalAddress(address, title="Storage Address")
-  validateGte(slot, 0, title="Storage Slot")
-  0.i256
+  #validateGte(slot, 0, title="Storage Slot")
   
   # TODO
+  # make it more correct
+  # for now, we just use a table
+  
   # let account = db.GetAccount(address)
   # var storage = HashTrie(HexaryTrie(self.db, account.storageRoot))
 
-  # let slotAsKey = pad32(intToBigEndian(slot))
+  let slotAsKey = slot.intToBigEndian.pad32.toString
+  var storage = db.db
+  if storage.hasKey(slotAsKey):
+    result = storage[slotAsKey]
+    #let encodedValue = storage[slotAsKey]
+    #result = rlp.decode(encodedValue)
+  else:
+    result = 0.u256
 
-  # if slotAsKey in storage:
-  #   let encodedValue = storage[slotAsKey]
-  #   return rlp.decode(encodedValue)
-  # else:
-  #   return 0.i256
-
-proc setNonce*(db: var AccountStateDB, address: string, nonce: Int256) =
+proc setNonce*(db: var AccountStateDB, address: string, nonce: UInt256) =
   validateCanonicalAddress(address, title="Storage Address")
-  validateGte(nonce, 0, title="Nonce")
+  #validateGte(nonce, 0, title="Nonce")
 
   var account = db.getAccount(address)
   account.nonce = nonce
 
   db.setAccount(address, account)
 
-proc getNonce*(db: AccountStateDB, address: string): Int256 =
+proc getNonce*(db: AccountStateDB, address: string): UInt256 =
   validateCanonicalAddress(address, title="Storage Address")
 
   let account = db.getAccount(address)
@@ -105,15 +109,15 @@ proc setCode*(db: var AccountStateDB, address: string, code: string) =
   var account = db.getAccount(address)
 
   account.codeHash = keccak(code)
-  db.db[account.codeHash] = code
+  #db.db[account.codeHash] = code
   db.setAccount(address, account)
 
 proc getCode*(db: var AccountStateDB, address: string): string =
   let codeHash = db.getCodeHash(address)
-  if db.db.hasKey(codeHash):
-    result = db.db[codeHash]
-  else:
-    result = ""
+  #if db.db.hasKey(codeHash):
+  #  result = db.db[codeHash]
+  #else:
+  result = ""
 
 # proc rootHash*(db: AccountStateDB): string =
   # TODO return self.Trie.rootHash

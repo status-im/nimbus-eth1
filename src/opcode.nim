@@ -10,16 +10,16 @@ template run*(opcode: Opcode, computation: var BaseComputation) =
 method logger*(opcode: Opcode): Logger =
   logging.getLogger(&"vm.opcode.{opcode.kind}")
 
-method gasCost*(opcode: Opcode, computation: var BaseComputation): Int256 =
+method gasCost*(opcode: Opcode, computation: var BaseComputation): UInt256 =
   if opcode.kind in VARIABLE_GAS_COST_OPS:
     opcode.gasCostHandler(computation)
   else:
     opcode.gasCostConstant
 
-template newOpcode*(kind: Op, gasCost: Int256, logic: proc(computation: var BaseComputation)): Opcode =
+template newOpcode*(kind: Op, gasCost: UInt256, logic: proc(computation: var BaseComputation)): Opcode =
   Opcode(kind: kind, gasCostConstant: gasCost, runLogic: logic)
 
-template newOpcode*(kind: Op, gasHandler: proc(computation: var BaseComputation): Int256, logic: proc(computation: var BaseComputation)): Opcode =
+template newOpcode*(kind: Op, gasHandler: proc(computation: var BaseComputation): UInt256, logic: proc(computation: var BaseComputation)): Opcode =
   Opcode(kind: kind, gasCostHandler: gasHandler, runLogic: logic)
 
 method `$`*(opcode: Opcode): string =

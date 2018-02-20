@@ -8,4 +8,4 @@ type
   Block* = ref object of RootObj
     header*: Header
     uncles*: CountableList[Header]
-    blockNumber*: Int256
+    blockNumber*: UInt256

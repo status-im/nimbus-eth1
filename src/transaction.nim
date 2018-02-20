@@ -4,16 +4,16 @@ import
 type
   BaseTransaction* = ref object
     nonce*: Int256
-    gasPrice*: Int256
-    gas*: Int256
+    gasPrice*: UInt256
+    gas*: UInt256
     to*: string
-    value*: Int256
+    value*: UInt256
     data*: string
     v*: Int256
     r*: Int256
     s*: Int256
 
-proc intrinsicGas*(t: BaseTransaction): Int256 =
+proc intrinsicGas*(t: BaseTransaction): UInt256 =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)

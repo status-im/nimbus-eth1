@@ -7,21 +7,22 @@ proc add*(computation: var BaseComputation) =
   # Addition
   var (left, right) = computation.stack.popInt(2)
   
-  var res = (left + right) and constants.UINT_256_MAX
+  var res = (left + right) and UINT_256_MAX
   pushRes()
 
 proc addmod*(computation: var BaseComputation) =
   # Modulo Addition
   var (left, right, arg) = computation.stack.popInt(3)
 
-  var res = if arg == 0: 0.int256 else: (left + right) mod arg
+  var res = if arg == 0: 0.u256 else: (left + right) mod arg
+  echo left + right, " ", arg
   pushRes()
 
 proc sub*(computation: var BaseComputation) =
   # Subtraction
   var (left, right) = computation.stack.popInt(2)
 
-  var res = (left - right) and constants.UINT_256_MAX
+  var res = (left - right) and UINT_256_MAX
   pushRes()
 
 
@@ -29,50 +30,50 @@ proc modulo*(computation: var BaseComputation) =
   # Modulo
   var (value, arg) = computation.stack.popInt(2)
 
-  var res = if arg == 0: 0.int256 else: value mod arg
+  var res = if arg == 0: 0.u256 else: value mod arg
   pushRes()
 
 proc smod*(computation: var BaseComputation) =
   # Signed Modulo
   var (value, arg) = computation.stack.popInt(2)
-  value = unsignedToSigned(value)
-  arg = unsignedToSigned(value)
+  let signedValue = unsignedToSigned(value)
+  let signedArg = unsignedToSigned(arg)
 
-  var posOrNeg = if value < 0: -1.int256 else: 1.int256
-  var res = if arg == 0: 0.int256 else: ((value.abs mod arg.abs) * posOrNeg) and constants.UINT_256_MAX
-  res = signedToUnsigned(res)
+  var posOrNeg = if signedValue < 0: -1.i256 else: 1.i256
+  var signedRes = if signedArg == 0: 0.i256 else: ((signedValue.abs mod signedArg.abs) * posOrNeg) and UINT_256_MAX_INT
+  var res = signedToUnsigned(signedRes)
   pushRes()
 
 proc mul*(computation: var BaseComputation) =
   # Multiplication
   var (left, right) = computation.stack.popInt(2)
 
-  var res = (left * right) and constants.UINT_256_MAX
+  var res = (left * right) and UINT_256_MAX
   pushRes()
 
 proc mulmod*(computation: var BaseComputation) =
   #  Modulo Multiplication
   var (left, right, arg) = computation.stack.popInt(3)
 
-  var res = if arg == 0: 0.int256 else: (left * right) mod arg
+  var res = if arg == 0: 0.u256 else: (left * right) mod arg
   pushRes()
 
 proc divide*(computation: var BaseComputation) =
   # Division
   var (numerator, denominator) = computation.stack.popInt(2)
 
-  var res = if denominator == 0: 0.int256 else: (numerator div denominator) and constants.UINT_256_MAX
+  var res = if denominator == 0: 0.u256 else: (numerator div denominator) and UINT_256_MAX
   pushRes()
 
 proc sdiv*(computation: var BaseComputation) =
   # Signed Division
   var (numerator, denominator) = computation.stack.popInt(2)
-  numerator = unsignedToSigned(numerator)
-  denominator = unsignedToSigned(denominator)
+  let signedNumerator = unsignedToSigned(numerator)
+  let signedDenominator = unsignedToSigned(denominator)
 
-  var posOrNeg = if numerator * denominator < 0: -1.int256 else: 1.int256
-  var res = if denominator == 0: 0.int256 else: (posOrNeg * (numerator.abs div denominator.abs))
-  res = unsignedToSigned(res)
+  var posOrNeg = if signedNumerator * signedDenominator < 0: -1.i256 else: 1.i256
+  var signedRes = if signedDenominator == 0: 0.i256 else: (posOrNeg * (signedNumerator.abs div signedDenominator.abs))
+  var res = signedToUnsigned(signedRes)
   pushRes()
 
 # no curry
@@ -80,9 +81,9 @@ proc exp*(computation: var BaseComputation) =
   # Exponentiation
   var (base, exponent) = computation.stack.popInt(2)
   
-  var bitSize = 0.int256 # TODO exponent.bitLength()
+  var bitSize = 0.u256 # TODO exponent.bitLength()
   var byteSize = ceil8(bitSize) div 8
-  var res = if base == 0: 0.int256 else: (base ^ exponent.getInt) mod constants.UINT_256_CEILING
+  var res = if base == 0: 0.u256 else: (base ^ exponent.getUInt.int) mod UINT_256_CEILING
   # computation.gasMeter.consumeGas(
   #   gasPerByte * byteSize,
   #   reason="EXP: exponent bytes"
@@ -93,11 +94,11 @@ proc signextend*(computation: var BaseComputation) =
   # Signed Extend
   var (bits, value) = computation.stack.popInt(2)
 
-  var res: Int256
-  if bits <= 31.int256:
-    var testBit = bits.getInt * 8 + 7
-    var signBit = (1.int256 shl testBit)
-    res = if value != 0 and signBit != 0: value or (constants.UINT_256_CEILING - signBit) else: value and (signBit - 1.int256)
+  var res: UInt256
+  if bits <= 31.u256:
+    var testBit = bits.getUInt.int * 8 + 7
+    var signBit = (1 shl testBit)
+    res = if value != 0 and signBit != 0: value or (UINT_256_CEILING - signBit.u256) else: value and (signBit.u256 - 1.u256)
   else:
     res = value
   pushRes()

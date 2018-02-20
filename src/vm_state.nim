@@ -47,22 +47,22 @@ method coinbase*(vmState: BaseVMState): string =
 method timestamp*(vmState: BaseVMState): int =
   vmState.blockHeader.timestamp
 
-method blockNumber*(vmState: BaseVMState): Int256 =
+method blockNumber*(vmState: BaseVMState): UInt256 =
   vmState.blockHeader.blockNumber
 
-method difficulty*(vmState: BaseVMState): Int256 =
+method difficulty*(vmState: BaseVMState): UInt256 =
   vmState.blockHeader.difficulty
 
-method gasLimit*(vmState: BaseVMState): Int256 =
+method gasLimit*(vmState: BaseVMState): UInt256 =
   vmState.blockHeader.gasLimit
 
-method getAncestorHash*(vmState: BaseVMState, blockNumber: Int256): string =
-  var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1.int256
+method getAncestorHash*(vmState: BaseVMState, blockNumber: UInt256): string =
+  var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1.u256
   if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH or
      ancestorDepth < 0 or
-     ancestorDepth >= vmState.prevHeaders.len.int256:
+     ancestorDepth >= vmState.prevHeaders.len.u256:
     return ""
-  var header = vmState.prevHeaders[ancestorDepth.getInt]
+  var header = vmState.prevHeaders[ancestorDepth.getUInt.int]
   result = header.hash
 
 macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
@@ -72,7 +72,6 @@ macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
   let db = ident("db")
   result = quote:
     block:
-      echo `vmState`
       var `db` = `vmState`.chaindb.getStateDB(`vmState`.blockHeader.stateRoot, `readOnly`)
       `handler`
       if `readOnly`:

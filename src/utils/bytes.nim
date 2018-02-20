@@ -13,7 +13,9 @@ import strutils, sequtils
 #   cstring(res) # TODO: faster
 
 proc toString*(value: seq[byte]): string =
-  value.mapIt(it.char).join("")
+  "0x" & value.mapIt(it.int.toHex(2)).join("").toLowerAscii
 
 proc toBytes*(value: string): seq[byte] =
   result = value.mapIt(it.byte)
+
+

@@ -1,7 +1,7 @@
 import
   unittest, strformat, strutils, sequtils, tables, ttmath, json,
   test_helpers, constants, errors, logging,
-  chain, vm_state, computation, opcode, opcode_table, utils / header, vm / [gas_meter, message, code_stream], vm / forks / frontier / vm, db / [db_chain, state_db], db / backends / memory_backend
+  chain, vm_state, computation, opcode, opcode_table, utils / header, vm / [gas_meter, message, code_stream, stack], vm / forks / frontier / vm, db / [db_chain, state_db], db / backends / memory_backend
 
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
@@ -17,9 +17,9 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var vm = newFrontierVM(Header(), newBaseChainDB(newMemoryDB()))
   let header = Header(
     coinbase: fixture{"env"}{"currentCoinbase"}.getStr,
-    difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.i256,
-    blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.i256,
-    gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.i256,
+    difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
+    blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
+    gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
     timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt)
   
   var code = ""
@@ -31,18 +31,19 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let message = newMessage(
       to=fixture{"exec"}{"address"}.getStr,
       sender=fixture{"exec"}{"caller"}.getStr,
-      value=fixture{"exec"}{"value"}.getHexadecimalInt.i256,
+      value=fixture{"exec"}{"value"}.getHexadecimalInt.u256,
       data=fixture{"exec"}{"data"}.getStr.mapIt(it.byte),
       code=code,
-      gas=fixture{"exec"}{"gas"}.getHexadecimalInt.i256,
-      gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt.i256,
+      gas=fixture{"exec"}{"gas"}.getHexadecimalInt.u256,
+      gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt.u256,
       options=newMessageOptions(origin=fixture{"exec"}{"origin"}.getStr))
 
-  echo fixture{"exec"}
+  #echo fixture{"exec"}
   var c = newCodeStreamFromUnescaped(code)
   var opcodes = c.decompile
-  for opcode in opcodes:
-    echo opcode[0], " ", opcode[1], " ", opcode[2]
+  if DEBUG:
+    for opcode in opcodes:
+      echo opcode[0], " ", opcode[1], " ", opcode[2]
 
   var computation = newBaseComputation(vm.state, message)
   computation.accountsToDelete = initTable[string, string]()
@@ -69,10 +70,10 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     check(computation.output == expectedOutput)
     let gasMeter = computation.gasMeter
 
-    let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt.i256
+    let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt.u256
     let actualGasRemaining = gasMeter.gasRemaining
-    let gasDelta = actualGasRemaining - expectedGasRemaining
-    check(gasDelta == 0)
+    #let gasDelta = actualGasRemaining - expectedGasRemaining
+    check(actualGasRemaining == expectedGasRemaining)
 
     let callCreatesJson = fixture{"callcreates"}
     var callCreates: seq[JsonNode] = @[]
@@ -85,8 +86,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       var (childComputation, createdCall) = child
       let toAddress = createdCall{"destination"}.getStr
       let data = createdCall{"data"}.getStr.mapIt(it.byte)
-      let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt.i256
-      let value = createdCall{"value"}.getHexadecimalInt.i256
+      let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt.u256
+      let value = createdCall{"value"}.getHexadecimalInt.u256
 
       check(childComputation.msg.to == toAddress)
       check(data == childComputation.msg.data or childComputation.msg.code.len > 0)

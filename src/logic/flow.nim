@@ -14,7 +14,7 @@ proc stop*(computation) =
 
 
 proc jump*(computation) =
-  let jumpDest = stack.popInt.getInt
+  let jumpDest = stack.popInt.getUInt.int
 
   code.pc = jumpDest
 
@@ -30,21 +30,21 @@ proc jumpi*(computation) =
   let (jumpDest, checkValue) = stack.popInt(2)
 
   if checkValue > 0:
-    code.pc = jumpDest.getInt
+    code.pc = jumpDest.getUInt.int
 
     let nextOpcode = code.peek()
 
     if nextOpcode != JUMPDEST:
       raise newException(InvalidJumpDestination, "Invalid Jump Destination")
 
-    if not code.isValidOpcode(jumpDest.getInt):
+    if not code.isValidOpcode(jumpDest.getUInt.int):
       raise newException(InvalidInstruction, "Jump resulted in invalid instruction")
 
 proc jumpdest*(computation) =
   discard
 
 proc pc*(computation) =
-  let pc = max(code.pc - 1, 0)
+  let pc = max(code.pc - 1, 0).u256
   stack.push(pc)
 
 proc gas*(computation) =

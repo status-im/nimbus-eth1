@@ -26,17 +26,22 @@ proc validateLength*[T](values: seq[T], size: int) =
     raise newException(ValidationError,
       &"seq expected {size} len, got {values.len}")
 
-proc validateLte*(value: Int256 | int, maximum: int, title: string = "Value") =
-  if value.i256 > maximum.i256:
+proc validateLte*(value: UInt256 | int, maximum: int, title: string = "Value") =
+  if value.u256 > maximum.u256:
     raise newException(ValidationError,
       &"{title} {value} is not less or equal to {maximum}")
 
-proc validateLt*(value: Int256 | int, maximum: int, title: string = "Value") =
-  if value.i256 >= maximum.i256:
+proc validateLt*(value: UInt256 | int, maximum: int, title: string = "Value") =
+  if value.u256 >= maximum.u256:
     raise newException(ValidationError,
       &"{title} {value} is not less than {maximum}")
 
 proc validateStackItem*(value: string) =
+  if value.len > 32:
+    raise newException(ValidationError,
+      &"Invalid stack item: expected 32 bytes, got {value.len}: value is {value}")
+
+proc validateStackItem*(value: string | seq[byte]) =
   if value.len > 32:
     raise newException(ValidationError,
       &"Invalid stack item: expected 32 bytes, got {value.len}: value is {value}")

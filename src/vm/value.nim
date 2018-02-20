@@ -1,5 +1,5 @@
 import
-  strformat, strutils,
+  strformat, strutils, sequtils,
   ../constants, ttmath
 
 type
@@ -10,7 +10,7 @@ type
     of VInt:
       i*: Int256
     of VBinary:
-      b*: string
+      b*: seq[byte]
 
 proc `$`*(value: Value): string =
   case value.kind:
@@ -26,6 +26,9 @@ proc vint*(i: Int256): Value =
   Value(kind: VInt, i: i)
 
 proc vbinary*(b: string): Value =
+  Value(kind: VBinary, b: b.mapIt(it.byte))
+
+proc vbinary*(b: seq[byte]): Value =
   Value(kind: VBinary, b: b)
 
 proc `==`*(a: Value, b: Value): bool =

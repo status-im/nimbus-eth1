@@ -1,9 +1,9 @@
 import
-  strformat, strutils, sequtils, tables, macros, ttmath,
+  strformat, strutils, sequtils, tables, macros, ttmath, terminal,
   constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values,
   vm / [code_stream, gas_meter, memory, message, stack]
 
-proc memoryGasCost*(sizeInBytes: Int256): Int256 =
+proc memoryGasCost*(sizeInBytes: UInt256): UInt256 =
   var
     sizeInWords = ceil32(sizeInBytes) div 32
     linearCost = sizeInWords * GAS_MEMORY
@@ -26,7 +26,7 @@ type
     rawOutput*:             string
     returnData*:            string
     error*:                 Error
-    logEntries*:            seq[(string, seq[Int256], string)]
+    logEntries*:            seq[(string, seq[UInt256], string)]
     shouldEraseReturnData*: bool
     accountsToDelete*:      Table[string, string]
     opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
@@ -40,9 +40,9 @@ type
   Opcode* = ref object of RootObj
     case kind*:      Op
     of VARIABLE_GAS_COST_OPS:
-      gasCostHandler*: proc(computation: var BaseComputation): Int256
+      gasCostHandler*: proc(computation: var BaseComputation): UInt256
     else:
-      gasCostConstant*: Int256
+      gasCostConstant*: UInt256
     runLogic*:  proc(computation: var BaseComputation)
 
 proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation =
@@ -87,9 +87,9 @@ method shouldEraseReturnData*(c: BaseComputation): bool =
 
 method prepareChildMessage*(
     c: var BaseComputation,
-    gas: Int256,
+    gas: UInt256,
     to: string,
-    value: Int256,
+    value: UInt256,
     data: seq[byte],
     code: string,
     options: MessageOptions = newMessageOptions()): Message =
@@ -106,13 +106,13 @@ method prepareChildMessage*(
     code,
     childOptions)
 
-method extendMemory*(c: var BaseComputation, startPosition: Int256, size: Int256) =
+method extendMemory*(c: var BaseComputation, startPosition: UInt256, size: UInt256) =
   # Memory Management
   #
   # validate_uint256(start_position, title="Memory start position")
   # validate_uint256(size, title="Memory size")
 
-  let beforeSize = ceil32(len(c.memory).int256)
+  let beforeSize = ceil32(len(c.memory).u256)
   let afterSize = ceil32(startPosition + size)
 
   let beforeCost = memoryGasCost(beforeSize)
@@ -182,7 +182,7 @@ method registerAccountForDeletion*(c: var BaseComputation, beneficiary: string) 
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
-method addLogEntry*(c: var BaseComputation, account: string, topics: seq[Int256], data: string) =
+method addLogEntry*(c: var BaseComputation, account: string, topics: seq[UInt256], data: string) =
   validateCanonicalAddress(account, title="log entry address")
   c.logEntries.add((account, topics, data))
 
@@ -193,28 +193,28 @@ method getAccountsForDeletion*(c: BaseComputation): seq[(string, string)] =
   else:
     result = @[]
 
-method getLogEntries*(c: BaseComputation): seq[(string, seq[Int256], string)] =
+method getLogEntries*(c: BaseComputation): seq[(string, seq[UInt256], string)] =
   # TODO
   if c.isError:
     result = @[]
   else:
     result = @[]
 
-method getGasRefund*(c: BaseComputation): Int256 =
+method getGasRefund*(c: BaseComputation): UInt256 =
   if c.isError:
-    result = 0.int256
+    result = 0.u256
   else:
-    result = c.gasMeter.gasRefunded + c.children.mapIt(it.getGasRefund()).foldl(a + b, 0.int256)
+    result = c.gasMeter.gasRefunded + c.children.mapIt(it.getGasRefund()).foldl(a + b, 0.u256)
 
-method getGasUsed*(c: BaseComputation): Int256 =
+method getGasUsed*(c: BaseComputation): UInt256 =
   if c.shouldBurnGas:
     result = c.msg.gas
   else:
-    result = max(0.int256, c.msg.gas - c.gasMeter.gasRemaining)
+    result = max(0.u256, c.msg.gas - c.gasMeter.gasRemaining)
 
-method getGasRemaining*(c: BaseComputation): Int256 =
+method getGasRemaining*(c: BaseComputation): UInt256 =
   if c.shouldBurnGas:
-    result = 0.int256
+    result = 0.u256
   else:
     result = c.gasMeter.gasRemaining
 
@@ -295,6 +295,7 @@ macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
             opcode.run(c)
           except Halt:
             break
+          c.logger.log($c.stack & "\n\n", fgGreen)
         return c
       inComputation(c):
         res = handler()

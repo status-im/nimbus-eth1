@@ -12,11 +12,11 @@ proc mstoreX(computation; x: int) =
   let start = stack.popInt()
   let value = stack.popBinary()
 
-  let paddedValue = padLeft(value, x, "\x00")
-  let normalizedValue = ($paddedValue)[^x .. ^1]
-
-  extendMemory(start, x.int256)
-  memory.write(start, 32.int256, normalizedValue)
+  let paddedValue = padLeft(value, x, 0.byte)
+  let normalizedValue = paddedValue[^x .. ^1]
+  
+  extendMemory(start, x.u256)
+  memory.write(start, 32.u256, normalizedValue)
 
 # TODO template handler
 
@@ -29,10 +29,10 @@ proc mstore8*(computation) =
 proc mload*(computation) =
   let start = stack.popInt()
 
-  extendMemory(start, 32.int256)
+  extendMemory(start, 32.u256)
 
-  let value = memory.read(start, 32.int256).toString
+  let value = memory.read(start, 32.u256)
   stack.push(value)
 
 proc msize*(computation) =
-  stack.push(memory.len)
+  stack.push(memory.len.u256)

@@ -4,7 +4,7 @@ import
 
 type
   CodeStream* = ref object
-    bytes: seq[byte]
+    bytes*: seq[byte]
     depthProcessed: int
     invalidPositions: HashSet[int]
     pc*: int

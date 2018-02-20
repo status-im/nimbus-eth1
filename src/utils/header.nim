@@ -3,11 +3,11 @@ import ../constants, ttmath, strformat
 type
   Header* = ref object
     timestamp*: int
-    difficulty*: Int256
-    blockNumber*: Int256
+    difficulty*: UInt256
+    blockNumber*: UInt256
     hash*: string
     coinbase*: string
-    gasLimit*: Int256
+    gasLimit*: UInt256
     stateRoot*: string
 
   # TODO
@@ -52,14 +52,14 @@ proc generateHeaderFromParentHeader*(
 
   #   return header
 
-proc computeGasLimit*(header: Header, gasLimitFloor: Int256): Int256 =
+proc computeGasLimit*(header: Header, gasLimitFloor: UInt256): UInt256 =
   # TODO
   gasLimitFloor
 
-proc gasUsed*(header: Header): Int256 =
+proc gasUsed*(header: Header): UInt256 =
   # TODO
-  0.int256
+  0.u256
 
-proc gasLimit*(header: Header): Int256 =
+proc gasLimit*(header: Header): UInt256 =
   # TODO
-  0.int256
+  0.u256

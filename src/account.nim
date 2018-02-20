@@ -3,12 +3,12 @@ import
 
 type
   Account* = ref object
-    nonce*:             Int256
-    balance*:           Int256
+    nonce*:             UInt256
+    balance*:           UInt256
     storageRoot*:       string
     codeHash*:          string
 
 rlpFields Account, nonce, balance
 
-proc newAccount*(nonce: Int256 = 0.i256, balance: Int256 = 0.i256): Account =
+proc newAccount*(nonce: UInt256 = 0.u256, balance: UInt256 = 0.u256): Account =
   Account(nonce: nonce, balance: balance)

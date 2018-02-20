@@ -1,14 +1,14 @@
-import strformat
+import strformat, terminal
 
 type
   Logger* = object
     name*: string
 
-var DEBUG = true
+var DEBUG* = false
 
-proc log*(l: Logger, msg: string) =
+proc log*(l: Logger, msg: string, color: ForegroundColor = fgBlack) =
   if DEBUG:
-    echo &"#{l.name}: {msg}"
+    styledWriteLine(stdout, color, &"#{l.name}: {msg}", resetStyle)
 
 proc debug*(l: Logger, msg: string) =
   if DEBUG:
@@ -16,7 +16,7 @@ proc debug*(l: Logger, msg: string) =
 
 proc trace*(l: Logger, msg: string) =
   if DEBUG:
-    l.log(msg)
+    l.log(msg, fgBlue)
 
 proc getLogger*(name: string): Logger =
   result = Logger(name: name)

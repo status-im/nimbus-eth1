@@ -17,11 +17,11 @@ type
 
     # logger = logging.getLogger("evm.vm.message.Message")
 
-    gas*:                     Int256
-    gasPrice*:                Int256
+    gas*:                     UInt256
+    gasPrice*:                UInt256
     to*:                      string
     sender*:                  string    
-    value*:                   Int256
+    value*:                   UInt256
     data*:                    seq[byte]
     code*:                    string
     internalOrigin:           string
@@ -66,11 +66,11 @@ proc newMessageOptions*(
     isStatic: isStatic)
 
 proc newMessage*(
-    gas: Int256,
-    gasPrice: Int256,
+    gas: UInt256,
+    gasPrice: UInt256,
     to: string,
     sender: string,
-    value: Int256,
+    value: UInt256,
     data: seq[byte],
     code: string,
     options: MessageOptions = newMessageOptions()): Message =

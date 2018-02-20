@@ -1,5 +1,5 @@
 import
-  strformat, macros,
+  strformat, macros, sequtils,
   ../constants, ../errors, ../computation, .. / vm / [stack, code_stream], .. / utils / [padding, bytes], ttmath
 
 {.this: computation.}
@@ -9,7 +9,7 @@ using
   computation: var BaseComputation
 
 proc pop*(computation) =
-  discard stack.pop()
+  discard stack.popInt()
 
 macro pushXX(size: static[int]): untyped =
   let computation = ident("computation")
@@ -17,12 +17,12 @@ macro pushXX(size: static[int]): untyped =
   let name = ident(&"push{size}")
   result = quote:
     proc `name`*(`computation`: var BaseComputation) =
-      let `value` = `computation`.code.read(`size`).toString
-      let stripped = `value`.strip(0.char)
+      let `value` = `computation`.code.read(`size`)
+      let stripped = `value`.toString.strip(0.char)
       if stripped.len == 0:
-        `computation`.stack.push(0.i256)
+        `computation`.stack.push(0.u256)
       else:
-        let paddedValue = `value`.padRight(`size`, "\x00")
+        let paddedValue = `value`.padRight(`size`, 0.byte)
         `computation`.stack.push(paddedValue)
 
 

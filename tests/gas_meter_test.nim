@@ -6,7 +6,7 @@ import unittest, macros, strformat, strutils, sequtils, constants, opcode_values
 disableLogging()
 
 proc gasMeters: seq[GasMeter] =
-  @[newGasMeter(10.i256), newGasMeter(100.i256), newGasMeter(999.i256)]
+  @[newGasMeter(10.u256), newGasMeter(100.u256), newGasMeter(999.u256)]
 
 macro all(element: untyped, handler: untyped): untyped =
   let name = ident(&"{element.repr}s")
@@ -47,20 +47,21 @@ macro all(element: untyped, handler: untyped): untyped =
 
 
 suite "gasMeter":
-  test "consume rejects negative":
-    all(gasMeter):
-      expect(ValidationError):
-        gasMeter.consumeGas(-1.i256, "independent")
+  # types
+  # test "consume rejects negative":
+  #   all(gasMeter):
+  #     expect(ValidationError):
+  #       gasMeter.consumeGas(-1.i256, "independent")
 
-  test "return rejects negative":
-    all(gasMeter):
-      expect(ValidationError):
-        gasMeter.returnGas(-1.i256)
+  # test "return rejects negative":
+  #   all(gasMeter):
+  #     expect(ValidationError):
+  #       gasMeter.returnGas(-1.i256)
 
-  test "refund rejects negative":
-    all(gasMeter):
-      expect(ValidationError):
-        gasMeter.returnGas(-1.i256)
+  # test "refund rejects negative":
+  #   all(gasMeter):
+  #     expect(ValidationError):
+  #       gasMeter.returnGas(-1.i256)
 
   # TODO: -0/+0 
   test "consume spends":
@@ -74,15 +75,15 @@ suite "gasMeter":
     all(gasMeter):
       check(gasMeter.gasRemaining == gasMeter.startGas)
       expect(OutOfGas):
-        gasMeter.consumeGas(gasMeter.startGas + 1.i256, "")
+        gasMeter.consumeGas(gasMeter.startGas + 1.u256, "")
 
   test "return refund works correctly":
     all(gasMeter):
       check(gasMeter.gasRemaining == gasMeter.startGas)
       check(gasMeter.gasRefunded == 0)
-      gasMeter.consumeGas(5.i256, "")
-      check(gasMeter.gasRemaining == gasMeter.startGas - 5.i256)
-      gasMeter.returnGas(5.i256)
+      gasMeter.consumeGas(5.u256, "")
+      check(gasMeter.gasRemaining == gasMeter.startGas - 5.u256)
+      gasMeter.returnGas(5.u256)
       check(gasMeter.gasRemaining == gasMeter.startGas)
-      gasMeter.refundGas(5.i256)
-      check(gasMeter.gasRefunded == 5.i256)
+      gasMeter.refundGas(5.u256)
+      check(gasMeter.gasRefunded == 5.u256)

@@ -1,5 +1,5 @@
 import
-  ../constants, ../errors, ../computation, .. / db / state_db, .. / vm / [stack, gas_meter, message], strformat
+  ../constants, ../errors, ../computation, ../vm_state, .. / db / [db_chain, state_db], .. / vm / [stack, gas_meter, message], strformat, ttmath, utils / header
 
 {.this: computation.}
 {.experimental.}
@@ -9,52 +9,26 @@ using
 
 proc sstore*(computation) =
   let (slot, value) = stack.popInt(2)
-  #if value != 0: #and slot == 0:
-  computation.gasMeter.consumeGas(GAS_SSET, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} (TODO)")
-  #else:
-  #computation.gasMeter.consumeGas(GAS_SRESET, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} (TODO)")
-  # with computation.vm_state.state_db(read_only=True) as state_db:
-  #      current_value = state_db.get_storage(
-  #          address=computation.msg.storage_address,
-  #          slot=slot,
-  #      )
 
-  # let isCurrentlyEmpty = not bool(current_value)
-  # let isGoingToBeEmpty = not bool(value)
+  var currentValue = 0.u256
 
-  # if is_currently_empty:
-  #      gas_refund = 0
-  #  elif is_going_to_be_empty:
-  #      gas_refund = constants.REFUND_SCLEAR
-  #  else:
-  #      gas_refund = 0
+  computation.vmState.db(readOnly=false):
+    currentValue = db.getStorage(computation.msg.storageAddress, slot)
 
-  #  if is_currently_empty and is_going_to_be_empty:
-  #      gas_cost = constants.GAS_SRESET
-  #  elif is_currently_empty:
-  #      gas_cost = constants.GAS_SSET
-  #  elif is_going_to_be_empty:
-  #      gas_cost = constants.GAS_SRESET
-  #  else:
-  #      gas_cost = constants.GAS_SRESET
+  let isCurrentlyEmpty = currentValue == 0
+  let isGoingToBeEmpty = value == 0
 
-    # computation.gas_meter.consume_gas(gas_cost, reason="SSTORE: {0}[{1}] -> {2} ({3})".format(
-    #     encode_hex(computation.msg.storage_address),
-    #     slot,
-    #     value,
-    #     current_value,
-    # ))
+  let gasRefund = if isCurrentlyEmpty or not isGoingToBeEmpty: 0.u256 else: REFUND_SCLEAR
 
-    # if gas_refund:
-    #     computation.gas_meter.refund_gas(gas_refund)
+  let gasCost = if isCurrentlyEmpty and not isGoingToBeEmpty: GAS_SSET else: GAS_SRESET
 
-    # with computation.vm_state.state_db() as state_db:
-    #     state_db.set_storage(
-    #         address=computation.msg.storage_address,
-    #         slot=slot,
-    #         value=value,
-    #     )
+  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
+  
+  if gasRefund > 0:
+    computation.gasMeter.refundGas(gasRefund)
 
+  computation.vmState.db(readOnly=false):
+    db.setStorage(computation.msg.storageAddress, slot, value)
 
 proc sload*(computation) =
   let slot = stack.popInt()

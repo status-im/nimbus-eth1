@@ -16,7 +16,7 @@ proc coinbase*(computation) =
   stack.push(vmState.coinbase)
 
 proc timestamp*(computation) =
-  stack.push(vmState.timestamp)
+  stack.push(vmState.timestamp.u256)
 
 proc number*(computation) =
   stack.push(vmState.blockNumber)

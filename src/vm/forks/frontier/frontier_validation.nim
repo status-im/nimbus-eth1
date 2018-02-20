@@ -4,7 +4,7 @@ import
 
 proc validateFrontierTransaction*(vmState: BaseVmState, transaction: BaseTransaction) =
   let gasCost = transaction.gas * transaction.gasPrice
-  var senderBalance: Int256
+  var senderBalance: UInt256
   # inDB(vmState.stateDB(readOnly=true):
   #   senderBalance = db.getBalance(transaction.sender)
   senderBalance = gasCost # TODO

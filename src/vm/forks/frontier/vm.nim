@@ -9,14 +9,14 @@ type
 method name*(vm: FrontierVM): string =
   "FrontierVM"
 
-method getBlockReward(vm: FrontierVM): Int256 =
+method getBlockReward(vm: FrontierVM): UInt256 =
   BLOCK_REWARD
 
-method getUncleReward(vm: FrontierVM, blockNumber: Int256, uncle: Block): Int256 =
+method getUncleReward(vm: FrontierVM, blockNumber: UInt256, uncle: Block): UInt256 =
   BLOCK_REWARD * (UNCLE_DEPTH_PENALTY_FACTOR + uncle.blockNumber - blockNumber) div UNCLE_DEPTH_PENALTY_FACTOR
 
 
-method getNephewReward(vm: FrontierVM): Int256 =
+method getNephewReward(vm: FrontierVM): UInt256 =
   vm.getBlockReward() div 32
 
 proc newFrontierVM*(header: Header, chainDB: BaseChainDB): FrontierVM =

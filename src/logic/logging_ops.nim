@@ -22,7 +22,7 @@ macro logXX(topicCount: static[int]): untyped =
   result = quote:
     proc `name`*(`computation`: var BaseComputation) =
       let (`memStartPosition`, `size`) = `computation`.stack.popInt(2)
-      var `topics`: seq[Int256]
+      var `topics`: seq[UInt256]
 
   var topicCode: NimNode
   if topicCount == 0:
@@ -44,7 +44,7 @@ macro logXX(topicCount: static[int]): untyped =
 
   let logicCode = quote:
     let dataGasCost = constants.GAS_LOG_DATA * `size`
-    let topicGasCost = constants.GAS_LOG_TOPIC * `topicCount`.i256
+    let topicGasCost = constants.GAS_LOG_TOPIC * `topicCount`.u256
     let totalGasCost = dataGasCost + topicGasCost
     `computation`.gasMeter.consumeGas(totalGasCost, reason="Log topic and data gas cost")
     `computation`.extendMemory(`memStartPosition`, `size`)

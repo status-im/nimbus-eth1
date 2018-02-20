@@ -17,7 +17,7 @@ type
 
   CreateByzantium* = ref object of CreateEIP150
 
-method maxChildGasModifier(create: Create, gas: Int256): Int256 {.base.} =
+method maxChildGasModifier(create: Create, gas: UInt256): UInt256 {.base.} =
   gas
 
 method runLogic*(create: Create, computation) =
@@ -55,7 +55,7 @@ method runLogic*(create: Create, computation) =
 
   if isCollision:
     computation.vmState.logger.debug(&"Address collision while creating contract: {contractAddress.encodeHex}")
-    computation.stack.push(0.i256)
+    computation.stack.push(0.u256)
     return
 
   let childMsg = computation.prepareChildMessage(
@@ -70,12 +70,12 @@ method runLogic*(create: Create, computation) =
   var childComputation: BaseComputation
 
   if childComputation.isError:
-    computation.stack.push(0.i256)
+    computation.stack.push(0.u256)
   else:
     computation.stack.push(contractAddress)
   computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-method maxChildGasModifier(create: CreateEIP150, gas: Int256): Int256 =
+method maxChildGasModifier(create: CreateEIP150, gas: UInt256): UInt256 =
   maxChildGasEIP150(gas)
 
 method runLogic*(create: CreateByzantium, computation) =
@@ -84,7 +84,7 @@ method runLogic*(create: CreateByzantium, computation) =
   procCall runLogic(create, computation)
 
 proc selfdestructEIP150(computation) =
-  let beneficiary = forceBytesToAddress(stack.popBinary)
+  let beneficiary = forceBytesToAddress(stack.popString)
   # TODO: with
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #       if not state_db.account_exists(beneficiary):
@@ -95,7 +95,7 @@ proc selfdestructEIP150(computation) =
   #   _selfdestruct(computation, beneficiary)
 
 proc selfdestructEIP161(computation) =
-  let beneficiary = forceBytesToAddress(stack.popBinary)
+  let beneficiary = forceBytesToAddress(stack.popString)
   # TODO: with
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #       is_dead = (
@@ -136,8 +136,8 @@ proc selfdestruct(computation; beneficiary: string) =
 proc returnOp*(computation) =
   let (startPosition, size) = stack.popInt(2)
   computation.extendMemory(startPosition, size)
-  let output = memory.read(startPosition, size).toString
-  computation.output = output
+  let output = memory.read(startPosition, size)
+  computation.output = output.toString
   raise newException(Halt, "RETURN")
 
 proc revert*(computation) =
@@ -148,7 +148,7 @@ proc revert*(computation) =
   raise newException(Revert, $output)
 
 proc selfdestruct*(computation) =
-  let beneficiary = forceBytesToAddress(stack.popBinary)
+  let beneficiary = forceBytesToAddress(stack.popString)
   selfdestruct(computation, beneficiary)
   raise newException(Halt, "SELFDESTRUCT")
 

@@ -4,7 +4,7 @@ import
   .. / vm / [stack, message, gas_meter, memory, code_stream], .. / utils / [address, padding, bytes], ttmath
 
 proc balance*(computation: var BaseComputation) =
-  let address = forceBytesToAddress(computation.stack.popBinary)
+  let address = forceBytesToAddress(computation.stack.popString)
   var balance: Int256
   # TODO computation.vmState.stateDB(read_only=True):
   #  balance = db.getBalance(address)
@@ -25,15 +25,15 @@ proc callValue*(computation: var BaseComputation) =
 
 proc callDataLoad*(computation: var BaseComputation) =
   # Load call data into memory
-  let startPosition = computation.stack.popInt.getInt
-  let value = computation.msg.data[startPosition ..< startPosition + 32].toString
-  let paddedValue = padRight(value, 32, "\x00")
-  let normalizedValue = paddedValue.lStrip(0.char)
+  let startPosition = computation.stack.popInt.getUInt.int
+  let value = computation.msg.data[startPosition ..< startPosition + 32]
+  let paddedValue = padRight(value, 32, 0.byte)
+  let normalizedValue = paddedValue.lStrip(0.byte)
   computation.stack.push(normalizedValue)
 
 
 proc callDataSize*(computation: var BaseComputation) =
-  let size = computation.msg.data.len
+  let size = computation.msg.data.len.u256
   computation.stack.push(size)
 
 proc callDataCopy*(computation: var BaseComputation) =
@@ -45,13 +45,13 @@ proc callDataCopy*(computation: var BaseComputation) =
   let wordCount = ceil32(size) div 32
   let copyGasCost = wordCount * constants.GAS_COPY
   computation.gasMeter.consumeGas(copyGasCost, reason="CALLDATACOPY fee")
-  let value = computation.msg.data[calldataStartPosition.getInt ..< (calldataStartPosition + size).getInt].toString
-  let paddedValue = padRight(value, size.getInt, "\x00")
+  let value = computation.msg.data[calldataStartPosition.getUInt.int ..< (calldataStartPosition + size).getUInt.int]
+  let paddedValue = padRight(value, size.getUInt.int, 0.byte)
   computation.memory.write(memStartPosition, size, paddedValue)
 
 
 proc codesize*(computation: var BaseComputation) =
-  let size = computation.code.len.i256
+  let size = computation.code.len.u256
   computation.stack.push(size)
 
 
@@ -76,7 +76,7 @@ proc gasprice*(computation: var BaseComputation) =
 
 
 proc extCodeSize*(computation: var BaseComputation) =
-  let account = forceBytesToAddress(computation.stack.popBinary)
+  let account = forceBytesToAddress(computation.stack.popString)
   # TODO
   #     with computation.vm_state.state_db(read_only=True) as state_db:
   #         code_size = len(state_db.get_code(account))
@@ -84,7 +84,7 @@ proc extCodeSize*(computation: var BaseComputation) =
   #     computation.stack.push(code_size)
 
 proc extCodeCopy*(computation: var BaseComputation) =
-  let account = forceBytesToAddress(computation.stack.popBinary)
+  let account = forceBytesToAddress(computation.stack.popString)
   let (memStartPosition, codeStartPosition, size) = computation.stack.popInt(3)
   computation.extendMemory(memStartPosition, size)
   let wordCount = ceil32(size) div 32
@@ -100,7 +100,7 @@ proc extCodeCopy*(computation: var BaseComputation) =
   #     computation.memory.write(mem_start_position, size, padded_code_bytes)
 
 proc returnDataSize*(computation: var BaseComputation) =
-  let size = computation.returnData.len
+  let size = computation.returnData.len.u256
   computation.stack.push(size)
 
 proc returnDataCopy*(computation: var BaseComputation) =
@@ -115,5 +115,5 @@ proc returnDataCopy*(computation: var BaseComputation) =
   let wordCount = ceil32(size) div 32
   let copyGasCost = wordCount * constants.GAS_COPY
   computation.gasMeter.consumeGas(copyGasCost, reason="RETURNDATACOPY fee")
-  let value = ($computation.returnData)[returnDataStartPosition.getInt ..< (returnDataStartPosition + size).getInt]
+  let value = ($computation.returnData)[returnDataStartPosition.getUInt.int ..< (returnDataStartPosition + size).getUInt.int]
   computation.memory.write(memStartPosition, size, value)

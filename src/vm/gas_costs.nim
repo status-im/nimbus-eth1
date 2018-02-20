@@ -2,7 +2,7 @@ import
   strformat, ttmath,
   ../constants, ../opcode, ../computation, stack
 
-proc expGasCost*(computation: var BaseComputation): Int256 =
+proc expGasCost*(computation: var BaseComputation): UInt256 =
   let arg = computation.stack.getInt(0)
-  result = if arg == 0: 10.i256 else: (10.i256 + 10.i256 * (1.i256 + arg.log256))
+  result = if arg == 0: 10.u256 else: (10.u256 + 10.u256 * (1.u256 + arg.log256))
   

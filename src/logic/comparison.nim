@@ -21,7 +21,7 @@ quasiBoolean(xorOp, `xor`, nonzero=true) # Bitwise XOr
 proc iszero*(computation: var BaseComputation) =
   var value = computation.stack.popInt()
 
-  var res = if value == 0: 1.i256 else: 0.i256
+  var res = if value == 0: 1.u256 else: 0.u256
   pushRes()
 
 proc notOp*(computation: var BaseComputation) =
@@ -34,6 +34,6 @@ proc byteOp*(computation: var BaseComputation) =
   # Bitwise And
   var (position, value) = computation.stack.popInt(2)
 
-  var res = if position >= 32.i256: 0.i256 else: (value div (256.i256.pow(31 - position.getInt))) mod 256
+  var res = if position >= 32.u256: 0.u256 else: (value div (256.u256.pow(31'u - position.getUInt))) mod 256
   pushRes()
 
