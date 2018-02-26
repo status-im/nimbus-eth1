@@ -4,7 +4,7 @@ type
   Logger* = object
     name*: string
 
-var DEBUG* = false
+var DEBUG* = defined(nimbusdebug)
 
 proc log*(l: Logger, msg: string, color: ForegroundColor = fgBlack) =
   if DEBUG:

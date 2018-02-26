@@ -15,7 +15,7 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
   for filename in walkDirRec("tests" / "fixtures" / s):
     var (folder, name) = filename.splitPath()
     #if "Arithmetic" in folder: #
-    if name.startswith("swap"):
+    if name.startswith("addmodBigIntCast"):
       echo name
       result.add(generateTest(filename, handler))
       z += 1

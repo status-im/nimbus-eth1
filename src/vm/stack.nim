@@ -1,5 +1,5 @@
 import
-  strformat, strutils, sequtils, macros,
+  strformat, strutils, sequtils, macros, rlp,
   value, ../errors, ../validation, ../utils_numeric, ../constants, ttmath, ../logging, .. / utils / bytes
 
 type

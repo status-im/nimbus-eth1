@@ -1,4 +1,4 @@
-import ttmath, constants, strformat, sequtils, endians, macros, utils / padding
+import ttmath, constants, strformat, sequtils, endians, macros, utils / padding, rlp
 
 # TODO improve
 

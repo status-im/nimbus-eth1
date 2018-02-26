@@ -11,11 +11,12 @@ proc sstore*(computation) =
   let (slot, value) = stack.popInt(2)
 
   var currentValue = 0.u256
+  var existing = false
 
   computation.vmState.db(readOnly=false):
-    currentValue = db.getStorage(computation.msg.storageAddress, slot)
+    (currentValue, existing) = db.getStorage(computation.msg.storageAddress, slot)
 
-  let isCurrentlyEmpty = currentValue == 0
+  let isCurrentlyEmpty = not existing
   let isGoingToBeEmpty = value == 0
 
   let gasRefund = if isCurrentlyEmpty or not isGoingToBeEmpty: 0.u256 else: REFUND_SCLEAR

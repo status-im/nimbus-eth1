@@ -7,7 +7,7 @@ import
 type
   TypeHint* {.pure.} = enum UInt256, Bytes, Any
 
-  Bytes* = seq[byte]
+  #Bytes* = seq[byte]
 
   # Int256* = BigInt #distinct int # TODO
 

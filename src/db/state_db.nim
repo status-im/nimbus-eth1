@@ -4,11 +4,11 @@ import
 
 type
   AccountStateDB* = ref object
-    db*: Table[string, UInt256]
+    db*: Table[string, Bytes]
     rootHash*: string # TODO trie
 
 proc newAccountStateDB*(db: Table[string, string], readOnly: bool = false): AccountStateDB =
-  result = AccountStateDB(db: initTable[string, UInt256]())
+  result = AccountStateDB(db: initTable[string, Bytes]())
 
 proc logger*(db: AccountStateDB): Logger =
   logging.getLogger("db.State")
@@ -59,16 +59,16 @@ proc setStorage*(db: var AccountStateDB, address: string, slot: UInt256, value: 
   let slotAsKey = slot.intToBigEndian.pad32.toString
   var storage = db.db
   # TODO fix
-  #if value > 0:
-  #  let encodedValue = rlp.encode(value)
-  #  storage[slotAsKey] = encodedValue
-  #else:
-  #  storage.del(slotAsKey)
-  storage[slotAsKey] = value
+  if value > 0:
+    let encodedValue = rlp.encode(value)
+    storage[slotAsKey] = encodedValue.bytes[encodedValue.ibegin..<encodedValue.iend]
+  else:
+    storage.del(slotAsKey)
+  #storage[slotAsKey] = value
   # account.storageRoot = storage.rootHash
   # db.setAccount(address, account)
 
-proc getStorage*(db: var AccountStateDB, address: string, slot: UInt256): UInt256 =
+proc getStorage*(db: var AccountStateDB, address: string, slot: UInt256): (UInt256, bool) =
   validateCanonicalAddress(address, title="Storage Address")
   #validateGte(slot, 0, title="Storage Slot")
   
@@ -82,11 +82,12 @@ proc getStorage*(db: var AccountStateDB, address: string, slot: UInt256): UInt25
   let slotAsKey = slot.intToBigEndian.pad32.toString
   var storage = db.db
   if storage.hasKey(slotAsKey):
-    result = storage[slotAsKey]
-    #let encodedValue = storage[slotAsKey]
-    #result = rlp.decode(encodedValue)
+    #result = storage[slotAsKey]
+    var encodedValue = storage[slotAsKey]
+    var r = rlpFromBytes(encodedValue.initBytesRange)
+    result = (r.read(Bytes).bigEndianToInt, true)
   else:
-    result = 0.u256
+    result = (0.u256, false)
 
 proc setNonce*(db: var AccountStateDB, address: string, nonce: UInt256) =
   validateCanonicalAddress(address, title="Storage Address")

@@ -34,6 +34,6 @@ proc byteOp*(computation: var BaseComputation) =
   # Bitwise And
   var (position, value) = computation.stack.popInt(2)
 
-  var res = if position >= 32.u256: 0.u256 else: (value div (256.u256.pow(31'u - position.getUInt))) mod 256
+  var res = if position >= 32.u256: 0.u256 else: (value div (256.u256.pow(31'u64 - position.getUInt))) mod 256
   pushRes()
 
