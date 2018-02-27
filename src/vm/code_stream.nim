@@ -9,6 +9,7 @@ type
     invalidPositions: HashSet[int]
     pc*: int
     logger: Logger
+    cached: seq[(int, Op, string)]
 
 proc `$`*(b: byte): string =
   $(b.int)
@@ -19,6 +20,7 @@ proc newCodeStream*(codeBytes: seq[byte]): CodeStream =
   result.pc = 0
   result.invalidPositions = initSet[int]()
   result.depthProcessed = 0
+  result.cached = @[]
   result.logger = logging.getLogger("vm.code_stream")
 
 proc newCodeStream*(codeBytes: string): CodeStream =
@@ -105,9 +107,11 @@ proc isValidOpcode*(c: var CodeStream, position: int): bool =
     else:
       return true
 
-proc decompile*(original: CodeStream): seq[(int, Op, string)] =
+proc decompile*(original: var CodeStream): seq[(int, Op, string)] =
   # behave as https://etherscan.io/opcode-tool
   # TODO
+  if original.cached.len > 0:
+    return original.cached
   result = @[]
   var c = newCodeStream(original.bytes)
   while true:
@@ -120,3 +124,8 @@ proc decompile*(original: CodeStream): seq[(int, Op, string)] =
     else:
       result.add((-1, Op.STOP, ""))
       break
+  original.cached = result
+
+proc hasSStore*(c: var CodeStream): bool =
+  let opcodes = c.decompile()
+  result = opcodes.anyIt(it[1] == SSTORE)

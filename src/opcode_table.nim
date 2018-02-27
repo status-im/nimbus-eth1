@@ -32,7 +32,7 @@ var OPCODE_TABLE* = initOpcodes:
   Op.Not:           GAS_VERY_LOW        notOp
   Op.Byte:          GAS_VERY_LOW        byteOp
 
-
+  
   # sha3
   Op.SHA3:          GAS_SHA3            sha3op
 

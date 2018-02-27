@@ -60,14 +60,16 @@ proc `^`*(left: Int256, right: int): Int256 =
     result = result * m
     value -= 1.i256
 
-proc `^`*(left: UInt256, right: int): UInt256 =
-  var value = right.u256
+proc `^`*(left: UInt256, right: UInt256): UInt256 =
+  var value = right
   result = 1.u256
   var m = right.u256
   while value > 0.u256:
     result = result * m
     value -= 1.u256
 
+proc `^`*(left: UInt256, right: int): UInt256 =
+  left ^ right.u256
 
 proc `>`*(a: Int256, b: int): bool =
   a > b.i256

@@ -15,7 +15,6 @@ proc addmod*(computation: var BaseComputation) =
   var (left, right, arg) = computation.stack.popInt(3)
 
   var res = if arg == 0: 0.u256 else: (left + right) mod arg
-  echo left + right, " ", arg
   pushRes()
 
 proc sub*(computation: var BaseComputation) =
@@ -83,7 +82,7 @@ proc exp*(computation: var BaseComputation) =
   
   var bitSize = 0.u256 # TODO exponent.bitLength()
   var byteSize = ceil8(bitSize) div 8
-  var res = if base == 0: 0.u256 else: (base ^ exponent.getUInt.int) mod UINT_256_CEILING
+  var res = if base == 0: 0.u256 else: (base.pow(exponent.getUInt)) mod UINT_256_CEILING
   # computation.gasMeter.consumeGas(
   #   gasPerByte * byteSize,
   #   reason="EXP: exponent bytes"
