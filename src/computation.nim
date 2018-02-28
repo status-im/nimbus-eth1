@@ -11,7 +11,7 @@ proc memoryGasCost*(sizeInBytes: UInt256): UInt256 =
     totalCost = linearCost + quadraticCost
   result = totalCost
 
-const VARIABLE_GAS_COST_OPS* = {Op.Exp}
+#const VARIABLE_GAS_COST_OPS* = {Op.Exp}
 
 type
   BaseComputation* = ref object of RootObj
@@ -38,11 +38,11 @@ type
     erasesReturnData*:      bool
 
   Opcode* = ref object of RootObj
-    case kind*:      Op
-    of VARIABLE_GAS_COST_OPS:
-      gasCostHandler*: proc(computation: var BaseComputation): UInt256
-    else:
-      gasCostConstant*: UInt256
+    kind*: Op
+    #of VARIABLE_GAS_COST_OPS:
+    #  gasCostHandler*: proc(computation: var BaseComputation): UInt256
+    #else:
+    gasCostConstant*: UInt256
     runLogic*:  proc(computation: var BaseComputation)
 
 proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation =

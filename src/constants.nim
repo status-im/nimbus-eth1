@@ -154,7 +154,7 @@ let
   GAS_HIGH* =                     10.u256
   GAS_EXT_CODE* =                 20.u256
   GAS_BALANCE* =                  20.u256
-  GAS_SLOAD* =                    50.u256
+  GAS_SLOAD* =                    200.u256 # TODO: pre eip150
   GAS_JUMP_DEST* =                1.u256
   GAS_SSET* =                     20_000.u256
   GAS_SRESET* =                   5_000.u256

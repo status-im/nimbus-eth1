@@ -1,4 +1,4 @@
-import ttmath, constants, strformat, sequtils, endians, macros, utils / padding, rlp
+import ttmath, constants, strformat, strutils, sequtils, endians, macros, utils / padding, rlp
 
 # TODO improve
 
@@ -17,6 +17,22 @@ proc bigEndianToInt*(value: Bytes): UInt256 =
     result.table[z] = temp
 
 #echo intToBigEndian("32482610168005790164680892356840817100452003984372336767666156211029086934369".u256)
+
+proc bitLength*(value: UInt256): int =
+  var b = ""
+  for z in 0 ..< 4:
+    b.add(value.table[3 - z].int64.toBin(64))
+  result = b.strip(chars={'0'}, trailing=false).len
+
+#proc log256*(value: UInt256): UInt256 =
+#  log2(value) div 8
+
+proc ceil8*(value: int): int =
+  let remainder = value mod 8
+  if remainder == 0:
+    value
+  else:
+    value + 8 - remainder
 
 proc unsignedToSigned*(value: UInt256): Int256 =
   0.i256

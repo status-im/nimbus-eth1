@@ -12,6 +12,7 @@ proc validTest*(folder: string, name: string): bool =
     "callstatelessToReturn1" notin name and
     "arith" notin name and
     folder notin @["vmRandomTest", "vmSystemOperations", "vmPerformance", "vmEnvironmentalInfo", "vmLogTest", "vmSha3Test", "vmIOandFlowOperations"]
+  #result = name == "exp2.json"
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
   let testStatusIMPL = ident("testStatusIMPL")

@@ -31,6 +31,7 @@ proc sstore*(computation) =
 
 proc sload*(computation) =
   let slot = stack.popInt()
+  var value = 2.u256
 
   # TODO: with
   # with computation.vm_state.state_db(read_only=True) as state_db:
@@ -38,4 +39,4 @@ proc sload*(computation) =
   #          address=computation.msg.storage_address,
   #          slot=slot,
   #      )
-  #  computation.stack.push(value)
+  computation.stack.push(value)

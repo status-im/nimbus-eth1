@@ -15,7 +15,7 @@ var OPCODE_TABLE* = initOpcodes:
   Op.SMod:          GAS_LOW             smod
   Op.AddMod:        GAS_MID             addmod
   Op.MulMod:        GAS_MID             mulmod
-  Op.Exp:           expGasCost          arithmetic.exp
+  Op.Exp:           GAS_ZERO            arithmetic.exp
   Op.SignExtend:    GAS_LOW             signextend
 
 
@@ -75,7 +75,7 @@ var OPCODE_TABLE* = initOpcodes:
   Op.MSize:         GAS_BASE            msize
 
   # storage
-  Op.SLoad:         GAS_SLOAD_COST      sload
+  Op.SLoad:         GAS_SLOAD           sload
   Op.SStore:        GAS_ZERO            sstore
 
 

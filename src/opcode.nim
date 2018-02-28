@@ -11,10 +11,10 @@ method logger*(opcode: Opcode): Logger =
   logging.getLogger(&"vm.opcode.{opcode.kind}")
 
 method gasCost*(opcode: Opcode, computation: var BaseComputation): UInt256 =
-  if opcode.kind in VARIABLE_GAS_COST_OPS:
-    opcode.gasCostHandler(computation)
-  else:
-    opcode.gasCostConstant
+  #if opcode.kind in VARIABLE_GAS_COST_OPS:
+  #  opcode.gasCostHandler(computation)
+  #else:
+  opcode.gasCostConstant
 
 template newOpcode*(kind: Op, gasCost: UInt256, logic: proc(computation: var BaseComputation)): Opcode =
   Opcode(kind: kind, gasCostConstant: gasCost, runLogic: logic)
@@ -23,10 +23,11 @@ template newOpcode*(kind: Op, gasHandler: proc(computation: var BaseComputation)
   Opcode(kind: kind, gasCostHandler: gasHandler, runLogic: logic)
 
 method `$`*(opcode: Opcode): string =
-  let gasCost = if opcode.kind in VARIABLE_GAS_COST_OPS:
-    "variable"
-  else:
-    $opcode.gasCostConstant
+  let gasCost = $opcode.gasCostConstant
+  # if opcode.kind in VARIABLE_GAS_COST_OPS:
+  #   "variable"
+  # else:
+  #   $opcode.gasCostConstant
   &"{opcode.kind}(0x{opcode.kind.int.toHex(2)}: {gasCost})"
 
 macro initOpcodes*(spec: untyped): untyped =
