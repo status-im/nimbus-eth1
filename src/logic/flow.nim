@@ -1,6 +1,6 @@
 import
   strformat, ttmath,
-  ../constants, ../opcode_values, ../logging, ../errors, ../computation, .. /vm / [code_stream, stack]
+  ../constants, ../types, ../opcode_values, ../logging, ../errors, ../computation, .. /vm / [code_stream, stack]
 
 
 {.this: computation.}

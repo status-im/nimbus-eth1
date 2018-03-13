@@ -1,5 +1,5 @@
 import
-  ../logging, ../constants, ../errors, ../transaction, ../computation, "../block", ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header
+  ../logging, ../constants, ../errors, ../transaction, ../types, ../computation, "../block", ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header
 
 type
   VM* = ref object of RootObj

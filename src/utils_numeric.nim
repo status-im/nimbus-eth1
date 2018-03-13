@@ -1,5 +1,7 @@
 import ttmath, constants, strformat, strutils, sequtils, endians, macros, utils / padding, rlp
 
+# some methods based on py-evm utils/numeric
+
 # TODO improve
 
 proc intToBigEndian*(value: UInt256): Bytes =
@@ -50,6 +52,7 @@ proc signedToUnsigned*(value: Int256): UInt256 =
   # else:
   #   return value
 
+# it's deasible to map nameXX methods like that (originally decorator)
 macro ceilXX(ceiling: static[int]): untyped =
   var name = ident(&"ceil{ceiling}")
   result = quote:

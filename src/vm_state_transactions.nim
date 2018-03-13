@@ -1,6 +1,6 @@
 import
   strformat, tables,
-  logging, constants, errors, computation, transaction, vm_state, "block", db / db_chain, utils / [state, header]
+  logging, constants, errors, computation, transaction, types, vm_state, "block", db / db_chain, utils / [state, header]
 
 method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction): (BaseComputation, Header) =
   # Execute the transaction in the vm

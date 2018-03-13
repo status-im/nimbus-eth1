@@ -1,6 +1,6 @@
 import
   strformat,
-  ../constants, ../errors, ../computation, ../opcode, ../opcode_values, ../logging, ../vm_state, call,
+  ../constants, ../types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging, ../vm_state, call,
   .. / vm / [stack, gas_meter, memory, message], .. / utils / [address, hexadecimal, bytes],
   ttmath
 

@@ -1,6 +1,6 @@
 import
   strformat, ttmath,
-  ../constants, ../opcode, ../computation, stack
+  ../types, ../constants, ../opcode, ../computation, stack
 
 proc expGasCost*(computation: var BaseComputation): UInt256 =
   let arg = computation.stack.getInt(0)

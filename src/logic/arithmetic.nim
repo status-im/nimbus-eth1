@@ -1,5 +1,5 @@
 import 
-  ../constants, ../utils_numeric, ../computation,
+  ../constants, ../utils_numeric, ../computation, ../types,
   .. / vm / [gas_meter, stack], ../opcode, ../opcode_values,
   helpers, ttmath, strutils
 

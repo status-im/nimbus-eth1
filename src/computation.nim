@@ -1,10 +1,10 @@
 import
   strformat, strutils, sequtils, tables, macros, ttmath, terminal,
-  constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values,
+  constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values, types,
   vm / [code_stream, gas_meter, memory, message, stack]
 
 proc memoryGasCost*(sizeInBytes: UInt256): UInt256 =
-  var
+  let
     sizeInWords = ceil32(sizeInBytes) div 32
     linearCost = sizeInWords * GAS_MEMORY
     quadraticCost = sizeInWords ^ 2 div GAS_MEMORY_QUADRATIC_DENOMINATOR
@@ -12,38 +12,6 @@ proc memoryGasCost*(sizeInBytes: UInt256): UInt256 =
   result = totalCost
 
 #const VARIABLE_GAS_COST_OPS* = {Op.Exp}
-
-type
-  BaseComputation* = ref object of RootObj
-    # The execution computation
-    vmState*:               BaseVMState
-    msg*:                   Message
-    memory*:                Memory
-    stack*:                 Stack
-    gasMeter*:              GasMeter
-    code*:                  CodeStream
-    children*:              seq[BaseComputation]
-    rawOutput*:             string
-    returnData*:            string
-    error*:                 Error
-    logEntries*:            seq[(string, seq[UInt256], string)]
-    shouldEraseReturnData*: bool
-    accountsToDelete*:      Table[string, string]
-    opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
-    precompiles*:           Table[string, Opcode]
-
-  Error* = ref object
-    info*:                  string
-    burnsGas*:              bool
-    erasesReturnData*:      bool
-
-  Opcode* = ref object of RootObj
-    kind*: Op
-    #of VARIABLE_GAS_COST_OPS:
-    #  gasCostHandler*: proc(computation: var BaseComputation): UInt256
-    #else:
-    gasCostConstant*: UInt256
-    runLogic*:  proc(computation: var BaseComputation)
 
 proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation =
   new(result)
@@ -186,6 +154,8 @@ method addLogEntry*(c: var BaseComputation, account: string, topics: seq[UInt256
   validateCanonicalAddress(account, title="log entry address")
   c.logEntries.add((account, topics, data))
 
+# many methods are basically TODO, but they still return valid values
+# in order to test some existing code
 method getAccountsForDeletion*(c: BaseComputation): seq[(string, string)] =
   # TODO
   if c.isError:

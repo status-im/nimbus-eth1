@@ -1,7 +1,7 @@
 import
   unittest, strformat, strutils, sequtils, tables, ttmath, json,
   test_helpers, constants, errors, logging, ospaths,
-  chain, vm_state, computation, opcode, opcode_table, utils / [header, padding], vm / [gas_meter, message, code_stream, stack], vm / forks / frontier / vm, db / [db_chain, state_db], db / backends / memory_backend
+  chain, vm_state, computation, opcode, types, opcode_table, utils / [header, padding], vm / [gas_meter, message, code_stream, stack], vm / forks / frontier / vm, db / [db_chain, state_db], db / backends / memory_backend
 
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
@@ -40,10 +40,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
   #echo fixture{"exec"}
   var c = newCodeStreamFromUnescaped(code)
-  var opcodes = c.decompile
   if DEBUG:
-    for opcode in opcodes:
-      echo opcode[0], " ", opcode[1], " ", opcode[2]
+    c.displayDecompiled()
 
   var computation = newBaseComputation(vm.state, message)
   computation.accountsToDelete = initTable[string, string]()

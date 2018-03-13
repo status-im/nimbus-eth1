@@ -1,4 +1,3 @@
-# TODO : hex
 type
   Op* {.pure.} = enum
     STOP = 0x0,    # 0

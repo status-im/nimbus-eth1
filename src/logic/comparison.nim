@@ -1,5 +1,5 @@
 import
-  ../constants, ../utils_numeric, ../computation, ../vm/stack,
+  ../constants, ../utils_numeric, ../computation, ../vm/stack, ../types,
   helpers, ttmath
 
 quasiBoolean(lt, `<`) # Lesser Comparison

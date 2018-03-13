@@ -1,6 +1,6 @@
 import
   macros, strformat,
-  ../computation, ../vm/stack
+  ../types, ../computation, ../vm/stack
 
 macro dupXX(position: static[int]): untyped =
   let name = ident(&"dup{position}")

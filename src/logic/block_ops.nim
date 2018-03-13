@@ -1,5 +1,5 @@
 import
-  ../constants, ../errors, ../computation, ../vm_state, .. / vm / [stack]
+  ../constants, ../errors, ../computation, ../vm_state, ../types, .. / vm / [stack]
 
 {.this: computation.}
 {.experimental.}

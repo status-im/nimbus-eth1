@@ -1,5 +1,5 @@
 import
-  ../constants, ../computation, .. / vm / [stack, memory], .. / utils / [padding, bytes]
+  ../constants, ../computation, ../types, .. / vm / [stack, memory], .. / utils / [padding, bytes]
 
 
 {.this: computation.}

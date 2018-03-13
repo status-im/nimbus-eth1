@@ -1,5 +1,5 @@
 import
-  ../constants, ../errors, ../computation, ../vm_state, .. / db / [db_chain, state_db], .. / vm / [stack, gas_meter, message], strformat, ttmath, utils / header
+  ../constants, ../types, ../errors, ../computation, ../vm_state, .. / db / [db_chain, state_db], .. / vm / [stack, gas_meter, message], strformat, ttmath, utils / header
 
 {.this: computation.}
 {.experimental.}

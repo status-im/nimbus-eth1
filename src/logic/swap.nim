@@ -1,6 +1,6 @@
 import
   macros, strformat,
-  ../computation, ../vm/stack
+  ../types, ../computation, ../vm/stack
 
 macro swapXX(position: static[int]): untyped =
   let name = ident(&"swap{position}")
