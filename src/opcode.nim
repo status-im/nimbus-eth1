@@ -4,6 +4,7 @@ import
 
 template run*(opcode: Opcode, computation: var BaseComputation) =
   # Hook for performing the actual VM execution
+  # opcode.consumeGas(computation)
   computation.gasMeter.consumeGas(opcode.gasCost(computation), reason = $opcode.kind)
   opcode.runLogic(computation)
 
