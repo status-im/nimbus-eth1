@@ -170,13 +170,19 @@ proc dup*(stack: var Stack, position: int | UInt256) =
 
 
 proc getInt*(stack: Stack, position: int): UInt256 =
-  stack.values[position]
+  if stack.values.len <= position:
+    raise newException(InsufficientStack, &"No {position} item")
+  else:
+    stack.values[position]
 
 proc getBinary*(stack: Stack, position: int): Bytes =
   stack.values[position].toType(Bytes)
 
 proc getString*(stack: Stack, position: int): string =
   stack.values[position].toType(string)
+
+proc peek*(stack: Stack): UInt256 =
+  stack.getInt(stack.values.len - 1)
 
 proc `$`*(stack: Stack): string =
   let values = stack.values.mapIt(&"  {$it}").join("\n")
