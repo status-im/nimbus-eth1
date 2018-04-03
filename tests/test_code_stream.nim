@@ -1,4 +1,5 @@
-import unittest, strutils, sequtils, opcode_values, vm / code_stream
+import  unittest, strutils, sequtils,
+        ../src/opcode_values, ../src/vm/code_stream
 
 suite "parse bytecode":
   test "accepts bytes":

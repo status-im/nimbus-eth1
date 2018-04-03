@@ -1,4 +1,6 @@
-import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, vm / memory, ttmath
+import  unittest, macros, strformat, strutils, sequtils,
+        ttmath,
+        ../src/[constants, opcode_values, errors, vm/memory]
 
 proc memory32: Memory =
   result = newMemory()
@@ -27,7 +29,7 @@ suite "memory":
 
   test "write rejects invalid size":
     # expect(ValidationError):
-    #   var mem = memory32()  
+    #   var mem = memory32()
     #   mem.write(startPosition = 0.i256, size = -1.i256, value = @[1.byte, 0.byte])
     expect(ValidationError):
       var mem = memory32()
@@ -37,7 +39,7 @@ suite "memory":
     expect(ValidationError):
       var mem = memory32()
       mem.write(startPosition = 0.u256, size = 4.u256, value = @[1.byte, 0.byte])
-  
+
   test "write rejects valyes beyond memory size":
     expect(ValidationError):
       var mem = memory128()
