@@ -1,5 +1,5 @@
 import
-  ../logging, ../constants, ../errors, ../transaction, ../types, ../computation, "../block", ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header
+  ../logging, ../constants, ../errors, ../transaction, ../types, ../computation, ../block_obj, ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header
 
 type
   VM* = ref object of RootObj
@@ -7,7 +7,7 @@ type
     # such as the Frontier or Homestead network.  Defining an Chain  defining
     # individual VM classes for each fork of the protocol rules within that
     # network
-    
+
     chainDB*: BaseChainDB
     isStateless*: bool
     state*: BaseVMState

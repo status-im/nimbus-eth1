@@ -1,9 +1,12 @@
 import
-  logging, constants, errors, ttmath, "block", vm / [base, stack], db / db_chain,  utils / header,
-  frontier_block, frontier_vm_state, frontier_validation
+  ../../../logging, ../../../constants, ../../../errors,
+  ttmath,
+  ../../../block_obj,
+  ../../../vm/[base, stack], ../../../db/db_chain,  ../../../utils/header,
+  ./frontier_block, ./frontier_vm_state, ./frontier_validation
 
 
-type 
+type
   FrontierVM* = ref object of VM
 
 method name*(vm: FrontierVM): string =

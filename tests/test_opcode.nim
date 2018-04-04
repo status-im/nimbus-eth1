@@ -1,7 +1,13 @@
-import 
-  unittest, test_helpers,
-  constants, types, errors, logging, ttmath,
-  tables, parseutils, chain, vm_state, computation, opcode, opcode_table, utils / [header, padding], vm / [gas_meter, message, code_stream, stack], vm / forks / frontier / vm, db / [db_chain, state_db], db / backends / memory_backend
+import
+  unittest, ttmath, tables, parseutils,
+  ../src/[constants, types, errors, logging],
+  ../src/[chain, vm_state, computation, opcode, opcode_table],
+  ../src/[utils/header, utils/padding],
+  ../src/vm/[gas_meter, message, code_stream, stack],
+  ../src/vm/forks/frontier/vm,
+  ../src/db/[db_chain, state_db, backends/memory_backend],
+  test_helpers
+
 
 proc testCode(code: string, gas: UInt256): BaseComputation =
   var vm = newFrontierVM(Header(), newBaseChainDB(newMemoryDB()))
@@ -11,7 +17,7 @@ proc testCode(code: string, gas: UInt256): BaseComputation =
     # blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
     # gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
     # timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt)
-  
+
   let message = newMessage(
     to="", #fixture{"exec"}{"address"}.getStr,
     sender="", #fixture{"exec"}{"caller"}.getStr,

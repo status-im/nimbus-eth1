@@ -1,5 +1,8 @@
 import
-  ../constants, ../types, ../errors, ../computation, ../vm_state, .. / db / [db_chain, state_db], .. / vm / [stack, gas_meter, message], strformat, ttmath, utils / header
+  ../constants, ../types, ../errors, ../computation, ../vm_state,
+  ../utils/header,
+  ../db/[db_chain, state_db], ../vm/[stack, gas_meter, message],
+  strformat, ttmath
 
 {.this: computation.}
 {.experimental.}
@@ -23,7 +26,7 @@ proc sstore*(computation) =
   let gasCost = if isCurrentlyEmpty and not isGoingToBeEmpty: GAS_SSET else: GAS_SRESET
 
   computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
-  
+
   if gasRefund > 0: computation.gasMeter.refundGas(gasRefund)
 
   computation.vmState.db(readOnly=false):

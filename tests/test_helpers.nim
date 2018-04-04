@@ -1,12 +1,16 @@
 import
-  os, macros, json, strformat, strutils, ttmath, utils / [hexadecimal, address, padding], chain, vm_state, constants, db / [db_chain, state_db], vm / forks / frontier / vm, parseutils, ospaths, tables
+  os, macros, json, strformat, strutils, parseutils, ospaths, tables,
+  ttmath,
+  ../src/utils/[hexadecimal, address, padding],
+  ../src/[chain, vm_state, constants],
+  ../src/db/[db_chain, state_db], ../src/vm/forks/frontier/vm
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
 
 proc validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
-  # TODO fix 
+  # TODO fix
   result = "calldatacopy" notin name and
     "balanceAddressInputTooBigRightMyAddress." notin name and
     "callstatelessToReturn1" notin name and

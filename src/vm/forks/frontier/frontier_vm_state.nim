@@ -1,9 +1,10 @@
 import
-  logging, constants, errors, vm_state, utils/header, db/db_chain
+  ../../../logging, ../../../constants, ../../../errors, ../../../vm_state,
+  ../../../utils/header, ../../../db/db_chain
 
 type
   FrontierVMState* = ref object of BaseVMState
-    # receipts*: 
+    # receipts*:
     # computationClass*: Any
     # accessLogs*: AccessLogs
 
