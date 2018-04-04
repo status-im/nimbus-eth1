@@ -5,4 +5,4 @@ before_install:
   - docker pull statusteam/nim-base
 script:
   - docker run -v "$(pwd):/project" -w /project statusteam/nim-base nim --version
-  - docker run -v "$(pwd):/project" -w /project statusteam/nim-base nimble refresh && nimble test
+  - docker run -v "$(pwd):/project" -w /project statusteam/nim-base sh -c "nimble refresh && nimble test"
