@@ -1,4 +1,6 @@
-import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, logging, vm / gas_meter, ttmath
+import  unittest, macros, strformat, strutils, sequtils,
+        ttmath,
+        ../src/[constants, opcode_values, errors, logging, vm/gas_meter]
 
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful
@@ -63,7 +65,7 @@ suite "gasMeter":
   #     expect(ValidationError):
   #       gasMeter.returnGas(-1.i256)
 
-  # TODO: -0/+0 
+  # TODO: -0/+0
   test "consume spends":
     all(gasMeter):
       check(gasMeter.gasRemaining == gasMeter.startGas)
