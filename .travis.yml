@@ -4,5 +4,5 @@ services:
 before_install:
   - docker pull yglukhov/nim-base
 script:
-  - docker run yglukhov/nim-base nim --version
-  - docker run -v "$(pwd):/project" -w /project yglukhov/nim-base /bin/bash -c "nimble install -y && nimble test"
+  - docker run -v "$(pwd):/project" -w /project yglukhov/nim-base nim --version
+  - docker run -v "$(pwd):/project" -w /project yglukhov/nim-base nimble test
