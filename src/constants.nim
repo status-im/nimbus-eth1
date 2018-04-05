@@ -132,11 +132,10 @@ let
   UINT_256_CEILING*: UInt256 =    2 ^ 256
   UINT_255_MAX*: UInt256 =        2 ^ (255 - 1) - 1.u256
   UINT_255_CEILING*: UInt256 =    2 ^ 255
-  UINT_256_CEILING_INT*: Int256 = 2.i256 ^ 256
+  UINT_256_CEILING_INT*: Int256 = max[Int256]() #2.i256 ^ 256
   UINT_255_MAX_INT*: Int256 =     2.i256 ^ (255 - 1) - 1.i256  
   UINT_256_MAX_INT*: Int256 =     2.i256 ^ 256 - 1.i256
-  UINT_255_CEILING_INT*: Int256 = 2.i256 ^ 255
-
+  UINT_255_CEILING_INT*: Int256 = 2.i256 ^ 255 - 1.i256
   NULLBYTE* =                     "\x00"
   EMPTYWORD* =                    repeat(NULLBYTE, 32)
   UINT160CEILING*: UInt256 =      2 ^ 160
@@ -207,10 +206,11 @@ let
   GAS_LIMIT_MAXIMUM*: UInt256 =   2 ^ 63 - 1.u256
   GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* = 3.u256
   GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2.u256
-  
+
   DIFFICULTY_ADJUSTMENT_DENOMINATOR* = 2_048.u256
   DIFFICULTY_MINIMUM* =           131_072.u256
-  
+  BYZANTIUM_DIFFICULTY_ADJUSTMENT_CUTOFF* = 9
+
   BOMB_EXPONENTIAL_PERIOD* =      100_000.u256
   BOMB_EXPONENTIAL_FREE_PERIODS* = 2.u256
   
@@ -239,6 +239,7 @@ let
   GENESIS_NONCE* =                "\x00\x00\x00\x00\x00\x00\x00B"
   GENESIS_MIX_HASH* =             ZERO_HASH32
   GENESIS_EXTRA_DATA* =           ""
+  GAS_LIMIT_MINIMUM* =            5000.u256
   
   EMPTYSHA3 =                     "\xc5\xd2F\x01\x86\xf7#<\x92~}\xb2\xdc\xc7\x03\xc0\xe5\x00\xb6S\xca\x82';{\xfa\xd8\x04]\x85\xa4p"  
   BLANK_ROOT_HASH* =              "V\xe8\x1f\x17\x1b\xccU\xa6\xff\x83E\xe6\x92\xc0\xf8n[H\xe0\x1b\x99l\xad\xc0\x01b/\xb5\xe3c\xb4!"
@@ -246,4 +247,34 @@ let
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* = 20.u256
 
   MAX_PREV_HEADER_DEPTH* = 256.u256
+
+  FORK_ICEAGE_BLKNUM* =           200_000.u256
+  FORK_HOMESTED_BLKNUM* =         1_150_000.u256
+  FORK_DAO_BLKNUM* =              1_920_000.u256
+  FORK_TANGERINE_WHISTLE_BLKNUM* = 2_463_000.u256
+  FORK_SPURIOUS_DRAGON_BLKNUM* =  2_675_000.u256
+  FORK_BYZANTIUM_BLKNUM* =        4_370_000.u256
+
+# TODO: Move the below to a new utils unit?
+
+type
+  Fork = enum fkUnknown, fkFrontier, fkIceAge, fkHomested, fkDao, fkTangerineWhistle, fkSpuriousDragon, fkByzantium
+  UInt256Pair = tuple[a: Uint256, b: Uint256]
+
+proc `..`*(a, b: Uint256): UInt256Pair = (a, b)
+
+proc contains*(ab: UInt256Pair, v: UInt256): bool =
+  return v >= ab[0] and v <= ab[1]
+
+proc toFork*(blockNumber: UInt256): Fork =
+  result = fkUnknown
+  let one = u256(1)
+  if blockNumber in u256(0)..FORK_ICEAGE_BLKNUM - one: result = fkFrontier
+  elif blockNumber in FORK_ICEAGE_BLKNUM..FORK_HOMESTED_BLKNUM - one: result = fkIceAge
+  elif blockNumber in FORK_HOMESTED_BLKNUM..FORK_DAO_BLKNUM - one: result = fkHomested
+  elif blockNumber in FORK_DAO_BLKNUM..FORK_TANGERINE_WHISTLE_BLKNUM - one: result = fkDao
+  elif blockNumber in FORK_TANGERINE_WHISTLE_BLKNUM..FORK_SPURIOUS_DRAGON_BLKNUM - one: result = fkTangerineWhistle
+  elif blockNumber in FORK_SPURIOUS_DRAGON_BLKNUM..FORK_BYZANTIUM_BLKNUM - one: result = fkSpuriousDragon
+  else:
+    if blockNumber >= FORK_BYZANTIUM_BLKNUM: result = fkByzantium # Update for constantinople when announced
 
