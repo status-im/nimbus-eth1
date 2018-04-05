@@ -1,3 +1,2 @@
 nimcache/
-runner
-*_test
+build/

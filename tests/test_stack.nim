@@ -1,4 +1,7 @@
-import unittest, macros, strformat, strutils, sequtils, constants, opcode_values, errors, vm / [stack, value], ttmath, utils / [bytes, padding], utils_numeric
+import  unittest, macros, strformat, strutils, sequtils,
+        ttmath,
+        ../src/[constants, opcode_values, errors, utils_numeric, vm/stack, vm/value, utils/bytes, utils/padding]
+
 
 template testPush(value: untyped, expected: untyped): untyped =
   var stack = newStack()
@@ -17,7 +20,7 @@ suite "stack":
     testPush("ves".toBytes, "ves".toBytes.bigEndianToInt)
 
     testFailPush("yzyzyzyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".toBytes)
-    
+
   test "push does not allow stack to exceed 1024":
     var stack = newStack()
     for z in 0 .. < 1024:
@@ -37,7 +40,7 @@ suite "stack":
     check(stack.len == 1024)
     expect(FullStack):
       stack.dup(1)
-  
+
   test "pop returns latest stack item":
     var stack = newStack()
     for element in @[1'u, 2'u, 3'u]:
@@ -78,7 +81,7 @@ suite "stack":
     var stack = newStack()
     expect(InsufficientStack):
       stack.swap(0)
-  
+
   test "dup raises InsufficientStack appropriately":
     var stack = newStack()
     expect(InsufficientStack):

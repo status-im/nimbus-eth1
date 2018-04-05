@@ -8,9 +8,17 @@ type
   Value* = ref object
     case kind*: ValueKind:
     of VInt:
-      i*: Int256
+      Fi: array[32, byte] #Int256
     of VBinary:
       b*: seq[byte]
+
+# TODO: The Int256 value is stored as array[32, byte], and we bitcast it
+# back and forth. This is a hacky workaround for the problem that clang
+# doesn't let you store ttmath types inside nim variant types (unions). Things
+# should get better when we switch to mpint.
+
+proc i*(v: Value): Int256 {.inline.} =
+  cast[ptr Int256](unsafeAddr v.Fi)[]
 
 proc `$`*(value: Value): string =
   case value.kind:
@@ -19,23 +27,16 @@ proc `$`*(value: Value): string =
   of VBinary:
     &"Binary({value.b})"
 
-proc vint*(i: int): Value =
-  Value(kind: VInt, i: i.int256)
+proc toArr(i: Int256): array[32, byte] {.inline.} =
+  cast[ptr array[32, byte]](unsafeAddr i)[]
 
 proc vint*(i: Int256): Value =
-  Value(kind: VInt, i: i)
+  Value(kind: VInt, Fi: i.toArr)
+
+proc vint*(i: int): Value {.inline.} = vint(i.int256)
 
 proc vbinary*(b: string): Value =
   Value(kind: VBinary, b: b.mapIt(it.byte))
 
 proc vbinary*(b: seq[byte]): Value =
   Value(kind: VBinary, b: b)
-
-proc `==`*(a: Value, b: Value): bool =
-  if a.kind != b.kind:
-    return false
-  case a.kind:
-  of VInt:
-    a.i == b.i
-  of VBinary:
-    a.b == b.b

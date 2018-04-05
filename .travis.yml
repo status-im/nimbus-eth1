@@ -2,7 +2,7 @@ sudo: required
 services:
   - docker
 before_install:
-  - docker pull yglukhov/nim-base
+  - docker pull statusteam/nim-base
 script:
-  - docker run yglukhov/nim-base nim --version
-  - docker run -v "$(pwd):/project" -w /project yglukhov/nim-base /bin/bash -c "nimble install -y && ./tests/build_test.sh && ./tests/test.sh"
+  - docker run -v "$(pwd):/project" -w /project statusteam/nim-base nim --version
+  - docker run -v "$(pwd):/project" -w /project statusteam/nim-base sh -c "nimble refresh && nimble test"
