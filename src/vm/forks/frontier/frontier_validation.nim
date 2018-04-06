@@ -1,6 +1,6 @@
 import
-  strformat,
-  constants, errors, ttmath, vm_state, transaction, utils/header
+  strformat, ttmath,
+  ../../../constants, ../../../errors, ../../../vm_state, ../../../transaction, ../../../utils/header
 
 proc validateFrontierTransaction*(vmState: BaseVmState, transaction: BaseTransaction) =
   let gasCost = transaction.gas * transaction.gasPrice

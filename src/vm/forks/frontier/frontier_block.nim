@@ -1,5 +1,7 @@
 import
-  logging, constants, errors, transaction, "block", utils/header
+  ../../../logging, ../../../constants, ../../../errors, ../../../transaction,
+  ../../../block_obj,
+  ../../../utils/header
 
 type
   FrontierBlock* = object of Block

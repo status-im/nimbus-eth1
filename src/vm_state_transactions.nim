@@ -1,6 +1,6 @@
 import
   strformat, tables,
-  logging, constants, errors, computation, transaction, types, vm_state, "block", db / db_chain, utils / [state, header]
+  logging, constants, errors, computation, transaction, types, vm_state, block_obj, db / db_chain, utils / [state, header]
 
 method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction): (BaseComputation, Header) =
   # Execute the transaction in the vm
@@ -45,7 +45,7 @@ method applyTransaction*(
   # transaction: the transaction need to be applied
   # b: the block which the transaction applies on
   # isStateless: if isStateless, call vmState.addTransaction to set block
-  
+
   if isStateless:
     var ourBlock = b # deepcopy
     vmState.blockHeader = b.header
