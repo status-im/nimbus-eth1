@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   strformat, tables,
   ../constants, ../errors, ../validation, ../account, ../logging, ../utils_numeric, .. / utils / [padding, bytes, keccak], ttmath, rlp
@@ -13,7 +20,7 @@ proc newAccountStateDB*(db: Table[string, string], readOnly: bool = false): Acco
 proc logger*(db: AccountStateDB): Logger =
   logging.getLogger("db.State")
 
-proc getAccount(db: AccountStateDB, address: string): Account = 
+proc getAccount(db: AccountStateDB, address: string): Account =
   # let rlpAccount = db.trie[address]
   # if not rlpAccount.isNil:
   #   account = rlp.decode[Account](rlpAccount)
@@ -24,7 +31,7 @@ proc getAccount(db: AccountStateDB, address: string): Account =
 
 proc setAccount(db: AccountStateDB, address: string, account: Account) =
   # db.trie[address] = rlp.encode[Account](account)
-  discard # TODO 
+  discard # TODO
 
 
 proc getCodeHash*(db: AccountStateDB, address: string): string =
@@ -51,7 +58,7 @@ proc setStorage*(db: var AccountStateDB, address: string, slot: UInt256, value: 
   #validateGte(value, 0, title="Storage Value")
   #validateGte(slot, 0, title="Storage Slot")
   validateCanonicalAddress(address, title="Storage Address")
-  
+
   # TODO
   # let account = db.getAccount(address)
   # var storage = HashTrie(HexaryTrie(self.db, account.storageRoot))
@@ -71,11 +78,11 @@ proc setStorage*(db: var AccountStateDB, address: string, slot: UInt256, value: 
 proc getStorage*(db: var AccountStateDB, address: string, slot: UInt256): (UInt256, bool) =
   validateCanonicalAddress(address, title="Storage Address")
   #validateGte(slot, 0, title="Storage Slot")
-  
+
   # TODO
   # make it more correct
   # for now, we just use a table
-  
+
   # let account = db.GetAccount(address)
   # var storage = HashTrie(HexaryTrie(self.db, account.storageRoot))
 

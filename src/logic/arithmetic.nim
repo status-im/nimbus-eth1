@@ -1,4 +1,11 @@
-import 
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+import
   ../constants, ../utils_numeric, ../computation, ../types,
   .. / vm / [gas_meter, stack], ../opcode, ../opcode_values,
   helpers, ttmath, strutils
@@ -6,7 +13,7 @@ import
 proc add*(computation: var BaseComputation) =
   # Addition
   var (left, right) = computation.stack.popInt(2)
-  
+
   var res = (left + right) and UINT_256_MAX
   pushRes()
 
@@ -79,7 +86,7 @@ proc sdiv*(computation: var BaseComputation) =
 proc exp*(computation: var BaseComputation) =
   # Exponentiation
   let (base, exponent) = computation.stack.popInt(2)
-  
+
   var gasCost = GAS_EXP_BYTE.u256
   #if exponent != 0:
   #  gasCost += GAS_EXP_BYTE * (1 + log256(exponent))

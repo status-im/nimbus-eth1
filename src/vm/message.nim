@@ -1,10 +1,17 @@
-import 
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+import
     ../logging, ../constants, ../validation, ttmath
 
 type
   Message* = ref object
     # A message for VM computation
-    
+
     # depth = None
 
     # code = None
@@ -20,7 +27,7 @@ type
     gas*:                     UInt256
     gasPrice*:                UInt256
     to*:                      string
-    sender*:                  string    
+    sender*:                  string
     value*:                   UInt256
     data*:                    seq[byte]
     code*:                    string
@@ -74,11 +81,11 @@ proc newMessage*(
     data: seq[byte],
     code: string,
     options: MessageOptions = newMessageOptions()): Message =
-    
+
   new(result)
   result.gas = gas
   result.gasPrice = gasPrice
-    
+
   if to != CREATE_CONTRACT_ADDRESS:
     validateCanonicalAddress(to, title="Message.to")
   result.to = to

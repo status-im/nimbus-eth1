@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 type
   Op* {.pure.} = enum
     STOP = 0x0,    # 0
@@ -26,7 +33,7 @@ type
     BYTE,          # 26
 
     SHA3 = 0x20,   # 32
-    
+
     ADDRESS = 0x30,# 48
     BALANCE,       # 49
     ORIGIN,        # 50
@@ -59,7 +66,7 @@ type
     DIFFICULTY,    # 68
 
     GASLIMIT,      # 69
-    
+
     POP = 0x50,    # 80
 
     MLOAD,         # 81
@@ -79,7 +86,7 @@ type
     GAS,           # 90
 
     JUMPDEST,      # 91
-    
+
     PUSH1 = 0x60,  # 96
     PUSH2,         # 97
     PUSH3,         # 98

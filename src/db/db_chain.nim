@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import strformat, tables, ttmath, state_db, backends / memory_backend
 
 type
@@ -23,7 +30,7 @@ proc `$`*(db: BaseChainDB): string =
 
 # proc getCanonicalBlockHeaderByNumber*(self: BaseChainDB; blockNumber: int): BlockHeader =
 #   ##         Returns the block header with the given number in the canonical chain.
-#   ## 
+#   ##
 #   ##         Raises BlockNotFound if there's no block header with the given number in the
 #   ##         canonical chain.
 #   validateUint256(blockNumber)
@@ -59,7 +66,7 @@ proc `$`*(db: BaseChainDB): string =
 
 # proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: cstring): BlockHeader =
 #   ##         Returns the requested block header as specified by block hash.
-#   ## 
+#   ##
 #   ##         Raises BlockNotFound if it is not present in the db.
 #   validateWord(blockHash)
 #   try:
@@ -90,7 +97,7 @@ proc `$`*(db: BaseChainDB): string =
 #       yield rlp.decode(receiptData)
 #     else:
 #       break
-  
+
 # iterator getBlockTransactions*(self: BaseChainDB; blockHeader: BlockHeader;
 #                               transactionClass: typedesc): FrontierTransaction =
 #   var transactionDb = HexaryTrie(self.db)
@@ -101,7 +108,7 @@ proc `$`*(db: BaseChainDB): string =
 #       yield rlp.decode(transactionData)
 #     else:
 #       break
-  
+
 # proc addBlockNumberToHashLookup*(self: BaseChainDB; header: BlockHeader): void =
 #   var blockNumberToHashKey = makeBlockNumberToHashLookupKey(header.blockNumber)
 #   self.db.set(blockNumberToHashKey, rlp.encode(header.hash))

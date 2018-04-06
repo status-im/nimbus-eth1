@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import ttmath, constants, strformat, strutils, sequtils, endians, macros, utils / padding, rlp
 
 # some methods based on py-evm utils/numeric
@@ -9,7 +16,7 @@ proc intToBigEndian*(value: UInt256): Bytes =
   for z in 0 ..< 4:
     var temp = value.table[z]
     bigEndian64(result[24 - z * 8].addr, temp.addr)
-  
+
 proc bigEndianToInt*(value: Bytes): UInt256 =
   var bytes = value.padLeft(32, 0.byte)
   result = 0.u256

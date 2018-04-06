@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   strformat, strutils, tables, macros,
   constants, ttmath, errors, logging, vm_state,
@@ -32,7 +39,7 @@ var OPCODE_TABLE* = initOpcodes:
   Op.Not:           GAS_VERY_LOW        notOp
   Op.Byte:          GAS_VERY_LOW        byteOp
 
-  
+
   # sha3
   Op.SHA3:          GAS_SHA3            sha3op
 
@@ -59,7 +66,7 @@ var OPCODE_TABLE* = initOpcodes:
   Op.Number:        GAS_BASE            number
   Op.Difficulty:    GAS_BASE            difficulty
   Op.GasLimit:      GAS_BASE            gaslimit
-  
+
 
   # stack
   Op.Pop:           GAS_BASE            stack_ops.pop

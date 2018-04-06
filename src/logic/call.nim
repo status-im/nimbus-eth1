@@ -1,6 +1,13 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   strformat,
-  ../constants, ../types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging, 
+  ../constants, ../types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging,
   .. / vm / [stack, memory, gas_meter, message],
   .. / utils / [address, bytes],
   ttmath
@@ -87,7 +94,7 @@ method runLogic*(call: BaseCall, computation) =
     #     else:
     #         code = state_db.get_code(to)
     let code = ""
-    
+
     let childMsg = computation.prepareChildMessage(
       childMsgGas,
       to,
@@ -96,7 +103,7 @@ method runLogic*(call: BaseCall, computation) =
       code,
       MessageOptions(
         shouldTransferValue: shouldTransferValue,
-        isStatic: isStatic))        
+        isStatic: isStatic))
     if not sender.isNil:
       childMsg.sender = sender
     # let childComputation = computation.applyChildComputation(childMsg)
@@ -120,7 +127,7 @@ method msgExtraGas(call: Call, computation; gas: UInt256, to: string, value: UIn
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #  let accountExists = db.accountExists(to)
   let accountExists = false
-  
+
   let transferGasFee = if value != 0: GAS_CALL_VALUE else: 0.u256
   let createGasFee = if not accountExists: GAS_NEW_ACCOUNT else: 0.u256
   transferGasFee + createGasFee

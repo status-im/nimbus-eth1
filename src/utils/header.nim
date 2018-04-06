@@ -1,3 +1,11 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+
 import ../constants, ttmath, strformat, times, ../validation
 
 type
@@ -100,7 +108,7 @@ proc generateHeaderFromParentHeader*(
   result = Header(
     timestamp: max(getTime(), parent.timestamp + 1.milliseconds),   # Note: Py-evm uses +1 second, not ms
     block_number: (parent.block_number + u256(1)),
-    # TODO: difficulty: parent.computeDifficulty(parent.timestamp),       
+    # TODO: difficulty: parent.computeDifficulty(parent.timestamp),
     #[TODO: Make field? Or do we need to keep as a proc?
     gas_limit: computeGasLimit(
       parent,
