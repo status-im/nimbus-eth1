@@ -1,5 +1,5 @@
 import
-  ../constants, ../errors, ../computation, ../vm_state, ../types, .. / vm / [stack], ttmath
+  ../constants, ../errors, ../computation, ../vm_state, ../types, .. / vm / [stack]
 
 {.this: computation.}
 {.experimental.}
@@ -19,6 +19,7 @@ proc timestamp*(computation) =
   # TODO: EthTime is an alias of Time, which is a distinct int64 so can't use u256(int64)
   # This may have implications for different platforms.
   stack.push(vmState.timestamp.uint64.u256) 
+  stack.push(vmState.timestamp.u256)
 
 proc number*(computation) =
   stack.push(vmState.blockNumber)
