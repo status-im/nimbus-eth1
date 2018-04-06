@@ -16,7 +16,9 @@ proc coinbase*(computation) =
   stack.push(vmState.coinbase)
 
 proc timestamp*(computation) =
-  stack.push(vmState.timestamp.uint64.u256) # TODO: EthTime (from Time) is distinct
+  # TODO: EthTime is an alias of Time, which is a distinct int64 so can't use u256(int64)
+  # This may have implications for different platforms.
+  stack.push(vmState.timestamp.uint64.u256) 
 
 proc number*(computation) =
   stack.push(vmState.blockNumber)
