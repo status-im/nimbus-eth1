@@ -1,5 +1,5 @@
 import
-  ../constants, ../errors, ../computation, ../vm_state, ../types, .. / vm / [stack]
+  ../constants, ../errors, ../computation, ../vm_state, ../types, .. / vm / [stack], ttmath
 
 {.this: computation.}
 {.experimental.}
@@ -16,7 +16,7 @@ proc coinbase*(computation) =
   stack.push(vmState.coinbase)
 
 proc timestamp*(computation) =
-  stack.push(vmState.timestamp.u256)
+  stack.push(vmState.timestamp.uint64.u256) # TODO: EthTime (from Time) is distinct
 
 proc number*(computation) =
   stack.push(vmState.blockNumber)
