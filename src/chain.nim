@@ -31,7 +31,7 @@ type
     nonce*: string
     mixHash*: string
     extraData*: string
-    timestamp*: EthTime
+    timestamp*: int
     stateRoot*: string
 
   FundedAddress* = ref object

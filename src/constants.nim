@@ -1,12 +1,11 @@
 
 import
-  ttmath, math, strutils, tables, utils/padding, rlp, times
+  ttmath, math, strutils, tables, utils/padding, rlp
 
 # rlpFields UInt256, table
 
 type
   TypeHint* {.pure.} = enum UInt256, Bytes, Any
-  EthTime* = Time
 
   #Bytes* = seq[byte]
 

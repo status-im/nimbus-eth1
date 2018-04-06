@@ -1,6 +1,7 @@
 import ../constants, ttmath, strformat, times, ../validation
 
 type
+  EthTime = Time
   Header* = ref object
     timestamp*: EthTime
     difficulty*: UInt256
