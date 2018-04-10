@@ -13,4 +13,3 @@ template keccak*(value: string): string =
 
 template keccak*(value: cstring): string =
   ($value).keccak
-

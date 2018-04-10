@@ -51,7 +51,7 @@ method blockhash*(vmState: BaseVMState): string =
 method coinbase*(vmState: BaseVMState): string =
   vmState.blockHeader.coinbase
 
-method timestamp*(vmState: BaseVMState): int =
+method timestamp*(vmState: BaseVMState): EthTime =
   vmState.blockHeader.timestamp
 
 method blockNumber*(vmState: BaseVMState): UInt256 =
