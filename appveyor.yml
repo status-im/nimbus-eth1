@@ -39,7 +39,7 @@ install:
   - koch boot -d:release
   - koch nimble
 build_script:
-  - cd C:\projects\nimbus
+  - cd C:\projects\nimbus-aubsn
   - nimble install -y
 test_script:
   - nimble test
