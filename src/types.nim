@@ -1,6 +1,13 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   tables,
-  constants, vm_state, 
+  constants, vm_state,
   opcode_values, ttmath,
   vm / [code_stream, gas_meter, memory, message, stack]
 
@@ -37,6 +44,6 @@ type
     ## that's what parity does:
     ##   it uses the peek methods of the stack and calculates the cost
     ##   then it actually pops/pushes stuff in exec
-    ## I followed the py-evm approach which does that in opcode logic 
+    ## I followed the py-evm approach which does that in opcode logic
     gasCostConstant*: UInt256
     runLogic*:  proc(computation: var BaseComputation)

@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   logging, constants, errors, validation, utils/header, vm / forks / frontier / vm
 
@@ -15,7 +22,7 @@ method computeDifficulty*(parentHeader: Header, timestamp: int): Int256 =
   # result = if numBombPeriods >= 0: max(baseDifficulty + 2.Int256 ^ numBombPeriods, DIFFICULTY_MINIMUM) else: baseDifficulty
   result = 0.Int256
 
-method createHeaderFromParent*(parentHeader: Header): Header = 
+method createHeaderFromParent*(parentHeader: Header): Header =
   # TODO
   result = Header()
 

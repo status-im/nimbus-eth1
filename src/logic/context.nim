@@ -1,6 +1,13 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   strformat,
-  ../constants, ../types, ../errors, ../utils_numeric, ../computation, ../vm_state, ../account, ../db/state_db, ../validation, 
+  ../constants, ../types, ../errors, ../utils_numeric, ../computation, ../vm_state, ../account, ../db/state_db, ../validation,
   .. / vm / [stack, message, gas_meter, memory, code_stream], .. / utils / [address, padding, bytes], ttmath
 
 proc balance*(computation: var BaseComputation) =
@@ -106,10 +113,10 @@ proc returnDataSize*(computation: var BaseComputation) =
 proc returnDataCopy*(computation: var BaseComputation) =
   let (memStartPosition, returnDataStartPosition, size) = computation.stack.popInt(3)
   if returnDataStartPosition + size > computation.returnData.len:
-    raise newException(OutOfBoundsRead, 
+    raise newException(OutOfBoundsRead,
       "Return data length is not sufficient to satisfy request.  Asked \n" &
       &"for data from index {returnDataStartPosition} to {returnDataStartPosition + size}. Return data is {computation.returnData.len} in \n" &
-      "length")      
+      "length")
 
   computation.extendMemory(memStartPosition, size)
   let wordCount = ceil32(size) div 32

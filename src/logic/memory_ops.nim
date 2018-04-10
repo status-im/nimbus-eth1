@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   ../constants, ../computation, ../types, .. / vm / [stack, memory], .. / utils / [padding, bytes]
 
@@ -14,7 +21,7 @@ proc mstoreX(computation; x: int) =
 
   let paddedValue = padLeft(value, x, 0.byte)
   let normalizedValue = paddedValue[^x .. ^1]
-  
+
   extendMemory(start, x.u256)
   memory.write(start, 32.u256, normalizedValue)
 

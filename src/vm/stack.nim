@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   strformat, strutils, sequtils, macros, rlp,
   value, ../errors, ../validation, ../utils_numeric, ../constants, ttmath, ../logging, .. / utils / bytes
@@ -68,7 +75,7 @@ proc push*(stack: var Stack, value: Bytes) =
   stack.values.add(value.toType(UInt256))
 
 proc internalPop(stack: var Stack, numItems: int): seq[UInt256] =
-  if len(stack) < numItems: 
+  if len(stack) < numItems:
     result = @[]
   else:
     result = stack.values[^numItems .. ^1]
@@ -76,9 +83,9 @@ proc internalPop(stack: var Stack, numItems: int): seq[UInt256] =
 
 proc internalPop(stack: var Stack, numItems: int, T: typedesc): seq[T] =
   result = @[]
-  if len(stack) < numItems: 
+  if len(stack) < numItems:
     return
-  
+
   for z in 0 ..< numItems:
     var value = stack.values.pop()
     result.add(toType(value, T))
@@ -127,7 +134,7 @@ macro popInt*(stack: typed, numItems: static[int]): untyped =
     var name = ident(&"internalPopTuple{numItems}")
     result = quote:
       `name`(`stack`, UInt256)
-  
+
 proc popBinary*(stack: var Stack): Bytes =
   var elements = stack.internalPop(1, Bytes)
   ensurePop(elements, 1)

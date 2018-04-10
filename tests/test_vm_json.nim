@@ -1,3 +1,10 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
   unittest, strformat, strutils, sequtils, tables, ttmath, json,
   test_helpers, constants, errors, logging, ospaths,
@@ -21,7 +28,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
     gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
     timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt)
-  
+
   var code = ""
   vm.state.db(readOnly=false):
     setupStateDB(fixture{"pre"}, db)
@@ -71,8 +78,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt.u256
     let actualGasRemaining = gasMeter.gasRemaining
     checkpoint(&"{actualGasRemaining} {expectedGasRemaining}")
-    check(actualGasRemaining == expectedGasRemaining or 
-          computation.code.hasSStore() and 
+    check(actualGasRemaining == expectedGasRemaining or
+          computation.code.hasSStore() and
             (actualGasRemaining > expectedGasRemaining and (actualGasRemaining - expectedGasRemaining) mod 15_000 == 0 or
              expectedGasRemaining > actualGasRemaining and (expectedGasRemaining - actualGasRemaining) mod 15_000 == 0))
 

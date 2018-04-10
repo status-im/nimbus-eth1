@@ -1,6 +1,9 @@
 # Nimbus
 
-[![Build Status](https://travis-ci.org/status-im/nimbus.svg?branch=master)](https://travis-ci.org/status-im/nimbus)
+[![Build Status (Travis)](https://img.shields.io/travis/status-im/nimbus/master.svg?label=Linux%20/%20macOS "Linux/macOS build status (Travis)")](https://travis-ci.org/status-im/nimbus)
+[![Windows build status (Appveyor)](https://img.shields.io/appveyor/ci/jarradh/nimbus/master.svg?label=Windows "Windows build status (Appveyor)")](https://ci.appveyor.com/project/jarradh/nimbus)[![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 
 An Ethereum 2.0 Sharding Client for Resource-Restricted Devices
 
@@ -12,3 +15,12 @@ Join the Status community chats:
 Rationale
 
 https://docs.google.com/document/d/14u65XVNLOd83cq3t7wNC9UPweZ6kPWvmXwRTWWn0diQ/edit#
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
