@@ -1,0 +1,47 @@
+version: '{build}'
+
+cache:
+- x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
+- i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
+
+matrix:
+  fast_finish: true     # set this flag to immediately finish build once one of the jobs fails.
+
+environment:
+
+  matrix:
+    - MINGW_DIR: mingw32
+      MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z/download
+      MINGW_ARCHIVE: i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
+      platform: x86
+    - MINGW_DIR: mingw64
+      MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z/download
+      MINGW_ARCHIVE: x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
+      platform: x64
+
+install:
+  - setlocal EnableExtensions EnableDelayedExpansion
+  - IF not exist "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
+  - 7z x -y "%MINGW_ARCHIVE%" > nul
+  - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\Nim\bin;%PATH%
+  - git clone https://github.com/nim-lang/Nim.git
+  - cd %CD%\Nim
+  - git remote add statusim https://github.com/status-im/Nim.git
+  - git fetch statusim
+  - git config --global user.email "you@example.com"
+  - git config --global user.name "Your Name"
+  - for /f "tokens=*" %%G IN ('git branch -a --list ^"statusim/status-autopatch-*^"') DO (git merge %%G)
+  - git clone --depth 1 https://github.com/nim-lang/csources
+  - cd csources
+  - IF "%PLATFORM%" == "x64" ( build64.bat ) else ( build.bat )
+  - cd ..
+  - bin\nim c koch
+  - koch boot -d:release
+  - koch nimble
+build_script:
+  - cd C:\projects\nimbus
+  - nimble install -y
+test_script:
+  - nimble test
+
+deploy: off
