@@ -10,7 +10,6 @@ skipDirs      = @["tests"]
 requires "nim >= 0.18.1",
          "https://github.com/cheatfate/nimcrypto#master",
          "https://github.com/status-im/nim-rlp",
-         "https://github.com/status-im/nim-ranges",
          "https://github.com/status-im/nim-ttmath#master"
 
 proc test(name: string, lang = "cpp") =
