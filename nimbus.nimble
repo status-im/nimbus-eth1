@@ -8,7 +8,7 @@ license       = "Apache License 2.0"
 skipDirs      = @["tests"]
 
 requires "nim >= 0.18.1",
-         "https://github.com/status-im/nim-keccak-tiny.git >= 0.2.0",
+         "https://github.com/cheatfate/nimcrypto#master",
          "https://github.com/alehander42/nim-rlp#fix-ordinal", #TODO switching to the Status repo throws: "Error: undeclared identifier: 'Range'"
          "https://github.com/status-im/nim-ttmath#master"
 
