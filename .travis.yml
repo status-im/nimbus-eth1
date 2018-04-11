@@ -15,6 +15,9 @@ matrix:
 
     - os: osx
       before_install:
+        - brew update # TODO: https://github.com/status-im/nimbus/issues/9
+        - brew install gcc
+        
         - git clone https://github.com/nim-lang/nim.git
         - cd nim
         - git remote add statusim https://github.com/status-im/nim.git
@@ -31,8 +34,6 @@ matrix:
         - ./koch boot -d:release
         - ./koch nimble
         - cd ..
-        - brew update # TODO: https://github.com/status-im/nimbus/issues/9
-        - brew install gcc
 
       script:
         - nimble install -dy && nimble test
