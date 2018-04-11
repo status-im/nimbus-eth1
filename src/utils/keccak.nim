@@ -6,10 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  keccak_tiny, strutils
+  nimcrypto, strutils
 
-template keccak*(value: string): string =
-  $keccak_256(value)
+proc keccak*(value: string): string {.inline.}=
+  $keccak256.digest value
 
-template keccak*(value: cstring): string =
-  ($value).keccak
+proc keccak*(value: cstring): string {.inline.}=
+  # TODO: this is inefficient it allocates for the cstring -> string and then for string -> result
+  keccak $value
