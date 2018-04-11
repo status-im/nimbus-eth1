@@ -69,7 +69,7 @@ proc setStorage*(db: var AccountStateDB, address: string, slot: UInt256, value: 
   # TODO fix
   if value > 0:
     let encodedValue = rlp.encode(value)
-    storage[slotAsKey] = encodedValue.bytes[encodedValue.ibegin..<encodedValue.iend]
+    storage[slotAsKey] = encodedValue.decode(Bytes)
   else:
     storage.del(slotAsKey)
   #storage[slotAsKey] = value
@@ -91,9 +91,7 @@ proc getStorage*(db: var AccountStateDB, address: string, slot: UInt256): (UInt2
   var storage = db.db
   if storage.hasKey(slotAsKey):
     #result = storage[slotAsKey]
-    var encodedValue = storage[slotAsKey]
-    var r = rlpFromBytes(encodedValue.initBytesRange)
-    result = (r.read(Bytes).bigEndianToInt, true)
+    result = (storage[slotAsKey].bigEndianToInt, true)
   else:
     result = (0.u256, false)
 

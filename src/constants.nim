@@ -5,7 +5,7 @@ import
 # rlpFields UInt256, table
 
 type
-  TypeHint* {.pure.} = enum UInt256, Bytes, Any
+  TypeHint* {.pure.} = enum UInt256, Bytes, Any # TODO Bytes is in conflict with nim-rlp Bytes = seq[byte]
   EthTime* = Time
 
 
@@ -135,7 +135,7 @@ let
   UINT_255_MAX*: UInt256 =        2 ^ (255 - 1) - 1.u256
   UINT_255_CEILING*: UInt256 =    2 ^ 255
   UINT_256_CEILING_INT*: Int256 = max[Int256]() #2.i256 ^ 256
-  UINT_255_MAX_INT*: Int256 =     2.i256 ^ (255 - 1) - 1.i256  
+  UINT_255_MAX_INT*: Int256 =     2.i256 ^ (255 - 1) - 1.i256
   UINT_256_MAX_INT*: Int256 =     2.i256 ^ 256 - 1.i256
   UINT_255_CEILING_INT*: Int256 = 2.i256 ^ 255 - 1.i256
   NULLBYTE* =                     "\x00"
@@ -145,7 +145,7 @@ let
   ZERO_ADDRESS* =                 repeat("\x00", 20)
   ZERO_HASH32* =                  repeat("\x00", 20)
   STACK_DEPTH_LIMIT* =            1024
-  
+
   GAS_NULL* =                     0.u256
   GAS_ZERO* =                     0.u256
   GAS_BASE* =                     2.u256
@@ -165,7 +165,7 @@ let
   GAS_SELF_DESTRUCT_COST* =       0.u256
   GAS_IN_HANDLER* =               0.u256 # to be calculated in handler
   REFUND_SCLEAR* =                15_000.u256
-  
+
   GAS_SELF_DESTRUCT* =            0.u256
   GAS_SELF_DESTRUCT_NEW_ACCOUNT* = 25_000.u256
   GAS_CREATE* =                   32_000.u256
@@ -173,7 +173,7 @@ let
   GAS_CALL_VALUE* =               9_000.u256
   GAS_CALL_STIPEND* =             2_300.u256
   GAS_NEW_ACCOUNT* =              25_000.u256
-  
+
   GAS_COST_BALANCE* =             400.u256
 
   GAS_EXP* =                      10.u256
@@ -215,14 +215,14 @@ let
 
   BOMB_EXPONENTIAL_PERIOD* =      100_000.u256
   BOMB_EXPONENTIAL_FREE_PERIODS* = 2.u256
-  
+
   BLOCK_REWARD* =                 5.u256 * 2.u256 # denoms.ether
-  
+
   UNCLE_DEPTH_PENALTY_FACTOR* =   8.u256
-  
+
   MAX_UNCLE_DEPTH* =              6.u256
   MAX_UNCLES* =                   2.u256
-  
+
   SECPK1_P*: UInt256 =            2 ^ 256 - 2 ^ 32 - 977.u256
   SECPK1_N*: UInt256 =            "115792089237316195423570985008687907852837564279074904382605163141518161494337".u256
   SECPK1_A* =                     0.u256
@@ -230,9 +230,9 @@ let
   SECPK1_Gx* =                    0.u256
   SECPK1_Gy* =                    0.u256
   SECPK1_G* =                     (SECPK1Gx, SECPK1Gy)
-  
+
   EMPTY_UNCLE_HASH* =             "\x1d\xccM\xe8\xde\xc7]z\xab\x85\xb5g\xb6\xcc\xd4\x1a\xd3\x12E\x1b\x94\x8at\x13\xf0\xa1B\xfd@\xd4\x93G"
-  
+
   GENESIS_BLOCK_NUMBER* =         0.u256
   GENESIS_DIFFICULTY* =           131_072.u256
   GENESIS_GAS_LIMIT* =            3_141_592.u256
@@ -242,10 +242,10 @@ let
   GENESIS_MIX_HASH* =             ZERO_HASH32
   GENESIS_EXTRA_DATA* =           ""
   GAS_LIMIT_MINIMUM* =            5000.u256
-  
-  EMPTYSHA3 =                     "\xc5\xd2F\x01\x86\xf7#<\x92~}\xb2\xdc\xc7\x03\xc0\xe5\x00\xb6S\xca\x82';{\xfa\xd8\x04]\x85\xa4p"  
+
+  EMPTYSHA3 =                     "\xc5\xd2F\x01\x86\xf7#<\x92~}\xb2\xdc\xc7\x03\xc0\xe5\x00\xb6S\xca\x82';{\xfa\xd8\x04]\x85\xa4p"
   BLANK_ROOT_HASH* =              "V\xe8\x1f\x17\x1b\xccU\xa6\xff\x83E\xe6\x92\xc0\xf8n[H\xe0\x1b\x99l\xad\xc0\x01b/\xb5\xe3c\xb4!"
-  
+
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* = 20.u256
 
   MAX_PREV_HEADER_DEPTH* = 256.u256
