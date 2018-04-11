@@ -7,7 +7,8 @@
 
 import
   strformat, tables,
-  ../constants, ../errors, ../validation, ../account, ../logging, ../utils_numeric, .. / utils / [padding, bytes, keccak], ttmath, rlp
+  ../constants, ../errors, ../validation, ../account, ../logging, ../utils_numeric, .. / utils / [padding, bytes, keccak],
+  ttmath, rlp, ranges
 
 type
   AccountStateDB* = ref object
