@@ -8,7 +8,7 @@
 import
   strformat, tables,
   ../constants, ../errors, ../validation, ../account, ../logging, ../utils_numeric, .. / utils / [padding, bytes, keccak],
-  ttmath, rlp, ranges
+  ttmath, rlp
 
 type
   AccountStateDB* = ref object
@@ -68,7 +68,7 @@ proc setStorage*(db: var AccountStateDB, address: string, slot: UInt256, value: 
   var storage = db.db
   # TODO fix
   if value > 0:
-    let encodedValue = rlp.encode(value)
+    let encodedValue = rlp.encode value.table # TODO This is a hack, RLP encoding ttmath table has issues
     storage[slotAsKey] = encodedValue.decode(Bytes)
   else:
     storage.del(slotAsKey)
