@@ -31,6 +31,8 @@ matrix:
         - ./koch boot -d:release
         - ./koch nimble
         - cd ..
+        - brew update # TODO: https://github.com/status-im/nimbus/issues/9
+        - brew install gcc
 
       script:
         - nimble install -dy && nimble test
