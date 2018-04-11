@@ -1,6 +1,9 @@
 matrix:
-  # allow_failures:
-  #   - os: osx
+  allow_failures:
+    # disabled for the moment: https://github.com/status-im/nimbus/issues/9
+    # Installing GCC-7 on travis is not straightforward due to hombrew conflict:
+    # https://travis-ci.org/status-im/nimbus/jobs/365157366#L2322
+    - os: osx
 
   include:
     - os: linux
@@ -15,9 +18,9 @@ matrix:
 
     - os: osx
       before_install:
-        - brew update # TODO: https://github.com/status-im/nimbus/issues/9
-        - brew install gcc
-        
+        # - brew update
+        # - brew install gcc
+
         - git clone https://github.com/nim-lang/nim.git
         - cd nim
         - git remote add statusim https://github.com/status-im/nim.git
