@@ -11,7 +11,7 @@ matrix:
         - docker pull statusteam/nim-base
       script:
         - docker run statusteam/nim-base nim --version
-        - docker run -v "$(pwd):/project" -w /project statusteam/nim-base nimble install -dy && nimble test
+        - docker run -v "$(pwd):/project" -w /project statusteam/nim-base sh -c "nimble install -dy && nimble test"
 
     - os: osx
       before_install:
