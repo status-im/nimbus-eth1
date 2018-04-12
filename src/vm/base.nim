@@ -9,6 +9,11 @@ import
   ../logging, ../constants, ../errors, ../transaction, ../types, ../computation, ../block_obj, ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header
 
 type
+  VMkind* = enum
+    ## List of VMs forks (py-evm vm_class) of the Ethereum network
+    # TODO: used in Chain.vmsByRange: can we store the runtimetime in a seq/tuple instead?
+    vmkFrontier, vmkHomestead, vmkTangerineWhistle, vmkSpuriousDragon, vmkByzantium
+
   VM* = ref object of RootObj
     # The VM class represents the Chain rules for a specific protocol definition
     # such as the Frontier or Homestead network.  Defining an Chain  defining

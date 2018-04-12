@@ -21,7 +21,7 @@ type
     header*: BlockHeader
     logger*: Logger
     networkId*: string
-    vmsByRange*: seq[tuple[blockNumber: Int256, vm: VM]] # TODO
+    vmsByRange*: seq[tuple[blockNumber: Int256, vmk: VMkind]] # TODO: VM should actually be a runtime typedesc(VM)
     importBlock*: bool
     validateBlock*: bool
     db*: BaseChainDB
@@ -47,9 +47,9 @@ type
     code*: string
 
 
-proc configureChain*(name: string, blockNumber: Int256, vm: VM, importBlock: bool = true, validateBlock: bool = true): Chain =
+proc configureChain*(name: string, blockNumber: Int256, vmk: VMKind, importBlock: bool = true, validateBlock: bool = true): Chain =
   new(result)
-  result.vmsByRange = @[(blockNumber: blockNumber, vm: vm)]
+  result.vmsByRange = @[(blockNumber: blockNumber, vmk: vmk)]
   result.importBlock = importBlock
   result.validateBlock = validateBlock
 
@@ -75,3 +75,23 @@ proc fromGenesis*(
   result.vmsByRange = chain.vmsByRange
   # TODO
   # chainDB.persistBlockToDB(result.getBlock)
+
+proc getVMClassForBlockNumber*(chain: Chain, blockNumber: Int256): VMKind =
+  ## Returns the VM class for the given block number
+  # TODO should the return value be a typedesc?
+
+  # TODO: validate_block_number
+  for idx in countdown(chain.vmsByRange.high, chain.vmsByRange.low):
+    let (n, vmk) = chain.vmsByRange[idx]
+    if blockNumber > n:
+      return vmk
+
+  raise newException(ValueError, "VM not found for block #" & $blockNumber) # TODO: VMNotFound exception
+
+proc getVM*(chain: Chain, header: BlockHeader = nil): VM =
+  ## Returns the VM instance for the given block number
+
+  if header.isNil:
+    let header = chain.header # shadowing input param
+
+

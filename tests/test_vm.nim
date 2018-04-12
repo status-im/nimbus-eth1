@@ -15,7 +15,7 @@ suite "VM":
     var
       chain = chainWithoutBlockValidation()
       vm = chain.getVM()
-      txIdx = len(vm.block.transactions)
+      txIdx = len(vm.`block`.transactions)
       recipient = decodeHex("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0c")
       amount = 100.Int256
 
