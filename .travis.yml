@@ -1,9 +1,6 @@
 matrix:
-  allow_failures:
-    # disabled for the moment: https://github.com/status-im/nimbus/issues/9
-    # Installing GCC-7 on travis is not straightforward due to hombrew conflict:
-    # https://travis-ci.org/status-im/nimbus/jobs/365157366#L2322
-    - os: osx
+  # allow_failures:
+  #   - os: osx
 
   include:
     - os: linux
