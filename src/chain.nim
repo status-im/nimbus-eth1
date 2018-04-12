@@ -8,7 +8,7 @@
 import
   tables, ttmath,
   ./logging, ./constants, ./errors, ./validation, ./utils/hexadecimal, ./vm/base, ./db/db_chain,
-  ./utils/header
+  ./utils/header, ./vm/forks/frontier/vm
 
 type
   Chain* = ref object
@@ -28,9 +28,9 @@ type
     fundedAddressPrivateKey*: string
 
   GenesisParams* = ref object
-    blockNumber*: Int256
-    difficulty*: Int256
-    gasLimit*: Int256
+    blockNumber*: UInt256
+    difficulty*: UInt256
+    gasLimit*: UInt256
     parentHash*: string
     coinbase*: string
     nonce*: string
@@ -89,11 +89,13 @@ proc getVMClassForBlockNumber*(chain: Chain, blockNumber: UInt256): VMKind =
 proc getVM*(chain: Chain, header: BlockHeader = nil): VM =
   ## Returns the VM instance for the given block number
 
-  if header.isNil:
-    let header = chain.header # shadowing input param
-
+  # shadowing input param
+  let header = if header.isNil: chain.header
+               else: header
 
   let vm_class = chain.getVMClassForBlockNumber(header.blockNumber)
 
-  # case vm_class:
-  # of vmkFrontier: result =
+  case vm_class:
+  of vmkFrontier: result = newFrontierVM(header, chain.db)
+  else:
+    raise newException(ValueError, "Chain: only FrontierVM is implemented")

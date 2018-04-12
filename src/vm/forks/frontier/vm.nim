@@ -34,3 +34,4 @@ proc newFrontierVM*(header: BlockHeader, chainDB: BaseChainDB): FrontierVM =
   result.chainDB = chainDB
   result.isStateless = true
   result.state = newFrontierVMState()
+  result.`block` = makeFrontierBlock(header, @[])

@@ -11,7 +11,7 @@ import
   ../../../utils/header
 
 type
-  FrontierBlock* = object of Block
+  FrontierBlock* = ref object of Block
     # bloomFilter*: BloomFilter
     # header*: BlockHeader
     transactions*: seq[BaseTransaction]
@@ -25,13 +25,13 @@ type
 #   rlp, rlp.sedes, eth_bloom, evm.constants, evm.rlp.receipts, evm.rlp.blocks,
 #   evm.rlp.headers, evm.utils.keccak, transactions
 
-# method makeFrontierBlock*(header: auto; transactions: auto; uncles: void): auto =
-#   if transactions is None:
-#     transactions = @[]
-#   if uncles is None:
-#     uncles = @[]
-#   result.bloomFilter = BloomFilter(header.bloom)
-#   super(FrontierBlock, result).__init__()
+proc makeFrontierBlock*(header: BlockHeader; transactions: seq[BaseTransaction]; uncles: void): FrontierBlock =
+  new result
+  if transactions.len == 0:
+    result.transactions = @[]
+  # if uncles is None:
+  #   uncles = @[]
+  # result.bloomFilter = BloomFilter(header.bloom)
 
 # method number*(self: FrontierBlock): int =
 #   return self.header.blockNumber
