@@ -7,19 +7,20 @@
 
 import
   unittest,
-  test_helpers, .. / src / [db / backends / memory, db / chain, constants, utils / hexadecimal]
+  ./test_helpers, ./fixtures,
+  ../src/[db/backends/memory_backend, chain, constants, utils/hexadecimal]
 
-suite "vm":
-  test "apply no validation":
+suite "VM":
+  test "Sanity check with no validation":
     var
-      chain = testChain()
+      chain = chainWithoutBlockValidation()
       vm = chain.getVM()
-      txIdx = len(vm.`block`.transactions)
+      txIdx = len(vm.block.transactions)
       recipient = decodeHex("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0c")
       amount = 100.Int256
 
-    var from = chain.fundedAddress
-    var tx = newTransaction(vm, from, recipient, amount, chain.fundedAddressPrivateKey)
+    var ethaddr_from = chain.fundedAddress
+    var tx = newTransaction(vm, ethaddr_from, recipient, amount, chain.fundedAddressPrivateKey)
     var (computation, _) = vm.applyTransaction(tx)
     var accessLogs = computation.vmState.accessLogs
 
@@ -27,7 +28,7 @@ suite "vm":
 
     var txGas = tx.gasPrice * constants.GAS_TX
     inDb(vm.state.stateDb(readOnly=true)):
-      check(db.getBalance(from) == chain.fundedAddressInitialBalance - amount - txGas)
+      check(db.getBalance(ethaddr_from) == chain.fundedAddressInitialBalance - amount - txGas)
       check(db.getBalance(recipient) == amount)
     var b = vm.`block`
     check(b.transactions[txIdx] == tx)

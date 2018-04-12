@@ -5,9 +5,12 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import unittest, strformat, tables, constants, chain, ttmath, vm / forks / frontier / vm, utils / [header, address], db / db_chain, db / backends / memory_backend
+import
+  unittest, strformat, tables,
+  ttmath,
+  ../src/[constants, chain, vm/forks/frontier/vm, utils/header, utils/address, db/db_chain, db/backends/memory_backend]
 
-proc chainWithoutBlockValidation: Chain =
+proc chainWithoutBlockValidation*: Chain =
   result = configureChain("TestChain", GENESIS_BLOCK_NUMBER, newFrontierVM(Header(), newBaseChainDB(newMemoryDB())), false, false)
   let privateKey = "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8" # TODO privateKey(decodeHex("0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8"))
   let fundedAddr = privateKey # privateKey.publicKey.toCanonicalAddress
