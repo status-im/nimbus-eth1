@@ -6,7 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  logging, constants, utils / header, ttmath
+  ttmath,
+  ./logging, ./constants,
+  ./utils/header
 
 type
   CountableList*[T] = ref object

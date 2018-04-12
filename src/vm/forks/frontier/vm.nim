@@ -8,7 +8,7 @@
 import
   ../../../logging, ../../../constants, ../../../errors,
   ttmath,
-  ../../../block_obj,
+  ../../../block_types,
   ../../../vm/[base, stack], ../../../db/db_chain,  ../../../utils/header,
   ./frontier_block, ./frontier_vm_state, ./frontier_validation
 

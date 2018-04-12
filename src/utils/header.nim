@@ -10,6 +10,7 @@ import ../constants, ttmath, strformat, times, ../validation
 
 type
   Header* = ref object
+    # Note: this is defined in evm/rlp/headers in the original repo
     timestamp*: EthTime
     difficulty*: UInt256
     blockNumber*: UInt256
@@ -17,8 +18,7 @@ type
     unclesHash*: string
     coinbase*: string
     stateRoot*: string
-
-  # TODO
+    # TODO: incomplete
 
 proc hasUncles*(header: Header): bool = header.uncles_hash != EMPTY_UNCLE_HASH
 

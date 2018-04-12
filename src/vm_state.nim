@@ -7,7 +7,8 @@
 
 import
   macros, strformat, tables,
-  logging, constants, ttmath, errors, transaction, db/db_chain, utils/state, utils/header
+  ttmath,
+  ./logging, ./constants, ./errors, ./transaction, ./db/db_chain, ./utils/state, ./utils/header
 
 type
   BaseVMState* = ref object of RootObj

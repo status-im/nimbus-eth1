@@ -7,7 +7,7 @@
 
 import
   ../../../logging, ../../../constants, ../../../errors, ../../../transaction,
-  ../../../block_obj,
+  ../../../block_types,
   ../../../utils/header
 
 type
