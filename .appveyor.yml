@@ -1,5 +1,8 @@
 version: '{build}'
 
+# clone directory - avoids Appveyor appending a unique string: https://ci.appveyor.com/project/jarradh/nimbus-on2qu/build/59
+clone_folder: c:\projects\nimbus
+
 cache:
 - x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
 - i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
