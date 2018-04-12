@@ -4,8 +4,9 @@ cache:
 - x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
 - i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
 
+# We always want 32 and 64-bit compilation
 matrix:
-  fast_finish: true     # set this flag to immediately finish build once one of the jobs fails.
+  fast_finish: false     # set this flag to immediately finish build once one of the jobs fails.
 
 environment:
 
