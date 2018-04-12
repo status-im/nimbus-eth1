@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, strformat, tables,
+  unittest, strformat, tables, times,
   ttmath,
   ../src/[constants, chain, vm/forks/frontier/vm, utils/header, utils/address, db/db_chain, db/backends/memory_backend]
 
@@ -24,7 +24,7 @@ proc chainWithoutBlockValidation*: Chain =
     nonce: GENESIS_NONCE,
     mixHash: GENESIS_MIX_HASH,
     extraData: GENESIS_EXTRA_DATA,
-    timestamp: 1501851927,
+    timestamp: fromUnix 1501851927,
     stateRoot: "0x9d354f9b5ba851a35eced279ef377111387197581429cfcc7f744ef89a30b5d4") #.decodeHex)
   let genesisState = {"fundedAddr": FundedAddress(balance: initialBalance.int256, nonce: 0, code: "")}.toTable()
   result = fromGenesis(

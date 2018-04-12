@@ -233,9 +233,9 @@ let
 
   EMPTY_UNCLE_HASH* =             "\x1d\xccM\xe8\xde\xc7]z\xab\x85\xb5g\xb6\xcc\xd4\x1a\xd3\x12E\x1b\x94\x8at\x13\xf0\xa1B\xfd@\xd4\x93G"
 
-  GENESIS_BLOCK_NUMBER* =         0.u256
-  GENESIS_DIFFICULTY* =           131_072.u256
-  GENESIS_GAS_LIMIT* =            3_141_592.u256
+  GENESIS_BLOCK_NUMBER* =         0.i256
+  GENESIS_DIFFICULTY* =           131_072.i256
+  GENESIS_GAS_LIMIT* =            3_141_592.i256
   GENESIS_PARENT_HASH* =          ZERO_HASH32
   GENESIS_COINBASE* =             ZERO_ADDRESS
   GENESIS_NONCE* =                "\x00\x00\x00\x00\x00\x00\x00B"
