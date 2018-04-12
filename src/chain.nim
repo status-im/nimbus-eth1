@@ -7,12 +7,10 @@
 
 import
   tables, ttmath,
-  logging, constants, errors, validation, utils / hexadecimal, vm / base, db / db_chain
+  ./logging, ./constants, ./errors, ./validation, ./utils/hexadecimal, ./vm/base, ./db/db_chain,
+  ./utils/header
 
 type
-  BlockHeader* = ref object
-    # Placeholder TODO
-
   Chain* = ref object
     ## An Chain is a combination of one or more VM classes.  Each VM is associated
     ## with a range of blocks.  The Chain class acts as a wrapper around these other
@@ -95,3 +93,4 @@ proc getVM*(chain: Chain, header: BlockHeader = nil): VM =
     let header = chain.header # shadowing input param
 
 
+  # let vm_class = chain.getVMClassForBlockNumber(header.blockNumber)

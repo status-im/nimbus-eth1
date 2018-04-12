@@ -9,7 +9,7 @@ import
   strformat, tables,
   logging, constants, errors, computation, transaction, types, vm_state, block_types, db / db_chain, utils / [state, header]
 
-method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction): (BaseComputation, Header) =
+method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction): (BaseComputation, BlockHeader) =
   # Execute the transaction in the vm
   raise newException(ValueError, "Must be implemented by subclasses")
 

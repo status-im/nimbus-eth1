@@ -33,7 +33,7 @@ var c = BaseComputation(
   vmState: BaseVMState(
     prevHeaders: @[],
     chaindb: BaseChainDB(),
-    blockHeader: Header(),
+    blockHeader: BlockHeader(),
     name: "zero"),
   msg: msg,
   memory: mem,

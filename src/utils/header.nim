@@ -9,7 +9,7 @@
 import ../constants, ttmath, strformat, times, ../validation
 
 type
-  Header* = ref object
+  BlockHeader* = ref object
     # Note: this is defined in evm/rlp/headers in the original repo
     timestamp*: EthTime
     difficulty*: UInt256
@@ -20,24 +20,24 @@ type
     stateRoot*: string
     # TODO: incomplete
 
-proc hasUncles*(header: Header): bool = header.uncles_hash != EMPTY_UNCLE_HASH
+proc hasUncles*(header: BlockHeader): bool = header.uncles_hash != EMPTY_UNCLE_HASH
 
-proc gasUsed*(header: Header): UInt256 =
+proc gasUsed*(header: BlockHeader): UInt256 =
   # TODO
   # Should this be calculated/a proc? Parity and Py-Evm just have it as a field.
   0.u256
 
-proc gasLimit*(header: Header): UInt256 =
+proc gasLimit*(header: BlockHeader): UInt256 =
   # TODO
   0.u256
 
-proc `$`*(header: Header): string =
+proc `$`*(header: BlockHeader): string =
   if header.isNil:
     result = "nil"
   else:
-    result = &"Header(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.blockNumber} gasLimit: {header.gasLimit})"
+    result = &"BlockHeader(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.blockNumber} gasLimit: {header.gasLimit})"
 
-proc gasLimitBounds*(parent: Header): (UInt256, UInt256) =
+proc gasLimitBounds*(parent: BlockHeader): (UInt256, UInt256) =
   ## Compute the boundaries for the block gas limit based on the parent block.
   let
     boundary_range = parent.gasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR
@@ -46,7 +46,7 @@ proc gasLimitBounds*(parent: Header): (UInt256, UInt256) =
   return (lower_bound, upper_bound)
 
 #[
-proc validate_gaslimit(header: Header):
+proc validate_gaslimit(header: BlockHeader):
   let parent_header = getBlockHeaderByHash(header.parent_hash)
   low_bound, high_bound = compute_gas_limit_bounds(parent_header)
   if header.gas_limit < low_bound:
@@ -59,7 +59,7 @@ proc validate_gaslimit(header: Header):
               encode_hex(header.hash), header.gas_limit, high_bound))
 ]#
 
-proc computeGasLimit*(parent: Header, gasLimitFloor: UInt256): UInt256 =
+proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: UInt256): UInt256 =
   #[
     For each block:
     - decrease by 1/1024th of the gas limit from the previous block
@@ -98,13 +98,13 @@ proc computeGasLimit*(parent: Header, gasLimitFloor: UInt256): UInt256 =
       return gas_limit
 
 proc generateHeaderFromParentHeader*(
-    computeDifficultyFn: proc(parentHeader: Header, timestamp: int): int,
-    parent: Header,
+    computeDifficultyFn: proc(parentHeader: BlockHeader, timestamp: int): int,
+    parent: BlockHeader,
     coinbase: string,
     timestamp: int = -1,
-    extraData: string = ""): Header =
+    extraData: string = ""): BlockHeader =
   # TODO: validateGt(timestamp, parent.timestamp)
-  result = Header(
+  result = BlockHeader(
     timestamp: max(getTime(), parent.timestamp + 1.milliseconds),   # Note: Py-evm uses +1 second, not ms
     block_number: (parent.block_number + u256(1)),
     # TODO: difficulty: parent.computeDifficulty(parent.timestamp),

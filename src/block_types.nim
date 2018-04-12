@@ -15,6 +15,6 @@ type
     elements: seq[T] # TODO
 
   Block* = ref object of RootObj
-    header*: Header
-    uncles*: CountableList[Header]
+    header*: BlockHeader
+    uncles*: CountableList[BlockHeader]
     blockNumber*: UInt256

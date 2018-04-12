@@ -12,11 +12,11 @@ import
 
 type
   BaseVMState* = ref object of RootObj
-    prevHeaders*: seq[Header]
+    prevHeaders*: seq[BlockHeader]
     # receipts*:
     chaindb*: BaseChainDB
     accessLogs*: AccessLogs
-    blockHeader*: Header
+    blockHeader*: BlockHeader
     name*: string
 
   AccessLogs* = ref object
@@ -41,7 +41,7 @@ proc newBaseVMState*: BaseVMState =
   result.prevHeaders = @[]
   result.name = "BaseVM"
   result.accessLogs = newAccessLogs()
-  result.blockHeader = Header(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
+  result.blockHeader = BlockHeader(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
 
 method logger*(vmState: BaseVMState): Logger =
   logging.getLogger(&"evm.vmState.{vmState.name}")

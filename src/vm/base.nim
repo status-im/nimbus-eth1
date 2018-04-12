@@ -25,7 +25,7 @@ type
     state*: BaseVMState
     `block`*: Block
 
-proc newVM*(header: Header, chainDB: BaseChainDB): VM =
+proc newVM*(header: BlockHeader, chainDB: BaseChainDB): VM =
   new(result)
   result.chainDB = chainDB
 

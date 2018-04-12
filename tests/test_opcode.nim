@@ -17,8 +17,8 @@ import
 
 
 proc testCode(code: string, gas: UInt256): BaseComputation =
-  var vm = newFrontierVM(Header(), newBaseChainDB(newMemoryDB()))
-  let header = Header()
+  var vm = newFrontierVM(BlockHeader(), newBaseChainDB(newMemoryDB()))
+  let header = BlockHeader()
     # coinbase: "",
     # difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
     # blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
