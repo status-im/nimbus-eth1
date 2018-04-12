@@ -19,7 +19,7 @@ type
     header*: BlockHeader
     logger*: Logger
     networkId*: string
-    vmsByRange*: seq[tuple[blockNumber: Int256, vmk: VMkind]] # TODO: VM should actually be a runtime typedesc(VM)
+    vmsByRange*: seq[tuple[blockNumber: UInt256, vmk: VMkind]] # TODO: VM should actually be a runtime typedesc(VM)
     importBlock*: bool
     validateBlock*: bool
     db*: BaseChainDB
@@ -45,7 +45,7 @@ type
     code*: string
 
 
-proc configureChain*(name: string, blockNumber: Int256, vmk: VMKind, importBlock: bool = true, validateBlock: bool = true): Chain =
+proc configureChain*(name: string, blockNumber: UInt256, vmk: VMKind, importBlock: bool = true, validateBlock: bool = true): Chain =
   new(result)
   result.vmsByRange = @[(blockNumber: blockNumber, vmk: vmk)]
   result.importBlock = importBlock
@@ -74,7 +74,7 @@ proc fromGenesis*(
   # TODO
   # chainDB.persistBlockToDB(result.getBlock)
 
-proc getVMClassForBlockNumber*(chain: Chain, blockNumber: Int256): VMKind =
+proc getVMClassForBlockNumber*(chain: Chain, blockNumber: UInt256): VMKind =
   ## Returns the VM class for the given block number
   # TODO should the return value be a typedesc?
 
@@ -93,4 +93,7 @@ proc getVM*(chain: Chain, header: BlockHeader = nil): VM =
     let header = chain.header # shadowing input param
 
 
-  # let vm_class = chain.getVMClassForBlockNumber(header.blockNumber)
+  let vm_class = chain.getVMClassForBlockNumber(header.blockNumber)
+
+  # case vm_class:
+  # of vmkFrontier: result =
