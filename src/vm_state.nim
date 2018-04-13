@@ -8,7 +8,7 @@
 import
   macros, strformat, tables,
   ttmath,
-  ./logging, ./constants, ./errors, ./transaction, ./db/db_chain, ./utils/state, ./utils/header
+  ./logging, ./constants, ./errors, ./transaction, ./db/[db_chain, state_db], ./utils/state, ./utils/header
 
 type
   BaseVMState* = ref object of RootObj
@@ -98,3 +98,6 @@ macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
       # leaving the context.
       # TODO `db`.db = nil
       # state._trie = None
+
+proc readOnlyStateDB*(vmState: BaseVMState): AccountStateDB {.inline.}=
+  vmState.chaindb.getStateDb("", readOnly = true)

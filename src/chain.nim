@@ -81,7 +81,7 @@ proc getVMClassForBlockNumber*(chain: Chain, blockNumber: UInt256): VMKind =
   # TODO: validate_block_number
   for idx in countdown(chain.vmsByRange.high, chain.vmsByRange.low):
     let (n, vmk) = chain.vmsByRange[idx]
-    if blockNumber > n:
+    if blockNumber >= n:
       return vmk
 
   raise newException(ValueError, "VM not found for block #" & $blockNumber) # TODO: VMNotFound exception

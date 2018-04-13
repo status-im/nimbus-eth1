@@ -95,16 +95,18 @@ proc getHexadecimalInt*(j: JsonNode): int =
 
 method newTransaction*(
   vm: VM, addr_from, addr_to: string,
-  amount: Int256,
+  amount: UInt256,
   private_key: string,
-  gas_price = 10.i256,
-  gas = 100000.i256,
+  gas_price = 10.u256,
+  gas = 100000.u256,
   data: seq[byte] = @[]
 ): BaseTransaction =
-  # TODO
+  # TODO: amount should be an Int to deal with negatives
+  new result
 
   # Todo getStateDB is incomplete
-  let nonce = vm.state.chaindb.getStateDb("", readOnly = true).getNonce(addr_from)
+  let nonce = vm.state.readOnlyStateDB.getNonce(addr_from)
 
+  # TODO
   # if !private key: create_unsigned_transaction
   # else: create_signed_transaction

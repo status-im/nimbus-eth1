@@ -8,8 +8,10 @@
 import
   unittest, ttmath,
   ./test_helpers, ./fixtures,
-  ../src/[db/backends/memory_backend, chain, constants, utils/hexadecimal],
+  ../src/[db/backends/memory_backend, db/state_db, chain, constants, utils/hexadecimal, vm_state],
   ../src/[vm/base, computation]
+
+import typetraits
 
 suite "VM":
   test "Apply transaction with no validation":
@@ -17,21 +19,26 @@ suite "VM":
       chain = chainWithoutBlockValidation()
       vm = chain.getVM()
       # txIdx = len(vm.`block`.transactions) # Can't take len of a runtime field
+    let
       recipient = decodeHex("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0c")
-      amount = 100.i256
+      amount = 100.u256
+      ethaddr_from = chain.fundedAddress
+      tx = newTransaction(vm, ethaddr_from, recipient, amount, chain.fundedAddressPrivateKey)
+      # (computation, _) = vm.applyTransaction(tx)
+      # accessLogs = computation.vmState.accessLogs
 
-    var ethaddr_from = chain.fundedAddress
-    var tx = newTransaction(vm, ethaddr_from, recipient, amount, chain.fundedAddressPrivateKey)
-    var (computation, _) = vm.applyTransaction(tx)
-    var accessLogs = computation.vmState.accessLogs
+    # check(not computation.isError)
 
-    check(not computation.isError)
+    let
+      txGas = tx.gasPrice * constants.GAS_TX
+      state_db = vm.state.readOnlyStateDB
+      b = vm.`block`
 
-    var txGas = tx.gasPrice * constants.GAS_TX
-    # inDb(vm.state.stateDb(readOnly=true)):
-    #   check(db.getBalance(ethaddr_from) == chain.fundedAddressInitialBalance - amount - txGas)
-    #   check(db.getBalance(recipient) == amount)
-    # var b = vm.`block`
-    # check(b.transactions[txIdx] == tx)
-    # check(b.header.gasUsed == constants.GAS_TX)
+    echo state_db.getBalance(ethaddr_from).type.name
+
+    # check:
+    #   state_db.getBalance(ethaddr_from) == chain.fundedAddressInitialBalance - amount - txGas # TODO: this really should be i256
+    #   state_db.getBalance(recipient) == amount
+    #   b.transactions[txIdx] == tx
+    #   b.header.gasUsed == constants.GAS_TX
 
