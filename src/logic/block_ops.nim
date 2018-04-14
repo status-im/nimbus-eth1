@@ -6,6 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  times,
   ../constants, ../errors, ../computation, ../vm_state, ../types, .. / vm / [stack], ttmath
 
 {.this: computation.}
@@ -25,7 +26,7 @@ proc coinbase*(computation) =
 proc timestamp*(computation) =
   # TODO: EthTime is an alias of Time, which is a distinct int64 so can't use u256(int64)
   # This may have implications for different platforms.
-  stack.push(vmState.timestamp.uint64.u256) 
+  stack.push(vmState.timestamp.toUnix.uint64.u256)
 
 proc number*(computation) =
   stack.push(vmState.blockNumber)
