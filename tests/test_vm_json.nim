@@ -21,8 +21,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   for label, child in fixtures:
     fixture = child
     break
-  var vm = newFrontierVM(Header(), newBaseChainDB(newMemoryDB()))
-  let header = Header(
+  var vm = newFrontierVM(BlockHeader(), newBaseChainDB(newMemoryDB()))
+  let header = BlockHeader(
     coinbase: fixture{"env"}{"currentCoinbase"}.getStr,
     difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
     blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,

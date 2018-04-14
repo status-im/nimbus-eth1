@@ -6,13 +6,15 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  logging, constants, utils / header, ttmath
+  ttmath,
+  ./logging, ./constants,
+  ./utils/header
 
 type
   CountableList*[T] = ref object
     elements: seq[T] # TODO
 
   Block* = ref object of RootObj
-    header*: Header
-    uncles*: CountableList[Header]
+    header*: BlockHeader
+    uncles*: CountableList[BlockHeader]
     blockNumber*: UInt256

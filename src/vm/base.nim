@@ -6,9 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../logging, ../constants, ../errors, ../transaction, ../types, ../computation, ../block_obj, ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header
+  ../logging, ../constants, ../errors, ../transaction, ../types, ../computation, ../block_types, ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header
 
 type
+  VMkind* = enum
+    ## List of VMs forks (py-evm vm_class) of the Ethereum network
+    # TODO: used in Chain.vmsByRange: can we store the runtimetime in a seq/tuple instead?
+    vmkFrontier, vmkHomestead, vmkTangerineWhistle, vmkSpuriousDragon, vmkByzantium
+
   VM* = ref object of RootObj
     # The VM class represents the Chain rules for a specific protocol definition
     # such as the Frontier or Homestead network.  Defining an Chain  defining
@@ -20,7 +25,7 @@ type
     state*: BaseVMState
     `block`*: Block
 
-proc newVM*(header: Header, chainDB: BaseChainDB): VM =
+proc newVM*(header: BlockHeader, chainDB: BaseChainDB): VM =
   new(result)
   result.chainDB = chainDB
 

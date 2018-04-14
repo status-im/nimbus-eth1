@@ -7,10 +7,13 @@
 
 import
   strformat, tables,
-  logging, constants, errors, computation, transaction, types, vm_state, block_obj, db / db_chain, utils / [state, header]
+  logging, constants, errors, computation, transaction, types, vm_state, block_types, db / db_chain, utils / [state, header]
 
-method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction): (BaseComputation, Header) =
+method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction): (BaseComputation, BlockHeader) {.base.}=
   # Execute the transaction in the vm
+  # TODO: introduced here: https://github.com/ethereum/py-evm/commit/21c57f2d56ab91bb62723c3f9ebe291d0b132dde
+  # Refactored/Removed here: https://github.com/ethereum/py-evm/commit/cc991bf
+  # Deleted here: https://github.com/ethereum/py-evm/commit/746defb6f8e83cee2c352a0ab8690e1281c4227c
   raise newException(ValueError, "Must be implemented by subclasses")
 
 

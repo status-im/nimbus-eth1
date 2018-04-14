@@ -10,5 +10,6 @@ import  ./test_code_stream,
         ./test_memory,
         ./test_stack,
         ./test_opcode
+        # ./test_vm
 
 

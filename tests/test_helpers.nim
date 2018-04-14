@@ -10,7 +10,8 @@ import
   ttmath,
   ../src/utils/[hexadecimal, address, padding],
   ../src/[chain, vm_state, constants],
-  ../src/db/[db_chain, state_db], ../src/vm/forks/frontier/vm
+  ../src/db/[db_chain, state_db], ../src/vm/forks/frontier/vm,
+  ../src/vm/base, ../src/transaction
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
@@ -91,3 +92,21 @@ proc setupStateDB*(desiredState: JsonNode, stateDB: var AccountStateDB) =
 
 proc getHexadecimalInt*(j: JsonNode): int =
   discard parseHex(j.getStr, result)
+
+method newTransaction*(
+  vm: VM, addr_from, addr_to: string,
+  amount: UInt256,
+  private_key: string,
+  gas_price = 10.u256,
+  gas = 100000.u256,
+  data: seq[byte] = @[]
+): BaseTransaction =
+  # TODO: amount should be an Int to deal with negatives
+  new result
+
+  # Todo getStateDB is incomplete
+  let nonce = vm.state.readOnlyStateDB.getNonce(addr_from)
+
+  # TODO
+  # if !private key: create_unsigned_transaction
+  # else: create_signed_transaction

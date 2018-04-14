@@ -8,7 +8,7 @@
 import
   ../../../logging, ../../../constants, ../../../errors,
   ttmath,
-  ../../../block_obj,
+  ../../../block_types,
   ../../../vm/[base, stack], ../../../db/db_chain,  ../../../utils/header,
   ./frontier_block, ./frontier_vm_state, ./frontier_validation
 
@@ -29,8 +29,9 @@ method getUncleReward(vm: FrontierVM, blockNumber: UInt256, uncle: Block): UInt2
 method getNephewReward(vm: FrontierVM): UInt256 =
   vm.getBlockReward() div 32
 
-proc newFrontierVM*(header: Header, chainDB: BaseChainDB): FrontierVM =
+proc newFrontierVM*(header: BlockHeader, chainDB: BaseChainDB): FrontierVM =
   new(result)
   result.chainDB = chainDB
   result.isStateless = true
   result.state = newFrontierVMState()
+  result.`block` = makeFrontierBlock(header, @[])

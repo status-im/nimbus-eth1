@@ -7,15 +7,16 @@
 
 import
   macros, strformat, tables,
-  logging, constants, ttmath, errors, transaction, db/db_chain, utils/state, utils/header
+  ttmath,
+  ./logging, ./constants, ./errors, ./transaction, ./db/[db_chain, state_db], ./utils/state, ./utils/header
 
 type
   BaseVMState* = ref object of RootObj
-    prevHeaders*: seq[Header]
+    prevHeaders*: seq[BlockHeader]
     # receipts*:
     chaindb*: BaseChainDB
     accessLogs*: AccessLogs
-    blockHeader*: Header
+    blockHeader*: BlockHeader
     name*: string
 
   AccessLogs* = ref object
@@ -40,7 +41,7 @@ proc newBaseVMState*: BaseVMState =
   result.prevHeaders = @[]
   result.name = "BaseVM"
   result.accessLogs = newAccessLogs()
-  result.blockHeader = Header(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
+  result.blockHeader = BlockHeader(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
 
 method logger*(vmState: BaseVMState): Logger =
   logging.getLogger(&"evm.vmState.{vmState.name}")
@@ -97,3 +98,6 @@ macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
       # leaving the context.
       # TODO `db`.db = nil
       # state._trie = None
+
+proc readOnlyStateDB*(vmState: BaseVMState): AccountStateDB {.inline.}=
+  vmState.chaindb.getStateDb("", readOnly = true)
