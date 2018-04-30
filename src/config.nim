@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import parseopt, strutils
+import parseopt, strutils, net
 
 const
   NimbusName* = "Nimbus"
@@ -31,39 +31,39 @@ const
 type
   ConfigStatus* = enum
     ## Configuration status flags
-    Success,                   ## Success
-    EmptyOption,               ## No options in category
-    ErrorUnknownOption,        ## Unknown option in command line found
-    ErrorParseOption,          ## Error in parsing command line option
-    Error                      ## Unspecified error
+    Success,                    ## Success
+    EmptyOption,                ## No options in category
+    ErrorUnknownOption,         ## Unknown option in command line found
+    ErrorParseOption,           ## Error in parsing command line option
+    Error                       ## Unspecified error
 
   RpcFlags* {.pure.} = enum
     ## RPC flags
-    Enabled                    ## RPC enabled
+    Enabled                     ## RPC enabled
 
   RpcConfiguration* = object
     ## JSON-RPC configuration object
-    flags*: set[RpcFlags]      ## RPC flags
-    bindAddress*: string       ## RPC bind address string
-    bindPort*: uint16          ## RPC bind port
-    allowedIPs*: seq[string]   ## Sequence of allowed IP addresses
-    username*: string          ## RPC authorization username
-    password*: string          ## RPC authorization password
+    flags*: set[RpcFlags]       ## RPC flags
+    bindAddress*: IpAddress     ## RPC bind address
+    bindPort*: uint16           ## RPC bind port
+    allowedIPs*: seq[IpAddress] ## Sequence of allowed IP addresses
+    username*: string           ## RPC authorization username
+    password*: string           ## RPC authorization password
 
   NetworkFlags* = enum
     ## Ethereum network flags
-    LocalNet,                  ## Use local network only
-    TestNet,                   ## Use test network only
-    MainNet,                   ## Use main network only
-    NoDiscover,                ## Peer discovery disabled
-    V5Discover,                ## Dicovery V5 enabled
+    LocalNet,                   ## Use local network only
+    TestNet,                    ## Use test network only
+    MainNet,                    ## Use main network only
+    NoDiscover,                 ## Peer discovery disabled
+    V5Discover,                 ## Dicovery V5 enabled
 
   DebugFlags* {.pure.} = enum
     ## Debug selection flags
-    Enabled,                   ## Debugging enabled
-    Test1,                     ## Test1 enabled
-    Test2,                     ## Test2 enabled
-    Test3                      ## Test3 enabled
+    Enabled,                    ## Debugging enabled
+    Test1,                      ## Test1 enabled
+    Test2,                      ## Test2 enabled
+    Test3                       ## Test3 enabled
 
   NetConfiguration* = object
     ## Network configuration object
@@ -82,9 +82,9 @@ type
 
   NimbusConfiguration* = ref object
     ## Main Nimbus configuration object
-    rpc*: RpcConfiguration      ## JSON-RPC configuration
-    net*: NetConfiguration      ## Network configuration
-    debug*: DebugConfiguration  ## Debug configuration
+    rpc*: RpcConfiguration       ## JSON-RPC configuration
+    net*: NetConfiguration       ## Network configuration
+    debug*: DebugConfiguration   ## Debug configuration
 
 var nimbusConfig {.threadvar.}: NimbusConfiguration
 
@@ -94,11 +94,11 @@ proc initConfiguration(): NimbusConfiguration =
 
   ## RPC defaults
   result.rpc.flags = {}
-  result.rpc.bindAddress = "127.0.0.1"
+  result.rpc.bindAddress = parseIpAddress("127.0.0.1")
   result.rpc.bindPort = uint16(7654)
   result.rpc.username = ""
   result.rpc.password = ""
-  result.rpc.allowedIPs = newSeq[string]()
+  result.rpc.allowedIPs = newSeq[IpAddress]()
 
   ## Network defaults
   result.net.flags = {TestNet}
@@ -125,11 +125,21 @@ proc processList(v: string, o: var seq[string]) =
         o.add(n)
 
 proc processInteger(v: string, o: var int): ConfigStatus =
-  result = Success
   try:
     o  = parseInt(v)
+    result = Success
   except:
     result = ErrorParseOption
+
+proc processIpAddress(v: string, o: var IpAddress): ConfigStatus =
+  try:
+    o = parseIpAddress(v)
+    result = Success
+  except:
+    result = ErrorParseOption
+
+#proc processENode(v: string, o: var ENode): ConfigStatus =
+#  discard
 
 proc processRpcArguments(key, value: string): ConfigStatus =
   ## Processes only `RPC` related command line options
@@ -139,7 +149,7 @@ proc processRpcArguments(key, value: string): ConfigStatus =
   if skey == "rpc":
     config.rpc.flags.incl(Enabled)
   elif skey == "rpcbind":
-    config.rpc.bindAddress = value
+    result = processIpAddress(value, config.rpc.bindAddress)
   elif skey == "rpcport":
     var res = 0
     result = processInteger(value, res)
@@ -150,7 +160,16 @@ proc processRpcArguments(key, value: string): ConfigStatus =
   elif skey == "rpcpassword":
     config.rpc.password = value
   elif skey == "rpcallowip":
-    processList(value, config.rpc.allowedIPs)
+    var list = newSeq[string]()
+    var res = ConfigStatus.Success
+    processList(value, list)
+    for item in list:
+      var address: IpAddress
+      result = processIpAddress(item, address)
+      if result == Success:
+        config.rpc.allowedIPs.add(address)
+      else:
+        break
   else:
     result = EmptyOption
 
@@ -262,7 +281,7 @@ API AND CONSOLE OPTIONS:
   --rpcport:<value>       HTTP-RPC server listening port (default: 7654)
   --rpcuser:<value>       HTTP-RPC authorization username
   --rpcpassword:<value>   HTTP-RPC authorization password
-  --rpcallowip:<value>    Allow HTTP-RPC connections from specified sources
+  --rpcallowip:<value>    Allow HTTP-RPC connections from specified IP addresses
 
 LOGGING AND DEBUGGING OPTIONS:
   --debug                 Enable debug mode
