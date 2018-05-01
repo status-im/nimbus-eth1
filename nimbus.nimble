@@ -10,7 +10,8 @@ skipDirs      = @["tests"]
 requires "nim >= 0.18.1",
          "https://github.com/cheatfate/nimcrypto#master",
          "https://github.com/status-im/nim-rlp",
-         "https://github.com/status-im/nim-ttmath#master"
+         "https://github.com/status-im/nim-ttmath#master",
+         "https://github.com/status-im/nim-eth-p2p"
 
 proc test(name: string, lang = "cpp") =
   if not dirExists "build":

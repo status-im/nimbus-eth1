@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import parseopt, strutils, net
+import parseopt, strutils, net, ethp2p
 
 const
   NimbusName* = "Nimbus"
@@ -68,9 +68,9 @@ type
   NetConfiguration* = object
     ## Network configuration object
     flags*: set[NetworkFlags]
-    bootNodes: seq[string]
-    bootNodes4: seq[string]
-    bootNodes5: seq[string]
+    bootNodes: seq[ENode]
+    bootNodes4: seq[ENode]
+    bootNodes5: seq[ENode]
     bindPort: uint16
     maxPeers: int
     maxPendingPeers: int
@@ -102,9 +102,9 @@ proc initConfiguration(): NimbusConfiguration =
 
   ## Network defaults
   result.net.flags = {TestNet}
-  result.net.bootNodes = newSeq[string]()
-  result.net.bootNodes4 = newSeq[string]()
-  result.net.bootNodes5 = newSeq[string]()
+  result.net.bootNodes = newSeq[ENode]()
+  result.net.bootNodes4 = newSeq[ENode]()
+  result.net.bootNodes5 = newSeq[ENode]()
   result.net.maxPeers = 25
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16
@@ -119,12 +119,14 @@ proc getConfiguration*(): NimbusConfiguration =
   result = nimbusConfig
 
 proc processList(v: string, o: var seq[string]) =
+  ## Process comma-separated list of strings.
   if len(v) > 0:
     for n in v.split({' ', ','}):
       if len(n) > 0:
         o.add(n)
 
 proc processInteger(v: string, o: var int): ConfigStatus =
+  ## Convert string to integer.
   try:
     o  = parseInt(v)
     result = Success
@@ -132,14 +134,46 @@ proc processInteger(v: string, o: var int): ConfigStatus =
     result = ErrorParseOption
 
 proc processIpAddress(v: string, o: var IpAddress): ConfigStatus =
+  ## Convert string to IpAddress.
   try:
     o = parseIpAddress(v)
     result = Success
   except:
     result = ErrorParseOption
 
-#proc processENode(v: string, o: var ENode): ConfigStatus =
-#  discard
+proc processAddressesList(v: string, o: var seq[IpAddress]): ConfigStatus =
+  ## Convert comma-separated list of strings to list of IpAddress.
+  var
+    address: IpAddress
+    list = newSeq[string]()
+  processList(v, list)
+  for item in list:
+    result = processIpAddress(item, address)
+    if result == Success:
+      o.add(address)
+    else:
+      break
+
+proc processENode(v: string, o: var ENode): ConfigStatus =
+  ## Convert string to ENode.
+  let res = initENode(v, o)
+  if res == ENodeStatus.Success:
+    result = Success
+  else:
+    result = ErrorParseOption
+
+proc processENodesList(v: string, o: var seq[ENode]): ConfigStatus =
+  ## Convert comma-separated list of strings to list of ENode.
+  var
+    node: ENode
+    list = newSeq[string]()
+  processList(v, list)
+  for item in list:
+    result = processENode(item, node)
+    if result == Success:
+      o.add(node)
+    else:
+      break
 
 proc processRpcArguments(key, value: string): ConfigStatus =
   ## Processes only `RPC` related command line options
@@ -160,16 +194,7 @@ proc processRpcArguments(key, value: string): ConfigStatus =
   elif skey == "rpcpassword":
     config.rpc.password = value
   elif skey == "rpcallowip":
-    var list = newSeq[string]()
-    var res = ConfigStatus.Success
-    processList(value, list)
-    for item in list:
-      var address: IpAddress
-      result = processIpAddress(item, address)
-      if result == Success:
-        config.rpc.allowedIPs.add(address)
-      else:
-        break
+    result = processAddressesList(value, config.rpc.allowedIPs)
   else:
     result = EmptyOption
 
@@ -179,11 +204,11 @@ proc processNetArguments(key, value: string): ConfigStatus =
   let config = getConfiguration()
   let skey = key.toLowerAscii()
   if skey == "bootnodes":
-    processList(value, config.net.bootNodes)
+    result = processENodesList(value, config.net.bootnodes)
   elif skey == "bootnodesv4":
-    processList(value, config.net.bootNodes4)
+    result = processENodesList(value, config.net.bootNodes4)
   elif skey == "bootnodesv5":
-    processList(value, config.net.bootNodes5)
+    result = processENodesList(value, config.net.bootNodes5)
   elif skey == "testnet":
     config.net.flags.incl(TestNet)
     config.net.flags.excl(LocalNet)
