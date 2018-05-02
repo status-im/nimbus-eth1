@@ -7,12 +7,13 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import parseopt, strutils, net, ethp2p
+import parseopt, strutils, net, ethp2p, eth_keyfile, eth_keys, json,
+       nimcrypto
 
 const
   NimbusName* = "Nimbus"
   ## project name string
-  
+
   NimbusCopyright* = "Copyright (C) 2018 Status Research & Development GmbH"
   ## copyright string
 
@@ -68,13 +69,14 @@ type
   NetConfiguration* = object
     ## Network configuration object
     flags*: set[NetworkFlags]
-    bootNodes: seq[ENode]
-    bootNodes4: seq[ENode]
-    bootNodes5: seq[ENode]
-    bindPort: uint16
-    maxPeers: int
-    maxPendingPeers: int
-    nodeKey: string
+    bootNodes*: seq[ENode]
+    bootNodes4*: seq[ENode]
+    bootNodes5*: seq[ENode]
+    bindPort*: uint16
+    discPort*: uint16
+    maxPeers*: int
+    maxPendingPeers*: int
+    nodeKey*: PrivateKey
 
   DebugConfiguration* = object
     ## Debug configuration object
@@ -108,6 +110,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.maxPeers = 25
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16
+  result.net.discPort = 30303'u16
 
   ## Debug defaults
   result.debug.flags = {}
@@ -175,6 +178,38 @@ proc processENodesList(v: string, o: var seq[ENode]): ConfigStatus =
     else:
       break
 
+proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
+  ## Convert hexadecimal string to private key object.
+  try:
+    o = initPrivateKey(v)
+    result = Success
+  except:
+    result = ErrorParseOption
+
+# proc processHexBytes(v: string, o: var seq[byte]): ConfigStatus =
+#   ## Convert hexadecimal string to seq[byte].
+#   try:
+#     o = fromHex(v)
+#     result = Success
+#   except:
+#     result = ErrorParseOption
+
+# proc processHexString(v: string, o: var string): ConfigStatus =
+#   ## Convert hexadecimal string to string.
+#   try:
+#     o = parseHexStr(v)
+#     result = Success
+#   except:
+#     result = ErrorParseOption
+
+# proc processJson(v: string, o: var JsonNode): ConfigStatus =
+#   ## Convert string to JSON.
+#   try:
+#     o = parseJson(v)
+#     result = Success
+#   except:
+#     result = ErrorParseOption
+
 proc processRpcArguments(key, value: string): ConfigStatus =
   ## Processes only `RPC` related command line options
   result = Success
@@ -230,6 +265,11 @@ proc processNetArguments(key, value: string): ConfigStatus =
     result = processInteger(value, res)
     if result == Success:
       config.net.bindPort = uint16(res and 0xFFFF)
+  elif skey == "discport":
+    var res = 0
+    result = processInteger(value, res)
+    if result == Success:
+      config.net.discPort = uint16(res and 0xFFFF)
   elif skey == "maxpeers":
     var res = 0
     result = processInteger(value, res)
@@ -240,6 +280,11 @@ proc processNetArguments(key, value: string): ConfigStatus =
     result = processInteger(value, res)
     if result == Success:
       config.net.maxPendingPeers = res
+  elif skey == "nodekey":
+    var res: PrivateKey
+    result = processPrivateKey(value, res)
+    if result == Success:
+      config.net.nodeKey = res
   else:
     result = EmptyOption
 
@@ -287,19 +332,24 @@ proc getHelpString*(): string =
 USAGE:
   nimbus [options]
 
+ETHEREUM OPTIONS:
+  --keyfile:<value>       Use keyfile storage file
+
 NETWORKING OPTIONS:
   --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
   --bootnodesv4:<value>   Comma separated enode URLs for P2P v4 discovery bootstrap (light server, full nodes)
   --botnoodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
-  --port:<value>          Network listening port (default: 30303)
+  --port:<value>          Network listening TCP port (default: 30303)
+  --discport:<value>      Netowkr listening UDP port (default: 30303)
   --maxpeers:<value>      Maximum number of network peers (default: 25)
   --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
   --nodiscover            Disables the peer discovery mechanism (manual peer addition)
   --v5discover            Enables the experimental RLPx V5 (Topic Discovery) mechanism
+  --nodekey:<value>       P2P node private key (as hexadecimal string)
   --testnet               Use Ethereum Test Network
   --mainnet               Use Ethereum Main Network
   --localnet              Use local network only
-  
+
 API AND CONSOLE OPTIONS:
   --rpc                   Enable the HTTP-RPC server
   --rpcbind:<value>       HTTP-RPC server will bind to given address (default: 127.0.0.1)
