@@ -392,7 +392,7 @@ proc processArguments*(msg: var string): ConfigStatus =
       break
 
   if length == 0 and result == Success:
-    msg = getHelpString()
+    # msg = getHelpString()
     result = Success
 
 proc processConfig*(pathname: string): ConfigStatus =

@@ -20,8 +20,11 @@ when isMainModule:
       echo message
 
   var disc4: Discovery4Service
-  echo disc4.init()
-  echo disc4.configure()
-  echo disc4.errorMessage()
-  echo disc4.start()
-  echo disc4.errorMessage()
+  if disc4.init() != ServiceStatus.Success:
+    quit(QuitFailure)
+  if disc4.configure() != ServiceStatus.Success:
+    echo disc4.errorMessage()
+    quit(QuitFailure)
+  if disc4.start() != ServiceStatus.Success:
+    echo disc4.errorMessage()
+    quit(QuitFailure)
