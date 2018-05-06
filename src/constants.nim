@@ -1,6 +1,6 @@
 
 import
-  ttmath, math, strutils, tables, utils/padding, rlp, times
+  stint, math, strutils, tables, utils/padding, rlp, times
 
 # rlpFields UInt256, table
 
@@ -51,7 +51,7 @@ proc `^`*(base: int; exp: int): UInt256 =
   var ex = exp
   result = 1.u256
   while ex > 0:
-    result *= base
+    result = result * base
     dec(ex)
 
 proc `^`*(left: Int256, right: int): Int256 =
@@ -130,13 +130,13 @@ proc `abs`*(a: Int256): Int256 =
 # constants
 
 let
-  UINT_256_MAX*: UInt256 =        2 ^ 256 - 1.u256
-  UINT_256_CEILING*: UInt256 =    2 ^ 256
+  UINT_256_MAX*: UInt256 =        high(UInt256)
+  UINT_256_CEILING*: UInt256 =    2 ^ 256      # TODO, this won't work
   UINT_255_MAX*: UInt256 =        2 ^ (255 - 1) - 1.u256
-  UINT_255_CEILING*: UInt256 =    2 ^ 255
-  UINT_256_CEILING_INT*: Int256 = max[Int256]() #2.i256 ^ 256
+  UINT_255_CEILING*: UInt256 =    2 ^ 255      # TODO, this won't work
+  UINT_256_CEILING_INT*: Int256 = high(Int256)
   UINT_255_MAX_INT*: Int256 =     2.i256 ^ (255 - 1) - 1.i256
-  UINT_256_MAX_INT*: Int256 =     2.i256 ^ 256 - 1.i256
+  UINT_256_MAX_INT*: Int256 =     2.i256 ^ 256 - 1.i256 # TODO, this won't work
   UINT_255_CEILING_INT*: Int256 = 2.i256 ^ 255 - 1.i256
   NULLBYTE* =                     "\x00"
   EMPTYWORD* =                    repeat(NULLBYTE, 32)
