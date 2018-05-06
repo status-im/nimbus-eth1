@@ -7,7 +7,7 @@
 
 import
   strformat,
-  errors, constants, ttmath
+  errors, constants, stint
 
 proc validateCanonicalAddress*(value: string, title: string = "Value") =
   # TODO

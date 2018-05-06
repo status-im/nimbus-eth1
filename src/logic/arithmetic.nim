@@ -8,7 +8,7 @@
 import
   ../constants, ../utils_numeric, ../computation, ../types,
   .. / vm / [gas_meter, stack], ../opcode, ../opcode_values,
-  helpers, ttmath, strutils
+  helpers, stint, strutils
 
 proc add*(computation: var BaseComputation) =
   # Addition

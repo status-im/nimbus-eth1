@@ -8,7 +8,7 @@
 import
   strformat, tables,
   ../constants, ../errors, ../validation, ../account, ../logging, ../utils_numeric, .. / utils / [padding, bytes, keccak],
-  ttmath, rlp
+  stint, rlp
 
 type
   AccountStateDB* = ref object

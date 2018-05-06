@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  sequtils, ttmath,
+  sequtils, stint,
   ../constants, ../errors, ../logging, ../validation, ../utils_numeric, ../utils/bytes
 
 type

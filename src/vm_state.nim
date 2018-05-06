@@ -7,7 +7,7 @@
 
 import
   macros, strformat, tables,
-  ttmath,
+  stint,
   ./logging, ./constants, ./errors, ./transaction, ./db/[db_chain, state_db], ./utils/state, ./utils/header
 
 type

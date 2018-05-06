@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, ttmath,
+  strformat, stint,
   ../types, ../constants, ../opcode, ../computation, stack
 
 proc expGasCost*(computation: var BaseComputation): UInt256 =

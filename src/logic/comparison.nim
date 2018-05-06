@@ -7,7 +7,7 @@
 
 import
   ../constants, ../utils_numeric, ../computation, ../vm/stack, ../types,
-  helpers, ttmath
+  helpers, stint
 
 quasiBoolean(lt, `<`) # Lesser Comparison
 

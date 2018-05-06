@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, ttmath, tables, parseutils,
+  unittest, stint, tables, parseutils,
   ../src/[constants, types, errors, logging],
   ../src/[chain, vm_state, computation, opcode, opcode_table],
   ../src/[utils/header, utils/padding],

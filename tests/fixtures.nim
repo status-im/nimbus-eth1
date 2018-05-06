@@ -7,7 +7,7 @@
 
 import
   unittest, strformat, tables, times,
-  ttmath,
+  stint,
   ../src/[constants, chain, vm/base, vm/forks/frontier/vm, utils/header, utils/address, db/db_chain, db/backends/memory_backend]
 
 proc chainWithoutBlockValidation*: Chain =

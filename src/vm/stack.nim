@@ -7,7 +7,7 @@
 
 import
   strformat, strutils, sequtils, macros, rlp,
-  value, ../errors, ../validation, ../utils_numeric, ../constants, ttmath, ../logging, .. / utils / bytes
+  value, ../errors, ../validation, ../utils_numeric, ../constants, stint, ../logging, .. / utils / bytes
 
 type
 

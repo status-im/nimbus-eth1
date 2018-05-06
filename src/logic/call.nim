@@ -10,7 +10,7 @@ import
   ../constants, ../types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging,
   .. / vm / [stack, memory, gas_meter, message],
   .. / utils / [address, bytes],
-  ttmath
+  stint
 
 type
   BaseCall* = ref object of Opcode

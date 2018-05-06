@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import  unittest, macros, strformat, strutils, sequtils,
-        ttmath,
+        stint,
         ../src/[constants, opcode_values, errors, utils_numeric, vm/stack, vm/value, utils/bytes, utils/padding]
 
 

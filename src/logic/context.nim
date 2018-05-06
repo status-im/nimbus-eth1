@@ -8,7 +8,7 @@
 import
   strformat,
   ../constants, ../types, ../errors, ../utils_numeric, ../computation, ../vm_state, ../account, ../db/state_db, ../validation,
-  .. / vm / [stack, message, gas_meter, memory, code_stream], .. / utils / [address, padding, bytes], ttmath
+  .. / vm / [stack, message, gas_meter, memory, code_stream], .. / utils / [address, padding, bytes], stint
 
 proc balance*(computation: var BaseComputation) =
   let address = forceBytesToAddress(computation.stack.popString)

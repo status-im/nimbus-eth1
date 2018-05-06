@@ -9,7 +9,7 @@ import
   ../constants, ../types, ../errors, ../computation, ../vm_state,
   ../utils/header,
   ../db/[db_chain, state_db], ../vm/[stack, gas_meter, message],
-  strformat, ttmath
+  strformat, stint
 
 {.this: computation.}
 {.experimental.}
