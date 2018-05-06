@@ -68,7 +68,7 @@ proc setStorage*(db: var AccountStateDB, address: string, slot: UInt256, value: 
   var storage = db.db
   # TODO fix
   if value > 0:
-    let encodedValue = rlp.encode value.toByteArrayBE
+    let encodedValue = rlp.encode value.intToBigEndian
     storage[slotAsKey] = encodedValue.decode(Bytes)
   else:
     storage.del(slotAsKey)
