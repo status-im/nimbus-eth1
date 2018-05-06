@@ -102,7 +102,7 @@ proc signextend*(computation: var BaseComputation) =
 
   var res: UInt256
   if bits <= 31.u256:
-    var testBit = bits.getUInt.int * 8 + 7
+    var testBit = bits.toInt * 8 + 7
     var signBit = (1 shl testBit)
     res = if value != 0 and signBit != 0: value or (UINT_256_CEILING - signBit.u256) else: value and (signBit.u256 - 1.u256)
   else:

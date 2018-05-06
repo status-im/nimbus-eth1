@@ -70,7 +70,7 @@ method getAncestorHash*(vmState: BaseVMState, blockNumber: UInt256): string =
      ancestorDepth < 0 or
      ancestorDepth >= vmState.prevHeaders.len.u256:
     return ""
-  var header = vmState.prevHeaders[ancestorDepth.getUInt.int]
+  var header = vmState.prevHeaders[ancestorDepth.toInt]
   result = header.hash
 
 macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
