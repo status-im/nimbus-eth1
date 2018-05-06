@@ -124,9 +124,6 @@ mapOp(`and`)
 mapOp(`or`)
 mapOp(`xor`)
 
-proc `abs`*(a: Int256): Int256 =
-  if a >= 0.i256: a else: -a
-
 # constants
 
 let
