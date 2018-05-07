@@ -7,7 +7,7 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  ttmath,
+  stint,
   ../src/utils/[hexadecimal, address, padding],
   ../src/[chain, vm_state, constants],
   ../src/db/[db_chain, state_db], ../src/vm/forks/frontier/vm,

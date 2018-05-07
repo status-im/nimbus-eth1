@@ -8,7 +8,7 @@
 import
   tables,
   constants, vm_state,
-  opcode_values, ttmath,
+  opcode_values, stint,
   vm / [code_stream, gas_meter, memory, message, stack]
 
 type

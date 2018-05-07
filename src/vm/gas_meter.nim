@@ -7,7 +7,7 @@
 
 import
   strformat,
-  ../logging, ../errors, ../constants, ttmath
+  ../logging, ../errors, ../constants, stint
 
 type
   GasMeter* = ref object

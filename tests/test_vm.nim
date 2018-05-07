@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, ttmath,
+  unittest, stint,
   ./test_helpers, ./fixtures,
   ../src/[db/backends/memory_backend, db/state_db, chain, constants, utils/hexadecimal, vm_state],
   ../src/[vm/base, computation]

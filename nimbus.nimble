@@ -10,11 +10,11 @@ skipDirs      = @["tests"]
 requires "nim >= 0.18.1",
          "https://github.com/cheatfate/nimcrypto",
          "https://github.com/status-im/nim-rlp",
-         "https://github.com/status-im/nim-ttmath",
+         "https://github.com/status-im/nim-stint",
          "https://github.com/status-im/nim-eth-p2p",
          "https://github.com/status-im/nim-eth-keyfile"
 
-proc test(name: string, lang = "cpp") =
+proc test(name: string, lang = "c") =
   if not dirExists "build":
     mkDir "build"
   if not dirExists "nimcache":

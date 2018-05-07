@@ -7,7 +7,7 @@
 
 import
   times,
-  ../constants, ../errors, ../computation, ../vm_state, ../types, .. / vm / [stack], ttmath
+  ../constants, ../errors, ../computation, ../vm_state, ../types, .. / vm / [stack], stint
 
 {.this: computation.}
 {.experimental.}

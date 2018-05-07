@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, ttmath,
+  strformat, stint,
   ../constants, ../types, ../opcode_values, ../logging, ../errors, ../computation, .. /vm / [code_stream, stack]
 
 
@@ -21,8 +21,7 @@ proc stop*(computation) =
 
 
 proc jump*(computation) =
-  let jumpDest = stack.popInt.getUInt.int
-
+  let jumpDest = stack.popInt.toInt
   code.pc = jumpDest
 
   let nextOpcode = code.peek()
@@ -37,14 +36,14 @@ proc jumpi*(computation) =
   let (jumpDest, checkValue) = stack.popInt(2)
 
   if checkValue > 0:
-    code.pc = jumpDest.getUInt.int
+    code.pc = jumpDest.toInt
 
     let nextOpcode = code.peek()
 
     if nextOpcode != JUMPDEST:
       raise newException(InvalidJumpDestination, "Invalid Jump Destination")
 
-    if not code.isValidOpcode(jumpDest.getUInt.int):
+    if not code.isValidOpcode(jumpDest.toInt):
       raise newException(InvalidInstruction, "Jump resulted in invalid instruction")
 
 proc jumpdest*(computation) =

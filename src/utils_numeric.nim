@@ -5,33 +5,36 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ttmath, constants, strformat, strutils, sequtils, endians, macros, utils / padding, rlp
+import stint, constants, strformat, strutils, sequtils, endians, macros, utils / padding, rlp
 
 # some methods based on py-evm utils/numeric
 
 # TODO improve
 
 proc intToBigEndian*(value: UInt256): Bytes =
-  result = repeat(0.byte, 32)
-  for z in 0 ..< 4:
-    var temp = value.table[z]
-    bigEndian64(result[24 - z * 8].addr, temp.addr)
+  result = newSeq[byte](32)
+  let v_ptr = cast[ptr array[32, byte]](value.unsafeAddr)
+
+  for idx, val in result.mpairs:
+    when system.cpuEndian == littleEndian:
+      val = v_ptr[32 - 1 - idx]
+    else:
+      val = v_ptr[idx]
 
 proc bigEndianToInt*(value: Bytes): UInt256 =
   var bytes = value.padLeft(32, 0.byte)
-  result = 0.u256
-  for z in 0 ..< 4:
-    var temp = 0.uint
-    bigEndian64(temp.addr, bytes[24 - z * 8].addr)
-    result.table[z] = temp
+  let v_ptr = cast[ptr array[32, byte]](result.addr)
+
+  for idx, val in bytes:
+    when system.cpuEndian == littleEndian:
+      v_ptr[32 - 1 - idx] = val
+    else:
+      v_ptr[idx] = val
 
 #echo intToBigEndian("32482610168005790164680892356840817100452003984372336767666156211029086934369".u256)
 
 proc bitLength*(value: UInt256): int =
-  var b = ""
-  for z in 0 ..< 4:
-    b.add(value.table[3 - z].int64.toBin(64))
-  result = b.strip(chars={'0'}, trailing=false).len
+  255 - value.countLeadingZeroBits
 
 #proc log256*(value: UInt256): UInt256 =
 #  log2(value) div 8

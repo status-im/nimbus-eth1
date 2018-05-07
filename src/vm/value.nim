@@ -7,7 +7,7 @@
 
 import
   strformat, strutils, sequtils,
-  ../constants, ttmath
+  ../constants, stint
 
 type
   ValueKind* = enum VInt, VBinary
@@ -21,7 +21,7 @@ type
 
 # TODO: The Int256 value is stored as array[32, byte], and we bitcast it
 # back and forth. This is a hacky workaround for the problem that clang
-# doesn't let you store ttmath types inside nim variant types (unions). Things
+# doesn't let you store stint types inside nim variant types (unions). Things
 # should get better when we switch to mpint.
 
 proc i*(v: Value): Int256 {.inline.} =

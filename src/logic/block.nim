@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../computation, ../vm/stack, ../vm_state, ttmath
+  ../constants, ../computation, ../vm/stack, ../vm_state, stint
 
 proc blockhash*(computation: var BaseComputation) =
   var blockNumber = computation.stack.popInt()

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-    ../logging, ../constants, ../validation, ttmath
+    ../logging, ../constants, ../validation, stint
 
 type
   Message* = ref object

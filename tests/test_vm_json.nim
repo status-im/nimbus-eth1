@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, strformat, strutils, sequtils, tables, ttmath, json,
+  unittest, strformat, strutils, sequtils, tables, stint, json,
   test_helpers, constants, errors, logging, ospaths,
   chain, vm_state, computation, opcode, types, opcode_table, utils / [header, padding], vm / [gas_meter, message, code_stream, stack], vm / forks / frontier / vm, db / [db_chain, state_db], db / backends / memory_backend
 

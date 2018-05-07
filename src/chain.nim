@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables, ttmath,
+  tables, stint,
   ./logging, ./constants, ./errors, ./validation, ./utils/hexadecimal, ./vm/base, ./db/db_chain,
   ./utils/header, ./vm/forks/frontier/vm
 

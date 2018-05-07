@@ -7,7 +7,7 @@
 
 import
   ../constants, ../utils_numeric, ../computation, ../vm/stack, ../types,
-  helpers, ttmath
+  helpers, stint
 
 quasiBoolean(lt, `<`) # Lesser Comparison
 
@@ -25,6 +25,7 @@ quasiBoolean(orOp, `or`, nonzero=true) # Bitwise Or
 
 quasiBoolean(xorOp, `xor`, nonzero=true) # Bitwise XOr
 
+# TODO use isZero from Stint
 proc iszero*(computation: var BaseComputation) =
   var value = computation.stack.popInt()
 
@@ -37,10 +38,14 @@ proc notOp*(computation: var BaseComputation) =
   var res = constants.UINT_256_MAX - value
   pushRes()
 
+# TODO: seems like there is an implementation or a comment issue
+#       this is not a bitwise "and" or the "byte" instruction
 proc byteOp*(computation: var BaseComputation) =
   # Bitwise And
-  var (position, value) = computation.stack.popInt(2)
 
-  var res = if position >= 32.u256: 0.u256 else: (value div (256.u256.pow(31'u64 - position.getUInt))) mod 256
-  pushRes()
+  quit("byteOp is not Implemented as it requires pow https://github.com/status-im/nim-stint/issues/37")
+  # var (position, value) = computation.stack.popInt(2)
+
+  # var res = if position >= 32.u256: 0.u256 else: (value div (256.u256.pow(31'u64 - position.toInt.uint64))) mod 256
+  # pushRes()
 

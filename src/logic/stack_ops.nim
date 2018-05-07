@@ -7,7 +7,7 @@
 
 import
   strformat, macros, sequtils,
-  ../types, ../constants, ../errors, ../computation, .. / vm / [stack, code_stream], .. / utils / [padding, bytes], ttmath
+  ../types, ../constants, ../errors, ../computation, .. / vm / [stack, code_stream], .. / utils / [padding, bytes], stint
 
 {.this: computation.}
 {.experimental.}

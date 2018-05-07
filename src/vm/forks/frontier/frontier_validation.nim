@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, ttmath,
+  strformat, stint,
   ../../../constants, ../../../errors, ../../../vm_state, ../../../transaction, ../../../utils/header
 
 proc validateFrontierTransaction*(vmState: BaseVmState, transaction: BaseTransaction) =

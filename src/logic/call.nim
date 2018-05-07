@@ -10,7 +10,7 @@ import
   ../constants, ../types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging,
   .. / vm / [stack, memory, gas_meter, message],
   .. / utils / [address, bytes],
-  ttmath
+  stint
 
 type
   BaseCall* = ref object of Opcode
@@ -118,7 +118,7 @@ method runLogic*(call: BaseCall, computation) =
       computation.memory.write(
         memoryOutputStartPosition,
         actualOutputSize,
-        childComputation.output.toBytes[0 ..< actualOutputSize.getUInt.int])
+        childComputation.output.toBytes[0 ..< actualOutputSize.toInt])
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
