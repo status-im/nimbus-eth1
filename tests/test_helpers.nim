@@ -50,8 +50,8 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
           status[folder][name] = Status.OK
         z += 1
 
-    status.sort do (a: (string, OrderedTable[string, Status]), b: (string, OrderedTable[string, Status])) -> int:
-     cmp(a[0], b[0])
+    status.sort do (a: (string, OrderedTable[string, Status]),
+                    b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
 
     let symbol: array[Status, string] = ["+", "-", " "]
     var raw = ""

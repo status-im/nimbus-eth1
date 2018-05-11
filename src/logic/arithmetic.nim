@@ -85,7 +85,7 @@ proc sdiv*(computation: var BaseComputation) =
 # no curry
 proc exp*(computation: var BaseComputation) =
 
-  quit("Exp is not implemented at the moment. Pending https://github.com/status-im/nim-stint/issues/37")
+  raise newException(ValueError, "Exp is not implemented at the moment. Pending https://github.com/status-im/nim-stint/issues/37")
 
   # # Exponentiation
   # let (base, exponent) = computation.stack.popInt(2)
