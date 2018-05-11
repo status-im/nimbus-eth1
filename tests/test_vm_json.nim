@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, strformat, strutils, sequtils, tables, stint, json, ospaths,
+  unittest, strformat, strutils, sequtils, tables, stint, json, ospaths, times,
   ./test_helpers,
   ../src/[constants, errors, logging],
   ../src/[chain, vm_state, computation, opcode, types, opcode_table],
@@ -29,8 +29,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     coinbase: fixture{"env"}{"currentCoinbase"}.getStr,
     difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
     blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
-    gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
-    timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt)
+    # gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
+    timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix)
 
   var code = ""
   vm.state.db(readOnly=false):
