@@ -32,15 +32,15 @@ VMTests
 + divByNonZero3.json                                              OK
 + divByZero.json                                                  OK
 + divByZero_2.json                                                OK
-- exp0.json                                                       Fail
-- exp1.json                                                       Fail
-- exp2.json                                                       Fail
-- exp3.json                                                       Fail
++ exp0.json                                                       OK
++ exp1.json                                                       OK
++ exp2.json                                                       OK
++ exp3.json                                                       OK
 - exp4.json                                                       Fail
 - exp5.json                                                       Fail
 - exp6.json                                                       Fail
 - exp7.json                                                       Fail
-- expPowerOf256Of256_0.json                                       Fail
++ expPowerOf256Of256_0.json                                       OK
 - expPowerOf256Of256_1.json                                       Fail
 - expPowerOf256Of256_10.json                                      Fail
 - expPowerOf256Of256_11.json                                      Fail
@@ -75,46 +75,46 @@ VMTests
 - expPowerOf256Of256_8.json                                       Fail
 - expPowerOf256Of256_9.json                                       Fail
 - expPowerOf256_1.json                                            Fail
-- expPowerOf256_10.json                                           Fail
-- expPowerOf256_11.json                                           Fail
-- expPowerOf256_12.json                                           Fail
-- expPowerOf256_13.json                                           Fail
-- expPowerOf256_14.json                                           Fail
-- expPowerOf256_15.json                                           Fail
-- expPowerOf256_16.json                                           Fail
-- expPowerOf256_17.json                                           Fail
-- expPowerOf256_18.json                                           Fail
-- expPowerOf256_19.json                                           Fail
-- expPowerOf256_2.json                                            Fail
-- expPowerOf256_20.json                                           Fail
-- expPowerOf256_21.json                                           Fail
-- expPowerOf256_22.json                                           Fail
-- expPowerOf256_23.json                                           Fail
-- expPowerOf256_24.json                                           Fail
-- expPowerOf256_25.json                                           Fail
-- expPowerOf256_26.json                                           Fail
-- expPowerOf256_27.json                                           Fail
-- expPowerOf256_28.json                                           Fail
-- expPowerOf256_29.json                                           Fail
-- expPowerOf256_3.json                                            Fail
-- expPowerOf256_30.json                                           Fail
-- expPowerOf256_31.json                                           Fail
-- expPowerOf256_32.json                                           Fail
-- expPowerOf256_33.json                                           Fail
-- expPowerOf256_4.json                                            Fail
-- expPowerOf256_5.json                                            Fail
-- expPowerOf256_6.json                                            Fail
-- expPowerOf256_7.json                                            Fail
-- expPowerOf256_8.json                                            Fail
-- expPowerOf256_9.json                                            Fail
-- expPowerOf2_128.json                                            Fail
-- expPowerOf2_16.json                                             Fail
++ expPowerOf256_10.json                                           OK
++ expPowerOf256_11.json                                           OK
++ expPowerOf256_12.json                                           OK
++ expPowerOf256_13.json                                           OK
++ expPowerOf256_14.json                                           OK
++ expPowerOf256_15.json                                           OK
++ expPowerOf256_16.json                                           OK
++ expPowerOf256_17.json                                           OK
++ expPowerOf256_18.json                                           OK
++ expPowerOf256_19.json                                           OK
++ expPowerOf256_2.json                                            OK
++ expPowerOf256_20.json                                           OK
++ expPowerOf256_21.json                                           OK
++ expPowerOf256_22.json                                           OK
++ expPowerOf256_23.json                                           OK
++ expPowerOf256_24.json                                           OK
++ expPowerOf256_25.json                                           OK
++ expPowerOf256_26.json                                           OK
++ expPowerOf256_27.json                                           OK
++ expPowerOf256_28.json                                           OK
++ expPowerOf256_29.json                                           OK
++ expPowerOf256_3.json                                            OK
++ expPowerOf256_30.json                                           OK
++ expPowerOf256_31.json                                           OK
++ expPowerOf256_32.json                                           OK
++ expPowerOf256_33.json                                           OK
++ expPowerOf256_4.json                                            OK
++ expPowerOf256_5.json                                            OK
++ expPowerOf256_6.json                                            OK
++ expPowerOf256_7.json                                            OK
++ expPowerOf256_8.json                                            OK
++ expPowerOf256_9.json                                            OK
++ expPowerOf2_128.json                                            OK
++ expPowerOf2_16.json                                             OK
 - expPowerOf2_2.json                                              Fail
 - expPowerOf2_256.json                                            Fail
-- expPowerOf2_32.json                                             Fail
-- expPowerOf2_4.json                                              Fail
-- expPowerOf2_64.json                                             Fail
-- expPowerOf2_8.json                                              Fail
++ expPowerOf2_32.json                                             OK
++ expPowerOf2_4.json                                              OK
++ expPowerOf2_64.json                                             OK
++ expPowerOf2_8.json                                              OK
 - expXY.json                                                      Fail
 - expXY_success.json                                              Fail
 + fibbonacci_unrolled.json                                        OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 104/195 Fail: 90/195 Skip: 1/195
+OK: 147/195 Fail: 47/195 Skip: 1/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -207,18 +207,18 @@ OK: 104/195 Fail: 90/195 Skip: 1/195
 + and3.json                                                       OK
 + and4.json                                                       OK
 + and5.json                                                       OK
-- byte0.json                                                      Fail
-- byte1.json                                                      Fail
-- byte10.json                                                     Fail
-- byte11.json                                                     Fail
-- byte2.json                                                      Fail
-- byte3.json                                                      Fail
-- byte4.json                                                      Fail
-- byte5.json                                                      Fail
-- byte6.json                                                      Fail
-- byte7.json                                                      Fail
-- byte8.json                                                      Fail
-- byte9.json                                                      Fail
++ byte0.json                                                      OK
++ byte1.json                                                      OK
++ byte10.json                                                     OK
++ byte11.json                                                     OK
++ byte2.json                                                      OK
++ byte3.json                                                      OK
++ byte4.json                                                      OK
++ byte5.json                                                      OK
++ byte6.json                                                      OK
++ byte7.json                                                      OK
++ byte8.json                                                      OK
++ byte9.json                                                      OK
 + eq0.json                                                        OK
 + eq1.json                                                        OK
 + eq2.json                                                        OK
@@ -262,7 +262,7 @@ OK: 104/195 Fail: 90/195 Skip: 1/195
 + xor4.json                                                       OK
 + xor5.json                                                       OK
 ```
-OK: 48/60 Fail: 12/60 Skip: 0/60
+OK: 60/60 Fail: 0/60 Skip: 0/60
 ## vmBlockInfoTest
 ```diff
 - blockhash257Block.json                                          Fail
