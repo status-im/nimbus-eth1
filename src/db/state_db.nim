@@ -12,11 +12,11 @@ import
 
 type
   AccountStateDB* = ref object
-    db*: Table[string, Bytes]
+    db*: Table[string, BytesRange]
     rootHash*: string # TODO trie
 
 proc newAccountStateDB*(db: Table[string, string], readOnly: bool = false): AccountStateDB =
-  result = AccountStateDB(db: initTable[string, Bytes]())
+  result = AccountStateDB(db: initTable[string, BytesRange]())
 
 proc logger*(db: AccountStateDB): Logger =
   logging.getLogger("db.State")
@@ -69,7 +69,7 @@ proc setStorage*(db: var AccountStateDB, address: string, slot: UInt256, value: 
   # TODO fix
   if value > 0:
     let encodedValue = rlp.encode value.intToBigEndian
-    storage[slotAsKey] = encodedValue.decode(Bytes)
+    storage[slotAsKey] = encodedValue
   else:
     storage.del(slotAsKey)
   #storage[slotAsKey] = value
@@ -91,7 +91,9 @@ proc getStorage*(db: var AccountStateDB, address: string, slot: UInt256): (UInt2
   var storage = db.db
   if storage.hasKey(slotAsKey):
     #result = storage[slotAsKey]
-    result = (storage[slotAsKey].bigEndianToInt, true)
+    # XXX: `bigEndianToInt` can be refactored to work with a BytesRange/openarray
+    # Then we won't need to call `toSeq` here.
+    result = (storage[slotAsKey].toSeq.bigEndianToInt, true)
   else:
     result = (0.u256, false)
 
