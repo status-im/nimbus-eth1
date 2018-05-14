@@ -85,19 +85,17 @@ proc sdiv*(computation: var BaseComputation) =
 # no curry
 proc exp*(computation: var BaseComputation) =
 
-  raise newException(ValueError, "Exp is not implemented at the moment. Pending https://github.com/status-im/nim-stint/issues/37")
+  # Exponentiation
+  let (base, exponent) = computation.stack.popInt(2)
 
-  # # Exponentiation
-  # let (base, exponent) = computation.stack.popInt(2)
-
-  # var gasCost = GAS_EXP_BYTE.u256
-  # #if exponent != 0:
-  # #  gasCost += GAS_EXP_BYTE * (1 + log256(exponent))
-  # gasCost += (ceil8(exponent.bitLength()) div 8).u256 * GAS_EXP_BYTE # TODO
-  # computation.gasMeter.consumeGas(gasCost, reason="EXP: exponent bytes")
-  # #echo "exp", base, " ", exponent, " ", res
-  # var res = if base == 0: 0.u256 else: base.pow(exponent)
-  # pushRes()
+  var gasCost = GAS_EXP_BYTE.u256
+  #if exponent != 0:
+  #  gasCost += GAS_EXP_BYTE * (1 + log256(exponent))
+  gasCost += (ceil8(exponent.bitLength()) div 8).u256 * GAS_EXP_BYTE # TODO
+  computation.gasMeter.consumeGas(gasCost, reason="EXP: exponent bytes")
+  #echo "exp", base, " ", exponent, " ", res
+  var res = if base == 0: 0.u256 else: base.pow(exponent)
+  pushRes()
 
 proc signextend*(computation: var BaseComputation) =
   # Signed Extend
