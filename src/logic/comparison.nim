@@ -43,8 +43,7 @@ proc notOp*(computation: var BaseComputation) =
 proc byteOp*(computation: var BaseComputation) =
   # Bitwise And
 
-  raise newException(ValueError, "byteOp is not Implemented as it requires pow https://github.com/status-im/nim-stint/issues/37")
-  # var (position, value) = computation.stack.popInt(2)
+  var (position, value) = computation.stack.popInt(2)
 
-  # var res = if position >= 32.u256: 0.u256 else: (value div (256.u256.pow(31'u64 - position.toInt.uint64))) mod 256
-  # pushRes()
+  var res = if position >= 32.u256: 0.u256 else: (value div (256.u256.pow(31'u64 - position.toInt.uint64))) mod 256
+  pushRes()
