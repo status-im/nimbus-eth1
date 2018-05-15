@@ -33,18 +33,18 @@ proc bigEndianToInt*(value: Bytes): UInt256 =
 
 #echo intToBigEndian("32482610168005790164680892356840817100452003984372336767666156211029086934369".u256)
 
-proc bitLength*(value: UInt256): int =
-  255 - value.countLeadingZeroBits
+# proc bitLength*(value: UInt256): int =
+#   255 - value.countLeadingZeroBits
 
-#proc log256*(value: UInt256): UInt256 =
-#  log2(value) div 8
+proc log256*(value: UInt256): UInt256 =
+  ((255 - value.countLeadingZeroBits) div 8).u256
 
-proc ceil8*(value: int): int =
-  let remainder = value mod 8
-  if remainder == 0:
-    value
-  else:
-    value + 8 - remainder
+# proc ceil8*(value: int): int =
+#   let remainder = value mod 8
+#   if remainder == 0:
+#     value
+#   else:
+#     value + 8 - remainder
 
 proc unsignedToSigned*(value: UInt256): Int256 =
   0.i256

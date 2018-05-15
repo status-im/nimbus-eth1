@@ -89,11 +89,10 @@ proc exp*(computation: var BaseComputation) =
   let (base, exponent) = computation.stack.popInt(2)
 
   var gasCost = GAS_EXP_BYTE.u256
-  #if exponent != 0:
-  #  gasCost += GAS_EXP_BYTE * (1 + log256(exponent))
-  gasCost += (ceil8(exponent.bitLength()) div 8).u256 * GAS_EXP_BYTE # TODO
+  if not exponent.isZero:
+    gasCost += GAS_EXP_BYTE * (one(Uint256) + log256(exponent))
   computation.gasMeter.consumeGas(gasCost, reason="EXP: exponent bytes")
-  #echo "exp", base, " ", exponent, " ", res
+
   var res = if base == 0: 0.u256 else: base.pow(exponent)
   pushRes()
 
