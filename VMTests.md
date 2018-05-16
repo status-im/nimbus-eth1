@@ -135,7 +135,7 @@ VMTests
 - mulUnderFlow.json                                               Fail
 + mulmod0.json                                                    OK
 + mulmod1.json                                                    OK
-- mulmod1_overflow.json                                           Fail
++ mulmod1_overflow.json                                           OK
 + mulmod1_overflow2.json                                          OK
 + mulmod1_overflow3.json                                          OK
 + mulmod1_overflow4.json                                          OK
@@ -155,7 +155,7 @@ VMTests
 + sdiv2.json                                                      OK
 + sdiv3.json                                                      OK
 + sdiv4.json                                                      OK
-+ sdiv5.json                                                      OK
+- sdiv5.json                                                      Fail
 + sdiv6.json                                                      OK
 + sdiv7.json                                                      OK
 + sdiv8.json                                                      OK
@@ -165,7 +165,7 @@ VMTests
 + sdivByZero2.json                                                OK
 - sdiv_dejavu.json                                                Fail
 + sdiv_i256min.json                                               OK
-+ sdiv_i256min2.json                                              OK
+- sdiv_i256min2.json                                              Fail
 + sdiv_i256min3.json                                              OK
 + signextendInvalidByteNumber.json                                OK
 + signextend_00.json                                              OK
@@ -185,12 +185,12 @@ VMTests
 + smod2.json                                                      OK
 + smod3.json                                                      OK
 + smod4.json                                                      OK
-+ smod5.json                                                      OK
+- smod5.json                                                      Fail
 + smod6.json                                                      OK
-+ smod7.json                                                      OK
+- smod7.json                                                      Fail
 + smod8_byZero.json                                               OK
-+ smod_i256min1.json                                              OK
-+ smod_i256min2.json                                              OK
+- smod_i256min1.json                                              Fail
+- smod_i256min2.json                                              Fail
 + stop.json                                                       OK
 + sub0.json                                                       OK
 + sub1.json                                                       OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 187/195 Fail: 7/195 Skip: 1/195
+OK: 182/195 Fail: 12/195 Skip: 1/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
