@@ -97,14 +97,6 @@ proc `mod`*(a: UInt256, b: int): UInt256 =
 proc `div`*(a: UInt256, b: int): UInt256 =
   a div b.u256
 
-proc log256*(a: Int256): Int256 =
-  # TODO
-  2.i256
-
-proc log256*(a: UInt256): UInt256 =
-  # TODO
-  2.u256
-
 proc setXLen[T](s: var seq[T]; newlen: Natural) =
   if s.isNil:
     s = newSeq[T](newlen)
