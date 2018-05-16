@@ -155,7 +155,7 @@ VMTests
 + sdiv2.json                                                      OK
 + sdiv3.json                                                      OK
 + sdiv4.json                                                      OK
-- sdiv5.json                                                      Fail
++ sdiv5.json                                                      OK
 + sdiv6.json                                                      OK
 + sdiv7.json                                                      OK
 + sdiv8.json                                                      OK
@@ -165,7 +165,7 @@ VMTests
 + sdivByZero2.json                                                OK
 - sdiv_dejavu.json                                                Fail
 + sdiv_i256min.json                                               OK
-- sdiv_i256min2.json                                              Fail
++ sdiv_i256min2.json                                              OK
 + sdiv_i256min3.json                                              OK
 + signextendInvalidByteNumber.json                                OK
 + signextend_00.json                                              OK
@@ -189,8 +189,8 @@ VMTests
 + smod6.json                                                      OK
 - smod7.json                                                      Fail
 + smod8_byZero.json                                               OK
-- smod_i256min1.json                                              Fail
-- smod_i256min2.json                                              Fail
++ smod_i256min1.json                                              OK
++ smod_i256min2.json                                              OK
 + stop.json                                                       OK
 + sub0.json                                                       OK
 + sub1.json                                                       OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 182/195 Fail: 12/195 Skip: 1/195
+OK: 186/195 Fail: 8/195 Skip: 1/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK

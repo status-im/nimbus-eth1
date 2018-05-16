@@ -46,7 +46,9 @@ proc smod*(computation: var BaseComputation) =
   let (value, modulus) = computation.stack.popInt(2)
 
   let res = if modulus.isZero: zero(Uint256)
-            else: cast[UInt256](cast[Int256](value) mod cast[Int256](modulo))
+            else: pseudoSignedToUnsigned(
+              unsignedToPseudoSigned(value) mod unsignedToPseudoSigned(modulus)
+              )
   pushRes()
 
 proc mul*(computation: var BaseComputation) =
@@ -74,10 +76,12 @@ proc divide*(computation: var BaseComputation) =
 
 proc sdiv*(computation: var BaseComputation) =
   # Signed Division
-  let (value, modulus) = computation.stack.popInt(2)
+  let (value, divisor) = computation.stack.popInt(2)
 
-  let res = if modulus.isZero: zero(Uint256)
-            else: cast[UInt256](cast[Int256](value) div cast[Int256](modulo))
+  let res = if divisor.isZero: zero(Uint256)
+            else: pseudoSignedToUnsigned(
+              unsignedToPseudoSigned(value) div unsignedToPseudoSigned(divisor)
+              )
   pushRes()
 
 # no curry

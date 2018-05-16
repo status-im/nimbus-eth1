@@ -48,19 +48,21 @@ proc log256*(value: UInt256): UInt256 =
 
 proc unsignedToSigned*(value: UInt256): Int256 =
   0.i256
-  # TODO
-  # if value <= UINT_255_MAX_INT:
-  #   return value
-  # else:
-  #   return value - UINT_256_CEILING_INT
+  # TODO Remove stub (used in quasiBoolean for signed comparison)
 
 proc signedToUnsigned*(value: Int256): UInt256 =
   0.u256
-  # TODO
-  # if value < 0:
-  #   return value + UINT_256_CEILING_INT
-  # else:
-  #   return value
+  # TODO Remove stub (used in quasiBoolean for signed comparison)
+
+proc unsignedToPseudoSigned*(value: UInt256): UInt256 =
+  result = value
+  if value > INT_256_MAX_AS_UINT256:
+    result -= INT_256_MAX_AS_UINT256
+
+proc pseudoSignedToUnsigned*(value: UInt256): UInt256 =
+  result = value
+  if value > INT_256_MAX_AS_UINT256:
+    result += INT_256_MAX_AS_UINT256
 
 # it's deasible to map nameXX methods like that (originally decorator)
 macro ceilXX(ceiling: static[int]): untyped =

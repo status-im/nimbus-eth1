@@ -120,13 +120,7 @@ mapOp(`xor`)
 
 let
   UINT_256_MAX*: UInt256 =        high(UInt256)
-  UINT_256_CEILING*: UInt256 =    2 ^ 256      # TODO, this won't work
-  UINT_255_MAX*: UInt256 =        2 ^ (255 - 1) - 1.u256
-  UINT_255_CEILING*: UInt256 =    2 ^ 255      # TODO, this won't work
-  UINT_256_CEILING_INT*: Int256 = high(Int256)
-  UINT_255_MAX_INT*: Int256 =     2.i256 ^ (255 - 1) - 1.i256
-  UINT_256_MAX_INT*: Int256 =     2.i256 ^ 256 - 1.i256 # TODO, this won't work
-  UINT_255_CEILING_INT*: Int256 = 2.i256 ^ 255 - 1.i256
+  INT_256_MAX_AS_UINT256* =       cast[Uint256](high(Int256))
   NULLBYTE* =                     "\x00"
   EMPTYWORD* =                    repeat(NULLBYTE, 32)
   UINT160CEILING*: UInt256 =      2 ^ 160
