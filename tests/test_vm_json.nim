@@ -63,6 +63,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   if not fixture{"post"}.isNil:
     # Success checks
     check(not computation.isError)
+    if computation.isError:
+      echo "Computation error: ", computation.error.info
 
     let logEntries = computation.getLogEntries()
     if not fixture{"logs"}.isNil:

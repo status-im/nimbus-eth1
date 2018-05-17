@@ -12,74 +12,76 @@ import
 
 proc add*(computation: var BaseComputation) =
   # Addition
-  var (left, right) = computation.stack.popInt(2)
+  let (left, right) = computation.stack.popInt(2)
 
-  var res = (left + right) and UINT_256_MAX
+  let res = left + right
   pushRes()
 
 proc addmod*(computation: var BaseComputation) =
   # Modulo Addition
-  var (left, right, arg) = computation.stack.popInt(3)
+  let (left, right, modulus) = computation.stack.popInt(3)
 
-  var res = if arg == 0: 0.u256 else: (left + right) mod arg
+  let res = if modulus.isZero: zero(Uint256) # EVM special casing of div by 0
+            else: addmod(left, right, modulus)
   pushRes()
 
 proc sub*(computation: var BaseComputation) =
   # Subtraction
-  var (left, right) = computation.stack.popInt(2)
+  let (left, right) = computation.stack.popInt(2)
 
-  var res = (left - right) and UINT_256_MAX
+  let res = left - right
   pushRes()
 
 
 proc modulo*(computation: var BaseComputation) =
   # Modulo
-  var (value, arg) = computation.stack.popInt(2)
+  let (value, modulus) = computation.stack.popInt(2)
 
-  var res = if arg == 0: 0.u256 else: value mod arg
+  let res = if modulus.isZero: zero(Uint256) # EVM special casing of div by 0
+            else: value mod modulus
   pushRes()
 
 proc smod*(computation: var BaseComputation) =
   # Signed Modulo
-  var (value, arg) = computation.stack.popInt(2)
-  let signedValue = unsignedToSigned(value)
-  let signedArg = unsignedToSigned(arg)
+  let (value, modulus) = computation.stack.popInt(2)
 
-  var posOrNeg = if signedValue < 0: -1.i256 else: 1.i256
-  var signedRes = if signedArg == 0: 0.i256 else: ((signedValue.abs mod signedArg.abs) * posOrNeg) and UINT_256_MAX_INT
-  var res = signedToUnsigned(signedRes)
+  let res = if modulus.isZero: zero(Uint256)
+            else: pseudoSignedToUnsigned(
+              unsignedToPseudoSigned(value) mod unsignedToPseudoSigned(modulus)
+              )
   pushRes()
 
 proc mul*(computation: var BaseComputation) =
   # Multiplication
-  var (left, right) = computation.stack.popInt(2)
+  let (left, right) = computation.stack.popInt(2)
 
-  var res = (left * right) and UINT_256_MAX
+  let res = left * right
   pushRes()
 
 proc mulmod*(computation: var BaseComputation) =
   #  Modulo Multiplication
-  var (left, right, arg) = computation.stack.popInt(3)
+  let (left, right, modulus) = computation.stack.popInt(3)
 
-  var res = if arg == 0: 0.u256 else: (left * right) mod arg
+  let res = if modulus.isZero: zero(Uint256)
+            else: mulmod(left, right, modulus)
   pushRes()
 
 proc divide*(computation: var BaseComputation) =
   # Division
-  var (numerator, denominator) = computation.stack.popInt(2)
+  let (numerator, denominator) = computation.stack.popInt(2)
 
-  var res = if denominator == 0: 0.u256 else: (numerator div denominator) and UINT_256_MAX
+  let res = if denominator.isZero: zero(Uint256)
+            else: numerator div denominator
   pushRes()
 
 proc sdiv*(computation: var BaseComputation) =
   # Signed Division
-  var (numerator, denominator) = computation.stack.popInt(2)
-  let signedNumerator = unsignedToSigned(numerator)
-  let signedDenominator = unsignedToSigned(denominator)
+  let (value, divisor) = computation.stack.popInt(2)
 
-  var posOrNeg = if signedNumerator * signedDenominator < 0: -1.i256 else: 1.i256
-  var signedRes = if signedDenominator == 0: 0.i256 else: (posOrNeg * (signedNumerator.abs div signedDenominator.abs))
-  var res = signedToUnsigned(signedRes)
+  let res = if divisor.isZero: zero(Uint256)
+            else: pseudoSignedToUnsigned(
+              unsignedToPseudoSigned(value) div unsignedToPseudoSigned(divisor)
+              )
   pushRes()
 
 # no curry
@@ -93,18 +95,23 @@ proc exp*(computation: var BaseComputation) =
     gasCost += GAS_EXP_BYTE * (one(Uint256) + log256(exponent))
   computation.gasMeter.consumeGas(gasCost, reason="EXP: exponent bytes")
 
-  var res = if base == 0: 0.u256 else: base.pow(exponent)
+  let res = if base.isZero: 0.u256 # 0^0 is 0 in py-evm
+            else: base.pow(exponent)
   pushRes()
 
 proc signextend*(computation: var BaseComputation) =
   # Signed Extend
-  var (bits, value) = computation.stack.popInt(2)
+  let (bits, value) = computation.stack.popInt(2)
 
   var res: UInt256
   if bits <= 31.u256:
-    var testBit = bits.toInt * 8 + 7
-    var signBit = (1 shl testBit)
-    res = if value != 0 and signBit != 0: value or (UINT_256_CEILING - signBit.u256) else: value and (signBit.u256 - 1.u256)
+    let testBit = bits.toInt * 8 + 7
+    let bitPos = (1 shl testBit)
+    let mask = bitPos - 1
+    if not (value and bitPos).isZero:
+      res = value or (not mask)
+    else:
+      res = value and mask
   else:
     res = value
   pushRes()
