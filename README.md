@@ -13,7 +13,7 @@ Join the Status community chats:
 
 
 ## Rationale
-[Nimbus - An Ethereum 2.0 Sharding Client_xt](https://github.com/status-im/nimbus/blob/master/Nimbus%20-%20An%20Ethereum%202.0%20Sharding%20Client_xt.md)
+[Nimbus - An Ethereum 2.0 Sharding Client](https://github.com/status-im/nimbus/blob/master/Nimbus%20-%20An%20Ethereum%202.0%20Sharding%20Client_xt.md)
 
 ## License
 
