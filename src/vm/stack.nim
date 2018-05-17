@@ -75,6 +75,7 @@ proc push*(stack: var Stack, value: Bytes) =
   stack.values.add(value.toType(UInt256))
 
 proc internalPop(stack: var Stack, numItems: int): seq[UInt256] =
+  # TODO: it is very inefficient to allocate a seq
   if len(stack) < numItems:
     result = @[]
   else:
@@ -82,6 +83,7 @@ proc internalPop(stack: var Stack, numItems: int): seq[UInt256] =
     stack.values = stack.values[0 ..< ^numItems]
 
 proc internalPop(stack: var Stack, numItems: int, T: typedesc): seq[T] =
+  # TODO: it is very inefficient to allocate a seq
   result = @[]
   if len(stack) < numItems:
     return
@@ -90,9 +92,12 @@ proc internalPop(stack: var Stack, numItems: int, T: typedesc): seq[T] =
     var value = stack.values.pop()
     result.add(toType(value, T))
 
-template ensurePop(elements: untyped, a: untyped): untyped =
-  if len(`elements`) < `a`:
-    raise newException(InsufficientStack, "No stack items")
+proc ensurePop(elements: seq, a: int) =
+  let num = elements.len
+  let expected = a
+  if num < expected:
+    raise newException(InsufficientStack,
+      &"Stack underflow: expected {expected} elements, got {num} instead.")
 
 proc popInt*(stack: var Stack): UInt256 =
   var elements = stack.internalPop(1, UInt256)
