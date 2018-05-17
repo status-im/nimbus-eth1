@@ -13,13 +13,11 @@ Join the Status community chats:
 
 
 ## Rationale
-https://github.com/status-im/nimbus/blob/master/Nimbus%20-%20An%20Ethereum%202.0%20Sharding%20Client_xt.md
+[Nimbus - An Ethereum 2.0 Sharding Client_xt](https://github.com/status-im/nimbus/blob/master/Nimbus%20-%20An%20Ethereum%202.0%20Sharding%20Client_xt.md)
 
 ## License
 
-Licensed under either of
+Licensed under one of the following:
 
  * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-
-at your option.
+ * MIT license: [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
