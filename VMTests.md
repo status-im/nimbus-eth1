@@ -132,7 +132,7 @@ VMTests
 + mul5.json                                                       OK
 + mul6.json                                                       OK
 + mul7.json                                                       OK
-- mulUnderFlow.json                                               Fail
++ mulUnderFlow.json                                               OK
 + mulmod0.json                                                    OK
 + mulmod1.json                                                    OK
 + mulmod1_overflow.json                                           OK
@@ -163,7 +163,7 @@ VMTests
 + sdivByZero0.json                                                OK
 + sdivByZero1.json                                                OK
 + sdivByZero2.json                                                OK
-- sdiv_dejavu.json                                                Fail
++ sdiv_dejavu.json                                                OK
 + sdiv_i256min.json                                               OK
 + sdiv_i256min2.json                                              OK
 + sdiv_i256min3.json                                              OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 186/195 Fail: 8/195 Skip: 1/195
+OK: 188/195 Fail: 6/195 Skip: 1/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
