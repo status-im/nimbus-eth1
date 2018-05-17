@@ -13,8 +13,7 @@ Join the Status community chats:
 
 
 ## Rationale
-
-https://docs.google.com/document/d/14u65XVNLOd83cq3t7wNC9UPweZ6kPWvmXwRTWWn0diQ/edit#
+https://github.com/status-im/nimbus/blob/master/Nimbus%20-%20An%20Ethereum%202.0%20Sharding%20Client_xt.md
 
 ## License
 
