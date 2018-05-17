@@ -93,3 +93,12 @@ suite "stack":
     var stack = newStack()
     expect(InsufficientStack):
       stack.dup(0)
+
+  test "binary operations raises InsufficientStack appropriately":
+    # https://github.com/status-im/nimbus/issues/31
+    # ./tests/fixtures/VMTests/vmArithmeticTest/mulUnderFlow.json
+
+    var stack = newStack()
+    stack.push(123)
+    expect(InsufficientStack):
+      discard stack.popInt(2)

@@ -75,28 +75,31 @@ proc push*(stack: var Stack, value: Bytes) =
   stack.values.add(value.toType(UInt256))
 
 proc internalPop(stack: var Stack, numItems: int): seq[UInt256] =
-  if len(stack) < numItems:
-    result = @[]
-  else:
-    result = stack.values[^numItems .. ^1]
-    stack.values = stack.values[0 ..< ^numItems]
+  # TODO: it is very inefficient to allocate a seq
+  assert  numItems <= stack.len
+  result = stack.values[^numItems .. ^1]
+  stack.values = stack.values[0 ..< ^numItems]
 
 proc internalPop(stack: var Stack, numItems: int, T: typedesc): seq[T] =
+  # TODO: it is very inefficient to allocate a seq
+
+  assert  numItems <= stack.len
   result = @[]
-  if len(stack) < numItems:
-    return
 
   for z in 0 ..< numItems:
     var value = stack.values.pop()
     result.add(toType(value, T))
 
-template ensurePop(elements: untyped, a: untyped): untyped =
-  if len(`elements`) < `a`:
-    raise newException(InsufficientStack, "No stack items")
+proc ensurePop(elements: seq|Stack, a: int) =
+  let num = elements.len
+  let expected = a
+  if num < expected:
+    raise newException(InsufficientStack,
+      &"Stack underflow: expected {expected} elements, got {num} instead.")
 
 proc popInt*(stack: var Stack): UInt256 =
+  ensurePop(stack, 1)
   var elements = stack.internalPop(1, UInt256)
-  ensurePop(elements, 1)
   result = elements[0]
 
 macro internalPopTuple(numItems: static[int]): untyped =
@@ -110,6 +113,8 @@ macro internalPopTuple(numItems: static[int]): untyped =
   result = quote:
     proc `name`*(`stackNode`: var Stack, `t`: typedesc): `typ`
   result[^1] = nnkStmtList.newTree()
+  result[^1].add quote do:
+    ensurePop(`stackNode`, `numItems`)
   for z in 0 ..< numItems:
     var zNode = newLit(z)
     var element = quote:
