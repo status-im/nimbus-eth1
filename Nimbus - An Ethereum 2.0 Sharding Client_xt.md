@@ -313,25 +313,25 @@ Implement support for the following:
 2. Create an abstraction that would allow sub-protocols: ETH,
    [SHH](https://gist.github.com/gluk256/9812e59ed0481050350a11308ada4096), [PSS](https://gist.github.com/zelig/d52dab6a4509125f842bbd0dce1e9440), [Swarm](https://github.com/ethersphere/swarm), [LES](https://github.com/ethereum/wiki/wiki/Light-client-protocol), [Stateless Clients](https://nordicapis.com/defining-stateful-vs-stateless-web-services/), Sharding, [Plasma](https://plasma.io/), [State Channels](https://blog.stephantual.com/what-are-state-channels-32a81f7accab). For now, we can ignore all but LES and Sharding.
 
-3. DB: Most implementations of Ethereum use [LevelDB](https://github.com/google/leveldb). Parity has a DB abstraction and uses [HashDB](https://github.com/NPS-DEEP/hashdb/wiki) and [rocksdb](https://rocksdb.org/docs/getting-started.html).
+3. DB: Most implementations of Ethereum use [LevelDB](https://github.com/google/leveldb). Parity has a DB abstraction and uses [HashDB](https://github.com/NPS-DEEP/hashdb/wiki) and [RocksDB](https://rocksdb.org/docs/getting-started.html).
 
-   RocksDB is an interesting choice, because it solves the issues that have troubled leveldb. Rocksdb also has a [lite    version](https://github.com/facebook/rocksdb/blob/master/ROCKSDB_LITE.md) for mobile usage; it's in C++, which would be an issue only if we go for pure C.
+   RocksDB is an interesting choice, because it solves the issues that have troubled leveldb. Rocksdb also has a [light    version](https://github.com/facebook/rocksdb/blob/master/ROCKSDB_LITE.md) for mobile usage; it's in C++, which would be an issue only if we go for pure C.
 
 4. [EVM](https://github.com/pirapira/awesome-ethereum-virtual-machine): basic VM,
    [eWASM](https://github.com/ewasm/design) ([Hera](https://github.com/ewasm/hera) is also in C++)
 
 
-   5. IPC/RPC abstraction, [external API
+5. IPC/RPC abstraction, [external API
    methods](https://github.com/ethereum/wiki/wiki/JSON-RPC) that can be consumed by application bindings: react-native module, IPC, RPC HTTP
    server, or web sockets
 
 
-   6. Encryption library is a little unclear. [Libgcrypt](https://www.gnupg.org/software/libgcrypt/index.html) has everything we need but might be problematic from the standpoint of LGPL licensing. If we have an abstraction for Libgcrypt, we could use it now and swap it out later for something more permissive.
+6. Encryption library is a little unclear. [Libgcrypt](https://www.gnupg.org/software/libgcrypt/index.html) has everything we need but might be problematic from the standpoint of LGPL licensing. If we have an abstraction for Libgcrypt, we could use it now and swap it out later for something more permissive.
 
 	 Alternatively, we could roll out our own library. However, implementing our own encryption would not be a great idea, and our version would have to be audited and tested. Suggestions are welcome.
 
 
-  7. Monitor
+7. Monitor
    [ethereum/py-evm](https://github.com/ethereum/py-evm/tree/sharding). Connect with Chang-Wu Chen, Hsiao-Wei Wang, and anyone else working on sharding.
 
 # RESOURCES
@@ -347,8 +347,7 @@ Implement support for the following:
 
 6.  [A Modest Proposal for Ethereum 2.0: A presentation by Vitalik Buterin at devcon three](https://youtu.be/hAhUfCjjkXc)
 
-7.  [Python Implementation of the EVM
-	 ](https://github.com/ethereum/py-evm/blob/master/README.md)
+7.  [Python Implementation of the EVM](https://github.com/ethereum/py-evm/blob/master/README.md)
 
 8.  [Discussion about sharding](https://ethresear.ch/c/sharding)
 
