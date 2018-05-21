@@ -55,7 +55,7 @@ In addition, throughout the development of Status, we have found that the domina
 
 Although Nimbus will support archival nodes, its first implementation will be as a light client, with focus on Proof of Stake and sharding.
 
-During the deployment of Status among 40,000 alpha testers, we found that a significant portion (23.6%) of users were still running old mobile devices. In addition, recently discovered [Spectre vulnerabilities](https://en.wikipedia.org/wiki/Spectre_(security_vulnerability) have led to an increase in the demand for open processors. For these reasons, we propose a self-imposed constraint and a requirement that Status perform well on the following:
+During the deployment of Status among 40,000 alpha testers, we found that a significant portion (23.6%) of users were still running old mobile devices. In addition, recently discovered [Spectre vulnerabilities](https://en.wikipedia.org/wiki/Spectre_(security_vulnerability)) have led to an increase in the demand for open processors. For these reasons, we propose a self-imposed constraint and a requirement that Status perform well on the following:
 
 1. 2014 [SoC](https://en.wikipedia.org/wiki/System_on_a_chip) architectures, such as the [Cortex-A53](https://developer.arm.com/products/processors/cortex-a/cortex-a53) (Samsung Note 4 & [Raspberry Pi 3](https://www.raspberrypi.org/products/raspberry-pi-3-model-b/)) and the Apple A8 (iPhone 6)
 
@@ -80,11 +80,11 @@ The application architecture should have modular abstractions for the following:
 
 6.  Virtual Machine
 
-In addition, the implementation must pass Ethereum's common compliance tests: [https://github.com/ethereum/tests](https://github.com/ethereum/tests)
+In addition, the implementation must pass the [common tests for all Ethereum implementations](https://github.com/ethereum/tests).
 
 ## Requirement: Commitment to Ethereum Improvement Proposals (EIP)
 
-Nimbus is committed to open standards and to maintaining consensus with other Ethereum-compliant implementations. The development of Nimbus and the changes in its protocols will follow the EIP process: [https://github.com/ethereum/EIPs/](https://github.com/ethereum/EIPs/)
+Nimbus is committed to open standards and to maintaining consensus with other Ethereum-compliant implementations. The development of Nimbus and the changes in its protocols will follow [the EIP process]([https://github.com/ethereum/EIPs/](https://github.com/ethereum/EIPs/)
 
 ## Requirement: User Experience
 
@@ -218,7 +218,7 @@ We will set and advertise bounties as soon as the P2P layer gets implemented. If
 
 ### July - October 2018
 
-We will optimize the architecture of Nimbus for implementing the [LES protocol](https://github.com/paritytech/wiki/blob/master/Light-Ethereum-Subprotocol-(LES).md). We will also optimize all internal state-handling operations such that they work efficiently and asynchronously. This will enable on-demand fetching of data from the network. This will also ensure that Nimbus runs with a high degree of concurrency and that the client UI is responsive.
+We will optimize the architecture of Nimbus for implementing the [LES protocol](https://github.com/ethereum/wiki/wiki/Light-client-protocol). We will also optimize all internal state-handling operations such that they work efficiently and asynchronously. This will enable on-demand fetching of data from the network. This will also ensure that Nimbus runs with a high degree of concurrency and that the client UI is responsive.
 
 ### Goals:
 
@@ -311,7 +311,7 @@ Implement support for the following:
    [secp256k1](https://en.bitcoin.it/wiki/Secp256k1).
 
 2. Create an abstraction that would allow sub-protocols: ETH,
-   [SHH](https://gist.github.com/gluk256/9812e59ed0481050350a11308ada4096), [PSS](https://gist.github.com/zelig/d52dab6a4509125f842bbd0dce1e9440), [Swarm](https://github.com/ethersphere/swarm), [LES](https://github.com/ethereum/wiki/wiki/Light-client-protocol), [Stateless Clients](https://nordicapis.com/defining-stateful-vs-stateless-web-services/), Sharding, [Plasma](https://plasma.io/)(?), [State Channels](https://blog.stephantual.com/what-are-state-channels-32a81f7accab). For now, we can ignore all but LES and Sharding.
+   [SHH](https://gist.github.com/gluk256/9812e59ed0481050350a11308ada4096), [PSS](https://gist.github.com/zelig/d52dab6a4509125f842bbd0dce1e9440), [Swarm](https://github.com/ethersphere/swarm), [LES](https://github.com/ethereum/wiki/wiki/Light-client-protocol), [Stateless Clients](https://nordicapis.com/defining-stateful-vs-stateless-web-services/), Sharding, [Plasma](https://plasma.io/), [State Channels](https://blog.stephantual.com/what-are-state-channels-32a81f7accab). For now, we can ignore all but LES and Sharding.
 
 3. DB: Most implementations of Ethereum use [LevelDB](https://github.com/google/leveldb). Parity has a DB abstraction and uses [HashDB](https://github.com/NPS-DEEP/hashdb/wiki) and [rocksdb](https://rocksdb.org/docs/getting-started.html).
 
