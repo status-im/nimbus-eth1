@@ -84,7 +84,7 @@ In addition, the implementation must pass the [common tests for all Ethereum imp
 
 ## Requirement: Commitment to Ethereum Improvement Proposals (EIP)
 
-Nimbus is committed to open standards and to maintaining consensus with other Ethereum-compliant implementations. The development of Nimbus and the changes in its protocols will follow [the EIP process]([https://github.com/ethereum/EIPs/](https://github.com/ethereum/EIPs/)
+Nimbus is committed to open standards and to maintaining consensus with other Ethereum-compliant implementations. The development of Nimbus and the changes in its protocols will follow [the EIP process](https://github.com/ethereum/EIPs/).
 
 ## Requirement: User Experience
 
@@ -174,7 +174,7 @@ We will strive to publish as much of the developed code as possible. The code wi
 
 3.  The team is familiar with all codebases used to implement Ethereum.
 
-4.  The team understands the main themes from [ethresear.ch](https://ethresear.ch/) and actively participates in [EIPs](https://github.com/ethereum/EIPs/).
+4.  The team understands the main themes from [ethresear.ch](https://ethresear.ch/) and actively participates in EIPs.
 
 
 ## Milestone: Sharding Phase 1
@@ -185,7 +185,7 @@ While implementing compatibility with Ethereum 1.0, we will gain early experienc
 
 1.  The client will successfully communicate with other sharding clients that support the Phase 1 protocols.
 
-2.  The team will actively participate in sharding-related [EIPs](https://github.com/ethereum/EIPs/).
+2.  The team will actively participate in sharding-related EIPs.
 
 
 ### Goal:
