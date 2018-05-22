@@ -1,5 +1,53 @@
-## Nimbus - An Ethereum 2.0 Sharding Client  
 
+- [Overview](#overview)
+- [Goals](#goals)
+- [Requirements](#requirements)
+	- [Requirement: Nim](#requirement--nim)
+	- [Requirement: Development on Embedded Systems](#requirement--development-on-embedded-systems)
+	- [Requirement: Extensible, Configurable, and Modular Design](#requirement--extensible--configurable--and-modular-design)
+	- [Requirement: Commitment to Ethereum Improvement Proposals (EIP)](#requirement--commitment-to-ethereum-improvement-proposals-eip)
+	- [Requirement: User Experience](#requirement--user-experience)
+	- [Requirement: Dual Licensing of MIT and Apache v2.0](#requirement--dual-licensing-of-mit-and-apache-v20)
+	- [Requirement: Biweekly Development Reports, Technical Writing, and Promotion](#requirement--biweekly-development-reports--technical-writing--and-promotion)
+	- [Requirement: Bounty-Based Development](#requirement--bounty-based-development)
+- [Milestones](#milestones)
+	- [Milestone: Formation of the Team, and Detailed Implementation of the Project](#milestone--formation-of-the-team--and-detailed-implementation-of-the-project)
+		- [January - February 2018](#january---february-2018)
+		- [Completed:](#completed)
+		- [Goals:](#goals)
+	- [Milestone: Compatibility with Ethereum 1.0](#milestone--compatibility-with-ethereum-10)
+		- [January - ~November 2018](#january---november-2018)
+		- [Goals:](#goals)
+	- [Milestone: Sharding Phase 1](#milestone--sharding-phase-1)
+		- [July - ~November 2018](#july---november-2018)
+		- [Goal:](#goal)
+	- [Auditing of Beta and Security](#auditing-of-beta-and-security)
+		- [~November 2018 - ~March 2019](#november-2018---march-2019)
+		- [Goal:](#goal)
+	- [Milestone: Implementation of Whisper and PSS](#milestone--implementation-of-whisper-and-pss)
+		- [July - October 2018](#july---october-2018)
+		- [Goals:](#goals)
+	- [Milestone: Support for LES](#milestone--support-for-les)
+		- [July - October 2018](#july---october-2018)
+		- [Goals:](#goals)
+	- [Milestone: Implementation of Swarm](#milestone--implementation-of-swarm)
+		- [October 2018 - ~March 2019](#october-2018---march-2019)
+		- [Goals:](#goals)
+	- [Milestone: Implementation of Casper](#milestone--implementation-of-casper)
+		- [December 2018 - Feb 2019](#december-2018---feb-2019)
+	- [Milestone: Release of Sharding Phase 2](#milestone--release-of-sharding-phase-2)
+		- [November 2018 - July 2019](#november-2018---july-2019)
+		- [Goals:](#goals)
+	- [Milestone: Release of Sharding Phase 3](#milestone--release-of-sharding-phase-3)
+		- [March - August 2019](#march---august-2019)
+		- [Goals:](#goals)
+	- [Milestone: Ongoing Improvements in Sharding](#milestone--ongoing-improvements-in-sharding)
+		- [August 2019 - Onward](#august-2019---onward)
+		- [Goals:](#goals)
+- [Ideas Considered for Implementation](#ideas-considered-for-implementation)
+- [Resources](#resources)
+
+<!-- /TOC -->
 # Overview
 
 Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FAQ) client implementation for the Ethereum Blockchain Application Platform. Because the largest deployment of Ethereum will be on embedded systems, Nimbus will be designed to perform well on IoT and personal mobile devices, including older smartphones with resource-restricted hardware. The extensible, configurable, and modular design of Nimbus will make it production ready for Web 3.0 and will ensure that it can be supported and maintained across all goals of Ethereum 2.0.
@@ -31,7 +79,7 @@ Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FA
 7.  Focus on marketing and promotion to address community concerns on scalability and to bolster Ethereum’s dominant mindshare.
 
 
-# REQUIREMENTS
+# Requirements
 
 ## Requirement: Nim
 
@@ -113,7 +161,7 @@ Within the community at large, we will promote Ethereum as the leader of scalabl
 
 To entice the community to accelerate the development, we will attach bounties to and [publish](https://openbounty.status.im/app#/) the tasks that can be self-contained and defined clearly.
 
-# MILESTONES
+# Milestones
 
 Timelines are approximate and affected by research, implementation considerations, and revisions made while the team produces a detailed implementation timeline.
 
@@ -130,13 +178,13 @@ Timelines are approximate and affected by research, implementation consideration
 ### Goals:
 1.  Hire core contributors:
 
-	a.  Five (5) full-time core contributors
+    a.  Five (5) full-time core contributors
 
-	b.  Up to five (5) part-time core contributors
+    b.  Up to five (5) part-time core contributors
 
-	c. One (1) Technical Program Manager
+    c. One (1) Technical Program Manager
 
-	d.  One (1) Technical Writer
+    d.  One (1) Technical Writer
 
 	e. Up to ten (10) full-time core contributors by 2019
 
@@ -170,7 +218,7 @@ We will strive to publish as much of the developed code as possible. The code wi
 
 	a. Sync with the latest blockchain, from scratch
 
-	b. Accurately execute the entire transaction history
+    b. Accurately execute the entire transaction history
 
 3.  The team is familiar with all codebases used to implement Ethereum.
 
@@ -302,7 +350,7 @@ Implement support for the following:
 3. Provide an ongoing research into the applicability and performance characteristics of all super-quadratic sharding designs in a mobile environment.
 
 
-# IDEAS CONSIDERED FOR IMPLEMENTATION
+# Ideas Considered for Implementation
 
 1. Create [devp2p](https://github.com/ethereum/wiki/wiki/%C3%90%CE%9EVp2p-Wire-Protocol) and an abstraction to allow for
    [libp2p](https://github.com/Agorise/c-libp2p), [Node
@@ -334,7 +382,7 @@ Implement support for the following:
 7. Monitor
    [ethereum/py-evm](https://github.com/ethereum/py-evm/tree/sharding). Connect with Chang-Wu Chen, Hsiao-Wei Wang, and anyone else working on sharding.
 
-# RESOURCES
+# Resources
 1.  [Awesome Ethereum Virtual Machine](https://github.com/pirapira/awesome-ethereum-virtual-machine)
 
 2.  [Detailed introduction to the sharding proposal](https://github.com/ethereum/sharding/blob/develop/docs/doc.md)
@@ -347,7 +395,8 @@ Implement support for the following:
 
 6.  [A Modest Proposal for Ethereum 2.0: A presentation by Vitalik Buterin at devcon three](https://youtu.be/hAhUfCjjkXc)
 
-7.  [Python Implementation of the EVM](https://github.com/ethereum/py-evm/blob/master/README.md)
+7.  [Python Implementation of the EVM
+	 ](https://github.com/ethereum/py-evm/blob/master/README.md)
 
 8.  [Discussion about sharding](https://ethresear.ch/c/sharding)
 
