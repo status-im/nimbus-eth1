@@ -8,7 +8,7 @@
 import
   tables, stint,
   ./logging, ./constants, ./errors, ./validation, ./utils/hexadecimal, ./vm/base, ./db/db_chain,
-  ./utils/header, ./vm/forks/frontier/vm
+  ./utils/header, ./vm/forks/f20150730_frontier/vm
 
 type
   Chain* = ref object

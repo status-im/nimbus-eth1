@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  logging, constants, errors, validation, utils/header, vm / forks / frontier / vm
+  logging, constants, errors, validation, utils/header, vm/forks/f20150730_frontier/vm
 
 method computeDifficulty*(parentHeader: BlockHeader, timestamp: int): Int256 =
   validateGt(timestamp, parentHeader.timestamp, title="BlockHeader timestamp")
