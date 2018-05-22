@@ -241,7 +241,7 @@ While implementing compatibility with Ethereum 1.0, we will gain early experienc
 The architecture of Nimbus supports sharding nodes with split responsibilities.
 
 
-## Auditing of Beta and Security
+## Milestone: Auditing of Beta and Security
 
 ### ~November 2018 - ~March 2019
 
