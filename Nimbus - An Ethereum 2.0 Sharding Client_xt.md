@@ -143,7 +143,7 @@ Access to shards and the mainchain state should be fast and responsive, the appl
 
 One unsolved hurdle faced by Status is the [LGPLv3](https://opensource.org/licenses/LGPL-3.0) license, whose requirement for runtime linking is incompatible with major mobile app distribution channels, such as the App Store of Apple Inc.
 
-Numerous requests for a static-linking exception have been made but not answered. This has blocked the deployment of any legally sound, full Ethereum client on popular channels for distribution of mobile devices. LGPL also prevents the adoption of Ethereum on closed hardware platforms, such as XBox. Still, we remain optimistic this issue will be rectified.
+Numerous requests for a static-linking exception have gone unanswered. This has blocked the deployment of any legally sound, full Ethereum client on popular channels for distribution of mobile devices. LGPL also prevents the adoption of Ethereum on closed hardware platforms, such as XBox. Still, we remain optimistic this issue will be rectified.
 
 We propose that Nimbus be licensed under Apache 2.0 and MIT. A permissive licensing structure with patent protection would
 1. Ensure the compatibility with GPL 2.0 and LGPL 2.0
@@ -196,9 +196,9 @@ Timelines are approximate and affected by research, implementation consideration
 
 ### January - ~November 2018
 
-As an initial goal, we will focus on implementing all components required for interoperability with the Ethereum ecosystem. However, before starting the implementation in Nim, the team will reference and understand the existing implementations of Ethereum: [Go Ethereum](https://github.com/ethereum/go-ethereum/), [Pyethereum](https://github.com/ethereum/pyethereum), [Py-EVM](https://github.com/ethereum/py-evm), and [Parity](https://github.com/paritytech/parity).
+As an initial goal, we will focus on implementing all components required for interoperability with the Ethereum ecosystem. However, before starting the implementation in Nim, we will develop an understanding of the existing implementations of Ethereum: [Go Ethereum](https://github.com/ethereum/go-ethereum/), [Pyethereum](https://github.com/ethereum/pyethereum), [Py-EVM](https://github.com/ethereum/py-evm), and [Parity](https://github.com/paritytech/parity).
 
-We will strive to publish as much of the developed code as possible. The code will consist of independently reusable libraries that have the same permissive license as that of Nimbus itself. This will include the libraries for the following:
+The code will consist of independently reusable libraries that have the same permissive license as that of Nimbus itself:
 
 1. [RLP](https://github.com/ethereum/wiki/wiki/RLP) encoding and decoding
 
@@ -309,7 +309,7 @@ The team will closely follow the development of [Casper](https://blockgeeks.com/
 
 ### November 2018 - July 2019
 
-We will focus on achieving compatibility with the rest of the clients. In addition, we will implement an [eWASM](https://github.com/ewasm/design/blob/master/README.md) runtime and will add Nim as one of the languages able to target the new VM.
+We will focus on achieving compatibility with all other clients. In addition, we will implement an [eWASM](https://github.com/ewasm/design/blob/master/README.md) runtime and will add Nim as one of the languages that can target the new VM.
 
 
 
@@ -317,7 +317,7 @@ We will focus on achieving compatibility with the rest of the clients. In additi
 
 Implement the following in Nim:
 
-1.  Command-line tools and APIs for running Phase 2 nodes and for interacting with the Validator Manager Contract (VMC)
+1.  CLI tools and APIs for running Phase 2 nodes and for interacting with the Validator Manager Contract (VMC)
 
 2.  The development tools that will target the eWASM runtime environment
 
