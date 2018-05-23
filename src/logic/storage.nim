@@ -32,7 +32,7 @@ proc sstore*(computation) =
   let gasRefund = if isCurrentlyEmpty or not isGoingToBeEmpty: 0.u256 else: REFUND_SCLEAR
   let gasCost = if isCurrentlyEmpty and not isGoingToBeEmpty: GAS_SSET else: GAS_SRESET
 
-  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
+  computation.gasMeter.consumeGas(computation.gasCosts[gasCost], &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
 
   if gasRefund > 0: computation.gasMeter.refundGas(gasRefund)
 

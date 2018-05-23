@@ -11,7 +11,7 @@ import
   ../src/[chain, vm_state, computation, opcode, opcode_table],
   ../src/[utils/header, utils/padding],
   ../src/vm/[gas_meter, message, code_stream, stack],
-  ../src/vm/forks/f20150730_frontier/vm,
+  ../src/vm/forks/f20150730_frontier/frontier_vm,
   ../src/db/[db_chain, state_db, backends/memory_backend],
   test_helpers
 

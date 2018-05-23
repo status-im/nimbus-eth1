@@ -10,7 +10,7 @@ import
   stint,
   ../src/utils/[hexadecimal, address, padding],
   ../src/[chain, vm_state, constants],
-  ../src/db/[db_chain, state_db], ../src/vm/forks/f20150730_frontier/vm,
+  ../src/db/[db_chain, state_db], ../src/vm/forks/f20150730_frontier/frontier_vm,
   ../src/vm/base, ../src/transaction
 
 type

@@ -13,6 +13,8 @@ import
   stint
 
 type
+  # TODO most of these are for gas handling
+
   BaseCall* = ref object of Opcode
 
   Call* = ref object of BaseCall
@@ -27,12 +29,12 @@ type
 
   DelegateCallEIP150* = ref object of DelegateCall
 
-  CallEIP161* = ref object of CallEIP150
+  CallEIP161* = ref object of CallEIP150 # TODO: Refactoring - put that in VM forks
 
   # Byzantium
-  StaticCall* = ref object of CallEIP161
+  StaticCall* = ref object of CallEIP161 # TODO: Refactoring - put that in VM forks
 
-  CallByzantium* = ref object of CallEIP161
+  CallByzantium* = ref object of CallEIP161 # TODO: Refactoring - put that in VM forks
 
 using
   computation: var BaseComputation
@@ -50,7 +52,7 @@ method callParams*(call: BaseCall, computation): (UInt256, UInt256, string, stri
   raise newException(NotImplementedError, "Must be implemented subclasses")
 
 method runLogic*(call: BaseCall, computation) =
-  computation.gasMeter.consumeGas(call.gasCost(computation), reason = $call.kind)
+  computation.gasMeter.consumeGas(computation.gasCosts[call.gasCost(computation)], reason = $call.kind) # TODO: Refactoring call gas costs
   let (gas, value, to, sender,
        codeAddress,
        memoryInputStartPosition, memoryInputSize,

@@ -29,6 +29,7 @@ type
     accountsToDelete*:      Table[string, string]
     opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
     precompiles*:           Table[string, Opcode]
+    gasCosts*:              GasCosts # TODO separate opcode processing and gas computation
 
   Error* = ref object
     info*:                  string
@@ -45,5 +46,29 @@ type
     ##   it uses the peek methods of the stack and calculates the cost
     ##   then it actually pops/pushes stuff in exec
     ## I followed the py-evm approach which does that in opcode logic
-    gasCostConstant*: UInt256
+    gasCostKind*: GasCostKind
     runLogic*:  proc(computation: var BaseComputation)
+
+  GasCostKind* = enum
+    GasZero
+    GasBase
+    GasVeryLow
+    GasLow
+    GasMid
+    GasHigh
+    GasSload
+    GasJumpDest
+    GasSset
+    GasSreset
+    GasExtCode
+    GasCoinbase
+    GasSelfDestruct
+    GasInHandler
+    GasRefundSclear
+
+    GasBalance
+    GasCall
+    GasExp
+    GasSHA3
+
+  GasCosts* = array[GasCostKind, UInt256]

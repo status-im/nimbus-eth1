@@ -9,7 +9,8 @@ import
   strformat, strutils, tables, macros,
   constants, stint, errors, logging, vm_state,
   vm / [gas_meter, stack, code_stream, memory, message, value], db / db_chain, computation, opcode, opcode_values, utils / [header, address],
-  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid, call, system_ops]
+  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid, call, system_ops],
+  ./types
 
 var OPCODE_TABLE* = initOpcodes:
   # arithmetic
@@ -22,7 +23,7 @@ var OPCODE_TABLE* = initOpcodes:
   Op.SMod:          GAS_LOW             smod
   Op.AddMod:        GAS_MID             addmod
   Op.MulMod:        GAS_MID             mulmod
-  Op.Exp:           GAS_ZERO            arithmetic.exp
+  Op.Exp:           GAS_IN_HANDLER      arithmetic.exp
   Op.SignExtend:    GAS_LOW             signextend
 
 
@@ -46,7 +47,7 @@ var OPCODE_TABLE* = initOpcodes:
 
   # context
   Op.Address:       GAS_BASE            context.address
-  Op.Balance:       GAS_COST_BALANCE    balance
+  Op.Balance:       GAS_BALANCE         balance
   Op.Origin:        GAS_BASE            origin
   Op.Caller:        GAS_BASE            caller
   Op.CallValue:     GAS_BASE            callValue
@@ -55,8 +56,8 @@ var OPCODE_TABLE* = initOpcodes:
   Op.CallDataCopy:  GAS_BASE            callDataCopy
   Op.CodeSize:      GAS_BASE            codesize
   Op.CodeCopy:      GAS_BASE            codecopy
-  Op.ExtCodeSize:   GAS_EXT_CODE_COST   extCodeSize
-  Op.ExtCodeCopy:   GAS_EXT_CODE_COST   extCodeCopy
+  Op.ExtCodeSize:   GAS_EXT_CODE        extCodeSize
+  Op.ExtCodeCopy:   GAS_EXT_CODE        extCodeCopy
 
 
   # block
@@ -83,7 +84,7 @@ var OPCODE_TABLE* = initOpcodes:
 
   # storage
   Op.SLoad:         GAS_SLOAD           sload
-  Op.SStore:        GAS_ZERO            sstore
+  Op.SStore:        GAS_IN_HANDLER      sstore
 
 
   # flow
@@ -104,8 +105,8 @@ var OPCODE_TABLE* = initOpcodes:
 
 
   # system
-  Op.Return:        0.u256              returnOp
-  Op.SelfDestruct:  GAS_SELF_DESTRUCT_COST selfdestruct
+  Op.Return:        GAS_ZERO            returnOp
+  Op.SelfDestruct:  GAS_SELF_DESTRUCT   selfdestruct
 
 
 # call
