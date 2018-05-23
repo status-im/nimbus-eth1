@@ -10,7 +10,7 @@ import
   stint,
   ../../../block_types,
   ../../../vm/[base, stack], ../../../db/db_chain,  ../../../utils/header,
-  ./Tangerine_block, ./Tangerine_vm_state, ./Tangerine_validation
+  ./tangerine_block, ./tangerine_vm_state, ./tangerine_validation
 
 
 type
