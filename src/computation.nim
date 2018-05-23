@@ -41,7 +41,7 @@ method newBaseComputation*(vmState: FrontierVMState, message: Message): BaseComp
   result.logEntries = @[]
   result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
   result.rawOutput = "0x"
-  result.gasCosts = TangerineGasCosts
+  result.gasCosts = BaseGasCosts
 
 method newBaseComputation*(vmState: TangerineVMState, message: Message): BaseComputation =
   new(result)
@@ -55,6 +55,7 @@ method newBaseComputation*(vmState: TangerineVMState, message: Message): BaseCom
   result.logEntries = @[]
   result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
   result.rawOutput = "0x"
+  result.gasCosts = TangerineGasCosts
 
 method logger*(computation: BaseComputation): Logger =
   logging.getLogger("vm.computation.BaseComputation")

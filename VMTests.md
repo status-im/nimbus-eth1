@@ -116,7 +116,7 @@ VMTests
 + expPowerOf2_64.json                                             OK
 + expPowerOf2_8.json                                              OK
 - expXY.json                                                      Fail
-- expXY_success.json                                              Fail
++ expXY_success.json                                              OK
 + fibbonacci_unrolled.json                                        OK
 + mod0.json                                                       OK
 + mod1.json                                                       OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 188/195 Fail: 6/195 Skip: 1/195
+OK: 189/195 Fail: 5/195 Skip: 1/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -602,7 +602,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + push30.json                                                     OK
 + push31.json                                                     OK
 + push32.json                                                     OK
-- push32AndSuicide.json                                           Fail
++ push32AndSuicide.json                                           OK
 + push32FillUpInputWithZerosAtTheEnd.json                         OK
 + push32Undefined.json                                            OK
 + push32Undefined2.json                                           OK
@@ -633,7 +633,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + swap9.json                                                      OK
 + swapjump1.json                                                  OK
 ```
-OK: 73/74 Fail: 1/74 Skip: 0/74
+OK: 74/74 Fail: 0/74 Skip: 0/74
 ## vmRandomTest
 ```diff
   201503102037PYTHON.json                                         Skip
