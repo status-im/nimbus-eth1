@@ -39,7 +39,7 @@ proc tangerineGasCosts(baseCosts: GasCosts): GasCosts =
   result = baseCosts
   result[GasSload]        = 200.u256
   result[GasSelfDestruct] = 5000.u256
-  result[GasBalance]      = 20.u256
+  result[GasBalance]      = 400.u256
   result[GasCall]         = 40.u256
 
 let TangerineGasCosts* = BaseGasCosts.tangerineGasCosts

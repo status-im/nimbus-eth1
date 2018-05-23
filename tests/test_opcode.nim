@@ -16,9 +16,9 @@ import
   test_helpers
 
 
-proc testCode(code: string, gas: UInt256): BaseComputation =
-  var vm = newNimbusVM(BlockHeader(), newBaseChainDB(newMemoryDB()))
-  let header = BlockHeader()
+proc testCode(code: string, initialGas: UInt256, blockNum: UInt256): BaseComputation =
+  let header = BlockHeader(blockNumber: blockNum)
+  var vm = newNimbusVM(header, newBaseChainDB(newMemoryDB()))
     # coinbase: "",
     # difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
     # blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
@@ -31,15 +31,15 @@ proc testCode(code: string, gas: UInt256): BaseComputation =
     value=0.u256,
     data = @[],
     code=code,
-    gas=gas,
-    gasPrice=1.u256)
+    gas=initial_gas,
+    gasPrice=1.u256) # What is this used for?
     # gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt.u256,
     #options=newMessageOptions(origin=fixture{"exec"}{"origin"}.getStr))
 
   #echo fixture{"exec"}
   var c = newCodeStreamFromUnescaped(code)
-  #if DEBUG:
-  c.displayDecompiled()
+  if DEBUG:
+    c.displayDecompiled()
 
   var computation = newBaseComputation(vm.state, message)
   computation.accountsToDelete = initTable[string, string]()
@@ -51,7 +51,11 @@ proc testCode(code: string, gas: UInt256): BaseComputation =
 
 suite "opcodes":
   test "add":
-    var c = testCode("0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01", 100_000.u256)
+    var c = testCode(
+      "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01",
+      100_000.u256,
+      0.u256
+      )
     check(c.gasMeter.gasRemaining == 99_991.u256)
     check(c.stack.peek == "115792089237316195423570985008687907853269984665640564039457584007913129639934".u256)
 #     let address = Address::from_str("0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6").unwrap();
@@ -71,3 +75,38 @@ suite "opcodes":
 #   assert_eq!(gas_left, U256::from(79_988));
 #   assert_store(&ext, 0, "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe");
 # }
+
+  test "Frontier VM computation - pre-EIP150 gas cost properly applied":
+    block: # Using Balance (0x31)
+      var c = testCode(
+        "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff31",
+        100_000.u256,
+        0.u256
+        )
+      check: c.gasMeter.gasRemaining == 100000.u256 - 3.u256 - 20.u256 # Starting gas - push32 (verylow) - balance
+
+    block: # Using SLOAD (0x54)
+      var c = testCode(
+        "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff54",
+        100_000.u256,
+        0.u256
+        )
+      check: c.gasMeter.gasRemaining == 100000.u256 - 3.u256 - 50.u256 # Starting gas - push32 (verylow) - SLOAD
+
+
+  test "Tangerine VM computation - post-EIP150 gas cost properly applied":
+    block: # Using Balance (0x31)
+      var c = testCode(
+        "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff31",
+        100_000.u256,
+        2_463_000.u256 # Tangerine block
+        )
+      check: c.gasMeter.gasRemaining == 100000.u256 - 3.u256 - 400.u256 # Starting gas - push32 (verylow) - balance
+
+    block: # Using SLOAD (0x54)
+      var c = testCode(
+        "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff54",
+        100_000.u256,
+        2_463_000.u256
+        )
+      check: c.gasMeter.gasRemaining == 100000.u256 - 3.u256 - 200.u256 # Starting gas - push32 (verylow) - SLOAD

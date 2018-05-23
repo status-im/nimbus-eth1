@@ -41,4 +41,3 @@ suite "VM":
     #   state_db.getBalance(recipient) == amount
     #   b.transactions[txIdx] == tx
     #   b.header.gasUsed == constants.GAS_TX
-
