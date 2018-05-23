@@ -25,9 +25,11 @@ type
     state*: BaseVMState
     `block`*: Block
 
-proc newVM*(header: BlockHeader, chainDB: BaseChainDB): VM =
-  new(result)
-  result.chainDB = chainDB
+# TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
+
+# proc newVM*(header: BlockHeader, chainDB: BaseChainDB): VM =
+#   new(result)
+#   result.chainDB = chainDB
 
 method name*(vm: VM): string =
   "VM"

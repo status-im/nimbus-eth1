@@ -252,6 +252,8 @@ proc contains*(ab: UInt256Pair, v: UInt256): bool =
   return v >= ab[0] and v <= ab[1]
 
 proc toFork*(blockNumber: UInt256): Fork =
+  # TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
+  # TODO - Refactoring: redundant with `chain.nim` getVM
   result = fkUnknown
   let one = u256(1)
   if blockNumber in u256(0)..FORK_ICEAGE_BLKNUM - one: result = fkFrontier

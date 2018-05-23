@@ -11,13 +11,13 @@ import
   ../src/[chain, vm_state, computation, opcode, opcode_table],
   ../src/[utils/header, utils/padding],
   ../src/vm/[gas_meter, message, code_stream, stack],
-  ../src/vm/forks/f20150730_frontier/frontier_vm,
+  ../src/vm/forks/vm_forks,
   ../src/db/[db_chain, state_db, backends/memory_backend],
   test_helpers
 
 
 proc testCode(code: string, gas: UInt256): BaseComputation =
-  var vm = newFrontierVM(BlockHeader(), newBaseChainDB(newMemoryDB()))
+  var vm = newNimbusVM(BlockHeader(), newBaseChainDB(newMemoryDB()))
   let header = BlockHeader()
     # coinbase: "",
     # difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,

@@ -74,8 +74,11 @@ proc fromGenesis*(
   # TODO
   # chainDB.persistBlockToDB(result.getBlock)
 
+
 proc getVMClassForBlockNumber*(chain: Chain, blockNumber: UInt256): VMKind =
   ## Returns the VM class for the given block number
+  # TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
+  # TODO - Refactoring: redundant with constants.nim `toFork`
   # TODO should the return value be a typedesc?
 
   # TODO: validate_block_number
@@ -86,9 +89,12 @@ proc getVMClassForBlockNumber*(chain: Chain, blockNumber: UInt256): VMKind =
 
   raise newException(ValueError, "VM not found for block #" & $blockNumber) # TODO: VMNotFound exception
 
+# TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
+
 proc getVM*(chain: Chain, header: BlockHeader = nil): VM =
   ## Returns the VM instance for the given block number
-
+  # TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
+  # TODO - Refactoring: redundant with constants.nim `toFork`
   # shadowing input param
   let header = if header.isNil: chain.header
                else: header

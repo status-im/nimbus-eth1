@@ -12,7 +12,7 @@ import
   ../src/[chain, vm_state, computation, opcode, types, opcode_table],
   ../src/utils/[header, padding],
   ../src/vm/[gas_meter, message, code_stream, stack],
-  ../src/vm/forks/f20150730_frontier/frontier_vm, ../src/db/[db_chain, state_db, backends/memory_backend]
+  ../src/vm/forks/vm_forks, ../src/db/[db_chain, state_db, backends/memory_backend]
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -24,13 +24,14 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   for label, child in fixtures:
     fixture = child
     break
-  var vm = newFrontierVM(BlockHeader(), newBaseChainDB(newMemoryDB()))
   let header = BlockHeader(
     coinbase: fixture{"env"}{"currentCoinbase"}.getStr,
     difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
     blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
     # gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
-    timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix)
+    timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix
+    )
+  var vm = newNimbusVM(header, newBaseChainDB(newMemoryDB()))
 
   var code = ""
   vm.state.db(readOnly=false):
