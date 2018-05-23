@@ -14,99 +14,99 @@ import
 
 var OPCODE_TABLE* = initOpcodes:
   # arithmetic
-  Op.Add:           GAS_VERY_LOW        add
-  Op.Mul:           GAS_LOW             mul
-  Op.Sub:           GAS_VERY_LOW        sub
-  Op.Div:           GAS_LOW             divide
-  Op.SDiv:          GAS_LOW             sdiv
-  Op.Mod:           GAS_LOW             modulo
-  Op.SMod:          GAS_LOW             smod
-  Op.AddMod:        GAS_MID             addmod
-  Op.MulMod:        GAS_MID             mulmod
-  Op.Exp:           GAS_IN_HANDLER      arithmetic.exp
-  Op.SignExtend:    GAS_LOW             signextend
+  Op.Add:           GasVeryLow        add
+  Op.Mul:           GasLow            mul
+  Op.Sub:           GasVeryLow        sub
+  Op.Div:           GasLow            divide
+  Op.SDiv:          GasLow            sdiv
+  Op.Mod:           GasLow            modulo
+  Op.SMod:          GasLow            smod
+  Op.AddMod:        GasMid            addmod
+  Op.MulMod:        GasMid            mulmod
+  Op.Exp:           GasInHandler      arithmetic.exp
+  Op.SignExtend:    GasLow            signextend
 
 
   # comparison
-  Op.Lt:            GAS_VERY_LOW        lt
-  Op.Gt:            GAS_VERY_LOW        gt
-  Op.SLt:           GAS_VERY_LOW        slt
-  Op.SGt:           GAS_VERY_LOW        sgt
-  Op.Eq:            GAS_VERY_LOW        eq
-  Op.IsZero:        GAS_VERY_LOW        iszero
-  Op.And:           GAS_VERY_LOW        andOp
-  Op.Or:            GAS_VERY_LOW        orOp
-  Op.Xor:           GAS_VERY_LOW        xorOp
-  Op.Not:           GAS_VERY_LOW        notOp
-  Op.Byte:          GAS_VERY_LOW        byteOp
+  Op.Lt:            GasVeryLow        lt
+  Op.Gt:            GasVeryLow        gt
+  Op.SLt:           GasVeryLow        slt
+  Op.SGt:           GasVeryLow        sgt
+  Op.Eq:            GasVeryLow        eq
+  Op.IsZero:        GasVeryLow        iszero
+  Op.And:           GasVeryLow        andOp
+  Op.Or:            GasVeryLow        orOp
+  Op.Xor:           GasVeryLow        xorOp
+  Op.Not:           GasVeryLow        notOp
+  Op.Byte:          GasVeryLow        byteOp
 
 
   # sha3
-  Op.SHA3:          GAS_SHA3            sha3op
+  Op.SHA3:          GasSHA3           sha3op
 
 
   # context
-  Op.Address:       GAS_BASE            context.address
-  Op.Balance:       GAS_BALANCE         balance
-  Op.Origin:        GAS_BASE            origin
-  Op.Caller:        GAS_BASE            caller
-  Op.CallValue:     GAS_BASE            callValue
-  Op.CallDataLoad:  GAS_VERY_LOW        callDataLoad
-  Op.CallDataSize:  GAS_BASE            callDataSize
-  Op.CallDataCopy:  GAS_BASE            callDataCopy
-  Op.CodeSize:      GAS_BASE            codesize
-  Op.CodeCopy:      GAS_BASE            codecopy
-  Op.ExtCodeSize:   GAS_EXT_CODE        extCodeSize
-  Op.ExtCodeCopy:   GAS_EXT_CODE        extCodeCopy
+  Op.Address:       GasBase           context.address
+  Op.Balance:       GasBalance        balance
+  Op.Origin:        GasBase           origin
+  Op.Caller:        GasBase           caller
+  Op.CallValue:     GasBase           callValue
+  Op.CallDataLoad:  GasVeryLow        callDataLoad
+  Op.CallDataSize:  GasBase           callDataSize
+  Op.CallDataCopy:  GasBase           callDataCopy
+  Op.CodeSize:      GasBase           codesize
+  Op.CodeCopy:      GasBase           codecopy
+  Op.ExtCodeSize:   GasExtCode        extCodeSize
+  Op.ExtCodeCopy:   GasExtCode        extCodeCopy
 
 
   # block
-  Op.Blockhash:     GAS_BASE            block_ops.blockhash
-  Op.Coinbase:      GAS_COINBASE        coinbase
-  Op.Timestamp:     GAS_BASE            timestamp
-  Op.Number:        GAS_BASE            number
-  Op.Difficulty:    GAS_BASE            difficulty
-  Op.GasLimit:      GAS_BASE            gaslimit
+  Op.Blockhash:     GasBase           block_ops.blockhash
+  Op.Coinbase:      GasCoinbase       coinbase
+  Op.Timestamp:     GasBase           timestamp
+  Op.Number:        GasBase           number
+  Op.Difficulty:    GasBase           difficulty
+  Op.GasLimit:      GasBase           gaslimit
 
 
   # stack
-  Op.Pop:           GAS_BASE            stack_ops.pop
-  1..32 Op.PushXX:  GAS_VERY_LOW        pushXX # XX replaced by macro
-  1..16 Op.DupXX:   GAS_VERY_LOW        dupXX
-  1..16 Op.SwapXX:  GAS_VERY_LOW        swapXX
+  Op.Pop:           GasBase           stack_ops.pop
+  1..32 Op.PushXX:  GasVeryLow        pushXX # XX replaced by macro
+  1..16 Op.DupXX:   GasVeryLow        dupXX
+  1..16 Op.SwapXX:  GasVeryLow        swapXX
 
 
   # memory
-  Op.MLoad:         GAS_VERY_LOW        mload
-  Op.MStore:        GAS_VERY_LOW        mstore
-  Op.MStore8:       GAS_VERY_LOW        mstore8
-  Op.MSize:         GAS_BASE            msize
+  Op.MLoad:         GasVeryLow        mload
+  Op.MStore:        GasVeryLow        mstore
+  Op.MStore8:       GasVeryLow        mstore8
+  Op.MSize:         GasBase           msize
 
   # storage
-  Op.SLoad:         GAS_SLOAD           sload
-  Op.SStore:        GAS_IN_HANDLER      sstore
+  Op.SLoad:         GasSload          sload
+  Op.SStore:        GasInHandler      sstore
 
 
   # flow
-  Op.Jump:          GAS_MID             jump
-  Op.JumpI:         GAS_MID             jumpi
-  Op.PC:            GAS_HIGH            pc
-  Op.Gas:           GAS_BASE            flow.gas
-  Op.JumpDest:      GAS_JUMP_DEST       jumpdest
-  Op.Stop:          GAS_ZERO            stop
+  Op.Jump:          GasMid            jump
+  Op.JumpI:         GasMid            jumpi
+  Op.PC:            GasHigh           pc
+  Op.Gas:           GasBase           flow.gas
+  Op.JumpDest:      GasJumpDest       jumpdest
+  Op.Stop:          GasZero           stop
 
 
   # logging
-  0..4 Op.LogXX:    GAS_IN_HANDLER      logXX
+  0..4 Op.LogXX:    GasInHandler      logXX
 
 
   # invalid
-  Op.Invalid:       GAS_ZERO            invalidOp
+  Op.Invalid:       GasZero           invalidOp
 
 
   # system
-  Op.Return:        GAS_ZERO            returnOp
-  Op.SelfDestruct:  GAS_SELF_DESTRUCT   selfdestruct
+  Op.Return:        GasZero           returnOp
+  Op.SelfDestruct:  GasSelfDestruct   selfdestruct
 
 
 # call
