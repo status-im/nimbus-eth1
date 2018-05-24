@@ -311,7 +311,7 @@ Implement the following:
 4. Reusable APIs for publishing and obtaining content from Swarm
 
 
-## Milestone: Release of Sharding Phase 3
+## Milestone: Sharding Phase 3
 
 ### March - August 2019
 
