@@ -6,46 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-    ../logging, ../constants, ../validation, stint
-
-type
-  Message* = ref object
-    # A message for VM computation
-
-    # depth = None
-
-    # code = None
-    # codeAddress = None
-
-    # createAddress = None
-
-    # shouldTransferValue = None
-    # isStatic = None
-
-    # logger = logging.getLogger("evm.vm.message.Message")
-
-    gas*:                     UInt256
-    gasPrice*:                UInt256
-    to*:                      string
-    sender*:                  string
-    value*:                   UInt256
-    data*:                    seq[byte]
-    code*:                    string
-    internalOrigin:           string
-    internalCodeAddress:      string
-    depth*:                   int
-    internalStorageAddress:   string
-    shouldTransferValue*:     bool
-    isStatic*:                bool
-    isCreate*:                bool
-
-  MessageOptions* = ref object
-    origin*:                  string
-    depth*:                   int
-    createAddress*:           string
-    codeAddress*:             string
-    shouldTransferValue*:     bool
-    isStatic*:                bool
+    ../logging, ../constants, ../validation, stint, ../types
 
 proc `origin=`*(message: var Message, value: string) =
   message.internalOrigin = value
@@ -73,8 +34,8 @@ proc newMessageOptions*(
     isStatic: isStatic)
 
 proc newMessage*(
-    gas: UInt256,
-    gasPrice: UInt256,
+    gas: GasInt,
+    gasPrice: GasInt,
     to: string,
     sender: string,
     value: UInt256,

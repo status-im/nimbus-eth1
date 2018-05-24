@@ -7,7 +7,7 @@
 
 import  unittest, macros, strformat, strutils, sequtils,
         stint,
-        ../src/[constants, opcode_values, errors, logging, vm/gas_meter]
+        ../src/[constants, opcode_values, errors, logging, types, vm/gas_meter]
 
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful
@@ -15,7 +15,7 @@ import  unittest, macros, strformat, strutils, sequtils,
 disableLogging()
 
 proc gasMeters: seq[GasMeter] =
-  @[newGasMeter(10.u256), newGasMeter(100.u256), newGasMeter(999.u256)]
+  @[newGasMeter(10), newGasMeter(100), newGasMeter(999)]
 
 macro all(element: untyped, handler: untyped): untyped =
   let name = ident(&"{element.repr}s")
@@ -84,15 +84,15 @@ suite "gasMeter":
     all(gasMeter):
       check(gasMeter.gasRemaining == gasMeter.startGas)
       expect(OutOfGas):
-        gasMeter.consumeGas(gasMeter.startGas + 1.u256, "")
+        gasMeter.consumeGas(gasMeter.startGas + 1, "")
 
   test "return refund works correctly":
     all(gasMeter):
       check(gasMeter.gasRemaining == gasMeter.startGas)
       check(gasMeter.gasRefunded == 0)
-      gasMeter.consumeGas(5.u256, "")
-      check(gasMeter.gasRemaining == gasMeter.startGas - 5.u256)
-      gasMeter.returnGas(5.u256)
+      gasMeter.consumeGas(5, "")
+      check(gasMeter.gasRemaining == gasMeter.startGas - 5)
+      gasMeter.returnGas(5)
       check(gasMeter.gasRemaining == gasMeter.startGas)
-      gasMeter.refundGas(5.u256)
-      check(gasMeter.gasRefunded == 5.u256)
+      gasMeter.refundGas(5)
+      check(gasMeter.gasRefunded == 5)

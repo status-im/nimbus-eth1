@@ -47,14 +47,15 @@ proc callDataCopy*(computation: var BaseComputation) =
   let (memStartPosition,
        calldataStartPosition,
        size) = computation.stack.popInt(3)
-  computation.extendMemory(memStartPosition, size)
+  let (memPos, callPos, len) = (memStartPosition.toInt, calldataStartPosition.toInt, size.toInt)
+  computation.extendMemory(memPos, len)
 
-  let wordCount = ceil32(size) div 32
+  let wordCount = ceil32(len) div 32
   let copyGasCost = wordCount * constants.GAS_COPY
   computation.gasMeter.consumeGas(copyGasCost, reason="CALLDATACOPY fee")
-  let value = computation.msg.data[calldataStartPosition.toInt ..< (calldataStartPosition + size).toInt]
-  let paddedValue = padRight(value, size.toInt, 0.byte)
-  computation.memory.write(memStartPosition, size, paddedValue)
+  let value = computation.msg.data[callPos ..< callPos + len]
+  let paddedValue = padRight(value, len, 0.byte)
+  computation.memory.write(memPos, len, paddedValue)
 
 
 proc codesize*(computation: var BaseComputation) =
@@ -66,8 +67,10 @@ proc codecopy*(computation: var BaseComputation) =
   let (memStartPosition,
        codeStartPosition,
        size) = computation.stack.popInt(3)
-  computation.extendMemory(memStartPosition, size)
-  let wordCount = ceil32(size) div 32
+  let (memPos, codePos, len) = (memStartPosition.toInt, codeStartPosition.toInt, size.toInt)
+  computation.extendMemory(memPos, len)
+
+  let wordCount = ceil32(len) div 32
   let copyGasCost = constants.GAS_COPY * wordCount
 
   computation.gasMeter.consumeGas(copyGasCost, reason="CODECOPY: word gas cost")
@@ -79,7 +82,7 @@ proc codecopy*(computation: var BaseComputation) =
 
 
 proc gasprice*(computation: var BaseComputation) =
-  computation.stack.push(computation.msg.gasPrice)
+  computation.stack.push(computation.msg.gasPrice.u256)
 
 
 proc extCodeSize*(computation: var BaseComputation) =
@@ -93,8 +96,9 @@ proc extCodeSize*(computation: var BaseComputation) =
 proc extCodeCopy*(computation: var BaseComputation) =
   let account = forceBytesToAddress(computation.stack.popString)
   let (memStartPosition, codeStartPosition, size) = computation.stack.popInt(3)
-  computation.extendMemory(memStartPosition, size)
-  let wordCount = ceil32(size) div 32
+  let (memPos, codePos, len) = (memStartPosition.toInt, codeStartPosition.toInt, size.toInt)
+  computation.extendMemory(memPos, len)
+  let wordCount = ceil32(len) div 32
   let copyGasCost = constants.GAS_COPY * wordCount
 
   computation.gasMeter.consumeGas(copyGasCost, reason="EXTCODECOPY: word gas cost")
@@ -112,15 +116,16 @@ proc returnDataSize*(computation: var BaseComputation) =
 
 proc returnDataCopy*(computation: var BaseComputation) =
   let (memStartPosition, returnDataStartPosition, size) = computation.stack.popInt(3)
-  if returnDataStartPosition + size > computation.returnData.len:
+  let (memPos, returnPos, len) = (memStartPosition.toInt, returnDataStartPosition.toInt, size.toInt)
+  if returnPos + len > computation.returnData.len:
     raise newException(OutOfBoundsRead,
       "Return data length is not sufficient to satisfy request.  Asked \n" &
       &"for data from index {returnDataStartPosition} to {returnDataStartPosition + size}. Return data is {computation.returnData.len} in \n" &
       "length")
 
-  computation.extendMemory(memStartPosition, size)
-  let wordCount = ceil32(size) div 32
+  computation.extendMemory(memPos, len)
+  let wordCount = ceil32(len) div 32
   let copyGasCost = wordCount * constants.GAS_COPY
   computation.gasMeter.consumeGas(copyGasCost, reason="RETURNDATACOPY fee")
-  let value = ($computation.returnData)[returnDataStartPosition.toInt ..< (returnDataStartPosition + size).toInt]
-  computation.memory.write(memStartPosition, size, value)
+  let value = ($computation.returnData)[returnPos ..< returnPos + len]
+  computation.memory.write(memPos, len, value)

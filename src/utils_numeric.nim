@@ -36,8 +36,8 @@ proc bigEndianToInt*(value: Bytes): UInt256 =
 # proc bitLength*(value: UInt256): int =
 #   255 - value.countLeadingZeroBits
 
-proc log256*(value: UInt256): UInt256 =
-  ((255 - value.countLeadingZeroBits) div 8).u256
+proc log256*(value: UInt256): Natural =
+  (255 - value.countLeadingZeroBits) div 8 # Compilers optimize to `shr 3`
 
 # proc ceil8*(value: int): int =
 #   let remainder = value mod 8
@@ -68,12 +68,12 @@ proc pseudoSignedToUnsigned*(value: UInt256): UInt256 =
 macro ceilXX(ceiling: static[int]): untyped =
   var name = ident(&"ceil{ceiling}")
   result = quote:
-    proc `name`*(value: UInt256): UInt256 =
-      var remainder = value mod `ceiling`.u256
+    proc `name`*(value: Natural): Natural =
+      var remainder = value mod `ceiling`
       if remainder == 0:
         return value
       else:
-        return value + `ceiling`.u256 - remainder
+        return value + `ceiling` - remainder
 
 
 ceilXX(32)

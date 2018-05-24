@@ -39,13 +39,13 @@ type
 using
   computation: var BaseComputation
 
-method msgExtraGas*(call: BaseCall, computation; gas: UInt256, to: string, value: UInt256): UInt256 {.base.} =
+method msgExtraGas*(call: BaseCall, computation; gas: GasInt, to: string, value: UInt256): GasInt {.base.} =
   raise newException(NotImplementedError, "Must be implemented by subclasses")
 
-method msgGas*(call: BaseCall, computation; gas: UInt256, to: string, value: UInt256): (UInt256, UInt256) {.base.} =
+method msgGas*(call: BaseCall, computation; gas: GasInt, to: string, value: UInt256): (GasInt, GasInt) {.base.} =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   let totalFee = gas + extraGas
-  let childMsgGas = gas + (if value != 0: GAS_CALL_STIPEND else: 0.u256)
+  let childMsgGas = gas + (if value != 0: GAS_CALL_STIPEND else: 0)
   (childMsgGas, totalFee)
 
 method callParams*(call: BaseCall, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) {.base.} =
@@ -60,11 +60,13 @@ method runLogic*(call: BaseCall, computation) =
        shouldTransferValue,
        isStatic) = call.callParams(computation)
 
-  computation.extendMemory(memoryInputStartPosition, memoryInputSize)
-  computation.extendMemory(memoryOutputStartPosition, memoryOutputSize)
+  let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.toInt, memoryInputSize.toInt, memoryOutputStartPosition.toInt, memoryOutputSize.toInt)
 
-  let callData = computation.memory.read(memoryInputStartPosition, memoryInputSize)
-  let (childMsgGas, childMsgGasFee) = call.msgGas(computation, gas, to, value)
+  computation.extendMemory(memInPos, memInLen)
+  computation.extendMemory(memOutPos, memOutLen)
+
+  let callData = computation.memory.read(memInPos, memInLen)
+  let (childMsgGas, childMsgGasFee) = call.msgGas(computation, gas.toInt, to, value)
   computation.gasMeter.consumeGas(childMsgGasFee, reason = $call.kind)
 
   # TODO: Pre-call checks
@@ -116,22 +118,22 @@ method runLogic*(call: BaseCall, computation) =
     else:
       computation.stack.push(1.u256)
     if not childComputation.shouldEraseReturnData:
-      let actualOutputSize = min(memoryOutputSize, childComputation.output.len.u256)
+      let actualOutputSize = min(memOutLen, childComputation.output.len)
       computation.memory.write(
-        memoryOutputStartPosition,
+        memOutPos,
         actualOutputSize,
-        childComputation.output.toBytes[0 ..< actualOutputSize.toInt])
+        childComputation.output.toBytes[0 ..< actualOutputSize])
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-method msgExtraGas(call: Call, computation; gas: UInt256, to: string, value: UInt256): UInt256 =
+method msgExtraGas(call: Call, computation; gas: GasInt, to: string, value: UInt256): GasInt =
   # TODO: db
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #  let accountExists = db.accountExists(to)
   let accountExists = false
 
-  let transferGasFee = if value != 0: GAS_CALL_VALUE else: 0.u256
-  let createGasFee = if not accountExists: GAS_NEW_ACCOUNT else: 0.u256
+  let transferGasFee = if value != 0: GAS_CALL_VALUE else: 0
+  let createGasFee = if not accountExists: GAS_NEW_ACCOUNT else: 0
   transferGasFee + createGasFee
 
 method callParams(call: CallCode, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) =
@@ -154,8 +156,8 @@ method callParams(call: CallCode, computation): (UInt256, UInt256, string, strin
    true,  # should_transfer_value,
    computation.msg.isStatic)
 
-method msgExtraGas(call: CallCode, computation; gas: UInt256, to: string, value: UInt256): UInt256 =
-  if value != 0: GAS_CALL_VALUE else: 0.u256
+method msgExtraGas(call: CallCode, computation; gas: GasInt, to: string, value: UInt256): GasInt =
+  if value != 0: GAS_CALL_VALUE else: 0
 
 method callParams(call: Call, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) =
   let gas = computation.stack.popInt()
@@ -180,11 +182,11 @@ method callParams(call: Call, computation): (UInt256, UInt256, string, string, s
    true,  # should_transfer_value,
    computation.msg.isStatic)
 
-method msgGas(call: DelegateCall, computation; gas: UInt256, to: string, value: UInt256): (UInt256, UInt256) =
+method msgGas(call: DelegateCall, computation; gas: GasInt, to: string, value: UInt256): (GasInt, GasInt) =
   (gas, gas)
 
-method msgExtraGas(call: DelegateCall, computation; gas: UInt256, to: string, value: UInt256): UInt256 =
-  0.u256
+method msgExtraGas(call: DelegateCall, computation; gas: GasInt, to: string, value: UInt256): GasInt =
+  0
 
 method callParams(call: DelegateCall, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) =
   let gas = computation.stack.popInt()
@@ -209,30 +211,30 @@ method callParams(call: DelegateCall, computation): (UInt256, UInt256, string, s
    false,  # should_transfer_value,
    computation.msg.isStatic)
 
-proc maxChildGasEIP150*(gas: UInt256): UInt256 =
+proc maxChildGasEIP150*(gas: GasInt): GasInt =
   gas - gas div 64
 
-proc computeEIP150MsgGas(computation; gas: UInt256, extraGas: UInt256, value: UInt256, name: string, callStipend: UInt256): (UInt256, UInt256) =
+proc computeEIP150MsgGas(computation; gas, extraGas: GasInt, value: UInt256, name: string, callStipend: GasInt): (GasInt, GasInt) =
   if computation.gasMeter.gasRemaining < extraGas:
     raise newException(OutOfGas, &"Out of gas: Needed {extraGas} - Remaining {computation.gasMeter.gasRemaining} - Reason: {name}")
   let gas = min(gas, maxChildGasEIP150(computation.gasMeter.gasRemaining - extraGas))
   let totalFee = gas + extraGas
-  let childMsgGas = gas + (if value != 0: callStipend else: 0.u256)
+  let childMsgGas = gas + (if value != 0: callStipend else: 0)
   (childMsgGas, totalFee)
 
-method msgGas(call: CallEIP150, computation; gas: UInt256, to: string, value: UInt256):  (UInt256, UInt256) =
+method msgGas(call: CallEIP150, computation; gas: GasInt, to: string, value: UInt256):  (GasInt, GasInt) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, GAS_CALL_STIPEND)
 
-method msgGas(call: CallCodeEIP150, computation; gas: UInt256, to: string, value: UInt256):  (UInt256, UInt256) =
+method msgGas(call: CallCodeEIP150, computation; gas: GasInt, to: string, value: UInt256):  (GasInt, GasInt) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, GAS_CALL_STIPEND)
 
-method msgGas(call: DelegateCallEIP150, computation; gas: UInt256, to: string, value: UInt256):  (UInt256, UInt256) =
+method msgGas(call: DelegateCallEIP150, computation; gas: GasInt, to: string, value: UInt256):  (GasInt, GasInt) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
-  computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, 0.u256)
+  computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, 0)
 
-proc msgExtraGas*(call: CallEIP161, computation; gas: UInt256, to: string, value: UInt256): UInt256 =
+proc msgExtraGas*(call: CallEIP161, computation; gas: GasInt, to: string, value: UInt256): GasInt =
   # TODO: with
   #  with computation.vm_state.state_db(read_only=True) as state_db:
   #            account_is_dead = (
@@ -240,8 +242,8 @@ proc msgExtraGas*(call: CallEIP161, computation; gas: UInt256, to: string, value
   #                state_db.account_is_empty(to))
   let accountIsDead = true
 
-  let transferGasFee = if value != 0: GAS_CALL_VALUE else: 0.u256
-  let createGasFee = if accountIsDead and value != 0: GAS_NEW_ACCOUNT else: 0.u256
+  let transferGasFee = if value != 0: GAS_CALL_VALUE else: 0
+  let createGasFee = if accountIsDead and value != 0: GAS_NEW_ACCOUNT else: 0
   transferGasFee + createGasFee
 
 

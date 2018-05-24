@@ -10,36 +10,36 @@ import
 
 # TODO: Make that computation at compile-time.
 #       Go-Ethereum uses pure uint64 for gas computation
-let BaseGasCosts*: GasCosts = [
-  GasZero:                     0.u256,
-  GasBase:                     2.u256,
-  GasVeryLow:                  3.u256,
-  GasLow:                      5.u256,
-  GasMid:                      8.u256,
-  GasHigh:                     10.u256,
-  GasSload:                    50.u256,     # Changed to 200 in Tangerine (EIP150)
-  GasJumpDest:                 1.u256,
-  GasSset:                     20_000.u256,
-  GasSreset:                   5_000.u256,
-  GasExtCode:                  20.u256,
-  GasCoinbase:                 20.u256,
-  GasSelfDestruct:             0.u256,      # Changed to 5000 in Tangerine (EIP150)
-  GasInHandler:                0.u256,      # to be calculated in handler
-  GasRefundSclear:             15000.u256,
+const BaseGasCosts*: GasCosts = [
+  GasZero:                     0'i64,
+  GasBase:                     2,
+  GasVeryLow:                  3,
+  GasLow:                      5,
+  GasMid:                      8,
+  GasHigh:                     10,
+  GasSload:                    50,     # Changed to 200 in Tangerine (EIP150)
+  GasJumpDest:                 1,
+  GasSset:                     20_000,
+  GasSreset:                   5_000,
+  GasExtCode:                  20,
+  GasCoinbase:                 20,
+  GasSelfDestruct:             0,      # Changed to 5000 in Tangerine (EIP150)
+  GasInHandler:                0,      # to be calculated in handler
+  GasRefundSclear:             15000,
 
-  GasBalance:                  20.u256,     # Changed to 400 in Tangerine (EIP150)
-  GasCall:                     40.u256,     # Changed to 700 in Tangerine (EIP150)
-  GasExp:                      10.u256,
-  GasSHA3:                     30.u256
+  GasBalance:                  20,     # Changed to 400 in Tangerine (EIP150)
+  GasCall:                     40,     # Changed to 700 in Tangerine (EIP150)
+  GasExp:                      10,
+  GasSHA3:                     30
 ]
 
 proc tangerineGasCosts(baseCosts: GasCosts): GasCosts =
 
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
   result = baseCosts
-  result[GasSload]        = 200.u256
-  result[GasSelfDestruct] = 5000.u256
-  result[GasBalance]      = 400.u256
-  result[GasCall]         = 40.u256
+  result[GasSload]        = 200
+  result[GasSelfDestruct] = 5000
+  result[GasBalance]      = 400
+  result[GasCall]         = 40
 
-let TangerineGasCosts* = BaseGasCosts.tangerineGasCosts
+const TangerineGasCosts* = BaseGasCosts.tangerineGasCosts

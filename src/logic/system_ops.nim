@@ -24,13 +24,14 @@ type
 
   CreateByzantium* = ref object of CreateEIP150 # TODO: Refactoring - put that in VM forks
 
-method maxChildGasModifier(create: Create, gas: UInt256): UInt256 {.base.} =
+method maxChildGasModifier(create: Create, gas: GasInt): GasInt {.base.} =
   gas
 
 method runLogic*(create: Create, computation) =
   computation.gasMeter.consumeGas(computation.gasCosts[create.gasCost(computation)], reason = $create.kind) # TODO: Refactoring create gas costs
   let (value, startPosition, size) = computation.stack.popInt(3)
-  computation.extendMemory(startPosition, size)
+  let (pos, len) = (startPosition.toInt, size.toInt)
+  computation.extendMemory(pos, len)
 
   # TODO: with
   # with computation.vm_state.state_db(read_only=True) as state_db:
@@ -42,7 +43,7 @@ method runLogic*(create: Create, computation) =
   #          computation.stack.push(0)
   #          return
 
-  let callData = computation.memory.read(startPosition, size)
+  let callData = computation.memory.read(pos, len)
   let createMsgGas = create.maxChildGasModifier(computation.gasMeter.gasRemaining)
   computation.gasMeter.consumeGas(createMsgGas, reason="CREATE")
 
@@ -82,7 +83,7 @@ method runLogic*(create: Create, computation) =
     computation.stack.push(contractAddress)
   computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-method maxChildGasModifier(create: CreateEIP150, gas: UInt256): UInt256 =
+method maxChildGasModifier(create: CreateEIP150, gas: GasInt): GasInt =
   maxChildGasEIP150(gas)
 
 method runLogic*(create: CreateByzantium, computation) =
@@ -142,15 +143,17 @@ proc selfdestruct(computation; beneficiary: string) =
 
 proc returnOp*(computation) =
   let (startPosition, size) = stack.popInt(2)
-  computation.extendMemory(startPosition, size)
-  let output = memory.read(startPosition, size)
+  let (pos, len) = (startPosition.toInt, size.toInt)
+  computation.extendMemory(pos, len)
+  let output = memory.read(pos, len)
   computation.output = output.toString
   raise newException(Halt, "RETURN")
 
 proc revert*(computation) =
   let (startPosition, size) = stack.popInt(2)
-  computation.extendMemory(startPosition, size)
-  let output = memory.read(startPosition, size).toString
+  let (pos, len) = (startPosition.toInt, size.toInt)
+  computation.extendMemory(pos, len)
+  let output = memory.read(pos, len).toString
   computation.output = output
   raise newException(Revert, $output)
 

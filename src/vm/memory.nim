@@ -24,39 +24,39 @@ proc len*(memory: Memory): int =
 
 
 # TODO: why is the size passed as a UInt256?
-proc extend*(memory: var Memory; startPosition: UInt256; size: UInt256) =
+proc extend*(memory: var Memory; startPosition: Natural; size: Natural) =
   if size == 0:
     return
   var newSize = ceil32(startPosition + size)
-  if newSize <= len(memory).u256:
+  if newSize <= len(memory):
     return
-  var sizeToExtend = newSize - len(memory).u256
-  memory.bytes = memory.bytes.concat(repeat(0.byte, sizeToExtend.toInt))
+  var sizeToExtend = newSize - len(memory)
+  memory.bytes = memory.bytes.concat(repeat(0.byte, sizeToExtend))
 
-proc newMemory*(size: UInt256): Memory =
+proc newMemory*(size: Natural): Memory =
   result = newMemory()
-  result.extend(0.u256, size)
+  result.extend(0, size)
 
 # TODO: why is the size passed as a UInt256?
-proc read*(memory: var Memory, startPosition: UInt256, size: UInt256): seq[byte] =
-  result = memory.bytes[startPosition.toInt ..< (startPosition + size).toInt]
+proc read*(memory: var Memory, startPosition: Natural, size: Natural): seq[byte] =
+  result = memory.bytes[startPosition ..< (startPosition + size)]
 
 # TODO: why is the size passed as a UInt256?
-proc write*(memory: var Memory, startPosition: UInt256, size: UInt256, value: seq[byte]) =
+proc write*(memory: var Memory, startPosition: Natural, size: Natural, value: seq[byte]) =
   if size == 0:
     return
   #echo size
   #echo startPosition
   #validateGte(startPosition, 0)
   #validateGte(size, 0)
-  validateLength(value, size.toInt)
+  validateLength(value, size)
   validateLte(startPosition + size, memory.len)
   let index = memory.len
-  if memory.len.u256 < startPosition + size:
-    memory.bytes = memory.bytes.concat(repeat(0.byte, memory.len - (startPosition + size).toInt)) # TODO: better logarithmic scaling?
+  if memory.len < startPosition + size:
+    memory.bytes = memory.bytes.concat(repeat(0.byte, memory.len - (startPosition + size))) # TODO: better logarithmic scaling?
 
   for z, b in value:
-    memory.bytes[z + startPosition.toInt] = b
+    memory.bytes[z + startPosition] = b
 
-template write*(memory: var Memory, startPosition: UInt256, size: UInt256, value: cstring) =
+template write*(memory: var Memory, startPosition: Natural, size: Natural, value: cstring) =
   memory.write(startPosition, size, value.toBytes)

@@ -17,18 +17,19 @@ using
 
 macro logXX(topicCount: static[int]): untyped =
   if topicCount < 0 or topicCount > 4:
-    error(&"Invalid log topic size {topicCount}  Must be 0, 1, 2, 3, or 4")
+    error(&"Invalid log topic len {topicCount}  Must be 0, 1, 2, 3, or 4")
     return
 
   let name = ident(&"log{topicCount}")
   let computation = ident("computation")
   let topics = ident("topics")
   let topicsTuple = ident("topicsTuple")
-  let size = ident("size")
-  let memStartPosition = ident("memStartPosition")
+  let len = ident("len")
+  let memPos = ident("memPos")
   result = quote:
     proc `name`*(`computation`: var BaseComputation) =
-      let (`memStartPosition`, `size`) = `computation`.stack.popInt(2)
+      let (memStartPosition, size) = `computation`.stack.popInt(2)
+      let (`memPos`, `len`) = (memStartPosition.toInt, size.toInt)
       var `topics`: seq[UInt256]
 
   var topicCode: NimNode
@@ -50,12 +51,12 @@ macro logXX(topicCount: static[int]): untyped =
   result.body.add(topicCode)
 
   let logicCode = quote:
-    let dataGasCost = constants.GAS_LOG_DATA * `size`
-    let topicGasCost = constants.GAS_LOG_TOPIC * `topicCount`.u256
+    let dataGasCost = constants.GAS_LOG_DATA * `len`
+    let topicGasCost = constants.GAS_LOG_TOPIC * `topicCount`
     let totalGasCost = dataGasCost + topicGasCost
     `computation`.gasMeter.consumeGas(totalGasCost, reason="Log topic and data gas cost")
-    `computation`.extendMemory(`memStartPosition`, `size`)
-    let logData = `computation`.memory.read(`memStartPosition`, `size`).toString
+    `computation`.extendMemory(`memPos`, `len`)
+    let logData = `computation`.memory.read(`memPos`, `len`).toString
     `computation`.addLogEntry(
         account=`computation`.msg.storageAddress,
         topics=`topics`,

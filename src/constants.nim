@@ -46,13 +46,13 @@ proc `==`*(a: UInt256, b: int): bool =
 proc `!=`*(a: UInt256, b: int): bool =
   a != b.u256
 
-proc `^`*(base: int; exp: int): UInt256 =
-  let base = base.u256
-  var ex = exp
-  result = 1.u256
-  while ex > 0:
-    result = result * base
-    dec(ex)
+# proc `^`*(base: int; exp: int): UInt256 =
+#   let base = base.u256
+#   var ex = exp
+#   result = 1.u256
+#   while ex > 0:
+#     result = result * base
+#     dec(ex)
 
 proc `^`*(left: Int256, right: int): Int256 =
   var value = right.i256
@@ -123,7 +123,7 @@ let
   INT_256_MAX_AS_UINT256* =       cast[Uint256](high(Int256))
   NULLBYTE* =                     "\x00"
   EMPTYWORD* =                    repeat(NULLBYTE, 32)
-  UINT160CEILING*: UInt256 =      2 ^ 160
+  UINT160CEILING*: UInt256 =      2.u256 ^ 160
   CREATE_CONTRACT_ADDRESS* =      ""
   ZERO_ADDRESS* =                 repeat("\x00", 20)
   ZERO_HASH32* =                  repeat("\x00", 20)
@@ -147,34 +147,34 @@ let
   # GAS_SLOAD_COST* =               20.u256
   # GAS_SELF_DESTRUCT_COST* =       0.u256
   # GAS_IN_HANDLER* =               0.u256 # to be calculated in handler
-  REFUND_SCLEAR* =                15_000.u256
+  REFUND_SCLEAR* =                15_000
 
   # GAS_SELF_DESTRUCT* =            0.u256
   # GAS_SELF_DESTRUCT_NEW_ACCOUNT* = 25_000.u256
   GAS_CREATE* =                   32_000.u256
   # GAS_CALL* =                     40.u256
-  GAS_CALL_VALUE* =               9_000.u256
-  GAS_CALL_STIPEND* =             2_300.u256
-  GAS_NEW_ACCOUNT* =              25_000.u256
+  GAS_CALL_VALUE* =               9_000
+  GAS_CALL_STIPEND* =             2_300
+  GAS_NEW_ACCOUNT* =              25_000
 
   # GAS_COST_BALANCE* =             400.u256 # TODO: this is post-eip150, see also GAS_BALANCE
 
   # GAS_EXP* =                      10.u256
   # GAS_EXP_BYTE* =                 10.u256
-  GAS_MEMORY* =                   3.u256
+  GAS_MEMORY* =                   3
   GAS_TX_CREATE* =                32_000.u256
   GAS_TX_DATA_ZERO* =             4.u256
   GAS_TX_DATA_NON_ZERO* =         68.u256
   GAS_TX* =                       21_000.u256
   GAS_LOG* =                      375.u256
-  GAS_LOG_DATA* =                 8.u256
-  GAS_LOG_TOPIC* =                375.u256
+  GAS_LOG_DATA* =                 8
+  GAS_LOG_TOPIC* =                375
   # GAS_SHA3* =                     30.u256
-  GAS_SHA3_WORD* =                6.u256
-  GAS_COPY* =                     3.u256
+  GAS_SHA3_WORD* =                6
+  GAS_COPY* =                     3
   GAS_BLOCK_HASH* =               20.u256
   GAS_CODE_DEPOSIT* =             200.u256
-  GAS_MEMORY_QUADRATIC_DENOMINATOR* = 512.u256
+  GAS_MEMORY_QUADRATIC_DENOMINATOR* = 512
   GAS_SHA256* =                   60.u256
   GAS_SHA256WORD* =               12.u256
   GAS_RIP_EMD160* =               600.u256
@@ -188,7 +188,7 @@ let
   GAS_ECPAIRING_PER_POINT* =      80_000.u256
   GAS_LIMIT_EMA_DENOMINATOR* =    1_024.u256
   GAS_LIMIT_ADJUSTMENT_FACTOR* =  1_024.u256
-  GAS_LIMIT_MAXIMUM*: UInt256 =   2 ^ 63 - 1.u256
+  GAS_LIMIT_MAXIMUM* =            high(int64)
   GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* = 3.u256
   GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2.u256
 
@@ -206,7 +206,7 @@ let
   MAX_UNCLE_DEPTH* =              6.u256
   MAX_UNCLES* =                   2.u256
 
-  SECPK1_P*: UInt256 =            2 ^ 256 - 2 ^ 32 - 977.u256
+  SECPK1_P*: UInt256 =            2.u256 ^ 256 - 2.u256 ^ 32 - 977.u256
   SECPK1_N*: UInt256 =            "115792089237316195423570985008687907852837564279074904382605163141518161494337".u256
   SECPK1_A* =                     0.u256
   SECPK1_B* =                     7.u256

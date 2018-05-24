@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, sequtils, tables, macros, stint, terminal,
+  strformat, strutils, sequtils, tables, macros, stint, terminal, math,
   constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values, types,
   vm / [code_stream, gas_meter, memory, message, stack],
 
@@ -15,7 +15,7 @@ import
   vm/forks/f20150730_frontier/frontier_vm_state,
   vm/forks/f20161018_tangerine_whistle/tangerine_vm_state
 
-proc memoryGasCost*(sizeInBytes: UInt256): UInt256 =
+proc memoryGasCost*(sizeInBytes: Natural): GasInt =
   let
     sizeInWords = ceil32(sizeInBytes) div 32
     linearCost = sizeInWords * GAS_MEMORY
@@ -86,7 +86,7 @@ method shouldEraseReturnData*(c: BaseComputation): bool =
 
 method prepareChildMessage*(
     c: var BaseComputation,
-    gas: UInt256,
+    gas: GasInt,
     to: string,
     value: UInt256,
     data: seq[byte],
@@ -105,13 +105,10 @@ method prepareChildMessage*(
     code,
     childOptions)
 
-method extendMemory*(c: var BaseComputation, startPosition: UInt256, size: UInt256) =
+method extendMemory*(c: var BaseComputation, startPosition: Natural, size: Natural) =
   # Memory Management
-  #
-  # validate_uint256(start_position, title="Memory start position")
-  # validate_uint256(size, title="Memory size")
 
-  let beforeSize = ceil32(len(c.memory).u256)
+  let beforeSize = ceil32(len(c.memory))
   let afterSize = ceil32(startPosition + size)
 
   let beforeCost = memoryGasCost(beforeSize)
@@ -201,21 +198,21 @@ method getLogEntries*(c: BaseComputation): seq[(string, seq[UInt256], string)] =
   else:
     result = @[]
 
-method getGasRefund*(c: BaseComputation): UInt256 =
+method getGasRefund*(c: BaseComputation): GasInt =
   if c.isError:
-    result = 0.u256
+    result = 0
   else:
-    result = c.gasMeter.gasRefunded + c.children.mapIt(it.getGasRefund()).foldl(a + b, 0.u256)
+    result = c.gasMeter.gasRefunded + c.children.mapIt(it.getGasRefund()).foldl(a + b, 0'i64)
 
-method getGasUsed*(c: BaseComputation): UInt256 =
+method getGasUsed*(c: BaseComputation): GasInt =
   if c.shouldBurnGas:
     result = c.msg.gas
   else:
-    result = max(0.u256, c.msg.gas - c.gasMeter.gasRemaining)
+    result = max(0, c.msg.gas - c.gasMeter.gasRemaining)
 
-method getGasRemaining*(c: BaseComputation): UInt256 =
+method getGasRemaining*(c: BaseComputation): GasInt =
   if c.shouldBurnGas:
-    result = 0.u256
+    result = 0
   else:
     result = c.gasMeter.gasRemaining
 
