@@ -7,35 +7,36 @@
 
 import
   strformat, strutils, sequtils, macros,
-  constants, logging, errors, types, opcode_values, computation, vm/stack, stint
+  constants, logging, errors, types, opcode_values, computation, vm/stack, stint,
+  ./types
 
 template run*(opcode: Opcode, computation: var BaseComputation) =
   # Hook for performing the actual VM execution
   # opcode.consumeGas(computation)
-  computation.gasMeter.consumeGas(opcode.gasCost(computation), reason = $opcode.kind)
+  computation.gasMeter.consumeGas(computation.gasCosts[opcode.gasCost(computation)], reason = $opcode.kind) # TODO: further refactoring of gas costs
   opcode.runLogic(computation)
 
 method logger*(opcode: Opcode): Logger =
   logging.getLogger(&"vm.opcode.{opcode.kind}")
 
-method gasCost*(opcode: Opcode, computation: var BaseComputation): UInt256 =
+method gasCost*(opcode: Opcode, computation: var BaseComputation): GasCostKind =
   #if opcode.kind in VARIABLE_GAS_COST_OPS:
   #  opcode.gasCostHandler(computation)
   #else:
-  opcode.gasCostConstant
+  opcode.gasCostKind
 
 template newOpcode*(kind: Op, gasCost: UInt256, logic: proc(computation: var BaseComputation)): Opcode =
-  Opcode(kind: kind, gasCostConstant: gasCost, runLogic: logic)
+  Opcode(kind: kind, gasCostKind: gasCost, runLogic: logic)
 
 template newOpcode*(kind: Op, gasHandler: proc(computation: var BaseComputation): UInt256, logic: proc(computation: var BaseComputation)): Opcode =
   Opcode(kind: kind, gasCostHandler: gasHandler, runLogic: logic)
 
 method `$`*(opcode: Opcode): string =
-  let gasCost = $opcode.gasCostConstant
+  let gasCost = $opcode.gasCostKind
   # if opcode.kind in VARIABLE_GAS_COST_OPS:
   #   "variable"
   # else:
-  #   $opcode.gasCostConstant
+  #   $opcode.gasCostKind
   &"{opcode.kind}(0x{opcode.kind.int.toHex(2)}: {gasCost})"
 
 macro initOpcodes*(spec: untyped): untyped =
@@ -68,7 +69,7 @@ macro initOpcodes*(spec: untyped): untyped =
           `value`[`op`] = Opcode(kind: `op`, gasCostHandler: `gasCost`, runLogic: `handler`)
       else:
         quote:
-          `value`[`op`] = Opcode(kind: `op`, gasCostConstant: `gasCost`, runLogic: `handler`)
+          `value`[`op`] = Opcode(kind: `op`, gasCostKind: `gasCost`, runLogic: `handler`)
       result[1].add(opcode)
 
   result[1].add(value)

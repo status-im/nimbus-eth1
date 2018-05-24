@@ -20,15 +20,15 @@ using
 type
   Create* = ref object of Opcode
 
-  CreateEIP150* = ref object of Create
+  CreateEIP150* = ref object of Create # TODO: Refactoring - put that in VM forks
 
-  CreateByzantium* = ref object of CreateEIP150
+  CreateByzantium* = ref object of CreateEIP150 # TODO: Refactoring - put that in VM forks
 
 method maxChildGasModifier(create: Create, gas: UInt256): UInt256 {.base.} =
   gas
 
 method runLogic*(create: Create, computation) =
-  computation.gasMeter.consumeGas(create.gasCost(computation), reason = $create.kind)
+  computation.gasMeter.consumeGas(computation.gasCosts[create.gasCost(computation)], reason = $create.kind) # TODO: Refactoring create gas costs
   let (value, startPosition, size) = computation.stack.popInt(3)
   computation.extendMemory(startPosition, size)
 

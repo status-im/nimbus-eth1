@@ -129,38 +129,38 @@ let
   ZERO_HASH32* =                  repeat("\x00", 20)
   STACK_DEPTH_LIMIT* =            1024
 
-  GAS_NULL* =                     0.u256
-  GAS_ZERO* =                     0.u256
-  GAS_BASE* =                     2.u256
-  GAS_VERY_LOW* =                 3.u256
-  GAS_LOW* =                      5.u256
-  GAS_MID* =                      8.u256
-  GAS_HIGH* =                     10.u256
-  GAS_EXT_CODE* =                 20.u256
-  GAS_BALANCE* =                  20.u256
-  GAS_SLOAD* =                    200.u256 # TODO: pre eip150
-  GAS_JUMP_DEST* =                1.u256
-  GAS_SSET* =                     20_000.u256
-  GAS_SRESET* =                   5_000.u256
-  GAS_EXT_CODE_COST* =            700.u256
-  GAS_COINBASE* =                 20.u256
-  GAS_SLOAD_COST* =               20.u256
-  GAS_SELF_DESTRUCT_COST* =       0.u256
-  GAS_IN_HANDLER* =               0.u256 # to be calculated in handler
+  # GAS_NULL* =                     0.u256
+  # GAS_ZERO* =                     0.u256
+  # GAS_BASE* =                     2.u256
+  # GAS_VERY_LOW* =                 3.u256
+  # GAS_LOW* =                      5.u256
+  # GAS_MID* =                      8.u256
+  # GAS_HIGH* =                     10.u256
+  # GAS_EXT_CODE* =                 20.u256 # TODO: this is pre-eip150, see also GAS_EXT_CODE_COST
+  # GAS_BALANCE* =                  20.u256 # TODO: this is pre-eip150, see also GAS_COST_BALANCE
+  # GAS_SLOAD* =                    200.u256 # TODO: pre eip150
+  # GAS_JUMP_DEST* =                1.u256
+  # GAS_SSET* =                     20_000.u256
+  # GAS_SRESET* =                   5_000.u256
+  # GAS_EXT_CODE_COST* =            700.u256
+  # GAS_COINBASE* =                 20.u256
+  # GAS_SLOAD_COST* =               20.u256
+  # GAS_SELF_DESTRUCT_COST* =       0.u256
+  # GAS_IN_HANDLER* =               0.u256 # to be calculated in handler
   REFUND_SCLEAR* =                15_000.u256
 
-  GAS_SELF_DESTRUCT* =            0.u256
-  GAS_SELF_DESTRUCT_NEW_ACCOUNT* = 25_000.u256
+  # GAS_SELF_DESTRUCT* =            0.u256
+  # GAS_SELF_DESTRUCT_NEW_ACCOUNT* = 25_000.u256
   GAS_CREATE* =                   32_000.u256
-  GAS_CALL* =                     40.u256
+  # GAS_CALL* =                     40.u256
   GAS_CALL_VALUE* =               9_000.u256
   GAS_CALL_STIPEND* =             2_300.u256
   GAS_NEW_ACCOUNT* =              25_000.u256
 
-  GAS_COST_BALANCE* =             400.u256
+  # GAS_COST_BALANCE* =             400.u256 # TODO: this is post-eip150, see also GAS_BALANCE
 
-  GAS_EXP* =                      10.u256
-  GAS_EXP_BYTE* =                 10.u256
+  # GAS_EXP* =                      10.u256
+  # GAS_EXP_BYTE* =                 10.u256
   GAS_MEMORY* =                   3.u256
   GAS_TX_CREATE* =                32_000.u256
   GAS_TX_DATA_ZERO* =             4.u256
@@ -169,7 +169,7 @@ let
   GAS_LOG* =                      375.u256
   GAS_LOG_DATA* =                 8.u256
   GAS_LOG_TOPIC* =                375.u256
-  GAS_SHA3* =                     30.u256
+  # GAS_SHA3* =                     30.u256
   GAS_SHA3_WORD* =                6.u256
   GAS_COPY* =                     3.u256
   GAS_BLOCK_HASH* =               20.u256
@@ -252,6 +252,8 @@ proc contains*(ab: UInt256Pair, v: UInt256): bool =
   return v >= ab[0] and v <= ab[1]
 
 proc toFork*(blockNumber: UInt256): Fork =
+  # TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
+  # TODO - Refactoring: redundant with `chain.nim` getVM
   result = fkUnknown
   let one = u256(1)
   if blockNumber in u256(0)..FORK_ICEAGE_BLKNUM - one: result = fkFrontier

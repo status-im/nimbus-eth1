@@ -8,7 +8,12 @@
 import
   strformat, strutils, sequtils, tables, macros, stint, terminal,
   constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values, types,
-  vm / [code_stream, gas_meter, memory, message, stack]
+  vm / [code_stream, gas_meter, memory, message, stack],
+
+  # TODO further refactoring of gas cost
+  vm/forks/gas_costs,
+  vm/forks/f20150730_frontier/frontier_vm_state,
+  vm/forks/f20161018_tangerine_whistle/tangerine_vm_state
 
 proc memoryGasCost*(sizeInBytes: UInt256): UInt256 =
   let
@@ -20,7 +25,11 @@ proc memoryGasCost*(sizeInBytes: UInt256): UInt256 =
 
 #const VARIABLE_GAS_COST_OPS* = {Op.Exp}
 
-proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation =
+method newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation {.base.}=
+  raise newException(ValueError, "Must be implemented by subclasses")
+
+# TODO refactor that
+method newBaseComputation*(vmState: FrontierVMState, message: Message): BaseComputation =
   new(result)
   result.vmState = vmState
   result.msg = message
@@ -32,6 +41,21 @@ proc newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputatio
   result.logEntries = @[]
   result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
   result.rawOutput = "0x"
+  result.gasCosts = BaseGasCosts
+
+method newBaseComputation*(vmState: TangerineVMState, message: Message): BaseComputation =
+  new(result)
+  result.vmState = vmState
+  result.msg = message
+  result.memory = Memory()
+  result.stack = newStack()
+  result.gasMeter = newGasMeter(message.gas)
+  result.children = @[]
+  result.accountsToDelete = initTable[string, string]()
+  result.logEntries = @[]
+  result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
+  result.rawOutput = "0x"
+  result.gasCosts = TangerineGasCosts
 
 method logger*(computation: BaseComputation): Logger =
   logging.getLogger("vm.computation.BaseComputation")

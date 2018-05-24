@@ -8,7 +8,7 @@
 import
   unittest, strformat, tables, times,
   stint,
-  ../src/[constants, chain, vm/base, vm/forks/frontier/vm, utils/header, utils/address, db/db_chain, db/backends/memory_backend]
+  ../src/[constants, chain, vm/base, vm/forks/f20150730_frontier/frontier_vm, utils/header, utils/address, db/db_chain, db/backends/memory_backend]
 
 proc chainWithoutBlockValidation*: Chain =
   result = configureChain("TestChain", GENESIS_BLOCK_NUMBER, vmkFrontier, false, false)
