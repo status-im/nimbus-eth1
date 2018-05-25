@@ -1,5 +1,4 @@
 **Nimbus - An Ethereum 2.0 Sharding Client**
-
 - [Overview](#overview)
 - [Goals](#goals)
 - [Requirements](#requirements)
@@ -48,7 +47,6 @@
 - [Ideas Considered for Implementation](#ideas-considered-for-implementation)
 - [Resources](#resources)
 
-<!-- /TOC -->
 
 # Overview
 
