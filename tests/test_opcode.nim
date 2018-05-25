@@ -16,7 +16,7 @@ import
   test_helpers
 
 
-proc testCode(code: string, initialGas: UInt256, blockNum: UInt256): BaseComputation =
+proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputation =
   let header = BlockHeader(blockNumber: blockNum)
   var vm = newNimbusVM(header, newBaseChainDB(newMemoryDB()))
     # coinbase: "",
@@ -32,7 +32,7 @@ proc testCode(code: string, initialGas: UInt256, blockNum: UInt256): BaseComputa
     data = @[],
     code=code,
     gas=initial_gas,
-    gasPrice=1.u256) # What is this used for?
+    gasPrice=1) # What is this used for?
     # gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt.u256,
     #options=newMessageOptions(origin=fixture{"exec"}{"origin"}.getStr))
 
@@ -53,10 +53,10 @@ suite "opcodes":
   test "add":
     var c = testCode(
       "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01",
-      100_000.u256,
+      100_000,
       0.u256
       )
-    check(c.gasMeter.gasRemaining == 99_991.u256)
+    check(c.gasMeter.gasRemaining == 99_991)
     check(c.stack.peek == "115792089237316195423570985008687907853269984665640564039457584007913129639934".u256)
 #     let address = Address::from_str("0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6").unwrap();
 #   let code = "7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01600055".from_hex().unwrap();
@@ -80,33 +80,33 @@ suite "opcodes":
     block: # Using Balance (0x31)
       var c = testCode(
         "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff31",
-        100_000.u256,
+        100_000,
         0.u256
         )
-      check: c.gasMeter.gasRemaining == 100000.u256 - 3.u256 - 20.u256 # Starting gas - push32 (verylow) - balance
+      check: c.gasMeter.gasRemaining == 100000 - 3 - 20 # Starting gas - push32 (verylow) - balance
 
     block: # Using SLOAD (0x54)
       var c = testCode(
         "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff54",
-        100_000.u256,
+        100_000,
         0.u256
         )
-      check: c.gasMeter.gasRemaining == 100000.u256 - 3.u256 - 50.u256 # Starting gas - push32 (verylow) - SLOAD
+      check: c.gasMeter.gasRemaining == 100000 - 3 - 50 # Starting gas - push32 (verylow) - SLOAD
 
 
   test "Tangerine VM computation - post-EIP150 gas cost properly applied":
     block: # Using Balance (0x31)
       var c = testCode(
         "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff31",
-        100_000.u256,
+        100_000,
         2_463_000.u256 # Tangerine block
         )
-      check: c.gasMeter.gasRemaining == 100000.u256 - 3.u256 - 400.u256 # Starting gas - push32 (verylow) - balance
+      check: c.gasMeter.gasRemaining == 100000 - 3 - 400 # Starting gas - push32 (verylow) - balance
 
     block: # Using SLOAD (0x54)
       var c = testCode(
         "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff54",
-        100_000.u256,
+        100_000,
         2_463_000.u256
         )
-      check: c.gasMeter.gasRemaining == 100000.u256 - 3.u256 - 200.u256 # Starting gas - push32 (verylow) - SLOAD
+      check: c.gasMeter.gasRemaining == 100000 - 3 - 200 # Starting gas - push32 (verylow) - SLOAD

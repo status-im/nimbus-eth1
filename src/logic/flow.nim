@@ -55,4 +55,4 @@ proc pc*(computation) =
 
 proc gas*(computation) =
   let gasRemaining = gasMeter.gasRemaining
-  stack.push(gasRemaining)
+  stack.push(gasRemaining.u256)

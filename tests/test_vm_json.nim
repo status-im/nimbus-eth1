@@ -45,8 +45,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       value=fixture{"exec"}{"value"}.getHexadecimalInt.u256,
       data=fixture{"exec"}{"data"}.getStr.mapIt(it.byte),
       code=code,
-      gas=fixture{"exec"}{"gas"}.getHexadecimalInt.u256,
-      gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt.u256,
+      gas=fixture{"exec"}{"gas"}.getHexadecimalInt,
+      gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt,
       options=newMessageOptions(origin=fixture{"exec"}{"origin"}.getStr))
 
   #echo fixture{"exec"}
@@ -81,7 +81,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     check(computation.output == expectedOutput)
     let gasMeter = computation.gasMeter
 
-    let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt.u256
+    let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt
     let actualGasRemaining = gasMeter.gasRemaining
     checkpoint(&"{actualGasRemaining} {expectedGasRemaining}")
     check(actualGasRemaining == expectedGasRemaining or
@@ -100,7 +100,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       var (childComputation, createdCall) = child
       let toAddress = createdCall{"destination"}.getStr
       let data = createdCall{"data"}.getStr.mapIt(it.byte)
-      let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt.u256
+      let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt
       let value = createdCall{"value"}.getHexadecimalInt.u256
 
       check(childComputation.msg.to == toAddress)

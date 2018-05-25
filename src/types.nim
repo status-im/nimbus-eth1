@@ -9,7 +9,8 @@ import
   tables,
   constants, vm_state,
   opcode_values, stint,
-  vm / [code_stream, gas_meter, memory, message, stack]
+  vm / [code_stream, memory, stack],
+  ./logging
 
 type
   BaseComputation* = ref object of RootObj
@@ -49,6 +50,16 @@ type
     gasCostKind*: GasCostKind
     runLogic*:  proc(computation: var BaseComputation)
 
+  GasInt* = int64
+    ## Type alias used for gas computation
+    # For reference - https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
+
+  GasMeter* = ref object
+    logger*: Logger
+    gasRefunded*: GasInt
+    startGas*: GasInt
+    gasRemaining*: GasInt
+
   GasCostKind* = enum
     GasZero
     GasBase
@@ -71,4 +82,42 @@ type
     GasExp
     GasSHA3
 
-  GasCosts* = array[GasCostKind, UInt256]
+  GasCosts* = array[GasCostKind, GasInt]
+
+  Message* = ref object
+    # A message for VM computation
+
+    # depth = None
+
+    # code = None
+    # codeAddress = None
+
+    # createAddress = None
+
+    # shouldTransferValue = None
+    # isStatic = None
+
+    # logger = logging.getLogger("evm.vm.message.Message")
+
+    gas*:                     GasInt
+    gasPrice*:                GasInt
+    to*:                      string
+    sender*:                  string
+    value*:                   UInt256
+    data*:                    seq[byte]
+    code*:                    string
+    internalOrigin*:          string
+    internalCodeAddress*:     string
+    depth*:                   int
+    internalStorageAddress*:  string
+    shouldTransferValue*:     bool
+    isStatic*:                bool
+    isCreate*:                bool
+
+  MessageOptions* = ref object
+    origin*:                  string
+    depth*:                   int
+    createAddress*:           string
+    codeAddress*:             string
+    shouldTransferValue*:     bool
+    isStatic*:                bool
