@@ -3,46 +3,46 @@
 - [Overview](#overview)
 - [Goals](#goals)
 - [Requirements](#requirements)
-	- [Requirement: Nim](#requirement--nim)
-	- [Requirement: Development on Embedded Systems](#requirement--development-on-embedded-systems)
-	- [Requirement: Extensible, Configurable, and Modular Design](#requirement--extensible--configurable--and-modular-design)
-	- [Requirement: Commitment to Ethereum Improvement Proposals (EIP)](#requirement--commitment-to-ethereum-improvement-proposals-eip)
-	- [Requirement: User Experience](#requirement--user-experience)
-	- [Requirement: Dual Licensing of MIT and Apache v2.0](#requirement--dual-licensing-of-mit-and-apache-v20)
-	- [Requirement: Biweekly Development Reports, Technical Writing, and Promotion](#requirement--biweekly-development-reports--technical-writing--and-promotion)
-	- [Requirement: Bounty-Based Development](#requirement--bounty-based-development)
+	- [Nim](#nim)
+	- [Development on Embedded Systems](#development-on-embedded-systems)
+	- [Extensible, Configurable, and Modular Design](#extensible--configurable--and-modular-design)
+	- [Commitment to Ethereum Improvement Proposals (EIP)](#commitment-to-ethereum-improvement-proposals-eip)
+	- [User Experience](#user-experience)
+	- [Dual Licensing of MIT and Apache v2.0](#dual-licensing-of-mit-and-apache-v20)
+	- [Biweekly Development Reports, Technical Writing, and Promotion](#biweekly-development-reports--technical-writing--and-promotion)
+	- [Bounty-Based Development](#bounty-based-development)
 - [Milestones](#milestones)
-	- [Milestone: Formation of the Team, and Detailed Project Implementation Timeline](#milestone--formation-of-the-team--and-detailed-project-implementation-timeline)
+	- [Formation of the Team, and Detailed Project Implementation Timeline](#formation-of-the-team--and-detailed-project-implementation-timeline)
 		- [January - February 2018](#january---february-2018)
 		- [Completed:](#completed)
 		- [Goals:](#goals)
-	- [Milestone: Compatibility with Ethereum 1.0](#milestone--compatibility-with-ethereum-10)
+	- [Compatibility with Ethereum 1.0](#compatibility-with-ethereum-10)
 		- [January - November 2018](#january---november-2018)
 		- [Goals:](#goals)
-	- [Milestone: Sharding Phase 1](#milestone--sharding-phase-1)
+	- [Sharding Phase 1](#sharding-phase-1)
 		- [July - November 2018](#july---november-2018)
 		- [Goal:](#goal)
-	- [Milestone: Auditing of Beta and Security](#milestone--auditing-of-beta-and-security)
+	- [Auditing of Beta and Security](#auditing-of-beta-and-security)
 		- [November 2018 - March 2019](#november-2018---march-2019)
 		- [Goal:](#goal)
-	- [Milestone: Implementation of Whisper and PSS](#milestone--implementation-of-whisper-and-pss)
+	- [Implementation of Whisper and PSS](#implementation-of-whisper-and-pss)
 		- [July - November 2018](#july---november-2018)
 		- [Goals:](#goals)
-	- [Milestone: Support for LES](#milestone--support-for-les)
+	- [Support for LES](#support-for-les)
 		- [July - November 2018](#july---november-2018)
 		- [Goals:](#goals)
-	- [Milestone: Sharding Phase 2](#milestone--sharding-phase-2)
+	- [Sharding Phase 2](#sharding-phase-2)
 		- [November 2018 - July 2019](#november-2018---july-2019)
 		- [Goals:](#goals)
-	- [Milestone: Implementation of Casper](#milestone--implementation-of-casper)
+	- [Implementation of Casper](#implementation-of-casper)
 		- [December 2018 - February 2019](#december-2018---february-2019)
-	- [Milestone: Implementation of Swarm](#milestone--implementation-of-swarm)
+	- [Implementation of Swarm](#implementation-of-swarm)
 		- [January - July 2019](#january---july-2019)
 		- [Goals:](#goals)
-	- [Milestone: Release of Sharding Phase 3](#milestone--release-of-sharding-phase-3)
+	- [Release of Sharding Phase 3](#release-of-sharding-phase-3)
 		- [March - August 2019](#march---august-2019)
 		- [Goals:](#goals)
-	- [Milestone: Ongoing Improvements in Sharding](#milestone--ongoing-improvements-in-sharding)
+	- [Ongoing Improvements in Sharding](#ongoing-improvements-in-sharding)
 		- [August - December 2019](#august---december-2019)
 		- [Goals:](#goals)
 - [Ideas Considered for Implementation](#ideas-considered-for-implementation)
@@ -82,7 +82,7 @@ Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FA
 
 # Requirements
 
-## Requirement: Nim
+## Nim
 
 [Nim](https://nim-lang.org/) is an efficient, general-purpose systems programming language with a Python-like syntax that compiles to C. Nim will allow us to implement Ethereum rapidly and to take advantage of the mature C-language tooling: in compilation of machine code, and in the analysis of static code.is an efficient, general-purpose systems programming language with a Python-like syntax that compiles to C. Nim will allow us to implement Ethereum rapidly and to take advantage of the mature C-language tooling: in compilation of machine code, and in the analysis of static code.
 
@@ -94,7 +94,7 @@ With Ethereum research currently modeled in Python, the end result of implementi
 
 The core contributors and Nim community have been very supportive and enthusiastic for the project.
 
-## Requirement: Development on Embedded Systems
+## Development on Embedded Systems
 
 We believe that the largest successful deployment of Ethereum will reside on embedded systems: IoT devices and mobile personal devices, such as smartphones. Although Nimbus will support archival nodes, its first implementation will be as a light client, with focus on Proof of Stake and sharding.
 
@@ -114,7 +114,7 @@ During the deployment of Status among 40,000 alpha testers, we found that a sign
 
 When the 2020 scalability goal is fully realised, this constraint will help ensure that Ethereum runs performantly on resource-restricted hardware that is at least 6 years old.
 
-## Requirement: Extensible, Configurable, and Modular Design
+## Extensible, Configurable, and Modular Design
 
 The application architecture should have modular abstractions for the following:
 
@@ -132,15 +132,15 @@ The application architecture should have modular abstractions for the following:
 
 In addition, the implementation must pass the [common tests for all Ethereum implementations](https://github.com/ethereum/tests).
 
-## Requirement: Commitment to Ethereum Improvement Proposals (EIP)
+## Commitment to Ethereum Improvement Proposals (EIP)
 
 Nimbus is committed to open standards and to maintaining consensus with other Ethereum-compliant implementations. The development of Nimbus and the changes in its protocols will follow [the EIP process](https://github.com/ethereum/EIPs/).
 
-## Requirement: User Experience
+## User Experience
 
 Access to shards and mainchain state should be fast and responsive, the application binary should be lightweight in terms of the resources used, and the client should be dependable and robust against crashes.
 
-## Requirement: Dual Licensing of MIT and Apache v2.0
+## Dual Licensing of MIT and Apache v2.0
 
 One unsolved hurdle faced by Status is the [LGPLv3](https://opensource.org/licenses/LGPL-3.0) license, whose requirement for runtime linking is incompatible with major mobile app distribution channels, such as the App Store of Apple Inc.
 
@@ -152,13 +152,13 @@ We propose that Nimbus be licensed under Apache 2.0 and MIT. A permissive licens
 2. Extend the reach of the Ethereum platform
 3. Foster the highest degree of adoption by governments and enterprise
 
-## Requirement: Biweekly Development Reports, Technical Writing, and Promotion
+## Biweekly Development Reports, Technical Writing, and Promotion
 
 In addition to the implementation, Nimbus will have a biweekly process for reporting development-related updates. A technical writer will document implementation efforts and translate ongoing research discussions into articles easily understood by the community.
 
 Within the community at large, we will promote Ethereum as the leader of scalable public blockchains.
 
-## Requirement: Bounty-Based Development
+## Bounty-Based Development
 
 To entice the community to accelerate the development, we will attach bounties to and [publish](https://openbounty.status.im/app#/) the tasks that can be self-contained and defined clearly.
 
@@ -167,7 +167,7 @@ To entice the community to accelerate the development, we will attach bounties t
 Timelines are approximate and subject to research, implementation considerations, and revisions made while the team produces a detailed implementation timeline.
 
 
-## Milestone: Formation of the Team, and Detailed Project Implementation Timeline
+## Formation of the Team, and Detailed Project Implementation Timeline
 
 ### January - February 2018
 
@@ -194,7 +194,7 @@ atom
 
 2. Create a detailed timeline for implementing the project as a deliverable
 
-## Milestone: Compatibility with Ethereum 1.0
+## Compatibility with Ethereum 1.0
 
 ### January - November 2018
 
@@ -228,7 +228,7 @@ The code will consist of independently reusable libraries that have the same per
 
 3. The team understands the main themes from [ethresear.ch](https://ethresear.ch/) and actively participates in EIPs.
 
-## Milestone: Sharding Phase 1
+## Sharding Phase 1
 
 ### July - November 2018
 
@@ -241,7 +241,7 @@ While implementing compatibility with Ethereum 1.0, we will gain early experienc
 
 The architecture of Nimbus supports sharding nodes.
 
-## Milestone: Auditing of Beta and Security
+## Auditing of Beta and Security
 
 ### November 2018 - March 2019
 
@@ -251,7 +251,7 @@ An independent security partner will continuously perform a security audit on th
 
 Deliver a security-audited, production-ready client.
 
-## Milestone: Implementation of Whisper and PSS
+## Implementation of Whisper and PSS
 
 ### July - November 2018
 
@@ -262,7 +262,7 @@ We will set and advertise the bounties as soon as the P2P layer gets implemented
 1. Make Nimbus the leading platform for conducting research into the scalability aspects of Whisper and PSS. We consider this a key requirement for implementing a fully decentralised Status messaging platform within the Ethereum network.
 2. Deliver easy-to-use APIs for conducting large-scale and small-scale experiments within the network.
 
-## Milestone: Support for LES
+## Support for LES
 
 ### July - November 2018
 
@@ -273,7 +273,7 @@ We will optimize the architecture of Nimbus for implementing the [LES protocol](
 1. Enable a Light Mode switch in Nimbus.
 2. Successfully operate Nimbus in a mobile environment, without relying on a proxy service.
 
-## Milestone: Sharding Phase 2
+## Sharding Phase 2
 
 ### November 2018 - July 2019
 
@@ -286,13 +286,13 @@ Implement the following in Nim:
 1. CLI tools and APIs for running Phase 2 nodes and for interacting with the Validator Manager Contract (VMC)
 2. The development tools that will target the eWASM runtime environment
 
-## Milestone: Implementation of Casper
+## Implementation of Casper
 
 ### December 2018 - February 2019
 
 The team will closely follow the development of [Casper](https://blockgeeks.com/guides/ethereum-casper/) and will try to achieve and maintain compatibility with the existing Casper deployments.
 
-## Milestone: Implementation of Swarm
+## Implementation of Swarm
 
 ### January - July 2019
 
@@ -311,7 +311,7 @@ Implement the following:
 4. Reusable APIs for publishing and obtaining content from Swarm
 
 
-## Milestone: Sharding Phase 3
+## Release of Sharding Phase 3
 
 ### March - August 2019
 
@@ -325,7 +325,7 @@ Implement support for the following:
 
 2. Running stateless executor nodes in deployments of headless servers
 
-## Milestone: Ongoing Improvements in Sharding
+## Ongoing Improvements in Sharding
 
 ### August - December 2019
 
