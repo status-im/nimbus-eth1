@@ -1,4 +1,4 @@
-# Nimbus: An Ethereum 2.0 Sharding Client for Resource-Restricted Devices
+# Nimbus: an Ethereum 2.0 Sharding Client for Resource-Restricted Devices
 
 [![Build Status (Travis)](https://img.shields.io/travis/status-im/nimbus/master.svg?label=Linux%20/%20macOS "Linux/macOS build status (Travis)")](https://travis-ci.org/status-im/nimbus)
 [![Windows build status (Appveyor)](https://img.shields.io/appveyor/ci/jarradh/nimbus/master.svg?label=Windows "Windows build status (Appveyor)")](https://ci.appveyor.com/project/jarradh/nimbus)[![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
