@@ -7,28 +7,28 @@
 
 import
   macros, strformat,
-  ../types, ../computation, ../vm/stack
+  ../vm_types, ../computation, ../vm/stack
 
-macro swapXX(position: static[int]): untyped =
-  let name = ident(&"swap{position}")
+macro dupXX(position: static[int]): untyped =
+  let name = ident(&"dup{position}")
   result = quote:
     proc `name`*(computation: var BaseComputation) =
-      computation.stack.swap(`position`)
+      computation.stack.dup(`position`)
 
-swapXX(0)
-swapXX(1)
-swapXX(2)
-swapXX(3)
-swapXX(4)
-swapXX(5)
-swapXX(6)
-swapXX(7)
-swapXX(8)
-swapXX(9)
-swapXX(10)
-swapXX(11)
-swapXX(12)
-swapXX(13)
-swapXX(14)
-swapXX(15)
-swapXX(16)
+dupXX(1)
+dupXX(2)
+dupXX(3)
+dupXX(4)
+dupXX(5)
+dupXX(6)
+dupXX(7)
+dupXX(8)
+dupXX(9)
+dupXX(10)
+dupXX(11)
+dupXX(12)
+dupXX(13)
+dupXX(14)
+dupXX(15)
+dupXX(16)
+

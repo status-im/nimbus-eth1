@@ -8,11 +8,11 @@
 import
   unittest, strformat, strutils, sequtils, tables, stint, json, ospaths, times,
   ./test_helpers,
-  ../src/[constants, errors, logging],
-  ../src/[chain, vm_state, computation, opcode, types, opcode_table],
-  ../src/utils/[header, padding],
-  ../src/vm/[gas_meter, message, code_stream, stack],
-  ../src/vm/forks/vm_forks, ../src/db/[db_chain, state_db, backends/memory_backend]
+  ../nimbus/[constants, errors, logging],
+  ../nimbus/[chain, vm_state, computation, opcode, vm_types, opcode_table],
+  ../nimbus/utils/[header, padding],
+  ../nimbus/vm/[gas_meter, message, code_stream, stack],
+  ../nimbus/vm/forks/vm_forks, ../nimbus/db/[db_chain, state_db, backends/memory_backend]
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 

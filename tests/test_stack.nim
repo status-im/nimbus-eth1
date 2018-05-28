@@ -7,7 +7,7 @@
 
 import  unittest, macros, strformat, strutils, sequtils,
         stint,
-        ../src/[constants, opcode_values, errors, utils_numeric, vm/stack, vm/value, utils/bytes, utils/padding]
+        ../nimbus/[constants, opcode_values, errors, utils_numeric, vm/stack, vm/value, utils/bytes, utils/padding]
 
 
 template testPush(value: untyped, expected: untyped): untyped =

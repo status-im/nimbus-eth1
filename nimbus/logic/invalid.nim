@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../errors, ../types, ../computation
+  ../errors, ../vm_types, ../computation
 
 proc invalidOp*(computation: var BaseComputation) =
   raise newException(InvalidInstruction, "Invalid opcode")

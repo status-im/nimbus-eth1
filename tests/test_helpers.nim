@@ -8,10 +8,10 @@
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
   stint,
-  ../src/utils/[hexadecimal, address, padding],
-  ../src/[chain, vm_state, constants],
-  ../src/db/[db_chain, state_db], ../src/vm/forks/f20150730_frontier/frontier_vm,
-  ../src/vm/base, ../src/transaction
+  ../nimbus/utils/[hexadecimal, address, padding],
+  ../nimbus/[chain, vm_state, constants],
+  ../nimbus/db/[db_chain, state_db], ../nimbus/vm/forks/f20150730_frontier/frontier_vm,
+  ../nimbus/vm/base, ../nimbus/transaction
 
 type
   Status* {.pure.} = enum OK, Fail, Skip

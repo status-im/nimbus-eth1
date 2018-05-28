@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../utils_numeric, .. / utils / [keccak, bytes], .. / vm / [stack, memory, gas_meter], ../computation, ../types, helpers, stint
+  ../constants, ../utils_numeric, .. / utils / [keccak, bytes], .. / vm / [stack, memory, gas_meter], ../computation, ../vm_types, helpers, stint
 
 proc sha3op*(computation: var BaseComputation) =
   let (startPosition, size) = computation.stack.popInt(2)

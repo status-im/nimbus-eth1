@@ -7,7 +7,7 @@
 
 import  unittest, macros, strformat, strutils, sequtils,
         stint,
-        ../src/[constants, opcode_values, errors, vm/memory]
+        ../nimbus/[constants, opcode_values, errors, vm/memory]
 
 proc memory32: Memory =
   result = newMemory()

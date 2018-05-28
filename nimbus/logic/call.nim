@@ -7,7 +7,7 @@
 
 import
   strformat,
-  ../constants, ../types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging,
+  ../constants, ../vm_types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging,
   .. / vm / [stack, memory, gas_meter, message],
   .. / utils / [address, bytes],
   stint

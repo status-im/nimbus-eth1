@@ -7,7 +7,7 @@
 
 import  unittest, macros, strformat, strutils, sequtils,
         stint,
-        ../src/[constants, opcode_values, errors, logging, types, vm/gas_meter]
+        ../nimbus/[constants, opcode_values, errors, logging, vm_types, vm/gas_meter]
 
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful

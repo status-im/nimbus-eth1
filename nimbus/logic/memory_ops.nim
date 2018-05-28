@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../computation, ../types, .. / vm / [stack, memory], .. / utils / [padding, bytes],
+  ../constants, ../computation, ../vm_types, .. / vm / [stack, memory], .. / utils / [padding, bytes],
   stint
 
 

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-    ../logging, ../constants, ../validation, stint, ../types
+    ../logging, ../constants, ../validation, stint, ../vm_types
 
 proc `origin=`*(message: var Message, value: string) =
   message.internalOrigin = value
