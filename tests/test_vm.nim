@@ -8,8 +8,8 @@
 import
   unittest, stint,
   ./test_helpers, ./fixtures,
-  ../src/[db/backends/memory_backend, db/state_db, chain, constants, utils/hexadecimal, vm_state],
-  ../src/[vm/base, computation]
+  ../nimbus/[db/backends/memory_backend, db/state_db, chain, constants, utils/hexadecimal, vm_state],
+  ../nimbus/[vm/base, computation]
 
 import typetraits
 

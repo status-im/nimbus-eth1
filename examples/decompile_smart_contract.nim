@@ -1,4 +1,4 @@
-import ../src/vm/code_stream, ../src/opcode_values, strformat
+import ../nimbus/vm/code_stream, ../nimbus/opcode_values, strformat
 
 var c = newCodeStreamFromUnescaped("0x6003600202600055")
 

@@ -8,9 +8,9 @@ license       = "Apache License 2.0"
 skipDirs      = @["tests"]
 
 requires "nim >= 0.18.1",
-         "https://github.com/cheatfate/nimcrypto",
-         "https://github.com/status-im/nim-rlp",
-         "https://github.com/status-im/nim-stint",
+         "nimcrypto",
+         "rlp",
+         "stint",
          "https://github.com/status-im/nim-eth-p2p",
          "https://github.com/status-im/nim-eth-keyfile"
 

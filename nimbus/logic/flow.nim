@@ -7,7 +7,7 @@
 
 import
   strformat, stint,
-  ../constants, ../types, ../opcode_values, ../logging, ../errors, ../computation, .. /vm / [code_stream, stack]
+  ../constants, ../vm_types, ../opcode_values, ../logging, ../errors, ../computation, .. /vm / [code_stream, stack]
 
 
 {.this: computation.}

@@ -7,7 +7,7 @@
 
 import
   strformat,
-  ../logging, ../errors, ../types
+  ../logging, ../errors, ../vm_types
 
 proc newGasMeter*(startGas: GasInt): GasMeter =
   new(result)

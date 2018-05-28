@@ -7,7 +7,7 @@
 
 import
   strformat, macros,
-  ../constants, ../errors, ../types, ../computation, .. / vm / [stack, memory, gas_meter, message], .. / utils / bytes, stint
+  ../constants, ../errors, ../vm_types, ../computation, .. / vm / [stack, memory, gas_meter, message], .. / utils / bytes, stint
 
 {.this: computation.}
 {.experimental.}

@@ -7,8 +7,8 @@
 
 import
   strformat, strutils, sequtils, macros,
-  constants, logging, errors, types, opcode_values, computation, vm/stack, stint,
-  ./types
+  constants, logging, errors, opcode_values, computation, vm/stack, stint,
+  ./vm_types
 
 template run*(opcode: Opcode, computation: var BaseComputation) =
   # Hook for performing the actual VM execution

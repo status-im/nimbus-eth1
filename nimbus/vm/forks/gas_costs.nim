@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, ../../types
+  stint, ../../vm_types
 
 # TODO: Make that computation at compile-time.
 #       Go-Ethereum uses pure uint64 for gas computation

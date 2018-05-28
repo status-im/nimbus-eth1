@@ -7,12 +7,12 @@
 
 import
   unittest, stint, tables, parseutils,
-  ../src/[constants, types, errors, logging],
-  ../src/[chain, vm_state, computation, opcode, opcode_table],
-  ../src/[utils/header, utils/padding],
-  ../src/vm/[gas_meter, message, code_stream, stack],
-  ../src/vm/forks/vm_forks,
-  ../src/db/[db_chain, state_db, backends/memory_backend],
+  ../nimbus/[constants, vm_types, errors, logging],
+  ../nimbus/[chain, vm_state, computation, opcode, opcode_table],
+  ../nimbus/[utils/header, utils/padding],
+  ../nimbus/vm/[gas_meter, message, code_stream, stack],
+  ../nimbus/vm/forks/vm_forks,
+  ../nimbus/db/[db_chain, state_db, backends/memory_backend],
   test_helpers
 
 
