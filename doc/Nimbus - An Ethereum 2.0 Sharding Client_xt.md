@@ -1,4 +1,4 @@
-**Nimbus - an Ethereum 2.0 Sharding Client**
+**Nimbus - An Ethereum 2.0 Sharding Client**
 - [Overview](#overview)
 - [Goals](#goals)
 - [Requirements](#requirements)
@@ -7,7 +7,7 @@
 	- [Extensible, Configurable, and Modular Design](#extensible--configurable--and-modular-design)
 	- [Commitment to Ethereum Improvement Proposals (EIP)](#commitment-to-ethereum-improvement-proposals-eip)
 	- [User Experience](#user-experience)
-	- [Dual Licensing of MIT and Apache v2.0](#dual-licensing-of-mit-and-apache-v20)
+	- [Licensing: MIT, Apache v2.0, or Both](#licensing--mit--apache-v20--or-both)
 	- [Biweekly Development Reports, Technical Writing, and Promotion](#biweekly-development-reports--technical-writing--and-promotion)
 	- [Bounty-Based Development](#bounty-based-development)
 - [Milestones](#milestones)
@@ -44,13 +44,14 @@
 	- [Ongoing Improvements in Sharding](#ongoing-improvements-in-sharding)
 		- [August - December 2019](#august---december-2019)
 		- [Goals:](#goals)
+- [Etymology](#etymology)
 - [Ideas Considered for Implementation](#ideas-considered-for-implementation)
 - [Resources](#resources)
 
 
 # Overview
 
-Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FAQ) client implementation for the Ethereum Blockchain Application Platform. Because the largest deployment of Ethereum will be on embedded systems, Nimbus will be designed to perform well on IoT and personal mobile devices, including older smartphones with resource-restricted hardware. The extensible, configurable, and modular design of Nimbus will make it production ready for Web 3.0 and will ensure that it can be supported and maintained across all goals of Ethereum 2.0.
+Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FAQ) client implementation for the Ethereum Blockchain Application Platform. Because the largest deployment of Ethereum will potentially be on embedded systems, Nimbus will be designed to perform well on IoT and personal mobile devices, including older smartphones with resource-restricted hardware. The extensible, configurable, and modular design of Nimbus will make it production ready for Web 3.0 and will ensure that it can be supported and maintained across all goals of Ethereum 2.0.
 
 # Goals
 
@@ -82,7 +83,7 @@ Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FA
 
 ## Nim
 
-[Nim](https://nim-lang.org/) is an efficient, general-purpose systems programming language with a Python-like syntax that compiles to C. Nim will allow us to implement Ethereum rapidly and to take advantage of the mature C-language tooling: in compilation of machine code, and in the analysis of static code.is an efficient, general-purpose systems programming language with a Python-like syntax that compiles to C. Nim will allow us to implement Ethereum rapidly and to take advantage of the mature C-language tooling: in compilation of machine code, and in the analysis of static code.
+[Nim](https://nim-lang.org/) is an efficient, general-purpose systems programming language with a Python-like syntax that compiles to C. Nim will allow us to implement Ethereum rapidly and to take advantage of the mature C-language tooling: in compilation of machine code, and in the analysis of static code.
 
 With Ethereum research currently modeled in Python, the end result of implementing in Nim should be code that
 
@@ -99,8 +100,6 @@ We believe that the largest successful deployment of Ethereum will reside on emb
 Existing implementations of Ethereum have focused on desktop computers and servers. These implementations have played a major role in the initial success of Ethereum, and they are suitable for full and archival nodes. However, their deployment onto embedded systems has been an afterthought. 
 
 In addition, throughout the development of Status, we have found that the dominant Ethereum implementations, Geth and Parity, are unsuitable for our target platform unless they are profiled and optimised (in progress).
-
-Although Nimbus will support archival nodes, its first implementation will be as a light client, with focus on Proof of Stake and sharding.
 
 During the deployment of Status among 40,000 alpha testers, we found that a significant portion (23.6%) of users were still running old mobile devices. In addition, recently discovered [Spectre vulnerabilities](https://en.wikipedia.org/wiki/Spectre_(security_vulnerability)) have led to an increase in the demand for open processors. For these reasons, we propose a self-imposed constraint and a requirement that Status perform well on the following:
 
@@ -138,17 +137,17 @@ Nimbus is committed to open standards and to maintaining consensus with other Et
 
 Access to shards and mainchain state should be fast and responsive, the application binary should be lightweight in terms of the resources used, and the client should be dependable and robust against crashes.
 
-## Dual Licensing of MIT and Apache v2.0
+## Licensing: MIT, Apache v2.0, or Both
 
-One unsolved hurdle faced by Status is the [LGPLv3](https://opensource.org/licenses/LGPL-3.0) license, whose requirement for runtime linking is incompatible with major mobile app distribution channels, such as the App Store of Apple Inc.
-
-Numerous requests for a static-linking exception have gone unanswered. This has blocked the deployment of any legally sound, full Ethereum client on popular channels for distribution of mobile devices. LGPL also prevents the adoption of Ethereum on closed hardware platforms, such as XBox. Still, we remain optimistic this issue will be rectified.
-
-We propose that Nimbus be licensed under Apache 2.0 and MIT. A permissive licensing structure with patent protection would 
+We propose that Nimbus be licensed under Apache 2.0 and MIT. A permissive licensing structure with patent protection would
 
 1. Ensure the compatibility with GPL 2.0 and LGPL 2.0
 2. Extend the reach of the Ethereum platform
 3. Foster the highest degree of adoption by governments and enterprise
+
+One unsolved hurdle faced by Status is the [LGPLv3](https://opensource.org/licenses/LGPL-3.0) license, whose requirement for runtime linking is incompatible with major mobile app distribution channels, such as the App Store of Apple Inc.
+
+Numerous requests for a static-linking exception have gone unanswered. This has blocked the deployment of any legally sound, full Ethereum client on popular channels for distribution of mobile devices. LGPL also prevents the adoption of Ethereum on closed hardware platforms, such as XBox. Still, we remain optimistic this issue will be rectified.
 
 ## Biweekly Development Reports, Technical Writing, and Promotion
 
@@ -162,7 +161,7 @@ To entice the community to accelerate the development, we will attach bounties t
 
 # Milestones
 
-Timelines are approximate and subject to research, implementation considerations, and revisions made while the team produces a detailed implementation timeline.
+Timelines are approximate and affected by research, implementation considerations, and revisions made while the team produces a detailed implementation timeline.
 
 
 ## Formation of the Team, and Detailed Project Implementation Timeline
@@ -196,7 +195,7 @@ atom
 
 ### January - November 2018
 
-As an initial goal, we will focus on implementing all components required for interoperability with the Ethereum ecosystem. We will publish these components as independently reusable modules and libraries. 
+As an initial goal, we will focus on implementing all components required for interoperability with the Ethereum ecosystem. We will publish these components as independently reusable modules and libraries.
 
 However, before starting the implementation in Nim, we will develop an understanding of the existing implementations of Ethereum: [Go Ethereum](https://github.com/ethereum/go-ethereum/), [Pyethereum](https://github.com/ethereum/pyethereum), [Py-EVM](https://github.com/ethereum/py-evm), and [Parity](https://github.com/paritytech/parity).
 
@@ -208,11 +207,13 @@ The code will consist of independently reusable libraries that have the same per
 
 3. Connecting to the Ethereum network
 
-4. [RLPx](https://github.com/ethereum/devp2p/blob/master/rlpx.md#introduction) sub-protocols
+4. Ethereum Patricia Trees
 
-5. Ethereum [Ethash](https://github.com/ethereum/wiki/wiki/Ethash) function
+5. [RLPx](https://github.com/ethereum/devp2p/blob/master/rlpx.md#introduction) sub-protocols
 
-6. Implementation of EVM
+6. Ethereum [Ethash](https://github.com/ethereum/wiki/wiki/Ethash) function
+
+7. Implementation of EVM
 
 ### Goals:
 
@@ -335,6 +336,14 @@ Implement support for the following:
 
 3. Provide an ongoing research into the applicability and performance characteristics of all super-quadratic sharding designs in a mobile environment.
 
+# Etymology
+
+A reference to:
+* A different kind of "dark cloud" computing
+* Spiritual symbolism of sanctity and holiness
+* Nim, the language it will be written in
+* A Bus in computing architecture
+
 # Ideas Considered for Implementation
 
 1. Create [devp2p](https://github.com/ethereum/wiki/wiki/%C3%90%CE%9EVp2p-Wire-Protocol) and an abstraction to allow for
@@ -360,7 +369,7 @@ Implement support for the following:
 
 6. Encryption library is a little unclear. [Libgcrypt](https://www.gnupg.org/software/libgcrypt/index.html) has everything we need but might be problematic from the standpoint of LGPL licensing. If we have an abstraction for Libgcrypt, we could use it now and swap it out later for something more permissive.
 
-	 Alternatively, we could roll out our own library. However, implementing our own encryption would not be a great idea, and our version would have to be audited and tested. Suggestions are welcome.
+     Alternatively, we could roll out our own library. However, implementing our own encryption would not be a great idea, and our version would have to be audited and tested. Suggestions are welcome.
 
 7. Monitor
    [ethereum/py-evm](https://github.com/ethereum/py-evm/tree/sharding). Connect with Chang-Wu Chen, Hsiao-Wei Wang, and anyone else working on sharding.
