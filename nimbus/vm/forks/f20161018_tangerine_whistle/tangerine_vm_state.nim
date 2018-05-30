@@ -20,4 +20,4 @@ proc newTangerineVMState*: TangerineVMState =
   result.prevHeaders = @[]
   result.name = "TangerineVM"
   result.accessLogs = newAccessLogs()
-  result.blockHeader = BlockHeader(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
+  # result.blockHeader = # TODO: ...

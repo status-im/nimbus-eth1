@@ -7,10 +7,8 @@
 
 import macros
 
-macro pushRes*: untyped =
-  let resNode = ident("res")
-  result = quote:
-    computation.stack.push(`resNode`)
+template pushRes*: untyped =
+  computation.stack.push(res)
 
 macro quasiBoolean*(name: untyped, op: untyped, signed: untyped = nil, nonzero: untyped = nil): untyped =
   var signedNode = newEmptyNode()

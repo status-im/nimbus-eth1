@@ -10,7 +10,7 @@ import
   ../../../constants, ../../../errors, ../../../vm_state, ../../../transaction, ../../../utils/header
 
 proc validateFrontierTransaction*(vmState: BaseVmState, transaction: BaseTransaction) =
-  let gasCost = transaction.gas * transaction.gasPrice
+  let gasCost = u256(transaction.gas * transaction.gasPrice)
   var senderBalance: UInt256
   # inDB(vmState.stateDB(readOnly=true):
   #   senderBalance = db.getBalance(transaction.sender)

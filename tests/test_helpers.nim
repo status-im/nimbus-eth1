@@ -7,7 +7,7 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  stint,
+  stint, byteutils, eth_common, eth_keys,
   ../nimbus/utils/[hexadecimal, address, padding],
   ../nimbus/[chain, vm_state, constants],
   ../nimbus/db/[db_chain, state_db], ../nimbus/vm/forks/f20150730_frontier/frontier_vm,
@@ -77,8 +77,11 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       raw.add("OK: " & $okCount & "/" & $sum & " Fail: " & $failCount & "/" & $sum & " Skip: " & $skipCount & "/" & $sum & "\n")
     writeFile(`s` & ".md", raw)
 
+proc accountFromHex(s: string): EthAddress = hexToByteArray(s, result)
+
 proc setupStateDB*(desiredState: JsonNode, stateDB: var AccountStateDB) =
-  for account, accountData in desiredState:
+  for ac, accountData in desiredState:
+    let account = accountFromHex(ac)
     for slot, value in accountData{"storage"}:
       stateDB.setStorage(account, slot.parseInt.u256, value.getInt.u256)
 
@@ -94,9 +97,9 @@ proc getHexadecimalInt*(j: JsonNode): int =
   discard parseHex(j.getStr, result)
 
 method newTransaction*(
-  vm: VM, addr_from, addr_to: string,
+  vm: VM, addr_from, addr_to: EthAddress,
   amount: UInt256,
-  private_key: string,
+  private_key: PrivateKey,
   gas_price = 10.u256,
   gas = 100000.u256,
   data: seq[byte] = @[]

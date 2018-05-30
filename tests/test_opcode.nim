@@ -26,8 +26,8 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
     # timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt)
 
   let message = newMessage(
-    to="", #fixture{"exec"}{"address"}.getStr,
-    sender="", #fixture{"exec"}{"caller"}.getStr,
+    to=ZERO_ADDRESS, #fixture{"exec"}{"address"}.getStr,
+    sender=ZERO_ADDRESS, #fixture{"exec"}{"caller"}.getStr,
     value=0.u256,
     data = @[],
     code=code,
@@ -42,7 +42,6 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
     c.displayDecompiled()
 
   var computation = newBaseComputation(vm.state, message)
-  computation.accountsToDelete = initTable[string, string]()
   computation.opcodes = OPCODE_TABLE
   computation.precompiles = initTable[string, Opcode]()
 

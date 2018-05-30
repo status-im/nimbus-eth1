@@ -6,22 +6,23 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-    ../logging, ../constants, ../validation, stint, ../vm_types
+    stint, eth_common,
+    ../logging, ../constants, ../validation, ../vm_types
 
-proc `origin=`*(message: var Message, value: string) =
+proc `origin=`*(message: var Message, value: EthAddress) =
   message.internalOrigin = value
 
-proc `codeAddress=`*(message: var Message, value: string) =
+proc `codeAddress=`*(message: var Message, value: EthAddress) =
   message.internalCodeAddress = value
 
-proc `storageAddress=`*(message: var Message, value: string) =
+proc `storageAddress=`*(message: var Message, value: EthAddress) =
   message.internalStorageAddress = value
 
 proc newMessageOptions*(
-    origin: string = "",
+    origin = ZERO_ADDRESS,
     depth: int = 0,
-    createAddress: string = "",
-    codeAddress: string = "",
+    createAddress = ZERO_ADDRESS,
+    codeAddress = ZERO_ADDRESS,
     shouldTransferValue: bool = true,
     isStatic: bool = false): MessageOptions =
 
@@ -36,8 +37,8 @@ proc newMessageOptions*(
 proc newMessage*(
     gas: GasInt,
     gasPrice: GasInt,
-    to: string,
-    sender: string,
+    to: EthAddress,
+    sender: EthAddress,
     value: UInt256,
     data: seq[byte],
     code: string,
@@ -58,8 +59,6 @@ proc newMessage*(
 
   result.data = data
 
-  if not options.origin.isNil:
-    validateCanonicalAddress(options.origin, title="Message.origin")
   result.internalOrigin = options.origin
 
   validateGte(options.depth, minimum=0, title="Message.depth")
@@ -67,20 +66,16 @@ proc newMessage*(
 
   result.code = code
 
-  if not options.createAddress.isNil:
-    validateCanonicalAddress(options.createAddress, title="Message.storage_address")
   result.storageAddress = options.createAddress
 
-  if not options.codeAddress.isNil:
-    validateCanonicalAddress(options.codeAddress, title="Message.code_address")
   result.codeAddress = options.codeAddress
 
   result.shouldTransferValue = options.shouldTransferValue
 
   result.isStatic = options.isStatic
 
-proc origin*(message: Message): string =
-  if not message.internalOrigin.len == 0:
+proc origin*(message: Message): EthAddress =
+  if message.internalOrigin != ZERO_ADDRESS:
     message.internalOrigin
   else:
     message.sender
@@ -88,14 +83,14 @@ proc origin*(message: Message): string =
 proc isOrigin*(message: Message): bool =
   message.sender == message.origin
 
-proc codeAddress*(message: Message): string =
-  if not message.internalCodeAddress.len == 0:
+proc codeAddress*(message: Message): EthAddress =
+  if message.internalCodeAddress != ZERO_ADDRESS:
     message.internalCodeAddress
   else:
     message.to
 
-proc `storageAddress`*(message: Message): string =
-  if not message.internalStorageAddress.len == 0:
+proc `storageAddress`*(message: Message): EthAddress =
+  if message.internalStorageAddress != ZERO_ADDRESS:
     message.internalStorageAddress
   else:
     message.to

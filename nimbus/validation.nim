@@ -7,16 +7,11 @@
 
 import
   strformat,
-  errors, constants, stint
+  errors, constants, stint, eth_common
 
-proc validateCanonicalAddress*(value: string, title: string = "Value") =
-  # TODO
-  if false: #len(value) != 20:
-    raise newException(ValidationError,
-      &"{title} {value} is not a valid canonical address")
-
-
-
+template validateCanonicalAddress*(value: EthAddress, title: string = "Value") =
+  # TODO: This needs to be removed
+  discard
 
 proc validateGte*(value: Int256 | int, minimum: int, title: string = "Value") =
   if value.i256 < minimum.i256:

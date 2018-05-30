@@ -11,6 +11,7 @@ requires "nim >= 0.18.1",
          "nimcrypto",
          "rlp",
          "stint",
+         "https://github.com/status-im/nim-eth-common",
          "https://github.com/status-im/nim-eth-p2p",
          "https://github.com/status-im/nim-eth-keyfile"
 

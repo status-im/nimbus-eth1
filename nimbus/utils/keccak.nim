@@ -6,11 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  nimcrypto, strutils
+  nimcrypto, strutils, eth_common
 
-proc keccak*(value: string): string {.inline.}=
-  $keccak256.digest value
+proc keccak*(value: openarray[byte]): Hash256 {.inline.} =
+  keccak256.digest value
 
-proc keccak*(value: cstring): string {.inline.}=
+proc keccak*(value: string): Hash256 {.inline.} =
+  keccak256.digest value
+
+proc keccak*(value: cstring): Hash256 {.inline.} =
   # TODO: this is inefficient it allocates for the cstring -> string and then for string -> result
   keccak $value

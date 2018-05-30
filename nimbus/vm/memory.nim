@@ -23,7 +23,6 @@ proc len*(memory: Memory): int =
   result = memory.bytes.len
 
 
-# TODO: why is the size passed as a UInt256?
 proc extend*(memory: var Memory; startPosition: Natural; size: Natural) =
   if size == 0:
     return
@@ -37,19 +36,17 @@ proc newMemory*(size: Natural): Memory =
   result = newMemory()
   result.extend(0, size)
 
-# TODO: why is the size passed as a UInt256?
 proc read*(memory: var Memory, startPosition: Natural, size: Natural): seq[byte] =
   result = memory.bytes[startPosition ..< (startPosition + size)]
 
-# TODO: why is the size passed as a UInt256?
-proc write*(memory: var Memory, startPosition: Natural, size: Natural, value: seq[byte]) =
+proc write*(memory: var Memory, startPosition: Natural, value: openarray[byte]) =
+  let size = value.len
   if size == 0:
     return
   #echo size
   #echo startPosition
   #validateGte(startPosition, 0)
   #validateGte(size, 0)
-  validateLength(value, size)
   validateLte(startPosition + size, memory.len)
   let index = memory.len
   if memory.len < startPosition + size:
@@ -59,4 +56,4 @@ proc write*(memory: var Memory, startPosition: Natural, size: Natural, value: se
     memory.bytes[z + startPosition] = b
 
 template write*(memory: var Memory, startPosition: Natural, size: Natural, value: cstring) =
-  memory.write(startPosition, size, value.toBytes)
+  memory.write(startPosition, value.toBytes)

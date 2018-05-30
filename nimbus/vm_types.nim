@@ -8,9 +8,11 @@
 import
   tables,
   constants, vm_state,
-  opcode_values, stint,
+  opcode_values, stint, eth_common,
   vm / [code_stream, memory, stack],
   ./logging
+
+export GasInt
 
 type
   BaseComputation* = ref object of RootObj
@@ -25,9 +27,9 @@ type
     rawOutput*:             string
     returnData*:            string
     error*:                 Error
-    logEntries*:            seq[(string, seq[UInt256], string)]
+    logEntries*:            seq[(EthAddress, seq[UInt256], string)]
     shouldEraseReturnData*: bool
-    accountsToDelete*:      Table[string, string]
+    accountsToDelete*:      Table[EthAddress, EthAddress]
     opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
     precompiles*:           Table[string, Opcode]
     gasCosts*:              GasCosts # TODO separate opcode processing and gas computation
@@ -49,10 +51,6 @@ type
     ## I followed the py-evm approach which does that in opcode logic
     gasCostKind*: GasCostKind
     runLogic*:  proc(computation: var BaseComputation)
-
-  GasInt* = int64
-    ## Type alias used for gas computation
-    # For reference - https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
 
   GasMeter* = ref object
     logger*: Logger
@@ -101,23 +99,23 @@ type
 
     gas*:                     GasInt
     gasPrice*:                GasInt
-    to*:                      string
-    sender*:                  string
+    to*:                      EthAddress
+    sender*:                  EthAddress
     value*:                   UInt256
     data*:                    seq[byte]
     code*:                    string
-    internalOrigin*:          string
-    internalCodeAddress*:     string
+    internalOrigin*:          EthAddress
+    internalCodeAddress*:     EthAddress
     depth*:                   int
-    internalStorageAddress*:  string
+    internalStorageAddress*:  EthAddress
     shouldTransferValue*:     bool
     isStatic*:                bool
     isCreate*:                bool
 
   MessageOptions* = ref object
-    origin*:                  string
+    origin*:                  EthAddress
     depth*:                   int
-    createAddress*:           string
-    codeAddress*:             string
+    createAddress*:           EthAddress
+    codeAddress*:             EthAddress
     shouldTransferValue*:     bool
     isStatic*:                bool

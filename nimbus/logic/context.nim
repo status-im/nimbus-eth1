@@ -11,7 +11,7 @@ import
   .. / vm / [stack, message, gas_meter, memory, code_stream], .. / utils / [address, padding, bytes], stint
 
 proc balance*(computation: var BaseComputation) =
-  let address = forceBytesToAddress(computation.stack.popString)
+  let address = computation.stack.popAddress()
   var balance: Int256
   # TODO computation.vmState.stateDB(read_only=True):
   #  balance = db.getBalance(address)
@@ -55,7 +55,7 @@ proc callDataCopy*(computation: var BaseComputation) =
   computation.gasMeter.consumeGas(copyGasCost, reason="CALLDATACOPY fee")
   let value = computation.msg.data[callPos ..< callPos + len]
   let paddedValue = padRight(value, len, 0.byte)
-  computation.memory.write(memPos, len, paddedValue)
+  computation.memory.write(memPos, paddedValue)
 
 
 proc codesize*(computation: var BaseComputation) =
@@ -86,7 +86,7 @@ proc gasprice*(computation: var BaseComputation) =
 
 
 proc extCodeSize*(computation: var BaseComputation) =
-  let account = forceBytesToAddress(computation.stack.popString)
+  let account = computation.stack.popAddress()
   # TODO
   #     with computation.vm_state.state_db(read_only=True) as state_db:
   #         code_size = len(state_db.get_code(account))
@@ -94,7 +94,7 @@ proc extCodeSize*(computation: var BaseComputation) =
   #     computation.stack.push(code_size)
 
 proc extCodeCopy*(computation: var BaseComputation) =
-  let account = forceBytesToAddress(computation.stack.popString)
+  let account = computation.stack.popAddress()
   let (memStartPosition, codeStartPosition, size) = computation.stack.popInt(3)
   let (memPos, codePos, len) = (memStartPosition.toInt, codeStartPosition.toInt, size.toInt)
   computation.extendMemory(memPos, len)

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables, stint,
+  tables, stint, eth_common, eth_keys,
   ./logging, ./constants, ./errors, ./validation, ./utils/hexadecimal, ./vm/base, ./db/db_chain,
   ./utils/header, ./vm/forks/f20150730_frontier/frontier_vm
 
@@ -23,21 +23,21 @@ type
     importBlock*: bool
     validateBlock*: bool
     db*: BaseChainDB
-    fundedAddress*: string
+    fundedAddress*: EthAddress
     fundedAddressInitialBalance*: int
-    fundedAddressPrivateKey*: string
+    fundedAddressPrivateKey*: PrivateKey
 
   GenesisParams* = ref object
-    blockNumber*: UInt256
+    blockNumber*: BlockNumber
     difficulty*: UInt256
-    gasLimit*: UInt256
-    parentHash*: string
-    coinbase*: string
+    gasLimit*: GasInt
+    parentHash*: Hash256
+    coinbase*: EthAddress
     nonce*: string
-    mixHash*: string
+    mixHash*: Hash256
     extraData*: string
     timestamp*: EthTime
-    stateRoot*: string
+    stateRoot*: Hash256
 
   FundedAddress* = ref object
     balance*: Int256
@@ -75,7 +75,7 @@ proc fromGenesis*(
   # chainDB.persistBlockToDB(result.getBlock)
 
 
-proc getVMClassForBlockNumber*(chain: Chain, blockNumber: UInt256): VMKind =
+proc getVMClassForBlockNumber*(chain: Chain, blockNumber: BlockNumber): VMKind =
   ## Returns the VM class for the given block number
   # TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
   # TODO - Refactoring: redundant with constants.nim `toFork`
@@ -91,17 +91,16 @@ proc getVMClassForBlockNumber*(chain: Chain, blockNumber: UInt256): VMKind =
 
 # TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
 
-proc getVM*(chain: Chain, header: BlockHeader = nil): VM =
+proc getVM*(chain: Chain, header: BlockHeader): VM =
   ## Returns the VM instance for the given block number
   # TODO - Refactoring: superseded by newNimbusVM for the time being #https://github.com/status-im/nimbus/pull/37
   # TODO - Refactoring: redundant with constants.nim `toFork`
   # shadowing input param
-  let header = if header.isNil: chain.header
-               else: header
-
   let vm_class = chain.getVMClassForBlockNumber(header.blockNumber)
 
   case vm_class:
   of vmkFrontier: result = newFrontierVM(header, chain.db)
   else:
     raise newException(ValueError, "Chain: only FrontierVM is implemented")
+
+proc getVM*(chain: Chain): VM {.inline.} = getVM(chain, chain.header)

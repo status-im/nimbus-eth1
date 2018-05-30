@@ -20,7 +20,7 @@ proc newFrontierVMState*: FrontierVMState =
   result.prevHeaders = @[]
   result.name = "FrontierVM"
   result.accessLogs = newAccessLogs()
-  result.blockHeader = BlockHeader(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
+  # result.blockHeader = # TODO: ...
 
 # import
 #   py2nim_helpers, __future__, rlp, evm, evm.constants, evm.exceptions, evm.rlp.logs,

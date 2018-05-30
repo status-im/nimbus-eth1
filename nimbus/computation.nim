@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, sequtils, tables, macros, stint, terminal, math,
+  strformat, strutils, sequtils, tables, macros, stint, terminal, math, eth_common, byteutils,
   constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values, vm_types,
   vm / [code_stream, gas_meter, memory, message, stack],
 
@@ -37,7 +37,7 @@ method newBaseComputation*(vmState: FrontierVMState, message: Message): BaseComp
   result.stack = newStack()
   result.gasMeter = newGasMeter(message.gas)
   result.children = @[]
-  result.accountsToDelete = initTable[string, string]()
+  result.accountsToDelete = initTable[EthAddress, EthAddress]()
   result.logEntries = @[]
   result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
   result.rawOutput = "0x"
@@ -51,7 +51,7 @@ method newBaseComputation*(vmState: TangerineVMState, message: Message): BaseCom
   result.stack = newStack()
   result.gasMeter = newGasMeter(message.gas)
   result.children = @[]
-  result.accountsToDelete = initTable[string, string]()
+  result.accountsToDelete = initTable[EthAddress, EthAddress]()
   result.logEntries = @[]
   result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
   result.rawOutput = "0x"
@@ -87,7 +87,7 @@ method shouldEraseReturnData*(c: BaseComputation): bool =
 method prepareChildMessage*(
     c: var BaseComputation,
     gas: GasInt,
-    to: string,
+    to: EthAddress,
     value: UInt256,
     data: seq[byte],
     code: string,
@@ -169,7 +169,7 @@ method applyChildBaseComputation*(c: var BaseComputation, childMsg: Message): Ba
   c.addChildBaseComputation(childBaseComputation)
   result = childBaseComputation
 
-method registerAccountForDeletion*(c: var BaseComputation, beneficiary: string) =
+method registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   validateCanonicalAddress(beneficiary, title="self destruct beneficiary address")
 
   if c.msg.storageAddress in c.accountsToDelete:
@@ -178,7 +178,7 @@ method registerAccountForDeletion*(c: var BaseComputation, beneficiary: string) 
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
-method addLogEntry*(c: var BaseComputation, account: string, topics: seq[UInt256], data: string) =
+method addLogEntry*(c: var BaseComputation, account: EthAddress, topics: seq[UInt256], data: string) =
   validateCanonicalAddress(account, title="log entry address")
   c.logEntries.add((account, topics, data))
 
@@ -229,8 +229,8 @@ template inComputation*(c: untyped, handler: untyped): untyped =
   `c`.logger.debug(
     "COMPUTATION STARTING: gas: $1 | from: $2 | to: $3 | value: $4 | depth: $5 | static: $6" % [
       $`c`.msg.gas,
-      $encodeHex(`c`.msg.sender),
-      $encodeHex(`c`.msg.to),
+      toHex(`c`.msg.sender),
+      toHex(`c`.msg.to),
       $`c`.msg.value,
       $`c`.msg.depth,
       if c.msg.isStatic: "y" else: "n"])
@@ -238,8 +238,8 @@ template inComputation*(c: untyped, handler: untyped): untyped =
     `handler`
     c.logger.debug(
       "COMPUTATION SUCCESS: from: $1 | to: $2 | value: $3 | depth: $4 | static: $5 | gas-used: $6 | gas-remaining: $7" % [
-        $encodeHex(c.msg.sender),
-        $encodeHex(c.msg.to),
+        toHex(c.msg.sender),
+        toHex(c.msg.to),
         $c.msg.value,
         $c.msg.depth,
         if c.msg.isStatic: "y" else: "n",
@@ -249,8 +249,8 @@ template inComputation*(c: untyped, handler: untyped): untyped =
     `c`.logger.debug(
       "COMPUTATION ERROR: gas: $1 | from: $2 | to: $3 | value: $4 | depth: $5 | static: $6 | error: $7" % [
         $`c`.msg.gas,
-        $encodeHex(`c`.msg.sender),
-        $encodeHex(`c`.msg.to),
+        toHex(`c`.msg.sender),
+        toHex(`c`.msg.to),
         $c.msg.value,
         $c.msg.depth,
         if c.msg.isStatic: "y" else: "n",
