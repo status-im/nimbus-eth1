@@ -5,22 +5,39 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import strformat, tables, stint, state_db, backends / memory_backend
+import strformat, tables, stint, rlp, ranges, state_db, backends / memory_backend,
+  ../errors, ../utils/header, ../constants, eth_common, byteutils
 
 type
   BaseChainDB* = ref object
     db*: MemoryDB
     # TODO db*: JournalDB
 
+  KeyType = enum
+    blockNumberToHash
+    blockHashToScore
+
 proc newBaseChainDB*(db: MemoryDB): BaseChainDB =
   new(result)
   result.db = db
 
-proc exists*(self: BaseChainDB; key: string): bool =
-  return self.db.exists(key)
+proc contains*(self: BaseChainDB; key: Hash256): bool =
+  return self.db.contains(genericHashKey(key))
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
+
+proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader =
+  ##         Returns the requested block header as specified by block hash.
+  ##
+  ##         Raises BlockNotFound if it is not present in the db.
+  var blk: seq[byte]
+  try:
+    blk = self.db.get(genericHashKey(blockHash))
+  except KeyError:
+    raise newException(BlockNotFound, "No block with hash " & blockHash.data.toHex)
+  let rng = blk.toRange
+  return decode(rng, BlockHeader)
 
 # proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
 #   if notself.exists(CANONICALHEADHASHDBKEY):
@@ -28,16 +45,20 @@ proc `$`*(db: BaseChainDB): string =
 #                       "No canonical head set for this chain")
 #   return self.getBlockHeaderByHash(self.db.get(CANONICALHEADHASHDBKEY))
 
-# proc getCanonicalBlockHeaderByNumber*(self: BaseChainDB; blockNumber: int): BlockHeader =
-#   ##         Returns the block header with the given number in the canonical chain.
-#   ##
-#   ##         Raises BlockNotFound if there's no block header with the given number in the
-#   ##         canonical chain.
-#   validateUint256(blockNumber)
-#   return self.getBlockHeaderByHash(self.lookupBlockHash(blockNumber))
+proc lookupBlockHash*(self: BaseChainDB; n: BlockNumber): Hash256 {.inline.} =
+  ##         Return the block hash for the given block number.
+  let numberToHashKey = blockNumberToHashKey(n)
+  result = rlp.decode(self.db.get(numberToHashKey).toRange, Hash256)
 
-# proc getScore*(self: BaseChainDB; blockHash: cstring): int =
-#   return rlp.decode(self.db.get(makeBlockHashToScoreLookupKey(blockHash)))
+proc getCanonicalBlockHeaderByNumber*(self: BaseChainDB; n: BlockNumber): BlockHeader =
+  ##         Returns the block header with the given number in the canonical chain.
+  ##
+  ##         Raises BlockNotFound if there's no block header with the given number in the
+  ##         canonical chain.
+  self.getBlockHeaderByHash(self.lookupBlockHash(n))
+
+proc getScore*(self: BaseChainDB; blockHash: Hash256): int =
+  rlp.decode(self.db.get(blockHashToScoreKey(blockHash)).toRange, int)
 
 # proc setAsCanonicalChainHead*(self: BaseChainDB; header: BlockHeader): void =
 #   ##         Sets the header as the canonical chain HEAD.
@@ -50,43 +71,23 @@ proc `$`*(db: BaseChainDB): string =
 #         header.hash))
 #   self.db.set(CANONICALHEADHASHDBKEY, header.hash)
 
-# iterator findCommonAncestor*(self: BaseChainDB; header: BlockHeader): BlockHeader =
-#   ##         Returns the chain leading up from the given header until the first ancestor it has in
-#   ##         common with our canonical chain.
-#   var h = header
-#   while true:
-#     yield h
-#     if h.parentHash == GENESISPARENTHASH:
-#       break
-#     try:
-#       var orig = self.getCanonicalBlockHeaderByNumber(h.blockNumber)
-#     except KeyError:
-#       nil
-#     h = self.getBlockHeaderByHash(h.parentHash)
+iterator findCommonAncestor*(self: BaseChainDB; header: BlockHeader): BlockHeader =
+  ##         Returns the chain leading up from the given header until the first ancestor it has in
+  ##         common with our canonical chain.
+  var h = header
+  while true:
+    yield h
+    if h.parentHash == GENESIS_PARENT_HASH:
+      break
+    try:
+      var orig = self.getCanonicalBlockHeaderByNumber(h.blockNumber)
+    except KeyError:
+      discard # TODO: break??
+    h = self.getBlockHeaderByHash(h.parentHash)
 
-# proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: cstring): BlockHeader =
-#   ##         Returns the requested block header as specified by block hash.
-#   ##
-#   ##         Raises BlockNotFound if it is not present in the db.
-#   validateWord(blockHash)
-#   try:
-#     var block = self.db.get(blockHash)
-#   except KeyError:
-#     raise newException(BlockNotFound, "No block with hash {0} found".format(
-#         encodeHex(blockHash)))
-#   return rlp.decode(block)
-
-# proc headerExists*(self: BaseChainDB; blockHash: cstring): bool =
-#   ## Returns True if the header with the given block hash is in our DB.
-#   return self.db.exists(blockHash)
-
-# proc lookupBlockHash*(self: BaseChainDB; blockNumber: int): cstring =
-#   ##         Return the block hash for the given block number.
-#   validateUint256(blockNumber)
-#   var
-#     numberToHashKey = makeBlockNumberToHashLookupKey(blockNumber)
-#     blockHash = rlp.decode(self.db.get(numberToHashKey))
-#   return blockHash
+proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
+  ## Returns True if the header with the given block hash is in our DB.
+  self.contains(blockHash)
 
 # iterator getReceipts*(self: BaseChainDB; header: BlockHeader; receiptClass: typedesc): Receipt =
 #   var receiptDb = HexaryTrie()
@@ -159,7 +160,7 @@ proc `$`*(db: BaseChainDB): string =
 # proc clear*(self: BaseChainDB): void =
 #   self.db.clear()
 
-method getStateDb*(self: BaseChainDB; stateRoot: string; readOnly: bool = false): AccountStateDB =
+method getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
   # TODO
   result = newAccountStateDB(initTable[string, string]())
 

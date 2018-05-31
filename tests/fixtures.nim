@@ -7,13 +7,13 @@
 
 import
   unittest, strformat, tables, times,
-  stint,
+  stint, eth_keys, eth_common,
   ../nimbus/[constants, chain, vm/base, vm/forks/f20150730_frontier/frontier_vm, utils/header, utils/address, db/db_chain, db/backends/memory_backend]
 
 proc chainWithoutBlockValidation*: Chain =
   result = configureChain("TestChain", GENESIS_BLOCK_NUMBER, vmkFrontier, false, false)
-  let privateKey = "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8" # TODO privateKey(decodeHex("0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8"))
-  let fundedAddr = privateKey # privateKey.publicKey.toCanonicalAddress
+  let privateKey = initPrivateKey("45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8")
+  let fundedAddr = privateKey.getPublicKey.toCanonicalAddress
   let initialBalance = 100_000_000
   let genesisParams = GenesisParams(
     blockNumber: GENESIS_BLOCK_NUMBER,
@@ -25,7 +25,7 @@ proc chainWithoutBlockValidation*: Chain =
     mixHash: GENESIS_MIX_HASH,
     extraData: GENESIS_EXTRA_DATA,
     timestamp: fromUnix 1501851927,
-    stateRoot: "0x9d354f9b5ba851a35eced279ef377111387197581429cfcc7f744ef89a30b5d4") #.decodeHex)
+    stateRoot: "9d354f9b5ba851a35eced279ef377111387197581429cfcc7f744ef89a30b5d4".toDigest)
   let genesisState = {"fundedAddr": FundedAddress(balance: initialBalance.int256, nonce: 0, code: "")}.toTable()
   result = fromGenesis(
     result,

@@ -6,13 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, stint, errors
+  constants, stint, errors, eth_common
 
 type
   BaseTransaction* = ref object
     nonce*: Int256
-    gasPrice*: UInt256
-    gas*: UInt256
+    gasPrice*: GasInt
+    gas*: GasInt
     to*: string
     value*: UInt256
     data*: string
@@ -20,7 +20,7 @@ type
     r*: Int256
     s*: Int256
 
-proc intrinsicGas*(t: BaseTransaction): UInt256 =
+proc intrinsicGas*(t: BaseTransaction): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)

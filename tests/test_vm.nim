@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, stint,
+  unittest, stint, eth_common,
   ./test_helpers, ./fixtures,
   ../nimbus/[db/backends/memory_backend, db/state_db, chain, constants, utils/hexadecimal, vm_state],
   ../nimbus/[vm/base, computation]
@@ -20,7 +20,7 @@ suite "VM":
       vm = chain.getVM()
       # txIdx = len(vm.`block`.transactions) # Can't take len of a runtime field
     let
-      recipient = decodeHex("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0c")
+      recipient = parseAddress("0xa94f5374fce5edbc8e2a8697c15331677e6ebf0c")
       amount = 100.u256
       ethaddr_from = chain.fundedAddress
       tx = newTransaction(vm, ethaddr_from, recipient, amount, chain.fundedAddressPrivateKey)

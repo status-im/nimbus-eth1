@@ -9,7 +9,7 @@ import
   strformat,
   ../constants, ../vm_types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging, ../vm_state, call,
   .. / vm / [stack, gas_meter, memory, message], .. / utils / [address, hexadecimal, bytes],
-  stint
+  stint, byteutils, eth_common
 
 {.this: computation.}
 {.experimental.}
@@ -58,11 +58,11 @@ method runLogic*(create: Create, computation) =
         #     )
 
         #     is_collision = state_db.account_has_code_or_nonce(contract_address)
-  let contractAddress = ""
+  let contractAddress = ZERO_ADDRESS
   let isCollision = false
 
   if isCollision:
-    computation.vmState.logger.debug(&"Address collision while creating contract: {contractAddress.encodeHex}")
+    computation.vmState.logger.debug(&"Address collision while creating contract: {contractAddress.toHex}")
     computation.stack.push(0.u256)
     return
 
@@ -92,7 +92,7 @@ method runLogic*(create: CreateByzantium, computation) =
   procCall runLogic(create, computation)
 
 proc selfdestructEIP150(computation) =
-  let beneficiary = forceBytesToAddress(stack.popString)
+  let beneficiary = stack.popAddress()
   # TODO: with
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #       if not state_db.account_exists(beneficiary):
@@ -103,7 +103,7 @@ proc selfdestructEIP150(computation) =
   #   _selfdestruct(computation, beneficiary)
 
 proc selfdestructEIP161(computation) =
-  let beneficiary = forceBytesToAddress(stack.popString)
+  let beneficiary = stack.popAddress()
   # TODO: with
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #       is_dead = (
@@ -117,7 +117,7 @@ proc selfdestructEIP161(computation) =
   #          )
   #  _selfdestruct(computation, beneficiary)
 
-proc selfdestruct(computation; beneficiary: string) =
+proc selfdestruct(computation; beneficiary: EthAddress) =
   discard # TODO: with
   # with computation.vm_state.state_db() as state_db:
   #     local_balance = state_db.get_balance(computation.msg.storage_address)
@@ -158,7 +158,7 @@ proc revert*(computation) =
   raise newException(Revert, $output)
 
 proc selfdestruct*(computation) =
-  let beneficiary = forceBytesToAddress(stack.popString)
+  let beneficiary = stack.popAddress()
   selfdestruct(computation, beneficiary)
   raise newException(Halt, "SELFDESTRUCT")
 

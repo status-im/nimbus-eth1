@@ -16,23 +16,22 @@ import
 using
   computation: var BaseComputation
 
-proc mstoreX(computation; x: int) =
-  let start = stack.popInt().toInt
-  let value = stack.popBinary()
-
-  let paddedValue = padLeft(value, x, 0.byte)
-  let normalizedValue = paddedValue[^x .. ^1]
-
-  extendMemory(start, x)
-  memory.write(start, 32, normalizedValue)
-
 # TODO template handler
 
 proc mstore*(computation) =
-  mstoreX(32)
+  let start = stack.popInt().toInt
+  let normalizedValue = stack.popInt().toByteArrayBE
+
+  extendMemory(start, 32)
+  memory.write(start, normalizedValue)
 
 proc mstore8*(computation) =
-  mstoreX(1)
+  let start = stack.popInt().toInt
+  let value = stack.popInt()
+  let normalizedValue = (value and 0xff).toByteArrayBE
+
+  extendMemory(start, 1)
+  memory.write(start, [normalizedValue[0]])
 
 proc mload*(computation) =
   let start = stack.popInt().toInt

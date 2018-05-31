@@ -21,7 +21,7 @@ suite "memory":
   test "write":
     var mem = memory32()
     # Test that write creates 32byte string == value padded with zeros
-    mem.write(startPosition = 0, size = 4, value = @[1.byte, 0.byte, 1.byte, 0.byte])
+    mem.write(startPosition = 0, value = @[1.byte, 0.byte, 1.byte, 0.byte])
     check(mem.bytes == @[1.byte, 0.byte, 1.byte, 0.byte].concat(repeat(0.byte, 28)))
 
   # test "write rejects invalid position":
@@ -44,15 +44,10 @@ suite "memory":
   #     var mem = memory32()
   #     mem.write(startPosition = 0.u256, size = pow(2.u256, 256), value = @[1.byte, 0.byte])
 
-  test "write rejects invalid value":
-    expect(ValidationError):
-      var mem = memory32()
-      mem.write(startPosition = 0, size = 4, value = @[1.byte, 0.byte])
-
   test "write rejects valyes beyond memory size":
     expect(ValidationError):
       var mem = memory128()
-      mem.write(startPosition = 128, size = 4, value = @[1.byte, 0.byte, 1.byte, 0.byte])
+      mem.write(startPosition = 128, value = @[1.byte, 0.byte, 1.byte, 0.byte])
 
   test "extends appropriately extends memory":
     var mem = newMemory()
@@ -68,7 +63,7 @@ suite "memory":
 
   test "read returns correct bytes":
     var mem = memory32()
-    mem.write(startPosition = 5, size = 4, value = @[1.byte, 0.byte, 1.byte, 0.byte])
+    mem.write(startPosition = 5, value = @[1.byte, 0.byte, 1.byte, 0.byte])
     check(mem.read(startPosition = 5, size = 4) == @[1.byte, 0.byte, 1.byte, 0.byte])
     check(mem.read(startPosition = 6, size = 4) == @[0.byte, 1.byte, 0.byte, 0.byte])
     check(mem.read(startPosition = 1, size = 3) == @[0.byte, 0.byte, 0.byte])

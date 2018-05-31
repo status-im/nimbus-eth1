@@ -1,17 +1,6 @@
 
 import
-  stint, math, strutils, tables, utils/padding, rlp, times
-
-# rlpFields UInt256, table
-
-type
-  TypeHint* {.pure.} = enum UInt256, Bytes, Any # TODO Bytes is in conflict with nim-rlp Bytes = seq[byte]
-  EthTime* = Time
-
-
-  #Bytes* = seq[byte]
-
-  # Int256* = BigInt #distinct int # TODO
+  stint, math, strutils, utils/padding, eth_common
 
 proc int256*(i: int): Int256 =
   i.i256
@@ -97,12 +86,6 @@ proc `mod`*(a: UInt256, b: int): UInt256 =
 proc `div`*(a: UInt256, b: int): UInt256 =
   a div b.u256
 
-proc setXLen[T](s: var seq[T]; newlen: Natural) =
-  if s.isNil:
-    s = newSeq[T](newlen)
-  else:
-    s.setLen(newlen)
-
 template mapOp(op: untyped): untyped =
   proc `op`*(left: Int256, right: int): Int256 =
     result = left.i256
@@ -116,6 +99,8 @@ mapOp(`and`)
 mapOp(`or`)
 mapOp(`xor`)
 
+proc default(t: typedesc): t = discard
+
 # constants
 
 let
@@ -124,9 +109,9 @@ let
   NULLBYTE* =                     "\x00"
   EMPTYWORD* =                    repeat(NULLBYTE, 32)
   UINT160CEILING*: UInt256 =      2.u256 ^ 160
-  CREATE_CONTRACT_ADDRESS* =      ""
-  ZERO_ADDRESS* =                 repeat("\x00", 20)
-  ZERO_HASH32* =                  repeat("\x00", 20)
+  ZERO_ADDRESS* =                 default(EthAddress)
+  CREATE_CONTRACT_ADDRESS* =      ZERO_ADDRESS
+  ZERO_HASH32* =                  Hash256()
   STACK_DEPTH_LIMIT* =            1024
 
   # GAS_NULL* =                     0.u256
@@ -165,7 +150,7 @@ let
   GAS_TX_CREATE* =                32_000.u256
   GAS_TX_DATA_ZERO* =             4.u256
   GAS_TX_DATA_NON_ZERO* =         68.u256
-  GAS_TX* =                       21_000.u256
+  GAS_TX* =                       21_000
   GAS_LOG* =                      375.u256
   GAS_LOG_DATA* =                 8
   GAS_LOG_TOPIC* =                375
@@ -186,11 +171,11 @@ let
   GAS_ECMUL* =                    40_000.u256
   GAS_ECPAIRING_BASE* =           100_000.u256
   GAS_ECPAIRING_PER_POINT* =      80_000.u256
-  GAS_LIMIT_EMA_DENOMINATOR* =    1_024.u256
-  GAS_LIMIT_ADJUSTMENT_FACTOR* =  1_024.u256
-  GAS_LIMIT_MAXIMUM* =            high(int64)
-  GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* = 3.u256
-  GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2.u256
+  GAS_LIMIT_EMA_DENOMINATOR* =    1_024
+  GAS_LIMIT_ADJUSTMENT_FACTOR* =  1_024
+  GAS_LIMIT_MAXIMUM* =            high(GasInt)
+  GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* = 3
+  GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2
 
   DIFFICULTY_ADJUSTMENT_DENOMINATOR* = 2_048.u256
   DIFFICULTY_MINIMUM* =           131_072.u256
@@ -214,20 +199,20 @@ let
   SECPK1_Gy* =                    0.u256
   SECPK1_G* =                     (SECPK1Gx, SECPK1Gy)
 
-  EMPTY_UNCLE_HASH* =             "\x1d\xccM\xe8\xde\xc7]z\xab\x85\xb5g\xb6\xcc\xd4\x1a\xd3\x12E\x1b\x94\x8at\x13\xf0\xa1B\xfd@\xd4\x93G"
+  EMPTY_UNCLE_HASH* =             "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
 
   GENESIS_BLOCK_NUMBER* =         0.u256
   GENESIS_DIFFICULTY* =           131_072.u256
-  GENESIS_GAS_LIMIT* =            3_141_592.u256
+  GENESIS_GAS_LIMIT* =            3_141_592
   GENESIS_PARENT_HASH* =          ZERO_HASH32
   GENESIS_COINBASE* =             ZERO_ADDRESS
   GENESIS_NONCE* =                "\x00\x00\x00\x00\x00\x00\x00B"
   GENESIS_MIX_HASH* =             ZERO_HASH32
   GENESIS_EXTRA_DATA* =           ""
-  GAS_LIMIT_MINIMUM* =            5000.u256
+  GAS_LIMIT_MINIMUM* =            5000
 
   EMPTYSHA3 =                     "\xc5\xd2F\x01\x86\xf7#<\x92~}\xb2\xdc\xc7\x03\xc0\xe5\x00\xb6S\xca\x82';{\xfa\xd8\x04]\x85\xa4p"
-  BLANK_ROOT_HASH* =              "V\xe8\x1f\x17\x1b\xccU\xa6\xff\x83E\xe6\x92\xc0\xf8n[H\xe0\x1b\x99l\xad\xc0\x01b/\xb5\xe3c\xb4!"
+  BLANK_ROOT_HASH* =              "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest()
 
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* = 20.u256
 

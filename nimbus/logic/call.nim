@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat,
+  strformat, eth_common,
   ../constants, ../vm_types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging,
   .. / vm / [stack, memory, gas_meter, message],
   .. / utils / [address, bytes],
@@ -39,16 +39,16 @@ type
 using
   computation: var BaseComputation
 
-method msgExtraGas*(call: BaseCall, computation; gas: GasInt, to: string, value: UInt256): GasInt {.base.} =
+method msgExtraGas*(call: BaseCall, computation; gas: GasInt, to: EthAddress, value: UInt256): GasInt {.base.} =
   raise newException(NotImplementedError, "Must be implemented by subclasses")
 
-method msgGas*(call: BaseCall, computation; gas: GasInt, to: string, value: UInt256): (GasInt, GasInt) {.base.} =
+method msgGas*(call: BaseCall, computation; gas: GasInt, to: EthAddress, value: UInt256): (GasInt, GasInt) {.base.} =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   let totalFee = gas + extraGas
   let childMsgGas = gas + (if value != 0: GAS_CALL_STIPEND else: 0)
   (childMsgGas, totalFee)
 
-method callParams*(call: BaseCall, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) {.base.} =
+method callParams*(call: BaseCall, computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) {.base.} =
   raise newException(NotImplementedError, "Must be implemented subclasses")
 
 method runLogic*(call: BaseCall, computation) =
@@ -108,7 +108,7 @@ method runLogic*(call: BaseCall, computation) =
       MessageOptions(
         shouldTransferValue: shouldTransferValue,
         isStatic: isStatic))
-    if not sender.isNil:
+    if sender != ZERO_ADDRESS:
       childMsg.sender = sender
     # let childComputation = computation.applyChildComputation(childMsg)
     # TODO
@@ -121,12 +121,11 @@ method runLogic*(call: BaseCall, computation) =
       let actualOutputSize = min(memOutLen, childComputation.output.len)
       computation.memory.write(
         memOutPos,
-        actualOutputSize,
         childComputation.output.toBytes[0 ..< actualOutputSize])
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-method msgExtraGas(call: Call, computation; gas: GasInt, to: string, value: UInt256): GasInt =
+method msgExtraGas(call: Call, computation; gas: GasInt, to: EthAddress, value: UInt256): GasInt =
   # TODO: db
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #  let accountExists = db.accountExists(to)
@@ -136,9 +135,9 @@ method msgExtraGas(call: Call, computation; gas: GasInt, to: string, value: UInt
   let createGasFee = if not accountExists: GAS_NEW_ACCOUNT else: 0
   transferGasFee + createGasFee
 
-method callParams(call: CallCode, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+method callParams(call: CallCode, computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
   let gas = computation.stack.popInt()
-  let to = forceBytesToAddress(computation.stack.popString)
+  let to = computation.stack.popAddress()
 
   let (value,
        memoryInputStartPosition, memoryInputSize,
@@ -147,8 +146,8 @@ method callParams(call: CallCode, computation): (UInt256, UInt256, string, strin
   result = (gas,
    value,
    to,
-   nil,  # sender
-   nil,  # code_address
+   ZERO_ADDRESS,  # sender
+   ZERO_ADDRESS,  # code_address
    memoryInputStartPosition,
    memoryInputSize,
    memoryOutputStartPosition,
@@ -156,12 +155,12 @@ method callParams(call: CallCode, computation): (UInt256, UInt256, string, strin
    true,  # should_transfer_value,
    computation.msg.isStatic)
 
-method msgExtraGas(call: CallCode, computation; gas: GasInt, to: string, value: UInt256): GasInt =
+method msgExtraGas(call: CallCode, computation; gas: GasInt, to: EthAddress, value: UInt256): GasInt =
   if value != 0: GAS_CALL_VALUE else: 0
 
-method callParams(call: Call, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+method callParams(call: Call, computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
   let gas = computation.stack.popInt()
-  let codeAddress = forceBytesToAddress(computation.stack.popString)
+  let codeAddress = computation.stack.popAddress()
 
   let (value,
        memoryInputStartPosition, memoryInputSize,
@@ -182,15 +181,15 @@ method callParams(call: Call, computation): (UInt256, UInt256, string, string, s
    true,  # should_transfer_value,
    computation.msg.isStatic)
 
-method msgGas(call: DelegateCall, computation; gas: GasInt, to: string, value: UInt256): (GasInt, GasInt) =
+method msgGas(call: DelegateCall, computation; gas: GasInt, to: EthAddress, value: UInt256): (GasInt, GasInt) =
   (gas, gas)
 
-method msgExtraGas(call: DelegateCall, computation; gas: GasInt, to: string, value: UInt256): GasInt =
+method msgExtraGas(call: DelegateCall, computation; gas: GasInt, to: EthAddress, value: UInt256): GasInt =
   0
 
-method callParams(call: DelegateCall, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+method callParams(call: DelegateCall, computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
   let gas = computation.stack.popInt()
-  let codeAddress = forceBytesToAddress(computation.stack.popString)
+  let codeAddress = computation.stack.popAddress()
 
   let (memoryInputStartPosition, memoryInputSize,
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
@@ -222,19 +221,19 @@ proc computeEIP150MsgGas(computation; gas, extraGas: GasInt, value: UInt256, nam
   let childMsgGas = gas + (if value != 0: callStipend else: 0)
   (childMsgGas, totalFee)
 
-method msgGas(call: CallEIP150, computation; gas: GasInt, to: string, value: UInt256):  (GasInt, GasInt) =
+method msgGas(call: CallEIP150, computation; gas: GasInt, to: EthAddress, value: UInt256):  (GasInt, GasInt) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, GAS_CALL_STIPEND)
 
-method msgGas(call: CallCodeEIP150, computation; gas: GasInt, to: string, value: UInt256):  (GasInt, GasInt) =
+method msgGas(call: CallCodeEIP150, computation; gas: GasInt, to: EthAddress, value: UInt256):  (GasInt, GasInt) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, GAS_CALL_STIPEND)
 
-method msgGas(call: DelegateCallEIP150, computation; gas: GasInt, to: string, value: UInt256):  (GasInt, GasInt) =
+method msgGas(call: DelegateCallEIP150, computation; gas: GasInt, to: EthAddress, value: UInt256):  (GasInt, GasInt) =
   let extraGas = call.msgExtraGas(computation, gas, to, value)
   computeEIP150MsgGas(computation, gas, extraGas, value, $call.kind, 0)
 
-proc msgExtraGas*(call: CallEIP161, computation; gas: GasInt, to: string, value: UInt256): GasInt =
+proc msgExtraGas*(call: CallEIP161, computation; gas: GasInt, to: EthAddress, value: UInt256): GasInt =
   # TODO: with
   #  with computation.vm_state.state_db(read_only=True) as state_db:
   #            account_is_dead = (
@@ -247,9 +246,9 @@ proc msgExtraGas*(call: CallEIP161, computation; gas: GasInt, to: string, value:
   transferGasFee + createGasFee
 
 
-method callParams(call: StaticCall, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+method callParams(call: StaticCall, computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
   let gas = computation.stack.popInt()
-  let to = forceBytesToAddress(computation.stack.popString)
+  let to = computation.stack.popAddress()
 
   let (memoryInputStartPosition, memoryInputSize,
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
@@ -257,8 +256,8 @@ method callParams(call: StaticCall, computation): (UInt256, UInt256, string, str
   result = (gas,
    0.u256, # value
    to,
-   nil, # sender
-   nil, # codeAddress
+   ZERO_ADDRESS, # sender
+   ZERO_ADDRESS, # codeAddress
    memoryInputStartPosition,
    memoryInputSize,
    memoryOutputStartPosition,
@@ -267,7 +266,7 @@ method callParams(call: StaticCall, computation): (UInt256, UInt256, string, str
    true) # is_static
 
 
-method callParams(call: CallByzantium, computation): (UInt256, UInt256, string, string, string, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+method callParams(call: CallByzantium, computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
   result = procCall callParams(call, computation)
   if computation.msg.isStatic and result[1] != 0:
     raise newException(WriteProtection, "Cannot modify state while inside of a STATICCALL context")

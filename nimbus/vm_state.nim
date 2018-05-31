@@ -7,8 +7,9 @@
 
 import
   macros, strformat, tables,
-  stint,
-  ./logging, ./constants, ./errors, ./transaction, ./db/[db_chain, state_db], ./utils/state, ./utils/header
+  stint, eth_common,
+  ./logging, ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
+  ./utils/[state, header]
 
 type
   BaseVMState* = ref object of RootObj
@@ -41,35 +42,35 @@ proc newBaseVMState*: BaseVMState =
   result.prevHeaders = @[]
   result.name = "BaseVM"
   result.accessLogs = newAccessLogs()
-  result.blockHeader = BlockHeader(hash: "TODO", coinbase: "TODO", stateRoot: "TODO")
+  # result.blockHeader = # TODO...
 
 method logger*(vmState: BaseVMState): Logger =
   logging.getLogger(&"evm.vmState.{vmState.name}")
 
-method blockhash*(vmState: BaseVMState): string =
+method blockhash*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.hash
 
-method coinbase*(vmState: BaseVMState): string =
+method coinbase*(vmState: BaseVMState): EthAddress =
   vmState.blockHeader.coinbase
 
 method timestamp*(vmState: BaseVMState): EthTime =
   vmState.blockHeader.timestamp
 
-method blockNumber*(vmState: BaseVMState): UInt256 =
+method blockNumber*(vmState: BaseVMState): BlockNumber =
   vmState.blockHeader.blockNumber
 
 method difficulty*(vmState: BaseVMState): UInt256 =
   vmState.blockHeader.difficulty
 
-method gasLimit*(vmState: BaseVMState): UInt256 =
+method gasLimit*(vmState: BaseVMState): GasInt =
   vmState.blockHeader.gasLimit
 
-method getAncestorHash*(vmState: BaseVMState, blockNumber: UInt256): string =
+method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 =
   var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1.u256
   if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH or
      ancestorDepth < 0 or
      ancestorDepth >= vmState.prevHeaders.len.u256:
-    return ""
+    return
   var header = vmState.prevHeaders[ancestorDepth.toInt]
   result = header.hash
 
@@ -100,4 +101,4 @@ macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
       # state._trie = None
 
 proc readOnlyStateDB*(vmState: BaseVMState): AccountStateDB {.inline.}=
-  vmState.chaindb.getStateDb("", readOnly = true)
+  vmState.chaindb.getStateDb(Hash256(), readOnly = true)

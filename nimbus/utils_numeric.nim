@@ -11,25 +11,15 @@ import stint, constants, strformat, strutils, sequtils, endians, macros, utils /
 
 # TODO improve
 
-proc intToBigEndian*(value: UInt256): Bytes =
+proc intToBigEndian*(value: UInt256): Bytes {.deprecated.} =
   result = newSeq[byte](32)
-  let v_ptr = cast[ptr array[32, byte]](value.unsafeAddr)
+  result[0 .. ^1] = value.toByteArrayBE()
 
-  for idx, val in result.mpairs:
-    when system.cpuEndian == littleEndian:
-      val = v_ptr[32 - 1 - idx]
-    else:
-      val = v_ptr[idx]
-
-proc bigEndianToInt*(value: Bytes): UInt256 =
-  var bytes = value.padLeft(32, 0.byte)
-  let v_ptr = cast[ptr array[32, byte]](result.addr)
-
-  for idx, val in bytes:
-    when system.cpuEndian == littleEndian:
-      v_ptr[32 - 1 - idx] = val
-    else:
-      v_ptr[idx] = val
+proc bigEndianToInt*(value: openarray[byte]): UInt256 =
+  if value.len == 32:
+    readUintBE[256](value)
+  else:
+    readUintBE[256](padLeft(@value, 32, 0.byte))
 
 #echo intToBigEndian("32482610168005790164680892356840817100452003984372336767666156211029086934369".u256)
 

@@ -7,18 +7,18 @@
 
 import  unittest, macros, strformat, strutils, sequtils,
         stint,
-        ../nimbus/[constants, opcode_values, errors, utils_numeric, vm/stack, vm/value, utils/bytes, utils/padding]
+        ../nimbus/[constants, opcode_values, errors, utils_numeric, vm/stack, utils/bytes, utils/padding]
 
 
 template testPush(value: untyped, expected: untyped): untyped =
   var stack = newStack()
-  stack.push(`value`)
-  check(stack.values == @[`expected`])
+  stack.push(value)
+  check(stack.values == @[expected])
 
 template testFailPush(value: untyped): untyped =
   var stack = newStack()
   expect(ValidationError):
-    stack.push(`value`)
+    stack.push(value)
 
 suite "stack":
   test "push only valid":
@@ -53,11 +53,6 @@ suite "stack":
     for element in @[1'u, 2'u, 3'u]:
       stack.push(element)
     check(stack.popInt == 3.u256)
-
-    stack = newStack()
-    stack.push("1".toBytes)
-    check(stack.popBinary == "1".toBytes.pad32)
-
 
   test "swap correct":
     var stack = newStack()

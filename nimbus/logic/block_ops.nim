@@ -35,5 +35,4 @@ proc difficulty*(computation) =
   stack.push(vmState.difficulty)
 
 proc gaslimit*(computation) =
-  stack.push(vmState.gasLimit)
-
+  stack.push(vmState.gasLimit.u256)
