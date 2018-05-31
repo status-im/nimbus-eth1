@@ -12,7 +12,8 @@ import
   ../nimbus/[chain, vm_state, computation, opcode, vm_types, opcode_table],
   ../nimbus/utils/[header, padding],
   ../nimbus/vm/[gas_meter, message, code_stream, stack],
-  ../nimbus/vm/forks/vm_forks, ../nimbus/db/[db_chain, state_db, backends/memory_backend]
+  ../nimbus/vm/forks/vm_forks, ../nimbus/db/[db_chain, state_db, backends/memory_backend],
+  eth_common
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -24,30 +25,32 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   for label, child in fixtures:
     fixture = child
     break
+  let fenv = fixture["env"]
   let header = BlockHeader(
-    coinbase: fixture{"env"}{"currentCoinbase"}.getStr,
-    difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
-    blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
-    # gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
-    timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix
+    coinbase: fenv{"currentCoinbase"}.getStr.parseAddress,
+    difficulty: fenv{"currentDifficulty"}.getHexadecimalInt.u256,
+    blockNumber: fenv{"currentNumber"}.getHexadecimalInt.u256,
+    gasLimit: fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
+    timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix
     )
   var vm = newNimbusVM(header, newBaseChainDB(newMemoryDB()))
 
+  let fexec = fixture["exec"]
   var code = ""
   vm.state.db(readOnly=false):
     setupStateDB(fixture{"pre"}, db)
-    code = db.getCode(fixture{"exec"}{"address"}.getStr)
+    code = db.getCode(fexec{"address"}.getStr.parseAddress)
 
-  code = fixture{"exec"}{"code"}.getStr
+  code = fexec{"code"}.getStr
   let message = newMessage(
-      to=fixture{"exec"}{"address"}.getStr,
-      sender=fixture{"exec"}{"caller"}.getStr,
-      value=fixture{"exec"}{"value"}.getHexadecimalInt.u256,
-      data=fixture{"exec"}{"data"}.getStr.mapIt(it.byte),
-      code=code,
-      gas=fixture{"exec"}{"gas"}.getHexadecimalInt,
-      gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt,
-      options=newMessageOptions(origin=fixture{"exec"}{"origin"}.getStr))
+      to = fexec{"address"}.getStr.parseAddress,
+      sender = fexec{"caller"}.getStr.parseAddress,
+      value = fexec{"value"}.getHexadecimalInt.u256,
+      data = fexec{"data"}.getStr.mapIt(it.byte),
+      code = code,
+      gas = fexec{"gas"}.getHexadecimalInt,
+      gasPrice = fexec{"gasPrice"}.getHexadecimalInt,
+      options = newMessageOptions(origin=fexec{"origin"}.getStr.parseAddress))
 
   #echo fixture{"exec"}
   var c = newCodeStreamFromUnescaped(code)
@@ -55,7 +58,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     c.displayDecompiled()
 
   var computation = newBaseComputation(vm.state, message)
-  computation.accountsToDelete = initTable[string, string]()
   computation.opcodes = OPCODE_TABLE
   computation.precompiles = initTable[string, Opcode]()
 
@@ -98,7 +100,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     check(computation.children.len == callCreates.len)
     for child in zip(computation.children, callCreates):
       var (childComputation, createdCall) = child
-      let toAddress = createdCall{"destination"}.getStr
+      let toAddress = createdCall{"destination"}.getStr.parseAddress
       let data = createdCall{"data"}.getStr.mapIt(it.byte)
       let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt
       let value = createdCall{"value"}.getHexadecimalInt.u256
