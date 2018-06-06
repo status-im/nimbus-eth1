@@ -7,7 +7,7 @@
 
 import
   strformat, eth_common,
-  ../constants, ../vm_types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging,
+  ../constants, ../vm_types, ../errors, ../computation, ../opcode_values, ../logging,
   .. / vm / [stack, memory, gas_meter, message],
   .. / utils / [address, bytes],
   stint
@@ -52,7 +52,7 @@ method callParams*(call: BaseCall, computation): (UInt256, UInt256, EthAddress, 
   raise newException(NotImplementedError, "Must be implemented subclasses")
 
 method runLogic*(call: BaseCall, computation) =
-  computation.gasMeter.consumeGas(computation.gasCosts[call.gasCost(computation)], reason = $call.kind) # TODO: Refactoring call gas costs
+  computation.gasMeter.consumeGas(computation.gasCosts[call.gasCostKind], reason = $call.kind) # TODO: Refactoring call gas costs
   let (gas, value, to, sender,
        codeAddress,
        memoryInputStartPosition, memoryInputSize,
@@ -87,7 +87,7 @@ method runLogic*(call: BaseCall, computation) =
     else:
       raise newException(VMError, "Invariant: Unreachable code path")
 
-    call.logger.debug(&"{call.kind} failure: {errMessage}")
+    computation.logger.debug(&"{call.kind} failure: {errMessage}")
     computation.gasMeter.returnGas(childMsgGas)
     computation.stack.push(0.u256)
   else:
