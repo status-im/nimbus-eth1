@@ -144,7 +144,7 @@ VMTests
 + mulmod2_1.json                                                  OK
 + mulmod3.json                                                    OK
 + mulmod3_0.json                                                  OK
-- mulmod4.json                                                    Fail
++ mulmod4.json                                                    OK
 + mulmoddivByZero.json                                            OK
 + mulmoddivByZero1.json                                           OK
 + mulmoddivByZero2.json                                           OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 189/195 Fail: 5/195 Skip: 1/195
+OK: 190/195 Fail: 4/195 Skip: 1/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -720,8 +720,8 @@ OK: 0/36 Fail: 0/36 Skip: 36/36
 ## vmTests
 ```diff
   arith.json                                                      Skip
-- boolean.json                                                    Fail
-- mktx.json                                                       Fail
-- suicide.json                                                    Fail
++ boolean.json                                                    OK
++ mktx.json                                                       OK
++ suicide.json                                                    OK
 ```
-OK: 0/4 Fail: 3/4 Skip: 1/4
+OK: 3/4 Fail: 0/4 Skip: 1/4

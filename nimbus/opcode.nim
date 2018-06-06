@@ -10,11 +10,22 @@ import
   constants, logging, errors, opcode_values, computation, vm/stack, stint,
   ./vm_types
 
+
+# Super dirty fix for https://github.com/status-im/nimbus/issues/46
+# Pending https://github.com/status-im/nimbus/issues/36
+# Disentangle opcode logic
+from logic.call import runLogic, BaseCall
+
+
 template run*(opcode: Opcode, computation: var BaseComputation) =
   # Hook for performing the actual VM execution
   # opcode.consumeGas(computation)
   computation.gasMeter.consumeGas(computation.gasCosts[opcode.gasCost(computation)], reason = $opcode.kind) # TODO: further refactoring of gas costs
-  opcode.runLogic(computation)
+
+  if opcode.kind == Op.Call: # Super dirty fix for https://github.com/status-im/nimbus/issues/46
+    runLogic(BaseCall(opcode), computation)
+  else:
+    opcode.runLogic(computation)
 
 method logger*(opcode: Opcode): Logger =
   logging.getLogger(&"vm.opcode.{opcode.kind}")
