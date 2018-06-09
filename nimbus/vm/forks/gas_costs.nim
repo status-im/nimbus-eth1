@@ -47,73 +47,12 @@ type
     GasLogTopic,        # Paid for each topic of a LOG operation.
     GasSha3,            # Paid for each SHA3 operation.
     GasSha3Word,        # Paid for each word (rounded up) for input data to a SHA3 operation.
-    GasCopy,            # Partial payment for *COPY operations, multiplied by words copied, rounded up.
+    GasCopy,            # Partial payment for COPY operations, multiplied by words copied, rounded up.
     GasBlockhash        # Payment for BLOCKHASH operation.
     # GasQuadDivisor      # The quadratic coefficient of the input sizes of the exponentiation-over-modulo precompiled contract.
 
   GasFeeSchedule = array[GasFeeKind, GasInt]
 
-const
-  BaseGasFees: GasFeeSchedule = [
-    # Fee Schedule at for the initial Ethereum forks
-    GasZero:            0'i64,
-    GasBase:            2,
-    GasVeryLow:         3,
-    GasLow:             5,
-    GasMid:             8,
-    GasHigh:            10,
-    GasExtCode:         20,     # Changed to 700 in Tangerine (EIP150)
-    GasBalance:         20,     # Changed to 400 in Tangerine (EIP150)
-    GasSload:           50,     # Changed to 200 in Tangerine (EIP150)
-    GasJumpDest:        1,
-    GasSset:            20_000,
-    GasSreset:          5_000,
-    RefundSclear:       15_000,
-    RefundSelfDestruct: 24_000,
-    GasSelfDestruct:    0,      # Changed to 5000 in Tangerine (EIP150)
-    GasCreate:          32000,
-    GasCodeDeposit:     200,
-    GasCall:            40,     # Changed to 700 in Tangerine (EIP150)
-    GasCallValue:       9000,
-    GasCallStipend:     2300,
-    GasNewAccount:      25_000,
-    GasExp:             10,
-    GasExpByte:         10,     # Changed to 50 in Spurious Dragon (EIP160)
-    GasMemory:          3,
-    GasTXCreate:        32000,
-    GasTXDataZero:      4,
-    GasTXDataNonZero:   68,
-    GasTransaction:     21000,
-    GasLog:             375,
-    GasLogData:         8,
-    GasLogTopic:        375,
-    GasSha3:            30,
-    GasSha3Word:        6,
-    GasCopy:            3,
-    GasBlockhash:       20
-    # GasQuadDivisor:     100     # Unused, do not confuse with the quadratic coefficient 512 for memory expansion
-  ]
-
-func tangerineGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
-
-  # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
-  result = previous_fees
-  result[GasSload]        = 200
-  result[GasSelfDestruct] = 5000
-  result[GasBalance]      = 400
-  result[GasCall]         = 40
-
-func spuriousGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
-
-  # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-160.md
-  result = previous_fees
-  result[GasExpByte]        = 50
-
-const
-  TangerineGasFees = BaseGasFees.tangerineGasFees
-  SpuriousGasFees = TangerineGasFees.spuriousGasFees
-
-type
   GasParams = object
     # Yellow Paper, Appendix H - https://ethereum.github.io/yellowpaper/paper.pdf
     # GasCost is a function of (σ, μ):
@@ -138,7 +77,6 @@ type
     else:
       discard
 
-
   GasCostKind = enum
     GckFixed,
     GckSpecial
@@ -155,6 +93,8 @@ type
       #   - Properly logging and ordering cost and refund (for Sstore especially)
       #   - Allow to use unsigned integer in the future
       #   - CALL instruction requires passing the child message gas (Ccallgas in yellow paper)
+
+  GasCosts* = Table[Op, GasCost]
 
 template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyped) =
 
@@ -369,7 +309,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
   # ###################################################################################################
 
 
-  const `ResultGasCostsName`{.inject.}: Table[Op, GasCost] = block:
+  const `ResultGasCostsName`*{.inject.}: GasCosts = block:
     # We use a block expression to avoid name redefinition conflicts
     # with "fixed" and "special"
 
@@ -540,6 +480,65 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
         SelfDestruct:   special `prefix gasSelfDestruct`
       }.toTable
 
+# Generate the fork-specific gas costs tables
+const
+  BaseGasFees: GasFeeSchedule = [
+    # Fee Schedule at for the initial Ethereum forks
+    GasZero:            0'i64,
+    GasBase:            2,
+    GasVeryLow:         3,
+    GasLow:             5,
+    GasMid:             8,
+    GasHigh:            10,
+    GasExtCode:         20,     # Changed to 700 in Tangerine (EIP150)
+    GasBalance:         20,     # Changed to 400 in Tangerine (EIP150)
+    GasSload:           50,     # Changed to 200 in Tangerine (EIP150)
+    GasJumpDest:        1,
+    GasSset:            20_000,
+    GasSreset:          5_000,
+    RefundSclear:       15_000,
+    RefundSelfDestruct: 24_000,
+    GasSelfDestruct:    0,      # Changed to 5000 in Tangerine (EIP150)
+    GasCreate:          32000,
+    GasCodeDeposit:     200,
+    GasCall:            40,     # Changed to 700 in Tangerine (EIP150)
+    GasCallValue:       9000,
+    GasCallStipend:     2300,
+    GasNewAccount:      25_000,
+    GasExp:             10,
+    GasExpByte:         10,     # Changed to 50 in Spurious Dragon (EIP160)
+    GasMemory:          3,
+    GasTXCreate:        32000,
+    GasTXDataZero:      4,
+    GasTXDataNonZero:   68,
+    GasTransaction:     21000,
+    GasLog:             375,
+    GasLogData:         8,
+    GasLogTopic:        375,
+    GasSha3:            30,
+    GasSha3Word:        6,
+    GasCopy:            3,
+    GasBlockhash:       20
+    # GasQuadDivisor:     100     # Unused, do not confuse with the quadratic coefficient 512 for memory expansion
+  ]
+
 # Create the schedule for each forks
+func tangerineGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
+  # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
+  result = previous_fees
+  result[GasSload]        = 200
+  result[GasSelfDestruct] = 5000
+  result[GasBalance]      = 400
+  result[GasCall]         = 40
+
+func spuriousGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
+  # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-160.md
+  result = previous_fees
+  result[GasExpByte]        = 50
+
+const
+  TangerineGasFees = BaseGasFees.tangerineGasFees
+  SpuriousGasFees = TangerineGasFees.spuriousGasFees
+
 gasCosts(BaseGasFees, base, BaseGasCosts)
 gasCosts(TangerineGasFees, tangerine, TangerineGasCosts)

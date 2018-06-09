@@ -9,7 +9,7 @@ import
   tables,
   constants, vm_state,
   opcode_values, stint, eth_common,
-  vm / [code_stream, memory, stack],
+  vm / [code_stream, memory, stack, forks/gas_costs],
   ./logging
 
 export GasInt
@@ -32,24 +32,17 @@ type
     accountsToDelete*:      Table[EthAddress, EthAddress]
     opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
     precompiles*:           Table[string, Opcode]
-    gasCosts*:              GasCosts # TODO separate opcode processing and gas computation
+    gasCosts*:              static[GasCosts]
 
   Error* = ref object
     info*:                  string
     burnsGas*:              bool
     erasesReturnData*:      bool
 
-  Opcode* = ref object of RootObj
+  Opcode* = ref object
+    # TODO can't use a stack-allocated object because
+    # "BaseComputation is not a concrete type"
     kind*: Op
-    #of VARIABLE_GAS_COST_OPS:
-    #  gasCostHandler*: proc(computation: var BaseComputation): UInt256
-    ## so, we could have special logic that separates all gas cost calculations
-    ## from actual opcode execution
-    ## that's what parity does:
-    ##   it uses the peek methods of the stack and calculates the cost
-    ##   then it actually pops/pushes stuff in exec
-    ## I followed the py-evm approach which does that in opcode logic
-    gasCostKind*: GasCostKind
     runLogic*:  proc(computation: var BaseComputation)
 
   GasMeter* = ref object
