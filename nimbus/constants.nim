@@ -114,18 +114,8 @@ let
   ZERO_HASH32* =                  Hash256()
   STACK_DEPTH_LIMIT* =            1024
 
-  GAS_RIP_EMD160* =               600.u256
-  GAS_RIP_EMD160WORD* =           120.u256
-  GAS_IDENTITY* =                 15.u256
-  GAS_IDENTITY_WORD* = 3
-  GAS_ECRECOVER* =                3_000.u256
-  GAS_ECADD* =                    500.u256
-  GAS_ECMUL* =                    40_000.u256
-  GAS_ECPAIRING_BASE* =           100_000.u256
-  GAS_ECPAIRING_PER_POINT* =      80_000.u256
   GAS_LIMIT_EMA_DENOMINATOR* =    1_024
   GAS_LIMIT_ADJUSTMENT_FACTOR* =  1_024
-  GAS_LIMIT_MAXIMUM* =            high(GasInt)
   GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* = 3
   GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2
 
