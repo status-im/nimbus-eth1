@@ -53,7 +53,7 @@ type
 
   GasFeeSchedule = array[GasFeeKind, GasInt]
 
-  GasParams = object
+  GasParams* = object
     # Yellow Paper, Appendix H - https://ethereum.github.io/yellowpaper/paper.pdf
     # GasCost is a function of (σ, μ):
     #   - σ is the full system state
@@ -62,18 +62,18 @@ type
     #   - σ: an account address
     #   - μ: a value popped from the stack or its size.
 
-    case kind: Op
+    case kind*: Op
     of Sstore:
-      s_isStorageEmpty: bool
+      s_isStorageEmpty*: bool
     of Call:
-      c_isNewAccount: bool
-      c_gasBalance: GasInt
-      c_contractGas: Gasint
-      c_activeMemSize: Natural
-      c_memRequested: Natural
+      c_isNewAccount*: bool
+      c_gasBalance*: GasInt
+      c_contractGas*: Gasint
+      c_activeMemSize*: Natural
+      c_memRequested*: Natural
     of Revert, Return:
-      r_activeMemSize: Natural
-      r_memRequested: Natural
+      r_activeMemSize*: Natural
+      r_memRequested*: Natural
     else:
       discard
 
@@ -84,11 +84,12 @@ type
   GasResult = tuple[gasCost, gasRefund: GasInt]
 
   GasCost = object
+    # Only special handler is public
     case kind: GasCostKind
     of GckFixed:
       cost: GasInt
     of GckSpecial:
-      handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}
+      handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}
       # We use gasCost/gasRefund for:
       #   - Properly logging and ordering cost and refund (for Sstore especially)
       #   - Allow to use unsigned integer in the future
@@ -122,6 +123,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
       new_cost = new_words * static(FeeSchedule[GasMemory]) +
         (prev_words ^ 2) shr 9 # div 512
 
+    # TODO: add logging
     result = new_cost - prev_cost
 
   func `prefix all_but_one_64th`(gas: GasInt): GasInt {.inline.} =
@@ -542,3 +544,6 @@ const
 
 gasCosts(BaseGasFees, base, BaseGasCosts)
 gasCosts(TangerineGasFees, tangerine, TangerineGasCosts)
+
+
+echo repr BaseGasCosts[Op.Call]

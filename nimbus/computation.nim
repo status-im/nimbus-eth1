@@ -15,16 +15,6 @@ import
   vm/forks/f20150730_frontier/frontier_vm_state,
   vm/forks/f20161018_tangerine_whistle/tangerine_vm_state
 
-proc memoryGasCost*(sizeInBytes: Natural): GasInt =
-  let
-    sizeInWords = ceil32(sizeInBytes) div 32
-    linearCost = sizeInWords * GAS_MEMORY
-    quadraticCost = sizeInWords ^ 2 div GAS_MEMORY_QUADRATIC_DENOMINATOR
-    totalCost = linearCost + quadraticCost
-  result = totalCost
-
-#const VARIABLE_GAS_COST_OPS* = {Op.Exp}
-
 method newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation {.base.}=
   raise newException(ValueError, "Must be implemented by subclasses")
 
@@ -104,26 +94,6 @@ method prepareChildMessage*(
     data,
     code,
     childOptions)
-
-method extendMemory*(c: var BaseComputation, startPosition: Natural, size: Natural) =
-  # Memory Management
-
-  let beforeSize = ceil32(len(c.memory))
-  let afterSize = ceil32(startPosition + size)
-
-  let beforeCost = memoryGasCost(beforeSize)
-  let afterCost = memoryGasCost(afterSize)
-
-  c.logger.debug(&"MEMORY: size ({beforeSize} -> {afterSize}) | cost ({beforeCost} -> {afterCost})")
-
-  if size > 0:
-    if beforeCost < afterCost:
-      var gasFee = afterCost - beforeCost
-      c.gasMeter.consumeGas(
-        gasFee,
-        reason = &"Expanding memory {beforeSize} -> {afterSize}")
-
-      c.memory.extend(startPosition, size)
 
 method output*(c: BaseComputation): string =
   if c.shouldEraseReturnData:

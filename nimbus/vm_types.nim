@@ -12,7 +12,7 @@ import
   vm / [code_stream, memory, stack, forks/gas_costs],
   ./logging
 
-export GasInt
+export GasInt, gas_costs
 
 type
   BaseComputation* = ref object of RootObj
@@ -32,16 +32,17 @@ type
     accountsToDelete*:      Table[EthAddress, EthAddress]
     opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
     precompiles*:           Table[string, Opcode]
-    gasCosts*:              static[GasCosts]
+    gasCosts*:              GasCosts # TODO - avoid allocating memory for this const
 
   Error* = ref object
     info*:                  string
     burnsGas*:              bool
     erasesReturnData*:      bool
 
-  Opcode* = ref object
+  Opcode* = ref object of RootObj
     # TODO can't use a stack-allocated object because
     # "BaseComputation is not a concrete type"
+    # TODO: We can probably remove this.
     kind*: Op
     runLogic*:  proc(computation: var BaseComputation)
 
