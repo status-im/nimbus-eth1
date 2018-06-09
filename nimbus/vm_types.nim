@@ -58,30 +58,6 @@ type
     startGas*: GasInt
     gasRemaining*: GasInt
 
-  GasCostKind* = enum
-    GasZero
-    GasBase
-    GasVeryLow
-    GasLow
-    GasMid
-    GasHigh
-    GasSload
-    GasJumpDest
-    GasSset
-    GasSreset
-    GasExtCode
-    GasCoinbase
-    GasSelfDestruct
-    GasInHandler
-    GasRefundSclear
-
-    GasBalance
-    GasCall
-    GasExp
-    GasSHA3
-
-  GasCosts* = array[GasCostKind, GasInt]
-
   Message* = ref object
     # A message for VM computation
 
