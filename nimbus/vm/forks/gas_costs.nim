@@ -80,6 +80,7 @@ type
   GasCostKind* = enum
     GckFixed,
     GckDynamic,
+    GckMemExpansion,
     GckComplex
 
   GasResult = tuple[gasCost, gasRefund: GasInt]
@@ -92,6 +93,8 @@ type
       cost: GasInt
     of GckDynamic:
       d_handler*: proc(value: Uint256): GasInt {.nimcall.}
+    of GckMemExpansion:
+      m_handler*: proc(activeMemSize, memExpansion: Natural): GasInt {.nimcall.}
     of GckComplex:
       c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}
       # We use gasCost/gasRefund for:
@@ -171,6 +174,9 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
     result = static(FeeSchedule[GasVeryLow]) +
       static(FeeSchedule[GasCopy]) * value.toInt.wordCount
+
+  func `prefix gasLoadStore`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
+    FeeSchedule[GasVeryLow] + `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
 
   func `prefix gasSstore`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
     ## Value is word to save
@@ -300,13 +306,8 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     # Ccall
     result.gasCost += cextra
 
-  func `prefix gasHalt`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
-
-    ## value is unused
-    result.gasCost = `prefix gasMemoryExpansion`(
-      gasParams.r_activeMemSize,
-      gasParams.r_memRequested
-    )
+  func `prefix gasHalt`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
+    `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
 
   func `prefix gasSelfDestruct`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
     # TODO
@@ -325,6 +326,9 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
     func dynamic(handler: proc(value: Uint256): GasInt {.nimcall.}): GasCost =
       GasCost(kind: GckDynamic, d_handler: handler)
+
+    func memExpansion(handler: proc(activeMemSize, memExpansion: Natural): GasInt {.nimcall.}): GasCost =
+      GasCost(kind: GckMemExpansion, m_handler: handler)
 
     func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}): GasCost =
       GasCost(kind: GckComplex, c_handler: handler)
@@ -388,9 +392,9 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
         # 50s: Stack, Memory, Storage and Flow Operations
         Pop:            fixed GasBase,
-        Mload:          fixed GasVeryLow,
-        Mstore:         fixed GasVeryLow,
-        Mstore8:        fixed GasVeryLow,
+        Mload:          memExpansion `prefix gasLoadStore`,
+        Mstore:         memExpansion `prefix gasLoadStore`,
+        Mstore8:        memExpansion `prefix gasLoadStore`,
         Sload:          fixed GasSload,
         Sstore:         complex `prefix gasSstore`,
         Jump:           fixed GasMid,
@@ -481,10 +485,10 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
         Create:         fixed GasCreate,
         Call:           complex `prefix gasCall`,
         CallCode:       complex `prefix gasCall`,
-        Return:         complex `prefix gasHalt`,
+        Return:         memExpansion `prefix gasHalt`,
         DelegateCall:   complex `prefix gasCall`,
         StaticCall:     complex `prefix gasCall`,
-        Op.Revert:      complex `prefix gasHalt`,
+        Op.Revert:      memExpansion `prefix gasHalt`,
         Invalid:        fixed GasZero,
         SelfDestruct:   complex `prefix gasSelfDestruct`
       }.toTable

@@ -9,6 +9,7 @@ import
   ../constants, ../vm_types, ../errors, ../computation, ../vm_state,
   ../utils/header,
   ../db/[db_chain, state_db], ../vm/[stack, gas_meter, message],
+  ../opcode_values,
   strformat, stint
 
 {.this: computation.}
@@ -26,15 +27,14 @@ proc sstore*(computation) =
   computation.vmState.db(readOnly=false):
     (currentValue, existing) = db.getStorage(computation.msg.storageAddress, slot)
 
-  let isCurrentlyEmpty = not existing # currentValue == 0
-  let isGoingToBeEmpty = value == 0
+  let
+    gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: not existing)
+    (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(currentValue, gasParam)
 
-  let gasRefund = if isCurrentlyEmpty or not isGoingToBeEmpty: 0 else: REFUND_SCLEAR
-  let gasCost = if isCurrentlyEmpty and not isGoingToBeEmpty: GAS_SSET else: GAS_SRESET
+  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
 
-  computation.gasMeter.consumeGas(computation.gasCosts[gasCost], &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
-
-  if gasRefund > 0: computation.gasMeter.refundGas(gasRefund)
+  if gasRefund > 0:
+    computation.gasMeter.refundGas(gasRefund)
 
   computation.vmState.db(readOnly=false):
     db.setStorage(computation.msg.storageAddress, slot, value)
