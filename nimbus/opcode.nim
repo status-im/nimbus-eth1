@@ -22,7 +22,10 @@ template run*(opcode: Opcode, computation: var BaseComputation) =
   # opcode.consumeGas(computation)
 
   if opcode.kind == Op.Call: # Super dirty fix for https://github.com/status-im/nimbus/issues/46
+    # TODO remove this branch
     runLogic(BaseCall(opcode), computation)
+  elif computation.gasCosts[opcode.kind].kind in {GckDynamic, GckComplex}:
+    opcode.runLogic(computation)
   else:
     computation.gasMeter.consumeGas(computation.gasCosts[opcode], reason = $opcode.kind)
     opcode.runLogic(computation)

@@ -77,21 +77,24 @@ type
     else:
       discard
 
-  GasCostKind = enum
+  GasCostKind* = enum
     GckFixed,
-    GckSpecial
+    GckDynamic,
+    GckComplex
 
   GasResult = tuple[gasCost, gasRefund: GasInt]
 
   GasCost = object
-    # Only special handler is public
+    # Only dynamic handler is public
     case kind: GasCostKind
     of GckFixed:
       cost: GasInt
-    of GckSpecial:
-      handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}
+    of GckDynamic:
+      d_handler*: proc(value: Uint256): GasInt {.nimcall.}
+    of GckComplex:
+      c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}
       # We use gasCost/gasRefund for:
-      #   - Properly logging and ordering cost and refund (for Sstore especially)
+      #   - Properly log and order cost and refund (for Sstore especially)
       #   - Allow to use unsigned integer in the future
       #   - CALL instruction requires passing the child message gas (Ccallgas in yellow paper)
 
@@ -139,33 +142,33 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
   # ############### Opcode gas functions ##############################
 
-  func `prefix gasExp`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasExp`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the exponent
     ## gasParams is unused
 
-    result.gasCost = static FeeSchedule[GasExp]
+    result = static FeeSchedule[GasExp]
     if not value.isZero:
-      result.gasCost += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
+      result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
-  func `prefix gasSha3`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasSha3`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the sha3 function
     ## gasParams is unused
 
-    result.gasCost = static(FeeSchedule[GasSha3]) +
+    result = static(FeeSchedule[GasSha3]) +
       static(FeeSchedule[GasSha3Word]) * value.toInt.wordCount
 
-  func `prefix gasCopy`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasCopy`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
     ## gasParams is unused
 
-    result.gasCost = static(FeeSchedule[GasVeryLow]) +
+    result = static(FeeSchedule[GasVeryLow]) +
       static(FeeSchedule[GasCopy]) * value.toInt.wordCount
 
-  func `prefix gasExtCodeCopy`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasExtCodeCopy`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
     ## gasParams is unused
 
-    result.gasCost = static(FeeSchedule[GasVeryLow]) +
+    result = static(FeeSchedule[GasVeryLow]) +
       static(FeeSchedule[GasCopy]) * value.toInt.wordCount
 
   func `prefix gasSstore`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
@@ -186,37 +189,37 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     if value.isZero xor gasParams.s_isStorageEmpty:
       result.gasRefund = static(FeeSchedule[RefundSclear])
 
-  func `prefix gasLog0`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasLog0`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the logX function
     ## gasParams is unused
-    result.gasCost = static(FeeSchedule[GasLog]) +
+    result = static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * value.toInt
 
-  func `prefix gasLog1`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasLog1`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the logX function
     ## gasParams is unused
-    result.gasCost = static(FeeSchedule[GasLog]) +
+    result = static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * value.toInt +
       static(FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog2`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasLog2`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the logX function
     ## gasParams is unused
-    result.gasCost = static(FeeSchedule[GasLog]) +
+    result = static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * value.toInt +
       static(2 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog3`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasLog3`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the logX function
     ## gasParams is unused
-    result.gasCost = static(FeeSchedule[GasLog]) +
+    result = static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * value.toInt +
       static(2 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog4`(value: Uint256, gasParams = GasParams()): GasResult {.nimcall.} =
+  func `prefix gasLog4`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the logX function
     ## gasParams is unused
-    result.gasCost = static(FeeSchedule[GasLog]) +
+    result = static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * value.toInt +
       static(2 * FeeSchedule[GasLogTopic])
 
@@ -313,14 +316,17 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
   const `ResultGasCostsName`*{.inject.}: GasCosts = block:
     # We use a block expression to avoid name redefinition conflicts
-    # with "fixed" and "special"
+    # with "fixed" and "dynamic"
 
     # Syntactic sugar
     func fixed(gasFeeKind: static[GasFeeKind]): GasCost =
-      GasCost(kind: GckFixed,   cost: static(FeeSchedule[gasFeeKind]))
+      GasCost(kind: GckFixed, cost: static(FeeSchedule[gasFeeKind]))
 
-    func special(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}): GasCost =
-      GasCost(kind: GckSpecial,   handler: handler)
+    func dynamic(handler: proc(value: Uint256): GasInt {.nimcall.}): GasCost =
+      GasCost(kind: GckDynamic, d_handler: handler)
+
+    func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}): GasCost =
+      GasCost(kind: GckComplex, c_handler: handler)
 
     # Returned value
     {
@@ -335,7 +341,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
         Smod:            fixed GasLow,
         Addmod:          fixed GasMid,
         Mulmod:          fixed GasMid,
-        Exp:             special `prefix gasExp`,
+        Exp:             dynamic `prefix gasExp`,
         SignExtend:      fixed GasLow,
 
         # 10s: Comparison & Bitwise Logic Operations
@@ -352,7 +358,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
         Byte:            fixed GasVeryLow,
 
         # 20s: SHA3
-        Sha3:            special `prefix gasSha3`,
+        Sha3:            dynamic `prefix gasSha3`,
 
         # 30s: Environmental Information
         Address:         fixed GasBase,
@@ -362,14 +368,14 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
         CallValue:       fixed GasBase,
         CallDataLoad:    fixed GasVeryLow,
         CallDataSize:    fixed GasBase,
-        CallDataCopy:    special `prefix gasCopy`,
+        CallDataCopy:    dynamic `prefix gasCopy`,
         CodeSize:        fixed GasBase,
-        CodeCopy:        special `prefix gasCopy`,
+        CodeCopy:        dynamic `prefix gasCopy`,
         GasPrice:        fixed GasBase,
         ExtCodeSize:     fixed GasExtcode,
-        ExtCodeCopy:     special `prefix gasExtCodeCopy`,
+        ExtCodeCopy:     dynamic `prefix gasExtCodeCopy`,
         ReturnDataSize:  fixed GasBase,
-        ReturnDataCopy:  special `prefix gasCopy`,
+        ReturnDataCopy:  dynamic `prefix gasCopy`,
 
         # 40s: Block Information
         Blockhash:       fixed GasBlockhash,
@@ -385,7 +391,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
         Mstore:         fixed GasVeryLow,
         Mstore8:        fixed GasVeryLow,
         Sload:          fixed GasSload,
-        Sstore:         special `prefix gasSstore`,
+        Sstore:         complex `prefix gasSstore`,
         Jump:           fixed GasMid,
         JumpI:          fixed GasHigh,
         Pc:             fixed GasBase,
@@ -464,22 +470,22 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
         Swap16:         fixed GasVeryLow,
 
         # a0s: Logging Operations
-        Log0:           special `prefix gasLog0`,
-        Log1:           special `prefix gasLog1`,
-        Log2:           special `prefix gasLog2`,
-        Log3:           special `prefix gasLog3`,
-        Log4:           special `prefix gasLog4`,
+        Log0:           dynamic `prefix gasLog0`,
+        Log1:           dynamic `prefix gasLog1`,
+        Log2:           dynamic `prefix gasLog2`,
+        Log3:           dynamic `prefix gasLog3`,
+        Log4:           dynamic `prefix gasLog4`,
 
         # f0s: System operations
         Create:         fixed GasCreate,
-        Call:           special `prefix gasCall`,
-        CallCode:       special `prefix gasCall`,
-        Return:         special `prefix gasHalt`,
-        DelegateCall:   special `prefix gasCall`,
-        StaticCall:     special `prefix gasCall`,
-        Op.Revert:      special `prefix gasHalt`,
+        Call:           complex `prefix gasCall`,
+        CallCode:       complex `prefix gasCall`,
+        Return:         complex `prefix gasHalt`,
+        DelegateCall:   complex `prefix gasCall`,
+        StaticCall:     complex `prefix gasCall`,
+        Op.Revert:      complex `prefix gasHalt`,
         Invalid:        fixed GasZero,
-        SelfDestruct:   special `prefix gasSelfDestruct`
+        SelfDestruct:   complex `prefix gasSelfDestruct`
       }.toTable
 
 # Generate the fork-specific gas costs tables
@@ -545,5 +551,4 @@ const
 gasCosts(BaseGasFees, base, BaseGasCosts)
 gasCosts(TangerineGasFees, tangerine, TangerineGasCosts)
 
-
-echo repr BaseGasCosts[Op.Call]
+echo BaseGasCosts[Op.Add]

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, sequtils, tables, macros, stint, terminal, math, eth_common, byteutils,
+  strformat, strutils, sequtils, macros, stint, terminal, math, eth_common, byteutils,
   constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values, vm_types,
   vm / [code_stream, gas_meter, memory, message, stack],
 

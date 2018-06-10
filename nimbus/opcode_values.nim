@@ -5,8 +5,6 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import tables
-
 type
   # Yellow Paper Appendix H - https://ethereum.github.io/yellowpaper/paper.pdf
   # Special notes from Yellow Paper:

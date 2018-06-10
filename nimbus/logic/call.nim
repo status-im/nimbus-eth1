@@ -53,7 +53,7 @@ method runLogic*(call: BaseCall, computation) =
 
   let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.toInt, memoryInputSize.toInt, memoryOutputStartPosition.toInt, memoryOutputSize.toInt)
 
-  let (gasCost, childMsgGas) = computation.gasCosts[Op.Call].handler(
+  let (gasCost, childMsgGas) = computation.gasCosts[Op.Call].c_handler(
     value,
     GasParams() # TODO - stub
   )
