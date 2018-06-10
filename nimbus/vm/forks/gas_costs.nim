@@ -196,39 +196,39 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     if value.isZero xor gasParams.s_isStorageEmpty:
       result.gasRefund = static(FeeSchedule[RefundSclear])
 
-  func `prefix gasLog0`(value: Uint256): GasInt {.nimcall.} =
-    ## Value is the size of the input to the logX function
-    ## gasParams is unused
-    result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * value.toInt
+  func `prefix gasLog0`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
 
-  func `prefix gasLog1`(value: Uint256): GasInt {.nimcall.} =
-    ## Value is the size of the input to the logX function
-    ## gasParams is unused
-    result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * value.toInt +
+    result += static(FeeSchedule[GasLog]) +
+      static(FeeSchedule[GasLogData]) * memExpansion
+
+  func `prefix gasLog1`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+
+    result += static(FeeSchedule[GasLog]) +
+      static(FeeSchedule[GasLogData]) * memExpansion +
       static(FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog2`(value: Uint256): GasInt {.nimcall.} =
-    ## Value is the size of the input to the logX function
-    ## gasParams is unused
-    result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * value.toInt +
+  func `prefix gasLog2`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+
+    result += static(FeeSchedule[GasLog]) +
+      static(FeeSchedule[GasLogData]) * memExpansion +
       static(2 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog3`(value: Uint256): GasInt {.nimcall.} =
-    ## Value is the size of the input to the logX function
-    ## gasParams is unused
-    result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * value.toInt +
-      static(2 * FeeSchedule[GasLogTopic])
+  func `prefix gasLog3`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
 
-  func `prefix gasLog4`(value: Uint256): GasInt {.nimcall.} =
-    ## Value is the size of the input to the logX function
-    ## gasParams is unused
     result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * value.toInt +
-      static(2 * FeeSchedule[GasLogTopic])
+      static(FeeSchedule[GasLogData]) * memExpansion +
+      static(3 * FeeSchedule[GasLogTopic])
+
+  func `prefix gasLog4`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+
+    result = static(FeeSchedule[GasLog]) +
+      static(FeeSchedule[GasLogData]) * memExpansion +
+      static(4 * FeeSchedule[GasLogTopic])
 
   func `prefix gasCall`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
 
@@ -475,11 +475,11 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
         Swap16:         fixed GasVeryLow,
 
         # a0s: Logging Operations
-        Log0:           dynamic `prefix gasLog0`,
-        Log1:           dynamic `prefix gasLog1`,
-        Log2:           dynamic `prefix gasLog2`,
-        Log3:           dynamic `prefix gasLog3`,
-        Log4:           dynamic `prefix gasLog4`,
+        Log0:           memExpansion `prefix gasLog0`,
+        Log1:           memExpansion `prefix gasLog1`,
+        Log2:           memExpansion `prefix gasLog2`,
+        Log3:           memExpansion `prefix gasLog3`,
+        Log4:           memExpansion `prefix gasLog4`,
 
         # f0s: System operations
         Create:         fixed GasCreate,
