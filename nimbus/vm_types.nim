@@ -30,7 +30,7 @@ type
     logEntries*:            seq[(EthAddress, seq[UInt256], string)]
     shouldEraseReturnData*: bool
     accountsToDelete*:      Table[EthAddress, EthAddress]
-    opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
+    opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
     precompiles*:           Table[string, Opcode]
     gasCosts*:              GasCosts # TODO - avoid allocating memory for this const
 

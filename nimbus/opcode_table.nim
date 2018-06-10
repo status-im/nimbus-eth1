@@ -13,7 +13,7 @@ import
   ./vm_types
 
 const
-  OpLogic: Table[Op, proc(computation: var BaseComputation){.nimcall.}] = {
+  OpLogic*: Table[Op, proc(computation: var BaseComputation){.nimcall.}] = {
     # 0s: Stop and Arithmetic Operations
     Stop:            stop,
     Add:             arithmetic.add,

@@ -42,6 +42,7 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
     c.displayDecompiled()
 
   var computation = newBaseComputation(vm.state, message)
+  computation.opcodes = OpLogic # TODO remove this need
   computation.precompiles = initTable[string, Opcode]()
 
   computation = computation.applyComputation(vm.state, message)

@@ -231,10 +231,10 @@ template inComputation*(c: untyped, handler: untyped): untyped =
         c.gasMeter.gasRemaining,
         reason="Zeroing gas due to VM Exception: $1" % getCurrentExceptionMsg())
 
-
 method getOpcodeFn*(computation: var BaseComputation, op: Op): Opcode =
+  # TODO use isValidOpcode and remove the Op --> Opcode indirection
   if computation.opcodes.len > 0 and computation.opcodes.hasKey(op):
-    computation.opcodes[op]
+    OpCode(kind: op, runLogic: computation.opcodes[op])
   else:
     raise newException(InvalidInstruction,
       &"Invalid opcode {op}")
