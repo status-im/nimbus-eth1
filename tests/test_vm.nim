@@ -30,7 +30,7 @@ suite "VM":
     # check(not computation.isError)
 
     let
-      txGas = tx.gasPrice * constants.GAS_TX
+      # txGas = tx.gasPrice * constants.GAS_TX
       state_db = vm.state.readOnlyStateDB
       b = vm.`block`
 

@@ -86,11 +86,9 @@ type
   GasResult = tuple[gasCost, gasRefund: GasInt]
 
   GasCost = object
-    # Only dynamic and complex handlers are public
-    # Simple costs are substituted at compile-time
-    case kind: GasCostKind
+    case kind*: GasCostKind
     of GckFixed:
-      cost: GasInt
+      cost*: GasInt
     of GckDynamic:
       d_handler*: proc(value: Uint256): GasInt {.nimcall.}
     of GckMemExpansion:

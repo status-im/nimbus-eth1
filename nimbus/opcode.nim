@@ -27,7 +27,7 @@ template run*(opcode: Opcode, computation: var BaseComputation) =
   elif computation.gasCosts[opcode.kind].kind != GckFixed:
     opcode.runLogic(computation)
   else:
-    computation.gasMeter.consumeGas(computation.gasCosts[opcode], reason = $opcode.kind)
+    computation.gasMeter.consumeGas(computation.gasCosts[opcode.kind].cost, reason = $opcode.kind)
     opcode.runLogic(computation)
 
 method logger*(opcode: Opcode): Logger =
