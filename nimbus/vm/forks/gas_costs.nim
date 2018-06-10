@@ -85,7 +85,8 @@ type
   GasResult = tuple[gasCost, gasRefund: GasInt]
 
   GasCost = object
-    # Only dynamic handler is public
+    # Only dynamic and complex handlers are public
+    # Simple costs are substituted at compile-time
     case kind: GasCostKind
     of GckFixed:
       cost: GasInt
@@ -550,5 +551,3 @@ const
 
 gasCosts(BaseGasFees, base, BaseGasCosts)
 gasCosts(TangerineGasFees, tangerine, TangerineGasCosts)
-
-echo BaseGasCosts[Op.Add]
