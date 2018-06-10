@@ -9,6 +9,7 @@ import
   strformat,
   ../constants, ../vm_types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging, ../vm_state, call,
   .. / vm / [stack, gas_meter, memory, message], .. / utils / [address, hexadecimal, bytes],
+  ../opcode_values,
   stint, byteutils, eth_common
 
 {.this: computation.}
@@ -24,14 +25,14 @@ type
 
   CreateByzantium* = ref object of CreateEIP150 # TODO: Refactoring - put that in VM forks
 
-method maxChildGasModifier(create: Create, gas: GasInt): GasInt {.base.} =
-  gas
+# method maxChildGasModifier(create: Create, gas: GasInt): GasInt {.base.} =
+#   gas
 
 method runLogic*(create: Create, computation) =
-  computation.gasMeter.consumeGas(computation.gasCosts[create.gasCost(computation)], reason = $create.kind) # TODO: Refactoring create gas costs
+  # computation.gasMeter.consumeGas(computation.gasCosts[create.gasCost(computation)], reason = $create.kind) # TODO: Refactoring create gas costs
   let (value, startPosition, size) = computation.stack.popInt(3)
   let (pos, len) = (startPosition.toInt, size.toInt)
-  computation.extendMemory(pos, len)
+  computation.memory.extend(pos, len)
 
   # TODO: with
   # with computation.vm_state.state_db(read_only=True) as state_db:
@@ -44,8 +45,9 @@ method runLogic*(create: Create, computation) =
   #          return
 
   let callData = computation.memory.read(pos, len)
-  let createMsgGas = create.maxChildGasModifier(computation.gasMeter.gasRemaining)
-  computation.gasMeter.consumeGas(createMsgGas, reason="CREATE")
+  # TODO refactor gas
+  # let createMsgGas = create.maxChildGasModifier(computation.gasMeter.gasRemaining)
+  # computation.gasMeter.consumeGas(createMsgGas, reason="CREATE")
 
   # TODO: with
         # with computation.vm_state.state_db() as state_db:
@@ -67,7 +69,7 @@ method runLogic*(create: Create, computation) =
     return
 
   let childMsg = computation.prepareChildMessage(
-    gas=createMsgGas,
+    gas=0, # TODO refactor gas
     to=constants.CREATE_CONTRACT_ADDRESS,
     value=value,
     data=cast[seq[byte]](@[]),
@@ -83,8 +85,9 @@ method runLogic*(create: Create, computation) =
     computation.stack.push(contractAddress)
   computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-method maxChildGasModifier(create: CreateEIP150, gas: GasInt): GasInt =
-  maxChildGasEIP150(gas)
+# TODO refactor gas
+# method maxChildGasModifier(create: CreateEIP150, gas: GasInt): GasInt =
+#   maxChildGasEIP150(gas)
 
 method runLogic*(create: CreateByzantium, computation) =
   if computation.msg.isStatic:
@@ -144,7 +147,13 @@ proc selfdestruct(computation; beneficiary: EthAddress) =
 proc returnOp*(computation) =
   let (startPosition, size) = stack.popInt(2)
   let (pos, len) = (startPosition.toInt, size.toInt)
-  computation.extendMemory(pos, len)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[Return].m_handler(pos, len),
+    reason = "RETURN"
+    )
+
+  computation.memory.extend(pos, len)
   let output = memory.read(pos, len)
   computation.output = output.toString
   raise newException(Halt, "RETURN")
@@ -152,7 +161,13 @@ proc returnOp*(computation) =
 proc revert*(computation) =
   let (startPosition, size) = stack.popInt(2)
   let (pos, len) = (startPosition.toInt, size.toInt)
-  computation.extendMemory(pos, len)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[Op.Revert].m_handler(pos, len),
+    reason = "REVERT"
+    )
+
+  computation.memory.extend(pos, len)
   let output = memory.read(pos, len).toString
   computation.output = output
   raise newException(Revert, $output)
