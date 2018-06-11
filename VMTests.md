@@ -9,7 +9,7 @@ VMTests
 + add4.json                                                       OK
 + addmod0.json                                                    OK
 + addmod1.json                                                    OK
-+ addmod1_overflow2.json                                          OK
+- addmod1_overflow2.json                                          Fail
 + addmod1_overflow3.json                                          OK
 + addmod1_overflow4.json                                          OK
 + addmod1_overflowDiff.json                                       OK
@@ -24,7 +24,7 @@ VMTests
 + addmodDivByZero2.json                                           OK
 + addmodDivByZero3.json                                           OK
   arith1.json                                                     Skip
-+ div1.json                                                       OK
+- div1.json                                                       Fail
 + divBoostBug.json                                                OK
 + divByNonZero0.json                                              OK
 + divByNonZero1.json                                              OK
@@ -117,7 +117,7 @@ VMTests
 + expPowerOf2_8.json                                              OK
 - expXY.json                                                      Fail
 + expXY_success.json                                              OK
-+ fibbonacci_unrolled.json                                        OK
+- fibbonacci_unrolled.json                                        Fail
 + mod0.json                                                       OK
 + mod1.json                                                       OK
 + mod2.json                                                       OK
@@ -131,11 +131,11 @@ VMTests
 + mul4.json                                                       OK
 + mul5.json                                                       OK
 + mul6.json                                                       OK
-+ mul7.json                                                       OK
+- mul7.json                                                       Fail
 + mulUnderFlow.json                                               OK
 + mulmod0.json                                                    OK
 + mulmod1.json                                                    OK
-+ mulmod1_overflow.json                                           OK
+- mulmod1_overflow.json                                           Fail
 + mulmod1_overflow2.json                                          OK
 + mulmod1_overflow3.json                                          OK
 + mulmod1_overflow4.json                                          OK
@@ -149,7 +149,7 @@ VMTests
 + mulmoddivByZero1.json                                           OK
 + mulmoddivByZero2.json                                           OK
 + mulmoddivByZero3.json                                           OK
-+ not1.json                                                       OK
+- not1.json                                                       Fail
 + sdiv0.json                                                      OK
 + sdiv1.json                                                      OK
 + sdiv2.json                                                      OK
@@ -177,7 +177,7 @@ VMTests
 + signextend_BitIsNotSet.json                                     OK
 + signextend_BitIsNotSetInHigherByte.json                         OK
 + signextend_BitIsSetInHigherByte.json                            OK
-- signextend_Overflow_dj42.json                                   Fail
++ signextend_Overflow_dj42.json                                   OK
 + signextend_bigBytePlus1.json                                    OK
 + signextend_bitIsSet.json                                        OK
 + smod0.json                                                      OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 190/195 Fail: 4/195 Skip: 1/195
+OK: 185/195 Fail: 9/195 Skip: 1/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -265,20 +265,20 @@ OK: 190/195 Fail: 4/195 Skip: 1/195
 OK: 60/60 Fail: 0/60 Skip: 0/60
 ## vmBlockInfoTest
 ```diff
-- blockhash257Block.json                                          Fail
-- blockhash258Block.json                                          Fail
-- blockhashInRange.json                                           Fail
-- blockhashMyBlock.json                                           Fail
-- blockhashNotExistingBlock.json                                  Fail
-- blockhashOutOfRange.json                                        Fail
++ blockhash257Block.json                                          OK
++ blockhash258Block.json                                          OK
++ blockhashInRange.json                                           OK
++ blockhashMyBlock.json                                           OK
++ blockhashNotExistingBlock.json                                  OK
++ blockhashOutOfRange.json                                        OK
 + blockhashUnderFlow.json                                         OK
-- coinbase.json                                                   Fail
++ coinbase.json                                                   OK
 + difficulty.json                                                 OK
 + gaslimit.json                                                   OK
 + number.json                                                     OK
 + timestamp.json                                                  OK
 ```
-OK: 5/12 Fail: 7/12 Skip: 0/12
+OK: 12/12 Fail: 0/12 Skip: 0/12
 ## vmEnvironmentalInfo
 ```diff
   ExtCodeSizeAddressInputTooBigLeftMyAddress.json                 Skip
