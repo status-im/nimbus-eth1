@@ -87,7 +87,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
     let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt
     let actualGasRemaining = gasMeter.gasRemaining
-    checkpoint(&"{actualGasRemaining} {expectedGasRemaining}")
+    checkpoint(&"Remaining: {actualGasRemaining} - Expected: {expectedGasRemaining}")
     check(actualGasRemaining == expectedGasRemaining or
           computation.code.hasSStore() and
             (actualGasRemaining > expectedGasRemaining and (actualGasRemaining - expectedGasRemaining) mod 15_000 == 0 or
