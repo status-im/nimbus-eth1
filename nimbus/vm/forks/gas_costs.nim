@@ -147,7 +147,6 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
   func `prefix gasExp`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the exponent
-    ## gasParams is unused
 
     result = static FeeSchedule[GasExp]
     if not value.isZero:
@@ -155,21 +154,18 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
   func `prefix gasSha3`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the sha3 function
-    ## gasParams is unused
 
     result = static(FeeSchedule[GasSha3]) +
       static(FeeSchedule[GasSha3Word]) * value.toInt.wordCount
 
   func `prefix gasCopy`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
-    ## gasParams is unused
 
     result = static(FeeSchedule[GasVeryLow]) +
       static(FeeSchedule[GasCopy]) * value.toInt.wordCount
 
   func `prefix gasExtCodeCopy`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
-    ## gasParams is unused
 
     result = static(FeeSchedule[GasVeryLow]) +
       static(FeeSchedule[GasCopy]) * value.toInt.wordCount
@@ -547,7 +543,7 @@ func tangerineGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
 func spuriousGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-160.md
   result = previous_fees
-  result[GasExpByte]        = 50
+  result[GasExpByte]      = 50
 
 const
   TangerineGasFees = BaseGasFees.tangerineGasFees
