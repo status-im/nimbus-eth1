@@ -149,7 +149,7 @@ proc returnOp*(computation) =
   let (pos, len) = (startPosition.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[Return].m_handler(pos, len),
+    computation.gasCosts[Return].m_handler(computation.memory.len, pos + len),
     reason = "RETURN"
     )
 
@@ -163,7 +163,7 @@ proc revert*(computation) =
   let (pos, len) = (startPosition.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[Op.Revert].m_handler(pos, len),
+    computation.gasCosts[Op.Revert].m_handler(computation.memory.len, pos + len),
     reason = "REVERT"
     )
 

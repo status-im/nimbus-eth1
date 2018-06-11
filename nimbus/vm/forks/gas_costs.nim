@@ -93,7 +93,7 @@ type
     of GckDynamic:
       d_handler*: proc(value: Uint256): GasInt {.nimcall.}
     of GckMemExpansion:
-      m_handler*: proc(activeMemSize, memExpansion: Natural): GasInt {.nimcall.}
+      m_handler*: proc(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.}
     of GckComplex:
       c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}
       # We use gasCost/gasRefund for:
@@ -110,7 +110,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
   # ############### Helper functions ##############################
 
-  func `prefix gasMemoryExpansion`(activeMemSize, memExpansion: Natural): GasInt {.inline.} =
+  func `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize: Natural): GasInt {.inline.} =
     # Input: size (in bytes)
 
     # Yellow Paper:
@@ -125,7 +125,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
       prev_cost = prev_words * static(FeeSchedule[GasMemory]) +
         (prev_words ^ 2) shr 9 # div 512
 
-      new_words = (activeMemSize + memExpansion).wordCount
+      new_words = requestedMemSize.wordCount
       new_cost = new_words * static(FeeSchedule[GasMemory]) +
         (new_words ^ 2) shr 9 # div 512
 
@@ -152,11 +152,11 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     if not value.isZero:
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
-  func `prefix gasSha3`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
+  func `prefix gasSha3`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
 
-    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+    result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
     result += static(FeeSchedule[GasSha3]) +
-      static(FeeSchedule[GasSha3Word]) * memExpansion.wordCount
+      static(FeeSchedule[GasSha3Word]) * requestedMemSize.wordCount
 
   func `prefix gasCopy`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
@@ -170,8 +170,8 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     result = static(FeeSchedule[GasVeryLow]) +
       static(FeeSchedule[GasCopy]) * value.toInt.wordCount
 
-  func `prefix gasLoadStore`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
-    FeeSchedule[GasVeryLow] + `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+  func `prefix gasLoadStore`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
+    FeeSchedule[GasVeryLow] + `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
   func `prefix gasSstore`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
     ## Value is word to save
@@ -191,38 +191,38 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     if value.isZero xor gasParams.s_isStorageEmpty:
       result.gasRefund = static(FeeSchedule[RefundSclear])
 
-  func `prefix gasLog0`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+  func `prefix gasLog0`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result += static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * memExpansion
+      static(FeeSchedule[GasLogData]) * requestedMemSize
 
-  func `prefix gasLog1`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+  func `prefix gasLog1`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result += static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * memExpansion +
+      static(FeeSchedule[GasLogData]) * requestedMemSize +
       static(FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog2`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+  func `prefix gasLog2`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result += static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * memExpansion +
+      static(FeeSchedule[GasLogData]) * requestedMemSize +
       static(2 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog3`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+  func `prefix gasLog3`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * memExpansion +
+      static(FeeSchedule[GasLogData]) * requestedMemSize +
       static(3 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog4`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
-    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+  func `prefix gasLog4`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
+    result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * memExpansion +
+      static(FeeSchedule[GasLogData]) * requestedMemSize +
       static(4 * FeeSchedule[GasLogTopic])
 
   func `prefix gasCall`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
@@ -301,8 +301,8 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     # Ccall
     result.gasCost += cextra
 
-  func `prefix gasHalt`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
-    `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+  func `prefix gasHalt`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
+    `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
   func `prefix gasSelfDestruct`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
     # TODO
@@ -322,7 +322,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     func dynamic(handler: proc(value: Uint256): GasInt {.nimcall.}): GasCost =
       GasCost(kind: GckDynamic, d_handler: handler)
 
-    func memExpansion(handler: proc(activeMemSize, memExpansion: Natural): GasInt {.nimcall.}): GasCost =
+    func requestedMemSize(handler: proc(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
     func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}): GasCost =
@@ -359,7 +359,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           Byte:            fixed GasVeryLow,
 
           # 20s: SHA3
-          Sha3:            memExpansion `prefix gasSha3`,
+          Sha3:            requestedMemSize `prefix gasSha3`,
 
           # 30s: Environmental Information
           Address:         fixed GasBase,
@@ -388,9 +388,9 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
           # 50s: Stack, Memory, Storage and Flow Operations
           Pop:            fixed GasBase,
-          Mload:          memExpansion `prefix gasLoadStore`,
-          Mstore:         memExpansion `prefix gasLoadStore`,
-          Mstore8:        memExpansion `prefix gasLoadStore`,
+          Mload:          requestedMemSize `prefix gasLoadStore`,
+          Mstore:         requestedMemSize `prefix gasLoadStore`,
+          Mstore8:        requestedMemSize `prefix gasLoadStore`,
           Sload:          fixed GasSload,
           Sstore:         complex `prefix gasSstore`,
           Jump:           fixed GasMid,
@@ -471,20 +471,20 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           Swap16:         fixed GasVeryLow,
 
           # a0s: Logging Operations
-          Log0:           memExpansion `prefix gasLog0`,
-          Log1:           memExpansion `prefix gasLog1`,
-          Log2:           memExpansion `prefix gasLog2`,
-          Log3:           memExpansion `prefix gasLog3`,
-          Log4:           memExpansion `prefix gasLog4`,
+          Log0:           requestedMemSize `prefix gasLog0`,
+          Log1:           requestedMemSize `prefix gasLog1`,
+          Log2:           requestedMemSize `prefix gasLog2`,
+          Log3:           requestedMemSize `prefix gasLog3`,
+          Log4:           requestedMemSize `prefix gasLog4`,
 
           # f0s: System operations
           Create:         fixed GasCreate,
           Call:           complex `prefix gasCall`,
           CallCode:       complex `prefix gasCall`,
-          Return:         memExpansion `prefix gasHalt`,
+          Return:         requestedMemSize `prefix gasHalt`,
           DelegateCall:   complex `prefix gasCall`,
           StaticCall:     complex `prefix gasCall`,
-          Op.Revert:      memExpansion `prefix gasHalt`,
+          Op.Revert:      requestedMemSize `prefix gasHalt`,
           Invalid:        fixed GasZero,
           SelfDestruct:   complex `prefix gasSelfDestruct`
         ]

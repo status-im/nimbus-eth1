@@ -55,7 +55,7 @@ macro logXX(topicCount: static[int]): untyped =
   let OpName = ident(&"Log{topicCount}")
   let logicCode = quote:
     `computation`.gasMeter.consumeGas(
-      `computation`.gasCosts[`OpName`].m_handler(`memPos`, `len`),
+      `computation`.gasCosts[`OpName`].m_handler(`computation`.memory.len, `memPos` + `len`),
       reason="Memory expansion, Log topic and data gas cost")
     `computation`.memory.extend(`memPos`, `len`)
     let logData = `computation`.memory.read(`memPos`, `len`).toString
