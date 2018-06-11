@@ -72,9 +72,6 @@ type
       c_contractGas*: Gasint
       c_activeMemSize*: Natural
       c_memRequested*: Natural
-    of Revert, Return:
-      r_activeMemSize*: Natural
-      r_memRequested*: Natural
     else:
       discard
 
