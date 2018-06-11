@@ -12,7 +12,7 @@ import
   vm / [code_stream, memory, stack, forks/gas_costs],
   ./logging
 
-export GasInt, gas_costs, tables
+export GasInt, gas_costs
 
 type
   BaseComputation* = ref object of RootObj

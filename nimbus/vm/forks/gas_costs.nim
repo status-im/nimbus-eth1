@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, eth_common, tables, math,
+  stint, eth_common, math,
+  ../../utils/macros_gen_opcodes,
   ../../opcode_values,
   ../../utils_numeric
 
@@ -78,6 +79,7 @@ type
       discard
 
   GasCostKind* = enum
+    GckInvalidOp,
     GckFixed,
     GckDynamic,
     GckMemExpansion,
@@ -87,6 +89,8 @@ type
 
   GasCost = object
     case kind*: GasCostKind
+    of GckInvalidOp:
+      discard
     of GckFixed:
       cost*: GasInt
     of GckDynamic:
@@ -100,7 +104,7 @@ type
       #   - Allow to use unsigned integer in the future
       #   - CALL instruction requires passing the child message gas (Ccallgas in yellow paper)
 
-  GasCosts* = Table[Op, GasCost]
+  GasCosts* = array[Op, GasCost]
 
 template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyped) =
 
@@ -332,164 +336,165 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
       GasCost(kind: GckComplex, c_handler: handler)
 
     # Returned value
-    {
-        # 0s: Stop and Arithmetic Operations
-        Stop:            fixed GasZero,
-        Add:             fixed GasVeryLow,
-        Mul:             fixed GasLow,
-        Sub:             fixed GasVeryLow,
-        Div:             fixed GasLow,
-        Sdiv:            fixed GasLow,
-        Mod:             fixed GasLow,
-        Smod:            fixed GasLow,
-        Addmod:          fixed GasMid,
-        Mulmod:          fixed GasMid,
-        Exp:             dynamic `prefix gasExp`,
-        SignExtend:      fixed GasLow,
+    fill_enum_table_holes(Op, GasCost(kind: GckInvalidOp)):
+      [
+          # 0s: Stop and Arithmetic Operations
+          Stop:            fixed GasZero,
+          Add:             fixed GasVeryLow,
+          Mul:             fixed GasLow,
+          Sub:             fixed GasVeryLow,
+          Div:             fixed GasLow,
+          Sdiv:            fixed GasLow,
+          Mod:             fixed GasLow,
+          Smod:            fixed GasLow,
+          Addmod:          fixed GasMid,
+          Mulmod:          fixed GasMid,
+          Exp:             dynamic `prefix gasExp`,
+          SignExtend:      fixed GasLow,
 
-        # 10s: Comparison & Bitwise Logic Operations
-        Lt:              fixed GasVeryLow,
-        Gt:              fixed GasVeryLow,
-        Slt:             fixed GasVeryLow,
-        Sgt:             fixed GasVeryLow,
-        Eq:              fixed GasVeryLow,
-        IsZero:          fixed GasVeryLow,
-        And:             fixed GasVeryLow,
-        Or:              fixed GasVeryLow,
-        Xor:             fixed GasVeryLow,
-        Not:             fixed GasVeryLow,
-        Byte:            fixed GasVeryLow,
+          # 10s: Comparison & Bitwise Logic Operations
+          Lt:              fixed GasVeryLow,
+          Gt:              fixed GasVeryLow,
+          Slt:             fixed GasVeryLow,
+          Sgt:             fixed GasVeryLow,
+          Eq:              fixed GasVeryLow,
+          IsZero:          fixed GasVeryLow,
+          And:             fixed GasVeryLow,
+          Or:              fixed GasVeryLow,
+          Xor:             fixed GasVeryLow,
+          Not:             fixed GasVeryLow,
+          Byte:            fixed GasVeryLow,
 
-        # 20s: SHA3
-        Sha3:            dynamic `prefix gasSha3`,
+          # 20s: SHA3
+          Sha3:            dynamic `prefix gasSha3`,
 
-        # 30s: Environmental Information
-        Address:         fixed GasBase,
-        Balance:         fixed GasBalance,
-        Origin:          fixed GasBase,
-        Caller:          fixed GasBase,
-        CallValue:       fixed GasBase,
-        CallDataLoad:    fixed GasVeryLow,
-        CallDataSize:    fixed GasBase,
-        CallDataCopy:    dynamic `prefix gasCopy`,
-        CodeSize:        fixed GasBase,
-        CodeCopy:        dynamic `prefix gasCopy`,
-        GasPrice:        fixed GasBase,
-        ExtCodeSize:     fixed GasExtcode,
-        ExtCodeCopy:     dynamic `prefix gasExtCodeCopy`,
-        ReturnDataSize:  fixed GasBase,
-        ReturnDataCopy:  dynamic `prefix gasCopy`,
+          # 30s: Environmental Information
+          Address:         fixed GasBase,
+          Balance:         fixed GasBalance,
+          Origin:          fixed GasBase,
+          Caller:          fixed GasBase,
+          CallValue:       fixed GasBase,
+          CallDataLoad:    fixed GasVeryLow,
+          CallDataSize:    fixed GasBase,
+          CallDataCopy:    dynamic `prefix gasCopy`,
+          CodeSize:        fixed GasBase,
+          CodeCopy:        dynamic `prefix gasCopy`,
+          GasPrice:        fixed GasBase,
+          ExtCodeSize:     fixed GasExtcode,
+          ExtCodeCopy:     dynamic `prefix gasExtCodeCopy`,
+          ReturnDataSize:  fixed GasBase,
+          ReturnDataCopy:  dynamic `prefix gasCopy`,
 
-        # 40s: Block Information
-        Blockhash:       fixed GasBlockhash,
-        Coinbase:        fixed GasBase,
-        Timestamp:       fixed GasBase,
-        Number:          fixed GasBase,
-        Difficulty:      fixed GasBase,
-        GasLimit:        fixed GasBase,
+          # 40s: Block Information
+          Blockhash:       fixed GasBlockhash,
+          Coinbase:        fixed GasBase,
+          Timestamp:       fixed GasBase,
+          Number:          fixed GasBase,
+          Difficulty:      fixed GasBase,
+          GasLimit:        fixed GasBase,
 
-        # 50s: Stack, Memory, Storage and Flow Operations
-        Pop:            fixed GasBase,
-        Mload:          memExpansion `prefix gasLoadStore`,
-        Mstore:         memExpansion `prefix gasLoadStore`,
-        Mstore8:        memExpansion `prefix gasLoadStore`,
-        Sload:          fixed GasSload,
-        Sstore:         complex `prefix gasSstore`,
-        Jump:           fixed GasMid,
-        JumpI:          fixed GasHigh,
-        Pc:             fixed GasBase,
-        Msize:          fixed GasBase,
-        Gas:            fixed GasBase,
-        JumpDest:       fixed GasJumpDest,
+          # 50s: Stack, Memory, Storage and Flow Operations
+          Pop:            fixed GasBase,
+          Mload:          memExpansion `prefix gasLoadStore`,
+          Mstore:         memExpansion `prefix gasLoadStore`,
+          Mstore8:        memExpansion `prefix gasLoadStore`,
+          Sload:          fixed GasSload,
+          Sstore:         complex `prefix gasSstore`,
+          Jump:           fixed GasMid,
+          JumpI:          fixed GasHigh,
+          Pc:             fixed GasBase,
+          Msize:          fixed GasBase,
+          Gas:            fixed GasBase,
+          JumpDest:       fixed GasJumpDest,
 
-        # 60s & 70s: Push Operations
-        Push1:          fixed GasVeryLow,
-        Push2:          fixed GasVeryLow,
-        Push3:          fixed GasVeryLow,
-        Push4:          fixed GasVeryLow,
-        Push5:          fixed GasVeryLow,
-        Push6:          fixed GasVeryLow,
-        Push7:          fixed GasVeryLow,
-        Push8:          fixed GasVeryLow,
-        Push9:          fixed GasVeryLow,
-        Push10:         fixed GasVeryLow,
-        Push11:         fixed GasVeryLow,
-        Push12:         fixed GasVeryLow,
-        Push13:         fixed GasVeryLow,
-        Push14:         fixed GasVeryLow,
-        Push15:         fixed GasVeryLow,
-        Push16:         fixed GasVeryLow,
-        Push17:         fixed GasVeryLow,
-        Push18:         fixed GasVeryLow,
-        Push19:         fixed GasVeryLow,
-        Push20:         fixed GasVeryLow,
-        Push21:         fixed GasVeryLow,
-        Push22:         fixed GasVeryLow,
-        Push23:         fixed GasVeryLow,
-        Push24:         fixed GasVeryLow,
-        Push25:         fixed GasVeryLow,
-        Push26:         fixed GasVeryLow,
-        Push27:         fixed GasVeryLow,
-        Push28:         fixed GasVeryLow,
-        Push29:         fixed GasVeryLow,
-        Push30:         fixed GasVeryLow,
-        Push31:         fixed GasVeryLow,
-        Push32:         fixed GasVeryLow,
+          # 60s & 70s: Push Operations
+          Push1:          fixed GasVeryLow,
+          Push2:          fixed GasVeryLow,
+          Push3:          fixed GasVeryLow,
+          Push4:          fixed GasVeryLow,
+          Push5:          fixed GasVeryLow,
+          Push6:          fixed GasVeryLow,
+          Push7:          fixed GasVeryLow,
+          Push8:          fixed GasVeryLow,
+          Push9:          fixed GasVeryLow,
+          Push10:         fixed GasVeryLow,
+          Push11:         fixed GasVeryLow,
+          Push12:         fixed GasVeryLow,
+          Push13:         fixed GasVeryLow,
+          Push14:         fixed GasVeryLow,
+          Push15:         fixed GasVeryLow,
+          Push16:         fixed GasVeryLow,
+          Push17:         fixed GasVeryLow,
+          Push18:         fixed GasVeryLow,
+          Push19:         fixed GasVeryLow,
+          Push20:         fixed GasVeryLow,
+          Push21:         fixed GasVeryLow,
+          Push22:         fixed GasVeryLow,
+          Push23:         fixed GasVeryLow,
+          Push24:         fixed GasVeryLow,
+          Push25:         fixed GasVeryLow,
+          Push26:         fixed GasVeryLow,
+          Push27:         fixed GasVeryLow,
+          Push28:         fixed GasVeryLow,
+          Push29:         fixed GasVeryLow,
+          Push30:         fixed GasVeryLow,
+          Push31:         fixed GasVeryLow,
+          Push32:         fixed GasVeryLow,
 
-        # 80s: Duplication Operations
-        Dup1:           fixed GasVeryLow,
-        Dup2:           fixed GasVeryLow,
-        Dup3:           fixed GasVeryLow,
-        Dup4:           fixed GasVeryLow,
-        Dup5:           fixed GasVeryLow,
-        Dup6:           fixed GasVeryLow,
-        Dup7:           fixed GasVeryLow,
-        Dup8:           fixed GasVeryLow,
-        Dup9:           fixed GasVeryLow,
-        Dup10:          fixed GasVeryLow,
-        Dup11:          fixed GasVeryLow,
-        Dup12:          fixed GasVeryLow,
-        Dup13:          fixed GasVeryLow,
-        Dup14:          fixed GasVeryLow,
-        Dup15:          fixed GasVeryLow,
-        Dup16:          fixed GasVeryLow,
+          # 80s: Duplication Operations
+          Dup1:           fixed GasVeryLow,
+          Dup2:           fixed GasVeryLow,
+          Dup3:           fixed GasVeryLow,
+          Dup4:           fixed GasVeryLow,
+          Dup5:           fixed GasVeryLow,
+          Dup6:           fixed GasVeryLow,
+          Dup7:           fixed GasVeryLow,
+          Dup8:           fixed GasVeryLow,
+          Dup9:           fixed GasVeryLow,
+          Dup10:          fixed GasVeryLow,
+          Dup11:          fixed GasVeryLow,
+          Dup12:          fixed GasVeryLow,
+          Dup13:          fixed GasVeryLow,
+          Dup14:          fixed GasVeryLow,
+          Dup15:          fixed GasVeryLow,
+          Dup16:          fixed GasVeryLow,
 
-        # 90s: Exchange Operations
-        Swap1:          fixed GasVeryLow,
-        Swap2:          fixed GasVeryLow,
-        Swap3:          fixed GasVeryLow,
-        Swap4:          fixed GasVeryLow,
-        Swap5:          fixed GasVeryLow,
-        Swap6:          fixed GasVeryLow,
-        Swap7:          fixed GasVeryLow,
-        Swap8:          fixed GasVeryLow,
-        Swap9:          fixed GasVeryLow,
-        Swap10:         fixed GasVeryLow,
-        Swap11:         fixed GasVeryLow,
-        Swap12:         fixed GasVeryLow,
-        Swap13:         fixed GasVeryLow,
-        Swap14:         fixed GasVeryLow,
-        Swap15:         fixed GasVeryLow,
-        Swap16:         fixed GasVeryLow,
+          # 90s: Exchange Operations
+          Swap1:          fixed GasVeryLow,
+          Swap2:          fixed GasVeryLow,
+          Swap3:          fixed GasVeryLow,
+          Swap4:          fixed GasVeryLow,
+          Swap5:          fixed GasVeryLow,
+          Swap6:          fixed GasVeryLow,
+          Swap7:          fixed GasVeryLow,
+          Swap8:          fixed GasVeryLow,
+          Swap9:          fixed GasVeryLow,
+          Swap10:         fixed GasVeryLow,
+          Swap11:         fixed GasVeryLow,
+          Swap12:         fixed GasVeryLow,
+          Swap13:         fixed GasVeryLow,
+          Swap14:         fixed GasVeryLow,
+          Swap15:         fixed GasVeryLow,
+          Swap16:         fixed GasVeryLow,
 
-        # a0s: Logging Operations
-        Log0:           memExpansion `prefix gasLog0`,
-        Log1:           memExpansion `prefix gasLog1`,
-        Log2:           memExpansion `prefix gasLog2`,
-        Log3:           memExpansion `prefix gasLog3`,
-        Log4:           memExpansion `prefix gasLog4`,
+          # a0s: Logging Operations
+          Log0:           memExpansion `prefix gasLog0`,
+          Log1:           memExpansion `prefix gasLog1`,
+          Log2:           memExpansion `prefix gasLog2`,
+          Log3:           memExpansion `prefix gasLog3`,
+          Log4:           memExpansion `prefix gasLog4`,
 
-        # f0s: System operations
-        Create:         fixed GasCreate,
-        Call:           complex `prefix gasCall`,
-        CallCode:       complex `prefix gasCall`,
-        Return:         memExpansion `prefix gasHalt`,
-        DelegateCall:   complex `prefix gasCall`,
-        StaticCall:     complex `prefix gasCall`,
-        Op.Revert:      memExpansion `prefix gasHalt`,
-        Invalid:        fixed GasZero,
-        SelfDestruct:   complex `prefix gasSelfDestruct`
-      }.toTable
+          # f0s: System operations
+          Create:         fixed GasCreate,
+          Call:           complex `prefix gasCall`,
+          CallCode:       complex `prefix gasCall`,
+          Return:         memExpansion `prefix gasHalt`,
+          DelegateCall:   complex `prefix gasCall`,
+          StaticCall:     complex `prefix gasCall`,
+          Op.Revert:      memExpansion `prefix gasHalt`,
+          Invalid:        fixed GasZero,
+          SelfDestruct:   complex `prefix gasSelfDestruct`
+        ]
 
 # Generate the fork-specific gas costs tables
 const

@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, tables, macros,
-  constants, stint, errors, logging, vm_state,
+  tables,
+  stint, logging,
   vm / [gas_meter, stack, code_stream, memory, message], db / db_chain, computation, opcode, opcode_values, utils / [header, address],
   logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid, call, system_ops],
   ./vm_types

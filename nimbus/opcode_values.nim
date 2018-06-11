@@ -5,73 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import macros, strformat, strutils
-
-macro fill_enum_holes(x: untyped): untyped =
-  # Due to https://github.com/nim-lang/Nim/issues/8007, we can't
-  # use compile-time Tables of object variants, so instead, we use
-  # const arrays to map Op --> gas prices.
-  # Arrays require an enum without hole. This macro will fill the holes
-  # in the enum.
-  #
-  # This has an added benefits that we can use computed gotos (direct threaded interpreter)
-  # instead of call or subroutine threading to dispatch opcode.
-  # see: https://github.com/nim-lang/Nim/issues/7699 (computed gotos, bad codegen with enum with holes)
-  # see: https://github.com/status-im/nimbus/wiki/Interpreter-optimization-resources
-  #      for interpreter dispatch strategies
-
-  ## Sanity checks
-  #
-  # StmtList
-  #   TypeSection
-  #     TypeDef
-  #       PragmaExpr
-  #         Postfix
-  #           Ident "*"
-  #           Ident "Op"
-  #         Pragma
-  #           Ident "pure"
-  #       Empty
-  #       EnumTy
-  #         Empty
-  #         EnumFieldDef
-  #           Ident "Stop"
-  #           IntLit 0
-  #         EnumFieldDef
-  #           Ident "Add"
-  #           IntLit 1
-  x[0].expectKind(nnkTypeSection)
-  x[0][0][2].expectKind(nnkEnumTy)
-
-  let opcodes = x[0][0][2]
-
-  # We will iterate over all the opcodes
-  # check if the i-th value is declared, if not add a no-op
-  # and accumulate that in a "dense opcodes" declaration
-
-  var
-    opcode = 0
-    holes_idx = 1
-    dense_opcs = nnkEnumTy.newTree()
-  dense_opcs.add newEmptyNode()
-
-  # Iterate on the enum with holes
-  while holes_idx < opcodes.len:
-    let curr_ident = opcodes[holes_idx]
-
-    if curr_ident.kind in {nnkIdent, nnkEmpty} or
-      (curr_ident.kind == nnkEnumFieldDef and
-      curr_ident[1].intVal == opcode):
-
-      dense_opcs.add curr_ident
-      inc holes_idx
-    else:
-      dense_opcs.add newIdentNode(&"Nop0x{opcode.toHex(2)}")
-
-    inc opcode
-
-  result = x
-  result[0][0][2] = dense_opcs
+import ./utils/macros_gen_opcodes
 
 fill_enum_holes:
   type

@@ -10,8 +10,7 @@ import
   ../constants, ../vm_types, ../errors, ../computation, ../opcode_values, ../logging,
   .. / vm / [stack, memory, gas_meter, message],
   .. / utils / [address, bytes],
-  stint,
-  tables
+  stint
 
 type
   # TODO most of these are for gas handling
