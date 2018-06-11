@@ -195,34 +195,34 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result += static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * requestedMemSize
+      static(FeeSchedule[GasLogData]) * (requestedMemSize - activeMemSize)
 
   func `prefix gasLog1`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result += static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * requestedMemSize +
+      static(FeeSchedule[GasLogData]) * (requestedMemSize - activeMemSize) +
       static(FeeSchedule[GasLogTopic])
 
   func `prefix gasLog2`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result += static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * requestedMemSize +
+      static(FeeSchedule[GasLogData]) * (requestedMemSize - activeMemSize) +
       static(2 * FeeSchedule[GasLogTopic])
 
   func `prefix gasLog3`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * requestedMemSize +
+      static(FeeSchedule[GasLogData]) * (requestedMemSize - activeMemSize) +
       static(3 * FeeSchedule[GasLogTopic])
 
   func `prefix gasLog4`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
     result = static(FeeSchedule[GasLog]) +
-      static(FeeSchedule[GasLogData]) * requestedMemSize +
+      static(FeeSchedule[GasLogData]) * (requestedMemSize - activeMemSize) +
       static(4 * FeeSchedule[GasLogTopic])
 
   func `prefix gasCall`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
