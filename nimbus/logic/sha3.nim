@@ -13,13 +13,13 @@ import
 
 proc sha3op*(computation: var BaseComputation) =
   let (startPosition, size) = computation.stack.popInt(2)
+  let (pos, len) = (startPosition.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[Sha3].d_handler(size),
+    computation.gasCosts[Sha3].m_handler(pos, len),
     reason="SHA3: word gas cost"
     )
 
-  let (pos, len) = (startPosition.toInt, size.toInt)
   computation.memory.extend(pos, len)
 
   var res = keccak("") # TODO: stub

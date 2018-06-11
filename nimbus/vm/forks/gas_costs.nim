@@ -152,11 +152,11 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     if not value.isZero:
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
-  func `prefix gasSha3`(value: Uint256): GasInt {.nimcall.} =
-    ## Value is the size of the input to the sha3 function
+  func `prefix gasSha3`(activeMemSize, memExpansion: Natural): GasInt {.nimcall.} =
 
-    result = static(FeeSchedule[GasSha3]) +
-      static(FeeSchedule[GasSha3Word]) * value.toInt.wordCount
+    result = `prefix gasMemoryExpansion`(activeMemSize, memExpansion)
+    result += static(FeeSchedule[GasSha3]) +
+      static(FeeSchedule[GasSha3Word]) * memExpansion.wordCount
 
   func `prefix gasCopy`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
@@ -359,7 +359,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           Byte:            fixed GasVeryLow,
 
           # 20s: SHA3
-          Sha3:            dynamic `prefix gasSha3`,
+          Sha3:            memExpansion `prefix gasSha3`,
 
           # 30s: Environmental Information
           Address:         fixed GasBase,

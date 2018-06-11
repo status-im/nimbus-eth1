@@ -50,6 +50,6 @@ func ceil32*(value: Natural): Natural {.inline.}=
     return value + 32 - remainder
 
 func wordCount*(length: Natural): Natural {.inline.}=
-  # Returns the number of EVM words fcorresponding to a specific size.
+  # Returns the number of EVM words corresponding to a specific size.
   # EVM words is rounded up
   length.ceil32 shr 5 # equivalent to `div 32` (32 = 2^5)
