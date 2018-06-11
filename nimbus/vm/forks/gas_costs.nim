@@ -171,7 +171,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
       static(FeeSchedule[GasCopy]) * value.toInt.wordCount
 
   func `prefix gasLoadStore`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =
-    FeeSchedule[GasVeryLow] + `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
+    static(FeeSchedule[GasVeryLow]) + `prefix gasMemoryExpansion`(activeMemSize, requestedMemSize)
 
   func `prefix gasSstore`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
     ## Value is word to save
