@@ -130,7 +130,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
       new_words = (activeMemSize + memExpansion).wordCount
       new_cost = new_words * static(FeeSchedule[GasMemory]) +
-        (prev_words ^ 2) shr 9 # div 512
+        (new_words ^ 2) shr 9 # div 512
 
     # TODO: add logging
     result = new_cost - prev_cost
