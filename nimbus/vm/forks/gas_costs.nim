@@ -322,7 +322,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     func dynamic(handler: proc(value: Uint256): GasInt {.nimcall.}): GasCost =
       GasCost(kind: GckDynamic, d_handler: handler)
 
-    func requestedMemSize(handler: proc(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.}): GasCost =
+    func memExpansion(handler: proc(activeMemSize, memExpansion: Natural): GasInt {.nimcall.}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
     func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}): GasCost =
@@ -359,7 +359,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           Byte:            fixed GasVeryLow,
 
           # 20s: SHA3
-          Sha3:            requestedMemSize `prefix gasSha3`,
+          Sha3:            memExpansion `prefix gasSha3`,
 
           # 30s: Environmental Information
           Address:         fixed GasBase,
@@ -388,9 +388,9 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 
           # 50s: Stack, Memory, Storage and Flow Operations
           Pop:            fixed GasBase,
-          Mload:          requestedMemSize `prefix gasLoadStore`,
-          Mstore:         requestedMemSize `prefix gasLoadStore`,
-          Mstore8:        requestedMemSize `prefix gasLoadStore`,
+          Mload:          memExpansion `prefix gasLoadStore`,
+          Mstore:         memExpansion `prefix gasLoadStore`,
+          Mstore8:        memExpansion `prefix gasLoadStore`,
           Sload:          fixed GasSload,
           Sstore:         complex `prefix gasSstore`,
           Jump:           fixed GasMid,
@@ -471,20 +471,20 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           Swap16:         fixed GasVeryLow,
 
           # a0s: Logging Operations
-          Log0:           requestedMemSize `prefix gasLog0`,
-          Log1:           requestedMemSize `prefix gasLog1`,
-          Log2:           requestedMemSize `prefix gasLog2`,
-          Log3:           requestedMemSize `prefix gasLog3`,
-          Log4:           requestedMemSize `prefix gasLog4`,
+          Log0:           memExpansion `prefix gasLog0`,
+          Log1:           memExpansion `prefix gasLog1`,
+          Log2:           memExpansion `prefix gasLog2`,
+          Log3:           memExpansion `prefix gasLog3`,
+          Log4:           memExpansion `prefix gasLog4`,
 
           # f0s: System operations
           Create:         fixed GasCreate,
           Call:           complex `prefix gasCall`,
           CallCode:       complex `prefix gasCall`,
-          Return:         requestedMemSize `prefix gasHalt`,
+          Return:         memExpansion `prefix gasHalt`,
           DelegateCall:   complex `prefix gasCall`,
           StaticCall:     complex `prefix gasCall`,
-          Op.Revert:      requestedMemSize `prefix gasHalt`,
+          Op.Revert:      memExpansion `prefix gasHalt`,
           Invalid:        fixed GasZero,
           SelfDestruct:   complex `prefix gasSelfDestruct`
         ]
