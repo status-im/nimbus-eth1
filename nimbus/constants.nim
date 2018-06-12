@@ -114,66 +114,8 @@ let
   ZERO_HASH32* =                  Hash256()
   STACK_DEPTH_LIMIT* =            1024
 
-  # GAS_NULL* =                     0.u256
-  # GAS_ZERO* =                     0.u256
-  # GAS_BASE* =                     2.u256
-  # GAS_VERY_LOW* =                 3.u256
-  # GAS_LOW* =                      5.u256
-  # GAS_MID* =                      8.u256
-  # GAS_HIGH* =                     10.u256
-  # GAS_EXT_CODE* =                 20.u256 # TODO: this is pre-eip150, see also GAS_EXT_CODE_COST
-  # GAS_BALANCE* =                  20.u256 # TODO: this is pre-eip150, see also GAS_COST_BALANCE
-  # GAS_SLOAD* =                    200.u256 # TODO: pre eip150
-  # GAS_JUMP_DEST* =                1.u256
-  # GAS_SSET* =                     20_000.u256
-  # GAS_SRESET* =                   5_000.u256
-  # GAS_EXT_CODE_COST* =            700.u256
-  # GAS_COINBASE* =                 20.u256
-  # GAS_SLOAD_COST* =               20.u256
-  # GAS_SELF_DESTRUCT_COST* =       0.u256
-  # GAS_IN_HANDLER* =               0.u256 # to be calculated in handler
-  REFUND_SCLEAR* =                15_000
-
-  # GAS_SELF_DESTRUCT* =            0.u256
-  # GAS_SELF_DESTRUCT_NEW_ACCOUNT* = 25_000.u256
-  GAS_CREATE* =                   32_000.u256
-  # GAS_CALL* =                     40.u256
-  GAS_CALL_VALUE* =               9_000
-  GAS_CALL_STIPEND* =             2_300
-  GAS_NEW_ACCOUNT* =              25_000
-
-  # GAS_COST_BALANCE* =             400.u256 # TODO: this is post-eip150, see also GAS_BALANCE
-
-  # GAS_EXP* =                      10.u256
-  # GAS_EXP_BYTE* =                 10.u256
-  GAS_MEMORY* =                   3
-  GAS_TX_CREATE* =                32_000.u256
-  GAS_TX_DATA_ZERO* =             4.u256
-  GAS_TX_DATA_NON_ZERO* =         68.u256
-  GAS_TX* =                       21_000
-  GAS_LOG* =                      375.u256
-  GAS_LOG_DATA* =                 8
-  GAS_LOG_TOPIC* =                375
-  # GAS_SHA3* =                     30.u256
-  GAS_SHA3_WORD* =                6
-  GAS_COPY* =                     3
-  GAS_BLOCK_HASH* =               20.u256
-  GAS_CODE_DEPOSIT* =             200.u256
-  GAS_MEMORY_QUADRATIC_DENOMINATOR* = 512
-  GAS_SHA256* =                   60.u256
-  GAS_SHA256WORD* =               12.u256
-  GAS_RIP_EMD160* =               600.u256
-  GAS_RIP_EMD160WORD* =           120.u256
-  GAS_IDENTITY* =                 15.u256
-  GAS_IDENTITY_WORD* = 3
-  GAS_ECRECOVER* =                3_000.u256
-  GAS_ECADD* =                    500.u256
-  GAS_ECMUL* =                    40_000.u256
-  GAS_ECPAIRING_BASE* =           100_000.u256
-  GAS_ECPAIRING_PER_POINT* =      80_000.u256
   GAS_LIMIT_EMA_DENOMINATOR* =    1_024
   GAS_LIMIT_ADJUSTMENT_FACTOR* =  1_024
-  GAS_LIMIT_MAXIMUM* =            high(GasInt)
   GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* = 3
   GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2
 

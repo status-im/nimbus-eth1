@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../computation, ../vm_types, .. / vm / [stack, memory], .. / utils / [padding, bytes],
+  ../constants, ../computation, ../vm_types, ../vm/[stack, memory, gas_meter], .. /utils/[padding, bytes],
+  ../opcode_values,
   stint
 
 
@@ -22,7 +23,12 @@ proc mstore*(computation) =
   let start = stack.popInt().toInt
   let normalizedValue = stack.popInt().toByteArrayBE
 
-  extendMemory(start, 32)
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[MStore].m_handler(computation.memory.len, start + 32),
+    reason="MSTORE: GasVeryLow + memory expansion"
+    )
+
+  memory.extend(start, 32)
   memory.write(start, normalizedValue)
 
 proc mstore8*(computation) =
@@ -30,14 +36,23 @@ proc mstore8*(computation) =
   let value = stack.popInt()
   let normalizedValue = (value and 0xff).toByteArrayBE
 
-  extendMemory(start, 1)
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[MStore8].m_handler(computation.memory.len, start + 1),
+    reason="MSTORE8: GasVeryLow + memory expansion"
+    )
+
+  memory.extend(start, 1)
   memory.write(start, [normalizedValue[0]])
 
 proc mload*(computation) =
   let start = stack.popInt().toInt
 
-  extendMemory(start, 32)
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[MLoad].m_handler(computation.memory.len, start + 32),
+    reason="MLOAD: GasVeryLow + memory expansion"
+    )
 
+  memory.extend(start, 32)
   let value = memory.read(start, 32)
   stack.push(value)
 

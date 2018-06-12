@@ -9,10 +9,10 @@ import
   tables,
   constants, vm_state,
   opcode_values, stint, eth_common,
-  vm / [code_stream, memory, stack],
+  vm / [code_stream, memory, stack, forks/gas_costs],
   ./logging
 
-export GasInt
+export GasInt, gas_costs
 
 type
   BaseComputation* = ref object of RootObj
@@ -30,9 +30,9 @@ type
     logEntries*:            seq[(EthAddress, seq[UInt256], string)]
     shouldEraseReturnData*: bool
     accountsToDelete*:      Table[EthAddress, EthAddress]
-    opcodes*:               Table[Op, Opcode] # TODO array[Op, Opcode]
+    opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
     precompiles*:           Table[string, Opcode]
-    gasCosts*:              GasCosts # TODO separate opcode processing and gas computation
+    gasCosts*:              GasCosts # TODO - avoid allocating memory for this const
 
   Error* = ref object
     info*:                  string
@@ -40,16 +40,10 @@ type
     erasesReturnData*:      bool
 
   Opcode* = ref object of RootObj
+    # TODO can't use a stack-allocated object because
+    # "BaseComputation is not a concrete type"
+    # TODO: We can probably remove this.
     kind*: Op
-    #of VARIABLE_GAS_COST_OPS:
-    #  gasCostHandler*: proc(computation: var BaseComputation): UInt256
-    ## so, we could have special logic that separates all gas cost calculations
-    ## from actual opcode execution
-    ## that's what parity does:
-    ##   it uses the peek methods of the stack and calculates the cost
-    ##   then it actually pops/pushes stuff in exec
-    ## I followed the py-evm approach which does that in opcode logic
-    gasCostKind*: GasCostKind
     runLogic*:  proc(computation: var BaseComputation)
 
   GasMeter* = ref object
@@ -57,30 +51,6 @@ type
     gasRefunded*: GasInt
     startGas*: GasInt
     gasRemaining*: GasInt
-
-  GasCostKind* = enum
-    GasZero
-    GasBase
-    GasVeryLow
-    GasLow
-    GasMid
-    GasHigh
-    GasSload
-    GasJumpDest
-    GasSset
-    GasSreset
-    GasExtCode
-    GasCoinbase
-    GasSelfDestruct
-    GasInHandler
-    GasRefundSclear
-
-    GasBalance
-    GasCall
-    GasExp
-    GasSHA3
-
-  GasCosts* = array[GasCostKind, GasInt]
 
   Message* = ref object
     # A message for VM computation

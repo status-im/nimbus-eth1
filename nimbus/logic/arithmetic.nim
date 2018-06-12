@@ -90,10 +90,10 @@ proc exp*(computation: var BaseComputation) =
   # Exponentiation
   let (base, exponent) = computation.stack.popInt(2)
 
-  var gasCost = computation.gasCosts[GasExp]
-  if not exponent.isZero:
-    gasCost += gasCost * (1 + log256(exponent))
-  computation.gasMeter.consumeGas(gasCost, reason="EXP: exponent bytes")
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[Exp].d_handler(exponent),
+    reason="EXP: exponent bytes"
+    )
 
   let res = if base.isZero: 0.u256 # 0^0 is 0 in py-evm
             else: base.pow(exponent)

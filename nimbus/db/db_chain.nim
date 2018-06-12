@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import strformat, tables, stint, rlp, ranges, state_db, backends / memory_backend,
+import stint, tables, rlp, ranges, state_db, backends / memory_backend,
   ../errors, ../utils/header, ../constants, eth_common, byteutils
 
 type

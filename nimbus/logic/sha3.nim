@@ -6,15 +6,21 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../utils_numeric, .. / utils / [keccak, bytes], .. / vm / [stack, memory, gas_meter], ../computation, ../vm_types, helpers, stint
+  ../constants, ../utils_numeric, ../utils/[keccak, bytes], ../vm/[stack, memory, gas_meter],
+  ../computation, ../vm_types, ../opcode_values,
+  ./helpers,
+  stint
 
 proc sha3op*(computation: var BaseComputation) =
   let (startPosition, size) = computation.stack.popInt(2)
   let (pos, len) = (startPosition.toInt, size.toInt)
-  computation.extendMemory(pos, len)
-  let sha3Bytes = computation.memory.read(pos, len)
-  let wordCount = sha3Bytes.len.ceil32 div 32 # TODO, can't we just shr instead of rounding + div
-  let gasCost = constants.GAS_SHA3_WORD * wordCount
-  computation.gasMeter.consumeGas(gasCost, reason="SHA3: word gas cost")
-  var res = keccak("")
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[Sha3].m_handler(computation.memory.len, pos + len),
+    reason="SHA3: word gas cost"
+    )
+
+  computation.memory.extend(pos, len)
+
+  var res = keccak("") # TODO: stub
   pushRes()

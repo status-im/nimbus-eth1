@@ -6,24 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, sequtils, tables, macros, stint, terminal, math, eth_common, byteutils,
-  constants, errors, utils/hexadecimal, utils_numeric, validation, vm_state, logging, opcode_values, vm_types,
-  vm / [code_stream, gas_meter, memory, message, stack],
+  strformat, strutils, sequtils, macros, stint, terminal, math, eth_common, byteutils, tables,
+  ./constants, ./errors, ./utils/hexadecimal, ./utils_numeric, ./validation, ./vm_state, ./logging, ./opcode_values, ./vm_types,
+  ./vm/[code_stream, gas_meter, memory, message, stack],
 
   # TODO further refactoring of gas cost
   vm/forks/gas_costs,
   vm/forks/f20150730_frontier/frontier_vm_state,
   vm/forks/f20161018_tangerine_whistle/tangerine_vm_state
-
-proc memoryGasCost*(sizeInBytes: Natural): GasInt =
-  let
-    sizeInWords = ceil32(sizeInBytes) div 32
-    linearCost = sizeInWords * GAS_MEMORY
-    quadraticCost = sizeInWords ^ 2 div GAS_MEMORY_QUADRATIC_DENOMINATOR
-    totalCost = linearCost + quadraticCost
-  result = totalCost
-
-#const VARIABLE_GAS_COST_OPS* = {Op.Exp}
 
 method newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation {.base.}=
   raise newException(ValueError, "Must be implemented by subclasses")
@@ -104,26 +94,6 @@ method prepareChildMessage*(
     data,
     code,
     childOptions)
-
-method extendMemory*(c: var BaseComputation, startPosition: Natural, size: Natural) =
-  # Memory Management
-
-  let beforeSize = ceil32(len(c.memory))
-  let afterSize = ceil32(startPosition + size)
-
-  let beforeCost = memoryGasCost(beforeSize)
-  let afterCost = memoryGasCost(afterSize)
-
-  c.logger.debug(&"MEMORY: size ({beforeSize} -> {afterSize}) | cost ({beforeCost} -> {afterCost})")
-
-  if size > 0:
-    if beforeCost < afterCost:
-      var gasFee = afterCost - beforeCost
-      c.gasMeter.consumeGas(
-        gasFee,
-        reason = &"Expanding memory {beforeSize} -> {afterSize}")
-
-      c.memory.extend(startPosition, size)
 
 method output*(c: BaseComputation): string =
   if c.shouldEraseReturnData:
@@ -261,10 +231,10 @@ template inComputation*(c: untyped, handler: untyped): untyped =
         c.gasMeter.gasRemaining,
         reason="Zeroing gas due to VM Exception: $1" % getCurrentExceptionMsg())
 
-
 method getOpcodeFn*(computation: var BaseComputation, op: Op): Opcode =
+  # TODO use isValidOpcode and remove the Op --> Opcode indirection
   if computation.opcodes.len > 0 and computation.opcodes.hasKey(op):
-    computation.opcodes[op]
+    OpCode(kind: op, runLogic: computation.opcodes[op])
   else:
     raise newException(InvalidInstruction,
       &"Invalid opcode {op}")

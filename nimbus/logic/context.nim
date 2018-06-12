@@ -8,7 +8,8 @@
 import
   strformat,
   ../constants, ../vm_types, ../errors, ../utils_numeric, ../computation, ../vm_state, ../account, ../db/state_db, ../validation,
-  .. / vm / [stack, message, gas_meter, memory, code_stream], .. / utils / [address, padding, bytes], stint
+  .. /vm/[stack, message, gas_meter, memory, code_stream], ../utils/[address, padding, bytes], stint,
+  ../opcode_values
 
 proc balance*(computation: var BaseComputation) =
   let address = computation.stack.popAddress()
@@ -47,12 +48,14 @@ proc callDataCopy*(computation: var BaseComputation) =
   let (memStartPosition,
        calldataStartPosition,
        size) = computation.stack.popInt(3)
-  let (memPos, callPos, len) = (memStartPosition.toInt, calldataStartPosition.toInt, size.toInt)
-  computation.extendMemory(memPos, len)
 
-  let wordCount = ceil32(len) div 32
-  let copyGasCost = wordCount * constants.GAS_COPY
-  computation.gasMeter.consumeGas(copyGasCost, reason="CALLDATACOPY fee")
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[CallDataCopy].d_handler(size),
+    reason="CALLDATACOPY fee")
+
+  let (memPos, callPos, len) = (memStartPosition.toInt, calldataStartPosition.toInt, size.toInt)
+  computation.memory.extend(memPos, len)
+
   let value = computation.msg.data[callPos ..< callPos + len]
   let paddedValue = padRight(value, len, 0.byte)
   computation.memory.write(memPos, paddedValue)
@@ -67,13 +70,14 @@ proc codecopy*(computation: var BaseComputation) =
   let (memStartPosition,
        codeStartPosition,
        size) = computation.stack.popInt(3)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[CodeCopy].d_handler(size),
+    reason="CODECOPY: word gas cost")
+
   let (memPos, codePos, len) = (memStartPosition.toInt, codeStartPosition.toInt, size.toInt)
-  computation.extendMemory(memPos, len)
+  computation.memory.extend(memPos, len)
 
-  let wordCount = ceil32(len) div 32
-  let copyGasCost = constants.GAS_COPY * wordCount
-
-  computation.gasMeter.consumeGas(copyGasCost, reason="CODECOPY: word gas cost")
   # TODO
   # with computation.code.seek(code_start_position):
   #   code_bytes = computation.code.read(size)
@@ -96,12 +100,15 @@ proc extCodeSize*(computation: var BaseComputation) =
 proc extCodeCopy*(computation: var BaseComputation) =
   let account = computation.stack.popAddress()
   let (memStartPosition, codeStartPosition, size) = computation.stack.popInt(3)
-  let (memPos, codePos, len) = (memStartPosition.toInt, codeStartPosition.toInt, size.toInt)
-  computation.extendMemory(memPos, len)
-  let wordCount = ceil32(len) div 32
-  let copyGasCost = constants.GAS_COPY * wordCount
 
-  computation.gasMeter.consumeGas(copyGasCost, reason="EXTCODECOPY: word gas cost")
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[ExtCodeCopy].d_handler(size),
+    reason="EXTCODECOPY: word gas cost"
+    )
+
+  let (memPos, codePos, len) = (memStartPosition.toInt, codeStartPosition.toInt, size.toInt)
+  computation.memory.extend(memPos, len)
+
 
   # TODO:
   #     with computation.vm_state.state_db(read_only=True) as state_db:
@@ -116,6 +123,12 @@ proc returnDataSize*(computation: var BaseComputation) =
 
 proc returnDataCopy*(computation: var BaseComputation) =
   let (memStartPosition, returnDataStartPosition, size) = computation.stack.popInt(3)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[ReturnDataCopy].d_handler(size),
+    reason="RETURNDATACOPY fee"
+    )
+
   let (memPos, returnPos, len) = (memStartPosition.toInt, returnDataStartPosition.toInt, size.toInt)
   if returnPos + len > computation.returnData.len:
     raise newException(OutOfBoundsRead,
@@ -123,9 +136,7 @@ proc returnDataCopy*(computation: var BaseComputation) =
       &"for data from index {returnDataStartPosition} to {returnDataStartPosition + size}. Return data is {computation.returnData.len} in \n" &
       "length")
 
-  computation.extendMemory(memPos, len)
-  let wordCount = ceil32(len) div 32
-  let copyGasCost = wordCount * constants.GAS_COPY
-  computation.gasMeter.consumeGas(copyGasCost, reason="RETURNDATACOPY fee")
+  computation.memory.extend(memPos, len)
+
   let value = ($computation.returnData)[returnPos ..< returnPos + len]
   computation.memory.write(memPos, len, value)

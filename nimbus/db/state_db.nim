@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, tables, eth_common,
+  eth_common, tables,
   ../constants, ../errors, ../validation, ../account, ../logging, ../utils_numeric, .. / utils / [padding, bytes, keccak],
   stint, rlp
 

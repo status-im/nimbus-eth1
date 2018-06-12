@@ -9,11 +9,13 @@ import
   unittest, strformat, strutils, sequtils, tables, stint, json, ospaths, times,
   ./test_helpers,
   ../nimbus/[constants, errors, logging],
-  ../nimbus/[chain, vm_state, computation, opcode, vm_types, opcode_table],
+  ../nimbus/[chain, vm_state, computation, opcode, vm_types],
   ../nimbus/utils/[header, padding],
   ../nimbus/vm/[gas_meter, message, code_stream, stack],
   ../nimbus/vm/forks/vm_forks, ../nimbus/db/[db_chain, state_db, backends/memory_backend],
   eth_common
+
+from ../nimbus/opcode_table import OpLogic
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -58,7 +60,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     c.displayDecompiled()
 
   var computation = newBaseComputation(vm.state, message)
-  computation.opcodes = OPCODE_TABLE
+  computation.opcodes = OpLogic
   computation.precompiles = initTable[string, Opcode]()
 
   computation = computation.applyComputation(vm.state, message)
@@ -85,7 +87,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
     let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt
     let actualGasRemaining = gasMeter.gasRemaining
-    checkpoint(&"{actualGasRemaining} {expectedGasRemaining}")
+    checkpoint(&"Remaining: {actualGasRemaining} - Expected: {expectedGasRemaining}")
     check(actualGasRemaining == expectedGasRemaining or
           computation.code.hasSStore() and
             (actualGasRemaining > expectedGasRemaining and (actualGasRemaining - expectedGasRemaining) mod 15_000 == 0 or
