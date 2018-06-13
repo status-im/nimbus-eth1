@@ -183,13 +183,13 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
       gSreset = FeeSchedule[GasSreset]
 
     # Gas cost - literal translation of Yellow Paper
-    result.gasCost =  if value.isZero.not xor gasParams.s_isStorageEmpty:
+    result.gasCost =  if value.isZero.not and gasParams.s_isStorageEmpty:
                         gSet
                       else:
                         gSreset
 
     # Refund
-    if value.isZero xor gasParams.s_isStorageEmpty:
+    if value.isZero and not gasParams.s_isStorageEmpty:
       result.gasRefund = static(FeeSchedule[RefundSclear])
 
   func `prefix gasLog0`(activeMemSize, requestedMemSize: Natural): GasInt {.nimcall.} =

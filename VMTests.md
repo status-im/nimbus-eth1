@@ -9,7 +9,7 @@ VMTests
 + add4.json                                                       OK
 + addmod0.json                                                    OK
 + addmod1.json                                                    OK
-- addmod1_overflow2.json                                          Fail
++ addmod1_overflow2.json                                          OK
 + addmod1_overflow3.json                                          OK
 + addmod1_overflow4.json                                          OK
 + addmod1_overflowDiff.json                                       OK
@@ -135,7 +135,7 @@ VMTests
 + mulUnderFlow.json                                               OK
 + mulmod0.json                                                    OK
 + mulmod1.json                                                    OK
-- mulmod1_overflow.json                                           Fail
++ mulmod1_overflow.json                                           OK
 + mulmod1_overflow2.json                                          OK
 + mulmod1_overflow3.json                                          OK
 + mulmod1_overflow4.json                                          OK
@@ -185,9 +185,9 @@ VMTests
 + smod2.json                                                      OK
 + smod3.json                                                      OK
 + smod4.json                                                      OK
-- smod5.json                                                      Fail
++ smod5.json                                                      OK
 + smod6.json                                                      OK
-- smod7.json                                                      Fail
++ smod7.json                                                      OK
 + smod8_byZero.json                                               OK
 + smod_i256min1.json                                              OK
 + smod_i256min2.json                                              OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 189/195 Fail: 5/195 Skip: 1/195
+OK: 193/195 Fail: 1/195 Skip: 1/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
