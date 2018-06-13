@@ -24,7 +24,7 @@ proc mstore*(computation) =
   let normalizedValue = stack.popInt().toByteArrayBE
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[MStore].m_handler(computation.memory.len, start + 32),
+    computation.gasCosts[MStore].m_handler(computation.memory.len, start, 32),
     reason="MSTORE: GasVeryLow + memory expansion"
     )
 
@@ -37,7 +37,7 @@ proc mstore8*(computation) =
   let normalizedValue = (value and 0xff).toByteArrayBE
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[MStore8].m_handler(computation.memory.len, start + 1),
+    computation.gasCosts[MStore8].m_handler(computation.memory.len, start, 1),
     reason="MSTORE8: GasVeryLow + memory expansion"
     )
 
@@ -48,7 +48,7 @@ proc mload*(computation) =
   let start = stack.popInt().toInt
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[MLoad].m_handler(computation.memory.len, start + 32),
+    computation.gasCosts[MLoad].m_handler(computation.memory.len, start, 32),
     reason="MLOAD: GasVeryLow + memory expansion"
     )
 
