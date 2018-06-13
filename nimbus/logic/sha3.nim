@@ -16,7 +16,7 @@ proc sha3op*(computation: var BaseComputation) =
   let (pos, len) = (startPosition.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[Sha3].m_handler(computation.memory.len, pos + len),
+    computation.gasCosts[Sha3].m_handler(computation.memory.len, pos, len),
     reason="SHA3: word gas cost"
     )
 
