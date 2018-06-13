@@ -23,7 +23,7 @@ VMTests
 + addmodDivByZero1.json                                           OK
 + addmodDivByZero2.json                                           OK
 + addmodDivByZero3.json                                           OK
-  arith1.json                                                     Skip
++ arith1.json                                                     OK
 + div1.json                                                       OK
 + divBoostBug.json                                                OK
 + divByNonZero0.json                                              OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 193/195 Fail: 1/195 Skip: 1/195
+OK: 194/195 Fail: 1/195 Skip: 0/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -486,54 +486,54 @@ OK: 0/52 Fail: 0/52 Skip: 52/52
 OK: 0/145 Fail: 0/145 Skip: 145/145
 ## vmLogTest
 ```diff
-  log0_emptyMem.json                                              Skip
-  log0_logMemStartTooHigh.json                                    Skip
-  log0_logMemsizeTooHigh.json                                     Skip
-  log0_logMemsizeZero.json                                        Skip
-  log0_nonEmptyMem.json                                           Skip
-  log0_nonEmptyMem_logMemSize1.json                               Skip
-  log0_nonEmptyMem_logMemSize1_logMemStart31.json                 Skip
-  log1_Caller.json                                                Skip
-  log1_MaxTopic.json                                              Skip
-  log1_emptyMem.json                                              Skip
-  log1_logMemStartTooHigh.json                                    Skip
-  log1_logMemsizeTooHigh.json                                     Skip
-  log1_logMemsizeZero.json                                        Skip
-  log1_nonEmptyMem.json                                           Skip
-  log1_nonEmptyMem_logMemSize1.json                               Skip
-  log1_nonEmptyMem_logMemSize1_logMemStart31.json                 Skip
-  log2_Caller.json                                                Skip
-  log2_MaxTopic.json                                              Skip
-  log2_emptyMem.json                                              Skip
-  log2_logMemStartTooHigh.json                                    Skip
-  log2_logMemsizeTooHigh.json                                     Skip
-  log2_logMemsizeZero.json                                        Skip
-  log2_nonEmptyMem.json                                           Skip
-  log2_nonEmptyMem_logMemSize1.json                               Skip
-  log2_nonEmptyMem_logMemSize1_logMemStart31.json                 Skip
-  log3_Caller.json                                                Skip
-  log3_MaxTopic.json                                              Skip
-  log3_PC.json                                                    Skip
-  log3_emptyMem.json                                              Skip
-  log3_logMemStartTooHigh.json                                    Skip
-  log3_logMemsizeTooHigh.json                                     Skip
-  log3_logMemsizeZero.json                                        Skip
-  log3_nonEmptyMem.json                                           Skip
-  log3_nonEmptyMem_logMemSize1.json                               Skip
-  log3_nonEmptyMem_logMemSize1_logMemStart31.json                 Skip
-  log4_Caller.json                                                Skip
-  log4_MaxTopic.json                                              Skip
-  log4_PC.json                                                    Skip
-  log4_emptyMem.json                                              Skip
-  log4_logMemStartTooHigh.json                                    Skip
-  log4_logMemsizeTooHigh.json                                     Skip
-  log4_logMemsizeZero.json                                        Skip
-  log4_nonEmptyMem.json                                           Skip
-  log4_nonEmptyMem_logMemSize1.json                               Skip
-  log4_nonEmptyMem_logMemSize1_logMemStart31.json                 Skip
-  log_2logs.json                                                  Skip
++ log0_emptyMem.json                                              OK
+- log0_logMemStartTooHigh.json                                    Fail
+- log0_logMemsizeTooHigh.json                                     Fail
+- log0_logMemsizeZero.json                                        Fail
+- log0_nonEmptyMem.json                                           Fail
+- log0_nonEmptyMem_logMemSize1.json                               Fail
+- log0_nonEmptyMem_logMemSize1_logMemStart31.json                 Fail
+- log1_Caller.json                                                Fail
+- log1_MaxTopic.json                                              Fail
++ log1_emptyMem.json                                              OK
+- log1_logMemStartTooHigh.json                                    Fail
+- log1_logMemsizeTooHigh.json                                     Fail
+- log1_logMemsizeZero.json                                        Fail
+- log1_nonEmptyMem.json                                           Fail
+- log1_nonEmptyMem_logMemSize1.json                               Fail
+- log1_nonEmptyMem_logMemSize1_logMemStart31.json                 Fail
+- log2_Caller.json                                                Fail
+- log2_MaxTopic.json                                              Fail
++ log2_emptyMem.json                                              OK
+- log2_logMemStartTooHigh.json                                    Fail
+- log2_logMemsizeTooHigh.json                                     Fail
+- log2_logMemsizeZero.json                                        Fail
+- log2_nonEmptyMem.json                                           Fail
+- log2_nonEmptyMem_logMemSize1.json                               Fail
+- log2_nonEmptyMem_logMemSize1_logMemStart31.json                 Fail
+- log3_Caller.json                                                Fail
+- log3_MaxTopic.json                                              Fail
+- log3_PC.json                                                    Fail
++ log3_emptyMem.json                                              OK
+- log3_logMemStartTooHigh.json                                    Fail
+- log3_logMemsizeTooHigh.json                                     Fail
+- log3_logMemsizeZero.json                                        Fail
+- log3_nonEmptyMem.json                                           Fail
+- log3_nonEmptyMem_logMemSize1.json                               Fail
+- log3_nonEmptyMem_logMemSize1_logMemStart31.json                 Fail
+- log4_Caller.json                                                Fail
+- log4_MaxTopic.json                                              Fail
+- log4_PC.json                                                    Fail
++ log4_emptyMem.json                                              OK
+- log4_logMemStartTooHigh.json                                    Fail
+- log4_logMemsizeTooHigh.json                                     Fail
+- log4_logMemsizeZero.json                                        Fail
+- log4_nonEmptyMem.json                                           Fail
+- log4_nonEmptyMem_logMemSize1.json                               Fail
+- log4_nonEmptyMem_logMemSize1_logMemStart31.json                 Fail
+- log_2logs.json                                                  Fail
 ```
-OK: 0/46 Fail: 0/46 Skip: 46/46
+OK: 5/46 Fail: 41/46 Skip: 0/46
 ## vmPerformance
 ```diff
   ackermann31.json                                                Skip
@@ -657,26 +657,26 @@ OK: 74/74 Fail: 0/74 Skip: 0/74
 OK: 0/17 Fail: 0/17 Skip: 17/17
 ## vmSha3Test
 ```diff
-  sha3_0.json                                                     Skip
-  sha3_1.json                                                     Skip
-  sha3_2.json                                                     Skip
-  sha3_3.json                                                     Skip
-  sha3_4.json                                                     Skip
-  sha3_5.json                                                     Skip
-  sha3_6.json                                                     Skip
-  sha3_bigOffset.json                                             Skip
-  sha3_bigOffset2.json                                            Skip
-  sha3_bigSize.json                                               Skip
-  sha3_memSizeNoQuadraticCost31.json                              Skip
-  sha3_memSizeQuadraticCost32.json                                Skip
-  sha3_memSizeQuadraticCost32_zeroSize.json                       Skip
-  sha3_memSizeQuadraticCost33.json                                Skip
-  sha3_memSizeQuadraticCost63.json                                Skip
-  sha3_memSizeQuadraticCost64.json                                Skip
-  sha3_memSizeQuadraticCost64_2.json                              Skip
-  sha3_memSizeQuadraticCost65.json                                Skip
++ sha3_0.json                                                     OK
++ sha3_1.json                                                     OK
++ sha3_2.json                                                     OK
++ sha3_3.json                                                     OK
++ sha3_4.json                                                     OK
++ sha3_5.json                                                     OK
+- sha3_6.json                                                     Fail
+- sha3_bigOffset.json                                             Fail
+- sha3_bigOffset2.json                                            Fail
+- sha3_bigSize.json                                               Fail
+- sha3_memSizeNoQuadraticCost31.json                              Fail
+- sha3_memSizeQuadraticCost32.json                                Fail
+- sha3_memSizeQuadraticCost32_zeroSize.json                       Fail
+- sha3_memSizeQuadraticCost33.json                                Fail
+- sha3_memSizeQuadraticCost63.json                                Fail
+- sha3_memSizeQuadraticCost64.json                                Fail
+- sha3_memSizeQuadraticCost64_2.json                              Fail
+- sha3_memSizeQuadraticCost65.json                                Fail
 ```
-OK: 0/18 Fail: 0/18 Skip: 18/18
+OK: 6/18 Fail: 12/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
   ABAcalls0.json                                                  Skip
@@ -719,9 +719,9 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 OK: 0/36 Fail: 0/36 Skip: 36/36
 ## vmTests
 ```diff
-  arith.json                                                      Skip
++ arith.json                                                      OK
 + boolean.json                                                    OK
 + mktx.json                                                       OK
 + suicide.json                                                    OK
 ```
-OK: 3/4 Fail: 0/4 Skip: 1/4
+OK: 4/4 Fail: 0/4 Skip: 0/4

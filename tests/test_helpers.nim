@@ -22,8 +22,7 @@ proc validTest*(folder: string, name: string): bool =
   result = "calldatacopy" notin name and
     "balanceAddressInputTooBigRightMyAddress." notin name and
     "callstatelessToReturn1" notin name and
-    "arith" notin name and
-    folder notin @["vmRandomTest", "vmSystemOperations", "vmPerformance", "vmEnvironmentalInfo", "vmLogTest", "vmSha3Test", "vmIOandFlowOperations"]
+    folder notin @["vmRandomTest", "vmSystemOperations", "vmPerformance", "vmEnvironmentalInfo", "vmIOandFlowOperations"]
   #result = name == "exp2.json"
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
