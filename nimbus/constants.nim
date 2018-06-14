@@ -2,103 +2,6 @@
 import
   stint, math, strutils, utils/padding, eth_common
 
-proc int256*(i: int): Int256 =
-  i.i256
-
-# template i256*(i: int): Int256 =
-#   i.initBigInt
-
-template i256*(i: Int256): Int256 =
-  i
-
-template u256*(i: int): UInt256 =
-  i.uint.u256
-
-template u256*(i: UInt256): UInt256 =
-  i
-
-template getInt*(i: int): int =
-  i
-
-# TODO
-# We'll have a fast fixed i256, for now this works
-
-proc `==`*(a: Int256, b: int): bool =
-  a == b.i256
-
-proc `!=`*(a: Int256, b: int): bool =
-  a != b.i256
-
-proc `==`*(a: UInt256, b: int): bool =
-  a == b.u256
-
-proc `!=`*(a: UInt256, b: int): bool =
-  a != b.u256
-
-# proc `^`*(base: int; exp: int): UInt256 =
-#   let base = base.u256
-#   var ex = exp
-#   result = 1.u256
-#   while ex > 0:
-#     result = result * base
-#     dec(ex)
-
-proc `^`*(left: Int256, right: int): Int256 =
-  var value = right.i256
-  result = 1.i256
-  var m = right.i256
-  while value > 0.i256:
-    result = result * m
-    value -= 1.i256
-
-proc `^`*(left: UInt256, right: UInt256): UInt256 =
-  var value = right
-  result = 1.u256
-  var m = right.u256
-  while value > 0.u256:
-    result = result * m
-    value -= 1.u256
-
-proc `^`*(left: UInt256, right: int): UInt256 =
-  left ^ right.u256
-
-proc `>`*(a: Int256, b: int): bool =
-  a > b.i256
-
-proc `<`*(a: Int256, b: int): bool =
-  a < b.i256
-
-proc `>`*(a: UInt256, b: int): bool =
-  a > b.u256
-
-proc `<`*(a: UInt256, b: int): bool =
-  a < b.u256
-
-proc `mod`*(a: Int256, b: int): Int256 =
-  a mod b.i256
-
-proc `div`*(a: Int256, b: int): Int256 =
-  a div b.i256
-
-proc `mod`*(a: UInt256, b: int): UInt256 =
-  a mod b.u256
-
-proc `div`*(a: UInt256, b: int): UInt256 =
-  a div b.u256
-
-template mapOp(op: untyped): untyped =
-  proc `op`*(left: Int256, right: int): Int256 =
-    result = left.i256
-    result = `op`(result, right.i256)
-
-  proc `op`*(left: UInt256, right: int): UInt256 =
-    result = left.u256
-    result = `op`(result, right.u256)
-
-mapOp(`and`)
-mapOp(`or`)
-mapOp(`xor`)
-
 proc default(t: typedesc): t = discard
 
 # constants
@@ -108,7 +11,7 @@ let
   INT_256_MAX_AS_UINT256* =       cast[Uint256](high(Int256))
   NULLBYTE* =                     "\x00"
   EMPTYWORD* =                    repeat(NULLBYTE, 32)
-  UINT160CEILING*: UInt256 =      2.u256 ^ 160
+  UINT160CEILING*: UInt256 =      2.u256.pow(160)
   ZERO_ADDRESS* =                 default(EthAddress)
   CREATE_CONTRACT_ADDRESS* =      ZERO_ADDRESS
   ZERO_HASH32* =                  Hash256()
@@ -132,14 +35,6 @@ let
 
   MAX_UNCLE_DEPTH* =              6.u256
   MAX_UNCLES* =                   2.u256
-
-  SECPK1_P*: UInt256 =            2.u256 ^ 256 - 2.u256 ^ 32 - 977.u256
-  SECPK1_N*: UInt256 =            "115792089237316195423570985008687907852837564279074904382605163141518161494337".u256
-  SECPK1_A* =                     0.u256
-  SECPK1_B* =                     7.u256
-  SECPK1_Gx* =                    0.u256
-  SECPK1_Gy* =                    0.u256
-  SECPK1_G* =                     (SECPK1Gx, SECPK1Gy)
 
   EMPTY_UNCLE_HASH* =             "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
 

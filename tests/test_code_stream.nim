@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import  unittest, strutils, sequtils,
-        ../nimbus/opcode_values, ../nimbus/vm/code_stream
+        ../nimbus/vm/interpreter
 
 suite "parse bytecode":
   test "accepts bytes":

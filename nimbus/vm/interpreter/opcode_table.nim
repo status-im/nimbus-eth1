@@ -6,11 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables,
-  stint, logging,
-  vm / [gas_meter, stack, code_stream, memory, message], db / db_chain, computation, opcode, opcode_values, utils / [header, address],
-  logic / [arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid, call, system_ops],
-  ./vm_types
+  tables, stint,
+  ../../vm_types, ./opcode_values,
+  opcodes_impl/[arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid, call, system_ops]
 
 const
   OpLogic*: Table[Op, proc(computation: var BaseComputation){.nimcall.}] = {

@@ -7,13 +7,13 @@
 
 import
   strformat, strutils, sequtils, macros, stint, terminal, math, eth_common, byteutils, tables,
-  ./constants, ./errors, ./utils/hexadecimal, ./utils_numeric, ./validation, ./vm_state, ./logging, ./opcode_values, ./vm_types,
-  ./vm/[code_stream, gas_meter, memory, message, stack],
+  ../constants, ../errors, ../validation, ../vm_state, ../logging, ../vm_types,
+  ./interpreter/[opcode_values,gas_meter, gas_costs],
+  ./code_stream, ./memory, ./message, ./stack, ./interpreter,
 
   # TODO further refactoring of gas cost
-  vm/forks/gas_costs,
-  vm/forks/f20150730_frontier/frontier_vm_state,
-  vm/forks/f20161018_tangerine_whistle/tangerine_vm_state
+  ./forks/f20150730_frontier/frontier_vm_state,
+  ./forks/f20161018_tangerine_whistle/tangerine_vm_state
 
 method newBaseComputation*(vmState: BaseVMState, message: Message): BaseComputation {.base.}=
   raise newException(ValueError, "Must be implemented by subclasses")
@@ -238,6 +238,27 @@ method getOpcodeFn*(computation: var BaseComputation, op: Op): Opcode =
   else:
     raise newException(InvalidInstruction,
       &"Invalid opcode {op}")
+
+# Super dirty fix for https://github.com/status-im/nimbus/issues/46
+# Pending https://github.com/status-im/nimbus/issues/36
+# Disentangle opcode logic
+from ./interpreter/opcodes_impl/call import runLogic, BaseCall
+
+template run*(opcode: Opcode, computation: var BaseComputation) =
+  # Hook for performing the actual VM execution
+  # opcode.consumeGas(computation)
+
+  if opcode.kind == Op.Call: # Super dirty fix for https://github.com/status-im/nimbus/issues/46
+    # TODO remove this branch
+    runLogic(BaseCall(opcode), computation)
+  elif computation.gasCosts[opcode.kind].kind != GckFixed:
+    opcode.runLogic(computation)
+  else:
+    computation.gasMeter.consumeGas(computation.gasCosts[opcode.kind].cost, reason = $opcode.kind)
+    opcode.runLogic(computation)
+
+method logger*(opcode: Opcode): Logger =
+  logging.getLogger(&"vm.opcode.{opcode.kind}")
 
 macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
   # Perform the computation that would be triggered by the VM message

@@ -6,8 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../utils_numeric, ../computation, ../vm/stack, ../vm_types,
-  helpers, stint
+  helpers, ./impl_std_import
 
 quasiBoolean(lt, `<`) # Lesser Comparison
 
@@ -35,7 +34,7 @@ proc iszero*(computation: var BaseComputation) =
 proc notOp*(computation: var BaseComputation) =
   var value = computation.stack.popInt()
 
-  var res = constants.UINT_256_MAX - value
+  var res = UINT_256_MAX - value
   pushRes()
 
 # TODO: seems like there is an implementation or a comment issue

@@ -6,8 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  times,
-  ../constants, ../errors, ../computation, ../vm_state, ../vm_types, .. / vm / [stack], stint
+  times, ./impl_std_import
 
 {.this: computation.}
 {.experimental.}

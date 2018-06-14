@@ -6,7 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../logging, ../constants, ../errors, ../transaction, ../vm_types, ../computation, ../block_types, ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header
+  ../logging, ../constants, ../errors, ../transaction, ../vm_types,
+  ../block_types, ../vm_state, ../vm_state_transactions, ../db/db_chain, ../utils/header,
+  ./computation
 
 type
   VMkind* = enum

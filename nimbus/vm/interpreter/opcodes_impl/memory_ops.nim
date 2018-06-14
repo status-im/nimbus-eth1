@@ -6,10 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../computation, ../vm_types, ../vm/[stack, memory, gas_meter], .. /utils/[padding, bytes],
-  ../opcode_values,
-  stint
-
+  ./impl_std_import
 
 {.this: computation.}
 {.experimental.}

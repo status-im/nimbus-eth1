@@ -6,11 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../vm_types, ../errors, ../computation, ../vm_state,
-  ../utils/header,
-  ../db/[db_chain, state_db], ../vm/[stack, gas_meter, message],
-  ../opcode_values,
-  strformat, stint
+  ./impl_std_import, strformat,
+  ../../../utils/header,
+  ../../../db/[db_chain, state_db]
+
 
 {.this: computation.}
 {.experimental.}

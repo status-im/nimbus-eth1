@@ -6,9 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../utils_numeric, ../computation, ../vm_types,
-  .. / vm / [gas_meter, stack], ../opcode, ../opcode_values,
-  helpers, stint, strutils
+  helpers, stint, strutils, ./impl_std_import
 
 proc add*(computation: var BaseComputation) =
   # Addition

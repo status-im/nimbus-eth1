@@ -51,7 +51,7 @@ type
     ## Error signaling that an account has insufficient funds to transfer the
     ## requested value.
 
-  StackDepthLimit* = object of VMError
+  StackDepthError* = object of VMError
     ## Error signaling that the call stack has exceeded it's maximum allowed depth.
 
   ContractCreationCollision* = object of VMError

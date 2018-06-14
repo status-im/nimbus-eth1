@@ -9,8 +9,8 @@ import
   ../../db/db_chain, ../../constants,
   ../../utils/header,
   ../base,
-  ./f20150730_frontier/frontier_vm,
-  ./f20161018_tangerine_whistle/tangerine_vm,
+  ../forks/f20150730_frontier/frontier_vm,
+  ../forks/f20161018_tangerine_whistle/tangerine_vm,
   stint
 
 # Note (mamy): refactoring is in progress (2018-05-23), this is redundant with

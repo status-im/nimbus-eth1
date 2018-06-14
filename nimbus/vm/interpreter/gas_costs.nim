@@ -6,10 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, eth_common, math,
-  ../../utils/macros_gen_opcodes,
-  ../../opcode_values,
-  ../../utils_numeric
+  stint, math, eth_common, # GasInt
+  ../utils/[macros_gen_opcodes, utils_numeric],
+  ./opcode_values
 
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf

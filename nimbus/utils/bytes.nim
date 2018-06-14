@@ -24,5 +24,3 @@ proc toString*(value: seq[byte]): string =
 
 proc toBytes*(value: string): seq[byte] =
   result = value.mapIt(it.byte)
-
-

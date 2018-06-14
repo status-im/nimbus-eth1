@@ -6,21 +6,19 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../utils_numeric, ../utils/[keccak, bytes], ../vm/[stack, memory, gas_meter],
-  ../computation, ../vm_types, ../opcode_values,
-  ./helpers,
-  stint
+  nimcrypto,
+  ./impl_std_import, ./helpers
 
 proc sha3op*(computation: var BaseComputation) =
   let (startPosition, size) = computation.stack.popInt(2)
   let (pos, len) = (startPosition.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[Sha3].m_handler(computation.memory.len, pos, len),
+    computation.gasCosts[Op.Sha3].m_handler(computation.memory.len, pos, len),
     reason="SHA3: word gas cost"
     )
 
   computation.memory.extend(pos, len)
 
-  var res = keccak("") # TODO: stub
+  var res = keccak256.digest("") # TODO: stub
   pushRes()

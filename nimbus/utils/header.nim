@@ -92,4 +92,8 @@ proc generateHeaderFromParentHeader*(
     # TODO: data: extraData,
   )
 
+import nimcrypto
+# TODO: required otherwise
+# eth_common/rlp_serialization.nim(18, 12) template/generic instantiation from here
+# nimcrypto/hash.nim(46, 6) Error: attempting to call undeclared routine: 'init'
 proc hash*(b: BlockHeader): Hash256 {.inline.} = rlpHash(b)

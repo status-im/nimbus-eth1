@@ -7,9 +7,7 @@
 
 import
   strformat, macros,
-  ../constants, ../errors, ../vm_types, ../computation, ../vm/[stack, memory, gas_meter, message], ../utils/bytes,
-  ../opcode_values,
-  stint
+  ./impl_std_import
 
 {.this: computation.}
 {.experimental.}

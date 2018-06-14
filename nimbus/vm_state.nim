@@ -9,7 +9,7 @@ import
   macros, strformat, tables,
   stint, eth_common,
   ./logging, ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
-  ./utils/[state, header]
+  ./utils/header
 
 type
   BaseVMState* = ref object of RootObj

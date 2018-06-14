@@ -8,9 +8,9 @@
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
   stint, byteutils, eth_common, eth_keys,
-  ../nimbus/utils/[hexadecimal, address, padding],
-  ../nimbus/[chain, vm_state, constants],
-  ../nimbus/db/[db_chain, state_db], ../nimbus/vm/forks/f20150730_frontier/frontier_vm,
+  ../nimbus/utils/[address, padding],
+  ../nimbus/[vm_state, constants],
+  ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm/base, ../nimbus/transaction
 
 type

@@ -6,11 +6,16 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, eth_common,
-  ../constants, ../vm_types, ../errors, ../computation, ../opcode_values, ../logging,
-  .. / vm / [stack, memory, gas_meter, message],
-  .. / utils / [address, bytes],
-  stint
+  strformat, eth_common, stint,
+  # ./impl_std_import # Cannot do that due to recursive dependencies
+  # ./vm/interpreter/opcodes_impl/impl_std_import.nim imports ./vm/computation.nim
+  # ./vm/computation.nim                              imports ./vm/interpreter/opcode.nim
+  # ./vm/interpreter/opcode.nim                       imports ./vm/interpreter/opcodes_impl/call.nim
+  # ./vm/interpreter/opcodes_impl/call.nim            imports ./vm/interpreter/opcodes_impl/impl_std_import.nim
+  ../../../constants, ../../../vm_types, ../../../errors, ../../../logging,
+  ../../../utils/bytes,
+  ../../computation, ../../stack, ../../memory, ../../message,
+  ../opcode_values, ../gas_meter, ../gas_costs
 
 type
   # TODO most of these are for gas handling
@@ -68,7 +73,7 @@ method runLogic*(call: BaseCall, computation) =
   let senderBalance = 0.u256
 
   let insufficientFunds = shouldTransferValue and senderBalance < value
-  let stackTooDeep = computation.msg.depth + 1 > constants.STACK_DEPTH_LIMIT
+  let stackTooDeep = computation.msg.depth + 1 > STACK_DEPTH_LIMIT
 
   if insufficientFunds or stackTooDeep:
     computation.returnData = ""

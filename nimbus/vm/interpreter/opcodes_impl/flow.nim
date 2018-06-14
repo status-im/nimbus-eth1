@@ -6,9 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, stint,
-  ../constants, ../vm_types, ../opcode_values, ../logging, ../errors, ../computation, .. /vm / [code_stream, stack]
-
+  strformat, ./impl_std_import
 
 {.this: computation.}
 {.experimental.}

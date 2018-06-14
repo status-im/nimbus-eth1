@@ -5,13 +5,11 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import stint, constants, strformat, strutils, sequtils, endians, macros, utils / padding, rlp
+import
+  stint, strformat, strutils, sequtils, endians, macros, rlp,
+  ../../constants, ../../utils/padding
 
 # some methods based on py-evm utils/numeric
-
-proc intToBigEndian*(value: UInt256): Bytes {.deprecated.} =
-  result = newSeq[byte](32)
-  result[0 .. ^1] = value.toByteArrayBE()
 
 proc bigEndianToInt*(value: openarray[byte]): UInt256 =
   if value.len == 32:
