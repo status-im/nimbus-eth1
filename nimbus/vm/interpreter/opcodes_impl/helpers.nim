@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import macros
+import macros, stint
 
 template pushRes*: untyped =
   computation.stack.push(res)
@@ -22,8 +22,8 @@ macro quasiBoolean*(name: untyped, op: untyped, signed: untyped = nil, nonzero: 
     actualLeftNode = ident("leftSigned")
     actualRightNode = ident("rightSigned")
     signedNode = quote:
-      let `actualLeftNode` = unsignedToSigned(`leftNode`)
-      let `actualRightNode` = unsignedToSigned(`rightNode`)
+      let `actualLeftNode` = cast[Int256](`leftNode`)
+      let `actualRightNode` = cast[Int256](`rightNode`)
   var test = if nonzero.isNil:
       quote:
         `op`(`actualLeftNode`, `actualRightNode`)

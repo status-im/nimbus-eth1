@@ -20,14 +20,6 @@ proc bigEndianToInt*(value: openarray[byte]): UInt256 =
 proc log256*(value: UInt256): Natural =
   (255 - value.countLeadingZeroBits) div 8 # Compilers optimize to `shr 3`
 
-proc unsignedToSigned*(value: UInt256): Int256 =
-  0.i256
-  # TODO Remove stub (used in quasiBoolean for signed comparison)
-
-proc signedToUnsigned*(value: Int256): UInt256 =
-  0.u256
-  # TODO Remove stub (used in quasiBoolean for signed comparison)
-
 proc unsignedToPseudoSigned*(value: UInt256): UInt256 =
   result = value
   if value > INT_256_MAX_AS_UINT256:

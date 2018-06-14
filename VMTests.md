@@ -229,9 +229,9 @@ OK: 194/195 Fail: 1/195 Skip: 0/195
 + iszeo2.json                                                     OK
 + iszero0.json                                                    OK
 + iszero1.json                                                    OK
-- lt0.json                                                        Fail
-- lt1.json                                                        Fail
-- lt2.json                                                        Fail
++ lt0.json                                                        OK
++ lt1.json                                                        OK
++ lt2.json                                                        OK
 + lt3.json                                                        OK
 + not0.json                                                       OK
 + not1.json                                                       OK
@@ -262,7 +262,7 @@ OK: 194/195 Fail: 1/195 Skip: 0/195
 + xor4.json                                                       OK
 + xor5.json                                                       OK
 ```
-OK: 57/60 Fail: 3/60 Skip: 0/60
+OK: 60/60 Fail: 0/60 Skip: 0/60
 ## vmBlockInfoTest
 ```diff
 + blockhash257Block.json                                          OK
@@ -665,18 +665,18 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + sha3_5.json                                                     OK
 - sha3_6.json                                                     Fail
 - sha3_bigOffset.json                                             Fail
-- sha3_bigOffset2.json                                            Fail
++ sha3_bigOffset2.json                                            OK
 - sha3_bigSize.json                                               Fail
-- sha3_memSizeNoQuadraticCost31.json                              Fail
-- sha3_memSizeQuadraticCost32.json                                Fail
++ sha3_memSizeNoQuadraticCost31.json                              OK
++ sha3_memSizeQuadraticCost32.json                                OK
 - sha3_memSizeQuadraticCost32_zeroSize.json                       Fail
-- sha3_memSizeQuadraticCost33.json                                Fail
-- sha3_memSizeQuadraticCost63.json                                Fail
-- sha3_memSizeQuadraticCost64.json                                Fail
-- sha3_memSizeQuadraticCost64_2.json                              Fail
-- sha3_memSizeQuadraticCost65.json                                Fail
++ sha3_memSizeQuadraticCost33.json                                OK
++ sha3_memSizeQuadraticCost63.json                                OK
++ sha3_memSizeQuadraticCost64.json                                OK
++ sha3_memSizeQuadraticCost64_2.json                              OK
++ sha3_memSizeQuadraticCost65.json                                OK
 ```
-OK: 6/18 Fail: 12/18 Skip: 0/18
+OK: 14/18 Fail: 4/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
   ABAcalls0.json                                                  Skip
