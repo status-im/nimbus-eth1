@@ -9,7 +9,7 @@ import
   strformat, strutils, sequtils, macros, stint, terminal, math, eth_common, byteutils, tables,
   ../constants, ../errors, ../validation, ../vm_state, ../logging, ../vm_types,
   ./interpreter/[opcode_values,gas_meter, gas_costs],
-  ./code_stream, ./memory, ./message, ./stack, ./interpreter,
+  ./code_stream, ./memory, ./message, ./stack,
 
   # TODO further refactoring of gas cost
   ./forks/f20150730_frontier/frontier_vm_state,
