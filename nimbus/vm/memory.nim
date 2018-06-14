@@ -56,9 +56,9 @@ proc write*(memory: var Memory, startPosition: Natural, value: openarray[byte]) 
   for z, b in value:
     memory.bytes[z + startPosition] = b
 
-proc write*(memory: var Memory, startPosition: Natural, size: Natural, value: cstring) {.inline.}=
-  memory.write(startPosition, ($value).toBytes)
+template write*(memory: var Memory, startPosition: Natural, size: Natural, value: cstring) =
+  memory.write(startPosition, value.toBytes)
   # TODO ~ O(n^3):
-  #  - there is a string allocation with $
+  #  - there is a string allocation with $ (?)
   #  - then a conversion to seq (= new allocation) with toBytes
   #  - then writing to memory
