@@ -105,7 +105,7 @@ proc signextend*(computation: var BaseComputation) =
   if bits <= 31.u256:
     let testBit = bits.toInt * 8 + 7
     let bitPos = (1 shl testBit)
-    let mask = bitPos - 1
+    let mask = u256(bitPos - 1)
     if not (value and bitPos).isZero:
       res = value or (not mask)
     else:

@@ -169,17 +169,17 @@ VMTests
 + sdiv_i256min3.json                                              OK
 + signextendInvalidByteNumber.json                                OK
 + signextend_00.json                                              OK
-- signextend_0_BigByte.json                                       Fail
++ signextend_0_BigByte.json                                       OK
 + signextend_AlmostBiggestByte.json                               OK
 + signextend_BigByteBigByte.json                                  OK
 + signextend_BigBytePlus1_2.json                                  OK
 + signextend_BigByte_0.json                                       OK
 + signextend_BitIsNotSet.json                                     OK
 + signextend_BitIsNotSetInHigherByte.json                         OK
-- signextend_BitIsSetInHigherByte.json                            Fail
++ signextend_BitIsSetInHigherByte.json                            OK
 + signextend_Overflow_dj42.json                                   OK
 + signextend_bigBytePlus1.json                                    OK
-- signextend_bitIsSet.json                                        Fail
++ signextend_bitIsSet.json                                        OK
 + smod0.json                                                      OK
 + smod1.json                                                      OK
 + smod2.json                                                      OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 191/195 Fail: 4/195 Skip: 0/195
+OK: 194/195 Fail: 1/195 Skip: 0/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
