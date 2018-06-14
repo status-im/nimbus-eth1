@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import  unittest, stint,
-        ../nimbus/[constants, errors, vm/stack, utils/bytes]
+        ../nimbus/[constants, errors, vm/interpreter, utils/bytes]
 
 
 template testPush(value: untyped, expected: untyped): untyped =
@@ -23,7 +23,7 @@ suite "stack":
   test "push only valid":
     testPush(0'u, 0.u256)
     testPush(UINT_256_MAX, UINT_256_MAX)
-    testPush("ves".toBytes, readUintBE[256]("ves".toBytes))
+    testPush("ves".toBytes, "ves".toBytes.bigEndianToInt)
 
     testFailPush("yzyzyzyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".toBytes)
 
