@@ -8,10 +8,9 @@
 import
   strformat, eth_common, stint,
   # ./impl_std_import # Cannot do that due to recursive dependencies
-  # ./vm/interpreter/opcodes_impl/impl_std_import.nim imports ./vm/computation.nim
-  # ./vm/computation.nim                              imports ./vm/interpreter/opcode.nim
-  # ./vm/interpreter/opcode.nim                       imports ./vm/interpreter/opcodes_impl/call.nim
-  # ./vm/interpreter/opcodes_impl/call.nim            imports ./vm/interpreter/opcodes_impl/impl_std_import.nim
+  # .../vm/interpreter/opcodes_impl/impl_std_import.nim imports .../vm/computation.nim
+  # .../vm/computation.nim                              imports .../vm/interpreter/opcodes_impl/call.nim
+  # .../vm/interpreter/opcodes_impl/call.nim            imports .../vm/interpreter/opcodes_impl/impl_std_import.nim
   ../../../constants, ../../../vm_types, ../../../errors, ../../../logging,
   ../../../utils/bytes,
   ../../computation, ../../stack, ../../memory, ../../message,
