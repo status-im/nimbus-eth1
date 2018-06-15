@@ -9,6 +9,7 @@ import
   stint, ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./opcode_values
 
+# ##################################
 # 0s: Stop and Arithmetic Operations
 
 op add, FkFrontier, inline = true, lhs, rhs:
@@ -95,3 +96,59 @@ op signExtend, FkFrontier, inline = true, bits, value:
     res = value
 
   push: res
+
+# ##########################################
+# 10s: Comparison & Bitwise Logic Operations
+
+op lt, FkFrontier, inline = true, lhs, rhs:
+  ## 0x10, Less-than comparison
+  push: (lhs < rhs).uint.u256
+
+op gt, FkFrontier, inline = true, lhs, rhs:
+  ## 0x11, Greater-than comparison
+  push: (lhs > rhs).uint.u256
+
+op slt, FkFrontier, inline = true, lhs, rhs:
+  ## 0x12, Signed less-than comparison
+  push: (cast[Int256](lhs) < cast[Int256](rhs)).uint.u256
+
+op sgt, FkFrontier, inline = true, lhs, rhs:
+  ## 0x13, Signed greater-than comparison
+  push: (cast[Int256](lhs) > cast[Int256](rhs)).uint.u256
+
+op eq, FkFrontier, inline = true, lhs, rhs:
+  ## 0x14, Signed greater-than comparison
+  push: (lhs == rhs).uint.u256
+
+op isZero, FkFrontier, inline = true, value:
+  ## 0x15, Check if zero
+  push: value.isZero.uint.u256
+
+op andOp, FkFrontier, inline = true, lhs, rhs:
+  ## 0x16, Bitwise AND
+  push: lhs and rhs
+
+op orOp, FkFrontier, inline = true, lhs, rhs:
+  ## 0x17, Bitwise AND
+  push: lhs or rhs
+
+op xorOp, FkFrontier, inline = true, lhs, rhs:
+  ## 0x18, Bitwise AND
+  push: lhs xor rhs
+
+op notOp, FkFrontier, inline = true, value:
+  ## 0x19, Check if zero
+  push: value.not
+
+op byteOp, FkFrontier, inline = true, position, value:
+  ## 0x20, Retrieve single byte from word.
+
+  let pos = position.toInt
+
+  push:
+    if pos >= 32: zero(Uint256)
+    else:
+      when system.cpuEndian == bigEndian:
+        cast[array[256, byte]](value)[pos].u256
+      else:
+        cast[array[256, byte]](value)[255 - pos].u256
