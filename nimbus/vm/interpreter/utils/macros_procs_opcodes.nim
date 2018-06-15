@@ -15,10 +15,6 @@ import
 
 proc pop(tree: var NimNode): NimNode =
   ## Returns the last value of a NimNode and remove it
-
-  # Workaround for https://github.com/nim-lang/Nim/issues/5855
-  # varargs[untyped] consumes all remaining arguments
-
   result = tree[tree.len-1]
   tree.del(tree.len-1)
 
@@ -40,14 +36,9 @@ proc replacePush(body, computation: NimNode): NimNode =
     case node.kind:
     of nnkCall:
       if eqIdent(node[0], "push"):
-        return nnkCall.newTree(
-                    bindSym"push",
-                    nnkDotExpr.newTree(
-                      computation,
-                      newIdentNode("stack")
-                    ),
-                    node[1]
-                  )
+        let value = node[1]
+        return quote do:
+          `computation`.stack.push `value`
       else:
         letsGoDeeper()
     of {nnkIdent, nnkSym, nnkEmpty}:
@@ -58,7 +49,6 @@ proc replacePush(body, computation: NimNode): NimNode =
       letsGoDeeper()
   result = inspect(body)
 
-
 macro op*(procname, fork: untyped, inline: static[bool], stackParams_body: varargs[untyped]): untyped =
   ## Usage:
   ## .. code-block:: nim
@@ -66,46 +56,46 @@ macro op*(procname, fork: untyped, inline: static[bool], stackParams_body: varar
   ##     push:
   ##       lhs + rhs
 
-  # Unfortunately due to varargs[untyped] consuming all following parameters,
+  # TODO: Unfortunately due to varargs[untyped] consuming all following parameters,
   # we can't have a nicer macro signature `stackParams: varargs[untyped], body: untyped`
-  # see https://github.com/nim-lang/Nim/issues/5855
+  # see https://github.com/nim-lang/Nim/issues/5855 and are forced to "pop"
 
   let computation = newIdentNode("computation")
   var stackParams = stackParams_body
 
-  # 1. Separate stackParams and body
+  # 1. Separate stackParams and body with pop
   # 2. Replace "push: foo" by computation.stack.push(foo)
   let body = newStmtList().add stackParams.pop.replacePush(computation)
 
   # 3. let (x, y, z) = computation.stack.popInt(3)
+  let len = stackParams.len
   var popStackStmt = nnkVarTuple.newTree()
-  for params in stackParams:
-    popStackStmt.add newIdentNode(params.ident)
 
-  popStackStmt.add newEmptyNode()
-  popStackStmt.add nnkCall.newTree(
-                    bindSym"popInt",
-                    nnkDotExpr.newTree(
-                      computation,
-                      newIdentNode("stack")
-                    ),
-                    newLit(stackParams.len)
-                  )
+  if len != 0:
+    for params in stackParams:
+      popStackStmt.add newIdentNode(params.ident)
 
-  popStackStmt = nnkStmtList.newTree(
-    nnkLetSection.newTree(popStackStmt)
-  )
+    popStackStmt.add newEmptyNode()
+    popStackStmt.add quote do:
+      `computation`.stack.popInt(`len`)
+
+    popStackStmt = nnkStmtList.newTree(
+      nnkLetSection.newTree(popStackStmt)
+    )
+  else:
+    popStackStmt = nnkDiscardStmt.newTree(newEmptyNode())
 
   # 4. Generate the proc with name addFkFrontier
   # TODO: replace by func to ensure no side effects
   #       pending - https://github.com/status-im/nim-stint/issues/52
+  let procforkname = newIdentNode($procname & $fork)
   if inline:
     result = quote do:
-      proc `procname fork`*(`computation`: var BaseComputation) {.inline.} =
+      proc `procforkname`*(`computation`: var BaseComputation) {.inline.} =
         `popStackStmt`
         `body`
   else:
     result = quote do:
-      proc `procname fork`*(`computation`: var BaseComputation) =
+      proc `procforkname`*(`computation`: var BaseComputation) =
         `popStackStmt`
         `body`

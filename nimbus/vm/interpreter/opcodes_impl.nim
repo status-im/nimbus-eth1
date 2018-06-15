@@ -6,8 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, ./utils/[macros_procs_opcodes, utils_numeric],
-  ./gas_meter, ./opcode_values
+  stint, nimcrypto,
+  ./utils/[macros_procs_opcodes, utils_numeric],
+  ./gas_meter, ./gas_costs, ./opcode_values,
+  ../memory, ../message
 
 # ##################################
 # 0s: Stop and Arithmetic Operations
@@ -152,3 +154,24 @@ op byteOp, FkFrontier, inline = true, position, value:
         cast[array[256, byte]](value)[pos].u256
       else:
         cast[array[256, byte]](value)[255 - pos].u256
+
+# ##########################################
+# 20s: SHA3
+op sha3, FkFrontier, inline = true, startPos, length:
+  ## Compute Keccak-256 hash.
+  let (pos, len) = (startPos.toInt, length.toInt)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[Op.Sha3].m_handler(computation.memory.len, pos, len),
+    reason="SHA3: word gas cost"
+    )
+
+  computation.memory.extend(pos, len)
+  push:
+    keccak256.digest computation.memory.bytes.toOpenArray(pos, pos+len)
+
+# ##########################################
+# 30s: Environmental Information
+op address, FkFrontier, inline = true:
+  ## # Get address of currently executing account.
+  push: computation.msg.storageAddress
