@@ -7,29 +7,36 @@
 
 import strformat, terminal
 
+# TODO replace by nim-chronicles
+
 type
   Logger* = object
     name*: string
 
-var DEBUG* = defined(nimbusdebug)
+const DEBUG* = defined(nimbusdebug)
 
-proc log*(l: Logger, msg: string, color: ForegroundColor = fgBlack) =
-  if DEBUG:
+# Note: to make logging costless:
+#  - DEBUG should be a const and dispatch should use `when` for compile-time specialization
+#  - Passing a string to a proc, even a const string and inline proc, might trigger a heap allocation
+#    use a template instead.
+
+template log*(l: Logger, msg: string, color: ForegroundColor = fgBlack) =
+  when DEBUG:
     styledWriteLine(stdout, color, &"#{l.name}: {msg}", resetStyle)
 
-proc debug*(l: Logger, msg: string) =
-  if DEBUG:
+template debug*(l: Logger, msg: string) =
+  when DEBUG:
     l.log(msg)
 
-proc trace*(l: Logger, msg: string) =
-  if DEBUG:
+template trace*(l: Logger, msg: string) =
+  when DEBUG:
     l.log(msg, fgBlue)
 
 proc getLogger*(name: string): Logger =
   result = Logger(name: name)
 
-proc disableLogging* =
-  DEBUG = false
+# proc disableLogging* =
+#   DEBUG = false
 
-proc enableLogging* =
-  DEBUG = true
+# proc enableLogging* =
+#   DEBUG = true

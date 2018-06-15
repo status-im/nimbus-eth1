@@ -12,7 +12,7 @@ import  unittest, macros, strformat,
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful
 
-disableLogging()
+# disableLogging()
 
 proc gasMeters: seq[GasMeter] =
   @[newGasMeter(10), newGasMeter(100), newGasMeter(999)]
