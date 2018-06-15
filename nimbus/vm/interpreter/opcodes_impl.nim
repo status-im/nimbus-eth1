@@ -9,7 +9,8 @@ import
   stint, nimcrypto,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values,
-  ../memory, ../message
+  ../memory, ../message, ../stack,
+  ../../vm_state
 
 # ##################################
 # 0s: Stop and Arithmetic Operations
@@ -157,8 +158,9 @@ op byteOp, FkFrontier, inline = true, position, value:
 
 # ##########################################
 # 20s: SHA3
+
 op sha3, FkFrontier, inline = true, startPos, length:
-  ## Compute Keccak-256 hash.
+  ## 0x20, Compute Keccak-256 hash.
   let (pos, len) = (startPos.toInt, length.toInt)
 
   computation.gasMeter.consumeGas(
@@ -172,6 +174,27 @@ op sha3, FkFrontier, inline = true, startPos, length:
 
 # ##########################################
 # 30s: Environmental Information
+
 op address, FkFrontier, inline = true:
-  ## # Get address of currently executing account.
+  ## 0x30, Get address of currently executing account.
   push: computation.msg.storageAddress
+
+op balance, FkFrontier, inline = true:
+  ## 0x31, Get balance of the given account.
+  let address = computation.stack.popAddress
+  # computation.vmState.db(readOnly=true):
+  #   push: db.getBalance(address)
+  push: zero(UInt256) # TODO: Stub
+
+op origin, FkFrontier, inline = true:
+  ## 0x32, Get execution origination address.
+  push: computation.msg.origin
+
+op caller, FkFrontier, inline = true:
+  ## 0x33, Get caller address.
+  push: computation.msg.origin
+
+op callValue, FkFrontier, inline = true:
+  ## 0x34, Get deposited value by the instruction/transaction
+  ##       responsible for this execution
+  push: computation.msg.value
