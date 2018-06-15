@@ -5,6 +5,9 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+# ##################################################################
+# Macros to facilitate opcode enum and table creation
+
 import macros, strformat, strutils
 
 # Due to https://github.com/nim-lang/Nim/issues/8007, we can't

@@ -9,7 +9,7 @@ import
   ./interpreter/[opcode_values, gas_meter, opcode_table],
   ./interpreter/vm_forks
 
-from utils/utils_numeric import bigEndianToInt
+from ./interpreter/utils/utils_numeric import bigEndianToInt
 
 import # Used in vm_types. Beware of recursive dependencies
   ./code_stream, ./computation, ./stack, ./message

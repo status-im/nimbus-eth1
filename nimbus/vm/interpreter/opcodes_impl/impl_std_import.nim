@@ -10,7 +10,7 @@ import
   ../../../constants, ../../../vm_state, ../../../vm_types, ../../../vm_types,
   ../../../errors, ../../../logging, ../../../utils/padding, ../../../utils/bytes,
   ../../stack, ../../computation, ../../stack, ../../memory, ../../message,
-  ../../code_stream, ../../utils/utils_numeric,
+  ../../code_stream, ../utils/utils_numeric,
   ../opcode_values, ../gas_meter, ../gas_costs
 
 export

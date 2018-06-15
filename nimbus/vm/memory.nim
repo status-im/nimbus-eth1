@@ -9,7 +9,7 @@ import
   sequtils,
   eth_common/eth_types,
   ../constants, ../errors, ../logging, ../validation, ../utils/bytes,
-  ./utils/utils_numeric
+  ./interpreter/utils/utils_numeric
 
 type
   Memory* = ref object

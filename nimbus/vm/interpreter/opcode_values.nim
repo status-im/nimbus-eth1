@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ../utils/macros_gen_opcodes
+import ./utils/macros_gen_opcodes
 
 fill_enum_holes:
   type
@@ -19,7 +19,7 @@ fill_enum_holes:
     #          because the intermediate sum (or multiplication) might roll over if
     #          intermediate result is greater or equal 2^256
 
-    Op* {.pure.} = enum
+    Op* = enum
       # 0s: Stop and Arithmetic Operations
       Stop =           0x00, # Halts execution.
       Add =            0x01, # Addition operation.
@@ -31,7 +31,7 @@ fill_enum_holes:
       Smod =           0x07, # Signed modulo remainder operation.
       Addmod =         0x08, # Modulo addition operation.
       Mulmod =         0x09, # Modulo multiplication operation.
-      Exp =            0x0A, # Exponential operation
+      Exp =            0x0A, # Exponentiation operation
       SignExtend =     0x0B, # Extend length of two’s complement signed integer.
 
       # 10s: Comparison & Bitwise Logic Operations
