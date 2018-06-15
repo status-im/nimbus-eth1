@@ -15,7 +15,7 @@ using
   computation: var BaseComputation
 
 proc stop*(computation) =
-  raise newException(Halt, "STOP")
+  raise newException(HaltError, "STOP")
 
 
 proc jump*(computation) =

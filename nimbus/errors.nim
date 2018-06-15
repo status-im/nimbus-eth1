@@ -24,7 +24,7 @@ type
   ValidationError* = object of EVMError
     ## Error to signal something does not pass a validation check.
 
-  Halt* = object of EVMError
+  HaltError* = object of EVMError
     ## Raised by opcode function to halt vm execution.
 
   VMError* = object of EVMError
@@ -57,7 +57,7 @@ type
   ContractCreationCollision* = object of VMError
     ## Error signaling that there was an address collision during contract creation.
 
-  Revert* = object of VMError
+  RevertError* = object of VMError
     ##     Error used by the REVERT opcode
 
   WriteProtection* = object of VMError
@@ -79,7 +79,7 @@ proc makeVMError*: ref VMError =
   result.burnsGas = true
   result.erasesReturnData = true
 
-proc makeRevert*(): ref Revert =
+proc makeRevert*(): ref RevertError =
   new(result)
   result.burnsGas = false
   result.erasesReturnData = false

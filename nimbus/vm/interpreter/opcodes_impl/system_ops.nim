@@ -139,7 +139,7 @@ proc selfdestruct(computation; beneficiary: EthAddress) =
 
   # 3rd: Register the account to be deleted
   computation.registerAccountForDeletion(beneficiary)
-  raise newException(Halt, "SELFDESTRUCT")
+  raise newException(HaltError, "SELFDESTRUCT")
 
 
 proc returnOp*(computation) =
@@ -154,24 +154,24 @@ proc returnOp*(computation) =
   computation.memory.extend(pos, len)
   let output = memory.read(pos, len)
   computation.output = output.toString
-  raise newException(Halt, "RETURN")
+  raise newException(HaltError, "RETURN")
 
 proc revert*(computation) =
   let (startPosition, size) = stack.popInt(2)
   let (pos, len) = (startPosition.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[Op.Revert].m_handler(computation.memory.len, pos, len),
+    computation.gasCosts[Revert].m_handler(computation.memory.len, pos, len),
     reason = "REVERT"
     )
 
   computation.memory.extend(pos, len)
   let output = memory.read(pos, len).toString
   computation.output = output
-  raise newException(Revert, $output)
+  raise newException(RevertError, $output)
 
 proc selfdestruct*(computation) =
   let beneficiary = stack.popAddress()
   selfdestruct(computation, beneficiary)
-  raise newException(Halt, "SELFDESTRUCT")
+  raise newException(HaltError, "SELFDESTRUCT")
 

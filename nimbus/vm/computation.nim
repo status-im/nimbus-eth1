@@ -283,7 +283,7 @@ macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
             "OPCODE: 0x$1 ($2) | pc: $3" % [opcode.kind.int.toHex(2), $opcode.kind, $max(0, c.code.pc - 1)])
           try:
             opcode.run(c)
-          except Halt:
+          except HaltError:
             break
           c.logger.log($c.stack & "\n\n", fgGreen)
         return c
