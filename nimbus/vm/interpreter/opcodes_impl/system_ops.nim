@@ -7,9 +7,7 @@
 
 import
   strformat,
-  ../constants, ../vm_types, ../errors, ../computation, ../opcode, ../opcode_values, ../logging, ../vm_state, call,
-  .. / vm / [stack, gas_meter, memory, message], .. / utils / [address, hexadecimal, bytes],
-  ../opcode_values,
+  ./call, ./impl_std_import,
   stint, byteutils, eth_common
 
 {.this: computation.}
@@ -70,7 +68,7 @@ method runLogic*(create: Create, computation) =
 
   let childMsg = computation.prepareChildMessage(
     gas=0, # TODO refactor gas
-    to=constants.CREATE_CONTRACT_ADDRESS,
+    to=CREATE_CONTRACT_ADDRESS,
     value=value,
     data=cast[seq[byte]](@[]),
     code=callData.toString,

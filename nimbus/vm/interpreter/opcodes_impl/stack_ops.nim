@@ -6,8 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, macros, sequtils,
-  ../vm_types, ../constants, ../errors, ../computation, .. / vm / [stack, code_stream], .. / utils / [padding, bytes], stint
+  strformat, macros, ./impl_std_import
 
 {.this: computation.}
 {.experimental.}

@@ -7,14 +7,13 @@
 
 import
   unittest, stint, tables, parseutils,
-  ../nimbus/[constants, vm_types, errors, logging],
-  ../nimbus/[chain, vm_state, computation, opcode, opcode_table],
-  ../nimbus/[utils/header, utils/padding],
-  ../nimbus/vm/[gas_meter, message, code_stream, stack],
-  ../nimbus/vm/forks/vm_forks,
+  ../nimbus/[constants, vm_types, logging],
+  ../nimbus/vm/interpreter,
+  ../nimbus/utils/header,
   ../nimbus/db/[db_chain, state_db, backends/memory_backend],
-  test_helpers
+  ./test_helpers
 
+from eth_common import GasInt
 
 proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputation =
   let header = BlockHeader(blockNumber: blockNum)

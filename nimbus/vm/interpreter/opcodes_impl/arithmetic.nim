@@ -6,9 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../constants, ../utils_numeric, ../computation, ../vm_types,
-  .. / vm / [gas_meter, stack], ../opcode, ../opcode_values,
-  helpers, stint, strutils
+  helpers, stint, strutils, ./impl_std_import
 
 proc add*(computation: var BaseComputation) =
   # Addition
@@ -107,7 +105,7 @@ proc signextend*(computation: var BaseComputation) =
   if bits <= 31.u256:
     let testBit = bits.toInt * 8 + 7
     let bitPos = (1 shl testBit)
-    let mask = bitPos - 1
+    let mask = u256(bitPos - 1)
     if not (value and bitPos).isZero:
       res = value or (not mask)
     else:

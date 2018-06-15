@@ -6,8 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  macros, strformat,
-  ../vm_types, ../computation, ../vm/stack
+  macros, strformat, ./impl_std_import
 
 macro swapXX(position: static[int]): untyped =
   let name = ident(&"swap{position}")

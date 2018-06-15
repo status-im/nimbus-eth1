@@ -6,9 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  eth_common, tables,
-  ../constants, ../errors, ../validation, ../account, ../logging, ../utils_numeric, .. / utils / [padding, bytes, keccak],
-  stint, rlp
+  eth_common, tables, nimcrypto, stint, rlp,
+  ../constants, ../errors, ../validation, ../account, ../logging
 
 type
   AccountStateDB* = ref object
@@ -64,11 +63,11 @@ proc setStorage*(db: var AccountStateDB, address: EthAddress, slot: UInt256, val
   # let account = db.getAccount(address)
   # var storage = HashTrie(HexaryTrie(self.db, account.storageRoot))
 
-  let slotAsKey = slot.intToBigEndian.pad32.toString
+  let slotAsKey = "0x" & slot.dumpHex # Convert to a number to hex big-endian representation including prefix and leading zeros
   var storage = db.db
   # TODO fix
   if value > 0:
-    let encodedValue = rlp.encode value.intToBigEndian
+    let encodedValue = rlp.encode value.toByteArrayBE
     storage[slotAsKey] = encodedValue
   else:
     storage.del(slotAsKey)
@@ -87,13 +86,11 @@ proc getStorage*(db: var AccountStateDB, address: EthAddress, slot: UInt256): (U
   # let account = db.GetAccount(address)
   # var storage = HashTrie(HexaryTrie(self.db, account.storageRoot))
 
-  let slotAsKey = slot.intToBigEndian.pad32.toString
+  let slotAsKey = "0x" & slot.dumpHex # Convert to a number to hex big-endian representation including prefix and leading zeros
   var storage = db.db
   if storage.hasKey(slotAsKey):
-    #result = storage[slotAsKey]
-    # XXX: `bigEndianToInt` can be refactored to work with a BytesRange/openarray
-    # Then we won't need to call `toSeq` here.
-    result = (storage[slotAsKey].toSeq.bigEndianToInt, true)
+    let byteRange = storage[slotAsKey]
+    result = (readUintBE[256](byteRange.toOpenArray), true)
   else:
     result = (0.u256, false)
 
@@ -117,7 +114,7 @@ proc setCode*(db: var AccountStateDB, address: EthAddress, code: string) =
 
   var account = db.getAccount(address)
 
-  account.codeHash = keccak(code)
+  account.codeHash = keccak256.digest code
   #db.db[account.codeHash] = code
   db.setAccount(address, account)
 

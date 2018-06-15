@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat,
-  ../logging, ../errors, ../vm_types
+  strformat, eth_common, # GasInt
+  ../../logging, ../../errors, ../../vm_types
 
 proc newGasMeter*(startGas: GasInt): GasMeter =
   new(result)

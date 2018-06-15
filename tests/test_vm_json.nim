@@ -9,13 +9,11 @@ import
   unittest, strformat, strutils, sequtils, tables, stint, json, ospaths, times,
   ./test_helpers,
   ../nimbus/[constants, errors, logging],
-  ../nimbus/[chain, vm_state, computation, opcode, vm_types],
+  ../nimbus/[vm_state, vm_types],
   ../nimbus/utils/[header, padding],
-  ../nimbus/vm/[gas_meter, message, code_stream, stack],
-  ../nimbus/vm/forks/vm_forks, ../nimbus/db/[db_chain, state_db, backends/memory_backend],
+  ../nimbus/vm/interpreter,
+  ../nimbus/db/[db_chain, state_db, backends/memory_backend],
   eth_common
-
-from ../nimbus/opcode_table import OpLogic
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -47,7 +45,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let message = newMessage(
       to = fexec{"address"}.getStr.parseAddress,
       sender = fexec{"caller"}.getStr.parseAddress,
-      value = fexec{"value"}.getHexadecimalInt.u256,
+      value = cast[uint](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
       data = fexec{"data"}.getStr.mapIt(it.byte),
       code = code,
       gas = fexec{"gas"}.getHexadecimalInt,

@@ -7,7 +7,7 @@
 
 import
   strformat, strutils, sequtils, macros, rlp, eth_common, nimcrypto,
-  ../errors, ../validation, ../utils_numeric, ../constants, stint, ../logging, .. / utils / bytes
+  ../errors, ../validation, ./utils/utils_numeric, ../constants, stint, ../logging, .. / utils / bytes
 
 type
   Stack* = ref object of RootObj
@@ -98,6 +98,8 @@ proc swap*(stack: var Stack, position: int) =
   else:
     raise newException(InsufficientStack,
                       &"Insufficient stack items for SWAP{position}")
+
+template getint(x: int): int = x
 
 proc dup*(stack: var Stack, position: int | UInt256) =
   ## Perform a DUP operation on the stack

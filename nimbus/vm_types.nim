@@ -6,13 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables,
-  constants, vm_state,
-  opcode_values, stint, eth_common,
-  vm / [code_stream, memory, stack, forks/gas_costs],
-  ./logging
+  tables, stint, eth_common,
+  ./constants, ./vm_state, ./logging,
+  ./vm/[memory, stack, code_stream],
+  ./vm/interpreter/[gas_costs, opcode_values] # TODO - will be hidden at a lower layer
 
-export GasInt, gas_costs
 
 type
   BaseComputation* = ref object of RootObj
@@ -32,7 +30,7 @@ type
     accountsToDelete*:      Table[EthAddress, EthAddress]
     opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
     precompiles*:           Table[string, Opcode]
-    gasCosts*:              GasCosts # TODO - avoid allocating memory for this const
+    gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
 
   Error* = ref object
     info*:                  string

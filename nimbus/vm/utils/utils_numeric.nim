@@ -5,13 +5,11 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import stint, constants, strformat, strutils, sequtils, endians, macros, utils / padding, rlp
+import
+  stint, strformat, strutils, sequtils, endians, macros, rlp,
+  ../../constants, ../../utils/padding
 
 # some methods based on py-evm utils/numeric
-
-proc intToBigEndian*(value: UInt256): Bytes {.deprecated.} =
-  result = newSeq[byte](32)
-  result[0 .. ^1] = value.toByteArrayBE()
 
 proc bigEndianToInt*(value: openarray[byte]): UInt256 =
   if value.len == 32:
@@ -21,14 +19,6 @@ proc bigEndianToInt*(value: openarray[byte]): UInt256 =
 
 proc log256*(value: UInt256): Natural =
   (255 - value.countLeadingZeroBits) div 8 # Compilers optimize to `shr 3`
-
-proc unsignedToSigned*(value: UInt256): Int256 =
-  0.i256
-  # TODO Remove stub (used in quasiBoolean for signed comparison)
-
-proc signedToUnsigned*(value: Int256): UInt256 =
-  0.u256
-  # TODO Remove stub (used in quasiBoolean for signed comparison)
 
 proc unsignedToPseudoSigned*(value: UInt256): UInt256 =
   result = value

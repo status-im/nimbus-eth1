@@ -7,7 +7,7 @@
 
 import
   strformat, strutils, sequtils, parseutils, sets, macros,
-  ../logging, ../constants, ../opcode_values
+  ../logging, ../constants, ./interpreter/opcode_values
 
 type
   CodeStream* = ref object

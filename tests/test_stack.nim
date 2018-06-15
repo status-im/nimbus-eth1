@@ -5,9 +5,8 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest, macros, strformat, strutils, sequtils,
-        stint,
-        ../nimbus/[constants, opcode_values, errors, utils_numeric, vm/stack, utils/bytes, utils/padding]
+import  unittest, stint,
+        ../nimbus/[constants, errors, vm/interpreter, utils/bytes]
 
 
 template testPush(value: untyped, expected: untyped): untyped =
@@ -35,9 +34,6 @@ suite "stack":
     check(stack.len == 1024)
     expect(FullStack):
       stack.push(1025)
-
-
-
 
   test "dup does not allow stack to exceed 1024":
     var stack = newStack()

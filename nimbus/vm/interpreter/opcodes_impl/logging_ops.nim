@@ -7,9 +7,7 @@
 
 import
   strformat, macros,
-  ../constants, ../errors, ../vm_types, ../computation, ../vm/[stack, memory, gas_meter, message], ../utils/bytes,
-  ../opcode_values,
-  stint
+  ./impl_std_import
 
 {.this: computation.}
 {.experimental.}
@@ -53,19 +51,18 @@ macro logXX(topicCount: static[int]): untyped =
   result.body.add(topicCode)
 
   let OpName = ident(&"Log{topicCount}")
-  let logicCode = quote:
+  let logicCode = quote do:
     `computation`.gasMeter.consumeGas(
       `computation`.gasCosts[`OpName`].m_handler(`computation`.memory.len, `memPos`, `len`),
       reason="Memory expansion, Log topic and data gas cost")
     `computation`.memory.extend(`memPos`, `len`)
     let logData = `computation`.memory.read(`memPos`, `len`).toString
     `computation`.addLogEntry(
-        account=`computation`.msg.storageAddress,
-        topics=`topics`,
-        data=log_data)
+        account = `computation`.msg.storageAddress,
+        topics = `topics`,
+        data = log_data)
 
   result.body.add(logicCode)
-  # echo result.repr
 
 logXX(0)
 logXX(1)

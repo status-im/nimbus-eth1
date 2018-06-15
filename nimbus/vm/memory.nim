@@ -7,7 +7,8 @@
 
 import
   sequtils, stint,
-  ../constants, ../errors, ../logging, ../validation, ../utils_numeric, ../utils/bytes
+  ../constants, ../errors, ../logging, ../validation, ../utils/bytes,
+  ./utils/utils_numeric
 
 type
   Memory* = ref object
@@ -57,3 +58,7 @@ proc write*(memory: var Memory, startPosition: Natural, value: openarray[byte]) 
 
 template write*(memory: var Memory, startPosition: Natural, size: Natural, value: cstring) =
   memory.write(startPosition, value.toBytes)
+  # TODO ~ O(n^3):
+  #  - there is a string allocation with $ (?)
+  #  - then a conversion to seq (= new allocation) with toBytes
+  #  - then writing to memory
