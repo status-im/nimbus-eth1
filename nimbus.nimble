@@ -12,8 +12,8 @@ requires "nim >= 0.18.1",
          "rlp",
          "stint",
          "https://github.com/status-im/nim-eth-common",
-         "https://github.com/status-im/nim-eth-p2p",
-         "https://github.com/status-im/nim-eth-keyfile"
+         "eth_p2p",
+         "eth_keyfile"
 
 proc test(name: string, lang = "c") =
   if not dirExists "build":

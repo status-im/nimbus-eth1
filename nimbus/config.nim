@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import parseopt, strutils, net, ethp2p, eth_keyfile, eth_keys, json,
+import parseopt, strutils, net, eth_p2p, eth_keyfile, eth_keys, json,
        nimcrypto
 
 const

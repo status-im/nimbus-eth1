@@ -8,7 +8,7 @@
 # those terms.
 
 import asyncdispatch, net           # stdlib modules
-import ethp2p, eth_keys, nimcrypto  # external modules
+import eth_p2p, eth_keys, nimcrypto # external modules
 import service, ../config           # internal modules
 
 type
