@@ -81,7 +81,7 @@ op exp, FkFrontier, inline = true, base, exponent:
     if base == 0: zero(UInt256)
     else: base.pow(exponent)
 
-op signExtend, FkFrontier, inline = true, bits, value:
+op signExtend, FkFrontier, inline = false, bits, value:
   ## 0x0B, Sign extend
   ## Extend length of two’s complement signed integer.
 
@@ -198,3 +198,69 @@ op callValue, FkFrontier, inline = true:
   ## 0x34, Get deposited value by the instruction/transaction
   ##       responsible for this execution
   push: computation.msg.value
+
+op callDataLoad, FkFrontier, inline = false, startPos:
+  ## 0x35, Get input data of current environment
+  let start = startPos.toInt
+
+  # If the data does not take 32 bytes, pad with zeros
+  let lim = min(computation.msg.data.len, start + 32)
+  let padding = start + 32 - lim
+  var value: array[32, byte] # We rely on value being initialized with 0 by default
+  value[padding ..< lim] = computation.msg.data.toOpenArray(start, start + lim)
+
+  push: value # TODO, with the new implementation we can delete push for seq[byte]
+
+op callDataSize, FkFrontier, inline = true:
+  ## 0x36, Get size of input data in current environment.
+  push: computation.msg.data.len.u256
+
+op callDataCopy, FkFrontier, inline = false, memStartPos, copyStartPos, size:
+  ## 0x37, Copy input data in current environment to memory.
+
+  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[CallDataCopy].m_handler(memPos, copyPos, len),
+    reason="CallDataCopy fee")
+
+  computation.memory.extend(memPos, len)
+
+  # If the data does not take 32 bytes, pad with zeros
+  let lim = min(computation.msg.data.len, copyPos + len)
+  let padding = copyPos + len - lim
+  # Note: when extending, extended memory is zero-ed, we only need to offset with padding value
+  computation.memory.write(memPos):
+    computation.msg.data.toOpenArray(copyPos+padding, copyPos+lim)
+
+op codesize, FkFrontier, inline = true:
+  ## 0x38, Get size of code running in current environment.
+  push: computation.code.len
+
+op codecopy, FkFrontier, inline = false, memStartPos, copyStartPos, size:
+  ## 0x39, Copy code running in current environment to memory.
+
+  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
+    reason="CodeCopy fee")
+
+  computation.memory.extend(memPos, len)
+
+  # TODO: here Py-EVM is doing something very complex, increasing a program counter in the "CodeStream" type.
+  #       while Geth, Parity and the Yellow paper are just copying bytes?
+  #   https://github.com/ethereum/py-evm/blob/090b29141d1d80c4b216cfa7ab889115df3c0da0/evm/vm/logic/context.py#L96-L97
+  #   https://github.com/paritytech/parity/blob/98b7c07171cd320f32877dfa5aa528f585dc9a72/ethcore/evm/src/interpreter/mod.rs#L581-L582
+  #   https://github.com/ethereum/go-ethereum/blob/947e0afeb3bce9c52548979daddd1e00aa0d7ba8/core/vm/instructions.go#L478-L479
+
+  # If the data does not take 32 bytes, pad with zeros
+  let lim = min(computation.code.bytes.len, copyPos + len)
+  let padding = copyPos + len - lim
+  # Note: when extending, extended memory is zero-ed, we only need to offset with padding value
+  computation.memory.write(memPos):
+    computation.code.bytes.toOpenArray(copyPos+padding, copyPos+lim)
+
+op gasprice, FkFrontier, inline = true:
+  # 0x3A, Get price of gas in current environment.
+  push: computation.msg.gasPrice
