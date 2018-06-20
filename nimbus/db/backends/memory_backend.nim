@@ -12,28 +12,36 @@ type
     genericHash
     blockNumberToHash
     blockHashToScore
+    transactionHashToBlock
+    canonicalHeadHash
 
   DbKey* = object
     case kind: DBKeyKind
-    of genericHash, blockHashToScore:
+    of genericHash, blockHashToScore, transactionHashToBlock:
       h: Hash256
     of blockNumberToHash:
       u: BlockNumber
+    of canonicalHeadHash:
+      discard
 
   MemoryDB* = ref object
     kvStore*: Table[DbKey, seq[byte]]
 
 proc genericHashKey*(h: Hash256): DbKey {.inline.} = DbKey(kind: genericHash, h: h)
 proc blockHashToScoreKey*(h: Hash256): DbKey {.inline.} = DbKey(kind: blockHashToScore, h: h)
+proc transactionHashToBlockKey*(h: Hash256): DbKey {.inline.} = DbKey(kind: transactionHashToBlock, h: h)
 proc blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} = DbKey(kind: blockNumberToHash, u: u)
+proc canonicalHeadHashKey*(): DbKey {.inline.} = DbKey(kind: canonicalHeadHash)
 
 proc hash(k: DbKey): Hash =
   result = result !& hash(k.kind)
   case k.kind
-  of genericHash, blockHashToScore:
+  of genericHash, blockHashToScore, transactionHashToBlock:
     result = result !& hash(k.h)
   of blockNumberToHash:
     result = result !& hashData(unsafeAddr k.u, sizeof(k.u))
+  of canonicalHeadHash:
+    discard
   result = result
 
 proc `==`(a, b: DbKey): bool {.inline.} =

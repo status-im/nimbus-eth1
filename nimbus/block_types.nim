@@ -6,15 +6,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint,
-  ./logging, ./constants,
-  ./utils/header
+  stint, eth_common,
+  ./logging, ./constants
 
 type
-  CountableList*[T] = ref object
-    elements: seq[T] # TODO
-
   Block* = ref object of RootObj
     header*: BlockHeader
-    uncles*: CountableList[BlockHeader]
-    blockNumber*: UInt256
+    uncles*: seq[BlockHeader]
+
+proc blockNumber*(b: Block): BlockNumber {.inline.} = b.header.blockNumber
