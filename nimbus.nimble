@@ -13,6 +13,7 @@ requires "nim >= 0.18.1",
          "rlp",
          "stint",
          "https://github.com/status-im/nim-eth-common",
+         "https://github.com/status-im/nim-eth-rpc",
          "eth_p2p",
          "eth_keyfile"
 
