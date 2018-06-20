@@ -6,6 +6,7 @@ author        = "Status Research & Development GmbH"
 description   = "An Ethereum 2.0 Sharding Client for Resource-Restricted Devices"
 license       = "Apache License 2.0"
 skipDirs      = @["tests", "examples"]
+bin           = @["nimbus/nimbus"]
 
 requires "nim >= 0.18.1",
          "nimcrypto",

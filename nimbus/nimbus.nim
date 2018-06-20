@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import config, asyncdispatch
+import config
 import p2p/service, p2p/disc4service
 
 when isMainModule:
