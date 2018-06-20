@@ -9,7 +9,7 @@
 # Macros to facilitate opcode procs creation
 
 import
-  macros,
+  macros, strformat,
   ../../computation, ../../stack,
   ../../../constants, ../../../vm_types
 
@@ -99,3 +99,26 @@ macro op*(procname, fork: untyped, inline: static[bool], stackParams_body: varar
       proc `procforkname`*(`computation`: var BaseComputation) =
         `popStackStmt`
         `body`
+
+macro genPushFkFrontier*(): untyped =
+
+  # TODO: avoid allocating a seq[byte], transforming to a string, stripping char
+
+  let computation = ident("computation")
+  let value = ident("value")
+  func genName(size: int): NimNode = ident(&"push{size}FkFrontier")
+
+  result = newStmtList()
+
+  for size in 1 .. 32:
+    let name = genName(size)
+    result.add quote do:
+      func `name`*(`computation`: var BaseComputation) =
+        ## Push `size`-byte(s) on the stack
+        let `value` = `computation`.code.read(`size`)
+        let stripped = `value`.toString.strip(0.char)
+        if stripped.len == 0:
+          `computation`.stack.push(0.u256)
+        else:
+          let paddedValue = `value`.padRight(`size`, 0.byte)
+          `computation`.stack.push(paddedValue)

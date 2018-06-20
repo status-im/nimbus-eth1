@@ -6,11 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, nimcrypto,
+  stint, nimcrypto, strformat, eth_common, times,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values,
-  ../memory, ../message, ../stack,
-  ../../vm_state
+  ../memory, ../message, ../stack, ../code_stream,
+  ../../vm_state, ../../errors,
+  ../../db/[db_chain, state_db],
+  ../../utils/bytes
 
 # ##################################
 # 0s: Stop and Arithmetic Operations
@@ -182,9 +184,8 @@ op address, FkFrontier, inline = true:
 op balance, FkFrontier, inline = true:
   ## 0x31, Get balance of the given account.
   let address = computation.stack.popAddress
-  # computation.vmState.db(readOnly=true):
-  #   push: db.getBalance(address)
-  push: zero(UInt256) # TODO: Stub
+  computation.vmState.db(readOnly=true):
+    push: db.getBalance(address)
 
 op origin, FkFrontier, inline = true:
   ## 0x32, Get execution origination address.
@@ -262,5 +263,193 @@ op codecopy, FkFrontier, inline = false, memStartPos, copyStartPos, size:
     computation.code.bytes.toOpenArray(copyPos+padding, copyPos+lim)
 
 op gasprice, FkFrontier, inline = true:
-  # 0x3A, Get price of gas in current environment.
+  ## 0x3A, Get price of gas in current environment.
   push: computation.msg.gasPrice
+
+op extCodeSize, FkFrontier, inline = true:
+  ## 0x3b, Get size of an account's code
+  let account = computation.stack.popAddress()
+  push: 0 # TODO
+
+op extCodeCopy, FkFrontier, inline = true, memStartPos, copyStartPos, size:
+  ## 0x3c, Copy an account's code to memory.
+  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
+    reason="ExtCodeCopy fee")
+
+  computation.memory.extend(memPos, len)
+
+  # TODO implementation
+
+op returnDataSize, FkFrontier, inline = true:
+  ## 0x3d, Get size of output data from the previous call from the current environment.
+  push: computation.returnData.len
+
+op returnDataCopy, FkFrontier, inline = false,  memStartPos, copyStartPos, size:
+  ## 0x3e, Copy output data from the previous call to memory.
+  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
+    reason="ExtCodeCopy fee")
+
+  if copyPos + len > computation.returnData.len:
+    # TODO Geth additionally checks copyPos + len < 64
+    #      Parity uses a saturating addition
+    #      Yellow paper mentions  μs[1] + i are not subject to the 2^256 modulo.
+    raise newException(OutOfBoundsRead,
+      "Return data length is not sufficient to satisfy request.  Asked \n" &
+      &"for data from index {copyStartPos} to {copyStartPos + size}. Return data is {computation.returnData.len} in \n" &
+      "length")
+
+  computation.memory.extend(memPos, len)
+
+  computation.memory.write(memPos):
+    computation.code.bytes.toOpenArray(copyPos, copyPos+len)
+
+# ##########################################
+# 40s: Block Information
+
+op blockhash, FkFrontier, inline = true, blockNumber:
+  ## 0x40, Get the hash of one of the 256 most recent complete blocks.
+  push: computation.vmState.getAncestorHash(blockNumber)
+
+op coinbase, FkFrontier, inline = true:
+  ## 0x41, Get the block's beneficiary address.
+  push: computation.vmState.coinbase
+
+op timestamp, FkFrontier, inline = true:
+  ## 0x42, Get the block's timestamp.
+  push: computation.vmState.timestamp.toUnix
+
+op blocknumber, FkFrontier, inline = true:
+  ## 0x43, Get the block's number.
+  push: computation.vmState.blockNumber
+
+op difficulty, FkFrontier, inline = true:
+  ## 0x44, Get the block's difficulty
+  push: computation.vmState.difficulty
+
+op gasLimit, FkFrontier, inline = true:
+  ## 0x45, Get the block's gas limit
+  push: computation.vmState.gasLimit
+
+# ##########################################
+# 50s: Stack, Memory, Storage and Flow Operations
+
+op pop, FkFrontier, inline = true:
+  ## 0x50, Remove item from stack.
+  discard computation.stack.popInt()
+
+op mload, FkFrontier, inline = true, memStartPos:
+  ## 0x51, Load word from memory
+  let memPos = memStartPos.toInt
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[MLoad].m_handler(computation.memory.len, memPos, 32),
+    reason="MLOAD: GasVeryLow + memory expansion"
+    )
+  computation.memory.extend(memPos, 32)
+
+  push: computation.memory.read(memPos, 32) # TODO, should we convert to native endianness?
+
+op mstore, FkFrontier, inline = true, memStartPos, value:
+  ## 0x52, Save word to memory
+  let memPos = memStartPos.toInt
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[MStore].m_handler(computation.memory.len, memPos, 32),
+    reason="MSTORE: GasVeryLow + memory expansion"
+    )
+
+  computation.memory.extend(memPos, 32)
+  computation.memory.write(memPos, value.toByteArrayBE) # is big-endian correct? Parity/Geth do convert
+
+op mstore8, FkFrontier, inline = true, memStartPos, value:
+  ## 0x53, Save byte to memory
+  let memPos = memStartPos.toInt
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[MStore].m_handler(computation.memory.len, memPos, 1),
+    reason="MSTORE8: GasVeryLow + memory expansion"
+    )
+
+  computation.memory.extend(memPos, 1)
+  computation.memory.write(memPos, [value.toByteArrayBE[0]])
+
+op sload, FkFrontier, inline = true, slot:
+  ## 0x54, Load word from storage.
+
+  computation.vmState.db(readOnly=true):
+    let (value, _) = db.getStorage(computation.msg.storageAddress, slot)
+    push: value
+
+op sstore, FkFrontier, inline = false, slot, value:
+  ## 0x55, Save word to storage.
+
+  var currentValue = 0.u256
+  var existing = false
+
+  computation.vmState.db(readOnly=true):
+    (currentValue, existing) = db.getStorage(computation.msg.storageAddress, slot)
+
+  let
+    gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: not existing)
+    (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(currentValue, gasParam)
+
+  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
+
+  if gasRefund > 0:
+    computation.gasMeter.refundGas(gasRefund)
+
+  computation.vmState.db(readOnly=false):
+    db.setStorage(computation.msg.storageAddress, slot, value)
+
+op jump, FkFrontier, inline = true, jumpTarget:
+  ## 0x56, Alter the program counter
+
+  let jt = jumpTarget.toInt
+  computation.code.pc = jt
+
+  let nextOpcode = computation.code.peek
+  if nextOpcode != JUMPDEST:
+    raise newException(InvalidJumpDestination, "Invalid Jump Destination")
+  # TODO: next check seems redundant
+  if not computation.code.isValidOpcode(jt):
+    raise newException(InvalidInstruction, "Jump resulted in invalid instruction")
+
+  # TODO: what happens if there is an error, rollback?
+
+op jumpI, FkFrontier, inline = true, jumpTarget, testedValue:
+  ## 0x57, Conditionally alter the program counter.
+
+  if testedValue != 0:
+    let jt = jumpTarget.toInt
+    computation.code.pc = jt
+
+    let nextOpcode = computation.code.peek
+    if nextOpcode != JUMPDEST:
+      raise newException(InvalidJumpDestination, "Invalid Jump Destination")
+    # TODO: next check seems redundant
+    if not computation.code.isValidOpcode(jt):
+      raise newException(InvalidInstruction, "Jump resulted in invalid instruction")
+
+op pc, FkFrontier, inline = true:
+  ## 0x58, Get the value of the program counter prior to the increment corresponding to this instruction.
+  push: max(computation.code.pc - 1, 0)
+
+op msize, FkFrontier, inline = true:
+  ## 0x59, Get the size of active memory in bytes.
+  push: computation.memory.len
+
+op gas, FkFrontier, inline = true:
+  ## 0x5a, Get the amount of available gas, including the corresponding reduction for the cost of this instruction.
+  push: computation.gasMeter.gasRemaining
+
+op jumpDest, FkFrontier, inline = true:
+  ## 0x5b, Mark a valid destination for jumps. This operation has no effect on machine state during execution.
+  discard
+
+genPushFkFrontier()

@@ -45,6 +45,7 @@ proc newCodeStreamFromUnescaped*(code: string): CodeStream =
   newCodeStream(codeBytes)
 
 proc read*(c: var CodeStream, size: int): seq[byte] =
+  # TODO: use openarray[bytes]
   if c.pc + size - 1 < c.bytes.len:
     result = c.bytes[c.pc .. c.pc + size - 1]
     c.pc += size
@@ -100,7 +101,7 @@ when false:
     finally:
       cs.pc = anchorPc
 
-proc isValidOpcode*(c: var CodeStream, position: int): bool =
+proc isValidOpcode*(c: CodeStream, position: int): bool =
   if position >= len(c):
     return false
   if position in c.invalidPositions:
