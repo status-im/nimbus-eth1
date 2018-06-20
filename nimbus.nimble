@@ -14,6 +14,7 @@ requires "nim >= 0.18.1",
          "stint",
          "https://github.com/status-im/nim-eth-common",
          "https://github.com/status-im/nim-eth-rpc",
+         "https://github.com/status-im/nim-asyncdispatch2",
          "eth_p2p",
          "eth_keyfile"
 
