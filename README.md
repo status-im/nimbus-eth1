@@ -13,6 +13,12 @@ Join the Status community chats:
 ## Rationale
 [Nimbus: an Ethereum 2.0 Sharding Client](https://github.com/status-im/nimbus/blob/master/doc/Nimbus%20-%20An%20Ethereum%202.0%20Sharding%20Client_xt.md)
 
+## Building & Testing
+
+Currently Nimbus requires the latest development version of the Nim programming language. Follow the [installation steps](https://github.com/nim-lang/Nim) or use [choosenim](https://github.com/dom96/choosenim).
+
+You can build the package and run the tests using `nimble test`. You can run the example using `nim compile --run examples/decompile_smart_contract.nim`.
+
 ## License
 
 Licensed under one of the following:
