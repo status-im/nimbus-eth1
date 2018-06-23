@@ -8,11 +8,11 @@
 import
   stint, nimcrypto, strformat, eth_common, times,
   ./utils/[macros_procs_opcodes, utils_numeric],
-  ./gas_meter, ./gas_costs, ./opcode_values,
-  ../memory, ../message, ../stack, ../code_stream,
-  ../../vm_state, ../../errors,
+  ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
+  ../memory, ../message, ../stack, ../code_stream, ../computation,
+  ../../vm_state, ../../errors, ../../constants, ../../vm_types, ../../logging,
   ../../db/[db_chain, state_db],
-  ../../utils/bytes
+  ../../utils/[bytes, padding, address] # TODO remove those dependencies
 
 # ##################################
 # 0s: Stop and Arithmetic Operations
@@ -452,4 +452,196 @@ op jumpDest, FkFrontier, inline = true:
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect on machine state during execution.
   discard
 
+# ##########################################
+# 60s & 70s: Push Operations.
+# 80s: Duplication Operations
+# 90s: Exchange Operations
+# a0s: Logging Operations
+
 genPushFkFrontier()
+genDupFkFrontier()
+genSwapFkFrontier()
+genLogFkFrontier()
+
+# ##########################################
+# f0s: System operations.
+
+template genCreate(ForkName: untyped): untyped =
+  op create, ForkName, inline = false, value, startPosition, size:
+    ## 0xf0, Create a new account with associated code.
+
+    let (memPos, len) = (startPosition.toInt, size.toInt)
+
+    computation.gasMeter.consumeGas(
+      computation.gasCosts[CodeCopy].m_handler(computation.memory.len, memPos, len),
+      reason="Create fee")
+
+    computation.memory.extend(memPos, len)
+
+    ##### getBalance type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
+    # computation.vmState.db(readOnly=true):
+    #   when ForkName >= FkHomestead: # TODO this is done in Geth but not Parity and Py-EVM
+    #     let insufficientFunds = db.getBalance(computation.msg.storageAddress) < value # TODO check gas balance rollover
+    #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
+
+    #     # TODO: error message
+    #     if insufficientFunds or stackTooDeep:
+    #       push: 0
+    #       return
+    #   else:
+    #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
+    #     if stackTooDeep:
+    #       push: 0
+    #       return
+
+    let callData = computation.memory.read(memPos, len)
+
+    ## TODO dynamic gas that depends on remaining gas
+
+    ##### getNonce type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
+    # computation.vmState.db(readOnly=true):
+    #   let creationNonce = db.getNonce(computation.msg.storageAddress)
+    #   db.incrementNonce(computation.msg.storageAddress)
+    let contractAddress = ZERO_ADDRESS # generateContractAddress(computation.msg.storageAddress, creationNonce)
+
+    let isCollision = false # TODO: db.accountHasCodeOrNonce ...
+
+    if isCollision:
+      computation.vmState.logger.debug("Address collision while creating contract: " & contractAddress.toHex)
+      push: 0
+      return
+
+    let childMsg = prepareChildMessage(
+      computation,
+      gas = 0, # TODO refactor gas
+      to = CREATE_CONTRACT_ADDRESS,
+      value = value,
+      data = @[],
+      code = callData.toString,
+      options = MessageOptions(createAddress: contractAddress)
+      )
+
+    let childComputation = applyChildBaseComputation(computation, childMsg)
+
+    if childComputation.isError:
+      push: 0
+    else:
+      push: contractAddress
+    computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
+
+genCreate(FkFrontier)
+genCreate(FkHomestead)
+
+proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+  let gas = computation.stack.popInt()
+  let codeAddress = computation.stack.popAddress()
+
+  let (value,
+       memoryInputStartPosition, memoryInputSize,
+       memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(5)
+
+  let to = computation.msg.storageAddress
+  let sender = computation.msg.storageAddress
+
+  result = (gas,
+   value,
+   to,
+   sender,
+   codeAddress,
+   memoryInputStartPosition,
+   memoryInputSize,
+   memoryOutputStartPosition,
+   memoryOutputSize,
+   true,  # should_transfer_value,
+   computation.msg.isStatic)
+
+
+template genCall(ForkName: untyped): untyped =
+  op call, ForkName, inline = false:
+    # 0xf1, Message-Call into an account
+    let (gas, value, to, sender,
+          codeAddress,
+          memoryInputStartPosition, memoryInputSize,
+          memoryOutputStartPosition, memoryOutputSize,
+          shouldTransferValue,
+          isStatic) = callParams(computation)
+
+    let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.toInt, memoryInputSize.toInt, memoryOutputStartPosition.toInt, memoryOutputSize.toInt)
+
+    let (gasCost, childMsgGas) = computation.gasCosts[Op.Call].c_handler(
+      value,
+      GasParams(kind: Call,
+                c_isNewAccount: true, # TODO stub
+                c_gasBalance: 0,
+                c_contractGas: 0,
+                c_currentMemSize: computation.memory.len,
+                c_memOffset: 0, # TODO make sure if we pass the largest mem requested
+                c_memLength: 0  # or an addition of mem requested
+      ))
+
+    computation.memory.extend(memInPos, memInLen)
+    computation.memory.extend(memOutPos, memOutLen)
+
+    let callData = computation.memory.read(memInPos, memInLen)
+
+    ##### getBalance type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
+    # computation.vmState.db(readOnly = true):
+    #   let senderBalance = db.getBalance(computation.msg.storageAddress) # TODO check gas balance rollover
+
+    let insufficientFunds = false # shouldTransferValue and senderBalance < value
+    let stackTooDeep = computation.msg.depth >= MaxCallDepth
+
+    if insufficientFunds or stackTooDeep:
+      computation.returnData = ""
+      var errMessage: string
+      if insufficientFunds:
+        let senderBalance = -1 # TODO workaround
+        # Note: for some reason we can't use strformat here, we get undeclared identifiers
+        errMessage = &"Insufficient Funds: have: " & $senderBalance & "need: " & $value
+      elif stackTooDeep:
+        errMessage = "Stack Limit Reached"
+      else:
+        raise newException(VMError, "Invariant: Unreachable code path")
+
+      # computation.logger.debug(&"failure: {errMessage}") # TODO: Error: expression 'logger' has no type (or is ambiguous)
+      computation.gasMeter.returnGas(childMsgGas)
+      push: 0
+      return
+
+    ##### getCode type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
+    # computation.vmState.db(readOnly = true):
+    #   let code =  if codeAddress != ZERO_ADDRESS: db.getCode(codeAddress)
+    #               else: db.getCode(to)
+    let code = ""
+
+    var childMsg = prepareChildMessage(
+      computation,
+      childMsgGas,
+      to,
+      value,
+      callData,
+      code,
+      MessageOptions(
+        shouldTransferValue: shouldTransferValue,
+        isStatic: isStatic)
+    )
+
+    if sender != ZERO_ADDRESS:
+      childMsg.sender = sender
+
+    let childComputation = applyChildBaseComputation(computation, childMsg)
+
+    if childComputation.isError:
+      push: 0
+    else:
+      push: 1
+
+    if not childComputation.shouldEraseReturnData:
+      let actualOutputSize = min(memOutLen, childComputation.output.len)
+      computation.memory.write(
+        memOutPos,
+        childComputation.output.toBytes[0 ..< actualOutputSize])
+      if not childComputation.shouldBurnGas:
+        computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
+
+genCall(FkFrontier)

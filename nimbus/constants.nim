@@ -5,9 +5,9 @@ import
 proc default(t: typedesc): t = discard
 
 # constants
-let # TODO - replace by const - https://github.com/status-im/nim-stint/issues/52
+const
   UINT_256_MAX*: UInt256 =        high(UInt256)
-  INT_256_MAX_AS_UINT256* =       cast[Uint256](high(Int256))
+  INT_256_MAX_AS_UINT256* =       high(Uint256) shr 1
   NULLBYTE* =                     "\x00"
   EMPTYWORD* =                    repeat(NULLBYTE, 32)
   UINT160CEILING*: UInt256 =      2.u256.pow(160)
@@ -53,4 +53,4 @@ let # TODO - replace by const - https://github.com/status-im/nim-stint/issues/52
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* = 20.u256
 
   MAX_PREV_HEADER_DEPTH* =        256.toBlockNumber
-
+  MaxCallDepth* =                   1024

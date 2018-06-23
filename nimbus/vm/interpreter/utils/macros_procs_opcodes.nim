@@ -9,7 +9,7 @@
 # Macros to facilitate opcode procs creation
 
 import
-  macros, strformat,
+  macros, strformat, stint,
   ../../computation, ../../stack,
   ../../../constants, ../../../vm_types
 
@@ -103,22 +103,97 @@ macro op*(procname, fork: untyped, inline: static[bool], stackParams_body: varar
 macro genPushFkFrontier*(): untyped =
 
   # TODO: avoid allocating a seq[byte], transforming to a string, stripping char
-
-  let computation = ident("computation")
-  let value = ident("value")
   func genName(size: int): NimNode = ident(&"push{size}FkFrontier")
-
   result = newStmtList()
 
   for size in 1 .. 32:
     let name = genName(size)
     result.add quote do:
-      func `name`*(`computation`: var BaseComputation) =
+      func `name`*(computation: var BaseComputation) =
         ## Push `size`-byte(s) on the stack
-        let `value` = `computation`.code.read(`size`)
-        let stripped = `value`.toString.strip(0.char)
+        let value = computation.code.read(`size`)
+        let stripped = value.toString.strip(0.char)
         if stripped.len == 0:
-          `computation`.stack.push(0.u256)
+          computation.stack.push(0.u256)
         else:
-          let paddedValue = `value`.padRight(`size`, 0.byte)
-          `computation`.stack.push(paddedValue)
+          let paddedValue = value.padRight(`size`, 0.byte)
+          computation.stack.push(paddedValue)
+
+macro genDupFkFrontier*(): untyped =
+
+  func genName(position: int): NimNode = ident(&"dup{position}FkFrontier")
+  result = newStmtList()
+
+  for pos in 1 .. 16:
+    let name = genName(pos)
+    result.add quote do:
+      func `name`*(computation: var BaseComputation) =
+        computation.stack.dup(`pos`)
+
+macro genSwapFkFrontier*(): untyped =
+
+  func genName(position: int): NimNode = ident(&"swap{position}FkFrontier")
+  result = newStmtList()
+
+  for pos in 1 .. 16:
+    let name = genName(pos)
+    result.add quote do:
+      func `name`*(computation: var BaseComputation) =
+        computation.stack.swap(`pos`)
+
+proc logImpl(topicCount: int): NimNode =
+
+  # TODO: use toopenArray to avoid some string allocations
+
+  if topicCount < 0 or topicCount > 4:
+    error(&"Invalid log topic len {topicCount}  Must be 0, 1, 2, 3, or 4")
+    return
+
+  let name = ident(&"log{topicCount}FkFrontier")
+  let computation = ident("computation")
+  let topics = ident("topics")
+  let topicsTuple = ident("topicsTuple")
+  let len = ident("len")
+  let memPos = ident("memPos")
+  result = quote:
+    proc `name`*(`computation`: var BaseComputation) =
+      let (memStartPosition, size) = `computation`.stack.popInt(2)
+      let (`memPos`, `len`) = (memStartPosition.toInt, size.toInt)
+      var `topics`: seq[UInt256]
+
+  var topicCode: NimNode
+  if topicCount == 0:
+    topicCode = quote:
+      `topics` = @[]
+  elif topicCount > 1:
+    topicCode = quote:
+      let `topicsTuple` = `computation`.stack.popInt(`topicCount`)
+    topicCode = nnkStmtList.newTree(topicCode)
+    for z in 0 ..< topicCount:
+      let topicPush = quote:
+        `topics`.add(`topicsTuple`[`z`])
+      topicCode.add(topicPush)
+  else:
+    topicCode = quote:
+      `topics` = @[`computation`.stack.popInt()]
+
+  result.body.add(topicCode)
+
+  let OpName = ident(&"Log{topicCount}")
+  let logicCode = quote do:
+    `computation`.gasMeter.consumeGas(
+      `computation`.gasCosts[`OpName`].m_handler(`computation`.memory.len, `memPos`, `len`),
+      reason="Memory expansion, Log topic and data gas cost")
+    `computation`.memory.extend(`memPos`, `len`)
+    let logData = `computation`.memory.read(`memPos`, `len`).toString
+    `computation`.addLogEntry(
+        account = `computation`.msg.storageAddress,
+        topics = `topics`,
+        data = log_data)
+
+  result.body.add(logicCode)
+
+macro genLogFkFrontier*(): untyped =
+  result = newStmtList()
+  for i in 0..4:
+    result.add logImpl(i)

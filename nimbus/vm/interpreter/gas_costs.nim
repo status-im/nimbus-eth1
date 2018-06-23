@@ -479,7 +479,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           Log4:           memExpansion `prefix gasLog4`,
 
           # f0s: System operations
-          Create:         fixed GasCreate,
+          Create:         fixed GasCreate, # TODO, dynamic cost
           Call:           complex `prefix gasCall`,
           CallCode:       complex `prefix gasCall`,
           Return:         memExpansion `prefix gasHalt`,
