@@ -3,6 +3,7 @@
 let
   stdenv = pkgs.stdenv;
   nim = pkgs.callPackage ./nim.nix {};
+  makeLibraryPath = stdenv.lib.makeLibraryPath;
 
 in
 
@@ -19,5 +20,6 @@ stdenv.mkDerivation rec {
 
   src = ./.;
   buildInputs = [pkgs.clang nim pkgs.rocksdb_lite];
+  LD_LIBRARY_PATH = "${makeLibraryPath buildInputs}";
 }
 
