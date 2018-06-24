@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import stint, tables, sequtils, algorithm, rlp, ranges, state_db, nimcrypto,
-  backends / memory_backend,
-  ../errors, ../block_types, ../utils/header, ../constants, eth_common, byteutils
+  ../errors, ../block_types, ../utils/header, ../constants, eth_common, byteutils,
+  ./storage_types.nim, backends/memory_backend
 
 type
   BaseChainDB* = ref object
@@ -36,13 +36,11 @@ proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader =
   ##         Returns the requested block header as specified by block hash.
   ##
   ##         Raises BlockNotFound if it is not present in the db.
-  var blk: seq[byte]
   try:
-    blk = self.db.get(genericHashKey(blockHash))
+    let blk = self.db.get(genericHashKey(blockHash))
+    return decode(blk, BlockHeader)
   except KeyError:
     raise newException(BlockNotFound, "No block with hash " & blockHash.data.toHex)
-  let rng = blk.toRange
-  return decode(rng, BlockHeader)
 
 proc getHash(self: BaseChainDB, key: DbKey): Hash256 {.inline.} =
   rlp.decode(self.db.get(key).toRange, Hash256)
@@ -88,7 +86,7 @@ iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
       h = self.getBlockHeaderByHash(h.parentHash)
 
 proc addBlockNumberToHashLookup(self: BaseChainDB; header: BlockHeader) =
-  self.db.set(blockNumberToHashKey(header.blockNumber), rlp.encode(header.hash).toSeq())
+  self.db.set(blockNumberToHashKey(header.blockNumber), rlp.encode(header.hash))
 
 iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader): Hash256 =
   ## Returns an iterable of the transaction hashes from th block specified
@@ -127,7 +125,7 @@ proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockH
   for h in newCanonicalHeaders:
     self.addBlockNumberToHashLookup(h)
 
-  self.db.set(canonicalHeadHashKey(), rlp.encode(header.hash).toSeq())
+  self.db.set(canonicalHeadHashKey(), rlp.encode(header.hash))
   return newCanonicalHeaders
 
 proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
@@ -168,10 +166,10 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   if not isGenesis and not self.headerExists(header.parentHash):
     raise newException(ParentNotFound, "Cannot persist block header " &
         $header.hash & " with unknown parent " & $header.parentHash)
-  self.db.set(genericHashKey(header.hash), rlp.encode(header).toSeq())
+  self.db.set(genericHashKey(header.hash), rlp.encode(header))
   let score = if isGenesis: header.difficulty
               else: self.getScore(header.parentHash).u256 + header.difficulty
-  self.db.set(blockHashToScoreKey(header.hash), rlp.encode(score).toSeq())
+  self.db.set(blockHashToScoreKey(header.hash), rlp.encode(score))
   var headScore: int
   try:
     headScore = self.getScore(self.getCanonicalHead().hash)
@@ -185,14 +183,14 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
 proc addTransactionToCanonicalChain(self: BaseChainDB, txHash: Hash256,
     blockHeader: BlockHeader, index: int) =
   let k: TransactionKey = (blockHeader.blockNumber, index)
-  self.db.set(transactionHashToBlockKey(txHash), rlp.encode(k).toSeq())
+  self.db.set(transactionHashToBlockKey(txHash), rlp.encode(k))
 
 proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
   result = keccak256.digest(enc.toOpenArray())
-  self.db.set(genericHashKey(result), enc.toSeq())
+  self.db.set(genericHashKey(result), enc)
 
 proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
   ## Persist the given block's header and uncles.
