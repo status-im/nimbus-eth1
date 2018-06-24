@@ -15,7 +15,23 @@ Join the Status community chats:
 
 ## Building & Testing
 
+### Prerequisites
+
+Please install a recent version of Facebook's RocksDB following the instructions here:
+
+https://github.com/facebook/rocksdb/blob/master/INSTALL.md
+
 Currently Nimbus requires the latest development version of the Nim programming language. Follow the [installation steps](https://github.com/nim-lang/Nim) or use [choosenim](https://github.com/dom96/choosenim).
+
+### Obtaining the prerequisites through the Nix package manager
+
+Users of the [Nix package manager](https://nixos.org/nix/download.html) can install all prerequisites simply by running:
+
+``` bash
+nix-shell nimbus.nix
+```
+
+### Build
 
 You can build the package and run the tests using `nimble test`. You can run the example using `nim compile --run examples/decompile_smart_contract.nim`.
 

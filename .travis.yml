@@ -15,7 +15,8 @@ matrix:
 
     - os: osx
       before_install:
-        # - brew update
+        - brew update
+        - brew install rocksdb
         # - brew install gcc
 
         - git clone https://github.com/nim-lang/nim.git
