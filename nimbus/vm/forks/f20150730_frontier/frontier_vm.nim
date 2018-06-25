@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  stint, eth_common/eth_types,
   ../../../logging, ../../../constants, ../../../errors,
-  stint,
   ../../../block_types,
   ../../../vm/[base, stack], ../../../db/db_chain,  ../../../utils/header,
   ./frontier_block, ./frontier_vm_state, ./frontier_validation
@@ -22,7 +22,7 @@ method name*(vm: FrontierVM): string =
 method getBlockReward(vm: FrontierVM): UInt256 =
   BLOCK_REWARD
 
-method getUncleReward(vm: FrontierVM, blockNumber: UInt256, uncle: Block): UInt256 =
+method getUncleReward(vm: FrontierVM, blockNumber: BlockNumber, uncle: Block): UInt256 =
   BLOCK_REWARD * (UNCLE_DEPTH_PENALTY_FACTOR + uncle.blockNumber - blockNumber) div UNCLE_DEPTH_PENALTY_FACTOR
 
 

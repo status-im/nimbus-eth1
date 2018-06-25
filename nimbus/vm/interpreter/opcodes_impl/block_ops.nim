@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  times, ./impl_std_import
+  times, eth_common/eth_types, ./impl_std_import
 
 {.this: computation.}
 {.experimental.}
@@ -15,7 +15,7 @@ using
   computation: var BaseComputation
 
 proc blockhash*(computation) =
-  let blockNumber = stack.popInt()
+  let blockNumber = vmWordToBlockNumber stack.popInt()
   let blockHash = vmState.getAncestorHash(blockNumber)
   stack.push(blockHash)
 
@@ -28,7 +28,7 @@ proc timestamp*(computation) =
   stack.push(vmState.timestamp.toUnix.uint64.u256)
 
 proc number*(computation) =
-  stack.push(vmState.blockNumber)
+  stack.push(blockNumberToVmWord vmState.blockNumber)
 
 proc difficulty*(computation) =
   stack.push(vmState.difficulty)

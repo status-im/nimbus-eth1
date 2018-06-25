@@ -84,7 +84,7 @@ proc generateHeaderFromParentHeader*(
   # TODO: validateGt(timestamp, parent.timestamp)
   result = BlockHeader(
     timestamp: max(getTime(), parent.timestamp + 1.milliseconds),   # Note: Py-evm uses +1 second, not ms
-    blockNumber: (parent.blockNumber + 1.u256),
+    blockNumber: (parent.blockNumber + 1),
     # TODO: difficulty: parent.computeDifficulty(parent.timestamp),
     gasLimit: computeGasLimit(parent, gasLimitFloor = GENESIS_GAS_LIMIT),
     stateRoot: parent.stateRoot,
