@@ -66,12 +66,15 @@ method gasLimit*(vmState: BaseVMState): GasInt =
   vmState.blockHeader.gasLimit
 
 method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 =
-  var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1.u256
-  if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH or
-     ancestorDepth < 0 or
-     ancestorDepth >= vmState.prevHeaders.len.u256:
+  var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1
+  if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH or ancestorDepth < 0:
     return
-  var header = vmState.prevHeaders[ancestorDepth.toInt]
+
+  let idx = ancestorDepth.toInt
+  if idx >= vmState.prevHeaders.len:
+    return
+
+  var header = vmState.prevHeaders[idx]
   result = header.hash
 
 macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
