@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, stint, tables, parseutils,
+  unittest, tables, parseutils,
+  eth_trie/[types, memdb], eth_common/eth_types,
   ../nimbus/[constants, vm_types, logging],
   ../nimbus/vm/interpreter,
   ../nimbus/utils/header,
@@ -17,7 +18,8 @@ from eth_common import GasInt
 
 proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputation =
   let header = BlockHeader(blockNumber: blockNum)
-  var vm = newNimbusVM(header, newBaseChainDB(newMemoryDB()))
+  var memDb = newMemDB()
+  var vm = newNimbusVM(header, newBaseChainDB(trieDB memDb))
     # coinbase: "",
     # difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
     # blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,

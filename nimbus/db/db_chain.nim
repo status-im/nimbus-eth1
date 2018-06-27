@@ -5,13 +5,14 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import stint, tables, sequtils, algorithm, rlp, ranges, state_db, nimcrypto,
-  ../errors, ../block_types, ../utils/header, ../constants, eth_common, byteutils,
-  ./storage_types.nim, backends/memory_backend
+import
+  tables, sequtils, algorithm,
+  rlp, ranges, state_db, nimcrypto, eth_trie/types, eth_common, byteutils,
+  ../errors, ../block_types, ../utils/header, ../constants, ./storage_types.nim
 
 type
   BaseChainDB* = ref object
-    db*: MemoryDB
+    db*: TrieDatabaseRef
     # TODO db*: JournalDB
 
   KeyType = enum
@@ -22,12 +23,9 @@ type
     blockNumber: BlockNumber
     index: int
 
-proc newBaseChainDB*(db: MemoryDB): BaseChainDB =
+proc newBaseChainDB*(db: TrieDatabaseRef): BaseChainDB =
   new(result)
   result.db = db
-
-proc contains*(self: BaseChainDB; key: Hash256): bool =
-  return self.db.contains(genericHashKey(key))
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
@@ -37,17 +35,17 @@ proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader =
   ##
   ##         Raises BlockNotFound if it is not present in the db.
   try:
-    let blk = self.db.get(genericHashKey(blockHash))
+    let blk = self.db.get(genericHashKey(blockHash).toOpenArray).toRange
     return decode(blk, BlockHeader)
   except KeyError:
     raise newException(BlockNotFound, "No block with hash " & blockHash.data.toHex)
 
 proc getHash(self: BaseChainDB, key: DbKey): Hash256 {.inline.} =
-  rlp.decode(self.db.get(key).toRange, Hash256)
+  rlp.decode(self.db.get(key.toOpenArray).toRange, Hash256)
 
 proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
   let k = canonicalHeadHashKey()
-  if k notin self.db:
+  if k.toOpenArray notin self.db:
     raise newException(CanonicalHeadNotFound,
                       "No canonical head set for this chain")
   return self.getBlockHeaderByHash(self.getHash(k))
@@ -64,7 +62,7 @@ proc getCanonicalBlockHeaderByNumber*(self: BaseChainDB; n: BlockNumber): BlockH
   self.getBlockHeaderByHash(self.lookupBlockHash(n))
 
 proc getScore*(self: BaseChainDB; blockHash: Hash256): int =
-  rlp.decode(self.db.get(blockHashToScoreKey(blockHash)).toRange, int)
+  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray).toRange, int)
 
 iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
   ##         Returns the chain leading up from the given header until the first ancestor it has in
@@ -86,7 +84,10 @@ iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
       h = self.getBlockHeaderByHash(h.parentHash)
 
 proc addBlockNumberToHashLookup(self: BaseChainDB; header: BlockHeader) =
-  self.db.set(blockNumberToHashKey(header.blockNumber), rlp.encode(header.hash))
+  if not self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
+                     rlp.encode(header.hash).toOpenArray):
+    # TODO: handle this error somehow
+    discard
 
 iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader): Hash256 =
   ## Returns an iterable of the transaction hashes from th block specified
@@ -101,7 +102,9 @@ iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader):
 
 proc removeTransactionFromCanonicalChain(self: BaseChainDB, transactionHash: Hash256) {.inline.} =
   ## Removes the transaction specified by the given hash from the canonical chain.
-  self.db.delete(transactionHashToBlockKey(transactionHash))
+  if not self.db.del(transactionHashToBlockKey(transactionHash).toOpenArray):
+    # TODO: handle this error
+    discard
 
 proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockHeader] =
   ##         Sets the header as the canonical chain HEAD.
@@ -125,12 +128,15 @@ proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockH
   for h in newCanonicalHeaders:
     self.addBlockNumberToHashLookup(h)
 
-  self.db.set(canonicalHeadHashKey(), rlp.encode(header.hash))
+  if not self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(header.hash).toOpenArray):
+    # XXX: handle this error
+    discard
+
   return newCanonicalHeaders
 
 proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
-  self.contains(blockHash)
+  self.db.contains(blockHash.data)
 
 iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): BytesRange =
   doAssert(false, "TODO: Implement me")
@@ -166,10 +172,16 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   if not isGenesis and not self.headerExists(header.parentHash):
     raise newException(ParentNotFound, "Cannot persist block header " &
         $header.hash & " with unknown parent " & $header.parentHash)
-  self.db.set(genericHashKey(header.hash), rlp.encode(header))
+  if not self.db.put(genericHashKey(header.hash).toOpenArray, rlp.encode(header).toOpenArray):
+    # XXX: handle this error somehow
+    discard
+
   let score = if isGenesis: header.difficulty
               else: self.getScore(header.parentHash).u256 + header.difficulty
-  self.db.set(blockHashToScoreKey(header.hash), rlp.encode(score))
+  if not self.db.put(blockHashToScoreKey(header.hash).toOpenArray, rlp.encode(score).toOpenArray):
+    # XXX: handle this error somehow
+    discard
+
   var headScore: int
   try:
     headScore = self.getScore(self.getCanonicalHead().hash)
@@ -179,18 +191,21 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   if score > headScore.u256:
     result = self.setAsCanonicalChainHead(header.hash)
 
-
 proc addTransactionToCanonicalChain(self: BaseChainDB, txHash: Hash256,
     blockHeader: BlockHeader, index: int) =
   let k: TransactionKey = (blockHeader.blockNumber, index)
-  self.db.set(transactionHashToBlockKey(txHash), rlp.encode(k))
+  if not self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(k).toOpenArray):
+    # XXX: handle this error somehow
+    discard
 
 proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
   result = keccak256.digest(enc.toOpenArray())
-  self.db.set(genericHashKey(result), enc)
+  if not self.db.put(genericHashKey(result).toOpenArray, enc.toOpenArray):
+    # XXX:
+    discard
 
 proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
   ## Persist the given block's header and uncles.
@@ -227,6 +242,5 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 # proc clear*(self: BaseChainDB): void =
 #   self.db.clear()
 
-method getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
-  # TODO
-  result = newAccountStateDB(initTable[string, string]())
+proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
+  result = newAccountStateDB(self.db, stateRoot)

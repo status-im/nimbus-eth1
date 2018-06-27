@@ -6,19 +6,25 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, strformat, strutils, sequtils, tables, stint, json, ospaths, times,
+  unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
+  rlp, nimcrypto/[keccak, hash], eth_trie/[types, memdb], eth_common, ranges/typedranges,
   ./test_helpers,
   ../nimbus/[constants, errors, logging],
   ../nimbus/[vm_state, vm_types],
   ../nimbus/utils/[header, padding],
   ../nimbus/vm/interpreter,
-  ../nimbus/db/[db_chain, state_db, backends/memory_backend],
-  eth_common
+  ../nimbus/db/[db_chain, state_db, backends/memory_backend]
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
 suite "vm json tests":
   jsonTest("VMTests", testFixture)
+
+
+proc stringFromBytes(x: ByteRange): string =
+  result = newString(x.len)
+  for i in 0 ..< x.len:
+    result[i] = char(x[i])
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode
@@ -26,20 +32,24 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     fixture = child
     break
   let fenv = fixture["env"]
+  var emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
   let header = BlockHeader(
     coinbase: fenv{"currentCoinbase"}.getStr.parseAddress,
     difficulty: fenv{"currentDifficulty"}.getHexadecimalInt.u256,
     blockNumber: fenv{"currentNumber"}.getHexadecimalInt.u256,
     gasLimit: fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
-    timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix
+    timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,
+    stateRoot: emptyRlpHash
     )
-  var vm = newNimbusVM(header, newBaseChainDB(newMemoryDB()))
+  var memDb = newMemDB()
+  var vm = newNimbusVM(header, newBaseChainDB(trieDB memDb))
 
   let fexec = fixture["exec"]
   var code = ""
-  vm.state.db(readOnly=false):
+  vm.state.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
-    code = db.getCode(fexec{"address"}.getStr.parseAddress)
+    let address = fexec{"address"}.getStr.parseAddress
+    code = stringFromBytes db.getCode(address)
 
   code = fexec{"code"}.getStr
   let message = newMessage(

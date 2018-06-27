@@ -7,7 +7,7 @@
 
 import
   strformat,
-  errors, constants, stint, eth_common
+  errors, constants, eth_common
 
 template validateCanonicalAddress*(value: EthAddress, title: string = "Value") =
   # TODO: This needs to be removed

@@ -7,7 +7,7 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  stint, byteutils, eth_common, eth_keys,
+  byteutils, eth_common, eth_keys,
   ../nimbus/utils/[address, padding],
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
@@ -19,6 +19,11 @@ type
 proc validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
   # TODO fix
+  if true:
+    return "extcodesize0" in name
+  if true:
+    return folder == "vmEnvironmentalInfo"
+
   result = "calldatacopy" notin name and
     "balanceAddressInputTooBigRightMyAddress." notin name and
     "callstatelessToReturn1" notin name and
@@ -76,16 +81,16 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       raw.add("OK: " & $okCount & "/" & $sum & " Fail: " & $failCount & "/" & $sum & " Skip: " & $skipCount & "/" & $sum & "\n")
     writeFile(`s` & ".md", raw)
 
-proc accountFromHex(s: string): EthAddress = hexToByteArray(s, result)
+proc ethAddressFromHex(s: string): EthAddress = hexToByteArray(s, result)
 
 proc setupStateDB*(desiredState: JsonNode, stateDB: var AccountStateDB) =
   for ac, accountData in desiredState:
-    let account = accountFromHex(ac)
+    let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:
       stateDB.setStorage(account, slot.parseInt.u256, value.getInt.u256)
 
     let nonce = accountData{"nonce"}.getInt.u256
-    let code = accountData{"code"}.getStr
+    let code = stringToByteRange accountData{"code"}.getStr
     let balance = accountData{"balance"}.getInt.u256
 
     stateDB.setNonce(account, nonce)

@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-    stint, eth_common,
-    ../logging, ../constants, ../validation, ../vm_types
+  eth_common,
+  ../logging, ../constants, ../validation, ../vm_types
 
 proc `origin=`*(message: var Message, value: EthAddress) =
   message.internalOrigin = value

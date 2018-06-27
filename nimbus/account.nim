@@ -6,10 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, stint, rlp, eth_common
+  constants, errors, rlp, eth_common
 
 type
-  Account* = ref object
+  Account* = object
     nonce*:             UInt256
     balance*:           UInt256
     storageRoot*:       Hash256

@@ -6,12 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, eth_common/eth_types,
+  eth_common/eth_types,
   ../../../logging, ../../../constants, ../../../errors,
   ../../../block_types,
   ../../../vm/[base, stack], ../../../db/db_chain,  ../../../utils/header,
   ./frontier_block, ./frontier_vm_state, ./frontier_validation
-
 
 type
   FrontierVM* = ref object of VM
@@ -34,4 +33,6 @@ proc newFrontierVM*(header: BlockHeader, chainDB: BaseChainDB): FrontierVM =
   result.chainDB = chainDB
   result.isStateless = true
   result.state = newFrontierVMState()
+  result.state.chaindb = result.chainDB
+  result.state.blockHeader = header
   result.`block` = makeFrontierBlock(header, @[])

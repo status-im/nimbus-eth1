@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, stint/lenient_stint,
+  eth_common/eth_types, stint/lenient_stint,
   ../../../constants, ../../../vm_state, ../../../vm_types, ../../../vm_types,
   ../../../errors, ../../../logging, ../../../utils/padding, ../../../utils/bytes,
   ../../stack, ../../computation, ../../stack, ../../memory, ../../message,
@@ -14,7 +14,7 @@ import
   ../opcode_values, ../gas_meter, ../gas_costs
 
 export
-  stint, lenient_stint,
+  eth_types, lenient_stint,
   constants, vm_state, vm_types, vm_types,
   errors, logging, padding, bytes,
   stack, computation, stack, memory, message,

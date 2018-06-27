@@ -6,7 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  helpers, stint, strutils, ./impl_std_import
+  strutils,
+  eth_common/eth_types,
+  helpers, ./impl_std_import
 
 proc add*(computation: var BaseComputation) =
   # Addition

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables, stint,
+  tables, eth_common/eth_types,
   ../../vm_types, ./opcode_values,
   opcodes_impl/[arithmetic, comparison, sha3, context, block_ops, stack_ops, duplication, swap, memory_ops, storage, flow, logging_ops, invalid, call, system_ops]
 
@@ -51,8 +51,8 @@ const
     CallDataLoad:    callDataLoad,
     CallDataSize:    callDataSize,
     CallDataCopy:    callDataCopy,
-    CodeSize:        codesize,
-    CodeCopy:        codecopy,
+    CodeSize:        codeSize,
+    CodeCopy:        codeCopy,
     GasPrice:        gasPrice,     # TODO this wasn't used previously
     ExtCodeSize:     extCodeSize,
     ExtCodeCopy:     extCodeCopy,

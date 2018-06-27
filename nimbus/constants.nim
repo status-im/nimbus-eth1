@@ -1,6 +1,6 @@
 
 import
-  stint, math, strutils, utils/padding, eth_common
+  math, strutils, utils/padding, eth_common
 
 proc default(t: typedesc): t = discard
 

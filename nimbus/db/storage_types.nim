@@ -11,8 +11,8 @@ type
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
-    data: array[33, byte]
-    dataEndPos: uint8 # the last populated position in the data
+    data*: array[33, byte]
+    dataEndPos*: uint8 # the last populated position in the data
 
   StorageError* = object of Exception
 

@@ -5,10 +5,13 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  ./test_code_stream,
-        ./test_gas_meter,
-        ./test_memory,
-        ./test_stack,
-        ./test_opcode,
-        ./test_storage_backends
-        # ./test_vm_json
+when false:
+  import  ./test_code_stream,
+          ./test_gas_meter,
+          ./test_memory,
+          ./test_stack,
+          ./test_opcode,
+          ./test_storage_backends
+
+when true:
+  import  ./test_vm_json

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 
-import eth_common, ../constants, stint, strformat, times, ../validation, rlp
+import eth_common, ../constants, strformat, times, ../validation, rlp
 
 export BlockHeader
 

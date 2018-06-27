@@ -78,16 +78,15 @@ proc peek*(c: var CodeStream): Op =
 proc updatePc*(c: var CodeStream, value: int) =
   c.pc = min(value, len(c))
 
-macro seek*(c: var CodeStream, pc: int, handler: untyped): untyped =
-  let c2 = ident("c")
-  result = quote:
-    var anchorPc = `c`.pc
-    `c`.pc = `pc`
+when false:
+  template seek*(cs: var CodeStream, pc: int, handler: untyped): untyped =
+    var anchorPc = cs.pc
+    cs.pc = pc
     try:
-      var `c2` = `c`
-      `handler`
+      var c {.inject.} = cs
+      handler
     finally:
-      `c`.pc = anchorPc
+      cs.pc = anchorPc
 
 proc isValidOpcode*(c: var CodeStream, position: int): bool =
   if position >= len(c):

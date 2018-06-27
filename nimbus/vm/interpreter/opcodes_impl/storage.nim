@@ -10,7 +10,6 @@ import
   ../../../utils/header,
   ../../../db/[db_chain, state_db]
 
-
 {.this: computation.}
 {.experimental.}
 
@@ -19,12 +18,7 @@ using
 
 proc sstore*(computation) =
   let (slot, value) = stack.popInt(2)
-
-  var currentValue = 0.u256
-  var existing = false
-
-  computation.vmState.db(readOnly=false):
-    (currentValue, existing) = db.getStorage(computation.msg.storageAddress, slot)
+  var (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
 
   let
     gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: not existing)
@@ -35,17 +29,15 @@ proc sstore*(computation) =
   if gasRefund > 0:
     computation.gasMeter.refundGas(gasRefund)
 
-  computation.vmState.db(readOnly=false):
+  computation.vmState.mutateStateDB:
     db.setStorage(computation.msg.storageAddress, slot, value)
 
 proc sload*(computation) =
   let slot = stack.popInt()
-  var value = 2.u256
+  let (value, found) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
+  if found:
+    computation.stack.push value
+  else:
+    # XXX: raise exception?
+    discard
 
-  # TODO: with
-  # with computation.vm_state.state_db(read_only=True) as state_db:
-  #      value = state_db.get_storage(
-  #          address=computation.msg.storage_address,
-  #          slot=slot,
-  #      )
-  computation.stack.push(value)

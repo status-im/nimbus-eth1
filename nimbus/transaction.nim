@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, stint, errors, eth_common
+  constants, errors, eth_common
 
 type
   BaseTransaction* = ref object

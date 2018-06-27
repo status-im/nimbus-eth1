@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  eth_common/eth_types,
   ../../../logging, ../../../constants, ../../../errors,
-  stint,
   ../../../block_types,
   ../../../vm/[base, stack], ../../../db/db_chain,  ../../../utils/header,
   ./tangerine_block, ./tangerine_vm_state, ./tangerine_validation
@@ -34,4 +34,6 @@ proc newTangerineVM*(header: BlockHeader, chainDB: BaseChainDB): TangerineVM =
   result.chainDB = chainDB
   result.isStateless = true
   result.state = newTangerineVMState()
+  result.state.chaindb = result.chainDB
+  result.state.blockHeader = header
   result.`block` = makeTangerineBlock(header, @[])

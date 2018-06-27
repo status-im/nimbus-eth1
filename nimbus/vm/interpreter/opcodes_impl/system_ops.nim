@@ -8,7 +8,7 @@
 import
   strformat,
   ./call, ./impl_std_import,
-  stint, byteutils, eth_common
+  byteutils, eth_common
 
 {.this: computation.}
 {.experimental.}
@@ -32,7 +32,7 @@ method runLogic*(create: Create, computation) =
   let (pos, len) = (startPosition.toInt, size.toInt)
   computation.memory.extend(pos, len)
 
-  # TODO: with
+  # TODO: with ZZZZ
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #          insufficient_funds = state_db.get_balance(
   #              computation.msg.storage_address) < value
@@ -94,7 +94,7 @@ method runLogic*(create: CreateByzantium, computation) =
 
 proc selfdestructEIP150(computation) =
   let beneficiary = stack.popAddress()
-  # TODO: with
+  # TODO: with ZZZZ
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #       if not state_db.account_exists(beneficiary):
   #           computation.gas_meter.consume_gas(
@@ -105,7 +105,7 @@ proc selfdestructEIP150(computation) =
 
 proc selfdestructEIP161(computation) =
   let beneficiary = stack.popAddress()
-  # TODO: with
+  # TODO: with ZZZZ
   # with computation.vm_state.state_db(read_only=True) as state_db:
   #       is_dead = (
   #          not state_db.account_exists(beneficiary) or
@@ -119,7 +119,7 @@ proc selfdestructEIP161(computation) =
   #  _selfdestruct(computation, beneficiary)
 
 proc selfdestruct(computation; beneficiary: EthAddress) =
-  discard # TODO: with
+  discard # TODO: with ZZZZ
   # with computation.vm_state.state_db() as state_db:
   #     local_balance = state_db.get_balance(computation.msg.storage_address)
   #     beneficiary_balance = state_db.get_balance(beneficiary)
