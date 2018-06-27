@@ -7,7 +7,7 @@
 
 import
   tables, sequtils, algorithm,
-  rlp, ranges, state_db, nimcrypto, eth_trie/types, eth_common, byteutils,
+  rlp, ranges, state_db, nimcrypto, eth_trie/[types, hexary], eth_common, byteutils,
   ../errors, ../block_types, ../utils/header, ../constants, ./storage_types.nim
 
 type
@@ -133,28 +133,27 @@ proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   self.db.contains(blockHash.data)
 
 iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): BytesRange =
-  doAssert(false, "TODO: Implement me")
-  # var transactionDb = HexaryTrie(self.db, transactionRoot)
-  # var transactionIdx = 0
-  # while true:
-  #   var transactionKey = rlp.encode(transactionIdx)
-  #   if transactionKey in transactionDb:
-  #     var transactionData = transactionDb[transactionKey]
-  #     yield transactionDb[transactionKey]
-  #   else:
-  #     break
-  #   inc transactionIdx
+  var transactionDb = initHexaryTrie(self.db, transactionRoot)
+  var transactionIdx = 0
+  while true:
+    let transactionKey = rlp.encode(transactionIdx).toRange
+    if transactionKey in transactionDb:
+      yield transactionDb.get(transactionKey)
+    else:
+      break
+    inc transactionIdx
 
-
-# iterator getReceipts*(self: BaseChainDB; header: BlockHeader; receiptClass: typedesc): Receipt =
-#   var receiptDb = HexaryTrie()
-#   for receiptIdx in itertools.count():
-#     var receiptKey = rlp.encode(receiptIdx)
-#     if receiptKey in receiptDb:
-#       var receiptData = receiptDb[receiptKey]
-#       yield rlp.decode(receiptData)
-#     else:
-#       break
+iterator getReceipts*(self: BaseChainDB; header: BlockHeader; receiptClass: typedesc): Receipt =
+  var receiptDb = initHexaryTrie(self.db, header.receiptRoot)
+  var receiptIdx = 0
+  while true:
+    let receiptKey = rlp.encode(receiptIdx).toRange
+    if receiptKey in receiptDb:
+      let receiptData = receiptDb.get(receiptKey)
+      yield rlp.decode(receiptData, receiptClass)
+    else:
+      break
+    inc receiptIdx
 
 iterator getBlockTransactions(self: BaseChainDB; transactionRoot: Hash256;
                               transactionClass: typedesc): transactionClass =
