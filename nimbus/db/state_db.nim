@@ -22,6 +22,7 @@ proc rootHash*(accountDb: AccountStateDB): KeccakHash =
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
                         root: KeccakHash, readOnly: bool = false): AccountStateDB =
+  result.new()
   result.trie = initHexaryTrie(backingStore, root)
 
 proc logger*(db: AccountStateDB): Logger =
