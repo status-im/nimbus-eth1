@@ -84,10 +84,8 @@ iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
       h = self.getBlockHeaderByHash(h.parentHash)
 
 proc addBlockNumberToHashLookup(self: BaseChainDB; header: BlockHeader) =
-  if not self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
-                     rlp.encode(header.hash).toOpenArray):
-    # TODO: handle this error somehow
-    discard
+  self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
+                     rlp.encode(header.hash).toOpenArray)
 
 iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader): Hash256 =
   ## Returns an iterable of the transaction hashes from th block specified
@@ -102,9 +100,7 @@ iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader):
 
 proc removeTransactionFromCanonicalChain(self: BaseChainDB, transactionHash: Hash256) {.inline.} =
   ## Removes the transaction specified by the given hash from the canonical chain.
-  if not self.db.del(transactionHashToBlockKey(transactionHash).toOpenArray):
-    # TODO: handle this error
-    discard
+  self.db.del(transactionHashToBlockKey(transactionHash).toOpenArray)
 
 proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockHeader] =
   ##         Sets the header as the canonical chain HEAD.
@@ -128,9 +124,7 @@ proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockH
   for h in newCanonicalHeaders:
     self.addBlockNumberToHashLookup(h)
 
-  if not self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(header.hash).toOpenArray):
-    # XXX: handle this error
-    discard
+  self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(header.hash).toOpenArray)
 
   return newCanonicalHeaders
 
@@ -172,15 +166,11 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   if not isGenesis and not self.headerExists(header.parentHash):
     raise newException(ParentNotFound, "Cannot persist block header " &
         $header.hash & " with unknown parent " & $header.parentHash)
-  if not self.db.put(genericHashKey(header.hash).toOpenArray, rlp.encode(header).toOpenArray):
-    # XXX: handle this error somehow
-    discard
+  self.db.put(genericHashKey(header.hash).toOpenArray, rlp.encode(header).toOpenArray)
 
   let score = if isGenesis: header.difficulty
               else: self.getScore(header.parentHash).u256 + header.difficulty
-  if not self.db.put(blockHashToScoreKey(header.hash).toOpenArray, rlp.encode(score).toOpenArray):
-    # XXX: handle this error somehow
-    discard
+  self.db.put(blockHashToScoreKey(header.hash).toOpenArray, rlp.encode(score).toOpenArray)
 
   var headScore: int
   try:
@@ -194,18 +184,14 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
 proc addTransactionToCanonicalChain(self: BaseChainDB, txHash: Hash256,
     blockHeader: BlockHeader, index: int) =
   let k: TransactionKey = (blockHeader.blockNumber, index)
-  if not self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(k).toOpenArray):
-    # XXX: handle this error somehow
-    discard
+  self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(k).toOpenArray)
 
 proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
   result = keccak256.digest(enc.toOpenArray())
-  if not self.db.put(genericHashKey(result).toOpenArray, enc.toOpenArray):
-    # XXX:
-    discard
+  self.db.put(genericHashKey(result).toOpenArray, enc.toOpenArray)
 
 proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
   ## Persist the given block's header and uncles.
