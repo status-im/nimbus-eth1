@@ -132,7 +132,7 @@ VMTests
 + mul5.json                                                       OK
 + mul6.json                                                       OK
 + mul7.json                                                       OK
-- mulUnderFlow.json                                               Fail
++ mulUnderFlow.json                                               OK
 + mulmod0.json                                                    OK
 + mulmod1.json                                                    OK
 + mulmod1_overflow.json                                           OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 191/195 Fail: 4/195 Skip: 0/195
+OK: 193/195 Fail: 2/195 Skip: 0/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -271,14 +271,14 @@ OK: 59/60 Fail: 1/60 Skip: 0/60
 + blockhashMyBlock.json                                           OK
 + blockhashNotExistingBlock.json                                  OK
 + blockhashOutOfRange.json                                        OK
-- blockhashUnderFlow.json                                         Fail
++ blockhashUnderFlow.json                                         OK
 + coinbase.json                                                   OK
 + difficulty.json                                                 OK
 + gaslimit.json                                                   OK
 + number.json                                                     OK
 + timestamp.json                                                  OK
 ```
-OK: 11/12 Fail: 1/12 Skip: 0/12
+OK: 12/12 Fail: 0/12 Skip: 0/12
 ## vmEnvironmentalInfo
 ```diff
 + ExtCodeSizeAddressInputTooBigLeftMyAddress.json                 OK
@@ -348,7 +348,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + BlockNumberDynamicJumpInsidePushWithoutJumpDest.json            OK
 + BlockNumberDynamicJumpi0.json                                   OK
 + BlockNumberDynamicJumpi1.json                                   OK
-- BlockNumberDynamicJumpi1_jumpdest.json                          Fail
++ BlockNumberDynamicJumpi1_jumpdest.json                          OK
 - BlockNumberDynamicJumpiAfterStop.json                           Fail
 - BlockNumberDynamicJumpiOutsideBoundary.json                     Fail
 + BlockNumberDynamicJumpifInsidePushWithJumpDest.json             OK
@@ -359,12 +359,12 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + DynamicJump0_foreverOutOfGas.json                               OK
 + DynamicJump0_jumpdest0.json                                     OK
 + DynamicJump0_jumpdest2.json                                     OK
-- DynamicJump0_withoutJumpdest.json                               Fail
++ DynamicJump0_withoutJumpdest.json                               OK
 - DynamicJump1.json                                               Fail
 - DynamicJumpAfterStop.json                                       Fail
-- DynamicJumpInsidePushWithJumpDest.json                          Fail
-- DynamicJumpInsidePushWithoutJumpDest.json                       Fail
-- DynamicJumpJD_DependsOnJumps0.json                              Fail
++ DynamicJumpInsidePushWithJumpDest.json                          OK
++ DynamicJumpInsidePushWithoutJumpDest.json                       OK
++ DynamicJumpJD_DependsOnJumps0.json                              OK
 + DynamicJumpJD_DependsOnJumps1.json                              OK
 + DynamicJumpPathologicalTest0.json                               OK
 + DynamicJumpPathologicalTest1.json                               OK
@@ -377,7 +377,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 - DynamicJump_valueUnderflow.json                                 Fail
 + DynamicJumpi0.json                                              OK
 + DynamicJumpi1.json                                              OK
-- DynamicJumpi1_jumpdest.json                                     Fail
++ DynamicJumpi1_jumpdest.json                                     OK
 - DynamicJumpiAfterStop.json                                      Fail
 - DynamicJumpiOutsideBoundary.json                                Fail
 + DynamicJumpifInsidePushWithJumpDest.json                        OK
@@ -410,50 +410,50 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 - for_loop2.json                                                  Fail
 + gas0.json                                                       OK
 + gas1.json                                                       OK
-- gasOverFlow.json                                                Fail
++ gasOverFlow.json                                                OK
 + indirect_jump1.json                                             OK
 + indirect_jump2.json                                             OK
 + indirect_jump3.json                                             OK
 + indirect_jump4.json                                             OK
-- jump0_AfterJumpdest.json                                        Fail
-- jump0_AfterJumpdest3.json                                       Fail
-- jump0_foreverOutOfGas.json                                      Fail
++ jump0_AfterJumpdest.json                                        OK
++ jump0_AfterJumpdest3.json                                       OK
++ jump0_foreverOutOfGas.json                                      OK
 + jump0_jumpdest0.json                                            OK
 + jump0_jumpdest2.json                                            OK
-- jump0_outOfBoundary.json                                        Fail
-- jump0_withoutJumpdest.json                                      Fail
++ jump0_outOfBoundary.json                                        OK
++ jump0_withoutJumpdest.json                                      OK
 - jump1.json                                                      Fail
 - jumpAfterStop.json                                              Fail
 + jumpDynamicJumpSameDest.json                                    OK
 - jumpHigh.json                                                   Fail
-- jumpInsidePushWithJumpDest.json                                 Fail
-- jumpInsidePushWithoutJumpDest.json                              Fail
-- jumpOntoJump.json                                               Fail
++ jumpInsidePushWithJumpDest.json                                 OK
++ jumpInsidePushWithoutJumpDest.json                              OK
++ jumpOntoJump.json                                               OK
 - jumpTo1InstructionafterJump.json                                Fail
-- jumpTo1InstructionafterJump_jumpdestFirstInstruction.json       Fail
-- jumpTo1InstructionafterJump_noJumpDest.json                     Fail
++ jumpTo1InstructionafterJump_jumpdestFirstInstruction.json       OK
++ jumpTo1InstructionafterJump_noJumpDest.json                     OK
 - jumpToUint64maxPlus1.json                                       Fail
 - jumpToUintmaxPlus1.json                                         Fail
 + jumpdestBigList.json                                            OK
-- jumpi0.json                                                     Fail
++ jumpi0.json                                                     OK
 + jumpi1.json                                                     OK
-- jumpi1_jumpdest.json                                            Fail
++ jumpi1_jumpdest.json                                            OK
 - jumpiAfterStop.json                                             Fail
 - jumpiOutsideBoundary.json                                       Fail
 - jumpiToUint64maxPlus1.json                                      Fail
 - jumpiToUintmaxPlus1.json                                        Fail
 + jumpi_at_the_end.json                                           OK
-- jumpifInsidePushWithJumpDest.json                               Fail
-- jumpifInsidePushWithoutJumpDest.json                            Fail
++ jumpifInsidePushWithJumpDest.json                               OK
++ jumpifInsidePushWithoutJumpDest.json                            OK
 - kv1.json                                                        Fail
-- log1MemExp.json                                                 Fail
++ log1MemExp.json                                                 OK
 + loop_stacklimit_1020.json                                       OK
-- loop_stacklimit_1021.json                                       Fail
++ loop_stacklimit_1021.json                                       OK
 - memory1.json                                                    Fail
 + mloadError0.json                                                OK
 - mloadError1.json                                                Fail
-- mloadMemExp.json                                                Fail
-- mloadOutOfGasError2.json                                        Fail
++ mloadMemExp.json                                                OK
++ mloadOutOfGasError2.json                                        OK
 + msize0.json                                                     OK
 + msize1.json                                                     OK
 + msize2.json                                                     OK
@@ -470,10 +470,10 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + pc0.json                                                        OK
 + pc1.json                                                        OK
 + pop0.json                                                       OK
-- pop1.json                                                       Fail
-- return1.json                                                    Fail
++ pop1.json                                                       OK
++ return1.json                                                    OK
 - return2.json                                                    Fail
-- sha3MemExp.json                                                 Fail
++ sha3MemExp.json                                                 OK
 + sstore_load_0.json                                              OK
 - sstore_load_1.json                                              Fail
 - sstore_load_2.json                                              Fail
@@ -567,7 +567,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + dup15.json                                                      OK
 + dup16.json                                                      OK
 + dup2.json                                                       OK
-- dup2error.json                                                  Fail
++ dup2error.json                                                  OK
 + dup3.json                                                       OK
 + dup4.json                                                       OK
 + dup5.json                                                       OK
@@ -607,7 +607,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + push32Undefined.json                                            OK
 + push32Undefined2.json                                           OK
 + push32Undefined3.json                                           OK
-- push33.json                                                     Fail
++ push33.json                                                     OK
 + push4.json                                                      OK
 + push5.json                                                      OK
 + push6.json                                                      OK
@@ -623,7 +623,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + swap15.json                                                     OK
 + swap16.json                                                     OK
 + swap2.json                                                      OK
-- swap2error.json                                                 Fail
++ swap2error.json                                                 OK
 + swap3.json                                                      OK
 + swap4.json                                                      OK
 + swap5.json                                                      OK

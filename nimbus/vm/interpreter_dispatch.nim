@@ -9,7 +9,7 @@ import
   tables, macros,
   ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter],
   ./code_stream,
-  ../vm_types
+  ../vm_types, ../errors
 
 static:
   let
@@ -224,7 +224,10 @@ proc executeOpcodes*(computation: var BaseComputation) =
 
   let fork = computation.vmState.blockHeader.blockNumber.toFork
 
-  case fork
-  of FkFrontier: computation.frontierVM()
-  else:
-    raise newException(ValueError, "not implemented fork: " & $fork)
+  try: # TODO logging similar to the "inComputation" template
+    case fork
+    of FkFrontier: computation.frontierVM()
+    else:
+      raise newException(ValueError, "not implemented fork: " & $fork)
+  except VMError:
+    computation.error = Error(info: getCurrentExceptionMsg())
