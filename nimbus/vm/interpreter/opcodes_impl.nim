@@ -726,7 +726,6 @@ op returnOp, FkFrontier, inline = false, startPos, size:
   computation.memory.extend(pos, len)
   let output = computation.memory.read(pos, len)
   computation.output = output.toString
-  raise newException(HaltError, "RETURN")
 
 op revert, FkByzantium, inline = false, startPos, size:
   ## 0xf0, Halt execution reverting state changes but returning data and remaining gas.
@@ -740,7 +739,6 @@ op revert, FkByzantium, inline = false, startPos, size:
   computation.memory.extend(pos, len)
   let output = computation.memory.read(pos, len).toString
   computation.output = output
-  raise newException(RevertError, $output)
 
 op selfDestruct, FkFrontier, inline = false:
   ## 0xff Halt execution and register account for later deletion.
@@ -749,4 +747,3 @@ op selfDestruct, FkFrontier, inline = false:
   ## TODO
 
   computation.registerAccountForDeletion(beneficiary)
-  raise newException(HaltError, "SELFDESTRUCT")

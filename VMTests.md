@@ -23,8 +23,8 @@ VMTests
 + addmodDivByZero1.json                                           OK
 + addmodDivByZero2.json                                           OK
 + addmodDivByZero3.json                                           OK
-- arith1.json                                                     Fail
-- div1.json                                                       Fail
++ arith1.json                                                     OK
++ div1.json                                                       OK
 + divBoostBug.json                                                OK
 + divByNonZero0.json                                              OK
 + divByNonZero1.json                                              OK
@@ -131,7 +131,7 @@ VMTests
 + mul4.json                                                       OK
 + mul5.json                                                       OK
 + mul6.json                                                       OK
-- mul7.json                                                       Fail
++ mul7.json                                                       OK
 - mulUnderFlow.json                                               Fail
 + mulmod0.json                                                    OK
 + mulmod1.json                                                    OK
@@ -144,7 +144,7 @@ VMTests
 + mulmod2_1.json                                                  OK
 + mulmod3.json                                                    OK
 + mulmod3_0.json                                                  OK
-- mulmod4.json                                                    Fail
++ mulmod4.json                                                    OK
 + mulmoddivByZero.json                                            OK
 + mulmoddivByZero1.json                                           OK
 + mulmoddivByZero2.json                                           OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 185/195 Fail: 10/195 Skip: 0/195
+OK: 191/195 Fail: 4/195 Skip: 0/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -411,9 +411,9 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + gas0.json                                                       OK
 + gas1.json                                                       OK
 - gasOverFlow.json                                                Fail
-- indirect_jump1.json                                             Fail
-- indirect_jump2.json                                             Fail
-- indirect_jump3.json                                             Fail
++ indirect_jump1.json                                             OK
++ indirect_jump2.json                                             OK
++ indirect_jump3.json                                             OK
 + indirect_jump4.json                                             OK
 - jump0_AfterJumpdest.json                                        Fail
 - jump0_AfterJumpdest3.json                                       Fail
@@ -424,7 +424,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 - jump0_withoutJumpdest.json                                      Fail
 - jump1.json                                                      Fail
 - jumpAfterStop.json                                              Fail
-- jumpDynamicJumpSameDest.json                                    Fail
++ jumpDynamicJumpSameDest.json                                    OK
 - jumpHigh.json                                                   Fail
 - jumpInsidePushWithJumpDest.json                                 Fail
 - jumpInsidePushWithoutJumpDest.json                              Fail
@@ -447,7 +447,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 - jumpifInsidePushWithoutJumpDest.json                            Fail
 - kv1.json                                                        Fail
 - log1MemExp.json                                                 Fail
-- loop_stacklimit_1020.json                                       Fail
++ loop_stacklimit_1020.json                                       OK
 - loop_stacklimit_1021.json                                       Fail
 - memory1.json                                                    Fail
 + mloadError0.json                                                OK
@@ -602,7 +602,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + push30.json                                                     OK
 + push31.json                                                     OK
 + push32.json                                                     OK
-- push32AndSuicide.json                                           Fail
++ push32AndSuicide.json                                           OK
 + push32FillUpInputWithZerosAtTheEnd.json                         OK
 + push32Undefined.json                                            OK
 + push32Undefined2.json                                           OK
@@ -722,6 +722,6 @@ OK: 0/36 Fail: 0/36 Skip: 36/36
 - arith.json                                                      Fail
 - boolean.json                                                    Fail
 - mktx.json                                                       Fail
-- suicide.json                                                    Fail
++ suicide.json                                                    OK
 ```
-OK: 0/4 Fail: 4/4 Skip: 0/4
+OK: 1/4 Fail: 3/4 Skip: 0/4

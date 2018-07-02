@@ -68,11 +68,14 @@ proc len*(c: CodeStream): int =
   len(c.bytes)
 
 proc next*(c: var CodeStream): Op =
-  var nextOpcode = c.read(1)
-  if nextOpcode.len != 0:
-    return Op(nextOpcode[0])
+  if c.pc != c.bytes.len:
+    result = Op(c.bytes[c.pc])
+    if result in {Return, Revert, SelfDestruct}:
+      c.pc = c.bytes.len # TODO: hack to halt execution, but this should be in the proc not the program counter
+    else:
+      inc c.pc
   else:
-    return Op.STOP
+    result = Stop
 
 iterator items*(c: var CodeStream): Op =
   var nextOpcode = c.next()
