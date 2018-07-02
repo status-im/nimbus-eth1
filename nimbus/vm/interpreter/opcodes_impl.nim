@@ -283,11 +283,11 @@ op extCodeCopy, FkFrontier, inline = true, memStartPos, copyStartPos, size:
 
   # TODO implementation
 
-op returnDataSize, FkFrontier, inline = true:
+op returnDataSize, FkByzantium, inline = true:
   ## 0x3d, Get size of output data from the previous call from the current environment.
   push: computation.returnData.len
 
-op returnDataCopy, FkFrontier, inline = false,  memStartPos, copyStartPos, size:
+op returnDataCopy, FkByzantium, inline = false,  memStartPos, copyStartPos, size:
   ## 0x3e, Copy output data from the previous call to memory.
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
 
@@ -544,27 +544,92 @@ proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress
   let sender = computation.msg.storageAddress
 
   result = (gas,
-   value,
-   to,
-   sender,
-   codeAddress,
-   memoryInputStartPosition,
-   memoryInputSize,
-   memoryOutputStartPosition,
-   memoryOutputSize,
-   true,  # should_transfer_value,
-   computation.msg.isStatic)
+    value,
+    to,
+    sender,
+    codeAddress,
+    memoryInputStartPosition,
+    memoryInputSize,
+    memoryOutputStartPosition,
+    memoryOutputSize,
+    true,  # should_transfer_value,
+    computation.msg.isStatic)
 
+proc callCodeParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+  let gas = computation.stack.popInt()
+  let to = computation.stack.popAddress()
 
-template genCall(ForkName: untyped): untyped =
-  op call, ForkName, inline = false:
-    # 0xf1, Message-Call into an account
+  let (value,
+       memoryInputStartPosition, memoryInputSize,
+       memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(5)
+
+  result = (gas,
+    value,
+    to,
+    ZERO_ADDRESS,  # sender
+    ZERO_ADDRESS,  # code_address
+    memoryInputStartPosition,
+    memoryInputSize,
+    memoryOutputStartPosition,
+    memoryOutputSize,
+    true,  # should_transfer_value,
+    computation.msg.isStatic)
+
+proc delegateCallParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+  let gas = computation.stack.popInt()
+  let codeAddress = computation.stack.popAddress()
+
+  let (memoryInputStartPosition, memoryInputSize,
+       memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
+
+  let to = computation.msg.storageAddress
+  let sender = computation.msg.storageAddress
+  let value = computation.msg.value
+
+  result = (gas,
+    value,
+    to,
+    sender,
+    codeAddress,
+    memoryInputStartPosition,
+    memoryInputSize,
+    memoryOutputStartPosition,
+    memoryOutputSize,
+    false,  # should_transfer_value,
+    computation.msg.isStatic)
+
+proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
+  let gas = computation.stack.popInt()
+  let to = computation.stack.popAddress()
+
+  let (memoryInputStartPosition, memoryInputSize,
+       memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
+
+  result = (gas,
+    0.u256, # value
+    to,
+    ZERO_ADDRESS, # sender
+    ZERO_ADDRESS, # codeAddress
+    memoryInputStartPosition,
+    memoryInputSize,
+    memoryOutputStartPosition,
+    memoryOutputSize,
+    false,  # should_transfer_value,
+    true) # is_static
+
+template genCall(callName, ForkName: untyped): untyped =
+  op callName, ForkName, inline = false:
+    ## CALL, 0xf1, Message-Call into an account
+    ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
+    ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
+    ## STATICCALL, 0xfa, Static message-call into an account.
+
     let (gas, value, to, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
           memoryOutputStartPosition, memoryOutputSize,
           shouldTransferValue,
-          isStatic) = callParams(computation)
+          isStatic) = `callName Params`(computation)
 
     let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.toInt, memoryInputSize.toInt, memoryOutputStartPosition.toInt, memoryOutputSize.toInt)
 
@@ -644,4 +709,44 @@ template genCall(ForkName: untyped): untyped =
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-genCall(FkFrontier)
+genCall(call, FkFrontier)
+genCall(callCode, FkFrontier)
+genCall(delegateCall, FkFrontier)
+genCall(staticCall, FkByzantium)
+
+op returnOp, FkFrontier, inline = false, startPos, size:
+  ## 0xf3, Halt execution returning output data.
+  let (pos, len) = (startPos.toInt, size.toInt)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[Return].m_handler(computation.memory.len, pos, len),
+    reason = "RETURN"
+    )
+
+  computation.memory.extend(pos, len)
+  let output = computation.memory.read(pos, len)
+  computation.output = output.toString
+  raise newException(HaltError, "RETURN")
+
+op revert, FkByzantium, inline = false, startPos, size:
+  ## 0xf0, Halt execution reverting state changes but returning data and remaining gas.
+  let (pos, len) = (startPos.toInt, size.toInt)
+
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[Revert].m_handler(computation.memory.len, pos, len),
+    reason = "REVERT"
+    )
+
+  computation.memory.extend(pos, len)
+  let output = computation.memory.read(pos, len).toString
+  computation.output = output
+  raise newException(RevertError, $output)
+
+op selfDestruct, FkFrontier, inline = false:
+  ## 0xff Halt execution and register account for later deletion.
+  let beneficiary = computation.stack.popAddress()
+
+  ## TODO
+
+  computation.registerAccountForDeletion(beneficiary)
+  raise newException(HaltError, "SELFDESTRUCT")
