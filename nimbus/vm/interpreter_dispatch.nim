@@ -7,7 +7,7 @@
 
 import
   tables, macros,
-  ./interpreter/[opcode_values, opcodes_impl, vm_forks],
+  ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter],
   ./code_stream,
   ../vm_types
 
@@ -188,10 +188,18 @@ proc opTableToCaseStmt(opTable: Table[Op, NimNode], computation: NimNode): NimNo
   )
 
   # Add a branch for each (opcode, proc) pair
-  for k, v in opTable.pairs:
+  for op, opImpl in opTable.pairs:
+    let branchStmt = if BaseGasCosts[op].kind == GckFixed:
+        let asOp = quote do: Op(`op`) # TODO: unfortunately when passing to runtime, Op are transformed into int
+        quote do:
+          `computation`.gasMeter.consumeGas(`computation`.gasCosts[`asOp`].cost, reason = $`asOp`)
+          `opImpl`(`computation`)
+      else:
+        quote do: `opImpl`(`computation`)
+
     result.add nnkOfBranch.newTree(
-      newIdentNode($k),
-      nnkCall.newTree(v, computation)
+      newIdentNode($op),
+      branchStmt
     )
 
   # Everything else is an error
@@ -202,7 +210,7 @@ proc opTableToCaseStmt(opTable: Table[Op, NimNode], computation: NimNode): NimNo
   # Wrap the case statement in while true + computed goto
   result = quote do:
     while true:
-      {.computedGoto.}
+      # {.computedGoto.} # TODO: case statement must be exhaustive
       let `instr` = `computation`.code.next
       `result`
 
@@ -212,7 +220,7 @@ macro genFrontierDispatch(computation: BaseComputation): untyped =
 proc frontierVM(computation: var BaseComputation) =
   genFrontierDispatch(computation)
 
-proc executeOpcodes(computation: var BaseComputation) =
+proc executeOpcodes*(computation: var BaseComputation) =
 
   let fork = computation.vmState.blockHeader.blockNumber.toFork
 

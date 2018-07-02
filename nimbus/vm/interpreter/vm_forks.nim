@@ -42,6 +42,7 @@ proc toFork*(blockNumber: UInt256): Fork =
   #       hence binary search is probably worth it earlier than
   #       linear search
 
+  # Genesis block 0 also uses the Frontier code path
   if blockNumber < forkBlocks[FkThawing]:     FkFrontier
   elif blockNumber < forkBlocks[FkHomestead]: FkThawing
   elif blockNumber < forkBlocks[FkDao]:       FkHomestead
