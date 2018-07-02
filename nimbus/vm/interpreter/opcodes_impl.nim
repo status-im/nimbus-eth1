@@ -151,12 +151,12 @@ op byteOp, FkFrontier, inline = true, position, value:
   let pos = position.toInt
 
   push:
-    if pos >= 32: zero(Uint256)
+    if pos >= 32 or pos < 0: zero(Uint256)
     else:
       when system.cpuEndian == bigEndian:
-        cast[array[256, byte]](value)[pos].u256
+        cast[array[32, byte]](value)[pos].u256
       else:
-        cast[array[256, byte]](value)[255 - pos].u256
+        cast[array[32, byte]](value)[31 - pos].u256
 
 # ##########################################
 # 20s: SHA3

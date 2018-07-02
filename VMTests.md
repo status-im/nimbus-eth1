@@ -209,7 +209,7 @@ OK: 193/195 Fail: 2/195 Skip: 0/195
 + and5.json                                                       OK
 + byte0.json                                                      OK
 + byte1.json                                                      OK
-- byte10.json                                                     Fail
++ byte10.json                                                     OK
 + byte11.json                                                     OK
 + byte2.json                                                      OK
 + byte3.json                                                      OK
@@ -262,7 +262,7 @@ OK: 193/195 Fail: 2/195 Skip: 0/195
 + xor4.json                                                       OK
 + xor5.json                                                       OK
 ```
-OK: 59/60 Fail: 1/60 Skip: 0/60
+OK: 60/60 Fail: 0/60 Skip: 0/60
 ## vmBlockInfoTest
 ```diff
 + blockhash257Block.json                                          OK
