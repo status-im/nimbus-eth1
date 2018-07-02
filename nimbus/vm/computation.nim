@@ -261,32 +261,33 @@ template run*(opcode: Opcode, computation: var BaseComputation) =
 method logger*(opcode: Opcode): Logger =
   logging.getLogger(&"vm.opcode.{opcode.kind}")
 
-macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
-  # Perform the computation that would be triggered by the VM message
-  # c.applyComputation(vmState, message)
-  var typ = repr(getType(t)[1]).split(":", 1)[0]
-  var name = ident(&"new{typ}")
-  var typName = ident(typ)
-  result = quote:
-    block:
-      var res: `typName`
-      var c = `t` # `name`(`vmState`, `message`)
-      var handler = proc: `typName` =
-        # TODO
-        # if `message`.codeAddress in c.precompiles:
-        #   c.precompiles[`message`.codeAddress].run(c)
-        #   return c
+# replace by executeOpcodes
+# macro applyComputation*(t: typed, vmState: untyped, message: untyped): untyped =
+#   # Perform the computation that would be triggered by the VM message
+#   # c.applyComputation(vmState, message)
+#   var typ = repr(getType(t)[1]).split(":", 1)[0]
+#   var name = ident(&"new{typ}")
+#   var typName = ident(typ)
+#   result = quote:
+#     block:
+#       var res: `typName`
+#       var c = `t` # `name`(`vmState`, `message`)
+#       var handler = proc: `typName` =
+#         # TODO
+#         # if `message`.codeAddress in c.precompiles:
+#         #   c.precompiles[`message`.codeAddress].run(c)
+#         #   return c
 
-        for op in c.code:
-          var opcode = c.getOpcodeFn(op)
-          c.logger.trace(
-            "OPCODE: 0x$1 ($2) | pc: $3" % [opcode.kind.int.toHex(2), $opcode.kind, $max(0, c.code.pc - 1)])
-          try:
-            opcode.run(c)
-          except HaltError:
-            break
-          c.logger.log($c.stack & "\n\n", fgGreen)
-        return c
-      inComputation(c):
-        res = handler()
-      c
+#         for op in c.code:
+#           var opcode = c.getOpcodeFn(op)
+#           c.logger.trace(
+#             "OPCODE: 0x$1 ($2) | pc: $3" % [opcode.kind.int.toHex(2), $opcode.kind, $max(0, c.code.pc - 1)])
+#           try:
+#             opcode.run(c)
+#           except HaltError:
+#             break
+#           c.logger.log($c.stack & "\n\n", fgGreen)
+#         return c
+#       inComputation(c):
+#         res = handler()
+#       c
