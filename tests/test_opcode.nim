@@ -46,7 +46,7 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
   result.opcodes = OpLogic # TODO remove this need
   result.precompiles = initTable[string, Opcode]()
 
-  result.executeOpcodes
+  result.executeOpcodes()
 
 suite "opcodes":
   test "add":

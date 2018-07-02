@@ -74,7 +74,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   computation.opcodes = OpLogic
   computation.precompiles = initTable[string, Opcode]()
 
-  computation = computation.applyComputation(vm.state, message)
+  computation.executeOpcodes()
 
   if not fixture{"post"}.isNil:
     # Success checks
