@@ -172,9 +172,6 @@ op sha3, FkFrontier, inline = true, startPos, length:
 
   computation.memory.extend(pos, len)
   let endRange = min(pos + len, computation.memory.len - 1)
-  debugecho: "pos: " & $pos
-  debugecho: "endRange: " & $endRange
-  debugecho: "memBytes length: " & $computation.memory.bytes.len
   push:
     keccak256.digest computation.memory.bytes.toOpenArray(pos, endRange)
 
@@ -209,10 +206,10 @@ op callDataLoad, FkFrontier, inline = false, startPos:
   let start = startPos.toInt
 
   # If the data does not take 32 bytes, pad with zeros
-  let lim = min(computation.msg.data.len, start + 32)
-  let padding = start + 32 - lim
+  let endRange = min(computation.msg.data.len - 1, start + 31)
+  let padding = start + 31 - endRange
   var value: array[32, byte] # We rely on value being initialized with 0 by default
-  value[padding ..< lim] = computation.msg.data.toOpenArray(start, start + lim)
+  value[padding ..< 32] = computation.msg.data.toOpenArray(start, endRange)
 
   push: value # TODO, with the new implementation we can delete push for seq[byte]
 
