@@ -9,7 +9,8 @@ import
   tables, macros,
   ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter],
   ./code_stream,
-  ../vm_types, ../errors
+  ../vm_types, ../errors,
+  ../logging, ./stack, ./computation, terminal # Those are only needed for logging
 
 let FrontierOpDispatch {.compileTime.}: Table[Op, NimNode] = {
   # Stop: special cased
@@ -219,6 +220,8 @@ proc opTableToCaseStmt(opTable: Table[Op, NimNode], computation: NimNode): NimNo
     var `instr` = `computation`.code.next()
     while true:
       # {.computedGoto.} # TODO: case statement must be exhaustive
+
+      `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
       `result`
 
 macro genFrontierDispatch(computation: BaseComputation): untyped =

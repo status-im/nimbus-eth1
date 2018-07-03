@@ -48,7 +48,7 @@ method newBaseComputation*(vmState: TangerineVMState, message: Message): BaseCom
   result.rawOutput = "0x"
   result.gasCosts = TangerineGasCosts
 
-method logger*(computation: BaseComputation): Logger =
+proc logger*(computation: BaseComputation): Logger =
   logging.getLogger("vm.computation.BaseComputation")
 
 method applyMessage*(c: var BaseComputation): BaseComputation =
@@ -59,7 +59,7 @@ method applyCreateMessage(c: var BaseComputation): BaseComputation =
   # Execution of an VM message to create a new contract
   raise newException(ValueError, "Must be implemented by subclasses")
 
-method isOriginComputation*(c: BaseComputation): bool =
+proc isOriginComputation*(c: BaseComputation): bool =
   # Is this computation the computation initiated by a transaction
   c.msg.isOrigin
 
@@ -69,10 +69,10 @@ template isSuccess*(c: BaseComputation): bool =
 template isError*(c: BaseComputation): bool =
   not c.isSuccess
 
-method shouldBurnGas*(c: BaseComputation): bool =
+proc shouldBurnGas*(c: BaseComputation): bool =
   c.isError and c.error.burnsGas
 
-method shouldEraseReturnData*(c: BaseComputation): bool =
+proc shouldEraseReturnData*(c: BaseComputation): bool =
   c.isError and c.error.erasesReturnData
 
 method prepareChildMessage*(
