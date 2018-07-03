@@ -52,15 +52,17 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     code = stringFromBytes db.getCode(address)
 
   code = fexec{"code"}.getStr
+  let toAddress = fexec{"address"}.getStr.parseAddress
   let message = newMessage(
-      to = fexec{"address"}.getStr.parseAddress,
+      to = toAddress,
       sender = fexec{"caller"}.getStr.parseAddress,
       value = cast[uint](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
       data = fexec{"data"}.getStr.mapIt(it.byte),
       code = code,
       gas = fexec{"gas"}.getHexadecimalInt,
       gasPrice = fexec{"gasPrice"}.getHexadecimalInt,
-      options = newMessageOptions(origin=fexec{"origin"}.getStr.parseAddress))
+      options = newMessageOptions(origin=fexec{"origin"}.getStr.parseAddress,
+                                  createAddress = toAddress))
 
   #echo fixture{"exec"}
   var c = newCodeStreamFromUnescaped(code)
@@ -120,10 +122,11 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       check(gasLimit == childComputation.msg.gas)
       check(value == childComputation.msg.value)
       # TODO postState = fixture{"post"}
+
+    if not fixture{"post"}.isNil:
+      verifyStateDb(fixture{"post"}, computation.vmState.readOnlyStateDB)
   else:
       # Error checks
       check(computation.isError)
       # TODO postState = fixture{"pre"}
-
-  # TODO with vm.state.stateDb(readOnly=True) as stateDb:
-  #    verifyStateDb(postState, stateDb)
+  

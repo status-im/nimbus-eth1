@@ -64,18 +64,11 @@ proc setBalance*(db: var AccountStateDB, address: EthAddress, balance: UInt256) 
 proc deltaBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) + delta)
 
-proc stringToByteRange*(str: string): ByteRange =
-  # TODO: There might be a more efficient way to
-  # implement this without creating a copy.
-  var res = newSeq[byte](str.len)
-  copyMem(addr res[0], unsafeAddr str[0], str.len)
-  return res.toRange
-
 template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
   # Converts a number to hex big-endian representation including
   # prefix and leading zeros:
-  stringToByteRange("0x" & slot.dumpHex)
+  @(keccak256.digest(slot.toByteArrayBE).data).toRange
   # Original py-evm code:
   # pad32(int_to_big_endian(slot))
 
@@ -87,16 +80,16 @@ proc setStorage*(db: var AccountStateDB,
   validateCanonicalAddress(address, title="Storage Address")
 
   var account = db.getAccount(address)
-  var storage = initHexaryTrie(db.trie.db, account.storageRoot)
+  var accountTrie = initHexaryTrie(db.trie.db, account.storageRoot)
   let slotAsKey = createTrieKeyFromSlot slot
 
   if value > 0:
     let encodedValue = rlp.encode value
-    storage.put(slotAsKey, encodedValue)
+    accountTrie.put(slotAsKey, encodedValue)
   else:
-    storage.del(slotAsKey)
+    accountTrie.del(slotAsKey)
 
-  account.storageRoot = storage.rootHash
+  account.storageRoot = accountTrie.rootHash
   db.setAccount(address, account)
 
 proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) =
@@ -106,8 +99,10 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
   let
     account = db.getAccount(address)
     slotAsKey = createTrieKeyFromSlot slot
-    storage = initHexaryTrie(db.trie.db, account.storageRoot)
-    foundRecord = storage.get(slotAsKey)
+    accountTrie = initHexaryTrie(db.trie.db, account.storageRoot)
+
+  let
+    foundRecord = accountTrie.get(slotAsKey)
 
   if foundRecord.len > 0:
     result = (rlp.decode(foundRecord, UInt256), true)

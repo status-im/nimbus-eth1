@@ -7,7 +7,7 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  byteutils, eth_common, eth_keys,
+  byteutils, eth_common, eth_keys, ranges/typedranges,
   ../nimbus/utils/[address, padding],
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
@@ -83,19 +83,43 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
 
 proc ethAddressFromHex(s: string): EthAddress = hexToByteArray(s, result)
 
-proc setupStateDB*(desiredState: JsonNode, stateDB: var AccountStateDB) =
-  for ac, accountData in desiredState:
+proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
+  for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:
-      stateDB.setStorage(account, slot.parseInt.u256, value.getInt.u256)
+      stateDB.setStorage(account, slot.parseHexInt.u256, value.getInt.u256)
 
     let nonce = accountData{"nonce"}.getInt.u256
-    let code = stringToByteRange accountData{"code"}.getStr
+    let code = hexToSeqByte(accountData{"code"}.getStr).toRange
     let balance = accountData{"balance"}.getInt.u256
 
     stateDB.setNonce(account, nonce)
     stateDB.setCode(account, code)
     stateDB.setBalance(account, balance)
+
+proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
+  for ac, accountData in wantedState:
+    let account = ethAddressFromHex(ac)
+    for slot, value in accountData{"storage"}:
+      let
+        slotId = slot.parseHexInt.u256
+        wantedValue = value.getStr.parseHexInt.u256
+
+      let (actualValue, found) = stateDB.getStorage(account, slotId)
+      doAssert found and actualValue == wantedValue
+
+    let
+      wantedCode = hexToSeqByte(accountData{"code"}.getStr).toRange
+      wantedBalance = accountData{"balance"}.getInt.u256
+      wantedNonce = accountData{"nonce"}.getInt.u256
+
+      actualCode = stateDB.getCode(account)
+      actualBalance = stateDB.getBalance(account)
+      actualNonce = stateDB.getNonce(account)
+
+    doAssert wantedCode == actualCode
+    doAssert wantedBalance == actualBalance
+    doAssert wantedNonce == actualNonce
 
 proc getHexadecimalInt*(j: JsonNode): int =
   discard parseHex(j.getStr, result)

@@ -18,13 +18,14 @@ using
 
 proc sstore*(computation) =
   let (slot, value) = stack.popInt(2)
+
   var (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
 
   let
     gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: not existing)
     (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(currentValue, gasParam)
 
-  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
+  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
 
   if gasRefund > 0:
     computation.gasMeter.refundGas(gasRefund)

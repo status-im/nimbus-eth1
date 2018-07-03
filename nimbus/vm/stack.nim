@@ -29,7 +29,7 @@ proc toStackElement(v: EthAddress, elem: var StackElement) {.inline.} = elem = b
 proc toStackElement(v: MDigest, elem: var StackElement) {.inline.} = elem = readUintBE[256](v.data)
 
 proc fromStackElement(elem: StackElement, v: var UInt256) {.inline.} = v = elem
-proc fromStackElement(elem: StackElement, v: var EthAddress) {.inline.} = v[0 .. ^1] = elem.toByteArrayBE().toOpenArray(0, 19)
+proc fromStackElement(elem: StackElement, v: var EthAddress) {.inline.} = v[0 .. ^1] = elem.toByteArrayBE().toOpenArray(12, 31)
 proc fromStackElement(elem: StackElement, v: var Hash256) {.inline.} = v.data = elem.toByteArrayBE()
 
 proc toStackElement(v: seq[byte], elem: var StackElement) {.inline.} =

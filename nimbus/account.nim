@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, rlp, eth_common
+  constants, errors, eth_common, rlp, eth_common/eth_types
 
 type
   Account* = object
@@ -15,7 +15,9 @@ type
     storageRoot*:       Hash256
     codeHash*:          Hash256
 
-rlpFields Account, nonce, balance
-
 proc newAccount*(nonce: UInt256 = 0.u256, balance: UInt256 = 0.u256): Account =
-  Account(nonce: nonce, balance: balance)
+  result.nonce = nonce
+  result.balance = balance
+  result.storageRoot = BLANK_ROOT_HASH
+  result.codeHash = EMPTY_SHA3
+
