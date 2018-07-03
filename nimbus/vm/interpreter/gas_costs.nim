@@ -552,3 +552,9 @@ const
 
 gasCosts(BaseGasFees, base, BaseGasCosts)
 gasCosts(TangerineGasFees, tangerine, TangerineGasCosts)
+
+proc forkToSchedule*(fork: Fork): GasCosts =
+  if fork < FkTangerine:
+    BaseGasCosts
+  else:
+    TangerineGasCosts

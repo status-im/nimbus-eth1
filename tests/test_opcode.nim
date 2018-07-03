@@ -17,14 +17,11 @@ import
 from eth_common import GasInt
 
 proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputation =
-  let header = BlockHeader(blockNumber: blockNum)
-  var memDb = newMemDB()
-  var vm = newNimbusVM(header, newBaseChainDB(trieDB memDb))
-    # coinbase: "",
-    # difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
-    # blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
-    # gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
-    # timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt)
+  # coinbase: "",
+  # difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
+  # blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
+  # gasLimit: fixture{"env"}{"currentGasLimit"}.getHexadecimalInt.u256,
+  # timestamp: fixture{"env"}{"currentTimestamp"}.getHexadecimalInt)
 
   let message = newMessage(
     to=ZERO_ADDRESS, #fixture{"exec"}{"address"}.getStr,
@@ -42,7 +39,7 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
   if DEBUG:
     c.displayDecompiled()
 
-  result = newBaseComputation(vm.state, message)
+  result = newBaseComputation(blockNum, message)
   result.precompiles = initTable[string, Opcode]()
 
   result.executeOpcodes()

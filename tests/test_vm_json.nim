@@ -32,6 +32,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   for label, child in fixtures:
     fixture = child
     break
+
   let fenv = fixture["env"]
   var emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
   let header = BlockHeader(
@@ -42,12 +43,11 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,
     stateRoot: emptyRlpHash
     )
-  var memDb = newMemDB()
-  var vm = newNimbusVM(header, newBaseChainDB(trieDB memDb))
 
+  var vmState = newBaseVMState()
   let fexec = fixture["exec"]
   var code = ""
-  vm.state.mutateStateDB:
+  vmState.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
     let address = fexec{"address"}.getStr.parseAddress
     code = stringFromBytes db.getCode(address)
@@ -70,7 +70,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   if DEBUG:
     c.displayDecompiled()
 
-  var computation = newBaseComputation(vm.state, message)
+  var computation = newBaseComputation(header.blockNumber, message)
+  computation.vmState = vmState
   computation.precompiles = initTable[string, Opcode]()
 
   computation.executeOpcodes()
@@ -129,4 +130,4 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       # Error checks
       check(computation.isError)
       # TODO postState = fixture{"pre"}
-  
+

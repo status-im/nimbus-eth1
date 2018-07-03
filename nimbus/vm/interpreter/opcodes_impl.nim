@@ -525,7 +525,10 @@ template genCreate(ForkName: untyped): untyped =
       options = MessageOptions(createAddress: contractAddress)
       )
 
-    let childComputation = applyChildBaseComputation(computation, childMsg)
+    # let childComputation = applyChildBaseComputation(computation, childMsg)
+    var childComputation: BaseComputation # TODO - stub
+    new childComputation
+    childComputation.gasMeter = newGasMeter(0) # TODO GasMeter should be a normal object.
 
     if childComputation.isError:
       push: 0

@@ -125,21 +125,3 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
 
 proc getHexadecimalInt*(j: JsonNode): int =
   discard parseHex(j.getStr, result)
-
-method newTransaction*(
-  vm: VM, addr_from, addr_to: EthAddress,
-  amount: UInt256,
-  private_key: PrivateKey,
-  gas_price = 10.u256,
-  gas = 100000.u256,
-  data: seq[byte] = @[]
-): BaseTransaction =
-  # TODO: amount should be an Int to deal with negatives
-  new result
-
-  # Todo getStateDB is incomplete
-  let nonce = vm.state.readOnlyStateDB.getNonce(addr_from)
-
-  # TODO
-  # if !private key: create_unsigned_transaction
-  # else: create_signed_transaction

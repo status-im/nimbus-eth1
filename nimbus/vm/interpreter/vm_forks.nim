@@ -5,13 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  eth_common/eth_types,
-  ../../db/db_chain, ../../constants,
-  ../../utils/header,
-  ../base,
-  ../forks/f20150730_frontier/frontier_vm,
-  ../forks/f20161018_tangerine_whistle/tangerine_vm
+import  stint
 
 type
   Fork* = enum
@@ -42,6 +36,9 @@ proc toFork*(blockNumber: UInt256): Fork =
   #       hence binary search is probably worth it earlier than
   #       linear search
 
+  # TODO: all toFork usage currently incurs comparison to get the fork and then another comparison to
+  #       go to the ultimate needed result.
+
   # Genesis block 0 also uses the Frontier code path
   if blockNumber < forkBlocks[FkThawing]:     FkFrontier
   elif blockNumber < forkBlocks[FkHomestead]: FkThawing
@@ -51,11 +48,3 @@ proc toFork*(blockNumber: UInt256): Fork =
   elif blockNumber < forkBlocks[FkByzantium]: FkSpurious
   else:
     FkByzantium # Update for constantinople when announced
-
-proc newNimbusVM*(header: BlockHeader, chainDB: BaseChainDB): VM =
-  # TODO - remove inherited VM
-  # TODO: deal with empty BlockHeader
-  if header.blockNumber < forkBlocks[FkTangerine]:
-    result = newFrontierVM(header, chainDB)
-  else:
-    result = newTangerineVM(header, chainDB)
