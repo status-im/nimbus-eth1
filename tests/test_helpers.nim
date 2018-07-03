@@ -11,7 +11,7 @@ import
   ../nimbus/utils/[address, padding],
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
-  ../nimbus/vm/base, ../nimbus/transaction
+  ../nimbus/transaction
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
