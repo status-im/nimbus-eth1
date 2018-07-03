@@ -360,7 +360,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + DynamicJump0_jumpdest0.json                                     OK
 + DynamicJump0_jumpdest2.json                                     OK
 + DynamicJump0_withoutJumpdest.json                               OK
-- DynamicJump1.json                                               Fail
++ DynamicJump1.json                                               OK
 - DynamicJumpAfterStop.json                                       Fail
 + DynamicJumpInsidePushWithJumpDest.json                          OK
 + DynamicJumpInsidePushWithoutJumpDest.json                       OK
@@ -422,10 +422,10 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + jump0_jumpdest2.json                                            OK
 + jump0_outOfBoundary.json                                        OK
 + jump0_withoutJumpdest.json                                      OK
-- jump1.json                                                      Fail
++ jump1.json                                                      OK
 - jumpAfterStop.json                                              Fail
 + jumpDynamicJumpSameDest.json                                    OK
-- jumpHigh.json                                                   Fail
++ jumpHigh.json                                                   OK
 + jumpInsidePushWithJumpDest.json                                 OK
 + jumpInsidePushWithoutJumpDest.json                              OK
 + jumpOntoJump.json                                               OK
@@ -433,7 +433,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + jumpTo1InstructionafterJump_jumpdestFirstInstruction.json       OK
 + jumpTo1InstructionafterJump_noJumpDest.json                     OK
 - jumpToUint64maxPlus1.json                                       Fail
-- jumpToUintmaxPlus1.json                                         Fail
++ jumpToUintmaxPlus1.json                                         OK
 + jumpdestBigList.json                                            OK
 + jumpi0.json                                                     OK
 + jumpi1.json                                                     OK
@@ -441,7 +441,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 - jumpiAfterStop.json                                             Fail
 - jumpiOutsideBoundary.json                                       Fail
 - jumpiToUint64maxPlus1.json                                      Fail
-- jumpiToUintmaxPlus1.json                                        Fail
++ jumpiToUintmaxPlus1.json                                        OK
 + jumpi_at_the_end.json                                           OK
 + jumpifInsidePushWithJumpDest.json                               OK
 + jumpifInsidePushWithoutJumpDest.json                            OK

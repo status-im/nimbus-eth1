@@ -70,10 +70,7 @@ proc len*(c: CodeStream): int =
 proc next*(c: var CodeStream): Op =
   if c.pc != c.bytes.len:
     result = Op(c.bytes[c.pc])
-    if result in {Return, Revert, SelfDestruct}:
-      c.pc = c.bytes.len # TODO: hack to halt execution, but this should be in the proc not the program counter
-    else:
-      inc c.pc
+    inc c.pc
   else:
     result = Stop
 
@@ -87,9 +84,10 @@ proc `[]`*(c: CodeStream, offset: int): Op =
   Op(c.bytes[offset])
 
 proc peek*(c: var CodeStream): Op =
-  var currentPc = c.pc
-  result = c.next()
-  c.pc = currentPc
+  if c.pc <= c.bytes.len:
+    result = Op(c.bytes[c.pc])
+  else:
+    result = Stop
 
 proc updatePc*(c: var CodeStream, value: int) =
   c.pc = min(value, len(c))

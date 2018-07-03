@@ -173,7 +173,7 @@ static:
 
 proc opTableToCaseStmt(opTable: Table[Op, NimNode], computation: NimNode): NimNode =
 
-  let instr = genSym(nskLet)
+  let instr = genSym(nskVar)
   result = nnkCaseStmt.newTree(instr)
 
   # Handle STOP
@@ -188,14 +188,23 @@ proc opTableToCaseStmt(opTable: Table[Op, NimNode], computation: NimNode): NimNo
   )
 
   # Add a branch for each (opcode, proc) pair
+  # We dispatch to the next instruction at the end of each branch
   for op, opImpl in opTable.pairs:
-    let branchStmt = if BaseGasCosts[op].kind == GckFixed:
-        let asOp = quote do: Op(`op`) # TODO: unfortunately when passing to runtime, Op are transformed into int
+    let branchStmt = block:
+      let asOp = quote do: Op(`op`) # TODO: unfortunately when passing to runtime, ops are transformed into int
+
+      if BaseGasCosts[op].kind == GckFixed:
         quote do:
           `computation`.gasMeter.consumeGas(`computation`.gasCosts[`asOp`].cost, reason = $`asOp`)
           `opImpl`(`computation`)
+          `instr` = `computation`.code.next()
       else:
-        quote do: `opImpl`(`computation`)
+        quote do:
+          `opImpl`(`computation`)
+          when `asOp` in {Return, Revert, SelfDestruct}:
+            break
+          else:
+            `instr` = `computation`.code.next()
 
     result.add nnkOfBranch.newTree(
       newIdentNode($op),
@@ -209,9 +218,9 @@ proc opTableToCaseStmt(opTable: Table[Op, NimNode], computation: NimNode): NimNo
 
   # Wrap the case statement in while true + computed goto
   result = quote do:
+    var `instr` = `computation`.code.next()
     while true:
       # {.computedGoto.} # TODO: case statement must be exhaustive
-      let `instr` = `computation`.code.next
       `result`
 
 macro genFrontierDispatch(computation: BaseComputation): untyped =
