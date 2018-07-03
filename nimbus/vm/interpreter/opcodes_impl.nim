@@ -171,7 +171,7 @@ op sha3, FkFrontier, inline = true, startPos, length:
     )
 
   computation.memory.extend(pos, len)
-  let endRange = min(pos + len, computation.memory.len)
+  let endRange = min(pos + len, computation.memory.len - 1)
   debugecho: "pos: " & $pos
   debugecho: "endRange: " & $endRange
   debugecho: "memBytes length: " & $computation.memory.bytes.len
