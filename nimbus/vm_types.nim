@@ -45,7 +45,7 @@ type
     kind*: Op
     runLogic*:  proc(computation: var BaseComputation)
 
-  GasMeter* = ref object
+  GasMeter* = ref object # TODO: use a normal object
     logger*: Logger
     gasRefunded*: GasInt
     startGas*: GasInt

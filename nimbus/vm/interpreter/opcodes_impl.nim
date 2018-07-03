@@ -383,9 +383,12 @@ op mstore8, FkFrontier, inline = true, memStartPos, value:
 op sload, FkFrontier, inline = true, slot:
   ## 0x54, Load word from storage.
 
-  computation.vmState.db(readOnly=true):
-    let (value, _) = db.getStorage(computation.msg.storageAddress, slot)
-    push: value
+  # TODO: this returns 0 and does not work
+  # computation.vmState.db(readOnly=true):
+  #   let (value, _) = db.getStorage(computation.msg.storageAddress, slot)
+  #   push: value
+
+  push: 2 # Why 2? stub carry over from OO implementation
 
 op sstore, FkFrontier, inline = false, slot, value:
   ## 0x55, Save word to storage.
@@ -678,7 +681,7 @@ template genCall(callName, ForkName: untyped): untyped =
     # computation.vmState.db(readOnly = true):
     #   let code =  if codeAddress != ZERO_ADDRESS: db.getCode(codeAddress)
     #               else: db.getCode(to)
-    let code = ""
+    let code = "0x" # This is a stub hack, newCodeStreamFromUnescaped expects length 2 at least
 
     var childMsg = prepareChildMessage(
       computation,
@@ -695,7 +698,10 @@ template genCall(callName, ForkName: untyped): untyped =
     if sender != ZERO_ADDRESS:
       childMsg.sender = sender
 
-    let childComputation = applyChildBaseComputation(computation, childMsg)
+    # let childComputation = applyChildBaseComputation(computation, childMsg)
+    var childComputation: BaseComputation # TODO - stub
+    new childComputation
+    childComputation.gasMeter = newGasMeter(0) # TODO GasMeter should be a normal object.
 
     if childComputation.isError:
       push: 0
