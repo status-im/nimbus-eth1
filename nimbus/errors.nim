@@ -9,9 +9,6 @@ type
   EVMError* = object of Exception
     ## Base error class for all evm errors.
 
-  VMNotFound* = object of EVMError
-    ## No VM available for the provided block number.
-
   BlockNotFound* = object of EVMError
     ## The block with the given number/hash does not exist.
 
@@ -23,9 +20,6 @@ type
 
   ValidationError* = object of EVMError
     ## Error to signal something does not pass a validation check.
-
-  HaltError* = object of EVMError
-    ## Raised by opcode function to halt vm execution.
 
   VMError* = object of EVMError
     ## Class of errors which can be raised during VM execution.
@@ -57,9 +51,6 @@ type
   ContractCreationCollision* = object of VMError
     ## Error signaling that there was an address collision during contract creation.
 
-  RevertError* = object of VMError
-    ##     Error used by the REVERT opcode
-
   WriteProtection* = object of VMError
     ## Error raised if an attempt to modify the state database is made while
     ## operating inside of a STATICCALL context.
@@ -78,8 +69,3 @@ proc makeVMError*: ref VMError =
   new(result)
   result.burnsGas = true
   result.erasesReturnData = true
-
-proc makeRevert*(): ref RevertError =
-  new(result)
-  result.burnsGas = false
-  result.erasesReturnData = false
