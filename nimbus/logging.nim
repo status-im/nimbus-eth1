@@ -20,19 +20,19 @@ const DEBUG* = defined(nimbusdebug)
 #  - Passing a string to a proc, even a const string and inline proc, might trigger a heap allocation
 #    use a template instead.
 
-template log*(l: Logger, msg: string, color: ForegroundColor = fgBlack) =
+proc log*(l: Logger, msg: string, color: ForegroundColor = fgBlack) {.inline.}=
   when DEBUG:
     styledWriteLine(stdout, color, &"#{l.name}: {msg}", resetStyle)
 
-template debug*(l: Logger, msg: string) =
+proc debug*(l: Logger, msg: string) {.inline.}=
   when DEBUG:
     l.log(msg)
 
-template trace*(l: Logger, msg: string) =
+proc trace*(l: Logger, msg: string) {.inline.}=
   when DEBUG:
     l.log(msg, fgBlue)
 
-proc getLogger*(name: string): Logger =
+proc getLogger*(name: string): Logger {.inline.}=
   result = Logger(name: name)
 
 # proc disableLogging* =
