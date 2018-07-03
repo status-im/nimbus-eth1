@@ -43,7 +43,6 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
     c.displayDecompiled()
 
   result = newBaseComputation(vm.state, message)
-  result.opcodes = OpLogic # TODO remove this need
   result.precompiles = initTable[string, Opcode]()
 
   result.executeOpcodes()

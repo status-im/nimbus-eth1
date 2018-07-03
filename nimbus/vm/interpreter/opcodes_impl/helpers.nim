@@ -31,7 +31,7 @@ macro quasiBoolean*(name: untyped, op: untyped, signed: untyped = nil, nonzero: 
         `op`(`actualLeftNode`, `actualRightNode`)
     else:
       quote:
-        `op`(`actualLeftNode`, `actualRightNode`) != 0
+        `op`(`actualLeftNode`, `actualRightNode`) != 0 # This is a hack that rely on false == 0, it doesn't work on latest devel
   result = quote:
     proc `name`*(computation: var BaseComputation) =
       var (`leftNode`, `rightNode`) = computation.stack.popInt(2)

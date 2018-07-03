@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./interpreter/[opcode_values, gas_meter, opcode_table],
+  ./interpreter/[opcode_values, gas_meter],
   ./interpreter/vm_forks
 
 from ./interpreter/utils/utils_numeric import bigEndianToInt
@@ -15,7 +15,7 @@ import # Used in vm_types. Beware of recursive dependencies
   ./code_stream, ./computation, ./stack, ./message, interpreter_dispatch
 
 export
-  opcode_values, gas_meter, opcode_table,
+  opcode_values, gas_meter,
   vm_forks
 
 export utils_numeric.bigEndianToInt

@@ -171,8 +171,12 @@ op sha3, FkFrontier, inline = true, startPos, length:
     )
 
   computation.memory.extend(pos, len)
+  let endRange = min(pos + len, computation.memory.len)
+  debugecho: "pos: " & $pos
+  debugecho: "endRange: " & $endRange
+  debugecho: "memBytes length: " & $computation.memory.bytes.len
   push:
-    keccak256.digest computation.memory.bytes.toOpenArray(pos, pos+len)
+    keccak256.digest computation.memory.bytes.toOpenArray(pos, endRange)
 
 # ##########################################
 # 30s: Environmental Information

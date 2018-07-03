@@ -71,7 +71,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     c.displayDecompiled()
 
   var computation = newBaseComputation(vm.state, message)
-  computation.opcodes = OpLogic
   computation.precompiles = initTable[string, Opcode]()
 
   computation.executeOpcodes()
