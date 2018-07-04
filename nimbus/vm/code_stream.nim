@@ -7,6 +7,7 @@
 
 import
   strformat, strutils, sequtils, parseutils, sets, macros,
+  eth_common,
   ../logging, ../constants, ./interpreter/opcode_values
 
 type
@@ -50,6 +51,17 @@ proc read*(c: var CodeStream, size: int): seq[byte] =
   else:
     result = @[]
     c.pc = c.bytes.len
+
+proc readVmWord*(c: var CodeStream, n: int): UInt256 =
+  ## Reads `n` bytes bytes from the code stream and pads
+  ## the remaining bytes with zeros.
+  let result_bytes = cast[ptr array[32, byte]](addr result)
+
+  let last = min(c.pc + n, c.bytes.len)
+  let toWrite = last - c.pc
+  for i in 0 ..< toWrite : result_bytes[i] = c.bytes[last - i - 1]
+  for j in toWrite ..< 32: result_bytes[j] = 0
+  c.pc = last
 
 proc len*(c: CodeStream): int =
   len(c.bytes)
