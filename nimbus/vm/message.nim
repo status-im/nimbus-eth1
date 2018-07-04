@@ -59,7 +59,10 @@ proc newMessage*(
 
   result.data = data
 
-  result.internalOrigin = options.origin
+  if options.origin != ZERO_ADDRESS:
+    result.internalOrigin = options.origin
+  else:
+    result.internalOrigin = sender
 
   validateGte(options.depth, minimum=0, title="Message.depth")
   result.depth = options.depth

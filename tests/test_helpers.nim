@@ -20,7 +20,7 @@ proc validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
   # TODO fix
   if true:
-    return "extcodesize0" in name
+    return "origin" in name
   if true:
     return folder == "vmEnvironmentalInfo"
 
@@ -103,7 +103,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
     for slot, value in accountData{"storage"}:
       let
         slotId = slot.parseHexInt.u256
-        wantedValue = value.getStr.parseHexInt.u256
+        wantedValue = UInt256.fromHex value.getStr
 
       let (actualValue, found) = stateDB.getStorage(account, slotId)
       doAssert found and actualValue == wantedValue
