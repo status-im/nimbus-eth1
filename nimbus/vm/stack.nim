@@ -32,9 +32,9 @@ proc fromStackElement(elem: StackElement, v: var UInt256) {.inline.} = v = elem
 proc fromStackElement(elem: StackElement, v: var EthAddress) {.inline.} = v[0 .. ^1] = elem.toByteArrayBE().toOpenArray(12, 31)
 proc fromStackElement(elem: StackElement, v: var Hash256) {.inline.} = v.data = elem.toByteArrayBE()
 
-proc toStackElement(v: seq[byte], elem: var StackElement) {.inline.} =
+proc toStackElement(v: openarray[byte], elem: var StackElement) {.inline.} =
   # TODO: This needs to go
-  validateStackItem(v)
+  # validateStackItem(v)
   elem = bigEndianToInt(v)
 
 proc pushAux[T](stack: var Stack, value: T) =
@@ -45,7 +45,7 @@ proc pushAux[T](stack: var Stack, value: T) =
 proc push*(stack: var Stack, value: uint | UInt256 | EthAddress | Hash256) {.inline.} =
   pushAux(stack, value)
 
-proc push*(stack: var Stack, value: seq[byte]) {.inline.} =
+proc push*(stack: var Stack, value: openarray[byte]) {.inline.} =
   # TODO: This needs to go...
   pushAux(stack, value)
 

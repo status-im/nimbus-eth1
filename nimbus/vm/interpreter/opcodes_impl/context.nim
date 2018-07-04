@@ -28,13 +28,45 @@ proc caller*(computation: var BaseComputation) =
 proc callValue*(computation: var BaseComputation) =
   computation.stack.push(computation.msg.value)
 
+proc writePaddedResult(mem: var Memory,
+                       data: openarray[byte],
+                       memPos, dataPos, len: Natural,
+                       paddingValue = 0.byte) =
+  mem.extend(memPos, len)
+
+  let dataEndPosition = dataPos + len - 1
+  if dataEndPosition < data.len:
+    mem.write(memPos, data[dataPos .. dataEndPosition])
+  else:
+    var presentElements = data.len - dataPos
+    if presentElements > 0:
+      mem.write(memPos, data.toOpenArray(dataPos, data.len - 1))
+    else:
+      presentElements = 0
+
+    mem.writePaddingBytes(memPos + presentElements,
+                          len - presentElements,
+                          paddingValue)
+
 proc callDataLoad*(computation: var BaseComputation) =
   # Load call data into memory
-  let startPosition = computation.stack.popInt.toInt
-  let value = computation.msg.data[startPosition ..< startPosition + 32]
-  let paddedValue = padRight(value, 32, 0.byte)
-  let normalizedValue = paddedValue.lStrip(0.byte)
-  computation.stack.push(normalizedValue)
+  let
+    dataPos = computation.stack.popInt.toInt
+    dataEndPosition = dataPos + 32 - 1
+
+  if dataEndPosition < computation.msg.data.len:
+    computation.stack.push(computation.msg.data[dataPos .. dataEndPosition])
+  else:
+    var bytes: array[32, byte]
+    var presentBytes = computation.msg.data.len - dataPos
+
+    if presentBytes > 0:
+      copyMem(addr bytes[0], addr computation.msg.data[dataPos], presentBytes)
+    else:
+      presentBytes = 0
+
+    for i in presentBytes ..< 32: bytes[i] = 0
+    computation.stack.push(bytes)
 
 proc callDataSize*(computation: var BaseComputation) =
   let size = computation.msg.data.len.u256
@@ -50,31 +82,13 @@ proc callDataCopy*(computation: var BaseComputation) =
     reason="CALLDATACOPY fee")
 
   let (memPos, callPos, len) = (memStartPosition.toInt, calldataStartPosition.toInt, size.toInt)
-  computation.memory.extend(memPos, len)
 
-  let value = computation.msg.data[callPos ..< callPos + len]
-  let paddedValue = padRight(value, len, 0.byte)
-  computation.memory.write(memPos, paddedValue)
+  computation.memory.writePaddedResult(computation.msg.data,
+                                       memPos, callPos, len)
 
 proc codeSize*(computation: var BaseComputation) =
   let size = computation.code.len.u256
   computation.stack.push(size)
-
-proc writePaddedResult(mem: var Memory,
-                       data: openarray[byte],
-                       memPos, dataPos, len: Natural,
-                       paddingValue = 0.byte) =
-  mem.extend(memPos, len)
-
-  let dataEndPosition = dataPos + len - 1
-  if dataEndPosition < data.len:
-    mem.write(memPos, data[dataPos .. dataEndPosition])
-  else:
-    let presentElements = data.len - dataPos
-    mem.write(memPos, data.toOpenArray(dataPos, data.len - 1))
-    mem.writePaddingBytes(memPos + presentElements,
-                          len - presentElements,
-                          paddingValue)
 
 proc codeCopy*(computation: var BaseComputation) =
   let (memStartPosition,
