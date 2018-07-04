@@ -115,7 +115,7 @@ VMTests
 + expPowerOf2_4.json                                              OK
 + expPowerOf2_64.json                                             OK
 + expPowerOf2_8.json                                              OK
-- expXY.json                                                      Fail
++ expXY.json                                                      OK
 + expXY_success.json                                              OK
 + fibbonacci_unrolled.json                                        OK
 + mod0.json                                                       OK
@@ -150,12 +150,12 @@ VMTests
 + mulmoddivByZero2.json                                           OK
 + mulmoddivByZero3.json                                           OK
 + not1.json                                                       OK
-+ sdiv0.json                                                      OK
+- sdiv0.json                                                      Fail
 + sdiv1.json                                                      OK
 + sdiv2.json                                                      OK
-+ sdiv3.json                                                      OK
-+ sdiv4.json                                                      OK
-+ sdiv5.json                                                      OK
+- sdiv3.json                                                      Fail
+- sdiv4.json                                                      Fail
+- sdiv5.json                                                      Fail
 + sdiv6.json                                                      OK
 + sdiv7.json                                                      OK
 + sdiv8.json                                                      OK
@@ -164,8 +164,8 @@ VMTests
 + sdivByZero1.json                                                OK
 + sdivByZero2.json                                                OK
 + sdiv_dejavu.json                                                OK
-+ sdiv_i256min.json                                               OK
-+ sdiv_i256min2.json                                              OK
+- sdiv_i256min.json                                               Fail
+- sdiv_i256min2.json                                              Fail
 + sdiv_i256min3.json                                              OK
 + signextendInvalidByteNumber.json                                OK
 + signextend_00.json                                              OK
@@ -180,9 +180,9 @@ VMTests
 + signextend_Overflow_dj42.json                                   OK
 + signextend_bigBytePlus1.json                                    OK
 + signextend_bitIsSet.json                                        OK
-+ smod0.json                                                      OK
-+ smod1.json                                                      OK
-+ smod2.json                                                      OK
+- smod0.json                                                      Fail
+- smod1.json                                                      Fail
+- smod2.json                                                      Fail
 + smod3.json                                                      OK
 + smod4.json                                                      OK
 + smod5.json                                                      OK
@@ -190,7 +190,7 @@ VMTests
 + smod7.json                                                      OK
 + smod8_byZero.json                                               OK
 + smod_i256min1.json                                              OK
-+ smod_i256min2.json                                              OK
+- smod_i256min2.json                                              Fail
 + stop.json                                                       OK
 + sub0.json                                                       OK
 + sub1.json                                                       OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 194/195 Fail: 1/195 Skip: 0/195
+OK: 185/195 Fail: 10/195 Skip: 0/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -267,7 +267,7 @@ OK: 60/60 Fail: 0/60 Skip: 0/60
 ```diff
 + blockhash257Block.json                                          OK
 + blockhash258Block.json                                          OK
-+ blockhashInRange.json                                           OK
+- blockhashInRange.json                                           Fail
 + blockhashMyBlock.json                                           OK
 + blockhashNotExistingBlock.json                                  OK
 + blockhashOutOfRange.json                                        OK
@@ -278,21 +278,21 @@ OK: 60/60 Fail: 0/60 Skip: 0/60
 + number.json                                                     OK
 + timestamp.json                                                  OK
 ```
-OK: 12/12 Fail: 0/12 Skip: 0/12
+OK: 11/12 Fail: 1/12 Skip: 0/12
 ## vmEnvironmentalInfo
 ```diff
-  ExtCodeSizeAddressInputTooBigLeftMyAddress.json                 Skip
-  ExtCodeSizeAddressInputTooBigRightMyAddress.json                Skip
-  address0.json                                                   Skip
-  address1.json                                                   Skip
-  balance0.json                                                   Skip
-  balance01.json                                                  Skip
-  balance1.json                                                   Skip
-  balanceAddress2.json                                            Skip
-  balanceAddressInputTooBig.json                                  Skip
-  balanceAddressInputTooBigLeftMyAddress.json                     Skip
++ ExtCodeSizeAddressInputTooBigLeftMyAddress.json                 OK
++ ExtCodeSizeAddressInputTooBigRightMyAddress.json                OK
++ address0.json                                                   OK
++ address1.json                                                   OK
++ balance0.json                                                   OK
+- balance01.json                                                  Fail
+- balance1.json                                                   Fail
++ balanceAddress2.json                                            OK
++ balanceAddressInputTooBig.json                                  OK
+- balanceAddressInputTooBigLeftMyAddress.json                     Fail
   balanceAddressInputTooBigRightMyAddress.json                    Skip
-  balanceCaller3.json                                             Skip
++ balanceCaller3.json                                             OK
   calldatacopy0.json                                              Skip
   calldatacopy0_return.json                                       Skip
   calldatacopy1.json                                              Skip
@@ -307,41 +307,41 @@ OK: 12/12 Fail: 0/12 Skip: 0/12
   calldatacopy_DataIndexTooHigh2_return.json                      Skip
   calldatacopy_DataIndexTooHigh_return.json                       Skip
   calldatacopy_sec.json                                           Skip
-  calldataload0.json                                              Skip
-  calldataload1.json                                              Skip
-  calldataload2.json                                              Skip
-  calldataloadSizeTooHigh.json                                    Skip
-  calldataloadSizeTooHighPartial.json                             Skip
-  calldataload_BigOffset.json                                     Skip
-  calldatasize0.json                                              Skip
-  calldatasize1.json                                              Skip
-  calldatasize2.json                                              Skip
-  caller.json                                                     Skip
-  callvalue.json                                                  Skip
-  codecopy0.json                                                  Skip
-  codecopyZeroMemExpansion.json                                   Skip
-  codecopy_DataIndexTooHigh.json                                  Skip
-  codesize.json                                                   Skip
-  env1.json                                                       Skip
-  extcodecopy0.json                                               Skip
-  extcodecopy0AddressTooBigLeft.json                              Skip
-  extcodecopy0AddressTooBigRight.json                             Skip
-  extcodecopyZeroMemExpansion.json                                Skip
-  extcodecopy_DataIndexTooHigh.json                               Skip
-  extcodesize0.json                                               Skip
-  extcodesize1.json                                               Skip
-  extcodesizeUnderFlow.json                                       Skip
-  gasprice.json                                                   Skip
-  origin.json                                                     Skip
++ calldataload0.json                                              OK
++ calldataload1.json                                              OK
++ calldataload2.json                                              OK
++ calldataloadSizeTooHigh.json                                    OK
++ calldataloadSizeTooHighPartial.json                             OK
++ calldataload_BigOffset.json                                     OK
++ calldatasize0.json                                              OK
++ calldatasize1.json                                              OK
++ calldatasize2.json                                              OK
++ caller.json                                                     OK
++ callvalue.json                                                  OK
+- codecopy0.json                                                  Fail
++ codecopyZeroMemExpansion.json                                   OK
+- codecopy_DataIndexTooHigh.json                                  Fail
++ codesize.json                                                   OK
+- env1.json                                                       Fail
+- extcodecopy0.json                                               Fail
+- extcodecopy0AddressTooBigLeft.json                              Fail
+- extcodecopy0AddressTooBigRight.json                             Fail
+- extcodecopyZeroMemExpansion.json                                Fail
+- extcodecopy_DataIndexTooHigh.json                               Fail
++ extcodesize0.json                                               OK
++ extcodesize1.json                                               OK
++ extcodesizeUnderFlow.json                                       OK
++ gasprice.json                                                   OK
++ origin.json                                                     OK
 ```
-OK: 0/52 Fail: 0/52 Skip: 52/52
+OK: 26/52 Fail: 11/52 Skip: 15/52
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
 + BlockNumberDynamicJump0_AfterJumpdest3.json                     OK
 + BlockNumberDynamicJump0_foreverOutOfGas.json                    OK
-- BlockNumberDynamicJump0_jumpdest0.json                          Fail
-- BlockNumberDynamicJump0_jumpdest2.json                          Fail
++ BlockNumberDynamicJump0_jumpdest0.json                          OK
++ BlockNumberDynamicJump0_jumpdest2.json                          OK
 + BlockNumberDynamicJump0_withoutJumpdest.json                    OK
 + BlockNumberDynamicJump1.json                                    OK
 + BlockNumberDynamicJumpInsidePushWithJumpDest.json               OK
@@ -353,7 +353,7 @@ OK: 0/52 Fail: 0/52 Skip: 52/52
 - BlockNumberDynamicJumpiOutsideBoundary.json                     Fail
 + BlockNumberDynamicJumpifInsidePushWithJumpDest.json             OK
 + BlockNumberDynamicJumpifInsidePushWithoutJumpDest.json          OK
-- DyanmicJump0_outOfBoundary.json                                 Fail
++ DyanmicJump0_outOfBoundary.json                                 OK
 + DynamicJump0_AfterJumpdest.json                                 OK
 + DynamicJump0_AfterJumpdest3.json                                OK
 + DynamicJump0_foreverOutOfGas.json                               OK
@@ -366,15 +366,15 @@ OK: 0/52 Fail: 0/52 Skip: 52/52
 + DynamicJumpInsidePushWithoutJumpDest.json                       OK
 + DynamicJumpJD_DependsOnJumps0.json                              OK
 + DynamicJumpJD_DependsOnJumps1.json                              OK
-- DynamicJumpPathologicalTest0.json                               Fail
++ DynamicJumpPathologicalTest0.json                               OK
 + DynamicJumpPathologicalTest1.json                               OK
 + DynamicJumpPathologicalTest2.json                               OK
 + DynamicJumpPathologicalTest3.json                               OK
 + DynamicJumpStartWithJumpDest.json                               OK
-+ DynamicJump_value1.json                                         OK
-+ DynamicJump_value2.json                                         OK
-+ DynamicJump_value3.json                                         OK
-+ DynamicJump_valueUnderflow.json                                 OK
+- DynamicJump_value1.json                                         Fail
+- DynamicJump_value2.json                                         Fail
+- DynamicJump_value3.json                                         Fail
+- DynamicJump_valueUnderflow.json                                 Fail
 + DynamicJumpi0.json                                              OK
 + DynamicJumpi1.json                                              OK
 + DynamicJumpi1_jumpdest.json                                     OK
@@ -382,22 +382,22 @@ OK: 0/52 Fail: 0/52 Skip: 52/52
 - DynamicJumpiOutsideBoundary.json                                Fail
 + DynamicJumpifInsidePushWithJumpDest.json                        OK
 + DynamicJumpifInsidePushWithoutJumpDest.json                     OK
-- JDfromStorageDynamicJump0_AfterJumpdest.json                    Fail
-- JDfromStorageDynamicJump0_AfterJumpdest3.json                   Fail
-- JDfromStorageDynamicJump0_foreverOutOfGas.json                  Fail
++ JDfromStorageDynamicJump0_AfterJumpdest.json                    OK
++ JDfromStorageDynamicJump0_AfterJumpdest3.json                   OK
++ JDfromStorageDynamicJump0_foreverOutOfGas.json                  OK
 - JDfromStorageDynamicJump0_jumpdest0.json                        Fail
 - JDfromStorageDynamicJump0_jumpdest2.json                        Fail
-- JDfromStorageDynamicJump0_withoutJumpdest.json                  Fail
-- JDfromStorageDynamicJump1.json                                  Fail
-- JDfromStorageDynamicJumpInsidePushWithJumpDest.json             Fail
-- JDfromStorageDynamicJumpInsidePushWithoutJumpDest.json          Fail
-- JDfromStorageDynamicJumpi0.json                                 Fail
++ JDfromStorageDynamicJump0_withoutJumpdest.json                  OK
++ JDfromStorageDynamicJump1.json                                  OK
++ JDfromStorageDynamicJumpInsidePushWithJumpDest.json             OK
++ JDfromStorageDynamicJumpInsidePushWithoutJumpDest.json          OK
++ JDfromStorageDynamicJumpi0.json                                 OK
 - JDfromStorageDynamicJumpi1.json                                 Fail
-- JDfromStorageDynamicJumpi1_jumpdest.json                        Fail
++ JDfromStorageDynamicJumpi1_jumpdest.json                        OK
 - JDfromStorageDynamicJumpiAfterStop.json                         Fail
-- JDfromStorageDynamicJumpiOutsideBoundary.json                   Fail
-- JDfromStorageDynamicJumpifInsidePushWithJumpDest.json           Fail
-- JDfromStorageDynamicJumpifInsidePushWithoutJumpDest.json        Fail
++ JDfromStorageDynamicJumpiOutsideBoundary.json                   OK
++ JDfromStorageDynamicJumpifInsidePushWithJumpDest.json           OK
++ JDfromStorageDynamicJumpifInsidePushWithoutJumpDest.json        OK
 + bad_indirect_jump1.json                                         OK
 + bad_indirect_jump2.json                                         OK
 + byte1.json                                                      OK
@@ -461,9 +461,9 @@ OK: 0/52 Fail: 0/52 Skip: 52/52
 + mstore0.json                                                    OK
 + mstore1.json                                                    OK
 + mstore8MemExp.json                                              OK
-+ mstore8WordToBigError.json                                      OK
-+ mstore8_0.json                                                  OK
-+ mstore8_1.json                                                  OK
+- mstore8WordToBigError.json                                      Fail
+- mstore8_0.json                                                  Fail
+- mstore8_1.json                                                  Fail
 + mstoreMemExp.json                                               OK
 + mstoreWordToBigError.json                                       OK
 + mstore_mload0.json                                              OK
@@ -475,15 +475,15 @@ OK: 0/52 Fail: 0/52 Skip: 52/52
 - return2.json                                                    Fail
 + sha3MemExp.json                                                 OK
 + sstore_load_0.json                                              OK
-+ sstore_load_1.json                                              OK
+- sstore_load_1.json                                              Fail
 - sstore_load_2.json                                              Fail
 + sstore_underflow.json                                           OK
-+ stack_loop.json                                                 OK
+- stack_loop.json                                                 Fail
 + stackjump1.json                                                 OK
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 103/145 Fail: 41/145 Skip: 1/145
+OK: 110/145 Fail: 34/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
@@ -614,7 +614,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + push7.json                                                      OK
 + push8.json                                                      OK
 + push9.json                                                      OK
-+ swap1.json                                                      OK
+- swap1.json                                                      Fail
 + swap10.json                                                     OK
 + swap11.json                                                     OK
 + swap12.json                                                     OK
@@ -631,9 +631,9 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + swap7.json                                                      OK
 + swap8.json                                                      OK
 + swap9.json                                                      OK
-+ swapjump1.json                                                  OK
+- swapjump1.json                                                  Fail
 ```
-OK: 74/74 Fail: 0/74 Skip: 0/74
+OK: 72/74 Fail: 2/74 Skip: 0/74
 ## vmRandomTest
 ```diff
   201503102037PYTHON.json                                         Skip
@@ -658,25 +658,25 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 ## vmSha3Test
 ```diff
 + sha3_0.json                                                     OK
-+ sha3_1.json                                                     OK
-+ sha3_2.json                                                     OK
+- sha3_1.json                                                     Fail
+- sha3_2.json                                                     Fail
 + sha3_3.json                                                     OK
 + sha3_4.json                                                     OK
 + sha3_5.json                                                     OK
 - sha3_6.json                                                     Fail
 - sha3_bigOffset.json                                             Fail
-+ sha3_bigOffset2.json                                            OK
+- sha3_bigOffset2.json                                            Fail
 - sha3_bigSize.json                                               Fail
-+ sha3_memSizeNoQuadraticCost31.json                              OK
-+ sha3_memSizeQuadraticCost32.json                                OK
+- sha3_memSizeNoQuadraticCost31.json                              Fail
+- sha3_memSizeQuadraticCost32.json                                Fail
 - sha3_memSizeQuadraticCost32_zeroSize.json                       Fail
-+ sha3_memSizeQuadraticCost33.json                                OK
-+ sha3_memSizeQuadraticCost63.json                                OK
-+ sha3_memSizeQuadraticCost64.json                                OK
-+ sha3_memSizeQuadraticCost64_2.json                              OK
-+ sha3_memSizeQuadraticCost65.json                                OK
+- sha3_memSizeQuadraticCost33.json                                Fail
+- sha3_memSizeQuadraticCost63.json                                Fail
+- sha3_memSizeQuadraticCost64.json                                Fail
+- sha3_memSizeQuadraticCost64_2.json                              Fail
+- sha3_memSizeQuadraticCost65.json                                Fail
 ```
-OK: 14/18 Fail: 4/18 Skip: 0/18
+OK: 4/18 Fail: 14/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
   ABAcalls0.json                                                  Skip

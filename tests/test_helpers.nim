@@ -19,15 +19,15 @@ type
 proc validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
   # TODO fix
-  if true:
-    return "calldatasize1" in name
-  if true:
-    return folder == "vmEnvironmentalInfo"
+  #if true:
+  #  return "or0" in name
+  #if true:
+  #  return folder == "vmEnvironmentalInfo"
 
   result = "calldatacopy" notin name and
     "balanceAddressInputTooBigRightMyAddress." notin name and
     "callstatelessToReturn1" notin name and
-    folder notin @["vmRandomTest", "vmSystemOperations", "vmPerformance", "vmEnvironmentalInfo"]
+    folder notin @["vmRandomTest", "vmSystemOperations", "vmPerformance"]
   #result = name == "exp2.json"
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
@@ -106,6 +106,8 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
         wantedValue = UInt256.fromHex value.getStr
 
       let (actualValue, found) = stateDB.getStorage(account, slotId)
+      # echo "FOUND ", found
+      # echo "ACTUAL VALUE ", actualValue.toHex
       doAssert found and actualValue == wantedValue
 
     let
