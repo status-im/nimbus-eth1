@@ -109,7 +109,7 @@ macro genPushFkFrontier*(): untyped =
   for size in 1 .. 32:
     let name = genName(size)
     result.add quote do:
-      func `name`*(computation: var BaseComputation) =
+      func `name`*(computation: var BaseComputation) {.inline.}=
         ## Push `size`-byte(s) on the stack
         let value = computation.code.read(`size`)
         let stripped = value.toString.strip(0.char)
@@ -127,7 +127,7 @@ macro genDupFkFrontier*(): untyped =
   for pos in 1 .. 16:
     let name = genName(pos)
     result.add quote do:
-      func `name`*(computation: var BaseComputation) =
+      func `name`*(computation: var BaseComputation) {.inline.}=
         computation.stack.dup(`pos`)
 
 macro genSwapFkFrontier*(): untyped =
@@ -138,7 +138,7 @@ macro genSwapFkFrontier*(): untyped =
   for pos in 1 .. 16:
     let name = genName(pos)
     result.add quote do:
-      func `name`*(computation: var BaseComputation) =
+      func `name`*(computation: var BaseComputation) {.inline.}=
         computation.stack.swap(`pos`)
 
 proc logImpl(topicCount: int): NimNode =
