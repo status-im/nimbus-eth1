@@ -350,7 +350,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + BlockNumberDynamicJumpi1.json                                   OK
 + BlockNumberDynamicJumpi1_jumpdest.json                          OK
 - BlockNumberDynamicJumpiAfterStop.json                           Fail
-- BlockNumberDynamicJumpiOutsideBoundary.json                     Fail
++ BlockNumberDynamicJumpiOutsideBoundary.json                     OK
 + BlockNumberDynamicJumpifInsidePushWithJumpDest.json             OK
 + BlockNumberDynamicJumpifInsidePushWithoutJumpDest.json          OK
 + DyanmicJump0_outOfBoundary.json                                 OK
@@ -379,7 +379,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + DynamicJumpi1.json                                              OK
 + DynamicJumpi1_jumpdest.json                                     OK
 - DynamicJumpiAfterStop.json                                      Fail
-- DynamicJumpiOutsideBoundary.json                                Fail
++ DynamicJumpiOutsideBoundary.json                                OK
 + DynamicJumpifInsidePushWithJumpDest.json                        OK
 + DynamicJumpifInsidePushWithoutJumpDest.json                     OK
 + JDfromStorageDynamicJump0_AfterJumpdest.json                    OK
@@ -439,13 +439,13 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + jumpi1.json                                                     OK
 + jumpi1_jumpdest.json                                            OK
 - jumpiAfterStop.json                                             Fail
-- jumpiOutsideBoundary.json                                       Fail
++ jumpiOutsideBoundary.json                                       OK
 - jumpiToUint64maxPlus1.json                                      Fail
 + jumpiToUintmaxPlus1.json                                        OK
 + jumpi_at_the_end.json                                           OK
 + jumpifInsidePushWithJumpDest.json                               OK
 + jumpifInsidePushWithoutJumpDest.json                            OK
-- kv1.json                                                        Fail
++ kv1.json                                                        OK
 + log1MemExp.json                                                 OK
 + loop_stacklimit_1020.json                                       OK
 + loop_stacklimit_1021.json                                       OK
