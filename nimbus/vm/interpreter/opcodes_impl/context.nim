@@ -50,15 +50,20 @@ proc writePaddedResult(mem: var Memory,
 
 proc callDataLoad*(computation: var BaseComputation) =
   # Load call data into memory
+  let origDataPos = computation.stack.popInt
+  if origDataPos >= computation.msg.data.len:
+    computation.stack.push(0)
+    return
+
   let
-    dataPos = computation.stack.popInt.toInt
-    dataEndPosition = dataPos + 32 - 1
+    dataPos = origDataPos.toInt
+    dataEndPosition = dataPos + 31
 
   if dataEndPosition < computation.msg.data.len:
     computation.stack.push(computation.msg.data[dataPos .. dataEndPosition])
   else:
     var bytes: array[32, byte]
-    var presentBytes = computation.msg.data.len - dataPos
+    var presentBytes = min(computation.msg.data.len - dataPos, 32)
 
     if presentBytes > 0:
       copyMem(addr bytes[0], addr computation.msg.data[dataPos], presentBytes)
