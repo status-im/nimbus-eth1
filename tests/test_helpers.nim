@@ -20,7 +20,7 @@ proc validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
   # TODO fix
   if true:
-    return "origin" in name
+    return "calldatasize1" in name
   if true:
     return folder == "vmEnvironmentalInfo"
 

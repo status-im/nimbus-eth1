@@ -7,7 +7,8 @@
 
 import
   unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
-  rlp, nimcrypto/[keccak, hash], eth_trie/[types, memdb], eth_common, ranges/typedranges,
+  byteutils, ranges/typedranges, nimcrypto/[keccak, hash],
+  rlp, eth_trie/[types, memdb], eth_common,
   ./test_helpers,
   ../nimbus/[constants, errors, logging],
   ../nimbus/[vm_state, vm_types],
@@ -57,7 +58,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       to = toAddress,
       sender = fexec{"caller"}.getStr.parseAddress,
       value = cast[uint](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
-      data = fexec{"data"}.getStr.mapIt(it.byte),
+      data = fexec{"data"}.getStr.hexToSeqByte,
       code = code,
       gas = fexec{"gas"}.getHexadecimalInt,
       gasPrice = fexec{"gasPrice"}.getHexadecimalInt,
@@ -113,7 +114,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     for child in zip(computation.children, callCreates):
       var (childComputation, createdCall) = child
       let toAddress = createdCall{"destination"}.getStr.parseAddress
-      let data = createdCall{"data"}.getStr.mapIt(it.byte)
+      let data = createdCall{"data"}.getStr.hexToSeqByte
       let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt
       let value = createdCall{"value"}.getHexadecimalInt.u256
 
