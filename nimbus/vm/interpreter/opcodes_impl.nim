@@ -15,6 +15,13 @@ import
   ../../utils/[bytes, padding, address] # TODO remove those dependencies
 
 # ##################################
+# Syntactic sugar
+
+template push(x: typed) {.dirty.} =
+  ## Push an expression on the computation stack
+  computation.stack.push x
+
+# ##################################
 # 0s: Stop and Arithmetic Operations
 
 op add, FkFrontier, inline = true, lhs, rhs:

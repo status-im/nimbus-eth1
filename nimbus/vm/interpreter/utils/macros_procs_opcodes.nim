@@ -18,37 +18,6 @@ proc pop(tree: var NimNode): NimNode =
   result = tree[tree.len-1]
   tree.del(tree.len-1)
 
-template letsGoDeeper =
-  var rTree = node.kind.newTree()
-  for child in node:
-    rTree.add inspect(child)
-  return rTree
-
-proc replacePush(body, computation: NimNode): NimNode =
-  # Args:
-  #   - The computation ident node (= newIdentNode("computation"))
-  #   - The proc body
-  # Returns:
-  #   - An AST with "push: foo" replaced by
-  #     computation.stack.push(foo)
-
-  proc inspect(node: NimNode): NimNode =
-    case node.kind:
-    of nnkCall:
-      if eqIdent(node[0], "push"):
-        let value = node[1]
-        return quote do:
-          `computation`.stack.push `value`
-      else:
-        letsGoDeeper()
-    of {nnkIdent, nnkSym, nnkEmpty}:
-      return node
-    of nnkLiterals:
-      return node
-    else:
-      letsGoDeeper()
-  result = inspect(body)
-
 macro op*(procname, fork: untyped, inline: static[bool], stackParams_body: varargs[untyped]): untyped =
   ## Usage:
   ## .. code-block:: nim
@@ -64,8 +33,7 @@ macro op*(procname, fork: untyped, inline: static[bool], stackParams_body: varar
   var stackParams = stackParams_body
 
   # 1. Separate stackParams and body with pop
-  # 2. Replace "push: foo" by computation.stack.push(foo)
-  let body = newStmtList().add stackParams.pop.replacePush(computation)
+  let body = newStmtList().add stackParams.pop
 
   # 3. let (x, y, z) = computation.stack.popInt(3)
   let len = stackParams.len
