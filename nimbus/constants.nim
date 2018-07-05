@@ -1,6 +1,6 @@
 
 import
-  stint, math, strutils, utils/padding, eth_common
+  math, strutils, utils/padding, eth_common
 
 proc default(t: typedesc): t = discard
 
@@ -48,8 +48,8 @@ let
   GENESIS_EXTRA_DATA* =           ""
   GAS_LIMIT_MINIMUM* =            5000
 
-  EMPTYSHA3 =                     "\xc5\xd2F\x01\x86\xf7#<\x92~}\xb2\xdc\xc7\x03\xc0\xe5\x00\xb6S\xca\x82';{\xfa\xd8\x04]\x85\xa4p"
-  BLANK_ROOT_HASH* =              "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest()
+  BLANK_ROOT_HASH* =              "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
+  EMPTY_SHA3* =                   "883f7328a6c30727a655daff17eba3a86049871bc7839a5b71e2bc26a99c4d4c".toDigest
 
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* = 20.u256
 

@@ -5,9 +5,10 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest, sequtils,
-        stint,
-        ../nimbus/[constants, errors, vm/memory]
+import
+  unittest, sequtils,
+  eth_common/eth_types,
+  ../nimbus/[constants, errors, vm/memory]
 
 proc memory32: Memory =
   result = newMemory()

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, eth_common,
+  eth_common,
   ./logging, ./constants
 
 type

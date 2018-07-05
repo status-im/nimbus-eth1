@@ -7,7 +7,7 @@
 
 import
   macros, strformat, tables,
-  stint, eth_common,
+  eth_common,
   ./logging, ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
   ./utils/header
 
@@ -77,31 +77,46 @@ method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256
   var header = vmState.prevHeaders[idx]
   result = header.hash
 
-macro db*(vmState: untyped, readOnly: untyped, handler: untyped): untyped =
-  # vm.state.db:
-  #   setupStateDB(fixture{"pre"}, stateDb)
-  #   code = db.getCode(fixture{"exec"}{"address"}.getStr)
-  let db = ident("db")
-  result = quote:
-    block:
-      var `db` = `vmState`.chaindb.getStateDB(`vmState`.blockHeader.stateRoot, `readOnly`)
-      `handler`
-      if `readOnly`:
-        # This acts as a secondary check that no mutation took place for
-        # read_only databases.
-        assert `db`.rootHash == `vmState`.blockHeader.stateRoot
-      elif `vmState`.blockHeader.stateRoot != `db`.rootHash:
-        `vmState`.blockHeader.stateRoot = `db`.rootHash
+when false:
+  # this was an older version of `mutateStateDB`, kept here for reference
+  # until `mutateStateDB` is fully implemented.
+  macro db*(vmState: untyped, readOnly: bool, handler: untyped): untyped =
+    # vm.state.db:
+    #   setupStateDB(fixture{"pre"}, stateDb)
+    #   code = db.getCode(fixture{"exec"}{"address"}.getStr)
+    let db = ident("db")
+    result = quote:
+      block:
+        var `db` = `vmState`.chaindb.getStateDB(`vmState`.blockHeader.stateRoot, `readOnly`)
+        `handler`
+        if `readOnly`:
+          # This acts as a secondary check that no mutation took place for
+          # read_only databases.
+          assert `db`.rootHash == `vmState`.blockHeader.stateRoot
+        elif `vmState`.blockHeader.stateRoot != `db`.rootHash:
+          `vmState`.blockHeader.stateRoot = `db`.rootHash
 
-      # TODO
-      # `vmState`.accessLogs.reads.update(`db`.db.accessLogs.reads)
-      # `vmState`.accessLogs.writes.update(`db`.db.accessLogs.writes)
+        # TODO
+        # `vmState`.accessLogs.reads.update(`db`.db.accessLogs.reads)
+        # `vmState`.accessLogs.writes.update(`db`.db.accessLogs.writes)
 
-      # remove the reference to the underlying `db` object to ensure that no
-      # further modifications can occur using the `State` object after
-      # leaving the context.
-      # TODO `db`.db = nil
-      # state._trie = None
+        # remove the reference to the underlying `db` object to ensure that no
+        # further modifications can occur using the `State` object after
+        # leaving the context.
+        # TODO `db`.db = nil
+        # state._trie = None
+
+template mutateStateDB*(vmState: BaseVMState, body: untyped) =
+  # This should provide more clever change handling in the future
+  block:
+    let initialStateRoot = vmState.blockHeader.stateRoot
+    var db {.inject.} = vmState.chaindb.getStateDB(initialStateRoot, false)
+
+    body
+
+    let finalStateRoot = db.rootHash
+    if finalStateRoot != initialStateRoot:
+      vmState.blockHeader.stateRoot = finalStateRoot
 
 proc readOnlyStateDB*(vmState: BaseVMState): AccountStateDB {.inline.}=
-  vmState.chaindb.getStateDb(Hash256(), readOnly = true)
+  vmState.chaindb.getStateDb(vmState.blockHeader.stateRoot, readOnly = true)

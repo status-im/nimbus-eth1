@@ -23,14 +23,7 @@ macro pushXX(size: static[int]): untyped =
   let name = ident(&"push{size}")
   result = quote:
     proc `name`*(`computation`: var BaseComputation) =
-      let `value` = `computation`.code.read(`size`)
-      let stripped = `value`.toString.strip(0.char)
-      if stripped.len == 0:
-        `computation`.stack.push(0.u256)
-      else:
-        let paddedValue = `value`.padRight(`size`, 0.byte)
-        `computation`.stack.push(paddedValue)
-
+      `computation`.stack.push `computation`.code.readVmWord(`size`)
 
 pushXX(1)
 pushXX(2)

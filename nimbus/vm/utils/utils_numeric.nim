@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, strformat, strutils, sequtils, endians, macros, rlp,
+  strformat, strutils, sequtils, endians, macros,
+  eth_common/eth_types, rlp,
   ../../constants, ../../utils/padding
 
 # some methods based on py-evm utils/numeric

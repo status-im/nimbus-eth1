@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-    stint, eth_common,
-    ../logging, ../constants, ../validation, ../vm_types
+  eth_common,
+  ../logging, ../constants, ../validation, ../vm_types
 
 proc `origin=`*(message: var Message, value: EthAddress) =
   message.internalOrigin = value
@@ -59,7 +59,10 @@ proc newMessage*(
 
   result.data = data
 
-  result.internalOrigin = options.origin
+  if options.origin != ZERO_ADDRESS:
+    result.internalOrigin = options.origin
+  else:
+    result.internalOrigin = sender
 
   validateGte(options.depth, minimum=0, title="Message.depth")
   result.depth = options.depth

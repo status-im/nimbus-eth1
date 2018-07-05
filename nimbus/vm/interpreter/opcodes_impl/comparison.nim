@@ -18,11 +18,17 @@ quasiBoolean(sgt, `>`, signed=true) # Signed Greater Comparison
 
 quasiBoolean(eq, `==`) # Equality
 
-quasiBoolean(andOp, `and`, nonzero=true) # Bitwise And
+proc andOp*(computation: var BaseComputation) =
+  let (lhs, rhs) = computation.stack.popInt(2)
+  computation.stack.push(lhs and rhs)
 
-quasiBoolean(orOp, `or`, nonzero=true) # Bitwise Or
+proc orOp*(computation: var BaseComputation) =
+  let (lhs, rhs) = computation.stack.popInt(2)
+  computation.stack.push(lhs or rhs)
 
-quasiBoolean(xorOp, `xor`, nonzero=true) # Bitwise XOr
+proc xorOp*(computation: var BaseComputation) =
+  let (lhs, rhs) = computation.stack.popInt(2)
+  computation.stack.push(lhs xor rhs)
 
 # TODO use isZero from Stint
 proc iszero*(computation: var BaseComputation) =

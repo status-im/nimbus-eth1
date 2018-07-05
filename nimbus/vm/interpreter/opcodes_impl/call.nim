@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, eth_common, stint,
+  strformat, eth_common,
   # ./impl_std_import # Cannot do that due to recursive dependencies
   # .../vm/interpreter/opcodes_impl/impl_std_import.nim imports .../vm/computation.nim
   # .../vm/computation.nim                              imports .../vm/interpreter/opcodes_impl/call.nim

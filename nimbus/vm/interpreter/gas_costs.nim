@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, math, eth_common, # GasInt
+  math, eth_common/eth_types,
   ../utils/[macros_gen_opcodes, utils_numeric],
   ./opcode_values
 

@@ -5,8 +5,10 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest, stint,
-        ../nimbus/[constants, errors, vm/interpreter, utils/bytes]
+import
+  unittest,
+  eth_common/eth_types,
+  ../nimbus/[constants, errors, vm/interpreter, utils/bytes]
 
 
 template testPush(value: untyped, expected: untyped): untyped =

@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables, stint, eth_common,
+  tables,
+  eth_common,
   ./constants, ./vm_state, ./logging,
   ./vm/[memory, stack, code_stream],
   ./vm/interpreter/[gas_costs, opcode_values] # TODO - will be hidden at a lower layer

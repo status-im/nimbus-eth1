@@ -5,9 +5,10 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest, macros, strformat,
-        stint,
-        ../nimbus/[vm_types, errors, logging, vm/interpreter]
+import
+  unittest, macros, strformat,
+  eth_common/eth_types,
+  ../nimbus/[vm_types, errors, logging, vm/interpreter]
 
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful

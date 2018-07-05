@@ -6,19 +6,26 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, strformat, strutils, sequtils, tables, stint, json, ospaths, times,
+  unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
+  byteutils, ranges/typedranges, nimcrypto/[keccak, hash],
+  rlp, eth_trie/[types, memdb], eth_common,
   ./test_helpers,
   ../nimbus/[constants, errors, logging],
   ../nimbus/[vm_state, vm_types],
   ../nimbus/utils/[header, padding],
   ../nimbus/vm/interpreter,
-  ../nimbus/db/[db_chain, state_db, backends/memory_backend],
-  eth_common
+  ../nimbus/db/[db_chain, state_db, backends/memory_backend]
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
 suite "vm json tests":
   jsonTest("VMTests", testFixture)
+
+
+proc stringFromBytes(x: ByteRange): string =
+  result = newString(x.len)
+  for i in 0 ..< x.len:
+    result[i] = char(x[i])
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode
@@ -26,31 +33,37 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     fixture = child
     break
   let fenv = fixture["env"]
+  var emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
   let header = BlockHeader(
     coinbase: fenv{"currentCoinbase"}.getStr.parseAddress,
     difficulty: fenv{"currentDifficulty"}.getHexadecimalInt.u256,
     blockNumber: fenv{"currentNumber"}.getHexadecimalInt.u256,
     gasLimit: fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
-    timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix
+    timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,
+    stateRoot: emptyRlpHash
     )
-  var vm = newNimbusVM(header, newBaseChainDB(newMemoryDB()))
+  var memDb = newMemDB()
+  var vm = newNimbusVM(header, newBaseChainDB(trieDB memDb))
 
   let fexec = fixture["exec"]
   var code = ""
-  vm.state.db(readOnly=false):
+  vm.state.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
-    code = db.getCode(fexec{"address"}.getStr.parseAddress)
+    let address = fexec{"address"}.getStr.parseAddress
+    code = stringFromBytes db.getCode(address)
 
   code = fexec{"code"}.getStr
+  let toAddress = fexec{"address"}.getStr.parseAddress
   let message = newMessage(
-      to = fexec{"address"}.getStr.parseAddress,
+      to = toAddress,
       sender = fexec{"caller"}.getStr.parseAddress,
       value = cast[uint](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
-      data = fexec{"data"}.getStr.mapIt(it.byte),
+      data = fexec{"data"}.getStr.hexToSeqByte,
       code = code,
       gas = fexec{"gas"}.getHexadecimalInt,
       gasPrice = fexec{"gasPrice"}.getHexadecimalInt,
-      options = newMessageOptions(origin=fexec{"origin"}.getStr.parseAddress))
+      options = newMessageOptions(origin=fexec{"origin"}.getStr.parseAddress,
+                                  createAddress = toAddress))
 
   #echo fixture{"exec"}
   var c = newCodeStreamFromUnescaped(code)
@@ -101,7 +114,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     for child in zip(computation.children, callCreates):
       var (childComputation, createdCall) = child
       let toAddress = createdCall{"destination"}.getStr.parseAddress
-      let data = createdCall{"data"}.getStr.mapIt(it.byte)
+      let data = createdCall{"data"}.getStr.hexToSeqByte
       let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt
       let value = createdCall{"value"}.getHexadecimalInt.u256
 
@@ -110,10 +123,11 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       check(gasLimit == childComputation.msg.gas)
       check(value == childComputation.msg.value)
       # TODO postState = fixture{"post"}
+
+    if not fixture{"post"}.isNil:
+      verifyStateDb(fixture{"post"}, computation.vmState.readOnlyStateDB)
   else:
       # Error checks
       check(computation.isError)
       # TODO postState = fixture{"pre"}
-
-  # TODO with vm.state.stateDb(readOnly=True) as stateDb:
-  #    verifyStateDb(postState, stateDb)
+  

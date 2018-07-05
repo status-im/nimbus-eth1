@@ -1,6 +1,6 @@
 import
   unittest, macros,
-  stint, nimcrypto/[keccak, hash], ranges, eth_common/eth_types,
+  nimcrypto/[keccak, hash], ranges, eth_common/eth_types,
   ../nimbus/db/[storage_types],
   ../nimbus/db/backends/[sqlite_backend, rocksdb_backend]
 
