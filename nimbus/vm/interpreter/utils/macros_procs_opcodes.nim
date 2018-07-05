@@ -10,7 +10,7 @@
 
 import
   macros, strformat, stint,
-  ../../computation, ../../stack,
+  ../../computation, ../../stack, ../../code_stream,
   ../../../constants, ../../../vm_types
 
 proc pop(tree: var NimNode): NimNode =
@@ -76,13 +76,7 @@ macro genPush*(): untyped =
     result.add quote do:
       func `name`*(computation: var BaseComputation) {.inline.}=
         ## Push `size`-byte(s) on the stack
-        let value = computation.code.read(`size`)
-        let stripped = value.toString.strip(0.char)
-        if stripped.len == 0:
-          computation.stack.push(0.u256)
-        else:
-          let paddedValue = value.padRight(`size`, 0.byte)
-          computation.stack.push(paddedValue)
+        computation.stack.push computation.code.readVmWord(`size`)
 
 macro genDup*(): untyped =
   func genName(position: int): NimNode = ident(&"dup{position}")

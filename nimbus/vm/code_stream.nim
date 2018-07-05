@@ -61,7 +61,6 @@ proc readVmWord*(c: var CodeStream, n: int): UInt256 =
   let last = min(c.pc + n, c.bytes.len)
   let toWrite = last - c.pc
   for i in 0 ..< toWrite : result_bytes[i] = c.bytes[last - i - 1]
-  for j in toWrite ..< 32: result_bytes[j] = 0
   c.pc = last
 
 proc len*(c: CodeStream): int =

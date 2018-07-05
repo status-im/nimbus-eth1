@@ -24,7 +24,7 @@ type
     code*:                  CodeStream
     children*:              seq[BaseComputation]
     rawOutput*:             string
-    returnData*:            string
+    returnData*:            seq[byte]
     error*:                 Error
     logEntries*:            seq[(EthAddress, seq[UInt256], string)]
     shouldEraseReturnData*: bool

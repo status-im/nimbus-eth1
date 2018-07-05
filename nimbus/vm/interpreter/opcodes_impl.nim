@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times,
+  strformat, times, ranges,
   stint, nimcrypto, ranges/typedranges, eth_common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
@@ -40,7 +40,7 @@ op sub, inline = true, lhs, rhs:
 op divide, inline = true, lhs, rhs:
   ## 0x04, Division
   push:
-    if rhs == 0: zero(Uint256)
+    if rhs == 0: zero(Uint256) # EVM special casing of div by 0
     else:        lhs div rhs
 
 op sdiv, inline = true, lhs, rhs:
@@ -71,14 +71,14 @@ op addmod, inline = true, lhs, rhs, modulus:
   ## 0x08, Modulo addition
   ## Intermediate computations do not roll over at 2^256
   push:
-    if modulus == 0: zero(UInt256)
+    if modulus == 0: zero(UInt256) # EVM special casing of div by 0
     else: addmod(lhs, rhs, modulus)
 
 op mulmod, inline = true, lhs, rhs, modulus:
   ## 0x09, Modulo multiplication
   ## Intermediate computations do not roll over at 2^256
   push:
-    if modulus == 0: zero(UInt256)
+    if modulus == 0: zero(UInt256) # EVM special casing of div by 0
     else: mulmod(lhs, rhs, modulus)
 
 op exp, inline = true, base, exponent:
@@ -186,6 +186,28 @@ op sha3, inline = true, startPos, length:
 # ##########################################
 # 30s: Environmental Information
 
+# See: https://github.com/status-im/nimbus/issues/67
+#
+# proc writePaddedResult(mem: var Memory,
+#                        data: openarray[byte],
+#                        memPos, dataPos, len: Natural,
+#                        paddingValue = 0.byte) =
+#   mem.extend(memPos, len)
+#
+#   let dataEndPosition = dataPos + len - 1
+#   if dataEndPosition < data.len:
+#     mem.write(memPos, data[dataPos .. dataEndPosition])
+#   else:
+#     var presentElements = data.len - dataPos
+#     if presentElements > 0:
+#       mem.write(memPos, data.toOpenArray(dataPos, data.len - 1))
+#     else:
+#       presentElements = 0
+#
+#     mem.writePaddingBytes(memPos + presentElements,
+#                           len - presentElements,
+#                           paddingValue)
+
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
   push: computation.msg.storageAddress
@@ -201,7 +223,7 @@ op origin, inline = true:
 
 op caller, inline = true:
   ## 0x33, Get caller address.
-  push: computation.msg.origin
+  push: computation.msg.sender
 
 op callValue, inline = true:
   ## 0x34, Get deposited value by the instruction/transaction
@@ -210,7 +232,12 @@ op callValue, inline = true:
 
 op callDataLoad, inline = false, startPos:
   ## 0x35, Get input data of current environment
+  # TODO tests: https://github.com/status-im/nimbus/issues/67
   let start = startPos.toInt
+
+  if start >= computation.msg.data.len:
+    push: 0
+    return
 
   # If the data does not take 32 bytes, pad with zeros
   let endRange = min(computation.msg.data.len - 1, start + 31)
@@ -226,6 +253,7 @@ op callDataSize, inline = true:
 
 op callDataCopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x37, Copy input data in current environment to memory.
+  # TODO tests: https://github.com/status-im/nimbus/issues/67
 
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
 
@@ -239,6 +267,7 @@ op callDataCopy, inline = false, memStartPos, copyStartPos, size:
   let lim = min(computation.msg.data.len, copyPos + len)
   let padding = copyPos + len - lim
   # Note: when extending, extended memory is zero-ed, we only need to offset with padding value
+  # Also memory.write handles the case where copyPos+padding is out of bounds
   computation.memory.write(memPos):
     computation.msg.data.toOpenArray(copyPos+padding, copyPos+lim)
 
@@ -248,6 +277,7 @@ op codesize, inline = true:
 
 op codecopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x39, Copy code running in current environment to memory.
+  # TODO tests: https://github.com/status-im/nimbus/issues/67
 
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
 
@@ -257,16 +287,11 @@ op codecopy, inline = false, memStartPos, copyStartPos, size:
 
   computation.memory.extend(memPos, len)
 
-  # TODO: here Py-EVM is doing something very complex, increasing a program counter in the "CodeStream" type.
-  #       while Geth, Parity and the Yellow paper are just copying bytes?
-  #   https://github.com/ethereum/py-evm/blob/090b29141d1d80c4b216cfa7ab889115df3c0da0/evm/vm/logic/context.py#L96-L97
-  #   https://github.com/paritytech/parity/blob/98b7c07171cd320f32877dfa5aa528f585dc9a72/ethcore/evm/src/interpreter/mod.rs#L581-L582
-  #   https://github.com/ethereum/go-ethereum/blob/947e0afeb3bce9c52548979daddd1e00aa0d7ba8/core/vm/instructions.go#L478-L479
-
   # If the data does not take 32 bytes, pad with zeros
   let lim = min(computation.code.bytes.len, copyPos + len)
   let padding = copyPos + len - lim
   # Note: when extending, extended memory is zero-ed, we only need to offset with padding value
+  # Also memory.write handles the case where copyPos+padding is out of bounds
   computation.memory.write(memPos):
     computation.code.bytes.toOpenArray(copyPos+padding, copyPos+lim)
 
@@ -280,17 +305,29 @@ op extCodeSize, inline = true:
   let codeSize = computation.vmState.readOnlyStateDB.getCode(account).len
   push uint(codeSize)
 
-op extCodeCopy, inline = true, memStartPos, copyStartPos, size:
+op extCodeCopy, inline = true:
   ## 0x3c, Copy an account's code to memory.
-  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+  let account = computation.stack.popAddress()
+  let (memStartPos, codeStartPos, size) = computation.stack.popInt(3)
+  let (memPos, codePos, len) = (memStartPos.toInt, codeStartPos.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
+    computation.gasCosts[CodeCopy].m_handler(memPos, codePos, len),
     reason="ExtCodeCopy fee")
 
   computation.memory.extend(memPos, len)
+  var codeBytes = computation.vmState.readOnlyStateDB.getCode(account)
 
-  # TODO implementation
+  # If the data does not take 32 bytes, pad with zeros
+  let lim = min(codeBytes.len, codePos + len)
+  let padding = codePos + len - lim
+  # Note: when extending, extended memory is zero-ed, we only need to offset with padding value
+  # Also memory.write handles the case where codePos+padding is out of bounds
+  computation.memory.write(memPos):
+    # toOpenArray for ByteRange does not support slices
+    # and the following toOpenArray chaining crashes the compiler with internal error
+    # codeBytes.toOpenArray.toOpenArray(codePos+padding, codePos+lim)
+    codeBytes.toOpenArray[codePos+padding .. codePos+lim] # This inefficiently allocates a seq
 
 op returnDataSize, inline = true:
   ## 0x3d, Get size of output data from the previous call from the current environment.
@@ -316,7 +353,7 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
   computation.memory.extend(memPos, len)
 
   computation.memory.write(memPos):
-    computation.code.bytes.toOpenArray(copyPos, copyPos+len)
+    computation.returnData.toOpenArray(copyPos, copyPos+len)
 
 # ##########################################
 # 40s: Block Information
@@ -666,7 +703,7 @@ template genCall(callName: untyped): untyped =
     let stackTooDeep = computation.msg.depth >= MaxCallDepth
 
     if insufficientFunds or stackTooDeep:
-      computation.returnData = ""
+      computation.returnData = @[]
       var errMessage: string
       if insufficientFunds:
         let senderBalance = -1 # TODO workaround
