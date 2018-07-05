@@ -307,11 +307,11 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
   calldatacopy_DataIndexTooHigh2_return.json                      Skip
   calldatacopy_DataIndexTooHigh_return.json                       Skip
   calldatacopy_sec.json                                           Skip
-- calldataload0.json                                              Fail
++ calldataload0.json                                              OK
 + calldataload1.json                                              OK
-- calldataload2.json                                              Fail
++ calldataload2.json                                              OK
 - calldataloadSizeTooHigh.json                                    Fail
-- calldataloadSizeTooHighPartial.json                             Fail
++ calldataloadSizeTooHighPartial.json                             OK
 + calldataload_BigOffset.json                                     OK
 + calldatasize0.json                                              OK
 + calldatasize1.json                                              OK
@@ -319,7 +319,7 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + caller.json                                                     OK
 + callvalue.json                                                  OK
 + codecopy0.json                                                  OK
-- codecopyZeroMemExpansion.json                                   Fail
++ codecopyZeroMemExpansion.json                                   OK
 - codecopy_DataIndexTooHigh.json                                  Fail
 + codesize.json                                                   OK
 - env1.json                                                       Fail
@@ -334,7 +334,7 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 22/52 Fail: 15/52 Skip: 15/52
+OK: 26/52 Fail: 11/52 Skip: 15/52
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
@@ -445,7 +445,7 @@ OK: 22/52 Fail: 15/52 Skip: 15/52
 + jumpi_at_the_end.json                                           OK
 + jumpifInsidePushWithJumpDest.json                               OK
 + jumpifInsidePushWithoutJumpDest.json                            OK
-- kv1.json                                                        Fail
++ kv1.json                                                        OK
 + log1MemExp.json                                                 OK
 + loop_stacklimit_1020.json                                       OK
 + loop_stacklimit_1021.json                                       OK
@@ -483,7 +483,7 @@ OK: 22/52 Fail: 15/52 Skip: 15/52
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 112/145 Fail: 32/145 Skip: 1/145
+OK: 113/145 Fail: 31/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK

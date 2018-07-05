@@ -186,27 +186,25 @@ op sha3, inline = true, startPos, length:
 # ##########################################
 # 30s: Environmental Information
 
-# See: https://github.com/status-im/nimbus/issues/67
-#
-# proc writePaddedResult(mem: var Memory,
-#                        data: openarray[byte],
-#                        memPos, dataPos, len: Natural,
-#                        paddingValue = 0.byte) =
-#   mem.extend(memPos, len)
-#
-#   let dataEndPosition = dataPos + len - 1
-#   if dataEndPosition < data.len:
-#     mem.write(memPos, data[dataPos .. dataEndPosition])
-#   else:
-#     var presentElements = data.len - dataPos
-#     if presentElements > 0:
-#       mem.write(memPos, data.toOpenArray(dataPos, data.len - 1))
-#     else:
-#       presentElements = 0
-#
-#     mem.writePaddingBytes(memPos + presentElements,
-#                           len - presentElements,
-#                           paddingValue)
+# TODO - simplify: https://github.com/status-im/nimbus/issues/67
+proc writePaddedResult(mem: var Memory,
+                       data: openarray[byte],
+                       memPos, dataPos, len: Natural,
+                       paddingValue = 0.byte) =
+  mem.extend(memPos, len)
+
+  let dataEndPosition = dataPos + len - 1
+  if dataEndPosition < data.len:
+    mem.write(memPos, data[dataPos .. dataEndPosition])
+  else:
+    var presentElements = data.len - dataPos
+    if presentElements > 0:
+      mem.write(memPos, data.toOpenArray(dataPos, data.len - 1))
+    else:
+      presentElements = 0
+
+  # Note, we don't need to write padding bytes
+  # mem.extend already pads with zero properly
 
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
@@ -232,20 +230,27 @@ op callValue, inline = true:
 
 op callDataLoad, inline = false, startPos:
   ## 0x35, Get input data of current environment
-  # TODO tests: https://github.com/status-im/nimbus/issues/67
-  let start = startPos.toInt
-
-  if start >= computation.msg.data.len:
+  # TODO simplification: https://github.com/status-im/nimbus/issues/67
+  let dataPos = startPos.toInt
+  if dataPos >= computation.msg.data.len:
     push: 0
     return
 
-  # If the data does not take 32 bytes, pad with zeros
-  let endRange = min(computation.msg.data.len - 1, start + 31)
-  let padding = start + 31 - endRange
-  var value: array[32, byte] # We rely on value being initialized with 0 by default
-  value[padding ..< 32] = computation.msg.data.toOpenArray(start, endRange)
+  let dataEndPosition = dataPos + 31
 
-  push: value # TODO, with the new implementation we can delete push for seq[byte]
+  if dataEndPosition < computation.msg.data.len:
+    computation.stack.push(computation.msg.data[dataPos .. dataEndPosition])
+  else:
+    var bytes: array[32, byte]
+    var presentBytes = min(computation.msg.data.len - dataPos, 32)
+
+    if presentBytes > 0:
+      copyMem(addr bytes[0], addr computation.msg.data[dataPos], presentBytes)
+    else:
+      presentBytes = 0
+
+    for i in presentBytes ..< 32: bytes[i] = 0
+    computation.stack.push(bytes)
 
 op callDataSize, inline = true:
   ## 0x36, Get size of input data in current environment.
@@ -285,15 +290,7 @@ op codecopy, inline = false, memStartPos, copyStartPos, size:
     computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
     reason="CodeCopy fee")
 
-  computation.memory.extend(memPos, len)
-
-  # If the data does not take 32 bytes, pad with zeros
-  let lim = min(computation.code.bytes.len, copyPos + len)
-  let padding = copyPos + len - lim
-  # Note: when extending, extended memory is zero-ed, we only need to offset with padding value
-  # Also memory.write handles the case where copyPos+padding is out of bounds
-  computation.memory.write(memPos):
-    computation.code.bytes.toOpenArray(copyPos+padding, copyPos+lim)
+  computation.memory.writePaddedResult(computation.code.bytes, memPos, copyPos, len)
 
 op gasprice, inline = true:
   ## 0x3A, Get price of gas in current environment.
@@ -315,19 +312,8 @@ op extCodeCopy, inline = true:
     computation.gasCosts[CodeCopy].m_handler(memPos, codePos, len),
     reason="ExtCodeCopy fee")
 
-  computation.memory.extend(memPos, len)
-  var codeBytes = computation.vmState.readOnlyStateDB.getCode(account)
-
-  # If the data does not take 32 bytes, pad with zeros
-  let lim = min(codeBytes.len, codePos + len)
-  let padding = codePos + len - lim
-  # Note: when extending, extended memory is zero-ed, we only need to offset with padding value
-  # Also memory.write handles the case where codePos+padding is out of bounds
-  computation.memory.write(memPos):
-    # toOpenArray for ByteRange does not support slices
-    # and the following toOpenArray chaining crashes the compiler with internal error
-    # codeBytes.toOpenArray.toOpenArray(codePos+padding, codePos+lim)
-    codeBytes.toOpenArray[codePos+padding .. codePos+lim] # This inefficiently allocates a seq
+  let codeBytes = computation.vmState.readOnlyStateDB.getCode(account)
+  computation.memory.writePaddedResult(codeBytes.toOpenArray, memPos, codePos, len)
 
 op returnDataSize, inline = true:
   ## 0x3d, Get size of output data from the previous call from the current environment.

@@ -58,16 +58,6 @@ proc write*(memory: var Memory, startPos: Natural, value: openarray[byte]) =
   for z, b in value:
     memory.bytes[z + startPos] = b
 
-# See: https://github.com/status-im/nimbus/issues/67
-#
-# proc writePaddingBytes*(memory: var Memory,
-#                         startPos, numberOfBytes: Natural,
-#                         paddingValue = 0.byte) =
-#   let endPos = startPos + numberOfBytes
-#   assert endPos < memory.len
-#   for i in startPos ..< endPos:
-#     memory.bytes[i] = paddingValue
-
 template write*(memory: var Memory, startPos: Natural, size: Natural, value: cstring) =
   memory.write(startPos, value.toBytes)
   # TODO ~ O(n^3):
