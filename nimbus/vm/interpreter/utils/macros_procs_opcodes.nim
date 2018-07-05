@@ -18,10 +18,10 @@ proc pop(tree: var NimNode): NimNode =
   result = tree[tree.len-1]
   tree.del(tree.len-1)
 
-macro op*(procname, fork: untyped, inline: static[bool], stackParams_body: varargs[untyped]): untyped =
+macro op*(procname: untyped, inline: static[bool], stackParams_body: varargs[untyped]): untyped =
   ## Usage:
   ## .. code-block:: nim
-  ##   op add, FkFrontier, inline = true, lhs, rhs:
+  ##   op add, inline = true, lhs, rhs:
   ##     push:
   ##       lhs + rhs
 
@@ -53,25 +53,22 @@ macro op*(procname, fork: untyped, inline: static[bool], stackParams_body: varar
   else:
     popStackStmt = nnkDiscardStmt.newTree(newEmptyNode())
 
-  # 4. Generate the proc with name addFkFrontier
+  # 4. Generate the proc
   # TODO: replace by func to ensure no side effects
-  #       pending - https://github.com/status-im/nim-stint/issues/52
-  let procforkname = newIdentNode($procname & $fork)
   if inline:
     result = quote do:
-      proc `procforkname`*(`computation`: var BaseComputation) {.inline.} =
+      proc `procname`*(`computation`: var BaseComputation) {.inline.} =
         `popStackStmt`
         `body`
   else:
     result = quote do:
-      proc `procforkname`*(`computation`: var BaseComputation) =
+      proc `procname`*(`computation`: var BaseComputation) =
         `popStackStmt`
         `body`
 
-macro genPushFkFrontier*(): untyped =
-
+macro genPush*(): untyped =
   # TODO: avoid allocating a seq[byte], transforming to a string, stripping char
-  func genName(size: int): NimNode = ident(&"push{size}FkFrontier")
+  func genName(size: int): NimNode = ident(&"push{size}")
   result = newStmtList()
 
   for size in 1 .. 32:
@@ -87,9 +84,8 @@ macro genPushFkFrontier*(): untyped =
           let paddedValue = value.padRight(`size`, 0.byte)
           computation.stack.push(paddedValue)
 
-macro genDupFkFrontier*(): untyped =
-
-  func genName(position: int): NimNode = ident(&"dup{position}FkFrontier")
+macro genDup*(): untyped =
+  func genName(position: int): NimNode = ident(&"dup{position}")
   result = newStmtList()
 
   for pos in 1 .. 16:
@@ -98,9 +94,8 @@ macro genDupFkFrontier*(): untyped =
       func `name`*(computation: var BaseComputation) {.inline.}=
         computation.stack.dup(`pos`)
 
-macro genSwapFkFrontier*(): untyped =
-
-  func genName(position: int): NimNode = ident(&"swap{position}FkFrontier")
+macro genSwap*(): untyped =
+  func genName(position: int): NimNode = ident(&"swap{position}")
   result = newStmtList()
 
   for pos in 1 .. 16:
@@ -117,7 +112,7 @@ proc logImpl(topicCount: int): NimNode =
     error(&"Invalid log topic len {topicCount}  Must be 0, 1, 2, 3, or 4")
     return
 
-  let name = ident(&"log{topicCount}FkFrontier")
+  let name = ident(&"log{topicCount}")
   let computation = ident("computation")
   let topics = ident("topics")
   let topicsTuple = ident("topicsTuple")
@@ -162,7 +157,7 @@ proc logImpl(topicCount: int): NimNode =
 
   result.body.add(logicCode)
 
-macro genLogFkFrontier*(): untyped =
+macro genLog*(): untyped =
   result = newStmtList()
   for i in 0..4:
     result.add logImpl(i)

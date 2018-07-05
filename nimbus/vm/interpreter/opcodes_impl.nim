@@ -24,25 +24,25 @@ template push(x: typed) {.dirty.} =
 # ##################################
 # 0s: Stop and Arithmetic Operations
 
-op add, FkFrontier, inline = true, lhs, rhs:
+op add, inline = true, lhs, rhs:
   ## 0x01, Addition
   push: lhs + rhs
 
-op mul, FkFrontier, inline = true, lhs, rhs:
+op mul, inline = true, lhs, rhs:
   ## 0x02, Multiplication
   push: lhs * rhs
 
-op sub, FkFrontier, inline = true, lhs, rhs:
+op sub, inline = true, lhs, rhs:
   ## 0x03, Substraction
   push: lhs - rhs
 
-op divide, FkFrontier, inline = true, lhs, rhs:
+op divide, inline = true, lhs, rhs:
   ## 0x04, Division
   push:
     if rhs == 0: zero(Uint256)
     else:        lhs div rhs
 
-op sdiv, FkFrontier, inline = true, lhs, rhs:
+op sdiv, inline = true, lhs, rhs:
   ## 0x05, Signed division
   push:
     if rhs == 0: zero(Uint256)
@@ -51,13 +51,13 @@ op sdiv, FkFrontier, inline = true, lhs, rhs:
         lhs.unsignedToPseudoSigned div rhs.unsignedToPseudoSigned
       )
 
-op modulo, FkFrontier, inline = true, lhs, rhs:
+op modulo, inline = true, lhs, rhs:
   ## 0x06, Modulo
   push:
     if rhs == 0: zero(Uint256)
     else:        lhs mod rhs
 
-op smod, FkFrontier, inline = true, lhs, rhs:
+op smod, inline = true, lhs, rhs:
   ## 0x07, Signed modulo
   push:
     if rhs == 0: zero(UInt256)
@@ -66,21 +66,21 @@ op smod, FkFrontier, inline = true, lhs, rhs:
         lhs.unsignedToPseudoSigned mod rhs.unsignedToPseudoSigned
       )
 
-op addmod, FkFrontier, inline = true, lhs, rhs, modulus:
+op addmod, inline = true, lhs, rhs, modulus:
   ## 0x08, Modulo addition
   ## Intermediate computations do not roll over at 2^256
   push:
     if modulus == 0: zero(UInt256)
     else: addmod(lhs, rhs, modulus)
 
-op mulmod, FkFrontier, inline = true, lhs, rhs, modulus:
+op mulmod, inline = true, lhs, rhs, modulus:
   ## 0x09, Modulo multiplication
   ## Intermediate computations do not roll over at 2^256
   push:
     if modulus == 0: zero(UInt256)
     else: mulmod(lhs, rhs, modulus)
 
-op exp, FkFrontier, inline = true, base, exponent:
+op exp, inline = true, base, exponent:
   ## 0x0A, Exponentiation
   computation.gasMeter.consumeGas(
     computation.gasCosts[Exp].d_handler(exponent),
@@ -90,7 +90,7 @@ op exp, FkFrontier, inline = true, base, exponent:
     if base == 0: zero(UInt256)
     else: base.pow(exponent)
 
-op signExtend, FkFrontier, inline = false, bits, value:
+op signExtend, inline = false, bits, value:
   ## 0x0B, Sign extend
   ## Extend length of two’s complement signed integer.
 
@@ -112,47 +112,47 @@ op signExtend, FkFrontier, inline = false, bits, value:
 # ##########################################
 # 10s: Comparison & Bitwise Logic Operations
 
-op lt, FkFrontier, inline = true, lhs, rhs:
+op lt, inline = true, lhs, rhs:
   ## 0x10, Less-than comparison
   push: (lhs < rhs).uint.u256
 
-op gt, FkFrontier, inline = true, lhs, rhs:
+op gt, inline = true, lhs, rhs:
   ## 0x11, Greater-than comparison
   push: (lhs > rhs).uint.u256
 
-op slt, FkFrontier, inline = true, lhs, rhs:
+op slt, inline = true, lhs, rhs:
   ## 0x12, Signed less-than comparison
   push: (cast[Int256](lhs) < cast[Int256](rhs)).uint.u256
 
-op sgt, FkFrontier, inline = true, lhs, rhs:
+op sgt, inline = true, lhs, rhs:
   ## 0x13, Signed greater-than comparison
   push: (cast[Int256](lhs) > cast[Int256](rhs)).uint.u256
 
-op eq, FkFrontier, inline = true, lhs, rhs:
+op eq, inline = true, lhs, rhs:
   ## 0x14, Signed greater-than comparison
   push: (lhs == rhs).uint.u256
 
-op isZero, FkFrontier, inline = true, value:
+op isZero, inline = true, value:
   ## 0x15, Check if zero
   push: value.isZero.uint.u256
 
-op andOp, FkFrontier, inline = true, lhs, rhs:
+op andOp, inline = true, lhs, rhs:
   ## 0x16, Bitwise AND
   push: lhs and rhs
 
-op orOp, FkFrontier, inline = true, lhs, rhs:
+op orOp, inline = true, lhs, rhs:
   ## 0x17, Bitwise AND
   push: lhs or rhs
 
-op xorOp, FkFrontier, inline = true, lhs, rhs:
+op xorOp, inline = true, lhs, rhs:
   ## 0x18, Bitwise AND
   push: lhs xor rhs
 
-op notOp, FkFrontier, inline = true, value:
+op notOp, inline = true, value:
   ## 0x19, Check if zero
   push: value.not
 
-op byteOp, FkFrontier, inline = true, position, value:
+op byteOp, inline = true, position, value:
   ## 0x20, Retrieve single byte from word.
 
   let pos = position.toInt
@@ -168,7 +168,7 @@ op byteOp, FkFrontier, inline = true, position, value:
 # ##########################################
 # 20s: SHA3
 
-op sha3, FkFrontier, inline = true, startPos, length:
+op sha3, inline = true, startPos, length:
   ## 0x20, Compute Keccak-256 hash.
   let (pos, len) = (startPos.toInt, length.toInt)
 
@@ -185,30 +185,30 @@ op sha3, FkFrontier, inline = true, startPos, length:
 # ##########################################
 # 30s: Environmental Information
 
-op address, FkFrontier, inline = true:
+op address, inline = true:
   ## 0x30, Get address of currently executing account.
   push: computation.msg.storageAddress
 
-op balance, FkFrontier, inline = true:
+op balance, inline = true:
   ## 0x31, Get balance of the given account.
   let address = computation.stack.popAddress
   computation.vmState.db(readOnly=true):
     push: db.getBalance(address)
 
-op origin, FkFrontier, inline = true:
+op origin, inline = true:
   ## 0x32, Get execution origination address.
   push: computation.msg.origin
 
-op caller, FkFrontier, inline = true:
+op caller, inline = true:
   ## 0x33, Get caller address.
   push: computation.msg.origin
 
-op callValue, FkFrontier, inline = true:
+op callValue, inline = true:
   ## 0x34, Get deposited value by the instruction/transaction
   ##       responsible for this execution
   push: computation.msg.value
 
-op callDataLoad, FkFrontier, inline = false, startPos:
+op callDataLoad, inline = false, startPos:
   ## 0x35, Get input data of current environment
   let start = startPos.toInt
 
@@ -220,11 +220,11 @@ op callDataLoad, FkFrontier, inline = false, startPos:
 
   push: value # TODO, with the new implementation we can delete push for seq[byte]
 
-op callDataSize, FkFrontier, inline = true:
+op callDataSize, inline = true:
   ## 0x36, Get size of input data in current environment.
   push: computation.msg.data.len.u256
 
-op callDataCopy, FkFrontier, inline = false, memStartPos, copyStartPos, size:
+op callDataCopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x37, Copy input data in current environment to memory.
 
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
@@ -242,11 +242,11 @@ op callDataCopy, FkFrontier, inline = false, memStartPos, copyStartPos, size:
   computation.memory.write(memPos):
     computation.msg.data.toOpenArray(copyPos+padding, copyPos+lim)
 
-op codesize, FkFrontier, inline = true:
+op codesize, inline = true:
   ## 0x38, Get size of code running in current environment.
   push: computation.code.len
 
-op codecopy, FkFrontier, inline = false, memStartPos, copyStartPos, size:
+op codecopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x39, Copy code running in current environment to memory.
 
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
@@ -270,16 +270,16 @@ op codecopy, FkFrontier, inline = false, memStartPos, copyStartPos, size:
   computation.memory.write(memPos):
     computation.code.bytes.toOpenArray(copyPos+padding, copyPos+lim)
 
-op gasprice, FkFrontier, inline = true:
+op gasprice, inline = true:
   ## 0x3A, Get price of gas in current environment.
   push: computation.msg.gasPrice
 
-op extCodeSize, FkFrontier, inline = true:
+op extCodeSize, inline = true:
   ## 0x3b, Get size of an account's code
   let account = computation.stack.popAddress()
   push: 0 # TODO
 
-op extCodeCopy, FkFrontier, inline = true, memStartPos, copyStartPos, size:
+op extCodeCopy, inline = true, memStartPos, copyStartPos, size:
   ## 0x3c, Copy an account's code to memory.
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
 
@@ -291,11 +291,11 @@ op extCodeCopy, FkFrontier, inline = true, memStartPos, copyStartPos, size:
 
   # TODO implementation
 
-op returnDataSize, FkByzantium, inline = true:
+op returnDataSize, inline = true:
   ## 0x3d, Get size of output data from the previous call from the current environment.
   push: computation.returnData.len
 
-op returnDataCopy, FkByzantium, inline = false,  memStartPos, copyStartPos, size:
+op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
   ## 0x3e, Copy output data from the previous call to memory.
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
 
@@ -320,38 +320,38 @@ op returnDataCopy, FkByzantium, inline = false,  memStartPos, copyStartPos, size
 # ##########################################
 # 40s: Block Information
 
-op blockhash, FkFrontier, inline = true, blockNumber:
+op blockhash, inline = true, blockNumber:
   ## 0x40, Get the hash of one of the 256 most recent complete blocks.
   push: computation.vmState.getAncestorHash(blockNumber)
 
-op coinbase, FkFrontier, inline = true:
+op coinbase, inline = true:
   ## 0x41, Get the block's beneficiary address.
   push: computation.vmState.coinbase
 
-op timestamp, FkFrontier, inline = true:
+op timestamp, inline = true:
   ## 0x42, Get the block's timestamp.
   push: computation.vmState.timestamp.toUnix
 
-op blocknumber, FkFrontier, inline = true:
+op blocknumber, inline = true:
   ## 0x43, Get the block's number.
   push: computation.vmState.blockNumber
 
-op difficulty, FkFrontier, inline = true:
+op difficulty, inline = true:
   ## 0x44, Get the block's difficulty
   push: computation.vmState.difficulty
 
-op gasLimit, FkFrontier, inline = true:
+op gasLimit, inline = true:
   ## 0x45, Get the block's gas limit
   push: computation.vmState.gasLimit
 
 # ##########################################
 # 50s: Stack, Memory, Storage and Flow Operations
 
-op pop, FkFrontier, inline = true:
+op pop, inline = true:
   ## 0x50, Remove item from stack.
   discard computation.stack.popInt()
 
-op mload, FkFrontier, inline = true, memStartPos:
+op mload, inline = true, memStartPos:
   ## 0x51, Load word from memory
   let memPos = memStartPos.toInt
 
@@ -363,7 +363,7 @@ op mload, FkFrontier, inline = true, memStartPos:
 
   push: computation.memory.read(memPos, 32) # TODO, should we convert to native endianness?
 
-op mstore, FkFrontier, inline = true, memStartPos, value:
+op mstore, inline = true, memStartPos, value:
   ## 0x52, Save word to memory
   let memPos = memStartPos.toInt
 
@@ -375,7 +375,7 @@ op mstore, FkFrontier, inline = true, memStartPos, value:
   computation.memory.extend(memPos, 32)
   computation.memory.write(memPos, value.toByteArrayBE) # is big-endian correct? Parity/Geth do convert
 
-op mstore8, FkFrontier, inline = true, memStartPos, value:
+op mstore8, inline = true, memStartPos, value:
   ## 0x53, Save byte to memory
   let memPos = memStartPos.toInt
 
@@ -387,7 +387,7 @@ op mstore8, FkFrontier, inline = true, memStartPos, value:
   computation.memory.extend(memPos, 1)
   computation.memory.write(memPos, [value.toByteArrayBE[0]])
 
-op sload, FkFrontier, inline = true, slot:
+op sload, inline = true, slot:
   ## 0x54, Load word from storage.
 
   # TODO: this returns 0 and does not work
@@ -397,7 +397,7 @@ op sload, FkFrontier, inline = true, slot:
 
   push: 2 # Why 2? stub carry over from OO implementation
 
-op sstore, FkFrontier, inline = false, slot, value:
+op sstore, inline = false, slot, value:
   ## 0x55, Save word to storage.
 
   var currentValue = 0.u256
@@ -418,7 +418,7 @@ op sstore, FkFrontier, inline = false, slot, value:
   computation.vmState.db(readOnly=false):
     db.setStorage(computation.msg.storageAddress, slot, value)
 
-op jump, FkFrontier, inline = true, jumpTarget:
+op jump, inline = true, jumpTarget:
   ## 0x56, Alter the program counter
 
   let jt = jumpTarget.toInt
@@ -433,7 +433,7 @@ op jump, FkFrontier, inline = true, jumpTarget:
 
   # TODO: what happens if there is an error, rollback?
 
-op jumpI, FkFrontier, inline = true, jumpTarget, testedValue:
+op jumpI, inline = true, jumpTarget, testedValue:
   ## 0x57, Conditionally alter the program counter.
 
   if testedValue != 0:
@@ -447,19 +447,19 @@ op jumpI, FkFrontier, inline = true, jumpTarget, testedValue:
     if not computation.code.isValidOpcode(jt):
       raise newException(InvalidInstruction, "Jump resulted in invalid instruction")
 
-op pc, FkFrontier, inline = true:
+op pc, inline = true:
   ## 0x58, Get the value of the program counter prior to the increment corresponding to this instruction.
   push: max(computation.code.pc - 1, 0)
 
-op msize, FkFrontier, inline = true:
+op msize, inline = true:
   ## 0x59, Get the size of active memory in bytes.
   push: computation.memory.len
 
-op gas, FkFrontier, inline = true:
+op gas, inline = true:
   ## 0x5a, Get the amount of available gas, including the corresponding reduction for the cost of this instruction.
   push: computation.gasMeter.gasRemaining
 
-op jumpDest, FkFrontier, inline = true:
+op jumpDest, inline = true:
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect on machine state during execution.
   discard
 
@@ -469,82 +469,79 @@ op jumpDest, FkFrontier, inline = true:
 # 90s: Exchange Operations
 # a0s: Logging Operations
 
-genPushFkFrontier()
-genDupFkFrontier()
-genSwapFkFrontier()
-genLogFkFrontier()
+genPush()
+genDup()
+genSwap()
+genLog()
 
 # ##########################################
 # f0s: System operations.
 
-template genCreate(ForkName: untyped): untyped =
-  op create, ForkName, inline = false, value, startPosition, size:
-    ## 0xf0, Create a new account with associated code.
+op create, inline = false, value, startPosition, size:
+  ## 0xf0, Create a new account with associated code.
+  # TODO: Forked create for Homestead
 
-    let (memPos, len) = (startPosition.toInt, size.toInt)
+  let (memPos, len) = (startPosition.toInt, size.toInt)
 
-    computation.gasMeter.consumeGas(
-      computation.gasCosts[CodeCopy].m_handler(computation.memory.len, memPos, len),
-      reason="Create fee")
+  computation.gasMeter.consumeGas(
+    computation.gasCosts[CodeCopy].m_handler(computation.memory.len, memPos, len),
+    reason="Create fee")
 
-    computation.memory.extend(memPos, len)
+  computation.memory.extend(memPos, len)
 
-    ##### getBalance type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
-    # computation.vmState.db(readOnly=true):
-    #   when ForkName >= FkHomestead: # TODO this is done in Geth but not Parity and Py-EVM
-    #     let insufficientFunds = db.getBalance(computation.msg.storageAddress) < value # TODO check gas balance rollover
-    #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
+  ##### getBalance type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
+  # computation.vmState.db(readOnly=true):
+  #   when ForkName >= FkHomestead: # TODO this is done in Geth but not Parity and Py-EVM
+  #     let insufficientFunds = db.getBalance(computation.msg.storageAddress) < value # TODO check gas balance rollover
+  #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
 
-    #     # TODO: error message
-    #     if insufficientFunds or stackTooDeep:
-    #       push: 0
-    #       return
-    #   else:
-    #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
-    #     if stackTooDeep:
-    #       push: 0
-    #       return
+  #     # TODO: error message
+  #     if insufficientFunds or stackTooDeep:
+  #       push: 0
+  #       return
+  #   else:
+  #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
+  #     if stackTooDeep:
+  #       push: 0
+  #       return
 
-    let callData = computation.memory.read(memPos, len)
+  let callData = computation.memory.read(memPos, len)
 
-    ## TODO dynamic gas that depends on remaining gas
+  ## TODO dynamic gas that depends on remaining gas
 
-    ##### getNonce type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
-    # computation.vmState.db(readOnly=true):
-    #   let creationNonce = db.getNonce(computation.msg.storageAddress)
-    #   db.incrementNonce(computation.msg.storageAddress)
-    let contractAddress = ZERO_ADDRESS # generateContractAddress(computation.msg.storageAddress, creationNonce)
+  ##### getNonce type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
+  # computation.vmState.db(readOnly=true):
+  #   let creationNonce = db.getNonce(computation.msg.storageAddress)
+  #   db.incrementNonce(computation.msg.storageAddress)
+  let contractAddress = ZERO_ADDRESS # generateContractAddress(computation.msg.storageAddress, creationNonce)
 
-    let isCollision = false # TODO: db.accountHasCodeOrNonce ...
+  let isCollision = false # TODO: db.accountHasCodeOrNonce ...
 
-    if isCollision:
-      computation.vmState.logger.debug("Address collision while creating contract: " & contractAddress.toHex)
-      push: 0
-      return
+  if isCollision:
+    computation.vmState.logger.debug("Address collision while creating contract: " & contractAddress.toHex)
+    push: 0
+    return
 
-    let childMsg = prepareChildMessage(
-      computation,
-      gas = 0, # TODO refactor gas
-      to = CREATE_CONTRACT_ADDRESS,
-      value = value,
-      data = @[],
-      code = callData.toString,
-      options = MessageOptions(createAddress: contractAddress)
-      )
+  let childMsg = prepareChildMessage(
+    computation,
+    gas = 0, # TODO refactor gas
+    to = CREATE_CONTRACT_ADDRESS,
+    value = value,
+    data = @[],
+    code = callData.toString,
+    options = MessageOptions(createAddress: contractAddress)
+    )
 
-    # let childComputation = applyChildBaseComputation(computation, childMsg)
-    var childComputation: BaseComputation # TODO - stub
-    new childComputation
-    childComputation.gasMeter = newGasMeter(0) # TODO GasMeter should be a normal object.
+  # let childComputation = applyChildBaseComputation(computation, childMsg)
+  var childComputation: BaseComputation # TODO - stub
+  new childComputation
+  childComputation.gasMeter = newGasMeter(0) # TODO GasMeter should be a normal object.
 
-    if childComputation.isError:
-      push: 0
-    else:
-      push: contractAddress
-    computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
-
-genCreate(FkFrontier)
-genCreate(FkHomestead)
+  if childComputation.isError:
+    push: 0
+  else:
+    push: contractAddress
+  computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
 proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, bool, bool) =
   let gas = computation.stack.popInt()
@@ -631,12 +628,13 @@ proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthA
     false,  # should_transfer_value,
     true) # is_static
 
-template genCall(callName, ForkName: untyped): untyped =
-  op callName, ForkName, inline = false:
+template genCall(callName: untyped): untyped =
+  op callName, inline = false:
     ## CALL, 0xf1, Message-Call into an account
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
+    # TODO: forked calls for Homestead
 
     let (gas, value, to, sender,
           codeAddress,
@@ -726,12 +724,12 @@ template genCall(callName, ForkName: untyped): untyped =
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-genCall(call, FkFrontier)
-genCall(callCode, FkFrontier)
-genCall(delegateCall, FkFrontier)
-genCall(staticCall, FkByzantium)
+genCall(call)
+genCall(callCode)
+genCall(delegateCall)
+genCall(staticCall)
 
-op returnOp, FkFrontier, inline = false, startPos, size:
+op returnOp, inline = false, startPos, size:
   ## 0xf3, Halt execution returning output data.
   let (pos, len) = (startPos.toInt, size.toInt)
 
@@ -744,7 +742,7 @@ op returnOp, FkFrontier, inline = false, startPos, size:
   let output = computation.memory.read(pos, len)
   computation.output = output.toString
 
-op revert, FkByzantium, inline = false, startPos, size:
+op revert, inline = false, startPos, size:
   ## 0xf0, Halt execution reverting state changes but returning data and remaining gas.
   let (pos, len) = (startPos.toInt, size.toInt)
 
@@ -757,7 +755,7 @@ op revert, FkByzantium, inline = false, startPos, size:
   let output = computation.memory.read(pos, len).toString
   computation.output = output
 
-op selfDestruct, FkFrontier, inline = false:
+op selfDestruct, inline = false:
   ## 0xff Halt execution and register account for later deletion.
   let beneficiary = computation.stack.popAddress()
 
