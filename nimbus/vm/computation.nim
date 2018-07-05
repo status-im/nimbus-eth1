@@ -12,10 +12,9 @@ import
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack
 
-proc newBaseComputation*(blockNumber: UInt256, message: Message): BaseComputation =
-
-  new(result)
-  result.vmState = newBaseVMState()
+proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Message): BaseComputation =
+  new result
+  result.vmState = vmState
   result.msg = message
   result.memory = Memory()
   result.stack = newStack()

@@ -44,7 +44,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     stateRoot: emptyRlpHash
     )
 
-  var vmState = newBaseVMState()
+  var memDb = newMemDB()
+  var vmState = newBaseVMState(header, newBaseChainDB(trieDB memDb))
   let fexec = fixture["exec"]
   var code = ""
   vmState.mutateStateDB:
@@ -70,7 +71,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   if DEBUG:
     c.displayDecompiled()
 
-  var computation = newBaseComputation(header.blockNumber, message)
+  var computation = newBaseComputation(vmState, header.blockNumber, message)
   computation.vmState = vmState
   computation.precompiles = initTable[string, Opcode]()
 

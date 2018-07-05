@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint, nimcrypto, strformat, eth_common, times,
+  strformat, times,
+  stint, nimcrypto, ranges/typedranges, eth_common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
@@ -276,7 +277,8 @@ op gasprice, inline = true:
 op extCodeSize, inline = true:
   ## 0x3b, Get size of an account's code
   let account = computation.stack.popAddress()
-  push: 0 # TODO
+  let codeSize = computation.vmState.readOnlyStateDB.getCode(account).len
+  push uint(codeSize)
 
 op extCodeCopy, inline = true, memStartPos, copyStartPos, size:
   ## 0x3c, Copy an account's code to memory.
@@ -405,7 +407,7 @@ op sstore, inline = false, slot, value:
     gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: not existing)
     (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(currentValue, gasParam)
 
-  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[slot] -> {value} ({currentValue})")
+  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
 
   if gasRefund > 0:
     computation.gasMeter.refundGas(gasRefund)

@@ -37,12 +37,13 @@ proc `$`*(vmState: BaseVMState): string =
   else:
     result = &"VMState {vmState.name}:\n  header: {vmState.blockHeader}\n  chaindb:  {vmState.chaindb}"
 
-proc newBaseVMState*: BaseVMState =
-  new(result)
+proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB): BaseVMState =
+  new result
   result.prevHeaders = @[]
   result.name = "BaseVM"
   result.accessLogs = newAccessLogs()
-  # result.blockHeader = # TODO...
+  result.blockHeader = header
+  result.chaindb = chainDB
 
 method logger*(vmState: BaseVMState): Logger =
   logging.getLogger(&"evm.vmState.{vmState.name}")

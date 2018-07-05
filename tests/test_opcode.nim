@@ -17,6 +17,10 @@ import
 from eth_common import GasInt
 
 proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputation =
+  let header = BlockHeader(blockNumber: blockNum)
+  var memDb = newMemDB()
+  var vmState = newBaseVMState(header, newBaseChainDB(trieDB memDb))
+
   # coinbase: "",
   # difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,
   # blockNumber: fixture{"env"}{"currentNumber"}.getHexadecimalInt.u256,
@@ -39,7 +43,7 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
   if DEBUG:
     c.displayDecompiled()
 
-  result = newBaseComputation(blockNum, message)
+  result = newBaseComputation(vmState, blockNum, message)
   result.precompiles = initTable[string, Opcode]()
 
   result.executeOpcodes()

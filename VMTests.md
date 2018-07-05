@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 194/195 Fail: 1/195 Skip: 0/195
+OK: 185/195 Fail: 10/195 Skip: 0/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -278,7 +278,7 @@ OK: 60/60 Fail: 0/60 Skip: 0/60
 + number.json                                                     OK
 + timestamp.json                                                  OK
 ```
-OK: 12/12 Fail: 0/12 Skip: 0/12
+OK: 11/12 Fail: 1/12 Skip: 0/12
 ## vmEnvironmentalInfo
 ```diff
 + ExtCodeSizeAddressInputTooBigLeftMyAddress.json                 OK
@@ -307,19 +307,19 @@ OK: 12/12 Fail: 0/12 Skip: 0/12
   calldatacopy_DataIndexTooHigh2_return.json                      Skip
   calldatacopy_DataIndexTooHigh_return.json                       Skip
   calldatacopy_sec.json                                           Skip
-+ calldataload0.json                                              OK
+- calldataload0.json                                              Fail
 + calldataload1.json                                              OK
-+ calldataload2.json                                              OK
-+ calldataloadSizeTooHigh.json                                    OK
-+ calldataloadSizeTooHighPartial.json                             OK
+- calldataload2.json                                              Fail
+- calldataloadSizeTooHigh.json                                    Fail
+- calldataloadSizeTooHighPartial.json                             Fail
 + calldataload_BigOffset.json                                     OK
 + calldatasize0.json                                              OK
 + calldatasize1.json                                              OK
 + calldatasize2.json                                              OK
 + caller.json                                                     OK
 + callvalue.json                                                  OK
-- codecopy0.json                                                  Fail
-+ codecopyZeroMemExpansion.json                                   OK
++ codecopy0.json                                                  OK
+- codecopyZeroMemExpansion.json                                   Fail
 - codecopy_DataIndexTooHigh.json                                  Fail
 + codesize.json                                                   OK
 - env1.json                                                       Fail
@@ -334,7 +334,7 @@ OK: 12/12 Fail: 0/12 Skip: 0/12
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 26/52 Fail: 11/52 Skip: 15/52
+OK: 22/52 Fail: 15/52 Skip: 15/52
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
@@ -461,8 +461,8 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + mstore0.json                                                    OK
 + mstore1.json                                                    OK
 + mstore8MemExp.json                                              OK
-- mstore8WordToBigError.json                                      Fail
-- mstore8_0.json                                                  Fail
++ mstore8WordToBigError.json                                      OK
++ mstore8_0.json                                                  OK
 - mstore8_1.json                                                  Fail
 + mstoreMemExp.json                                               OK
 + mstoreWordToBigError.json                                       OK
@@ -483,7 +483,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 110/145 Fail: 34/145 Skip: 1/145
+OK: 112/145 Fail: 32/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
@@ -673,10 +673,10 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 - sha3_memSizeQuadraticCost33.json                                Fail
 - sha3_memSizeQuadraticCost63.json                                Fail
 - sha3_memSizeQuadraticCost64.json                                Fail
-- sha3_memSizeQuadraticCost64_2.json                              Fail
++ sha3_memSizeQuadraticCost64_2.json                              OK
 - sha3_memSizeQuadraticCost65.json                                Fail
 ```
-OK: 4/18 Fail: 14/18 Skip: 0/18
+OK: 5/18 Fail: 13/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
   ABAcalls0.json                                                  Skip
