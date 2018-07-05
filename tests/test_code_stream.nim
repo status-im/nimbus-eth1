@@ -44,14 +44,15 @@ suite "parse bytecode":
     discard codeStream.next
     check(codeStream.next == Op.STOP)
 
-  test "seek reverts to original position on exit":
-    var codeStream = newCodeStream("\x01\x02\x30")
-    check(codeStream.pc == 0)
-    codeStream.seek(1):
-      check(codeStream.pc == 1)
-      check(codeStream.next == Op.MUL)
-    check(codeStream.pc == 0)
-    check(codeStream.peek == Op.ADD)
+  # Seek has been dommented out for future deletion
+  # test "seek reverts to original position on exit":
+  #   var codeStream = newCodeStream("\x01\x02\x30")
+  #   check(codeStream.pc == 0)
+  #   codeStream.seek(1):
+  #     check(codeStream.pc == 1)
+  #     check(codeStream.next == Op.MUL)
+  #   check(codeStream.pc == 0)
+  #   check(codeStream.peek == Op.ADD)
 
   test "[] returns opcode":
     let codeStream = newCodeStream("\x01\x02\x30")

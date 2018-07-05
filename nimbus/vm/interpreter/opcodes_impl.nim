@@ -191,9 +191,8 @@ op address, inline = true:
 
 op balance, inline = true:
   ## 0x31, Get balance of the given account.
-  let address = computation.stack.popAddress
-  computation.vmState.db(readOnly=true):
-    push: db.getBalance(address)
+  let address = computation.stack.popAddress()
+  push: computation.vmState.readOnlyStateDB.getBalance(address)
 
 op origin, inline = true:
   ## 0x32, Get execution origination address.
@@ -390,21 +389,17 @@ op mstore8, inline = true, memStartPos, value:
 op sload, inline = true, slot:
   ## 0x54, Load word from storage.
 
-  # TODO: this returns 0 and does not work
-  # computation.vmState.db(readOnly=true):
-  #   let (value, _) = db.getStorage(computation.msg.storageAddress, slot)
-  #   push: value
-
-  push: 2 # Why 2? stub carry over from OO implementation
+  let (value, found) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
+  if found:
+    push: value
+  else:
+    # TODO: raise exception?
+    discard
 
 op sstore, inline = false, slot, value:
   ## 0x55, Save word to storage.
 
-  var currentValue = 0.u256
-  var existing = false
-
-  computation.vmState.db(readOnly=true):
-    (currentValue, existing) = db.getStorage(computation.msg.storageAddress, slot)
+  let (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
 
   let
     gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: not existing)
@@ -415,7 +410,7 @@ op sstore, inline = false, slot, value:
   if gasRefund > 0:
     computation.gasMeter.refundGas(gasRefund)
 
-  computation.vmState.db(readOnly=false):
+  computation.vmState.mutateStateDB:
     db.setStorage(computation.msg.storageAddress, slot, value)
 
 op jump, inline = true, jumpTarget:
