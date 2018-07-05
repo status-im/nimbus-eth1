@@ -8,7 +8,7 @@
 import
   unittest, tables, parseutils,
   eth_trie/[types, memdb], eth_common/eth_types,
-  ../nimbus/[constants, vm_types, logging],
+  ../nimbus/[constants, vm_types, logging, vm_state],
   ../nimbus/vm/interpreter,
   ../nimbus/utils/header,
   ../nimbus/db/[db_chain, state_db, backends/memory_backend],
