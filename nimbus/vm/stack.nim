@@ -34,7 +34,7 @@ proc fromStackElement(elem: StackElement, v: var Hash256) {.inline.} = v.data = 
 
 proc toStackElement(v: openarray[byte], elem: var StackElement) {.inline.} =
   # TODO: This needs to go
-  # validateStackItem(v)
+  validateStackItem(v) # This is necessary to pass stack tests
   elem = bigEndianToInt(v)
 
 proc pushAux[T](stack: var Stack, value: T) =
