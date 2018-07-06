@@ -142,7 +142,7 @@ proc logImpl(topicCount: int): NimNode =
       `computation`.gasCosts[`OpName`].m_handler(`computation`.memory.len, `memPos`, `len`),
       reason="Memory expansion, Log topic and data gas cost")
     `computation`.memory.extend(`memPos`, `len`)
-    let logData = `computation`.memory.read(`memPos`, `len`).toString
+    let logData = `computation`.memory.read(`memPos`, `len`)
     addLogEntry(
       `computation`,
       account = `computation`.msg.storageAddress,

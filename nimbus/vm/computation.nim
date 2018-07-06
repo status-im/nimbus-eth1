@@ -7,7 +7,7 @@
 
 import
   strformat, strutils, sequtils, macros, terminal, math, tables,
-  eth_common, byteutils,
+  eth_common,
   ../constants, ../errors, ../validation, ../vm_state, ../logging, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack
@@ -23,7 +23,7 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Me
   result.accountsToDelete = initTable[EthAddress, EthAddress]()
   result.logEntries = @[]
   result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
-  result.rawOutput = "0x"
+  # result.rawOutput = "0x"
   result.gasCosts = blockNumber.toFork.forkToSchedule
 
 proc logger*(computation: BaseComputation): Logger =
@@ -45,13 +45,17 @@ proc shouldBurnGas*(c: BaseComputation): bool =
 proc shouldEraseReturnData*(c: BaseComputation): bool =
   c.isError and c.error.erasesReturnData
 
+func bytesToHex(x: openarray[byte]): string {.inline.} =
+  ## TODO: use seq[byte] for raw data and delete this proc
+  foldl(x, a & b.int.toHex(2).toLowerAscii, "0x")
+
 proc prepareChildMessage*(
     c: var BaseComputation,
     gas: GasInt,
     to: EthAddress,
     value: UInt256,
     data: seq[byte],
-    code: string,
+    code: seq[byte],
     options: MessageOptions = newMessageOptions()): Message =
 
   var childOptions = options
@@ -63,17 +67,22 @@ proc prepareChildMessage*(
     to,
     value,
     data,
-    code,
+    code.bytesToHex, # TODO: use seq[byte] for Message as well
     childOptions)
 
-proc output*(c: BaseComputation): string =
+func output*(c: BaseComputation): seq[byte] =
   if c.shouldEraseReturnData:
-    ""
+    @[]
   else:
     c.rawOutput
 
-proc `output=`*(c: var BaseComputation, value: string) =
-  c.rawOutput = value
+func `output=`*(c: var BaseComputation, value: openarray[byte]) =
+  c.rawOutput = @value
+
+proc outputHex*(c: BaseComputation): string =
+  if c.shouldEraseReturnData:
+    return "0x"
+  c.rawOutput.bytesToHex
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   validateCanonicalAddress(beneficiary, title="self destruct beneficiary address")
@@ -84,7 +93,7 @@ proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
-proc addLogEntry*(c: var BaseComputation, account: EthAddress, topics: seq[UInt256], data: string) =
+proc addLogEntry*(c: var BaseComputation, account: EthAddress, topics: seq[UInt256], data: seq[byte]) =
   validateCanonicalAddress(account, title="log entry address")
   c.logEntries.add((account, topics, data))
 

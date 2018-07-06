@@ -44,38 +44,29 @@ proc newMessage*(
     code: string,
     options: MessageOptions = newMessageOptions()): Message =
 
+  if to != CREATE_CONTRACT_ADDRESS:
+    validateCanonicalAddress(to, title="Message.to")
+  validateCanonicalAddress(sender, title="Message.sender")
+  validateGte(options.depth, minimum=0, title="Message.depth")
+
   new(result)
   result.gas = gas
   result.gasPrice = gasPrice
-
-  if to != CREATE_CONTRACT_ADDRESS:
-    validateCanonicalAddress(to, title="Message.to")
   result.to = to
-
-  validateCanonicalAddress(sender, title="Message.sender")
   result.sender = sender
-
   result.value = value
-
   result.data = data
+  result.depth = options.depth
+  result.storageAddress = options.createAddress
+  result.codeAddress = options.codeAddress
+  result.shouldTransferValue = options.shouldTransferValue
+  result.isStatic = options.isStatic
+  result.code = code
 
   if options.origin != ZERO_ADDRESS:
     result.internalOrigin = options.origin
   else:
     result.internalOrigin = sender
-
-  validateGte(options.depth, minimum=0, title="Message.depth")
-  result.depth = options.depth
-
-  result.code = code
-
-  result.storageAddress = options.createAddress
-
-  result.codeAddress = options.codeAddress
-
-  result.shouldTransferValue = options.shouldTransferValue
-
-  result.isStatic = options.isStatic
 
 proc origin*(message: Message): EthAddress =
   if message.internalOrigin != ZERO_ADDRESS:

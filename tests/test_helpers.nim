@@ -8,7 +8,6 @@
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
   byteutils, eth_common, eth_keys, ranges/typedranges,
-  ../nimbus/utils/[address, padding],
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/transaction
@@ -31,7 +30,13 @@ proc validTest*(folder: string, name: string): bool =
   #result = name == "exp2.json"
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
-  let testStatusIMPL = ident("testStatusIMPL")
+  let
+    testStatusIMPL = ident("testStatusIMPL")
+    # workaround for strformat in quote do: https://github.com/nim-lang/Nim/issues/8220
+    symbol = newIdentNode"symbol"
+    final  = newIdentNode"final"
+    name   = newIdentNode"name"
+    formatted = newStrLitNode"{symbol[final]} {name:<64}{$final}{'\n'}"
   result = quote:
     var z = 0
     var filenames: seq[(string, string, string)] = @[]
@@ -57,7 +62,7 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
     status.sort do (a: (string, OrderedTable[string, Status]),
                     b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
 
-    let symbol: array[Status, string] = ["+", "-", " "]
+    let `symbol`: array[Status, string] = ["+", "-", " "]
     var raw = ""
     raw.add(`s` & "\n")
     raw.add("===\n")
@@ -70,9 +75,9 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       var okCount = 0
       var failCount = 0
       var skipCount = 0
-      for name, final in sortedStatuses:
-        raw.add(symbol[final] & " " & name.padRight(64, " ") & $final & "\n")
-        case final:
+      for `name`, `final` in sortedStatuses:
+        raw.add(&`formatted`)
+        case `final`:
           of Status.OK: okCount += 1
           of Status.Fail: failCount += 1
           of Status.Skip: skipCount += 1

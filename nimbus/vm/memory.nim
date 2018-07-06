@@ -8,7 +8,7 @@
 import
   sequtils,
   eth_common/eth_types,
-  ../constants, ../errors, ../logging, ../validation, ../utils/bytes,
+  ../constants, ../errors, ../logging, ../validation,
   ./interpreter/utils/utils_numeric
 
 type
@@ -57,10 +57,3 @@ proc write*(memory: var Memory, startPos: Natural, value: openarray[byte]) =
 
   for z, b in value:
     memory.bytes[z + startPos] = b
-
-template write*(memory: var Memory, startPos: Natural, size: Natural, value: cstring) =
-  memory.write(startPos, value.toBytes)
-  # TODO ~ O(n^3):
-  #  - there is a string allocation with $ (?)
-  #  - then a conversion to seq (= new allocation) with toBytes
-  #  - then writing to memory

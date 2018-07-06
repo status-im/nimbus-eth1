@@ -23,10 +23,10 @@ type
     gasMeter*:              GasMeter
     code*:                  CodeStream
     children*:              seq[BaseComputation]
-    rawOutput*:             string
+    rawOutput*:             seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
-    logEntries*:            seq[(EthAddress, seq[UInt256], string)]
+    logEntries*:            seq[(EthAddress, seq[UInt256], seq[byte])]
     shouldEraseReturnData*: bool
     accountsToDelete*:      Table[EthAddress, EthAddress]
     opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
@@ -72,7 +72,7 @@ type
     sender*:                  EthAddress
     value*:                   UInt256
     data*:                    seq[byte]
-    code*:                    string
+    code*:                    string    # TDO: seq[byte] is probably a better representation
     internalOrigin*:          EthAddress
     internalCodeAddress*:     EthAddress
     depth*:                   int
