@@ -21,7 +21,7 @@ template testFailPush(value: untyped): untyped =
   expect(ValidationError):
     stack.push(value)
 
-template toBytes(s: string): seq[byte] =
+func toBytes(s: string): seq[byte] =
   cast[seq[byte]](s)
 
 func bigEndianToInt*(value: openarray[byte]): UInt256 =
