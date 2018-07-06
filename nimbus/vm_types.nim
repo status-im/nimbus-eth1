@@ -72,7 +72,7 @@ type
     sender*:                  EthAddress
     value*:                   UInt256
     data*:                    seq[byte]
-    code*:                    string    # TDO: seq[byte] is probably a better representation
+    code*:                    string    # TODO: seq[byte] is probably a better representation
     internalOrigin*:          EthAddress
     internalCodeAddress*:     EthAddress
     depth*:                   int
