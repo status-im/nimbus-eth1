@@ -24,7 +24,7 @@ type
     code*:                  CodeStream
     children*:              seq[BaseComputation]
     rawOutput*:             string
-    returnData*:            string
+    returnData*:            seq[byte]
     error*:                 Error
     logEntries*:            seq[(EthAddress, seq[UInt256], string)]
     shouldEraseReturnData*: bool
@@ -45,7 +45,7 @@ type
     kind*: Op
     runLogic*:  proc(computation: var BaseComputation)
 
-  GasMeter* = ref object
+  GasMeter* = ref object # TODO: use a normal object
     logger*: Logger
     gasRefunded*: GasInt
     startGas*: GasInt

@@ -310,7 +310,7 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + calldataload0.json                                              OK
 + calldataload1.json                                              OK
 + calldataload2.json                                              OK
-+ calldataloadSizeTooHigh.json                                    OK
+- calldataloadSizeTooHigh.json                                    Fail
 + calldataloadSizeTooHighPartial.json                             OK
 + calldataload_BigOffset.json                                     OK
 + calldatasize0.json                                              OK
@@ -318,7 +318,7 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + calldatasize2.json                                              OK
 + caller.json                                                     OK
 + callvalue.json                                                  OK
-- codecopy0.json                                                  Fail
++ codecopy0.json                                                  OK
 + codecopyZeroMemExpansion.json                                   OK
 - codecopy_DataIndexTooHigh.json                                  Fail
 + codesize.json                                                   OK
@@ -445,7 +445,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + jumpi_at_the_end.json                                           OK
 + jumpifInsidePushWithJumpDest.json                               OK
 + jumpifInsidePushWithoutJumpDest.json                            OK
-- kv1.json                                                        Fail
++ kv1.json                                                        OK
 + log1MemExp.json                                                 OK
 + loop_stacklimit_1020.json                                       OK
 + loop_stacklimit_1021.json                                       OK
@@ -461,8 +461,8 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + mstore0.json                                                    OK
 + mstore1.json                                                    OK
 + mstore8MemExp.json                                              OK
-- mstore8WordToBigError.json                                      Fail
-- mstore8_0.json                                                  Fail
++ mstore8WordToBigError.json                                      OK
++ mstore8_0.json                                                  OK
 - mstore8_1.json                                                  Fail
 + mstoreMemExp.json                                               OK
 + mstoreWordToBigError.json                                       OK
@@ -483,7 +483,7 @@ OK: 26/52 Fail: 11/52 Skip: 15/52
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 110/145 Fail: 34/145 Skip: 1/145
+OK: 113/145 Fail: 31/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
@@ -673,10 +673,10 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 - sha3_memSizeQuadraticCost33.json                                Fail
 - sha3_memSizeQuadraticCost63.json                                Fail
 - sha3_memSizeQuadraticCost64.json                                Fail
-- sha3_memSizeQuadraticCost64_2.json                              Fail
++ sha3_memSizeQuadraticCost64_2.json                              OK
 - sha3_memSizeQuadraticCost65.json                                Fail
 ```
-OK: 4/18 Fail: 14/18 Skip: 0/18
+OK: 5/18 Fail: 13/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
   ABAcalls0.json                                                  Skip
@@ -719,9 +719,9 @@ OK: 4/18 Fail: 14/18 Skip: 0/18
 OK: 0/36 Fail: 0/36 Skip: 36/36
 ## vmTests
 ```diff
-+ arith.json                                                      OK
-+ boolean.json                                                    OK
-+ mktx.json                                                       OK
+- arith.json                                                      Fail
+- boolean.json                                                    Fail
+- mktx.json                                                       Fail
 + suicide.json                                                    OK
 ```
-OK: 4/4 Fail: 0/4 Skip: 0/4
+OK: 1/4 Fail: 3/4 Skip: 0/4

@@ -32,7 +32,7 @@ template trace*(l: Logger, msg: string) =
   when DEBUG:
     l.log(msg, fgBlue)
 
-proc getLogger*(name: string): Logger =
+proc getLogger*(name: string): Logger {.inline.}=
   result = Logger(name: name)
 
 # proc disableLogging* =

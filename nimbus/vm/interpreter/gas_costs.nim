@@ -7,8 +7,8 @@
 
 import
   math, eth_common/eth_types,
-  ../utils/[macros_gen_opcodes, utils_numeric],
-  ./opcode_values
+  ./utils/[macros_gen_opcodes, utils_numeric],
+  ./opcode_values, ./vm_forks
 
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf
@@ -158,11 +158,10 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     result += static(FeeSchedule[GasSha3]) +
       static(FeeSchedule[GasSha3Word]) * (memLength).wordCount
 
-  func `prefix gasCopy`(value: Uint256): GasInt {.nimcall.} =
-    ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
-
+  func `prefix gasCopy`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
     result = static(FeeSchedule[GasVeryLow]) +
-      static(FeeSchedule[GasCopy]) * value.toInt.wordCount
+      static(FeeSchedule[GasCopy]) * memLength.wordCount
+    result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
   func `prefix gasExtCodeCopy`(value: Uint256): GasInt {.nimcall.} =
     ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
@@ -371,14 +370,14 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           CallValue:       fixed GasBase,
           CallDataLoad:    fixed GasVeryLow,
           CallDataSize:    fixed GasBase,
-          CallDataCopy:    dynamic `prefix gasCopy`,
+          CallDataCopy:    memExpansion `prefix gasCopy`,
           CodeSize:        fixed GasBase,
-          CodeCopy:        dynamic `prefix gasCopy`,
+          CodeCopy:        memExpansion `prefix gasCopy`,
           GasPrice:        fixed GasBase,
           ExtCodeSize:     fixed GasExtcode,
           ExtCodeCopy:     dynamic `prefix gasExtCodeCopy`,
           ReturnDataSize:  fixed GasBase,
-          ReturnDataCopy:  dynamic `prefix gasCopy`,
+          ReturnDataCopy:  memExpansion `prefix gasCopy`,
 
           # 40s: Block Information
           Blockhash:       fixed GasBlockhash,
@@ -480,7 +479,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           Log4:           memExpansion `prefix gasLog4`,
 
           # f0s: System operations
-          Create:         fixed GasCreate,
+          Create:         fixed GasCreate, # TODO, dynamic cost
           Call:           complex `prefix gasCall`,
           CallCode:       complex `prefix gasCall`,
           Return:         memExpansion `prefix gasHalt`,
@@ -553,3 +552,9 @@ const
 
 gasCosts(BaseGasFees, base, BaseGasCosts)
 gasCosts(TangerineGasFees, tangerine, TangerineGasCosts)
+
+proc forkToSchedule*(fork: Fork): GasCosts =
+  if fork < FkTangerine:
+    BaseGasCosts
+  else:
+    TangerineGasCosts

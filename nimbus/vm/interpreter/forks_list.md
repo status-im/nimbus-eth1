@@ -15,3 +15,10 @@ From https://www.etherchain.org/hardForks
 
 From https://ethereum.stackexchange.com/a/28409
 ![](forks_list.png)
+
+Tangerine Whistles introduced new gas costs
+
+Byzantium introduced opcodes:
+  - REVERT (EIP 140)
+  - RETURNDATASIZE and RETURNDATACOPY (EIP 211)
+  - STATICCALL (EIP 214)

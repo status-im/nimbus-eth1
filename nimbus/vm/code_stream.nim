@@ -45,6 +45,7 @@ proc newCodeStreamFromUnescaped*(code: string): CodeStream =
   newCodeStream(codeBytes)
 
 proc read*(c: var CodeStream, size: int): seq[byte] =
+  # TODO: use openarray[bytes]
   if c.pc + size - 1 < c.bytes.len:
     result = c.bytes[c.pc .. c.pc + size - 1]
     c.pc += size
@@ -60,18 +61,17 @@ proc readVmWord*(c: var CodeStream, n: int): UInt256 =
   let last = min(c.pc + n, c.bytes.len)
   let toWrite = last - c.pc
   for i in 0 ..< toWrite : result_bytes[i] = c.bytes[last - i - 1]
-  for j in toWrite ..< 32: result_bytes[j] = 0
   c.pc = last
 
 proc len*(c: CodeStream): int =
   len(c.bytes)
 
 proc next*(c: var CodeStream): Op =
-  var nextOpcode = c.read(1)
-  if nextOpcode.len != 0:
-    return Op(nextOpcode[0])
+  if c.pc != c.bytes.len:
+    result = Op(c.bytes[c.pc])
+    inc c.pc
   else:
-    return Op.STOP
+    result = Stop
 
 iterator items*(c: var CodeStream): Op =
   var nextOpcode = c.next()
@@ -83,9 +83,10 @@ proc `[]`*(c: CodeStream, offset: int): Op =
   Op(c.bytes[offset])
 
 proc peek*(c: var CodeStream): Op =
-  var currentPc = c.pc
-  result = c.next()
-  c.pc = currentPc
+  if c.pc <= c.bytes.len:
+    result = Op(c.bytes[c.pc])
+  else:
+    result = Stop
 
 proc updatePc*(c: var CodeStream, value: int) =
   c.pc = min(value, len(c))
@@ -100,7 +101,7 @@ when false:
     finally:
       cs.pc = anchorPc
 
-proc isValidOpcode*(c: var CodeStream, position: int): bool =
+proc isValidOpcode*(c: CodeStream, position: int): bool =
   if position >= len(c):
     return false
   if position in c.invalidPositions:

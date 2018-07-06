@@ -9,7 +9,7 @@ import
   sequtils,
   eth_common/eth_types,
   ../constants, ../errors, ../logging, ../validation, ../utils/bytes,
-  ./utils/utils_numeric
+  ./interpreter/utils/utils_numeric
 
 type
   Memory* = ref object
@@ -39,6 +39,7 @@ proc newMemory*(size: Natural): Memory =
   result.extend(0, size)
 
 proc read*(memory: var Memory, startPos: Natural, size: Natural): seq[byte] =
+  # TODO: use an openarray[byte]
   result = memory.bytes[startPos ..< (startPos + size)]
 
 proc write*(memory: var Memory, startPos: Natural, value: openarray[byte]) =
@@ -56,14 +57,6 @@ proc write*(memory: var Memory, startPos: Natural, value: openarray[byte]) =
 
   for z, b in value:
     memory.bytes[z + startPos] = b
-
-proc writePaddingBytes*(memory: var Memory,
-                        startPos, numberOfBytes: Natural,
-                        paddingValue = 0.byte) =
-  let endPos = startPos + numberOfBytes
-  assert endPos < memory.len
-  for i in startPos ..< endPos:
-    memory.bytes[i] = paddingValue
 
 template write*(memory: var Memory, startPos: Natural, size: Natural, value: cstring) =
   memory.write(startPos, value.toBytes)
