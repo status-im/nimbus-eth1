@@ -1,6 +1,6 @@
 
 import
-  math, strutils, utils/padding, eth_common
+  math, strutils, eth_common
 
 proc default(t: typedesc): t = discard
 
@@ -8,8 +8,6 @@ proc default(t: typedesc): t = discard
 const
   UINT_256_MAX*: UInt256 =                  high(UInt256)
   INT_256_MAX_AS_UINT256* =                 high(Uint256) shr 1
-  NULLBYTE* =                               "\x00"
-  EMPTYWORD* =                              repeat(NULLBYTE, 32)
   UINT160CEILING*: UInt256 =                2.u256.pow(160)
   ZERO_ADDRESS* =                           default(EthAddress)
   CREATE_CONTRACT_ADDRESS* =                ZERO_ADDRESS

@@ -8,7 +8,7 @@
 import
   unittest,
   eth_common/eth_types,
-  ../nimbus/[constants, errors, vm/interpreter, utils/bytes]
+  ../nimbus/[constants, errors, vm/interpreter]
 
 
 template testPush(value: untyped, expected: untyped): untyped =
@@ -20,6 +20,12 @@ template testFailPush(value: untyped): untyped =
   var stack = newStack()
   expect(ValidationError):
     stack.push(value)
+
+func toBytes(s: string): seq[byte] =
+  cast[seq[byte]](s)
+
+func bigEndianToInt*(value: openarray[byte]): UInt256 =
+  result.initFromBytesBE(value)
 
 suite "stack":
   test "push only valid":

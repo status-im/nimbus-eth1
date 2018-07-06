@@ -8,25 +8,19 @@
 import
   strformat, strutils, sequtils, endians, macros,
   eth_common/eth_types, rlp,
-  ../../../constants, ../../../utils/padding
+  ../../../constants
 
 # some methods based on py-evm utils/numeric
 
-proc bigEndianToInt*(value: openarray[byte]): UInt256 =
-  if value.len == 32:
-    readUintBE[256](value)
-  else:
-    readUintBE[256](padLeft(@value, 32, 0.byte))
-
-proc log256*(value: UInt256): Natural {.inline.}=
+func log256*(value: UInt256): Natural {.inline.}=
   (255 - value.countLeadingZeroBits) shr 3 # div 8
 
-proc unsignedToPseudoSigned*(value: UInt256): UInt256 {.inline.}=
+func unsignedToPseudoSigned*(value: UInt256): UInt256 {.inline.}=
   result = value
   if value > INT_256_MAX_AS_UINT256:
     result -= INT_256_MAX_AS_UINT256
 
-proc pseudoSignedToUnsigned*(value: UInt256): UInt256 {.inline.}=
+func pseudoSignedToUnsigned*(value: UInt256): UInt256 {.inline.}=
   result = value
   if value > INT_256_MAX_AS_UINT256:
     result += INT_256_MAX_AS_UINT256

@@ -12,7 +12,7 @@ import
   ./test_helpers,
   ../nimbus/[constants, errors, logging],
   ../nimbus/[vm_state, vm_types],
-  ../nimbus/utils/[header, padding],
+  ../nimbus/utils/header,
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db, backends/memory_backend]
 
@@ -94,7 +94,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       fail()
 
     let expectedOutput = fixture{"out"}.getStr
-    check(computation.output == expectedOutput)
+    check(computation.outputHex == expectedOutput)
     let gasMeter = computation.gasMeter
 
     let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt

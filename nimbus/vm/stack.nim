@@ -7,7 +7,7 @@
 
 import
   strformat, strutils, sequtils, macros, rlp, eth_common, nimcrypto,
-  ../errors, ../validation, ./interpreter/utils/utils_numeric, ../constants, ../logging, .. / utils / bytes
+  ../errors, ../validation, ./interpreter/utils/utils_numeric, ../constants, ../logging
 
 type
   Stack* = ref object of RootObj
@@ -25,8 +25,8 @@ proc len*(stack: Stack): int {.inline.} =
 
 proc toStackElement(v: UInt256, elem: var StackElement) {.inline.} = elem = v
 proc toStackElement(v: uint | int | GasInt, elem: var StackElement) {.inline.} = elem = v.u256
-proc toStackElement(v: EthAddress, elem: var StackElement) {.inline.} = elem = bigEndianToInt(v)
-proc toStackElement(v: MDigest, elem: var StackElement) {.inline.} = elem = readUintBE[256](v.data)
+proc toStackElement(v: EthAddress, elem: var StackElement) {.inline.} = elem.initFromBytesBE(v)
+proc toStackElement(v: MDigest, elem: var StackElement) {.inline.} = elem.initFromBytesBE(v.data, allowPadding = false)
 
 proc fromStackElement(elem: StackElement, v: var UInt256) {.inline.} = v = elem
 proc fromStackElement(elem: StackElement, v: var EthAddress) {.inline.} = v[0 .. ^1] = elem.toByteArrayBE().toOpenArray(12, 31)
@@ -35,7 +35,7 @@ proc fromStackElement(elem: StackElement, v: var Hash256) {.inline.} = v.data = 
 proc toStackElement(v: openarray[byte], elem: var StackElement) {.inline.} =
   # TODO: This needs to go
   validateStackItem(v) # This is necessary to pass stack tests
-  elem = bigEndianToInt(v)
+  elem.initFromBytesBE(v)
 
 proc pushAux[T](stack: var Stack, value: T) =
   ensureStackLimit()

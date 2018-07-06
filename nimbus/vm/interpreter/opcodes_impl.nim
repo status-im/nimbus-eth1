@@ -12,8 +12,7 @@ import
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
   ../../vm_state, ../../errors, ../../constants, ../../vm_types, ../../logging,
-  ../../db/[db_chain, state_db],
-  ../../utils/[bytes, padding, address] # TODO remove those dependencies
+  ../../db/[db_chain, state_db]
 
 # ##################################
 # Syntactic sugar
@@ -266,15 +265,7 @@ op callDataCopy, inline = false, memStartPos, copyStartPos, size:
     computation.gasCosts[CallDataCopy].m_handler(memPos, copyPos, len),
     reason="CallDataCopy fee")
 
-  computation.memory.extend(memPos, len)
-
-  # If the data does not take 32 bytes, pad with zeros
-  let lim = min(computation.msg.data.len, copyPos + len)
-  let padding = copyPos + len - lim
-  # Note: when extending, extended memory is zero-ed, we only need to offset with padding value
-  # Also memory.write handles the case where copyPos+padding is out of bounds
-  computation.memory.write(memPos):
-    computation.msg.data.toOpenArray(copyPos+padding, copyPos+lim)
+  computation.memory.writePaddedResult(computation.code.bytes, memPos, copyPos, len)
 
 op codesize, inline = true:
   ## 0x38, Get size of code running in current environment.
@@ -548,7 +539,7 @@ op create, inline = false, value, startPosition, size:
     to = CREATE_CONTRACT_ADDRESS,
     value = value,
     data = @[],
-    code = callData.toString,
+    code = callData,
     options = MessageOptions(createAddress: contractAddress)
     )
 
@@ -709,7 +700,7 @@ template genCall(callName: untyped): untyped =
     # computation.vmState.db(readOnly = true):
     #   let code =  if codeAddress != ZERO_ADDRESS: db.getCode(codeAddress)
     #               else: db.getCode(to)
-    let code = "0x" # This is a stub hack, newCodeStreamFromUnescaped expects length 2 at least
+    let code: seq[byte] = @[]
 
     var childMsg = prepareChildMessage(
       computation,
@@ -740,7 +731,7 @@ template genCall(callName: untyped): untyped =
       let actualOutputSize = min(memOutLen, childComputation.output.len)
       computation.memory.write(
         memOutPos,
-        childComputation.output.toBytes[0 ..< actualOutputSize])
+        childComputation.output.toOpenArray(0, actualOutputSize))
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
@@ -759,8 +750,7 @@ op returnOp, inline = false, startPos, size:
     )
 
   computation.memory.extend(pos, len)
-  let output = computation.memory.read(pos, len)
-  computation.output = output.toString
+  computation.output = computation.memory.read(pos, len)
 
 op revert, inline = false, startPos, size:
   ## 0xf0, Halt execution reverting state changes but returning data and remaining gas.
@@ -772,8 +762,7 @@ op revert, inline = false, startPos, size:
     )
 
   computation.memory.extend(pos, len)
-  let output = computation.memory.read(pos, len).toString
-  computation.output = output
+  computation.output = computation.memory.read(pos, len)
 
 op selfDestruct, inline = false:
   ## 0xff Halt execution and register account for later deletion.
