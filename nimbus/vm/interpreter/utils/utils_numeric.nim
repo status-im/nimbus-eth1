@@ -12,10 +12,6 @@ import
 
 # some methods based on py-evm utils/numeric
 
-func bigEndianToInt*(value: openarray[byte]): UInt256 {.inline.}=
-  # TODO: delete -> only used int testing
-  result.initFromBytesBE(value)
-
 func log256*(value: UInt256): Natural {.inline.}=
   (255 - value.countLeadingZeroBits) shr 3 # div 8
 

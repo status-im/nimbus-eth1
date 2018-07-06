@@ -24,6 +24,9 @@ template testFailPush(value: untyped): untyped =
 template toBytes(s: string): seq[byte] =
   cast[seq[byte]](s)
 
+func bigEndianToInt*(value: openarray[byte]): UInt256 =
+  result.initFromBytesBE(value)
+
 suite "stack":
   test "push only valid":
     testPush(0'u, 0.u256)
