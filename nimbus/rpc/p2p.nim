@@ -9,7 +9,7 @@
 import nimcrypto, eth-rpc/server, eth_p2p
 import ../config
 
-proc setupP2PRPC*(server: P2PServer, rpcsrv: RpcServer) =
+proc setupP2PRPC*(server: EthereumNode, rpcsrv: RpcServer) =
   rpcsrv.rpc("net_version") do() -> int:
     let conf = getConfiguration()
     result = conf.net.networkId

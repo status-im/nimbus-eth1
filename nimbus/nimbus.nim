@@ -16,6 +16,9 @@ import config, rpc/common, rpc/p2p
 ## * No multiple bind addresses support
 ## * No database support
 
+const
+  nimbusClientId = "nimbus 0.1.0"
+
 when not defined(windows):
   from posix import SIGINT, SIGTERM
 
@@ -25,7 +28,7 @@ type
 
   NimbusObject = ref object
     rpcServer*: RpcServer
-    p2pServer*: P2PServer
+    ethNode*: EthereumNode
     state*: NimbusState
 
 proc start(): NimbusObject =
@@ -50,11 +53,11 @@ proc start(): NimbusObject =
   address.tcpPort = Port(conf.net.bindPort)
   address.udpPort = Port(conf.net.discPort)
 
-  nimbus.p2pServer = newP2PServer(keypair, address, nil, conf.net.bootNodes,
-                                  conf.net.ident, conf.net.networkId)
+  nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
+                                   nil, nimbusClientId)
 
   if RpcFlags.Enabled in conf.rpc.flags:
-    setupP2PRpc(nimbus.p2pServer, nimbus.rpcServer)
+    setupP2PRpc(nimbus.ethNode, nimbus.rpcServer)
 
   ## Starting servers
   nimbus.state = Starting
@@ -63,7 +66,9 @@ proc start(): NimbusObject =
       nimbus.state = Stopping
       result = "EXITING"
     nimbus.rpcServer.start()
-  nimbus.p2pServer.start()
+
+  nimbus.ethNode.connectToNetwork(conf.net.bootNodes)
+
   nimbus.state = Running
   result = nimbus
 
