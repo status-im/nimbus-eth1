@@ -11,7 +11,8 @@
 import
   macros, strformat, stint,
   ../../computation, ../../stack, ../../code_stream,
-  ../../../constants, ../../../vm_types
+  ../../../constants, ../../../vm_types, ../../memory,
+  ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values]
 
 proc pop(tree: var NimNode): NimNode =
   ## Returns the last value of a NimNode and remove it
@@ -98,60 +99,32 @@ macro genSwap*(): untyped =
       func `name`*(computation: var BaseComputation) {.inline.}=
         computation.stack.swap(`pos`)
 
-proc logImpl(topicCount: int): NimNode =
+proc logImpl(c: var BaseComputation, opcode: Op, topicCount: int) =
+  assert(topicCount in 0 .. 4)
+  let (memStartPosition, size) = c.stack.popInt(2)
+  let (memPos, len) = (memStartPosition.toInt, size.toInt)
 
-  # TODO: use toopenArray to avoid some string allocations
+  if memPos < 0 or len < 0:
+    raise newException(OutOfBoundsRead, "Out of bounds memory access")
 
-  if topicCount < 0 or topicCount > 4:
-    error(&"Invalid log topic len {topicCount}  Must be 0, 1, 2, 3, or 4")
-    return
+  var topics = newSeqOfCap[UInt256](topicCount)
+  for i in 0 ..< topicCount:
+    topics.add(c.stack.popInt())
+  c.gasMeter.consumeGas(
+    c.gasCosts[opcode].m_handler(c.memory.len, memPos, len),
+    reason="Memory expansion, Log topic and data gas cost")
 
-  let name = ident(&"log{topicCount}")
-  let computation = ident("computation")
-  let topics = ident("topics")
-  let topicsTuple = ident("topicsTuple")
-  let len = ident("len")
-  let memPos = ident("memPos")
-  result = quote:
-    proc `name`*(`computation`: var BaseComputation) =
-      let (memStartPosition, size) = `computation`.stack.popInt(2)
-      let (`memPos`, `len`) = (memStartPosition.toInt, size.toInt)
-      var `topics`: seq[UInt256]
+  c.memory.extend(memPos, len)
+  let logData = c.memory.read(memPos, len)
+  addLogEntry(
+    c,
+    account = c.msg.storageAddress,
+    topics = topics,
+    data = logData)
 
-  var topicCode: NimNode
-  if topicCount == 0:
-    topicCode = quote:
-      `topics` = @[]
-  elif topicCount > 1:
-    topicCode = quote:
-      let `topicsTuple` = `computation`.stack.popInt(`topicCount`)
-    topicCode = nnkStmtList.newTree(topicCode)
-    for z in 0 ..< topicCount:
-      let topicPush = quote:
-        `topics`.add(`topicsTuple`[`z`])
-      topicCode.add(topicPush)
-  else:
-    topicCode = quote:
-      `topics` = @[`computation`.stack.popInt()]
-
-  result.body.add(topicCode)
-
-  let OpName = ident(&"Log{topicCount}")
-  let logicCode = quote do:
-    `computation`.gasMeter.consumeGas(
-      `computation`.gasCosts[`OpName`].m_handler(`computation`.memory.len, `memPos`, `len`),
-      reason="Memory expansion, Log topic and data gas cost")
-    `computation`.memory.extend(`memPos`, `len`)
-    let logData = `computation`.memory.read(`memPos`, `len`)
-    addLogEntry(
-      `computation`,
-      account = `computation`.msg.storageAddress,
-      topics = `topics`,
-      data = log_data)
-
-  result.body.add(logicCode)
-
-macro genLog*(): untyped =
-  result = newStmtList()
-  for i in 0..4:
-    result.add logImpl(i)
+template genLog*() =
+  proc log0*(c: var BaseComputation) {.inline.} = logImpl(c, Log0, 0)
+  proc log1*(c: var BaseComputation) {.inline.} = logImpl(c, Log1, 1)
+  proc log2*(c: var BaseComputation) {.inline.} = logImpl(c, Log2, 2)
+  proc log3*(c: var BaseComputation) {.inline.} = logImpl(c, Log3, 3)
+  proc log4*(c: var BaseComputation) {.inline.} = logImpl(c, Log4, 4)
