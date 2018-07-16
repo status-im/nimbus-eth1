@@ -487,8 +487,8 @@ OK: 113/145 Fail: 31/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
-- log0_logMemStartTooHigh.json                                    Fail
-- log0_logMemsizeTooHigh.json                                     Fail
++ log0_logMemStartTooHigh.json                                    OK
++ log0_logMemsizeTooHigh.json                                     OK
 + log0_logMemsizeZero.json                                        OK
 + log0_nonEmptyMem.json                                           OK
 + log0_nonEmptyMem_logMemSize1.json                               OK
@@ -496,8 +496,8 @@ OK: 113/145 Fail: 31/145 Skip: 1/145
 + log1_Caller.json                                                OK
 + log1_MaxTopic.json                                              OK
 + log1_emptyMem.json                                              OK
-- log1_logMemStartTooHigh.json                                    Fail
-- log1_logMemsizeTooHigh.json                                     Fail
++ log1_logMemStartTooHigh.json                                    OK
++ log1_logMemsizeTooHigh.json                                     OK
 + log1_logMemsizeZero.json                                        OK
 + log1_nonEmptyMem.json                                           OK
 + log1_nonEmptyMem_logMemSize1.json                               OK
@@ -505,8 +505,8 @@ OK: 113/145 Fail: 31/145 Skip: 1/145
 + log2_Caller.json                                                OK
 + log2_MaxTopic.json                                              OK
 + log2_emptyMem.json                                              OK
-- log2_logMemStartTooHigh.json                                    Fail
-- log2_logMemsizeTooHigh.json                                     Fail
++ log2_logMemStartTooHigh.json                                    OK
++ log2_logMemsizeTooHigh.json                                     OK
 + log2_logMemsizeZero.json                                        OK
 + log2_nonEmptyMem.json                                           OK
 + log2_nonEmptyMem_logMemSize1.json                               OK
@@ -515,8 +515,8 @@ OK: 113/145 Fail: 31/145 Skip: 1/145
 + log3_MaxTopic.json                                              OK
 + log3_PC.json                                                    OK
 + log3_emptyMem.json                                              OK
-- log3_logMemStartTooHigh.json                                    Fail
-- log3_logMemsizeTooHigh.json                                     Fail
++ log3_logMemStartTooHigh.json                                    OK
++ log3_logMemsizeTooHigh.json                                     OK
 + log3_logMemsizeZero.json                                        OK
 + log3_nonEmptyMem.json                                           OK
 + log3_nonEmptyMem_logMemSize1.json                               OK
@@ -525,15 +525,15 @@ OK: 113/145 Fail: 31/145 Skip: 1/145
 + log4_MaxTopic.json                                              OK
 + log4_PC.json                                                    OK
 + log4_emptyMem.json                                              OK
-- log4_logMemStartTooHigh.json                                    Fail
-- log4_logMemsizeTooHigh.json                                     Fail
++ log4_logMemStartTooHigh.json                                    OK
++ log4_logMemsizeTooHigh.json                                     OK
 + log4_logMemsizeZero.json                                        OK
 + log4_nonEmptyMem.json                                           OK
 + log4_nonEmptyMem_logMemSize1.json                               OK
 + log4_nonEmptyMem_logMemSize1_logMemStart31.json                 OK
 + log_2logs.json                                                  OK
 ```
-OK: 36/46 Fail: 10/46 Skip: 0/46
+OK: 46/46 Fail: 0/46 Skip: 0/46
 ## vmPerformance
 ```diff
   ackermann31.json                                                Skip
