@@ -172,13 +172,16 @@ op sha3, inline = true, startPos, length:
   ## 0x20, Compute Keccak-256 hash.
   let (pos, len) = (startPos.toInt, length.toInt)
 
+  if pos < 0 or len < 0:
+    raise newException(OutOfBoundsRead, "Out of bounds memory access")
+
   computation.gasMeter.consumeGas(
     computation.gasCosts[Op.Sha3].m_handler(computation.memory.len, pos, len),
     reason="SHA3: word gas cost"
     )
 
   computation.memory.extend(pos, len)
-  let endRange = min(pos + len, computation.memory.len - 1)
+  let endRange = min(pos + len, computation.memory.len) - 1
   push:
     keccak256.digest computation.memory.bytes.toOpenArray(pos, endRange)
 

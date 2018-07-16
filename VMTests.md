@@ -658,25 +658,25 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 ## vmSha3Test
 ```diff
 + sha3_0.json                                                     OK
-- sha3_1.json                                                     Fail
-- sha3_2.json                                                     Fail
++ sha3_1.json                                                     OK
++ sha3_2.json                                                     OK
 + sha3_3.json                                                     OK
 + sha3_4.json                                                     OK
 + sha3_5.json                                                     OK
-- sha3_6.json                                                     Fail
-- sha3_bigOffset.json                                             Fail
-- sha3_bigOffset2.json                                            Fail
-- sha3_bigSize.json                                               Fail
-- sha3_memSizeNoQuadraticCost31.json                              Fail
-- sha3_memSizeQuadraticCost32.json                                Fail
++ sha3_6.json                                                     OK
++ sha3_bigOffset.json                                             OK
++ sha3_bigOffset2.json                                            OK
++ sha3_bigSize.json                                               OK
++ sha3_memSizeNoQuadraticCost31.json                              OK
++ sha3_memSizeQuadraticCost32.json                                OK
 - sha3_memSizeQuadraticCost32_zeroSize.json                       Fail
-- sha3_memSizeQuadraticCost33.json                                Fail
-- sha3_memSizeQuadraticCost63.json                                Fail
-- sha3_memSizeQuadraticCost64.json                                Fail
++ sha3_memSizeQuadraticCost33.json                                OK
++ sha3_memSizeQuadraticCost63.json                                OK
++ sha3_memSizeQuadraticCost64.json                                OK
 + sha3_memSizeQuadraticCost64_2.json                              OK
-- sha3_memSizeQuadraticCost65.json                                Fail
++ sha3_memSizeQuadraticCost65.json                                OK
 ```
-OK: 5/18 Fail: 13/18 Skip: 0/18
+OK: 17/18 Fail: 1/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
   ABAcalls0.json                                                  Skip
