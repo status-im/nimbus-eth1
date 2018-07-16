@@ -287,10 +287,10 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + address1.json                                                   OK
 + balance0.json                                                   OK
 - balance01.json                                                  Fail
-- balance1.json                                                   Fail
++ balance1.json                                                   OK
 + balanceAddress2.json                                            OK
 + balanceAddressInputTooBig.json                                  OK
-- balanceAddressInputTooBigLeftMyAddress.json                     Fail
++ balanceAddressInputTooBigLeftMyAddress.json                     OK
   balanceAddressInputTooBigRightMyAddress.json                    Skip
 + balanceCaller3.json                                             OK
   calldatacopy0.json                                              Skip
@@ -334,7 +334,7 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 26/52 Fail: 11/52 Skip: 15/52
+OK: 28/52 Fail: 9/52 Skip: 15/52
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
@@ -602,7 +602,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + push30.json                                                     OK
 + push31.json                                                     OK
 + push32.json                                                     OK
-+ push32AndSuicide.json                                           OK
+- push32AndSuicide.json                                           Fail
 + push32FillUpInputWithZerosAtTheEnd.json                         OK
 + push32Undefined.json                                            OK
 + push32Undefined2.json                                           OK
@@ -614,7 +614,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + push7.json                                                      OK
 + push8.json                                                      OK
 + push9.json                                                      OK
-- swap1.json                                                      Fail
++ swap1.json                                                      OK
 + swap10.json                                                     OK
 + swap11.json                                                     OK
 + swap12.json                                                     OK
@@ -722,6 +722,6 @@ OK: 0/36 Fail: 0/36 Skip: 36/36
 - arith.json                                                      Fail
 - boolean.json                                                    Fail
 - mktx.json                                                       Fail
-+ suicide.json                                                    OK
+- suicide.json                                                    Fail
 ```
-OK: 1/4 Fail: 3/4 Skip: 0/4
+OK: 0/4 Fail: 4/4 Skip: 0/4

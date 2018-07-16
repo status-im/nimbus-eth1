@@ -96,7 +96,7 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
 
     let nonce = accountData{"nonce"}.getInt.u256
     let code = hexToSeqByte(accountData{"code"}.getStr).toRange
-    let balance = accountData{"balance"}.getInt.u256
+    let balance = UInt256.fromHex accountData{"balance"}.getStr
 
     stateDB.setNonce(account, nonce)
     stateDB.setCode(account, code)
@@ -107,17 +107,18 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
     let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:
       let
-        slotId = slot.parseHexInt.u256
+        slotId = UInt256.fromHex slot
         wantedValue = UInt256.fromHex value.getStr
 
       let (actualValue, found) = stateDB.getStorage(account, slotId)
       # echo "FOUND ", found
       # echo "ACTUAL VALUE ", actualValue.toHex
-      doAssert found and actualValue == wantedValue
+      doAssert found
+      doAssert actualValue == wantedValue
 
     let
       wantedCode = hexToSeqByte(accountData{"code"}.getStr).toRange
-      wantedBalance = accountData{"balance"}.getInt.u256
+      wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
       wantedNonce = accountData{"nonce"}.getInt.u256
 
       actualCode = stateDB.getCode(account)
