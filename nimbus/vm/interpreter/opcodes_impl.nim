@@ -182,8 +182,11 @@ op sha3, inline = true, startPos, length:
 
   computation.memory.extend(pos, len)
   let endRange = min(pos + len, computation.memory.len) - 1
-  push:
-    keccak256.digest computation.memory.bytes.toOpenArray(pos, endRange)
+  if endRange == -1:
+    push(EMPTY_SHA3)
+  else:
+    push:
+      keccak256.digest computation.memory.bytes.toOpenArray(pos, endRange)
 
 # ##########################################
 # 30s: Environmental Information
@@ -421,8 +424,8 @@ op sstore, inline = false, slot, value:
   let (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
 
   let
-    gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: not existing)
-    (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(currentValue, gasParam)
+    gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: currentValue.isZero)
+    (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(value, gasParam)
 
   computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
 

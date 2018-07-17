@@ -46,7 +46,7 @@ const
   GAS_LIMIT_MINIMUM* =                      5000
 
   BLANK_ROOT_HASH* =                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
-  EMPTY_SHA3* =                             "883f7328a6c30727a655daff17eba3a86049871bc7839a5b71e2bc26a99c4d4c".toDigest
+  EMPTY_SHA3* =                             "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
 
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* =      20.u256
 

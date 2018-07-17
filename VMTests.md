@@ -185,9 +185,9 @@ VMTests
 - smod2.json                                                      Fail
 + smod3.json                                                      OK
 + smod4.json                                                      OK
-+ smod5.json                                                      OK
+- smod5.json                                                      Fail
 + smod6.json                                                      OK
-+ smod7.json                                                      OK
+- smod7.json                                                      Fail
 + smod8_byZero.json                                               OK
 + smod_i256min1.json                                              OK
 - smod_i256min2.json                                              Fail
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 185/195 Fail: 10/195 Skip: 0/195
+OK: 183/195 Fail: 12/195 Skip: 0/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -349,7 +349,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + BlockNumberDynamicJumpi0.json                                   OK
 + BlockNumberDynamicJumpi1.json                                   OK
 + BlockNumberDynamicJumpi1_jumpdest.json                          OK
-- BlockNumberDynamicJumpiAfterStop.json                           Fail
++ BlockNumberDynamicJumpiAfterStop.json                           OK
 - BlockNumberDynamicJumpiOutsideBoundary.json                     Fail
 + BlockNumberDynamicJumpifInsidePushWithJumpDest.json             OK
 + BlockNumberDynamicJumpifInsidePushWithoutJumpDest.json          OK
@@ -361,7 +361,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + DynamicJump0_jumpdest2.json                                     OK
 + DynamicJump0_withoutJumpdest.json                               OK
 + DynamicJump1.json                                               OK
-- DynamicJumpAfterStop.json                                       Fail
++ DynamicJumpAfterStop.json                                       OK
 + DynamicJumpInsidePushWithJumpDest.json                          OK
 + DynamicJumpInsidePushWithoutJumpDest.json                       OK
 + DynamicJumpJD_DependsOnJumps0.json                              OK
@@ -378,7 +378,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + DynamicJumpi0.json                                              OK
 + DynamicJumpi1.json                                              OK
 + DynamicJumpi1_jumpdest.json                                     OK
-- DynamicJumpiAfterStop.json                                      Fail
++ DynamicJumpiAfterStop.json                                      OK
 - DynamicJumpiOutsideBoundary.json                                Fail
 + DynamicJumpifInsidePushWithJumpDest.json                        OK
 + DynamicJumpifInsidePushWithoutJumpDest.json                     OK
@@ -423,13 +423,13 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + jump0_outOfBoundary.json                                        OK
 + jump0_withoutJumpdest.json                                      OK
 + jump1.json                                                      OK
-- jumpAfterStop.json                                              Fail
++ jumpAfterStop.json                                              OK
 + jumpDynamicJumpSameDest.json                                    OK
 + jumpHigh.json                                                   OK
 + jumpInsidePushWithJumpDest.json                                 OK
 + jumpInsidePushWithoutJumpDest.json                              OK
 + jumpOntoJump.json                                               OK
-- jumpTo1InstructionafterJump.json                                Fail
++ jumpTo1InstructionafterJump.json                                OK
 + jumpTo1InstructionafterJump_jumpdestFirstInstruction.json       OK
 + jumpTo1InstructionafterJump_noJumpDest.json                     OK
 - jumpToUint64maxPlus1.json                                       Fail
@@ -438,7 +438,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + jumpi0.json                                                     OK
 + jumpi1.json                                                     OK
 + jumpi1_jumpdest.json                                            OK
-- jumpiAfterStop.json                                             Fail
++ jumpiAfterStop.json                                             OK
 - jumpiOutsideBoundary.json                                       Fail
 - jumpiToUint64maxPlus1.json                                      Fail
 + jumpiToUintmaxPlus1.json                                        OK
@@ -476,14 +476,14 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + sha3MemExp.json                                                 OK
 + sstore_load_0.json                                              OK
 - sstore_load_1.json                                              Fail
-- sstore_load_2.json                                              Fail
++ sstore_load_2.json                                              OK
 + sstore_underflow.json                                           OK
 - stack_loop.json                                                 Fail
 + stackjump1.json                                                 OK
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 113/145 Fail: 31/145 Skip: 1/145
+OK: 120/145 Fail: 24/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
