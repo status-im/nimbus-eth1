@@ -44,12 +44,20 @@ op divide, inline = true, lhs, rhs:
 
 op sdiv, inline = true, lhs, rhs:
   ## 0x05, Signed division
-  push:
-    if rhs == 0: zero(Uint256)
+  var r: UInt256
+  if rhs != 0:
+    const min = (1.u256 shl 255) - 1.u256
+    var a = lhs
+    var b = rhs
+    var signA, signB: bool
+    extractSign(a, signA)
+    extractSign(b, signB)
+    if a == min and b == not zero(UInt256):
+      r = min
     else:
-      pseudoSignedToUnsigned(
-        lhs.unsignedToPseudoSigned div rhs.unsignedToPseudoSigned
-      )
+      r = a div b
+      setSign(r, signA xor signB)
+  push(r)
 
 op modulo, inline = true, lhs, rhs:
   ## 0x06, Modulo
@@ -59,12 +67,17 @@ op modulo, inline = true, lhs, rhs:
 
 op smod, inline = true, lhs, rhs:
   ## 0x07, Signed modulo
-  push:
-    if rhs == 0: zero(UInt256)
-    else:
-      pseudoSignedToUnsigned(
-        lhs.unsignedToPseudoSigned mod rhs.unsignedToPseudoSigned
-      )
+  var r: UInt256
+  if rhs != 0:
+    var sign: bool
+    var v = lhs
+    var m = rhs
+    extractSign(m, sign)
+    extractSign(v, sign)
+    r = v mod m
+    setSign(r, sign)
+
+  push(r)
 
 op addmod, inline = true, lhs, rhs, modulus:
   ## 0x08, Modulo addition
@@ -182,8 +195,11 @@ op sha3, inline = true, startPos, length:
 
   computation.memory.extend(pos, len)
   let endRange = min(pos + len, computation.memory.len) - 1
-  push:
-    keccak256.digest computation.memory.bytes.toOpenArray(pos, endRange)
+  if endRange == -1:
+    push(EMPTY_SHA3)
+  else:
+    push:
+      keccak256.digest computation.memory.bytes.toOpenArray(pos, endRange)
 
 # ##########################################
 # 30s: Environmental Information
@@ -421,8 +437,8 @@ op sstore, inline = false, slot, value:
   let (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
 
   let
-    gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: not existing)
-    (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(currentValue, gasParam)
+    gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: currentValue.isZero)
+    (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(value, gasParam)
 
   computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
 

@@ -150,12 +150,12 @@ VMTests
 + mulmoddivByZero2.json                                           OK
 + mulmoddivByZero3.json                                           OK
 + not1.json                                                       OK
-- sdiv0.json                                                      Fail
++ sdiv0.json                                                      OK
 + sdiv1.json                                                      OK
 + sdiv2.json                                                      OK
-- sdiv3.json                                                      Fail
-- sdiv4.json                                                      Fail
-- sdiv5.json                                                      Fail
++ sdiv3.json                                                      OK
++ sdiv4.json                                                      OK
++ sdiv5.json                                                      OK
 + sdiv6.json                                                      OK
 + sdiv7.json                                                      OK
 + sdiv8.json                                                      OK
@@ -164,8 +164,8 @@ VMTests
 + sdivByZero1.json                                                OK
 + sdivByZero2.json                                                OK
 + sdiv_dejavu.json                                                OK
-- sdiv_i256min.json                                               Fail
-- sdiv_i256min2.json                                              Fail
++ sdiv_i256min.json                                               OK
++ sdiv_i256min2.json                                              OK
 + sdiv_i256min3.json                                              OK
 + signextendInvalidByteNumber.json                                OK
 + signextend_00.json                                              OK
@@ -180,9 +180,9 @@ VMTests
 + signextend_Overflow_dj42.json                                   OK
 + signextend_bigBytePlus1.json                                    OK
 + signextend_bitIsSet.json                                        OK
-- smod0.json                                                      Fail
-- smod1.json                                                      Fail
-- smod2.json                                                      Fail
++ smod0.json                                                      OK
++ smod1.json                                                      OK
++ smod2.json                                                      OK
 + smod3.json                                                      OK
 + smod4.json                                                      OK
 + smod5.json                                                      OK
@@ -190,7 +190,7 @@ VMTests
 + smod7.json                                                      OK
 + smod8_byZero.json                                               OK
 + smod_i256min1.json                                              OK
-- smod_i256min2.json                                              Fail
++ smod_i256min2.json                                              OK
 + stop.json                                                       OK
 + sub0.json                                                       OK
 + sub1.json                                                       OK
@@ -198,7 +198,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 185/195 Fail: 10/195 Skip: 0/195
+OK: 195/195 Fail: 0/195 Skip: 0/195
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -349,7 +349,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + BlockNumberDynamicJumpi0.json                                   OK
 + BlockNumberDynamicJumpi1.json                                   OK
 + BlockNumberDynamicJumpi1_jumpdest.json                          OK
-- BlockNumberDynamicJumpiAfterStop.json                           Fail
++ BlockNumberDynamicJumpiAfterStop.json                           OK
 - BlockNumberDynamicJumpiOutsideBoundary.json                     Fail
 + BlockNumberDynamicJumpifInsidePushWithJumpDest.json             OK
 + BlockNumberDynamicJumpifInsidePushWithoutJumpDest.json          OK
@@ -361,7 +361,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + DynamicJump0_jumpdest2.json                                     OK
 + DynamicJump0_withoutJumpdest.json                               OK
 + DynamicJump1.json                                               OK
-- DynamicJumpAfterStop.json                                       Fail
++ DynamicJumpAfterStop.json                                       OK
 + DynamicJumpInsidePushWithJumpDest.json                          OK
 + DynamicJumpInsidePushWithoutJumpDest.json                       OK
 + DynamicJumpJD_DependsOnJumps0.json                              OK
@@ -378,7 +378,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + DynamicJumpi0.json                                              OK
 + DynamicJumpi1.json                                              OK
 + DynamicJumpi1_jumpdest.json                                     OK
-- DynamicJumpiAfterStop.json                                      Fail
++ DynamicJumpiAfterStop.json                                      OK
 - DynamicJumpiOutsideBoundary.json                                Fail
 + DynamicJumpifInsidePushWithJumpDest.json                        OK
 + DynamicJumpifInsidePushWithoutJumpDest.json                     OK
@@ -423,13 +423,13 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + jump0_outOfBoundary.json                                        OK
 + jump0_withoutJumpdest.json                                      OK
 + jump1.json                                                      OK
-- jumpAfterStop.json                                              Fail
++ jumpAfterStop.json                                              OK
 + jumpDynamicJumpSameDest.json                                    OK
 + jumpHigh.json                                                   OK
 + jumpInsidePushWithJumpDest.json                                 OK
 + jumpInsidePushWithoutJumpDest.json                              OK
 + jumpOntoJump.json                                               OK
-- jumpTo1InstructionafterJump.json                                Fail
++ jumpTo1InstructionafterJump.json                                OK
 + jumpTo1InstructionafterJump_jumpdestFirstInstruction.json       OK
 + jumpTo1InstructionafterJump_noJumpDest.json                     OK
 - jumpToUint64maxPlus1.json                                       Fail
@@ -438,7 +438,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + jumpi0.json                                                     OK
 + jumpi1.json                                                     OK
 + jumpi1_jumpdest.json                                            OK
-- jumpiAfterStop.json                                             Fail
++ jumpiAfterStop.json                                             OK
 - jumpiOutsideBoundary.json                                       Fail
 - jumpiToUint64maxPlus1.json                                      Fail
 + jumpiToUintmaxPlus1.json                                        OK
@@ -476,14 +476,14 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + sha3MemExp.json                                                 OK
 + sstore_load_0.json                                              OK
 - sstore_load_1.json                                              Fail
-- sstore_load_2.json                                              Fail
++ sstore_load_2.json                                              OK
 + sstore_underflow.json                                           OK
 - stack_loop.json                                                 Fail
 + stackjump1.json                                                 OK
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 113/145 Fail: 31/145 Skip: 1/145
+OK: 120/145 Fail: 24/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK

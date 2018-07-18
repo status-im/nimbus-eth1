@@ -15,16 +15,6 @@ import
 func log256*(value: UInt256): Natural {.inline.}=
   (255 - value.countLeadingZeroBits) shr 3 # div 8
 
-func unsignedToPseudoSigned*(value: UInt256): UInt256 {.inline.}=
-  result = value
-  if value > INT_256_MAX_AS_UINT256:
-    result -= INT_256_MAX_AS_UINT256
-
-func pseudoSignedToUnsigned*(value: UInt256): UInt256 {.inline.}=
-  result = value
-  if value > INT_256_MAX_AS_UINT256:
-    result += INT_256_MAX_AS_UINT256
-
 func ceil32*(value: Natural): Natural {.inline.}=
   # Round input to the nearest bigger multiple of 32
 
@@ -38,3 +28,16 @@ func wordCount*(length: Natural): Natural {.inline.}=
   # Returns the number of EVM words corresponding to a specific size.
   # EVM words is rounded up
   length.ceil32 shr 5 # equivalent to `div 32` (32 = 2^5)
+
+proc flipSign(value: var UInt256) =
+  # ⚠ Warning: low(Int256) (binary repr 0b1000...0000) cannot be negated, please handle this special case
+  value = not value
+  value += 1.u256
+
+proc extractSign*(v: var UInt256, sign: var bool) =
+  sign = v > INT_256_MAX_AS_UINT256
+  if sign:
+    flipSign(v)
+
+proc setSign*(v: var UInt256, sign: bool) {.inline.} =
+  if sign: flipSign(v)
