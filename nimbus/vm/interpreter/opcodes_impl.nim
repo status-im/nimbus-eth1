@@ -565,7 +565,7 @@ op create, inline = false, value, startPosition, size:
   # let childComputation = applyChildBaseComputation(computation, childMsg)
   var childComputation: BaseComputation # TODO - stub
   new childComputation
-  childComputation.gasMeter = newGasMeter(0) # TODO GasMeter should be a normal object.
+  childComputation.gasMeter.init(0)
 
   if childComputation.isError:
     push: 0
@@ -739,7 +739,7 @@ template genCall(callName: untyped): untyped =
     # let childComputation = applyChildBaseComputation(computation, childMsg)
     var childComputation: BaseComputation # TODO - stub
     new childComputation
-    childComputation.gasMeter = newGasMeter(0) # TODO GasMeter should be a normal object.
+    childComputation.gasMeter.init(0)
 
     if childComputation.isError:
       push: 0

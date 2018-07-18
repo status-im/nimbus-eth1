@@ -15,8 +15,10 @@ import
 
 # disableLogging()
 
+proc initGasMeter(startGas: GasInt): GasMeter = result.init(startGas)
+
 proc gasMeters: seq[GasMeter] =
-  @[newGasMeter(10), newGasMeter(100), newGasMeter(999)]
+  @[initGasMeter(10), initGasMeter(100), initGasMeter(999)]
 
 macro all(element: untyped, handler: untyped): untyped =
   let name = ident(&"{element.repr}s")

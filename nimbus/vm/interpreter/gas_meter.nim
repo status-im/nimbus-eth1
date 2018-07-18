@@ -9,12 +9,11 @@ import
   strformat, eth_common, # GasInt
   ../../logging, ../../errors, ../../vm_types
 
-proc newGasMeter*(startGas: GasInt): GasMeter =
-  new(result)
-  result.startGas = startGas
-  result.gasRemaining = result.startGas
-  result.gasRefunded = 0
-  result.logger = logging.getLogger("gas")
+proc init*(m: var GasMeter, startGas: GasInt) =
+  m.startGas = startGas
+  m.gasRemaining = m.startGas
+  m.gasRefunded = 0
+  m.logger = logging.getLogger("gas")
 
 proc consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string) =
   #if amount < 0.u256:
