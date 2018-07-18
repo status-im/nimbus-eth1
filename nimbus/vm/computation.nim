@@ -18,7 +18,7 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Me
   result.msg = message
   result.memory = Memory()
   result.stack = newStack()
-  result.gasMeter = newGasMeter(message.gas)
+  result.gasMeter.init(message.gas)
   result.children = @[]
   result.accountsToDelete = initTable[EthAddress, EthAddress]()
   result.logEntries = @[]
