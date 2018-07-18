@@ -424,12 +424,8 @@ op mstore8, inline = true, memStartPos, value:
 op sload, inline = true, slot:
   ## 0x54, Load word from storage.
 
-  let (value, found) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
-  if found:
-    push: value
-  else:
-    # TODO: raise exception?
-    discard
+  let (value, _) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
+  push(value)
 
 op sstore, inline = false, slot, value:
   ## 0x55, Save word to storage.
@@ -448,8 +444,9 @@ op sstore, inline = false, slot, value:
   computation.vmState.mutateStateDB:
     db.setStorage(computation.msg.storageAddress, slot, value)
 
-op jump, inline = true, jumpTarget:
-  ## 0x56, Alter the program counter
+proc jumpImpl(computation: var BaseComputation, jumpTarget: UInt256) =
+  if jumpTarget >= computation.code.len.u256:
+    raise newException(InvalidJumpDestination, "Invalid Jump Destination")
 
   let jt = jumpTarget.toInt
   computation.code.pc = jt
@@ -461,21 +458,14 @@ op jump, inline = true, jumpTarget:
   if not computation.code.isValidOpcode(jt):
     raise newException(InvalidInstruction, "Jump resulted in invalid instruction")
 
-  # TODO: what happens if there is an error, rollback?
+op jump, inline = true, jumpTarget:
+  ## 0x56, Alter the program counter
+  jumpImpl(computation, jumpTarget)
 
 op jumpI, inline = true, jumpTarget, testedValue:
   ## 0x57, Conditionally alter the program counter.
-
   if testedValue != 0:
-    let jt = jumpTarget.toInt
-    computation.code.pc = jt
-
-    let nextOpcode = computation.code.peek
-    if nextOpcode != JUMPDEST:
-      raise newException(InvalidJumpDestination, "Invalid Jump Destination")
-    # TODO: next check seems redundant
-    if not computation.code.isValidOpcode(jt):
-      raise newException(InvalidInstruction, "Jump resulted in invalid instruction")
+    jumpImpl(computation, jumpTarget)
 
 op pc, inline = true:
   ## 0x58, Get the value of the program counter prior to the increment corresponding to this instruction.

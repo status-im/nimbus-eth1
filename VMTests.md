@@ -350,7 +350,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + BlockNumberDynamicJumpi1.json                                   OK
 + BlockNumberDynamicJumpi1_jumpdest.json                          OK
 + BlockNumberDynamicJumpiAfterStop.json                           OK
-- BlockNumberDynamicJumpiOutsideBoundary.json                     Fail
++ BlockNumberDynamicJumpiOutsideBoundary.json                     OK
 + BlockNumberDynamicJumpifInsidePushWithJumpDest.json             OK
 + BlockNumberDynamicJumpifInsidePushWithoutJumpDest.json          OK
 + DyanmicJump0_outOfBoundary.json                                 OK
@@ -379,7 +379,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + DynamicJumpi1.json                                              OK
 + DynamicJumpi1_jumpdest.json                                     OK
 + DynamicJumpiAfterStop.json                                      OK
-- DynamicJumpiOutsideBoundary.json                                Fail
++ DynamicJumpiOutsideBoundary.json                                OK
 + DynamicJumpifInsidePushWithJumpDest.json                        OK
 + DynamicJumpifInsidePushWithoutJumpDest.json                     OK
 + JDfromStorageDynamicJump0_AfterJumpdest.json                    OK
@@ -432,15 +432,15 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + jumpTo1InstructionafterJump.json                                OK
 + jumpTo1InstructionafterJump_jumpdestFirstInstruction.json       OK
 + jumpTo1InstructionafterJump_noJumpDest.json                     OK
-- jumpToUint64maxPlus1.json                                       Fail
++ jumpToUint64maxPlus1.json                                       OK
 + jumpToUintmaxPlus1.json                                         OK
 + jumpdestBigList.json                                            OK
 + jumpi0.json                                                     OK
 + jumpi1.json                                                     OK
 + jumpi1_jumpdest.json                                            OK
 + jumpiAfterStop.json                                             OK
-- jumpiOutsideBoundary.json                                       Fail
-- jumpiToUint64maxPlus1.json                                      Fail
++ jumpiOutsideBoundary.json                                       OK
++ jumpiToUint64maxPlus1.json                                      OK
 + jumpiToUintmaxPlus1.json                                        OK
 + jumpi_at_the_end.json                                           OK
 + jumpifInsidePushWithJumpDest.json                               OK
@@ -475,7 +475,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 - return2.json                                                    Fail
 + sha3MemExp.json                                                 OK
 + sstore_load_0.json                                              OK
-- sstore_load_1.json                                              Fail
++ sstore_load_1.json                                              OK
 + sstore_load_2.json                                              OK
 + sstore_underflow.json                                           OK
 - stack_loop.json                                                 Fail
@@ -483,7 +483,7 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 120/145 Fail: 24/145 Skip: 1/145
+OK: 126/145 Fail: 18/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK

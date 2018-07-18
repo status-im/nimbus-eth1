@@ -83,7 +83,7 @@ proc `[]`*(c: CodeStream, offset: int): Op =
   Op(c.bytes[offset])
 
 proc peek*(c: var CodeStream): Op =
-  if c.pc <= c.bytes.len:
+  if c.pc < c.bytes.len:
     result = Op(c.bytes[c.pc])
   else:
     result = Stop
