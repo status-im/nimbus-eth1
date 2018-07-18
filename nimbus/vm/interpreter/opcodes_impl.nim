@@ -44,12 +44,20 @@ op divide, inline = true, lhs, rhs:
 
 op sdiv, inline = true, lhs, rhs:
   ## 0x05, Signed division
-  push:
-    if rhs == 0: zero(Uint256)
+  var r: UInt256
+  if rhs != 0:
+    let min = (one(UInt256) shl 256) + one(UInt256)
+    var a = lhs
+    var b = rhs
+    var signA, signB: bool
+    extractSign(a, signA)
+    extractSign(b, signB)
+    if a == min and b == not zero(UInt256):
+      r = min
     else:
-      pseudoSignedToUnsigned(
-        lhs.unsignedToPseudoSigned div rhs.unsignedToPseudoSigned
-      )
+      r = a div b
+      setSign(r, signA xor signB)
+  push(r)
 
 op modulo, inline = true, lhs, rhs:
   ## 0x06, Modulo
@@ -59,12 +67,17 @@ op modulo, inline = true, lhs, rhs:
 
 op smod, inline = true, lhs, rhs:
   ## 0x07, Signed modulo
-  push:
-    if rhs == 0: zero(UInt256)
-    else:
-      pseudoSignedToUnsigned(
-        lhs.unsignedToPseudoSigned mod rhs.unsignedToPseudoSigned
-      )
+  var r: UInt256
+  if rhs != 0:
+    var sign: bool
+    var v = lhs
+    var m = rhs
+    extractSign(m, sign)
+    extractSign(v, sign)
+    r = v mod m
+    setSign(r, sign)
+
+  push(r)
 
 op addmod, inline = true, lhs, rhs, modulus:
   ## 0x08, Modulo addition
