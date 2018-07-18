@@ -46,7 +46,7 @@ op sdiv, inline = true, lhs, rhs:
   ## 0x05, Signed division
   var r: UInt256
   if rhs != 0:
-    let min = (one(UInt256) shl 256) + one(UInt256)
+    const min = (1.u256 shl 255) - 1.u256
     var a = lhs
     var b = rhs
     var signA, signB: bool

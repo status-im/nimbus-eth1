@@ -30,6 +30,7 @@ func wordCount*(length: Natural): Natural {.inline.}=
   length.ceil32 shr 5 # equivalent to `div 32` (32 = 2^5)
 
 proc flipSign(value: var UInt256) =
+  # ⚠ Warning: low(Int256) (binary repr 0b1000...0000) cannot be negated, please handle this special case
   value = not value
   value += 1.u256
 
