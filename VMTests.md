@@ -286,7 +286,7 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + address0.json                                                   OK
 + address1.json                                                   OK
 + balance0.json                                                   OK
-- balance01.json                                                  Fail
++ balance01.json                                                  OK
 + balance1.json                                                   OK
 + balanceAddress2.json                                            OK
 + balanceAddressInputTooBig.json                                  OK
@@ -334,7 +334,7 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 28/52 Fail: 9/52 Skip: 15/52
+OK: 29/52 Fail: 8/52 Skip: 15/52
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
@@ -371,10 +371,10 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + DynamicJumpPathologicalTest2.json                               OK
 + DynamicJumpPathologicalTest3.json                               OK
 + DynamicJumpStartWithJumpDest.json                               OK
-- DynamicJump_value1.json                                         Fail
-- DynamicJump_value2.json                                         Fail
-- DynamicJump_value3.json                                         Fail
-- DynamicJump_valueUnderflow.json                                 Fail
++ DynamicJump_value1.json                                         OK
++ DynamicJump_value2.json                                         OK
++ DynamicJump_value3.json                                         OK
++ DynamicJump_valueUnderflow.json                                 OK
 + DynamicJumpi0.json                                              OK
 + DynamicJumpi1.json                                              OK
 + DynamicJumpi1_jumpdest.json                                     OK
@@ -478,12 +478,12 @@ OK: 28/52 Fail: 9/52 Skip: 15/52
 + sstore_load_1.json                                              OK
 + sstore_load_2.json                                              OK
 + sstore_underflow.json                                           OK
-- stack_loop.json                                                 Fail
++ stack_loop.json                                                 OK
 + stackjump1.json                                                 OK
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 126/145 Fail: 18/145 Skip: 1/145
+OK: 131/145 Fail: 13/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
@@ -631,9 +631,9 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + swap7.json                                                      OK
 + swap8.json                                                      OK
 + swap9.json                                                      OK
-- swapjump1.json                                                  Fail
++ swapjump1.json                                                  OK
 ```
-OK: 72/74 Fail: 2/74 Skip: 0/74
+OK: 73/74 Fail: 1/74 Skip: 0/74
 ## vmRandomTest
 ```diff
   201503102037PYTHON.json                                         Skip
