@@ -9,10 +9,6 @@ import
   strformat,
   errors, constants, eth_common
 
-template validateCanonicalAddress*(value: EthAddress, title: string = "Value") =
-  # TODO: This needs to be removed
-  discard
-
 proc validateGte*(value: Int256 | int, minimum: int, title: string = "Value") =
   if value.i256 < minimum.i256:
     raise newException(ValidationError,

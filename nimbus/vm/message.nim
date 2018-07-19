@@ -44,9 +44,6 @@ proc newMessage*(
     code: string,
     options: MessageOptions = newMessageOptions()): Message =
 
-  if to != CREATE_CONTRACT_ADDRESS:
-    validateCanonicalAddress(to, title="Message.to")
-  validateCanonicalAddress(sender, title="Message.sender")
   validateGte(options.depth, minimum=0, title="Message.depth")
 
   new(result)
