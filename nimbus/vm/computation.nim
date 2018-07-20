@@ -85,8 +85,6 @@ proc outputHex*(c: BaseComputation): string =
   c.rawOutput.bytesToHex
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
-  validateCanonicalAddress(beneficiary, title="self destruct beneficiary address")
-
   if c.msg.storageAddress in c.accountsToDelete:
     raise newException(ValueError,
       "invariant:  should be impossible for an account to be " &
@@ -94,7 +92,6 @@ proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
 proc addLogEntry*(c: var BaseComputation, account: EthAddress, topics: seq[UInt256], data: seq[byte]) =
-  validateCanonicalAddress(account, title="log entry address")
   c.logEntries.add((account, topics, data))
 
 # many methods are basically TODO, but they still return valid values

@@ -46,17 +46,14 @@ proc setAccount(db: AccountStateDB, address: EthAddress, account: Account) =
   db.trie.put createRangeFromAddress(address), rlp.encode(account)
 
 proc getCodeHash*(db: AccountStateDB, address: EthAddress): Hash256 =
-  validateCanonicalAddress(address, title="Storage Address")
   let account = db.getAccount(address)
   result = account.codeHash
 
 proc getBalance*(db: AccountStateDB, address: EthAddress): UInt256 =
-  validateCanonicalAddress(address, title="Storage Address")
   let account = db.getAccount(address)
   account.balance
 
 proc setBalance*(db: var AccountStateDB, address: EthAddress, balance: UInt256) =
-  validateCanonicalAddress(address, title="Storage Address")
   var account = db.getAccount(address)
   account.balance = balance
   db.setAccount(address, account)
@@ -77,7 +74,6 @@ proc setStorage*(db: var AccountStateDB,
                  slot: UInt256, value: UInt256) =
   #validateGte(value, 0, title="Storage Value")
   #validateGte(slot, 0, title="Storage Slot")
-  validateCanonicalAddress(address, title="Storage Address")
 
   var account = db.getAccount(address)
   var accountTrie = initHexaryTrie(db.trie.db, account.storageRoot)
@@ -93,7 +89,6 @@ proc setStorage*(db: var AccountStateDB,
   db.setAccount(address, account)
 
 proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) =
-  validateCanonicalAddress(address, title="Storage Address")
   #validateGte(slot, 0, title="Storage Slot")
 
   let
@@ -110,7 +105,6 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
     result = (0.u256, false)
 
 proc setNonce*(db: var AccountStateDB, address: EthAddress, nonce: UInt256) =
-  validateCanonicalAddress(address, title="Storage Address")
   #validateGte(nonce, 0, title="Nonce")
 
   var account = db.getAccount(address)
@@ -121,8 +115,6 @@ proc setNonce*(db: var AccountStateDB, address: EthAddress, nonce: UInt256) =
 proc getNonce*(db: AccountStateDB, address: EthAddress): UInt256 =
   # TODO it is very strange that we require a var param here
 
-  validateCanonicalAddress(address, title="Storage Address")
-
   let account = db.getAccount(address)
   account.nonce
 
@@ -132,7 +124,6 @@ proc toByteRange_Unnecessary*(h: KeccakHash): ByteRange =
   return s.toRange
 
 proc setCode*(db: var AccountStateDB, address: EthAddress, code: ByteRange) =
-  validateCanonicalAddress(address, title="Storage Address")
 
   var account = db.getAccount(address)
   account.codeHash = keccak256.digest code.toOpenArray
