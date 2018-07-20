@@ -6,7 +6,7 @@
 # at your option.
 # This file may not be copied, modified, or distributed except according to
 # those terms.
-import nimcrypto, eth-rpc/server, eth_p2p
+import nimcrypto, json_rpc/server, eth_p2p
 import ../config
 
 proc setupP2PRPC*(server: EthereumNode, rpcsrv: RpcServer) =
