@@ -740,7 +740,7 @@ template genCall(callName: untyped): untyped =
       let actualOutputSize = min(memOutLen, childComputation.output.len)
       computation.memory.write(
         memOutPos,
-        childComputation.output.toOpenArray(0, actualOutputSize))
+        childComputation.output.toOpenArray(0, actualOutputSize - 1))
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
