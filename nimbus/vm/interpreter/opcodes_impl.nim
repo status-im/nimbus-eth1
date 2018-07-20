@@ -738,10 +738,9 @@ template genCall(callName: untyped): untyped =
 
     if not childComputation.shouldEraseReturnData:
       let actualOutputSize = min(memOutLen, childComputation.output.len)
-      if actualOutputSize > 0:
-        computation.memory.write(
-          memOutPos,
-          childComputation.output.toOpenArray(0, actualOutputSize))
+      computation.memory.write(
+        memOutPos,
+        childComputation.output.toOpenArray(0, actualOutputSize - 1))
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
