@@ -6,7 +6,7 @@
 # at your option.
 # This file may not be copied, modified, or distributed except according to
 # those terms.
-import eth-rpc/server, nimcrypto
+import json_rpc/server, nimcrypto
 import ../config
 
 proc setupCommonRPC*(server: RpcServer) =
