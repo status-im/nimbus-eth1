@@ -35,6 +35,18 @@ nix-shell nimbus.nix
 
 You can build the package and run the tests using `nimble test`. You can run the example using `nim compile --run examples/decompile_smart_contract.nim`.
 
+You can run the official Ethereum JSON tests for the EVM this way:
+
+create a `./build` directory with `mkdir build` in your cloned repository.
+
+Run
+
+```
+nim c -r --nimcache:nimcache -o:build/test tests/test_vm_json.nim
+```
+
+The executable will be put in `build`, and nim compilation cache will use `nimcache`.
+
 ## License
 
 Licensed under one of the following:
