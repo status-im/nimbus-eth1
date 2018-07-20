@@ -15,10 +15,11 @@ requires "nim >= 0.18.1",
          "rocksdb",
          "eth_trie",
          "https://github.com/status-im/nim-eth-common",
-         "https://github.com/status-im/nim-eth-rpc",
+         "json_rpc",
          "https://github.com/status-im/nim-asyncdispatch2",
          "eth_p2p",
-         "eth_keyfile"
+         "eth_keyfile",
+         "eth_keys"
 
 proc test(name: string, lang = "c") =
   if not dirExists "build":

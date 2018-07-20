@@ -8,7 +8,7 @@
 # those terms.
 
 import strutils, net
-import asyncdispatch2, rpcserver, eth_p2p, eth_keys
+import asyncdispatch2, json_rpc/rpcserver, eth_p2p, eth_keys
 import config, rpc/common, rpc/p2p
 
 ## TODO:
@@ -27,7 +27,7 @@ type
     Starting, Running, Stopping, Stopped
 
   NimbusObject = ref object
-    rpcServer*: RpcServer
+    rpcServer*: RpcHttpServer
     ethNode*: EthereumNode
     state*: NimbusState
 
@@ -37,7 +37,7 @@ proc start(): NimbusObject =
 
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:
-    nimbus.rpcServer = newRpcServer(conf.rpc.binds)
+    nimbus.rpcServer = newRpcHttpServer(conf.rpc.binds)
     setupCommonRpc(nimbus.rpcServer)
 
   ## Creating P2P Server
