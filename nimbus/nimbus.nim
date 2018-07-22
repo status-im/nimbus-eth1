@@ -7,9 +7,11 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import strutils, net
-import asyncdispatch2, json_rpc/rpcserver, eth_p2p, eth_keys
-import config, rpc/common, rpc/p2p
+import
+  os, strutils, net,
+  asyncdispatch2, json_rpc/rpcserver, eth_keys,
+  eth_p2p, eth_p2p/rlpx_protocols/[eth, les],
+  config, rpc/[common, p2p]
 
 ## TODO:
 ## * No IPv6 support
@@ -67,7 +69,11 @@ proc start(): NimbusObject =
       result = "EXITING"
     nimbus.rpcServer.start()
 
-  nimbus.ethNode.connectToNetwork(conf.net.bootNodes)
+  waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes)
+
+  # TODO: temp code until the CLI/RPC interface is fleshed out
+  if os.getenv("START_SYNC") == "1":
+    waitFor nimbus.ethNode.fastBlockchainSync()
 
   nimbus.state = Running
   result = nimbus

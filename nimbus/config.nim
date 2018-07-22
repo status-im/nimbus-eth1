@@ -120,7 +120,7 @@ type
     discPort*: uint16             ## Discovery UDP bind port
     maxPeers*: int                ## Maximum allowed number of peers
     maxPendingPeers*: int         ## Maximum allowed pending peers
-    networkId*: int               ## Network ID as integer
+    networkId*: uint              ## Network ID as integer
     ident*: string                ## Server ident name string
     nodeKey*: PrivateKey          ## Server private key
 
@@ -250,28 +250,28 @@ template setBootnodes(onodes, nodes: untyped): untyped =
     (onodes).add(node)
 
 proc setNetwork(conf: var NetConfiguration, network: NetworkFlags,
-                id: int = 0) =
+                id: uint = 0) =
   ## Set network id and default network bootnodes
   conf.flags.excl({MainNet, MordenNet, RopstenNet, RinkebyNet, KovanNet,
                    CustomNet})
   conf.flags.incl(network)
   case network
   of MainNet:
-    conf.networkId = 1
+    conf.networkId = uint(1)
     conf.bootNodes.setLen(0)
     conf.bootNodes.setBootnodes(MainnetBootnodes)
   of MordenNet:
-    conf.networkId = 2
+    conf.networkId = uint(2)
   of RopstenNet:
-    conf.networkId = 3
+    conf.networkId = uint(3)
     conf.bootNodes.setLen(0)
     conf.bootNodes.setBootnodes(RopstenBootnodes)
   of RinkebyNet:
-    conf.networkId = 4
+    conf.networkId = uint(4)
     conf.bootNodes.setLen(0)
     conf.bootNodes.setBootnodes(RinkebyBootnodes)
   of KovanNet:
-    conf.networkId = 42
+    conf.networkId = uint(42)
     conf.bootNodes.setLen(0)
     conf.bootNodes.setBootnodes(KovanBootnodes)
   of CustomNet:
@@ -318,7 +318,7 @@ proc processNetArguments(key, value: string): ConfigStatus =
       of 42:
         config.net.setNetwork(KovanNet)
       else:
-        config.net.setNetwork(CustomNet, res)
+        config.net.setNetwork(CustomNet, uint(res))
   elif skey == "nodiscover":
     config.net.flags.incl(NoDiscover)
   elif skey == "v5discover":
