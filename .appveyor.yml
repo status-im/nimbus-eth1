@@ -3,6 +3,8 @@ version: '{build}'
 cache:
 - x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
 - i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
+- sqlite-dll-win32-x86-3240000.zip
+- sqlite-dll-win64-x64-3240000.zip
 
 # We always want 32 and 64-bit compilation
 matrix:
@@ -14,17 +16,25 @@ environment:
     - MINGW_DIR: mingw32
       MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z/download
       MINGW_ARCHIVE: i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
+      SQLITE_URL: https://www.sqlite.org/2018/sqlite-dll-win32-x86-3240000.zip
+      SQLITE_ARCHIVE: sqlite-dll-win32-x86-3240000.zip
       platform: x86
     - MINGW_DIR: mingw64
       MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z/download
       MINGW_ARCHIVE: x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
+      SQLITE_URL: https://www.sqlite.org/2018/sqlite-dll-win64-x64-3240000.zip
+      SQLITE_ARCHIVE: sqlite-dll-win64-x64-3240000.zip
       platform: x64
 
 install:
   - setlocal EnableExtensions EnableDelayedExpansion
+  - MKDIR %CD%\bin
   - IF not exist "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
   - 7z x -y "%MINGW_ARCHIVE%" > nul
-  - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\Nim\bin;%PATH%
+  - IF not exist "%SQLITE_ARCHIVE%" appveyor DownloadFile "%SQLITE_URL%" -FileName "%SQLITE_ARCHIVE%"
+  - 7z x -y "%SQLITE_ARCHIVE%" > nul
+  - IF "%PLATFORM%" == "x64" ( copy %CD%\sqlite3.dll %CD%\bin\sqlite3_64.dll ) ELSE ( copy %CD%\sqlite3.dll %CD%\bin\sqlite3_32.dll )
+  - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\bin;%CD%\Nim\bin;%PATH%
   - git clone https://github.com/nim-lang/Nim.git
   - cd %CD%\Nim
   - git remote add statusim https://github.com/status-im/Nim.git
