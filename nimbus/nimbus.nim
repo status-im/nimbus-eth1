@@ -73,7 +73,9 @@ proc start(): NimbusObject =
 
   # TODO: temp code until the CLI/RPC interface is fleshed out
   if os.getenv("START_SYNC") == "1":
-    waitFor nimbus.ethNode.fastBlockchainSync()
+    let status = waitFor nimbus.ethNode.fastBlockchainSync()
+    if status != syncSuccess:
+      echo "Block sync failed: ", status
 
   nimbus.state = Running
   result = nimbus
