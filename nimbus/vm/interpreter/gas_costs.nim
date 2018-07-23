@@ -120,6 +120,17 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     #   μ'i is the memory size after opcode execution
 
     #   Cmem(a) ≡ Gmemory · a + a² / 512
+    #
+    #   Except when memLength = 0, where per eq (297),
+    #   M(currentMemSize, f, l) = currentMemSize
+
+    if memLength == 0:
+      # Special subcase of memory-expansion cost
+      # currentMemSize - currentMemSize = 0
+      # "Referencing a zero length range ... does not require memory to be extended
+      #  to the beginning of the range."
+      return 0
+
     let
       prev_words = currentMemSize.wordCount
       prev_cost = prev_words * static(FeeSchedule[GasMemory]) +

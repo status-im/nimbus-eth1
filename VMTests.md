@@ -669,14 +669,14 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 + sha3_bigSize.json                                               OK
 + sha3_memSizeNoQuadraticCost31.json                              OK
 + sha3_memSizeQuadraticCost32.json                                OK
-- sha3_memSizeQuadraticCost32_zeroSize.json                       Fail
++ sha3_memSizeQuadraticCost32_zeroSize.json                       OK
 + sha3_memSizeQuadraticCost33.json                                OK
 + sha3_memSizeQuadraticCost63.json                                OK
 + sha3_memSizeQuadraticCost64.json                                OK
 + sha3_memSizeQuadraticCost64_2.json                              OK
 + sha3_memSizeQuadraticCost65.json                                OK
 ```
-OK: 17/18 Fail: 1/18 Skip: 0/18
+OK: 18/18 Fail: 0/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
   ABAcalls0.json                                                  Skip
