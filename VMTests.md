@@ -323,10 +323,10 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 - codecopy_DataIndexTooHigh.json                                  Fail
 + codesize.json                                                   OK
 - env1.json                                                       Fail
-- extcodecopy0.json                                               Fail
-- extcodecopy0AddressTooBigLeft.json                              Fail
-- extcodecopy0AddressTooBigRight.json                             Fail
-- extcodecopyZeroMemExpansion.json                                Fail
++ extcodecopy0.json                                               OK
++ extcodecopy0AddressTooBigLeft.json                              OK
++ extcodecopy0AddressTooBigRight.json                             OK
++ extcodecopyZeroMemExpansion.json                                OK
 - extcodecopy_DataIndexTooHigh.json                               Fail
 + extcodesize0.json                                               OK
 + extcodesize1.json                                               OK
@@ -334,7 +334,7 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 29/52 Fail: 8/52 Skip: 15/52
+OK: 33/52 Fail: 4/52 Skip: 15/52
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK

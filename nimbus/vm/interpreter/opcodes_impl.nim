@@ -319,7 +319,7 @@ op extCodeCopy, inline = true:
   let (memPos, codePos, len) = (memStartPos.toInt, codeStartPos.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[CodeCopy].m_handler(memPos, codePos, len),
+    computation.gasCosts[ExtCodeCopy].m_handler(memPos, codePos, len),
     reason="ExtCodeCopy fee")
 
   let codeBytes = computation.vmState.readOnlyStateDB.getCode(account)
