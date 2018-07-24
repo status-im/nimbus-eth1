@@ -163,11 +163,10 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
       static(FeeSchedule[GasCopy]) * memLength.wordCount
     result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-  func `prefix gasExtCodeCopy`(value: Uint256): GasInt {.nimcall.} =
-    ## Value is the size of the input to the CallDataCopy/CodeCopy/ReturnDataCopy function
-
-    result = static(FeeSchedule[GasVeryLow]) +
-      static(FeeSchedule[GasCopy]) * value.toInt.wordCount
+  func `prefix gasExtCodeCopy`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+    result = static(FeeSchedule[GasExtCode]) +
+      static(FeeSchedule[GasCopy]) * memLength.wordCount
+    result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
   func `prefix gasLoadStore`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
     result = static(FeeSchedule[GasVeryLow])
@@ -375,7 +374,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           CodeCopy:        memExpansion `prefix gasCopy`,
           GasPrice:        fixed GasBase,
           ExtCodeSize:     fixed GasExtcode,
-          ExtCodeCopy:     dynamic `prefix gasExtCodeCopy`,
+          ExtCodeCopy:     memExpansion `prefix gasExtCodeCopy`,
           ReturnDataSize:  fixed GasBase,
           ReturnDataCopy:  memExpansion `prefix gasCopy`,
 
