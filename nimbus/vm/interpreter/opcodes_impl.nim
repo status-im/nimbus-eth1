@@ -777,6 +777,24 @@ op selfDestruct, inline = false:
   ## 0xff Halt execution and register account for later deletion.
   let beneficiary = computation.stack.popAddress()
 
-  ## TODO
+  computation.vmState.mutateStateDB:
+    let
+      local_balance = db.get_balance(computation.msg.storage_address)
+      beneficiary_balance = db.get_balance(beneficiary)
 
-  computation.registerAccountForDeletion(beneficiary)
+    # Transfer to beneficiary
+    db.setBalance(beneficiary, local_balance + beneficiary_balance)
+
+    # Zero the balance of the address being deleted.
+    # This must come after sending to beneficiary in case the
+    # contract named itself as the beneficiary.
+    db.set_balance(computation.msg.storage_address, 0.u256)
+
+    # Register the account to be deleted
+    computation.registerAccountForDeletion(beneficiary)
+
+    computation.vm_state.logger.debug(
+      "SELFDESTRUCT: %s (%s) -> %s" &
+      computation.msg.storage_address.toHex &
+      local_balance.toString &
+      beneficiary.toHex)

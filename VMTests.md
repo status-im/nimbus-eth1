@@ -602,7 +602,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + push30.json                                                     OK
 + push31.json                                                     OK
 + push32.json                                                     OK
-- push32AndSuicide.json                                           Fail
++ push32AndSuicide.json                                           OK
 + push32FillUpInputWithZerosAtTheEnd.json                         OK
 + push32Undefined.json                                            OK
 + push32Undefined2.json                                           OK
@@ -633,7 +633,7 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 + swap9.json                                                      OK
 + swapjump1.json                                                  OK
 ```
-OK: 73/74 Fail: 1/74 Skip: 0/74
+OK: 74/74 Fail: 0/74 Skip: 0/74
 ## vmRandomTest
 ```diff
   201503102037PYTHON.json                                         Skip
@@ -722,6 +722,6 @@ OK: 0/36 Fail: 0/36 Skip: 36/36
 - arith.json                                                      Fail
 - boolean.json                                                    Fail
 - mktx.json                                                       Fail
-- suicide.json                                                    Fail
++ suicide.json                                                    OK
 ```
-OK: 0/4 Fail: 4/4 Skip: 0/4
+OK: 1/4 Fail: 3/4 Skip: 0/4
