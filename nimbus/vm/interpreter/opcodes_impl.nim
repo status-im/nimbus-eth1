@@ -419,7 +419,7 @@ op mstore8, inline = true, memStartPos, value:
     )
 
   computation.memory.extend(memPos, 1)
-  computation.memory.write(memPos, [value.toByteArrayBE[0]])
+  computation.memory.write(memPos, [value.toByteArrayBE[31]])
 
 op sload, inline = true, slot:
   ## 0x54, Load word from storage.

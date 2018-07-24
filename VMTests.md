@@ -403,7 +403,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + byte1.json                                                      OK
   calldatacopyMemExp.json                                         Skip
 - codecopyMemExp.json                                             Fail
-- deadCode_1.json                                                 Fail
++ deadCode_1.json                                                 OK
 + dupAt51becameMload.json                                         OK
 - extcodecopyMemExp.json                                          Fail
 - for_loop1.json                                                  Fail
@@ -449,7 +449,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + log1MemExp.json                                                 OK
 + loop_stacklimit_1020.json                                       OK
 + loop_stacklimit_1021.json                                       OK
-- memory1.json                                                    Fail
++ memory1.json                                                    OK
 + mloadError0.json                                                OK
 - mloadError1.json                                                Fail
 + mloadMemExp.json                                                OK
@@ -463,7 +463,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + mstore8MemExp.json                                              OK
 + mstore8WordToBigError.json                                      OK
 + mstore8_0.json                                                  OK
-- mstore8_1.json                                                  Fail
++ mstore8_1.json                                                  OK
 + mstoreMemExp.json                                               OK
 + mstoreWordToBigError.json                                       OK
 + mstore_mload0.json                                              OK
@@ -483,7 +483,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 131/145 Fail: 13/145 Skip: 1/145
+OK: 134/145 Fail: 10/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
