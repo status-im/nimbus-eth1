@@ -124,24 +124,29 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     #   Except when memLength = 0, where per eq (297),
     #   M(currentMemSize, f, l) = currentMemSize
 
-    if memLength == 0:
+    let
+      prev_words = currentMemSize.wordCount
+      new_words = (memOffset + memLength).wordCount
+
+    if memLength == 0 or new_words <= prev_words:
       # Special subcase of memory-expansion cost
       # currentMemSize - currentMemSize = 0
       # "Referencing a zero length range ... does not require memory to be extended
       #  to the beginning of the range."
+      #
+      # Also, don't credit EVM code for allocating memory
+      # then accessing lots of low memory. memoryGasCost,
+      # via go-ethereum, checks for this as special case.
       return 0
 
     let
-      prev_words = currentMemSize.wordCount
       prev_cost = prev_words * static(FeeSchedule[GasMemory]) +
         (prev_words ^ 2) shr 9 # div 512
-
-      new_words = (memOffset + memLength).wordCount
       new_cost = new_words * static(FeeSchedule[GasMemory]) +
         (new_words ^ 2) shr 9 # div 512
 
     # TODO: add logging
-    result = new_cost - prev_cost
+    result = max(new_cost - prev_cost, 0)
 
   func `prefix all_but_one_64th`(gas: GasInt): GasInt {.inline.} =
     ## Computes all but 1/64th
