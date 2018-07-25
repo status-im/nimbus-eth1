@@ -775,6 +775,9 @@ op revert, inline = false, startPos, size:
 
 op selfDestruct, inline = false:
   ## 0xff Halt execution and register account for later deletion.
+  # TODO: This is the basic implementation of the self destruct op,
+  # Other forks have some extra functionality around this call.
+  # In particular, EIP150 and EIP161 have extra requirements.
   let beneficiary = computation.stack.popAddress()
 
   computation.vmState.mutateStateDB:
