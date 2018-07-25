@@ -92,7 +92,7 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:
-      stateDB.setStorage(account, slot.parseHexInt.u256, value.getInt.u256)
+      stateDB.setStorage(account, slot.parseHexInt.u256, value.getStr.parseHexInt.u256)
 
     let nonce = accountData{"nonce"}.getInt.u256
     let code = hexToSeqByte(accountData{"code"}.getStr).toRange
