@@ -406,8 +406,8 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + deadCode_1.json                                                 OK
 + dupAt51becameMload.json                                         OK
 - extcodecopyMemExp.json                                          Fail
-- for_loop1.json                                                  Fail
-- for_loop2.json                                                  Fail
++ for_loop1.json                                                  OK
++ for_loop2.json                                                  OK
 + gas0.json                                                       OK
 + gas1.json                                                       OK
 + gasOverFlow.json                                                OK
@@ -451,7 +451,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + loop_stacklimit_1021.json                                       OK
 + memory1.json                                                    OK
 + mloadError0.json                                                OK
-- mloadError1.json                                                Fail
++ mloadError1.json                                                OK
 + mloadMemExp.json                                                OK
 + mloadOutOfGasError2.json                                        OK
 + msize0.json                                                     OK
@@ -472,7 +472,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + pop0.json                                                       OK
 + pop1.json                                                       OK
 + return1.json                                                    OK
-- return2.json                                                    Fail
++ return2.json                                                    OK
 + sha3MemExp.json                                                 OK
 + sstore_load_0.json                                              OK
 + sstore_load_1.json                                              OK
@@ -483,7 +483,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 134/145 Fail: 10/145 Skip: 1/145
+OK: 138/145 Fail: 6/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
