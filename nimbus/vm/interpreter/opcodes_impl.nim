@@ -762,7 +762,7 @@ op returnOp, inline = false, startPos, size:
   computation.output = computation.memory.read(pos, len)
 
 op revert, inline = false, startPos, size:
-  ## 0xf0, Halt execution reverting state changes but returning data and remaining gas.
+  ## 0xfd, Halt execution reverting state changes but returning data and remaining gas.
   let (pos, len) = (startPos.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
