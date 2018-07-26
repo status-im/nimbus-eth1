@@ -320,21 +320,21 @@ OK: 11/12 Fail: 1/12 Skip: 0/12
 + callvalue.json                                                  OK
 + codecopy0.json                                                  OK
 + codecopyZeroMemExpansion.json                                   OK
-- codecopy_DataIndexTooHigh.json                                  Fail
++ codecopy_DataIndexTooHigh.json                                  OK
 + codesize.json                                                   OK
 - env1.json                                                       Fail
 + extcodecopy0.json                                               OK
 + extcodecopy0AddressTooBigLeft.json                              OK
 + extcodecopy0AddressTooBigRight.json                             OK
 + extcodecopyZeroMemExpansion.json                                OK
-- extcodecopy_DataIndexTooHigh.json                               Fail
++ extcodecopy_DataIndexTooHigh.json                               OK
 + extcodesize0.json                                               OK
 + extcodesize1.json                                               OK
 + extcodesizeUnderFlow.json                                       OK
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 33/52 Fail: 4/52 Skip: 15/52
+OK: 35/52 Fail: 2/52 Skip: 15/52
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
