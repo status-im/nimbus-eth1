@@ -1,5 +1,5 @@
 import
-  unittest, macros,
+  unittest, macros, os,
   nimcrypto/[keccak, hash], ranges, eth_common/eth_types,
   ../nimbus/db/[storage_types],
   ../nimbus/db/backends/[sqlite_backend, rocksdb_backend]
@@ -8,7 +8,9 @@ template dummyInstance(T: type SqliteChainDB): auto =
   sqlite_backend.initChainDB ":memory:"
 
 template dummyInstance(T: type RocksChainDB): auto =
-  rocksdb_backend.initChainDB "/tmp/nimbus-test-db"
+  let tmp = getTempDir() / "nimbus-test-db"
+  removeDir(tmp)
+  rocksdb_backend.initChainDB(tmp)
 
 template backendTests(DB) =
   suite("storage tests: " & astToStr(DB)):
