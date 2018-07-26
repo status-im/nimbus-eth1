@@ -385,16 +385,16 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + JDfromStorageDynamicJump0_AfterJumpdest.json                    OK
 + JDfromStorageDynamicJump0_AfterJumpdest3.json                   OK
 + JDfromStorageDynamicJump0_foreverOutOfGas.json                  OK
-- JDfromStorageDynamicJump0_jumpdest0.json                        Fail
-- JDfromStorageDynamicJump0_jumpdest2.json                        Fail
++ JDfromStorageDynamicJump0_jumpdest0.json                        OK
++ JDfromStorageDynamicJump0_jumpdest2.json                        OK
 + JDfromStorageDynamicJump0_withoutJumpdest.json                  OK
 + JDfromStorageDynamicJump1.json                                  OK
 + JDfromStorageDynamicJumpInsidePushWithJumpDest.json             OK
 + JDfromStorageDynamicJumpInsidePushWithoutJumpDest.json          OK
 + JDfromStorageDynamicJumpi0.json                                 OK
-- JDfromStorageDynamicJumpi1.json                                 Fail
++ JDfromStorageDynamicJumpi1.json                                 OK
 + JDfromStorageDynamicJumpi1_jumpdest.json                        OK
-- JDfromStorageDynamicJumpiAfterStop.json                         Fail
++ JDfromStorageDynamicJumpiAfterStop.json                         OK
 + JDfromStorageDynamicJumpiOutsideBoundary.json                   OK
 + JDfromStorageDynamicJumpifInsidePushWithJumpDest.json           OK
 + JDfromStorageDynamicJumpifInsidePushWithoutJumpDest.json        OK
@@ -483,7 +483,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 138/145 Fail: 6/145 Skip: 1/145
+OK: 142/145 Fail: 2/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
