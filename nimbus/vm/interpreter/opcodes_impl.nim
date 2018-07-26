@@ -212,7 +212,10 @@ proc writePaddedResult(mem: var Memory,
   mem.extend(memPos, len)
 
   let dataEndPosition = dataPos + len - 1
-  if dataEndPosition < data.len:
+  if cast[uint64](dataEndPosition) < cast[uint64](dataPos):
+    # unsigned wraparound ("overflow")
+    discard
+  elif dataEndPosition < data.len:
     mem.write(memPos, data[dataPos .. dataEndPosition])
   else:
     var presentElements = data.len - dataPos
@@ -294,7 +297,7 @@ op codecopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x39, Copy code running in current environment to memory.
   # TODO tests: https://github.com/status-im/nimbus/issues/67
 
-  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+  let (memPos, copyPos, len) = (memStartPos.toInt, cast[uint64](copyStartPos.toInt), size.toInt)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
@@ -316,7 +319,11 @@ op extCodeCopy, inline = true:
   ## 0x3c, Copy an account's code to memory.
   let account = computation.stack.popAddress()
   let (memStartPos, codeStartPos, size) = computation.stack.popInt(3)
-  let (memPos, codePos, len) = (memStartPos.toInt, codeStartPos.toInt, size.toInt)
+
+  # It might be possible to cast this further down the callstack, but
+  # that risks creating competing interpretations of same param; this
+  # tends to be a ripe design for security vulns, vs a single "gate".
+  let (memPos, codePos, len) = (memStartPos.toInt, cast[uint64](codeStartPos), size.toInt)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[ExtCodeCopy].m_handler(memPos, codePos, len),
