@@ -11,7 +11,7 @@ import
   ../nimbus/[constants, vm_types, logging, vm_state],
   ../nimbus/vm/interpreter,
   ../nimbus/utils/header,
-  ../nimbus/db/[db_chain, state_db, backends/memory_backend],
+  ../nimbus/db/[db_chain, state_db],
   ./test_helpers
 
 from eth_common import GasInt

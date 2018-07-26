@@ -2,12 +2,13 @@ import os, rocksdb, ranges
 import ../storage_types
 
 type
-  RocksChainDB* = object
+  RocksChainDB* = ref object of RootObj
     store: RocksDBInstance
 
   ChainDB* = RocksChainDB
 
-proc initChainDB*(basePath: string): ChainDB =
+proc newChainDB*(basePath: string): ChainDB =
+  result.new()
   let
     dataDir = basePath / "data"
     backupsDir = basePath / "backups"
@@ -18,24 +19,23 @@ proc initChainDB*(basePath: string): ChainDB =
   let s = result.store.init(dataDir, backupsDir)
   if not s.ok: raiseStorageInitError()
 
-proc get*(db: ChainDB, key: DbKey): ByteRange =
-  let s = db.store.getBytes(key.toOpenArray)
+proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
+  let s = db.store.getBytes(key)
   if not s.ok: raiseKeyReadError(key)
-  return s.value.toRange
+  return s.value
 
-proc put*(db: var ChainDB, key: DbKey, value: ByteRange) =
-  let s = db.store.put(key.toOpenArray, value.toOpenArray)
+proc put*(db: ChainDB, key, value: openarray[byte]) =
+  let s = db.store.put(key, value)
   if not s.ok: raiseKeyWriteError(key)
 
-proc contains*(db: ChainDB, key: DbKey): bool =
-  let s = db.store.contains(key.toOpenArray)
+proc contains*(db: ChainDB, key: openarray[byte]): bool =
+  let s = db.store.contains(key)
   if not s.ok: raiseKeySearchError(key)
   return s.value
 
-proc del*(db: var ChainDB, key: DbKey) =
-  let s = db.store.del(key.toOpenArray)
+proc del*(db: ChainDB, key: openarray[byte]) =
+  let s = db.store.del(key)
   if not s.ok: raiseKeyDeletionError(key)
 
-proc close*(db: var ChainDB) =
+proc close*(db: ChainDB) =
   db.store.close
-

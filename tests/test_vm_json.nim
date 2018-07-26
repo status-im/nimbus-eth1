@@ -14,7 +14,7 @@ import
   ../nimbus/[vm_state, vm_types],
   ../nimbus/utils/header,
   ../nimbus/vm/interpreter,
-  ../nimbus/db/[db_chain, state_db, backends/memory_backend]
+  ../nimbus/db/[db_chain, state_db]
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
