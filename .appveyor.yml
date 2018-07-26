@@ -42,7 +42,7 @@ install:
   - IF "%PLATFORM%" == "x64" ( copy %CD%\sqlite3.dll %CD%\bin\sqlite3_64.dll ) ELSE ( copy %CD%\sqlite3.dll %CD%\bin\sqlite3_32.dll )
   - IF not exist "%ROCKSDB_ARCHIVE%" appveyor DownloadFile "%ROCKSDB_URL%" -FileName "%ROCKSDB_ARCHIVE%"
   - 7z x "%ROCKSDB_ARCHIVE%" -so | 7z x -aoa -si -ttar -y -o"rocksdb" > nul
-  - IF "%PLATFORM%" == "x64" ( copy %CD%\rocksdb\mingw64\bin\librocksdb_shared.dll %CD%\bin\librocksdb.dll ) ELSE ( copy %CD%\rocksdb\mingw32\bin\librocksdb_shared.dll %CD%\bin\librocksdb.dll )
+  - IF "%PLATFORM%" == "x64" ( copy %CD%\rocksdb\mingw64\bin\librocksdb-shared.dll %CD%\bin\librocksdb.dll ) ELSE ( copy %CD%\rocksdb\mingw32\bin\librocksdb-shared.dll %CD%\bin\librocksdb.dll )
   - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\bin;%CD%\Nim\bin;%PATH%
   - git clone https://github.com/nim-lang/Nim.git
   - cd %CD%\Nim
