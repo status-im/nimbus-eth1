@@ -255,6 +255,7 @@ proc setNetwork(conf: var NetConfiguration, network: NetworkFlags,
   conf.flags.excl({MainNet, MordenNet, RopstenNet, RinkebyNet, KovanNet,
                    CustomNet})
   conf.flags.incl(network)
+  assert(not conf.bootNodes.isNil) # Nim bug #7833
   case network
   of MainNet:
     conf.networkId = uint(1)
@@ -402,6 +403,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
 
   ## Network defaults
+  result.net.bootNodes = @[] # Nim bug #7833
   result.net.setNetwork(RopstenNet)
   result.net.maxPeers = 25
   result.net.maxPendingPeers = 0
