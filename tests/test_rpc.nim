@@ -3,6 +3,9 @@ import
   json_rpc/[rpcserver, rpcclient],
   ../nimbus/rpc/common, ../nimbus/constants, ../nimbus/nimbus/account,
   eth_common
+import rpcclient/test_hexstrings
+
+doHexStrTests()
 
 from os import getCurrentDir, DirSep
 from strutils import rsplit
