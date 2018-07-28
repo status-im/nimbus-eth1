@@ -297,7 +297,7 @@ op codecopy, inline = false, memStartPos, copyStartPos, size:
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
+    computation.gasCosts[CodeCopy].m_handler(computation.memory.len, memPos, len),
     reason="CodeCopy fee")
 
   computation.memory.writePaddedResult(computation.code.bytes, memPos, copyPos, len)
@@ -319,7 +319,7 @@ op extCodeCopy, inline = true:
   let (memPos, codePos, len) = (memStartPos.toInt, codeStartPos.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[ExtCodeCopy].m_handler(memPos, codePos, len),
+    computation.gasCosts[ExtCodeCopy].m_handler(computation.memory.len, memPos, len),
     reason="ExtCodeCopy fee")
 
   let codeBytes = computation.vmState.readOnlyStateDB.getCode(account)

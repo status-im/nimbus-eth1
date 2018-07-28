@@ -402,10 +402,10 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + bad_indirect_jump2.json                                         OK
 + byte1.json                                                      OK
   calldatacopyMemExp.json                                         Skip
-- codecopyMemExp.json                                             Fail
++ codecopyMemExp.json                                             OK
 + deadCode_1.json                                                 OK
 + dupAt51becameMload.json                                         OK
-- extcodecopyMemExp.json                                          Fail
++ extcodecopyMemExp.json                                          OK
 + for_loop1.json                                                  OK
 + for_loop2.json                                                  OK
 + gas0.json                                                       OK
@@ -483,7 +483,7 @@ OK: 33/52 Fail: 4/52 Skip: 15/52
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 142/145 Fail: 2/145 Skip: 1/145
+OK: 144/145 Fail: 0/145 Skip: 1/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
