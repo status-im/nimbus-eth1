@@ -1,12 +1,11 @@
 version: '{build}'
 
 cache:
-- x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
-- i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
-- sqlite-dll-win32-x86-3240000.zip
-- sqlite-dll-win64-x64-3240000.zip
-- mingw-w64-x86_64-rocksdb-5.10.2-1-any.pkg.tar.xz
-- mingw-w64-i686-rocksdb-5.10.2-1-any.pkg.tar.xz
+- x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z -> appveyor.yml
+- i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z -> appveyor.yml
+- sqlite-dll-win32-x86-3240000.zip -> appveyor.yml
+- sqlite-dll-win64-x64-3240000.zip -> appveyor.yml
+- nimbus-deps.zip -> appveyor.yml
 
 # We always want 32 and 64-bit compilation
 matrix:
@@ -16,20 +15,20 @@ environment:
 
   matrix:
     - MINGW_DIR: mingw32
-      MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z/download
+      MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
       MINGW_ARCHIVE: i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
       SQLITE_URL: https://www.sqlite.org/2018/sqlite-dll-win32-x86-3240000.zip
       SQLITE_ARCHIVE: sqlite-dll-win32-x86-3240000.zip
-      ROCKSDB_URL: https://sourceforge.net/projects/msys2/files/REPOS/MINGW/i686/mingw-w64-i686-rocksdb-5.10.2-1-any.pkg.tar.xz
-      ROCKSDB_ARCHIVE: mingw-w64-i686-rocksdb-5.10.2-1-any.pkg.tar.xz
+      ROCKSDB_URL: https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip
+      ROCKSDB_ARCHIVE: nimbus-deps.zip
       platform: x86
     - MINGW_DIR: mingw64
-      MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z/download
+      MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
       MINGW_ARCHIVE: x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
       SQLITE_URL: https://www.sqlite.org/2018/sqlite-dll-win64-x64-3240000.zip
       SQLITE_ARCHIVE: sqlite-dll-win64-x64-3240000.zip
-      ROCKSDB_URL: https://sourceforge.net/projects/msys2/files/REPOS/MINGW/x86_64/mingw-w64-x86_64-rocksdb-5.10.2-1-any.pkg.tar.xz
-      ROCKSDB_ARCHIVE: mingw-w64-x86_64-rocksdb-5.10.2-1-any.pkg.tar.xz
+      ROCKSDB_URL: https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip
+      ROCKSDB_ARCHIVE: nimbus-deps.zip
       platform: x64
 
 install:
@@ -41,8 +40,8 @@ install:
   - 7z x -y "%SQLITE_ARCHIVE%" > nul
   - IF "%PLATFORM%" == "x64" ( copy %CD%\sqlite3.dll %CD%\bin\sqlite3_64.dll ) ELSE ( copy %CD%\sqlite3.dll %CD%\bin\sqlite3_32.dll )
   - IF not exist "%ROCKSDB_ARCHIVE%" appveyor DownloadFile "%ROCKSDB_URL%" -FileName "%ROCKSDB_ARCHIVE%"
-  - 7z x "%ROCKSDB_ARCHIVE%" -so | 7z x -aoa -si -ttar -y -o"rocksdb" > nul
-  - IF "%PLATFORM%" == "x64" ( copy %CD%\rocksdb\mingw64\bin\librocksdb-shared.dll %CD%\bin\librocksdb.dll ) ELSE ( copy %CD%\rocksdb\mingw32\bin\librocksdb-shared.dll %CD%\bin\librocksdb.dll )
+  - 7z x -y "%ROCKSDB_ARCHIVE%" > nul
+  - IF "%PLATFORM%" == "x64" ( copy %CD%\x64\librocksdb.dll %CD%\bin\librocksdb.dll ) ELSE ( copy %CD%\x86\librocksdb.dll %CD%\bin\librocksdb.dll )
   - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\bin;%CD%\Nim\bin;%PATH%
   - git clone https://github.com/nim-lang/Nim.git
   - cd %CD%\Nim
