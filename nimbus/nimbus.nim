@@ -8,10 +8,18 @@
 # those terms.
 
 import
-  os, strutils, net,
+  os, strutils, net, eth_common, db/[storage_types, db_chain],
   asyncdispatch2, json_rpc/rpcserver, eth_keys,
   eth_p2p, eth_p2p/rlpx_protocols/[eth, les],
-  config, rpc/[common, p2p]
+  config, rpc/[common, p2p],
+  eth_trie
+
+const UseSqlite = true
+
+when UseSqlite:
+  import db/backends/sqlite_backend
+else:
+  import db/backends/rocksdb_backend
 
 ## TODO:
 ## * No IPv6 support
@@ -32,6 +40,13 @@ type
     rpcServer*: RpcHttpServer
     ethNode*: EthereumNode
     state*: NimbusState
+
+proc newTrieDb(): TrieDatabaseRef =
+  # XXX: Setup db storage location according to config
+  result = trieDB(newChainDb(":memory:"))
+
+proc initializeEmptyDb(db: BaseChainDB) =
+  echo "Initializing empty DB (TODO)"
 
 proc start(): NimbusObject =
   var nimbus = NimbusObject()
@@ -55,8 +70,16 @@ proc start(): NimbusObject =
   address.tcpPort = Port(conf.net.bindPort)
   address.udpPort = Port(conf.net.discPort)
 
+  let trieDB = newTrieDb()
+  let chainDB = newBaseChainDB(trieDB)
+
+  if canonicalHeadHashKey().toOpenArray notin trieDB:
+    initializeEmptyDb(chainDb)
+
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId)
+
+  nimbus.ethNode.chain = chainDB
 
   if RpcFlags.Enabled in conf.rpc.flags:
     setupP2PRpc(nimbus.ethNode, nimbus.rpcServer)

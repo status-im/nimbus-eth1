@@ -2,13 +2,14 @@ import
   sqlite3, ranges, ranges/ptr_arith, ../storage_types
 
 type
-  SqliteChainDB* = object
+  SqliteChainDB* = ref object of RootObj
     store: PSqlite3
     selectStmt, insertStmt, deleteStmt: PStmt
 
   ChainDB* = SqliteChainDB
 
-proc initChainDB*(dbPath: string): ChainDB =
+proc newChainDB*(dbPath: string): ChainDB =
+  result.new()
   var s = sqlite3.open(dbPath, result.store)
   if s != SQLITE_OK:
     raiseStorageInitError()
@@ -54,14 +55,14 @@ proc initChainDB*(dbPath: string): ChainDB =
 proc bindBlob(s: Pstmt, n: int, blob: openarray[byte]): int32 =
   sqlite3.bind_blob(s, n.int32, blob.baseAddr, blob.len.int32, nil)
 
-proc get*(db: ChainDB, key: DbKey): ByteRange =
+proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
   template check(op) =
     let status = op
     if status != SQLITE_OK: raiseKeyReadError(key)
 
   check reset(db.selectStmt)
   check clearBindings(db.selectStmt)
-  check bindBlob(db.selectStmt, 1, key.toOpenArray)
+  check bindBlob(db.selectStmt, 1, key)
 
   case step(db.selectStmt)
   of SQLITE_ROW:
@@ -70,51 +71,50 @@ proc get*(db: ChainDB, key: DbKey): ByteRange =
       resLen   = columnBytes(db.selectStmt, 0)
       resSeq   = newSeq[byte](resLen)
     copyMem(resSeq.baseAddr, resStart, resLen)
-    return resSeq.toRange
+    return resSeq
   of SQLITE_DONE:
-    return ByteRange()
+    return @[]
   else: raiseKeySearchError(key)
 
-proc put*(db: var ChainDB, key: DbKey, value: ByteRange) =
+proc put*(db: ChainDB, key, value: openarray[byte]) =
   template check(op) =
     let status = op
     if status != SQLITE_OK: raiseKeyWriteError(key)
 
   check reset(db.insertStmt)
   check clearBindings(db.insertStmt)
-  check bindBlob(db.insertStmt, 1, key.toOpenArray)
-  check bindBlob(db.insertStmt, 2, value.toOpenArray)
+  check bindBlob(db.insertStmt, 1, key)
+  check bindBlob(db.insertStmt, 2, value)
 
   if step(db.insertStmt) != SQLITE_DONE:
     raiseKeyWriteError(key)
 
-proc contains*(db: ChainDB, key: DbKey): bool =
+proc contains*(db: ChainDB, key: openarray[byte]): bool =
   template check(op) =
     let status = op
     if status != SQLITE_OK: raiseKeySearchError(key)
 
   check reset(db.selectStmt)
   check clearBindings(db.selectStmt)
-  check bindBlob(db.selectStmt, 1, key.toOpenArray)
+  check bindBlob(db.selectStmt, 1, key)
 
   case step(db.selectStmt)
   of SQLITE_ROW: result = true
   of SQLITE_DONE: result = false
   else: raiseKeySearchError(key)
 
-proc del*(db: var ChainDB, key: DbKey) =
+proc del*(db: ChainDB, key: openarray[byte]) =
   template check(op) =
     let status = op
     if status != SQLITE_OK: raiseKeyDeletionError(key)
 
   check reset(db.deleteStmt)
   check clearBindings(db.deleteStmt)
-  check bindBlob(db.deleteStmt, 1, key.toOpenArray)
+  check bindBlob(db.deleteStmt, 1, key)
 
   if step(db.deleteStmt) != SQLITE_DONE:
     raiseKeyDeletionError(key)
 
-proc close*(db: var ChainDB) =
+proc close*(db: ChainDB) =
   discard sqlite3.close(db.store)
-  reset(db)
-
+  reset(db[])

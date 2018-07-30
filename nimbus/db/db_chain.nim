@@ -11,7 +11,7 @@ import
   ../errors, ../block_types, ../utils/header, ../constants, ./storage_types.nim
 
 type
-  BaseChainDB* = ref object
+  BaseChainDB* = ref object of AbstractChainDB
     db*: TrieDatabaseRef
     # TODO db*: JournalDB
 
@@ -229,3 +229,7 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 
 proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
   result = newAccountStateDB(self.db, stateRoot)
+
+method getBestBlockHeader*(self: BaseChainDB): BlockHeaderRef =
+  result.new()
+  result[] = self.getCanonicalHead()
