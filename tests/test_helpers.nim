@@ -26,7 +26,8 @@ proc validTest*(folder: string, name: string): bool =
   result = "calldatacopy" notin name and
     "balanceAddressInputTooBigRightMyAddress." notin name and
     "callstatelessToReturn1" notin name and
-    folder notin @["vmRandomTest", "vmSystemOperations", "vmPerformance"]
+    folder notin @["vmRandomTest", "vmSystemOperations", "vmPerformance"] and
+    "boolean." notin name and "mktx." notin name and "arith." notin name
   #result = name == "exp2.json"
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
