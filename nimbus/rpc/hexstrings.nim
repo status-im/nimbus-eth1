@@ -90,14 +90,14 @@ proc fromJson*(n: JsonNode, argName: string, result: var HexQuantityStr) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.validateHexQuantity:
-    raise newException(ValueError, "Parameter \"" & argName & "\" value is not valid as an Ethereum hex quantity \"" & hexStr & "\"")
-  result = hexStr[2..hexStr.high].hexQuantityStr
+    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as an Ethereum hex quantity \"" & hexStr & "\"")
+  result = hexStr.hexQuantityStr
 
 proc fromJson*(n: JsonNode, argName: string, result: var HexDataStr) =
   # Note that '0x' is stripped after validation
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.validateHexData:
-    raise newException(ValueError, "Parameter \"" & argName & "\" value is not valid as a Ethereum data \"" & hexStr & "\"")
-  result = hexStr[2..hexStr.high].hexDataStr
+    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as a Ethereum data \"" & hexStr & "\"")
+  result = hexStr.hexDataStr
 
