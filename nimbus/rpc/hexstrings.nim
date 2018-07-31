@@ -38,10 +38,10 @@ template isHexChar*(c: char): bool =
   else: true
 
 proc validateHexQuantity*(value: string): bool =
-  if not value.hasHexHeader:
+  if value.len < 3 or not value.hasHexHeader:
     return false
-  # No leading zeros
-  if value[2] == '0': return false
+  # No leading zeros (but allow 0x0)
+  if value.len > 3 and value[2] == '0': return false
   for i in 2 ..< value.len:
     let c = value[i]
     if not c.isHexChar:
@@ -49,7 +49,7 @@ proc validateHexQuantity*(value: string): bool =
   return true
 
 proc validateHexData*(value: string): bool =
-  if not value.hasHexHeader:
+  if value.len < 3 or not value.hasHexHeader:
     return false
   # Must be even number of digits
   if value.len mod 2 != 0: return false
@@ -60,19 +60,27 @@ proc validateHexData*(value: string): bool =
       return false
   return true
 
+const
+  SInvalidQuantity = "Invalid hex quantity format for Ethereum"
+  SInvalidData = "Invalid hex data format for Ethereum"
+
+proc validateRaiseHexQuantity*(value: string) =
+  if not value.validateHexQuantity:
+    raise newException(ValueError, SInvalidQuantity & ": " & value)
+
+proc validateRaiseHexData*(value: string) =
+  if not value.validateHexData:
+    raise newException(ValueError, SInvalidData & ": " & value)
+
 # Initialisation
 
 proc hexQuantityStr*(value: string): HexQuantityStr =
-  if not value.validateHexQuantity:
-    raise newException(ValueError, "Invalid hex quantity format for Ethereum: " & value)
-  else:
-    result = value.HexQuantityStr
+  value.validateRaiseHexQuantity
+  result = value.HexQuantityStr
 
 proc hexDataStr*(value: string): HexDataStr =
-  if not value.validateHexData:
-    raise newException(ValueError, "Invalid hex data format for Ethereum: " & value)
-  else:
-    result = value.HexDataStr
+  value.validateRaiseHexData
+  result = value.HexDataStr
 
 # Converters for use in RPC
 
