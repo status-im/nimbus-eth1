@@ -171,6 +171,8 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
               else: self.getScore(header.parentHash).u256 + header.difficulty
   self.db.put(blockHashToScoreKey(header.hash).toOpenArray, rlp.encode(score).toOpenArray)
 
+  self.addBlockNumberToHashLookup(header)
+
   var headScore: int
   try:
     headScore = self.getScore(self.getCanonicalHead().hash)
@@ -230,6 +232,25 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
   result = newAccountStateDB(self.db, stateRoot)
 
+
+method genesisHash*(db: BaseChainDB): KeccakHash =
+  db.lookupBlockHash(0.toBlockNumber)
+
+method getBlockHeader*(db: BaseChainDB, b: HashOrNum): BlockHeaderRef =
+  result.new()
+  case b.isHash
+  of true:
+    result[] = db.getBlockHeaderByHash(b.hash)
+  else:
+    result[] = db.getBlockHeaderByHash(db.lookupBlockHash(b.number))
+
 method getBestBlockHeader*(self: BaseChainDB): BlockHeaderRef =
   result.new()
   result[] = self.getCanonicalHead()
+
+# method getSuccessorHeader*(db: BaseChainDB,
+#                            h: BlockHeader): BlockHeaderRef =
+#   notImplemented
+
+# method getBlockBody*(db: BaseChainDB, blockHash: KeccakHash): BlockBodyRef =
+#   notImplemented
