@@ -265,20 +265,13 @@ OK: 195/195 Fail: 0/195 Skip: 0/195
 OK: 60/60 Fail: 0/60 Skip: 0/60
 ## vmBlockInfoTest
 ```diff
-+ blockhash257Block.json                                          OK
-+ blockhash258Block.json                                          OK
-- blockhashInRange.json                                           Fail
-+ blockhashMyBlock.json                                           OK
-+ blockhashNotExistingBlock.json                                  OK
-+ blockhashOutOfRange.json                                        OK
-+ blockhashUnderFlow.json                                         OK
 + coinbase.json                                                   OK
 + difficulty.json                                                 OK
 + gaslimit.json                                                   OK
 + number.json                                                     OK
 + timestamp.json                                                  OK
 ```
-OK: 11/12 Fail: 1/12 Skip: 0/12
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## vmEnvironmentalInfo
 ```diff
 + ExtCodeSizeAddressInputTooBigLeftMyAddress.json                 OK
