@@ -315,7 +315,6 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + codecopyZeroMemExpansion.json                                   OK
 - codecopy_DataIndexTooHigh.json                                  Fail
 + codesize.json                                                   OK
-- env1.json                                                       Fail
 + extcodecopy0.json                                               OK
 + extcodecopy0AddressTooBigLeft.json                              OK
 + extcodecopy0AddressTooBigRight.json                             OK
@@ -327,7 +326,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 33/52 Fail: 4/52 Skip: 15/52
+OK: 33/51 Fail: 3/51 Skip: 15/51
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
@@ -629,25 +628,16 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 OK: 74/74 Fail: 0/74 Skip: 0/74
 ## vmRandomTest
 ```diff
-  201503102037PYTHON.json                                         Skip
-  201503102148PYTHON.json                                         Skip
-  201503102300PYTHON.json                                         Skip
   201503102320PYTHON.json                                         Skip
-  201503110050PYTHON.json                                         Skip
   201503110206PYTHON.json                                         Skip
   201503110219PYTHON.json                                         Skip
   201503110226PYTHON_DUP6.json                                    Skip
   201503110346PYTHON_PUSH24.json                                  Skip
-  201503110526PYTHON.json                                         Skip
   201503111844PYTHON.json                                         Skip
   201503112218PYTHON.json                                         Skip
-  201503120317PYTHON.json                                         Skip
-  201503120525PYTHON.json                                         Skip
-  201503120547PYTHON.json                                         Skip
-  201503120909PYTHON.json                                         Skip
   randomTest.json                                                 Skip
 ```
-OK: 0/17 Fail: 0/17 Skip: 17/17
+OK: 0/8 Fail: 0/8 Skip: 8/8
 ## vmSha3Test
 ```diff
 + sha3_0.json                                                     OK
@@ -672,36 +662,7 @@ OK: 0/17 Fail: 0/17 Skip: 17/17
 OK: 18/18 Fail: 0/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
-  ABAcalls0.json                                                  Skip
-  ABAcalls1.json                                                  Skip
-  ABAcalls2.json                                                  Skip
-  ABAcalls3.json                                                  Skip
-  ABAcallsSuicide0.json                                           Skip
-  ABAcallsSuicide1.json                                           Skip
-  CallRecursiveBomb0.json                                         Skip
-  CallRecursiveBomb1.json                                         Skip
-  CallRecursiveBomb2.json                                         Skip
-  CallRecursiveBomb3.json                                         Skip
-  CallToNameRegistrator0.json                                     Skip
-  CallToNameRegistratorNotMuchMemory0.json                        Skip
-  CallToNameRegistratorNotMuchMemory1.json                        Skip
-  CallToNameRegistratorOutOfGas.json                              Skip
-  CallToNameRegistratorTooMuchMemory0.json                        Skip
-  CallToNameRegistratorTooMuchMemory1.json                        Skip
-  CallToNameRegistratorTooMuchMemory2.json                        Skip
-  CallToPrecompiledContract.json                                  Skip
-  CallToReturn1.json                                              Skip
-  PostToNameRegistrator0.json                                     Skip
-  PostToReturn1.json                                              Skip
   TestNameRegistrator.json                                        Skip
-  callcodeToNameRegistrator0.json                                 Skip
-  callcodeToReturn1.json                                          Skip
-  callstatelessToNameRegistrator0.json                            Skip
-  callstatelessToReturn1.json                                     Skip
-  createNameRegistrator.json                                      Skip
-  createNameRegistratorOutOfMemoryBonds0.json                     Skip
-  createNameRegistratorOutOfMemoryBonds1.json                     Skip
-  createNameRegistratorValueTooHigh.json                          Skip
   return0.json                                                    Skip
   return1.json                                                    Skip
   return2.json                                                    Skip
@@ -709,12 +670,9 @@ OK: 18/18 Fail: 0/18 Skip: 0/18
   suicideNotExistingAccount.json                                  Skip
   suicideSendEtherToMe.json                                       Skip
 ```
-OK: 0/36 Fail: 0/36 Skip: 36/36
+OK: 0/7 Fail: 0/7 Skip: 7/7
 ## vmTests
 ```diff
-  arith.json                                                      Skip
-  boolean.json                                                    Skip
-  mktx.json                                                       Skip
 + suicide.json                                                    OK
 ```
-OK: 1/4 Fail: 0/4 Skip: 3/4
+OK: 1/1 Fail: 0/1 Skip: 0/1
