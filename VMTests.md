@@ -284,22 +284,22 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + balanceAddress2.json                                            OK
 + balanceAddressInputTooBig.json                                  OK
 + balanceAddressInputTooBigLeftMyAddress.json                     OK
-  balanceAddressInputTooBigRightMyAddress.json                    Skip
++ balanceAddressInputTooBigRightMyAddress.json                    OK
 + balanceCaller3.json                                             OK
-  calldatacopy0.json                                              Skip
-  calldatacopy0_return.json                                       Skip
-  calldatacopy1.json                                              Skip
-  calldatacopy1_return.json                                       Skip
-  calldatacopy2.json                                              Skip
-  calldatacopy2_return.json                                       Skip
-  calldatacopyUnderFlow.json                                      Skip
-  calldatacopyZeroMemExpansion.json                               Skip
-  calldatacopyZeroMemExpansion_return.json                        Skip
-  calldatacopy_DataIndexTooHigh.json                              Skip
-  calldatacopy_DataIndexTooHigh2.json                             Skip
-  calldatacopy_DataIndexTooHigh2_return.json                      Skip
-  calldatacopy_DataIndexTooHigh_return.json                       Skip
-  calldatacopy_sec.json                                           Skip
+- calldatacopy0.json                                              Fail
+- calldatacopy0_return.json                                       Fail
+- calldatacopy1.json                                              Fail
+- calldatacopy1_return.json                                       Fail
++ calldatacopy2.json                                              OK
++ calldatacopy2_return.json                                       OK
++ calldatacopyUnderFlow.json                                      OK
++ calldatacopyZeroMemExpansion.json                               OK
++ calldatacopyZeroMemExpansion_return.json                        OK
+- calldatacopy_DataIndexTooHigh.json                              Fail
+- calldatacopy_DataIndexTooHigh2.json                             Fail
+- calldatacopy_DataIndexTooHigh2_return.json                      Fail
+- calldatacopy_DataIndexTooHigh_return.json                       Fail
+- calldatacopy_sec.json                                           Fail
 + calldataload0.json                                              OK
 + calldataload1.json                                              OK
 + calldataload2.json                                              OK
@@ -326,7 +326,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 33/51 Fail: 3/51 Skip: 15/51
+OK: 39/51 Fail: 12/51 Skip: 0/51
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
@@ -393,7 +393,7 @@ OK: 33/51 Fail: 3/51 Skip: 15/51
 + bad_indirect_jump1.json                                         OK
 + bad_indirect_jump2.json                                         OK
 + byte1.json                                                      OK
-  calldatacopyMemExp.json                                         Skip
+- calldatacopyMemExp.json                                         Fail
 + codecopyMemExp.json                                             OK
 + deadCode_1.json                                                 OK
 + dupAt51becameMload.json                                         OK
@@ -475,7 +475,7 @@ OK: 33/51 Fail: 3/51 Skip: 15/51
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 144/145 Fail: 0/145 Skip: 1/145
+OK: 144/145 Fail: 1/145 Skip: 0/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
@@ -628,16 +628,16 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 OK: 74/74 Fail: 0/74 Skip: 0/74
 ## vmRandomTest
 ```diff
-  201503102320PYTHON.json                                         Skip
-  201503110206PYTHON.json                                         Skip
-  201503110219PYTHON.json                                         Skip
-  201503110226PYTHON_DUP6.json                                    Skip
-  201503110346PYTHON_PUSH24.json                                  Skip
-  201503111844PYTHON.json                                         Skip
-  201503112218PYTHON.json                                         Skip
-  randomTest.json                                                 Skip
+- 201503102320PYTHON.json                                         Fail
+- 201503110206PYTHON.json                                         Fail
+- 201503110219PYTHON.json                                         Fail
+- 201503110226PYTHON_DUP6.json                                    Fail
+- 201503110346PYTHON_PUSH24.json                                  Fail
+- 201503111844PYTHON.json                                         Fail
+- 201503112218PYTHON.json                                         Fail
+- randomTest.json                                                 Fail
 ```
-OK: 0/8 Fail: 0/8 Skip: 8/8
+OK: 0/8 Fail: 8/8 Skip: 0/8
 ## vmSha3Test
 ```diff
 + sha3_0.json                                                     OK
@@ -662,15 +662,15 @@ OK: 0/8 Fail: 0/8 Skip: 8/8
 OK: 18/18 Fail: 0/18 Skip: 0/18
 ## vmSystemOperations
 ```diff
-  TestNameRegistrator.json                                        Skip
-  return0.json                                                    Skip
-  return1.json                                                    Skip
-  return2.json                                                    Skip
-  suicide0.json                                                   Skip
-  suicideNotExistingAccount.json                                  Skip
-  suicideSendEtherToMe.json                                       Skip
++ TestNameRegistrator.json                                        OK
++ return0.json                                                    OK
++ return1.json                                                    OK
++ return2.json                                                    OK
++ suicide0.json                                                   OK
++ suicideNotExistingAccount.json                                  OK
++ suicideSendEtherToMe.json                                       OK
 ```
-OK: 0/7 Fail: 0/7 Skip: 7/7
+OK: 7/7 Fail: 0/7 Skip: 0/7
 ## vmTests
 ```diff
 + suicide.json                                                    OK

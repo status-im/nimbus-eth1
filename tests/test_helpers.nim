@@ -17,17 +17,8 @@ type
 
 proc validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
-  # TODO fix
-  #if true:
-  #  return "or0" in name
-  #if true:
-  #  return folder == "vmEnvironmentalInfo"
 
-  result = "calldatacopy" notin name and
-    "balanceAddressInputTooBigRightMyAddress." notin name and
-    "callstatelessToReturn1" notin name and
-    folder notin @["vmRandomTest", "vmSystemOperations", "vmPerformance"]
-  #result = name == "exp2.json"
+  result = folder notin @["vmPerformance"]
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
   let
