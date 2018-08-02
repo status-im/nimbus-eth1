@@ -20,18 +20,17 @@ type
     storage*: Table[UInt256, UInt256]
     balance*: UInt256
     nonce*: UInt256
-    #privateKey: seq[byte] # For tests?
 
-proc toAddress(n: UInt256): EthAddress =
+func toAddress(n: UInt256): EthAddress =
   let a = n.toByteArrayBE()
-  result[0 .. ^1] = a[12 .. ^1]
+  result[0 .. ^1] = a.toOpenArray(12, a.high)
 
-proc decodePrealloc(data: seq[byte]): GenesisAlloc =
+func decodePrealloc(data: seq[byte]): GenesisAlloc =
   result = newTable[EthAddress, GenesisAccount]()
   for tup in rlp.decode(data.toRange, seq[(UInt256, UInt256)]):
     result[toAddress(tup[0])] = GenesisAccount(balance: tup[1])
 
-proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
+func defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   result = case id
   of MainNet:
     Genesis(
