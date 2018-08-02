@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import parseopt, strutils
+import parseopt, strutils, macros
 import asyncdispatch2, eth_keys, eth_p2p, eth_common
 
 const
@@ -309,11 +309,14 @@ proc setBootnodes(onodes: var seq[ENode], nodeUris: openarray[string]) =
     doAssert(processENode(item, node) == Success)
     onodes.add(node)
 
+macro availableEnumValues(T: type enum): untyped =
+  let impl = getTypeImpl(T)[1].getTypeImpl()
+  result = newNimNode(nnkBracket)
+  for i in 1 ..< impl.len: result.add(newCall("uint", copyNimTree(impl[i])))
+
 proc toPublicNetwork*(id: uint): PublicNetwork {.inline.} =
-  for i in PublicNetwork.low .. PublicNetwork.high:
-    if uint(i) == id:
-      result = i
-      break
+  if id in availableEnumValues(PublicNetwork):
+    result = PublicNetwork(id)
 
 proc setNetwork(conf: var NetConfiguration, id: PublicNetwork) =
   ## Set network id and default network bootnodes
