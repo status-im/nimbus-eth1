@@ -43,7 +43,7 @@ type
 
 proc newTrieDb(): TrieDatabaseRef =
   # XXX: Setup db storage location according to config
-  result = trieDB(newChainDb(":memory:"))
+  result = trieDB(newChainDb("nimbus.db"))
 
 proc initializeEmptyDb(db: BaseChainDB) =
   echo "Writing genesis to DB"
@@ -80,6 +80,7 @@ proc start(): NimbusObject =
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)
+    assert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId)
