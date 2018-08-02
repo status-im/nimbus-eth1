@@ -54,7 +54,7 @@ func defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
       extraData: hexToSeqByte("0x3535353535353535353535353535353535353535353535353535353535353535"),
       gasLimit: 16777216,
       difficulty: 1048576.u256,
-      alloc: decodePrealloc(testnetAllocData)
+      alloc: decodePrealloc(rinkebyAllocData)
     )
   else:
     raise newException(Exception, "No default genesis for " & $id)
