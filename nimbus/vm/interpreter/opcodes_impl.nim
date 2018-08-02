@@ -281,10 +281,10 @@ op callDataCopy, inline = false, memStartPos, copyStartPos, size:
   let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[CallDataCopy].m_handler(memPos, copyPos, len),
+    computation.gasCosts[CallDataCopy].m_handler(computation.memory.len, memPos, len),
     reason="CallDataCopy fee")
 
-  computation.memory.writePaddedResult(computation.code.bytes, memPos, copyPos, len)
+  computation.memory.writePaddedResult(computation.msg.data, memPos, copyPos, len)
 
 op codesize, inline = true:
   ## 0x38, Get size of code running in current environment.
