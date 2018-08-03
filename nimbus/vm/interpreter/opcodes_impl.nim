@@ -235,7 +235,7 @@ func cleanMemRef(x: UInt256): int {.inline.} =
   # If an opcode uses mem.extend, writePaddedResult,
   # or an m_handler for gas costs, it should ensure,
   # either via this proc or some other mechanism, it
-  # checks for .toInt calls it otherwise get checked
+  # checks for .toInt it otherwise calls get checked
   # for spurious negative interpretations for bounds
   # checking purposes.
   x.toInt and (-1.int32 shr 1)
