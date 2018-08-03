@@ -55,7 +55,7 @@ Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FA
 
 # Goals
 
-1. Create an Ethereum implementation suitable for resource-restricted devices.
+1.  Create an Ethereum implementation suitable for resource-restricted devices.
 
 2. Create an implementation team for the [Applied Research Objectives](https://hackmd.io/s/HkLkj55yb#objectives-in-applied-research) of [Ethereum Research](http://ethereumresearch.org/) (aka Ethereum Asia Pacific Limited), with focus on the following:
 
