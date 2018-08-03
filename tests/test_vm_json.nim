@@ -37,7 +37,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
   let header = BlockHeader(
     coinbase: fenv{"currentCoinbase"}.getStr.parseAddress,
-    difficulty: fenv{"currentDifficulty"}.getHexadecimalInt.u256,
+    difficulty: fromHex(UInt256, fenv{"currentDifficulty"}.getStr),
     blockNumber: fenv{"currentNumber"}.getHexadecimalInt.u256,
     gasLimit: fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
     timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,

@@ -229,14 +229,14 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
   func `prefix gasLog3`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-    result = static(FeeSchedule[GasLog]) +
+    result += static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
       static(3 * FeeSchedule[GasLogTopic])
 
   func `prefix gasLog4`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-    result = static(FeeSchedule[GasLog]) +
+    result += static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
       static(4 * FeeSchedule[GasLogTopic])
 

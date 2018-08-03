@@ -286,10 +286,10 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + balanceAddressInputTooBigLeftMyAddress.json                     OK
 + balanceAddressInputTooBigRightMyAddress.json                    OK
 + balanceCaller3.json                                             OK
-- calldatacopy0.json                                              Fail
-- calldatacopy0_return.json                                       Fail
-- calldatacopy1.json                                              Fail
-- calldatacopy1_return.json                                       Fail
++ calldatacopy0.json                                              OK
++ calldatacopy0_return.json                                       OK
++ calldatacopy1.json                                              OK
++ calldatacopy1_return.json                                       OK
 + calldatacopy2.json                                              OK
 + calldatacopy2_return.json                                       OK
 + calldatacopyUnderFlow.json                                      OK
@@ -299,7 +299,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 - calldatacopy_DataIndexTooHigh2.json                             Fail
 - calldatacopy_DataIndexTooHigh2_return.json                      Fail
 - calldatacopy_DataIndexTooHigh_return.json                       Fail
-- calldatacopy_sec.json                                           Fail
++ calldatacopy_sec.json                                           OK
 + calldataload0.json                                              OK
 + calldataload1.json                                              OK
 + calldataload2.json                                              OK
@@ -326,7 +326,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 39/51 Fail: 12/51 Skip: 0/51
+OK: 44/51 Fail: 7/51 Skip: 0/51
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
@@ -393,7 +393,7 @@ OK: 39/51 Fail: 12/51 Skip: 0/51
 + bad_indirect_jump1.json                                         OK
 + bad_indirect_jump2.json                                         OK
 + byte1.json                                                      OK
-- calldatacopyMemExp.json                                         Fail
++ calldatacopyMemExp.json                                         OK
 + codecopyMemExp.json                                             OK
 + deadCode_1.json                                                 OK
 + dupAt51becameMload.json                                         OK
@@ -475,7 +475,7 @@ OK: 39/51 Fail: 12/51 Skip: 0/51
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 144/145 Fail: 1/145 Skip: 0/145
+OK: 145/145 Fail: 0/145 Skip: 0/145
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
@@ -628,16 +628,16 @@ OK: 0/18 Fail: 0/18 Skip: 18/18
 OK: 74/74 Fail: 0/74 Skip: 0/74
 ## vmRandomTest
 ```diff
-- 201503102320PYTHON.json                                         Fail
-- 201503110206PYTHON.json                                         Fail
-- 201503110219PYTHON.json                                         Fail
-- 201503110226PYTHON_DUP6.json                                    Fail
-- 201503110346PYTHON_PUSH24.json                                  Fail
-- 201503111844PYTHON.json                                         Fail
-- 201503112218PYTHON.json                                         Fail
-- randomTest.json                                                 Fail
++ 201503102320PYTHON.json                                         OK
++ 201503110206PYTHON.json                                         OK
++ 201503110219PYTHON.json                                         OK
++ 201503110226PYTHON_DUP6.json                                    OK
++ 201503110346PYTHON_PUSH24.json                                  OK
++ 201503111844PYTHON.json                                         OK
++ 201503112218PYTHON.json                                         OK
++ randomTest.json                                                 OK
 ```
-OK: 0/8 Fail: 8/8 Skip: 0/8
+OK: 8/8 Fail: 0/8 Skip: 0/8
 ## vmSha3Test
 ```diff
 + sha3_0.json                                                     OK
