@@ -224,6 +224,22 @@ proc writePaddedResult(mem: var Memory,
   # Note, we don't need to write padding bytes
   # mem.extend already pads with zero properly
 
+func cleanMemRef(x: UInt256): int {.inline.} =
+  # https://github.com/status-im/nim-stint/issues/58
+  # Ensures that only 31 lower bits of x are used to
+  # keep its signed interpretation non-negative, per
+  # Ethereum yellow paper. In general, addresses and
+  # lengths >= 2^31 are beyond what the VM should be
+  # running due to gas costs, block sizes, etc.
+  #
+  # If an opcode uses mem.extend, writePaddedResult,
+  # or an m_handler for gas costs, it should ensure,
+  # either via this proc or some other mechanism, it
+  # checks for .toInt calls it otherwise get checked
+  # for spurious negative interpretations for bounds
+  # checking purposes.
+  x.toInt and (-1.int32 shr 1)
+
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
   push: computation.msg.storageAddress
@@ -249,7 +265,7 @@ op callValue, inline = true:
 op callDataLoad, inline = false, startPos:
   ## 0x35, Get input data of current environment
   # TODO simplification: https://github.com/status-im/nimbus/issues/67
-  let dataPos = startPos.toInt
+  let dataPos = startPos.cleanMemRef
   if dataPos >= computation.msg.data.len:
     push: 0
     return
@@ -278,7 +294,7 @@ op callDataCopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x37, Copy input data in current environment to memory.
   # TODO tests: https://github.com/status-im/nimbus/issues/67
 
-  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+  let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[CallDataCopy].m_handler(computation.memory.len, memPos, len),
@@ -294,7 +310,7 @@ op codecopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x39, Copy code running in current environment to memory.
   # TODO tests: https://github.com/status-im/nimbus/issues/67
 
-  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+  let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[CodeCopy].m_handler(computation.memory.len, memPos, len),
@@ -316,7 +332,7 @@ op extCodeCopy, inline = true:
   ## 0x3c, Copy an account's code to memory.
   let account = computation.stack.popAddress()
   let (memStartPos, codeStartPos, size) = computation.stack.popInt(3)
-  let (memPos, codePos, len) = (memStartPos.toInt, codeStartPos.toInt, size.toInt)
+  let (memPos, codePos, len) = (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[ExtCodeCopy].m_handler(computation.memory.len, memPos, len),
@@ -331,7 +347,7 @@ op returnDataSize, inline = true:
 
 op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
   ## 0x3e, Copy output data from the previous call to memory.
-  let (memPos, copyPos, len) = (memStartPos.toInt, copyStartPos.toInt, size.toInt)
+  let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
@@ -387,7 +403,7 @@ op pop, inline = true:
 
 op mload, inline = true, memStartPos:
   ## 0x51, Load word from memory
-  let memPos = memStartPos.toInt
+  let memPos = memStartPos.cleanMemRef
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[MLoad].m_handler(computation.memory.len, memPos, 32),
@@ -399,7 +415,7 @@ op mload, inline = true, memStartPos:
 
 op mstore, inline = true, memStartPos, value:
   ## 0x52, Save word to memory
-  let memPos = memStartPos.toInt
+  let memPos = memStartPos.cleanMemRef
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[MStore].m_handler(computation.memory.len, memPos, 32),
@@ -411,7 +427,7 @@ op mstore, inline = true, memStartPos, value:
 
 op mstore8, inline = true, memStartPos, value:
   ## 0x53, Save byte to memory
-  let memPos = memStartPos.toInt
+  let memPos = memStartPos.cleanMemRef
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[MStore].m_handler(computation.memory.len, memPos, 1),
@@ -501,7 +517,7 @@ op create, inline = false, value, startPosition, size:
   ## 0xf0, Create a new account with associated code.
   # TODO: Forked create for Homestead
 
-  let (memPos, len) = (startPosition.toInt, size.toInt)
+  let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[CodeCopy].m_handler(computation.memory.len, memPos, len),
@@ -663,7 +679,7 @@ template genCall(callName: untyped): untyped =
           shouldTransferValue,
           isStatic) = `callName Params`(computation)
 
-    let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.toInt, memoryInputSize.toInt, memoryOutputStartPosition.toInt, memoryOutputSize.toInt)
+    let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.cleanMemRef, memoryInputSize.cleanMemRef, memoryOutputStartPosition.cleanMemRef, memoryOutputSize.cleanMemRef)
 
     let (gasCost, childMsgGas) = computation.gasCosts[Op.Call].c_handler(
       value,
@@ -751,7 +767,7 @@ genCall(staticCall)
 
 op returnOp, inline = false, startPos, size:
   ## 0xf3, Halt execution returning output data.
-  let (pos, len) = (startPos.toInt, size.toInt)
+  let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[Return].m_handler(computation.memory.len, pos, len),
@@ -763,7 +779,7 @@ op returnOp, inline = false, startPos, size:
 
 op revert, inline = false, startPos, size:
   ## 0xfd, Halt execution reverting state changes but returning data and remaining gas.
-  let (pos, len) = (startPos.toInt, size.toInt)
+  let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[Revert].m_handler(computation.memory.len, pos, len),
