@@ -1,0 +1,119 @@
+{
+    "201503110226PYTHON_DUP6" : {
+        "_info" : {
+            "comment" : "This test used to be a VM test and it once failed in python client some day.  Since the test contains a BALANCE instruction (which must be mocked), it's moved to GeneralSateTest https://github.com/ethereum/tests/pull/445/files#r179426325",
+            "filling-rpc-server" : "eth/1.3.0-20449+commit.0aa883d9.dirty/linux/gnu5.4.0/debug",
+            "filling-tool-version" : "retesteth-0.0.1+commit.98de0277.Linux.g++",
+            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stRandom2/201503110226PYTHON_DUP6Filler.json",
+            "sourceHash" : "e3c45b0840d53d4702b17b0306e55a0096f44554c1176aed44b5f63884db36ff"
+        },
+        "env" : {
+            "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "currentDifficulty" : "0x20000",
+            "currentGasLimit" : "0x0f4240",
+            "currentNumber" : "0x01",
+            "currentTimestamp" : "0x03e8",
+            "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "pre" : {
+            "0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6" : {
+                "balance" : "0x0de0b6b3a7640000",
+                "code" : "0x45414443434042405b85",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x38beec8feeca2598",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "transaction" : {
+            "data" : [
+                "0x"
+            ],
+            "gasLimit" : [
+                "0x2710"
+            ],
+            "gasPrice" : "0x5af3107a4000",
+            "nonce" : "0x00",
+            "secretKey" : "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+            "to" : "0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6",
+            "value" : [
+                "0x0de0b6b3a7640000"
+            ]
+        },
+        "post" : {
+            "Byzantium" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x97bc1cfe54c890cf7260f16182afbfdfdc3a57684e566d0827348e42c3be1cd9",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x97bc1cfe54c890cf7260f16182afbfdfdc3a57684e566d0827348e42c3be1cd9",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "EIP150" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x14a9995ac65e78508883050f353b4a79d112e0ef28d517e08fbf19f5fc2cb9b9",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "EIP158" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x97bc1cfe54c890cf7260f16182afbfdfdc3a57684e566d0827348e42c3be1cd9",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Frontier" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x14a9995ac65e78508883050f353b4a79d112e0ef28d517e08fbf19f5fc2cb9b9",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Homestead" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x14a9995ac65e78508883050f353b4a79d112e0ef28d517e08fbf19f5fc2cb9b9",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
+        }
+    }
+}
