@@ -30,36 +30,55 @@ proc newBaseChainDB*(db: TrieDatabaseRef): BaseChainDB =
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
 
-proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader =
-  ##         Returns the requested block header as specified by block hash.
-  ##
-  ##         Raises BlockNotFound if it is not present in the db.
+proc getBlockHeader*(self: BaseChainDB; blockHash: Hash256, output: var BlockHeader): bool =
   try:
     let blk = self.db.get(genericHashKey(blockHash).toOpenArray).toRange
-    return decode(blk, BlockHeader)
+    if blk.len != 0:
+      output = rlp.decode(blk, BlockHeader)
+      result = true
   except KeyError:
+    discard
+
+proc getBlockHeader*(self: BaseChainDB, blockHash: Hash256): BlockHeader =
+  ## Returns the requested block header as specified by block hash.
+  ##
+  ## Raises BlockNotFound if it is not present in the db.
+  if not self.getBlockHeader(blockHash, result):
     raise newException(BlockNotFound, "No block with hash " & blockHash.data.toHex)
 
-proc getHash(self: BaseChainDB, key: DbKey): Hash256 {.inline.} =
-  rlp.decode(self.db.get(key.toOpenArray).toRange, Hash256)
+proc getHash(self: BaseChainDB, key: DbKey, output: var Hash256): bool {.inline.} =
+  try:
+    output = rlp.decode(self.db.get(key.toOpenArray).toRange, Hash256)
+    result = true
+  except KeyError:
+    discard
 
 proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
-  let k = canonicalHeadHashKey()
-  if k.toOpenArray notin self.db:
+  var headHash: Hash256
+  if not self.getHash(canonicalHeadHashKey(), headHash) or
+      not self.getBlockHeader(headHash, result):
     raise newException(CanonicalHeadNotFound,
                       "No canonical head set for this chain")
-  return self.getBlockHeaderByHash(self.getHash(k))
 
-proc lookupBlockHash*(self: BaseChainDB; n: BlockNumber): Hash256 {.inline.} =
-  ##         Return the block hash for the given block number.
-  self.getHash(blockNumberToHashKey(n))
+proc getBlockHash*(self: BaseChainDB, n: BlockNumber, output: var Hash256): bool {.inline.} =
+  ## Return the block hash for the given block number.
+  self.getHash(blockNumberToHashKey(n), output)
 
-proc getCanonicalBlockHeaderByNumber*(self: BaseChainDB; n: BlockNumber): BlockHeader =
-  ##         Returns the block header with the given number in the canonical chain.
-  ##
-  ##         Raises BlockNotFound if there's no block header with the given number in the
-  ##         canonical chain.
-  self.getBlockHeaderByHash(self.lookupBlockHash(n))
+proc getBlockHash*(self: BaseChainDB, n: BlockNumber): Hash256 {.inline.} =
+  ## Return the block hash for the given block number.
+  if not self.getHash(blockNumberToHashKey(n), result):
+    raise newException(BlockNotFound, "No block hash for number " & $n)
+
+proc getBlockHeader*(self: BaseChainDB; n: BlockNumber, output: var BlockHeader): bool =
+  ## Returns the block header with the given number in the canonical chain.
+  var blockHash: Hash256
+  if self.getBlockHash(n, blockHash):
+    result = self.getBlockHeader(blockHash, output)
+
+proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
+  ## Returns the block header with the given number in the canonical chain.
+  ## Raises BlockNotFound error if the block is not in the DB.
+  self.getBlockHeader(self.getBlockHash(n))
 
 proc getScore*(self: BaseChainDB; blockHash: Hash256): int =
   rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray).toRange, int)
@@ -68,20 +87,17 @@ iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
   ##         Returns the chain leading up from the given header until the first ancestor it has in
   ##         common with our canonical chain.
   var h = header
+  var orig: BlockHeader
   while true:
-    try:
-      let orig = self.getCanonicalBlockHeaderByNumber(h.blockNumber)
-      if orig.hash == h.hash:
-        break
-    except BlockNotFound:
-      discard
+    if self.getBlockHeader(h.blockNumber, orig) and orig.hash == h.hash:
+      break
 
     yield h
 
     if h.parentHash == GENESIS_PARENT_HASH:
       break
     else:
-      h = self.getBlockHeaderByHash(h.parentHash)
+      h = self.getBlockHeader(h.parentHash)
 
 proc addBlockNumberToHashLookup(self: BaseChainDB; header: BlockHeader) =
   self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
@@ -104,19 +120,16 @@ proc removeTransactionFromCanonicalChain(self: BaseChainDB, transactionHash: Has
 
 proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockHeader] =
   ##         Sets the header as the canonical chain HEAD.
-
-  let header = self.getBlockHeaderByHash(headerHash)
+  let header = self.getBlockHeader(headerHash)
 
   var newCanonicalHeaders = sequtils.toSeq(findNewAncestors(self, header))
   reverse(newCanonicalHeaders)
   for h in newCanonicalHeaders:
     var oldHash: Hash256
-    try:
-      oldHash = self.lookupBlockHash(h.blockNumber)
-    except BlockNotFound:
+    if not self.getBlockHash(h.blockNumber, oldHash):
       break
 
-    let oldHeader = self.getBlockHeaderByHash(oldHash)
+    let oldHeader = self.getBlockHeader(oldHash)
     for txHash in self.getBlockTransactionHashes(oldHeader):
       self.removeTransactionFromCanonicalChain(txHash)
       # TODO re-add txn to internal pending pool (only if local sender)
@@ -232,25 +245,41 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
   result = newAccountStateDB(self.db, stateRoot)
 
-
 method genesisHash*(db: BaseChainDB): KeccakHash =
-  db.lookupBlockHash(0.toBlockNumber)
+  db.getBlockHash(0.toBlockNumber)
 
 method getBlockHeader*(db: BaseChainDB, b: HashOrNum): BlockHeaderRef =
-  result.new()
-  case b.isHash
+  var h: BlockHeader
+  var ok = case b.isHash
   of true:
-    result[] = db.getBlockHeaderByHash(b.hash)
+    db.getBlockHeader(b.hash, h)
   else:
-    result[] = db.getBlockHeaderByHash(db.lookupBlockHash(b.number))
+    db.getBlockHeader(b.number, h)
+
+  if ok:
+    result.new()
+    result[] = h
 
 method getBestBlockHeader*(self: BaseChainDB): BlockHeaderRef =
   result.new()
   result[] = self.getCanonicalHead()
 
-# method getSuccessorHeader*(db: BaseChainDB,
-#                            h: BlockHeader): BlockHeaderRef =
-#   notImplemented
+method getSuccessorHeader*(db: BaseChainDB, h: BlockHeader): BlockHeaderRef =
+  let n = h.blockNumber + 1
+  var r: BlockHeader
+  if db.getBlockHeader(n, r):
+    result.new()
+    result[] = r
 
-# method getBlockBody*(db: BaseChainDB, blockHash: KeccakHash): BlockBodyRef =
-#   notImplemented
+method getBlockBody*(db: BaseChainDB, blockHash: KeccakHash): BlockBodyRef =
+  result = nil
+
+# Deprecated:
+proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader {.deprecated.} =
+  self.getBlockHeader(blockHash)
+
+proc lookupBlockHash*(self: BaseChainDB; n: BlockNumber): Hash256 {.deprecated.} =
+  self.getBlockHash(n)
+
+proc getCanonicalBlockHeaderByNumber*(self: BaseChainDB; n: BlockNumber): BlockHeader {.deprecated.} =
+  self.getBlockHeader(n)
