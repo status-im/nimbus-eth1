@@ -47,9 +47,7 @@ proc doTests =
   ethNode.chain = chain
 
   let balance = 100.u256
-  var
-    account = newAccount()
-    address: EthAddress = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+  var address: EthAddress = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
   state.mutateStateDB:
     db.setBalance(address, balance)
 
