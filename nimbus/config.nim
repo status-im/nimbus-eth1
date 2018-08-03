@@ -8,7 +8,7 @@
 # those terms.
 
 import parseopt, strutils, macros
-import asyncdispatch2, eth_keys, eth_p2p, eth_common
+import asyncdispatch2, eth_keys, eth_p2p, eth_common, chronicles
 
 const
   NimbusName* = "Nimbus"
@@ -193,7 +193,9 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       byzantiumBlock: 1035301.u256
     )
   else:
-    raise newException(Exception, "No chain config for " & $id)
+    error "No chain config for public network", networkId = id
+    doAssert(false, "No chain config for " & $id)
+    ChainConfig()
 
   result.chainId = uint(id)
 

@@ -30,7 +30,7 @@ func decodePrealloc(data: seq[byte]): GenesisAlloc =
   for tup in rlp.decode(data.toRange, seq[(UInt256, UInt256)]):
     result[toAddress(tup[0])] = GenesisAccount(balance: tup[1])
 
-func defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
+proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   result = case id
   of MainNet:
     Genesis(
@@ -57,7 +57,10 @@ func defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
       alloc: decodePrealloc(rinkebyAllocData)
     )
   else:
-    raise newException(Exception, "No default genesis for " & $id)
+    # TODO: Fill out the rest
+    error "No default genesis for network", id
+    doAssert(false, "No default genesis for " & $id)
+    Genesis()
   result.config = publicChainConfig(id)
 
 proc toBlock*(g: Genesis): BlockHeader =
