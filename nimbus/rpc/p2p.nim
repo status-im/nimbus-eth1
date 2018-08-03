@@ -12,7 +12,7 @@ import
   ../db/[db_chain, state_db], eth_common
 
 proc headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
-  let tag = blockTag.string.toLowerAscii
+  let tag = blockTag.toLowerAscii
   case tag
   of "latest": result = chain.getCanonicalHead()
   of "earliest": result = chain.getCanonicalBlockHeaderByNumber(GENESIS_BLOCK_NUMBER)
