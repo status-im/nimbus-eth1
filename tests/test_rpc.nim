@@ -62,7 +62,7 @@ proc doTests =
   rpcServer.start()
   waitFor client.connect("localhost", Port(8545))
 
-  suite "Server/Client RPC":
+  suite "Remote Procedure Calls":
     test "eth_getBalance":
       expect ValueError:
         # check error is raised on null address
