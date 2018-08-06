@@ -11,17 +11,17 @@ import
   ../config, ../vm_state, ../constants, eth_trie/[memdb, types],
   ../db/[db_chain, state_db], eth_common
 
-proc headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
+func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
   let tag = blockTag.toLowerAscii
   case tag
   of "latest": result = chain.getCanonicalHead()
   of "earliest": result = chain.getCanonicalBlockHeaderByNumber(GENESIS_BLOCK_NUMBER)
   of "pending":
-    #TODO
+    #TODO: Implement get pending block
     raise newException(ValueError, "Pending tag not yet implemented")
   else:
     # Raises are trapped and wrapped in JSON when returned to the user.
-    tag.validateRaiseHexQuantity
+    tag.validateHexQuantity
     let blockNum = stint.fromHex(UInt256, tag)
     result = chain.getCanonicalBlockHeaderByNumber(blockNum)
 
