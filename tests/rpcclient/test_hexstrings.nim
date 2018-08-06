@@ -3,7 +3,7 @@
 import unittest, ../../nimbus/rpc/hexstrings, json
 
 proc doHexStrTests* =
-  suite "Hex quantity":
+  suite "[RPC] Hex quantity":
     test "Empty string":
       expect ValueError:
         let
