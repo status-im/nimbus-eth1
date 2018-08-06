@@ -7,8 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import parseopt, strutils
-import asyncdispatch2, eth_keys, eth_p2p
+import parseopt, strutils, macros
+import asyncdispatch2, eth_keys, eth_p2p, eth_common, chronicles
 
 const
   NimbusName* = "Nimbus"
@@ -94,14 +94,16 @@ type
     flags*: set[RpcFlags]         ## RPC flags
     binds*: seq[TransportAddress] ## RPC bind address
 
+  PublicNetwork* = enum
+    CustomNet = 0
+    MainNet = 1
+    MordenNet = 2
+    RopstenNet = 3
+    RinkebyNet = 4
+    KovanNet = 42
+
   NetworkFlags* = enum
     ## Ethereum network flags
-    RopstenNet,                   ## Use test Ropsten network
-    RinkebyNet,                   ## Use test Rinkeby network
-    MordenNet,                    ## Use test Morden network
-    KovanNet,                     ## Use test Kovan network
-    CustomNet,                    ## Use custom network
-    MainNet,                      ## Use main network only
     NoDiscover,                   ## Peer discovery disabled
     V5Discover,                   ## Dicovery V5 enabled
 
@@ -128,6 +130,22 @@ type
     ## Debug configuration object
     flags*: set[DebugFlags]       ## Debug flags
 
+  ChainConfig* = object
+    chainId*: uint
+    homesteadBlock*: BlockNumber
+    daoForkBlock*: BlockNumber
+    daoForkSupport*: bool
+
+    # EIP150 implements the Gas price changes (https://github.com/ethereum/EIPs/issues/150)
+    eip150Block*: BlockNumber
+    eip150Hash*: Hash256
+
+    eip155Block*: BlockNumber
+    eip158Block*: BlockNumber
+
+    byzantiumBlock*: BlockNumber
+    constantinopleBlock*: BlockNumber
+
   NimbusConfiguration* = ref object
     ## Main Nimbus configuration object
     rpc*: RpcConfiguration        ## JSON-RPC configuration
@@ -137,6 +155,49 @@ type
 var nimbusConfig {.threadvar.}: NimbusConfiguration
 
 proc getConfiguration*(): NimbusConfiguration {.gcsafe.}
+
+proc publicChainConfig*(id: PublicNetwork): ChainConfig =
+  result = case id
+  of MainNet:
+    ChainConfig(
+      chainId:        MainNet.uint,
+      homesteadBlock: 1150000.u256,
+      daoForkBlock:   1920000.u256,
+      daoForkSupport: true,
+      eip150Block:    2463000.u256,
+      eip150Hash:     toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
+      eip155Block:    2675000.u256,
+      eip158Block:    2675000.u256,
+      byzantiumBlock: 4370000.u256
+    )
+  of RopstenNet:
+    ChainConfig(
+      chainId:        RopstenNet.uint,
+      homesteadBlock: 0.u256,
+      daoForkSupport: true,
+      eip150Block:    0.u256,
+      eip150Hash:     toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
+      eip155Block:    10.u256,
+      eip158Block:    10.u256,
+      byzantiumBlock: 1700000.u256
+    )
+  of RinkebyNet:
+    ChainConfig(
+      chainId:        RinkebyNet.uint,
+      homesteadBlock: 1.u256,
+      daoForkSupport: true,
+      eip150Block:    2.u256,
+      eip150Hash:     toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
+      eip155Block:    3.u256,
+      eip158Block:    3.u256,
+      byzantiumBlock: 1035301.u256
+    )
+  else:
+    error "No chain config for public network", networkId = id
+    doAssert(false, "No chain config for " & $id)
+    ChainConfig()
+
+  result.chainId = uint(id)
 
 proc processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.
@@ -243,42 +304,46 @@ proc processRpcArguments(key, value: string): ConfigStatus =
   else:
     result = EmptyOption
 
-template setBootnodes(onodes, nodes: untyped): untyped =
+proc setBootnodes(onodes: var seq[ENode], nodeUris: openarray[string]) =
   var node: ENode
-  for item in (nodes):
+  onodes = newSeqOfCap[ENode](nodeUris.len)
+  for item in nodeUris:
     doAssert(processENode(item, node) == Success)
-    (onodes).add(node)
+    onodes.add(node)
 
-proc setNetwork(conf: var NetConfiguration, network: NetworkFlags,
-                id: uint = 0) =
+macro availableEnumValues(T: type enum): untyped =
+  let impl = getTypeImpl(T)[1].getTypeImpl()
+  result = newNimNode(nnkBracket)
+  for i in 1 ..< impl.len: result.add(newCall("uint", copyNimTree(impl[i])))
+
+proc toPublicNetwork*(id: uint): PublicNetwork {.inline.} =
+  if id in availableEnumValues(PublicNetwork):
+    result = PublicNetwork(id)
+
+proc setNetwork(conf: var NetConfiguration, id: PublicNetwork) =
   ## Set network id and default network bootnodes
-  conf.flags.excl({MainNet, MordenNet, RopstenNet, RinkebyNet, KovanNet,
-                   CustomNet})
-  conf.flags.incl(network)
-  assert(not conf.bootNodes.isNil) # Nim bug #7833
-  case network
+  conf.networkId = uint(id)
+  case id
   of MainNet:
-    conf.networkId = uint(1)
-    conf.bootNodes.setLen(0)
     conf.bootNodes.setBootnodes(MainnetBootnodes)
   of MordenNet:
-    conf.networkId = uint(2)
+    discard
   of RopstenNet:
-    conf.networkId = uint(3)
-    conf.bootNodes.setLen(0)
     conf.bootNodes.setBootnodes(RopstenBootnodes)
   of RinkebyNet:
-    conf.networkId = uint(4)
-    conf.bootNodes.setLen(0)
     conf.bootNodes.setBootnodes(RinkebyBootnodes)
   of KovanNet:
-    conf.networkId = uint(42)
-    conf.bootNodes.setLen(0)
     conf.bootNodes.setBootnodes(KovanBootnodes)
   of CustomNet:
+    discard
+
+proc setNetwork(conf: var NetConfiguration, id: uint) =
+  ## Set network id and default network bootnodes
+  let pubNet = toPublicNetwork(id)
+  if pubNet == CustomNet:
     conf.networkId = id
   else:
-    discard
+    conf.setNetwork(pubNet)
 
 proc processNetArguments(key, value: string): ConfigStatus =
   ## Processes only `Networking` related command line options
@@ -307,24 +372,11 @@ proc processNetArguments(key, value: string): ConfigStatus =
     var res = 0
     result = processInteger(value, res)
     if result == Success:
-      case res
-      of 1:
-        config.net.setNetwork(MainNet)
-      of 2:
-        config.net.setNetwork(MordenNet)
-      of 3:
-        config.net.setNetwork(RopstenNet)
-      of 4:
-        config.net.setNetwork(RinkebyNet)
-      of 42:
-        config.net.setNetwork(KovanNet)
-      else:
-        config.net.setNetwork(CustomNet, uint(res))
+      config.net.setNetwork(uint(result))
   elif skey == "nodiscover":
     config.net.flags.incl(NoDiscover)
   elif skey == "v5discover":
     config.net.flags.incl(V5Discover)
-    config.net.bootNodes.setLen(0)
     config.net.bootNodes.setBootnodes(DiscoveryV5Bootnodes)
   elif skey == "port":
     var res = 0
@@ -403,8 +455,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
 
   ## Network defaults
-  result.net.bootNodes = @[] # Nim bug #7833
-  result.net.setNetwork(RopstenNet)
+  result.net.setNetwork(MainNet)
   result.net.maxPeers = 25
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16

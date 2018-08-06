@@ -11,7 +11,7 @@ import
   os, strutils, net, eth_common, db/[storage_types, db_chain],
   asyncdispatch2, json_rpc/rpcserver, eth_keys,
   eth_p2p, eth_p2p/rlpx_protocols/[eth, les],
-  config, rpc/[common, p2p],
+  config, genesis, rpc/[common, p2p],
   eth_trie
 
 const UseSqlite = true
@@ -43,10 +43,15 @@ type
 
 proc newTrieDb(): TrieDatabaseRef =
   # XXX: Setup db storage location according to config
-  result = trieDB(newChainDb(":memory:"))
+  result = trieDB(newChainDb("nimbus.db"))
 
 proc initializeEmptyDb(db: BaseChainDB) =
-  echo "Initializing empty DB (TODO)"
+  echo "Writing genesis to DB"
+  let networkId = getConfiguration().net.networkId.toPublicNetwork()
+  if networkId == CustomNet:
+    raise newException(Exception, "Custom genesis not implemented")
+  else:
+    defaultGenesisBlockForNetwork(networkId).commit(db)
 
 proc start(): NimbusObject =
   var nimbus = NimbusObject()
@@ -75,6 +80,7 @@ proc start(): NimbusObject =
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)
+    assert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId)
