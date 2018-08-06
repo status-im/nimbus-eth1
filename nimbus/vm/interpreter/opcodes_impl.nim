@@ -225,20 +225,12 @@ proc writePaddedResult(mem: var Memory,
   # mem.extend already pads with zero properly
 
 func cleanMemRef(x: UInt256): int {.inline.} =
-  # https://github.com/status-im/nim-stint/issues/58
-  # Ensures that only 31 lower bits of x are used to
-  # keep its signed interpretation non-negative, per
-  # Ethereum yellow paper. In general, addresses and
-  # lengths >= 2^31 are beyond what the VM should be
-  # running due to gas costs, block sizes, etc.
-  #
-  # If an opcode uses mem.extend, writePaddedResult,
-  # or an m_handler for gas costs, it should ensure,
-  # either via this proc or some other mechanism, it
-  # checks for .toInt it otherwise calls get checked
-  # for spurious negative interpretations for bounds
-  # checking purposes.
-  x.toInt and (-1.int32 shr 1)
+  ## Sanitize memory addresses, catch negative or impossibly big offsets
+  # See https://github.com/status-im/nimbus/pull/97 for more info
+  const upperBound = high(int32).u256
+  if x > upperBound:
+    return high(int32)
+  return x.toInt
 
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
