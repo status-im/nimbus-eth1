@@ -27,8 +27,8 @@ func encodeQuantity*(value: SomeUnsignedInt): string {.inline.} =
   var hValue = value.toHex.stripLeadingZeros
   result = "0x" & hValue
 
-template hasHexHeader*(value: string): bool =
-  if value != "" and value[0] == '0' and value[1] in {'x', 'X'} and value.len > 2: true
+template hasHexHeader(value: string): bool =
+  if value.len >= 2 and value[0] == '0' and value[1] in {'x', 'X'}: true
   else: false
 
 template isHexChar(c: char): bool =
@@ -38,10 +38,10 @@ template isHexChar(c: char): bool =
   else: true
 
 func isValidHexQuantity*(value: string): bool =
-  if value.len < 3 or not value.hasHexHeader:
+  if not value.hasHexHeader:
     return false
   # No leading zeros (but allow 0x0)
-  if value.len > 3 and value[2] == '0': return false
+  if value.len < 3 or (value.len > 3 and value[2] == '0'): return false
   for i in 2 ..< value.len:
     let c = value[i]
     if not c.isHexChar:
@@ -49,7 +49,7 @@ func isValidHexQuantity*(value: string): bool =
   return true
 
 func isValidHexData*(value: string): bool =
-  if value.len < 3 or not value.hasHexHeader:
+  if not value.hasHexHeader:
     return false
   # Must be even number of digits
   if value.len mod 2 != 0: return false
