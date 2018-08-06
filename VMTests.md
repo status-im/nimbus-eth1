@@ -295,15 +295,15 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + calldatacopyUnderFlow.json                                      OK
 + calldatacopyZeroMemExpansion.json                               OK
 + calldatacopyZeroMemExpansion_return.json                        OK
-- calldatacopy_DataIndexTooHigh.json                              Fail
-- calldatacopy_DataIndexTooHigh2.json                             Fail
-- calldatacopy_DataIndexTooHigh2_return.json                      Fail
-- calldatacopy_DataIndexTooHigh_return.json                       Fail
++ calldatacopy_DataIndexTooHigh.json                              OK
++ calldatacopy_DataIndexTooHigh2.json                             OK
++ calldatacopy_DataIndexTooHigh2_return.json                      OK
++ calldatacopy_DataIndexTooHigh_return.json                       OK
 + calldatacopy_sec.json                                           OK
 + calldataload0.json                                              OK
 + calldataload1.json                                              OK
 + calldataload2.json                                              OK
-- calldataloadSizeTooHigh.json                                    Fail
++ calldataloadSizeTooHigh.json                                    OK
 + calldataloadSizeTooHighPartial.json                             OK
 + calldataload_BigOffset.json                                     OK
 + calldatasize0.json                                              OK
@@ -313,20 +313,20 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + callvalue.json                                                  OK
 + codecopy0.json                                                  OK
 + codecopyZeroMemExpansion.json                                   OK
-- codecopy_DataIndexTooHigh.json                                  Fail
++ codecopy_DataIndexTooHigh.json                                  OK
 + codesize.json                                                   OK
 + extcodecopy0.json                                               OK
 + extcodecopy0AddressTooBigLeft.json                              OK
 + extcodecopy0AddressTooBigRight.json                             OK
 + extcodecopyZeroMemExpansion.json                                OK
-- extcodecopy_DataIndexTooHigh.json                               Fail
++ extcodecopy_DataIndexTooHigh.json                               OK
 + extcodesize0.json                                               OK
 + extcodesize1.json                                               OK
 + extcodesizeUnderFlow.json                                       OK
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 44/51 Fail: 7/51 Skip: 0/51
+OK: 51/51 Fail: 0/51 Skip: 0/51
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
