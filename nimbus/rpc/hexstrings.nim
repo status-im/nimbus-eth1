@@ -23,7 +23,7 @@ template stripLeadingZeros(value: string): string =
     cidx.inc
   value[cidx .. ^1]
 
-proc encodeQuantity*(value: SomeUnsignedInt): string =
+func encodeQuantity*(value: SomeUnsignedInt): string {.inline.} =
   var hValue = value.toHex.stripLeadingZeros
   result = "0x" & hValue
 
@@ -31,13 +31,13 @@ template hasHexHeader*(value: string): bool =
   if value != "" and value[0] == '0' and value[1] in {'x', 'X'} and value.len > 2: true
   else: false
 
-template isHexChar*(c: char): bool =
+template isHexChar(c: char): bool =
   if  c notin {'0'..'9'} and
       c notin {'a'..'f'} and
       c notin {'A'..'F'}: false
   else: true
 
-proc validateHexQuantity*(value: string): bool =
+func isValidHexQuantity*(value: string): bool =
   if value.len < 3 or not value.hasHexHeader:
     return false
   # No leading zeros (but allow 0x0)
@@ -48,7 +48,7 @@ proc validateHexQuantity*(value: string): bool =
       return false
   return true
 
-proc validateHexData*(value: string): bool =
+func isValidHexData*(value: string): bool =
   if value.len < 3 or not value.hasHexHeader:
     return false
   # Must be even number of digits
@@ -64,22 +64,22 @@ const
   SInvalidQuantity = "Invalid hex quantity format for Ethereum"
   SInvalidData = "Invalid hex data format for Ethereum"
 
-proc validateRaiseHexQuantity*(value: string) =
-  if not value.validateHexQuantity:
+proc validateHexQuantity*(value: string) {.inline.} =
+  if unlikely(not value.isValidHexQuantity):
     raise newException(ValueError, SInvalidQuantity & ": " & value)
 
-proc validateRaiseHexData*(value: string) =
-  if not value.validateHexData:
+proc validateHexData*(value: string) {.inline.} =
+  if unlikely(not value.isValidHexData):
     raise newException(ValueError, SInvalidData & ": " & value)
 
 # Initialisation
 
-proc hexQuantityStr*(value: string): HexQuantityStr =
-  value.validateRaiseHexQuantity
+proc hexQuantityStr*(value: string): HexQuantityStr {.inline.} =
+  value.validateHexQuantity
   result = value.HexQuantityStr
 
-proc hexDataStr*(value: string): HexDataStr =
-  value.validateRaiseHexData
+proc hexDataStr*(value: string): HexDataStr {.inline.} =
+  value.validateHexData
   result = value.HexDataStr
 
 # Converters for use in RPC
@@ -97,7 +97,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var HexQuantityStr) =
   # Note that '0x' is stripped after validation
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
-  if not hexStr.validateHexQuantity:
+  if not hexStr.isValidHexQuantity:
     raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as an Ethereum hex quantity \"" & hexStr & "\"")
   result = hexStr.hexQuantityStr
 
@@ -105,7 +105,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var HexDataStr) =
   # Note that '0x' is stripped after validation
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
-  if not hexStr.validateHexData:
+  if not hexStr.isValidHexData:
     raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as a Ethereum data \"" & hexStr & "\"")
   result = hexStr.hexDataStr
 
