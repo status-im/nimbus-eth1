@@ -40,6 +40,7 @@ VMTests
 + exp5.json                                                       OK
 + exp6.json                                                       OK
 + exp7.json                                                       OK
++ exp8.json                                                       OK
 + expPowerOf256Of256_0.json                                       OK
 + expPowerOf256Of256_1.json                                       OK
 + expPowerOf256Of256_10.json                                      OK
@@ -198,7 +199,7 @@ VMTests
 + sub3.json                                                       OK
 + sub4.json                                                       OK
 ```
-OK: 195/195 Fail: 0/195 Skip: 0/195
+OK: 196/196 Fail: 0/196 Skip: 0/196
 ## vmBitwiseLogicOperation
 ```diff
 + and0.json                                                       OK
@@ -219,6 +220,7 @@ OK: 195/195 Fail: 0/195 Skip: 0/195
 + byte7.json                                                      OK
 + byte8.json                                                      OK
 + byte9.json                                                      OK
++ byteBN.json                                                     OK
 + eq0.json                                                        OK
 + eq1.json                                                        OK
 + eq2.json                                                        OK
@@ -262,7 +264,7 @@ OK: 195/195 Fail: 0/195 Skip: 0/195
 + xor4.json                                                       OK
 + xor5.json                                                       OK
 ```
-OK: 60/60 Fail: 0/60 Skip: 0/60
+OK: 61/61 Fail: 0/61 Skip: 0/61
 ## vmBlockInfoTest
 ```diff
 + coinbase.json                                                   OK
@@ -274,18 +276,8 @@ OK: 60/60 Fail: 0/60 Skip: 0/60
 OK: 5/5 Fail: 0/5 Skip: 0/5
 ## vmEnvironmentalInfo
 ```diff
-+ ExtCodeSizeAddressInputTooBigLeftMyAddress.json                 OK
-+ ExtCodeSizeAddressInputTooBigRightMyAddress.json                OK
 + address0.json                                                   OK
 + address1.json                                                   OK
-+ balance0.json                                                   OK
-+ balance01.json                                                  OK
-+ balance1.json                                                   OK
-+ balanceAddress2.json                                            OK
-+ balanceAddressInputTooBig.json                                  OK
-+ balanceAddressInputTooBigLeftMyAddress.json                     OK
-+ balanceAddressInputTooBigRightMyAddress.json                    OK
-+ balanceCaller3.json                                             OK
 + calldatacopy0.json                                              OK
 + calldatacopy0_return.json                                       OK
 + calldatacopy1.json                                              OK
@@ -315,18 +307,10 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + codecopyZeroMemExpansion.json                                   OK
 + codecopy_DataIndexTooHigh.json                                  OK
 + codesize.json                                                   OK
-+ extcodecopy0.json                                               OK
-+ extcodecopy0AddressTooBigLeft.json                              OK
-+ extcodecopy0AddressTooBigRight.json                             OK
-+ extcodecopyZeroMemExpansion.json                                OK
-+ extcodecopy_DataIndexTooHigh.json                               OK
-+ extcodesize0.json                                               OK
-+ extcodesize1.json                                               OK
-+ extcodesizeUnderFlow.json                                       OK
 + gasprice.json                                                   OK
 + origin.json                                                     OK
 ```
-OK: 51/51 Fail: 0/51 Skip: 0/51
+OK: 33/33 Fail: 0/33 Skip: 0/33
 ## vmIOandFlowOperations
 ```diff
 + BlockNumberDynamicJump0_AfterJumpdest.json                      OK
@@ -397,7 +381,6 @@ OK: 51/51 Fail: 0/51 Skip: 0/51
 + codecopyMemExp.json                                             OK
 + deadCode_1.json                                                 OK
 + dupAt51becameMload.json                                         OK
-+ extcodecopyMemExp.json                                          OK
 + for_loop1.json                                                  OK
 + for_loop2.json                                                  OK
 + gas0.json                                                       OK
@@ -475,7 +458,7 @@ OK: 51/51 Fail: 0/51 Skip: 0/51
 + swapAt52becameMstore.json                                       OK
 + when.json                                                       OK
 ```
-OK: 145/145 Fail: 0/145 Skip: 0/145
+OK: 144/144 Fail: 0/144 Skip: 0/144
 ## vmLogTest
 ```diff
 + log0_emptyMem.json                                              OK
@@ -631,13 +614,11 @@ OK: 74/74 Fail: 0/74 Skip: 0/74
 + 201503102320PYTHON.json                                         OK
 + 201503110206PYTHON.json                                         OK
 + 201503110219PYTHON.json                                         OK
-+ 201503110226PYTHON_DUP6.json                                    OK
 + 201503110346PYTHON_PUSH24.json                                  OK
 + 201503111844PYTHON.json                                         OK
 + 201503112218PYTHON.json                                         OK
-+ randomTest.json                                                 OK
 ```
-OK: 8/8 Fail: 0/8 Skip: 0/8
+OK: 6/6 Fail: 0/6 Skip: 0/6
 ## vmSha3Test
 ```diff
 + sha3_0.json                                                     OK
