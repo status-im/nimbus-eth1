@@ -4,23 +4,33 @@ import unittest, ../../nimbus/rpc/hexstrings, json
 
 proc doHexStrTests* =
   suite "[RPC] Hex quantity":
-    test "Empty string":
+    test "Zero values":
       expect ValueError:
         let
           source = ""
           x = hexQuantityStr source
         check %x == %source
+      expect ValueError:
+        # must have '0' for zero quantities
+        let
+          source = "0x"
+          x = hexQuantityStr source
+        check %x == %source
+      let
+        source = "0x0"
+        x = hexQuantityStr source
+      check %x == %source
     test "Even length":
       let
-        source = "0x123"
+        source = "0x1234"
         x = hexQuantityStr source
       check %x == %source
     test "Odd length":
       let
         source = "0x123"
-        x = hexQuantityStr"0x123"
+        x = hexQuantityStr source
       check %x == %source
-    test "Missing header":
+    test "\"0x\" header":
       expect ValueError:
         let
           source = "1234"
@@ -32,12 +42,29 @@ proc doHexStrTests* =
           x = hexQuantityStr source
         check %x != %source
       expect ValueError:
+        # leading zeros not allowed
         let
-          source = "x1234"
+          source = "0x0123"
           x = hexQuantityStr source
         check %x != %source
       
-  suite "Hex data":
+  suite "[RPC] Hex data":
+    test "Zero value":
+      expect ValueError:
+        let
+          source = ""
+          x = hexDataStr source
+        check %x != %source
+      expect ValueError:
+        # not even length
+        let
+          source = "0x0"
+          x = hexDataStr source
+        check %x == %source
+      let
+        source = "0x"
+        x = hexDataStr source
+      check %x == %source
     test "Even length":
       let
         source = "0x1234"
@@ -49,7 +76,7 @@ proc doHexStrTests* =
           source = "0x123"
           x = hexDataStr source
         check %x != %source
-    test "Missing header":
+    test "\"0x\" header":
       expect ValueError:
         let
           source = "1234"
@@ -65,3 +92,8 @@ proc doHexStrTests* =
           source = "x1234"
           x = hexDataStr source
         check %x != %source
+      let
+        # leading zeros allowed
+        source = "0x0123"
+        x = hexDataStr source
+      check %x == %source
