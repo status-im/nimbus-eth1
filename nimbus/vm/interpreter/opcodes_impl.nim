@@ -100,8 +100,16 @@ op exp, inline = true, base, exponent:
     reason="EXP: exponent bytes"
     )
   push:
-    if base == 0: zero(UInt256)
-    else: base.pow(exponent)
+    if base.isZero:
+      if exponent.isZero:
+        # https://github.com/ethereum/yellowpaper/issues/257
+        # https://github.com/ethereum/tests/pull/460
+        # https://github.com/ewasm/evm2wasm/issues/137
+        1.u256
+      else:
+        zero(UInt256)
+    else:
+      base.pow(exponent)
 
 op signExtend, inline = false, bits, value:
   ## 0x0B, Sign extend
