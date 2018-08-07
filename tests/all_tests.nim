@@ -12,7 +12,5 @@ when true:
           ./test_stack,
           ./test_opcode,
           ./test_storage_backends,
-          ./test_genesis
-
-when false:
-  import  ./test_vm_json
+          ./test_genesis,
+          ./test_vm_json
