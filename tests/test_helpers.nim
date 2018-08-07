@@ -18,7 +18,7 @@ type
 proc validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
 
-  result = folder notin @["vmPerformance"]
+  result = folder notin @["vmPerformance"] or "loop" notin name
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
   let

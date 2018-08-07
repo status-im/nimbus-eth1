@@ -511,11 +511,11 @@ OK: 144/144 Fail: 0/144 Skip: 0/144
 OK: 46/46 Fail: 0/46 Skip: 0/46
 ## vmPerformance
 ```diff
-  ackermann31.json                                                Skip
-  ackermann32.json                                                Skip
-  ackermann33.json                                                Skip
-  fibonacci10.json                                                Skip
-  fibonacci16.json                                                Skip
++ ackermann31.json                                                OK
++ ackermann32.json                                                OK
++ ackermann33.json                                                OK
++ fibonacci10.json                                                OK
++ fibonacci16.json                                                OK
   loop-add-10M.json                                               Skip
   loop-divadd-10M.json                                            Skip
   loop-divadd-unr100-10M.json                                     Skip
@@ -528,9 +528,9 @@ OK: 46/46 Fail: 0/46 Skip: 0/46
   loop-exp-nop-1M.json                                            Skip
   loop-mul.json                                                   Skip
   loop-mulmod-2M.json                                             Skip
-  manyFunctions100.json                                           Skip
++ manyFunctions100.json                                           OK
 ```
-OK: 0/18 Fail: 0/18 Skip: 18/18
+OK: 6/18 Fail: 0/18 Skip: 12/18
 ## vmPushDupSwapTest
 ```diff
 + dup1.json                                                       OK
