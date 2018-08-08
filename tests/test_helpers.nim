@@ -120,5 +120,8 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
     doAssert wantedBalance == actualBalance
     doAssert wantedNonce == actualNonce
 
-proc getHexadecimalInt*(j: JsonNode): int =
-  discard parseHex(j.getStr, result)
+proc getHexadecimalInt*(j: JsonNode): int64 =
+  # parseutils.parseHex works with int which will overflow in 32 bit
+  var data: StUInt[64]
+  data = fromHex(StUInt[64], j.getStr)
+  result = cast[int64](data)
