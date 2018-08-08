@@ -70,22 +70,17 @@ proc toBlock*(g: Genesis): BlockHeader =
 
   for address, account in g.alloc:
     sdb.setBalance(address, account.balance)
-    sdb.setCode(address, account.code.toRange)
-    sdb.setNonce(address, account.nonce)
 
-    for k, v in account.storage:
-      sdb.setStorage(address, k, v)
+    when false:
+      # These properties are empty in all genesis blocks so far
+      sdb.setCode(address, account.code.toRange)
+      sdb.setNonce(address, account.nonce)
+
+      for k, v in account.storage:
+        sdb.setStorage(address, k, v)
 
   var root = sdb.rootHash
-
-  block tempRootHashStub: # TODO: Remove this block when we calculate the root hash correctly
-    if g.config.chainId == 1:
-      const correctMainnetRootHash = toDigest("d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544")
-      if root != correctMainnetRootHash:
-        error "Root hash incorrect. Stubbing it out."
-        root = correctMainnetRootHash
-      else:
-        error "Yay! Root hash is correct. Please remove the block where this message comes from."
+  doAssert $root == "D7F8974FB5AC78D9AC099B9AD5018BEDC2CE0A72DAD1827A1709DA30580F0544"
 
   result = BlockHeader(
     nonce: g.nonce,

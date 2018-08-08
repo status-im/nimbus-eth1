@@ -12,7 +12,7 @@ import
 
 type
   AccountStateDB* = ref object
-    trie: HexaryTrie
+    trie: SecureHexaryTrie
 
 proc rootHash*(accountDb: AccountStateDB): KeccakHash =
   accountDb.trie.rootHash
@@ -23,7 +23,7 @@ proc rootHash*(accountDb: AccountStateDB): KeccakHash =
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
                         root: KeccakHash, readOnly: bool = false): AccountStateDB =
   result.new()
-  result.trie = initHexaryTrie(backingStore, root)
+  result.trie = initSecureHexaryTrie(backingStore, root)
 
 proc logger*(db: AccountStateDB): Logger =
   logging.getLogger("db.State")
@@ -42,7 +42,7 @@ proc getAccount(db: AccountStateDB, address: EthAddress): Account =
   else:
     result = newAccount()
 
-proc setAccount(db: AccountStateDB, address: EthAddress, account: Account) =
+proc setAccount*(db: AccountStateDB, address: EthAddress, account: Account) =
   db.trie.put createRangeFromAddress(address), rlp.encode(account)
 
 proc getCodeHash*(db: AccountStateDB, address: EthAddress): Hash256 =
@@ -69,6 +69,9 @@ template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # Original py-evm code:
   # pad32(int_to_big_endian(slot))
 
+template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
+  initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot)
+
 proc setStorage*(db: var AccountStateDB,
                  address: EthAddress,
                  slot: UInt256, value: UInt256) =
@@ -76,7 +79,7 @@ proc setStorage*(db: var AccountStateDB,
   #validateGte(slot, 0, title="Storage Slot")
 
   var account = db.getAccount(address)
-  var accountTrie = initHexaryTrie(db.trie.db, account.storageRoot)
+  var accountTrie = getAccountTrie(db, account)
   let slotAsKey = createTrieKeyFromSlot slot
 
   if value > 0:
@@ -94,7 +97,7 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
   let
     account = db.getAccount(address)
     slotAsKey = createTrieKeyFromSlot slot
-    accountTrie = initHexaryTrie(db.trie.db, account.storageRoot)
+    accountTrie = getAccountTrie(db, account)
 
   let
     foundRecord = accountTrie.get(slotAsKey)
