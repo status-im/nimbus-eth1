@@ -105,7 +105,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
       # echo "FOUND ", found
       # echo "ACTUAL VALUE ", actualValue.toHex
       doAssert found
-      doAssert actualValue == wantedValue
+      doAssert actualValue == wantedValue, &"{actualValue.toHex} != {wantedValue.toHex}"
 
     let
       wantedCode = hexToSeqByte(accountData{"code"}.getStr).toRange
@@ -116,9 +116,9 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
       actualBalance = stateDB.getBalance(account)
       actualNonce = stateDB.getNonce(account)
 
-    doAssert wantedCode == actualCode
-    doAssert wantedBalance == actualBalance
-    doAssert wantedNonce == actualNonce
+    doAssert wantedCode == actualCode, &"{wantedCode} != {actualCode}"
+    doAssert wantedBalance == actualBalance, &"{wantedBalance.toHex} != {actualBalance.toHex}"
+    doAssert wantedNonce == actualNonce, &"{wantedNonce.toHex} != {actualNonce.toHex}"
 
 proc getHexadecimalInt*(j: JsonNode): int64 =
   # parseutils.parseHex works with int which will overflow in 32 bit
