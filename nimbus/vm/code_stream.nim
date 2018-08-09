@@ -54,7 +54,7 @@ proc read*(c: var CodeStream, size: int): seq[byte] =
     c.pc = c.bytes.len
 
 proc readVmWord*(c: var CodeStream, n: int): UInt256 =
-  ## Reads `n` bytes bytes from the code stream and pads
+  ## Reads `n` bytes from the code stream and pads
   ## the remaining bytes with zeros.
   let result_bytes = cast[ptr array[32, byte]](addr result)
 
