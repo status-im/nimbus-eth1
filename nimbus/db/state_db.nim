@@ -12,7 +12,7 @@ import
 
 type
   AccountStateDB* = ref object
-    trie: HexaryTrie
+    trie: SecureHexaryTrie
 
 proc rootHash*(accountDb: AccountStateDB): KeccakHash =
   accountDb.trie.rootHash
@@ -23,7 +23,7 @@ proc rootHash*(accountDb: AccountStateDB): KeccakHash =
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
                         root: KeccakHash, readOnly: bool = false): AccountStateDB =
   result.new()
-  result.trie = initHexaryTrie(backingStore, root)
+  result.trie = initSecureHexaryTrie(backingStore, root)
 
 proc logger*(db: AccountStateDB): Logger =
   logging.getLogger("db.State")
@@ -42,7 +42,7 @@ proc getAccount(db: AccountStateDB, address: EthAddress): Account =
   else:
     result = newAccount()
 
-proc setAccount(db: AccountStateDB, address: EthAddress, account: Account) =
+proc setAccount*(db: AccountStateDB, address: EthAddress, account: Account) =
   db.trie.put createRangeFromAddress(address), rlp.encode(account)
 
 proc getCodeHash*(db: AccountStateDB, address: EthAddress): Hash256 =
@@ -69,6 +69,9 @@ template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # Original py-evm code:
   # pad32(int_to_big_endian(slot))
 
+template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
+  initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot)
+
 proc setStorage*(db: var AccountStateDB,
                  address: EthAddress,
                  slot: UInt256, value: UInt256) =
@@ -76,7 +79,7 @@ proc setStorage*(db: var AccountStateDB,
   #validateGte(slot, 0, title="Storage Slot")
 
   var account = db.getAccount(address)
-  var accountTrie = initHexaryTrie(db.trie.db, account.storageRoot)
+  var accountTrie = getAccountTrie(db, account)
   let slotAsKey = createTrieKeyFromSlot slot
 
   if value > 0:
@@ -89,12 +92,10 @@ proc setStorage*(db: var AccountStateDB,
   db.setAccount(address, account)
 
 proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) =
-  #validateGte(slot, 0, title="Storage Slot")
-
   let
     account = db.getAccount(address)
     slotAsKey = createTrieKeyFromSlot slot
-    accountTrie = initHexaryTrie(db.trie.db, account.storageRoot)
+    accountTrie = getAccountTrie(db, account)
 
   let
     foundRecord = accountTrie.get(slotAsKey)
@@ -104,17 +105,13 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
   else:
     result = (0.u256, false)
 
-proc setNonce*(db: var AccountStateDB, address: EthAddress, nonce: UInt256) =
-  #validateGte(nonce, 0, title="Nonce")
-
+proc setNonce*(db: var AccountStateDB, address: EthAddress, newNonce: UInt256) =
   var account = db.getAccount(address)
-  account.nonce = nonce
-
-  db.setAccount(address, account)
+  if newNonce != account.nonce:
+    account.nonce = newNonce
+    db.setAccount(address, account)
 
 proc getNonce*(db: AccountStateDB, address: EthAddress): UInt256 =
-  # TODO it is very strange that we require a var param here
-
   let account = db.getAccount(address)
   account.nonce
 
@@ -124,12 +121,13 @@ proc toByteRange_Unnecessary*(h: KeccakHash): ByteRange =
   return s.toRange
 
 proc setCode*(db: var AccountStateDB, address: EthAddress, code: ByteRange) =
-
   var account = db.getAccount(address)
-  account.codeHash = keccak256.digest code.toOpenArray
-  # XXX: this uses the journaldb in py-evm
-  db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
-  db.setAccount(address, account)
+  let newCodeHash = keccak256.digest code.toOpenArray
+  if newCodeHash != account.codeHash:
+    account.codeHash = newCodeHash
+    # XXX: this uses the journaldb in py-evm
+    db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
+    db.setAccount(address, account)
 
 proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
   let codeHash = db.getCodeHash(address)

@@ -1,6 +1,6 @@
 import db/[db_chain, state_db], genesis_alloc, eth_common, tables, stint,
     byteutils, times, config, rlp, ranges, block_types, eth_trie,
-    eth_trie/memdb, constants, nimcrypto, chronicles
+    eth_trie/memdb, account, constants, nimcrypto, chronicles
 
 type
   Genesis* = object
@@ -69,23 +69,12 @@ proc toBlock*(g: Genesis): BlockHeader =
   var sdb = newAccountStateDB(tdb, trie.rootHash)
 
   for address, account in g.alloc:
-    sdb.setBalance(address, account.balance)
+    sdb.setAccount(address, newAccount(account.nonce, account.balance))
     sdb.setCode(address, account.code.toRange)
-    sdb.setNonce(address, account.nonce)
-
     for k, v in account.storage:
       sdb.setStorage(address, k, v)
 
   var root = sdb.rootHash
-
-  block tempRootHashStub: # TODO: Remove this block when we calculate the root hash correctly
-    if g.config.chainId == 1:
-      const correctMainnetRootHash = toDigest("d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544")
-      if root != correctMainnetRootHash:
-        error "Root hash incorrect. Stubbing it out."
-        root = correctMainnetRootHash
-      else:
-        error "Yay! Root hash is correct. Please remove the block where this message comes from."
 
   result = BlockHeader(
     nonce: g.nonce,
