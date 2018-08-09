@@ -125,8 +125,8 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     #   M(currentMemSize, f, l) = currentMemSize
 
     let
-      prev_words = currentMemSize.wordCount
-      new_words = (memOffset + memLength).wordCount
+      prev_words: int64 = currentMemSize.wordCount
+      new_words: int64 = (memOffset + memLength).wordCount
 
     if memLength == 0 or new_words <= prev_words:
       # Special subcase of memory-expansion cost
