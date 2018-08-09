@@ -105,26 +105,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
             (actualGasRemaining > expectedGasRemaining and (actualGasRemaining - expectedGasRemaining) mod 15_000 == 0 or
              expectedGasRemaining > actualGasRemaining and (expectedGasRemaining - actualGasRemaining) mod 15_000 == 0))
 
-    let callCreatesJson = fixture{"callcreates"}
-    var callCreates: seq[JsonNode] = @[]
-    if not callCreatesJson.isNil:
-      for next in callCreatesJson:
-        callCreates.add(next)
-
-    check(computation.children.len == callCreates.len)
-    for child in zip(computation.children, callCreates):
-      var (childComputation, createdCall) = child
-      let toAddress = createdCall{"destination"}.getStr.parseAddress
-      let data = createdCall{"data"}.getStr.hexToSeqByte
-      let gasLimit = createdCall{"gasLimit"}.getHexadecimalInt
-      let value = createdCall{"value"}.getHexadecimalInt.u256
-
-      check(childComputation.msg.to == toAddress)
-      check(data == childComputation.msg.data or childComputation.msg.code.len > 0)
-      check(gasLimit == childComputation.msg.gas)
-      check(value == childComputation.msg.value)
-      # TODO postState = fixture{"post"}
-
     if not fixture{"post"}.isNil:
       verifyStateDb(fixture{"post"}, computation.vmState.readOnlyStateDB)
   else:
