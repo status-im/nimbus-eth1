@@ -219,7 +219,7 @@ proc writePaddedResult(mem: var Memory,
                        paddingValue = 0.byte) =
   mem.extend(memPos, len)
 
-  let dataEndPosition = dataPos + len - 1
+  let dataEndPosition = dataPos.int64 + len - 1
   if dataEndPosition < data.len:
     mem.write(memPos, data[dataPos .. dataEndPosition])
   else:
