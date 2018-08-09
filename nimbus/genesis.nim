@@ -1,6 +1,6 @@
 import db/[db_chain, state_db], genesis_alloc, eth_common, tables, stint,
     byteutils, times, config, rlp, ranges, block_types, eth_trie,
-    eth_trie/memdb, constants, nimcrypto, chronicles
+    eth_trie/memdb, account, constants, nimcrypto, chronicles
 
 type
   Genesis* = object
@@ -69,18 +69,12 @@ proc toBlock*(g: Genesis): BlockHeader =
   var sdb = newAccountStateDB(tdb, trie.rootHash)
 
   for address, account in g.alloc:
-    sdb.setBalance(address, account.balance)
-
-    when false:
-      # These properties are empty in all genesis blocks so far
-      sdb.setCode(address, account.code.toRange)
-      sdb.setNonce(address, account.nonce)
-
-      for k, v in account.storage:
-        sdb.setStorage(address, k, v)
+    sdb.setAccount(address, newAccount(account.nonce, account.balance))
+    sdb.setCode(address, account.code.toRange)
+    for k, v in account.storage:
+      sdb.setStorage(address, k, v)
 
   var root = sdb.rootHash
-  doAssert $root == "D7F8974FB5AC78D9AC099B9AD5018BEDC2CE0A72DAD1827A1709DA30580F0544"
 
   result = BlockHeader(
     nonce: g.nonce,

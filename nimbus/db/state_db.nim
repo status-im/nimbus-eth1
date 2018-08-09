@@ -92,8 +92,6 @@ proc setStorage*(db: var AccountStateDB,
   db.setAccount(address, account)
 
 proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) =
-  #validateGte(slot, 0, title="Storage Slot")
-
   let
     account = db.getAccount(address)
     slotAsKey = createTrieKeyFromSlot slot
@@ -107,17 +105,13 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
   else:
     result = (0.u256, false)
 
-proc setNonce*(db: var AccountStateDB, address: EthAddress, nonce: UInt256) =
-  #validateGte(nonce, 0, title="Nonce")
-
+proc setNonce*(db: var AccountStateDB, address: EthAddress, newNonce: UInt256) =
   var account = db.getAccount(address)
-  account.nonce = nonce
-
-  db.setAccount(address, account)
+  if newNonce != account.nonce:
+    account.nonce = newNonce
+    db.setAccount(address, account)
 
 proc getNonce*(db: AccountStateDB, address: EthAddress): UInt256 =
-  # TODO it is very strange that we require a var param here
-
   let account = db.getAccount(address)
   account.nonce
 
@@ -127,12 +121,13 @@ proc toByteRange_Unnecessary*(h: KeccakHash): ByteRange =
   return s.toRange
 
 proc setCode*(db: var AccountStateDB, address: EthAddress, code: ByteRange) =
-
   var account = db.getAccount(address)
-  account.codeHash = keccak256.digest code.toOpenArray
-  # XXX: this uses the journaldb in py-evm
-  db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
-  db.setAccount(address, account)
+  let newCodeHash = keccak256.digest code.toOpenArray
+  if newCodeHash != account.codeHash:
+    account.codeHash = newCodeHash
+    # XXX: this uses the journaldb in py-evm
+    db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
+    db.setAccount(address, account)
 
 proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
   let codeHash = db.getCodeHash(address)
