@@ -1,7 +1,7 @@
 ## This module contains signatures for the Ethereum client RPCs.
 ## The signatures are not imported directly, but read and processed with parseStmt,
 ## then a procedure body is generated to marshal native Nim parameters to json and visa versa.
-import json, stint, eth_common
+import json, stint, eth_common, ../../nimbus/rpc/hexstrings
 
 proc web3_clientVersion(): string
 proc web3_sha3(data: string): string
@@ -10,21 +10,21 @@ proc net_peerCount(): int
 proc net_listening(): bool
 proc eth_protocolVersion(): string
 proc eth_syncing(): JsonNode
-proc eth_coinbase(): string
+proc eth_coinbase(): EthAddressStr
 proc eth_mining(): bool
 proc eth_hashrate(): int
-proc eth_gasPrice(): int64
-proc eth_accounts(): seq[array[20, byte]]
-proc eth_blockNumber(): int
-proc eth_getBalance(data: array[20, byte], quantityTag: string): int
-proc eth_getStorageAt(data: array[20, byte], quantity: int, quantityTag: string): seq[byte]
-proc eth_getTransactionCount(data: array[20, byte], quantityTag: string)
+proc eth_gasPrice(): GasInt
+proc eth_accounts(): seq[EthAddressStr]
+proc eth_blockNumber(): BlockNumber
+proc eth_getBalance(data: EthAddressStr, quantityTag: string): int
+proc eth_getStorageAt(data: EthAddressStr, quantity: int, quantityTag: string): seq[byte]
+proc eth_getTransactionCount(data: EthAddressStr, quantityTag: string)
 proc eth_getBlockTransactionCountByHash(data: array[32, byte])
 proc eth_getBlockTransactionCountByNumber(quantityTag: string)
 proc eth_getUncleCountByBlockHash(data: array[32, byte])
 proc eth_getUncleCountByBlockNumber(quantityTag: string)
-proc eth_getCode(data: array[20, byte], quantityTag: string): seq[byte]
-proc eth_sign(data: array[20, byte], message: seq[byte]): seq[byte]
+proc eth_getCode(data: EthAddressStr, quantityTag: string): HexDataStr
+proc eth_sign(data:EthAddressStr, message: HexDataStr): HexDataStr
 
 # TODO: Use eth_common types
 
