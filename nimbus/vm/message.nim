@@ -23,16 +23,14 @@ proc newMessageOptions*(
     depth: int = 0,
     createAddress = ZERO_ADDRESS,
     codeAddress = ZERO_ADDRESS,
-    shouldTransferValue: bool = true,
-    isStatic: bool = false): MessageOptions =
+    flags: MsgFlags = static(emvcNoFlags)): MessageOptions =
 
   result = MessageOptions(
     origin: origin,
     depth: depth,
     createAddress: createAddress,
     codeAddress: codeAddress,
-    shouldTransferValue: shouldTransferValue,
-    isStatic: isStatic)
+    flags: flags)
 
 proc newMessage*(
     gas: GasInt,
@@ -49,15 +47,14 @@ proc newMessage*(
   new(result)
   result.gas = gas
   result.gasPrice = gasPrice
-  result.to = to
+  result.destination = to
   result.sender = sender
   result.value = value
   result.data = data
   result.depth = options.depth
   result.storageAddress = options.createAddress
   result.codeAddress = options.codeAddress
-  result.shouldTransferValue = options.shouldTransferValue
-  result.isStatic = options.isStatic
+  result.flags = options.flags
   result.code = code
 
   if options.origin != ZERO_ADDRESS:
@@ -78,13 +75,13 @@ proc codeAddress*(message: Message): EthAddress =
   if message.internalCodeAddress != ZERO_ADDRESS:
     message.internalCodeAddress
   else:
-    message.to
+    message.destination
 
 proc `storageAddress`*(message: Message): EthAddress =
   if message.internalStorageAddress != ZERO_ADDRESS:
     message.internalStorageAddress
   else:
-    message.to
+    message.destination
 
 proc isCreate(message: Message): bool =
-  message.to == CREATE_CONTRACT_ADDRESS
+  message.destination == CREATE_CONTRACT_ADDRESS

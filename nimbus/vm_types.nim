@@ -51,8 +51,20 @@ type
     startGas*: GasInt
     gasRemaining*: GasInt
 
+  CallKind* = enum
+    evmcCall         = 0, # CALL
+    evmcDelegateCall = 1, # DELEGATECALL
+    evmcCallCode     = 2, # CALLCODE
+    evmcCreate       = 3, # CREATE
+    evmcCreate2      = 4  # CREATE2
+
+  MsgFlags* = enum
+    emvcNoFlags  = 0
+    emvcStatic   = 1
+
   Message* = ref object
     # A message for VM computation
+    # https://github.com/ethereum/evmc/blob/master/include/evmc/evmc.h
 
     # depth = None
 
@@ -61,30 +73,33 @@ type
 
     # createAddress = None
 
-    # shouldTransferValue = None
-    # isStatic = None
-
     # logger = logging.getLogger("evm.vm.message.Message")
 
-    gas*:                     GasInt
-    gasPrice*:                GasInt
-    to*:                      EthAddress
+    destination*:             EthAddress
     sender*:                  EthAddress
     value*:                   UInt256
     data*:                    seq[byte]
+    # size_t input_size;
+    codeHash*:                UInt256
+    create2Salt*:             Uint256
+    gas*:                     GasInt
+    gasPrice*:                GasInt
+    depth*:                   int
+    kind*:                    CallKind
+    flags*:                   MsgFlags
+
+    # Not in EVMC API
+
+    # TODO: Done via callback function (v)table in EVMC
     code*:                    string    # TODO: seq[byte] is probably a better representation
+
     internalOrigin*:          EthAddress
     internalCodeAddress*:     EthAddress
-    depth*:                   int
     internalStorageAddress*:  EthAddress
-    shouldTransferValue*:     bool
-    isStatic*:                bool
-    isCreate*:                bool
 
   MessageOptions* = ref object
     origin*:                  EthAddress
     depth*:                   int
     createAddress*:           EthAddress
     codeAddress*:             EthAddress
-    shouldTransferValue*:     bool
-    isStatic*:                bool
+    flags*:                   MsgFlags
