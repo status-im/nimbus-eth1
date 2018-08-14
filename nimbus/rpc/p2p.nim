@@ -133,7 +133,10 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ##
     ## data: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## Returns integer of the number of transactions in this block.
-    discard
+    let
+      header = chain.headerFromTag(quantityTag)
+      body = chain.getBlockBody(header.stateRoot)
+    result = body.transactions.len
 
   rpcsrv.rpc("eth_getUncleCountByBlockHash") do(data: HexDataStr):
     ## Returns the number of uncles in a block from a block matching the given block hash.
