@@ -72,8 +72,6 @@ proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
       resSeq   = newSeq[byte](resLen)
     copyMem(resSeq.baseAddr, resStart, resLen)
     return resSeq
-  of SQLITE_DONE:
-    return @[]
   else: raiseKeySearchError(key)
 
 proc put*(db: ChainDB, key, value: openarray[byte]) =
