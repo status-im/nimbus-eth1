@@ -10,6 +10,8 @@
 ## This module implements the Ethereum hexadecimal string formats for JSON
 ## See: https://github.com/ethereum/wiki/wiki/JSON-RPC#hex-value-encoding
 
+import eth_common/eth_types, stint, byteutils
+
 type
   HexQuantityStr* = distinct string
   HexDataStr* = distinct string
@@ -134,6 +136,17 @@ proc `%`*(value: EthAddressStr): JsonNode =
 
 proc `%`*(value: EthHashStr): JsonNode =
   result = %(value.string)
+
+# Overloads to support expected representation of hex data
+
+proc `%`*(value: EthAddress): JsonNode =
+  result = %("0x" & value.toHex)
+
+proc `%`*(value: UInt256): JsonNode =
+  result = %("0x" & value.toString)
+
+proc `%`*(value: openArray[seq]): JsonNode =
+  result = %("0x" & value.toHex)
 
 proc fromJson*(n: JsonNode, argName: string, result: var HexQuantityStr) =
   # Note that '0x' is stripped after validation
