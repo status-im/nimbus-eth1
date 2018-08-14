@@ -28,12 +28,12 @@ func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
 proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
   template chain: untyped = BaseChainDB(node.chain) # TODO: Sensible casting
   
-  proc accountDbFromTag(tag: string): AccountStateDb =
+  proc accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
     # Note: This is a read only account
     let
       header = chain.headerFromTag(tag)
       vmState = newBaseVMState(header, chain)
-    result = vmState.readOnlyStateDb
+    result = vmState.chaindb.getStateDb(vmState.blockHeader.stateRoot, readOnly)
 
   rpcsrv.rpc("net_version") do() -> uint:
     let conf = getConfiguration()
@@ -107,13 +107,16 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       result = ("0x" & storage[0].toHex).HexDataStr
 
 
-  rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string):
+  rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> int:
     ## Returns the number of transactions sent from an address.
     ##
     ## data: address.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
-    discard
+    let
+      header = chain.headerFromTag(quantityTag)
+      body = chain.getBlockBody(header.stateRoot)
+    result = body.transactions.len
 
   rpcsrv.rpc("eth_getBlockTransactionCountByHash") do(data: HexDataStr) -> int:
     ## Returns the number of transactions in a block from a block matching the given block hash.
