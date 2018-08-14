@@ -9,7 +9,17 @@
 import
   nimcrypto, json_rpc/rpcserver, eth_p2p, hexstrings, strutils, stint,
   ../config, ../vm_state, ../constants, eth_trie/[memdb, types],
-  ../db/[db_chain, state_db], eth_common, rpc_types, byteutils
+  ../db/[db_chain, state_db], eth_common, rpc_types, byteutils,
+  ranges/typedranges
+
+#[
+  Note:
+    * Hexstring types (HexQuantitySt, HexDataStr, EthAddressStr, EthHashStr)
+      are parsed to check format before the RPC blocks are executed and will
+      raise an exception if invalid.
+]#
+
+func strToAddress(value: string): EthAddress = hexToPaddedByteArray[20](value)
 
 func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
   let tag = blockTag.toLowerAscii
@@ -87,7 +97,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the current balance in wei.
     let
       account_db = accountDbFromTag(quantityTag)
-      addrBytes = hexToPaddedByteArray[20](data.string)
+      addrBytes = strToAddress(data.string)
       balance = account_db.get_balance(addrBytes)
 
     result = balance.toInt
@@ -101,11 +111,10 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns: the value at this storage position.
     let
       account_db = accountDbFromTag(quantityTag)
-      addrBytes = hexToPaddedByteArray[20](data.string)
+      addrBytes = strToAddress(data.string)
       storage = account_db.getStorage(addrBytes, quantity.u256)
     if storage[1]:
       result = ("0x" & storage[0].toHex).HexDataStr
-
 
   rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> int:
     ## Returns the number of transactions sent from an address.
@@ -164,7 +173,17 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## data: address
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
-    discard
+    let
+      account_db = accountDbFromTag(quantityTag)
+      addrBytes = strToAddress(data.string)
+      storage = account_db.getCode(addrBytes)
+    var
+      idx = 2
+      res = newString(storage.len + 2)
+    res[0..1] = "0x"
+    for b in storage:
+      res[idx] = b.char
+    result = hexDataStr(res)
 
   rpcsrv.rpc("eth_sign") do(data: EthAddressStr, message: HexDataStr) -> HexDataStr:
     ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
