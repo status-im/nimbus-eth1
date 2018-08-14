@@ -123,7 +123,10 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ##
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
-    discard
+    var hashData: Hash256
+    hashData.data = hexToPaddedByteArray[32](data.string)
+    let body = chain.getBlockBody(hashData)
+    result = body.transactions.len
 
   rpcsrv.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> int:
     ## Returns the number of transactions in a block matching the given block number.
