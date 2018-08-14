@@ -138,12 +138,15 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       body = chain.getBlockBody(header.stateRoot)
     result = body.transactions.len
 
-  rpcsrv.rpc("eth_getUncleCountByBlockHash") do(data: HexDataStr):
+  rpcsrv.rpc("eth_getUncleCountByBlockHash") do(data: HexDataStr) -> int:
     ## Returns the number of uncles in a block from a block matching the given block hash.
     ##
     ## data: hash of a block.
     ## Returns integer of the number of uncles in this block.
-    discard
+    var hashData: Hash256
+    hashData.data = hexToPaddedByteArray[32](data.string)
+    let body = chain.getBlockBody(hashData)
+    result = body.uncles.len
 
   rpcsrv.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string):
     ## Returns the number of uncles in a block from a block matching the given block number.
