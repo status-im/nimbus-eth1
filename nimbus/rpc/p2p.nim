@@ -10,14 +10,22 @@ import
   nimcrypto, json_rpc/rpcserver, eth_p2p, hexstrings, strutils, stint,
   ../config, ../vm_state, ../constants, eth_trie/[memdb, types],
   ../db/[db_chain, state_db], eth_common, rpc_types, byteutils,
-  ranges/typedranges
+  ranges/typedranges, times, ../utils/header
 
 #[
   Note:
     * Hexstring types (HexQuantitySt, HexDataStr, EthAddressStr, EthHashStr)
       are parsed to check format before the RPC blocks are executed and will
       raise an exception if invalid.
+    * Many of the RPC calls do not validate hex string types when output, only
+      type cast to avoid extra processing.
 ]#
+
+# TODO: Don't use stateRoot for block hash.
+
+# Work around for https://github.com/nim-lang/Nim/issues/8645
+proc `%`*(value: Time): JsonNode =
+  result = %value.toSeconds
 
 func strToAddress(value: string): EthAddress = hexToPaddedByteArray[20](value)
 
@@ -58,9 +66,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       sync: SyncState
     if true:
       # TODO: Populate sync state, this is a placeholder
-      sync.startingBlock = GENESIS_BLOCK_NUMBER.toHex.HexDataStr
-      sync.currentBlock = chain.getCanonicalHead().blockNumber.toHex.HexDataStr
-      sync.highestBlock = chain.getCanonicalHead().blockNumber.toHex.HexDataStr
+      sync.startingBlock = GENESIS_BLOCK_NUMBER
+      sync.currentBlock = chain.getCanonicalHead().blockNumber
+      sync.highestBlock = chain.getCanonicalHead().blockNumber
       result = %sync
     else:
       result = newJBool(false)
@@ -102,7 +110,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
 
     result = balance.toInt
 
-  rpcsrv.rpc("eth_getStorageAt") do(data: EthAddressStr, quantity: int, quantityTag: string) -> HexDataStr:
+  rpcsrv.rpc("eth_getStorageAt") do(data: EthAddressStr, quantity: int, quantityTag: string) -> UInt256:
     ## Returns the value from a storage position at a given address.
     ##
     ## data: address of the storage.
@@ -114,7 +122,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       addrBytes = strToAddress(data.string)
       storage = account_db.getStorage(addrBytes, quantity.u256)
     if storage[1]:
-      result = ("0x" & storage[0].toHex).HexDataStr
+      result = storage[0]
 
   rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> int:
     ## Returns the number of transactions sent from an address.
@@ -177,13 +185,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       account_db = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
       storage = account_db.getCode(addrBytes)
-    var
-      idx = 2
-      res = newString(storage.len + 2)
-    res[0..1] = "0x"
-    for b in storage:
-      res[idx] = b.char
-    result = hexDataStr(res)
+    # Easier to return the string manually here rather than expect ByteRange to be marshalled
+    result = byteutils.toHex(storage.toOpenArray).HexDataStr
 
   rpcsrv.rpc("eth_sign") do(data: EthAddressStr, message: HexDataStr) -> HexDataStr:
     ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
@@ -230,13 +233,48 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns the amount of gas used.
     discard
 
+  func populateBlockObject(header: BlockHeader, blockBody: BlockBodyRef): BlockObject =
+    result.number = new BlockNumber
+    result.number[] = header.blockNumber
+    result.hash = new Hash256
+    result.hash[] = header.hash
+    result.parentHash = header.parentHash
+    result.nonce = header.nonce.toUint
+
+    # Calculate hash for all uncle headers
+    var
+      rawdata = newSeq[byte](blockBody.uncles.len * 32)
+      startIdx = 0
+    for i in 0 ..< blockBody.uncles.len:
+      rawData[startIdx .. startIdx + 32] = blockBody.uncles[i].hash.data
+      startIdx += 32    
+    result.sha3Uncles = keccak256.digest(rawData)
+
+    result.logsBloom = nil  # TODO: Create bloom filter for logs
+    result.transactionsRoot = header.txRoot
+    result.stateRoot = header.stateRoot
+    result.receiptsRoot = header.receiptRoot
+    result.miner = ZERO_ADDRESS # TODO: Get miner address
+    result.difficulty = header.difficulty
+    result.totalDifficulty = header.difficulty  # TODO: Calculate
+    result.extraData = header.extraData
+    result.size = 0 # TODO: Calculate block size
+    result.gasLimit = header.gasLimit
+    result.gasUsed = header.gasUsed
+    result.timestamp = header.timeStamp
+    result.transactions = blockBody.transactions
+    result.uncles = blockBody.uncles
+
   rpcsrv.rpc("eth_getBlockByHash") do(data: HexDataStr, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
-    discard
+    let
+      header = chain.getCanonicalHead()
+      body = chain.getBlockBody(header.stateRoot)
+    populateBlockObject(header, body)
 
   rpcsrv.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by block number.
