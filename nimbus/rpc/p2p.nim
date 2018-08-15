@@ -21,8 +21,6 @@ import
       type cast to avoid extra processing.
 ]#
 
-# TODO: Don't use stateRoot for block hash.
-
 # Work around for https://github.com/nim-lang/Nim/issues/8645
 proc `%`*(value: Time): JsonNode =
   result = %value.toSeconds
@@ -51,7 +49,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       header = chain.headerFromTag(tag)
       vmState = newBaseVMState(header, chain)
-    result = vmState.chaindb.getStateDb(vmState.blockHeader.stateRoot, readOnly)
+    result = vmState.chaindb.getStateDb(vmState.blockHeader.hash, readOnly)
 
   rpcsrv.rpc("net_version") do() -> uint:
     let conf = getConfiguration()
@@ -132,7 +130,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the number of transactions send from this address.
     let
       header = chain.headerFromTag(quantityTag)
-      body = chain.getBlockBody(header.stateRoot)
+      body = chain.getBlockBody(header.hash)
     result = body.transactions.len
 
   rpcsrv.rpc("eth_getBlockTransactionCountByHash") do(data: HexDataStr) -> int:
@@ -152,7 +150,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the number of transactions in this block.
     let
       header = chain.headerFromTag(quantityTag)
-      body = chain.getBlockBody(header.stateRoot)
+      body = chain.getBlockBody(header.hash)
     result = body.transactions.len
 
   rpcsrv.rpc("eth_getUncleCountByBlockHash") do(data: HexDataStr) -> int:
@@ -172,7 +170,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of uncles in this block.
     let
       header = chain.headerFromTag(quantityTag)
-      body = chain.getBlockBody(header.stateRoot)
+      body = chain.getBlockBody(header.hash)
     result = body.uncles.len
 
   rpcsrv.rpc("eth_getCode") do(data: EthAddressStr, quantityTag: string) -> HexDataStr:
@@ -273,7 +271,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns BlockObject or nil when no block was found.
     let
       header = chain.getCanonicalHead()
-      body = chain.getBlockBody(header.stateRoot)
+      body = chain.getBlockBody(header.hash)
     populateBlockObject(header, body)
 
   rpcsrv.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> BlockObject:
@@ -282,7 +280,10 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
-    discard
+    let
+      header = chain.headerFromTag(quantityTag)
+      body = chain.getBlockBody(header.hash)
+    populateBlockObject(header, body)
 
   rpcsrv.rpc("eth_getTransactionByHash") do(data: HexDataStr) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
