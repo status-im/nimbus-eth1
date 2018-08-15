@@ -10,7 +10,7 @@
 ## This module implements the Ethereum hexadecimal string formats for JSON
 ## See: https://github.com/ethereum/wiki/wiki/JSON-RPC#hex-value-encoding
 
-import eth_common/eth_types, stint, byteutils
+import eth_common/eth_types, stint, byteutils, nimcrypto
 
 type
   HexQuantityStr* = distinct string
@@ -141,6 +141,9 @@ proc `%`*(value: EthHashStr): JsonNode =
 
 proc `%`*(value: EthAddress): JsonNode =
   result = %("0x" & value.toHex)
+
+proc `%`*(value: Hash256): JsonNode =
+  result = %("0x" & $value)
 
 proc `%`*(value: UInt256): JsonNode =
   result = %("0x" & value.toString)
