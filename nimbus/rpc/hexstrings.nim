@@ -151,6 +151,11 @@ proc `%`*(value: UInt256): JsonNode =
 proc `%`*(value: openArray[seq]): JsonNode =
   result = %("0x" & value.toHex)
 
+proc `%`*(value: ref BloomFilter): JsonNode =
+  result = %("0x" & toHex[256](value[]))
+
+# Marshalling from JSON to Nim types that includes format checking
+
 proc fromJson*(n: JsonNode, argName: string, result: var HexQuantityStr) =
   # Note that '0x' is stripped after validation
   n.kind.expect(JString, argName)
