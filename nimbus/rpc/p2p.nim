@@ -27,11 +27,17 @@ proc `%`*(value: Time): JsonNode =
 
 func strToAddress(value: string): EthAddress = hexToPaddedByteArray[20](value)
 
+func toHash(value: array[32, byte]): Hash256 {.inline.} =
+  result.data = value
+
+func strToHash(value: string): Hash256 {.inline.} =
+  result = hexToPaddedByteArray[32](value).toHash
+
 func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
   let tag = blockTag.toLowerAscii
   case tag
   of "latest": result = chain.getCanonicalHead()
-  of "earliest": result = chain.getCanonicalBlockHeaderByNumber(GENESIS_BLOCK_NUMBER)
+  of "earliest": result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
   of "pending":
     #TODO: Implement get pending block
     raise newException(ValueError, "Pending tag not yet implemented")
@@ -39,13 +45,12 @@ func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
     # Raises are trapped and wrapped in JSON when returned to the user.
     tag.validateHexQuantity
     let blockNum = stint.fromHex(UInt256, tag)
-    result = chain.getCanonicalBlockHeaderByNumber(blockNum)
+    result = chain.getBlockHeader(blockNum)
 
 proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
   template chain: untyped = BaseChainDB(node.chain) # TODO: Sensible casting
   
   proc accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
-    # Note: This is a read only account
     let
       header = chain.headerFromTag(tag)
       vmState = newBaseVMState(header, chain)
@@ -102,9 +107,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
     let
-      account_db = accountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
-      balance = account_db.get_balance(addrBytes)
+      balance = accountDb.get_balance(addrBytes)
 
     result = balance.toInt
 
@@ -116,30 +121,29 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
     let
-      account_db = accountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
-      storage = account_db.getStorage(addrBytes, quantity.u256)
+      storage = accountDb.getStorage(addrBytes, quantity.u256)
     if storage[1]:
       result = storage[0]
 
-  rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> int:
+  rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> UInt256:
     ## Returns the number of transactions sent from an address.
     ##
     ## data: address.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
     let
-      header = chain.headerFromTag(quantityTag)
-      body = chain.getBlockBody(header.hash)
-    result = body.transactions.len
+      addrBytes = data.string.strToAddress()
+      accountDb = accountDbFromTag(quantityTag)
+    result = accountDb.getNonce(addrBytes)
 
   rpcsrv.rpc("eth_getBlockTransactionCountByHash") do(data: HexDataStr) -> int:
     ## Returns the number of transactions in a block from a block matching the given block hash.
     ##
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
-    var hashData: Hash256
-    hashData.data = hexToPaddedByteArray[32](data.string)
+    var hashData = strToHash(data.string)
     let body = chain.getBlockBody(hashData)
     result = body.transactions.len
 
@@ -150,6 +154,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the number of transactions in this block.
     let
       header = chain.headerFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
     result = body.transactions.len
 
@@ -158,8 +163,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ##
     ## data: hash of a block.
     ## Returns integer of the number of uncles in this block.
-    var hashData: Hash256
-    hashData.data = hexToPaddedByteArray[32](data.string)
+    var hashData = strToHash(data.string)
     let body = chain.getBlockBody(hashData)
     result = body.uncles.len
 
@@ -180,9 +184,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      account_db = accountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
-      storage = account_db.getCode(addrBytes)
+      storage = accountDb.getCode(addrBytes)
     # Easier to return the string manually here rather than expect ByteRange to be marshalled
     result = byteutils.toHex(storage.toOpenArray).HexDataStr
 
@@ -270,8 +274,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
     let
-      header = chain.getCanonicalHead()
-      body = chain.getBlockBody(header.hash)
+      h = data.string.strToHash
+      header = chain.getBlockHeader(h)
+      body = chain.getBlockBody(h)
     populateBlockObject(header, body)
 
   rpcsrv.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> BlockObject:
