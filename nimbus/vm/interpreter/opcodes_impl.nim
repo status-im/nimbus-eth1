@@ -235,9 +235,10 @@ proc writePaddedResult(mem: var Memory,
 func cleanMemRef(x: UInt256): int {.inline.} =
   ## Sanitize memory addresses, catch negative or impossibly big offsets
   # See https://github.com/status-im/nimbus/pull/97 for more info
-  const upperBound = high(int32).u256
+  # For rational on shr, see https://github.com/status-im/nimbus/pull/101
+  const upperBound = (high(int32) shr 2).u256
   if x > upperBound:
-    return high(int32)
+    return high(int32) shr 2
   return x.toInt
 
 op address, inline = true:
