@@ -73,7 +73,7 @@ type
     value*: int64                   # value transferred in Wei.
     gasPrice*: GasInt               # gas price provided by the sender in Wei.
     gas*: GasInt                    # gas provided by the sender.
-    input*: HexDataStr              # the data send along with the transaction.
+    input*: Blob                    # the data send along with the transaction.
 
   LogObject* = object
     # Returned to user
