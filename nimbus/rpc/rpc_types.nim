@@ -64,7 +64,7 @@ type
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
     hash*: Hash256                  # hash of the transaction.
-    nonce*: int64                   # TODO: Is int? the number of transactions made by the sender prior to this one.
+    nonce*: uint64                  # the number of transactions made by the sender prior to this one.
     blockHash*: ref Hash256         # hash of the block where this transaction was in. null when its pending.
     blockNumber*: ref BlockNumber   # block number where this transaction was in. null when its pending.
     transactionIndex*: ref int64    # integer of the transactions index position in the block. null when its pending.
