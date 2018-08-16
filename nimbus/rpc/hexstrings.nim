@@ -142,6 +142,9 @@ proc `%`*(value: EthHashStr): JsonNode =
 proc `%`*(value: EthAddress): JsonNode =
   result = %("0x" & value.toHex)
 
+proc `%`*(value: ref EthAddress): JsonNode =
+  result = %("0x" & value[].toHex)
+
 proc `%`*(value: Hash256): JsonNode =
   result = %("0x" & $value)
 
