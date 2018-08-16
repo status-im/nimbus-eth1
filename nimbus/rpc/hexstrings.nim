@@ -10,9 +10,18 @@
 ## This module implements the Ethereum hexadecimal string formats for JSON
 ## See: https://github.com/ethereum/wiki/wiki/JSON-RPC#hex-value-encoding
 
+import eth_common/eth_types, stint, byteutils, nimcrypto
+
 type
   HexQuantityStr* = distinct string
   HexDataStr* = distinct string
+  EthAddressStr* = distinct string  # Same as HexDataStr but must be less <= 20 bytes
+  EthHashStr* = distinct string     # Same as HexDataStr but must be exactly 32 bytes
+
+func len*(quantity: HexQuantityStr): int = quantity.string.len
+func len*(data: HexDataStr): int = data.string.len
+func len*(data: EthAddressStr): int = data.string.len
+func len*(data: EthHashStr): int = data.string.len
 
 # Hex validation
 
@@ -60,9 +69,22 @@ func isValidHexData*(value: string): bool =
       return false
   return true
 
+func isValidEthAddress*(value: string): bool =
+  # 20 bytes for EthAddress plus "0x"
+  # Addresses are allowed to be shorter than 20 bytes for convenience
+  result = value.len <= 42 and value.isValidHexData
+
+func isValidEthHash*(value: string): bool =
+  # 32 bytes for EthAddress plus "0x"
+  # Currently hashes are required to be exact lengths
+  # TODO: Allow shorter hashes (pad with zeros) for convenience?
+  result = value.len == 66 and value.isValidHexData
+
 const
   SInvalidQuantity = "Invalid hex quantity format for Ethereum"
   SInvalidData = "Invalid hex data format for Ethereum"
+  SInvalidAddress = "Invalid address format for Ethereum"
+  SInvalidHash = "Invalid hash format for Ethereum"
 
 proc validateHexQuantity*(value: string) {.inline.} =
   if unlikely(not value.isValidHexQuantity):
@@ -71,6 +93,14 @@ proc validateHexQuantity*(value: string) {.inline.} =
 proc validateHexData*(value: string) {.inline.} =
   if unlikely(not value.isValidHexData):
     raise newException(ValueError, SInvalidData & ": " & value)
+
+proc validateHexAddressStr*(value: string) {.inline.} =
+  if unlikely(not value.isValidEthAddress):
+    raise newException(ValueError, SInvalidAddress & ": " & value)
+
+proc validateHashStr*(value: string) {.inline.} =
+  if unlikely(not value.isValidEthHash):
+    raise newException(ValueError, SInvalidHash & ": " & value)
 
 # Initialisation
 
@@ -82,6 +112,14 @@ proc hexDataStr*(value: string): HexDataStr {.inline.} =
   value.validateHexData
   result = value.HexDataStr
 
+proc ethAddressStr*(value: string): EthAddressStr {.inline.} =
+  value.validateHexAddressStr
+  result = value.EthAddressStr
+
+proc ethHashStr*(value: string): EthHashStr {.inline.} =
+  value.validateHashStr
+  result = value.EthHashStr
+
 # Converters for use in RPC
 
 import json
@@ -92,6 +130,31 @@ proc `%`*(value: HexQuantityStr): JsonNode =
 
 proc `%`*(value: HexDataStr): JsonNode =
   result = %(value.string)
+
+proc `%`*(value: EthAddressStr): JsonNode =
+  result = %(value.string)
+
+proc `%`*(value: EthHashStr): JsonNode =
+  result = %(value.string)
+
+# Overloads to support expected representation of hex data
+
+proc `%`*(value: EthAddress): JsonNode =
+  result = %("0x" & value.toHex)
+
+proc `%`*(value: Hash256): JsonNode =
+  result = %("0x" & $value)
+
+proc `%`*(value: UInt256): JsonNode =
+  result = %("0x" & value.toString)
+
+proc `%`*(value: openArray[seq]): JsonNode =
+  result = %("0x" & value.toHex)
+
+proc `%`*(value: ref BloomFilter): JsonNode =
+  result = %("0x" & toHex[256](value[]))
+
+# Marshalling from JSON to Nim types that includes format checking
 
 proc fromJson*(n: JsonNode, argName: string, result: var HexQuantityStr) =
   # Note that '0x' is stripped after validation
@@ -106,6 +169,22 @@ proc fromJson*(n: JsonNode, argName: string, result: var HexDataStr) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidHexData:
-    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as a Ethereum data \"" & hexStr & "\"")
+    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as Ethereum data \"" & hexStr & "\"")
   result = hexStr.hexDataStr
+
+proc fromJson*(n: JsonNode, argName: string, result: var EthAddressStr) =
+  # Note that '0x' is stripped after validation
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidEthAddress:
+    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as an Ethereum address \"" & hexStr & "\"")
+  result = hexStr.EthAddressStr
+
+proc fromJson*(n: JsonNode, argName: string, result: var EthHashStr) =
+  # Note that '0x' is stripped after validation
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidEthHash:
+    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as an Ethereum hash \"" & hexStr & "\"")
+  result = hexStr.EthHashStr
 

@@ -1,7 +1,7 @@
 import
   unittest, json, strformat, nimcrypto, rlp,
   json_rpc/[rpcserver, rpcclient], 
-  ../nimbus/rpc/[common, p2p],
+  ../nimbus/rpc/[common, p2p, hexstrings],
   ../nimbus/constants,
   ../nimbus/nimbus/[account, vm_state, config],
   ../nimbus/db/[state_db, db_chain], eth_common, byteutils,
@@ -35,6 +35,9 @@ proc setupEthNode: EthereumNode =
   result = newEthereumNode(keypair, srvAddress, conf.net.networkId,
                               nil, "nimbus 0.1.0")
 
+proc toEthAddressStr(address: EthAddress): EthAddressStr =
+  result = ("0x" & address.toHex).ethAddressStr
+
 proc doTests =
   # TODO: Include other transports such as Http
   var ethNode = setupEthNode()
@@ -46,8 +49,9 @@ proc doTests =
     state = newBaseVMState(header, chain)
   ethNode.chain = chain
 
-  let balance = 100.u256
-  var address: EthAddress = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+  let
+    balance = 100.u256
+    address: EthAddress = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
   state.mutateStateDB:
     db.setBalance(address, balance)
 
@@ -66,10 +70,10 @@ proc doTests =
     test "eth_getBalance":
       expect ValueError:
         # check error is raised on null address
-        var r = waitFor client.eth_getBalance(ZERO_ADDRESS, "0x0")
+        var r = waitFor client.eth_getBalance(ZERO_ADDRESS.toEthAddressStr, "0x0")
 
       let blockNum = state.blockheader.blockNumber
-      var r = waitFor client.eth_getBalance(address, "0x" & blockNum.toHex)
+      var r = waitFor client.eth_getBalance(address.toEthAddressStr, "0x" & blockNum.toHex)
       echo r
 
   rpcServer.stop()
