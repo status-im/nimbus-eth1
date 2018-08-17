@@ -113,6 +113,11 @@ iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader):
   # for encoded_transaction in all_encoded_transactions:
   #     yield keccak(encoded_transaction)
 
+proc getTransactionKey*(self: BaseChainDB, transactionHash: Hash256): tuple[blockNumber: BlockNumber, index: int] {.inline.} =
+  let
+    tx = self.db.get(transactionHashToBlockKey(transactionHash).toOpenArray).toRange
+    key = rlp.decode(tx, TransactionKey)
+  return (key.blockNumber, key.index)
 
 proc removeTransactionFromCanonicalChain(self: BaseChainDB, transactionHash: Hash256) {.inline.} =
   ## Removes the transaction specified by the given hash from the canonical chain.
