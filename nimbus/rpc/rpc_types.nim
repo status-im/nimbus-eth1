@@ -64,13 +64,13 @@ type
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
     hash*: Hash256                  # hash of the transaction.
-    nonce*: uint64                  # the number of transactions made by the sender prior to this one.
+    nonce*: UInt256                 # the number of transactions made by the sender prior to this one.
     blockHash*: ref Hash256         # hash of the block where this transaction was in. null when its pending.
     blockNumber*: ref BlockNumber   # block number where this transaction was in. null when its pending.
     transactionIndex*: ref int64    # integer of the transactions index position in the block. null when its pending.
     source*: EthAddress             # address of the sender.
     to*: ref EthAddress             # address of the receiver. null when its a contract creation transaction.
-    value*: int64                   # value transferred in Wei.
+    value*: UInt256                 # value transferred in Wei.
     gasPrice*: GasInt               # gas price provided by the sender in Wei.
     gas*: GasInt                    # gas provided by the sender.
     input*: Blob                    # the data send along with the transaction.
