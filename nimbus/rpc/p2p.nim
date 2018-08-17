@@ -9,8 +9,8 @@
 import
   nimcrypto, json_rpc/rpcserver, eth_p2p, hexstrings, strutils, stint,
   ../config, ../vm_state, ../constants, eth_trie/[memdb, types],
-  ../db/[db_chain, state_db], eth_common, rpc_types, byteutils,
-  ranges/typedranges, times, ../utils/header
+  ../db/[db_chain, state_db, storage_types], eth_common, rpc_types, byteutils,
+  ranges/typedranges, times, ../utils/header, rlp
 
 #[
   Note:
@@ -290,12 +290,45 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       body = chain.getBlockBody(header.hash)
     populateBlockObject(header, body)
 
+  func populateTransactionObject(transaction: Transaction, txHash: Hash256, txCount: UInt256, txIndex: int, blockHeader: BlockHeader, gas: int64): TransactionObject =
+    result.hash = txHash
+    result.nonce = txCount
+    result.blockHash = new Hash256
+    result.blockHash[] = blockHeader.hash
+    result.blockNumber = new BlockNumber
+    result.blockNumber[] = blockHeader.blockNumber
+    result.transactionIndex = new int64
+    result.transactionIndex[] = txIndex
+    # TODO: Fetch or calculate `from` address with signature after signing with the private key
+    #result.source: EthAddress
+    result.to = new EthAddress
+    result.to[] = transaction.to
+    result.value = transaction.value
+    result.gasPrice = transaction.gasPrice
+    result.gas = gas
+    result.input = transaction.payload
+
   rpcsrv.rpc("eth_getTransactionByHash") do(data: HexDataStr) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
     ##
     ## data: hash of a transaction.
     ## Returns requested transaction information.
-    discard
+    let
+      h = data.string.strToHash()
+      txDetails = chain.getTransactionKey(h)
+      header = chain.getBlockHeader(txDetails.blockNumber)
+      blockHash = chain.getBlockHash(txDetails.blockNumber)
+      body = chain.getBlockBody(blockHash)
+      transaction = body.transactions[txDetails.index]
+      vmState = newBaseVMState(header, chain)
+      addressDb = vmState.chaindb.getStateDb(blockHash, true)
+      # TODO: Get/calculate address for this transaction
+      address = ZERO_ADDRESS  
+      txCount = addressDb.getNonce(address)
+      txHash = transaction.rlpHash
+      # TODO: Fetch account gas
+      accountGas = 0  
+    populateTransactionObject(transaction, txHash, txCount, txDetails.index, header, accountGas)
 
   rpcsrv.rpc("eth_getTransactionByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
