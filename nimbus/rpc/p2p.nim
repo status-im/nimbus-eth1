@@ -336,7 +336,21 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## data: hash of a block.
     ## quantity: integer of the transaction index position.
     ## Returns  requested transaction information.
-    discard
+    let
+      blockHash = data.string.strToHash()
+      body = chain.getBlockBody(blockHash)
+      header = chain.getBlockHeader(blockHash)
+      transaction = body.transactions[quantity]
+      vmState = newBaseVMState(header, chain)
+      addressDb = vmState.chaindb.getStateDb(blockHash, true)
+      # TODO: Get/calculate address for this transaction
+      address = ZERO_ADDRESS  
+      txCount = addressDb.getNonce(address)
+      txHash = transaction.rlpHash
+      # TODO: Fetch account gas
+      accountGas = 0  
+    populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
+
 
   rpcsrv.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block number and transaction index position.
