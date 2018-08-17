@@ -357,7 +357,20 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## quantity: the transaction index position.
-    discard
+    let
+      header = chain.headerFromTag(quantityTag)
+      blockHash = header.hash
+      body = chain.getBlockBody(blockHash)
+      transaction = body.transactions[quantity]
+      vmState = newBaseVMState(header, chain)
+      addressDb = vmState.chaindb.getStateDb(blockHash, true)
+      # TODO: Get/calculate address for this transaction
+      address = ZERO_ADDRESS  
+      txCount = addressDb.getNonce(address)
+      txHash = transaction.rlpHash
+      # TODO: Fetch account gas
+      accountGas = 0  
+    populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
 
   # Currently defined as a variant type so this might need rethinking
   # See: https://github.com/status-im/nim-json-rpc/issues/29
