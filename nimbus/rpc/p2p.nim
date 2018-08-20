@@ -145,6 +145,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the number of transactions in this block.
     var hashData = strToHash(data.string)
     let body = chain.getBlockBody(hashData)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     result = body.transactions.len
 
   rpcsrv.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> int:
@@ -156,6 +158,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       header = chain.headerFromTag(quantityTag)
       accountDb = accountDbFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     result = body.transactions.len
 
   rpcsrv.rpc("eth_getUncleCountByBlockHash") do(data: HexDataStr) -> int:
@@ -165,6 +169,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the number of uncles in this block.
     var hashData = strToHash(data.string)
     let body = chain.getBlockBody(hashData)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     result = body.uncles.len
 
   rpcsrv.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string) -> int:
@@ -175,6 +181,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       header = chain.headerFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     result = body.uncles.len
 
   rpcsrv.rpc("eth_getCode") do(data: EthAddressStr, quantityTag: string) -> HexDataStr:
@@ -279,6 +287,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       h = data.string.strToHash
       header = chain.getBlockHeader(h)
       body = chain.getBlockBody(h)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     populateBlockObject(header, body)
 
   rpcsrv.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> BlockObject:
@@ -290,6 +300,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       header = chain.headerFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     populateBlockObject(header, body)
 
   func populateTransactionObject(transaction: Transaction, txHash: Hash256, txCount: UInt256, txIndex: int, blockHeader: BlockHeader, gas: int64): TransactionObject =
@@ -321,6 +333,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       header = chain.getBlockHeader(txDetails.blockNumber)
       blockHash = chain.getBlockHash(txDetails.blockNumber)
       body = chain.getBlockBody(blockHash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    let
       transaction = body.transactions[txDetails.index]
       vmState = newBaseVMState(header, chain)
       addressDb = vmState.chaindb.getStateDb(blockHash, true)
@@ -341,6 +356,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       blockHash = data.string.strToHash()
       body = chain.getBlockBody(blockHash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    let
       header = chain.getBlockHeader(blockHash)
       transaction = body.transactions[quantity]
       vmState = newBaseVMState(header, chain)
@@ -363,6 +381,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       header = chain.headerFromTag(quantityTag)
       blockHash = header.hash
       body = chain.getBlockBody(blockHash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    let
       transaction = body.transactions[quantity]
       vmState = newBaseVMState(header, chain)
       addressDb = vmState.chaindb.getStateDb(blockHash, true)
@@ -409,6 +430,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       txDetails = chain.getTransactionKey(h)
       header = chain.getBlockHeader(txDetails.blockNumber)
       body = chain.getBlockBody(h)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     var idx = 0
     for receipt in chain.getReceipts(header, Receipt):
       if idx == txDetails.index:
@@ -424,7 +447,11 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       blockHash = data.string.strToHash()
       body = chain.getBlockBody(blockHash)
-      uncle = body.uncles[quantity]
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    if quantity < 0 or quantity >= body.uncles.len:
+      raise newException(ValueError, "Uncle index out of range")
+    let uncle = body.uncles[quantity]
     result = populateBlockObject(uncle, body)
 
   rpcsrv.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> BlockObject:
@@ -436,7 +463,11 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       header = chain.headerFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
-      uncle = body.uncles[quantity]
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    if quantity < 0 or quantity >= body.uncles.len:
+      raise newException(ValueError, "Uncle index out of range")
+    let uncle = body.uncles[quantity]
     result = populateBlockObject(uncle, body)
 
   # FilterOptions requires more layout planning.
