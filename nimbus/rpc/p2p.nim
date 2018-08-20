@@ -427,13 +427,17 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       uncle = body.uncles[quantity]
     result = populateBlockObject(uncle, body)
 
-  rpcsrv.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: int64) -> BlockObject:
+  rpcsrv.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> BlockObject:
     # Returns information about a uncle of a block by number and uncle index position.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
-    discard
+    let
+      header = chain.headerFromTag(quantityTag)
+      body = chain.getBlockBody(header.hash)
+      uncle = body.uncles[quantity]
+    result = populateBlockObject(uncle, body)
 
   # FilterOptions requires more layout planning.
   # See: https://github.com/status-im/nim-json-rpc/issues/29
