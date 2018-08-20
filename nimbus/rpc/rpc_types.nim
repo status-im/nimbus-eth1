@@ -59,7 +59,7 @@ type
     gasUsed*: GasInt                # the total used gas by all transactions in this block.
     timestamp*: EthTime             # the unix timestamp for when the block was collated.
     transactions*: seq[Transaction] # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
-    uncles*: seq[BlockHeader]       # list of uncle hashes.
+    uncles*: seq[Hash256]           # list of uncle hashes.
 
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
