@@ -265,7 +265,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     result.gasUsed = header.gasUsed
     result.timestamp = header.timeStamp
     result.transactions = blockBody.transactions
-    result.uncles = blockBody.uncles
+    result.uncles = @[]
+    for i in 0 ..< blockBody.uncles.len:
+      result.uncles[i] = blockBody.uncles[i].hash
 
   rpcsrv.rpc("eth_getBlockByHash") do(data: HexDataStr, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
@@ -413,13 +415,17 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
         return populateReceipt(receipt, body.transactions[txDetails.index], txDetails.index, header)
       idx.inc
 
-  rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int64) -> BlockObject:
+  rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> BlockObject:
     ## Returns information about a uncle of a block by hash and uncle index position.  
     ##
-    ## data: hash a block.
+    ## data: hash of block.
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
-    discard
+    let
+      blockHash = data.string.strToHash()
+      body = chain.getBlockBody(blockHash)
+      uncle = body.uncles[quantity]
+    result = populateBlockObject(uncle, body)
 
   rpcsrv.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: int64) -> BlockObject:
     # Returns information about a uncle of a block by number and uncle index position.
