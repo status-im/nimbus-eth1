@@ -374,14 +374,44 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
 
   # Currently defined as a variant type so this might need rethinking
   # See: https://github.com/status-im/nim-json-rpc/issues/29
-  #[
+
+  proc populateReceipt(receipt: Receipt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
+    result.transactionHash = transaction.rlpHash
+    result.transactionIndex = txIndex
+    result.blockHash = blockHeader.hash
+    result.blockNumber = blockHeader.blockNumber
+    # TODO: Get sender
+    #result.sender: EthAddress
+    result.to = new EthAddress
+    result.to[] = transaction.to
+    # TODO: Get gas used
+    #result.cumulativeGasUsed: int
+    #result.gasUsed: int
+    # TODO: Get contract address if the transaction was a contract creation.
+    result.contractAddress = nil
+    # TODO: See Wiki for details. list of log objects, which this transaction generated.
+    result.logs = @[]
+    result.logsBloom = blockHeader.bloom
+    # post-transaction stateroot (pre Byzantium).
+    result.root = blockHeader.stateRoot
+    # 1 = success, 0 = failure.
+    result.status = 1
+
   rpcsrv.rpc("eth_getTransactionReceipt") do(data: HexDataStr) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.
     ##
     ## data: hash of a transaction.
     ## Returns transaction receipt.
-    discard
-  ]#
+    let
+      h = data.string.strToHash()
+      txDetails = chain.getTransactionKey(h)
+      header = chain.getBlockHeader(txDetails.blockNumber)
+      body = chain.getBlockBody(h)
+    var idx = 0
+    for receipt in chain.getReceipts(header, Receipt):
+      if idx == txDetails.index:
+        return populateReceipt(receipt, body.transactions[txDetails.index], txDetails.index, header)
+      idx.inc
 
   rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int64) -> BlockObject:
     ## Returns information about a uncle of a block by hash and uncle index position.  
@@ -439,7 +469,6 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns true if the filter was successfully uninstalled, otherwise false.
     discard
 
-  #[
   rpcsrv.rpc("eth_getFilterChanges") do(filterId: int) -> seq[LogObject]:
     ## Polling method for a filter, which returns an list of logs which occurred since last poll.
     ##
@@ -451,6 +480,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns a list of all logs matching filter with given id.
     result = @[]
 
+  #[
   rpcsrv.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
     ## filterOptions: settings for this filter.
     ## Returns a list of all logs matching a given filter object.
