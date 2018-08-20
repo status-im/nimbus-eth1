@@ -91,17 +91,17 @@ type
 
   ReceiptObject* = object
     # A transaction receipt object, or null when no receipt was found:
-    transactionHash*: UInt256         # hash of the transaction.
+    transactionHash*: Hash256         # hash of the transaction.
     transactionIndex*: int            # integer of the transactions index position in the block.
-    blockHash*: UInt256               # hash of the block where this transaction was in.
-    blockNumber*: int                 # block number where this transaction was in.
+    blockHash*: Hash256               # hash of the block where this transaction was in.
+    blockNumber*: BlockNumber         # block number where this transaction was in.
     sender*: EthAddress               # address of the sender.
     to*: ref EthAddress               # address of the receiver. null when its a contract creation transaction.
     cumulativeGasUsed*: int           # the total amount of gas used when this transaction was executed in the block.
     gasUsed*: int                     # the amount of gas used by this specific transaction alone.
-    contractAddress*: EthAddress      # the contract address created, if the transaction was a contract creation, otherwise null.
+    contractAddress*: ref EthAddress  # the contract address created, if the transaction was a contract creation, otherwise null.
     logs*: seq[LogObject]             # TODO: See Wiki for details. list of log objects, which this transaction generated.
     logsBloom*: BloomFilter           # bloom filter for light clients to quickly retrieve related logs.
-    root*: UInt256                    # post-transaction stateroot (pre Byzantium).
+    root*: Hash256                    # post-transaction stateroot (pre Byzantium).
     status*: int                      # 1 = success, 0 = failure.
 
