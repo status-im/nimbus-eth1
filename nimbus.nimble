@@ -29,6 +29,7 @@ proc test(name: string, lang = "c") =
   --run
   --nimcache: "nimcache"
   switch("out", ("./build/" & name))
+  switch("experimental", "ForLoopMacros")
   setCommand lang, "tests/" & name & ".nim"
 
 task test, "Run tests":
