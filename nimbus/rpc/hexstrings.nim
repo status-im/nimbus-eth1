@@ -17,6 +17,7 @@
     * ref EthAddress
     * Hash256
     * UInt256
+    * seq[byte]
     * openArray[seq]
     * ref BloomFilter
 ]#
@@ -28,11 +29,10 @@ type
   HexDataStr* = distinct string
   EthAddressStr* = distinct string  # Same as HexDataStr but must be less <= 20 bytes
   EthHashStr* = distinct string     # Same as HexDataStr but must be exactly 32 bytes
+  WhisperIdentity* = distinct string # 60 bytes
+  HexStrings = HexQuantityStr | HexDataStr | EthAddressStr | EthHashStr | WhisperIdentity
 
-func len*(quantity: HexQuantityStr): int = quantity.string.len
-func len*(data: HexDataStr): int = data.string.len
-func len*(data: EthAddressStr): int = data.string.len
-func len*(data: EthHashStr): int = data.string.len
+func len*(value: HexStrings): int = value.string.len
 
 # Hex validation
 
@@ -91,11 +91,17 @@ func isValidEthHash*(value: string): bool =
   # TODO: Allow shorter hashes (pad with zeros) for convenience?
   result = value.len == 66 and value.isValidHexData
 
+func isValidWhisperIdentity*(value: string): bool =
+  # 60 bytes for WhisperIdentity plus "0x"
+  # TODO: Are the HexData constratins applicable to Whisper identities?
+  result = value.len == 122 and value.isValidHexData
+
 const
   SInvalidQuantity = "Invalid hex quantity format for Ethereum"
   SInvalidData = "Invalid hex data format for Ethereum"
   SInvalidAddress = "Invalid address format for Ethereum"
   SInvalidHash = "Invalid hash format for Ethereum"
+  SInvalidWhisperIdentity = "Invalid format for whisper identity"
 
 proc validateHexQuantity*(value: string) {.inline.} =
   if unlikely(not value.isValidHexQuantity):
@@ -112,6 +118,10 @@ proc validateHexAddressStr*(value: string) {.inline.} =
 proc validateHashStr*(value: string) {.inline.} =
   if unlikely(not value.isValidEthHash):
     raise newException(ValueError, SInvalidHash & ": " & value)
+
+proc validateWhisperIdentity*(value: string) {.inline.} =
+  if unlikely(not value.isValidWhisperIdentity):  
+    raise newException(ValueError, SInvalidWhisperIdentity & ": " & value)
 
 # Initialisation
 
@@ -131,6 +141,10 @@ proc ethHashStr*(value: string): EthHashStr {.inline.} =
   value.validateHashStr
   result = value.EthHashStr
 
+proc whisperIdentity*(value: string): WhisperIdentity {.inline.} =
+  value.validateWhisperIdentity
+  result = value.WhisperIdentity
+
 # Converters for use in RPC
 
 import json
@@ -148,6 +162,9 @@ proc `%`*(value: EthAddressStr): JsonNode =
 proc `%`*(value: EthHashStr): JsonNode =
   result = %(value.string)
 
+proc `%`*(value: WhisperIdentity): JsonNode =
+  result = %(value.string)
+
 # Overloads to support expected representation of hex data
 
 proc `%`*(value: EthAddress): JsonNode =
@@ -162,8 +179,8 @@ proc `%`*(value: Hash256): JsonNode =
 proc `%`*(value: UInt256): JsonNode =
   result = %("0x" & value.toString)
 
-proc `%`*(value: openArray[seq]): JsonNode =
-  result = %("0x" & value.toHex)
+proc `%`*(value: openarray[byte]): JsonNode =
+  result = %("0x" & byteutils.toHex(value))
 
 proc `%`*(value: ref BloomFilter): JsonNode =
   result = %("0x" & toHex[256](value[]))
@@ -201,4 +218,12 @@ proc fromJson*(n: JsonNode, argName: string, result: var EthHashStr) =
   if not hexStr.isValidEthHash:
     raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as an Ethereum hash \"" & hexStr & "\"")
   result = hexStr.EthHashStr
+
+proc fromJson*(n: JsonNode, argName: string, result: var WhisperIdentity) =
+  # Note that '0x' is stripped after validation
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidWhisperIdentity:
+    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as a Whisper identity \"" & hexStr & "\"")
+  result = hexStr.WhisperIdentity
 
