@@ -1,7 +1,10 @@
 language: c # or other C/C++ variants
 
 # https://docs.travis-ci.com/user/caching/#ccache-cache
-cache: ccache
+cache:
+  ccache: true
+  directories:
+    - rocksdb-5.14.2
 
 install:
   - git clone https://github.com/status-im/nim.git
@@ -22,8 +25,7 @@ matrix:
       sudo: required
       before_install:
         - sudo apt-get install -y libssl-dev libgflags-dev libsnappy-dev
-        - wget https://github.com/facebook/rocksdb/archive/v5.14.2.tar.gz
-        - tar xvf v5.14.2.tar.gz
+        - "[ -d rocksdb-5.14.2 ] || { wget https://github.com/facebook/rocksdb/archive/v5.14.2.tar.gz && tar xvf v5.14.2.tar.gz; }"
         # rocksdb not present on trusty - on a newer ubuntu you can apt-get install -y librocksdb-dev
         - cd rocksdb-5.14.2 && make shared_lib -j$(nproc) && sudo make INSTALL_PATH=/usr install-shared && cd ..
 
