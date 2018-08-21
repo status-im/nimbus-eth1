@@ -10,6 +10,17 @@
 ## This module implements the Ethereum hexadecimal string formats for JSON
 ## See: https://github.com/ethereum/wiki/wiki/JSON-RPC#hex-value-encoding
 
+#[
+  Note:
+  The following types are converted to hex strings when marshalled to JSON:
+    * EthAddress
+    * ref EthAddress
+    * Hash256
+    * UInt256
+    * openArray[seq]
+    * ref BloomFilter
+]#
+
 import eth_common/eth_types, stint, byteutils, nimcrypto
 
 type
