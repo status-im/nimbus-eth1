@@ -9,8 +9,8 @@
 import
   nimcrypto, json_rpc/rpcserver, eth_p2p, hexstrings, strutils, stint,
   ../config, ../vm_state, ../constants, eth_trie/[memdb, types],
-  ../db/[db_chain, state_db], eth_common, rpc_types, byteutils,
-  ranges/typedranges, times, ../utils/header
+  ../db/[db_chain, state_db, storage_types], eth_common, rpc_types, byteutils,
+  ranges/typedranges, times, ../utils/header, rlp
 
 #[
   Note:
@@ -27,11 +27,17 @@ proc `%`*(value: Time): JsonNode =
 
 func strToAddress(value: string): EthAddress = hexToPaddedByteArray[20](value)
 
+func toHash(value: array[32, byte]): Hash256 {.inline.} =
+  result.data = value
+
+func strToHash(value: string): Hash256 {.inline.} =
+  result = hexToPaddedByteArray[32](value).toHash
+
 func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
   let tag = blockTag.toLowerAscii
   case tag
   of "latest": result = chain.getCanonicalHead()
-  of "earliest": result = chain.getCanonicalBlockHeaderByNumber(GENESIS_BLOCK_NUMBER)
+  of "earliest": result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
   of "pending":
     #TODO: Implement get pending block
     raise newException(ValueError, "Pending tag not yet implemented")
@@ -39,13 +45,12 @@ func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
     # Raises are trapped and wrapped in JSON when returned to the user.
     tag.validateHexQuantity
     let blockNum = stint.fromHex(UInt256, tag)
-    result = chain.getCanonicalBlockHeaderByNumber(blockNum)
+    result = chain.getBlockHeader(blockNum)
 
 proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
   template chain: untyped = BaseChainDB(node.chain) # TODO: Sensible casting
   
   proc accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
-    # Note: This is a read only account
     let
       header = chain.headerFromTag(tag)
       vmState = newBaseVMState(header, chain)
@@ -102,9 +107,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
     let
-      account_db = accountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
-      balance = account_db.get_balance(addrBytes)
+      balance = accountDb.get_balance(addrBytes)
 
     result = balance.toInt
 
@@ -116,31 +121,32 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
     let
-      account_db = accountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
-      storage = account_db.getStorage(addrBytes, quantity.u256)
+      storage = accountDb.getStorage(addrBytes, quantity.u256)
     if storage[1]:
       result = storage[0]
 
-  rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> int:
+  rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> UInt256:
     ## Returns the number of transactions sent from an address.
     ##
     ## data: address.
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
     let
-      header = chain.headerFromTag(quantityTag)
-      body = chain.getBlockBody(header.hash)
-    result = body.transactions.len
+      addrBytes = data.string.strToAddress()
+      accountDb = accountDbFromTag(quantityTag)
+    result = accountDb.getNonce(addrBytes)
 
   rpcsrv.rpc("eth_getBlockTransactionCountByHash") do(data: HexDataStr) -> int:
     ## Returns the number of transactions in a block from a block matching the given block hash.
     ##
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
-    var hashData: Hash256
-    hashData.data = hexToPaddedByteArray[32](data.string)
+    var hashData = strToHash(data.string)
     let body = chain.getBlockBody(hashData)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     result = body.transactions.len
 
   rpcsrv.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> int:
@@ -150,7 +156,10 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the number of transactions in this block.
     let
       header = chain.headerFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     result = body.transactions.len
 
   rpcsrv.rpc("eth_getUncleCountByBlockHash") do(data: HexDataStr) -> int:
@@ -158,9 +167,10 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ##
     ## data: hash of a block.
     ## Returns integer of the number of uncles in this block.
-    var hashData: Hash256
-    hashData.data = hexToPaddedByteArray[32](data.string)
+    var hashData = strToHash(data.string)
     let body = chain.getBlockBody(hashData)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     result = body.uncles.len
 
   rpcsrv.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string) -> int:
@@ -171,6 +181,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       header = chain.headerFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     result = body.uncles.len
 
   rpcsrv.rpc("eth_getCode") do(data: EthAddressStr, quantityTag: string) -> HexDataStr:
@@ -180,9 +192,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      account_db = accountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
-      storage = account_db.getCode(addrBytes)
+      storage = accountDb.getCode(addrBytes)
     # Easier to return the string manually here rather than expect ByteRange to be marshalled
     result = byteutils.toHex(storage.toOpenArray).HexDataStr
 
@@ -261,7 +273,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     result.gasUsed = header.gasUsed
     result.timestamp = header.timeStamp
     result.transactions = blockBody.transactions
-    result.uncles = blockBody.uncles
+    result.uncles = @[]
+    for i in 0 ..< blockBody.uncles.len:
+      result.uncles[i] = blockBody.uncles[i].hash
 
   rpcsrv.rpc("eth_getBlockByHash") do(data: HexDataStr, fullTransactions: bool) -> BlockObject:
     ## Returns information about a block by hash.
@@ -270,8 +284,11 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
     let
-      header = chain.getCanonicalHead()
-      body = chain.getBlockBody(header.hash)
+      h = data.string.strToHash
+      header = chain.getBlockHeader(h)
+      body = chain.getBlockBody(h)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     populateBlockObject(header, body)
 
   rpcsrv.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> BlockObject:
@@ -283,14 +300,52 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       header = chain.headerFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
     populateBlockObject(header, body)
+
+  func populateTransactionObject(transaction: Transaction, txHash: Hash256, txCount: UInt256, txIndex: int, blockHeader: BlockHeader, gas: int64): TransactionObject =
+    result.hash = txHash
+    result.nonce = txCount
+    result.blockHash = new Hash256
+    result.blockHash[] = blockHeader.hash
+    result.blockNumber = new BlockNumber
+    result.blockNumber[] = blockHeader.blockNumber
+    result.transactionIndex = new int64
+    result.transactionIndex[] = txIndex
+    # TODO: Fetch or calculate `from` address with signature after signing with the private key
+    #result.source: EthAddress
+    result.to = new EthAddress
+    result.to[] = transaction.to
+    result.value = transaction.value
+    result.gasPrice = transaction.gasPrice
+    result.gas = gas
+    result.input = transaction.payload
 
   rpcsrv.rpc("eth_getTransactionByHash") do(data: HexDataStr) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
     ##
     ## data: hash of a transaction.
     ## Returns requested transaction information.
-    discard
+    let
+      h = data.string.strToHash()
+      txDetails = chain.getTransactionKey(h)
+      header = chain.getBlockHeader(txDetails.blockNumber)
+      blockHash = chain.getBlockHash(txDetails.blockNumber)
+      body = chain.getBlockBody(blockHash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    let
+      transaction = body.transactions[txDetails.index]
+      vmState = newBaseVMState(header, chain)
+      addressDb = vmState.chaindb.getStateDb(blockHash, true)
+      # TODO: Get/calculate address for this transaction
+      address = ZERO_ADDRESS  
+      txCount = addressDb.getNonce(address)
+      txHash = transaction.rlpHash
+      # TODO: Fetch account gas
+      accountGas = 0  
+    populateTransactionObject(transaction, txHash, txCount, txDetails.index, header, accountGas)
 
   rpcsrv.rpc("eth_getTransactionByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
@@ -298,41 +353,122 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## data: hash of a block.
     ## quantity: integer of the transaction index position.
     ## Returns  requested transaction information.
-    discard
+    let
+      blockHash = data.string.strToHash()
+      body = chain.getBlockBody(blockHash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    let
+      header = chain.getBlockHeader(blockHash)
+      transaction = body.transactions[quantity]
+      vmState = newBaseVMState(header, chain)
+      addressDb = vmState.chaindb.getStateDb(blockHash, true)
+      # TODO: Get/calculate address for this transaction
+      address = ZERO_ADDRESS  
+      txCount = addressDb.getNonce(address)
+      txHash = transaction.rlpHash
+      # TODO: Fetch account gas
+      accountGas = 0  
+    populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
+
 
   rpcsrv.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block number and transaction index position.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## quantity: the transaction index position.
-    discard
+    let
+      header = chain.headerFromTag(quantityTag)
+      blockHash = header.hash
+      body = chain.getBlockBody(blockHash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    let
+      transaction = body.transactions[quantity]
+      vmState = newBaseVMState(header, chain)
+      addressDb = vmState.chaindb.getStateDb(blockHash, true)
+      # TODO: Get/calculate address for this transaction
+      address = ZERO_ADDRESS  
+      txCount = addressDb.getNonce(address)
+      txHash = transaction.rlpHash
+      # TODO: Fetch account gas
+      accountGas = 0  
+    populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
 
   # Currently defined as a variant type so this might need rethinking
   # See: https://github.com/status-im/nim-json-rpc/issues/29
-  #[
+
+  proc populateReceipt(receipt: Receipt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
+    result.transactionHash = transaction.rlpHash
+    result.transactionIndex = txIndex
+    result.blockHash = blockHeader.hash
+    result.blockNumber = blockHeader.blockNumber
+    # TODO: Get sender
+    #result.sender: EthAddress
+    result.to = new EthAddress
+    result.to[] = transaction.to
+    # TODO: Get gas used
+    #result.cumulativeGasUsed: int
+    #result.gasUsed: int
+    # TODO: Get contract address if the transaction was a contract creation.
+    result.contractAddress = nil
+    # TODO: See Wiki for details. list of log objects, which this transaction generated.
+    result.logs = @[]
+    result.logsBloom = blockHeader.bloom
+    # post-transaction stateroot (pre Byzantium).
+    result.root = blockHeader.stateRoot
+    # 1 = success, 0 = failure.
+    result.status = 1
+
   rpcsrv.rpc("eth_getTransactionReceipt") do(data: HexDataStr) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.
     ##
     ## data: hash of a transaction.
     ## Returns transaction receipt.
-    discard
-  ]#
+    let
+      h = data.string.strToHash()
+      txDetails = chain.getTransactionKey(h)
+      header = chain.getBlockHeader(txDetails.blockNumber)
+      body = chain.getBlockBody(h)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    var idx = 0
+    for receipt in chain.getReceipts(header, Receipt):
+      if idx == txDetails.index:
+        return populateReceipt(receipt, body.transactions[txDetails.index], txDetails.index, header)
+      idx.inc
 
-  rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int64) -> BlockObject:
+  rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> BlockObject:
     ## Returns information about a uncle of a block by hash and uncle index position.  
     ##
-    ## data: hash a block.
+    ## data: hash of block.
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
-    discard
+    let
+      blockHash = data.string.strToHash()
+      body = chain.getBlockBody(blockHash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    if quantity < 0 or quantity >= body.uncles.len:
+      raise newException(ValueError, "Uncle index out of range")
+    let uncle = body.uncles[quantity]
+    result = populateBlockObject(uncle, body)
 
-  rpcsrv.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: int64) -> BlockObject:
+  rpcsrv.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> BlockObject:
     # Returns information about a uncle of a block by number and uncle index position.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
-    discard
+    let
+      header = chain.headerFromTag(quantityTag)
+      body = chain.getBlockBody(header.hash)
+    if body == nil:
+      raise newException(ValueError, "Cannot find hash")
+    if quantity < 0 or quantity >= body.uncles.len:
+      raise newException(ValueError, "Uncle index out of range")
+    let uncle = body.uncles[quantity]
+    result = populateBlockObject(uncle, body)
 
   # FilterOptions requires more layout planning.
   # See: https://github.com/status-im/nim-json-rpc/issues/29
@@ -374,7 +510,6 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns true if the filter was successfully uninstalled, otherwise false.
     discard
 
-  #[
   rpcsrv.rpc("eth_getFilterChanges") do(filterId: int) -> seq[LogObject]:
     ## Polling method for a filter, which returns an list of logs which occurred since last poll.
     ##
@@ -386,6 +521,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns a list of all logs matching filter with given id.
     result = @[]
 
+  #[
   rpcsrv.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
     ## filterOptions: settings for this filter.
     ## Returns a list of all logs matching a given filter object.

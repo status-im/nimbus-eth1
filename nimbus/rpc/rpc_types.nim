@@ -59,21 +59,21 @@ type
     gasUsed*: GasInt                # the total used gas by all transactions in this block.
     timestamp*: EthTime             # the unix timestamp for when the block was collated.
     transactions*: seq[Transaction] # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
-    uncles*: seq[BlockHeader]       # list of uncle hashes.
+    uncles*: seq[Hash256]           # list of uncle hashes.
 
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
     hash*: Hash256                  # hash of the transaction.
-    nonce*: int64                   # TODO: Is int? the number of transactions made by the sender prior to this one.
+    nonce*: UInt256                 # the number of transactions made by the sender prior to this one.
     blockHash*: ref Hash256         # hash of the block where this transaction was in. null when its pending.
     blockNumber*: ref BlockNumber   # block number where this transaction was in. null when its pending.
     transactionIndex*: ref int64    # integer of the transactions index position in the block. null when its pending.
     source*: EthAddress             # address of the sender.
     to*: ref EthAddress             # address of the receiver. null when its a contract creation transaction.
-    value*: int64                   # value transferred in Wei.
+    value*: UInt256                 # value transferred in Wei.
     gasPrice*: GasInt               # gas price provided by the sender in Wei.
     gas*: GasInt                    # gas provided by the sender.
-    input*: HexDataStr              # the data send along with the transaction.
+    input*: Blob                    # the data send along with the transaction.
 
   LogObject* = object
     # Returned to user
@@ -88,3 +88,20 @@ type
     topics*: array[4, Hash256]    # array of 0 to 4 32 Bytes DATA of indexed log arguments.
                                   # (In solidity: The first topic is the hash of the signature of the event.
                                   # (e.g. Deposit(address,bytes32,uint256)), except you declared the event with the anonymous specifier.)
+
+  ReceiptObject* = object
+    # A transaction receipt object, or null when no receipt was found:
+    transactionHash*: Hash256         # hash of the transaction.
+    transactionIndex*: int            # integer of the transactions index position in the block.
+    blockHash*: Hash256               # hash of the block where this transaction was in.
+    blockNumber*: BlockNumber         # block number where this transaction was in.
+    sender*: EthAddress               # address of the sender.
+    to*: ref EthAddress               # address of the receiver. null when its a contract creation transaction.
+    cumulativeGasUsed*: int           # the total amount of gas used when this transaction was executed in the block.
+    gasUsed*: int                     # the amount of gas used by this specific transaction alone.
+    contractAddress*: ref EthAddress  # the contract address created, if the transaction was a contract creation, otherwise null.
+    logs*: seq[LogObject]             # TODO: See Wiki for details. list of log objects, which this transaction generated.
+    logsBloom*: BloomFilter           # bloom filter for light clients to quickly retrieve related logs.
+    root*: Hash256                    # post-transaction stateroot (pre Byzantium).
+    status*: int                      # 1 = success, 0 = failure.
+
