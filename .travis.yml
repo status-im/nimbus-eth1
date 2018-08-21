@@ -1,6 +1,17 @@
 language: c # or other C/C++ variants
 
+# https://docs.travis-ci.com/user/caching/#ccache-cache
 cache: ccache
+
+install:
+  - git clone https://github.com/status-im/nim.git
+  - cd nim
+  - sh build_all.sh
+  - cd ..
+  - export PATH=$PWD/nim/bin:$PATH
+
+script:
+  - nimble install -dy && nimble test
 
 matrix:
   # allow_failures:
@@ -8,20 +19,12 @@ matrix:
 
   include:
     - os: linux
-      cache: ccache
       sudo: required
       before_install:
         - sudo apt-get install -y libssl-dev libgflags-dev libsnappy-dev
         - git clone https://github.com/facebook/rocksdb.git
         # rocksdb not present on trusty - on a newer ubuntu you can apt-get install -y librocksdb-dev
         - cd rocksdb && git checkout v5.14.2 && make shared_lib -j$(nproc) && sudo make INSTALL_PATH=/usr install-shared && cd ..
-        - git clone https://github.com/status-im/nim.git
-        - cd nim
-        - sh build_all.sh
-        - cd ..
-        - export PATH=$PWD/nim/bin:$PATH
-      script:
-        - nimble install -dy && nimble test
 
     - os: osx
       before_install:
@@ -29,13 +32,3 @@ matrix:
         - brew install rocksdb ccache
         - export PATH="/usr/local/opt/ccache/libexec:$PATH"
         # - brew install gcc
-
-        - git clone https://github.com/status-im/nim.git
-        - cd nim
-        - sh build_all.sh
-        - cd ..
-        - export PATH=$PWD/nim/bin:$PATH
-
-
-      script:
-        - nimble install -dy && nimble test
