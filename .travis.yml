@@ -13,7 +13,8 @@ matrix:
       before_install:
         - sudo apt-get install -y libssl-dev libgflags-dev libsnappy-dev
         - git clone https://github.com/facebook/rocksdb.git
-        - cd rocksdb && make shared_lib && sudo make install && cd ..
+        # rocksdb not present on trusty - on a newer ubuntu you can apt-get install -y librocksdb-dev
+        - cd rocksdb && git checkout v5.14.2 && make shared_lib -j$(nproc) && sudo make INSTALL_PATH=/usr install-shared && cd ..
         - git clone https://github.com/status-im/nim.git
         - cd nim
         - sh build_all.sh
