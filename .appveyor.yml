@@ -59,7 +59,7 @@ install:
   - koch nimble
 build_script:
   - cd C:\projects\%APPVEYOR_PROJECT_SLUG%
-  - nimble install -y
+  - nimble install -dy
 test_script:
   - nimble test
 
