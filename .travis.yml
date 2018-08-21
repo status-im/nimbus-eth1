@@ -11,7 +11,9 @@ matrix:
       cache: ccache
       sudo: required
       before_install:
-        - sudo apt-get install -y libssl-dev librocksdb-dev
+        - sudo apt-get install -y libssl-dev libgflags-dev libsnappy-dev
+        - git clone https://github.com/facebook/rocksdb.git
+        - cd rocksdb && make shared_lib && sudo make install && cd ..
         - git clone https://github.com/status-im/nim.git
         - cd nim
         - sh build_all.sh
