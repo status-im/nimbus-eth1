@@ -1,40 +1,38 @@
+language: c # or other C/C++ variants
+
+cache: ccache
+
 matrix:
   # allow_failures:
   #   - os: osx
 
   include:
     - os: linux
+      cache: ccache
       sudo: required
-      services:
-        - docker
       before_install:
-        - docker pull statusteam/nim-base
+        - sudo apt-get install -y libssl-dev librocksdb-dev
+        - git clone https://github.com/status-im/nim.git
+        - cd nim
+        - sh build_all.sh
+        - cd ..
+        - export PATH=$PWD/nim/bin:$PATH
       script:
-        - docker run statusteam/nim-base nim --version
-        - docker run -v "$(pwd):/project" -w /project statusteam/nim-base sh -c "nimble install -dy && nimble test"
+        - nimble install -dy && nimble test
 
     - os: osx
       before_install:
         - brew update
-        - brew install rocksdb
+        - brew install rocksdb ccache
+        - export PATH="/usr/local/opt/ccache/libexec:$PATH"
         # - brew install gcc
 
-        - git clone https://github.com/nim-lang/nim.git
+        - git clone https://github.com/status-im/nim.git
         - cd nim
-        - git remote add statusim https://github.com/status-im/nim.git
-        - git fetch statusim
-        - git config --global user.email "you@example.com"
-        - git config --global user.name "Your Name"
-        - for b in $(git branch -a --list 'statusim/status-autopatch-*'); do git merge $b; done
-        - git clone --depth 1 https://github.com/nim-lang/csources.git
-        - cd csources
-        - sh build.sh
+        - sh build_all.sh
         - cd ..
-        - export PATH=$PWD/bin:$PATH
-        - nim c koch
-        - ./koch boot -d:release
-        - ./koch nimble
-        - cd ..
+        - export PATH=$PWD/nim/bin:$PATH
+
 
       script:
         - nimble install -dy && nimble test
