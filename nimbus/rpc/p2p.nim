@@ -8,7 +8,7 @@
 # those terms.
 import
   nimcrypto, json_rpc/rpcserver, eth_p2p, hexstrings, strutils, stint,
-  ../config, ../vm_state, ../constants, eth_trie/[memdb, types],
+  ../config, ../vm_state, ../constants, eth_trie/[memdb, types], eth_keys,
   ../db/[db_chain, state_db, storage_types], eth_common, rpc_types, byteutils,
   ranges/typedranges, times, ../utils/header, rlp
 
@@ -50,7 +50,14 @@ func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
 proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
   template chain: untyped = BaseChainDB(node.chain) # TODO: Sensible casting
   
-  proc accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
+  proc getAccountDb(readOnly = true): AccountStateDb = 
+    ## Retrieves the account db from canonical head
+    let
+      header = chain.getCanonicalHead()
+      vmState = newBaseVMState(header, chain)
+    result = vmState.chaindb.getStateDb(vmState.blockHeader.hash, readOnly)
+
+  proc getAccountDbFromTag(tag: string, readOnly = true): AccountStateDb =
     let
       header = chain.headerFromTag(tag)
       vmState = newBaseVMState(header, chain)
@@ -107,7 +114,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
     let
-      accountDb = accountDbFromTag(quantityTag)
+      accountDb = getAccountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
       balance = accountDb.get_balance(addrBytes)
 
@@ -121,7 +128,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
     let
-      accountDb = accountDbFromTag(quantityTag)
+      accountDb = getAccountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
       storage = accountDb.getStorage(addrBytes, quantity.u256)
     if storage[1]:
@@ -135,7 +142,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the number of transactions send from this address.
     let
       addrBytes = data.string.strToAddress()
-      accountDb = accountDbFromTag(quantityTag)
+      accountDb = getAccountDbFromTag(quantityTag)
     result = accountDb.getNonce(addrBytes)
 
   rpcsrv.rpc("eth_getBlockTransactionCountByHash") do(data: HexDataStr) -> int:
@@ -156,7 +163,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns integer of the number of transactions in this block.
     let
       header = chain.headerFromTag(quantityTag)
-      accountDb = accountDbFromTag(quantityTag)
+      accountDb = getAccountDbFromTag(quantityTag)
       body = chain.getBlockBody(header.hash)
     if body == nil:
       raise newException(ValueError, "Cannot find hash")
@@ -192,11 +199,16 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      accountDb = accountDbFromTag(quantityTag)
+      accountDb = getAccountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
       storage = accountDb.getCode(addrBytes)
     # Easier to return the string manually here rather than expect ByteRange to be marshalled
     result = byteutils.toHex(storage.toOpenArray).HexDataStr
+
+  template sign(privateKey: PrivateKey, message: string): string =
+    # TODO: Is message length encoded as bytes or characters?
+    let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
+    $signMessage(privateKey, msgData)
 
   rpcsrv.rpc("eth_sign") do(data: EthAddressStr, message: HexDataStr) -> HexDataStr:
     ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).
@@ -207,7 +219,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## data: address.
     ## message: message to sign.
     ## Returns signature.
-    discard
+    let accountDb = getAccountDb(true)
+    var privateKey: PrivateKey  # TODO: Get from key store
+    result = ("0x" & sign(privateKey, message.string)).HexDataStr
 
   rpcsrv.rpc("eth_sendTransaction") do(obj: EthSend) -> HexDataStr:
     ## Creates new message call transaction or a contract creation, if the data field contains code.
@@ -412,6 +426,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     result.logsBloom = blockHeader.bloom
     # post-transaction stateroot (pre Byzantium).
     result.root = blockHeader.stateRoot
+    # TODO: Respond to success/failure
     # 1 = success, 0 = failure.
     result.status = 1
 
