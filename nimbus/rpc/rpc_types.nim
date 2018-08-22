@@ -75,7 +75,7 @@ type
     gas*: GasInt                    # gas provided by the sender.
     input*: Blob                    # the data send along with the transaction.
 
-  LogObject* = object
+  FilterLog* = object
     # Returned to user
     removed*: bool                # true when the log was removed, due to a chain reorganization. false if its a valid log.
     logIndex*: ref int            # integer of the log index position in the block. null when its pending log.
@@ -97,10 +97,10 @@ type
     blockNumber*: BlockNumber         # block number where this transaction was in.
     sender*: EthAddress               # address of the sender.
     to*: ref EthAddress               # address of the receiver. null when its a contract creation transaction.
-    cumulativeGasUsed*: int           # the total amount of gas used when this transaction was executed in the block.
-    gasUsed*: int                     # the amount of gas used by this specific transaction alone.
+    cumulativeGasUsed*: GasInt        # the total amount of gas used when this transaction was executed in the block.
+    gasUsed*: GasInt                  # the amount of gas used by this specific transaction alone.
     contractAddress*: ref EthAddress  # the contract address created, if the transaction was a contract creation, otherwise null.
-    logs*: seq[LogObject]             # TODO: See Wiki for details. list of log objects, which this transaction generated.
+    logs*: seq[Log]                   # list of log objects which this transaction generated.
     logsBloom*: BloomFilter           # bloom filter for light clients to quickly retrieve related logs.
     root*: Hash256                    # post-transaction stateroot (pre Byzantium).
     status*: int                      # 1 = success, 0 = failure.
