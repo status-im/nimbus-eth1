@@ -395,10 +395,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       accountGas = 0  
     populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
 
-  # Currently defined as a variant type so this might need rethinking
-  # See: https://github.com/status-im/nim-json-rpc/issues/29
-
-  proc populateReceipt(receipt: Receipt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
+  proc populateReceipt(receipt: Receipt, cumulativeGas: GasInt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
     result.transactionHash = transaction.rlpHash
     result.transactionIndex = txIndex
     result.blockHash = blockHeader.hash
@@ -407,13 +404,11 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     #result.sender: EthAddress
     result.to = new EthAddress
     result.to[] = transaction.to
-    # TODO: Get gas used
-    #result.cumulativeGasUsed: int
-    #result.gasUsed: int
+    result.cumulativeGasUsed = cumulativeGas
+    result.gasUsed = receipt.gasUsed
     # TODO: Get contract address if the transaction was a contract creation.
     result.contractAddress = nil
-    # TODO: See Wiki for details. list of log objects, which this transaction generated.
-    result.logs = @[]
+    result.logs = receipt.logs
     result.logsBloom = blockHeader.bloom
     # post-transaction stateroot (pre Byzantium).
     result.root = blockHeader.stateRoot
@@ -432,10 +427,13 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       body = chain.getBlockBody(h)
     if body == nil:
       raise newException(ValueError, "Cannot find hash")
-    var idx = 0
+    var
+      idx = 0
+      cumulativeGas: GasInt
     for receipt in chain.getReceipts(header, Receipt):
+      cumulativeGas += receipt.gasUsed
       if idx == txDetails.index:
-        return populateReceipt(receipt, body.transactions[txDetails.index], txDetails.index, header)
+        return populateReceipt(receipt, cumulativeGas, body.transactions[txDetails.index], txDetails.index, header)
       idx.inc
 
   rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> BlockObject:
@@ -510,31 +508,29 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns true if the filter was successfully uninstalled, otherwise false.
     discard
 
-  rpcsrv.rpc("eth_getFilterChanges") do(filterId: int) -> seq[LogObject]:
+  rpcsrv.rpc("eth_getFilterChanges") do(filterId: int) -> seq[FilterLog]:
     ## Polling method for a filter, which returns an list of logs which occurred since last poll.
     ##
     ## filterId: the filter id.
     result = @[]
 
-  rpcsrv.rpc("eth_getFilterLogs") do(filterId: int) -> seq[LogObject]:
+  rpcsrv.rpc("eth_getFilterLogs") do(filterId: int) -> seq[FilterLog]:
     ## filterId: the filter id.
     ## Returns a list of all logs matching filter with given id.
     result = @[]
 
-  #[
-  rpcsrv.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
+  rpcsrv.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[FilterLog]:
     ## filterOptions: settings for this filter.
     ## Returns a list of all logs matching a given filter object.
     result = @[]
-  ]#
 
-  rpcsrv.rpc("eth_getWork") do() -> seq[HexDataStr]:
+  rpcsrv.rpc("eth_getWork") do() -> array[3, UInt256]:
     ## Returns the hash of the current block, the seedHash, and the boundary condition to be met ("target").
     ## Returned list has the following properties:
     ## DATA, 32 Bytes - current block header pow-hash.
     ## DATA, 32 Bytes - the seed hash used for the DAG.
     ## DATA, 32 Bytes - the boundary condition ("target"), 2^256 / difficulty.
-    result = @[]
+    discard
 
   rpcsrv.rpc("eth_submitWork") do(nonce: int64, powHash: HexDataStr, mixDigest: HexDataStr) -> bool:
     ## Used for submitting a proof-of-work solution.
