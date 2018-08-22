@@ -483,9 +483,6 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let uncle = body.uncles[quantity]
     result = populateBlockObject(uncle, body)
 
-  # FilterOptions requires more layout planning.
-  # See: https://github.com/status-im/nim-json-rpc/issues/29
-  #[
   rpcsrv.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
     ## Creates a filter object, based on filter options, to notify when the state changes (logs).
     ## To check if the state has changed, call eth_getFilterChanges.
@@ -499,7 +496,6 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## filterOptions: settings for this filter.
     ## Returns integer filter id.
     discard
-  ]#
   
   rpcsrv.rpc("eth_newBlockFilter") do() -> int:
     ## Creates a filter in the node, to notify when a new block arrives.
