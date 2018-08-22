@@ -9,12 +9,12 @@
 import strutils, nimcrypto, eth_common, stint, eth_trie/[memdb, types]
 import
   json_rpc/server, ../vm_state, ../logging, ../db/[db_chain, state_db],
-  ../constants, ../config
+  ../constants, ../config, hexstrings
 
 proc setupCommonRPC*(server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
     result = NimbusIdent
 
-  server.rpc("web3_sha3") do(data: string) -> string:
-    var rawdata = nimcrypto.fromHex(data)
+  server.rpc("web3_sha3") do(data: HexDataStr) -> string:
+    var rawdata = nimcrypto.fromHex(data.string)
     result = "0x" & $keccak_256.digest(rawdata)
