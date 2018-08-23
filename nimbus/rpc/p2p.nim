@@ -247,7 +247,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     ## Returns the return value of executed contract.
     discard
 
-  rpcsrv.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> HexDataStr: # TODO: Int or U/Int256?
+  rpcsrv.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> GasInt:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
     ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -274,7 +274,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       startIdx += 32    
     result.sha3Uncles = keccak256.digest(rawData)
 
-    result.logsBloom = nil  # TODO: Create bloom filter for logs
+    result.logsBloom = new BloomFilter
+    result.logsBloom[] = header.bloom
     result.transactionsRoot = header.txRoot
     result.stateRoot = header.stateRoot
     result.receiptsRoot = header.receiptRoot
