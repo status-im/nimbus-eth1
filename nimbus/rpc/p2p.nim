@@ -385,7 +385,6 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       accountGas = 0  
     populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
 
-
   rpcsrv.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block number and transaction index position.
     ##
@@ -408,6 +407,29 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       # TODO: Fetch account gas
       accountGas = 0  
     populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
+
+  template toSignature(transaction: Transaction): Signature =
+    var bytes: array[65, byte]
+    bytes[0..31] = cast[array[32, byte]](transaction.R)
+    bytes[32..63] = cast[array[32, byte]](transaction.S)
+    #[
+      TODO: In the yellow paper:
+        It is assumed that v is the ‘recovery id’, a 1 byte value
+        specifying the sign and finiteness of the curve point; this
+        value is in the range of [27,30].
+      Does this need to be checked that it is [0, 1] and inc by 27?
+    ]#
+    # TODO: Ugly casting below, is there a better way/helper func?
+    bytes[64] = (cast[uint64](transaction.V.data.lo) and 0xff'u64).uint8
+    initSignature(bytes)
+
+  proc getSender(transaction: Transaction): EthAddress =
+    let
+      txHash = transaction.rlpHash
+      sig = transaction.toSignature()
+      pubKey = recoverKeyFromSignature(sig, txHash)
+    const pubKeySize = 64
+    result[0..19] = pubKey.data[pubKeySize - 20 .. pubKeySize - 1]
 
   proc populateReceipt(receipt: Receipt, cumulativeGas: GasInt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
     result.transactionHash = transaction.rlpHash
