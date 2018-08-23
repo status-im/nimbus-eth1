@@ -33,7 +33,6 @@ func toHash(value: array[32, byte]): Hash256 {.inline.} =
 func strToHash(value: string): Hash256 {.inline.} =
   result = hexToPaddedByteArray[32](value).toHash
 
-
 template toSignature(transaction: Transaction): Signature =
   var bytes: array[65, byte]
   bytes[0..31] = cast[array[32, byte]](transaction.R)
@@ -347,11 +346,19 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       raise newException(ValueError, "Cannot find hash")
     populateBlockObject(header, body)
 
-  proc populateTransactionObject(transaction: Transaction, txHash: Hash256, txCount: UInt256, txIndex: int, blockHeader: BlockHeader, gas: GasInt): TransactionObject =
+  proc populateTransactionObject(transaction: Transaction, txIndex: int, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =
+    let
+      vmState = newBaseVMState(blockHeader, chain)
+      accountDb = vmState.chaindb.getStateDb(blockHash, true)
+      address = transaction.getSender(transaction.rlpHash)
+      txCount = accountDb.getNonce(address)
+      txHash = transaction.rlpHash
+      accountGas = accountDb.balance(address)
+
     result.hash = txHash
     result.nonce = txCount
     result.blockHash = new Hash256
-    result.blockHash[] = blockHeader.hash
+    result.blockHash[] = blockHash
     result.blockNumber = new BlockNumber
     result.blockNumber[] = blockHeader.blockNumber
     result.transactionIndex = new int64
@@ -361,9 +368,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     result.to[] = transaction.to
     result.value = transaction.value
     result.gasPrice = transaction.gasPrice
-    result.gas = gas
+    result.gas = accountGas
     result.input = transaction.payload
-
+  
   rpcsrv.rpc("eth_getTransactionByHash") do(data: HexDataStr) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
     ##
@@ -377,16 +384,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       body = chain.getBlockBody(blockHash)
     if body == nil:
       raise newException(ValueError, "Cannot find hash")
-    let
-      transaction = body.transactions[txDetails.index]
-      vmState = newBaseVMState(header, chain)
-      accountDb = vmState.chaindb.getStateDb(blockHash, true)
-      address = transaction.getSender(transaction.rlpHash)
-      txCount = accountDb.getNonce(address)
-      txHash = transaction.rlpHash
-      accountGas = accountDb.balance(address)
-
-    populateTransactionObject(transaction, txHash, txCount, txDetails.index, header, accountGas)
+    let transaction = body.transactions[txDetails.index]
+    populateTransactionObject(transaction, txDetails.index, header, blockHash)
 
   rpcsrv.rpc("eth_getTransactionByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
@@ -402,13 +401,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       header = chain.getBlockHeader(blockHash)
       transaction = body.transactions[quantity]
-      vmState = newBaseVMState(header, chain)
-      accountDb = vmState.chaindb.getStateDb(blockHash, true)
-      address = transaction.getSender(transaction.rlpHash) 
-      txCount = accountDb.getNonce(address)
-      txHash = transaction.rlpHash
-      accountGas = accountDb.balance(address)
-    populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
+    populateTransactionObject(transaction, quantity, header, blockHash)
 
   rpcsrv.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block number and transaction index position.
@@ -423,13 +416,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       raise newException(ValueError, "Cannot find hash")
     let
       transaction = body.transactions[quantity]
-      vmState = newBaseVMState(header, chain)
-      accountDb = vmState.chaindb.getStateDb(blockHash, true)
-      address = transaction.getSender(transaction.rlpHash)
-      txCount = accountDb.getNonce(address)
-      txHash = transaction.rlpHash
-      accountGas = accountDb.balance(address)
-    populateTransactionObject(transaction, txHash, txCount, quantity, header, accountGas)
+    populateTransactionObject(transaction, quantity, header, blockHash)
 
   proc populateReceipt(receipt: Receipt, cumulativeGas: GasInt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
     result.transactionHash = transaction.rlpHash
