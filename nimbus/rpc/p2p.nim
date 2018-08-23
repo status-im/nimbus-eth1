@@ -33,6 +33,25 @@ func toHash(value: array[32, byte]): Hash256 {.inline.} =
 func strToHash(value: string): Hash256 {.inline.} =
   result = hexToPaddedByteArray[32](value).toHash
 
+func hash(transaction: Transaction): Hash256 =
+  # Hash transaction without signature
+  type
+    TransHashObj = object
+      accountNonce:  uint64
+      gasPrice:      GasInt
+      gasLimit:      GasInt
+      to:            EthAddress
+      value:         UInt256
+      payload:       Blob
+  return TransHashObj(
+    accountNonce: transaction.accountNonce,
+    gasPrice: transaction.gasPrice,
+    gasLimit: transaction.gasLimit,
+    to: transaction.to,
+    value: transaction.value,
+    payload: transaction.payload
+    ).rlpHash
+
 template toSignature(transaction: Transaction): Signature =
   var bytes: array[65, byte]
   bytes[0..31] = cast[array[32, byte]](transaction.R)
@@ -48,9 +67,10 @@ template toSignature(transaction: Transaction): Signature =
   bytes[64] = (cast[uint64](transaction.V.data.lo) and 0xff'u64).uint8
   initSignature(bytes)
 
-proc getSender(transaction: Transaction, txHash: Hash256): EthAddress =
+proc getSender(transaction: Transaction): EthAddress =
   ## Find the address the transaction was sent from.
   let
+    txHash = transaction.hash # hash without signature
     sig = transaction.toSignature()
     pubKey = recoverKeyFromSignature(sig, txHash)
   const pubKeySize = 64
@@ -350,7 +370,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     let
       vmState = newBaseVMState(blockHeader, chain)
       accountDb = vmState.chaindb.getStateDb(blockHash, true)
-      address = transaction.getSender(transaction.rlpHash)
+      address = transaction.getSender()
       txCount = accountDb.getNonce(address)
       txHash = transaction.rlpHash
       accountGas = accountDb.balance(address)
@@ -363,7 +383,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     result.blockNumber[] = blockHeader.blockNumber
     result.transactionIndex = new int64
     result.transactionIndex[] = txIndex
-    result.source = transaction.getSender(transaction.rlpHash)
+    result.source = transaction.getSender()
     result.to = new EthAddress
     result.to[] = transaction.to
     result.value = transaction.value
@@ -423,7 +443,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     result.transactionIndex = txIndex
     result.blockHash = blockHeader.hash
     result.blockNumber = blockHeader.blockNumber
-    result.sender = transaction.getSender(result.transactionHash)
+    result.sender = transaction.getSender()
     result.to = new EthAddress
     result.to[] = transaction.to
     result.cumulativeGasUsed = cumulativeGas
