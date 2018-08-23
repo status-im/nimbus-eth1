@@ -7,8 +7,11 @@
 
 import
   sequtils, tables,
-  eth_common, nimcrypto, rlp, eth_trie/[hexary, memdb],
-  ../constants, ../errors, ../validation, ../account, ../logging
+  chronicles, eth_common, nimcrypto, rlp, eth_trie/[hexary, memdb],
+  ../constants, ../errors, ../validation, ../account
+
+logScope:
+  topics = "state_db"
 
 type
   AccountStateDB* = ref object
@@ -24,9 +27,6 @@ proc newAccountStateDB*(backingStore: TrieDatabaseRef,
                         root: KeccakHash, readOnly: bool = false): AccountStateDB =
   result.new()
   result.trie = initSecureHexaryTrie(backingStore, root)
-
-proc logger*(db: AccountStateDB): Logger =
-  logging.getLogger("db.State")
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
   ## XXX: The name of this proc is intentionally long, because it

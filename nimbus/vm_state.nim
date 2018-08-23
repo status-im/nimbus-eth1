@@ -8,7 +8,7 @@
 import
   macros, strformat, tables,
   eth_common,
-  ./logging, ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
+  ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
   ./utils/header
 
 type
@@ -44,9 +44,6 @@ proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB): BaseVMState =
   result.accessLogs = newAccessLogs()
   result.blockHeader = header
   result.chaindb = chainDB
-
-method logger*(vmState: BaseVMState): Logger =
-  logging.getLogger(&"evm.vmState.{vmState.name}")
 
 method blockhash*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.hash

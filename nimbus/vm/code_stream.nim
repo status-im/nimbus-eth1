@@ -6,9 +6,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, sequtils, parseutils, sets, macros,
+  chronicles, strformat, strutils, sequtils, parseutils, sets, macros,
   eth_common,
-  ../logging, ../constants, ./interpreter/opcode_values
+  ../constants, ./interpreter/opcode_values
+
+logScope:
+  topics = "vm code_stream"
 
 type
   CodeStream* = ref object
@@ -16,7 +19,6 @@ type
     depthProcessed: int
     invalidPositions: HashSet[int]
     pc*: int
-    logger: Logger
     cached: seq[(int, Op, string)]
 
 proc `$`*(b: byte): string =
@@ -29,7 +31,6 @@ proc newCodeStream*(codeBytes: seq[byte]): CodeStream =
   result.invalidPositions = initSet[int]()
   result.depthProcessed = 0
   result.cached = @[]
-  result.logger = logging.getLogger("vm.code_stream")
 
 proc newCodeStream*(codeBytes: string): CodeStream =
   newCodeStream(codeBytes.mapIt(it.byte))

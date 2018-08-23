@@ -6,12 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, sequtils, macros, rlp, eth_common, nimcrypto,
-  ../errors, ../validation, ./interpreter/utils/utils_numeric, ../constants, ../logging
+  chronicles, strformat, strutils, sequtils, macros, rlp, eth_common, nimcrypto,
+  ../errors, ../validation, ./interpreter/utils/utils_numeric, ../constants
+
+logScope:
+  topics = "vm stack"
 
 type
   Stack* = ref object of RootObj
-    logger*: Logger
     values*: seq[StackElement]
 
   StackElement = UInt256
@@ -87,7 +89,6 @@ proc popAddress*(stack: var Stack): EthAddress {.inline.} =
 
 proc newStack*(): Stack =
   new(result)
-  result.logger = logging.getLogger("stack.Stack")
   result.values = @[]
 
 proc swap*(stack: var Stack, position: int) =

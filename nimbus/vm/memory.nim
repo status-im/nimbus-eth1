@@ -7,19 +7,20 @@
 
 import
   sequtils,
-  eth_common/eth_types,
-  ../constants, ../errors, ../logging, ../validation,
+  chronicles, eth_common/eth_types,
+  ../constants, ../errors, ../validation,
   ./interpreter/utils/utils_numeric
+
+logScope:
+  topics = "vm memory"
 
 type
   Memory* = ref object
-    logger*: Logger
     bytes*:  seq[byte]
 
 proc newMemory*: Memory =
   new(result)
   result.bytes = @[]
-  result.logger = logging.getLogger("memory.Memory")
 
 proc len*(memory: Memory): int =
   result = memory.bytes.len

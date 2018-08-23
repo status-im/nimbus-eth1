@@ -7,7 +7,7 @@
 
 import
   eth_common,
-  ./logging, ./constants
+  ./constants
 
 type
   Block* = ref object of RootObj

@@ -8,7 +8,7 @@
 import
   tables,
   eth_common,
-  ./constants, ./vm_state, ./logging,
+  ./constants, ./vm_state,
   ./vm/[memory, stack, code_stream],
   ./vm/interpreter/[gas_costs, opcode_values] # TODO - will be hidden at a lower layer
 
@@ -46,7 +46,6 @@ type
     runLogic*:  proc(computation: var BaseComputation)
 
   GasMeter* = object
-    logger*: Logger
     gasRefunded*: GasInt
     startGas*: GasInt
     gasRemaining*: GasInt
