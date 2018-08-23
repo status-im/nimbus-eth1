@@ -15,3 +15,4 @@ build/
 *.la
 *.exe
 *.dll
+VMTests.md
