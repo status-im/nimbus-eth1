@@ -423,9 +423,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     bytes[64] = (cast[uint64](transaction.V.data.lo) and 0xff'u64).uint8
     initSignature(bytes)
 
-  proc getSender(transaction: Transaction): EthAddress =
+  proc getSender(transaction: Transaction, txHash: Hash256): EthAddress =
     let
-      txHash = transaction.rlpHash
       sig = transaction.toSignature()
       pubKey = recoverKeyFromSignature(sig, txHash)
     const pubKeySize = 64
@@ -436,8 +435,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     result.transactionIndex = txIndex
     result.blockHash = blockHeader.hash
     result.blockNumber = blockHeader.blockNumber
-    # TODO: Get sender
-    #result.sender: EthAddress
+    result.sender = transaction.getSender(result.transactionHash)
     result.to = new EthAddress
     result.to[] = transaction.to
     result.cumulativeGasUsed = cumulativeGas
