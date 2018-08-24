@@ -6,38 +6,62 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth_common
+  constants, errors, eth_common, eth_keys, rlp
 
-type
-  BaseTransaction* = ref object
-    nonce*: Int256
-    gasPrice*: GasInt
-    gas*: GasInt
-    to*: string
-    value*: UInt256
-    data*: string
-    v*: Int256
-    r*: Int256
-    s*: Int256
-
-proc intrinsicGas*(t: BaseTransaction): GasInt =
+proc intrinsicGas*(t: Transaction): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
   raise newException(ValueError, "not implemented intrinsicGas")
 
-
-
-
-
-
-proc validate*(t: BaseTransaction) =
+proc validate*(t: Transaction) =
   # Hook called during instantiation to ensure that all transaction
   # parameters pass validation rules
-  if t.intrinsicGas() > t.gas:
+  if t.intrinsicGas() > t.gasLimit:
     raise newException(ValidationError, "Insufficient gas")
   #  self.check_signature_validity()
 
-proc sender*(t: BaseTransaction): string =
-  # TODO
-  ""
+func hash*(transaction: Transaction): Hash256 =
+  # Hash transaction without signature
+  type
+    TransHashObj = object
+      accountNonce:  uint64
+      gasPrice:      GasInt
+      gasLimit:      GasInt
+      to:            EthAddress
+      value:         UInt256
+      payload:       Blob
+  return TransHashObj(
+    accountNonce: transaction.accountNonce,
+    gasPrice: transaction.gasPrice,
+    gasLimit: transaction.gasLimit,
+    to: transaction.to,
+    value: transaction.value,
+    payload: transaction.payload
+    ).rlpHash
+
+proc toSignature*(transaction: Transaction): Signature =
+  var bytes: array[65, byte]
+  bytes[0..31] = transaction.R.toByteArrayBE()
+  bytes[32..63] = transaction.S.toByteArrayBE()
+  #[
+    TODO: In the yellow paper:
+      It is assumed that v is the ‘recovery id’, a 1 byte value
+      specifying the sign and finiteness of the curve point; this
+      value is in the range of [27,30].
+    Does this need to be checked that it is [0, 1] and inc by 27?
+  ]#
+  # TODO: V will become a byte or range soon.
+  bytes[64] = (cast[uint64](transaction.V.data.lo) and 0xff'u64).uint8
+  initSignature(bytes)
+
+proc getSender*(transaction: Transaction, output: var EthAddress): bool =
+  ## Find the address the transaction was sent from.
+  let
+    txHash = transaction.hash # hash without signature
+    sig = transaction.toSignature()
+  var pubKey: PublicKey
+  if recoverSignatureKey(sig, txHash.data, pubKey) != EthKeysStatus.Success:
+    output = pubKey.toCanonicalAddress()
+    result = true
+
