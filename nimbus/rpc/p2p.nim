@@ -52,7 +52,7 @@ func hash(transaction: Transaction): Hash256 =
     payload: transaction.payload
     ).rlpHash
 
-template toSignature(transaction: Transaction): Signature =
+proc toSignature(transaction: Transaction): Signature =
   var bytes: array[65, byte]
   bytes[0..31] = cast[array[32, byte]](transaction.R)
   bytes[32..63] = cast[array[32, byte]](transaction.S)
