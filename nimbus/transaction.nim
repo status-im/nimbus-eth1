@@ -54,7 +54,7 @@ proc getSender*(transaction: Transaction, output: var EthAddress): bool =
     txHash = transaction.hash # hash without signature
     sig = transaction.toSignature()
   var pubKey: PublicKey
-  if recoverSignatureKey(sig, txHash.data, pubKey) != EthKeysStatus.Success:
+  if recoverSignatureKey(sig, txHash.data, pubKey) == EthKeysStatus.Success:
     output = pubKey.toCanonicalAddress()
     result = true
 
