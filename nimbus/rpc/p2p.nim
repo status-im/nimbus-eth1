@@ -73,8 +73,7 @@ proc getSender(transaction: Transaction): EthAddress =
     txHash = transaction.hash # hash without signature
     sig = transaction.toSignature()
     pubKey = recoverKeyFromSignature(sig, txHash)
-  const pubKeySize = 64
-  result[0..19] = pubKey.data[pubKeySize - 20 .. pubKeySize - 1]
+  result = pubKey.toCanonicalAddress()
 
 template balance(addressDb: AccountStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
