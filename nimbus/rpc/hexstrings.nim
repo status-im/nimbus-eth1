@@ -32,7 +32,7 @@ type
   WhisperIdentityStr* = distinct string   # 60 bytes
   HexStrings = HexQuantityStr | HexDataStr | EthAddressStr | EthHashStr | WhisperIdentityStr
 
-func len*(value: HexStrings): int = value.string.len
+template len*(value: HexStrings): int = value.string.len
 
 # Hex validation
 
