@@ -44,13 +44,6 @@ proc toSignature*(transaction: Transaction): Signature =
   var bytes: array[65, byte]
   bytes[0..31] = transaction.R.toByteArrayBE()
   bytes[32..63] = transaction.S.toByteArrayBE()
-  #[
-    TODO: In the yellow paper:
-      It is assumed that v is the ‘recovery id’, a 1 byte value
-      specifying the sign and finiteness of the curve point; this
-      value is in the range of [27,30].
-    Does this need to be checked that it is [0, 1] and inc by 27?
-  ]#
   # TODO: V will become a byte or range soon.
   bytes[64] = (cast[uint64](transaction.V.data.lo) and 0xff'u64).uint8
   initSignature(bytes)
