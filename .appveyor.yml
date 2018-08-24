@@ -43,13 +43,8 @@ install:
   - 7z x -y "%ROCKSDB_ARCHIVE%" > nul
   - IF "%PLATFORM%" == "x64" ( copy %CD%\x64\librocksdb.dll %CD%\bin\librocksdb.dll ) ELSE ( copy %CD%\x86\librocksdb.dll %CD%\bin\librocksdb.dll )
   - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\bin;%CD%\Nim\bin;%PATH%
-  - git clone https://github.com/nim-lang/Nim.git
+  - git clone https://github.com/status-im/Nim.git
   - cd %CD%\Nim
-  - git remote add statusim https://github.com/status-im/Nim.git
-  - git fetch statusim
-  - git config --global user.email "you@example.com"
-  - git config --global user.name "Your Name"
-  - for /f "tokens=*" %%G IN ('git branch -a --list ^"statusim/status-autopatch-*^"') DO (git merge %%G)
   - git clone --depth 1 https://github.com/nim-lang/csources
   - cd csources
   - IF "%PLATFORM%" == "x64" ( build64.bat ) else ( build.bat )
