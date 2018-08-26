@@ -8,7 +8,7 @@ cache:
     - nim
 
 install:
-  - export NIMVER=$(git ls-remote  git@github.com:status-im/nimbus.git HEAD | cut -f 1)
+  - export NIMVER=$(git ls-remote https://github.com/status-im/nim.git HEAD | cut -f 1)
   - "[ -f nim/$NIMVER/bin/nim ] || { mkdir -p nim; git clone https://github.com/status-im/nim.git nim/$NIMVER; cd nim/$NIMVER; sh build_all.sh; cd ../.. ; }"
   - export PATH=$PWD/nim/$NIMVER/bin:$PATH
 
