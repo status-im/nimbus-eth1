@@ -5,13 +5,12 @@ cache:
   ccache: true
   directories:
     - rocksdb-5.14.2
+    - nim
 
 install:
-  - git clone https://github.com/status-im/nim.git
-  - cd nim
-  - sh build_all.sh
-  - cd ..
-  - export PATH=$PWD/nim/bin:$PATH
+  - export NIMVER=$(git ls-remote  git@github.com:status-im/nimbus.git HEAD | cut -f 1)
+  - [ -f nim/$NIMVER/bin/nim ] || { mkdir -p nim; git clone https://github.com/status-im/nim.git nim/$NIMVER; cd nim/$NIMVER; sh build_all.sh; cd ../.. ; }
+  - export PATH=$PWD/nim/$NIMVER/bin:$PATH
 
 script:
   - nimble install -dy && nimble test
