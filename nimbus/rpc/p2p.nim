@@ -335,7 +335,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     for i in 0 ..< blockBody.uncles.len:
       result.uncles[i] = blockBody.uncles[i].hash
 
-  rpcsrv.rpc("eth_getBlockByHash") do(data: HexDataStr, fullTransactions: bool) -> BlockObject:
+  rpcsrv.rpc("eth_getBlockByHash") do(data: HexDataStr, fullTransactions: bool) -> Option[BlockObject]:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
@@ -347,9 +347,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       body = chain.getBlockBody(h)
     if body == nil:
       raise newException(ValueError, "Cannot find hash")
-    populateBlockObject(header, body)
+    result = some(populateBlockObject(header, body))
 
-  rpcsrv.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> BlockObject:
+  rpcsrv.rpc("eth_getBlockByNumber") do(quantityTag: string, fullTransactions: bool) -> Option[BlockObject]:
     ## Returns information about a block by block number.
     ##
     ## quantityTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -360,7 +360,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       body = chain.getBlockBody(header.hash)
     if body == nil:
       raise newException(ValueError, "Cannot find hash")
-    populateBlockObject(header, body)
+    result = some(populateBlockObject(header, body))
 
   proc populateTransactionObject(transaction: Transaction, txIndex: int64, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =
     let
@@ -470,7 +470,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
         return populateReceipt(receipt, cumulativeGas, body.transactions[txDetails.index], txDetails.index, header)
       idx.inc
 
-  rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> BlockObject:
+  rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> Option[BlockObject]:
     ## Returns information about a uncle of a block by hash and uncle index position.  
     ##
     ## data: hash of block.
@@ -484,9 +484,9 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     if quantity < 0 or quantity >= body.uncles.len:
       raise newException(ValueError, "Uncle index out of range")
     let uncle = body.uncles[quantity]
-    result = populateBlockObject(uncle, body)
+    result = some(populateBlockObject(uncle, body))
 
-  rpcsrv.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> BlockObject:
+  rpcsrv.rpc("eth_getUncleByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> Option[BlockObject]:
     # Returns information about a uncle of a block by number and uncle index position.
     ##
     ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
@@ -500,7 +500,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     if quantity < 0 or quantity >= body.uncles.len:
       raise newException(ValueError, "Uncle index out of range")
     let uncle = body.uncles[quantity]
-    result = populateBlockObject(uncle, body)
+    result = some(populateBlockObject(uncle, body))
 
   rpcsrv.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
     ## Creates a filter object, based on filter options, to notify when the state changes (logs).
