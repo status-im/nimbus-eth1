@@ -304,10 +304,8 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     discard
 
   func populateBlockObject(header: BlockHeader, blockBody: BlockBodyRef): BlockObject =
-    result.number = new BlockNumber
-    result.number[] = header.blockNumber
-    result.hash = new Hash256
-    result.hash[] = header.hash
+    result.number = some(header.blockNumber)
+    result.hash = some(header.hash)
     result.parentHash = header.parentHash
     result.nonce = header.nonce.toUint
 
@@ -320,8 +318,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       startIdx += 32    
     result.sha3Uncles = keccak256.digest(rawData)
 
-    result.logsBloom = new BloomFilter
-    result.logsBloom[] = header.bloom
+    result.logsBloom = some(header.bloom)
     result.transactionsRoot = header.txRoot
     result.stateRoot = header.stateRoot
     result.receiptsRoot = header.receiptRoot
@@ -365,7 +362,7 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
       raise newException(ValueError, "Cannot find hash")
     populateBlockObject(header, body)
 
-  proc populateTransactionObject(transaction: Transaction, txIndex: int, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =
+  proc populateTransactionObject(transaction: Transaction, txIndex: int64, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =
     let
       vmState = newBaseVMState(blockHeader, chain)
       accountDb = vmState.chaindb.getStateDb(blockHash, true)
@@ -376,15 +373,11 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
 
     result.hash = txHash
     result.nonce = txCount
-    result.blockHash = new Hash256
-    result.blockHash[] = blockHash
-    result.blockNumber = new BlockNumber
-    result.blockNumber[] = blockHeader.blockNumber
-    result.transactionIndex = new int64
-    result.transactionIndex[] = txIndex
+    result.blockHash = some(blockHash)
+    result.blockNumber = some(blockHeader.blockNumber)
+    result.transactionIndex = some(txIndex)
     result.source = transaction.getSender()
-    result.to = new EthAddress
-    result.to[] = transaction.to
+    result.to = some(transaction.to)
     result.value = transaction.value
     result.gasPrice = transaction.gasPrice
     result.gas = accountGas
@@ -443,12 +436,11 @@ proc setupP2PRPC*(node: EthereumNode, rpcsrv: RpcServer) =
     result.blockHash = blockHeader.hash
     result.blockNumber = blockHeader.blockNumber
     result.sender = transaction.getSender()
-    result.to = new EthAddress
-    result.to[] = transaction.to
+    result.to = some(transaction.to)
     result.cumulativeGasUsed = cumulativeGas
     result.gasUsed = receipt.gasUsed
     # TODO: Get contract address if the transaction was a contract creation.
-    result.contractAddress = nil
+    result.contractAddress = none(EthAddress)
     result.logs = receipt.logs
     result.logsBloom = blockHeader.bloom
     # post-transaction stateroot (pre Byzantium).
