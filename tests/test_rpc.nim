@@ -60,7 +60,7 @@ proc doTests =
     rpcServer = newRpcSocketServer(["localhost:8545"])
     client = newRpcSocketClient()
   setupCommonRpc(rpcServer)
-  setupP2PRpc(ethNode, rpcServer)
+  setupEthRpc(ethNode, chain, rpcServer)
 
   # Begin tests
   rpcServer.start()
