@@ -58,3 +58,7 @@ proc getSender*(transaction: Transaction, output: var EthAddress): bool =
     output = pubKey.toCanonicalAddress()
     result = true
 
+proc getSender*(transaction: Transaction): EthAddress =
+  ## Raises error on failure to recover public key
+  if not transaction.getSender(result):
+    raise newException(ValidationError, "Could not derive sender address from transaction")
