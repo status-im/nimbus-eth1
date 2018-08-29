@@ -11,7 +11,7 @@ import
   ../errors, ../block_types, ../utils/header, ../constants, ./storage_types.nim
 
 type
-  BaseChainDB* = ref object of AbstractChainDB
+  BaseChainDB* = ref object
     db*: TrieDatabaseRef
     # TODO db*: JournalDB
 
@@ -79,6 +79,9 @@ proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
   ## Returns the block header with the given number in the canonical chain.
   ## Raises BlockNotFound error if the block is not in the DB.
   self.getBlockHeader(self.getBlockHash(n))
+
+proc getBlockBody*(self: BaseChainDB, h: Hash256, output: var BlockBody): bool =
+  discard # TODO:
 
 proc getScore*(self: BaseChainDB; blockHash: Hash256): int =
   rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray).toRange, int)
@@ -250,34 +253,6 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
   result = newAccountStateDB(self.db, stateRoot)
 
-method genesisHash*(db: BaseChainDB): KeccakHash =
-  db.getBlockHash(0.toBlockNumber)
-
-method getBlockHeader*(db: BaseChainDB, b: HashOrNum): BlockHeaderRef =
-  var h: BlockHeader
-  var ok = case b.isHash
-  of true:
-    db.getBlockHeader(b.hash, h)
-  else:
-    db.getBlockHeader(b.number, h)
-
-  if ok:
-    result.new()
-    result[] = h
-
-method getBestBlockHeader*(self: BaseChainDB): BlockHeaderRef =
-  result.new()
-  result[] = self.getCanonicalHead()
-
-method getSuccessorHeader*(db: BaseChainDB, h: BlockHeader): BlockHeaderRef =
-  let n = h.blockNumber + 1
-  var r: BlockHeader
-  if db.getBlockHeader(n, r):
-    result.new()
-    result[] = r
-
-method getBlockBody*(db: BaseChainDB, blockHash: KeccakHash): BlockBodyRef =
-  result = nil
 
 # Deprecated:
 proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader {.deprecated.} =
@@ -288,3 +263,4 @@ proc lookupBlockHash*(self: BaseChainDB; n: BlockNumber): Hash256 {.deprecated.}
 
 proc getCanonicalBlockHeaderByNumber*(self: BaseChainDB; n: BlockNumber): BlockHeader {.deprecated.} =
   self.getBlockHeader(n)
+

@@ -11,7 +11,7 @@ import
   os, strutils, net, eth_common, db/[storage_types, db_chain],
   asyncdispatch2, json_rpc/rpcserver, eth_keys,
   eth_p2p, eth_p2p/rlpx_protocols/[eth, les],
-  config, genesis, rpc/[common, p2p],
+  config, genesis, rpc/[common, p2p], p2p/chain,
   eth_trie
 
 const UseSqlite = true
@@ -85,10 +85,10 @@ proc start(): NimbusObject =
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId)
 
-  nimbus.ethNode.chain = chainDB
+  nimbus.ethNode.chain = newChain(chainDB)
 
   if RpcFlags.Enabled in conf.rpc.flags:
-    setupP2PRpc(nimbus.ethNode, nimbus.rpcServer)
+    setupEthRpc(nimbus.ethNode, chainDB, nimbus.rpcServer)
 
   ## Starting servers
   nimbus.state = Starting
@@ -101,10 +101,9 @@ proc start(): NimbusObject =
   waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes)
 
   # TODO: temp code until the CLI/RPC interface is fleshed out
-  if os.getenv("START_SYNC") == "1":
-    let status = waitFor nimbus.ethNode.fastBlockchainSync()
-    if status != syncSuccess:
-      echo "Block sync failed: ", status
+  let status = waitFor nimbus.ethNode.fastBlockchainSync()
+  if status != syncSuccess:
+    echo "Block sync failed: ", status
 
   nimbus.state = Running
   result = nimbus
@@ -119,8 +118,8 @@ proc process*(nimbus: NimbusObject) =
       proc signalBreak(udata: pointer) =
         nimbus.state = Stopping
       # Adding SIGINT, SIGTERM handlers
-      discard addSignal(SIGINT, signalBreak)
-      discard addSignal(SIGTERM, signalBreak)
+      # discard addSignal(SIGINT, signalBreak)
+      # discard addSignal(SIGTERM, signalBreak)
 
     # Main loop
     while nimbus.state == Running:
