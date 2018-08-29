@@ -10,7 +10,7 @@ import
   nimcrypto, json_rpc/rpcserver, eth_p2p, hexstrings, strutils, stint,
   ../config, ../vm_state, ../constants, eth_trie/[memdb, types], eth_keys,
   ../db/[db_chain, state_db, storage_types], eth_common, rpc_types, byteutils,
-  ranges/typedranges, times, ../utils/header, rlp
+  ranges/typedranges, times, ../utils/header, rlp, ../transaction
 
 #[
   Note:
@@ -33,48 +33,6 @@ func toHash(value: array[32, byte]): Hash256 {.inline.} =
 func strToHash(value: string): Hash256 {.inline.} =
   result = hexToPaddedByteArray[32](value).toHash
 
-func hash(transaction: Transaction): Hash256 =
-  # Hash transaction without signature
-  type
-    TransHashObj = object
-      accountNonce:  uint64
-      gasPrice:      GasInt
-      gasLimit:      GasInt
-      to:            EthAddress
-      value:         UInt256
-      payload:       Blob
-  return TransHashObj(
-    accountNonce: transaction.accountNonce,
-    gasPrice: transaction.gasPrice,
-    gasLimit: transaction.gasLimit,
-    to: transaction.to,
-    value: transaction.value,
-    payload: transaction.payload
-    ).rlpHash
-
-proc toSignature(transaction: Transaction): Signature =
-  var bytes: array[65, byte]
-  bytes[0..31] = cast[array[32, byte]](transaction.R)
-  bytes[32..63] = cast[array[32, byte]](transaction.S)
-  #[
-    TODO: In the yellow paper:
-      It is assumed that v is the ‘recovery id’, a 1 byte value
-      specifying the sign and finiteness of the curve point; this
-      value is in the range of [27,30].
-    Does this need to be checked that it is [0, 1] and inc by 27?
-  ]#
-  # TODO: Ugly casting below, is there a better way/helper func?
-  bytes[64] = (cast[uint64](transaction.V.data.lo) and 0xff'u64).uint8
-  initSignature(bytes)
-
-proc getSender(transaction: Transaction): EthAddress =
-  ## Find the address the transaction was sent from.
-  let
-    txHash = transaction.hash # hash without signature
-    sig = transaction.toSignature()
-    pubKey = recoverKeyFromSignature(sig, txHash)
-  result = pubKey.toCanonicalAddress()
-
 template balance(addressDb: AccountStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
   cast[GasInt](addressDb.get_balance(address).data.lo)
@@ -94,11 +52,14 @@ func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
     result = chain.getBlockHeader(blockNum)
 
 proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
-  proc accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
-    let
-      header = chain.headerFromTag(tag)
-      vmState = newBaseVMState(header, chain)
+  
+  func getAccountDb(header: BlockHeader, readOnly = true): AccountStateDb = 
+    ## Retrieves the account db from canonical head
+    let vmState = newBaseVMState(header, chain)
     result = vmState.chaindb.getStateDb(vmState.blockHeader.hash, readOnly)
+
+  func accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
+    result = getAccountDb(chain.headerFromTag(tag))  
 
   proc getBlockBody(hash: KeccakHash): BlockBody =
     if not chain.getBlockBody(hash, result):
@@ -155,7 +116,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
     let
-      accountDb = getAccountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
       balance = accountDb.get_balance(addrBytes)
 
@@ -169,7 +130,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
     let
-      accountDb = getAccountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
       storage = accountDb.getStorage(addrBytes, quantity.u256)
     if storage[1]:
@@ -183,7 +144,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns integer of the number of transactions send from this address.
     let
       addrBytes = data.string.strToAddress()
-      accountDb = getAccountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
     result = accountDb.getNonce(addrBytes)
 
   rpcsrv.rpc("eth_getBlockTransactionCountByHash") do(data: HexDataStr) -> int:
@@ -225,7 +186,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      accountDb = getAccountDbFromTag(quantityTag)
+      accountDb = accountDbFromTag(quantityTag)
       addrBytes = strToAddress(data.string)
       storage = accountDb.getCode(addrBytes)
     # Easier to return the string manually here rather than expect ByteRange to be marshalled
@@ -245,7 +206,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## data: address.
     ## message: message to sign.
     ## Returns signature.
-    let accountDb = getAccountDb(true)
+    let accountDb = getAccountDb(chain.getCanonicalHead(), true)
     var privateKey: PrivateKey  # TODO: Get from key store
     result = ("0x" & sign(privateKey, message.string)).HexDataStr
 
