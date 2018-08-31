@@ -25,7 +25,7 @@ func hash*(transaction: Transaction): Hash256 =
   # Hash transaction without signature
   type
     TransHashObj = object
-      accountNonce:  uint64
+      accountNonce:  AccountNonce
       gasPrice:      GasInt
       gasLimit:      GasInt
       to:            EthAddress
