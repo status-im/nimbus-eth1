@@ -7,10 +7,11 @@
 
 import
   tables, macros,
+  chronicles,
   ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter, utils/macros_gen_opcodes],
   ./code_stream,
   ../vm_types, ../errors,
-  ../logging, ./stack, ./computation, terminal # Those are only needed for logging
+  ./stack, ./computation, terminal # Those are only needed for logging
 
 func invalidInstruction*(computation: var BaseComputation) {.inline.} =
   raise newException(ValueError, "Invalid instruction, received an opcode not implemented in the current fork.")
@@ -211,7 +212,8 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
     var `instr` = `computation`.code.next()
     while true:
       {.computedGoto.}
-      `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
+      # TODO lots of macro magic here to unravel, with chronicles...
+      # `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
       `result`
 
 macro genFrontierDispatch(computation: BaseComputation): untyped =

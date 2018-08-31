@@ -6,14 +6,16 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, eth_common, # GasInt
-  ../../logging, ../../errors, ../../vm_types
+  chronicles, strformat, eth_common, # GasInt
+  ../../errors, ../../vm_types
+
+logScope:
+  topics = "vm gas"
 
 proc init*(m: var GasMeter, startGas: GasInt) =
   m.startGas = startGas
   m.gasRemaining = m.startGas
   m.gasRefunded = 0
-  m.logger = logging.getLogger("gas")
 
 proc consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string) =
   #if amount < 0.u256:
@@ -24,8 +26,10 @@ proc consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string) =
     raise newException(OutOfGas,
       &"Out of gas: Needed {amount} - Remaining {gasMeter.gasRemaining} - Reason: {reason}")
   gasMeter.gasRemaining -= amount
-  gasMeter.logger.trace(
-    &"GAS CONSUMPTION: {gasMeter.gasRemaining + amount} - {amount} -> {gasMeter.gasRemaining} ({reason})")
+
+  when defined(nimbusTrace): # XXX: https://github.com/status-im/nim-chronicles/issues/26
+    debug(
+      "GAS CONSUMPTION", total = gasMeter.gasRemaining + amount, amount, remaining = gasMeter.gasRemaining, reason)
 
 proc returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   #if amount < 0.int256:
@@ -33,8 +37,9 @@ proc returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   # Alternatively: use a range type `range[0'i64 .. high(int64)]`
   #   https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   gasMeter.gasRemaining += amount
-  gasMeter.logger.trace(
-    &"GAS RETURNED: {gasMeter.gasRemaining - amount} + {amount} -> {gasMeter.gasRemaining}")
+  when defined(nimbusTrace): # XXX: https://github.com/status-im/nim-chronicles/issues/26
+    debug(
+      "GAS RETURNED", consumed = gasMeter.gasRemaining - amount, amount, remaining = gasMeter.gasRemaining)
 
 proc refundGas*(gasMeter: var GasMeter; amount: GasInt) =
   #if amount < 0.int256:
@@ -42,5 +47,6 @@ proc refundGas*(gasMeter: var GasMeter; amount: GasInt) =
   # Alternatively: use a range type `range[0'i64 .. high(int64)]`
   #   https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   gasMeter.gasRefunded += amount
-  gasMeter.logger.trace(
-    &"GAS REFUND: {gasMeter.gasRemaining - amount} + {amount} -> {gasMeter.gasRefunded}")
+  when defined(nimbusTrace): # XXX: https://github.com/status-im/nim-chronicles/issues/26
+    debug(
+      "GAS REFUND", consumed = gasMeter.gasRemaining - amount, amount, refunded = gasMeter.gasRefunded)

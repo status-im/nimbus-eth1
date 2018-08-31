@@ -8,7 +8,7 @@
 import
   unittest, tables, parseutils,
   eth_trie/[types, memdb], eth_common/eth_types,
-  ../nimbus/[constants, vm_types, logging, vm_state],
+  ../nimbus/[constants, vm_types, vm_state],
   ../nimbus/vm/interpreter,
   ../nimbus/utils/header,
   ../nimbus/db/[db_chain, state_db],
@@ -40,7 +40,7 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
 
   #echo fixture{"exec"}
   var c = newCodeStreamFromUnescaped(code)
-  if DEBUG:
+  when defined(nimbusdebug):
     c.displayDecompiled()
 
   result = newBaseComputation(vmState, blockNum, message)

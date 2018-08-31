@@ -7,7 +7,7 @@
 
 import
   eth_common,
-  ../logging, ../constants, ../validation, ../vm_types
+  ../constants, ../validation, ../vm_types
 
 proc `origin=`*(message: var Message, value: EthAddress) =
   message.internalOrigin = value

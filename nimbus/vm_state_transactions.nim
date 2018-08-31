@@ -7,7 +7,7 @@
 
 import
   strformat, tables,
-  ./logging, ./constants, ./errors, ./vm/computation,
+  ./constants, ./errors, ./vm/computation,
   ./transaction, ./vm_types, ./vm_state, ./block_types, ./db/db_chain, ./utils/header
 
 method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction): (BaseComputation, BlockHeader) {.base.}=

@@ -7,11 +7,11 @@
 
 import
   strformat, times, ranges,
-  stint, nimcrypto, ranges/typedranges, eth_common,
+  chronicles, stint, nimcrypto, ranges/typedranges, eth_common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
-  ../../vm_state, ../../errors, ../../constants, ../../vm_types, ../../logging,
+  ../../vm_state, ../../errors, ../../constants, ../../vm_types,
   ../../db/[db_chain, state_db]
 
 # ##################################
@@ -555,7 +555,7 @@ op create, inline = false, value, startPosition, size:
   let isCollision = false # TODO: db.accountHasCodeOrNonce ...
 
   if isCollision:
-    computation.vmState.logger.debug("Address collision while creating contract: " & contractAddress.toHex)
+    debug("Address collision while creating contract", address = contractAddress.toHex)
     push: 0
     return
 
@@ -806,8 +806,8 @@ op selfDestruct, inline = false:
     # Register the account to be deleted
     computation.registerAccountForDeletion(beneficiary)
 
-    computation.vm_state.logger.debug(
-      "SELFDESTRUCT: %s (%s) -> %s" &
-      computation.msg.storage_address.toHex &
-      local_balance.toString &
-      beneficiary.toHex)
+    debug(
+      "SELFDESTRUCT",
+      storage_address = computation.msg.storage_address.toHex,
+      local_balance = local_balance.toString,
+      beneficiary = beneficiary.toHex)

@@ -6,11 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, sequtils, macros, terminal, math, tables,
+  chronicles, strformat, strutils, sequtils, macros, terminal, math, tables,
   eth_common,
-  ../constants, ../errors, ../validation, ../vm_state, ../logging, ../vm_types,
+  ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack
+
+logScope:
+  topics = "vm computation"
 
 proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Message): BaseComputation =
   new result
@@ -25,9 +28,6 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Me
   result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
   # result.rawOutput = "0x"
   result.gasCosts = blockNumber.toFork.forkToSchedule
-
-proc logger*(computation: BaseComputation): Logger =
-  logging.getLogger("vm.computation.BaseComputation")
 
 proc isOriginComputation*(c: BaseComputation): bool =
   # Is this computation the computation initiated by a transaction
