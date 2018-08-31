@@ -105,13 +105,13 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
   else:
     result = (0.u256, false)
 
-proc setNonce*(db: var AccountStateDB, address: EthAddress, newNonce: UInt256) =
+proc setNonce*(db: var AccountStateDB, address: EthAddress, newNonce: AccountNonce) =
   var account = db.getAccount(address)
   if newNonce != account.nonce:
     account.nonce = newNonce
     db.setAccount(address, account)
 
-proc getNonce*(db: AccountStateDB, address: EthAddress): UInt256 =
+proc getNonce*(db: AccountStateDB, address: EthAddress): AccountNonce =
   let account = db.getAccount(address)
   account.nonce
 
