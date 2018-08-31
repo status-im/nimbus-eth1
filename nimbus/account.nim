@@ -10,14 +10,13 @@ import
 
 type
   Account* = object
-    nonce*:             UInt256
+    nonce*:             AccountNonce
     balance*:           UInt256
     storageRoot*:       Hash256
     codeHash*:          Hash256
 
-proc newAccount*(nonce: UInt256 = 0.u256, balance: UInt256 = 0.u256): Account =
+proc newAccount*(nonce: AccountNonce = 0, balance: UInt256 = 0.u256): Account =
   result.nonce = nonce
   result.balance = balance
   result.storageRoot = BLANK_ROOT_HASH
   result.codeHash = EMPTY_SHA3
-
