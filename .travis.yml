@@ -8,9 +8,19 @@ cache:
     - nim
 
 install:
+  # build nim from our own branch, to avoid downtime due to nim regressions
+  # Should work for both osx and linux..
+  - "export NPROC=$(python -c 'import multiprocessing as mp; print(mp.cpu_count())')"
   - export NIMVER=$(git ls-remote https://github.com/status-im/nim.git HEAD | cut -f 1)
   - "{ [ -f nim/$NIMVER/bin/nim ] && [ -f nim/$NIMVER/bin/nimble ] ; } || { rm -rf nim ; mkdir -p nim; git clone https://github.com/status-im/nim.git nim/$NIMVER; cd nim/$NIMVER; sh build_all.sh; cd ../.. ; }"
   - export PATH=$PWD/nim/$NIMVER/bin:$PATH
+  # build our own rocksdb to test with a fixed version that we think works
+  - "[ -f rocksdb-5.14.2/Makefile ] || { wget https://github.com/facebook/rocksdb/archive/v5.14.2.tar.gz && tar xvf v5.14.2.tar.gz; }"
+  - cd rocksdb-5.14.2
+  - "[ -f util/build_version.cc ] || { make util/build_version.cc ; }" # use cached version if possible
+  - export NO_UPDATE_BUILD_VERSION=1
+  - make shared_lib -j$NPROC && sudo make install-shared
+  - cd ..
 
 script:
   - nimble install -dy && nimble test
@@ -24,13 +34,11 @@ matrix:
       sudo: required
       before_install:
         - sudo apt-get install -y libssl-dev libgflags-dev libsnappy-dev
-        - "[ -f rocksdb-5.14.2/Makefile ] || { wget https://github.com/facebook/rocksdb/archive/v5.14.2.tar.gz && tar xvf v5.14.2.tar.gz; }"
-        # rocksdb not present on trusty - on a newer ubuntu you can apt-get install -y librocksdb-dev
-        - cd rocksdb-5.14.2 && make shared_lib -j$(nproc) && sudo make INSTALL_PATH=/usr install-shared && cd ..
-
+        - export INSTALL_PATH=/usr
     - os: osx
       before_install:
-        - brew update
-        - brew install rocksdb ccache
+        # - brew update
+        - brew install snappy ccache
         - export PATH="/usr/local/opt/ccache/libexec:$PATH"
+        - export INSTALL_PATH=$HOME # included in DYLD_FALLBACK_LIBRARY_PATH
         # - brew install gcc
