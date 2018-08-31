@@ -1,26 +1,25 @@
 language: c # or other C/C++ variants
 
-# https://docs.travis-ci.com/user/caching/#ccache-cache
+# https://docs.travis-ci.com/user/caching/
 cache:
-  ccache: true
   directories:
-    - rocksdb-5.14.2
     - nim
+    - rocksdb
 
 install:
   # build nim from our own branch, to avoid downtime due to nim regressions
-  # Should work for both osx and linux..
-  - "export NPROC=$(python -c 'import multiprocessing as mp; print(mp.cpu_count())')"
-  - export NIMVER=$(git ls-remote https://github.com/status-im/nim.git HEAD | cut -f 1)
+  - "export NIMVER=$(git ls-remote https://github.com/status-im/nim.git HEAD | cut -f 1)"
   - "{ [ -f nim/$NIMVER/bin/nim ] && [ -f nim/$NIMVER/bin/nimble ] ; } || { rm -rf nim ; mkdir -p nim; git clone https://github.com/status-im/nim.git nim/$NIMVER; cd nim/$NIMVER; sh build_all.sh; cd ../.. ; }"
-  - export PATH=$PWD/nim/$NIMVER/bin:$PATH
+  - "export PATH=$PWD/nim/$NIMVER/bin:$PATH"
+
   # build our own rocksdb to test with a fixed version that we think works
-  - "[ -f rocksdb-5.14.2/Makefile ] || { wget https://github.com/facebook/rocksdb/archive/v5.14.2.tar.gz && tar xvf v5.14.2.tar.gz; }"
-  - cd rocksdb-5.14.2
+  - "export ROCKSDBVER=5.14.2"
+  - "[ -f rocksdb/rocksdb-$ROCKSDBVER/Makefile ] || { rm -rf rocksdb ; mkdir -p rocksdb; cd rocksdb; wget https://github.com/facebook/rocksdb/archive/v$ROCKSDBVER.tar.gz && tar xvf v$ROCKSDBVER.tar.gz; cd ..; }"
+  - cd rocksdb/rocksdb-$ROCKSDBVER
   - "[ -f util/build_version.cc ] || { make util/build_version.cc ; }" # use cached version if possible
   - export NO_UPDATE_BUILD_VERSION=1
   - make shared_lib -j$NPROC && sudo make install-shared
-  - cd ..
+  - cd ../..
 
 script:
   - nimble install -dy && nimble test
@@ -33,12 +32,9 @@ matrix:
     - os: linux
       sudo: required
       before_install:
-        - sudo apt-get install -y libssl-dev libgflags-dev libsnappy-dev
         - export INSTALL_PATH=/usr
+        - export NPROC=$(nproc)
     - os: osx
       before_install:
-        # - brew update
-        - brew install snappy ccache
-        - export PATH="/usr/local/opt/ccache/libexec:$PATH"
         - export INSTALL_PATH=$HOME # included in DYLD_FALLBACK_LIBRARY_PATH
-        # - brew install gcc
+        - export NPROC=$(sysctl -n hw.ncpu)
