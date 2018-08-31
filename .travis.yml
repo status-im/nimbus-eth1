@@ -37,7 +37,7 @@ matrix:
         - export INSTALL_PATH=/usr
     - os: osx
       before_install:
-        - brew update
+        # - brew update
         - brew install snappy ccache
         - export PATH="/usr/local/opt/ccache/libexec:$PATH"
         - export INSTALL_PATH=$HOME # included in DYLD_FALLBACK_LIBRARY_PATH
