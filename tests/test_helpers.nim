@@ -85,7 +85,7 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
     for slot, value in accountData{"storage"}:
       stateDB.setStorage(account, slot.parseHexInt.u256, value.getStr.parseHexInt.u256)
 
-    let nonce = accountData{"nonce"}.getInt.u256
+    let nonce = accountData{"nonce"}.getInt.AccountNonce
     let code = hexToSeqByte(accountData{"code"}.getStr).toRange
     let balance = UInt256.fromHex accountData{"balance"}.getStr
 
@@ -110,7 +110,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
     let
       wantedCode = hexToSeqByte(accountData{"code"}.getStr).toRange
       wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
-      wantedNonce = accountData{"nonce"}.getInt.u256
+      wantedNonce = accountData{"nonce"}.getInt.AccountNonce
 
       actualCode = stateDB.getCode(account)
       actualBalance = stateDB.getBalance(account)

@@ -19,7 +19,7 @@ type
     code*: seq[byte]
     storage*: Table[UInt256, UInt256]
     balance*: UInt256
-    nonce*: UInt256
+    nonce*: AccountNonce
 
 func toAddress(n: UInt256): EthAddress =
   let a = n.toByteArrayBE()
