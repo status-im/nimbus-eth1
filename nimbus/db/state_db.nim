@@ -138,3 +138,6 @@ proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
 proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   let address = addressS.parseAddress
   return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
+
+proc hasCodeOrNonce*(account: AccountStateDB, address: EthAddress): bool {.inline.} =
+  account.getNonce(address) != 0 or account.getCodeHash(address) != EMPTY_SHA3
