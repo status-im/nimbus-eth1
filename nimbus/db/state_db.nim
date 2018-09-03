@@ -133,3 +133,5 @@ proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
   let codeHash = db.getCodeHash(address)
   result = db.trie.get(codeHash.toByteRange_Unnecessary)
 
+proc hasCodeOrNonce*(account: AccountStateDB, address: EthAddress): bool {.inline.} =
+  account.getNonce(address) != 0 or account.getCodeHash(address) != EMPTY_SHA3
