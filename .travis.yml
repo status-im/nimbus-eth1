@@ -22,7 +22,7 @@ install:
   - cd ../..
 
 script:
-  - nimble install -dy && nimble test
+  - nimble install -y && nimble test
 
 matrix:
   # allow_failures:
