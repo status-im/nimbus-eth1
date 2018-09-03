@@ -25,9 +25,6 @@ script:
   - nimble install -y && nimble test
 
 matrix:
-  # allow_failures:
-  #   - os: osx
-
   include:
     - os: linux
       sudo: required
@@ -38,3 +35,4 @@ matrix:
       before_install:
         - export INSTALL_PATH=$HOME # included in DYLD_FALLBACK_LIBRARY_PATH
         - export NPROC=$(sysctl -n hw.ncpu)
+
