@@ -546,13 +546,16 @@ op create, inline = false, value, startPosition, size:
 
   ## TODO dynamic gas that depends on remaining gas
 
-  ##### getNonce type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
-  # computation.vmState.db(readOnly=true):
-  #   let creationNonce = db.getNonce(computation.msg.storageAddress)
-  #   db.incrementNonce(computation.msg.storageAddress)
-  let contractAddress = ZERO_ADDRESS # generateContractAddress(computation.msg.storageAddress, creationNonce)
+  var
+    contractAddress: EthAddress
+    isCollision: bool
 
-  let isCollision = false # TODO: db.accountHasCodeOrNonce ...
+  computation.vmState.mutateStateDB:
+    let creationNonce = db.getNonce(computation.msg.storageAddress)
+    db.setNonce(computation.msg.storageAddress, creationNonce + 1)
+    
+    contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
+    isCollision = db.hasCodeOrNonce(contractAddress)
 
   if isCollision:
     debug("Address collision while creating contract", address = contractAddress.toHex)
