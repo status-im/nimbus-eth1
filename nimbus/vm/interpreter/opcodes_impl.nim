@@ -555,6 +555,7 @@ op create, inline = false, value, startPosition, size:
     db.setNonce(computation.msg.storageAddress, creationNonce + 1)
     
     contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
+    # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
     isCollision = db.hasCodeOrNonce(contractAddress)
 
   if isCollision:
