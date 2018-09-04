@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  sequtils, tables,
+  sequtils, strformat, tables,
   chronicles, eth_common, nimcrypto, rlp, eth_trie/[hexary, memdb],
   ../constants, ../errors, ../validation, ../account
 
@@ -65,9 +65,10 @@ template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
   # Converts a number to hex big-endian representation including
   # prefix and leading zeros:
-  @(keccak256.digest(slot.toByteArrayBE).data).toRange
+  @(slot.toByteArrayBE).toRange
   # Original py-evm code:
   # pad32(int_to_big_endian(slot))
+  # morally equivalent to toByteRange_Unnecessary but with different types
 
 template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
   initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot)
@@ -126,7 +127,8 @@ proc setCode*(db: var AccountStateDB, address: EthAddress, code: ByteRange) =
   if newCodeHash != account.codeHash:
     account.codeHash = newCodeHash
     # XXX: this uses the journaldb in py-evm
-    db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
+    # Breaks state hash root calculations
+    # db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
     db.setAccount(address, account)
 
 proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
@@ -135,3 +137,8 @@ proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
 
 proc hasCodeOrNonce*(account: AccountStateDB, address: EthAddress): bool {.inline.} =
   account.getNonce(address) != 0 or account.getCodeHash(address) != EMPTY_SHA3
+
+proc dumpAccount*(db: AccountStateDB, addressS: string): string =
+  let address = addressS.parseAddress
+  return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
+
