@@ -53,7 +53,7 @@ nim c -o:build/decompile_smart_contract -r examples/decompile_smart_contract.nim
 Run Ethereum [JSON-based VM tests](https://github.com/ethereum/tests/):
 ```
 mkdir -p build
-nim c -o:build/test_vm_json -r tests/test_vm_json.nim
+nim c -o:build/test_vm_json -r --experimental:forLoopMacros tests/test_vm_json.nim
 ```
 
 #### Troubleshooting
