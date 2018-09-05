@@ -1,57 +1,104 @@
 version: '{build}'
 
 cache:
-- x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z -> appveyor.yml
-- i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z -> appveyor.yml
-- sqlite-dll-win32-x86-3240000.zip -> appveyor.yml
-- sqlite-dll-win64-x64-3240000.zip -> appveyor.yml
-- nimbus-deps.zip -> appveyor.yml
+- sqlite-dll-win32-x86-3240000.zip -> .appveyor.yml
+- sqlite-dll-win64-x64-3240000.zip -> .appveyor.yml
+- nimbus-deps.zip -> .appveyor.yml
+- x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z -> .appveyor.yml
+- i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z -> .appveyor.yml
+- Nim -> .appveyor.yml
 
-# We always want 32 and 64-bit compilation
 matrix:
-  fast_finish: false     # set this flag to immediately finish build once one of the jobs fails.
+  # We always want 32 and 64-bit compilation
+  fast_finish: false
 
-environment:
-
-  matrix:
-    - MINGW_DIR: mingw32
-      MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
-      MINGW_ARCHIVE: i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z
-      SQLITE_URL: https://www.sqlite.org/2018/sqlite-dll-win32-x86-3240000.zip
-      SQLITE_ARCHIVE: sqlite-dll-win32-x86-3240000.zip
-      ROCKSDB_URL: https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip
-      ROCKSDB_ARCHIVE: nimbus-deps.zip
-      platform: x86
-    - MINGW_DIR: mingw64
-      MINGW_URL: https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
-      MINGW_ARCHIVE: x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z
-      SQLITE_URL: https://www.sqlite.org/2018/sqlite-dll-win64-x64-3240000.zip
-      SQLITE_ARCHIVE: sqlite-dll-win64-x64-3240000.zip
-      ROCKSDB_URL: https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip
-      ROCKSDB_ARCHIVE: nimbus-deps.zip
-      platform: x64
+platform:
+  - x86
+  - x64
 
 install:
   - setlocal EnableExtensions EnableDelayedExpansion
-  - MKDIR %CD%\bin
-  - IF not exist "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
+
+  - IF "%PLATFORM%" == "x86" (
+      SET "MINGW_ARCHIVE=i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z" &
+      SET "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains%%20targetting%%20Win32/Personal%%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z" &
+      SET "MINGW_DIR=mingw32"
+      SET "SQLITE_URL=https://www.sqlite.org/2018/sqlite-dll-win32-x86-3240000.zip"
+      SET "SQLITE_ARCHIVE=sqlite-dll-win32-x86-3240000.zip"
+      SET "ROCKSDB_URL=https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip"
+      SET "ROCKSDB_ARCHIVE=nimbus-deps.zip"
+    ) ELSE (
+      IF "%PLATFORM%" == "x64" (
+        SET "MINGW_ARCHIVE=x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z" &
+        SET "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains%%20targetting%%20Win64/Personal%%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z" &
+        SET "MINGW_DIR=mingw64"
+        SET "SQLITE_URL=https://www.sqlite.org/2018/sqlite-dll-win64-x64-3240000.zip"
+        SET "SQLITE_ARCHIVE=sqlite-dll-win64-x64-3240000.zip"
+        SET "ROCKSDB_URL=https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/nimbus-deps.zip"
+        SET "ROCKSDB_ARCHIVE=nimbus-deps.zip"
+      ) else (
+        echo "Unknown platform"
+      )
+    )
+
+  - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\Nim\bin;%PATH%
+
+  # Unpack mingw
+  - IF NOT EXIST "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
   - 7z x -y "%MINGW_ARCHIVE%" > nul
+
+  # Unpack sqlite
   - IF not exist "%SQLITE_ARCHIVE%" appveyor DownloadFile "%SQLITE_URL%" -FileName "%SQLITE_ARCHIVE%"
   - 7z x -y "%SQLITE_ARCHIVE%" > nul
   - IF "%PLATFORM%" == "x64" ( copy %CD%\sqlite3.dll %CD%\bin\sqlite3_64.dll ) ELSE ( copy %CD%\sqlite3.dll %CD%\bin\sqlite3_32.dll )
+
+  # Unpack rocksdb
   - IF not exist "%ROCKSDB_ARCHIVE%" appveyor DownloadFile "%ROCKSDB_URL%" -FileName "%ROCKSDB_ARCHIVE%"
   - 7z x -y "%ROCKSDB_ARCHIVE%" > nul
   - IF "%PLATFORM%" == "x64" ( copy %CD%\x64\librocksdb.dll %CD%\bin\librocksdb.dll ) ELSE ( copy %CD%\x86\librocksdb.dll %CD%\bin\librocksdb.dll )
-  - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\bin;%CD%\Nim\bin;%PATH%
-  - git clone https://github.com/status-im/Nim.git
-  - cd %CD%\Nim
-  - git clone --depth 1 https://github.com/nim-lang/csources
-  - cd csources
-  - IF "%PLATFORM%" == "x64" ( build64.bat ) else ( build.bat )
-  - cd ..
-  - bin\nim c koch
-  - koch boot -d:release
-  - koch nimble
+
+  # build nim from our own branch - this to avoid the day-to-day churn and
+  # regressions of the fast-paced Nim development while maintaining the
+  # flexibility to apply patches
+  - SET "NEED_REBUILD="
+
+  - IF NOT EXIST "Nim\\.git\\" (
+      git clone https://github.com/status-im/Nim.git
+    ) ELSE (
+      ( cd Nim ) &
+      ( git pull ) &
+      ( cd .. )
+    )
+
+  # Rebuild Nim if HEAD has moved or if we don't yet have a cached version
+  - IF NOT EXIST "Nim\\ver.txt" (
+      SET NEED_REBUILD=1
+    ) ELSE (
+      ( CD Nim ) &
+      ( git rev-parse HEAD > ..\\cur_ver.txt ) &
+      ( fc ver.txt ..\\cur_ver.txt > nul ) &
+      ( IF NOT ERRORLEVEL == 0 SET NEED_REBUILD=1 ) &
+      ( cd .. )
+    )
+
+  - IF NOT EXIST "Nim\\bin\\nim.exe" SET NEED_REBUILD=1
+  - IF NOT EXIST "Nim\\bin\\nimble.exe" SET NEED_REBUILD=1
+
+  # after building nim, wipe csources to save on cache space
+  - IF DEFINED NEED_REBUILD (
+      cd Nim &
+      ( IF EXIST "csources" rmdir /s /q csources ) &
+      git clone --depth 1 https://github.com/nim-lang/csources &
+      cd csources &
+      ( IF "%PLATFORM%" == "x64" ( build64.bat ) else ( build.bat ) ) &
+      cd .. &
+      bin\nim c koch &
+      koch boot -d:release &
+      koch nimble &
+      git rev-parse HEAD > ver.txt &
+      rmdir /s /q csources
+    )
+
 build_script:
   - cd C:\projects\%APPVEYOR_PROJECT_SLUG%
   - nimble install -y
