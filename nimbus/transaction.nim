@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth_common, eth_keys, rlp
+  constants, errors, eth_common, eth_keys, nimcrypto, rlp
 
 proc intrinsicGas*(t: Transaction): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
@@ -21,8 +21,8 @@ proc validate*(t: Transaction) =
     raise newException(ValidationError, "Insufficient gas")
   #  self.check_signature_validity()
 
-func hash*(transaction: Transaction): Hash256 =
-  # Hash transaction without signature
+func rlpEncode*(transaction: Transaction): auto =
+  # Encode transaction without signature
   type
     TransHashObj = object
       accountNonce:  AccountNonce
@@ -31,14 +31,18 @@ func hash*(transaction: Transaction): Hash256 =
       to:            EthAddress
       value:         UInt256
       payload:       Blob
-  return TransHashObj(
+  return rlp.encode(TransHashObj(
     accountNonce: transaction.accountNonce,
     gasPrice: transaction.gasPrice,
     gasLimit: transaction.gasLimit,
     to: transaction.to,
     value: transaction.value,
     payload: transaction.payload
-    ).rlpHash
+    ))
+
+func hash*(transaction: Transaction): Hash256 =
+  # Hash transaction without signature
+  return keccak256.digest(transaction.rlpEncode.toOpenArray)
 
 proc toSignature*(transaction: Transaction): Signature =
   var bytes: array[65, byte]
