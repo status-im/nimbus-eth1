@@ -41,7 +41,8 @@ install:
       )
     )
 
-  - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\Nim\bin;%PATH%
+  - MKDIR %CD%\bin
+  - SET PATH=%CD%\%MINGW_DIR%\bin;%CD%\bin;%CD%\Nim\bin;%PATH%
 
   # Unpack mingw
   - IF NOT EXIST "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
