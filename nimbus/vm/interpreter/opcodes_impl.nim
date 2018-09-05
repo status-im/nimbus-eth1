@@ -695,20 +695,20 @@ template genCall(callName: untyped): untyped =
     computation.memory.extend(memInPos, memInLen)
     computation.memory.extend(memOutPos, memOutLen)
 
-    let callData = computation.memory.read(memInPos, memInLen)
-
-    ##### getBalance type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
-    # computation.vmState.db(readOnly = true):
-    #   let senderBalance = db.getBalance(computation.msg.storageAddress) # TODO check gas balance rollover
-
-    let insufficientFunds = false # shouldTransferValue and senderBalance < value
-    let stackTooDeep = computation.msg.depth >= MaxCallDepth
+    let
+      callData = computation.memory.read(memInPos, memInLen)
+      senderBalance = computation.vmState.readOnlyStateDb.getBalance(computation.msg.storageAddress)
+      # TODO check gas balance rollover
+      # TODO: shouldTransferValue is not set up, should be:
+      #   call, callCode: True
+      #   callDelegate, callStatic: False
+      insufficientFunds = senderBalance < value # TODO: and shouldTransferValue
+      stackTooDeep = computation.msg.depth >= MaxCallDepth
 
     if insufficientFunds or stackTooDeep:
       computation.returnData = @[]
       var errMessage: string
       if insufficientFunds:
-        let senderBalance = -1 # TODO workaround
         # Note: for some reason we can't use strformat here, we get undeclared identifiers
         errMessage = &"Insufficient Funds: have: " & $senderBalance & "need: " & $value
       elif stackTooDeep:
@@ -721,11 +721,11 @@ template genCall(callName: untyped): untyped =
       push: 0
       return
 
-    ##### getCode type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
-    # computation.vmState.db(readOnly = true):
-    #   let code =  if codeAddress != ZERO_ADDRESS: db.getCode(codeAddress)
-    #               else: db.getCode(to)
-    let code: seq[byte] = @[]
+    let code =
+      if codeAddress != ZERO_ADDRESS:
+        computation.vmState.readOnlyStateDb.getCode(codeAddress)
+      else:
+        computation.vmState.readOnlyStateDb.getCode(to)
 
     var childMsg = prepareChildMessage(
       computation,
