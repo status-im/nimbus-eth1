@@ -15,7 +15,7 @@ import
 type
   Status* {.pure.} = enum OK, Fail, Skip
 
-proc validTest*(folder: string, name: string): bool =
+func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
 
   result = (folder != "vmPerformance" or "loop" notin name) and
@@ -135,3 +135,34 @@ proc getHexadecimalInt*(j: JsonNode): int64 =
   var data: StUInt[64]
   data = fromHex(StUInt[64], j.getStr)
   result = cast[int64](data)
+
+proc getFixtureTransaction*(j: JsonNode): Transaction =
+  var transaction : Transaction
+  transaction.accountNonce = j["nonce"].getStr.parseHexInt.AccountNonce
+  transaction.gasPrice = j["gasPrice"].getStr.parseHexInt
+  transaction.gasLimit = j["gasLimit"][0].getStr.parseHexInt
+  transaction.to = j["to"].getStr.parseAddress
+  transaction.value = j["value"][0].getStr.parseHexInt.u256
+
+  # Another, slightly distinct, case of this "" as special-cased hex string
+  # One possibility's a string prefix func which adds only if 0x is missing
+  # which can be used across the various hex-string-parsing utility funcs.
+  let rawData = j["data"][0].getStr
+  transaction.payload = (if rawData == "": "0x" else: rawData).hexToSeqByte
+
+  return transaction
+
+proc getFixtureTransactionSender*(j: JsonNode): auto =
+  var secretKey = j["secretKey"].getStr
+  removePrefix(secretKey, "0x")
+  let privateKey = initPrivateKey(secretKey)
+
+  var pubKey: PublicKey
+  let transaction = j.getFixtureTransaction
+  if recoverSignatureKey(signMessage(privateKey, transaction.rlpEncode.toOpenArray),
+                                     transaction.hash.data,
+                                     pubKey) == EthKeysStatus.Success:
+    return pubKey.toCanonicalAddress()
+  else:
+    # XXX: appropriate failure mode; probably raise something
+    discard
