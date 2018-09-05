@@ -73,7 +73,7 @@ Sometimes, the build will fail even though the latest CI is green - here are a f
 
 ## License
 
-Licensed under one of the following:
+Licensed under both of the following:
 
  * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
  * MIT license: [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
