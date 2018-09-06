@@ -14,7 +14,7 @@ import
   config, genesis, rpc/[common, p2p], p2p/chain,
   eth_trie
 
-const UseSqlite = true
+const UseSqlite = false
 
 when UseSqlite:
   import db/backends/sqlite_backend

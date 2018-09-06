@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, tables, parseutils,
+  unittest, tables, parseutils, byteutils,
   eth_trie/[types, memdb], eth_common/eth_types,
   ../nimbus/[constants, vm_types, vm_state],
   ../nimbus/vm/interpreter,
@@ -32,7 +32,7 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
     sender=ZERO_ADDRESS, #fixture{"exec"}{"caller"}.getStr,
     value=0.u256,
     data = @[],
-    code=code,
+    code=code.hexToSeqByte,
     gas=initial_gas,
     gasPrice=1) # What is this used for?
     # gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt.u256,

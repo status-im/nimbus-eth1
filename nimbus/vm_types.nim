@@ -90,7 +90,7 @@ type
     # Not in EVMC API
 
     # TODO: Done via callback function (v)table in EVMC
-    code*:                    string    # TODO: seq[byte] is probably a better representation
+    code*:                    seq[byte]
 
     internalOrigin*:          EthAddress
     internalCodeAddress*:     EthAddress

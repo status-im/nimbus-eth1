@@ -69,10 +69,12 @@ proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
     var
       resStart = columnBlob(db.selectStmt, 0)
       resLen   = columnBytes(db.selectStmt, 0)
-      resSeq   = newSeq[byte](resLen)
-    copyMem(resSeq.baseAddr, resStart, resLen)
-    return resSeq
-  else: raiseKeySearchError(key)
+    result = newSeq[byte](resLen)
+    copyMem(result.baseAddr, resStart, resLen)
+  of SQLITE_DONE:
+    discard
+  else:
+    raiseKeyReadError(key)
 
 proc put*(db: ChainDB, key, value: openarray[byte]) =
   template check(op) =

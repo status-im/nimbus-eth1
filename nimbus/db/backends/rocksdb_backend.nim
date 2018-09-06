@@ -21,8 +21,12 @@ proc newChainDB*(basePath: string): ChainDB =
 
 proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
   let s = db.store.getBytes(key)
-  if not s.ok: raiseKeyReadError(key)
-  return s.value
+  if s.ok:
+    return s.value
+  elif s.error.len == 0:
+    discard
+  else:
+    raiseKeyReadError(key)
 
 proc put*(db: ChainDB, key, value: openarray[byte]) =
   let s = db.store.put(key, value)

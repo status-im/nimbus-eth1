@@ -49,7 +49,7 @@ proc toSignature*(transaction: Transaction): Signature =
   bytes[0..31] = transaction.R.toByteArrayBE()
   bytes[32..63] = transaction.S.toByteArrayBE()
   # TODO: V will become a byte or range soon.
-  bytes[64] = transaction.V
+  bytes[64] = transaction.V - 27 # TODO: 27 should come from somewhere
   initSignature(bytes)
 
 proc getSender*(transaction: Transaction, output: var EthAddress): bool =

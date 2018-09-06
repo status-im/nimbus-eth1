@@ -31,13 +31,10 @@ proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
 
 proc getBlockHeader*(self: BaseChainDB; blockHash: Hash256, output: var BlockHeader): bool =
-  try:
-    let blk = self.db.get(genericHashKey(blockHash).toOpenArray).toRange
-    if blk.len != 0:
-      output = rlp.decode(blk, BlockHeader)
-      result = true
-  except KeyError:
-    discard
+  let data = self.db.get(genericHashKey(blockHash).toOpenArray).toRange
+  if data.len != 0:
+    output = rlp.decode(data, BlockHeader)
+    result = true
 
 proc getBlockHeader*(self: BaseChainDB, blockHash: Hash256): BlockHeader =
   ## Returns the requested block header as specified by block hash.
@@ -47,11 +44,10 @@ proc getBlockHeader*(self: BaseChainDB, blockHash: Hash256): BlockHeader =
     raise newException(BlockNotFound, "No block with hash " & blockHash.data.toHex)
 
 proc getHash(self: BaseChainDB, key: DbKey, output: var Hash256): bool {.inline.} =
-  try:
-    output = rlp.decode(self.db.get(key.toOpenArray).toRange, Hash256)
+  let data = self.db.get(key.toOpenArray).toRange
+  if data.len != 0:
+    output = rlp.decode(data, Hash256)
     result = true
-  except KeyError:
-    discard
 
 proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
   var headHash: Hash256
@@ -145,13 +141,13 @@ proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockH
   for h in newCanonicalHeaders:
     self.addBlockNumberToHashLookup(h)
 
-  self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(header.hash).toOpenArray)
+  self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash).toOpenArray)
 
   return newCanonicalHeaders
 
 proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
-  self.db.contains(blockHash.data)
+  self.db.contains(genericHashKey(blockHash).toOpenArray)
 
 iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): BytesRange =
   var transactionDb = initHexaryTrie(self.db, transactionRoot)
@@ -183,14 +179,15 @@ iterator getBlockTransactions(self: BaseChainDB; transactionRoot: Hash256;
 
 proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader] =
   let isGenesis = header.parentHash == GENESIS_PARENT_HASH
+  let headerHash = header.blockHash
   if not isGenesis and not self.headerExists(header.parentHash):
     raise newException(ParentNotFound, "Cannot persist block header " &
-        $header.hash & " with unknown parent " & $header.parentHash)
-  self.db.put(genericHashKey(header.hash).toOpenArray, rlp.encode(header).toOpenArray)
+        $headerHash & " with unknown parent " & $header.parentHash)
+  self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header).toOpenArray)
 
   let score = if isGenesis: header.difficulty
               else: self.getScore(header.parentHash).u256 + header.difficulty
-  self.db.put(blockHashToScoreKey(header.hash).toOpenArray, rlp.encode(score).toOpenArray)
+  self.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score).toOpenArray)
 
   self.addBlockNumberToHashLookup(header)
 
@@ -198,10 +195,10 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   try:
     headScore = self.getScore(self.getCanonicalHead().hash)
   except CanonicalHeadNotFound:
-    return self.setAsCanonicalChainHead(header.hash)
+    return self.setAsCanonicalChainHead(headerHash)
 
   if score > headScore.u256:
-    result = self.setAsCanonicalChainHead(header.hash)
+    result = self.setAsCanonicalChainHead(headerHash)
 
 proc addTransactionToCanonicalChain(self: BaseChainDB, txHash: Hash256,
     blockHeader: BlockHeader, index: int) =
