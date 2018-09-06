@@ -39,7 +39,7 @@ proc newMessage*(
     sender: EthAddress,
     value: UInt256,
     data: seq[byte],
-    code: string,
+    code: seq[byte],
     options: MessageOptions = newMessageOptions()): Message =
 
   validateGte(options.depth, minimum=0, title="Message.depth")

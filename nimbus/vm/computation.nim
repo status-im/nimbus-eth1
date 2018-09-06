@@ -25,7 +25,7 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Me
   result.children = @[]
   result.accountsToDelete = initTable[EthAddress, EthAddress]()
   result.logEntries = @[]
-  result.code = newCodeStreamFromUnescaped(message.code) # TODO: what is the best repr
+  result.code = newCodeStream(message.code)
   # result.rawOutput = "0x"
   result.gasCosts = blockNumber.toFork.forkToSchedule
 
@@ -67,7 +67,7 @@ proc prepareChildMessage*(
     to,
     value,
     data,
-    code.bytesToHex, # TODO: use seq[byte] for Message as well
+    code,
     childOptions)
 
 func output*(c: BaseComputation): seq[byte] =

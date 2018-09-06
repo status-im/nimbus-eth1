@@ -22,11 +22,6 @@ suite "vm json tests":
   jsonTest("VMTests", testFixture)
 
 
-proc stringFromBytes(x: ByteRange): string =
-  result = newString(x.len)
-  for i in 0 ..< x.len:
-    result[i] = char(x[i])
-
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode
   for label, child in fixtures:
@@ -47,13 +42,13 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var memDb = newMemDB()
   var vmState = newBaseVMState(header, newBaseChainDB(trieDB memDb))
   let fexec = fixture["exec"]
-  var code = ""
+  var code: seq[byte]
   vmState.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
     let address = fexec{"address"}.getStr.parseAddress
-    code = stringFromBytes db.getCode(address)
+    code = db.getCode(address).toSeq
 
-  code = fexec{"code"}.getStr
+  code = fexec{"code"}.getStr.hexToSeqByte
   let toAddress = fexec{"address"}.getStr.parseAddress
   let message = newMessage(
       to = toAddress,
@@ -67,7 +62,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
                                   createAddress = toAddress))
 
   #echo fixture{"exec"}
-  var c = newCodeStreamFromUnescaped(code)
+  var c = newCodeStream(code)
   when defined(nimbusdebug):
     c.displayDecompiled()
 

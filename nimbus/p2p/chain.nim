@@ -1,5 +1,5 @@
-import ../db/db_chain, eth_common, chronicles, ../vm_state, ../vm_types, ../transaction,
-  ../vm/[computation, interpreter_dispatch, message]
+import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
+  ../vm/[computation, interpreter_dispatch, message], ../constants
 
 
 type
@@ -35,17 +35,28 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   assert(headers.len == bodies.len)
 
   for i in 0 ..< headers.len:
-    let head = c.db.getCanonicalHead()
-    # assert(head.blockNumber == headers[i].blockNumber - 1)
-    let vmState = newBaseVMState(head, c.db)
-    if bodies[i].transactions.len != 0:
-      # echo "block: ", headers[i].blockNumber
-      for t in bodies[i].transactions:
-        var msg: Message
-        # echo "trns: ", t
+    echo "Persisting block: ", headers[i].blockNumber
+    if headers[i].txRoot != BLANK_ROOT_HASH:
+      let head = c.db.getCanonicalHead()
+      # assert(head.blockNumber == headers[i].blockNumber - 1)
+      let vmState = newBaseVMState(head, c.db)
+      let stateDb = newAccountStateDB(c.db.db, head.stateRoot)
+      if bodies[i].transactions.len != 0:
+        # echo "block: ", headers[i].blockNumber
+        for t in bodies[i].transactions:
+          var sender: EthAddress
+          if t.getSender(sender):
+            echo "Sender: ", sender
+            let code = stateDb.getCode(sender)
+            debug "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
+            let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
+      assert(false, "Dont know how to persist transactions")
 
-        # let msg = newMessage(t.gasLimit, t.gasPrice, t.to, t.getSender, 
+    if headers[i].ommersHash != EMPTY_UNCLE_HASH:
+      debug "Ignoring ommers", blockNumber = headers[i].blockNumber
+      
+    discard c.db.persistHeaderToDb(headers[i])
+    assert(c.db.getCanonicalHead().blockHash == headers[i].blockHash)
 
-      # let c = newBaseComputation(vmState, 
 
   discard
