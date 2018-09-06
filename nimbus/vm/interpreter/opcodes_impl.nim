@@ -12,7 +12,7 @@ import
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
   ../../vm_state, ../../errors, ../../constants, ../../vm_types,
-  ../../db/[db_chain, state_db]
+  ../../db/[db_chain, state_db], ../../utils/addresses
 
 # ##################################
 # Syntactic sugar
@@ -545,19 +545,23 @@ op create, inline = false, value, startPosition, size:
   let callData = computation.memory.read(memPos, len)
 
   ## TODO dynamic gas that depends on remaining gas
+  var
+    contractAddress: EthAddress
+    isCollision: bool
 
-  ##### getNonce type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
-  # computation.vmState.db(readOnly=true):
-  #   let creationNonce = db.getNonce(computation.msg.storageAddress)
-  #   db.incrementNonce(computation.msg.storageAddress)
-  let contractAddress = ZERO_ADDRESS # generateContractAddress(computation.msg.storageAddress, creationNonce)
-
-  let isCollision = false # TODO: db.accountHasCodeOrNonce ...
+  computation.vmState.mutateStateDB:
+    # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
+    # See: https://github.com/ethereum/EIPs/issues/684
+    let creationNonce = db.getNonce(computation.msg.storageAddress)
+    db.setNonce(computation.msg.storageAddress, creationNonce + 1)
+    
+    contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
+    isCollision = db.hasCodeOrNonce(contractAddress)
 
   if isCollision:
     debug("Address collision while creating contract", address = contractAddress.toHex)
     push: 0
-    return
+    raise newException(ValidationError, "Contract creation failed, address already in use")
 
   let childMsg = prepareChildMessage(
     computation,
