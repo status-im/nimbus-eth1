@@ -297,7 +297,7 @@ proc processRpcArguments(key, value: string): ConfigStatus =
   let config = getConfiguration()
   let skey = key.toLowerAscii()
   if skey == "rpc":
-    config.rpc.flags.incl(Enabled)
+    config.rpc.flags.incl(RpcFlags.Enabled)
   elif skey == "rpcbind":
     config.rpc.binds.setLen(0)
     result = processAddressPortsList(value, config.rpc.binds)
