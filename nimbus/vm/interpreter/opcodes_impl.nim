@@ -545,22 +545,23 @@ op create, inline = false, value, startPosition, size:
   let callData = computation.memory.read(memPos, len)
 
   ## TODO dynamic gas that depends on remaining gas
+  var
+    contractAddress: EthAddress
+    isCollision: bool
 
-  let
-    readOnlyState = computation.vmState.readOnlyStateDB
-    creationNonce = readOnlyState.getNonce(computation.msg.storageAddress)
+  computation.vmState.mutateStateDB:
+    # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
+    # See: https://github.com/ethereum/EIPs/issues/684
+    let creationNonce = db.getNonce(computation.msg.storageAddress)
+    db.setNonce(computation.msg.storageAddress, creationNonce + 1)
+    
     contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
-    isCollision = readOnlyState.hasCodeOrNonce(contractAddress)
+    isCollision = db.hasCodeOrNonce(contractAddress)
 
-  # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
-  # See: https://github.com/ethereum/EIPs/issues/684
-  if not isCollision:
-    computation.vmState.mutateStateDB:
-      db.setNonce(computation.msg.storageAddress, creationNonce + 1)
-  else:
+  if isCollision:
     debug("Address collision while creating contract", address = contractAddress.toHex)
     push: 0
-    raise newException(ValidationError, "Contract address already exists and is in use")
+    raise newException(ValidationError, "Contract creation failed, address already in use")
 
   let childMsg = prepareChildMessage(
     computation,
