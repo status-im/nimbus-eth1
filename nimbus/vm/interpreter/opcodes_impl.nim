@@ -733,7 +733,7 @@ template genCall(callName: untyped): untyped =
       to,
       value,
       callData,
-      code,
+      code.toSeq,
       MessageOptions(flags: flags)
     )
 
