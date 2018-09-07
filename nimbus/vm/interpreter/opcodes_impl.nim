@@ -699,9 +699,9 @@ template genCall(callName: untyped): untyped =
       callData = computation.memory.read(memInPos, memInLen)
       senderBalance = computation.vmState.readOnlyStateDb.getBalance(computation.msg.storageAddress)
       # TODO check gas balance rollover
-      # TODO: shouldTransferValue is not set up, should be:
-      #   call, callCode: True
-      #   callDelegate, callStatic: False
+      # TODO: shouldTransferValue in py-evm is:
+      #   True for call and callCode
+      #   False for callDelegate and callStatic
       insufficientFunds = senderBalance < value # TODO: and shouldTransferValue
       stackTooDeep = computation.msg.depth >= MaxCallDepth
 
@@ -740,9 +740,7 @@ template genCall(callName: untyped): untyped =
     if sender != ZERO_ADDRESS:
       childMsg.sender = sender
 
-    # let childComputation = applyChildBaseComputation(computation, childMsg)
-    var childComputation: BaseComputation # TODO - stub
-    new childComputation
+    var childComputation = applyChildComputation(computation, childMsg)
     childComputation.gasMeter.init(0)
 
     if childComputation.isError:
