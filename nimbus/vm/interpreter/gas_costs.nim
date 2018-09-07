@@ -508,7 +508,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
 # Generate the fork-specific gas costs tables
 const
   BaseGasFees: GasFeeSchedule = [
-    # Fee Schedule at for the initial Ethereum forks
+    # Fee Schedule for the initial Ethereum forks
     GasZero:            0'i64,
     GasBase:            2,
     GasVeryLow:         3,
