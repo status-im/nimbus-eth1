@@ -6,20 +6,35 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  os, macros, json, strformat, strutils, parseutils, ospaths, tables,
+  os, macros, json, sequtils, strformat, strutils, parseutils, ospaths, tables,
   byteutils, eth_common, eth_keys, ranges/typedranges,
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
-  ../nimbus/transaction
+  ../nimbus/transaction,
+  ../nimbus/vm/interpreter/[gas_costs, vm_forks]
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
 
+func slowTest*(folder: string, name: string): bool =
+  # TODO: add vmPerformance and loop check here
+  result = name in @["randomStatetest352.json", "randomStatetest1.json",
+                     "randomStatetest32.json", "randomStatetest347.json",
+                     "randomStatetest393.json", "randomStatetest626.json",
+                     "CALLCODE_Bounds.json", "DELEGATECALL_Bounds3.json",
+                     "CALLCODE_Bounds4.json", "CALL_Bounds.json",
+                     "DELEGATECALL_Bounds2.json", "CALL_Bounds3.json",
+                     "CALLCODE_Bounds2.json", "CALLCODE_Bounds3.json",
+                     "DELEGATECALL_Bounds.json", "CALL_Bounds2a.json",
+                     "CALL_Bounds2.json",
+                     "CallToNameRegistratorMemOOGAndInsufficientBalance.json",
+                     "CallToNameRegistratorTooMuchMemory0.json"]
+
 func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
-
   result = (folder != "vmPerformance" or "loop" notin name) and
            (folder notin @["stTransitionTest", "stStackTests", "stDelegatecallTestHomestead"] and
+            not slowTest(folder, name) and
             name notin @["static_Call1024BalanceTooLow.json",
                          "Call1024BalanceTooLow.json", "ExtCodeCopyTests.json"])
 
@@ -80,7 +95,7 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       raw.add("OK: " & $okCount & "/" & $sum & " Fail: " & $failCount & "/" & $sum & " Skip: " & $skipCount & "/" & $sum & "\n")
     writeFile(`s` & ".md", raw)
 
-proc ethAddressFromHex(s: string): EthAddress = hexToByteArray(s, result)
+proc ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
 
 proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
   for ac, accountData in wantedState:
@@ -152,7 +167,7 @@ proc getFixtureTransaction*(j: JsonNode): Transaction =
 
   return transaction
 
-proc getFixtureTransactionSender*(j: JsonNode): auto =
+proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
   var secretKey = j["secretKey"].getStr
   removePrefix(secretKey, "0x")
   let privateKey = initPrivateKey(secretKey)
@@ -160,9 +175,31 @@ proc getFixtureTransactionSender*(j: JsonNode): auto =
   var pubKey: PublicKey
   let transaction = j.getFixtureTransaction
   if recoverSignatureKey(signMessage(privateKey, transaction.rlpEncode.toOpenArray),
-                                     transaction.hash.data,
-                                     pubKey) == EthKeysStatus.Success:
+                         transaction.hash.data,
+                         pubKey) == EthKeysStatus.Success:
     return pubKey.toCanonicalAddress()
   else:
     # XXX: appropriate failure mode; probably raise something
     discard
+
+proc getFixtureCode*(pre: JsonNode, targetAccount: EthAddress) : seq[byte] =
+  # XXX: Workaround for broken setCode/getCode. Remove when feasible.
+  for ac, preState in pre:
+    if ethAddressFromHex(ac) == targetAccount:
+      return preState["code"].getStr.hexToSeqByte
+
+  # Fail loudly if it falls off the end (by default)
+
+proc getFixtureIntrinsicGas*(transaction: Transaction) : auto =
+  # Py-EVM has _get_homestead_intrinsic_gas and _get_frontier_intrinsic_gas
+  # Using former.
+
+  # TODO: refactor and pull from nimbus/vm/interpreter/gas_costs.nim
+  let
+    gasTransaction = 21_000
+    gasTXDataZero = 4
+    gasTXDataNonZero = 68
+    numZeroBytes = transaction.payload.count(0)
+    gasCosts = forkToSchedule(FkHomestead)
+
+  result = gasTransaction + gasTXDataZero * numZeroBytes + gasTXDataNonZero * (transaction.payload.len - numZeroBytes)
