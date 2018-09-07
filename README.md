@@ -51,7 +51,7 @@ mkdir -p build
 nim c -o:build/decompile_smart_contract -r examples/decompile_smart_contract.nim
 ```
 
-Run Ethereum [JSON-based VM tests](https://github.com/ethereum/tests/):
+Run Ethereum [JSON-based general state tests](https://github.com/ethereum/tests/):
 ```
 mkdir -p build
 nim c -o:build/test_generalstate_json -r --experimental:forLoopMacros tests/test_generalstate_json.nim
