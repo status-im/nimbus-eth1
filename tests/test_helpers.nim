@@ -33,8 +33,7 @@ func slowTest*(folder: string, name: string): bool =
 func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
   result = (folder != "vmPerformance" or "loop" notin name) and
-           (folder notin @["stTransitionTest", "stStackTests", "stDelegatecallTestHomestead"] and
-            not slowTest(folder, name) and
+           (not slowTest(folder, name) and
             name notin @["static_Call1024BalanceTooLow.json",
                          "Call1024BalanceTooLow.json", "ExtCodeCopyTests.json"])
 

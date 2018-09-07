@@ -401,41 +401,41 @@ OK: 0/30 Fail: 30/30 Skip: 0/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
-  Call1024OOG.json                                                Skip
-  Call1024PreCalls.json                                           Skip
-  CallLoseGasOOG.json                                             Skip
-  CallRecursiveBombPreCall.json                                   Skip
-  CallcodeLoseGasOOG.json                                         Skip
-  Delegatecall1024.json                                           Skip
-  Delegatecall1024OOG.json                                        Skip
-  callOutput1.json                                                Skip
-  callOutput2.json                                                Skip
-  callOutput3.json                                                Skip
-  callOutput3Fail.json                                            Skip
-  callOutput3partial.json                                         Skip
-  callOutput3partialFail.json                                     Skip
-  callWithHighValueAndGasOOG.json                                 Skip
-  callcodeOutput1.json                                            Skip
-  callcodeOutput2.json                                            Skip
-  callcodeOutput3.json                                            Skip
-  callcodeOutput3Fail.json                                        Skip
-  callcodeOutput3partial.json                                     Skip
-  callcodeOutput3partialFail.json                                 Skip
-  callcodeWithHighValueAndGasOOG.json                             Skip
-  deleagateCallAfterValueTransfer.json                            Skip
-  delegatecallAndOOGatTxLevel.json                                Skip
-  delegatecallBasic.json                                          Skip
-  delegatecallEmptycontract.json                                  Skip
-  delegatecallInInitcodeToEmptyContract.json                      Skip
-  delegatecallInInitcodeToExistingContract.json                   Skip
-  delegatecallInInitcodeToExistingContractOOG.json                Skip
-  delegatecallOOGinCall.json                                      Skip
-  delegatecallSenderCheck.json                                    Skip
-  delegatecallValueCheck.json                                     Skip
-  delegatecodeDynamicCode.json                                    Skip
-  delegatecodeDynamicCode2SelfCall.json                           Skip
+- Call1024OOG.json                                                Fail
+- Call1024PreCalls.json                                           Fail
+- CallLoseGasOOG.json                                             Fail
+- CallRecursiveBombPreCall.json                                   Fail
+- CallcodeLoseGasOOG.json                                         Fail
+- Delegatecall1024.json                                           Fail
+- Delegatecall1024OOG.json                                        Fail
+- callOutput1.json                                                Fail
+- callOutput2.json                                                Fail
+- callOutput3.json                                                Fail
+- callOutput3Fail.json                                            Fail
+- callOutput3partial.json                                         Fail
+- callOutput3partialFail.json                                     Fail
+- callWithHighValueAndGasOOG.json                                 Fail
+- callcodeOutput1.json                                            Fail
+- callcodeOutput2.json                                            Fail
+- callcodeOutput3.json                                            Fail
+- callcodeOutput3Fail.json                                        Fail
+- callcodeOutput3partial.json                                     Fail
+- callcodeOutput3partialFail.json                                 Fail
+- callcodeWithHighValueAndGasOOG.json                             Fail
+- deleagateCallAfterValueTransfer.json                            Fail
+- delegatecallAndOOGatTxLevel.json                                Fail
+- delegatecallBasic.json                                          Fail
+- delegatecallEmptycontract.json                                  Fail
+- delegatecallInInitcodeToEmptyContract.json                      Fail
+- delegatecallInInitcodeToExistingContract.json                   Fail
+- delegatecallInInitcodeToExistingContractOOG.json                Fail
+- delegatecallOOGinCall.json                                      Fail
+- delegatecallSenderCheck.json                                    Fail
+- delegatecallValueCheck.json                                     Fail
+- delegatecodeDynamicCode.json                                    Fail
+- delegatecodeDynamicCode2SelfCall.json                           Fail
 ```
-OK: 0/34 Fail: 0/34 Skip: 34/34
+OK: 0/34 Fail: 33/34 Skip: 1/34
 ## stEIP150Specific
 ```diff
 - CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Fail
@@ -1716,15 +1716,15 @@ OK: 1/16 Fail: 15/16 Skip: 0/16
 OK: 0/13 Fail: 13/13 Skip: 0/13
 ## stStackTests
 ```diff
-  shallowStack.json                                               Skip
-  stackOverflow.json                                              Skip
-  stackOverflowDUP.json                                           Skip
-  stackOverflowM1.json                                            Skip
-  stackOverflowM1DUP.json                                         Skip
-  stackOverflowM1PUSH.json                                        Skip
-  stackOverflowPUSH.json                                          Skip
+- shallowStack.json                                               Fail
+- stackOverflow.json                                              Fail
+- stackOverflowDUP.json                                           Fail
+- stackOverflowM1.json                                            Fail
+- stackOverflowM1DUP.json                                         Fail
+- stackOverflowM1PUSH.json                                        Fail
+- stackOverflowPUSH.json                                          Fail
 ```
-OK: 0/7 Fail: 0/7 Skip: 7/7
+OK: 0/7 Fail: 7/7 Skip: 0/7
 ## stStaticCall
 ```diff
 - static_ABAcalls0.json                                           Fail
@@ -2134,17 +2134,17 @@ OK: 4/67 Fail: 61/67 Skip: 2/67
 OK: 1/44 Fail: 43/44 Skip: 0/44
 ## stTransitionTest
 ```diff
-  createNameRegistratorPerTxsAfter.json                           Skip
-  createNameRegistratorPerTxsAt.json                              Skip
-  createNameRegistratorPerTxsBefore.json                          Skip
-  createNameRegistratorPerTxsNotEnoughGasAfter.json               Skip
-  createNameRegistratorPerTxsNotEnoughGasAt.json                  Skip
-  createNameRegistratorPerTxsNotEnoughGasBefore.json              Skip
-  delegatecallAfterTransition.json                                Skip
-  delegatecallAtTransition.json                                   Skip
-  delegatecallBeforeTransition.json                               Skip
+- createNameRegistratorPerTxsAfter.json                           Fail
+- createNameRegistratorPerTxsAt.json                              Fail
+- createNameRegistratorPerTxsBefore.json                          Fail
+- createNameRegistratorPerTxsNotEnoughGasAfter.json               Fail
+- createNameRegistratorPerTxsNotEnoughGasAt.json                  Fail
+- createNameRegistratorPerTxsNotEnoughGasBefore.json              Fail
+- delegatecallAfterTransition.json                                Fail
+- delegatecallAtTransition.json                                   Fail
+- delegatecallBeforeTransition.json                               Fail
 ```
-OK: 0/9 Fail: 0/9 Skip: 9/9
+OK: 0/9 Fail: 9/9 Skip: 0/9
 ## stWalletTest
 ```diff
 - dayLimitConstruction.json                                       Fail
