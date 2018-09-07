@@ -39,15 +39,29 @@ template isSuccess*(c: BaseComputation): bool =
 template isError*(c: BaseComputation): bool =
   not c.isSuccess
 
-proc shouldBurnGas*(c: BaseComputation): bool =
+func shouldBurnGas*(c: BaseComputation): bool =
   c.isError and c.error.burnsGas
 
-proc shouldEraseReturnData*(c: BaseComputation): bool =
+func shouldEraseReturnData*(c: BaseComputation): bool =
   c.isError and c.error.erasesReturnData
 
 func bytesToHex(x: openarray[byte]): string {.inline.} =
   ## TODO: use seq[byte] for raw data and delete this proc
   foldl(x, a & b.int.toHex(2).toLowerAscii, "0x")
+
+func output*(c: BaseComputation): seq[byte] =
+  if c.shouldEraseReturnData:
+    @[]
+  else:
+    c.rawOutput
+
+func `output=`*(c: var BaseComputation, value: openarray[byte]) =
+  c.rawOutput = @value
+
+proc outputHex*(c: BaseComputation): string =
+  if c.shouldEraseReturnData:
+    return "0x"
+  c.rawOutput.bytesToHex
 
 proc prepareChildMessage*(
     c: var BaseComputation,
@@ -70,19 +84,46 @@ proc prepareChildMessage*(
     code,
     childOptions)
 
-func output*(c: BaseComputation): seq[byte] =
-  if c.shouldEraseReturnData:
-    @[]
+proc applyCreateMessage(computation: BaseComputation): BaseComputation =
+  # TODO: This needs to be different depending on fork.
+  raise newException(NotImplementedError, "Apply create message not implemented")
+
+proc applyMessage(computation: BaseComputation): BaseComputation =
+  # TODO: This needs to be different depending on fork.
+  raise newException(NotImplementedError, "Apply message not implemented")
+
+proc generateChildComputation*(computation: BaseComputation, childMsg: Message): BaseComputation =
+  new result
+  if childMsg.isCreate:
+    result = newBaseComputation(
+      computation.vmState,
+      computation.vmState.blockHeader.blockNumber,
+      childMsg).applyCreateMessage()
   else:
-    c.rawOutput
+    result = newBaseComputation(
+      computation.vmState,
+      computation.vmState.blockHeader.blockNumber,
+      childMsg).applyMessage()
 
-func `output=`*(c: var BaseComputation, value: openarray[byte]) =
-  c.rawOutput = @value
+proc addChildComputation(computation: BaseComputation, child: BaseComputation) =
+  if child.isError:
+    if child.msg.isCreate:
+      computation.returnData = child.output
+    elif child.shouldBurnGas:
+      computation.returnData = @[]
+    else:
+      computation.returnData = child.output
+  else:
+    if child.msg.isCreate:
+      computation.returnData = @[]
+    else:
+      computation.returnData = child.output
+  computation.children.add(child)
 
-proc outputHex*(c: BaseComputation): string =
-  if c.shouldEraseReturnData:
-    return "0x"
-  c.rawOutput.bytesToHex
+proc applyChildComputation*(computation: BaseComputation, childMsg: Message): BaseComputation =
+  ## Apply the vm message childMsg as a child computation.
+  result = computation.generateChildComputation(childMsg)
+  computation.addChildComputation(result)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:
