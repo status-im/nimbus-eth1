@@ -155,7 +155,12 @@ proc getFixtureTransaction*(j: JsonNode): Transaction =
   transaction.accountNonce = j["nonce"].getStr.parseHexInt.AccountNonce
   transaction.gasPrice = j["gasPrice"].getStr.parseHexInt
   transaction.gasLimit = j["gasLimit"][0].getStr.parseHexInt
-  transaction.to = j["to"].getStr.parseAddress
+
+  # Another distinct case "" as special hex string, but at least here,
+  # it has some semantic meaning in Ethereum -- contract creation. The
+  # hex parsing routine tripping over this is at least the third.
+  let rawTo = j["to"].getStr
+  transaction.to = (if rawTo == "": "0x" else: rawTo).parseAddress
   transaction.value = j["value"][0].getStr.parseHexInt.u256
 
   # Another, slightly distinct, case of this "" as special-cased hex string

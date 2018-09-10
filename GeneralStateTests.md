@@ -63,11 +63,11 @@ OK: 0/2 Fail: 2/2 Skip: 0/2
 OK: 0/1 Fail: 1/1 Skip: 0/1
 ## stBugs
 ```diff
-- evmBytecode.json                                                Fail
-- returndatacopyPythonBug_Tue_03_48_41-1432.json                  Fail
++ evmBytecode.json                                                OK
++ returndatacopyPythonBug_Tue_03_48_41-1432.json                  OK
 - staticcall_createfails.json                                     Fail
 ```
-OK: 0/3 Fail: 3/3 Skip: 0/3
+OK: 2/3 Fail: 1/3 Skip: 0/3
 ## stCallCodes
 ```diff
 - call_OOG_additionalGasCosts1.json                               Fail
@@ -389,7 +389,7 @@ OK: 0/3 Fail: 3/3 Skip: 0/3
 - CreateOOGafterInitCode.json                                     Fail
 - CreateOOGafterInitCodeReturndata.json                           Fail
 - CreateOOGafterInitCodeReturndata2.json                          Fail
-- CreateOOGafterInitCodeReturndata3.json                          Fail
++ CreateOOGafterInitCodeReturndata3.json                          OK
 - CreateOOGafterInitCodeReturndataSize.json                       Fail
 - CreateOOGafterInitCodeRevert.json                               Fail
 - CreateOOGafterInitCodeRevert2.json                              Fail
@@ -397,7 +397,7 @@ OK: 0/3 Fail: 3/3 Skip: 0/3
 - TransactionCollisionToEmptyButCode.json                         Fail
 - TransactionCollisionToEmptyButNonce.json                        Fail
 ```
-OK: 0/30 Fail: 30/30 Skip: 0/30
+OK: 1/30 Fail: 29/30 Skip: 0/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -631,12 +631,12 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
 - mload32bitBound_Msize.json                                      Fail
 - mload32bitBound_return.json                                     Fail
 - mload32bitBound_return2.json                                    Fail
-- static_CALL_Bounds.json                                         Fail
-- static_CALL_Bounds2.json                                        Fail
-- static_CALL_Bounds2a.json                                       Fail
-- static_CALL_Bounds3.json                                        Fail
++ static_CALL_Bounds.json                                         OK
++ static_CALL_Bounds2.json                                        OK
++ static_CALL_Bounds2a.json                                       OK
++ static_CALL_Bounds3.json                                        OK
 ```
-OK: 3/38 Fail: 24/38 Skip: 11/38
+OK: 7/38 Fail: 20/38 Skip: 11/38
 ## stMemoryTest
 ```diff
 - callDataCopyOffset.json                                         Fail
@@ -1110,7 +1110,7 @@ OK: 0/16 Fail: 16/16 Skip: 0/16
 + randomStatetest259.json                                         OK
 - randomStatetest26.json                                          Fail
 + randomStatetest260.json                                         OK
-- randomStatetest261.json                                         Fail
++ randomStatetest261.json                                         OK
 + randomStatetest263.json                                         OK
 + randomStatetest264.json                                         OK
 - randomStatetest265.json                                         Fail
@@ -1243,10 +1243,10 @@ OK: 0/16 Fail: 16/16 Skip: 0/16
 + randomStatetest49.json                                          OK
 + randomStatetest5.json                                           OK
 - randomStatetest50.json                                          Fail
-- randomStatetest51.json                                          Fail
++ randomStatetest51.json                                          OK
 - randomStatetest52.json                                          Fail
 + randomStatetest53.json                                          OK
-- randomStatetest54.json                                          Fail
++ randomStatetest54.json                                          OK
 - randomStatetest55.json                                          Fail
 + randomStatetest57.json                                          OK
 + randomStatetest58.json                                          OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 16/16 Skip: 0/16
 - randomStatetest97.json                                          Fail
 + randomStatetest98.json                                          OK
 ```
-OK: 229/327 Fail: 94/327 Skip: 4/327
+OK: 232/327 Fail: 91/327 Skip: 4/327
 ## stRandom2
 ```diff
 - 201503110226PYTHON_DUP6.json                                    Fail
@@ -1393,7 +1393,7 @@ OK: 229/327 Fail: 94/327 Skip: 4/327
 + randomStatetest501.json                                         OK
 + randomStatetest502.json                                         OK
 + randomStatetest503.json                                         OK
-- randomStatetest504.json                                         Fail
++ randomStatetest504.json                                         OK
 + randomStatetest505.json                                         OK
 + randomStatetest506.json                                         OK
 + randomStatetest507.json                                         OK
@@ -1513,9 +1513,9 @@ OK: 229/327 Fail: 94/327 Skip: 4/327
 - randomStatetest644.json                                         Fail
 - randomStatetest645.json                                         Fail
 - randomStatetest646.json                                         Fail
-- randomStatetest647.json                                         Fail
++ randomStatetest647.json                                         OK
 ```
-OK: 147/227 Fail: 78/227 Skip: 2/227
+OK: 149/227 Fail: 76/227 Skip: 2/227
 ## stRecursiveCreate
 ```diff
 - recursiveCreate.json                                            Fail
@@ -1555,24 +1555,24 @@ OK: 5/19 Fail: 14/19 Skip: 0/19
 - modexp_modsize0_returndatasize.json                             Fail
 - returndatacopy_0_0_following_successful_create.json             Fail
 - returndatacopy_afterFailing_create.json                         Fail
-- returndatacopy_after_failing_callcode.json                      Fail
++ returndatacopy_after_failing_callcode.json                      OK
 - returndatacopy_after_failing_delegatecall.json                  Fail
-- returndatacopy_after_failing_staticcall.json                    Fail
++ returndatacopy_after_failing_staticcall.json                    OK
 - returndatacopy_after_revert_in_staticcall.json                  Fail
 - returndatacopy_after_successful_callcode.json                   Fail
 - returndatacopy_after_successful_delegatecall.json               Fail
 - returndatacopy_after_successful_staticcall.json                 Fail
 - returndatacopy_following_call.json                              Fail
 - returndatacopy_following_create.json                            Fail
-- returndatacopy_following_failing_call.json                      Fail
++ returndatacopy_following_failing_call.json                      OK
 - returndatacopy_following_revert.json                            Fail
 - returndatacopy_following_revert_in_create.json                  Fail
 - returndatacopy_following_successful_create.json                 Fail
-- returndatacopy_following_too_big_transfer.json                  Fail
-- returndatacopy_initial.json                                     Fail
-- returndatacopy_initial_256.json                                 Fail
-- returndatacopy_initial_big_sum.json                             Fail
-- returndatacopy_overrun.json                                     Fail
++ returndatacopy_following_too_big_transfer.json                  OK
++ returndatacopy_initial.json                                     OK
++ returndatacopy_initial_256.json                                 OK
++ returndatacopy_initial_big_sum.json                             OK
++ returndatacopy_overrun.json                                     OK
 - returndatasize_after_failing_callcode.json                      Fail
 - returndatasize_after_failing_delegatecall.json                  Fail
 - returndatasize_after_failing_staticcall.json                    Fail
@@ -1585,7 +1585,7 @@ OK: 5/19 Fail: 14/19 Skip: 0/19
 - returndatasize_initial.json                                     Fail
 - returndatasize_initial_zero_read.json                           Fail
 ```
-OK: 0/37 Fail: 37/37 Skip: 0/37
+OK: 8/37 Fail: 29/37 Skip: 0/37
 ## stRevertTest
 ```diff
 - LoopCallsDepthThenRevert.json                                   Fail
@@ -1635,48 +1635,48 @@ OK: 0/37 Fail: 37/37 Skip: 0/37
 OK: 0/43 Fail: 43/43 Skip: 0/43
 ## stShift
 ```diff
-- sar00.json                                                      Fail
-- sar01.json                                                      Fail
-- sar10.json                                                      Fail
-- sar11.json                                                      Fail
-- sar_0_256-1.json                                                Fail
-- sar_2^254_254.json                                              Fail
-- sar_2^255-1_248.json                                            Fail
-- sar_2^255-1_254.json                                            Fail
-- sar_2^255-1_255.json                                            Fail
-- sar_2^255-1_256.json                                            Fail
-- sar_2^255_1.json                                                Fail
-- sar_2^255_255.json                                              Fail
-- sar_2^255_256.json                                              Fail
-- sar_2^255_257.json                                              Fail
-- sar_2^256-1_0.json                                              Fail
-- sar_2^256-1_1.json                                              Fail
-- sar_2^256-1_255.json                                            Fail
-- sar_2^256-1_256.json                                            Fail
-- shl01-0100.json                                                 Fail
-- shl01-0101.json                                                 Fail
-- shl01-ff.json                                                   Fail
-- shl01.json                                                      Fail
-- shl10.json                                                      Fail
-- shl11.json                                                      Fail
-- shl_-1_0.json                                                   Fail
-- shl_-1_1.json                                                   Fail
-- shl_-1_255.json                                                 Fail
-- shl_-1_256.json                                                 Fail
-- shl_2^255-1_1.json                                              Fail
-- shr01.json                                                      Fail
-- shr10.json                                                      Fail
-- shr11.json                                                      Fail
-- shr_-1_0.json                                                   Fail
-- shr_-1_1.json                                                   Fail
-- shr_-1_255.json                                                 Fail
-- shr_-1_256.json                                                 Fail
-- shr_2^255_1.json                                                Fail
-- shr_2^255_255.json                                              Fail
-- shr_2^255_256.json                                              Fail
-- shr_2^255_257.json                                              Fail
++ sar00.json                                                      OK
++ sar01.json                                                      OK
++ sar10.json                                                      OK
++ sar11.json                                                      OK
++ sar_0_256-1.json                                                OK
++ sar_2^254_254.json                                              OK
++ sar_2^255-1_248.json                                            OK
++ sar_2^255-1_254.json                                            OK
++ sar_2^255-1_255.json                                            OK
++ sar_2^255-1_256.json                                            OK
++ sar_2^255_1.json                                                OK
++ sar_2^255_255.json                                              OK
++ sar_2^255_256.json                                              OK
++ sar_2^255_257.json                                              OK
++ sar_2^256-1_0.json                                              OK
++ sar_2^256-1_1.json                                              OK
++ sar_2^256-1_255.json                                            OK
++ sar_2^256-1_256.json                                            OK
++ shl01-0100.json                                                 OK
++ shl01-0101.json                                                 OK
++ shl01-ff.json                                                   OK
++ shl01.json                                                      OK
++ shl10.json                                                      OK
++ shl11.json                                                      OK
++ shl_-1_0.json                                                   OK
++ shl_-1_1.json                                                   OK
++ shl_-1_255.json                                                 OK
++ shl_-1_256.json                                                 OK
++ shl_2^255-1_1.json                                              OK
++ shr01.json                                                      OK
++ shr10.json                                                      OK
++ shr11.json                                                      OK
++ shr_-1_0.json                                                   OK
++ shr_-1_1.json                                                   OK
++ shr_-1_255.json                                                 OK
++ shr_-1_256.json                                                 OK
++ shr_2^255_1.json                                                OK
++ shr_2^255_255.json                                              OK
++ shr_2^255_256.json                                              OK
++ shr_2^255_257.json                                              OK
 ```
-OK: 0/40 Fail: 40/40 Skip: 0/40
+OK: 40/40 Fail: 0/40 Skip: 0/40
 ## stSolidityTest
 ```diff
 - AmbiguousMethod.json                                            Fail
@@ -1780,8 +1780,8 @@ OK: 0/7 Fail: 7/7 Skip: 0/7
 - static_CallEcrecoverR_prefixed0.json                            Fail
 - static_CallEcrecoverS_prefixed0.json                            Fail
 - static_CallEcrecoverV_prefixed0.json                            Fail
-- static_CallGoesOOGOnSecondLevel.json                            Fail
-- static_CallGoesOOGOnSecondLevel2.json                           Fail
++ static_CallGoesOOGOnSecondLevel.json                            OK
++ static_CallGoesOOGOnSecondLevel2.json                           OK
 - static_CallIdentitiy_1.json                                     Fail
 - static_CallIdentity_1_nonzeroValue.json                         Fail
 - static_CallIdentity_2.json                                      Fail
@@ -1820,15 +1820,15 @@ OK: 0/7 Fail: 7/7 Skip: 0/7
 - static_CallToNameRegistrator0.json                              Fail
 - static_CallToReturn1.json                                       Fail
 - static_CalltoReturn2.json                                       Fail
-- static_CheckCallCostOOG.json                                    Fail
++ static_CheckCallCostOOG.json                                    OK
 - static_CheckOpcodes.json                                        Fail
 - static_CheckOpcodes2.json                                       Fail
 - static_CheckOpcodes3.json                                       Fail
-- static_CheckOpcodes4.json                                       Fail
++ static_CheckOpcodes4.json                                       OK
 - static_CheckOpcodes5.json                                       Fail
 - static_ExecuteCallThatAskForeGasThenTrabsactionHas.json         Fail
-- static_InternalCallHittingGasLimit.json                         Fail
-- static_InternalCallHittingGasLimit2.json                        Fail
++ static_InternalCallHittingGasLimit.json                         OK
++ static_InternalCallHittingGasLimit2.json                        OK
 - static_InternlCallStoreClearsOOG.json                           Fail
 - static_LoopCallsDepthThenRevert.json                            Fail
 - static_LoopCallsDepthThenRevert2.json                           Fail
@@ -1836,7 +1836,7 @@ OK: 0/7 Fail: 7/7 Skip: 0/7
 - static_LoopCallsThenRevert.json                                 Fail
 - static_PostToReturn1.json                                       Fail
 - static_RETURN_Bounds.json                                       Fail
-- static_RETURN_BoundsOOG.json                                    Fail
++ static_RETURN_BoundsOOG.json                                    OK
 - static_RawCallGasAsk.json                                       Fail
 - static_Return50000_2.json                                       Fail
 - static_ReturnTest.json                                          Fail
@@ -1844,7 +1844,7 @@ OK: 0/7 Fail: 7/7 Skip: 0/7
 - static_RevertDepth2.json                                        Fail
 - static_RevertOpcodeCalls.json                                   Fail
 - static_ZeroValue_CALL_OOGRevert.json                            Fail
-- static_ZeroValue_SUICIDE_OOGRevert.json                         Fail
++ static_ZeroValue_SUICIDE_OOGRevert.json                         OK
 - static_callBasic.json                                           Fail
 - static_callChangeRevert.json                                    Fail
 - static_callCreate.json                                          Fail
@@ -1864,8 +1864,8 @@ OK: 0/7 Fail: 7/7 Skip: 0/7
 - static_callWithHighValueAndGasOOG.json                          Fail
 - static_callWithHighValueAndOOGatTxLevel.json                    Fail
 - static_callWithHighValueOOGinCall.json                          Fail
-- static_call_OOG_additionalGasCosts1.json                        Fail
-- static_call_OOG_additionalGasCosts2.json                        Fail
++ static_call_OOG_additionalGasCosts1.json                        OK
++ static_call_OOG_additionalGasCosts2.json                        OK
 - static_call_value_inherit.json                                  Fail
 - static_call_value_inherit_from_call.json                        Fail
 - static_callcall_00.json                                         Fail
@@ -2012,7 +2012,7 @@ OK: 0/7 Fail: 7/7 Skip: 0/7
 - static_refund_CallToSuicideNoStorage.json                       Fail
 - static_refund_CallToSuicideTwice.json                           Fail
 ```
-OK: 0/284 Fail: 283/284 Skip: 1/284
+OK: 10/284 Fail: 273/284 Skip: 1/284
 ## stSystemOperationsTest
 ```diff
 - ABAcalls0.json                                                  Fail
