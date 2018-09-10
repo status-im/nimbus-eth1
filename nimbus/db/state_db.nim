@@ -64,6 +64,12 @@ proc setBalance*(db: var AccountStateDB, address: EthAddress, balance: UInt256) 
 proc increaseBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) + delta)
 
+proc addBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
+  db.setBalance(address, db.getBalance(address) + delta)
+
+proc subBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
+  db.setBalance(address, db.getBalance(address) - delta)
+
 template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
   # Converts a number to hex big-endian representation including
