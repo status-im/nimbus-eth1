@@ -83,7 +83,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       options = newMessageOptions(origin = sender,
                                   createAddress = transaction.to))
 
-  # build_computation (Py-EVM)
   var computation = newBaseComputation(vmState, header.blockNumber, message)
   computation.vmState = vmState
 
@@ -95,7 +94,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   try:
     computation.executeOpcodes()
 
-    # finalize_computation (Py-EVM)
     let
       gasRemaining = computation.gasMeter.gasRemaining
       gasRefunded = computation.gasMeter.gasRefunded
@@ -105,12 +103,12 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
     vmState.mutateStateDB:
       db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount.u256)
+      db.deltaBalance(sender, gasRefundAmount.u256)
       db.deltaBalance(transaction.to, transaction.value)
       db.setBalance(sender, db.getBalance(sender) - transaction.value)
-      db.deltaBalance(sender, gasRefundAmount.u256)
 
   except ValueError:
     echo "Computation error"
 
   # TODO: do this right
-  doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == fixture["post"]["Byzantium"][0]["hash"].getStr
+  doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == fixture["post"]["Homestead"][0]["hash"].getStr
