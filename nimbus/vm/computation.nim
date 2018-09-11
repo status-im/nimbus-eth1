@@ -93,17 +93,14 @@ proc applyMessage(computation: BaseComputation): BaseComputation =
   raise newException(NotImplementedError, "Apply message not implemented")
 
 proc generateChildComputation*(computation: BaseComputation, childMsg: Message): BaseComputation =
-  new result
+  let childComp = newBaseComputation(
+      computation.vmState,
+      computation.vmState.blockHeader.blockNumber,
+      childMsg)
   if childMsg.isCreate:
-    result = newBaseComputation(
-      computation.vmState,
-      computation.vmState.blockHeader.blockNumber,
-      childMsg).applyCreateMessage()
+    result = applyCreateMessage(childComp)
   else:
-    result = newBaseComputation(
-      computation.vmState,
-      computation.vmState.blockHeader.blockNumber,
-      childMsg).applyMessage()
+    result = applyMessage(childComp)
 
 proc addChildComputation(computation: BaseComputation, child: BaseComputation) =
   if child.isError:
