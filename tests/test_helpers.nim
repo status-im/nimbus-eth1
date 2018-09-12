@@ -18,7 +18,8 @@ type
 
 func slowTest*(folder: string, name: string): bool =
   # TODO: add vmPerformance and loop check here
-  result = name in @["randomStatetest352.json", "randomStatetest1.json",
+  result = folder == "stQuadraticComplexityTest" or
+           name in @["randomStatetest352.json", "randomStatetest1.json",
                      "randomStatetest32.json", "randomStatetest347.json",
                      "randomStatetest393.json", "randomStatetest626.json",
                      "CALLCODE_Bounds.json", "DELEGATECALL_Bounds3.json",
@@ -36,6 +37,22 @@ func validTest*(folder: string, name: string): bool =
            (not slowTest(folder, name) and
             name notin @["static_Call1024BalanceTooLow.json",
                          "Call1024BalanceTooLow.json", "ExtCodeCopyTests.json"])
+
+proc lacksHomesteadPostStates*(filename: string): bool =
+  # XXX: Until Nimbus supports Byzantine or newer forks, as opposed
+  # to Homestead, ~1k of ~2.5k GeneralStateTests won't work. Nimbus
+  # supporting Byzantine should trigger removal of this function. A
+  # possible alternate approach of avoiding double-reading fixtures
+  # seemed less than ideal, as by the time that happens, output has
+  # already appeared. Compatible with non-GST fixtures. Will become
+  # expensive once BlockchainTests appear, so try to remove first.
+  let fixtures = parseJSON(readFile(filename))
+  var fixture: JsonNode
+  for label, child in fixtures:
+    fixture = child
+    break
+
+  return fixture.has_key("transaction") and not fixture["post"].has_key("Homestead")
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
   let
@@ -55,7 +72,7 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       if not status.hasKey(last):
         status[last] = initOrderedTable[string, Status]()
       status[last][name] = Status.Skip
-      if last.validTest(name):
+      if last.validTest(name) and not filename.lacksHomesteadPostStates:
         filenames.add((filename, last, name))
     for child in filenames:
       let (filename, folder, name) = child
