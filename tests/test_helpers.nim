@@ -111,7 +111,7 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       raw.add("OK: " & $okCount & "/" & $sum & " Fail: " & $failCount & "/" & $sum & " Skip: " & $skipCount & "/" & $sum & "\n")
     writeFile(`s` & ".md", raw)
 
-proc ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
+func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
 
 proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
   for ac, accountData in wantedState:
@@ -161,7 +161,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
     doAssert wantedBalance == actualBalance, &"{wantedBalance.toHex} != {actualBalance.toHex}"
     doAssert wantedNonce == actualNonce, &"{wantedNonce.toHex} != {actualNonce.toHex}"
 
-proc getHexadecimalInt*(j: JsonNode): int64 =
+func getHexadecimalInt*(j: JsonNode): int64 =
   # parseutils.parseHex works with int which will overflow in 32 bit
   var data: StUInt[64]
   data = fromHex(StUInt[64], j.getStr)
@@ -203,7 +203,7 @@ proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
     # XXX: appropriate failure mode; probably raise something
     discard
 
-proc getFixtureCode*(pre: JsonNode, targetAccount: EthAddress) : seq[byte] =
+func getFixtureCode*(pre: JsonNode, targetAccount: EthAddress) : seq[byte] =
   # XXX: Workaround for broken setCode/getCode. Remove when feasible.
   for ac, preState in pre:
     if ethAddressFromHex(ac) == targetAccount:

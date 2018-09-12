@@ -60,8 +60,9 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
   # TODO: implement other sorts of transctions
   # TODO: check whether it's to an empty address
+
+  # This address might not have code. This is fine.
   let code = fixture["pre"].getFixtureCode(transaction.to)
-  doAssert code.len > 2
 
   let currentCoinbase = fenv["currentCoinbase"].getStr.ethAddressFromHex
 
@@ -101,12 +102,12 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       gasRefund = min(gasRefunded, gasUsed div 2)
       gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice
 
-    vmState.mutateStateDB:
-      db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount.u256)
-      db.deltaBalance(sender, gasRefundAmount.u256)
-      db.deltaBalance(transaction.to, transaction.value)
-      db.setBalance(sender, db.getBalance(sender) - transaction.value)
-
+    if not computation.isError:
+      vmState.mutateStateDB:
+        db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount.u256)
+        db.deltaBalance(sender, gasRefundAmount.u256)
+        db.deltaBalance(transaction.to, transaction.value)
+        db.setBalance(sender, db.getBalance(sender) - transaction.value)
   except ValueError:
     echo "Computation error"
 

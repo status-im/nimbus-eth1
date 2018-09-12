@@ -612,7 +612,7 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
   DELEGATECALL_Bounds2.json                                       Skip
   DELEGATECALL_Bounds3.json                                       Skip
   DUP_Bounds.json                                                 Skip
-- FillStack.json                                                  Fail
++ FillStack.json                                                  OK
   JUMPI_Bounds.json                                               Skip
   JUMP_Bounds.json                                                Skip
   JUMP_Bounds2.json                                               Skip
@@ -627,29 +627,29 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
   SLOAD_Bounds.json                                               Skip
   SSTORE_Bounds.json                                              Skip
   mload32bitBound.json                                            Skip
-- mload32bitBound2.json                                           Fail
++ mload32bitBound2.json                                           OK
   mload32bitBound_Msize.json                                      Skip
-- mload32bitBound_return.json                                     Fail
-- mload32bitBound_return2.json                                    Fail
++ mload32bitBound_return.json                                     OK
++ mload32bitBound_return2.json                                    OK
   static_CALL_Bounds.json                                         Skip
   static_CALL_Bounds2.json                                        Skip
   static_CALL_Bounds2a.json                                       Skip
   static_CALL_Bounds3.json                                        Skip
 ```
-OK: 0/38 Fail: 5/38 Skip: 33/38
+OK: 4/38 Fail: 1/38 Skip: 33/38
 ## stMemoryTest
 ```diff
 - callDataCopyOffset.json                                         Fail
-- calldatacopy_dejavu.json                                        Fail
++ calldatacopy_dejavu.json                                        OK
 + calldatacopy_dejavu2.json                                       OK
 - codeCopyOffset.json                                             Fail
-- codecopy_dejavu.json                                            Fail
++ codecopy_dejavu.json                                            OK
 + codecopy_dejavu2.json                                           OK
-- extcodecopy_dejavu.json                                         Fail
-- log1_dejavu.json                                                Fail
-- log2_dejavu.json                                                Fail
-- log3_dejavu.json                                                Fail
-- log4_dejavu.json                                                Fail
++ extcodecopy_dejavu.json                                         OK
++ log1_dejavu.json                                                OK
++ log2_dejavu.json                                                OK
++ log3_dejavu.json                                                OK
++ log4_dejavu.json                                                OK
 + mem0b_singleByte.json                                           OK
 + mem31b_singleByte.json                                          OK
 + mem32b_singleByte.json                                          OK
@@ -693,21 +693,21 @@ OK: 0/38 Fail: 5/38 Skip: 33/38
 + memReturn.json                                                  OK
 + mload16bitBound.json                                            OK
 + mload8bitBound.json                                             OK
-- mload_dejavu.json                                               Fail
-- mstore_dejavu.json                                              Fail
-- mstroe8_dejavu.json                                             Fail
-- sha3_dejavu.json                                                Fail
++ mload_dejavu.json                                               OK
++ mstore_dejavu.json                                              OK
++ mstroe8_dejavu.json                                             OK
++ sha3_dejavu.json                                                OK
 + stackLimitGas_1023.json                                         OK
 + stackLimitGas_1024.json                                         OK
-- stackLimitGas_1025.json                                         Fail
++ stackLimitGas_1025.json                                         OK
 + stackLimitPush31_1023.json                                      OK
 + stackLimitPush31_1024.json                                      OK
-- stackLimitPush31_1025.json                                      Fail
++ stackLimitPush31_1025.json                                      OK
 + stackLimitPush32_1023.json                                      OK
 + stackLimitPush32_1024.json                                      OK
-- stackLimitPush32_1025.json                                      Fail
++ stackLimitPush32_1025.json                                      OK
 ```
-OK: 51/67 Fail: 16/67 Skip: 0/67
+OK: 65/67 Fail: 2/67 Skip: 0/67
 ## stNonZeroCallsTest
 ```diff
 - NonZeroValue_CALL.json                                          Fail
@@ -726,16 +726,16 @@ OK: 51/67 Fail: 16/67 Skip: 0/67
 - NonZeroValue_SUICIDE_ToEmpty.json                               Fail
 - NonZeroValue_SUICIDE_ToNonNonZeroBalance.json                   Fail
 - NonZeroValue_SUICIDE_ToOneStorageKey.json                       Fail
-- NonZeroValue_TransactionCALL.json                               Fail
++ NonZeroValue_TransactionCALL.json                               OK
 - NonZeroValue_TransactionCALL_ToEmpty.json                       Fail
 - NonZeroValue_TransactionCALL_ToNonNonZeroBalance.json           Fail
 - NonZeroValue_TransactionCALL_ToOneStorageKey.json               Fail
-- NonZeroValue_TransactionCALLwithData.json                       Fail
++ NonZeroValue_TransactionCALLwithData.json                       OK
 - NonZeroValue_TransactionCALLwithData_ToEmpty.json               Fail
 - NonZeroValue_TransactionCALLwithData_ToNonNonZeroBalance.json   Fail
 - NonZeroValue_TransactionCALLwithData_ToOneStorageKey.json       Fail
 ```
-OK: 0/24 Fail: 24/24 Skip: 0/24
+OK: 2/24 Fail: 22/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
   identity_to_bigger.json                                         Skip
@@ -958,11 +958,11 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 ```diff
 + randomStatetest0.json                                           OK
   randomStatetest1.json                                           Skip
-- randomStatetest10.json                                          Fail
++ randomStatetest10.json                                          OK
 - randomStatetest100.json                                         Fail
-- randomStatetest101.json                                         Fail
++ randomStatetest101.json                                         OK
 + randomStatetest102.json                                         OK
-- randomStatetest103.json                                         Fail
++ randomStatetest103.json                                         OK
 + randomStatetest104.json                                         OK
 + randomStatetest105.json                                         OK
 + randomStatetest106.json                                         OK
@@ -984,14 +984,14 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest122.json                                         OK
 + randomStatetest123.json                                         OK
 + randomStatetest124.json                                         OK
-- randomStatetest125.json                                         Fail
-- randomStatetest126.json                                         Fail
++ randomStatetest125.json                                         OK
++ randomStatetest126.json                                         OK
 + randomStatetest129.json                                         OK
-- randomStatetest13.json                                          Fail
++ randomStatetest13.json                                          OK
 + randomStatetest130.json                                         OK
 + randomStatetest131.json                                         OK
-- randomStatetest133.json                                         Fail
-- randomStatetest134.json                                         Fail
++ randomStatetest133.json                                         OK
++ randomStatetest134.json                                         OK
 - randomStatetest135.json                                         Fail
 + randomStatetest136.json                                         OK
 + randomStatetest137.json                                         OK
@@ -1016,7 +1016,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest157.json                                         OK
 + randomStatetest158.json                                         OK
 - randomStatetest159.json                                         Fail
-- randomStatetest16.json                                          Fail
++ randomStatetest16.json                                          OK
 + randomStatetest160.json                                         OK
 + randomStatetest161.json                                         OK
 + randomStatetest162.json                                         OK
@@ -1036,14 +1036,14 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 - randomStatetest177.json                                         Fail
 - randomStatetest178.json                                         Fail
 + randomStatetest179.json                                         OK
-- randomStatetest18.json                                          Fail
++ randomStatetest18.json                                          OK
 + randomStatetest180.json                                         OK
 + randomStatetest183.json                                         OK
 - randomStatetest184.json                                         Fail
 + randomStatetest185.json                                         OK
 + randomStatetest187.json                                         OK
 + randomStatetest188.json                                         OK
-- randomStatetest189.json                                         Fail
++ randomStatetest189.json                                         OK
 + randomStatetest19.json                                          OK
 + randomStatetest190.json                                         OK
 + randomStatetest191.json                                         OK
@@ -1055,7 +1055,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 - randomStatetest198.json                                         Fail
 - randomStatetest199.json                                         Fail
 + randomStatetest2.json                                           OK
-- randomStatetest20.json                                          Fail
++ randomStatetest20.json                                          OK
 + randomStatetest200.json                                         OK
 - randomStatetest201.json                                         Fail
 + randomStatetest202.json                                         OK
@@ -1087,11 +1087,11 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest230.json                                         OK
 + randomStatetest231.json                                         OK
 - randomStatetest232.json                                         Fail
-- randomStatetest233.json                                         Fail
++ randomStatetest233.json                                         OK
 + randomStatetest236.json                                         OK
 - randomStatetest237.json                                         Fail
 + randomStatetest238.json                                         OK
-- randomStatetest24.json                                          Fail
++ randomStatetest24.json                                          OK
 + randomStatetest241.json                                         OK
 + randomStatetest242.json                                         OK
 + randomStatetest243.json                                         OK
@@ -1102,11 +1102,11 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 - randomStatetest248.json                                         Fail
 + randomStatetest249.json                                         OK
 + randomStatetest25.json                                          OK
-- randomStatetest250.json                                         Fail
++ randomStatetest250.json                                         OK
 + randomStatetest251.json                                         OK
 + randomStatetest252.json                                         OK
 + randomStatetest254.json                                         OK
-- randomStatetest257.json                                         Fail
++ randomStatetest257.json                                         OK
 + randomStatetest259.json                                         OK
 - randomStatetest26.json                                          Fail
 + randomStatetest260.json                                         OK
@@ -1114,7 +1114,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest263.json                                         OK
 + randomStatetest264.json                                         OK
 + randomStatetest265.json                                         OK
-- randomStatetest266.json                                         Fail
++ randomStatetest266.json                                         OK
 + randomStatetest267.json                                         OK
 + randomStatetest268.json                                         OK
 + randomStatetest269.json                                         OK
@@ -1122,7 +1122,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest270.json                                         OK
 + randomStatetest271.json                                         OK
 - randomStatetest273.json                                         Fail
-- randomStatetest274.json                                         Fail
++ randomStatetest274.json                                         OK
 + randomStatetest275.json                                         OK
 + randomStatetest276.json                                         OK
 + randomStatetest278.json                                         OK
@@ -1139,11 +1139,11 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest29.json                                          OK
 + randomStatetest290.json                                         OK
 + randomStatetest291.json                                         OK
-- randomStatetest292.json                                         Fail
++ randomStatetest292.json                                         OK
 + randomStatetest293.json                                         OK
-- randomStatetest294.json                                         Fail
-- randomStatetest295.json                                         Fail
-- randomStatetest296.json                                         Fail
++ randomStatetest294.json                                         OK
++ randomStatetest295.json                                         OK
++ randomStatetest296.json                                         OK
 + randomStatetest297.json                                         OK
 + randomStatetest298.json                                         OK
 + randomStatetest299.json                                         OK
@@ -1151,9 +1151,9 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 - randomStatetest30.json                                          Fail
 + randomStatetest300.json                                         OK
 + randomStatetest301.json                                         OK
-- randomStatetest302.json                                         Fail
++ randomStatetest302.json                                         OK
 - randomStatetest303.json                                         Fail
-- randomStatetest304.json                                         Fail
++ randomStatetest304.json                                         OK
 + randomStatetest305.json                                         OK
 - randomStatetest306.json                                         Fail
 - randomStatetest307.json                                         Fail
@@ -1163,19 +1163,19 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest310.json                                         OK
 + randomStatetest311.json                                         OK
 + randomStatetest312.json                                         OK
-- randomStatetest313.json                                         Fail
++ randomStatetest313.json                                         OK
 + randomStatetest315.json                                         OK
 + randomStatetest316.json                                         OK
 + randomStatetest318.json                                         OK
   randomStatetest32.json                                          Skip
-- randomStatetest320.json                                         Fail
++ randomStatetest320.json                                         OK
 + randomStatetest321.json                                         OK
 + randomStatetest322.json                                         OK
 + randomStatetest323.json                                         OK
 + randomStatetest324.json                                         OK
 + randomStatetest325.json                                         OK
 + randomStatetest326.json                                         OK
-- randomStatetest327.json                                         Fail
++ randomStatetest327.json                                         OK
 + randomStatetest328.json                                         OK
 + randomStatetest329.json                                         OK
 + randomStatetest33.json                                          OK
@@ -1199,13 +1199,13 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest350.json                                         OK
 + randomStatetest351.json                                         OK
   randomStatetest352.json                                         Skip
-- randomStatetest353.json                                         Fail
++ randomStatetest353.json                                         OK
 + randomStatetest354.json                                         OK
-- randomStatetest355.json                                         Fail
++ randomStatetest355.json                                         OK
 + randomStatetest356.json                                         OK
 + randomStatetest357.json                                         OK
 + randomStatetest358.json                                         OK
-- randomStatetest359.json                                         Fail
++ randomStatetest359.json                                         OK
 + randomStatetest36.json                                          OK
 + randomStatetest360.json                                         OK
 + randomStatetest361.json                                         OK
@@ -1218,7 +1218,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 - randomStatetest368.json                                         Fail
 + randomStatetest369.json                                         OK
 + randomStatetest37.json                                          OK
-- randomStatetest370.json                                         Fail
++ randomStatetest370.json                                         OK
 + randomStatetest371.json                                         OK
 + randomStatetest372.json                                         OK
 + randomStatetest375.json                                         OK
@@ -1242,12 +1242,12 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 - randomStatetest48.json                                          Fail
 + randomStatetest49.json                                          OK
 + randomStatetest5.json                                           OK
-- randomStatetest50.json                                          Fail
++ randomStatetest50.json                                          OK
 + randomStatetest51.json                                          OK
 + randomStatetest52.json                                          OK
 + randomStatetest53.json                                          OK
 + randomStatetest54.json                                          OK
-- randomStatetest55.json                                          Fail
++ randomStatetest55.json                                          OK
 + randomStatetest57.json                                          OK
 + randomStatetest58.json                                          OK
 + randomStatetest59.json                                          OK
@@ -1270,7 +1270,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest81.json                                          OK
 + randomStatetest82.json                                          OK
 + randomStatetest83.json                                          OK
-- randomStatetest84.json                                          Fail
++ randomStatetest84.json                                          OK
 - randomStatetest85.json                                          Fail
 + randomStatetest87.json                                          OK
 + randomStatetest88.json                                          OK
@@ -1281,10 +1281,10 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest94.json                                          OK
 + randomStatetest95.json                                          OK
 + randomStatetest96.json                                          OK
-- randomStatetest97.json                                          Fail
++ randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 247/327 Fail: 76/327 Skip: 4/327
+OK: 282/327 Fail: 41/327 Skip: 4/327
 ## stRandom2
 ```diff
 - 201503110226PYTHON_DUP6.json                                    Fail
@@ -1322,8 +1322,8 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest419.json                                         OK
 + randomStatetest420.json                                         OK
 + randomStatetest421.json                                         OK
-- randomStatetest422.json                                         Fail
-- randomStatetest423.json                                         Fail
++ randomStatetest422.json                                         OK
++ randomStatetest423.json                                         OK
 + randomStatetest424.json                                         OK
 + randomStatetest425.json                                         OK
 + randomStatetest426.json                                         OK
@@ -1341,15 +1341,15 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest442.json                                         OK
 - randomStatetest443.json                                         Fail
 + randomStatetest444.json                                         OK
-- randomStatetest445.json                                         Fail
++ randomStatetest445.json                                         OK
 + randomStatetest446.json                                         OK
 + randomStatetest447.json                                         OK
 + randomStatetest448.json                                         OK
-- randomStatetest449.json                                         Fail
++ randomStatetest449.json                                         OK
 + randomStatetest450.json                                         OK
 + randomStatetest451.json                                         OK
 + randomStatetest452.json                                         OK
-- randomStatetest454.json                                         Fail
++ randomStatetest454.json                                         OK
 + randomStatetest455.json                                         OK
 + randomStatetest456.json                                         OK
 + randomStatetest457.json                                         OK
@@ -1376,19 +1376,19 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 - randomStatetest481.json                                         Fail
 + randomStatetest482.json                                         OK
 + randomStatetest483.json                                         OK
-- randomStatetest484.json                                         Fail
-- randomStatetest485.json                                         Fail
++ randomStatetest484.json                                         OK
++ randomStatetest485.json                                         OK
 - randomStatetest487.json                                         Fail
 + randomStatetest488.json                                         OK
 + randomStatetest489.json                                         OK
 + randomStatetest491.json                                         OK
 + randomStatetest493.json                                         OK
-- randomStatetest494.json                                         Fail
++ randomStatetest494.json                                         OK
 - randomStatetest495.json                                         Fail
-- randomStatetest496.json                                         Fail
++ randomStatetest496.json                                         OK
 + randomStatetest497.json                                         OK
 - randomStatetest498.json                                         Fail
-- randomStatetest499.json                                         Fail
++ randomStatetest499.json                                         OK
 + randomStatetest500.json                                         OK
 + randomStatetest501.json                                         OK
 + randomStatetest502.json                                         OK
@@ -1398,11 +1398,11 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest506.json                                         OK
 + randomStatetest507.json                                         OK
 - randomStatetest508.json                                         Fail
-- randomStatetest509.json                                         Fail
++ randomStatetest509.json                                         OK
 + randomStatetest510.json                                         OK
 + randomStatetest511.json                                         OK
 + randomStatetest512.json                                         OK
-- randomStatetest513.json                                         Fail
++ randomStatetest513.json                                         OK
 + randomStatetest514.json                                         OK
 + randomStatetest516.json                                         OK
 + randomStatetest517.json                                         OK
@@ -1410,12 +1410,12 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest519.json                                         OK
 + randomStatetest520.json                                         OK
 + randomStatetest521.json                                         OK
-- randomStatetest523.json                                         Fail
-- randomStatetest524.json                                         Fail
++ randomStatetest523.json                                         OK
++ randomStatetest524.json                                         OK
 + randomStatetest525.json                                         OK
 + randomStatetest526.json                                         OK
-- randomStatetest527.json                                         Fail
-- randomStatetest528.json                                         Fail
++ randomStatetest527.json                                         OK
++ randomStatetest528.json                                         OK
 + randomStatetest531.json                                         OK
 + randomStatetest532.json                                         OK
 + randomStatetest533.json                                         OK
@@ -1423,7 +1423,7 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest535.json                                         OK
 + randomStatetest536.json                                         OK
 + randomStatetest537.json                                         OK
-- randomStatetest538.json                                         Fail
++ randomStatetest538.json                                         OK
 + randomStatetest539.json                                         OK
 + randomStatetest541.json                                         OK
 + randomStatetest542.json                                         OK
@@ -1443,19 +1443,19 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest558.json                                         OK
 - randomStatetest559.json                                         Fail
 + randomStatetest560.json                                         OK
-- randomStatetest562.json                                         Fail
-- randomStatetest563.json                                         Fail
++ randomStatetest562.json                                         OK
++ randomStatetest563.json                                         OK
 + randomStatetest564.json                                         OK
 + randomStatetest565.json                                         OK
-- randomStatetest566.json                                         Fail
++ randomStatetest566.json                                         OK
 + randomStatetest567.json                                         OK
-- randomStatetest569.json                                         Fail
++ randomStatetest569.json                                         OK
 + randomStatetest571.json                                         OK
 - randomStatetest572.json                                         Fail
-- randomStatetest573.json                                         Fail
++ randomStatetest573.json                                         OK
 + randomStatetest574.json                                         OK
-- randomStatetest575.json                                         Fail
-- randomStatetest576.json                                         Fail
++ randomStatetest575.json                                         OK
++ randomStatetest576.json                                         OK
 - randomStatetest577.json                                         Fail
 + randomStatetest578.json                                         OK
 - randomStatetest579.json                                         Fail
@@ -1472,19 +1472,19 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest592.json                                         OK
 + randomStatetest594.json                                         OK
 + randomStatetest596.json                                         OK
-- randomStatetest597.json                                         Fail
++ randomStatetest597.json                                         OK
 + randomStatetest599.json                                         OK
 + randomStatetest600.json                                         OK
-- randomStatetest601.json                                         Fail
++ randomStatetest601.json                                         OK
 + randomStatetest602.json                                         OK
 + randomStatetest603.json                                         OK
-- randomStatetest604.json                                         Fail
++ randomStatetest604.json                                         OK
 + randomStatetest605.json                                         OK
 + randomStatetest607.json                                         OK
 + randomStatetest608.json                                         OK
 + randomStatetest609.json                                         OK
 + randomStatetest610.json                                         OK
-- randomStatetest611.json                                         Fail
++ randomStatetest611.json                                         OK
 + randomStatetest612.json                                         OK
 + randomStatetest615.json                                         OK
 + randomStatetest616.json                                         OK
@@ -1493,7 +1493,7 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest620.json                                         OK
 + randomStatetest621.json                                         OK
 + randomStatetest624.json                                         OK
-- randomStatetest625.json                                         Fail
++ randomStatetest625.json                                         OK
   randomStatetest626.json                                         Skip
 - randomStatetest627.json                                         Fail
 - randomStatetest628.json                                         Fail
@@ -1506,16 +1506,16 @@ OK: 247/327 Fail: 76/327 Skip: 4/327
 + randomStatetest637.json                                         OK
 + randomStatetest638.json                                         OK
 - randomStatetest639.json                                         Fail
-- randomStatetest640.json                                         Fail
++ randomStatetest640.json                                         OK
 + randomStatetest641.json                                         OK
-- randomStatetest642.json                                         Fail
++ randomStatetest642.json                                         OK
 - randomStatetest643.json                                         Fail
 - randomStatetest644.json                                         Fail
 - randomStatetest645.json                                         Fail
 - randomStatetest646.json                                         Fail
   randomStatetest647.json                                         Skip
 ```
-OK: 160/227 Fail: 63/227 Skip: 4/227
+OK: 191/227 Fail: 32/227 Skip: 4/227
 ## stRecursiveCreate
 ```diff
 - recursiveCreate.json                                            Fail
@@ -1530,21 +1530,21 @@ OK: 0/2 Fail: 2/2 Skip: 0/2
 + refund600.json                                                  OK
 - refundSuicide50procentCap.json                                  Fail
 - refund_CallA.json                                               Fail
-- refund_CallA_OOG.json                                           Fail
++ refund_CallA_OOG.json                                           OK
 - refund_CallA_notEnoughGasInCall.json                            Fail
 - refund_CallToSuicideNoStorage.json                              Fail
 - refund_CallToSuicideStorage.json                                Fail
 - refund_CallToSuicideTwice.json                                  Fail
 + refund_NoOOG_1.json                                             OK
-- refund_OOG.json                                                 Fail
++ refund_OOG.json                                                 OK
 - refund_TxToSuicide.json                                         Fail
-- refund_TxToSuicideOOG.json                                      Fail
++ refund_TxToSuicideOOG.json                                      OK
 + refund_changeNonZeroStorage.json                                OK
 + refund_getEtherBack.json                                        OK
 - refund_multimpleSuicide.json                                    Fail
 - refund_singleSuicide.json                                       Fail
 ```
-OK: 7/19 Fail: 12/19 Skip: 0/19
+OK: 10/19 Fail: 9/19 Skip: 0/19
 ## stReturnDataTest
 ```diff
 + call_ecrec_success_empty_then_returndatasize.json               OK
@@ -1602,7 +1602,7 @@ OK: 24/37 Fail: 10/37 Skip: 3/37
 - RevertInCreateInInit.json                                       Fail
 - RevertInDelegateCall.json                                       Fail
 + RevertInStaticCall.json                                         OK
-- RevertOnEmptyStack.json                                         Fail
++ RevertOnEmptyStack.json                                         OK
 - RevertOpcode.json                                               Fail
 - RevertOpcodeCalls.json                                          Fail
 - RevertOpcodeCreate.json                                         Fail
@@ -1632,7 +1632,7 @@ OK: 24/37 Fail: 10/37 Skip: 3/37
 - TouchToEmptyAccountRevert2.json                                 Fail
 - TouchToEmptyAccountRevert3.json                                 Fail
 ```
-OK: 2/43 Fail: 36/43 Skip: 5/43
+OK: 3/43 Fail: 35/43 Skip: 5/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -1680,9 +1680,9 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 ## stSolidityTest
 ```diff
 + AmbiguousMethod.json                                            OK
-- CallInfiniteLoop.json                                           Fail
++ CallInfiniteLoop.json                                           OK
 - CallLowLevelCreatesSolidity.json                                Fail
-- CallRecursiveMethods.json                                       Fail
++ CallRecursiveMethods.json                                       OK
 - ContractInheritance.json                                        Fail
 - CreateContractFromMethod.json                                   Fail
 - RecursiveCreateContracts.json                                   Fail
@@ -1696,7 +1696,7 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 + TestStoreGasPrices.json                                         OK
 + TestStructuresAndVariabless.json                                OK
 ```
-OK: 6/16 Fail: 10/16 Skip: 0/16
+OK: 8/16 Fail: 8/16 Skip: 0/16
 ## stSpecialTest
 ```diff
 - FailedCreateRevertsDeletion.json                                Fail
@@ -2057,9 +2057,9 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 - callcodeToReturn1.json                                          Fail
 - callerAccountBalance.json                                       Fail
 - createNameRegistrator.json                                      Fail
-- createNameRegistratorOOG_MemExpansionOOV.json                   Fail
-- createNameRegistratorOutOfMemoryBonds0.json                     Fail
-- createNameRegistratorOutOfMemoryBonds1.json                     Fail
++ createNameRegistratorOOG_MemExpansionOOV.json                   OK
++ createNameRegistratorOutOfMemoryBonds0.json                     OK
++ createNameRegistratorOutOfMemoryBonds1.json                     OK
 - createNameRegistratorValueTooHigh.json                          Fail
 - createNameRegistratorZeroMem.json                               Fail
 - createNameRegistratorZeroMem2.json                              Fail
@@ -2083,19 +2083,19 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 - suicideSendEtherToMe.json                                       Fail
 - testRandomTest.json                                             Fail
 ```
-OK: 8/67 Fail: 57/67 Skip: 2/67
+OK: 11/67 Fail: 54/67 Skip: 2/67
 ## stTransactionTest
 ```diff
-- ContractStoreClearsOOG.json                                     Fail
++ ContractStoreClearsOOG.json                                     OK
 + ContractStoreClearsSuccess.json                                 OK
-- CreateMessageReverted.json                                      Fail
++ CreateMessageReverted.json                                      OK
 - CreateMessageSuccess.json                                       Fail
 - CreateTransactionReverted.json                                  Fail
 - CreateTransactionSuccess.json                                   Fail
 - EmptyTransaction.json                                           Fail
 - EmptyTransaction2.json                                          Fail
 - EmptyTransaction3.json                                          Fail
-- HighGasLimit.json                                               Fail
++ HighGasLimit.json                                               OK
 - InternalCallHittingGasLimit.json                                Fail
 - InternalCallHittingGasLimit2.json                               Fail
 - InternalCallHittingGasLimitSuccess.json                         Fail
@@ -2116,22 +2116,22 @@ OK: 8/67 Fail: 57/67 Skip: 2/67
 - SuicidesAndSendMoneyToItselfEtherDestroyed.json                 Fail
 - SuicidesMixingCoinbase.json                                     Fail
 - SuicidesStopAfterSuicide.json                                   Fail
-- TransactionDataCosts652.json                                    Fail
-- TransactionFromCoinbaseHittingBlockGasLimit.json                Fail
++ TransactionDataCosts652.json                                    OK
++ TransactionFromCoinbaseHittingBlockGasLimit.json                OK
 - TransactionFromCoinbaseHittingBlockGasLimit1.json               Fail
 - TransactionFromCoinbaseNotEnoughFounds.json                     Fail
 - TransactionNonceCheck.json                                      Fail
 - TransactionNonceCheck2.json                                     Fail
 - TransactionSendingToEmpty.json                                  Fail
-- TransactionSendingToZero.json                                   Fail
-- TransactionToAddressh160minusOne.json                           Fail
++ TransactionSendingToZero.json                                   OK
++ TransactionToAddressh160minusOne.json                           OK
 - TransactionToItself.json                                        Fail
 - TransactionToItselfNotEnoughFounds.json                         Fail
 - UserTransactionGasLimitIsTooLowWhenZeroCost.json                Fail
-- UserTransactionZeroCost.json                                    Fail
-- UserTransactionZeroCostWithData.json                            Fail
++ UserTransactionZeroCost.json                                    OK
++ UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 1/44 Fail: 43/44 Skip: 0/44
+OK: 10/44 Fail: 34/44 Skip: 0/44
 ## stTransitionTest
 ```diff
 - createNameRegistratorPerTxsAfter.json                           Fail
@@ -2237,16 +2237,16 @@ OK: 0/24 Fail: 0/24 Skip: 24/24
 - ZeroValue_SUICIDE_ToEmpty.json                                  Fail
 - ZeroValue_SUICIDE_ToNonZeroBalance.json                         Fail
 - ZeroValue_SUICIDE_ToOneStorageKey.json                          Fail
-- ZeroValue_TransactionCALL.json                                  Fail
++ ZeroValue_TransactionCALL.json                                  OK
 - ZeroValue_TransactionCALL_ToEmpty.json                          Fail
 - ZeroValue_TransactionCALL_ToNonZeroBalance.json                 Fail
 - ZeroValue_TransactionCALL_ToOneStorageKey.json                  Fail
-- ZeroValue_TransactionCALLwithData.json                          Fail
++ ZeroValue_TransactionCALLwithData.json                          OK
 - ZeroValue_TransactionCALLwithData_ToEmpty.json                  Fail
 - ZeroValue_TransactionCALLwithData_ToNonZeroBalance.json         Fail
 - ZeroValue_TransactionCALLwithData_ToOneStorageKey.json          Fail
 ```
-OK: 0/24 Fail: 24/24 Skip: 0/24
+OK: 2/24 Fail: 22/24 Skip: 0/24
 ## stZeroKnowledge
 ```diff
   ecmul_1-2_2_28000_128.json                                      Skip
