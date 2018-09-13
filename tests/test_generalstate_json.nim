@@ -29,6 +29,7 @@ proc stringFromBytes(x: ByteRange): string =
     result[i] = char(x[i])
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
+  # XXX: this is becoming a mess. refactor.
   var fixture: JsonNode
   for label, child in fixtures:
     fixture = child
@@ -48,28 +49,44 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let ftrans = fixture["transaction"]
   let transaction = ftrans.getFixtureTransaction
   let sender = ftrans.getFixtureTransactionSender
-  let gas_cost = (transaction.gasLimit * transaction.gasPrice).u256
+  let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
 
   var memDb = newMemDB()
   var vmState = newBaseVMState(header, newBaseChainDB(trieDB memDb))
   vmState.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
 
-  doAssert transaction.accountNonce == vmState.readOnlyStateDB.getNonce(sender)
-  doAssert vmState.readOnlyStateDB.getBalance(sender) >= gas_cost
+  let currentCoinbase = fenv["currentCoinbase"].getStr.ethAddressFromHex
 
-  # TODO: implement other sorts of transctions
+  # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
+  # TODO: put yellow paper ref here from that link justifying the limit (1 shl 34 is stand-in)
+  if transaction.gasLimit < transaction.getFixtureIntrinsicGas or
+     transaction.gasPrice > (1 shl 34) or
+     transaction.accountNonce != vmState.readOnlyStateDB.getNonce(sender) or
+     vmState.readOnlyStateDB.getBalance(sender) < gas_cost:
+    vmState.mutateStateDb:
+      # pre-EIP158 (e.g., Byzantium, should ensure currentCoinbase exists)
+      # but in later forks, don't create at all
+      db.deltaBalance(currentCoinbase, 0.u256)
+
+    # FIXME: don't repeat this code
+    doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == fixture["post"]["Homestead"][0]["hash"].getStr
+    return
+
+  # TODO: implement other sorts of transactions
   # TODO: check whether it's to an empty address
 
   # This address might not have code. This is fine.
   let code = fixture["pre"].getFixtureCode(transaction.to)
 
-  let currentCoinbase = fenv["currentCoinbase"].getStr.ethAddressFromHex
-
   vmState.mutateStateDB:
+    # TODO: combine some of these
+    # Also, in general, map out/etc the whole vmState.mutateStateDB flow set
     db.setBalance(sender, db.getBalance(sender) - gas_cost)
     db.deltaBalance(currentCoinbase, gas_cost)
     db.setNonce(sender, db.getNonce(sender) + 1)
+    db.deltaBalance(transaction.to, transaction.value)
+    db.setBalance(sender, db.getBalance(sender) - transaction.value)
 
   # build_message (Py-EVM)
   # FIXME: detect contact creation address; only run if transaction.to addr has .code
@@ -95,20 +112,34 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   try:
     computation.executeOpcodes()
 
+    let deletedAccounts = computation.getAccountsForDeletion
+    computation.gasMeter.refundGas(24_000 * deletedAccounts.len)
+    vmState.mutateStateDB:
+      for deletedAccount in deletedAccounts:
+        db.deleteAccount deletedAccount
+
     let
-      gasRemaining = computation.gasMeter.gasRemaining
-      gasRefunded = computation.gasMeter.gasRefunded
-      gasUsed = transaction.gasLimit - gasRemaining
+      gasRemaining = computation.gasMeter.gasRemaining.u256
+      gasRefunded = computation.gasMeter.gasRefunded.u256
+      gasUsed = transaction.gasLimit.u256 - gasRemaining
       gasRefund = min(gasRefunded, gasUsed div 2)
-      gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice
+      gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice.u256
 
     if not computation.isError:
       vmState.mutateStateDB:
-        db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount.u256)
-        db.deltaBalance(sender, gasRefundAmount.u256)
-        db.deltaBalance(transaction.to, transaction.value)
-        db.setBalance(sender, db.getBalance(sender) - transaction.value)
+        db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount)
+        db.deltaBalance(sender, gasRefundAmount)
+      # TODO: only here does one commit, with some nuance/caveat
+    else:
+      # TODO: replace with transactional commit/revert state (foo.revert, or just implicit)
+      vmState.mutateStateDB:
+        db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
+        db.deltaBalance(sender, transaction.value)
   except ValueError:
+    # TODO: replace with transactional commit/revert state (here, foo.revert)
+    vmState.mutateStateDB:
+      db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
+      db.deltaBalance(sender, transaction.value)
     echo "Computation error"
 
   # TODO: do this right

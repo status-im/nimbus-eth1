@@ -45,6 +45,9 @@ proc getAccount(db: AccountStateDB, address: EthAddress): Account =
 proc setAccount*(db: AccountStateDB, address: EthAddress, account: Account) =
   db.trie.put createRangeFromAddress(address), rlp.encode(account)
 
+proc deleteAccount*(db: AccountStateDB, address: EthAddress) =
+  db.trie.del createRangeFromAddress(address)
+
 proc getCodeHash*(db: AccountStateDB, address: EthAddress): Hash256 =
   let account = db.getAccount(address)
   result = account.codeHash

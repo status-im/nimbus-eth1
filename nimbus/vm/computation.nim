@@ -96,12 +96,14 @@ proc addLogEntry*(c: var BaseComputation, account: EthAddress, topics: seq[UInt2
 
 # many methods are basically TODO, but they still return valid values
 # in order to test some existing code
-proc getAccountsForDeletion*(c: BaseComputation): seq[(string, string)] =
+func getAccountsForDeletion*(c: BaseComputation): seq[EthAddress] =
   # TODO
   if c.isError:
     result = @[]
   else:
     result = @[]
+    for account in c.accountsToDelete.keys:
+        result.add(account)
 
 proc getLogEntries*(c: BaseComputation): seq[(string, seq[UInt256], string)] =
   # TODO
