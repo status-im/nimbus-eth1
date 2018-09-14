@@ -10,7 +10,8 @@ import
   eth_common,
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
-  ./code_stream, ./memory, ./message, ./stack
+  ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
+  ../utils/header, byteutils, ranges
 
 logScope:
   topics = "vm computation"
@@ -84,25 +85,87 @@ proc prepareChildMessage*(
     code,
     childOptions)
 
-proc applyCreateMessage(computation: BaseComputation): BaseComputation =
-  # TODO: This needs to be different depending on fork.
-  raise newException(NotImplementedError, "Apply create message not implemented")
+proc applyFrontierMessage(computation: var BaseComputation) =
+  # TODO: Snapshots/Journaling, see: https://github.com/status-im/nimbus/issues/142
+  #let snapshot = computation.vmState.snapshot()
 
-proc applyMessage(computation: BaseComputation): BaseComputation =
-  # TODO: This needs to be different depending on fork.
-  raise newException(NotImplementedError, "Apply message not implemented")
+  if computation.msg.depth > STACK_DEPTH_LIMIT:
+      raise newException(StackDepthError, "Stack depth limit reached")
 
-proc generateChildComputation*(computation: BaseComputation, childMsg: Message): BaseComputation =
-  let childComp = newBaseComputation(
+  if computation.msg.value != 0:
+    let senderBalance =
+      computation.vmState.chainDb.getStateDb(
+        computation.vmState.blockHeader.hash, false).
+        getBalance(computation.msg.sender)
+
+    if sender_balance < computation.msg.value:
+      raise newException(InsufficientFunds, 
+          &"Insufficient funds: {senderBalance} < {computation.msg.value}"
+      )
+
+    computation.vmState.mutateStateDb:
+      db.deltaBalance(computation.msg.sender, -1 * computation.msg.value)
+      db.deltaBalance(computation.msg.storage_address, computation.msg.value)
+
+    debug "Apply message",
+      value = computation.msg.value,
+      sender = computation.msg.sender.toHex,
+      address = computation.msg.storage_address.toHex
+
+  computation.opcodeExec(computation)
+
+  # TODO: Snapshots/Journaling
+  #[
+  if result.isError:
+      computation.vmState.revert(snapshot)
+  else:
+      computation.vmState.commit(snapshot)
+  ]#
+
+proc createFrontierMessage(computation: var BaseComputation) =
+  computation.applyFrontierMessage()
+
+  if computation.isError:
+    return
+  else:
+    let contractCode = computation.output
+
+    if contractCode.len > 0:
+      try:
+        computation.gasMeter.consumeGas(
+          computation.gasCosts[Create].m_handler(0, 0, contractCode.len),
+          reason="Write contract code for CREATE")
+      except OutOfGas:
+        computation.output = @[]
+    else:
+      let storageAddr = computation.msg.storage_address
+      debug "SETTING CODE",
+        address = storageAddr.toHex,
+        length = len(contract_code),
+        hash = contractCode.rlpHash
+      computation.vmState.mutateStateDB:
+        db.setCode(storageAddr, contractCode.toRange)
+
+proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMsg: Message): BaseComputation =
+  var childComp = newBaseComputation(
       computation.vmState,
       computation.vmState.blockHeader.blockNumber,
       childMsg)
   if childMsg.isCreate:
-    result = applyCreateMessage(childComp)
+    case fork
+    of FkFrontier:
+      createFrontierMessage(childComp)
+    else:
+      raise newException(NotImplementedError, "Create message not yet implemented for fork " & $fork)
   else:
-    result = applyMessage(childComp)
+    case fork
+    of FkFrontier:
+      applyFrontierMessage(childComp)
+    else:
+      raise newException(NotImplementedError, "Apply message not yet implemented for fork " & $fork)
+  return childComp
 
-proc addChildComputation(computation: BaseComputation, child: BaseComputation) =
+proc addChildComputation(fork: Fork, computation: BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
       computation.returnData = child.output
@@ -119,8 +182,9 @@ proc addChildComputation(computation: BaseComputation, child: BaseComputation) =
 
 proc applyChildComputation*(computation: BaseComputation, childMsg: Message): BaseComputation =
   ## Apply the vm message childMsg as a child computation.
-  result = computation.generateChildComputation(childMsg)
-  computation.addChildComputation(result)
+  let fork = computation.vmState.blockHeader.blockNumber.toFork
+  result = fork.generateChildComputation(computation, childMsg)
+  fork.addChildComputation(computation, result)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:
