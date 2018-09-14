@@ -226,7 +226,9 @@ proc executeOpcodes*(computation: var BaseComputation) =
   let fork = computation.vmState.blockHeader.blockNumber.toFork
   try:
     case fork
-    of FkFrontier: computation.frontierVM()
+    of FkFrontier:
+      computation.opCodeExec = frontierVM
+      computation.frontierVM()
     else:
       raise newException(ValueError, "not implemented fork: " & $fork)
   except VMError:
