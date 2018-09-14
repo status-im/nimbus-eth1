@@ -741,7 +741,6 @@ template genCall(callName: untyped): untyped =
       childMsg.sender = sender
 
     var childComputation = applyChildComputation(computation, childMsg)
-    childComputation.gasMeter.init(0)
 
     if childComputation.isError:
       push: 0
