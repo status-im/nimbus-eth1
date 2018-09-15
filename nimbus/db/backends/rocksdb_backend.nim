@@ -1,4 +1,4 @@
-import os, rocksdb, ranges
+import os, rocksdb, ranges, eth_trie/db_tracing
 import ../storage_types
 
 type
@@ -22,13 +22,15 @@ proc newChainDB*(basePath: string): ChainDB =
 proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
   let s = db.store.getBytes(key)
   if s.ok:
-    return s.value
+    result = s.value
+    traceGet key, result
   elif s.error.len == 0:
     discard
   else:
     raiseKeyReadError(key)
 
 proc put*(db: ChainDB, key, value: openarray[byte]) =
+  tracePut key, value
   let s = db.store.put(key, value)
   if not s.ok: raiseKeyWriteError(key)
 
@@ -38,6 +40,7 @@ proc contains*(db: ChainDB, key: openarray[byte]): bool =
   return s.value
 
 proc del*(db: ChainDB, key: openarray[byte]) =
+  traceDel key
   let s = db.store.del(key)
   if not s.ok: raiseKeyDeletionError(key)
 

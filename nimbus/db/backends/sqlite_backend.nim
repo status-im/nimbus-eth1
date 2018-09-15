@@ -1,5 +1,6 @@
 import
-  sqlite3, ranges, ranges/ptr_arith, ../storage_types
+  sqlite3, ranges, ranges/ptr_arith, eth_trie/db_tracing,
+  ../storage_types
 
 type
   SqliteChainDB* = ref object of RootObj
@@ -71,12 +72,15 @@ proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
       resLen   = columnBytes(db.selectStmt, 0)
     result = newSeq[byte](resLen)
     copyMem(result.baseAddr, resStart, resLen)
+    traceGet key, result
   of SQLITE_DONE:
     discard
   else:
     raiseKeyReadError(key)
 
 proc put*(db: ChainDB, key, value: openarray[byte]) =
+  tracePut key, value
+
   template check(op) =
     let status = op
     if status != SQLITE_OK: raiseKeyWriteError(key)
@@ -104,6 +108,8 @@ proc contains*(db: ChainDB, key: openarray[byte]): bool =
   else: raiseKeySearchError(key)
 
 proc del*(db: ChainDB, key: openarray[byte]) =
+  traceDel key
+
   template check(op) =
     let status = op
     if status != SQLITE_OK: raiseKeyDeletionError(key)
