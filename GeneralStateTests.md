@@ -623,7 +623,7 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
   MSTORE_Bounds2.json                                             Skip
   MSTORE_Bounds2a.json                                            Skip
   POP_Bounds.json                                                 Skip
-- RETURN_Bounds.json                                              Fail
++ RETURN_Bounds.json                                              OK
   SLOAD_Bounds.json                                               Skip
   SSTORE_Bounds.json                                              Skip
   mload32bitBound.json                                            Skip
@@ -636,7 +636,7 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
   static_CALL_Bounds2a.json                                       Skip
   static_CALL_Bounds3.json                                        Skip
 ```
-OK: 4/38 Fail: 1/38 Skip: 33/38
+OK: 5/38 Fail: 0/38 Skip: 33/38
 ## stMemoryTest
 ```diff
 - callDataCopyOffset.json                                         Fail
@@ -1259,7 +1259,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest66.json                                          OK
 + randomStatetest67.json                                          OK
 + randomStatetest69.json                                          OK
-- randomStatetest7.json                                           Fail
++ randomStatetest7.json                                           OK
 + randomStatetest72.json                                          OK
 + randomStatetest73.json                                          OK
 + randomStatetest74.json                                          OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 293/327 Fail: 30/327 Skip: 4/327
+OK: 294/327 Fail: 29/327 Skip: 4/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -1339,7 +1339,7 @@ OK: 293/327 Fail: 30/327 Skip: 4/327
 + randomStatetest440.json                                         OK
 + randomStatetest441.json                                         OK
 + randomStatetest442.json                                         OK
-- randomStatetest443.json                                         Fail
++ randomStatetest443.json                                         OK
 + randomStatetest444.json                                         OK
 + randomStatetest445.json                                         OK
 + randomStatetest446.json                                         OK
@@ -1515,7 +1515,7 @@ OK: 293/327 Fail: 30/327 Skip: 4/327
 - randomStatetest646.json                                         Fail
   randomStatetest647.json                                         Skip
 ```
-OK: 200/227 Fail: 23/227 Skip: 4/227
+OK: 201/227 Fail: 22/227 Skip: 4/227
 ## stRecursiveCreate
 ```diff
 - recursiveCreate.json                                            Fail
@@ -1576,7 +1576,7 @@ OK: 11/19 Fail: 8/19 Skip: 0/19
 + returndatasize_after_failing_callcode.json                      OK
   returndatasize_after_failing_delegatecall.json                  Skip
 + returndatasize_after_failing_staticcall.json                    OK
-- returndatasize_after_oog_after_deeper.json                      Fail
++ returndatasize_after_oog_after_deeper.json                      OK
 + returndatasize_after_successful_callcode.json                   OK
 + returndatasize_after_successful_delegatecall.json               OK
 + returndatasize_after_successful_staticcall.json                 OK
@@ -1585,7 +1585,7 @@ OK: 11/19 Fail: 8/19 Skip: 0/19
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
 ```
-OK: 24/37 Fail: 10/37 Skip: 3/37
+OK: 25/37 Fail: 9/37 Skip: 3/37
 ## stRevertTest
 ```diff
 - LoopCallsDepthThenRevert.json                                   Fail
@@ -1598,12 +1598,12 @@ OK: 24/37 Fail: 10/37 Skip: 3/37
 - RevertDepth2.json                                               Fail
 - RevertDepthCreateAddressCollision.json                          Fail
 - RevertDepthCreateOOG.json                                       Fail
-- RevertInCallCode.json                                           Fail
++ RevertInCallCode.json                                           OK
 - RevertInCreateInInit.json                                       Fail
-- RevertInDelegateCall.json                                       Fail
++ RevertInDelegateCall.json                                       OK
 + RevertInStaticCall.json                                         OK
 + RevertOnEmptyStack.json                                         OK
-- RevertOpcode.json                                               Fail
++ RevertOpcode.json                                               OK
 - RevertOpcodeCalls.json                                          Fail
 - RevertOpcodeCreate.json                                         Fail
 - RevertOpcodeDirectCall.json                                     Fail
@@ -1618,21 +1618,21 @@ OK: 24/37 Fail: 10/37 Skip: 3/37
   RevertPrecompiledTouchDC.json                                   Skip
 - RevertPrefound.json                                             Fail
 - RevertPrefoundCall.json                                         Fail
-- RevertPrefoundCallOOG.json                                      Fail
++ RevertPrefoundCallOOG.json                                      OK
 - RevertPrefoundEmpty.json                                        Fail
 - RevertPrefoundEmptyCall.json                                    Fail
-- RevertPrefoundEmptyCallOOG.json                                 Fail
++ RevertPrefoundEmptyCallOOG.json                                 OK
 - RevertPrefoundEmptyOOG.json                                     Fail
 - RevertPrefoundOOG.json                                          Fail
 - RevertRemoteSubCallStorageOOG.json                              Fail
 - RevertRemoteSubCallStorageOOG2.json                             Fail
-- RevertSubCallStorageOOG.json                                    Fail
-- RevertSubCallStorageOOG2.json                                   Fail
++ RevertSubCallStorageOOG.json                                    OK
++ RevertSubCallStorageOOG2.json                                   OK
 - TouchToEmptyAccountRevert.json                                  Fail
 - TouchToEmptyAccountRevert2.json                                 Fail
 - TouchToEmptyAccountRevert3.json                                 Fail
 ```
-OK: 3/43 Fail: 35/43 Skip: 5/43
+OK: 10/43 Fail: 28/43 Skip: 5/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -2041,8 +2041,8 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 - CallToNameRegistratorTooMuchMemory2.json                        Fail
 - CallToNameRegistratorZeorSizeMemExpansion.json                  Fail
 - CallToReturn1.json                                              Fail
-- CallToReturn1ForDynamicJump0.json                               Fail
-- CallToReturn1ForDynamicJump1.json                               Fail
++ CallToReturn1ForDynamicJump0.json                               OK
++ CallToReturn1ForDynamicJump1.json                               OK
 - CalltoReturn2.json                                              Fail
 - CreateHashCollision.json                                        Fail
 - PostToReturn1.json                                              Fail
@@ -2083,7 +2083,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideSendEtherToMe.json                                       OK
 - testRandomTest.json                                             Fail
 ```
-OK: 21/67 Fail: 44/67 Skip: 2/67
+OK: 23/67 Fail: 42/67 Skip: 2/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
