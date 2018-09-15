@@ -113,6 +113,13 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
 
 func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
 
+# XXX should probably be part of hexToSeqByte
+func safeHexToSeqByte*(hexStr: string): seq[byte] =
+  if hexStr == "":
+    @[]
+  else:
+    hexStr.hexToSeqByte
+
 proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
@@ -120,12 +127,7 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
       stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
 
     let nonce = accountData{"nonce"}.getStr.parseHexInt.AccountNonce
-
-    # Keep workaround local until another case needing it is found,
-    # to ensure failure modes obvious.
-    let rawCode = accountData{"code"}.getStr
-    let code = hexToSeqByte(if rawCode == "": "0x" else: rawCode).toRange
-
+    let code = accountData{"code"}.getStr.safeHexToSeqByte.toRange
     let balance = UInt256.fromHex accountData{"balance"}.getStr
 
     stateDB.setNonce(account, nonce)
@@ -179,12 +181,7 @@ proc getFixtureTransaction*(j: JsonNode): Transaction =
   let rawTo = j["to"].getStr
   transaction.to = (if rawTo == "": "0x" else: rawTo).parseAddress
   transaction.value = j["value"][0].getStr.parseHexInt.u256
-
-  # Another, slightly distinct, case of this "" as special-cased hex string
-  # One possibility's a string prefix func which adds only if 0x is missing
-  # which can be used across the various hex-string-parsing utility funcs.
-  let rawData = j["data"][0].getStr
-  transaction.payload = (if rawData == "": "0x" else: rawData).hexToSeqByte
+  transaction.payload = j["data"][0].getStr.safeHexToSeqByte
 
   return transaction
 
@@ -207,7 +204,7 @@ func getFixtureCode*(pre: JsonNode, targetAccount: EthAddress) : seq[byte] =
   # XXX: Workaround for broken setCode/getCode. Remove when feasible.
   for ac, preState in pre:
     if ethAddressFromHex(ac) == targetAccount:
-      return preState["code"].getStr.hexToSeqByte
+      return preState["code"].getStr.safeHexToSeqByte
 
   # Fail loudly if it falls off the end (by default)
 
