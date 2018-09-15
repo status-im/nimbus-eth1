@@ -61,7 +61,7 @@ proc setBalance*(db: var AccountStateDB, address: EthAddress, balance: UInt256) 
   account.balance = balance
   db.setAccount(address, account)
 
-proc deltaBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
+proc increaseBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) + delta)
 
 template createTrieKeyFromSlot(slot: UInt256): ByteRange =
@@ -76,12 +76,19 @@ template createTrieKeyFromSlot(slot: UInt256): ByteRange =
 template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
   initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot)
 
+# XXX: https://github.com/status-im/nimbus/issues/142#issuecomment-420583181
+proc setStorageRoot*(db: var AccountStateDB, address: EthAddress, storageRoot: Hash256) =
+  var account = db.getAccount(address)
+  account.storageRoot = storageRoot
+  db.setAccount(address, account)
+
+proc getStorageRoot*(db: var AccountStateDB, address: EthAddress): Hash256 =
+  var account = db.getAccount(address)
+  account.storageRoot
+
 proc setStorage*(db: var AccountStateDB,
                  address: EthAddress,
                  slot: UInt256, value: UInt256) =
-  #validateGte(value, 0, title="Storage Value")
-  #validateGte(slot, 0, title="Storage Slot")
-
   var account = db.getAccount(address)
   var accountTrie = getAccountTrie(db, account)
   let slotAsKey = createTrieKeyFromSlot slot

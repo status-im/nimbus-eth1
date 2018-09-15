@@ -101,9 +101,7 @@ func getAccountsForDeletion*(c: BaseComputation): seq[EthAddress] =
   if c.isError:
     result = @[]
   else:
-    result = @[]
-    for account in c.accountsToDelete.keys:
-        result.add(account)
+    result = toSeq c.accountsToDelete.keys
 
 proc getLogEntries*(c: BaseComputation): seq[(string, seq[UInt256], string)] =
   # TODO

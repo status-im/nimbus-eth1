@@ -60,32 +60,36 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   # TODO: put yellow paper ref here from that link justifying the limit (1 shl 34 is stand-in)
+  var readOnlyDB = vmState.readOnlyStateDB
   if transaction.gasLimit < transaction.getFixtureIntrinsicGas or
      transaction.gasPrice > (1 shl 34) or
-     transaction.accountNonce != vmState.readOnlyStateDB.getNonce(sender) or
-     vmState.readOnlyStateDB.getBalance(sender) < gas_cost:
+     transaction.accountNonce != readOnlyDB.getNonce(sender) or
+     readOnlyDB.getBalance(sender) < gas_cost:
     vmState.mutateStateDb:
       # pre-EIP158 (e.g., Byzantium, should ensure currentCoinbase exists)
       # but in later forks, don't create at all
-      db.deltaBalance(currentCoinbase, 0.u256)
+      db.increaseBalance(currentCoinbase, 0.u256)
 
     # FIXME: don't repeat this code
+    # TODO: iterate over all fixture indexes
     doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == fixture["post"]["Homestead"][0]["hash"].getStr
     return
 
-  # TODO: implement other sorts of transactions
-  # TODO: check whether it's to an empty address
-
   # This address might not have code. This is fine.
   let code = fixture["pre"].getFixtureCode(transaction.to)
+
+  # TODO: replace with cachingDb or similar approach; necessary
+  # when calls/subcalls/etc come in, too.
+  var foo = vmState.readOnlyStateDB
+  let storageRoot = foo.getStorageRoot(transaction.to)
 
   vmState.mutateStateDB:
     # TODO: combine some of these
     # Also, in general, map out/etc the whole vmState.mutateStateDB flow set
     db.setBalance(sender, db.getBalance(sender) - gas_cost)
-    db.deltaBalance(currentCoinbase, gas_cost)
+    db.increaseBalance(currentCoinbase, gas_cost)
     db.setNonce(sender, db.getNonce(sender) + 1)
-    db.deltaBalance(transaction.to, transaction.value)
+    db.increaseBalance(transaction.to, transaction.value)
     db.setBalance(sender, db.getBalance(sender) - transaction.value)
 
   # build_message (Py-EVM)
@@ -101,14 +105,16 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       options = newMessageOptions(origin = sender,
                                   createAddress = transaction.to))
 
-  var computation = newBaseComputation(vmState, header.blockNumber, message)
-  computation.vmState = vmState
+  # doAssert not message.isCreate
 
+  var computation = newBaseComputation(vmState, header.blockNumber, message)
   # XXX: https://github.com/status-im/nimbus/issues/122
   computation.precompiles = initTable[string, Opcode]()
 
   doAssert computation.isOriginComputation
 
+  # TODO: delineate here during refactoring; try block not low-hanging fruit to split
+  # until transactional db comes in
   try:
     computation.executeOpcodes()
 
@@ -128,18 +134,20 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     if not computation.isError:
       vmState.mutateStateDB:
         db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount)
-        db.deltaBalance(sender, gasRefundAmount)
+        db.increaseBalance(sender, gasRefundAmount)
       # TODO: only here does one commit, with some nuance/caveat
     else:
-      # TODO: replace with transactional commit/revert state (foo.revert, or just implicit)
+      # TODO: replace with transactional commit/revert state (foo.revert or implicit)
       vmState.mutateStateDB:
         db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
-        db.deltaBalance(sender, transaction.value)
+        db.increaseBalance(sender, transaction.value)
+        db.setStorageRoot(transaction.to, storageRoot)
   except ValueError:
-    # TODO: replace with transactional commit/revert state (here, foo.revert)
+    # TODO: replace with transactional commit/revert state (foo.revert or implicit)
     vmState.mutateStateDB:
       db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
-      db.deltaBalance(sender, transaction.value)
+      db.increaseBalance(sender, transaction.value)
+      db.setStorageRoot(transaction.to, storageRoot)
     echo "Computation error"
 
   # TODO: do this right
