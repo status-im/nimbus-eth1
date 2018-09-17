@@ -55,8 +55,8 @@ proc `$`*(fork: Fork): string =
   of FkThawing: result = "Thawing"
   of FkHomestead: result = "Homestead"
   of FkDao: result = "Dao"
-  of FkTangerine: result = "Tangerine"
-  of FkSpurious: result = "Spurious"
+  of FkTangerine: result = "Tangerine Whistle"
+  of FkSpurious: result = "Spurious Dragon"
   of FkByzantium: result = "Byzantium"
   else:  result = "UNKNOWN FORK"
 
