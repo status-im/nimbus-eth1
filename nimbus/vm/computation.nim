@@ -85,7 +85,7 @@ proc prepareChildMessage*(
     code,
     childOptions)
 
-proc applyFrontierMessage(computation: var BaseComputation) =
+proc applyMessage(computation: var BaseComputation) =
   # TODO: Snapshots/Journaling, see: https://github.com/status-im/nimbus/issues/142
   #let snapshot = computation.vmState.snapshot()
 
@@ -122,21 +122,36 @@ proc applyFrontierMessage(computation: var BaseComputation) =
       computation.vmState.commit(snapshot)
   ]#
 
-proc createFrontierMessage(computation: var BaseComputation) =
-  computation.applyFrontierMessage()
+proc applyCreateMessage(fork: Fork, computation: var BaseComputation) =
+  computation.applyMessage()
+  if fork >= FkFrontier:
+    # TODO: Take snapshot
+    discard
 
   if computation.isError:
+    if fork == FkSpurious:
+      # TODO: Revert snapshot
+      discard
     return
   else:
     let contractCode = computation.output
-
     if contractCode.len > 0:
+      if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
+        # TODO: Revert snapshot
+        raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
+
       try:
         computation.gasMeter.consumeGas(
           computation.gasCosts[Create].m_handler(0, 0, contractCode.len),
-          reason="Write contract code for CREATE")
+          reason = "Write contract code for CREATE")
       except OutOfGas:
-        computation.output = @[]
+        if fork == FkFrontier:
+          computation.output = @[]
+        else:
+          # Different from Frontier:
+          # Reverts state on gas failure while writing contract code.
+          # TODO: Revert snapshot
+          discard
     else:
       let storageAddr = computation.msg.storage_address
       debug "SETTING CODE",
@@ -152,17 +167,9 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
       computation.vmState.blockHeader.blockNumber,
       childMsg)
   if childMsg.isCreate:
-    case fork
-    of FkFrontier:
-      createFrontierMessage(childComp)
-    else:
-      raise newException(NotImplementedError, "Create message not yet implemented for fork " & $fork)
+    fork.applyCreateMessage(childComp)
   else:
-    case fork
-    of FkFrontier:
-      applyFrontierMessage(childComp)
-    else:
-      raise newException(NotImplementedError, "Apply message not yet implemented for fork " & $fork)
+    applyMessage(childComp)
   return childComp
 
 proc addChildComputation(fork: Fork, computation: BaseComputation, child: BaseComputation) =
