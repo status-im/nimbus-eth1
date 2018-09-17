@@ -86,8 +86,8 @@ proc prepareChildMessage*(
     childOptions)
 
 proc applyMessage(computation: var BaseComputation) =
-  # TODO: Snapshots/Journaling, see: https://github.com/status-im/nimbus/issues/142
-  #let snapshot = computation.vmState.snapshot()
+  var transaction = computation.vmState.beginTransaction()
+  defer: transaction.dispose()
 
   if computation.msg.depth > STACK_DEPTH_LIMIT:
       raise newException(StackDepthError, "Stack depth limit reached")
@@ -99,7 +99,7 @@ proc applyMessage(computation: var BaseComputation) =
         getBalance(computation.msg.sender)
 
     if sender_balance < computation.msg.value:
-      raise newException(InsufficientFunds, 
+      raise newException(InsufficientFunds,
           &"Insufficient funds: {senderBalance} < {computation.msg.value}"
       )
 
@@ -114,36 +114,43 @@ proc applyMessage(computation: var BaseComputation) =
 
   computation.opcodeExec(computation)
 
-  # TODO: Snapshots/Journaling
-  #[
-  if result.isError:
-      computation.vmState.revert(snapshot)
-  else:
-      computation.vmState.commit(snapshot)
-  ]#
+  if not computation.isError:
+    transaction.commit()
 
 proc applyCreateMessage(fork: Fork, computation: var BaseComputation) =
   computation.applyMessage()
+
+  var transaction: DbTransaction
+  defer: transaction.safeDispose()
+
   if fork >= FkFrontier:
-    # TODO: Take snapshot
-    discard
+    transaction = computation.vmState.beginTransaction()
 
   if computation.isError:
-    if fork == FkSpurious:
-      # TODO: Revert snapshot
-      discard
     return
   else:
     let contractCode = computation.output
     if contractCode.len > 0:
       if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
-        # TODO: Revert snapshot
         raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
 
       try:
         computation.gasMeter.consumeGas(
           computation.gasCosts[Create].m_handler(0, 0, contractCode.len),
           reason = "Write contract code for CREATE")
+
+        let storageAddr = computation.msg.storage_address
+        debug "SETTING CODE",
+          address = storageAddr.toHex,
+          length = len(contract_code),
+          hash = contractCode.rlpHash
+
+        computation.vmState.mutateStateDb:
+          db.setCode(storageAddr, contractCode.toRange)
+
+        if transaction != nil:
+          transaction.commit()
+
       except OutOfGas:
         if fork == FkFrontier:
           computation.output = @[]
@@ -153,13 +160,8 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation) =
           # TODO: Revert snapshot
           discard
     else:
-      let storageAddr = computation.msg.storage_address
-      debug "SETTING CODE",
-        address = storageAddr.toHex,
-        length = len(contract_code),
-        hash = contractCode.rlpHash
-      computation.vmState.mutateStateDB:
-        db.setCode(storageAddr, contractCode.toRange)
+      if transaction != nil:
+        transaction.commit()
 
 proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMsg: Message): BaseComputation =
   var childComp = newBaseComputation(
