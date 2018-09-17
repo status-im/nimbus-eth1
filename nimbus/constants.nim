@@ -52,3 +52,11 @@ const
 
   MAX_PREV_HEADER_DEPTH* =                  256.toBlockNumber
   MaxCallDepth* =                           1024
+
+  ## Fork specific constants
+
+  # See: https://github.com/ethereum/EIPs/blob/master/EIPS/eip-170.md
+  # and: https://github.com/ethereum/EIPs/issues/170
+  EIP170_CODE_SIZE_LIMIT* =                 24577
+
+
