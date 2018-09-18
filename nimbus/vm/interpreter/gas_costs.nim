@@ -536,7 +536,7 @@ const
     GasExp:             10,
     GasExpByte:         10,     # Changed to 50 in Spurious Dragon (EIP160)
     GasMemory:          3,
-    GasTXCreate:        32000,
+    GasTXCreate:        0,      # Changed to 32000 in Homestead (EIP2)
     GasTXDataZero:      4,
     GasTXDataNonZero:   68,
     GasTransaction:     21000,
@@ -551,6 +551,11 @@ const
   ]
 
 # Create the schedule for each forks
+func homesteadGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
+  # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2.md
+  result = previous_fees
+  result[GasTXCreate] = 32000
+
 func tangerineGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
   result = previous_fees
@@ -565,14 +570,18 @@ func spuriousGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
   result[GasExpByte]      = 50
 
 const
-  TangerineGasFees = BaseGasFees.tangerineGasFees
+  HomesteadGasFees = BaseGasFees.homesteadGasFees
+  TangerineGasFees = HomesteadGasFees.tangerineGasFees
   SpuriousGasFees = TangerineGasFees.spuriousGasFees
 
 gasCosts(BaseGasFees, base, BaseGasCosts)
+gasCosts(HomesteadGasFees, homestead, HomesteadGasCosts)
 gasCosts(TangerineGasFees, tangerine, TangerineGasCosts)
 
 proc forkToSchedule*(fork: Fork): GasCosts =
-  if fork < FkTangerine:
+  if fork < FkHomestead:
     BaseGasCosts
+  elif fork < FkTangerine:
+    HomesteadGasCosts
   else:
     TangerineGasCosts
