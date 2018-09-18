@@ -49,8 +49,6 @@ proc write*(memory: var Memory, startPos: Natural, value: openarray[byte]) =
     return
   #echo size
   #echo startPos
-  #validateGte(startPos, 0)
-  #validateGte(size, 0)
   validateLte(startPos + size, memory.len)
   let index = memory.len
   if memory.len < startPos + size:

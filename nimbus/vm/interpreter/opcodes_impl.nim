@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times, ranges,
+  strformat, times, ranges, sequtils,
   chronicles, stint, nimcrypto, ranges/typedranges, eth_common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
@@ -193,7 +193,7 @@ op sha3, inline = true, startPos, length:
   ## 0x20, Compute Keccak-256 hash.
   let (pos, len) = (startPos.toInt, length.toInt)
 
-  if pos < 0 or len < 0:
+  if pos < 0 or len < 0 or pos > int32.high:
     raise newException(OutOfBoundsRead, "Out of bounds memory access")
 
   computation.gasMeter.consumeGas(
@@ -212,34 +212,20 @@ op sha3, inline = true, startPos, length:
 # ##########################################
 # 30s: Environmental Information
 
-# TODO - simplify: https://github.com/status-im/nimbus/issues/67
 proc writePaddedResult(mem: var Memory,
                        data: openarray[byte],
                        memPos, dataPos, len: Natural,
                        paddingValue = 0.byte) =
+  let prevLen = mem.len
   mem.extend(memPos, len)
-
   let dataEndPosition = dataPos.int64 + len - 1
-  if dataEndPosition < data.len:
-    mem.write(memPos, data[dataPos .. dataEndPosition])
-  else:
-    var presentElements = data.len - dataPos
-    if presentElements > 0:
-      mem.write(memPos, data.toOpenArray(dataPos, data.len - 1))
-    else:
-      presentElements = 0
+  let sourceBytes = data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
 
-  # Note, we don't need to write padding bytes
-  # mem.extend already pads with zero properly
+  mem.write(memPos, sourceBytes)
 
-func cleanMemRef(x: UInt256): int {.inline.} =
-  ## Sanitize memory addresses, catch negative or impossibly big offsets
-  # See https://github.com/status-im/nimbus/pull/97 for more info
-  # For rational on shr, see https://github.com/status-im/nimbus/pull/101
-  const upperBound = (high(int32) shr 2).u256
-  if x > upperBound:
-    return high(int32) shr 2
-  return x.toInt
+  # Don't duplicate zero-padding of mem.extend
+  let paddingOffset = memPos + sourceBytes.len
+  mem.write(paddingOffset, repeat(paddingValue, max(prevLen - paddingOffset, 0)))
 
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
