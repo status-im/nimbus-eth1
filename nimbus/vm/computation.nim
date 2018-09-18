@@ -10,7 +10,8 @@ import
   eth_common,
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
-  ./code_stream, ./memory, ./message, ./stack
+  ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
+  ../utils/header, byteutils, ranges
 
 logScope:
   topics = "vm computation"
@@ -39,15 +40,29 @@ template isSuccess*(c: BaseComputation): bool =
 template isError*(c: BaseComputation): bool =
   not c.isSuccess
 
-proc shouldBurnGas*(c: BaseComputation): bool =
+func shouldBurnGas*(c: BaseComputation): bool =
   c.isError and c.error.burnsGas
 
-proc shouldEraseReturnData*(c: BaseComputation): bool =
+func shouldEraseReturnData*(c: BaseComputation): bool =
   c.isError and c.error.erasesReturnData
 
 func bytesToHex(x: openarray[byte]): string {.inline.} =
   ## TODO: use seq[byte] for raw data and delete this proc
   foldl(x, a & b.int.toHex(2).toLowerAscii, "0x")
+
+func output*(c: BaseComputation): seq[byte] =
+  if c.shouldEraseReturnData:
+    @[]
+  else:
+    c.rawOutput
+
+func `output=`*(c: var BaseComputation, value: openarray[byte]) =
+  c.rawOutput = @value
+
+proc outputHex*(c: BaseComputation): string =
+  if c.shouldEraseReturnData:
+    return "0x"
+  c.rawOutput.bytesToHex
 
 proc prepareChildMessage*(
     c: var BaseComputation,
@@ -70,19 +85,119 @@ proc prepareChildMessage*(
     code,
     childOptions)
 
-func output*(c: BaseComputation): seq[byte] =
-  if c.shouldEraseReturnData:
-    @[]
+proc applyMessage(computation: var BaseComputation) =
+  var transaction = computation.vmState.beginTransaction()
+  defer: transaction.dispose()
+
+  if computation.msg.depth > STACK_DEPTH_LIMIT:
+      raise newException(StackDepthError, "Stack depth limit reached")
+
+  if computation.msg.value != 0:
+    let senderBalance =
+      computation.vmState.chainDb.getStateDb(
+        computation.vmState.blockHeader.hash, false).
+        getBalance(computation.msg.sender)
+
+    if sender_balance < computation.msg.value:
+      raise newException(InsufficientFunds,
+          &"Insufficient funds: {senderBalance} < {computation.msg.value}"
+      )
+
+    computation.vmState.mutateStateDb:
+      db.deltaBalance(computation.msg.sender, -1 * computation.msg.value)
+      db.deltaBalance(computation.msg.storage_address, computation.msg.value)
+
+    debug "Apply message",
+      value = computation.msg.value,
+      sender = computation.msg.sender.toHex,
+      address = computation.msg.storage_address.toHex
+
+  computation.opcodeExec(computation)
+
+  if not computation.isError:
+    transaction.commit()
+
+proc applyCreateMessage(fork: Fork, computation: var BaseComputation) =
+  computation.applyMessage()
+
+  var transaction: DbTransaction
+  defer: transaction.safeDispose()
+
+  if fork >= FkFrontier:
+    transaction = computation.vmState.beginTransaction()
+
+  if computation.isError:
+    return
   else:
-    c.rawOutput
+    let contractCode = computation.output
+    if contractCode.len > 0:
+      if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
+        raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
 
-func `output=`*(c: var BaseComputation, value: openarray[byte]) =
-  c.rawOutput = @value
+      try:
+        computation.gasMeter.consumeGas(
+          computation.gasCosts[Create].m_handler(0, 0, contractCode.len),
+          reason = "Write contract code for CREATE")
 
-proc outputHex*(c: BaseComputation): string =
-  if c.shouldEraseReturnData:
-    return "0x"
-  c.rawOutput.bytesToHex
+        let storageAddr = computation.msg.storage_address
+        debug "SETTING CODE",
+          address = storageAddr.toHex,
+          length = len(contract_code),
+          hash = contractCode.rlpHash
+
+        computation.vmState.mutateStateDb:
+          db.setCode(storageAddr, contractCode.toRange)
+
+        if transaction != nil:
+          transaction.commit()
+
+      except OutOfGas:
+        if fork == FkFrontier:
+          computation.output = @[]
+        else:
+          # Different from Frontier:
+          # Reverts state on gas failure while writing contract code.
+          # TODO: Revert snapshot
+          discard
+    else:
+      if transaction != nil:
+        transaction.commit()
+
+proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMsg: Message): BaseComputation =
+  var childComp = newBaseComputation(
+      computation.vmState,
+      computation.vmState.blockHeader.blockNumber,
+      childMsg)
+  
+  # Copy the fork op code executor proc (assumes child computation is in the same fork)
+  childComp.opCodeExec = computation.opCodeExec
+
+  if childMsg.isCreate:
+    fork.applyCreateMessage(childComp)
+  else:
+    applyMessage(childComp)
+  return childComp
+
+proc addChildComputation(fork: Fork, computation: BaseComputation, child: BaseComputation) =
+  if child.isError:
+    if child.msg.isCreate:
+      computation.returnData = child.output
+    elif child.shouldBurnGas:
+      computation.returnData = @[]
+    else:
+      computation.returnData = child.output
+  else:
+    if child.msg.isCreate:
+      computation.returnData = @[]
+    else:
+      computation.returnData = child.output
+  computation.children.add(child)
+
+proc applyChildComputation*(computation: BaseComputation, childMsg: Message): BaseComputation =
+  ## Apply the vm message childMsg as a child computation.
+  let fork = computation.vmState.blockHeader.blockNumber.toFork
+  result = fork.generateChildComputation(computation, childMsg)
+  fork.addChildComputation(computation, result)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:

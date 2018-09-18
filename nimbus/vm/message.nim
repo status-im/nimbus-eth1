@@ -83,5 +83,5 @@ proc `storageAddress`*(message: Message): EthAddress =
   else:
     message.destination
 
-proc isCreate(message: Message): bool =
+proc isCreate*(message: Message): bool =
   message.destination == CREATE_CONTRACT_ADDRESS

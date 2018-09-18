@@ -7,7 +7,7 @@
 
 import
   macros, strformat, tables,
-  eth_common,
+  eth_common, eth_trie/db,
   ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
   ./utils/header
 
@@ -118,3 +118,9 @@ template mutateStateDB*(vmState: BaseVMState, body: untyped) =
 
 proc readOnlyStateDB*(vmState: BaseVMState): AccountStateDB {.inline.}=
   vmState.chaindb.getStateDb(vmState.blockHeader.stateRoot, readOnly = true)
+
+export DbTransaction, commit, rollback, dispose, safeDispose
+
+proc beginTransaction*(vmState: BaseVMState): DbTransaction =
+  vmState.chaindb.db.beginTransaction()
+

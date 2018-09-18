@@ -238,8 +238,10 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 #   receiptDb[indexKey] = rlp.encode(receipt)
 #   return receiptDb.rootHash
 
-# proc snapshot*(self: BaseChainDB): UUID =
-#   return self.db.snapshot()
+#proc snapshot*(self: BaseChainDB): UUID =
+  # Snapshots are a combination of the state_root at the time of the
+  # snapshot and the id of the changeset from the journaled DB.  
+  #return self.db.snapshot()
 
 # proc commit*(self: BaseChainDB; checkpoint: UUID): void =
 #   self.db.commit(checkpoint)
@@ -248,6 +250,7 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 #   self.db.clear()
 
 proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
+  # TODO: readOnly is not used.
   result = newAccountStateDB(self.db, stateRoot)
 
 

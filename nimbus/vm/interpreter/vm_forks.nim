@@ -48,3 +48,15 @@ proc toFork*(blockNumber: UInt256): Fork =
   elif blockNumber < forkBlocks[FkByzantium]: FkSpurious
   else:
     FkByzantium # Update for constantinople when announced
+
+proc `$`*(fork: Fork): string =
+  case fork
+  of FkFrontier: result = "Frontier"
+  of FkThawing: result = "Thawing"
+  of FkHomestead: result = "Homestead"
+  of FkDao: result = "Dao"
+  of FkTangerine: result = "Tangerine Whistle"
+  of FkSpurious: result = "Spurious Dragon"
+  of FkByzantium: result = "Byzantium"
+  else:  result = "UNKNOWN FORK"
+

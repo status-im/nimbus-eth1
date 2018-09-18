@@ -19,7 +19,7 @@ from eth_common import GasInt
 proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputation =
   let header = BlockHeader(blockNumber: blockNum)
   var memDb = newMemDB()
-  var vmState = newBaseVMState(header, newBaseChainDB(trieDB memDb))
+  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
 
   # coinbase: "",
   # difficulty: fixture{"env"}{"currentDifficulty"}.getHexadecimalInt.u256,

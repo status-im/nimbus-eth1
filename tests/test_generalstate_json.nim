@@ -52,7 +52,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
 
   var memDb = newMemDB()
-  var vmState = newBaseVMState(header, newBaseChainDB(trieDB memDb))
+  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
   vmState.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
 

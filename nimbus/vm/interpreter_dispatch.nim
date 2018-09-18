@@ -222,12 +222,22 @@ macro genFrontierDispatch(computation: BaseComputation): untyped =
 proc frontierVM(computation: var BaseComputation) =
   genFrontierDispatch(computation)
 
+proc updateOpcodeExec*(computation: var BaseComputation, fork: Fork) =
+  case fork
+  of FkFrontier:
+    computation.opCodeExec = frontierVM
+    computation.frontierVM()
+  else:
+    raise newException(VMError, "Unknown or not implemented fork: " & $fork)
+
+proc updateOpcodeExec*(computation: var BaseComputation) =
+  let fork = computation.vmState.blockHeader.blockNumber.toFork
+  computation.updateOpcodeExec(fork)
+
 proc executeOpcodes*(computation: var BaseComputation) =
+  # TODO: Optimise getting fork and updating opCodeExec only when necessary
   let fork = computation.vmState.blockHeader.blockNumber.toFork
   try:
-    case fork
-    of FkFrontier: computation.frontierVM()
-    else:
-      raise newException(ValueError, "not implemented fork: " & $fork)
+    computation.updateOpcodeExec(fork)
   except VMError:
     computation.error = Error(info: getCurrentExceptionMsg())

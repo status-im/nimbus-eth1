@@ -168,6 +168,9 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     if not value.isZero:
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
+  func `prefix gasCreate`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+    result = static(FeeSchedule[GasCodeDeposit]) * memLength
+
   func `prefix gasSha3`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
 
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
@@ -494,7 +497,7 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
           Log4:           memExpansion `prefix gasLog4`,
 
           # f0s: System operations
-          Create:         fixed GasCreate, # TODO, dynamic cost
+          Create:         memExpansion `prefix gasCreate`,  # TODO: Change to dynamic?
           Call:           complex `prefix gasCall`,
           CallCode:       complex `prefix gasCall`,
           Return:         memExpansion `prefix gasHalt`,

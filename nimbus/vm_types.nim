@@ -14,6 +14,8 @@ import
 
 
 type
+  OpcodeExecutor* = proc(computation: var BaseComputation)
+
   BaseComputation* = ref object of RootObj
     # The execution computation
     vmState*:               BaseVMState
@@ -32,6 +34,7 @@ type
     opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
     precompiles*:           Table[string, Opcode]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
+    opCodeExec*:            OpcodeExecutor
 
   Error* = ref object
     info*:                  string

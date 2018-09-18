@@ -40,7 +40,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     )
 
   var memDb = newMemDB()
-  var vmState = newBaseVMState(header, newBaseChainDB(trieDB memDb))
+  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDB()))
   let fexec = fixture["exec"]
   var code: seq[byte]
   vmState.mutateStateDB:
