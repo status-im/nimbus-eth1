@@ -45,7 +45,7 @@ proc doTests =
     emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
     header = BlockHeader(stateRoot: emptyRlpHash)
   var
-    chain = newBaseChainDB(trieDB newMemDB())
+    chain = newBaseChainDB(newMemoryDb())
     state = newBaseVMState(header, chain)
   ethNode.chain = chain
 
