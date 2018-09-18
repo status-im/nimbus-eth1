@@ -29,7 +29,7 @@ proc stringFromBytes(x: ByteRange): string =
     result[i] = char(x[i])
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
-  # XXX: this is becoming a mess. refactor.
+  # XXX: this is a terrible mess. refactor.
   var fixture: JsonNode
   for label, child in fixtures:
     fixture = child
@@ -60,9 +60,13 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   # TODO: put yellow paper ref here from that link justifying the limit (1 shl 34 is stand-in)
+  # XXX: clean up lots of avoidable u256 construction
   var readOnlyDB = vmState.readOnlyStateDB
+  let limitAndValue = transaction.gasLimit.u256 + transaction.value
   if transaction.gasLimit < transaction.getFixtureIntrinsicGas or
      transaction.gasPrice > (1 shl 34) or
+     limitAndValue > readOnlyDB.getBalance(sender) or
+     #limitAndValue > header.gasLimit.u256 or
      transaction.accountNonce != readOnlyDB.getNonce(sender) or
      readOnlyDB.getBalance(sender) < gas_cost:
     vmState.mutateStateDb:
@@ -87,7 +91,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     # TODO: combine some of these
     # Also, in general, map out/etc the whole vmState.mutateStateDB flow set
     db.setBalance(sender, db.getBalance(sender) - gas_cost)
-    db.increaseBalance(currentCoinbase, gas_cost)
     db.setNonce(sender, db.getNonce(sender) + 1)
     db.increaseBalance(transaction.to, transaction.value)
     db.setBalance(sender, db.getBalance(sender) - transaction.value)
@@ -108,7 +111,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   # doAssert not message.isCreate
 
   var computation = newBaseComputation(vmState, header.blockNumber, message)
-  # XXX: https://github.com/status-im/nimbus/issues/122
   computation.precompiles = initTable[string, Opcode]()
 
   doAssert computation.isOriginComputation
@@ -120,9 +122,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
     let deletedAccounts = computation.getAccountsForDeletion
     computation.gasMeter.refundGas(24_000 * deletedAccounts.len)
-    vmState.mutateStateDB:
-      for deletedAccount in deletedAccounts:
-        db.deleteAccount deletedAccount
 
     let
       gasRemaining = computation.gasMeter.gasRemaining.u256
@@ -131,24 +130,39 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       gasRefund = min(gasRefunded, gasUsed div 2)
       gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice.u256
 
+    # TODO: investigate if these mutate blocks can be combined
+    vmState.mutateStateDB:
+      for deletedAccount in deletedAccounts:
+        db.deleteAccount deletedAccount
+
     if not computation.isError:
       vmState.mutateStateDB:
-        db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount)
+        if currentCoinbase notin deletedAccounts:
+          db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount)
+          db.increaseBalance(currentCoinbase, gas_cost)
         db.increaseBalance(sender, gasRefundAmount)
       # TODO: only here does one commit, with some nuance/caveat
     else:
+      # XXX: both error paths are intentionally indentical, for merging, with refactoring
       # TODO: replace with transactional commit/revert state (foo.revert or implicit)
       vmState.mutateStateDB:
+        # XXX: the coinbase has to be committed; the rest are basically reverts
         db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
         db.increaseBalance(sender, transaction.value)
         db.setStorageRoot(transaction.to, storageRoot)
+        db.increaseBalance(currentCoinbase, gas_cost)
   except ValueError:
     # TODO: replace with transactional commit/revert state (foo.revert or implicit)
     vmState.mutateStateDB:
+      # XXX: the coinbase has to be committed; the rest are basically reverts
       db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
       db.increaseBalance(sender, transaction.value)
       db.setStorageRoot(transaction.to, storageRoot)
-    echo "Computation error"
+      db.increaseBalance(currentCoinbase, gas_cost)
+
+  #echo vmState.readOnlyStateDB.dumpAccount("b94f5374fce5edbc8e2a8697c15331677e6ebf0b")
+  #echo vmState.readOnlyStateDB.dumpAccount("a94f5374fce5edbc8e2a8697c15331677e6ebf0b")
+  #echo vmState.readOnlyStateDB.dumpAccount("c94f5374fce5edbc8e2a8697c15331677e6ebf0b")
 
   # TODO: do this right
   doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == fixture["post"]["Homestead"][0]["hash"].getStr

@@ -41,3 +41,12 @@ proc extractSign*(v: var UInt256, sign: var bool) =
 
 proc setSign*(v: var UInt256, sign: bool) {.inline.} =
   if sign: flipSign(v)
+
+func cleanMemRef*(x: UInt256): int {.inline.} =
+  ## Sanitize memory addresses, catch negative or impossibly big offsets
+  # See https://github.com/status-im/nimbus/pull/97 for more info
+  # For rationale on shr, see https://github.com/status-im/nimbus/pull/101
+  const upperBound = (high(int32) shr 2).u256
+  if x > upperBound:
+    return high(int32) shr 2
+  return x.toInt

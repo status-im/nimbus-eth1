@@ -12,7 +12,8 @@ import
   macros, strformat, stint,
   ../../computation, ../../stack, ../../code_stream,
   ../../../constants, ../../../vm_types, ../../memory,
-  ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values]
+  ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values],
+  ../../interpreter/utils/utils_numeric
 
 proc pop(tree: var NimNode): NimNode =
   ## Returns the last value of a NimNode and remove it
@@ -102,7 +103,7 @@ macro genSwap*(): untyped =
 proc logImpl(c: var BaseComputation, opcode: Op, topicCount: int) =
   assert(topicCount in 0 .. 4)
   let (memStartPosition, size) = c.stack.popInt(2)
-  let (memPos, len) = (memStartPosition.toInt, size.toInt)
+  let (memPos, len) = (memStartPosition.cleanMemRef, size.cleanMemRef)
 
   if memPos < 0 or len < 0:
     raise newException(OutOfBoundsRead, "Out of bounds memory access")
