@@ -71,7 +71,7 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 ## stCallCodes
 ```diff
 - call_OOG_additionalGasCosts1.json                               Fail
-- call_OOG_additionalGasCosts2.json                               Fail
++ call_OOG_additionalGasCosts2.json                               OK
 - callcall_00.json                                                Fail
   callcall_00_OOGE.json                                           Skip
   callcall_00_OOGE_valueTransfer.json                             Skip
@@ -150,7 +150,7 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
   callcodecallcodecallcode_111_SuicideMiddle.json                 Skip
   callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 0/79 Fail: 5/79 Skip: 74/79
+OK: 1/79 Fail: 4/79 Skip: 74/79
 ## stCallCreateCallCodeTest
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -323,9 +323,9 @@ OK: 0/58 Fail: 58/58 Skip: 0/58
   Call1024BalanceTooLow.json                                      Skip
 - Call1024PreCalls.json                                           Fail
 - Callcode1024BalanceTooLow.json                                  Fail
-- callcall_00_OOGE_1.json                                         Fail
-- callcall_00_OOGE_2.json                                         Fail
-- callcall_00_OOGE_valueTransfer.json                             Fail
++ callcall_00_OOGE_1.json                                         OK
++ callcall_00_OOGE_2.json                                         OK
++ callcall_00_OOGE_valueTransfer.json                             OK
 - callcallcall_000_OOGMAfter.json                                 Fail
 - callcallcallcode_001_OOGMAfter_1.json                           Fail
 - callcallcallcode_001_OOGMAfter_2.json                           Fail
@@ -351,7 +351,7 @@ OK: 0/58 Fail: 58/58 Skip: 0/58
 - contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonFail
 - createInitFail_OOGduringInit.json                               Fail
 ```
-OK: 0/30 Fail: 28/30 Skip: 2/30
+OK: 3/30 Fail: 25/30 Skip: 2/30
 ## stCodeCopyTest
 ```diff
   ExtCodeCopyTests.json                                           Skip
@@ -414,14 +414,14 @@ OK: 0/30 Fail: 22/30 Skip: 8/30
 - callOutput3Fail.json                                            Fail
 - callOutput3partial.json                                         Fail
 - callOutput3partialFail.json                                     Fail
-- callWithHighValueAndGasOOG.json                                 Fail
++ callWithHighValueAndGasOOG.json                                 OK
 - callcodeOutput1.json                                            Fail
 - callcodeOutput2.json                                            Fail
 - callcodeOutput3.json                                            Fail
 - callcodeOutput3Fail.json                                        Fail
 - callcodeOutput3partial.json                                     Fail
 - callcodeOutput3partialFail.json                                 Fail
-- callcodeWithHighValueAndGasOOG.json                             Fail
++ callcodeWithHighValueAndGasOOG.json                             OK
 - deleagateCallAfterValueTransfer.json                            Fail
 - delegatecallAndOOGatTxLevel.json                                Fail
 - delegatecallBasic.json                                          Fail
@@ -435,7 +435,7 @@ OK: 0/30 Fail: 22/30 Skip: 8/30
 - delegatecodeDynamicCode.json                                    Fail
 - delegatecodeDynamicCode2SelfCall.json                           Fail
 ```
-OK: 0/34 Fail: 33/34 Skip: 1/34
+OK: 2/34 Fail: 31/34 Skip: 1/34
 ## stEIP150Specific
 ```diff
   CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
@@ -461,15 +461,15 @@ OK: 0/13 Fail: 1/13 Skip: 12/13
 - RawCallCodeGasMemory.json                                       Fail
 - RawCallCodeGasMemoryAsk.json                                    Fail
 - RawCallCodeGasValueTransfer.json                                Fail
-- RawCallCodeGasValueTransferAsk.json                             Fail
++ RawCallCodeGasValueTransferAsk.json                             OK
 - RawCallCodeGasValueTransferMemory.json                          Fail
-- RawCallCodeGasValueTransferMemoryAsk.json                       Fail
++ RawCallCodeGasValueTransferMemoryAsk.json                       OK
 - RawCallGas.json                                                 Fail
 - RawCallGasAsk.json                                              Fail
 - RawCallGasValueTransfer.json                                    Fail
-- RawCallGasValueTransferAsk.json                                 Fail
++ RawCallGasValueTransferAsk.json                                 OK
 - RawCallGasValueTransferMemory.json                              Fail
-- RawCallGasValueTransferMemoryAsk.json                           Fail
++ RawCallGasValueTransferMemoryAsk.json                           OK
 - RawCallMemoryGas.json                                           Fail
 - RawCallMemoryGasAsk.json                                        Fail
 - RawCreateFailGasValueTransfer.json                              Fail
@@ -486,7 +486,7 @@ OK: 0/13 Fail: 1/13 Skip: 12/13
 + RawExtCodeCopyMemoryGas.json                                    OK
 + RawExtCodeSizeGas.json                                          OK
 ```
-OK: 4/30 Fail: 26/30 Skip: 0/30
+OK: 8/30 Fail: 22/30 Skip: 0/30
 ## stEIP158Specific
 ```diff
   CALL_OneVCallSuicide.json                                       Skip
@@ -521,7 +521,7 @@ OK: 0/5 Fail: 5/5 Skip: 0/5
 - CallContractToCreateContractWhichWouldCreateContractInInitCode.jsonFail
 - CallRecursiveContract.json                                      Fail
 - CallTheContractToCreateEmptyContract.json                       Fail
-- NotEnoughCashContractCreation.json                              Fail
++ NotEnoughCashContractCreation.json                              OK
 - OutOfGasContractCreation.json                                   Fail
 - OutOfGasPrefundedContractCreation.json                          Fail
 - ReturnTest.json                                                 Fail
@@ -532,7 +532,7 @@ OK: 0/5 Fail: 5/5 Skip: 0/5
 - TransactionCreateStopInInitcode.json                            Fail
 - TransactionCreateSuicideInInitcode.json                         Fail
 ```
-OK: 0/18 Fail: 18/18 Skip: 0/18
+OK: 1/18 Fail: 17/18 Skip: 0/18
 ## stLogTests
 ```diff
 - log0_emptyMem.json                                              Fail
@@ -1708,12 +1708,12 @@ OK: 8/16 Fail: 8/16 Skip: 0/16
 - deploymentError.json                                            Fail
   failed_tx_xcf416c53.json                                        Skip
   gasPrice0.json                                                  Skip
-- makeMoney.json                                                  Fail
++ makeMoney.json                                                  OK
   sha3_deja.json                                                  Skip
   txCost-sec73.json                                               Skip
 - tx_e1c174e2.json                                                Fail
 ```
-OK: 0/13 Fail: 7/13 Skip: 6/13
+OK: 1/13 Fail: 6/13 Skip: 6/13
 ## stStackTests
 ```diff
   shallowStack.json                                               Skip
@@ -2037,8 +2037,8 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 - CallToNameRegistratorNotMuchMemory1.json                        Fail
 - CallToNameRegistratorOutOfGas.json                              Fail
   CallToNameRegistratorTooMuchMemory0.json                        Skip
-- CallToNameRegistratorTooMuchMemory1.json                        Fail
-- CallToNameRegistratorTooMuchMemory2.json                        Fail
++ CallToNameRegistratorTooMuchMemory1.json                        OK
++ CallToNameRegistratorTooMuchMemory2.json                        OK
 - CallToNameRegistratorZeorSizeMemExpansion.json                  Fail
 - CallToReturn1.json                                              Fail
 + CallToReturn1ForDynamicJump0.json                               OK
@@ -2083,21 +2083,21 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideSendEtherToMe.json                                       OK
 - testRandomTest.json                                             Fail
 ```
-OK: 23/67 Fail: 42/67 Skip: 2/67
+OK: 25/67 Fail: 40/67 Skip: 2/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
 + ContractStoreClearsSuccess.json                                 OK
-+ CreateMessageReverted.json                                      OK
+- CreateMessageReverted.json                                      Fail
 - CreateMessageSuccess.json                                       Fail
-- CreateTransactionReverted.json                                  Fail
++ CreateTransactionReverted.json                                  OK
 - CreateTransactionSuccess.json                                   Fail
-- EmptyTransaction.json                                           Fail
++ EmptyTransaction.json                                           OK
 - EmptyTransaction2.json                                          Fail
 - EmptyTransaction3.json                                          Fail
 + HighGasLimit.json                                               OK
-- InternalCallHittingGasLimit.json                                Fail
-- InternalCallHittingGasLimit2.json                               Fail
++ InternalCallHittingGasLimit.json                                OK
++ InternalCallHittingGasLimit2.json                               OK
 - InternalCallHittingGasLimitSuccess.json                         Fail
 - InternlCallStoreClearsOOG.json                                  Fail
 - InternlCallStoreClearsSucces.json                               Fail
@@ -2111,7 +2111,7 @@ OK: 23/67 Fail: 42/67 Skip: 2/67
 - StoreGasOnCreate.json                                           Fail
 - SuicidesAndInternlCallSuicidesBonusGasAtCall.json               Fail
 - SuicidesAndInternlCallSuicidesBonusGasAtCallFailed.json         Fail
-- SuicidesAndInternlCallSuicidesOOG.json                          Fail
++ SuicidesAndInternlCallSuicidesOOG.json                          OK
 - SuicidesAndInternlCallSuicidesSuccess.json                      Fail
 + SuicidesAndSendMoneyToItselfEtherDestroyed.json                 OK
 - SuicidesMixingCoinbase.json                                     Fail
@@ -2131,7 +2131,7 @@ OK: 23/67 Fail: 42/67 Skip: 2/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 22/44 Fail: 22/44 Skip: 0/44
+OK: 26/44 Fail: 18/44 Skip: 0/44
 ## stTransitionTest
 ```diff
 - createNameRegistratorPerTxsAfter.json                           Fail
