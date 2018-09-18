@@ -168,6 +168,10 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
       computation.vmState,
       computation.vmState.blockHeader.blockNumber,
       childMsg)
+  
+  # Copy the fork op code executor proc (assumes child computation is in the same fork)
+  childComp.opCodeExec = computation.opCodeExec
+
   if childMsg.isCreate:
     fork.applyCreateMessage(childComp)
   else:
