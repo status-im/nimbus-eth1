@@ -184,7 +184,7 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   # hex parsing routine tripping over this is at least the third.
   let rawTo = j["to"].getStr
   transaction.to = (if rawTo == "": "0x" else: rawTo).parseAddress
-  transaction.value = j["value"][valueIndex].getStr.parseHexInt.u256
+  transaction.value = fromHex(UInt256, j["value"][valueIndex].getStr)
   transaction.payload = j["data"][dataIndex].getStr.safeHexToSeqByte
 
   return transaction
