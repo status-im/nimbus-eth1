@@ -64,7 +64,7 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   result.config = publicChainConfig(id)
 
 proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
-  let tdb = if db.isNil: trieDB(newMemDB())
+  let tdb = if db.isNil: newMemoryDB()
             else: db.db
   var trie = initHexaryTrie(tdb)
   var sdb = newAccountStateDB(tdb, trie.rootHash)
