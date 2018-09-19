@@ -1,3 +1,3 @@
 # tests
 
-TODO: more vm tests and fixtures!
+TODO: more GeneralStateTest fixtures!
