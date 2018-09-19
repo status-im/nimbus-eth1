@@ -77,7 +77,7 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
     vmState.mutateStateDB:
       # pre-EIP158 (e.g., Byzantium) should ensure currentCoinbase exists
       # in later forks, don't create at all
-      db.increaseBalance(header.coinbase, 0.u256)
+      db.addBalance(header.coinbase, 0.u256)
     return
 
   # TODO: replace with cachingDb or similar approach; necessary
@@ -89,7 +89,7 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
   vmState.mutateStateDB:
     db.setBalance(sender, db.getBalance(sender) - gas_cost)
     db.setNonce(sender, db.getNonce(sender) + 1)
-    db.increaseBalance(transaction.to, transaction.value)
+    db.addBalance(transaction.to, transaction.value)
     db.setBalance(sender, db.getBalance(sender) - transaction.value)
 
   var computation = setupComputation(header, vmState, transaction, sender,
@@ -106,16 +106,16 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
     vmState.mutateStateDB:
       if header.coinbase notin computation.getAccountsForDeletion:
         db.setBalance(header.coinbase, db.getBalance(header.coinbase) - gasRefundAmount)
-        db.increaseBalance(header.coinbase, gas_cost)
-      db.increaseBalance(sender, gasRefundAmount)
+        db.addBalance(header.coinbase, gas_cost)
+      db.addBalance(sender, gasRefundAmount)
     # TODO: only here does one commit, with some nuance/caveat
   else:
     vmState.mutateStateDB:
       # XXX: the coinbase has to be committed; the rest are basically reverts
       db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
-      db.increaseBalance(sender, transaction.value)
+      db.addBalance(sender, transaction.value)
       db.setStorageRoot(transaction.to, storageRoot)
-      db.increaseBalance(header.coinbase, gas_cost)
+      db.addBalance(header.coinbase, gas_cost)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode

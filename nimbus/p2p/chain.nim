@@ -1,5 +1,6 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
-  ../vm/[computation, interpreter_dispatch, message], ../constants
+  ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto, ../utils/addresses,
+  eth_trie/memdb, eth_trie, rlp
 
 
 type
@@ -30,33 +31,136 @@ method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): b
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
+proc dataGas(data: openarray[byte]): GasInt =
+  for i in data:
+    if i == 0:
+      result += 4
+    else:
+      result += 68
+
+proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddress): UInt256 =
+  echo "Sender: ", sender
+  echo "txHash: ", t.rlpHash
+  # Inct nonce:
+  db.setNonce(sender, db.getNonce(sender) + 1)
+  var transactionFailed = false
+
+  let upfrontGasCost = t.gasLimit.u256 * t.gasPrice.u256
+  let upfrontCost = upfrontGasCost + t.value
+  var balance = db.getBalance(sender)
+  if balance < upfrontCost:
+    if balance <= upfrontGasCost:
+      result = balance
+      balance = 0.u256
+    else:
+      result = upfrontGasCost
+      balance -= upfrontGasCost
+    transactionFailed = true
+  else:
+    balance -= upfrontCost
+
+  db.setBalance(sender, balance)
+  if transactionFailed:
+    return
+
+  var gasUsed = 21000.GasInt
+  if t.payload.len != 0:
+    gasUsed += dataGas(t.payload)
+
+  if t.isContractCreation:
+    gasUsed += 32000
+    echo "Contract creation"
+
+  if gasUsed > t.gasLimit:
+    echo "Transaction failed. Out of gas."
+    transactionFailed = true
+  else:
+    if t.isContractCreation:
+      db.setCode(generateAddress(sender, t.accountNonce), t.payload.toRange)
+    else:
+      let code = db.getCode(t.to)
+      if code.len == 0:
+        # Value transfer
+        echo "Transfer ", t.value, " from ", sender, " to ", t.to
+
+        db.addBalance(t.to, t.value)
+      else:
+        # Contract call
+        echo "Contract call"
+
+        debug "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
+        let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
+
+  if gasUsed > t.gasLimit:
+    gasUsed = t.gasLimit
+
+  var refund = (t.gasLimit - gasUsed).u256 * t.gasPrice.u256
+  if transactionFailed:
+    refund += t.value
+
+  db.addBalance(sender, refund)
+
+  return gasUsed.u256 * t.gasPrice.u256
+
+proc calcTxRoot(transactions: openarray[Transaction]): Hash256 =
+  var tr = initHexaryTrie(trieDB(newMemDB()))
+  for i, t in transactions:
+    tr.put(rlp.encode(i), rlp.encode(t))
+  return tr.rootHash
+
 method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]) =
   # Run the VM here
   assert(headers.len == bodies.len)
 
+  let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
+
+  echo "Persisting blocks: ", headers[0].blockNumber, " - ", headers[^1].blockNumber
   for i in 0 ..< headers.len:
-    echo "Persisting block: ", headers[i].blockNumber
+    let head = c.db.getCanonicalHead()
+    assert(head.blockNumber == headers[i].blockNumber - 1)
+    var stateDb = newAccountStateDB(c.db.db, head.stateRoot)
+    var gasReward = 0.u256
+
+    assert(bodies[i].transactions.calcTxRoot == headers[i].txRoot)
+
     if headers[i].txRoot != BLANK_ROOT_HASH:
-      let head = c.db.getCanonicalHead()
       # assert(head.blockNumber == headers[i].blockNumber - 1)
       let vmState = newBaseVMState(head, c.db)
-      let stateDb = newAccountStateDB(c.db.db, head.stateRoot)
+      assert(bodies[i].transactions.len != 0)
+
       if bodies[i].transactions.len != 0:
-        # echo "block: ", headers[i].blockNumber
+        echo "block: ", headers[i].blockNumber
+        echo "h: ", headers[i].blockHash
+
         for t in bodies[i].transactions:
           var sender: EthAddress
           if t.getSender(sender):
-            echo "Sender: ", sender
-            let code = stateDb.getCode(sender)
-            debug "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
-            let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
-      assert(false, "Dont know how to persist transactions")
+            gasReward += processTransaction(stateDb, t, sender)
+          else:
+            assert(false, "Could not get sender")
+
+    var mainReward = blockReward + gasReward
 
     if headers[i].ommersHash != EMPTY_UNCLE_HASH:
-      debug "Ignoring ommers", blockNumber = headers[i].blockNumber
-      
+      let h = c.db.persistUncles(bodies[i].uncles)
+      assert(h == headers[i].ommersHash)
+      for u in 0 ..< bodies[i].uncles.len:
+        var uncleReward = bodies[i].uncles[u].blockNumber + 8.u256
+        uncleReward -= headers[i].blockNumber
+        uncleReward = uncleReward * blockReward
+        uncleReward = uncleReward div 8.u256
+        stateDb.addBalance(bodies[i].uncles[u].coinbase, uncleReward)
+        mainReward += blockReward div 32.u256
+
+    # Reward beneficiary
+    stateDb.addBalance(headers[i].coinbase, mainReward)
+
+    if headers[i].stateRoot != stateDb.rootHash:
+      echo "Wrong state root in block ", headers[i].blockNumber, ". Expected: ", headers[i].stateRoot, ", Actual: ", stateDb.rootHash, " arrived from ", c.db.getCanonicalHead().stateRoot
+    assert(headers[i].stateRoot == stateDb.rootHash)
+
+ 
     discard c.db.persistHeaderToDb(headers[i])
     assert(c.db.getCanonicalHead().blockHash == headers[i].blockHash)
-
 
   discard

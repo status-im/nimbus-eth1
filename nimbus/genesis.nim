@@ -63,8 +63,9 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
     Genesis()
   result.config = publicChainConfig(id)
 
-proc toBlock*(g: Genesis): BlockHeader =
-  let tdb = trieDB(newMemDB())
+proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
+  let tdb = if db.isNil: newMemoryDB()
+            else: db.db
   var trie = initHexaryTrie(tdb)
   var sdb = newAccountStateDB(tdb, trie.rootHash)
 
@@ -98,6 +99,6 @@ proc toBlock*(g: Genesis): BlockHeader =
     result.difficulty = GENESIS_DIFFICULTY
 
 proc commit*(g: Genesis, db: BaseChainDB) =
-  let b = g.toBlock()
+  let b = g.toBlock(db)
   assert(b.blockNumber == 0, "can't commit genesis block with number > 0")
   discard db.persistHeaderToDb(b)

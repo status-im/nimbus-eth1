@@ -21,48 +21,77 @@ proc validate*(t: Transaction) =
     raise newException(ValidationError, "Insufficient gas")
   #  self.check_signature_validity()
 
+type
+  TransHashObj = object
+    accountNonce:  AccountNonce
+    gasPrice:      GasInt
+    gasLimit:      GasInt
+    to {.rlpCustomSerialization.}: EthAddress
+    value:         UInt256
+    payload:       Blob
+    mIsContractCreation {.rlpIgnore.}: bool
+
+proc read(rlp: var Rlp, t: var TransHashObj, _: type EthAddress): EthAddress {.inline.} =
+ if rlp.blobLen != 0:
+   result = rlp.read(EthAddress)
+ else:
+   t.mIsContractCreation = true
+
+proc append(rlpWriter: var RlpWriter, t: TransHashObj, a: EthAddress) {.inline.} =
+  if t.mIsContractCreation:
+    rlpWriter.append("")
+  else:
+    rlpWriter.append(a)
+
 func rlpEncode*(transaction: Transaction): auto =
   # Encode transaction without signature
-  type
-    TransHashObj = object
-      accountNonce:  AccountNonce
-      gasPrice:      GasInt
-      gasLimit:      GasInt
-      to:            EthAddress
-      value:         UInt256
-      payload:       Blob
   return rlp.encode(TransHashObj(
     accountNonce: transaction.accountNonce,
     gasPrice: transaction.gasPrice,
     gasLimit: transaction.gasLimit,
     to: transaction.to,
     value: transaction.value,
-    payload: transaction.payload
+    payload: transaction.payload,
+    mIsContractCreation: transaction.isContractCreation
     ))
 
-func hash*(transaction: Transaction): Hash256 =
+func txHashNoSignature*(transaction: Transaction): Hash256 =
   # Hash transaction without signature
   return keccak256.digest(transaction.rlpEncode.toOpenArray)
 
-proc toSignature*(transaction: Transaction): Signature =
+proc getSignature*(transaction: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
   bytes[0..31] = transaction.R.toByteArrayBE()
   bytes[32..63] = transaction.S.toByteArrayBE()
   # TODO: V will become a byte or range soon.
-  bytes[64] = transaction.V - 27 # TODO: 27 should come from somewhere
-  initSignature(bytes)
+  let v = transaction.V.int
+  var chainId: int
+  if v > 36:
+    chainId = (v - 35) div 2
+  elif v == 27 or v == 28:
+    chainId = -4
+  else:
+    return false
+
+  bytes[64] = byte(v - (chainId * 2 + 35))
+  result = recoverSignature(bytes, output) == EthKeysStatus.Success
+
+proc toSignature*(transaction: Transaction): Signature =
+  if not getSignature(transaction, result):
+    raise newException(Exception, "Invalid signaure")
 
 proc getSender*(transaction: Transaction, output: var EthAddress): bool =
   ## Find the address the transaction was sent from.
-  let
-    txHash = transaction.hash # hash without signature
-    sig = transaction.toSignature()
-  var pubKey: PublicKey
-  if recoverSignatureKey(sig, txHash.data, pubKey) == EthKeysStatus.Success:
-    output = pubKey.toCanonicalAddress()
-    result = true
+  var sig: Signature
+  if transaction.getSignature(sig):
+    var pubKey: PublicKey
+    let txHash = transaction.txHashNoSignature
+    if recoverSignatureKey(sig, txHash.data, pubKey) == EthKeysStatus.Success:
+      output = pubKey.toCanonicalAddress()
+      result = true
 
 proc getSender*(transaction: Transaction): EthAddress =
   ## Raises error on failure to recover public key
   if not transaction.getSender(result):
     raise newException(ValidationError, "Could not derive sender address from transaction")
+

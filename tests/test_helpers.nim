@@ -192,20 +192,17 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   result = cast[int64](data)
 
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
-  var transaction : Transaction
-  transaction.accountNonce = j["nonce"].getStr.parseHexInt.AccountNonce
-  transaction.gasPrice = j["gasPrice"].getStr.parseHexInt
-  transaction.gasLimit = j["gasLimit"][gasIndex].getStr.parseHexInt
+  result.accountNonce = j["nonce"].getStr.parseHexInt.AccountNonce
+  result.gasPrice = j["gasPrice"].getStr.parseHexInt
+  result.gasLimit = j["gasLimit"][gasIndex].getStr.parseHexInt
 
   # Another distinct case "" as special hex string, but at least here,
   # it has some semantic meaning in Ethereum -- contract creation. The
   # hex parsing routine tripping over this is at least the third.
   let rawTo = j["to"].getStr
-  transaction.to = (if rawTo == "": "0x" else: rawTo).parseAddress
-  transaction.value = fromHex(UInt256, j["value"][valueIndex].getStr)
-  transaction.payload = j["data"][dataIndex].getStr.safeHexToSeqByte
-
-  return transaction
+  result.to = (if rawTo == "": "0x" else: rawTo).parseAddress
+  result.value = fromHex(UInt256, j["value"][valueIndex].getStr)
+  result.payload = j["data"][dataIndex].getStr.safeHexToSeqByte
 
 proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
   var secretKey = j["secretKey"].getStr
@@ -215,7 +212,7 @@ proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
   var pubKey: PublicKey
   let transaction = j.getFixtureTransaction(0, 0, 0)
   if recoverSignatureKey(signMessage(privateKey, transaction.rlpEncode.toOpenArray),
-                         transaction.hash.data,
+                         transaction.txHashNoSignature.data,
                          pubKey) == EthKeysStatus.Success:
     return pubKey.toCanonicalAddress()
   else:
