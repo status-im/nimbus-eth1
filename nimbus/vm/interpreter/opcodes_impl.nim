@@ -193,7 +193,7 @@ op sha3, inline = true, startPos, length:
   ## 0x20, Compute Keccak-256 hash.
   let (pos, len) = (startPos.toInt, length.toInt)
 
-  if pos < 0 or len < 0 or pos > int32.high:
+  if pos < 0 or len < 0 or pos > 2147483648:
     raise newException(OutOfBoundsRead, "Out of bounds memory access")
 
   computation.gasMeter.consumeGas(
