@@ -105,7 +105,7 @@ proc applyMessage(computation: var BaseComputation) =
 
     computation.vmState.mutateStateDb:
       db.setBalance(computation.msg.sender, db.getBalance(computation.msg.sender) - computation.msg.value)
-      db.increaseBalance(computation.msg.storage_address, computation.msg.value)
+      db.addBalance(computation.msg.storage_address, computation.msg.value)
 
     debug "Apply message",
       value = computation.msg.value,
