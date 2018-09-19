@@ -33,7 +33,6 @@ func slowTest*(folder: string, name: string): bool =
                      "CallToNameRegistratorTooMuchMemory0.json"]
 
 func failIn32Bits(folder, name: string): bool =
-  # XXX: maybe related to int32.high being 0 on 32-bits
   return name in @[
     "randomStatetest94.json",
     "calldatacopy_dejavu.json",
@@ -48,7 +47,35 @@ func failIn32Bits(folder, name: string): bool =
     "mload_dejavu.json",
     "mstore_dejavu.json",
     "mstroe8_dejavu.json",
-    "sha3_dejavu.json"]
+    "sha3_dejavu.json",
+    "HighGasLimit.json",
+    "OverflowGasRequire2.json",
+    "call_ecrec_success_empty_then_returndatasize.json",
+    "call_then_call_value_fail_then_returndatasize.json",
+    "returndatacopy_after_failing_callcode.json",
+    "returndatacopy_after_failing_delegatecall.json",
+    "returndatacopy_after_failing_staticcall.json",
+    "returndatacopy_after_revert_in_staticcall.json",
+    "returndatacopy_after_successful_callcode.json",
+    "returndatacopy_after_successful_delegatecall.json",
+    "returndatacopy_after_successful_staticcall.json",
+    "returndatacopy_following_call.json",
+    "returndatacopy_following_failing_call.json",
+    "returndatacopy_following_revert.json",
+    "returndatacopy_following_too_big_transfer.json",
+    "returndatacopy_initial.json",
+    "returndatacopy_initial_256.json",
+    "returndatacopy_initial_big_sum.json",
+    "returndatacopy_overrun.json",
+    "returndatasize_after_failing_callcode.json",
+    "returndatasize_after_failing_staticcall.json",
+    "returndatasize_after_oog_after_deeper.json",
+    "returndatasize_after_successful_callcode.json",
+    "returndatasize_after_successful_delegatecall.json",
+    "returndatasize_after_successful_staticcall.json",
+    "returndatasize_bug.json",
+    "returndatasize_initial.json",
+    "returndatasize_initial_zero_read.json"]
 
 func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
