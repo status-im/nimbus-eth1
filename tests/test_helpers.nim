@@ -192,13 +192,7 @@ proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
 
   var pubKey: PublicKey
   let transaction = j.getFixtureTransaction
-  if recoverSignatureKey(signMessage(privateKey, transaction.rlpEncode.toOpenArray),
-                         transaction.hash.data,
-                         pubKey) == EthKeysStatus.Success:
-    return pubKey.toCanonicalAddress()
-  else:
-    # XXX: appropriate failure mode; probably raise something
-    discard
+  transaction.getSender
 
 func getFixtureCode*(pre: JsonNode, targetAccount: EthAddress) : seq[byte] =
   # XXX: Workaround for broken setCode/getCode. Remove when feasible.
