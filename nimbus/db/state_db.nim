@@ -61,9 +61,6 @@ proc setBalance*(db: var AccountStateDB, address: EthAddress, balance: UInt256) 
   account.balance = balance
   db.setAccount(address, account)
 
-proc increaseBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
-  db.setBalance(address, db.getBalance(address) + delta)
-
 proc addBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) + delta)
 

@@ -72,7 +72,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     vmState.mutateStateDb:
       # pre-EIP158 (e.g., Byzantium, should ensure currentCoinbase exists)
       # but in later forks, don't create at all
-      db.increaseBalance(currentCoinbase, 0.u256)
+      db.addBalance(currentCoinbase, 0.u256)
 
     # FIXME: don't repeat this code
     # TODO: iterate over all fixture indexes
@@ -92,7 +92,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     # Also, in general, map out/etc the whole vmState.mutateStateDB flow set
     db.setBalance(sender, db.getBalance(sender) - gas_cost)
     db.setNonce(sender, db.getNonce(sender) + 1)
-    db.increaseBalance(transaction.to, transaction.value)
+    db.addBalance(transaction.to, transaction.value)
     db.setBalance(sender, db.getBalance(sender) - transaction.value)
 
   # build_message (Py-EVM)
@@ -139,8 +139,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       vmState.mutateStateDB:
         if currentCoinbase notin deletedAccounts:
           db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount)
-          db.increaseBalance(currentCoinbase, gas_cost)
-        db.increaseBalance(sender, gasRefundAmount)
+          db.addBalance(currentCoinbase, gas_cost)
+        db.addBalance(sender, gasRefundAmount)
       # TODO: only here does one commit, with some nuance/caveat
     else:
       # XXX: both error paths are intentionally indentical, for merging, with refactoring
@@ -148,17 +148,17 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       vmState.mutateStateDB:
         # XXX: the coinbase has to be committed; the rest are basically reverts
         db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
-        db.increaseBalance(sender, transaction.value)
+        db.addBalance(sender, transaction.value)
         db.setStorageRoot(transaction.to, storageRoot)
-        db.increaseBalance(currentCoinbase, gas_cost)
+        db.addBalance(currentCoinbase, gas_cost)
   except ValueError:
     # TODO: replace with transactional commit/revert state (foo.revert or implicit)
     vmState.mutateStateDB:
       # XXX: the coinbase has to be committed; the rest are basically reverts
       db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
-      db.increaseBalance(sender, transaction.value)
+      db.addBalance(sender, transaction.value)
       db.setStorageRoot(transaction.to, storageRoot)
-      db.increaseBalance(currentCoinbase, gas_cost)
+      db.addBalance(currentCoinbase, gas_cost)
 
   #echo vmState.readOnlyStateDB.dumpAccount("b94f5374fce5edbc8e2a8697c15331677e6ebf0b")
   #echo vmState.readOnlyStateDB.dumpAccount("a94f5374fce5edbc8e2a8697c15331677e6ebf0b")
