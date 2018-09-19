@@ -23,80 +23,20 @@ suite "generalstate json tests":
   jsonTest("GeneralStateTests", testFixture)
 
 
-proc stringFromBytes(x: ByteRange): string =
-  result = newString(x.len)
-  for i in 0 ..< x.len:
-    result[i] = char(x[i])
-
-proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
-  # XXX: this is a terrible mess. refactor.
-  var fixture: JsonNode
-  for label, child in fixtures:
-    fixture = child
-    break
-
-  let fenv = fixture["env"]
-  var emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
-  let header = BlockHeader(
-    coinbase: fenv{"currentCoinbase"}.getStr.parseAddress,
-    difficulty: fromHex(UInt256, fenv{"currentDifficulty"}.getStr),
-    blockNumber: fenv{"currentNumber"}.getHexadecimalInt.u256,
-    gasLimit: fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
-    timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,
-    stateRoot: emptyRlpHash
-    )
-
-  let ftrans = fixture["transaction"]
-  let transaction = ftrans.getFixtureTransaction
-  let sender = ftrans.getFixtureTransactionSender
-  let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
-
-  var memDb = newMemDB()
-  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
-  vmState.mutateStateDB:
-    setupStateDB(fixture{"pre"}, db)
-
-  let currentCoinbase = fenv["currentCoinbase"].getStr.ethAddressFromHex
-
+proc validateTransaction(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
-  # TODO: put yellow paper ref here from that link justifying the limit (1 shl 34 is stand-in)
-  # XXX: clean up lots of avoidable u256 construction
+  # XXX: lots of avoidable u256 construction
   var readOnlyDB = vmState.readOnlyStateDB
   let limitAndValue = transaction.gasLimit.u256 + transaction.value
-  if transaction.gasLimit < transaction.getFixtureIntrinsicGas or
-     transaction.gasPrice > (1 shl 34) or
-     limitAndValue > readOnlyDB.getBalance(sender) or
-     #limitAndValue > header.gasLimit.u256 or
-     transaction.accountNonce != readOnlyDB.getNonce(sender) or
-     readOnlyDB.getBalance(sender) < gas_cost:
-    vmState.mutateStateDb:
-      # pre-EIP158 (e.g., Byzantium, should ensure currentCoinbase exists)
-      # but in later forks, don't create at all
-      db.addBalance(currentCoinbase, 0.u256)
+  let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
 
-    # FIXME: don't repeat this code
-    # TODO: iterate over all fixture indexes
-    doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == fixture["post"]["Homestead"][0]["hash"].getStr
-    return
+  transaction.gasLimit >= transaction.getFixtureIntrinsicGas and
+    transaction.gasPrice <= (1 shl 34) and
+    limitAndValue <= readOnlyDB.getBalance(sender) and
+    transaction.accountNonce == readOnlyDB.getNonce(sender) and
+    readOnlyDB.getBalance(sender) >= gas_cost
 
-  # This address might not have code. This is fine.
-  let code = fixture["pre"].getFixtureCode(transaction.to)
-
-  # TODO: replace with cachingDb or similar approach; necessary
-  # when calls/subcalls/etc come in, too.
-  var foo = vmState.readOnlyStateDB
-  let storageRoot = foo.getStorageRoot(transaction.to)
-
-  vmState.mutateStateDB:
-    # TODO: combine some of these
-    # Also, in general, map out/etc the whole vmState.mutateStateDB flow set
-    db.setBalance(sender, db.getBalance(sender) - gas_cost)
-    db.setNonce(sender, db.getNonce(sender) + 1)
-    db.addBalance(transaction.to, transaction.value)
-    db.setBalance(sender, db.getBalance(sender) - transaction.value)
-
-  # build_message (Py-EVM)
-  # FIXME: detect contact creation address; only run if transaction.to addr has .code
+proc setupComputation(header: BlockHeader, vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, code: seq[byte]) : BaseComputation =
   let message = newMessage(
       gas = transaction.gasLimit - transaction.getFixtureIntrinsicGas,
       gasPrice = transaction.gasPrice,
@@ -109,20 +49,53 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
                                   createAddress = transaction.to))
 
   # doAssert not message.isCreate
+  result = newBaseComputation(vmState, header.blockNumber, message)
+  result.precompiles = initTable[string, Opcode]()
+  doAssert result.isOriginComputation
 
-  var computation = newBaseComputation(vmState, header.blockNumber, message)
-  computation.precompiles = initTable[string, Opcode]()
-
-  doAssert computation.isOriginComputation
-
-  # TODO: delineate here during refactoring; try block not low-hanging fruit to split
-  # until transactional db comes in
+proc execComputation(computation: var BaseComputation, vmState: var BaseVMState): bool =
   try:
     computation.executeOpcodes()
+    vmState.mutateStateDB:
+      for deletedAccount in computation.getAccountsForDeletion:
+        db.deleteAccount deletedAccount
 
-    let deletedAccounts = computation.getAccountsForDeletion
-    computation.gasMeter.refundGas(24_000 * deletedAccounts.len)
+    result = not computation.isError
+  except ValueError:
+    result = false
 
+proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transaction, sender: EthAddress, expectedHash: string) =
+  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
+  vmState.mutateStateDB:
+    setupStateDB(pre, db)
+
+  defer:
+    #echo vmState.readOnlyStateDB.dumpAccount("c94f5374fce5edbc8e2a8697c15331677e6ebf0b")
+    doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == expectedHash
+
+  if not validateTransaction(vmState, transaction, sender):
+    vmState.mutateStateDB:
+      # pre-EIP158 (e.g., Byzantium) should ensure currentCoinbase exists
+      # in later forks, don't create at all
+      db.addBalance(header.coinbase, 0.u256)
+    return
+
+  # TODO: replace with cachingDb or similar approach; necessary
+  # when calls/subcalls/etc come in, too.
+  var readOnly = vmState.readOnlyStateDB
+  let storageRoot = readOnly.getStorageRoot(transaction.to)
+
+  let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
+  vmState.mutateStateDB:
+    db.setBalance(sender, db.getBalance(sender) - gas_cost)
+    db.setNonce(sender, db.getNonce(sender) + 1)
+    db.addBalance(transaction.to, transaction.value)
+    db.setBalance(sender, db.getBalance(sender) - transaction.value)
+
+  var computation = setupComputation(header, vmState, transaction, sender,
+                                     pre.getFixtureCode(transaction.to))
+
+  if execComputation(computation, vmState):
     let
       gasRemaining = computation.gasMeter.gasRemaining.u256
       gasRefunded = computation.gasMeter.gasRefunded.u256
@@ -130,39 +103,46 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       gasRefund = min(gasRefunded, gasUsed div 2)
       gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice.u256
 
-    # TODO: investigate if these mutate blocks can be combined
     vmState.mutateStateDB:
-      for deletedAccount in deletedAccounts:
-        db.deleteAccount deletedAccount
-
-    if not computation.isError:
-      vmState.mutateStateDB:
-        if currentCoinbase notin deletedAccounts:
-          db.setBalance(currentCoinbase, db.getBalance(currentCoinbase) - gasRefundAmount)
-          db.addBalance(currentCoinbase, gas_cost)
-        db.addBalance(sender, gasRefundAmount)
-      # TODO: only here does one commit, with some nuance/caveat
-    else:
-      # XXX: both error paths are intentionally indentical, for merging, with refactoring
-      # TODO: replace with transactional commit/revert state (foo.revert or implicit)
-      vmState.mutateStateDB:
-        # XXX: the coinbase has to be committed; the rest are basically reverts
-        db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
-        db.addBalance(sender, transaction.value)
-        db.setStorageRoot(transaction.to, storageRoot)
-        db.addBalance(currentCoinbase, gas_cost)
-  except ValueError:
-    # TODO: replace with transactional commit/revert state (foo.revert or implicit)
+      if header.coinbase notin computation.getAccountsForDeletion:
+        db.setBalance(header.coinbase, db.getBalance(header.coinbase) - gasRefundAmount)
+        db.addBalance(header.coinbase, gas_cost)
+      db.addBalance(sender, gasRefundAmount)
+    # TODO: only here does one commit, with some nuance/caveat
+  else:
     vmState.mutateStateDB:
       # XXX: the coinbase has to be committed; the rest are basically reverts
       db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
       db.addBalance(sender, transaction.value)
       db.setStorageRoot(transaction.to, storageRoot)
-      db.addBalance(currentCoinbase, gas_cost)
+      db.addBalance(header.coinbase, gas_cost)
 
-  #echo vmState.readOnlyStateDB.dumpAccount("b94f5374fce5edbc8e2a8697c15331677e6ebf0b")
-  #echo vmState.readOnlyStateDB.dumpAccount("a94f5374fce5edbc8e2a8697c15331677e6ebf0b")
-  #echo vmState.readOnlyStateDB.dumpAccount("c94f5374fce5edbc8e2a8697c15331677e6ebf0b")
+proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
+  var fixture: JsonNode
+  for label, child in fixtures:
+    fixture = child
+    break
 
-  # TODO: do this right
-  doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == fixture["post"]["Homestead"][0]["hash"].getStr
+  let fenv = fixture["env"]
+  var emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
+  let header = BlockHeader(
+    coinbase: fenv["currentCoinbase"].getStr.ethAddressFromHex,
+    difficulty: fromHex(UInt256, fenv{"currentDifficulty"}.getStr),
+    blockNumber: fenv{"currentNumber"}.getHexadecimalInt.u256,
+    gasLimit: fenv{"currentGasLimit"}.getHexadecimalInt.GasInt,
+    timestamp: fenv{"currentTimestamp"}.getHexadecimalInt.int64.fromUnix,
+    stateRoot: emptyRlpHash
+    )
+
+  let ftrans = fixture["transaction"]
+  for expectation in fixture["post"]["Homestead"]:
+    let
+      expectedHash = expectation["hash"].getStr
+      indexes = expectation["indexes"]
+      dataIndex = indexes["data"].getInt
+      gasIndex = indexes["gas"].getInt
+      valueIndex = indexes["value"].getInt
+    let transaction = ftrans.getFixtureTransaction(dataIndex, gasIndex, valueIndex)
+    let sender = ftrans.getFixtureTransactionSender
+    echo "testing fixture indexes dataIndex = ", dataIndex, ", gasIndex = ", gasIndex, ", and valueIndex = ", valueIndex
+    testFixtureIndexes(header, fixture["pre"], transaction, sender, expectedHash)

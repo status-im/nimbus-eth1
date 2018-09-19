@@ -11,7 +11,8 @@ import
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/transaction,
-  ../nimbus/vm/interpreter/[gas_costs, vm_forks]
+  ../nimbus/vm/interpreter/[gas_costs, vm_forks],
+  ../tests/test_generalstate_failing
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
@@ -31,10 +32,29 @@ func slowTest*(folder: string, name: string): bool =
                      "CallToNameRegistratorMemOOGAndInsufficientBalance.json",
                      "CallToNameRegistratorTooMuchMemory0.json"]
 
+func failIn32Bits(folder, name: string): bool =
+  # XXX: maybe related to int32.high being 0 on 32-bits
+  return name in @[
+    "randomStatetest94.json",
+    "calldatacopy_dejavu.json",
+    "calldatacopy_dejavu2.json",
+    "codecopy_dejavu.json",
+    "codecopy_dejavu2.json",
+    "extcodecopy_dejavu.json",
+    "log1_dejavu.json",
+    "log2_dejavu.json",
+    "log3_dejavu.json",
+    "log4_dejavu.json",
+    "mload_dejavu.json",
+    "mstore_dejavu.json",
+    "mstroe8_dejavu.json",
+    "sha3_dejavu.json"]
+
 func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
   result = (folder != "vmPerformance" or "loop" notin name) and
            (not slowTest(folder, name) and
+            # TODO: check whether these are still useful
             name notin @["static_Call1024BalanceTooLow.json",
                          "Call1024BalanceTooLow.json", "ExtCodeCopyTests.json"])
 
@@ -63,7 +83,6 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
     name   = newIdentNode"name"
     formatted = newStrLitNode"{symbol[final]} {name:<64}{$final}{'\n'}"
   result = quote:
-    var z = 0
     var filenames: seq[(string, string, string)] = @[]
     var status = initOrderedTable[string, OrderedTable[string, Status]]()
     for filename in walkDirRec("tests" / "fixtures" / `s`):
@@ -79,10 +98,14 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       test filename:
         echo folder, name
         status[folder][name] = Status.FAIL
-        `handler`(parseJSON(readFile(filename)), `testStatusIMPL`)
-        if `testStatusIMPL` == OK:
-          status[folder][name] = Status.OK
-        z += 1
+        try:
+          `handler`(parseJSON(readFile(filename)), `testStatusIMPL`)
+          if `testStatusIMPL` == OK:
+            status[folder][name] = Status.OK
+        except AssertionError:
+          status[folder][name] = Status.FAIL
+          if not allowedFailingGeneralStateTest(folder, name) and not failIn32Bits(folder, name):
+            raise
 
     status.sort do (a: (string, OrderedTable[string, Status]),
                     b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
@@ -113,7 +136,6 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
 
 func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
 
-# XXX should probably be part of hexToSeqByte
 func safeHexToSeqByte*(hexStr: string): seq[byte] =
   if hexStr == "":
     @[]
@@ -169,21 +191,18 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   data = fromHex(StUInt[64], j.getStr)
   result = cast[int64](data)
 
-proc getFixtureTransaction*(j: JsonNode): Transaction =
-  var transaction : Transaction
-  transaction.accountNonce = j["nonce"].getStr.parseHexInt.AccountNonce
-  transaction.gasPrice = j["gasPrice"].getStr.parseHexInt
-  transaction.gasLimit = j["gasLimit"][0].getStr.parseHexInt
+proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
+  result.accountNonce = j["nonce"].getStr.parseHexInt.AccountNonce
+  result.gasPrice = j["gasPrice"].getStr.parseHexInt
+  result.gasLimit = j["gasLimit"][gasIndex].getStr.parseHexInt
 
   # Another distinct case "" as special hex string, but at least here,
   # it has some semantic meaning in Ethereum -- contract creation. The
   # hex parsing routine tripping over this is at least the third.
   let rawTo = j["to"].getStr
-  transaction.to = (if rawTo == "": "0x" else: rawTo).parseAddress
-  transaction.value = j["value"][0].getStr.parseHexInt.u256
-  transaction.payload = j["data"][0].getStr.safeHexToSeqByte
-
-  return transaction
+  result.to = (if rawTo == "": "0x" else: rawTo).parseAddress
+  result.value = fromHex(UInt256, j["value"][valueIndex].getStr)
+  result.payload = j["data"][dataIndex].getStr.safeHexToSeqByte
 
 proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
   var secretKey = j["secretKey"].getStr
@@ -191,8 +210,14 @@ proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
   let privateKey = initPrivateKey(secretKey)
 
   var pubKey: PublicKey
-  let transaction = j.getFixtureTransaction
-  transaction.getSender
+  let transaction = j.getFixtureTransaction(0, 0, 0)
+  if recoverSignatureKey(signMessage(privateKey, transaction.rlpEncode.toOpenArray),
+                         transaction.txHashNoSignature.data,
+                         pubKey) == EthKeysStatus.Success:
+    return pubKey.toCanonicalAddress()
+  else:
+    # XXX: appropriate failure mode; probably raise something
+    discard
 
 func getFixtureCode*(pre: JsonNode, targetAccount: EthAddress) : seq[byte] =
   # XXX: Workaround for broken setCode/getCode. Remove when feasible.

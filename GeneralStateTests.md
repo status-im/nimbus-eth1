@@ -623,7 +623,7 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
   MSTORE_Bounds2.json                                             Skip
   MSTORE_Bounds2a.json                                            Skip
   POP_Bounds.json                                                 Skip
-+ RETURN_Bounds.json                                              OK
+- RETURN_Bounds.json                                              Fail
   SLOAD_Bounds.json                                               Skip
   SSTORE_Bounds.json                                              Skip
   mload32bitBound.json                                            Skip
@@ -636,7 +636,7 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
   static_CALL_Bounds2a.json                                       Skip
   static_CALL_Bounds3.json                                        Skip
 ```
-OK: 5/38 Fail: 0/38 Skip: 33/38
+OK: 4/38 Fail: 1/38 Skip: 33/38
 ## stMemoryTest
 ```diff
 - callDataCopyOffset.json                                         Fail
