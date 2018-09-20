@@ -24,12 +24,8 @@ requires "nim >= 0.18.1",
 proc test(name: string, lang = "c") =
   if not dirExists "build":
     mkDir "build"
-  if not dirExists "nimcache":
-    mkDir "nimcache"
   --run
-  --nimcache: "nimcache"
   switch("out", ("./build/" & name))
-  switch("experimental", "ForLoopMacros")
   setCommand lang, "tests/" & name & ".nim"
 
 task test, "Run tests":
