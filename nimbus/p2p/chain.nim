@@ -38,7 +38,9 @@ proc dataGas(data: openarray[byte]): GasInt =
     else:
       result += 68
 
-proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddress): UInt256 =
+proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddress, head: BlockHeader, chainDB: BaseChainDB): UInt256 =
+  ## Process the transaction, write the results to db.
+  ## Returns amount of ETH to be rewarded to miner
   echo "Sender: ", sender
   echo "txHash: ", t.rlpHash
   # Inct nonce:
@@ -68,7 +70,7 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
     gasUsed += dataGas(t.payload)
 
   if t.isContractCreation:
-    gasUsed += 32000
+    # gasUsed += 32000 # This appears in Homestead.
     echo "Contract creation"
 
   if gasUsed > t.gasLimit:
@@ -77,6 +79,13 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   else:
     if t.isContractCreation:
       db.setCode(generateAddress(sender, t.accountNonce), t.payload.toRange)
+      let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, @[], t.payload)
+      let vmState = newBaseVMState(head, chainDB)
+      var c = newBaseComputation(vmState, head.blockNumber, msg)
+      c.executeOpcodes()
+      echo "isError: ", c.isError
+      # TODO: Handle failure, and gas consumption
+
     else:
       let code = db.getCode(t.to)
       if code.len == 0:
@@ -90,6 +99,7 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
 
         debug "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
         let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
+        # TODO: Run the vm
 
   if gasUsed > t.gasLimit:
     gasUsed = t.gasLimit
@@ -135,7 +145,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
         for t in bodies[i].transactions:
           var sender: EthAddress
           if t.getSender(sender):
-            gasReward += processTransaction(stateDb, t, sender)
+            gasReward += processTransaction(stateDb, t, sender, head, c.db)
           else:
             assert(false, "Could not get sender")
 
@@ -163,4 +173,3 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     discard c.db.persistHeaderToDb(headers[i])
     assert(c.db.getCanonicalHead().blockHash == headers[i].blockHash)
 
-  discard
