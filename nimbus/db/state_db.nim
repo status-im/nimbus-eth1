@@ -15,7 +15,8 @@ logScope:
 
 type
   AccountStateDB* = ref object
-    trie: SecureHexaryTrie
+    trie:         SecureHexaryTrie
+    accountCodes: TableRef[Hash256, ByteRange]
 
 proc rootHash*(accountDb: AccountStateDB): KeccakHash =
   accountDb.trie.rootHash
@@ -24,9 +25,11 @@ proc rootHash*(accountDb: AccountStateDB): KeccakHash =
 # TODO: self.Trie.rootHash = value
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
-                        root: KeccakHash, readOnly: bool = false): AccountStateDB =
+                        root: KeccakHash, readOnly: bool = false,
+                        accountCodes = newTable[Hash256, ByteRange]()): AccountStateDB =
   result.new()
   result.trie = initSecureHexaryTrie(backingStore, root)
+  result.accountCodes = accountCodes
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
   ## XXX: The name of this proc is intentionally long, because it
@@ -129,24 +132,18 @@ proc getNonce*(db: AccountStateDB, address: EthAddress): AccountNonce =
   let account = db.getAccount(address)
   account.nonce
 
-proc toByteRange_Unnecessary*(h: KeccakHash): ByteRange =
-  ## XXX: Another proc used to mark unnecessary conversions it the code
-  var s = @(h.data)
-  return s.toRange
-
 proc setCode*(db: var AccountStateDB, address: EthAddress, code: ByteRange) =
   var account = db.getAccount(address)
   let newCodeHash = keccak256.digest code.toOpenArray
   if newCodeHash != account.codeHash:
     account.codeHash = newCodeHash
+    db.accountCodes[newCodeHash] = code
     # XXX: this uses the journaldb in py-evm
-    # Breaks state hash root calculations
     # db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
     db.setAccount(address, account)
 
 proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
-  let codeHash = db.getCodeHash(address)
-  result = db.trie.get(codeHash.toByteRange_Unnecessary)
+  db.accountCodes.getOrDefault(db.getCodeHash(address))
 
 proc hasCodeOrNonce*(account: AccountStateDB, address: EthAddress): bool {.inline.} =
   account.getNonce(address) != 0 or account.getCodeHash(address) != EMPTY_SHA3

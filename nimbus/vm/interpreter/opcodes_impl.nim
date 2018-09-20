@@ -225,6 +225,7 @@ proc writePaddedResult(mem: var Memory,
 
   # Don't duplicate zero-padding of mem.extend
   let paddingOffset = memPos + sourceBytes.len
+  # TODO: avoid unnecessary memory allocation
   mem.write(paddingOffset, repeat(paddingValue, max(prevLen - paddingOffset, 0)))
 
 op address, inline = true:
