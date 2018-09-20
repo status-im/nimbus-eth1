@@ -50,6 +50,8 @@ func failIn32Bits(folder, name: string): bool =
     "sha3_dejavu.json",
     "HighGasLimit.json",
     "OverflowGasRequire2.json",
+
+    # TODO: obvious theme; check returndatasize/returndatacopy
     "call_ecrec_success_empty_then_returndatasize.json",
     "call_then_call_value_fail_then_returndatasize.json",
     "returndatacopy_after_failing_callcode.json",
@@ -75,7 +77,9 @@ func failIn32Bits(folder, name: string): bool =
     "returndatasize_after_successful_staticcall.json",
     "returndatasize_bug.json",
     "returndatasize_initial.json",
-    "returndatasize_initial_zero_read.json"]
+    "returndatasize_initial_zero_read.json",
+    "call_then_create_successful_then_returndatasize.json",
+    "call_outsize_then_create_successful_then_returndatasize.json"]
 
 func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
