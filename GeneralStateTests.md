@@ -423,7 +423,7 @@ OK: 0/30 Fail: 22/30 Skip: 8/30
 - callcodeOutput3partialFail.json                                 Fail
 + callcodeWithHighValueAndGasOOG.json                             OK
 - deleagateCallAfterValueTransfer.json                            Fail
-- delegatecallAndOOGatTxLevel.json                                Fail
++ delegatecallAndOOGatTxLevel.json                                OK
 - delegatecallBasic.json                                          Fail
 - delegatecallEmptycontract.json                                  Fail
 - delegatecallInInitcodeToEmptyContract.json                      Fail
@@ -435,7 +435,7 @@ OK: 0/30 Fail: 22/30 Skip: 8/30
 - delegatecodeDynamicCode.json                                    Fail
 - delegatecodeDynamicCode2SelfCall.json                           Fail
 ```
-OK: 2/34 Fail: 31/34 Skip: 1/34
+OK: 3/34 Fail: 30/34 Skip: 1/34
 ## stEIP150Specific
 ```diff
   CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
@@ -457,21 +457,21 @@ OK: 0/13 Fail: 1/13 Skip: 12/13
 ```diff
 + RawBalanceGas.json                                              OK
 - RawCallCodeGas.json                                             Fail
-- RawCallCodeGasAsk.json                                          Fail
++ RawCallCodeGasAsk.json                                          OK
 - RawCallCodeGasMemory.json                                       Fail
-- RawCallCodeGasMemoryAsk.json                                    Fail
++ RawCallCodeGasMemoryAsk.json                                    OK
 - RawCallCodeGasValueTransfer.json                                Fail
 + RawCallCodeGasValueTransferAsk.json                             OK
 - RawCallCodeGasValueTransferMemory.json                          Fail
 + RawCallCodeGasValueTransferMemoryAsk.json                       OK
 - RawCallGas.json                                                 Fail
-- RawCallGasAsk.json                                              Fail
++ RawCallGasAsk.json                                              OK
 - RawCallGasValueTransfer.json                                    Fail
 + RawCallGasValueTransferAsk.json                                 OK
 - RawCallGasValueTransferMemory.json                              Fail
 + RawCallGasValueTransferMemoryAsk.json                           OK
 - RawCallMemoryGas.json                                           Fail
-- RawCallMemoryGasAsk.json                                        Fail
++ RawCallMemoryGasAsk.json                                        OK
 - RawCreateFailGasValueTransfer.json                              Fail
 - RawCreateFailGasValueTransfer2.json                             Fail
 - RawCreateGas.json                                               Fail
@@ -479,14 +479,14 @@ OK: 0/13 Fail: 1/13 Skip: 12/13
 - RawCreateGasValueTransfer.json                                  Fail
 - RawCreateGasValueTransferMemory.json                            Fail
 - RawDelegateCallGas.json                                         Fail
-- RawDelegateCallGasAsk.json                                      Fail
++ RawDelegateCallGasAsk.json                                      OK
 - RawDelegateCallGasMemory.json                                   Fail
-- RawDelegateCallGasMemoryAsk.json                                Fail
++ RawDelegateCallGasMemoryAsk.json                                OK
 + RawExtCodeCopyGas.json                                          OK
 + RawExtCodeCopyMemoryGas.json                                    OK
 + RawExtCodeSizeGas.json                                          OK
 ```
-OK: 8/30 Fail: 22/30 Skip: 0/30
+OK: 14/30 Fail: 16/30 Skip: 0/30
 ## stEIP158Specific
 ```diff
   CALL_OneVCallSuicide.json                                       Skip
@@ -585,16 +585,16 @@ OK: 1/18 Fail: 17/18 Skip: 0/18
 OK: 0/46 Fail: 46/46 Skip: 0/46
 ## stMemExpandingEIP150Calls
 ```diff
-- CallAndCallcodeConsumeMoreGasThenTransactionHasWithMemExpandingCalls.jsonFail
++ CallAndCallcodeConsumeMoreGasThenTransactionHasWithMemExpandingCalls.jsonOK
 - CallAskMoreGasOnDepth2ThenTransactionHasWithMemExpandingCalls.jsonFail
-- CallGoesOOGOnSecondLevel2WithMemExpandingCalls.json             Fail
-- CallGoesOOGOnSecondLevelWithMemExpandingCalls.json              Fail
++ CallGoesOOGOnSecondLevel2WithMemExpandingCalls.json             OK
++ CallGoesOOGOnSecondLevelWithMemExpandingCalls.json              OK
 - CreateAndGasInsideCreateWithMemExpandingCalls.json              Fail
-- DelegateCallOnEIPWithMemExpandingCalls.json                     Fail
-- ExecuteCallThatAskMoreGasThenTransactionHasWithMemExpandingCalls.jsonFail
++ DelegateCallOnEIPWithMemExpandingCalls.json                     OK
++ ExecuteCallThatAskMoreGasThenTransactionHasWithMemExpandingCalls.jsonOK
 - NewGasPriceForCodesWithMemExpandingCalls.json                   Fail
 ```
-OK: 0/8 Fail: 8/8 Skip: 0/8
+OK: 5/8 Fail: 3/8 Skip: 0/8
 ## stMemoryStressTest
 ```diff
   CALLCODE_Bounds.json                                            Skip
@@ -623,7 +623,7 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
   MSTORE_Bounds2.json                                             Skip
   MSTORE_Bounds2a.json                                            Skip
   POP_Bounds.json                                                 Skip
-- RETURN_Bounds.json                                              Fail
++ RETURN_Bounds.json                                              OK
   SLOAD_Bounds.json                                               Skip
   SSTORE_Bounds.json                                              Skip
   mload32bitBound.json                                            Skip
@@ -636,7 +636,7 @@ OK: 0/8 Fail: 8/8 Skip: 0/8
   static_CALL_Bounds2a.json                                       Skip
   static_CALL_Bounds3.json                                        Skip
 ```
-OK: 4/38 Fail: 1/38 Skip: 33/38
+OK: 5/38 Fail: 0/38 Skip: 33/38
 ## stMemoryTest
 ```diff
 - callDataCopyOffset.json                                         Fail
@@ -1548,9 +1548,9 @@ OK: 11/19 Fail: 8/19 Skip: 0/19
 ## stReturnDataTest
 ```diff
 + call_ecrec_success_empty_then_returndatasize.json               OK
-- call_outsize_then_create_successful_then_returndatasize.json    Fail
++ call_outsize_then_create_successful_then_returndatasize.json    OK
 + call_then_call_value_fail_then_returndatasize.json              OK
-- call_then_create_successful_then_returndatasize.json            Fail
++ call_then_create_successful_then_returndatasize.json            OK
 - create_callprecompile_returndatasize.json                       Fail
   modexp_modsize0_returndatasize.json                             Skip
 - returndatacopy_0_0_following_successful_create.json             Fail
@@ -1585,17 +1585,17 @@ OK: 11/19 Fail: 8/19 Skip: 0/19
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
 ```
-OK: 26/37 Fail: 8/37 Skip: 3/37
+OK: 28/37 Fail: 6/37 Skip: 3/37
 ## stRevertTest
 ```diff
-- LoopCallsDepthThenRevert.json                                   Fail
++ LoopCallsDepthThenRevert.json                                   OK
   LoopCallsDepthThenRevert2.json                                  Skip
   LoopCallsDepthThenRevert3.json                                  Skip
 - LoopCallsThenRevert.json                                        Fail
-- LoopDelegateCallsDepthThenRevert.json                           Fail
++ LoopDelegateCallsDepthThenRevert.json                           OK
 - NashatyrevSuicideRevert.json                                    Fail
 + PythonRevertTestTue201814-1430.json                             OK
-- RevertDepth2.json                                               Fail
++ RevertDepth2.json                                               OK
 - RevertDepthCreateAddressCollision.json                          Fail
 - RevertDepthCreateOOG.json                                       Fail
 + RevertInCallCode.json                                           OK
@@ -1628,11 +1628,11 @@ OK: 26/37 Fail: 8/37 Skip: 3/37
 - RevertRemoteSubCallStorageOOG2.json                             Fail
 + RevertSubCallStorageOOG.json                                    OK
 + RevertSubCallStorageOOG2.json                                   OK
-- TouchToEmptyAccountRevert.json                                  Fail
++ TouchToEmptyAccountRevert.json                                  OK
 - TouchToEmptyAccountRevert2.json                                 Fail
 - TouchToEmptyAccountRevert3.json                                 Fail
 ```
-OK: 10/43 Fail: 28/43 Skip: 5/43
+OK: 14/43 Fail: 24/43 Skip: 5/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -2026,7 +2026,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 - CallRecursiveBomb0_OOG_atMaxCallDepth.json                      Fail
 - CallRecursiveBomb1.json                                         Fail
 - CallRecursiveBomb2.json                                         Fail
-- CallRecursiveBomb3.json                                         Fail
++ CallRecursiveBomb3.json                                         OK
 - CallRecursiveBombLog.json                                       Fail
 - CallRecursiveBombLog2.json                                      Fail
 - CallToNameRegistrator0.json                                     Fail
@@ -2083,7 +2083,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideSendEtherToMe.json                                       OK
 - testRandomTest.json                                             Fail
 ```
-OK: 25/67 Fail: 40/67 Skip: 2/67
+OK: 26/67 Fail: 39/67 Skip: 2/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK

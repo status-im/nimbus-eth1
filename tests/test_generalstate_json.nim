@@ -36,7 +36,7 @@ proc validateTransaction(vmState: BaseVMState, transaction: Transaction, sender:
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
     readOnlyDB.getBalance(sender) >= gas_cost
 
-proc setupComputation(header: BlockHeader, vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, code: seq[byte]) : BaseComputation =
+proc setupComputation(header: BlockHeader, vmState: var BaseVMState, transaction: Transaction, sender: EthAddress) : BaseComputation =
   let message = newMessage(
       gas = transaction.gasLimit - transaction.getFixtureIntrinsicGas,
       gasPrice = transaction.gasPrice,
@@ -44,7 +44,7 @@ proc setupComputation(header: BlockHeader, vmState: var BaseVMState, transaction
       sender = sender,
       value = transaction.value,
       data = transaction.payload,
-      code = code,
+      code = vmState.readOnlyStateDB.getCode(transaction.to).toSeq,
       options = newMessageOptions(origin = sender,
                                   createAddress = transaction.to))
 
@@ -87,14 +87,11 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
 
   let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
   vmState.mutateStateDB:
-    db.setBalance(sender, db.getBalance(sender) - gas_cost)
     db.setNonce(sender, db.getNonce(sender) + 1)
     db.addBalance(transaction.to, transaction.value)
-    db.setBalance(sender, db.getBalance(sender) - transaction.value)
+    db.subBalance(sender, transaction.value + gas_cost)
 
-  var computation = setupComputation(header, vmState, transaction, sender,
-                                     pre.getFixtureCode(transaction.to))
-
+  var computation = setupComputation(header, vmState, transaction, sender)
   if execComputation(computation, vmState):
     let
       gasRemaining = computation.gasMeter.gasRemaining.u256
@@ -105,14 +102,14 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
 
     vmState.mutateStateDB:
       if header.coinbase notin computation.getAccountsForDeletion:
-        db.setBalance(header.coinbase, db.getBalance(header.coinbase) - gasRefundAmount)
+        db.subBalance(header.coinbase, gasRefundAmount)
         db.addBalance(header.coinbase, gas_cost)
       db.addBalance(sender, gasRefundAmount)
     # TODO: only here does one commit, with some nuance/caveat
   else:
     vmState.mutateStateDB:
       # XXX: the coinbase has to be committed; the rest are basically reverts
-      db.setBalance(transaction.to, db.getBalance(transaction.to) - transaction.value)
+      db.subBalance(transaction.to, transaction.value)
       db.addBalance(sender, transaction.value)
       db.setStorageRoot(transaction.to, storageRoot)
       db.addBalance(header.coinbase, gas_cost)
@@ -144,5 +141,4 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       valueIndex = indexes["value"].getInt
     let transaction = ftrans.getFixtureTransaction(dataIndex, gasIndex, valueIndex)
     let sender = ftrans.getFixtureTransactionSender
-    echo "testing fixture indexes dataIndex = ", dataIndex, ", gasIndex = ", gasIndex, ", and valueIndex = ", valueIndex
     testFixtureIndexes(header, fixture["pre"], transaction, sender, expectedHash)

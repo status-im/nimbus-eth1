@@ -12,7 +12,11 @@ import
 
 type
   BaseChainDB* = ref object
-    db*: TrieDatabaseRef
+    db*:           TrieDatabaseRef
+    # XXX: intentionally simple stand-in for one use of full JournalDB
+    # Doesn't handle CREATE+revert, etc. But also creates minimal tech
+    # debt while setting a CI baseline from which to improve/replace.
+    accountCodes*: TableRef[Hash256, ByteRange]
     # TODO db*: JournalDB
 
   KeyType = enum
@@ -26,6 +30,7 @@ type
 proc newBaseChainDB*(db: TrieDatabaseRef): BaseChainDB =
   new(result)
   result.db = db
+  result.accountCodes = newTable[Hash256, ByteRange]()
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
@@ -251,7 +256,7 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 
 proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
   # TODO: readOnly is not used.
-  result = newAccountStateDB(self.db, stateRoot)
+  result = newAccountStateDB(self.db, stateRoot, readOnly, self.accountCodes)
 
 
 # Deprecated:

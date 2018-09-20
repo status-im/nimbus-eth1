@@ -50,6 +50,8 @@ func failIn32Bits(folder, name: string): bool =
     "sha3_dejavu.json",
     "HighGasLimit.json",
     "OverflowGasRequire2.json",
+
+    # TODO: obvious theme; check returndatasize/returndatacopy
     "call_ecrec_success_empty_then_returndatasize.json",
     "call_then_call_value_fail_then_returndatasize.json",
     "returndatacopy_after_failing_callcode.json",
@@ -75,7 +77,9 @@ func failIn32Bits(folder, name: string): bool =
     "returndatasize_after_successful_staticcall.json",
     "returndatasize_bug.json",
     "returndatasize_initial.json",
-    "returndatasize_initial_zero_read.json"]
+    "returndatasize_initial_zero_read.json",
+    "call_then_create_successful_then_returndatasize.json",
+    "call_outsize_then_create_successful_then_returndatasize.json"]
 
 func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
@@ -206,9 +210,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
       actualBalance = stateDB.getBalance(account)
       actualNonce = stateDB.getNonce(account)
 
-    # XXX: actualCode is sourced from wrong location currently, incompatible with
-    # state hash root. Can/should be fixed, but blocks further progress as-is.
-    # doAssert wantedCode == actualCode, &"{wantedCode} != {actualCode}"
+    doAssert wantedCode == actualCode, &"{wantedCode} != {actualCode}"
     doAssert wantedBalance == actualBalance, &"{wantedBalance.toHex} != {actualBalance.toHex}"
     doAssert wantedNonce == actualNonce, &"{wantedNonce.toHex} != {actualNonce.toHex}"
 
@@ -245,14 +247,6 @@ proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
   else:
     # XXX: appropriate failure mode; probably raise something
     discard
-
-func getFixtureCode*(pre: JsonNode, targetAccount: EthAddress) : seq[byte] =
-  # XXX: Workaround for broken setCode/getCode. Remove when feasible.
-  for ac, preState in pre:
-    if ethAddressFromHex(ac) == targetAccount:
-      return preState["code"].getStr.safeHexToSeqByte
-
-  # Fail loudly if it falls off the end (by default)
 
 proc getFixtureIntrinsicGas*(transaction: Transaction) : auto =
   # Py-EVM has _get_homestead_intrinsic_gas and _get_frontier_intrinsic_gas
