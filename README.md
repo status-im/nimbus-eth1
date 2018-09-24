@@ -33,7 +33,7 @@ Users of the [Nix package manager](https://nixos.org/nix/download.html) can inst
 nix-shell nimbus.nix
 ```
 
-### Build
+### Build & Install
 
 We use [Nimble](https://github.com/nim-lang/nimble) to manage dependencies and run tests.
 
