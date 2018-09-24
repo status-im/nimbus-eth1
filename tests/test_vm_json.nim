@@ -61,15 +61,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       options = newMessageOptions(origin=fexec{"origin"}.getStr.parseAddress,
                                   createAddress = toAddress))
 
-  #echo fixture{"exec"}
-  var c = newCodeStream(code)
-  when defined(nimbusdebug):
-    c.displayDecompiled()
-
   var computation = newBaseComputation(vmState, header.blockNumber, message)
-  computation.vmState = vmState
-  computation.precompiles = initTable[string, Opcode]()
-
   computation.executeOpcodes()
 
   if not fixture{"post"}.isNil:
