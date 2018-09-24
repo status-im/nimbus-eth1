@@ -10,7 +10,7 @@
 import
   os, strutils, net, eth_common, db/[storage_types, db_chain],
   asyncdispatch2, json_rpc/rpcserver, eth_keys,
-  eth_p2p, eth_p2p/rlpx_protocols/[eth, les],
+  eth_p2p, eth_p2p/rlpx_protocols/[eth],
   config, genesis, rpc/[common, p2p], p2p/chain,
   eth_trie
 
@@ -40,10 +40,6 @@ type
     rpcServer*: RpcHttpServer
     ethNode*: EthereumNode
     state*: NimbusState
-
-proc newTrieDb(): TrieDatabaseRef =
-  # XXX: Setup db storage location according to config
-  result = trieDB(newChainDb("nimbus.db"))
 
 proc initializeEmptyDb(db: BaseChainDB) =
   echo "Writing genesis to DB"
@@ -75,7 +71,8 @@ proc start(): NimbusObject =
   address.tcpPort = Port(conf.net.bindPort)
   address.udpPort = Port(conf.net.discPort)
 
-  let trieDB = newTrieDb()
+  createDir(conf.dataDir)
+  let trieDB = trieDB newChainDb(conf.dataDir)
   let chainDB = newBaseChainDB(trieDB)
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:

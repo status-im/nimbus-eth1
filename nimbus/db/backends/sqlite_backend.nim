@@ -1,5 +1,5 @@
 import
-  sqlite3, ranges, ranges/ptr_arith, eth_trie/db_tracing,
+  os, sqlite3, ranges, ranges/ptr_arith, eth_trie/db_tracing,
   ../storage_types
 
 type
@@ -9,8 +9,9 @@ type
 
   ChainDB* = SqliteChainDB
 
-proc newChainDB*(dbPath: string): ChainDB =
+proc newChainDB*(basePath: string, inMemory = false): ChainDB =
   result.new()
+  let dbPath = basePath / (if inMemory: ":memory:" else: "nimbus.db")
   var s = sqlite3.open(dbPath, result.store)
   if s != SQLITE_OK:
     raiseStorageInitError()

@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import parseopt, strutils, macros
+import parseopt, strutils, macros, os
 import asyncdispatch2, eth_keys, eth_p2p, eth_common, chronicles
 
 const
@@ -148,6 +148,8 @@ type
 
   NimbusConfiguration* = ref object
     ## Main Nimbus configuration object
+    dataDir*: string
+    keyFile*: string
     rpc*: RpcConfiguration        ## JSON-RPC configuration
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
@@ -290,6 +292,20 @@ proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
 #     result = Success
 #   except:
 #     result = ErrorParseOption
+
+proc processEthArguments(key, value: string): ConfigStatus =
+  result = Success
+  let config = getConfiguration()
+  case key.toLowerAscii()
+  of "keyfile":
+    if fileExists(value):
+      config.keyFile = value
+    else:
+      result = ErrorIncorrectOption
+  of "dataDir":
+    config.dataDir = value
+  else:
+    result = EmptyOption
 
 proc processRpcArguments(key, value: string): ConfigStatus =
   ## Processes only `RPC` related command line options
@@ -462,6 +478,15 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.discPort = 30303'u16
   result.net.ident = NimbusIdent
 
+  const dataDir = when defined(windows):
+                    "AppData" / "Roaming" / "Nimbus" / "DB"
+                  elif defined(macosx):
+                    "Library" / "Application Support" / "Nimbus" / "DB"
+                  else:
+                    ".cache" / "nimbus" / "db"
+
+  result.dataDir = getHomeDir() / dataDir
+
   ## Debug defaults
   result.debug.flags = {}
 
@@ -479,11 +504,12 @@ USAGE:
 
 ETHEREUM OPTIONS:
   --keyfile:<value>       Use keyfile storage file
+  --datadir:<value>       Base directory for all blockchain-related data
 
 NETWORKING OPTIONS:
   --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
   --bootnodesv4:<value>   Comma separated enode URLs for P2P v4 discovery bootstrap (light server, full nodes)
-  --botnoodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
+  --bootnodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
   --port:<value>          Network listening TCP port (default: 30303)
   --discport:<value>      Network listening UDP port (default: 30303)
   --maxpeers:<value>      Maximum number of network peers (default: 25)
@@ -531,6 +557,7 @@ proc processArguments*(msg: var string): ConfigStatus =
           result = Success
           break
         else:
+          checkArgument processEthArguments, key, value, msg
           checkArgument processRpcArguments, key, value, msg
           checkArgument processNetArguments, key, value, msg
           checkArgument processDebugArguments, key, value, msg

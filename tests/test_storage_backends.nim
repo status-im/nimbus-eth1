@@ -5,7 +5,7 @@ import
   ../nimbus/db/backends/[sqlite_backend, rocksdb_backend]
 
 template dummyInstance(T: type SqliteChainDB): auto =
-  sqlite_backend.newChainDB ":memory:"
+  sqlite_backend.newChainDB(getTempDir(), inMemory = true)
 
 template dummyInstance(T: type RocksChainDB): auto =
   let tmp = getTempDir() / "nimbus-test-db"

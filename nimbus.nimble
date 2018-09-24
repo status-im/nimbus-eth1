@@ -21,12 +21,17 @@ requires "nim >= 0.18.1",
          "eth_keyfile",
          "eth_keys"
 
-proc test(name: string, lang = "c") =
-  if not dirExists "build":
-    mkDir "build"
-  --run
+proc buildBinary(name: string, srcDir = ".", lang = "c") =
+  if not dirExists "build": mkDir "build"
   switch("out", ("./build/" & name))
-  setCommand lang, "tests/" & name & ".nim"
+  setCommand lang, srcDir & name & ".nim"
+
+proc test(name: string, lang = "c") =
+  buildBinary name, "tests/"
+  --run
 
 task test, "Run tests":
   test "all_tests"
+
+task nimbus, "Build Nimbus":
+  buildBinary "nimbus", "nimbus/"

@@ -25,7 +25,7 @@ Join the Status community chats:
 * A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/)
   * Compile [from source](https://github.com/facebook/rocksdb/blob/master/INSTALL.md) or use the package manager of your OS; for example, [Debian](https://packages.debian.org/search?keywords=librocksdb-dev&searchon=names&exact=1&suite=all&section=all), [Ubuntu](https://packages.ubuntu.com/search?keywords=librocksdb-dev&searchon=names&exact=1&suite=all&section=all), and [Fedora](https://apps.fedoraproject.org/packages/rocksdb) have working RocksDB packages
 
-### Obtaining the prerequisites through the Nix package manager
+#### Obtaining the prerequisites through the Nix package manager
 
 Users of the [Nix package manager](https://nixos.org/nix/download.html) can install all prerequisites simply by running:
 
@@ -37,24 +37,26 @@ nix-shell nimbus.nix
 
 We use [Nimble](https://github.com/nim-lang/nimble) to manage dependencies and run tests.
 
-To build and run test suite:
+To build and install Nimbus in your home folder, just execute:
+
+```bash
+nimble install
+```
+
+After a succesful installation, running `nimbus --help` will provide you with a list of
+the available command-line options. To start syncing with mainnet, just execute `nimbus`
+without any parameters.
+
+To execute all tests:
 ```bash
 nimble test
 ```
 
-Based on our config, Nimble will write binaries to `build/` - you can do this manually also, as in the following examples:
+Our Wiki provides additional helpful information for [debugging individual test cases][1]
+and for [pairing Nimbus with a locally running copy of Geth][2].
 
-Run example:
-```bash
-mkdir -p build
-nim c -o:build/decompile_smart_contract -r examples/decompile_smart_contract.nim
-```
-
-Run Ethereum [JSON-based general state tests](https://github.com/ethereum/tests/):
-```
-mkdir -p build
-nim c -o:build/test_generalstate_json -r --experimental:forLoopMacros tests/test_generalstate_json.nim
-```
+[1]: https://github.com/status-im/nimbus/wiki/Understanding-and-debugging-Nimbus-EVM-JSON-tests
+[2]: https://github.com/status-im/nimbus/wiki/Debugging-state-reconstruction
 
 #### Troubleshooting
 
