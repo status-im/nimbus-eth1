@@ -367,7 +367,7 @@ proc processNetArguments(key, value: string): ConfigStatus =
   let config = getConfiguration()
   let skey = key.toLowerAscii()
   if skey == "bootnodes":
-    result = processENodesList(value, config.net.bootnodes)
+    result = processENodesList(value, config.net.bootNodes)
   elif skey == "bootnodesv4":
     result = processENodesList(value, config.net.bootNodes)
   elif skey == "bootnodesv5":
@@ -511,7 +511,7 @@ NETWORKING OPTIONS:
   --bootnodesv4:<value>   Comma separated enode URLs for P2P v4 discovery bootstrap (light server, full nodes)
   --bootnodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
   --port:<value>          Network listening TCP port (default: 30303)
-  --discport:<value>      Network listening UDP port (default: 30303)
+  --discport:<value>      Network listening UDP port (defaults to --port argument)
   --maxpeers:<value>      Maximum number of network peers (default: 25)
   --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
   --nodiscover            Disables the peer discovery mechanism (manual peer addition)
@@ -538,7 +538,11 @@ LOGGING AND DEBUGGING OPTIONS:
 
 proc processArguments*(msg: var string): ConfigStatus =
   ## Process command line argument and update `NimbusConfiguration`.
-  discard getConfiguration()
+  let config = getConfiguration()
+  var tempBootNodes: seq[ENode]
+  swap(tempBootNodes, config.net.bootNodes)
+  config.net.discPort = 0
+
   var opt = initOptParser()
   var length = 0
   for kind, key, value in opt.getopt():
@@ -566,9 +570,11 @@ proc processArguments*(msg: var string): ConfigStatus =
       result = ErrorParseOption
       break
 
-  if length == 0 and result == Success:
-    # msg = getHelpString()
-    result = Success
+  if config.net.bootNodes.len == 0:
+    swap(tempBootNodes, config.net.bootNodes)
+
+  if config.net.discPort == 0:
+    config.net.discPort = config.net.bindPort
 
 proc processConfig*(pathname: string): ConfigStatus =
   ## Process configuration file `pathname` and update `NimbusConfiguration`.

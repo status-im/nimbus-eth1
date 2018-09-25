@@ -95,7 +95,8 @@ proc start(): NimbusObject =
       result = "EXITING"
     nimbus.rpcServer.start()
 
-  waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes)
+  waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes,
+    enableDiscovery = NoDiscover notin conf.net.flags)
 
   # TODO: temp code until the CLI/RPC interface is fleshed out
   let status = waitFor nimbus.ethNode.fastBlockchainSync()
