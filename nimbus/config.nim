@@ -539,8 +539,18 @@ LOGGING AND DEBUGGING OPTIONS:
 proc processArguments*(msg: var string): ConfigStatus =
   ## Process command line argument and update `NimbusConfiguration`.
   let config = getConfiguration()
+
+  # At this point `config.net.bootnodes` is likely populated with network default
+  # bootnodes. We want to override those if at least one custom bootnode is
+  # specified on the command line. We temporarily set `config.net.bootNodes`
+  # to empty seq, and in the end restore it if no bootnodes were spricified on
+  # the command line.
+  # TODO: This is pretty hacky and it's better to refactor it to make a clear
+  # distinction between default and custom bootnodes.
   var tempBootNodes: seq[ENode]
   swap(tempBootNodes, config.net.bootNodes)
+
+  # The same trick is done to discPort
   config.net.discPort = 0
 
   var opt = initOptParser()
@@ -571,6 +581,8 @@ proc processArguments*(msg: var string): ConfigStatus =
       break
 
   if config.net.bootNodes.len == 0:
+    # No custom bootnodes were specified on the command line, restore to
+    # previous values
     swap(tempBootNodes, config.net.bootNodes)
 
   if config.net.discPort == 0:
