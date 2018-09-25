@@ -11,7 +11,7 @@ type
 
 proc newChainDB*(basePath: string, inMemory = false): ChainDB =
   result.new()
-  let dbPath = basePath / (if inMemory: ":memory:" else: "nimbus.db")
+  let dbPath = if inMemory: ":memory:" else: basePath / "nimbus.db"
   var s = sqlite3.open(dbPath, result.store)
   if s != SQLITE_OK:
     raiseStorageInitError()
