@@ -57,7 +57,7 @@ func rlpEncode*(transaction: Transaction): auto =
 
 func txHashNoSignature*(transaction: Transaction): Hash256 =
   # Hash transaction without signature
-  return keccak256.digest(transaction.rlpEncode.toOpenArray)
+  return keccak256.digest(transaction.rlpEncode)
 
 proc getSignature*(transaction: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]

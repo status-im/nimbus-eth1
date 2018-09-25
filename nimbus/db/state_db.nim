@@ -46,7 +46,7 @@ proc getAccount(db: AccountStateDB, address: EthAddress): Account =
     result = newAccount()
 
 proc setAccount*(db: AccountStateDB, address: EthAddress, account: Account) =
-  db.trie.put createRangeFromAddress(address), rlp.encode(account)
+  db.trie.put createRangeFromAddress(address), rlp.encode(account).toRange
 
 proc deleteAccount*(db: AccountStateDB, address: EthAddress) =
   db.trie.del createRangeFromAddress(address)
@@ -100,7 +100,7 @@ proc setStorage*(db: var AccountStateDB,
   let slotAsKey = createTrieKeyFromSlot slot
 
   if value > 0:
-    let encodedValue = rlp.encode value
+    let encodedValue = rlp.encode(value).toRange
     accountTrie.put(slotAsKey, encodedValue)
   else:
     accountTrie.del(slotAsKey)
