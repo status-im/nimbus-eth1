@@ -105,7 +105,7 @@ iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
 
 proc addBlockNumberToHashLookup(self: BaseChainDB; header: BlockHeader) =
   self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
-                     rlp.encode(header.hash).toOpenArray)
+              rlp.encode(header.hash))
 
 iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader): Hash256 =
   ## Returns an iterable of the transaction hashes from th block specified
@@ -146,7 +146,7 @@ proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockH
   for h in newCanonicalHeaders:
     self.addBlockNumberToHashLookup(h)
 
-  self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash).toOpenArray)
+  self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
 
   return newCanonicalHeaders
 
@@ -188,11 +188,11 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   if not isGenesis and not self.headerExists(header.parentHash):
     raise newException(ParentNotFound, "Cannot persist block header " &
         $headerHash & " with unknown parent " & $header.parentHash)
-  self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header).toOpenArray)
+  self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
 
   let score = if isGenesis: header.difficulty
               else: self.getScore(header.parentHash).u256 + header.difficulty
-  self.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score).toOpenArray)
+  self.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score))
 
   self.addBlockNumberToHashLookup(header)
 
@@ -208,14 +208,14 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
 proc addTransactionToCanonicalChain(self: BaseChainDB, txHash: Hash256,
     blockHeader: BlockHeader, index: int) =
   let k: TransactionKey = (blockHeader.blockNumber, index)
-  self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(k).toOpenArray)
+  self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(k))
 
 proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
-  result = keccak256.digest(enc.toOpenArray())
-  self.db.put(genericHashKey(result).toOpenArray, enc.toOpenArray)
+  result = keccak256.digest(enc)
+  self.db.put(genericHashKey(result).toOpenArray, enc)
 
 proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
   ## Persist the given block's header and uncles.

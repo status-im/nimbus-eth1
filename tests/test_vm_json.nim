@@ -29,7 +29,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     break
 
   let fenv = fixture["env"]
-  var emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
+  var emptyRlpHash = keccak256.digest(rlp.encode(""))
   let header = BlockHeader(
     coinbase: fenv{"currentCoinbase"}.getStr.parseAddress,
     difficulty: fromHex(UInt256, fenv{"currentDifficulty"}.getStr),

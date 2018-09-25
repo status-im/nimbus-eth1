@@ -240,7 +240,7 @@ proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
 
   var pubKey: PublicKey
   let transaction = j.getFixtureTransaction(0, 0, 0)
-  if recoverSignatureKey(signMessage(privateKey, transaction.rlpEncode.toOpenArray),
+  if recoverSignatureKey(signMessage(privateKey, transaction.rlpEncode),
                          transaction.txHashNoSignature.data,
                          pubKey) == EthKeysStatus.Success:
     return pubKey.toCanonicalAddress()
