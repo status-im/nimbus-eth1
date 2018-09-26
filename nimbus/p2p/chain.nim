@@ -115,7 +115,7 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
 proc calcTxRoot(transactions: openarray[Transaction]): Hash256 =
   var tr = initHexaryTrie(trieDB(newMemDB()))
   for i, t in transactions:
-    tr.put(rlp.encode(i), rlp.encode(t))
+    tr.put(rlp.encode(i).toRange, rlp.encode(t).toRange)
   return tr.rootHash
 
 method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]) =
