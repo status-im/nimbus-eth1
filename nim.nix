@@ -1,4 +1,4 @@
-{ stdenv, lib, makeWrapper, nodejs, openssl, pcre, readline, sqlite, nim }:
+{ stdenv, lib, makeWrapper, git, nodejs, openssl, pcre, readline, sqlite }:
 
 stdenv.mkDerivation rec {
   # This derivation may be a bit confusing at first, because it builds the Status'
@@ -18,7 +18,7 @@ stdenv.mkDerivation rec {
     ref = "nimbus";
 
     # Set this to the hash of the head commit in the nimbus branch:
-    rev = "d40fb5a6d3ed937d41fd0e72a27df8c397aae881";
+    rev = "c240806756579c3375b1a79e1e65c40087a52ac5";
   };
 
   doCheck = true;
@@ -38,13 +38,14 @@ stdenv.mkDerivation rec {
   #    as part of building it, so it cannot be read-only
 
   buildInputs  = [
-    makeWrapper nodejs nim
-    openssl pcre readline sqlite
+    makeWrapper nodejs
+    openssl pcre readline sqlite git
   ];
 
   buildPhase   = ''
-    nim c --lib:"./lib" -d:release koch.nim
-    nim c --lib:"./lib" -d:release compiler/nim.nim && mv compiler/nim bin/
+    export HOME=$TMP
+    export GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
+    sh build_all.sh
   '';
 
   installPhase = ''

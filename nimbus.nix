@@ -19,7 +19,7 @@ stdenv.mkDerivation rec {
   };
 
   src = ./.;
-  buildInputs = [pkgs.clang nim pkgs.rocksdb_lite];
+  buildInputs = [pkgs.clang nim pkgs.rocksdb pkgs.sqlite];
   LD_LIBRARY_PATH = "${makeLibraryPath buildInputs}";
 }
 
