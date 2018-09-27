@@ -6,13 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
+  unittest, strformat, strutils, tables, json, ospaths, times,
   byteutils, ranges/typedranges, nimcrypto/[keccak, hash],
   rlp, eth_trie/[types, memdb], eth_common,
   eth_keys,
   ./test_helpers,
   ../nimbus/[constants, errors],
-  ../nimbus/[vm_state, vm_types],
+  ../nimbus/[vm_state, vm_types, vm_state_transactions],
   ../nimbus/utils/header,
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
@@ -22,47 +22,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 suite "generalstate json tests":
   jsonTest("GeneralStateTests", testFixture)
 
-
-proc validateTransaction(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
-  # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
-  # XXX: lots of avoidable u256 construction
-  var readOnlyDB = vmState.readOnlyStateDB
-  let limitAndValue = transaction.gasLimit.u256 + transaction.value
-  let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
-
-  transaction.gasLimit >= transaction.getFixtureIntrinsicGas and
-    transaction.gasPrice <= (1 shl 34) and
-    limitAndValue <= readOnlyDB.getBalance(sender) and
-    transaction.accountNonce == readOnlyDB.getNonce(sender) and
-    readOnlyDB.getBalance(sender) >= gas_cost
-
-proc setupComputation(header: BlockHeader, vmState: var BaseVMState, transaction: Transaction, sender: EthAddress) : BaseComputation =
-  let message = newMessage(
-      gas = transaction.gasLimit - transaction.getFixtureIntrinsicGas,
-      gasPrice = transaction.gasPrice,
-      to = transaction.to,
-      sender = sender,
-      value = transaction.value,
-      data = transaction.payload,
-      code = vmState.readOnlyStateDB.getCode(transaction.to).toSeq,
-      options = newMessageOptions(origin = sender,
-                                  createAddress = transaction.to))
-
-  # doAssert not message.isCreate
-  result = newBaseComputation(vmState, header.blockNumber, message)
-  result.precompiles = initTable[string, Opcode]()
-  doAssert result.isOriginComputation
-
-proc execComputation(computation: var BaseComputation, vmState: var BaseVMState): bool =
-  try:
-    computation.executeOpcodes()
-    vmState.mutateStateDB:
-      for deletedAccount in computation.getAccountsForDeletion:
-        db.deleteAccount deletedAccount
-
-    result = not computation.isError
-  except ValueError:
-    result = false
 
 proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transaction, sender: EthAddress, expectedHash: string) =
   var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
@@ -101,6 +60,8 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
       gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice.u256
 
     vmState.mutateStateDB:
+      for deletedAccount in computation.getAccountsForDeletion:
+        db.deleteAccount deletedAccount
       if header.coinbase notin computation.getAccountsForDeletion:
         db.subBalance(header.coinbase, gasRefundAmount)
         db.addBalance(header.coinbase, gas_cost)

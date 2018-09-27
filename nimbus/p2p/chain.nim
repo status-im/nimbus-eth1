@@ -1,6 +1,8 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
   ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto, ../utils/addresses,
-  eth_trie/memdb, eth_trie, rlp
+  ../vm_state_transactions,
+  eth_trie/memdb, eth_trie, rlp,
+  sugar
 
 
 type
@@ -31,13 +33,6 @@ method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): b
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-proc dataGas(data: openarray[byte]): GasInt =
-  for i in data:
-    if i == 0:
-      result += 4
-    else:
-      result += 68
-
 proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddress, head: BlockHeader, chainDB: BaseChainDB): UInt256 =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
@@ -47,6 +42,9 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   db.setNonce(sender, db.getNonce(sender) + 1)
   var transactionFailed = false
 
+  #t.dump
+
+  # TODO: combine/refactor re validate
   let upfrontGasCost = t.gasLimit.u256 * t.gasPrice.u256
   let upfrontCost = upfrontGasCost + t.value
   var balance = db.getBalance(sender)
@@ -65,26 +63,53 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   if transactionFailed:
     return
 
-  var gasUsed = 21000.GasInt
-  if t.payload.len != 0:
-    gasUsed += dataGas(t.payload)
+  var gasUsed = t.payload.intrinsicGas.GasInt
+  #echo "gasUsed is ", gasUsed
 
   if t.isContractCreation:
     # gasUsed += 32000 # This appears in Homestead.
     echo "Contract creation"
 
+  # TODO: check the 200x constant up front
   if gasUsed > t.gasLimit:
     echo "Transaction failed. Out of gas."
     transactionFailed = true
   else:
     if t.isContractCreation:
-      db.setCode(generateAddress(sender, t.accountNonce), t.payload.toRange)
-      let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, @[], t.payload)
+      # TODO: split out into separate function?; interleaving the cases obfuscates
       let vmState = newBaseVMState(head, chainDB)
+
+      # TODO: setupComputation
+      let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload)
       var c = newBaseComputation(vmState, head.blockNumber, msg)
-      c.executeOpcodes()
-      echo "isError: ", c.isError
-      # TODO: Handle failure, and gas consumption
+
+      if execComputation(c, vmState):
+        let contractAddress = generateAddress(sender, t.accountNonce)
+        db.setCode(contractAddress, c.output.toRange)
+        db.addBalance(contractAddress, t.value)
+
+        # XXX: copy/pasted from GST fixture
+        # TODO: more merging/refactoring/etc
+        # also a couple lines can collapse because variable used once
+        # once verified in GST fixture
+        let
+          gasRemaining = c.gasMeter.gasRemaining.u256
+          gasRefunded = c.gasMeter.gasRefunded.u256
+          gasUsed2 = t.gasLimit.u256 - gasRemaining
+          gasRefund = min(gasRefunded, gasUsed2 div 2)
+          gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
+        #echo "gasRemaining is ", gasRemaining, " and gasRefunded = ", gasRefunded, " and gasUsed2 = ", gasUsed2, " and gasRefund = ", gasRefund, " and gasRefundAmount = ", gasRefundAmount
+        let codeCost = (200 * c.output.len).u256
+        db.addBalance(sender, (t.gasLimit.u256 - gasUsed2 - codeCost)*t.gasPrice.u256)
+        echo c.output.len, " bytes: ", c.output
+        return (gasUsed2 + codeCost) * t.gasPrice.u256
+
+      else:
+        # FIXME: don't do this revert, but rather only subBalance correctly
+        # the if transactionfailed at end is what is supposed to pick it up
+        db.addBalance(sender, t.value)
+        echo "isError: ", c.isError
+        return upfrontGasCost
 
     else:
       let code = db.getCode(t.to)
@@ -150,6 +175,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
             assert(false, "Could not get sender")
 
     var mainReward = blockReward + gasReward
+    #echo "mainReward = ", mainReward , " with blockReward = ", blockReward, " and gasReward = ", gasReward
 
     if headers[i].ommersHash != EMPTY_UNCLE_HASH:
       let h = c.db.persistUncles(bodies[i].uncles)
@@ -160,6 +186,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
         uncleReward = uncleReward * blockReward
         uncleReward = uncleReward div 8.u256
         stateDb.addBalance(bodies[i].uncles[u].coinbase, uncleReward)
+        #echo "adding via unclehash to mainReward: ", (blockReward div 32.u256)
         mainReward += blockReward div 32.u256
 
     # Reward beneficiary
