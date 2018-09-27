@@ -6,11 +6,61 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, tables,
+  ranges/typedranges, sequtils, strformat, tables,
+  eth_common,
   ./constants, ./errors, ./vm/computation,
-  ./transaction, ./vm_types, ./vm_state, ./block_types, ./db/db_chain, ./utils/header
+  ./transaction, ./vm_types, ./vm_state, ./block_types, ./db/[db_chain, state_db], ./utils/header,
+  ./vm/interpreter
 
-method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction): (BaseComputation, BlockHeader) {.base.}=
+func intrinsicGas*(data: openarray[byte]): GasInt =
+  result = 21_000
+  for i in data:
+    if i == 0:
+      result += 4
+    else:
+      result += 68
+
+proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
+  # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
+  # XXX: lots of avoidable u256 construction
+  var readOnlyDB = vmState.readOnlyStateDB
+  let limitAndValue = transaction.gasLimit.u256 + transaction.value
+  let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
+
+  transaction.gasLimit >= transaction.payload.intrinsicGas and
+    transaction.gasPrice <= (1 shl 34) and
+    limitAndValue <= readOnlyDB.getBalance(sender) and
+    transaction.accountNonce == readOnlyDB.getNonce(sender) and
+    readOnlyDB.getBalance(sender) >= gas_cost
+
+proc setupComputation*(header: BlockHeader, vmState: var BaseVMState, transaction: Transaction, sender: EthAddress) : BaseComputation =
+  let message = newMessage(
+      gas = transaction.gasLimit - transaction.payload.intrinsicGas,
+      gasPrice = transaction.gasPrice,
+      to = transaction.to,
+      sender = sender,
+      value = transaction.value,
+      data = transaction.payload,
+      code = vmState.readOnlyStateDB.getCode(transaction.to).toSeq,
+      options = newMessageOptions(origin = sender,
+                                  createAddress = transaction.to))
+
+  result = newBaseComputation(vmState, header.blockNumber, message)
+  result.precompiles = initTable[string, Opcode]()
+  doAssert result.isOriginComputation
+
+proc execComputation*(computation: var BaseComputation, vmState: BaseVMState): bool =
+  try:
+    computation.executeOpcodes()
+    #[vmState.mutateStateDB:
+      for deletedAccount in computation.getAccountsForDeletion:
+        db.deleteAccount deletedAccount]#
+
+    result = not computation.isError
+  except ValueError:
+    result = false
+
+method executeTransaction(vmState: var BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
   # Execute the transaction in the vm
   # TODO: introduced here: https://github.com/ethereum/py-evm/commit/21c57f2d56ab91bb62723c3f9ebe291d0b132dde
   # Refactored/Removed here: https://github.com/ethereum/py-evm/commit/cc991bf
@@ -18,7 +68,7 @@ method executeTransaction(vmState: var BaseVMState, transaction: BaseTransaction
   raise newException(ValueError, "Must be implemented by subclasses")
 
 
-method addTransaction*(vmState: var BaseVMState, transaction: BaseTransaction, computation: BaseComputation, b: Block): (Block, Table[string, string]) =
+method addTransaction*(vmState: var BaseVMState, transaction: Transaction, computation: BaseComputation, b: Block): (Block, Table[string, string]) =
   # Add a transaction to the given block and
   # return `trieData` to store the transaction data in chaindb in VM layer
   # Update the bloomFilter, transaction trie and receipt trie roots, bloom_filter,
@@ -49,7 +99,7 @@ method addTransaction*(vmState: var BaseVMState, transaction: BaseTransaction, c
 
 method applyTransaction*(
     vmState: var BaseVMState,
-    transaction: BaseTransaction,
+    transaction: Transaction,
     b: Block,
     isStateless: bool): (BaseComputation, Block, Table[string, string]) =
   # Apply transaction to the given block

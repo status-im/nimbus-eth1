@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  os, macros, json, sequtils, strformat, strutils, parseutils, ospaths, tables,
+  os, macros, json, strformat, strutils, parseutils, ospaths, tables,
   byteutils, eth_common, eth_keys, ranges/typedranges,
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
@@ -247,17 +247,3 @@ proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
   else:
     # XXX: appropriate failure mode; probably raise something
     discard
-
-proc getFixtureIntrinsicGas*(transaction: Transaction) : auto =
-  # Py-EVM has _get_homestead_intrinsic_gas and _get_frontier_intrinsic_gas
-  # Using former.
-
-  # TODO: refactor and pull from nimbus/vm/interpreter/gas_costs.nim
-  let
-    gasTransaction = 21_000
-    gasTXDataZero = 4
-    gasTXDataNonZero = 68
-    numZeroBytes = transaction.payload.count(0)
-    gasCosts = forkToSchedule(FkHomestead)
-
-  result = gasTransaction + gasTXDataZero * numZeroBytes + gasTXDataNonZero * (transaction.payload.len - numZeroBytes)
