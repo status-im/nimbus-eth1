@@ -64,7 +64,6 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
     return
 
   var gasUsed = t.payload.intrinsicGas.GasInt
-  #echo "gasUsed is ", gasUsed
 
   if t.isContractCreation:
     # gasUsed += 32000 # This appears in Homestead.
@@ -79,13 +78,14 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
       # TODO: split out into separate function?; interleaving the cases obfuscates
       let vmState = newBaseVMState(head, chainDB)
 
-      # TODO: setupComputation
-      let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload)
+      # TODO: setupComputation refactoring
+      let contractAddress = generateAddress(sender, t.accountNonce)
+      let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload,
+                           options = newMessageOptions(origin = sender,
+                                                       createAddress = contractAddress))
       var c = newBaseComputation(vmState, head.blockNumber, msg)
 
       if execComputation(c, vmState):
-        let contractAddress = generateAddress(sender, t.accountNonce)
-        db.setCode(contractAddress, c.output.toRange)
         db.addBalance(contractAddress, t.value)
 
         # XXX: copy/pasted from GST fixture
@@ -99,10 +99,21 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
           gasRefund = min(gasRefunded, gasUsed2 div 2)
           gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
         #echo "gasRemaining is ", gasRemaining, " and gasRefunded = ", gasRefunded, " and gasUsed2 = ", gasUsed2, " and gasRefund = ", gasRefund, " and gasRefundAmount = ", gasRefundAmount
-        let codeCost = (200 * c.output.len).u256
-        db.addBalance(sender, (t.gasLimit.u256 - gasUsed2 - codeCost)*t.gasPrice.u256)
-        echo c.output.len, " bytes: ", c.output
-        return (gasUsed2 + codeCost) * t.gasPrice.u256
+
+        var codeCost = 200 * c.output.len
+
+        # This apparently is not supposed to actually consume the gas, just be able to,
+        # for purposes of accounting. Py-EVM apparently does consume the gas, but it is
+        # not matching observed blockchain balances if consumeGas is called.
+        if gasRemaining >= codeCost.u256:
+          db.setCode(contractAddress, c.output.toRange)
+        else:
+          # XXX: Homestead behaves differently; reverts state on gas failure
+          # https://github.com/ethereum/py-evm/blob/master/eth/vm/forks/homestead/computation.py
+          codeCost = 0
+          db.setCode(contractAddress, ByteRange())
+        db.addBalance(sender, (t.gasLimit.u256 - gasUsed2 - codeCost.u256)*t.gasPrice.u256)
+        return (gasUsed2 + codeCost.u256) * t.gasPrice.u256
 
       else:
         # FIXME: don't do this revert, but rather only subBalance correctly
@@ -186,7 +197,6 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
         uncleReward = uncleReward * blockReward
         uncleReward = uncleReward div 8.u256
         stateDb.addBalance(bodies[i].uncles[u].coinbase, uncleReward)
-        #echo "adding via unclehash to mainReward: ", (blockReward div 32.u256)
         mainReward += blockReward div 32.u256
 
     # Reward beneficiary
@@ -199,4 +209,3 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
  
     discard c.db.persistHeaderToDb(headers[i])
     assert(c.db.getCanonicalHead().blockHash == headers[i].blockHash)
-
