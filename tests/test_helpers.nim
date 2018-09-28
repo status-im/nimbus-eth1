@@ -227,11 +227,15 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   result.gasPrice = j["gasPrice"].getStr.parseHexInt
   result.gasLimit = j["gasLimit"][gasIndex].getStr.parseHexInt
 
-  # Another distinct case "" as special hex string, but at least here,
-  # it has some semantic meaning in Ethereum -- contract creation. The
-  # hex parsing routine tripping over this is at least the third.
+  # TODO: there are a couple fixtures which appear to distinguish between
+  # empty and 0 transaction.to.
   let rawTo = j["to"].getStr
-  result.to = (if rawTo == "": "0x" else: rawTo).parseAddress
+  if rawTo == "":
+    result.to = "0x".parseAddress
+    result.isContractCreation = true
+  else:
+    result.to = rawTo.parseAddress
+    result.isContractCreation = false
   result.value = fromHex(UInt256, j["value"][valueIndex].getStr)
   result.payload = j["data"][dataIndex].getStr.safeHexToSeqByte
 

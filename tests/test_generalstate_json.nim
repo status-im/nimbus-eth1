@@ -49,7 +49,7 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
     db.setNonce(sender, db.getNonce(sender) + 1)
     db.subBalance(sender, transaction.value + gas_cost)
 
-  if transaction.to == CREATE_CONTRACT_ADDRESS and transaction.payload.len > 0:
+  if transaction.isContractCreation and transaction.payload.len > 0:
     vmState.mutateStateDB:
       # TODO: move into applyCreateTransaction
       # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToZero.json
