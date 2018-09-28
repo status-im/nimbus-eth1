@@ -61,7 +61,7 @@ proc execComputation*(computation: var BaseComputation, vmState: BaseVMState): b
     result = false
 
 proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, head: BlockHeader, vmState: var BaseVMState, sender: EthAddress, useHomestead: bool = false): UInt256 =
-  doAssert t.to == CREATE_CONTRACT_ADDRESS
+  doAssert t.isContractCreation
   # TODO: clean up params
   echo "Contract creation"
 
