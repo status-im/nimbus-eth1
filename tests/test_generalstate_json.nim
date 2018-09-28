@@ -50,7 +50,15 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
     db.addBalance(transaction.to, transaction.value)
     db.subBalance(sender, transaction.value + gas_cost)
 
+
+  if transaction.to == CREATE_CONTRACT_ADDRESS and transaction.payload.len > 0:
+    vmState.mutateStateDB:
+      echo "running applyCreate"
+      discard applyCreateTransaction(db, transaction, header, vmState, sender)
+    return
   var computation = setupComputation(header, vmState, transaction, sender)
+
+  # What remains is call and/or value transfer
   if execComputation(computation, vmState):
     let
       gasRemaining = computation.gasMeter.gasRemaining.u256

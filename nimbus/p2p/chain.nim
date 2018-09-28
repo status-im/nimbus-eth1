@@ -1,5 +1,5 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
-  ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto, ../utils/addresses,
+  ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto,
   ../vm_state_transactions,
   eth_trie/memdb, eth_trie, rlp,
   sugar
@@ -42,7 +42,7 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   db.setNonce(sender, db.getNonce(sender) + 1)
   var transactionFailed = false
 
-  #t.dump
+  t.dump
 
   # TODO: combine/refactor re validate
   let upfrontGasCost = t.gasLimit.u256 * t.gasPrice.u256
@@ -63,64 +63,16 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   if transactionFailed:
     return
 
-  var gasUsed = t.payload.intrinsicGas.GasInt
+  var gasUsed = t.payload.intrinsicGas.GasInt # += 32000 appears in Homestead when contract create
 
-  if t.isContractCreation:
-    # gasUsed += 32000 # This appears in Homestead.
-    echo "Contract creation"
-
-  # TODO: check the 200x constant up front
   if gasUsed > t.gasLimit:
     echo "Transaction failed. Out of gas."
     transactionFailed = true
   else:
     if t.isContractCreation:
-      # TODO: split out into separate function?; interleaving the cases obfuscates
-      let vmState = newBaseVMState(head, chainDB)
-
-      # TODO: setupComputation refactoring
-      let contractAddress = generateAddress(sender, t.accountNonce)
-      let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload,
-                           options = newMessageOptions(origin = sender,
-                                                       createAddress = contractAddress))
-      var c = newBaseComputation(vmState, head.blockNumber, msg)
-
-      if execComputation(c, vmState):
-        db.addBalance(contractAddress, t.value)
-
-        # XXX: copy/pasted from GST fixture
-        # TODO: more merging/refactoring/etc
-        # also a couple lines can collapse because variable used once
-        # once verified in GST fixture
-        let
-          gasRemaining = c.gasMeter.gasRemaining.u256
-          gasRefunded = c.gasMeter.gasRefunded.u256
-          gasUsed2 = t.gasLimit.u256 - gasRemaining
-          gasRefund = min(gasRefunded, gasUsed2 div 2)
-          gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
-        #echo "gasRemaining is ", gasRemaining, " and gasRefunded = ", gasRefunded, " and gasUsed2 = ", gasUsed2, " and gasRefund = ", gasRefund, " and gasRefundAmount = ", gasRefundAmount
-
-        var codeCost = 200 * c.output.len
-
-        # This apparently is not supposed to actually consume the gas, just be able to,
-        # for purposes of accounting. Py-EVM apparently does consume the gas, but it is
-        # not matching observed blockchain balances if consumeGas is called.
-        if gasRemaining >= codeCost.u256:
-          db.setCode(contractAddress, c.output.toRange)
-        else:
-          # XXX: Homestead behaves differently; reverts state on gas failure
-          # https://github.com/ethereum/py-evm/blob/master/eth/vm/forks/homestead/computation.py
-          codeCost = 0
-          db.setCode(contractAddress, ByteRange())
-        db.addBalance(sender, (t.gasLimit.u256 - gasUsed2 - codeCost.u256)*t.gasPrice.u256)
-        return (gasUsed2 + codeCost.u256) * t.gasPrice.u256
-
-      else:
-        # FIXME: don't do this revert, but rather only subBalance correctly
-        # the if transactionfailed at end is what is supposed to pick it up
-        db.addBalance(sender, t.value)
-        echo "isError: ", c.isError
-        return upfrontGasCost
+      # TODO: re-derive sender in callee for cleaner interface, perhaps
+      var vmState = newBaseVMState(head, chainDB)
+      return applyCreateTransaction(db, t, head, vmState, sender)
 
     else:
       let code = db.getCode(t.to)

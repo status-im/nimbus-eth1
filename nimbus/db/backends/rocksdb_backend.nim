@@ -40,9 +40,10 @@ proc contains*(db: ChainDB, key: openarray[byte]): bool =
   return s.value
 
 proc del*(db: ChainDB, key: openarray[byte]) =
-  traceDel key
-  let s = db.store.del(key)
-  if not s.ok: raiseKeyDeletionError(key)
+  discard
+  #traceDel key
+  #let s = db.store.del(key)
+  #if not s.ok: raiseKeyDeletionError(key)
 
 proc close*(db: ChainDB) =
   db.store.close
