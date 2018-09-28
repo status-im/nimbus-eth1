@@ -13,7 +13,7 @@ import
   ./test_helpers,
   ../nimbus/[constants, errors],
   ../nimbus/[vm_state, vm_types, vm_state_transactions],
-  ../nimbus/utils/header,
+  ../nimbus/utils/[header, addresses],
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
 
@@ -47,16 +47,23 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
   let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
   vmState.mutateStateDB:
     db.setNonce(sender, db.getNonce(sender) + 1)
-    db.addBalance(transaction.to, transaction.value)
     db.subBalance(sender, transaction.value + gas_cost)
-
 
   if transaction.to == CREATE_CONTRACT_ADDRESS and transaction.payload.len > 0:
     vmState.mutateStateDB:
-      echo "running applyCreate"
-      discard applyCreateTransaction(db, transaction, header, vmState, sender)
+      # TODO: move into applyCreateTransaction
+      # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToZero.json
+      # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToEmpty.json
+      #db.addBalance(generateAddress(sender, transaction.accountNonce), transaction.value)
+
+      let createGasUsed = applyCreateTransaction(db, transaction, header, vmState, sender, true)
+      db.addBalance(header.coinbase, createGasUsed)
     return
   var computation = setupComputation(header, vmState, transaction, sender)
+
+  vmState.mutateStateDB:
+    # contract creation transaction.to == 0, so ensure happens after
+    db.addBalance(transaction.to, transaction.value)
 
   # What remains is call and/or value transfer
   if execComputation(computation, vmState):
@@ -70,6 +77,8 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
     vmState.mutateStateDB:
       for deletedAccount in computation.getAccountsForDeletion:
         db.deleteAccount deletedAccount
+      # TODO if the balance/etc calls were gated on gAFD or similar,
+      # that would simplify/combine codepaths
       if header.coinbase notin computation.getAccountsForDeletion:
         db.subBalance(header.coinbase, gasRefundAmount)
         db.addBalance(header.coinbase, gas_cost)

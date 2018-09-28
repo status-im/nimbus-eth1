@@ -60,13 +60,12 @@ proc execComputation*(computation: var BaseComputation, vmState: BaseVMState): b
   except ValueError:
     result = false
 
-proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, head: BlockHeader, vmState: var BaseVMState, sender: EthAddress): UInt256 =
+proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, head: BlockHeader, vmState: var BaseVMState, sender: EthAddress, useHomestead: bool = false): UInt256 =
   doAssert t.to == CREATE_CONTRACT_ADDRESS
   # TODO: clean up params
   echo "Contract creation"
 
-  # XXX: this looks only used in that one place; probably fold into newMessage call
-  var gasUsed = t.payload.intrinsicGas.GasInt # += 32000 appears in Homestead
+  let gasUsed = t.payload.intrinsicGas.GasInt + (if useHomestead: 32000 else: 0)
 
   # TODO: setupComputation refactoring
   let contractAddress = generateAddress(sender, t.accountNonce)
@@ -88,7 +87,7 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, head: Block
       gasUsed2 = t.gasLimit.u256 - gasRemaining
       gasRefund = min(gasRefunded, gasUsed2 div 2)
       gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
-    echo "gasRemaining is ", gasRemaining, " and gasRefunded = ", gasRefunded, " and gasUsed2 = ", gasUsed2, " and gasRefund = ", gasRefund, " and gasRefundAmount = ", gasRefundAmount
+    #echo "gasRemaining is ", gasRemaining, " and gasRefunded = ", gasRefunded, " and gasUsed2 = ", gasUsed2, " and gasRefund = ", gasRefund, " and gasRefundAmount = ", gasRefundAmount
 
     var codeCost = 200 * c.output.len
 

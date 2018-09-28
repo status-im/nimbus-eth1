@@ -58,9 +58,9 @@ OK: 0/46 Fail: 0/46 Skip: 46/46
 OK: 0/2 Fail: 2/2 Skip: 0/2
 ## stBadOpcode
 ```diff
-- badOpcodes.json                                                 Fail
++ badOpcodes.json                                                 OK
 ```
-OK: 0/1 Fail: 1/1 Skip: 0/1
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stBugs
 ```diff
 + evmBytecode.json                                                OK
@@ -348,10 +348,10 @@ OK: 0/58 Fail: 58/58 Skip: 0/58
 - callcodecallcodecallcode_111_OOGMAfter_1.json                   Fail
 - callcodecallcodecallcode_111_OOGMAfter_2.json                   Fail
 - callcodecallcodecallcode_111_OOGMAfter_3.json                   Fail
-- contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonFail
++ contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
 - createInitFail_OOGduringInit.json                               Fail
 ```
-OK: 3/30 Fail: 25/30 Skip: 2/30
+OK: 4/30 Fail: 24/30 Skip: 2/30
 ## stCodeCopyTest
 ```diff
   ExtCodeCopyTests.json                                           Skip
@@ -360,10 +360,10 @@ OK: 0/1 Fail: 0/1 Skip: 1/1
 ## stCodeSizeLimit
 ```diff
 - codesizeInit.json                                               Fail
-- codesizeOOGInvalidSize.json                                     Fail
-- codesizeValid.json                                              Fail
++ codesizeOOGInvalidSize.json                                     OK
++ codesizeValid.json                                              OK
 ```
-OK: 0/3 Fail: 3/3 Skip: 0/3
+OK: 2/3 Fail: 1/3 Skip: 0/3
 ## stCreateTest
 ```diff
 - CREATE_AcreateB_BSuicide_BStore.json                            Fail
@@ -505,12 +505,12 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stHomesteadSpecific
 ```diff
 - contractCreationOOGdontLeaveEmptyContract.json                  Fail
-- contractCreationOOGdontLeaveEmptyContractViaTransaction.json    Fail
++ contractCreationOOGdontLeaveEmptyContractViaTransaction.json    OK
 - createContractViaContract.json                                  Fail
 - createContractViaContractOOGInitCode.json                       Fail
 - createContractViaTransactionCost53000.json                      Fail
 ```
-OK: 0/5 Fail: 5/5 Skip: 0/5
+OK: 1/5 Fail: 4/5 Skip: 0/5
 ## stInitCodeTest
 ```diff
 - CallContractToCreateContractAndCallItOOG.json                   Fail
@@ -526,13 +526,13 @@ OK: 0/5 Fail: 5/5 Skip: 0/5
 - OutOfGasPrefundedContractCreation.json                          Fail
 - ReturnTest.json                                                 Fail
 - ReturnTest2.json                                                Fail
-- StackUnderFlowContractCreation.json                             Fail
++ StackUnderFlowContractCreation.json                             OK
 - TransactionCreateAutoSuicideContract.json                       Fail
-- TransactionCreateRandomInitCode.json                            Fail
-- TransactionCreateStopInInitcode.json                            Fail
-- TransactionCreateSuicideInInitcode.json                         Fail
++ TransactionCreateRandomInitCode.json                            OK
++ TransactionCreateStopInInitcode.json                            OK
++ TransactionCreateSuicideInInitcode.json                         OK
 ```
-OK: 1/18 Fail: 17/18 Skip: 0/18
+OK: 5/18 Fail: 13/18 Skip: 0/18
 ## stLogTests
 ```diff
 - log0_emptyMem.json                                              Fail
@@ -1599,7 +1599,7 @@ OK: 28/37 Fail: 6/37 Skip: 3/37
 - RevertDepthCreateAddressCollision.json                          Fail
 - RevertDepthCreateOOG.json                                       Fail
 + RevertInCallCode.json                                           OK
-- RevertInCreateInInit.json                                       Fail
++ RevertInCreateInInit.json                                       OK
 + RevertInDelegateCall.json                                       OK
 + RevertInStaticCall.json                                         OK
 + RevertOnEmptyStack.json                                         OK
@@ -1632,7 +1632,7 @@ OK: 28/37 Fail: 6/37 Skip: 3/37
 - TouchToEmptyAccountRevert2.json                                 Fail
 - TouchToEmptyAccountRevert3.json                                 Fail
 ```
-OK: 14/43 Fail: 24/43 Skip: 5/43
+OK: 15/43 Fail: 23/43 Skip: 5/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -1699,11 +1699,11 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 OK: 8/16 Fail: 8/16 Skip: 0/16
 ## stSpecialTest
 ```diff
-- FailedCreateRevertsDeletion.json                                Fail
++ FailedCreateRevertsDeletion.json                                OK
 - JUMPDEST_Attack.json                                            Fail
 - JUMPDEST_AttackwithJump.json                                    Fail
   OverflowGasMakeMoney.json                                       Skip
-- StackDepthLimitSEC.json                                         Fail
++ StackDepthLimitSEC.json                                         OK
   block504980.json                                                Skip
 - deploymentError.json                                            Fail
   failed_tx_xcf416c53.json                                        Skip
@@ -1713,18 +1713,18 @@ OK: 8/16 Fail: 8/16 Skip: 0/16
   txCost-sec73.json                                               Skip
 - tx_e1c174e2.json                                                Fail
 ```
-OK: 1/13 Fail: 6/13 Skip: 6/13
+OK: 3/13 Fail: 4/13 Skip: 6/13
 ## stStackTests
 ```diff
   shallowStack.json                                               Skip
   stackOverflow.json                                              Skip
   stackOverflowDUP.json                                           Skip
   stackOverflowM1.json                                            Skip
-- stackOverflowM1DUP.json                                         Fail
++ stackOverflowM1DUP.json                                         OK
   stackOverflowM1PUSH.json                                        Skip
   stackOverflowPUSH.json                                          Skip
 ```
-OK: 0/7 Fail: 1/7 Skip: 6/7
+OK: 1/7 Fail: 0/7 Skip: 6/7
 ## stStaticCall
 ```diff
   static_ABAcalls0.json                                           Skip
@@ -2091,7 +2091,7 @@ OK: 26/67 Fail: 39/67 Skip: 2/67
 - CreateMessageReverted.json                                      Fail
 - CreateMessageSuccess.json                                       Fail
 + CreateTransactionReverted.json                                  OK
-- CreateTransactionSuccess.json                                   Fail
++ CreateTransactionSuccess.json                                   OK
 + EmptyTransaction.json                                           OK
 - EmptyTransaction2.json                                          Fail
 - EmptyTransaction3.json                                          Fail
@@ -2131,7 +2131,7 @@ OK: 26/67 Fail: 39/67 Skip: 2/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 26/44 Fail: 18/44 Skip: 0/44
+OK: 27/44 Fail: 17/44 Skip: 0/44
 ## stTransitionTest
 ```diff
 - createNameRegistratorPerTxsAfter.json                           Fail

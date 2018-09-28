@@ -42,7 +42,7 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   db.setNonce(sender, db.getNonce(sender) + 1)
   var transactionFailed = false
 
-  t.dump
+  #t.dump
 
   # TODO: combine/refactor re validate
   let upfrontGasCost = t.gasLimit.u256 * t.gasPrice.u256
