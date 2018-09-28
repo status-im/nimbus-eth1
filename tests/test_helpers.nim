@@ -50,6 +50,8 @@ func failIn32Bits(folder, name: string): bool =
     "sha3_dejavu.json",
     "HighGasLimit.json",
     "OverflowGasRequire2.json",
+    "RevertInCreateInInit.json",
+    "FailedCreateRevertsDeletion.json",
 
     # TODO: obvious theme; check returndatasize/returndatacopy
     "call_ecrec_success_empty_then_returndatasize.json",
