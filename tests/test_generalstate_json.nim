@@ -66,7 +66,7 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
     db.addBalance(transaction.to, transaction.value)
 
   # What remains is call and/or value transfer
-  if execComputation(computation, vmState):
+  if execComputation(computation):
     let
       gasRemaining = computation.gasMeter.gasRemaining.u256
       gasRefunded = computation.gasMeter.gasRefunded.u256
@@ -75,8 +75,6 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
       gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice.u256
 
     vmState.mutateStateDB:
-      for deletedAccount in computation.getAccountsForDeletion:
-        db.deleteAccount deletedAccount
       # TODO if the balance/etc calls were gated on gAFD or similar,
       # that would simplify/combine codepaths
       if header.coinbase notin computation.getAccountsForDeletion:

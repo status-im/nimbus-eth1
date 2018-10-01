@@ -526,5 +526,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
   "pointAdd.json",
   "pointAddTrunc.json",
   "pointMulAdd.json",
-  "pointMulAdd2.json"]
+  "pointMulAdd2.json",
+  "Call1024BalanceTooLow.json",
+  "ExtCodeCopyTests.json"]
  name in allowedFailingGeneralStateTests

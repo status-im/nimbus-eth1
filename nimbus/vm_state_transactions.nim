@@ -49,12 +49,12 @@ proc setupComputation*(header: BlockHeader, vmState: var BaseVMState, transactio
   result.precompiles = initTable[string, Opcode]()
   doAssert result.isOriginComputation
 
-proc execComputation*(computation: var BaseComputation, vmState: BaseVMState): bool =
+proc execComputation*(computation: var BaseComputation): bool =
   try:
     computation.executeOpcodes()
-    #[vmState.mutateStateDB:
+    computation.vmState.mutateStateDB:
       for deletedAccount in computation.getAccountsForDeletion:
-        db.deleteAccount deletedAccount]#
+        db.deleteAccount deletedAccount
 
     result = not computation.isError
   except ValueError:
@@ -74,7 +74,7 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, head: Block
                                                    createAddress = contractAddress))
   var c = newBaseComputation(vmState, head.blockNumber, msg)
 
-  if execComputation(c, vmState):
+  if execComputation(c):
     db.addBalance(contractAddress, t.value)
 
     # XXX: copy/pasted from GST fixture

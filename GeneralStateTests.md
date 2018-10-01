@@ -320,7 +320,7 @@ OK: 0/58 Fail: 15/58 Skip: 43/58
 OK: 0/58 Fail: 58/58 Skip: 0/58
 ## stChangedEIP150
 ```diff
-  Call1024BalanceTooLow.json                                      Skip
+- Call1024BalanceTooLow.json                                      Fail
 - Call1024PreCalls.json                                           Fail
 - Callcode1024BalanceTooLow.json                                  Fail
 + callcall_00_OOGE_1.json                                         OK
@@ -351,12 +351,12 @@ OK: 0/58 Fail: 58/58 Skip: 0/58
 + contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
 - createInitFail_OOGduringInit.json                               Fail
 ```
-OK: 4/30 Fail: 24/30 Skip: 2/30
+OK: 4/30 Fail: 25/30 Skip: 1/30
 ## stCodeCopyTest
 ```diff
-  ExtCodeCopyTests.json                                           Skip
+- ExtCodeCopyTests.json                                           Fail
 ```
-OK: 0/1 Fail: 0/1 Skip: 1/1
+OK: 0/1 Fail: 1/1 Skip: 0/1
 ## stCodeSizeLimit
 ```diff
 - codesizeInit.json                                               Fail
@@ -400,7 +400,7 @@ OK: 2/3 Fail: 1/3 Skip: 0/3
 OK: 0/30 Fail: 22/30 Skip: 8/30
 ## stDelegatecallTestHomestead
 ```diff
-  Call1024BalanceTooLow.json                                      Skip
+- Call1024BalanceTooLow.json                                      Fail
 - Call1024OOG.json                                                Fail
 - Call1024PreCalls.json                                           Fail
 - CallLoseGasOOG.json                                             Fail
@@ -435,7 +435,7 @@ OK: 0/30 Fail: 22/30 Skip: 8/30
 - delegatecodeDynamicCode.json                                    Fail
 - delegatecodeDynamicCode2SelfCall.json                           Fail
 ```
-OK: 3/34 Fail: 30/34 Skip: 1/34
+OK: 3/34 Fail: 31/34 Skip: 0/34
 ## stEIP150Specific
 ```diff
   CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
