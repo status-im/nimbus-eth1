@@ -86,10 +86,7 @@ func failIn32Bits(folder, name: string): bool =
 func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
   result = (folder != "vmPerformance" or "loop" notin name) and
-           (not slowTest(folder, name) and
-            # TODO: check whether these are still useful
-            name notin @["static_Call1024BalanceTooLow.json",
-                         "Call1024BalanceTooLow.json", "ExtCodeCopyTests.json"])
+           not slowTest(folder, name)
 
 proc lacksHomesteadPostStates*(filename: string): bool =
   # XXX: Until Nimbus supports Byzantine or newer forks, as opposed
@@ -198,8 +195,6 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
         wantedValue = UInt256.fromHex value.getStr
 
       let (actualValue, found) = stateDB.getStorage(account, slotId)
-      # echo "FOUND ", found
-      # echo "ACTUAL VALUE ", actualValue.toHex
       doAssert found
       doAssert actualValue == wantedValue, &"{actualValue.toHex} != {wantedValue.toHex}"
 
@@ -228,7 +223,7 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   result.gasLimit = j["gasLimit"][gasIndex].getStr.parseHexInt
 
   # TODO: there are a couple fixtures which appear to distinguish between
-  # empty and 0 transaction.to.
+  # empty and 0 transaction.to; check/verify whether correct conditions.
   let rawTo = j["to"].getStr
   if rawTo == "":
     result.to = "0x".parseAddress
