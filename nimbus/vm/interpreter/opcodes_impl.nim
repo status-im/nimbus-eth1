@@ -14,6 +14,9 @@ import
   ../../vm_state, ../../errors, ../../constants, ../../vm_types,
   ../../db/[db_chain, state_db], ../../utils/addresses
 
+logScope:
+  topics = "opcode impl"
+
 # ##################################
 # Syntactic sugar
 
@@ -545,6 +548,18 @@ op create, inline = false, value, startPosition, size:
     contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
     isCollision = db.hasCodeOrNonce(contractAddress)
 
+
+  let (gasCost, childMsgGas) = computation.gasCosts[Op.Create].c_handler(
+    value,
+    GasParams(kind: Call,
+              c_isNewAccount: true, # TODO stub
+              c_gasBalance: 0,
+              c_contractGas: 0,
+              c_currentMemSize: computation.memory.len,
+              c_memOffset: 0, # TODO make sure if we pass the largest mem requested
+              c_memLength: 0  # or an addition of mem requested
+    ))
+
   if isCollision:
     debug("Address collision while creating contract", address = contractAddress.toHex)
     push: 0
@@ -552,7 +567,7 @@ op create, inline = false, value, startPosition, size:
 
   let childMsg = prepareChildMessage(
     computation,
-    gas = 0, # TODO refactor gas
+    gas = childMsgGas,
     to = CREATE_CONTRACT_ADDRESS,
     value = value,
     data = @[],
@@ -560,10 +575,7 @@ op create, inline = false, value, startPosition, size:
     options = MessageOptions(createAddress: contractAddress)
     )
 
-  # let childComputation = applyChildBaseComputation(computation, childMsg)
-  var childComputation: BaseComputation # TODO - stub
-  new childComputation
-  childComputation.gasMeter.init(0)
+  let childComputation = computation.applyChildComputation(childMsg, Create)
 
   if childComputation.isError:
     push: 0
@@ -652,13 +664,12 @@ proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthA
     memoryOutputSize,
     emvcStatic) # is_static
 
-template genCall(callName: untyped): untyped =
+template genCall(callName: untyped, opCode: Op): untyped =
   op callName, inline = false:
     ## CALL, 0xf1, Message-Call into an account
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
-    # TODO: forked calls for Homestead
 
     let (gas, value, to, sender,
           codeAddress,
@@ -668,7 +679,7 @@ template genCall(callName: untyped): untyped =
 
     let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.cleanMemRef, memoryInputSize.cleanMemRef, memoryOutputStartPosition.cleanMemRef, memoryOutputSize.cleanMemRef)
 
-    let (gasCost, childMsgGas) = computation.gasCosts[Op.Call].c_handler(
+    let (gasCost, childMsgGas) = computation.gasCosts[opCode].c_handler(
       value,
       GasParams(kind: Call,
                 c_isNewAccount: true, # TODO stub
@@ -678,41 +689,19 @@ template genCall(callName: untyped): untyped =
                 c_memOffset: 0, # TODO make sure if we pass the largest mem requested
                 c_memLength: 0  # or an addition of mem requested
       ))
+    debug "Call", gasCost = gasCost, childCost = childMsgGas
+    computation.gasMeter.consumeGas(gasCost, reason = $opCode)
 
     computation.memory.extend(memInPos, memInLen)
     computation.memory.extend(memOutPos, memOutLen)
 
     let
       callData = computation.memory.read(memInPos, memInLen)
-      senderBalance = computation.vmState.readOnlyStateDb.getBalance(computation.msg.storageAddress)
-      # TODO check gas balance rollover
-      # TODO: shouldTransferValue in py-evm is:
-      #   True for call and callCode
-      #   False for callDelegate and callStatic
-      insufficientFunds = senderBalance < value # TODO: and shouldTransferValue
-      stackTooDeep = computation.msg.depth >= MaxCallDepth
-
-    if insufficientFunds or stackTooDeep:
-      computation.returnData = @[]
-      var errMessage: string
-      if insufficientFunds:
-        # Note: for some reason we can't use strformat here, we get undeclared identifiers
-        errMessage = &"Insufficient Funds: have: " & $senderBalance & "need: " & $value
-      elif stackTooDeep:
-        errMessage = "Stack Limit Reached"
-      else:
-        raise newException(VMError, "Invariant: Unreachable code path")
-
-      # computation.logger.debug(&"failure: {errMessage}") # TODO: Error: expression 'logger' has no type (or is ambiguous)
-      computation.gasMeter.returnGas(childMsgGas)
-      push: 0
-      return
-
-    let code =
-      if codeAddress != ZERO_ADDRESS:
-        computation.vmState.readOnlyStateDb.getCode(codeAddress)
-      else:
-        computation.vmState.readOnlyStateDb.getCode(to)
+      code =
+        if codeAddress != ZERO_ADDRESS:
+          computation.vmState.readOnlyStateDb.getCode(codeAddress)
+        else:
+          computation.vmState.readOnlyStateDb.getCode(to)
 
     var childMsg = prepareChildMessage(
       computation,
@@ -727,13 +716,13 @@ template genCall(callName: untyped): untyped =
     if sender != ZERO_ADDRESS:
       childMsg.sender = sender
 
-    var childComputation = applyChildComputation(computation, childMsg)
+    var childComputation = applyChildComputation(computation, childMsg, opCode)
 
     if childComputation.isError:
       push: 0
     else:
       push: 1
-
+    
     if not childComputation.shouldEraseReturnData:
       let actualOutputSize = min(memOutLen, childComputation.output.len)
       computation.memory.write(
@@ -742,10 +731,10 @@ template genCall(callName: untyped): untyped =
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
-genCall(call)
-genCall(callCode)
-genCall(delegateCall)
-genCall(staticCall)
+genCall(call, Call)
+genCall(callCode, CallCode)
+genCall(delegateCall, DelegateCall)
+genCall(staticCall, StaticCall)
 
 op returnOp, inline = false, startPos, size:
   ## 0xf3, Halt execution returning output data.

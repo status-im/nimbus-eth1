@@ -11,7 +11,7 @@ import
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
-  ../utils/header, byteutils, ranges
+  ../utils/header, byteutils, ranges, eth_keys, precompiles
 
 logScope:
   topics = "vm computation"
@@ -85,7 +85,7 @@ proc prepareChildMessage*(
     code,
     childOptions)
 
-proc applyMessage(computation: var BaseComputation) =
+proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
   var transaction = computation.vmState.beginTransaction()
   defer: transaction.dispose()
 
@@ -97,28 +97,66 @@ proc applyMessage(computation: var BaseComputation) =
       computation.vmState.chainDb.getStateDb(
         computation.vmState.blockHeader.hash, false).
         getBalance(computation.msg.sender)
+    var newBalance = senderBalance
 
     if sender_balance < computation.msg.value:
       raise newException(InsufficientFunds,
           &"Insufficient funds: {senderBalance} < {computation.msg.value}"
       )
+    when opCode in {Call, CallCode}:
+      let
+        insufficientFunds = senderBalance < computation.msg.value
+        stackTooDeep = computation.msg.depth >= MaxCallDepth
 
-    computation.vmState.mutateStateDb:
-      db.setBalance(computation.msg.sender, db.getBalance(computation.msg.sender) - computation.msg.value)
-      db.addBalance(computation.msg.storage_address, computation.msg.value)
+      if insufficientFunds or stackTooDeep:
+        computation.returnData = @[]
+        var errMessage: string
+        if insufficientFunds:
+          errMessage = &"Insufficient Funds: have: {$senderBalance} need: {$computation.msg.value}"
+        elif stackTooDeep:
+          errMessage = "Stack Limit Reached"
+        else:
+          raise newException(VMError, "Invariant: Unreachable code path")
+
+        debug "Computation failure", msg = errMessage
+        computation.gasMeter.returnGas(computation.msg.gas)
+        push: 0
+        return
+      
+      newBalance = senderBalance - computation.msg.value
+      computation.vmState.mutateStateDb:
+        db.setBalance(computation.msg.sender, newBalance)
+        db.addBalance(computation.msg.storage_address, computation.msg.value)
+
+      debug "Value transferred",
+        source = computation.msg.sender,
+        dest = computation.msg.storage_address,
+        value = computation.msg.value,
+        oldSenderBalance = senderBalance,
+        newSenderBalance = newBalance,
+        gasPrice = computation.msg.gasPrice,
+        gas = computation.msg.gas
 
     debug "Apply message",
       value = computation.msg.value,
+      senderBalance = newBalance,
       sender = computation.msg.sender.toHex,
-      address = computation.msg.storage_address.toHex
+      address = computation.msg.storage_address.toHex,
+      gasPrice = computation.msg.gasPrice,
+      gas = computation.msg.gas
 
-  computation.opcodeExec(computation)
+  # Run code
+  if not computation.execPrecompiles:
+    computation.opcodeExec(computation)
 
   if not computation.isError:
+    debug "Computation committed"
     transaction.commit()
+  else:
+    debug "Computation rolled back due to error"
 
-proc applyCreateMessage(fork: Fork, computation: var BaseComputation) =
-  computation.applyMessage()
+proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: static[Op]) =
+  computation.applyMessage(opCode)
 
   var transaction: DbTransaction
   defer: transaction.safeDispose()
@@ -157,13 +195,13 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation) =
         else:
           # Different from Frontier:
           # Reverts state on gas failure while writing contract code.
-          # TODO: Revert snapshot
+          # Transaction are reverted automatically by safeDispose.
           discard
     else:
       if transaction != nil:
         transaction.commit()
 
-proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMsg: Message): BaseComputation =
+proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
   var childComp = newBaseComputation(
       computation.vmState,
       computation.vmState.blockHeader.blockNumber,
@@ -171,11 +209,11 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
   
   # Copy the fork op code executor proc (assumes child computation is in the same fork)
   childComp.opCodeExec = computation.opCodeExec
-
+  
   if childMsg.isCreate:
-    fork.applyCreateMessage(childComp)
+    fork.applyCreateMessage(childComp, opCode)
   else:
-    applyMessage(childComp)
+    applyMessage(childComp, opCode)
   return childComp
 
 proc addChildComputation(fork: Fork, computation: BaseComputation, child: BaseComputation) =
@@ -193,10 +231,10 @@ proc addChildComputation(fork: Fork, computation: BaseComputation, child: BaseCo
       computation.returnData = child.output
   computation.children.add(child)
 
-proc applyChildComputation*(computation: BaseComputation, childMsg: Message): BaseComputation =
+proc applyChildComputation*(computation: BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
   ## Apply the vm message childMsg as a child computation.
   let fork = computation.vmState.blockHeader.blockNumber.toFork
-  result = fork.generateChildComputation(computation, childMsg)
+  result = fork.generateChildComputation(computation, childMsg, opCode)
   fork.addChildComputation(computation, result)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
