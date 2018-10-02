@@ -46,7 +46,6 @@ proc setupComputation*(header: BlockHeader, vmState: var BaseVMState, transactio
                                   createAddress = transaction.to))
 
   result = newBaseComputation(vmState, header.blockNumber, message)
-  result.precompiles = initTable[string, Opcode]()
   doAssert result.isOriginComputation
 
 proc execComputation*(computation: var BaseComputation, vmState: BaseVMState): bool =
