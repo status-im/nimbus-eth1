@@ -41,10 +41,15 @@ proc ecRecover*(computation: var BaseComputation) =
   debug "ECRecover derived key ", key = pubKey.toCanonicalAddress()
 
 proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
-  # TODO: Assumes endian
-  for i in 0..18:
+  const
+    bRange = when system.cpuEndian == bigEndian: 0..18 else: 1..19
+    bOffset = when system.cpuEndian == bigEndian: 19 else: 0
+
+  for i in bRange:
     if computation.msg.codeAddress[i] != 0: return
-  let lb = computation.msg.codeAddress[19]
+  
+  let lb = computation.msg.codeAddress[bOffset]
+
   if lb < 9:
     result = true
     let precompile = PrecompileAddresses(lb)
