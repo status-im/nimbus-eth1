@@ -1,7 +1,7 @@
 import
   ../vm_types, interpreter/[gas_meter, gas_costs],
   ../errors, stint, eth_keys, eth_common, chronicles, tables, macros,
-  message
+  message, math, nimcrypto
 
 type
   PrecompileAddresses = enum
@@ -38,7 +38,34 @@ proc ecRecover*(computation: var BaseComputation) =
     raise newException(ValidationError, "Could not derive public key from computation")
   
   computation.rawOutput = @(pubKey.toCanonicalAddress())
-  debug "ECRecover derived key ", key = pubKey.toCanonicalAddress()
+  debug "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
+
+proc sha256*(computation: var BaseComputation) =
+  let
+    wordCount = computation.msg.data.len div 32
+    gasFee = GAS_SHA256 + wordCount * GAS_SHA256WORD
+
+  computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
+  computation.rawOutput = @(keccak_256.digest(computation.msg.data).data)
+  debug "SHA256 precompile", output = computation.rawOutput
+
+proc ripemd160(computation: var BaseComputation) =
+  let
+    wordCount = computation.msg.data.len div 32
+    gasFee = GAS_RIPEMD160 + wordCount * GAS_RIPEMD160WORD
+
+  computation.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
+  computation.rawOutput = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
+  debug "RIPEMD160 precompile", output = computation.rawOutput
+
+proc identity*(computation: var BaseComputation) =
+  let
+    wordCount = computation.msg.data.len div 32
+    gasFee = GAS_IDENTITY + wordCount * GAS_IDENTITYWORD
+
+  computation.gasMeter.consumeGas(gas_fee, reason="Identity Precompile")
+  computation.rawOutput = computation.msg.data
+  debug "Identity precompile", output = computation.rawOutput
 
 proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
   const
@@ -56,5 +83,8 @@ proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
     debug "Call precompile ", precompile = precompile, codeAddr = computation.msg.codeAddress
     case precompile
     of paEcRecover: ecRecover(computation)
+    of paSha256: sha256(computation)
+    of paRipeMd160: ripeMd160(computation)
+    of paIdentity: identity(computation)
     else:
       raise newException(ValidationError, "Unknown precompile address " & $lb)
