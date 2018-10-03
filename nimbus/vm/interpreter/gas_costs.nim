@@ -588,14 +588,14 @@ proc forkToSchedule*(fork: Fork): GasCosts =
 
 const
   ## Precompile costs
-  GAS_SHA256* =                             60
-  GAS_SHA256WORD* =                         12
-  GAS_RIPEMD160* =                          600
-  GAS_RIPEMD160WORD* =                      120
-  GAS_IDENTITY* =                           15
-  GAS_IDENTITYWORD* =                       3
-  GAS_ECRECOVER* =                          3000
-  GAS_ECADD* =                              500
-  GAS_ECMUL* =                              40000
-  GAS_ECPAIRING_BASE* =                     100000
-  GAS_ECPAIRING_PER_POINT* =                80000
+  GasSHA256* =            60
+  GasSHA256Word* =        12
+  GasRIPEMD160* =         600
+  GasRIPEMD160Word* =     120
+  GasIdentity* =          15
+  GasIdentityWord* =      3
+  GasECRecover* =         3000
+  GasECAdd* =             500
+  GasECMul* =             40000
+  GasECPairingBase* =     100000
+  GasECPairingPerPoint* = 80000

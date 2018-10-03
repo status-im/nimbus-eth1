@@ -24,7 +24,7 @@ proc getSignature*(computation: BaseComputation): Signature =
 
 proc ecRecover*(computation: var BaseComputation) =
   computation.gasMeter.consumeGas(
-    GAS_ECRECOVER,
+    GasECRecover,
     reason="ECRecover Precompile")
 
   # TODO: Check endian
@@ -43,7 +43,7 @@ proc ecRecover*(computation: var BaseComputation) =
 proc sha256*(computation: var BaseComputation) =
   let
     wordCount = computation.msg.data.len div 32
-    gasFee = GAS_SHA256 + wordCount * GAS_SHA256WORD
+    gasFee = GasSHA256 + wordCount * GasSHA256Word
 
   computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
   computation.rawOutput = @(keccak_256.digest(computation.msg.data).data)
@@ -52,7 +52,7 @@ proc sha256*(computation: var BaseComputation) =
 proc ripemd160(computation: var BaseComputation) =
   let
     wordCount = computation.msg.data.len div 32
-    gasFee = GAS_RIPEMD160 + wordCount * GAS_RIPEMD160WORD
+    gasFee = GasRIPEMD160 + wordCount * GasRIPEMD160Word
 
   computation.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   computation.rawOutput = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
@@ -61,9 +61,9 @@ proc ripemd160(computation: var BaseComputation) =
 proc identity*(computation: var BaseComputation) =
   let
     wordCount = computation.msg.data.len div 32
-    gasFee = GAS_IDENTITY + wordCount * GAS_IDENTITYWORD
+    gasFee = GasIdentity + wordCount * GasIdentityWord
 
-  computation.gasMeter.consumeGas(gas_fee, reason="Identity Precompile")
+  computation.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
   computation.rawOutput = computation.msg.data
   debug "Identity precompile", output = computation.rawOutput
 
@@ -77,7 +77,7 @@ proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
   
   let lb = computation.msg.codeAddress[bOffset]
 
-  if lb < 9:
+  if lb in PrecompileAddresses.low.byte .. PrecompileAddresses.high.byte:
     result = true
     let precompile = PrecompileAddresses(lb)
     debug "Call precompile ", precompile = precompile, codeAddr = computation.msg.codeAddress
