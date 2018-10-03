@@ -585,3 +585,17 @@ proc forkToSchedule*(fork: Fork): GasCosts =
     HomesteadGasCosts
   else:
     TangerineGasCosts
+
+const
+  ## Precompile costs
+  GAS_SHA256* =                             60
+  GAS_SHA256WORD* =                         12
+  GAS_RIPEMD160* =                          600
+  GAS_RIPEMD160WORD* =                      120
+  GAS_IDENTITY* =                           15
+  GAS_IDENTITYWORD* =                       3
+  GAS_ECRECOVER* =                          3000
+  GAS_ECADD* =                              500
+  GAS_ECMUL* =                              40000
+  GAS_ECPAIRING_BASE* =                     100000
+  GAS_ECPAIRING_PER_POINT* =                80000
