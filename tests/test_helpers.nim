@@ -83,6 +83,12 @@ func failIn32Bits(folder, name: string): bool =
     "call_then_create_successful_then_returndatasize.json",
     "call_outsize_then_create_successful_then_returndatasize.json"]
 
+func allowedFailInCurrentBuild(folder, name: string): bool =
+  when sizeof(int) == 4:
+    if failIn32Bits(folder, name):
+      return true
+  return allowedFailingGeneralStateTest(folder, name)
+
 func validTest*(folder: string, name: string): bool =
   # tests we want to skip or which segfault will be skipped here
   result = (folder != "vmPerformance" or "loop" notin name) and
@@ -134,7 +140,7 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
             status[folder][name] = Status.OK
         except AssertionError:
           status[folder][name] = Status.FAIL
-          if not allowedFailingGeneralStateTest(folder, name) and not failIn32Bits(folder, name):
+          if not allowedFailInCurrentBuild(folder, name):
             raise
 
     status.sort do (a: (string, OrderedTable[string, Status]),
