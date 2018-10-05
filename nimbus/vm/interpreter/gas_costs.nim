@@ -49,7 +49,6 @@ type
     GasSha3Word,        # Paid for each word (rounded up) for input data to a SHA3 operation.
     GasCopy,            # Partial payment for COPY operations, multiplied by words copied, rounded up.
     GasBlockhash        # Payment for BLOCKHASH operation.
-    # GasQuadDivisor      # The quadratic coefficient of the input sizes of the exponentiation-over-modulo precompiled contract.
 
   GasFeeSchedule = array[GasFeeKind, GasInt]
 
@@ -547,7 +546,6 @@ const
     GasSha3Word:        6,
     GasCopy:            3,
     GasBlockhash:       20
-    # GasQuadDivisor:     100     # Unused, do not confuse with the quadratic coefficient 512 for memory expansion
   ]
 
 # Create the schedule for each forks
@@ -599,3 +597,7 @@ const
   GasECMul* =             40000
   GasECPairingBase* =     100000
   GasECPairingPerPoint* = 80000
+  # The Yellow Paper is special casing the GasQuadDivisor.
+  # It is defined in Appendix G with the other GasFeeKind constants
+  # instead of Appendix E for precompiled contracts
+  GasQuadDivisor*       = 100

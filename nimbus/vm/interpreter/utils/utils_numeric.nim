@@ -12,8 +12,12 @@ import
 
 # some methods based on py-evm utils/numeric
 
+func log2*(value: UInt256): Natural {.inline.}=
+  # TODO: do we use ln for log2 like Nim convention?
+  255 - value.countLeadingZeroBits
+
 func log256*(value: UInt256): Natural {.inline.}=
-  (255 - value.countLeadingZeroBits) shr 3 # div 8
+  value.log2 shr 3 # div 8 (= log2(256), Logb x = Loga x/Loga b)
 
 func ceil32*(value: Natural): Natural {.inline.}=
   # Round input to the nearest bigger multiple of 32

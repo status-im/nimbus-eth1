@@ -1,5 +1,5 @@
 import
-  ../vm_types, interpreter/[gas_meter, gas_costs],
+  ../vm_types, interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   ../errors, stint, eth_keys, eth_common, chronicles, tables, macros,
   message, math, nimcrypto, bncurve/[fields, groups]
 
@@ -89,6 +89,66 @@ proc identity*(computation: var BaseComputation) =
   computation.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
   computation.rawOutput = computation.msg.data
   debug "Identity precompile", output = computation.rawOutput
+
+proc modExp(computation: var BaseComputation) =
+
+  # Parsing the data
+  template rawMsg: untyped {.dirty.} =
+    computation.msg.data
+  let
+    base_len = rawMsg.toOpenArray(0, 31).readUintBE[:256].toInt
+    exp_len = rawMsg.toOpenArray(32, 63).readUintBE[:256].toInt
+    mod_len = rawMsg.toOpenArray(64, 95).readUintBE[:256].toInt
+
+    start_exp = 96 + base_len
+    start_mod = start_exp + exp_len
+
+    base = Uint256.fromBytesBE(rawMsg.toOpenArray(96, start_exp - 1), allowPadding = true)
+    exp = Uint256.fromBytesBE(rawMsg.toOpenArray(start_exp, start_mod - 1), allowPadding = true)
+    modulo = Uint256.fromBytesBE(rawMsg.toOpenArray(start_mod, start_mod + mod_len - 1), allowPadding = true)
+
+  # TODO: Whenever the input is too short, the missing bytes are considered to be zero.
+
+  block: # Gas cost
+    func gasModExp_f(x: Natural): int =
+      # x: maximum length in bytes between modulo and base
+      # TODO: Deal with negative max_len
+      result = case x
+        of 0 .. 64: x * x
+        of 65 .. 1024: x * x div 4 + 96 * x - 3072
+        else: x * x div 16 + 480 * x - 199680
+
+    let adj_exp_len = block:
+      # TODO deal with negative length
+      if exp_len <= 32:
+        if exp.isZero(): 0
+        else: log2(exp)
+      else:
+        # TODO: deal with overflow
+        let extra = Uint256.fromBytesBE(rawMsg.toOpenArray(96 + base_len, 127 + base_len), allowPadding = true)
+        if not extra.isZero:
+          8 * (exp_len - 32) + extra.log2
+        else:
+          8 * (exp_len - 32)
+
+    let gasFee = block:
+      (
+        max(mod_len, base_len).gasModExp_f *
+          max(adj_exp_len, 1)
+      ) div GasQuadDivisor
+
+  block: # Processing
+    # Start with EVM special cases
+    if modulo <= 1:
+      # If m == 0: EVM returns 0.
+      # If m == 1: we can shortcut that to 0 as well
+      computation.rawOutput = @(static(zero(UInt256).toByteArrayBE))
+    elif exp.isZero():
+      # If 0^0: EVM returns 1
+      # For all x != 0, x^0 == 1 as well
+      computation.rawOutput = @(static(one(UInt256).toByteArrayBE))
+    else:
+      computation.rawOutput = @powmod(base, exp, modulo).toByteArrayBE
 
 proc bn256ecAdd*(computation: var BaseComputation) =
   var
@@ -188,6 +248,7 @@ proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
     of paSha256: sha256(computation)
     of paRipeMd160: ripeMd160(computation)
     of paIdentity: identity(computation)
+    of paModExp: modExp(computation)
     of paEcAdd: bn256ecAdd(computation)
     of paEcMul: bn256ecMul(computation)
     of paPairing: bn256ecPairing(computation)
