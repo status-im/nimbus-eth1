@@ -1,4 +1,4 @@
-import os, rocksdb, ranges, eth_trie/db_tracing
+import os, rocksdb, ranges, eth_trie/[db_tracing, constants]
 import ../storage_types
 
 type
@@ -6,18 +6,6 @@ type
     store: RocksDBInstance
 
   ChainDB* = RocksChainDB
-
-proc newChainDB*(basePath: string): ChainDB =
-  result.new()
-  let
-    dataDir = basePath / "data"
-    backupsDir = basePath / "backups"
-
-  createDir(dataDir)
-  createDir(backupsDir)
-
-  let s = result.store.init(dataDir, backupsDir)
-  if not s.ok: raiseStorageInitError()
 
 proc get*(db: ChainDB, key: openarray[byte]): seq[byte] =
   let s = db.store.getBytes(key)
@@ -46,3 +34,18 @@ proc del*(db: ChainDB, key: openarray[byte]) =
 
 proc close*(db: ChainDB) =
   db.store.close
+
+proc newChainDB*(basePath: string): ChainDB =
+  result.new()
+  let
+    dataDir = basePath / "data"
+    backupsDir = basePath / "backups"
+
+  createDir(dataDir)
+  createDir(backupsDir)
+
+  let s = result.store.init(dataDir, backupsDir)
+  if not s.ok: raiseStorageInitError()
+
+  put(result, emptyRlpHash.data, emptyRlp)
+

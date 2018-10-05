@@ -8,7 +8,7 @@
 import
   unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
   byteutils, ranges/typedranges, nimcrypto/[keccak, hash],
-  rlp, eth_trie/[types, memdb], eth_common,
+  rlp, eth_trie/db, eth_common,
   ./test_helpers,
   ../nimbus/[constants, errors],
   ../nimbus/[vm_state, vm_types],
@@ -39,7 +39,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     stateRoot: emptyRlpHash
     )
 
-  var memDb = newMemDB()
   var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDB()))
   let fexec = fixture["exec"]
   var code: seq[byte]

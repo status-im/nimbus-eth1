@@ -1,6 +1,8 @@
-import db/[db_chain, state_db], genesis_alloc, eth_common, tables, stint,
-    byteutils, times, config, rlp, ranges, block_types, eth_trie,
-    eth_trie/memdb, account, constants, nimcrypto, chronicles
+import
+  times, tables,
+  eth_common, stint, byteutils, rlp, ranges, block_types, nimcrypto,
+  chronicles, eth_trie, eth_trie/db,
+  db/[db_chain, state_db], genesis_alloc, config, account, constants
 
 type
   Genesis* = object

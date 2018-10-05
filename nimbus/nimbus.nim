@@ -12,7 +12,7 @@ import
   asyncdispatch2, json_rpc/rpcserver, eth_keys,
   eth_p2p, eth_p2p/rlpx_protocols/[eth],
   config, genesis, rpc/[common, p2p], p2p/chain,
-  eth_trie
+  eth_trie/db
 
 const UseSqlite = false
 

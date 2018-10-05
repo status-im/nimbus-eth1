@@ -1,5 +1,8 @@
-
-import ../nimbus/db/backends/caching_backend, eth_trie, eth_trie/memdb, unittest
+#[
+import
+  unittest,
+  eth_trie/db,
+  ../nimbus/db/backends/caching_backend
 
 let
   key1 = [0.byte, 0, 1]
@@ -42,4 +45,4 @@ suite "Caching DB backend":
       mdb.get(key2) == @value2
       mdb.get(key3) == @value3
       key4 notin mdb
-
+]#
