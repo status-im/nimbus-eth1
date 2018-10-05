@@ -96,9 +96,9 @@ proc modExp(computation: var BaseComputation) =
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
   let
-    base_len = rawMsg.toOpenArray(0, 31).readUintBE[:256].toInt
-    exp_len = rawMsg.toOpenArray(32, 63).readUintBE[:256].toInt
-    mod_len = rawMsg.toOpenArray(64, 95).readUintBE[:256].toInt
+    base_len = toInt Uint256.fromBytesBE(rawMsg.toOpenArray(0, 31), allowPadding = true)
+    exp_len = toInt Uint256.fromBytesBE(rawMsg.toOpenArray(32, 63), allowPadding = true)
+    mod_len = toInt Uint256.fromBytesBE(rawMsg.toOpenArray(64, 96), allowPadding = true)
 
     start_exp = 96 + base_len
     start_mod = start_exp + exp_len
@@ -106,8 +106,6 @@ proc modExp(computation: var BaseComputation) =
     base = Uint256.fromBytesBE(rawMsg.toOpenArray(96, start_exp - 1), allowPadding = true)
     exp = Uint256.fromBytesBE(rawMsg.toOpenArray(start_exp, start_mod - 1), allowPadding = true)
     modulo = Uint256.fromBytesBE(rawMsg.toOpenArray(start_mod, start_mod + mod_len - 1), allowPadding = true)
-
-  # TODO: Whenever the input is too short, the missing bytes are considered to be zero.
 
   block: # Gas cost
     func gasModExp_f(x: Natural): int =
@@ -124,7 +122,6 @@ proc modExp(computation: var BaseComputation) =
         if exp.isZero(): 0
         else: log2(exp)
       else:
-        # TODO: deal with overflow
         let extra = Uint256.fromBytesBE(rawMsg.toOpenArray(96 + base_len, 127 + base_len), allowPadding = true)
         if not extra.isZero:
           8 * (exp_len - 32) + extra.log2
