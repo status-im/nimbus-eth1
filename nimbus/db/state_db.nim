@@ -7,7 +7,7 @@
 
 import
   sequtils, strformat, tables,
-  chronicles, eth_common, nimcrypto, rlp, eth_trie/[hexary, memdb],
+  chronicles, eth_common, nimcrypto, rlp, eth_trie/[hexary, db],
   ../constants, ../errors, ../validation, ../account
 
 logScope:

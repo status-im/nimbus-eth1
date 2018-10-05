@@ -6,10 +6,11 @@
 # at your option.
 # This file may not be copied, modified, or distributed except according to
 # those terms.
-import strutils, nimcrypto, eth_common, stint, eth_trie/[memdb, types]
+
 import
-  json_rpc/server, ../vm_state, ../db/[db_chain, state_db],
-  ../constants, ../config, hexstrings
+  strutils,
+  nimcrypto, eth_common, stint, json_rpc/server,
+  ../vm_state, ../db/[db_chain, state_db], ../constants, ../config, hexstrings
 
 proc setupCommonRPC*(server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:

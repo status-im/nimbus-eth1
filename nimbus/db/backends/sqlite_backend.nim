@@ -1,5 +1,5 @@
 import
-  os, sqlite3, ranges, ranges/ptr_arith, eth_trie/db_tracing,
+  os, sqlite3, ranges, ranges/ptr_arith, eth_trie/[db_tracing, constants],
   ../storage_types
 
 type
@@ -8,6 +8,8 @@ type
     selectStmt, insertStmt, deleteStmt: PStmt
 
   ChainDB* = SqliteChainDB
+
+proc put*(db: ChainDB, key, value: openarray[byte])
 
 proc newChainDB*(basePath: string, inMemory = false): ChainDB =
   result.new()
@@ -53,6 +55,8 @@ proc newChainDB*(basePath: string, inMemory = false): ChainDB =
     """
 
   result.deleteStmt = prepare "DELETE FROM trie_nodes WHERE key = ?;"
+
+  put(result, emptyRlpHash.data, emptyRlp)
 
 proc bindBlob(s: Pstmt, n: int, blob: openarray[byte]): int32 =
   sqlite3.bind_blob(s, n.int32, blob.baseAddr, blob.len.int32, nil)

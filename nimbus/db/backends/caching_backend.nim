@@ -1,5 +1,7 @@
-import ranges, eth_trie, tables, sets
-import ../storage_types
+import
+  ranges, tables, sets,
+  eth_trie/db,
+  ../storage_types
 
 type
   CachingDB* = ref object of RootObj

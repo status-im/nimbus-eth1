@@ -6,11 +6,14 @@
 # at your option.
 # This file may not be copied, modified, or distributed except according to
 # those terms.
+
 import
-  nimcrypto, json_rpc/rpcserver, eth_p2p, hexstrings, strutils, stint,
-  ../config, ../vm_state, ../constants, eth_trie/[memdb, types], eth_keys,
-  ../db/[db_chain, state_db, storage_types], eth_common, rpc_types, byteutils,
-  ranges/typedranges, times, ../utils/header, rlp, ../transaction
+  strutils, times,
+  nimcrypto, json_rpc/rpcserver, hexstrings, stint, byteutils, ranges/typedranges,
+  eth_common, eth_p2p, eth_keys, eth_trie/db, rlp,
+  ../utils/header, ../transaction, ../config, ../vm_state, ../constants,
+  ../db/[db_chain, state_db, storage_types],
+  rpc_types
 
 #[
   Note:
@@ -52,14 +55,14 @@ func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
     result = chain.getBlockHeader(blockNum)
 
 proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
-  
-  func getAccountDb(header: BlockHeader, readOnly = true): AccountStateDb = 
+
+  func getAccountDb(header: BlockHeader, readOnly = true): AccountStateDb =
     ## Retrieves the account db from canonical head
     let vmState = newBaseVMState(header, chain)
     result = vmState.chaindb.getStateDb(vmState.blockHeader.hash, readOnly)
 
   func accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
-    result = getAccountDb(chain.headerFromTag(tag))  
+    result = getAccountDb(chain.headerFromTag(tag))
 
   proc getBlockBody(hash: KeccakHash): BlockBody =
     if not chain.getBlockBody(hash, result):
@@ -68,7 +71,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
   rpcsrv.rpc("net_version") do() -> uint:
     let conf = getConfiguration()
     result = conf.net.networkId
-  
+
   rpcsrv.rpc("eth_syncing") do() -> JsonNode:
     ## Returns SyncObject or false when not syncing.
     # TODO: Requires PeerPool to check sync state.
@@ -84,7 +87,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       result = %sync
     else:
       result = newJBool(false)
-  
+
   rpcsrv.rpc("eth_coinbase") do() -> EthAddress:
     ## Returns the current coinbase address.
     result = chain.getCanonicalHead().coinbase
@@ -238,7 +241,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
     ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
-    ## 
+    ##
     ## call: the transaction call object.
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the amount of gas used.
@@ -256,7 +259,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       startIdx = 0
     for i in 0 ..< blockBody.uncles.len:
       rawData[startIdx .. startIdx + 32] = blockBody.uncles[i].hash.data
-      startIdx += 32    
+      startIdx += 32
     result.sha3Uncles = keccak256.digest(rawData)
 
     result.logsBloom = some(header.bloom)
@@ -317,7 +320,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     result.gasPrice = transaction.gasPrice
     result.gas = accountGas
     result.input = transaction.payload
-  
+
   rpcsrv.rpc("eth_getTransactionByHash") do(data: HexDataStr) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
     ##
@@ -393,7 +396,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       idx.inc
 
   rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> Option[BlockObject]:
-    ## Returns information about a uncle of a block by hash and uncle index position.  
+    ## Returns information about a uncle of a block by hash and uncle index position.
     ##
     ## data: hash of block.
     ## quantity: the uncle's index position.
@@ -428,12 +431,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## [A] "A in first position (and anything after)"
     ## [null, B] "anything in first position AND B in second position (and anything after)"
     ## [A, B] "A in first position AND B in second position (and anything after)"
-    ## [[A, B], [A, B]] "(A OR B) in first position AND (A OR B) in second position (and anything after)"  
+    ## [[A, B], [A, B]] "(A OR B) in first position AND (A OR B) in second position (and anything after)"
     ##
     ## filterOptions: settings for this filter.
     ## Returns integer filter id.
     discard
-  
+
   rpcsrv.rpc("eth_newBlockFilter") do() -> int:
     ## Creates a filter in the node, to notify when a new block arrives.
     ## To check if the state has changed, call eth_getFilterChanges.
@@ -449,7 +452,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     discard
 
   rpcsrv.rpc("eth_uninstallFilter") do(filterId: int) -> bool:
-    ## Uninstalls a filter with given id. Should always be called when watch is no longer needed. 
+    ## Uninstalls a filter with given id. Should always be called when watch is no longer needed.
     ## Additonally Filters timeout when they aren't requested with eth_getFilterChanges for a period of time.
     ##
     ## filterId: The filter id.

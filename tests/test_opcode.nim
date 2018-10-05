@@ -7,7 +7,7 @@
 
 import
   unittest, tables, parseutils, byteutils,
-  eth_trie/[types, memdb], eth_common/eth_types,
+  eth_trie/db, eth_common/eth_types,
   ../nimbus/[constants, vm_types, vm_state],
   ../nimbus/vm/interpreter,
   ../nimbus/utils/header,
@@ -18,7 +18,6 @@ from eth_common import GasInt
 
 proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputation =
   let header = BlockHeader(blockNumber: blockNum)
-  var memDb = newMemDB()
   var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
 
   # coinbase: "",

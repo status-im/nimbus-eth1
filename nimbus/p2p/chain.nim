@@ -1,9 +1,8 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
   ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto,
   ../vm_state_transactions,
-  eth_trie/memdb, eth_trie, rlp,
+  eth_trie/db, eth_trie, rlp,
   sugar
-
 
 type
   Chain* = ref object of AbstractChainDB
@@ -101,7 +100,7 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   return gasUsed.u256 * t.gasPrice.u256
 
 proc calcTxRoot(transactions: openarray[Transaction]): Hash256 =
-  var tr = initHexaryTrie(trieDB(newMemDB()))
+  var tr = initHexaryTrie(newMemoryDB())
   for i, t in transactions:
     tr.put(rlp.encode(i).toRange, rlp.encode(t).toRange)
   return tr.rootHash
@@ -111,6 +110,9 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   assert(headers.len == bodies.len)
 
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
+
+  let transaction = c.db.db.beginTransaction()
+  defer: transaction.dispose()
 
   echo "Persisting blocks: ", headers[0].blockNumber, " - ", headers[^1].blockNumber
   for i in 0 ..< headers.len:
@@ -158,6 +160,8 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
       echo "Wrong state root in block ", headers[i].blockNumber, ". Expected: ", headers[i].stateRoot, ", Actual: ", stateDb.rootHash, " arrived from ", c.db.getCanonicalHead().stateRoot
     assert(headers[i].stateRoot == stateDb.rootHash)
 
- 
     discard c.db.persistHeaderToDb(headers[i])
     assert(c.db.getCanonicalHead().blockHash == headers[i].blockHash)
+
+  transaction.commit()
+
