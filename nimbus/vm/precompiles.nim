@@ -4,7 +4,7 @@ import
   message, math, nimcrypto, bncurve/[fields, groups]
 
 type
-  PrecompileAddresses = enum
+  PrecompileAddresses* = enum
     paEcRecover = 1,
     paSha256,
     paRipeMd160,
@@ -15,12 +15,24 @@ type
     paEcMul,
     paPairing = 8
 
-proc getSignature*(computation: BaseComputation): Signature =
-  var bytes: array[128, byte]
-  bytes[0..31] = computation.msg.data[32..63]   # V
-  bytes[32..63] = computation.msg.data[64..95]  # R
-  bytes[64..63] = computation.msg.data[96..128] # S
-  result = initSignature(bytes)                 # Can raise
+proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
+  # input is Hash, V, R, S
+  template data: untyped = computation.msg.data
+  var bytes: array[65, byte]
+  let maxPos = min(data.high, 127)
+  if maxPos >= 32:
+    # extract message hash
+    result[0][0..31] = data[0..31]
+    if maxPos >= 127:
+      # Copy message data to buffer
+      # Note that we need to rearrange to R, S, V
+      bytes[0..63] = data[64..127]
+      let v = data[63]  # TODO: Endian
+      assert v.int in 27..28
+      bytes[64] = v - 27
+  
+  if recoverSignature(bytes, result[1]) != EthKeysStatus.Success:
+    raise newException(ValidationError, "Could not recover signature computation")
 
 proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
   when T is G1:
@@ -50,17 +62,15 @@ proc ecRecover*(computation: var BaseComputation) =
     GasECRecover,
     reason="ECRecover Precompile")
 
-  # TODO: Check endian
-  # Assumes V is 27 or 28
   var
-    sig = computation.getSignature()
+    (msgHash, sig) = computation.getSignature()
     pubKey: PublicKey
-  let msgHash = computation.msg.data[0..31]
 
   if sig.recoverSignatureKey(msgHash, pubKey) != EthKeysStatus.Success:
     raise newException(ValidationError, "Could not derive public key from computation")
-
-  computation.rawOutput = @(pubKey.toCanonicalAddress())
+  
+  computation.rawOutput.setLen(32)
+  computation.rawOutput[12..31] = pubKey.toCanonicalAddress()
   debug "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
 
 proc sha256*(computation: var BaseComputation) =
@@ -69,17 +79,18 @@ proc sha256*(computation: var BaseComputation) =
     gasFee = GasSHA256 + wordCount * GasSHA256Word
 
   computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  computation.rawOutput = @(keccak_256.digest(computation.msg.data).data)
-  debug "SHA256 precompile", output = computation.rawOutput
+  computation.rawOutput = @(nimcrypto.sha_256.digest(computation.msg.data).data)
+  debug "SHA256 precompile", output = computation.rawOutput.toHex
 
-proc ripemd160(computation: var BaseComputation) =
+proc ripemd160*(computation: var BaseComputation) =
   let
     wordCount = computation.msg.data.len div 32
     gasFee = GasRIPEMD160 + wordCount * GasRIPEMD160Word
 
   computation.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
-  computation.rawOutput = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
-  debug "RIPEMD160 precompile", output = computation.rawOutput
+  computation.rawOutput.setLen(32)
+  computation.rawOutput[12..31] = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
+  debug "RIPEMD160 precompile", output = computation.rawOutput.toHex
 
 proc identity*(computation: var BaseComputation) =
   let
@@ -88,9 +99,9 @@ proc identity*(computation: var BaseComputation) =
 
   computation.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
   computation.rawOutput = computation.msg.data
-  debug "Identity precompile", output = computation.rawOutput
+  debug "Identity precompile", output = computation.rawOutput.toHex
 
-proc modExp(computation: var BaseComputation) =
+proc modExp*(computation: var BaseComputation) =
   ## Modular exponentiation precompiled contract
   # Parsing the data
   template rawMsg: untyped {.dirty.} =
