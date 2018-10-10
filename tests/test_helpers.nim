@@ -105,7 +105,8 @@ proc lacksHomesteadPostStates*(filename: string): bool =
     fixture = child
     break
 
-  return fixture.has_key("transaction") and not fixture["post"].has_key("Homestead")
+  return fixture.kind == JObject and fixture.has_key("transaction") and
+    (fixture.has_key("post") and not fixture["post"].has_key("Homestead"))
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
   let
@@ -129,7 +130,7 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
     for child in filenames:
       let (filename, folder, name) = child
       test filename:
-        echo folder, name
+        echo folder / name
         status[folder][name] = Status.FAIL
         try:
           `handler`(parseJSON(readFile(filename)), `testStatusIMPL`)
