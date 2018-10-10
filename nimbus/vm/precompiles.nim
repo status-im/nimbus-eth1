@@ -91,21 +91,21 @@ proc identity*(computation: var BaseComputation) =
   debug "Identity precompile", output = computation.rawOutput
 
 proc modExp(computation: var BaseComputation) =
-
+  ## Modular exponentiation precompiled contract
   # Parsing the data
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
   let
-    base_len = toInt Uint256.fromBytesBE(rawMsg.toOpenArray(0, 31), allowPadding = true)
-    exp_len = toInt Uint256.fromBytesBE(rawMsg.toOpenArray(32, 63), allowPadding = true)
-    mod_len = toInt Uint256.fromBytesBE(rawMsg.toOpenArray(64, 96), allowPadding = true)
+    base_len = rawMsg.rangeToPaddedUint256(0, 31).truncate(int)
+    exp_len = rawMsg.rangeToPaddedUint256(32, 63).truncate(int)
+    mod_len = rawMsg.rangeToPaddedUint256(64, 95).truncate(int)
 
     start_exp = 96 + base_len
     start_mod = start_exp + exp_len
 
-    base = Uint256.fromBytesBE(rawMsg.toOpenArray(96, start_exp - 1), allowPadding = true)
-    exp = Uint256.fromBytesBE(rawMsg.toOpenArray(start_exp, start_mod - 1), allowPadding = true)
-    modulo = Uint256.fromBytesBE(rawMsg.toOpenArray(start_mod, start_mod + mod_len - 1), allowPadding = true)
+    base = rawMsg.rangeToPaddedUint256(96, start_exp - 1)
+    exp = rawMsg.rangeToPaddedUint256(start_exp, start_mod - 1)
+    modulo = rawMsg.rangeToPaddedUint256(start_mod, start_mod + mod_len - 1)
 
   block: # Gas cost
     func gasModExp_f(x: Natural): int =
@@ -122,7 +122,7 @@ proc modExp(computation: var BaseComputation) =
         if exp.isZero(): 0
         else: log2(exp)
       else:
-        let extra = Uint256.fromBytesBE(rawMsg.toOpenArray(96 + base_len, 127 + base_len), allowPadding = true)
+        let extra = rawMsg.rangeToPaddedUint256(96 + base_len, 127 + base_len)
         if not extra.isZero:
           8 * (exp_len - 32) + extra.log2
         else:
@@ -136,16 +136,25 @@ proc modExp(computation: var BaseComputation) =
 
   block: # Processing
     # Start with EVM special cases
+
+    # Force static evaluation
+    func zero256(): static array[32, byte] = discard
+    func one256(): static array[32, byte] =
+      when cpuEndian == bigEndian:
+        result[^1] = 1
+      else:
+        result[0] = 1
+
     if modulo <= 1:
       # If m == 0: EVM returns 0.
       # If m == 1: we can shortcut that to 0 as well
-      computation.rawOutput = @(static(zero(UInt256).toByteArrayBE))
+      computation.rawOutput = @(zero256())
     elif exp.isZero():
       # If 0^0: EVM returns 1
       # For all x != 0, x^0 == 1 as well
-      computation.rawOutput = @(static(one(UInt256).toByteArrayBE))
+      computation.rawOutput = @(one256())
     else:
-      computation.rawOutput = @powmod(base, exp, modulo).toByteArrayBE
+      computation.rawOutput = @(powmod(base, exp, modulo).toByteArrayBE)
 
 proc bn256ecAdd*(computation: var BaseComputation) =
   var
