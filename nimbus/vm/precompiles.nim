@@ -41,9 +41,9 @@ proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
   else:
     const nextOffset = 64
     var px, py: FQ2
-  if not px.fromBytes(data.toOpenArray(0, nextOffset - 1)):
+  if not px.fromBytes2(data.toOpenArray(0, nextOffset - 1)):
     raise newException(ValidationError, "Could not get point value")
-  if not py.fromBytes(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
+  if not py.fromBytes2(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
     raise newException(ValidationError, "Could not get point value")
   if px.isZero() and py.isZero():
     result = T.zero()
@@ -54,7 +54,7 @@ proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
     result = ap.toJacobian()
 
 proc getFR(data: openarray[byte]): FR =
-  if not result.fromBytes(data):
+  if not result.fromBytes2(data):
     raise newException(ValidationError, "Could not get FR value")
 
 proc ecRecover*(computation: var BaseComputation) =
@@ -171,20 +171,17 @@ proc bn256ecAdd*(computation: var BaseComputation) =
   var
     input: array[128, byte]
     output: array[64, byte]
-
   # Padding data
   let msglen = len(computation.msg.data)
   let tocopy = if msglen < 128: msglen else: 128
   if tocopy > 0:
     copyMem(addr input[0], addr computation.msg.data[0], tocopy)
-
   var p1 = G1.getPoint(input.toOpenArray(0, 63))
   var p2 = G1.getPoint(input.toOpenArray(64, 127))
   var apo = (p1 + p2).toAffine()
   if isSome(apo):
-    let p = apo.get()
     # we can discard here because we supply proper buffer
-    discard p.toBytes(output)
+    discard apo.get().toBytes(output)
 
   # TODO: gas computation
   # computation.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
@@ -205,9 +202,8 @@ proc bn256ecMul*(computation: var BaseComputation) =
   var fr = getFR(input.toOpenArray(64, 95))
   var apo = (p1 * fr).toAffine()
   if isSome(apo):
-    let p = apo.get()
     # we can discard here because we supply buffer of proper size
-    discard p.toBytes(output)
+    discard apo.get().toBytes(output)
 
   # TODO: gas computation
   # computation.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
