@@ -2,7 +2,7 @@ import
   times, tables,
   eth_common, stint, byteutils, rlp, ranges, block_types, nimcrypto,
   chronicles, eth_trie, eth_trie/db,
-  db/[db_chain, state_db], genesis_alloc, config, account, constants
+  db/[db_chain, state_db], genesis_alloc, config, constants
 
 type
   Genesis* = object

@@ -7,8 +7,9 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import parseopt, strutils, macros, os
-import asyncdispatch2, eth_keys, eth_p2p, eth_common, chronicles
+import
+  parseopt, strutils, macros, os,
+  asyncdispatch2, eth_keys, eth_p2p, eth_common, chronicles, nimcrypto/hash
 
 const
   NimbusName* = "Nimbus"

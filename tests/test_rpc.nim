@@ -1,9 +1,9 @@
 import
   unittest, json, strformat, nimcrypto, rlp,
-  json_rpc/[rpcserver, rpcclient], 
+  json_rpc/[rpcserver, rpcclient],
   ../nimbus/rpc/[common, p2p, hexstrings],
   ../nimbus/constants,
-  ../nimbus/nimbus/[account, vm_state, config],
+  ../nimbus/nimbus/[vm_state, config],
   ../nimbus/db/[state_db, db_chain], eth_common, byteutils,
   eth_trie/[memDb, types],
   eth_p2p, eth_keys

@@ -8,7 +8,7 @@
 import
   sequtils, strformat, tables,
   chronicles, eth_common, nimcrypto, rlp, eth_trie/[hexary, db],
-  ../constants, ../errors, ../validation, ../account
+  ../constants, ../errors, ../validation
 
 logScope:
   topics = "state_db"

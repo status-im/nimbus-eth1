@@ -28,7 +28,7 @@ type
     data*: EthHashStr         # TODO: Support more data. The compiled code of a contract OR the hash of the invoked method signature and encoded parameters. For details see Ethereum Contract ABI.
     nonce*: int               # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce 
 
-  EthCall* = object  
+  EthCall* = object
     # Parameter from user
     source*: EthAddressStr    # (optional) The address the transaction is send from.
     to*: EthAddressStr        # The address the transaction is directed to.

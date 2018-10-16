@@ -1,4 +1,4 @@
-import os, rocksdb, ranges, eth_trie/[db_tracing, constants]
+import os, rocksdb, ranges, eth_trie/[defs, db_tracing]
 import ../storage_types
 
 type
