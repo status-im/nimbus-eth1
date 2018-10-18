@@ -78,8 +78,8 @@ proc prepareChildMessage*(
   result = newMessage(
     gas,
     c.msg.gasPrice,
-    c.msg.origin,
     to,
+    c.msg.origin,
     value,
     data,
     code,
