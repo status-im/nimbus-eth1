@@ -243,15 +243,10 @@ proc bn256ecPairing*(computation: var BaseComputation) =
   computation.rawOutput = @output
 
 proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
-  const
-    bRange = when system.cpuEndian == bigEndian: 0..18 else: 1..19
-    bOffset = when system.cpuEndian == bigEndian: 19 else: 0
-
-  for i in bRange:
+  for i in 0..18:
     if computation.msg.codeAddress[i] != 0: return
 
-  let lb = computation.msg.codeAddress[bOffset]
-
+  let lb = computation.msg.codeAddress[19]
   if lb in PrecompileAddresses.low.byte .. PrecompileAddresses.high.byte:
     result = true
     let precompile = PrecompileAddresses(lb)
@@ -265,5 +260,3 @@ proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
     of paEcAdd: bn256ecAdd(computation)
     of paEcMul: bn256ecMul(computation)
     of paPairing: bn256ecPairing(computation)
-    else:
-      raise newException(ValidationError, "Unknown precompile address " & $lb)
