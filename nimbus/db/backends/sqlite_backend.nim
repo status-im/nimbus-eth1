@@ -1,5 +1,5 @@
 import
-  os, sqlite3, ranges, ranges/ptr_arith, eth_trie/[db_tracing, constants],
+  os, sqlite3, ranges, ranges/ptr_arith, eth_trie/[db_tracing, defs],
   ../storage_types
 
 type
