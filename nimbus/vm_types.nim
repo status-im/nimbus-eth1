@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables,
+  tables, json,
   eth_common,
   ./constants, ./vm_state,
   ./vm/[memory, stack, code_stream],
@@ -35,6 +35,8 @@ type
     precompiles*:           Table[string, Opcode]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     opCodeExec*:            OpcodeExecutor
+    tracingEnabled*:        bool
+    tracer*:                TransactionTracer
 
   Error* = ref object
     info*:                  string
@@ -105,3 +107,8 @@ type
     createAddress*:           EthAddress
     codeAddress*:             EthAddress
     flags*:                   MsgFlags
+
+  TransactionTracer* = object
+    trace*: JsonNode
+    gasRemaining*: GasInt
+
