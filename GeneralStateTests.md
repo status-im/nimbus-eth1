@@ -428,14 +428,14 @@ OK: 0/30 Fail: 22/30 Skip: 8/30
 - delegatecallEmptycontract.json                                  Fail
 - delegatecallInInitcodeToEmptyContract.json                      Fail
 - delegatecallInInitcodeToExistingContract.json                   Fail
-- delegatecallInInitcodeToExistingContractOOG.json                Fail
++ delegatecallInInitcodeToExistingContractOOG.json                OK
 - delegatecallOOGinCall.json                                      Fail
 - delegatecallSenderCheck.json                                    Fail
 - delegatecallValueCheck.json                                     Fail
 - delegatecodeDynamicCode.json                                    Fail
 - delegatecodeDynamicCode2SelfCall.json                           Fail
 ```
-OK: 3/34 Fail: 30/34 Skip: 1/34
+OK: 4/34 Fail: 29/34 Skip: 1/34
 ## stEIP150Specific
 ```diff
   CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
@@ -718,10 +718,10 @@ OK: 65/67 Fail: 2/67 Skip: 0/67
 - NonZeroValue_CALL_ToEmpty.json                                  Fail
 - NonZeroValue_CALL_ToNonNonZeroBalance.json                      Fail
 - NonZeroValue_CALL_ToOneStorageKey.json                          Fail
-- NonZeroValue_DELEGATECALL.json                                  Fail
-- NonZeroValue_DELEGATECALL_ToEmpty.json                          Fail
-- NonZeroValue_DELEGATECALL_ToNonNonZeroBalance.json              Fail
-- NonZeroValue_DELEGATECALL_ToOneStorageKey.json                  Fail
++ NonZeroValue_DELEGATECALL.json                                  OK
++ NonZeroValue_DELEGATECALL_ToEmpty.json                          OK
++ NonZeroValue_DELEGATECALL_ToNonNonZeroBalance.json              OK
++ NonZeroValue_DELEGATECALL_ToOneStorageKey.json                  OK
 + NonZeroValue_SUICIDE.json                                       OK
 + NonZeroValue_SUICIDE_ToEmpty.json                               OK
 + NonZeroValue_SUICIDE_ToNonNonZeroBalance.json                   OK
@@ -735,7 +735,7 @@ OK: 65/67 Fail: 2/67 Skip: 0/67
 + NonZeroValue_TransactionCALLwithData_ToNonNonZeroBalance.json   OK
 + NonZeroValue_TransactionCALLwithData_ToOneStorageKey.json       OK
 ```
-OK: 12/24 Fail: 12/24 Skip: 0/24
+OK: 16/24 Fail: 8/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
   identity_to_bigger.json                                         Skip
@@ -1033,7 +1033,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest174.json                                         OK
 + randomStatetest175.json                                         OK
 + randomStatetest176.json                                         OK
-- randomStatetest177.json                                         Fail
++ randomStatetest177.json                                         OK
 - randomStatetest178.json                                         Fail
 + randomStatetest179.json                                         OK
 + randomStatetest18.json                                          OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 305/327 Fail: 18/327 Skip: 4/327
+OK: 306/327 Fail: 17/327 Skip: 4/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -1508,14 +1508,14 @@ OK: 305/327 Fail: 18/327 Skip: 4/327
 - randomStatetest639.json                                         Fail
 + randomStatetest640.json                                         OK
 + randomStatetest641.json                                         OK
-+ randomStatetest642.json                                         OK
+- randomStatetest642.json                                         Fail
 - randomStatetest643.json                                         Fail
 - randomStatetest644.json                                         Fail
 - randomStatetest645.json                                         Fail
 - randomStatetest646.json                                         Fail
   randomStatetest647.json                                         Skip
 ```
-OK: 208/227 Fail: 15/227 Skip: 4/227
+OK: 207/227 Fail: 16/227 Skip: 4/227
 ## stRecursiveCreate
 ```diff
 - recursiveCreate.json                                            Fail
@@ -1551,9 +1551,9 @@ OK: 11/19 Fail: 8/19 Skip: 0/19
 + call_outsize_then_create_successful_then_returndatasize.json    OK
 + call_then_call_value_fail_then_returndatasize.json              OK
 + call_then_create_successful_then_returndatasize.json            OK
-- create_callprecompile_returndatasize.json                       Fail
++ create_callprecompile_returndatasize.json                       OK
   modexp_modsize0_returndatasize.json                             Skip
-- returndatacopy_0_0_following_successful_create.json             Fail
++ returndatacopy_0_0_following_successful_create.json             OK
   returndatacopy_afterFailing_create.json                         Skip
 + returndatacopy_after_failing_callcode.json                      OK
 + returndatacopy_after_failing_delegatecall.json                  OK
@@ -1563,11 +1563,11 @@ OK: 11/19 Fail: 8/19 Skip: 0/19
 + returndatacopy_after_successful_delegatecall.json               OK
 + returndatacopy_after_successful_staticcall.json                 OK
 + returndatacopy_following_call.json                              OK
-- returndatacopy_following_create.json                            Fail
++ returndatacopy_following_create.json                            OK
 + returndatacopy_following_failing_call.json                      OK
 + returndatacopy_following_revert.json                            OK
-- returndatacopy_following_revert_in_create.json                  Fail
-- returndatacopy_following_successful_create.json                 Fail
++ returndatacopy_following_revert_in_create.json                  OK
++ returndatacopy_following_successful_create.json                 OK
 + returndatacopy_following_too_big_transfer.json                  OK
 + returndatacopy_initial.json                                     OK
 + returndatacopy_initial_256.json                                 OK
@@ -1581,11 +1581,11 @@ OK: 11/19 Fail: 8/19 Skip: 0/19
 + returndatasize_after_successful_delegatecall.json               OK
 + returndatasize_after_successful_staticcall.json                 OK
 + returndatasize_bug.json                                         OK
-- returndatasize_following_successful_create.json                 Fail
++ returndatasize_following_successful_create.json                 OK
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
 ```
-OK: 28/37 Fail: 6/37 Skip: 3/37
+OK: 34/37 Fail: 0/37 Skip: 3/37
 ## stRevertTest
 ```diff
 + LoopCallsDepthThenRevert.json                                   OK
@@ -1608,7 +1608,7 @@ OK: 28/37 Fail: 6/37 Skip: 3/37
 - RevertOpcodeCreate.json                                         Fail
 - RevertOpcodeDirectCall.json                                     Fail
 - RevertOpcodeInCallsOnNonEmptyReturnData.json                    Fail
-- RevertOpcodeInCreateReturns.json                                Fail
++ RevertOpcodeInCreateReturns.json                                OK
 - RevertOpcodeInInit.json                                         Fail
 - RevertOpcodeMultipleSubCalls.json                               Fail
 - RevertOpcodeReturn.json                                         Fail
@@ -1632,7 +1632,7 @@ OK: 28/37 Fail: 6/37 Skip: 3/37
 - TouchToEmptyAccountRevert2.json                                 Fail
 - TouchToEmptyAccountRevert3.json                                 Fail
 ```
-OK: 15/43 Fail: 23/43 Skip: 5/43
+OK: 16/43 Fail: 22/43 Skip: 5/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -2058,7 +2058,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + callerAccountBalance.json                                       OK
 - createNameRegistrator.json                                      Fail
 + createNameRegistratorOOG_MemExpansionOOV.json                   OK
-+ createNameRegistratorOutOfMemoryBonds0.json                     OK
+- createNameRegistratorOutOfMemoryBonds0.json                     Fail
 + createNameRegistratorOutOfMemoryBonds1.json                     OK
 - createNameRegistratorValueTooHigh.json                          Fail
 - createNameRegistratorZeroMem.json                               Fail
@@ -2083,12 +2083,12 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideSendEtherToMe.json                                       OK
 - testRandomTest.json                                             Fail
 ```
-OK: 26/67 Fail: 39/67 Skip: 2/67
+OK: 25/67 Fail: 40/67 Skip: 2/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
 + ContractStoreClearsSuccess.json                                 OK
-- CreateMessageReverted.json                                      Fail
++ CreateMessageReverted.json                                      OK
 - CreateMessageSuccess.json                                       Fail
 + CreateTransactionReverted.json                                  OK
 + CreateTransactionSuccess.json                                   OK
@@ -2131,7 +2131,7 @@ OK: 26/67 Fail: 39/67 Skip: 2/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 27/44 Fail: 17/44 Skip: 0/44
+OK: 28/44 Fail: 16/44 Skip: 0/44
 ## stTransitionTest
 ```diff
 - createNameRegistratorPerTxsAfter.json                           Fail
@@ -2222,17 +2222,17 @@ OK: 0/24 Fail: 0/24 Skip: 24/24
 ## stZeroCallsTest
 ```diff
 - ZeroValue_CALL.json                                             Fail
-- ZeroValue_CALLCODE.json                                         Fail
-- ZeroValue_CALLCODE_ToEmpty.json                                 Fail
-- ZeroValue_CALLCODE_ToNonZeroBalance.json                        Fail
-- ZeroValue_CALLCODE_ToOneStorageKey.json                         Fail
-- ZeroValue_CALL_ToEmpty.json                                     Fail
-- ZeroValue_CALL_ToNonZeroBalance.json                            Fail
-- ZeroValue_CALL_ToOneStorageKey.json                             Fail
-- ZeroValue_DELEGATECALL.json                                     Fail
-- ZeroValue_DELEGATECALL_ToEmpty.json                             Fail
-- ZeroValue_DELEGATECALL_ToNonZeroBalance.json                    Fail
-- ZeroValue_DELEGATECALL_ToOneStorageKey.json                     Fail
++ ZeroValue_CALLCODE.json                                         OK
++ ZeroValue_CALLCODE_ToEmpty.json                                 OK
++ ZeroValue_CALLCODE_ToNonZeroBalance.json                        OK
++ ZeroValue_CALLCODE_ToOneStorageKey.json                         OK
++ ZeroValue_CALL_ToEmpty.json                                     OK
++ ZeroValue_CALL_ToNonZeroBalance.json                            OK
++ ZeroValue_CALL_ToOneStorageKey.json                             OK
++ ZeroValue_DELEGATECALL.json                                     OK
++ ZeroValue_DELEGATECALL_ToEmpty.json                             OK
++ ZeroValue_DELEGATECALL_ToNonZeroBalance.json                    OK
++ ZeroValue_DELEGATECALL_ToOneStorageKey.json                     OK
 + ZeroValue_SUICIDE.json                                          OK
 + ZeroValue_SUICIDE_ToEmpty.json                                  OK
 + ZeroValue_SUICIDE_ToNonZeroBalance.json                         OK
@@ -2246,7 +2246,7 @@ OK: 0/24 Fail: 0/24 Skip: 24/24
 + ZeroValue_TransactionCALLwithData_ToNonZeroBalance.json         OK
 + ZeroValue_TransactionCALLwithData_ToOneStorageKey.json          OK
 ```
-OK: 12/24 Fail: 12/24 Skip: 0/24
+OK: 23/24 Fail: 1/24 Skip: 0/24
 ## stZeroKnowledge
 ```diff
   ecmul_1-2_2_28000_128.json                                      Skip
