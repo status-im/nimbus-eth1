@@ -146,6 +146,8 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
       gas = computation.msg.gas
 
   # Run code
+  # We cannot use the normal dispatching function `executeOpcodes`
+  # within `interpreter_dispatch.nim` due to a cyclic dependency.
   if not computation.execPrecompiles:
     computation.opcodeExec(computation)
 
