@@ -168,7 +168,9 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
   func `prefix gasCreate`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
-    result = static(FeeSchedule[GasCodeDeposit]) * memLength
+    result = 
+      static(FeeSchedule[GasCreate]) +
+      static(FeeSchedule[GasCodeDeposit]) * memLength
 
   func `prefix gasSha3`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
 
