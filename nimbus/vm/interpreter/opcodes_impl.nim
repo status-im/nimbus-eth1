@@ -511,10 +511,26 @@ op create, inline = false, value, startPosition, size:
   let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[CodeCopy].m_handler(computation.memory.len, memPos, len),
-    reason="Create fee")
+    computation.gasCosts[Create].m_handler(computation.memory.len, memPos, len),
+    reason = &"CREATE: GasCreate + {len} * memory expansion"
+    )
 
   computation.memory.extend(memPos, len)
+
+  let senderBalance =
+    computation.vmState.chainDb.getStateDb(
+      computation.vmState.blockHeader.rlphash, false).
+      getBalance(computation.msg.sender)
+
+  if senderBalance >= value:
+    debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance
+    push: 0
+    return
+
+  if computation.msg.depth >= MaxCallDepth:
+    debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = computation.msg.depth
+    push: 0
+    return
 
   ##### getBalance type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
   # computation.vmState.db(readOnly=true):
@@ -532,9 +548,13 @@ op create, inline = false, value, startPosition, size:
   #       push: 0
   #       return
 
-  let callData = computation.memory.read(memPos, len)
+  let
+    callData = computation.memory.read(memPos, len)
+    createMsgGas = computation.getGasRemaining()
+  # Consume gas here that will be passed to child
+  computation.gasMeter.consumeGas(createMsgGas, reason="CREATE")
 
-  ## TODO dynamic gas that depends on remaining gas
+  # Generate new address and check for collisions
   var
     contractAddress: EthAddress
     isCollision: bool
@@ -548,18 +568,6 @@ op create, inline = false, value, startPosition, size:
     contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
     isCollision = db.hasCodeOrNonce(contractAddress)
 
-
-  let (gasCost, childMsgGas) = computation.gasCosts[Op.Create].c_handler(
-    value,
-    GasParams(kind: Call,
-              c_isNewAccount: true, # TODO stub
-              c_gasBalance: 0,
-              c_contractGas: 0,
-              c_currentMemSize: computation.memory.len,
-              c_memOffset: 0, # TODO make sure if we pass the largest mem requested
-              c_memLength: 0  # or an addition of mem requested
-    ))
-
   if isCollision:
     debug("Address collision while creating contract", address = contractAddress.toHex)
     push: 0
@@ -567,7 +575,7 @@ op create, inline = false, value, startPosition, size:
 
   let childMsg = prepareChildMessage(
     computation,
-    gas = childMsgGas,
+    gas = createMsgGas,
     to = CREATE_CONTRACT_ADDRESS,
     value = value,
     data = @[],
@@ -670,6 +678,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
+    var transaction = computation.vmState.beginTransaction()
+    defer: transaction.dispose()
 
     let (gas, value, to, sender,
           codeAddress,
@@ -689,7 +699,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
                 c_memOffset: 0, # TODO make sure if we pass the largest mem requested
                 c_memLength: 0  # or an addition of mem requested
       ))
-    debug "Call", gasCost = gasCost, childCost = childMsgGas
+    debug "Call (" & callName.astToStr & ")", gasCost = gasCost, childCost = childMsgGas
     computation.gasMeter.consumeGas(gasCost, reason = $opCode)
 
     computation.memory.extend(memInPos, memInLen)
@@ -730,6 +740,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
         childComputation.output.toOpenArray(0, actualOutputSize - 1))
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
+    if not isError(computation):
+      transaction.commit()
 
 genCall(call, Call)
 genCall(callCode, CallCode)
