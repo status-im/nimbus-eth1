@@ -19,9 +19,8 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
       header = BlockHeader(blockNumber: blockNum)
       expected = test["expected"].getStr.hexToSeqByte
     var addressBytes = newSeq[byte](32)
-    addressBytes[31] = address  # TODO: Endian
+    addressBytes[31] = address
     var
-      # Data has the address injected at the start to simulate the real call.
       dataStr = test["input"].getStr
       data = if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
       memDb = newMemDB()
