@@ -7,7 +7,10 @@
 
 import
   eth_common,
-  ../constants, ../validation, ../vm_types
+  ../constants, ../validation, ../vm_types, chronicles
+
+logScope:
+  topics = "message"
 
 proc `origin=`*(message: var Message, value: EthAddress) =
   message.internalOrigin = value
@@ -43,6 +46,16 @@ proc newMessage*(
     options: MessageOptions = newMessageOptions()): Message =
 
   validateGte(options.depth, minimum=0, title="Message.depth")
+
+  debug "New message",
+    gas = gas,
+    gasPrice = gasPrice,
+    destination = to,
+    sender = sender,
+    value = value,
+    depth = options.depth,
+    storageAddress = options.createAddress,
+    codeAddress = options.codeAddress
 
   new(result)
   result.gas = gas
