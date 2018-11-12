@@ -81,7 +81,16 @@ func failIn32Bits(folder, name: string): bool =
     "returndatasize_initial.json",
     "returndatasize_initial_zero_read.json",
     "call_then_create_successful_then_returndatasize.json",
-    "call_outsize_then_create_successful_then_returndatasize.json"]
+    "call_outsize_then_create_successful_then_returndatasize.json",
+    
+    "returndatacopy_following_create.json",
+    "returndatacopy_following_revert_in_create.json",
+    "returndatacopy_following_successful_create.json",
+    "RevertOpcodeInCreateReturns.json",
+    "create_callprecompile_returndatasize.json",
+    "returndatacopy_0_0_following_successful_create.json",
+    "returndatasize_following_successful_create"
+  ]
 
 func allowedFailInCurrentBuild(folder, name: string): bool =
   when sizeof(int) == 4:
