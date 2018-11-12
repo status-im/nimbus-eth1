@@ -12,8 +12,12 @@ import
 
 # some methods based on py-evm utils/numeric
 
+func log2*(value: UInt256): Natural {.inline.}=
+  # TODO: do we use ln for log2 like Nim convention?
+  255 - value.countLeadingZeroBits
+
 func log256*(value: UInt256): Natural {.inline.}=
-  (255 - value.countLeadingZeroBits) shr 3 # div 8
+  value.log2 shr 3 # div 8 (= log2(256), Logb x = Loga x/Loga b)
 
 func ceil32*(value: Natural): Natural {.inline.}=
   # Round input to the nearest bigger multiple of 32
@@ -50,3 +54,19 @@ func cleanMemRef*(x: UInt256): int {.inline.} =
   if x > upperBound:
     return high(int32) shr 2
   return x.toInt
+
+proc rangeToPaddedUint256*(x: seq[byte], first, last: int): Uint256 =
+  ## Convert take a slice of a sequence of bytes interpret it as the big endian
+  ## representation of an Uint256. Use padding for sequence shorter than 32 bytes
+  ## including 0-length sequences.
+
+  let lo = max(0, first)
+  let hi = min(x.high, last)
+
+  if not(lo < hi):
+    return # 0
+
+  result = UInt256.fromBytesBE(
+    x.toOpenArray(lo, hi),
+    allowPadding = true
+  )

@@ -10,7 +10,7 @@ import
   chronicles,
   ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter, utils/macros_gen_opcodes],
   ./code_stream,
-  ../vm_types, ../errors,
+  ../vm_types, ../errors, precompiles,
   ./stack, ./computation, ./transaction_tracer, terminal # Those are only needed for logging
 
 func invalidInstruction*(computation: var BaseComputation) {.inline.} =
@@ -228,7 +228,8 @@ macro genFrontierDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(FrontierOpDispatch, computation)
 
 proc frontierVM(computation: var BaseComputation) =
-  genFrontierDispatch(computation)
+  if not computation.execPrecompiles:
+    genFrontierDispatch(computation)
 
 proc updateOpcodeExec*(computation: var BaseComputation, fork: Fork) =
   case fork

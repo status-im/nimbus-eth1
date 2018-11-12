@@ -32,7 +32,6 @@ type
     shouldEraseReturnData*: bool
     accountsToDelete*:      Table[EthAddress, EthAddress]
     opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
-    precompiles*:           Table[string, Opcode]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     opCodeExec*:            OpcodeExecutor
     tracingEnabled*:        bool

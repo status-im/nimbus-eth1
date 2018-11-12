@@ -19,7 +19,8 @@ requires "nim >= 0.18.1",
          "asyncdispatch2",
          "eth_p2p",
          "eth_keyfile",
-         "eth_keys"
+         "eth_keys",
+         "https://github.com/status-im/nim-bncurve >= 1.0.1"
 
 proc buildBinary(name: string, srcDir = ".", lang = "c") =
   if not dirExists "build": mkDir "build"
