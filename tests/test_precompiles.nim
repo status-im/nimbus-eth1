@@ -7,7 +7,7 @@
 
 import
   unittest, ../nimbus/vm/precompiles, json, byteutils, test_helpers, ospaths, tables,
-  strformat, strutils, eth_trie/[types, memdb], eth_common, ../nimbus/db/[db_chain, state_db],
+  strformat, strutils, eth_trie/db, eth_common, ../nimbus/db/[db_chain, state_db],
   ../nimbus/[constants, vm_types, vm_state], ../nimbus/vm/[computation, message], macros
 
 proc initAddress(i: byte): EthAddress = result[19] = i
@@ -23,7 +23,6 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
     var
       dataStr = test["input"].getStr
       data = if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
-      memDb = newMemDB()
       vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
       gas = 1_000_000.GasInt
       gasPrice = 1.GasInt
