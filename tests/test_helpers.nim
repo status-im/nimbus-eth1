@@ -89,7 +89,7 @@ func failIn32Bits(folder, name: string): bool =
     "RevertOpcodeInCreateReturns.json",
     "create_callprecompile_returndatasize.json",
     "returndatacopy_0_0_following_successful_create.json",
-    "returndatasize_following_successful_create"
+    "returndatasize_following_successful_create.json"
   ]
 
 func allowedFailInCurrentBuild(folder, name: string): bool =
