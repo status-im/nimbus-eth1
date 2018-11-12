@@ -5,7 +5,8 @@ import
   ../nimbus/constants,
   ../nimbus/nimbus/[vm_state, config],
   ../nimbus/db/[state_db, db_chain], eth_common, byteutils,
-  eth_trie/[memDb, types],
+  ../nimbus/p2p/chain,
+  eth_trie/db,
   eth_p2p, eth_keys
 import rpcclient/test_hexstrings
 
@@ -42,12 +43,12 @@ proc doTests =
   # TODO: Include other transports such as Http
   var ethNode = setupEthNode()
   let
-    emptyRlpHash = keccak256.digest(rlp.encode("").toOpenArray)
+    emptyRlpHash = keccak256.digest(rlp.encode(""))
     header = BlockHeader(stateRoot: emptyRlpHash)
   var
     chain = newBaseChainDB(newMemoryDb())
     state = newBaseVMState(header, chain)
-  ethNode.chain = chain
+  ethNode.chain = newChain(chain)
 
   let
     balance = 100.u256
