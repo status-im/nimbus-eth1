@@ -214,12 +214,24 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     var privateKey: PrivateKey  # TODO: Get from key store
     result = ("0x" & sign(privateKey, message.string)).HexDataStr
 
+  proc setupTransaction(send: EthSend): Transaction =
+    let
+      source = send.source.toAddress
+      destination = send.to.toAddress
+      data = send.data.string.fromHex
+      contractCreation = false  # TODO: Check if has code
+      v = 0.byte # TODO
+      r = 0.u256
+      s = 0.u256
+    result = initTransaction(send.nonce, send.gasPrice, send.gas, destination, send.value, data, v, r, s, contractCreation)
+
   rpcsrv.rpc("eth_sendTransaction") do(obj: EthSend) -> HexDataStr:
     ## Creates new message call transaction or a contract creation, if the data field contains code.
     ##
     ## obj: the transaction object.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
+    # TODO: Relies on pending pool implementation
     discard
 
   rpcsrv.rpc("eth_sendRawTransaction") do(data: string, quantityTag: int) -> HexDataStr:
@@ -228,7 +240,24 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## data: the signed transaction data.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
+    # TODO: Relies on pending pool implementation
     discard
+
+  proc setupComputation(call: EthCall, vmState: BaseVMState, blockNumber: BlockNumber, sender: EthAddress): BaseComputation =
+    let
+      destination = call.to.toAddress
+      message = newMessage(
+        gas = call.gas,
+        gasPrice = call.gasPrice,
+        to = destination,
+        sender = sender,
+        value = call.value,
+        data = call.data.string.fromHex,
+        code = vmState.readOnlyStateDB.getCode(destination).toSeq,
+        options = newMessageOptions(origin = sender,
+                                    createAddress = destination))
+
+    result = newBaseComputation(vmState, blockNumber, message)
 
   rpcsrv.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.
@@ -236,7 +265,13 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## call: the transaction call object.
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the return value of executed contract.
-    discard
+    let header = headerFromTag(chain, quantityTag)
+    var
+      vmState = newBaseVMState(header, chain)
+      sender = call.source.toAddress
+      comp = call.setupComputation(vmState, header.blockNumber, sender)
+    discard comp.execComputation
+    result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
 
   rpcsrv.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> GasInt:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
