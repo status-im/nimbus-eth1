@@ -11,9 +11,10 @@ import
   strutils, times, options,
   nimcrypto, json_rpc/rpcserver, hexstrings, stint, byteutils, ranges/typedranges,
   eth_common, eth_p2p, eth_keys, eth_trie/db, rlp,
-  ../utils/header, ../transaction, ../config, ../vm_state, ../constants,
+  ../utils/header, ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
+  ../vm_state_transactions,
   ../db/[db_chain, state_db, storage_types],
-  rpc_types
+  ../vm/[message, computation], rpc_types
 
 #[
   Note:
@@ -28,17 +29,17 @@ import
 proc `%`*(value: Time): JsonNode =
   result = %value.toSeconds
 
-func strToAddress(value: string): EthAddress = hexToPaddedByteArray[20](value)
+func toAddress(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
 
 func toHash(value: array[32, byte]): Hash256 {.inline.} =
   result.data = value
 
-func strToHash(value: string): Hash256 {.inline.} =
-  result = hexToPaddedByteArray[32](value).toHash
+func toHash(value: EthHashStr): Hash256 {.inline.} =
+  result = hexToPaddedByteArray[32](value.string).toHash
 
 template balance(addressDb: AccountStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
-  cast[GasInt](addressDb.get_balance(address).data.lo)
+  addressDb.getBalance(address).truncate(int64)
 
 func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
   let tag = blockTag.toLowerAscii
@@ -120,7 +121,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns integer of the current balance in wei.
     let
       accountDb = accountDbFromTag(quantityTag)
-      addrBytes = strToAddress(data.string)
+      addrBytes = data.toAddress
       balance = accountDb.get_balance(addrBytes)
 
     result = balance.toInt
@@ -134,7 +135,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns: the value at this storage position.
     let
       accountDb = accountDbFromTag(quantityTag)
-      addrBytes = strToAddress(data.string)
+      addrBytes = data.toAddress
       storage = accountDb.getStorage(addrBytes, quantity.u256)
     if storage[1]:
       result = storage[0]
@@ -146,16 +147,16 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the number of transactions send from this address.
     let
-      addrBytes = data.string.strToAddress()
+      addrBytes = data.toAddress
       accountDb = accountDbFromTag(quantityTag)
     result = accountDb.getNonce(addrBytes)
 
-  rpcsrv.rpc("eth_getBlockTransactionCountByHash") do(data: HexDataStr) -> int:
+  rpcsrv.rpc("eth_getBlockTransactionCountByHash") do(data: EthHashStr) -> int:
     ## Returns the number of transactions in a block from a block matching the given block hash.
     ##
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
-    var hashData = strToHash(data.string)
+    var hashData = data.toHash
     result = getBlockBody(hashData).transactions.len
 
   rpcsrv.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> int:
@@ -166,12 +167,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     let header = chain.headerFromTag(quantityTag)
     result = getBlockBody(header.hash).transactions.len
 
-  rpcsrv.rpc("eth_getUncleCountByBlockHash") do(data: HexDataStr) -> int:
+  rpcsrv.rpc("eth_getUncleCountByBlockHash") do(data: EthHashStr) -> int:
     ## Returns the number of uncles in a block from a block matching the given block hash.
     ##
     ## data: hash of a block.
     ## Returns integer of the number of uncles in this block.
-    var hashData = strToHash(data.string)
+    var hashData = data.toHash
     result = getBlockBody(hashData).uncles.len
 
   rpcsrv.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string) -> int:
@@ -190,7 +191,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns the code from the given address.
     let
       accountDb = accountDbFromTag(quantityTag)
-      addrBytes = strToAddress(data.string)
+      addrBytes = toAddress(data)
       storage = accountDb.getCode(addrBytes)
     # Easier to return the string manually here rather than expect ByteRange to be marshalled
     result = byteutils.toHex(storage.toOpenArray).HexDataStr
@@ -279,14 +280,14 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     for i in 0 ..< blockBody.uncles.len:
       result.uncles[i] = blockBody.uncles[i].hash
 
-  rpcsrv.rpc("eth_getBlockByHash") do(data: HexDataStr, fullTransactions: bool) -> Option[BlockObject]:
+  rpcsrv.rpc("eth_getBlockByHash") do(data: EthHashStr, fullTransactions: bool) -> Option[BlockObject]:
     ## Returns information about a block by hash.
     ##
     ## data: Hash of a block.
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
     let
-      h = data.string.strToHash
+      h = data.toHash
       header = chain.getBlockHeader(h)
     result = some(populateBlockObject(header, getBlockBody(h)))
 
@@ -321,27 +322,27 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     result.gas = accountGas
     result.input = transaction.payload
 
-  rpcsrv.rpc("eth_getTransactionByHash") do(data: HexDataStr) -> TransactionObject:
+  rpcsrv.rpc("eth_getTransactionByHash") do(data: EthHashStr) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
     ##
     ## data: hash of a transaction.
     ## Returns requested transaction information.
     let
-      h = data.string.strToHash()
+      h = data.toHash()
       txDetails = chain.getTransactionKey(h)
       header = chain.getBlockHeader(txDetails.blockNumber)
       blockHash = chain.getBlockHash(txDetails.blockNumber)
       transaction = getBlockBody(blockHash).transactions[txDetails.index]
     populateTransactionObject(transaction, txDetails.index, header, blockHash)
 
-  rpcsrv.rpc("eth_getTransactionByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> TransactionObject:
+  rpcsrv.rpc("eth_getTransactionByBlockHashAndIndex") do(data: EthHashStr, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
     ##
     ## data: hash of a block.
     ## quantity: integer of the transaction index position.
     ## Returns  requested transaction information.
     let
-      blockHash = data.string.strToHash()
+      blockHash = data.toHash()
       header = chain.getBlockHeader(blockHash)
       transaction = getBlockBody(blockHash).transactions[quantity]
     populateTransactionObject(transaction, quantity, header, blockHash)
@@ -376,13 +377,13 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     # 1 = success, 0 = failure.
     result.status = 1
 
-  rpcsrv.rpc("eth_getTransactionReceipt") do(data: HexDataStr) -> ReceiptObject:
+  rpcsrv.rpc("eth_getTransactionReceipt") do(data: EthHashStr) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.
     ##
     ## data: hash of a transaction.
     ## Returns transaction receipt.
     let
-      h = data.string.strToHash()
+      h = data.toHash
       txDetails = chain.getTransactionKey(h)
       header = chain.getBlockHeader(txDetails.blockNumber)
       body = getBlockBody(header.hash)
@@ -395,14 +396,14 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         return populateReceipt(receipt, cumulativeGas, body.transactions[txDetails.index], txDetails.index, header)
       idx.inc
 
-  rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> Option[BlockObject]:
+  rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: EthHashStr, quantity: int) -> Option[BlockObject]:
     ## Returns information about a uncle of a block by hash and uncle index position.
     ##
     ## data: hash of block.
     ## quantity: the uncle's index position.
     ## Returns BlockObject or nil when no block was found.
     let
-      blockHash = data.string.strToHash()
+      blockHash = data.toHash()
       body = getBlockBody(blockHash)
     if quantity < 0 or quantity >= body.uncles.len:
       raise newException(ValueError, "Uncle index out of range")
