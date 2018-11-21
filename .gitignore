@@ -1,18 +1,21 @@
+### the following pattern disables global gitignore rules (the ones from core.excludesFile)
 # Ignore all files without extensions (unix executable files)
-*
-!*.*
-!*/
-!LICENSE*
+#*
+#!*.*
+#!*/
+#!LICENSE*
 
 nimcache/
 
 # Executables shall be put in an ignored build/ directory
-# Ignore dynamic, static libs and libtool archive files
 build/
+
+# Ignore dynamic, static libs and libtool archive files
 *.so
 *.dylib
 *.a
 *.la
 *.exe
 *.dll
+
 VMTests.md
