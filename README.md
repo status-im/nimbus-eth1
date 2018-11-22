@@ -13,7 +13,7 @@ Join the Status community chats:
 
 
 ## Rationale
-[Nimbus: an Ethereum 2.0 Sharding Client](https://github.com/status-im/nimbus/blob/master/doc/Nimbus%20-%20An%20Ethereum%202.0%20Sharding%20Client_xt.md)
+[Nimbus: an Ethereum 2.0 Sharding Client](https://our.status.im/nimbus-for-newbies/). The code in this repository is currently focusing on Ethereum 1.0 feature parity, while all 2.0 research and development is happening in parallel in [nim-beacon-chain](https://github.com/status-im/nim-beacon-chain). The two repositories are expected to merge in Q1 2019.
 
 ## Building & Testing
 
