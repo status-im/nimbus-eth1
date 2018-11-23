@@ -210,3 +210,10 @@ proc fromJson*(n: JsonNode, argName: string, result: var WhisperIdentityStr) =
     raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as a Whisper identity \"" & hexStr & "\"")
   result = hexStr.WhisperIdentityStr
 
+proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidEthHash: # Same format as hash
+    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as a UInt256 \"" & hexStr & "\"")
+  result = readUintBE[256](hexToPaddedByteArray[32](hexStr))
+
