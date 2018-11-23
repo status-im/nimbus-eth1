@@ -249,7 +249,6 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       gasLimit, gasPrice: GasInt): BaseComputation =
     let
       # Handle optional defaults.
-      # Note in eth_call (but not eth_estimateGas), the `to` field is required.
       message = newMessage(
         gas = gasLimit,
         gasPrice = gasPrice,
@@ -272,19 +271,30 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     let header = headerFromTag(chain, quantityTag)
     var
       vmState = newBaseVMState(header, chain)
+      gasLimit =
+        if call.gas.isSome: call.gas.get
+        else: 0.GasInt
+      gasPrice =
+        if call.gasPrice.isSome: call.gasPrice.get
+        else: 0.GasInt
+    
+    # Set defaults for gas limit and price if required
+    if gaslimit == 0.GasInt:
+      gasLimit = (int64.high div 2).GasInt  # Note this is `uint64.high div 2` in Geth
+    if gasPrice == 0.GasInt:
+      gasPrice = 1e9.GasInt  # Geth's default gas price
+
+    var
       sender = if call.source.isSome: call.source.get.toAddress else: ZERO_ADDRESS
-      # destination is a required parameter for call. In geth if it's zero they use the first wallet address,
+      # Note that destination is a required parameter for call.
+      # In geth if it's zero they use the first wallet address,
       # if no wallets, remains as ZERO_ADDRESS
-      # TODO: Update to use wallets
+      # TODO: Wallets
       destination = if call.to.isSome: call.to.get.toAddress else: ZERO_ADDRESS
-      pendingBlock = vmState.chaindb.getCanonicalHead() # TODO: Needs to fetch from a pending block, not head
-      gasLimit = if call.gas.isSome: call.gas.get else: pendingBlock.gasLimit
-      gGasPrice = 1.GasInt
-      gasPrice = if call.gasPrice.isSome: call.gasPrice.get else: gGasPrice
       data = if call.data.isSome: call.data.get.string.fromHex else: @[]
       value = if call.value.isSome: call.value.get else: 0.u256
-
       comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice)
+    
     discard comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
 
