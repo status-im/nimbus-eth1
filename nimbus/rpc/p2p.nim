@@ -243,16 +243,20 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     # TODO: Relies on pending pool implementation
     discard
 
-  proc setupComputation(call: EthCall, vmState: BaseVMState, blockNumber: BlockNumber, sender: EthAddress): BaseComputation =
+  proc setupComputation(vmState: BaseVMState, blockNumber: BlockNumber,
+      value: UInt256, data: seq[byte],
+      sender, destination: EthAddress,
+      gasLimit, gasPrice: GasInt): BaseComputation =
     let
-      destination = call.to.toAddress
+      # Handle optional defaults.
+      # Note in eth_call (but not eth_estimateGas), the `to` field is required.
       message = newMessage(
-        gas = call.gas,
-        gasPrice = call.gasPrice,
+        gas = gasLimit,
+        gasPrice = gasPrice,
         to = destination,
         sender = sender,
-        value = call.value,
-        data = call.data.string.fromHex,
+        value = value,
+        data = data,
         code = vmState.readOnlyStateDB.getCode(destination).toSeq,
         options = newMessageOptions(origin = sender,
                                     createAddress = destination))
@@ -268,8 +272,19 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     let header = headerFromTag(chain, quantityTag)
     var
       vmState = newBaseVMState(header, chain)
-      sender = call.source.toAddress
-      comp = call.setupComputation(vmState, header.blockNumber, sender)
+      sender = if call.source.isSome: call.source.get.toAddress else: ZERO_ADDRESS
+      # destination is a required parameter for call. In geth if it's zero they use the first wallet address,
+      # if no wallets, remains as ZERO_ADDRESS
+      # TODO: Update to use wallets
+      destination = if call.to.isSome: call.to.get.toAddress else: ZERO_ADDRESS
+      pendingBlock = vmState.chaindb.getCanonicalHead() # TODO: Needs to fetch from a pending block, not head
+      gasLimit = if call.gas.isSome: call.gas.get else: pendingBlock.gasLimit
+      gGasPrice = 1.GasInt
+      gasPrice = if call.gasPrice.isSome: call.gasPrice.get else: gGasPrice
+      data = if call.data.isSome: call.data.get.string.fromHex else: @[]
+      value = if call.value.isSome: call.value.get else: 0.u256
+
+      comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice)
     discard comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
 
