@@ -81,9 +81,6 @@ proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
   ## Raises BlockNotFound error if the block is not in the DB.
   self.getBlockHeader(self.getBlockHash(n))
 
-proc getBlockBody*(self: BaseChainDB, h: Hash256, output: var BlockBody): bool =
-  discard # TODO:
-
 proc getScore*(self: BaseChainDB; blockHash: Hash256): int =
   rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray).toRange, int)
 
@@ -107,15 +104,43 @@ proc addBlockNumberToHashLookup(self: BaseChainDB; header: BlockHeader) =
   self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
               rlp.encode(header.hash))
 
+proc persistTransactions*(self: BaseChainDB, transactions: openarray[Transaction]) =
+  var tr = initHexaryTrie(self.db)
+  for i, t in transactions:
+    tr.put(rlp.encode(i).toRange, rlp.encode(t).toRange)
+
+iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): BytesRange =
+  var transactionDb = initHexaryTrie(self.db, transactionRoot)
+  var transactionIdx = 0
+  while true:
+    let transactionKey = rlp.encode(transactionIdx).toRange
+    if transactionKey in transactionDb:
+      yield transactionDb.get(transactionKey)
+    else:
+      break
+    inc transactionIdx
+
 iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader): Hash256 =
   ## Returns an iterable of the transaction hashes from th block specified
   ## by the given block header.
-  doAssert(false, "TODO: Implement me")
-  # let all_encoded_transactions = self._get_block_transaction_data(
-  #   blockHeader.transactionRoot,
-  # )
-  # for encoded_transaction in all_encoded_transactions:
-  #     yield keccak(encoded_transaction)
+  for encodedTx in self.getBlockTransactionData(blockHeader.txRoot):
+    yield keccak256.digest(encodedTx.toOpenArray)
+
+proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody): bool =
+  var header: BlockHeader
+  if self.getBlockHeader(blockHash, header):
+    result = true
+    output.transactions = @[]
+    output.uncles = @[]
+    for encodedTx in self.getBlockTransactionData(header.txRoot):
+      output.transactions.add(rlp.decode(encodedTx, Transaction))
+
+    if header.ommersHash != EMPTY_UNCLE_HASH:
+      let encodedUncles = self.db.get(genericHashKey(header.ommersHash).toOpenArray).toRange
+      if encodedUncles.len != 0:
+        output.uncles = rlp.decode(encodedUncles, seq[BlockHeader])
+      else:
+        result = false
 
 proc getTransactionKey*(self: BaseChainDB, transactionHash: Hash256): tuple[blockNumber: BlockNumber, index: int] {.inline.} =
   let
@@ -153,17 +178,6 @@ proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockH
 proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
   self.db.contains(genericHashKey(blockHash).toOpenArray)
-
-iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): BytesRange =
-  var transactionDb = initHexaryTrie(self.db, transactionRoot)
-  var transactionIdx = 0
-  while true:
-    let transactionKey = rlp.encode(transactionIdx).toRange
-    if transactionKey in transactionDb:
-      yield transactionDb.get(transactionKey)
-    else:
-      break
-    inc transactionIdx
 
 iterator getReceipts*(self: BaseChainDB; header: BlockHeader; receiptClass: typedesc): Receipt =
   var receiptDb = initHexaryTrie(self.db, header.receiptRoot)
@@ -245,7 +259,7 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 
 #proc snapshot*(self: BaseChainDB): UUID =
   # Snapshots are a combination of the state_root at the time of the
-  # snapshot and the id of the changeset from the journaled DB.  
+  # snapshot and the id of the changeset from the journaled DB.
   #return self.db.snapshot()
 
 # proc commit*(self: BaseChainDB; checkpoint: UUID): void =

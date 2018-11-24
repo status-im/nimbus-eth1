@@ -163,5 +163,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     discard c.db.persistHeaderToDb(headers[i])
     assert(c.db.getCanonicalHead().blockHash == headers[i].blockHash)
 
+    c.db.persistTransactions(bodies[i].transactions)
+
   transaction.commit()
 
