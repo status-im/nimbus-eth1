@@ -1,7 +1,7 @@
 import
-  unittest, json, strformat, nimcrypto, rlp,
+  unittest, json, strformat, nimcrypto, rlp, options,
   json_rpc/[rpcserver, rpcclient],
-  ../nimbus/rpc/[common, p2p, hexstrings],
+  ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
   ../nimbus/constants,
   ../nimbus/nimbus/[vm_state, config],
   ../nimbus/db/[state_db, db_chain], eth_common, byteutils,
@@ -68,6 +68,13 @@ proc doTests =
   waitFor client.connect("localhost", Port(8545))
 
   suite "Remote Procedure Calls":
+    # TODO: Currently returning 'block not found' when fetching header in p2p, so cannot perform tests
+    test "eth_call":
+      let
+        blockNum = state.blockheader.blockNumber
+        callParams = EthCall(value: some(100.u256))
+      var r = waitFor client.eth_call(callParams, "0x" & blockNum.toHex)
+      echo r
     test "eth_getBalance":
       expect ValueError:
         # check error is raised on null address
