@@ -280,9 +280,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     
     # Set defaults for gas limit and price if required
     if gaslimit == 0.GasInt:
-      gasLimit = (int64.high div 2).GasInt  # Note this is `uint64.high div 2` in Geth
-    if gasPrice == 0.GasInt:
-      gasPrice = 1e9.GasInt  # Geth's default gas price
+      gasLimit = header.gasLimit
 
     var
       sender = if call.source.isSome: call.source.get.toAddress else: ZERO_ADDRESS
