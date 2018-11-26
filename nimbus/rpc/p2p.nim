@@ -278,7 +278,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         if call.gasPrice.isSome: call.gasPrice.get
         else: 0.GasInt
     
-    # Set defaults for gas limit and price if required
+    # Set defaults for gas limit if required
+    # Price remains zero by default
     if gaslimit == 0.GasInt:
       gasLimit = header.gasLimit
 
