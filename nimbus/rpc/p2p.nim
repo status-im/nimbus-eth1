@@ -14,7 +14,7 @@ import
   ../utils/header, ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../vm_state_transactions, ../utils/addresses,
   ../vm/[interpreter_dispatch, computation],
-  rpc_types, rpc_utils, ../vm/[message, computation]
+  rpc_types, rpc_utils, ../vm/[message, computation, interpreter_dispatch]
 
 #[
   Note:
@@ -32,6 +32,52 @@ proc `%`*(value: Time): JsonNode =
 template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
   addressDb.getBalance(address).truncate(int64)
+
+proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
+  proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): BaseComputation =
+    # Note that vmState may be altered
+    setupComputation(
+        vmState.blockHeader,
+        vmState,
+        transaction,
+        sender)
+  
+  proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
+    Transaction(
+      accountNonce: 0.AccountNonce,
+      gasPrice: gasPrice,
+      gasLimit: gasLimit,
+      to: destination,
+      value: value
+    )
+  var
+    hiGas = vmState.gasLimit
+    loGas = transaction.intrinsicGas
+    gasPrice = transaction.gasPrice # TODO: Or zero?
+  
+  proc tryTransaction(vmState: var BaseVMState, gasLimit: GasInt): bool =
+    var
+      spoofTransaction = dummyTransaction(gasLimit, gasPrice, transaction.to, transaction.value)
+      computation = vmState.dummyComputation(spoofTransaction, sender)
+    computation.executeOpcodes
+    if not computation.isError:
+      return true
+
+  if vmState.tryTransaction(loGas):
+    return loGas
+  if not vmState.tryTransaction(hiGas):
+    return 0.GasInt # TODO: Reraise error from computation
+
+  var
+    minVal = vmState.gasLimit
+    maxVal = transaction.intrinsicGas
+  while loGas - hiGas > tolerance:
+    let midPoint = (loGas + hiGas) div 2
+    if vmState.tryTransaction(midPoint):
+      minVal = midPoint
+    else:
+      maxVal = midPoint
+  result = minVal
 
 proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
   proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): BaseComputation =
