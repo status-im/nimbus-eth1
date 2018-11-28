@@ -6,6 +6,7 @@ import
   ../nimbus/nimbus/[vm_state, config],
   ../nimbus/db/[state_db, db_chain], eth_common, byteutils,
   ../nimbus/p2p/chain,
+  ../nimbus/genesis,  
   eth_trie/db,
   eth_p2p, eth_keys
 import rpcclient/test_hexstrings
@@ -53,9 +54,11 @@ proc doTests =
   let
     balance = 100.u256
     address: EthAddress = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+    conf = getConfiguration()
+  defaultGenesisBlockForNetwork(conf.net.networkId.toPublicNetwork()).commit(chain)
   state.mutateStateDB:
     db.setBalance(address, balance)
-
+  
   # Create Ethereum RPCs
   var
     rpcServer = newRpcSocketServer(["localhost:8545"])
