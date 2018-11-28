@@ -26,7 +26,7 @@ type
     gasPrice*: GasInt         # (optional, default: To-Be-Determined) integer of the gasPrice used for each paid gas.
     value*: int               # (optional) integer of the value sent with this transaction.
     data*: EthHashStr         # TODO: Support more data. The compiled code of a contract OR the hash of the invoked method signature and encoded parameters. For details see Ethereum Contract ABI.
-    nonce*: int               # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce 
+    nonce*: int               # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
 
   EthCall* = object
     # Parameter from user
@@ -102,8 +102,8 @@ type
     contractAddress*: Option[EthAddress]  # the contract address created, if the transaction was a contract creation, otherwise null.
     logs*: seq[Log]                       # list of log objects which this transaction generated.
     logsBloom*: BloomFilter               # bloom filter for light clients to quickly retrieve related logs.
-    root*: Hash256                        # post-transaction stateroot (pre Byzantium).
-    status*: int                          # 1 = success, 0 = failure.
+    root*: Option[Hash256]                # post-transaction stateroot (pre Byzantium).
+    status*: Option[int]                  # 1 = success, 0 = failure.
 
   FilterDataKind* = enum fkItem, fkList
   FilterData* = object
