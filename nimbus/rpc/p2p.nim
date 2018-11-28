@@ -349,24 +349,25 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       transaction = getBlockBody(blockHash).transactions[quantity]
     populateTransactionObject(transaction, quantity, header, blockHash)
 
-  proc populateReceipt(receipt: Receipt, cumulativeGas: GasInt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
+  proc populateReceipt(receipt: Receipt, gasUsed: GasInt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
     result.transactionHash = transaction.rlpHash
     result.transactionIndex = txIndex
     result.blockHash = blockHeader.hash
     result.blockNumber = blockHeader.blockNumber
     result.sender = transaction.getSender()
     result.to = some(transaction.to)
-    result.cumulativeGasUsed = cumulativeGas
-    result.gasUsed = receipt.gasUsed
+    result.cumulativeGasUsed = receipt.cumulativeGasUsed
+    result.gasUsed = gasUsed
     # TODO: Get contract address if the transaction was a contract creation.
     result.contractAddress = none(EthAddress)
     result.logs = receipt.logs
     result.logsBloom = blockHeader.bloom
     # post-transaction stateroot (pre Byzantium).
-    result.root = blockHeader.stateRoot
-    # TODO: Respond to success/failure
-    # 1 = success, 0 = failure.
-    result.status = 1
+    if receipt.hasStateRoot:
+      result.root = some(receipt.stateRoot)
+    else:
+      # 1 = success, 0 = failure.
+      result.status = some(receipt.status)
 
   rpcsrv.rpc("eth_getTransactionReceipt") do(data: HexDataStr) -> ReceiptObject:
     ## Returns the receipt of a transaction by transaction hash.
@@ -380,11 +381,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       body = getBlockBody(header.hash)
     var
       idx = 0
-      cumulativeGas: GasInt
+      prevGasUsed = GasInt(0)
     for receipt in chain.getReceipts(header, Receipt):
-      cumulativeGas += receipt.gasUsed
+      let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+      prevGasUsed = receipt.cumulativeGasUsed
       if idx == txDetails.index:
-        return populateReceipt(receipt, cumulativeGas, body.transactions[txDetails.index], txDetails.index, header)
+        return populateReceipt(receipt, gasUsed, body.transactions[txDetails.index], txDetails.index, header)
       idx.inc
 
   rpcsrv.rpc("eth_getUncleByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> Option[BlockObject]:
