@@ -13,7 +13,7 @@ import
   eth_common, eth_p2p, eth_keys, eth_trie/db, rlp,
   ../utils/header, ../transaction, ../config, ../vm_state, ../constants,
   ../db/[db_chain, state_db, storage_types],
-  rpc_types
+  rpc_types, rpc_utils
 
 #[
   Note:
@@ -27,14 +27,6 @@ import
 # Work around for https://github.com/nim-lang/Nim/issues/8645
 proc `%`*(value: Time): JsonNode =
   result = %value.toSeconds
-
-func strToAddress(value: string): EthAddress = hexToPaddedByteArray[20](value)
-
-func toHash(value: array[32, byte]): Hash256 {.inline.} =
-  result.data = value
-
-func strToHash(value: string): Hash256 {.inline.} =
-  result = hexToPaddedByteArray[32](value).toHash
 
 template balance(addressDb: AccountStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?

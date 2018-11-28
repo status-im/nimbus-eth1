@@ -12,7 +12,7 @@ import
   asyncdispatch2, json_rpc/rpcserver, eth_keys,
   eth_p2p, eth_p2p/rlpx_protocols/[eth_protocol, les_protocol],
   eth_p2p/blockchain_sync,
-  config, genesis, rpc/[common, p2p], p2p/chain,
+  config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
   eth_trie/db
 
 const UseSqlite = false
@@ -85,8 +85,14 @@ proc start(): NimbusObject =
 
   nimbus.ethNode.chain = newChain(chainDB)
 
-  if RpcFlags.Enabled in conf.rpc.flags:
+  if RpcFlags.Eth in conf.rpc.flags:
     setupEthRpc(nimbus.ethNode, chainDB, nimbus.rpcServer)
+
+  if RpcFlags.Shh in conf.rpc.flags:
+    setupWhisperRPC(nimbus.rpcServer)
+
+  if RpcFlags.Debug in conf.rpc.flags:
+    setupDebugRpc(chainDB, nimbus.rpcServer)
 
   ## Starting servers
   nimbus.state = Starting

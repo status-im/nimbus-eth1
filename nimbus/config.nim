@@ -89,6 +89,9 @@ type
   RpcFlags* {.pure.} = enum
     ## RPC flags
     Enabled                       ## RPC enabled
+    Eth                           ## enable eth_ set of RPC API
+    Shh                           ## enable shh_ set of RPC API
+    Debug                         ## enable debug_ set of RPC API
 
   RpcConfiguration* = object
     ## JSON-RPC configuration object
@@ -154,6 +157,9 @@ type
     rpc*: RpcConfiguration        ## JSON-RPC configuration
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
+
+const
+  defaultRpcApi = {RpcFlags.Eth, RpcFlags.Shh}
 
 var nimbusConfig {.threadvar.}: NimbusConfiguration
 
@@ -241,6 +247,19 @@ proc processAddressPortsList(v: string,
       for a in tas6: o.add(a)
   result = Success
 
+proc processRpcApiList(v: string, flags: var set[RpcFlags]): ConfigStatus =
+  var list = newSeq[string]()
+  processList(v, list)
+  result = Success
+  for item in list:
+    case item.toLowerAscii()
+    of "eth": flags.incl RpcFlags.Eth
+    of "shh": flags.incl RpcFlags.Shh
+    of "debug": flags.incl RpcFlags.Debug
+    else:
+      warn "unknown rpc api", name = item
+      result = ErrorIncorrectOption
+
 proc processENode(v: string, o: var ENode): ConfigStatus =
   ## Convert string to ENode.
   let res = initENode(v, o)
@@ -314,10 +333,18 @@ proc processRpcArguments(key, value: string): ConfigStatus =
   let config = getConfiguration()
   let skey = key.toLowerAscii()
   if skey == "rpc":
-    config.rpc.flags.incl(RpcFlags.Enabled)
+    if RpcFlags.Enabled notin config.rpc.flags:
+      config.rpc.flags.incl(RpcFlags.Enabled)
+      config.rpc.flags.incl(defaultRpcApi)
   elif skey == "rpcbind":
     config.rpc.binds.setLen(0)
     result = processAddressPortsList(value, config.rpc.binds)
+  elif skey == "rpcapi":
+    if RpcFlags.Enabled in config.rpc.flags:
+      config.rpc.flags.excl(defaultRpcApi)
+    else:
+      config.rpc.flags.incl(RpcFlags.Enabled)
+    result = processRpcApiList(value, config.rpc.flags)
   else:
     result = EmptyOption
 
@@ -529,6 +556,7 @@ NETWORKING OPTIONS:
 API AND CONSOLE OPTIONS:
   --rpc                   Enable the HTTP-RPC server
   --rpcbind:<value>       HTTP-RPC server will bind to given comma separated address:port pairs (default: 127.0.0.1:8545)
+  --rpcapi:<value>        Enable specific set of rpc api from comma separated list(eth, shh, debug)
 
 LOGGING AND DEBUGGING OPTIONS:
   --debug                 Enable debug mode
