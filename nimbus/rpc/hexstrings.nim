@@ -175,45 +175,47 @@ proc `%`*(value: ref BloomFilter): JsonNode =
 
 # Marshalling from JSON to Nim types that includes format checking
 
+func invalidMsg(name: string): string = "When marshalling from JSON, parameter \"" & name & "\" is not valid"
+
 proc fromJson*(n: JsonNode, argName: string, result: var HexQuantityStr) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidHexQuantity:
-    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as an Ethereum hex quantity \"" & hexStr & "\"")
+    raise newException(ValueError, invalidMsg(argName) & " as an Ethereum hex quantity \"" & hexStr & "\"")
   result = hexStr.hexQuantityStr
 
 proc fromJson*(n: JsonNode, argName: string, result: var HexDataStr) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidHexData:
-    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as Ethereum data \"" & hexStr & "\"")
+    raise newException(ValueError, invalidMsg(argName) & " as Ethereum data \"" & hexStr & "\"")
   result = hexStr.hexDataStr
 
 proc fromJson*(n: JsonNode, argName: string, result: var EthAddressStr) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidEthAddress:
-    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as an Ethereum address \"" & hexStr & "\"")
+    raise newException(ValueError, invalidMsg(argName) & "\" as an Ethereum address \"" & hexStr & "\"")
   result = hexStr.EthAddressStr
 
 proc fromJson*(n: JsonNode, argName: string, result: var EthHashStr) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidEthHash:
-    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as an Ethereum hash \"" & hexStr & "\"")
+    raise newException(ValueError, invalidMsg(argName) & " as an Ethereum hash \"" & hexStr & "\"")
   result = hexStr.EthHashStr
 
 proc fromJson*(n: JsonNode, argName: string, result: var WhisperIdentityStr) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidWhisperIdentity:
-    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as a Whisper identity \"" & hexStr & "\"")
+    raise newException(ValueError, invalidMsg(argName) & " as a Whisper identity \"" & hexStr & "\"")
   result = hexStr.WhisperIdentityStr
 
 proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
-  if not hexStr.isValidEthHash: # Same format as hash
-    raise newException(ValueError, "Parameter \"" & argName & "\" is not valid as a UInt256 \"" & hexStr & "\"")
+  if hexStr.len <= 66 and hexStr.isValidHexData:
+    raise newException(ValueError, invalidMsg(argName) & " as a UInt256 \"" & hexStr & "\"")
   result = readUintBE[256](hexToPaddedByteArray[32](hexStr))
 
