@@ -10,7 +10,8 @@
 import
   strutils, hexstrings, eth_p2p, options,
   ../db/[db_chain, state_db, storage_types],
-  json_rpc/rpcserver, json, macros, rpc_utils
+  json_rpc/rpcserver, json, macros, rpc_utils,
+  eth_common
 
 type
   TraceTxOptions = object
@@ -19,6 +20,10 @@ type
     disableStack: Option[bool]
 
 proc setupDebugRpc*(chain: BaseChainDB, rpcsrv: RpcServer) =
+
+  proc getBlockBody(hash: Hash256): BlockBody =
+    if not chain.getBlockBody(hash, result):
+      raise newException(ValueError, "Error when retrieving block body")
 
   rpcsrv.rpc("debug_traceTransaction") do(data: HexDataStr, options: Option[TraceTxOptions]) -> JsonNode:
     ## The traceTransaction debugging method will attempt to run the transaction in the exact
@@ -32,5 +37,9 @@ proc setupDebugRpc*(chain: BaseChainDB, rpcsrv: RpcServer) =
     ## * disableStorage: BOOL. Setting this to true will disable storage capture (default = false).
     ## * disableMemory: BOOL. Setting this to true will disable memory capture (default = false).
     ## * disableStack: BOOL. Setting this to true will disable stack capture (default = false).
-    var hashData = strToHash(data.string)
-
+    let
+      txHash = strToHash(data.string)
+      txDetails = chain.getTransactionKey(txHash)
+      blockHeader = chain.getBlockHeader(txDetails.blockNumber)
+      blockHash = chain.getBlockHash(txDetails.blockNumber)
+      blockBody = getBlockBody(blockHash)

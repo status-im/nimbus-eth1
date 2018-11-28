@@ -100,14 +100,19 @@ iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
     else:
       h = self.getBlockHeader(h.parentHash)
 
-proc addBlockNumberToHashLookup(self: BaseChainDB; header: BlockHeader) =
+proc addBlockNumberToHashLookup*(self: BaseChainDB; header: BlockHeader) =
   self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
               rlp.encode(header.hash))
 
-proc persistTransactions*(self: BaseChainDB, transactions: openarray[Transaction]) =
-  var tr = initHexaryTrie(self.db)
-  for i, t in transactions:
-    tr.put(rlp.encode(i).toRange, rlp.encode(t).toRange)
+proc persistTransactions*(self: BaseChainDB, blockNumber: BlockNumber, transactions: openArray[Transaction]) =
+  var trie = initHexaryTrie(self.db)
+  for idx, tx in transactions:
+    let
+      encodedTx = rlp.encode(tx).toRange
+      txHash = keccak256.digest(encodedTx.toOpenArray)
+      txKey: TransactionKey = (blockNumber, idx)
+    trie.put(rlp.encode(idx).toRange, encodedTx)
+    self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(txKey))
 
 iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): BytesRange =
   var transactionDb = initHexaryTrie(self.db, transactionRoot)

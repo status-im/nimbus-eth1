@@ -110,8 +110,6 @@ proc start(): NimbusObject =
   if status != syncSuccess:
     echo "Block sync failed: ", status
 
-  #runForever()
-
   nimbus.state = Running
   result = nimbus
 

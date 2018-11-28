@@ -254,6 +254,7 @@ proc processRpcApiList(v: string, flags: var set[RpcFlags]): ConfigStatus =
   for item in list:
     case item.toLowerAscii()
     of "eth": flags.incl RpcFlags.Eth
+    of "shh": flags.incl RpcFlags.Shh
     of "debug": flags.incl RpcFlags.Debug
     else:
       warn "unknown rpc api", name = item
@@ -555,7 +556,7 @@ NETWORKING OPTIONS:
 API AND CONSOLE OPTIONS:
   --rpc                   Enable the HTTP-RPC server
   --rpcbind:<value>       HTTP-RPC server will bind to given comma separated address:port pairs (default: 127.0.0.1:8545)
-  --rpcapi:<value>        Enable specific set of rpc api from comma separated list(eth, debug)
+  --rpcapi:<value>        Enable specific set of rpc api from comma separated list(eth, shh, debug)
 
 LOGGING AND DEBUGGING OPTIONS:
   --debug                 Enable debug mode
