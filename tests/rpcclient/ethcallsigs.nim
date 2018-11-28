@@ -16,7 +16,7 @@ proc eth_hashrate(): int
 proc eth_gasPrice(): GasInt
 proc eth_accounts(): seq[EthAddressStr]
 proc eth_blockNumber(): BlockNumber
-proc eth_getBalance(data: EthAddressStr, quantityTag: string): int
+proc eth_getBalance(data: EthAddressStr, quantityTag: string): UInt256
 proc eth_getStorageAt(data: EthAddressStr, quantity: int, quantityTag: string): seq[byte]
 proc eth_getTransactionCount(data: EthAddressStr, quantityTag: string)
 proc eth_getBlockTransactionCountByHash(data: array[32, byte])
@@ -26,7 +26,7 @@ proc eth_getUncleCountByBlockNumber(quantityTag: string)
 proc eth_getCode(data: EthAddressStr, quantityTag: string): HexDataStr
 proc eth_sign(data:EthAddressStr, message: HexDataStr): HexDataStr
 #proc eth_sendRawTransaction(data: string, quantityTag: int): UInt256
-proc eth_call(call: EthCall, quantityTag: string): UInt256
+proc eth_call(call: EthCall, quantityTag: string): string
 
 # TODO: Use eth_common types
 

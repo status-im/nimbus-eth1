@@ -113,7 +113,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns integer of the current block number the client is on.
     result = chain.getCanonicalHead().blockNumber
 
-  rpcsrv.rpc("eth_getBalance") do(data: EthAddressStr, quantityTag: string) -> GasInt:
+  rpcsrv.rpc("eth_getBalance") do(data: EthAddressStr, quantityTag: string) -> UInt256:
     ## Returns the balance of the account of given address.
     ##
     ## data: address to check for balance.
@@ -124,7 +124,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       addrBytes = data.toAddress
       balance = accountDb.get_balance(addrBytes)
 
-    result = balance.toInt
+    result = balance
 
   rpcsrv.rpc("eth_getStorageAt") do(data: EthAddressStr, quantity: int, quantityTag: string) -> UInt256:
     ## Returns the value from a storage position at a given address.
