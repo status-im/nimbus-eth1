@@ -17,7 +17,7 @@ func invalidInstruction*(computation: var BaseComputation) {.inline.} =
   raise newException(ValueError, "Invalid instruction, received an opcode not implemented in the current fork.")
 
 let FrontierOpDispatch {.compileTime.}: array[Op, NimNode] = block:
-  fill_enum_table_holes(Op, newIdentNode"invalidInstruction"):
+  fill_enum_table_holes(Op, newIdentNode("invalidInstruction")):
     [
       Stop: newIdentNode "toBeReplacedByBreak",
       Add: newIdentNode "add",
@@ -235,20 +235,22 @@ proc frontierVM(computation: var BaseComputation) =
 
 proc updateOpcodeExec*(computation: var BaseComputation, fork: Fork) =
   case fork
-  of FkFrontier:
+  of FkFrontier..FkSpurious:
     computation.opCodeExec = frontierVM
     computation.frontierVM()
   else:
     raise newException(VMError, "Unknown or not implemented fork: " & $fork)
 
 proc updateOpcodeExec*(computation: var BaseComputation) =
-  let fork = computation.vmState.blockHeader.blockNumber.toFork
+  let fork = computation.getFork
   computation.updateOpcodeExec(fork)
 
 proc executeOpcodes*(computation: var BaseComputation) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
-  let fork = computation.vmState.blockHeader.blockNumber.toFork
+  let fork = computation.getFork
   try:
     computation.updateOpcodeExec(fork)
   except VMError:
     computation.error = Error(info: getCurrentExceptionMsg())
+    debug "executeOpcodes() failed", error = getCurrentExceptionMsg()
+

@@ -7,7 +7,7 @@
 
 import
   unittest, strformat, strutils, tables, json, ospaths, times,
-  byteutils, ranges/typedranges, nimcrypto/[keccak, hash],
+  byteutils, ranges/typedranges, nimcrypto/[keccak, hash], options,
   rlp, eth_trie/db, eth_common,
   eth_keys,
   ./test_helpers,
@@ -23,14 +23,15 @@ suite "generalstate json tests":
   jsonTest("GeneralStateTests", testFixture)
 
 
-proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transaction, sender: EthAddress, expectedHash: string) =
+proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transaction, sender: EthAddress, expectedHash: string, testStatusIMPL: var TestStatus, fork: Fork) =
   var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
   vmState.mutateStateDB:
     setupStateDB(pre, db)
 
   defer:
     #echo vmState.readOnlyStateDB.dumpAccount("c94f5374fce5edbc8e2a8697c15331677e6ebf0b")
-    doAssert "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii == expectedHash
+    let obtainedHash = "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii
+    check obtainedHash == expectedHash
 
   if not validateTransaction(vmState, transaction, sender):
     vmState.mutateStateDB:
@@ -56,10 +57,10 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
       # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToEmpty.json
       #db.addBalance(generateAddress(sender, transaction.accountNonce), transaction.value)
 
-      let createGasUsed = applyCreateTransaction(db, transaction, vmState, sender, true)
+      let createGasUsed = applyCreateTransaction(db, transaction, vmState, sender, some(fork))
       db.addBalance(header.coinbase, createGasUsed)
     return
-  var computation = setupComputation(header, vmState, transaction, sender)
+  var computation = setupComputation(header, vmState, transaction, sender, some(fork))
 
   vmState.mutateStateDB:
     # contract creation transaction.to == 0, so ensure happens after
@@ -108,13 +109,16 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     )
 
   let ftrans = fixture["transaction"]
-  for expectation in fixture["post"]["Homestead"]:
-    let
-      expectedHash = expectation["hash"].getStr
-      indexes = expectation["indexes"]
-      dataIndex = indexes["data"].getInt
-      gasIndex = indexes["gas"].getInt
-      valueIndex = indexes["value"].getInt
-    let transaction = ftrans.getFixtureTransaction(dataIndex, gasIndex, valueIndex)
-    let sender = ftrans.getFixtureTransactionSender
-    testFixtureIndexes(header, fixture["pre"], transaction, sender, expectedHash)
+  for fork in supportedForks:
+    if fixture["post"].has_key(forkNames[fork]):
+      # echo "[fork: ", forkNames[fork], "]"
+      for expectation in fixture["post"][forkNames[fork]]:
+        let
+          expectedHash = expectation["hash"].getStr
+          indexes = expectation["indexes"]
+          dataIndex = indexes["data"].getInt
+          gasIndex = indexes["gas"].getInt
+          valueIndex = indexes["value"].getInt
+        let transaction = ftrans.getFixtureTransaction(dataIndex, gasIndex, valueIndex)
+        let sender = ftrans.getFixtureTransactionSender
+        testFixtureIndexes(header, fixture["pre"], transaction, sender, expectedHash, testStatusIMPL, fork)

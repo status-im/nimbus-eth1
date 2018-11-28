@@ -9,7 +9,8 @@
 
 import
   parseopt, strutils, macros, os,
-  asyncdispatch2, eth_keys, eth_p2p, eth_common, chronicles, nimcrypto/hash
+  asyncdispatch2, eth_keys, eth_p2p, eth_common, chronicles, nimcrypto/hash,
+  ./vm/interpreter/vm_forks
 
 const
   NimbusName* = "Nimbus"
@@ -175,14 +176,14 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
   of MainNet:
     ChainConfig(
       chainId:        MainNet.uint,
-      homesteadBlock: 1150000.u256,
-      daoForkBlock:   1920000.u256,
+      homesteadBlock: forkBlocks[FkHomestead],
+      daoForkBlock:   forkBlocks[FkDao],
       daoForkSupport: true,
-      eip150Block:    2463000.u256,
+      eip150Block:    forkBlocks[FkTangerine],
       eip150Hash:     toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
-      eip155Block:    2675000.u256,
-      eip158Block:    2675000.u256,
-      byzantiumBlock: 4370000.u256
+      eip155Block:    forkBlocks[FkSpurious],
+      eip158Block:    forkBlocks[FkSpurious],
+      byzantiumBlock: forkBlocks[FkByzantium]
     )
   of RopstenNet:
     ChainConfig(

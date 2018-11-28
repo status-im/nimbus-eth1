@@ -14,23 +14,36 @@ import
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
   ../tests/test_generalstate_failing
 
+const
+  # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
+  forkNames* = {
+    FkFrontier: "Frontier",
+    FkHomestead: "Homestead",
+    FkTangerine: "EIP150",
+    FkSpurious: "EIP158",
+    FkByzantium: "Byzantium",
+  }.toTable
+
+  supportedForks* = [FkHomestead]
+
 type
   Status* {.pure.} = enum OK, Fail, Skip
 
 func slowTest*(folder: string, name: string): bool =
-  # TODO: add vmPerformance and loop check here
-  result = folder == "stQuadraticComplexityTest" or
-           name in @["randomStatetest352.json", "randomStatetest1.json",
-                     "randomStatetest32.json", "randomStatetest347.json",
-                     "randomStatetest393.json", "randomStatetest626.json",
-                     "CALLCODE_Bounds.json", "DELEGATECALL_Bounds3.json",
-                     "CALLCODE_Bounds4.json", "CALL_Bounds.json",
-                     "DELEGATECALL_Bounds2.json", "CALL_Bounds3.json",
-                     "CALLCODE_Bounds2.json", "CALLCODE_Bounds3.json",
-                     "DELEGATECALL_Bounds.json", "CALL_Bounds2a.json",
-                     "CALL_Bounds2.json",
-                     "CallToNameRegistratorMemOOGAndInsufficientBalance.json",
-                     "CallToNameRegistratorTooMuchMemory0.json"]
+  result =
+    (folder == "vmPerformance" and "loop" in name) or
+    folder == "stQuadraticComplexityTest" or
+    name in @["randomStatetest352.json", "randomStatetest1.json",
+             "randomStatetest32.json", "randomStatetest347.json",
+             "randomStatetest393.json", "randomStatetest626.json",
+             "CALLCODE_Bounds.json", "DELEGATECALL_Bounds3.json",
+             "CALLCODE_Bounds4.json", "CALL_Bounds.json",
+             "DELEGATECALL_Bounds2.json", "CALL_Bounds3.json",
+             "CALLCODE_Bounds2.json", "CALLCODE_Bounds3.json",
+             "DELEGATECALL_Bounds.json", "CALL_Bounds2a.json",
+             "CALL_Bounds2.json",
+             "CallToNameRegistratorMemOOGAndInsufficientBalance.json",
+             "CallToNameRegistratorTooMuchMemory0.json"]
 
 func failIn32Bits(folder, name: string): bool =
   return name in @[
@@ -82,7 +95,7 @@ func failIn32Bits(folder, name: string): bool =
     "returndatasize_initial_zero_read.json",
     "call_then_create_successful_then_returndatasize.json",
     "call_outsize_then_create_successful_then_returndatasize.json",
-    
+
     "returndatacopy_following_create.json",
     "returndatacopy_following_revert_in_create.json",
     "returndatacopy_following_successful_create.json",
@@ -99,26 +112,29 @@ func allowedFailInCurrentBuild(folder, name: string): bool =
   return allowedFailingGeneralStateTest(folder, name)
 
 func validTest*(folder: string, name: string): bool =
-  # tests we want to skip or which segfault will be skipped here
-  result = (folder != "vmPerformance" or "loop" notin name) and
-           not slowTest(folder, name)
+  # we skip tests that are slow or expected to fail for now
+  result =
+    not slowTest(folder, name) and
+    not allowedFailInCurrentBuild(folder, name)
 
-proc lacksHomesteadPostStates*(filename: string): bool =
+proc lacksSupportedForks*(filename: string): bool =
   # XXX: Until Nimbus supports Byzantine or newer forks, as opposed
-  # to Homestead, ~1k of ~2.5k GeneralStateTests won't work. Nimbus
-  # supporting Byzantine should trigger removal of this function. A
-  # possible alternate approach of avoiding double-reading fixtures
-  # seemed less than ideal, as by the time that happens, output has
-  # already appeared. Compatible with non-GST fixtures. Will become
-  # expensive once BlockchainTests appear, so try to remove first.
+  # to Homestead, ~1k of ~2.5k GeneralStateTests won't work.
   let fixtures = parseJSON(readFile(filename))
   var fixture: JsonNode
   for label, child in fixtures:
     fixture = child
     break
 
-  return fixture.kind == JObject and fixture.has_key("transaction") and
-    (fixture.has_key("post") and not fixture["post"].has_key("Homestead"))
+  # not all fixtures make a distinction between forks, so default to accepting
+  # them all, until we find the ones that specify forks in their "post" section
+  result = false
+  if fixture.kind == JObject and fixture.has_key("transaction") and fixture.has_key("post"):
+    result = true
+    for fork in supportedForks:
+      if fixture["post"].has_key(forkNames[fork]):
+        result = false
+        break
 
 macro jsonTest*(s: static[string], handler: untyped): untyped =
   let
@@ -128,30 +144,29 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
     final  = newIdentNode"final"
     name   = newIdentNode"name"
     formatted = newStrLitNode"{symbol[final]} {name:<64}{$final}{'\n'}"
+
   result = quote:
     var filenames: seq[(string, string, string)] = @[]
     var status = initOrderedTable[string, OrderedTable[string, Status]]()
     for filename in walkDirRec("tests" / "fixtures" / `s`):
+      if not filename.endsWith(".json"):
+        continue
       var (folder, name) = filename.splitPath()
       let last = folder.splitPath().tail
       if not status.hasKey(last):
         status[last] = initOrderedTable[string, Status]()
       status[last][name] = Status.Skip
-      if last.validTest(name) and not filename.lacksHomesteadPostStates:
+      if last.validTest(name) and not filename.lacksSupportedForks:
         filenames.add((filename, last, name))
     for child in filenames:
       let (filename, folder, name) = child
+      # we set this here because exceptions might be raised in the handler:
+      status[folder][name] = Status.Fail
       test filename:
         echo folder / name
-        status[folder][name] = Status.FAIL
-        try:
-          `handler`(parseJSON(readFile(filename)), `testStatusIMPL`)
-          if `testStatusIMPL` == OK:
-            status[folder][name] = Status.OK
-        except AssertionError:
-          status[folder][name] = Status.FAIL
-          if not allowedFailInCurrentBuild(folder, name):
-            raise
+        `handler`(parseJSON(readFile(filename)), `testStatusIMPL`)
+        if `testStatusIMPL` == OK:
+          status[folder][name] = Status.OK
 
     status.sort do (a: (string, OrderedTable[string, Status]),
                     b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
