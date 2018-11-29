@@ -4,7 +4,7 @@ import
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
   ../nimbus/constants,
   ../nimbus/nimbus/[vm_state, config],
-  ../nimbus/db/[state_db, db_chain], eth_common, byteutils,
+  ../nimbus/db/[state_db, db_chain, storage_types], eth_common, byteutils,
   ../nimbus/p2p/chain,
   ../nimbus/genesis,  
   eth_trie/db,
@@ -58,7 +58,8 @@ proc doTests =
   defaultGenesisBlockForNetwork(conf.net.networkId.toPublicNetwork()).commit(chain)
   state.mutateStateDB:
     db.setBalance(address, balance)
-  
+  assert(canonicalHeadHashKey().toOpenArray in state.chainDb.db)
+
   # Create Ethereum RPCs
   var
     rpcServer = newRpcSocketServer(["localhost:8545"])
