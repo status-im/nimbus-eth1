@@ -29,14 +29,6 @@ import
 proc `%`*(value: Time): JsonNode =
   result = %value.toSeconds
 
-func toAddress(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
-
-func toHash(value: array[32, byte]): Hash256 {.inline.} =
-  result.data = value
-
-func toHash(value: EthHashStr): Hash256 {.inline.} =
-  result = hexToPaddedByteArray[32](value.string).toHash
-
 template balance(addressDb: AccountStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
   addressDb.getBalance(address).truncate(int64)

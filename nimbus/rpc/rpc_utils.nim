@@ -9,10 +9,11 @@
 
 import hexstrings, nimcrypto, eth_common, byteutils
 
-func strToAddress*(value: string): EthAddress = hexToPaddedByteArray[20](value)
+func toAddress*(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
 
 func toHash*(value: array[32, byte]): Hash256 {.inline.} =
   result.data = value
 
-func strToHash*(value: string): Hash256 {.inline.} =
-  result = hexToPaddedByteArray[32](value).toHash
+func toHash*(value: EthHashStr): Hash256 {.inline.} =
+  result = hexToPaddedByteArray[32](value.string).toHash
+
