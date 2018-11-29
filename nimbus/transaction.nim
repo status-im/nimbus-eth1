@@ -8,6 +8,18 @@
 import
   constants, errors, eth_common, eth_keys, nimcrypto, rlp
 
+proc initTransaction*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
+  value: UInt256, payload: Blob, V: byte, R, S: UInt256, isContractCreation = false): Transaction =
+  result.accountNonce = nonce
+  result.gasPrice = gasPrice
+  result.gasLimit = gasLimit
+  result.to = to
+  result.value = value
+  result.V = V
+  result.R = R
+  result.S = S
+  result.isContractCreation = isContractCreation
+
 proc intrinsicGas*(t: Transaction): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used

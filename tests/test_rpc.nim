@@ -1,11 +1,12 @@
 import
-  unittest, json, strformat, nimcrypto, rlp,
+  unittest, json, strformat, nimcrypto, rlp, options,
   json_rpc/[rpcserver, rpcclient],
-  ../nimbus/rpc/[common, p2p, hexstrings],
+  ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
   ../nimbus/constants,
   ../nimbus/nimbus/[vm_state, config],
   ../nimbus/db/[state_db, db_chain], eth_common, byteutils,
   ../nimbus/p2p/chain,
+  ../nimbus/genesis,  
   eth_trie/db,
   eth_p2p, eth_keys
 import rpcclient/test_hexstrings
@@ -53,9 +54,11 @@ proc doTests =
   let
     balance = 100.u256
     address: EthAddress = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+    conf = getConfiguration()
+  defaultGenesisBlockForNetwork(conf.net.networkId.toPublicNetwork()).commit(chain)
   state.mutateStateDB:
     db.setBalance(address, balance)
-
+  
   # Create Ethereum RPCs
   var
     rpcServer = newRpcSocketServer(["localhost:8545"])
@@ -68,6 +71,13 @@ proc doTests =
   waitFor client.connect("localhost", Port(8545))
 
   suite "Remote Procedure Calls":
+    # TODO: Currently returning 'block not found' when fetching header in p2p, so cannot perform tests
+    test "eth_call":
+      let
+        blockNum = state.blockheader.blockNumber
+        callParams = EthCall(value: some(100.u256))
+      var r = waitFor client.eth_call(callParams, "0x" & blockNum.toHex)
+      echo r
     test "eth_getBalance":
       expect ValueError:
         # check error is raised on null address

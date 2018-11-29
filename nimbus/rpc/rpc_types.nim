@@ -24,18 +24,18 @@ type
     to*: EthAddressStr        # (optional when creating new contract) the address the transaction is directed to.
     gas*: GasInt              # (optional, default: 90000) integer of the gas provided for the transaction execution. It will return unused gas.
     gasPrice*: GasInt         # (optional, default: To-Be-Determined) integer of the gasPrice used for each paid gas.
-    value*: int               # (optional) integer of the value sent with this transaction.
+    value*: UInt256           # (optional) integer of the value sent with this transaction.
     data*: EthHashStr         # TODO: Support more data. The compiled code of a contract OR the hash of the invoked method signature and encoded parameters. For details see Ethereum Contract ABI.
-    nonce*: int               # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
+    nonce*: AccountNonce      # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce 
 
   EthCall* = object
     # Parameter from user
-    source*: EthAddressStr    # (optional) The address the transaction is send from.
-    to*: EthAddressStr        # The address the transaction is directed to.
-    gas*: GasInt              # (optional) Integer of the gas provided for the transaction execution. eth_call consumes zero gas, but this parameter may be needed by some executions.
-    gasPrice*: GasInt         # (optional) Integer of the gasPrice used for each paid gas.
-    value*: int               # (optional) Integer of the value sent with this transaction.
-    data*: EthHashStr         # (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI.
+    source*: Option[EthAddressStr]  # (optional) The address the transaction is send from.
+    to*: Option[EthAddressStr]      # (optional in eth_estimateGas, not in eth_call) The address the transaction is directed to.
+    gas*: Option[GasInt]            # (optional) Integer of the gas provided for the transaction execution. eth_call consumes zero gas, but this parameter may be needed by some executions.
+    gasPrice*: Option[GasInt]       # (optional) Integer of the gasPrice used for each paid gas.
+    value*: Option[UInt256]         # (optional) Integer of the value sent with this transaction.
+    data*: Option[EthHashStr]       # (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI.
 
   ## A block object, or null when no block was found
   ## Note that this includes slightly different information from eth_common.BlockHeader
