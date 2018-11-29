@@ -375,25 +375,34 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## call: the transaction call object.
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the amount of gas used.
-    # TODO: Use optional fields with EthCall
     var
       header = chain.headerFromTag(quantityTag)
       vmState = newBaseVMState(header, chain)
     let
-      gasLimit = if call.gas > 0.GasInt: call.gas else: header.gasLimit
-      gasPrice = if call.gasPrice > 0: call.gasPrice else: 0.GasInt
+      gasLimit = if
+        call.gas.isSome and call.gas.get > 0.GasInt: call.gas.get
+        else: header.gasLimit
+      gasPrice = if
+        call.gasPrice.isSome and call.gasPrice.get > 0: call.gasPrice.get
+        else: 0.GasInt
+      sender = if
+        call.source.isSome: call.source.get.toAddress
+        else: ZERO_ADDRESS
+      destination = if
+        call.to.isSome: call.to.get.toAddress
+        else: ZERO_ADDRESS
       curState = chain.getStateDb(header.stateRoot, true)
-      sender = call.source.string.strToAddress
-      destination = call.to.string.strToAddress
       nonce = curState.getNonce(sender)
-      value = call.value
-      # TODO: Use initTransaction when merged
+      value = if
+        call.value.isSome: call.value.get
+        else: 0.u256
+
       transaction = Transaction(
         accountNonce: nonce,
         gasPrice: gasPrice,
         gasLimit: gasLimit,
         to: destination,
-        value: value.u256,
+        value: value,
         payload: @[]
       )
     result = vmState.binarySearchGas(transaction, sender, gasPrice)
