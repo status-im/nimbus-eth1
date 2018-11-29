@@ -333,6 +333,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       blockHash = chain.getBlockHash(txDetails.blockNumber)
       transaction = getBlockBody(blockHash).transactions[txDetails.index]
     populateTransactionObject(transaction, txDetails.index, header, blockHash)
+    # TODO: if the requested transaction not in blockchain
+    # try to look for pending transaction in txpool
 
   rpcsrv.rpc("eth_getTransactionByBlockHashAndIndex") do(data: HexDataStr, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block hash and transaction index position.
