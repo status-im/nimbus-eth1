@@ -25,10 +25,10 @@ proc rootHash*(accountDb: AccountStateDB): KeccakHash =
 # TODO: self.Trie.rootHash = value
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
-                        root: KeccakHash, readOnly: bool = false,
+                        root: KeccakHash, pruneTrie: bool, readOnly: bool = false,
                         accountCodes = newTable[Hash256, ByteRange]()): AccountStateDB =
   result.new()
-  result.trie = initSecureHexaryTrie(backingStore, root)
+  result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
   result.accountCodes = accountCodes
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
