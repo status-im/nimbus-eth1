@@ -118,7 +118,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
     assert(head.blockNumber == headers[i].blockNumber - 1)
-    var stateDb = newAccountStateDB(c.db.db, head.stateRoot)
+    var stateDb = newAccountStateDB(c.db.db, head.stateRoot, c.db.pruneTrie)
     var gasReward = 0.u256
 
     assert(bodies[i].transactions.calcTxRoot == headers[i].txRoot)

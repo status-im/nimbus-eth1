@@ -18,6 +18,7 @@ type
     # debt while setting a CI baseline from which to improve/replace.
     accountCodes*: TableRef[Hash256, ByteRange]
     # TODO db*: JournalDB
+    pruneTrie*: bool
 
   KeyType = enum
     blockNumberToHash
@@ -27,10 +28,11 @@ type
     blockNumber: BlockNumber
     index: int
 
-proc newBaseChainDB*(db: TrieDatabaseRef): BaseChainDB =
+proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool): BaseChainDB =
   new(result)
   result.db = db
   result.accountCodes = newTable[Hash256, ByteRange]()
+  result.pruneTrie = pruneTrie
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
@@ -275,7 +277,7 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 
 proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
   # TODO: readOnly is not used.
-  result = newAccountStateDB(self.db, stateRoot, readOnly, self.accountCodes)
+  result = newAccountStateDB(self.db, stateRoot, self.pruneTrie, readOnly, self.accountCodes)
 
 
 # Deprecated:
