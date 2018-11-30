@@ -134,6 +134,10 @@ type
     ## Debug configuration object
     flags*: set[DebugFlags]       ## Debug flags
 
+  PruneMode* {.pure.} = enum
+    Full
+    Archive
+
   ChainConfig* = object
     chainId*: uint
     homesteadBlock*: BlockNumber
@@ -154,6 +158,7 @@ type
     ## Main Nimbus configuration object
     dataDir*: string
     keyFile*: string
+    prune*: PruneMode
     rpc*: RpcConfiguration        ## JSON-RPC configuration
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
@@ -313,6 +318,18 @@ proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
 #   except:
 #     result = ErrorParseOption
 
+proc processPruneList(v: string, flags: var PruneMode): ConfigStatus =
+  var list = newSeq[string]()
+  processList(v, list)
+  result = Success
+  for item in list:
+    case item.toLowerAscii()
+    of "full": flags = PruneMode.Full
+    of "archive": flags = PruneMode.Archive
+    else:
+      warn "unknown prune flags", name = item
+      result = ErrorIncorrectOption
+
 proc processEthArguments(key, value: string): ConfigStatus =
   result = Success
   let config = getConfiguration()
@@ -324,6 +341,8 @@ proc processEthArguments(key, value: string): ConfigStatus =
       result = ErrorIncorrectOption
   of "dataDir":
     config.dataDir = value
+  of "prune":
+    result = processPruneList(value, config.prune)
   else:
     result = EmptyOption
 
@@ -514,6 +533,7 @@ proc initConfiguration(): NimbusConfiguration =
                     ".cache" / "nimbus" / "db"
 
   result.dataDir = getHomeDir() / dataDir
+  result.prune = PruneMode.Full
 
   ## Debug defaults
   result.debug.flags = {}
@@ -533,6 +553,7 @@ USAGE:
 ETHEREUM OPTIONS:
   --keyfile:<value>       Use keyfile storage file
   --datadir:<value>       Base directory for all blockchain-related data
+  --prune:<value>         Blockchain prune mode(full or archive)
 
 NETWORKING OPTIONS:
   --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
