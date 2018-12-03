@@ -102,13 +102,14 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: Ba
       db.setCode(contractAddress, ByteRange())
     db.addBalance(sender, (t.gasLimit.u256 - gasUsed2 - codeCost.u256)*t.gasPrice.u256)
     return (gasUsed2 + codeCost.u256) * t.gasPrice.u256
-
   else:
     # FIXME: don't do this revert, but rather only subBalance correctly
     # the if transactionfailed at end is what is supposed to pick it up
     # especially when it's cross-function, it's ugly/fragile
     db.addBalance(sender, t.value)
     echo "isError: ", c.isError
+    if c.tracingEnabled:
+      c.traceError()
     return t.gasLimit.u256 * t.gasPrice.u256
 
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=

@@ -41,7 +41,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
     ## * disableMemory: BOOL. Setting this to true will disable memory capture (default = false).
     ## * disableStack: BOOL. Setting this to true will disable stack capture (default = false).
     let
-      txHash = toHash(data.string)
+      txHash = toHash(data)
       txDetails = chainDB.getTransactionKey(txHash)
       blockHeader = chainDB.getBlockHeader(txDetails.blockNumber)
       blockHash = chainDB.getBlockHash(txDetails.blockNumber)
