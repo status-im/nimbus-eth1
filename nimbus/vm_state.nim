@@ -9,20 +9,7 @@ import
   macros, strformat, tables,
   eth_common, eth_trie/db,
   ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
-  ./utils/header
-
-type
-  BaseVMState* = ref object of RootObj
-    prevHeaders*: seq[BlockHeader]
-    # receipts*:
-    chaindb*: BaseChainDB
-    accessLogs*: AccessLogs
-    blockHeader*: BlockHeader
-    name*: string
-
-  AccessLogs* = ref object
-    reads*: Table[string, string]
-    writes*: Table[string, string]
+  ./utils/header, json, vm_types, vm/transaction_tracer
 
 proc newAccessLogs*: AccessLogs =
   AccessLogs(reads: initTable[string, string](), writes: initTable[string, string]())
@@ -37,13 +24,15 @@ proc `$`*(vmState: BaseVMState): string =
   else:
     result = &"VMState {vmState.name}:\n  header: {vmState.blockHeader}\n  chaindb:  {vmState.chaindb}"
 
-proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB): BaseVMState =
+proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
   new result
   result.prevHeaders = @[]
   result.name = "BaseVM"
   result.accessLogs = newAccessLogs()
   result.blockHeader = header
   result.chaindb = chainDB
+  result.tracer.initTracer(tracerFlags)
+  result.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
 
 method blockhash*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.hash
@@ -124,3 +113,6 @@ export DbTransaction, commit, rollback, dispose, safeDispose
 proc beginTransaction*(vmState: BaseVMState): DbTransaction =
   vmState.chaindb.db.beginTransaction()
 
+proc getTracingResult*(vmState: BaseVMState): JsonNode =
+  assert(vmState.tracingEnabled)
+  vmState.tracer.trace

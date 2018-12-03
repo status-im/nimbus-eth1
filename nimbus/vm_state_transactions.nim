@@ -33,7 +33,7 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
     readOnlyDB.getBalance(sender) >= gas_cost
 
-proc setupComputation*(header: BlockHeader, vmState: var BaseVMState, transaction: Transaction, sender: EthAddress) : BaseComputation =
+proc setupComputation*(header: BlockHeader, vmState: BaseVMState, transaction: Transaction, sender: EthAddress) : BaseComputation =
   let message = newMessage(
       gas = transaction.gasLimit - transaction.payload.intrinsicGas,
       gasPrice = transaction.gasPrice,
@@ -59,7 +59,7 @@ proc execComputation*(computation: var BaseComputation): bool =
   except ValueError:
     result = false
 
-proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, head: BlockHeader, vmState: var BaseVMState, sender: EthAddress, useHomestead: bool = false): UInt256 =
+proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: BaseVMState, sender: EthAddress, useHomestead: bool = false): UInt256 =
   doAssert t.isContractCreation
   # TODO: clean up params
   echo "Contract creation"
@@ -71,7 +71,7 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, head: Block
   let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload,
                        options = newMessageOptions(origin = sender,
                                                    createAddress = contractAddress))
-  var c = newBaseComputation(vmState, head.blockNumber, msg)
+  var c = newBaseComputation(vmState, vmState.blockNumber, msg)
 
   if execComputation(c):
     db.addBalance(contractAddress, t.value)
@@ -111,7 +111,7 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, head: Block
     echo "isError: ", c.isError
     return t.gasLimit.u256 * t.gasPrice.u256
 
-method executeTransaction(vmState: var BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
+method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
   # Execute the transaction in the vm
   # TODO: introduced here: https://github.com/ethereum/py-evm/commit/21c57f2d56ab91bb62723c3f9ebe291d0b132dde
   # Refactored/Removed here: https://github.com/ethereum/py-evm/commit/cc991bf
@@ -119,7 +119,7 @@ method executeTransaction(vmState: var BaseVMState, transaction: Transaction): (
   raise newException(ValueError, "Must be implemented by subclasses")
 
 
-method addTransaction*(vmState: var BaseVMState, transaction: Transaction, computation: BaseComputation, b: Block): (Block, Table[string, string]) =
+method addTransaction*(vmState: BaseVMState, transaction: Transaction, computation: BaseComputation, b: Block): (Block, Table[string, string]) =
   # Add a transaction to the given block and
   # return `trieData` to store the transaction data in chaindb in VM layer
   # Update the bloomFilter, transaction trie and receipt trie roots, bloom_filter,
@@ -149,7 +149,7 @@ method addTransaction*(vmState: var BaseVMState, transaction: Transaction, compu
   result = (b, initTable[string, string]())
 
 method applyTransaction*(
-    vmState: var BaseVMState,
+    vmState: BaseVMState,
     transaction: Transaction,
     b: Block,
     isStateless: bool): (BaseComputation, Block, Table[string, string]) =

@@ -1,8 +1,6 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
   ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto,
-  ../vm_state_transactions,
-  eth_trie/db, eth_trie, rlp,
-  sugar
+  ../vm_state_transactions, sugar, ../utils, eth_trie/db
 
 type
   Chain* = ref object of AbstractChainDB
@@ -32,7 +30,7 @@ method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): b
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddress, head: BlockHeader, chainDB: BaseChainDB): UInt256 =
+proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   echo "Sender: ", sender
@@ -70,8 +68,7 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   else:
     if t.isContractCreation:
       # TODO: re-derive sender in callee for cleaner interface, perhaps
-      var vmState = newBaseVMState(head, chainDB)
-      return applyCreateTransaction(db, t, head, vmState, sender)
+      return applyCreateTransaction(db, t, vmState, sender)
 
     else:
       let code = db.getCode(t.to)
@@ -98,12 +95,6 @@ proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddre
   db.addBalance(sender, refund)
 
   return gasUsed.u256 * t.gasPrice.u256
-
-proc calcTxRoot(transactions: openarray[Transaction]): Hash256 =
-  var tr = initHexaryTrie(newMemoryDB())
-  for i, t in transactions:
-    tr.put(rlp.encode(i).toRange, rlp.encode(t).toRange)
-  return tr.rootHash
 
 method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]) =
   # Run the VM here
@@ -135,7 +126,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
         for t in bodies[i].transactions:
           var sender: EthAddress
           if t.getSender(sender):
-            gasReward += processTransaction(stateDb, t, sender, head, c.db)
+            gasReward += processTransaction(stateDb, t, sender, vmState)
           else:
             assert(false, "Could not get sender")
 

@@ -11,7 +11,7 @@ import
   ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter, utils/macros_gen_opcodes],
   ./code_stream,
   ../vm_types, ../errors, precompiles,
-  ./stack, ./computation, ./transaction_tracer, terminal # Those are only needed for logging
+  ./stack, ./computation, terminal # Those are only needed for logging
 
 func invalidInstruction*(computation: var BaseComputation) {.inline.} =
   raise newException(ValueError, "Invalid instruction, received an opcode not implemented in the current fork.")
@@ -192,19 +192,19 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
         if BaseGasCosts[op].kind == GckFixed:
           quote do:
             if `computation`.tracingEnabled:
-              `computation`.tracer.traceOpCodeStarted(`computation`, $`asOp`)
+              `computation`.traceOpCodeStarted($`asOp`)
             `computation`.gasMeter.consumeGas(`computation`.gasCosts[`asOp`].cost, reason = $`asOp`)
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
-              `computation`.tracer.traceOpCodeEnded(`computation`)
+              `computation`.traceOpCodeEnded()
             `instr` = `computation`.code.next()
         else:
           quote do:
             if `computation`.tracingEnabled:
-              `computation`.tracer.traceOpCodeStarted(`computation`, $`asOp`)
+              `computation`.traceOpCodeStarted($`asOp`)
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
-              `computation`.tracer.traceOpCodeEnded(`computation`)
+              `computation`.traceOpCodeEnded()
             when `asOp` in {Return, Revert, SelfDestruct}:
               break
             else:
