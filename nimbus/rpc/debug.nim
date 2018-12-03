@@ -11,7 +11,7 @@ import
   strutils, hexstrings, eth_p2p, options,
   ../db/[db_chain, state_db, storage_types],
   json_rpc/rpcserver, json, macros, rpc_utils,
-  eth_common
+  eth_common, ../tracer, ../vm_state, ../vm_types
 
 type
   TraceTxOptions = object
@@ -19,10 +19,13 @@ type
     disableMemory: Option[bool]
     disableStack: Option[bool]
 
-proc setupDebugRpc*(chain: BaseChainDB, rpcsrv: RpcServer) =
+proc isTrue(x: Option[bool]): bool =
+  result = x.isSome and x.get() == true
+
+proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
 
   proc getBlockBody(hash: Hash256): BlockBody =
-    if not chain.getBlockBody(hash, result):
+    if not chainDB.getBlockBody(hash, result):
       raise newException(ValueError, "Error when retrieving block body")
 
   rpcsrv.rpc("debug_traceTransaction") do(data: HexDataStr, options: Option[TraceTxOptions]) -> JsonNode:
@@ -39,7 +42,18 @@ proc setupDebugRpc*(chain: BaseChainDB, rpcsrv: RpcServer) =
     ## * disableStack: BOOL. Setting this to true will disable stack capture (default = false).
     let
       txHash = strToHash(data.string)
-      txDetails = chain.getTransactionKey(txHash)
-      blockHeader = chain.getBlockHeader(txDetails.blockNumber)
-      blockHash = chain.getBlockHash(txDetails.blockNumber)
+      txDetails = chainDB.getTransactionKey(txHash)
+      blockHeader = chainDB.getBlockHeader(txDetails.blockNumber)
+      blockHash = chainDB.getBlockHash(txDetails.blockNumber)
       blockBody = getBlockBody(blockHash)
+
+    var
+      flags: set[TracerFlags]
+
+    if options.isSome:
+      let opts = options.get
+      if opts.disableStorage.isTrue: flags.incl TracerFlags.DisableStorage
+      if opts.disableMemory.isTrue: flags.incl TracerFlags.DisableMemory
+      if opts.disableStack.isTrue: flags.incl TracerFlags.DisableStack
+
+    traceTransaction(chainDB, blockHeader, blockBody, txDetails.index, flags)

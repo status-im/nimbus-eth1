@@ -6,14 +6,38 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables, json,
-  eth_common,
-  ./constants, ./vm_state,
+  tables, eth_common,
+  ./constants, json,
   ./vm/[memory, stack, code_stream],
-  ./vm/interpreter/[gas_costs, opcode_values] # TODO - will be hidden at a lower layer
-
+  ./vm/interpreter/[gas_costs, opcode_values], # TODO - will be hidden at a lower layer
+  ./db/db_chain
 
 type
+  BaseVMState* = ref object of RootObj
+    prevHeaders*   : seq[BlockHeader]
+    # receipts*:
+    chaindb*       : BaseChainDB
+    accessLogs*    : AccessLogs
+    blockHeader*   : BlockHeader
+    name*          : string
+    tracingEnabled*: bool
+    tracer*        : TransactionTracer
+
+  AccessLogs* = ref object
+    reads*: Table[string, string]
+    writes*: Table[string, string]
+
+  TracerFlags* {.pure.} = enum
+    EnableTracing
+    DisableStorage
+    DisableMemory
+    DisableStack
+
+  TransactionTracer* = object
+    trace*: JsonNode
+    gasRemaining*: GasInt
+    flags*: set[TracerFlags]
+
   OpcodeExecutor* = proc(computation: var BaseComputation)
 
   BaseComputation* = ref object of RootObj
@@ -34,8 +58,6 @@ type
     opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     opCodeExec*:            OpcodeExecutor
-    tracingEnabled*:        bool
-    tracer*:                TransactionTracer
 
   Error* = ref object
     info*:                  string
@@ -106,8 +128,3 @@ type
     createAddress*:           EthAddress
     codeAddress*:             EthAddress
     flags*:                   MsgFlags
-
-  TransactionTracer* = object
-    trace*: JsonNode
-    gasRemaining*: GasInt
-
