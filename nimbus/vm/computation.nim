@@ -286,11 +286,14 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
   else:
     result = c.gasMeter.gasRemaining
 
-template tracingEnabled*(c: BaseComputation): bool =
+proc tracingEnabled*(c: BaseComputation): bool =
   c.vmState.tracingEnabled
 
-template traceOpCodeStarted*(c: BaseComputation, op: string) =
+proc traceOpCodeStarted*(c: BaseComputation, op: string) =
   traceOpCodeStarted(c.vmState.tracer, c, op)
 
 proc traceOpCodeEnded*(c: BaseComputation) =
   c.vmState.tracer.traceOpCodeEnded(c)
+
+proc traceError*(c: BaseComputation) =
+  c.vmState.tracer.traceError(c)
