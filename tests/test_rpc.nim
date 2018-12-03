@@ -87,6 +87,12 @@ proc doTests =
       let blockNum = state.blockheader.blockNumber
       var r = waitFor client.eth_getBalance(address.toEthAddressStr, "0x" & blockNum.toHex)
       echo r
+    test "eth_estimateGas":
+      let
+        call = EthCall()
+        blockNum = state.blockheader.blockNumber
+      var r = waitFor client.eth_estimateGas(call, "0x" & blockNum.toHex)
+      check r == 21_000
 
   rpcServer.stop()
   rpcServer.close()
