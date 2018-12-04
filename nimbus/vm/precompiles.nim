@@ -138,10 +138,12 @@ proc modExpInternal(computation: var BaseComputation, base_len, exp_len, mod_len
           max(adj_exp_len, 1)
       ) div GasQuadDivisor
 
+    computation.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+
   block: # Processing
     # TODO: specs mentions that we should return in "M" format
-    # i.e. if Base and exp are uint512 and Modulo an uint256
-    # we should return a 256-bit big-endian byte array
+    #       i.e. if Base and exp are uint512 and Modulo an uint256
+    #       we should return a 256-bit big-endian byte array
 
     # Force static evaluation
     func zero(): static array[T.bits div 8, byte] = discard

@@ -39,18 +39,17 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   for label, child in fixtures:
     case toLowerAscii(label)
-    # of "ecrecover": child.doTest(paEcRecover.ord, ecRecover)
-    # of "sha256": child.doTest(paSha256.ord, sha256)
-    # of "ripemd": child.doTest(paRipeMd160.ord, ripemd160)
-    # of "identity": child.doTest(paIdentity.ord, identity)
+    of "ecrecover": child.doTest(paEcRecover.ord, ecRecover)
+    of "sha256": child.doTest(paSha256.ord, sha256)
+    of "ripemd": child.doTest(paRipeMd160.ord, ripemd160)
+    of "identity": child.doTest(paIdentity.ord, identity)
     of "modexp": child.doTest(paModExp.ord, modexp)
-    # of "bn256add": child.doTest(paEcAdd.ord, bn256ECAdd)
-    # of "bn256mul": child.doTest(paEcMul.ord, bn256ECMul)
-    # of "ecpairing": child.doTest(paPairing.ord, bn256ecPairing)
+    of "bn256add": child.doTest(paEcAdd.ord, bn256ECAdd)
+    of "bn256mul": child.doTest(paEcMul.ord, bn256ECMul)
+    of "ecpairing": child.doTest(paPairing.ord, bn256ecPairing)
     else:
       #raise newException(ValueError, "Unknown test vector '" & $label & "'")
-      # echo "Unknown test vector '" & $label & "'"
-      discard
+      echo "Unknown test vector '" & $label & "'"
 
 suite "Precompiles":
   jsonTest("PrecompileTests", testFixture)
