@@ -18,6 +18,7 @@ type
     disableStorage: Option[bool]
     disableMemory: Option[bool]
     disableStack: Option[bool]
+    disableState: Option[bool]
 
 proc isTrue(x: Option[bool]): bool =
   result = x.isSome and x.get() == true
@@ -40,6 +41,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
     ## * disableStorage: BOOL. Setting this to true will disable storage capture (default = false).
     ## * disableMemory: BOOL. Setting this to true will disable memory capture (default = false).
     ## * disableStack: BOOL. Setting this to true will disable stack capture (default = false).
+    ## * disableState: BOOL. Setting this to true will disable state trie capture (default = false).
     let
       txHash = toHash(data)
       txDetails = chainDB.getTransactionKey(txHash)
@@ -55,5 +57,6 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       if opts.disableStorage.isTrue: flags.incl TracerFlags.DisableStorage
       if opts.disableMemory.isTrue: flags.incl TracerFlags.DisableMemory
       if opts.disableStack.isTrue: flags.incl TracerFlags.DisableStack
+      if opts.disableState.isTrue: flags.incl TracerFlags.DisableState
 
     traceTransaction(chainDB, blockHeader, blockBody, txDetails.index, flags)
