@@ -14,4 +14,5 @@ import  ./test_code_stream,
         ./test_caching_db_backend,
         ./test_genesis,
         ./test_vm_json,
+        ./test_precompiles,
         ./test_generalstate_json
