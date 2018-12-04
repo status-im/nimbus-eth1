@@ -13,14 +13,14 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags]): JsonNode =
   let
     parent = db.getParentHeader(header)
-    # we add a memory layer between backend/upper layer db
+    # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?    
+    captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?
     vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {TracerFlags.EnableTracing})
-    
+
   var stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
   if header.txRoot == BLANK_ROOT_HASH: return
   assert(body.transactions.calcTxRoot == header.txRoot)
@@ -40,7 +40,8 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
   result["gas"] = %gasUsed
 
   # now we dump captured state db
-  var n = newJObject()
-  for k, v in pairsInMemoryDB(memoryDB):
-    n[k.prefixHex] = %v.prefixHex
-  result["snapshot"] = n
+  if TracerFlags.DisableState notin tracerFlags:
+    var n = newJObject()
+    for k, v in pairsInMemoryDB(memoryDB):
+      n[k.prefixHex] = %v.prefixHex
+    result["state"] = n

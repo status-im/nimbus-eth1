@@ -32,6 +32,7 @@ type
     DisableStorage
     DisableMemory
     DisableStack
+    DisableState
 
   TransactionTracer* = object
     trace*: JsonNode
