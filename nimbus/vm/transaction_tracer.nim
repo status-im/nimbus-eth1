@@ -58,7 +58,9 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
   j["gasCost"] = %(tracer.gasRemaining - c.gasMeter.gasRemaining)
 
   if c.lastOpCodeHasRetVal:
-    j["returnValue"] = %("0x" & toHex(c.rawOutput, true))
+    let returnValue = %("0x" & toHex(c.rawOutput, true))
+    j["returnValue"] = returnValue
+    tracer.trace["returnValue"] = returnValue
 
 proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
   let j = tracer.trace["structLogs"].elems[^1]
