@@ -63,7 +63,7 @@ proc rangeToPaddedUint256*(x: seq[byte], first, last: int): Uint256 =
   let lo = max(0, first)
   let hi = min(x.high, last)
 
-  if not(lo < hi):
+  if not(lo <= hi):
     return # 0
 
   result = UInt256.fromBytesBE(
