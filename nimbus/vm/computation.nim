@@ -59,6 +59,7 @@ func output*(c: BaseComputation): seq[byte] =
 
 func `output=`*(c: var BaseComputation, value: openarray[byte]) =
   c.rawOutput = @value
+  c.lastOpCodeHasRetVal = true
 
 proc outputHex*(c: BaseComputation): string =
   if c.shouldEraseReturnData:
