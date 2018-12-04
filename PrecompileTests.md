@@ -6,9 +6,9 @@ PrecompileTests
 + bn256mul.json                                                   OK
 + ecrecover.json                                                  OK
 + identity.json                                                   OK
-- modexp.json                                                     Fail
++ modexp.json                                                     OK
 + pairing.json                                                    OK
 + ripemd160.json                                                  OK
 + sha256.json                                                     OK
 ```
-OK: 7/8 Fail: 1/8 Skip: 0/8
+OK: 8/8 Fail: 0/8 Skip: 0/8

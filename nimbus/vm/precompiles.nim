@@ -187,8 +187,10 @@ proc modExp*(computation: var BaseComputation) =
     computation.modExpInternal(base_len, exp_len, mod_len, StUint[2048])
   elif maxBytes <= 512:
     computation.modExpInternal(base_len, exp_len, mod_len, StUint[4096])
+  elif maxBytes <= 1024:
+    computation.modExpInternal(base_len, exp_len, mod_len, StUint[8192])
   else:
-    raise newException(ValueError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint4096")
+    raise newException(ValueError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
 proc bn256ecAdd*(computation: var BaseComputation) =
   var
