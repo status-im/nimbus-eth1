@@ -46,23 +46,18 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
       mem.add(%c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex())
     j["memory"] = mem
 
-  # TODO: this seems very inefficient
-  # could we improve it?
+proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
+  let j = tracer.trace["structLogs"].elems[^1]
+
   # TODO: figure out how to get storage
   # when contract excecution interrupted by exception
   if TracerFlags.DisableStorage notin tracer.flags:
     var storage = newJObject()
     var stateDB = c.vmState.chaindb.getStateDb(c.vmState.blockHeader.stateRoot, readOnly = true)
-    let storageRoot = stateDB.getStorageRoot(c.msg.storageAddress)
-    var trie = initHexaryTrie(c.vmState.chaindb.db, storageRoot)
-    for k, v in trie:
-      var key = k.toOpenArray.toHex
-      if key.len != 0:
-        storage[key] = %(v.toOpenArray.toHex)
+    for key, value in stateDB.storage(c.msg.storageAddress):
+      storage[key.dumpHex] = %(value.dumpHex)
     j["storage"] = storage
 
-proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
-  let j = tracer.trace["structLogs"].elems[^1]
   j["gasCost"] = %(tracer.gasRemaining - c.gasMeter.gasRemaining)
 
 proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
