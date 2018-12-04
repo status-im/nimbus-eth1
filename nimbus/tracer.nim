@@ -11,18 +11,19 @@ proc prefixHex(x: openArray[byte]): string =
 
 proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags]): JsonNode =
-  let parent = db.getParentHeader(header)
-  var stateDb = newAccountStateDB(db.db, parent.stateRoot, db.pruneTrie)
-  assert(body.transactions.calcTxRoot == header.txRoot)
-  if header.txRoot == BLANK_ROOT_HASH: return
-
   let
+    parent = db.getParentHeader(header)
+    # we add a memory layer between backend/upper layer db
+    # and capture state db snapshot during transaction execution
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?
-
-  let vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {TracerFlags.EnableTracing})
+    captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?    
+    vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {TracerFlags.EnableTracing})
+    
+  var stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
+  if header.txRoot == BLANK_ROOT_HASH: return
+  assert(body.transactions.calcTxRoot == header.txRoot)
   assert(body.transactions.len != 0)
 
   var gasUsed: GasInt
@@ -38,6 +39,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed
 
+  # now we dump captured state db
   var n = newJObject()
   for k, v in pairsInMemoryDB(memoryDB):
     n[k.prefixHex] = %v.prefixHex
