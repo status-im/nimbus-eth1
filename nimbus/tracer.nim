@@ -39,6 +39,11 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed
 
+  const returnValue = "returnValue"
+  let j = result["structLogs"].elems[^1]
+  if j.hasKey(returnValue):
+    result[returnValue] = j[returnValue]
+
   # now we dump captured state db
   if TracerFlags.DisableState notin tracerFlags:
     var n = newJObject()

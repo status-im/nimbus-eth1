@@ -194,6 +194,7 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
             if `computation`.tracingEnabled:
               `computation`.traceOpCodeStarted($`asOp`)
             `computation`.gasMeter.consumeGas(`computation`.gasCosts[`asOp`].cost, reason = $`asOp`)
+            `computation`.lastOpCodeHasRetVal = false
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
               `computation`.traceOpCodeEnded()
@@ -202,6 +203,7 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
           quote do:
             if `computation`.tracingEnabled:
               `computation`.traceOpCodeStarted($`asOp`)
+            `computation`.lastOpCodeHasRetVal = false
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
               `computation`.traceOpCodeEnded()

@@ -1,10 +1,7 @@
 import
-  json, strutils,
-  eth_common, stint, byteutils,
-  ../vm_types, memory, stack,
-  ../db/[db_chain, state_db],
-  eth_trie/hexary, ./message,
-  ranges/typedranges
+  json, strutils, nimcrypto, eth_common, stint,
+  ../vm_types, memory, stack, ../db/[db_chain, state_db],
+  eth_trie/hexary, ./message, ranges/typedranges
 
 proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.trace = newJObject()
@@ -59,6 +56,9 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
     j["storage"] = storage
 
   j["gasCost"] = %(tracer.gasRemaining - c.gasMeter.gasRemaining)
+
+  if c.lastOpCodeHasRetVal:
+    j["returnValue"] = %("0x" & toHex(c.rawOutput, true))
 
 proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
   let j = tracer.trace["structLogs"].elems[^1]
