@@ -1,6 +1,6 @@
 import
   db/[db_chain, state_db, capturedb], eth_common, utils, json,
-  constants, vm_state, vm_types, transaction, p2p/chain,
+  constants, vm_state, vm_types, transaction, p2p/executor,
   eth_trie/db, nimcrypto
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
@@ -10,7 +10,7 @@ proc prefixHex(x: openArray[byte]): string =
   "0x" & toHex(x, true)
 
 proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
-                       body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags]): JsonNode =
+                       body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
     parent = db.getParentHeader(header)
     # we add a memory layer between backend/lower layer db
