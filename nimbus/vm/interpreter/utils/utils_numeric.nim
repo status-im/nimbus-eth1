@@ -13,7 +13,6 @@ import
 # some methods based on py-evm utils/numeric
 
 func log2*[bits: static int](value: StUint[bits]): Natural {.inline.}=
-  # TODO: do we use ln for log2 like Nim convention?
   (bits - 1) - value.countLeadingZeroBits
 
 func log256*(value: UInt256): Natural {.inline.}=
