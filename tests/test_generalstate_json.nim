@@ -56,7 +56,7 @@ proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transac
       # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToEmpty.json
       #db.addBalance(generateAddress(sender, transaction.accountNonce), transaction.value)
 
-      let createGasUsed = applyCreateTransaction(db, transaction, header, vmState, sender, true)
+      let createGasUsed = applyCreateTransaction(db, transaction, vmState, sender, true)
       db.addBalance(header.coinbase, createGasUsed)
     return
   var computation = setupComputation(header, vmState, transaction, sender)

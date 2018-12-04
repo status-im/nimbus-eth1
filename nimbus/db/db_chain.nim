@@ -28,7 +28,7 @@ type
     blockNumber: BlockNumber
     index: int
 
-proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool): BaseChainDB =
+proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true): BaseChainDB =
   new(result)
   result.db = db
   result.accountCodes = newTable[Hash256, ByteRange]()
