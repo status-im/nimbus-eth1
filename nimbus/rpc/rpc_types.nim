@@ -119,6 +119,10 @@ type
     toBlock*: Option[string]              # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
     address*: Option[EthAddress]          # (optional) contract address or a list of addresses from which logs should originate.
     topics*: Option[seq[FilterData]]      # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
+  
+  WhisperFilterOptions* = object
+    to*: Option[WhisperIdentityStr]
+    topics*: seq[HexDataStr]
 
   WhisperPost* = object
     # Parameter from user
