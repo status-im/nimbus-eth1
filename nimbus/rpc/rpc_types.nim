@@ -115,21 +115,19 @@ type
 
   FilterOptions* = object
     # Parameter from user
-    fromBlock*: string              # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    toBlock*: string                # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
-    address*: EthAddress            # (optional) contract address or a list of addresses from which logs should originate.
-    topics*: seq[FilterData]        # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
+    fromBlock*: Option[string]            # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    toBlock*: Option[string]              # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    address*: Option[EthAddress]          # (optional) contract address or a list of addresses from which logs should originate.
+    topics*: Option[seq[FilterData]]      # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
 
   WhisperPost* = object
     # Parameter from user
-    source*: WhisperIdentityStr # (optional) the identity of the sender.
-    to*: WhisperIdentityStr     # (optional) the identity of the receiver. When present whisper will encrypt the message so that only the receiver can decrypt it.
-    topics*: seq[HexDataStr]    # list of DATA topics, for the receiver to identify messages.
-    payload*: HexDataStr        # the payload of the message.
-    priority*: int              # integer of the priority in a rang from.
-    ttl*: int                   # integer of the time to live in seconds.
-
-  WhisperIdentity = array[60, byte]
+    source*: Option[WhisperIdentityStr]   # (optional) the identity of the sender.
+    to*: Option[WhisperIdentityStr]       # (optional) the identity of the receiver. When present whisper will encrypt the message so that only the receiver can decrypt it.
+    topics*: seq[HexDataStr]              # list of DATA topics, for the receiver to identify messages.
+    payload*: HexDataStr                  # the payload of the message.
+    priority*: int                        # integer of the priority in a rang from.
+    ttl*: int                             # integer of the time to live in seconds.
 
   WhisperMessage* = object
     # Returned to user
