@@ -564,7 +564,7 @@ op create, inline = false, value, startPosition, size:
     # See: https://github.com/ethereum/EIPs/issues/684
     let creationNonce = db.getNonce(computation.msg.storageAddress)
     db.setNonce(computation.msg.storageAddress, creationNonce + 1)
-    
+
     contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
     isCollision = db.hasCodeOrNonce(contractAddress)
 
@@ -732,7 +732,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       push: 0
     else:
       push: 1
-    
+
     if not childComputation.shouldEraseReturnData:
       let actualOutputSize = min(memOutLen, childComputation.output.len)
       computation.memory.write(

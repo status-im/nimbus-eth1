@@ -74,7 +74,7 @@ proc start(): NimbusObject =
 
   createDir(conf.dataDir)
   let trieDB = trieDB newChainDb(conf.dataDir)
-  let chainDB = newBaseChainDB(trieDB)
+  let chainDB = newBaseChainDB(trieDB, conf.prune == PruneMode.Full)
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)

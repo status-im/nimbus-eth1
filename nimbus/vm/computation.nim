@@ -11,7 +11,8 @@ import
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
-  ../utils/header, byteutils, ranges, eth_keys, precompiles
+  ../utils/header, byteutils, ranges, eth_keys, precompiles,
+  transaction_tracer
 
 logScope:
   topics = "vm computation"
@@ -58,6 +59,7 @@ func output*(c: BaseComputation): seq[byte] =
 
 func `output=`*(c: var BaseComputation, value: openarray[byte]) =
   c.rawOutput = @value
+  c.lastOpCodeHasRetVal = true
 
 proc outputHex*(c: BaseComputation): string =
   if c.shouldEraseReturnData:
@@ -122,7 +124,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
         computation.gasMeter.returnGas(computation.msg.gas)
         push: 0
         return
-      
+
       newBalance = senderBalance - computation.msg.value
       computation.vmState.mutateStateDb:
         db.setBalance(computation.msg.sender, newBalance)
@@ -208,10 +210,10 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
       computation.vmState,
       computation.vmState.blockHeader.blockNumber,
       childMsg)
-  
+
   # Copy the fork op code executor proc (assumes child computation is in the same fork)
   childComp.opCodeExec = computation.opCodeExec
-  
+
   if childMsg.isCreate:
     fork.applyCreateMessage(childComp, opCode)
   else:
@@ -284,3 +286,15 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
     result = 0
   else:
     result = c.gasMeter.gasRemaining
+
+proc tracingEnabled*(c: BaseComputation): bool =
+  c.vmState.tracingEnabled
+
+proc traceOpCodeStarted*(c: BaseComputation, op: string) =
+  traceOpCodeStarted(c.vmState.tracer, c, op)
+
+proc traceOpCodeEnded*(c: BaseComputation) =
+  c.vmState.tracer.traceOpCodeEnded(c)
+
+proc traceError*(c: BaseComputation) =
+  c.vmState.tracer.traceError(c)

@@ -1,8 +1,6 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
   ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto,
-  ../vm_state_transactions,
-  eth_trie/db, eth_trie, rlp,
-  sugar
+  ../vm_state_transactions, sugar, ../utils, eth_trie/db, ../tracer, ./executor, json
 
 type
   Chain* = ref object of AbstractChainDB
@@ -32,79 +30,6 @@ method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): b
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-proc processTransaction(db: var AccountStateDB, t: Transaction, sender: EthAddress, head: BlockHeader, chainDB: BaseChainDB): UInt256 =
-  ## Process the transaction, write the results to db.
-  ## Returns amount of ETH to be rewarded to miner
-  echo "Sender: ", sender
-  echo "txHash: ", t.rlpHash
-  # Inct nonce:
-  db.setNonce(sender, db.getNonce(sender) + 1)
-  var transactionFailed = false
-
-  #t.dump
-
-  # TODO: combine/refactor re validate
-  let upfrontGasCost = t.gasLimit.u256 * t.gasPrice.u256
-  let upfrontCost = upfrontGasCost + t.value
-  var balance = db.getBalance(sender)
-  if balance < upfrontCost:
-    if balance <= upfrontGasCost:
-      result = balance
-      balance = 0.u256
-    else:
-      result = upfrontGasCost
-      balance -= upfrontGasCost
-    transactionFailed = true
-  else:
-    balance -= upfrontCost
-
-  db.setBalance(sender, balance)
-  if transactionFailed:
-    return
-
-  var gasUsed = t.payload.intrinsicGas.GasInt # += 32000 appears in Homestead when contract create
-
-  if gasUsed > t.gasLimit:
-    echo "Transaction failed. Out of gas."
-    transactionFailed = true
-  else:
-    if t.isContractCreation:
-      # TODO: re-derive sender in callee for cleaner interface, perhaps
-      var vmState = newBaseVMState(head, chainDB)
-      return applyCreateTransaction(db, t, head, vmState, sender)
-
-    else:
-      let code = db.getCode(t.to)
-      if code.len == 0:
-        # Value transfer
-        echo "Transfer ", t.value, " from ", sender, " to ", t.to
-
-        db.addBalance(t.to, t.value)
-      else:
-        # Contract call
-        echo "Contract call"
-
-        debug "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
-        let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
-        # TODO: Run the vm
-
-  if gasUsed > t.gasLimit:
-    gasUsed = t.gasLimit
-
-  var refund = (t.gasLimit - gasUsed).u256 * t.gasPrice.u256
-  if transactionFailed:
-    refund += t.value
-
-  db.addBalance(sender, refund)
-
-  return gasUsed.u256 * t.gasPrice.u256
-
-proc calcTxRoot(transactions: openarray[Transaction]): Hash256 =
-  var tr = initHexaryTrie(newMemoryDB())
-  for i, t in transactions:
-    tr.put(rlp.encode(i).toRange, rlp.encode(t).toRange)
-  return tr.rootHash
-
 method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]) =
   # Run the VM here
   assert(headers.len == bodies.len)
@@ -118,7 +43,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
     assert(head.blockNumber == headers[i].blockNumber - 1)
-    var stateDb = newAccountStateDB(c.db.db, head.stateRoot)
+    var stateDb = newAccountStateDB(c.db.db, head.stateRoot, c.db.pruneTrie)
     var gasReward = 0.u256
 
     assert(bodies[i].transactions.calcTxRoot == headers[i].txRoot)
@@ -135,7 +60,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
         for t in bodies[i].transactions:
           var sender: EthAddress
           if t.getSender(sender):
-            gasReward += processTransaction(stateDb, t, sender, head, c.db)
+            gasReward += processTransaction(stateDb, t, sender, vmState)
           else:
             assert(false, "Could not get sender")
 
@@ -158,6 +83,10 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
 
     if headers[i].stateRoot != stateDb.rootHash:
       echo "Wrong state root in block ", headers[i].blockNumber, ". Expected: ", headers[i].stateRoot, ", Actual: ", stateDb.rootHash, " arrived from ", c.db.getCanonicalHead().stateRoot
+      let trace = traceTransaction(c.db, headers[i], bodies[i], bodies[i].transactions.len - 1, {})
+      echo "NIMBUS TRACE"
+      echo trace.pretty()
+
     assert(headers[i].stateRoot == stateDb.rootHash)
 
     discard c.db.persistHeaderToDb(headers[i])

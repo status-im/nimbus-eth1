@@ -8,7 +8,8 @@
 import
   sequtils, strformat, tables,
   chronicles, eth_common, nimcrypto, rlp, eth_trie/[hexary, db],
-  ../constants, ../errors, ../validation
+  ../constants, ../errors, ../validation,
+  storage_types
 
 logScope:
   topics = "state_db"
@@ -25,10 +26,10 @@ proc rootHash*(accountDb: AccountStateDB): KeccakHash =
 # TODO: self.Trie.rootHash = value
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
-                        root: KeccakHash, readOnly: bool = false,
+                        root: KeccakHash, pruneTrie: bool, readOnly: bool = false,
                         accountCodes = newTable[Hash256, ByteRange]()): AccountStateDB =
   result.new()
-  result.trie = initSecureHexaryTrie(backingStore, root)
+  result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
   result.accountCodes = accountCodes
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
@@ -88,7 +89,7 @@ proc setStorageRoot*(db: var AccountStateDB, address: EthAddress, storageRoot: H
   account.storageRoot = storageRoot
   db.setAccount(address, account)
 
-proc getStorageRoot*(db: var AccountStateDB, address: EthAddress): Hash256 =
+proc getStorageRoot*(db: AccountStateDB, address: EthAddress): Hash256 =
   var account = db.getAccount(address)
   account.storageRoot
 
@@ -105,8 +106,27 @@ proc setStorage*(db: var AccountStateDB,
   else:
     accountTrie.del(slotAsKey)
 
+  # map slothash back to slot value
+  # see iterator storage below
+  var
+    triedb = HexaryTrie(db.trie).db
+    # slotHash can be obtained from accountTrie.put?
+    slotHash = keccak256.digest(slot.toByteArrayBE)
+  triedb.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
+
   account.storageRoot = accountTrie.rootHash
   db.setAccount(address, account)
+
+iterator storage*(db: AccountStateDB, address: EthAddress): (UInt256, UInt256) =
+  let
+    storageRoot = db.getStorageRoot(address)
+    triedb = HexaryTrie(db.trie).db
+  var trie = initHexaryTrie(triedb, storageRoot)
+
+  for key, value in trie:
+    if key.len != 0:
+      var keyData = triedb.get(slotHashToSlotKey(key.toOpenArray).toOpenArray).toRange
+      yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 
 proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) =
   let
