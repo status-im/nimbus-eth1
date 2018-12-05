@@ -38,7 +38,7 @@ proc setupWhisperRPC*(rpcsrv: RpcServer) =
     ## Returns true if the identity was successfully added to the group, otherwise false (?).
     discard
 
-  rpcsrv.rpc("shh_newFilter") do(filterOptions: FilterOptions, to: WhisperIdentityStr, topics: seq[HexDataStr]) -> int:
+  rpcsrv.rpc("shh_newFilter") do(filterOptions: WhisperFilterOptions) -> int:
     ## Creates filter to notify, when client receives whisper message matching the filter options.
     ##
     ## filterOptions: The filter options:
