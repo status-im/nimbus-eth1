@@ -28,8 +28,9 @@ proc buildBinary(name: string, srcDir = ".", lang = "c") =
   setCommand lang, srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
-  buildBinary name, "tests/"
+  --define: "chronicles_log_level=ERROR"
   --run
+  buildBinary name, "tests/"
 
 task test, "Run tests":
   test "all_tests"

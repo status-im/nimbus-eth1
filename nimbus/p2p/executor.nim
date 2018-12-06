@@ -5,8 +5,8 @@ import ../db/[db_chain, state_db], ../transaction, eth_common,
 proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
-  echo "Sender: ", sender
-  echo "txHash: ", t.rlpHash
+  trace "Sender", sender
+  trace "txHash", rlpHash = t.rlpHash
   # Inct nonce:
   db.setNonce(sender, db.getNonce(sender) + 1)
   var transactionFailed = false
@@ -35,7 +35,7 @@ proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddr
   var gasUsed = t.payload.intrinsicGas.GasInt # += 32000 appears in Homestead when contract create
 
   if gasUsed > t.gasLimit:
-    echo "Transaction failed. Out of gas."
+    debug "Transaction failed. Out of gas."
     transactionFailed = true
   else:
     if t.isContractCreation:
@@ -46,14 +46,13 @@ proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddr
       let code = db.getCode(t.to)
       if code.len == 0:
         # Value transfer
-        echo "Transfer ", t.value, " from ", sender, " to ", t.to
+        trace "Transfer", value = t.value, sender, to = t.to
 
         db.addBalance(t.to, t.value)
       else:
         # Contract call
-        echo "Contract call"
-
-        debug "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
+        trace "Contract call"
+        trace "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
         let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
         # TODO: Run the vm
 

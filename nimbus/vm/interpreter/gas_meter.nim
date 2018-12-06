@@ -22,19 +22,12 @@ proc consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string) =
     raise newException(OutOfGas,
       &"Out of gas: Needed {amount} - Remaining {gasMeter.gasRemaining} - Reason: {reason}")
   gasMeter.gasRemaining -= amount
-
-  when defined(nimbusTrace): # XXX: https://github.com/status-im/nim-chronicles/issues/26
-    debug(
-      "GAS CONSUMPTION", total = gasMeter.gasRemaining + amount, amount, remaining = gasMeter.gasRemaining, reason)
+  trace "GAS CONSUMPTION", total = gasMeter.gasRemaining + amount, amount, remaining = gasMeter.gasRemaining, reason
 
 proc returnGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRemaining += amount
-  when defined(nimbusTrace): # XXX: https://github.com/status-im/nim-chronicles/issues/26
-    debug(
-      "GAS RETURNED", consumed = gasMeter.gasRemaining - amount, amount, remaining = gasMeter.gasRemaining)
+  trace "GAS RETURNED", consumed = gasMeter.gasRemaining - amount, amount, remaining = gasMeter.gasRemaining
 
 proc refundGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRefunded += amount
-  when defined(nimbusTrace): # XXX: https://github.com/status-im/nim-chronicles/issues/26
-    debug(
-      "GAS REFUND", consumed = gasMeter.gasRemaining - amount, amount, refunded = gasMeter.gasRefunded)
+  trace "GAS REFUND", consumed = gasMeter.gasRemaining - amount, amount, refunded = gasMeter.gasRefunded

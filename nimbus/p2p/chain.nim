@@ -39,7 +39,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
 
-  echo "Persisting blocks: ", headers[0].blockNumber, " - ", headers[^1].blockNumber
+  trace "Persisting blocks", range = headers[0].blockNumber & " - " & headers[^1].blockNumber
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
     assert(head.blockNumber == headers[i].blockNumber - 1)
@@ -54,8 +54,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
       assert(bodies[i].transactions.len != 0)
 
       if bodies[i].transactions.len != 0:
-        echo "block: ", headers[i].blockNumber
-        echo "h: ", headers[i].blockHash
+        trace "Has transactions", blockNumber = headers[i].blockNumber, blockHash = headers[i].blockHash
 
         for t in bodies[i].transactions:
           var sender: EthAddress
@@ -82,10 +81,9 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     stateDb.addBalance(headers[i].coinbase, mainReward)
 
     if headers[i].stateRoot != stateDb.rootHash:
-      echo "Wrong state root in block ", headers[i].blockNumber, ". Expected: ", headers[i].stateRoot, ", Actual: ", stateDb.rootHash, " arrived from ", c.db.getCanonicalHead().stateRoot
-      let trace = traceTransaction(c.db, headers[i], bodies[i], bodies[i].transactions.len - 1, {})
-      echo "NIMBUS TRACE"
-      echo trace.pretty()
+      debug "Wrong state root in block", blockNumber = headers[i].blockNumber, expected = headers[i].stateRoot, actual = stateDb.rootHash, arrivedFrom = c.db.getCanonicalHead().stateRoot
+      let ttrace = traceTransaction(c.db, headers[i], bodies[i], bodies[i].transactions.len - 1, {})
+      trace "NIMBUS TRACE", transactionTrace=ttrace.pretty()
 
     assert(headers[i].stateRoot == stateDb.rootHash)
 

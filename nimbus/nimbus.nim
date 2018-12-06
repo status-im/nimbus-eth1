@@ -9,7 +9,7 @@
 
 import
   os, strutils, net, eth_common, db/[storage_types, db_chain],
-  asyncdispatch2, json_rpc/rpcserver, eth_keys,
+  asyncdispatch2, json_rpc/rpcserver, eth_keys, chronicles,
   eth_p2p, eth_p2p/rlpx_protocols/[eth_protocol, les_protocol],
   eth_p2p/blockchain_sync,
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
@@ -43,7 +43,7 @@ type
     state*: NimbusState
 
 proc initializeEmptyDb(db: BaseChainDB) =
-  echo "Writing genesis to DB"
+  trace "Writing genesis to DB"
   let networkId = getConfiguration().net.networkId.toPublicNetwork()
   if networkId == CustomNet:
     raise newException(Exception, "Custom genesis not implemented")
@@ -108,13 +108,13 @@ proc start(): NimbusObject =
   # TODO: temp code until the CLI/RPC interface is fleshed out
   let status = waitFor nimbus.ethNode.fastBlockchainSync()
   if status != syncSuccess:
-    echo "Block sync failed: ", status
+    debug "Block sync failed: ", status
 
   nimbus.state = Running
   result = nimbus
 
 proc stop*(nimbus: NimbusObject) {.async.} =
-  echo "Graceful shutdown"
+  trace "Graceful shutdown"
   nimbus.rpcServer.stop()
 
 proc process*(nimbus: NimbusObject) =
