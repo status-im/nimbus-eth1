@@ -30,7 +30,7 @@ proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
       let v = data[63]  # TODO: Endian
       assert v.int in 27..28
       bytes[64] = v - 27
-  
+
   if recoverSignature(bytes, result[1]) != EthKeysStatus.Success:
     raise newException(ValidationError, "Could not recover signature computation")
 
@@ -68,7 +68,7 @@ proc ecRecover*(computation: var BaseComputation) =
 
   if sig.recoverSignatureKey(msgHash, pubKey) != EthKeysStatus.Success:
     raise newException(ValidationError, "Could not derive public key from computation")
-  
+
   computation.rawOutput.setLen(32)
   computation.rawOutput[12..31] = pubKey.toCanonicalAddress()
   debug "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
@@ -101,25 +101,18 @@ proc identity*(computation: var BaseComputation) =
   computation.rawOutput = computation.msg.data
   debug "Identity precompile", output = computation.rawOutput.toHex
 
-proc modExp*(computation: var BaseComputation) =
-  ## Modular exponentiation precompiled contract
-  # Parsing the data
+proc modExpInternal(computation: var BaseComputation, base_len, exp_len, mod_len: int, T: type StUint) =
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
+
   let
-    base_len = rawMsg.rangeToPaddedUint256(0, 31).truncate(int)
-    exp_len = rawMsg.rangeToPaddedUint256(32, 63).truncate(int)
-    mod_len = rawMsg.rangeToPaddedUint256(64, 95).truncate(int)
-
-    start_exp = 96 + base_len
-    start_mod = start_exp + exp_len
-
-    base = rawMsg.rangeToPaddedUint256(96, start_exp - 1)
-    exp = rawMsg.rangeToPaddedUint256(start_exp, start_mod - 1)
-    modulo = rawMsg.rangeToPaddedUint256(start_mod, start_mod + mod_len - 1)
+    base = rawMsg.rangeToPadded[:T](96, 95 + base_len)
+    exp = rawMsg.rangeToPadded[:T](96 + base_len, 95 + base_len + exp_len)
+    modulo = rawMsg.rangeToPadded[:T](96 + base_len + exp_len, 95 + base_len + exp_len + mod_len)
 
   block: # Gas cost
     func gasModExp_f(x: Natural): int =
+      ## Estimates the difficulty of Karatsuba multiplication
       # x: maximum length in bytes between modulo and base
       # TODO: Deal with negative max_len
       result = case x
@@ -131,11 +124,11 @@ proc modExp*(computation: var BaseComputation) =
       # TODO deal with negative length
       if exp_len <= 32:
         if exp.isZero(): 0
-        else: log2(exp)
+        else: log2(exp)    # highest-bit in exponent
       else:
-        let extra = rawMsg.rangeToPaddedUint256(96 + base_len, 127 + base_len)
-        if not extra.isZero:
-          8 * (exp_len - 32) + extra.log2
+        let first32 = rawMsg.rangeToPadded[:Uint256](96 + base_len, 95 + base_len + exp_len)
+        if not first32.isZero:
+          8 * (exp_len - 32) + first32.log2
         else:
           8 * (exp_len - 32)
 
@@ -145,27 +138,61 @@ proc modExp*(computation: var BaseComputation) =
           max(adj_exp_len, 1)
       ) div GasQuadDivisor
 
+    computation.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+
   block: # Processing
-    # Start with EVM special cases
+    # TODO: specs mentions that we should return in "M" format
+    #       i.e. if Base and exp are uint512 and Modulo an uint256
+    #       we should return a 256-bit big-endian byte array
 
     # Force static evaluation
-    func zero256(): static array[32, byte] = discard
-    func one256(): static array[32, byte] =
+    func zero(): static array[T.bits div 8, byte] = discard
+    func one(): static array[T.bits div 8, byte] =
       when cpuEndian == bigEndian:
         result[^1] = 1
       else:
         result[0] = 1
 
+    # Start with EVM special cases
     if modulo <= 1:
       # If m == 0: EVM returns 0.
       # If m == 1: we can shortcut that to 0 as well
-      computation.rawOutput = @(zero256())
+      computation.rawOutput = @(zero())
     elif exp.isZero():
       # If 0^0: EVM returns 1
       # For all x != 0, x^0 == 1 as well
-      computation.rawOutput = @(one256())
+      computation.rawOutput = @(one())
     else:
       computation.rawOutput = @(powmod(base, exp, modulo).toByteArrayBE)
+
+proc modExp*(computation: var BaseComputation) =
+  ## Modular exponentiation precompiled contract
+  ## Yellow Paper Appendix E
+  ## EIP-198 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md
+  # Parsing the data
+  template rawMsg: untyped {.dirty.} =
+    computation.msg.data
+  let # lengths Base, Exponent, Modulus
+    base_len = rawMsg.rangeToPadded[:Uint256](0, 31).truncate(int)
+    exp_len = rawMsg.rangeToPadded[:Uint256](32, 63).truncate(int)
+    mod_len = rawMsg.rangeToPadded[:Uint256](64, 95).truncate(int)
+
+  let maxBytes = max(base_len, max(exp_len, mod_len))
+
+  if maxBytes <= 32:
+    computation.modExpInternal(base_len, exp_len, mod_len, UInt256)
+  elif maxBytes <= 64:
+    computation.modExpInternal(base_len, exp_len, mod_len, StUint[512])
+  elif maxBytes <= 128:
+    computation.modExpInternal(base_len, exp_len, mod_len, StUint[1024])
+  elif maxBytes <= 256:
+    computation.modExpInternal(base_len, exp_len, mod_len, StUint[2048])
+  elif maxBytes <= 512:
+    computation.modExpInternal(base_len, exp_len, mod_len, StUint[4096])
+  elif maxBytes <= 1024:
+    computation.modExpInternal(base_len, exp_len, mod_len, StUint[8192])
+  else:
+    raise newException(ValueError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
 proc bn256ecAdd*(computation: var BaseComputation) =
   var
