@@ -47,7 +47,7 @@ proc newMessage*(
 
   validateGte(options.depth, minimum=0, title="Message.depth")
 
-  debug "New message",
+  trace "New message",
     gas = gas,
     gasPrice = gasPrice,
     destination = to,

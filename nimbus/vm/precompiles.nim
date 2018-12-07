@@ -71,7 +71,7 @@ proc ecRecover*(computation: var BaseComputation) =
 
   computation.rawOutput.setLen(32)
   computation.rawOutput[12..31] = pubKey.toCanonicalAddress()
-  debug "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
+  trace "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
 
 proc sha256*(computation: var BaseComputation) =
   let
@@ -80,7 +80,7 @@ proc sha256*(computation: var BaseComputation) =
 
   computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
   computation.rawOutput = @(nimcrypto.sha_256.digest(computation.msg.data).data)
-  debug "SHA256 precompile", output = computation.rawOutput.toHex
+  trace "SHA256 precompile", output = computation.rawOutput.toHex
 
 proc ripemd160*(computation: var BaseComputation) =
   let
@@ -90,7 +90,7 @@ proc ripemd160*(computation: var BaseComputation) =
   computation.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   computation.rawOutput.setLen(32)
   computation.rawOutput[12..31] = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
-  debug "RIPEMD160 precompile", output = computation.rawOutput.toHex
+  trace "RIPEMD160 precompile", output = computation.rawOutput.toHex
 
 proc identity*(computation: var BaseComputation) =
   let
@@ -99,7 +99,7 @@ proc identity*(computation: var BaseComputation) =
 
   computation.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
   computation.rawOutput = computation.msg.data
-  debug "Identity precompile", output = computation.rawOutput.toHex
+  trace "Identity precompile", output = computation.rawOutput.toHex
 
 proc modExpInternal(computation: var BaseComputation, base_len, exp_len, mod_len: int, T: type StUint) =
   template rawMsg: untyped {.dirty.} =
@@ -277,7 +277,7 @@ proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
   if lb in PrecompileAddresses.low.byte .. PrecompileAddresses.high.byte:
     result = true
     let precompile = PrecompileAddresses(lb)
-    debug "Call precompile ", precompile = precompile, codeAddr = computation.msg.codeAddress
+    trace "Call precompile ", precompile = precompile, codeAddr = computation.msg.codeAddress
     case precompile
     of paEcRecover: ecRecover(computation)
     of paSha256: sha256(computation)

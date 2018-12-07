@@ -569,7 +569,7 @@ op create, inline = false, value, startPosition, size:
     isCollision = db.hasCodeOrNonce(contractAddress)
 
   if isCollision:
-    debug("Address collision while creating contract", address = contractAddress.toHex)
+    debug "Address collision while creating contract", address = contractAddress.toHex
     push: 0
     raise newException(ValidationError, "Contract creation failed, address already in use")
 
@@ -699,7 +699,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
                 c_memOffset: 0, # TODO make sure if we pass the largest mem requested
                 c_memLength: 0  # or an addition of mem requested
       ))
-    debug "Call (" & callName.astToStr & ")", gasCost = gasCost, childCost = childMsgGas
+    trace "Call (" & callName.astToStr & ")", gasCost = gasCost, childCost = childMsgGas
     computation.gasMeter.consumeGas(gasCost, reason = $opCode)
 
     computation.memory.extend(memInPos, memInLen)
@@ -798,8 +798,7 @@ op selfDestruct, inline = false:
     let RefundSelfDestruct = 24_000
     computation.gasMeter.refundGas(RefundSelfDestruct)
 
-    debug(
-      "SELFDESTRUCT",
+    trace "SELFDESTRUCT",
       storage_address = computation.msg.storage_address.toHex,
       local_balance = local_balance.toString,
-      beneficiary = beneficiary.toHex)
+      beneficiary = beneficiary.toHex

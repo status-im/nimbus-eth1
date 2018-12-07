@@ -7,7 +7,7 @@
 
 import
   ranges/typedranges, sequtils, strformat, tables,
-  eth_common,
+  eth_common, chronicles,
   ./constants, ./errors, ./vm/computation,
   ./transaction, ./vm_types, ./vm_state, ./block_types, ./db/[db_chain, state_db], ./utils/header,
   ./vm/interpreter, ./utils/addresses
@@ -62,7 +62,7 @@ proc execComputation*(computation: var BaseComputation): bool =
 proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: BaseVMState, sender: EthAddress, useHomestead: bool = false): UInt256 =
   doAssert t.isContractCreation
   # TODO: clean up params
-  echo "Contract creation"
+  trace "Contract creation"
 
   let gasUsed = t.payload.intrinsicGas.GasInt + (if useHomestead: 32000 else: 0)
 
@@ -107,7 +107,7 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: Ba
     # the if transactionfailed at end is what is supposed to pick it up
     # especially when it's cross-function, it's ugly/fragile
     db.addBalance(sender, t.value)
-    echo "isError: ", c.isError
+    debug "execComputation() error", isError = c.isError
     if c.tracingEnabled:
       c.traceError()
     return t.gasLimit.u256 * t.gasPrice.u256

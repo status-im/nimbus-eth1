@@ -130,7 +130,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
         db.setBalance(computation.msg.sender, newBalance)
         db.addBalance(computation.msg.storage_address, computation.msg.value)
 
-      debug "Value transferred",
+      trace "Value transferred",
         source = computation.msg.sender,
         dest = computation.msg.storage_address,
         value = computation.msg.value,
@@ -139,7 +139,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
         gasPrice = computation.msg.gasPrice,
         gas = computation.msg.gas
 
-    debug "Apply message",
+    trace "Apply message",
       value = computation.msg.value,
       senderBalance = newBalance,
       sender = computation.msg.sender.toHex,
@@ -154,7 +154,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
     computation.opcodeExec(computation)
 
   if not computation.isError:
-    debug "Computation committed"
+    trace "Computation committed"
     transaction.commit()
   else:
     debug "Computation rolled back due to error"
@@ -182,7 +182,7 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: st
           reason = "Write contract code for CREATE")
 
         let storageAddr = computation.msg.storage_address
-        debug "SETTING CODE",
+        trace "SETTING CODE",
           address = storageAddr.toHex,
           length = len(contract_code),
           hash = contractCode.rlpHash
