@@ -12,7 +12,7 @@ import
   nimcrypto, json_rpc/rpcserver, hexstrings, stint, byteutils, ranges/typedranges,
   eth_common, eth_p2p, eth_keys, eth_trie/db, rlp,
   ../utils/header, ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
-  ../vm_state_transactions,
+  ../vm_state_transactions, ../utils/addresses,
   ../db/[db_chain, state_db, storage_types],
   rpc_types, rpc_utils, ../vm/[message, computation]
 
@@ -270,7 +270,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       gasPrice =
         if call.gasPrice.isSome: call.gasPrice.get
         else: 0.GasInt
-    
+
     # Set defaults for gas limit if required
     # Price remains zero by default
     if gaslimit == 0.GasInt:
@@ -286,7 +286,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       data = if call.data.isSome: call.data.get.string.fromHex else: @[]
       value = if call.value.isSome: call.value.get else: 0.u256
       comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice)
-    
+
     discard comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
 
@@ -356,7 +356,6 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
   proc populateTransactionObject(transaction: Transaction, txIndex: int64, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =
     let
       vmState = newBaseVMState(blockHeader, chain)
-      #accountDb = vmState.chaindb.getStateDb(blockHash, true)
       accountDb = vmState.readOnlyStateDB()
       address = transaction.getSender()
       txCount = accountDb.getNonce(address)
@@ -364,16 +363,22 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       accountGas = accountDb.balance(address)
 
     result.hash = txHash
-    result.nonce = txCount
+    result.nonce = txCount # TODO: before or after transaction?
     result.blockHash = some(blockHash)
-    result.blockNumber = some(blockHeader.blockNumber)
+    result.blockNumber = some(blockHeader.blockNumber) # TODO: why the conversion have '0x' prefix?
     result.transactionIndex = some(txIndex)
     result.source = transaction.getSender()
-    result.to = some(transaction.to)
+
+    if transaction.isContractCreation:
+      let contractAddress = generateAddress(result.source, transaction.accountNonce)
+      result.to = some(contractAddress)
+    else:
+      result.to = some(transaction.to)
+
     result.value = transaction.value
     result.gasPrice = transaction.gasPrice
-    result.gas = accountGas
-    result.input = transaction.payload
+    result.gas = accountGas # TODO: this is completely wrong
+    result.input = transaction.payload # TODO: convert to hex
 
   rpcsrv.rpc("eth_getTransactionByHash") do(data: EthHashStr) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.

@@ -100,10 +100,6 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
       raise newException(StackDepthError, "Stack depth limit reached")
 
   if computation.msg.value != 0:
-    #[let senderBalance =
-      computation.vmState.chainDb.getStateDb(
-        computation.vmState.blockHeader.hash, false).
-        getBalance(computation.msg.sender)]#
     let senderBalance =
       computation.vmState.readOnlyStateDb().
       getBalance(computation.msg.sender)
