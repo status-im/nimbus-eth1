@@ -29,7 +29,7 @@ import
 proc `%`*(value: Time): JsonNode =
   result = %value.toSeconds
 
-template balance(addressDb: AccountStateDb, address: EthAddress): GasInt =
+template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
   addressDb.getBalance(address).truncate(int64)
 
@@ -49,12 +49,13 @@ func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
 
 proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
 
-  func getAccountDb(header: BlockHeader, readOnly = true): AccountStateDb =
+  func getAccountDb(header: BlockHeader, readOnly = true): ReadOnlyStateDb =
     ## Retrieves the account db from canonical head
     let vmState = newBaseVMState(header, chain)
-    result = vmState.chaindb.getStateDb(vmState.blockHeader.hash, readOnly)
+    #result = vmState.chaindb.getStateDb(vmState.blockHeader.hash, readOnly)
+    result = vmState.readOnlyStateDB()
 
-  func accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
+  func accountDbFromTag(tag: string, readOnly = true): ReadOnlyStateDb =
     result = getAccountDb(chain.headerFromTag(tag))
 
   proc getBlockBody(hash: KeccakHash): BlockBody =
@@ -355,7 +356,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
   proc populateTransactionObject(transaction: Transaction, txIndex: int64, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =
     let
       vmState = newBaseVMState(blockHeader, chain)
-      accountDb = vmState.chaindb.getStateDb(blockHash, true)
+      #accountDb = vmState.chaindb.getStateDb(blockHash, true)
+      accountDb = vmState.readOnlyStateDB()
       address = transaction.getSender()
       txCount = accountDb.getNonce(address)
       txHash = transaction.rlpHash

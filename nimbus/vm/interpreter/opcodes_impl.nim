@@ -518,9 +518,8 @@ op create, inline = false, value, startPosition, size:
   computation.memory.extend(memPos, len)
 
   let senderBalance =
-    computation.vmState.chainDb.getStateDb(
-      computation.vmState.blockHeader.rlphash, false).
-      getBalance(computation.msg.sender)
+    computation.vmState.readOnlyStateDb().
+    getBalance(computation.msg.sender)
 
   if senderBalance < value:
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance

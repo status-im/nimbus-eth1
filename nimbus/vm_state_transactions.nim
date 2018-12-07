@@ -59,7 +59,7 @@ proc execComputation*(computation: var BaseComputation): bool =
   except ValueError:
     result = false
 
-proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
+proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
   doAssert t.isContractCreation
   # TODO: clean up params
   trace "Contract creation"
@@ -76,7 +76,9 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: Ba
   let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload,
                        options = newMessageOptions(origin = sender,
                                                    createAddress = contractAddress))
+
   var c = newBaseComputation(vmState, vmState.blockNumber, msg, forkOverride)
+  var db = vmState.mutableStateDB()
 
   if execComputation(c):
     db.addBalance(contractAddress, t.value)

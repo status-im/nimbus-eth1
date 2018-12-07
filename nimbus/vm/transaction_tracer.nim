@@ -1,7 +1,7 @@
 import
   json, strutils, nimcrypto, eth_common, stint,
   ../vm_types, memory, stack, ../db/[db_chain, state_db],
-  eth_trie/hexary, ./message, ranges/typedranges
+  eth_trie/hexary, ./message, ranges/typedranges, ../vm_state
 
 proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.trace = newJObject()
@@ -50,7 +50,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
   # when contract excecution interrupted by exception
   if TracerFlags.DisableStorage notin tracer.flags:
     var storage = newJObject()
-    var stateDB = c.vmState.chaindb.getStateDb(c.vmState.blockHeader.stateRoot, readOnly = true)
+    var stateDB = c.vmState.stateDB
     for key, value in stateDB.storage(c.msg.storageAddress):
       storage[key.dumpHex] = %(value.dumpHex)
     j["storage"] = storage

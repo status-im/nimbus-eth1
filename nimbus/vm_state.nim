@@ -7,7 +7,7 @@
 
 import
   macros, strformat, tables,
-  eth_common, eth_trie/db,
+  eth_common, eth_trie/db, ranges,
   ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
   ./utils/header, json, vm_types, vm/transaction_tracer
 
@@ -33,6 +33,8 @@ proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set
   result.chaindb = chainDB
   result.tracer.initTracer(tracerFlags)
   result.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
+  result.accountCodes = newTable[Hash256, ByteRange]()
+  result.stateDB = newAccountStateDB(chainDB.db, header.stateRoot, chainDB.pruneTrie, result.accountCodes)
 
 method blockhash*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.hash
@@ -97,7 +99,7 @@ template mutateStateDB*(vmState: BaseVMState, body: untyped) =
   # This should provide more clever change handling in the future
   block:
     let initialStateRoot = vmState.blockHeader.stateRoot
-    var db {.inject.} = vmState.chaindb.getStateDB(initialStateRoot, false)
+    var db {.inject.} = initMutableStateDB(vmState.stateDB)
 
     body
 
@@ -105,8 +107,11 @@ template mutateStateDB*(vmState: BaseVMState, body: untyped) =
     if finalStateRoot != initialStateRoot:
       vmState.blockHeader.stateRoot = finalStateRoot
 
-proc readOnlyStateDB*(vmState: BaseVMState): AccountStateDB {.inline.}=
-  vmState.chaindb.getStateDb(vmState.blockHeader.stateRoot, readOnly = true)
+proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.}=
+  initReadOnlyStateDB(vmState.stateDB)
+
+proc mutableStateDB*(vmState: BaseVMState): MutableStateDB {.inline.}=
+  initMutableStateDB(vmState.stateDB)
 
 export DbTransaction, commit, rollback, dispose, safeDispose
 

@@ -2,12 +2,14 @@ import ../db/[db_chain, state_db], ../transaction, eth_common,
   ../vm_state, ../vm_types, ../vm_state_transactions, ranges,
   chronicles, ../vm/[computation, interpreter_dispatch, message]
 
-proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
+proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
   trace "txHash", rlpHash = t.rlpHash
   # Inct nonce:
+  
+  var db = vmState.mutableStateDB
   db.setNonce(sender, db.getNonce(sender) + 1)
   var transactionFailed = false
 
@@ -40,7 +42,7 @@ proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddr
   else:
     if t.isContractCreation:
       # TODO: re-derive sender in callee for cleaner interface, perhaps
-      return applyCreateTransaction(db, t, vmState, sender)
+      return applyCreateTransaction(t, vmState, sender)
 
     else:
       let code = db.getCode(t.to)

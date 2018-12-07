@@ -8,16 +8,12 @@
 import
   tables, sequtils, algorithm,
   rlp, ranges, state_db, nimcrypto, eth_trie/[hexary, db], eth_common, byteutils,
-  ../errors, ../block_types, ../utils/header, ../constants, ./storage_types.nim
+  ../errors, ../block_types, ../utils/header, ../constants, ./storage_types,
+  ./state_db
 
 type
   BaseChainDB* = ref object
-    db*:           TrieDatabaseRef
-    # XXX: intentionally simple stand-in for one use of full JournalDB
-    # Doesn't handle CREATE+revert, etc. But also creates minimal tech
-    # debt while setting a CI baseline from which to improve/replace.
-    accountCodes*: TableRef[Hash256, ByteRange]
-    # TODO db*: JournalDB
+    db*:        TrieDatabaseRef
     pruneTrie*: bool
 
   KeyType = enum
@@ -31,7 +27,6 @@ type
 proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true): BaseChainDB =
   new(result)
   result.db = db
-  result.accountCodes = newTable[Hash256, ByteRange]()
   result.pruneTrie = pruneTrie
 
 proc `$`*(db: BaseChainDB): string =
@@ -274,11 +269,6 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 
 # proc clear*(self: BaseChainDB): void =
 #   self.db.clear()
-
-proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
-  # TODO: readOnly is not used.
-  result = newAccountStateDB(self.db, stateRoot, self.pruneTrie, readOnly, self.accountCodes)
-
 
 # Deprecated:
 proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader {.deprecated.} =

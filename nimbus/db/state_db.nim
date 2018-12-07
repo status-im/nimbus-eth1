@@ -19,6 +19,11 @@ type
     trie:         SecureHexaryTrie
     accountCodes: TableRef[Hash256, ByteRange]
 
+  ReadOnlyStateDB* = object of RootObj
+    stateDB: AccountStateDB
+
+  MutableStateDB* = object of ReadOnlyStateDB
+
 proc rootHash*(accountDb: AccountStateDB): KeccakHash =
   accountDb.trie.rootHash
 
@@ -26,7 +31,7 @@ proc rootHash*(accountDb: AccountStateDB): KeccakHash =
 # TODO: self.Trie.rootHash = value
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
-                        root: KeccakHash, pruneTrie: bool, readOnly: bool = false,
+                        root: KeccakHash, pruneTrie: bool,
                         accountCodes = newTable[Hash256, ByteRange]()): AccountStateDB =
   result.new()
   result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
@@ -60,15 +65,15 @@ proc getBalance*(db: AccountStateDB, address: EthAddress): UInt256 =
   let account = db.getAccount(address)
   account.balance
 
-proc setBalance*(db: var AccountStateDB, address: EthAddress, balance: UInt256) =
+proc setBalance*(db: AccountStateDB, address: EthAddress, balance: UInt256) =
   var account = db.getAccount(address)
   account.balance = balance
   db.setAccount(address, account)
 
-proc addBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
+proc addBalance*(db: AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) + delta)
 
-proc subBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
+proc subBalance*(db: AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) - delta)
 
 template createTrieKeyFromSlot(slot: UInt256): ByteRange =
@@ -84,7 +89,7 @@ template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
   initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot)
 
 # XXX: https://github.com/status-im/nimbus/issues/142#issuecomment-420583181
-proc setStorageRoot*(db: var AccountStateDB, address: EthAddress, storageRoot: Hash256) =
+proc setStorageRoot*(db: AccountStateDB, address: EthAddress, storageRoot: Hash256) =
   var account = db.getAccount(address)
   account.storageRoot = storageRoot
   db.setAccount(address, account)
@@ -93,9 +98,7 @@ proc getStorageRoot*(db: AccountStateDB, address: EthAddress): Hash256 =
   var account = db.getAccount(address)
   account.storageRoot
 
-proc setStorage*(db: var AccountStateDB,
-                 address: EthAddress,
-                 slot: UInt256, value: UInt256) =
+proc setStorage*(db: AccountStateDB, address: EthAddress, slot, value: UInt256) =
   var account = db.getAccount(address)
   var accountTrie = getAccountTrie(db, account)
   let slotAsKey = createTrieKeyFromSlot slot
@@ -142,7 +145,7 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
   else:
     result = (0.u256, false)
 
-proc setNonce*(db: var AccountStateDB, address: EthAddress, newNonce: AccountNonce) =
+proc setNonce*(db: AccountStateDB, address: EthAddress, newNonce: AccountNonce) =
   var account = db.getAccount(address)
   if newNonce != account.nonce:
     account.nonce = newNonce
@@ -152,7 +155,7 @@ proc getNonce*(db: AccountStateDB, address: EthAddress): AccountNonce =
   let account = db.getAccount(address)
   account.nonce
 
-proc setCode*(db: var AccountStateDB, address: EthAddress, code: ByteRange) =
+proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
   var account = db.getAccount(address)
   let newCodeHash = keccak256.digest code.toOpenArray
   if newCodeHash != account.codeHash:
@@ -172,3 +175,67 @@ proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   let address = addressS.parseAddress
   return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
 
+# ------------------------------------------
+proc initMutableStateDB*(stateDB: AccountStateDB): MutableStateDB =
+  result.stateDB = stateDB
+
+proc initReadOnlyStateDB*(stateDB: AccountStateDB): ReadOnlyStateDB =
+  result.stateDB = stateDB
+
+proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.inline.} =
+  db.stateDB.rootHash
+
+proc getAccount*(db: ReadOnlyStateDB, address: EthAddress): Account {.inline.} =
+  db.stateDB.getAccount(address)
+
+proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.inline.} =
+  db.stateDB.getCodeHash(address)
+
+proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.inline.} =
+  db.stateDB.getBalance(address)
+
+proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.inline.} =
+  db.stateDB.getStorageRoot(address)
+
+iterator storage*(db: ReadOnlyStateDB, address: EthAddress): (UInt256, UInt256) {.inline.} =
+  for k, v in storage(db.stateDB, address):
+    yield (k, v)
+
+proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) {.inline.} =
+  db.stateDB.getStorage(address, slot)
+
+proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.inline.} =
+  db.stateDB.getNonce(address)
+
+proc getCode*(db: ReadOnlyStateDB, address: EthAddress): ByteRange {.inline.} =
+  db.stateDB.getCode(address)
+
+proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.inline.} =
+  db.stateDB.hasCodeOrNonce(address)
+
+proc setAccount*(db: MutableStateDB, address: EthAddress, account: Account) {.inline.} =
+  db.stateDB.setAccount(address, account)
+
+proc deleteAccount*(db: MutableStateDB, address: EthAddress) {.inline.} =
+  db.stateDB.deleteAccount(address)
+
+proc setBalance*(db: MutableStateDB, address: EthAddress, balance: UInt256) {.inline.} =
+  db.stateDB.setBalance(address, balance)
+
+proc addBalance*(db: MutableStateDB, address: EthAddress, delta: UInt256) {.inline.} =
+  db.stateDB.addBalance(address, delta)
+
+proc subBalance*(db: MutableStateDB, address: EthAddress, delta: UInt256) {.inline.} =
+  db.stateDB.subBalance(address, delta)
+
+proc setStorageRoot*(db: MutableStateDB, address: EthAddress, storageRoot: Hash256) {.inline.} =
+  db.stateDB.setStorageRoot(address, storageRoot)
+
+proc setStorage*(db: MutableStateDB, address: EthAddress, slot, value: UInt256) {.inline.} =
+  db.stateDB.setStorage(address, slot, value)
+
+proc setNonce*(db: MutableStateDB, address: EthAddress, newNonce: AccountNonce) {.inline.} =
+  db.stateDB.setNonce(address, newNonce)
+
+proc setCode*(db: MutableStateDB, address: EthAddress, code: ByteRange) {.inline.} =
+  db.stateDB.setCode(address, code)

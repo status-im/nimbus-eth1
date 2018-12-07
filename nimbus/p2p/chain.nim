@@ -43,14 +43,13 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
     assert(head.blockNumber == headers[i].blockNumber - 1)
-    var stateDb = newAccountStateDB(c.db.db, head.stateRoot, c.db.pruneTrie)
     var gasReward = 0.u256
 
     assert(bodies[i].transactions.calcTxRoot == headers[i].txRoot)
-
+    let vmState = newBaseVMState(head, c.db)
+    
     if headers[i].txRoot != BLANK_ROOT_HASH:
-      # assert(head.blockNumber == headers[i].blockNumber - 1)
-      let vmState = newBaseVMState(head, c.db)
+      # assert(head.blockNumber == headers[i].blockNumber - 1)      
       assert(bodies[i].transactions.len != 0)
 
       if bodies[i].transactions.len != 0:
@@ -59,13 +58,14 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
         for t in bodies[i].transactions:
           var sender: EthAddress
           if t.getSender(sender):
-            gasReward += processTransaction(stateDb, t, sender, vmState)
+            gasReward += processTransaction(t, sender, vmState)
           else:
             assert(false, "Could not get sender")
 
     var mainReward = blockReward + gasReward
     #echo "mainReward = ", mainReward , " with blockReward = ", blockReward, " and gasReward = ", gasReward
 
+    var stateDB = vmState.mutableStateDB()
     if headers[i].ommersHash != EMPTY_UNCLE_HASH:
       let h = c.db.persistUncles(bodies[i].uncles)
       assert(h == headers[i].ommersHash)
