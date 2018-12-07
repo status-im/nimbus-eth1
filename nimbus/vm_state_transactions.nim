@@ -6,11 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ranges/typedranges, sequtils, strformat, tables,
+  ranges/typedranges, sequtils, strformat, tables, options,
   eth_common, chronicles,
   ./constants, ./errors, ./vm/computation,
   ./transaction, ./vm_types, ./vm_state, ./block_types, ./db/[db_chain, state_db], ./utils/header,
-  ./vm/interpreter, ./utils/addresses
+  ./vm/interpreter, ./vm/interpreter/gas_costs, ./utils/addresses
 
 func intrinsicGas*(data: openarray[byte]): GasInt =
   result = 21_000
@@ -33,7 +33,7 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
     readOnlyDB.getBalance(sender) >= gas_cost
 
-proc setupComputation*(header: BlockHeader, vmState: BaseVMState, transaction: Transaction, sender: EthAddress) : BaseComputation =
+proc setupComputation*(header: BlockHeader, vmState: BaseVMState, transaction: Transaction, sender: EthAddress, forkOverride=none(Fork)) : BaseComputation =
   let message = newMessage(
       gas = transaction.gasLimit - transaction.payload.intrinsicGas,
       gasPrice = transaction.gasPrice,
@@ -45,7 +45,7 @@ proc setupComputation*(header: BlockHeader, vmState: BaseVMState, transaction: T
       options = newMessageOptions(origin = sender,
                                   createAddress = transaction.to))
 
-  result = newBaseComputation(vmState, header.blockNumber, message)
+  result = newBaseComputation(vmState, header.blockNumber, message, forkOverride)
   doAssert result.isOriginComputation
 
 proc execComputation*(computation: var BaseComputation): bool =
@@ -59,19 +59,24 @@ proc execComputation*(computation: var BaseComputation): bool =
   except ValueError:
     result = false
 
-proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: BaseVMState, sender: EthAddress, useHomestead: bool = false): UInt256 =
+proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
   doAssert t.isContractCreation
   # TODO: clean up params
   trace "Contract creation"
 
-  let gasUsed = t.payload.intrinsicGas.GasInt + (if useHomestead: 32000 else: 0)
+  let fork =
+    if forkOverride.isSome:
+      forkOverride.get
+    else:
+      vmState.blockNumber.toFork
+  let gasUsed = t.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
 
   # TODO: setupComputation refactoring
   let contractAddress = generateAddress(sender, t.accountNonce)
   let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload,
                        options = newMessageOptions(origin = sender,
                                                    createAddress = contractAddress))
-  var c = newBaseComputation(vmState, vmState.blockNumber, msg)
+  var c = newBaseComputation(vmState, vmState.blockNumber, msg, forkOverride)
 
   if execComputation(c):
     db.addBalance(contractAddress, t.value)

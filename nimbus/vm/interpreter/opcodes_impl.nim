@@ -522,7 +522,7 @@ op create, inline = false, value, startPosition, size:
       computation.vmState.blockHeader.rlphash, false).
       getBalance(computation.msg.sender)
 
-  if senderBalance >= value:
+  if senderBalance < value:
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance
     push: 0
     return

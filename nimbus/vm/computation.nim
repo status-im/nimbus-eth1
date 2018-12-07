@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, strformat, strutils, sequtils, macros, terminal, math, tables,
+  chronicles, strformat, strutils, sequtils, macros, terminal, math, tables, options,
   eth_common,
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
@@ -17,7 +17,7 @@ import
 logScope:
   topics = "vm computation"
 
-proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Message): BaseComputation =
+proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Message, forkOverride=none(Fork)): BaseComputation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -29,7 +29,12 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Me
   result.logEntries = @[]
   result.code = newCodeStream(message.code)
   # result.rawOutput = "0x"
-  result.gasCosts = blockNumber.toFork.forkToSchedule
+  result.gasCosts =
+    if forkOverride.isSome:
+      forkOverride.get.forkToSchedule
+    else:
+      blockNumber.toFork.forkToSchedule
+  result.forkOverride = forkOverride
 
 proc isOriginComputation*(c: BaseComputation): bool =
   # Is this computation the computation initiated by a transaction
@@ -209,7 +214,8 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
   var childComp = newBaseComputation(
       computation.vmState,
       computation.vmState.blockHeader.blockNumber,
-      childMsg)
+      childMsg,
+      some(fork))
 
   # Copy the fork op code executor proc (assumes child computation is in the same fork)
   childComp.opCodeExec = computation.opCodeExec
@@ -235,9 +241,16 @@ proc addChildComputation(fork: Fork, computation: BaseComputation, child: BaseCo
       computation.returnData = child.output
   computation.children.add(child)
 
+proc getFork*(computation: BaseComputation): Fork =
+  result =
+    if computation.forkOverride.isSome:
+      computation.forkOverride.get
+    else:
+      computation.vmState.blockHeader.blockNumber.toFork
+
 proc applyChildComputation*(computation: BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
   ## Apply the vm message childMsg as a child computation.
-  let fork = computation.vmState.blockHeader.blockNumber.toFork
+  let fork = computation.getFork
   result = fork.generateChildComputation(computation, childMsg, opCode)
   fork.addChildComputation(computation, result)
 

@@ -13,7 +13,7 @@ import
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf
 type
-  GasFeeKind = enum
+  GasFeeKind* = enum
     GasZero,            # Nothing paid for operations of the set Wzero.
     GasBase,            # Amount of gas to pay for operations of the set Wbase.
     GasVeryLow,         # Amount of gas to pay for operations of the set Wverylow.
@@ -102,10 +102,12 @@ type
 
   GasCosts* = array[Op, GasCost]
 
-template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyped) =
+template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   ## Generate the gas cost for each forks and store them in a const
   ## named `ResultGasCostsName`
+
+  const FeeSchedule = gasFees[fork]
 
   # ############### Helper functions ##############################
 
@@ -151,7 +153,6 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     ## Computes all but 1/64th
     ## L(n) ≡ n − ⌊n/64⌋ - (floored(n/64))
     # Introduced in EIP-150 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
-    # TODO: deactivate it pre-EIP150
 
     # Note: The all-but-one-64th calculation should occur after the memory expansion fee is taken
     # https://github.com/ethereum/yellowpaper/pull/442
@@ -291,10 +292,17 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
                         gasParams.c_memLength
                       )
 
-    # Cnew_account - TODO - pre-EIP158 zero-value call consumed 25000 gas
-    #                https://github.com/ethereum/eips/issues/158
-    if gasParams.c_isNewAccount and not value.isZero:
-      result.gasCost += static(FeeSchedule[GasNewAccount])
+    # Cnew_account
+    if gasParams.c_isNewAccount:
+      if fork < FkSpurious:
+        # Pre-EIP161 all account creation calls consumed 25000 gas.
+        result.gasCost += static(FeeSchedule[GasNewAccount])
+      else:
+        # Afterwards, only those transfering value:
+        # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-158.md
+        # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
+        if not value.isZero:
+          result.gasCost += static(FeeSchedule[GasNewAccount])
 
     # Cxfer
     if not value.isZero:
@@ -305,13 +313,16 @@ template gasCosts(FeeSchedule: GasFeeSchedule, prefix, ResultGasCostsName: untyp
     let cextra = result.gasCost
 
     # Cgascap
-    result.gasCost =  if gasParams.c_gasBalance >= result.gasCost:
-                        min(
-                          `prefix all_but_one_64th`(gasParams.c_gasBalance - result.gasCost),
-                          gasParams.c_contract_gas
-                          )
-                      else:
-                        gasParams.c_contract_gas
+    if fork >= FkTangerine:
+      # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
+      result.gasCost =
+        if gasParams.c_gasBalance >= result.gasCost:
+          min(
+            `prefix all_but_one_64th`(gasParams.c_gasBalance - result.gasCost),
+            gasParams.c_contract_gas
+          )
+        else:
+          gasParams.c_contract_gas
 
     # Ccallgas - Gas sent to the child message
     result.gasRefund = result.gasCost
@@ -574,9 +585,20 @@ const
   TangerineGasFees = HomesteadGasFees.tangerineGasFees
   SpuriousGasFees = TangerineGasFees.spuriousGasFees
 
-gasCosts(BaseGasFees, base, BaseGasCosts)
-gasCosts(HomesteadGasFees, homestead, HomesteadGasCosts)
-gasCosts(TangerineGasFees, tangerine, TangerineGasCosts)
+  gasFees*: array[Fork, GasFeeSchedule] = [
+    FkFrontier: BaseGasFees,
+    FkThawing: BaseGasFees,
+    FkHomestead: HomesteadGasFees,
+    FkDao: HomesteadGasFees,
+    FkTangerine: TangerineGasFees,
+    FkSpurious: SpuriousGasFees,
+    FkByzantium: SpuriousGasFees, # not supported yet
+  ]
+
+
+gasCosts(FkFrontier, base, BaseGasCosts)
+gasCosts(FkHomestead, homestead, HomesteadGasCosts)
+gasCosts(FkTangerine, tangerine, TangerineGasCosts)
 
 proc forkToSchedule*(fork: Fork): GasCosts =
   if fork < FkHomestead:

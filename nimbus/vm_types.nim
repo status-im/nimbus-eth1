@@ -6,10 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables, eth_common,
+  tables, eth_common, options,
   ./constants, json,
   ./vm/[memory, stack, code_stream],
-  ./vm/interpreter/[gas_costs, opcode_values], # TODO - will be hidden at a lower layer
+  ./vm/interpreter/[gas_costs, opcode_values, vm_forks], # TODO - will be hidden at a lower layer
   ./db/db_chain
 
 type
@@ -60,6 +60,7 @@ type
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     opCodeExec*:            OpcodeExecutor
     lastOpCodeHasRetVal*:   bool
+    forkOverride*:          Option[Fork]
 
   Error* = ref object
     info*:                  string
