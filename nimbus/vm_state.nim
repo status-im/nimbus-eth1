@@ -94,24 +94,24 @@ when false:
         # leaving the context.
         # TODO `db`.db = nil
         # state._trie = None
+        
+proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.}=
+  initReadOnlyStateDB(vmState.stateDB)
+
+proc mutableStateDB*(vmState: BaseVMState): MutableStateDB {.inline.}=
+  vmState.stateDB
 
 template mutateStateDB*(vmState: BaseVMState, body: untyped) =
   # This should provide more clever change handling in the future
   block:
     let initialStateRoot = vmState.blockHeader.stateRoot
-    var db {.inject.} = initMutableStateDB(vmState.stateDB)
+    var db {.inject.} = vmState.mutableStateDB
 
     body
 
     let finalStateRoot = db.rootHash
     if finalStateRoot != initialStateRoot:
       vmState.blockHeader.stateRoot = finalStateRoot
-
-proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.}=
-  initReadOnlyStateDB(vmState.stateDB)
-
-proc mutableStateDB*(vmState: BaseVMState): MutableStateDB {.inline.}=
-  initMutableStateDB(vmState.stateDB)
 
 export DbTransaction, commit, rollback, dispose, safeDispose
 

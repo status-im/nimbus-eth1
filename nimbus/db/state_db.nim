@@ -22,7 +22,7 @@ type
   ReadOnlyStateDB* = object of RootObj
     stateDB: AccountStateDB
 
-  MutableStateDB* = object of ReadOnlyStateDB
+  MutableStateDB* = AccountStateDB
 
 proc rootHash*(accountDb: AccountStateDB): KeccakHash =
   accountDb.trie.rootHash
@@ -176,9 +176,6 @@ proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
 
 # ------------------------------------------
-proc initMutableStateDB*(stateDB: AccountStateDB): MutableStateDB =
-  result.stateDB = stateDB
-
 proc initReadOnlyStateDB*(stateDB: AccountStateDB): ReadOnlyStateDB =
   result.stateDB = stateDB
 
@@ -212,30 +209,3 @@ proc getCode*(db: ReadOnlyStateDB, address: EthAddress): ByteRange {.inline.} =
 
 proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.inline.} =
   db.stateDB.hasCodeOrNonce(address)
-
-proc setAccount*(db: MutableStateDB, address: EthAddress, account: Account) {.inline.} =
-  db.stateDB.setAccount(address, account)
-
-proc deleteAccount*(db: MutableStateDB, address: EthAddress) {.inline.} =
-  db.stateDB.deleteAccount(address)
-
-proc setBalance*(db: MutableStateDB, address: EthAddress, balance: UInt256) {.inline.} =
-  db.stateDB.setBalance(address, balance)
-
-proc addBalance*(db: MutableStateDB, address: EthAddress, delta: UInt256) {.inline.} =
-  db.stateDB.addBalance(address, delta)
-
-proc subBalance*(db: MutableStateDB, address: EthAddress, delta: UInt256) {.inline.} =
-  db.stateDB.subBalance(address, delta)
-
-proc setStorageRoot*(db: MutableStateDB, address: EthAddress, storageRoot: Hash256) {.inline.} =
-  db.stateDB.setStorageRoot(address, storageRoot)
-
-proc setStorage*(db: MutableStateDB, address: EthAddress, slot, value: UInt256) {.inline.} =
-  db.stateDB.setStorage(address, slot, value)
-
-proc setNonce*(db: MutableStateDB, address: EthAddress, newNonce: AccountNonce) {.inline.} =
-  db.stateDB.setNonce(address, newNonce)
-
-proc setCode*(db: MutableStateDB, address: EthAddress, code: ByteRange) {.inline.} =
-  db.stateDB.setCode(address, code)
