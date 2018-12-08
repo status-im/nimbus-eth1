@@ -17,7 +17,6 @@ logScope:
 type
   AccountStateDB* = ref object
     trie:         SecureHexaryTrie
-    accountCodes: TableRef[Hash256, ByteRange]
 
   ReadOnlyStateDB* = object of RootObj
     stateDB: AccountStateDB
@@ -31,11 +30,9 @@ proc rootHash*(accountDb: AccountStateDB): KeccakHash =
 # TODO: self.Trie.rootHash = value
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
-                        root: KeccakHash, pruneTrie: bool,
-                        accountCodes = newTable[Hash256, ByteRange]()): AccountStateDB =
+                        root: KeccakHash, pruneTrie: bool): AccountStateDB =
   result.new()
   result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
-  result.accountCodes = accountCodes
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
   ## XXX: The name of this proc is intentionally long, because it
@@ -85,8 +82,11 @@ template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # pad32(int_to_big_endian(slot))
   # morally equivalent to toByteRange_Unnecessary but with different types
 
+template getTrieDB(stateDb: AccountStateDB): TrieDatabaseRef =
+  HexaryTrie(stateDb.trie).db
+
 template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
-  initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot, stateDb.trie.isPruning)
+  initSecureHexaryTrie(stateDb.getTrieDB, account.storageRoot, stateDb.trie.isPruning)
 
 # XXX: https://github.com/status-im/nimbus/issues/142#issuecomment-420583181
 proc setStorageRoot*(db: AccountStateDB, address: EthAddress, storageRoot: Hash256) =
@@ -160,13 +160,15 @@ proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
   let newCodeHash = keccak256.digest code.toOpenArray
   if newCodeHash != account.codeHash:
     account.codeHash = newCodeHash
-    db.accountCodes[newCodeHash] = code
-    # XXX: this uses the journaldb in py-evm
-    # db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
     db.setAccount(address, account)
+    # we have memory layer db, let's use it
+    # instead of complicated journalDB
+    var trieDB = db.getTrieDB()
+    trieDB.put(newCodeHash.data, code.toOpenArray)
 
 proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
-  db.accountCodes.getOrDefault(db.getCodeHash(address))
+  var trieDB = db.getTrieDB()
+  trieDB.get(db.getCodeHash(address).data).toRange
 
 proc hasCodeOrNonce*(account: AccountStateDB, address: EthAddress): bool {.inline.} =
   account.getNonce(address) != 0 or account.getCodeHash(address) != EMPTY_SHA3

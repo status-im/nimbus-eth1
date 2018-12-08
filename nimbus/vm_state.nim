@@ -33,8 +33,7 @@ proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set
   result.chaindb = chainDB
   result.tracer.initTracer(tracerFlags)
   result.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
-  result.accountCodes = newTable[Hash256, ByteRange]()
-  result.stateDB = newAccountStateDB(chainDB.db, header.stateRoot, chainDB.pruneTrie, result.accountCodes)
+  result.stateDB = newAccountStateDB(chainDB.db, header.stateRoot, chainDB.pruneTrie)
 
 method blockhash*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.hash
@@ -94,7 +93,7 @@ when false:
         # leaving the context.
         # TODO `db`.db = nil
         # state._trie = None
-        
+
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.}=
   initReadOnlyStateDB(vmState.stateDB)
 

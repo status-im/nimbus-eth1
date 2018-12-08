@@ -22,13 +22,8 @@ type
     name*          : string
     tracingEnabled*: bool
     tracer*        : TransactionTracer
-    # XXX: intentionally simple stand-in for one use of full JournalDB
-    # Doesn't handle CREATE+revert, etc. But also creates minimal tech
-    # debt while setting a CI baseline from which to improve/replace.
-    accountCodes*: TableRef[Hash256, ByteRange]
-    # TODO db*: JournalDB
-    stateDB*: AccountStateDB
-    
+    stateDB*       : AccountStateDB
+
   AccessLogs* = ref object
     reads*: Table[string, string]
     writes*: Table[string, string]
