@@ -12,7 +12,7 @@ import
   nimcrypto, json_rpc/rpcserver, hexstrings, stint, byteutils, ranges/typedranges,
   eth_common, eth_p2p, eth_keys, eth_trie/db, rlp,
   ../utils/header, ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
-  ../vm_state_transactions,
+  ../vm_state_transactions, ../utils/addresses,
   ../db/[db_chain, state_db, storage_types],
   rpc_types, rpc_utils, ../vm/[message, computation]
 
@@ -269,7 +269,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       gasPrice =
         if call.gasPrice.isSome: call.gasPrice.get
         else: 0.GasInt
-    
+
     # Set defaults for gas limit if required
     # Price remains zero by default
     if gaslimit == 0.GasInt:
@@ -285,7 +285,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       data = if call.data.isSome: call.data.get.string.fromHex else: @[]
       value = if call.value.isSome: call.value.get else: 0.u256
       comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice)
-    
+
     discard comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
 
@@ -411,19 +411,28 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       transaction = getBlockBody(blockHash).transactions[quantity]
     populateTransactionObject(transaction, quantity, header, blockHash)
 
-  proc populateReceipt(receipt: Receipt, gasUsed: GasInt, transaction: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
-    result.transactionHash = transaction.rlpHash
+  proc populateReceipt(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
+    result.transactionHash = tx.rlpHash
     result.transactionIndex = txIndex
     result.blockHash = blockHeader.hash
     result.blockNumber = blockHeader.blockNumber
-    result.sender = transaction.getSender()
-    result.to = some(transaction.to)
+    result.sender = tx.getSender()
+    result.to = some(tx.to)
     result.cumulativeGasUsed = receipt.cumulativeGasUsed
     result.gasUsed = gasUsed
-    # TODO: Get contract address if the transaction was a contract creation.
-    result.contractAddress = none(EthAddress)
+
+    if tx.isContractCreation:
+      var sender: EthAddress
+      if tx.getSender(sender):
+        let contractAddress = generateAddress(sender, tx.accountNonce)
+        result.contractAddress = some(contractAddress)
+      else:
+        assert(false)
+    else:
+      result.contractAddress = none(EthAddress)
+
     result.logs = receipt.logs
-    result.logsBloom = blockHeader.bloom
+    result.logsBloom = receipt.bloom
     # post-transaction stateroot (pre Byzantium).
     if receipt.hasStateRoot:
       result.root = some(receipt.stateRoot)
@@ -444,10 +453,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     var
       idx = 0
       prevGasUsed = GasInt(0)
-    for receipt in chain.getReceipts(header, Receipt):
+      
+    for receipt in chain.getReceipts(header):
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
       prevGasUsed = receipt.cumulativeGasUsed
       if idx == txDetails.index:
+        echo idx
         return populateReceipt(receipt, gasUsed, body.transactions[txDetails.index], txDetails.index, header)
       idx.inc
 
