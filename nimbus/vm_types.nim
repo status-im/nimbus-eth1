@@ -15,13 +15,13 @@ import
 type
   BaseVMState* = ref object of RootObj
     prevHeaders*   : seq[BlockHeader]
-    # receipts*:
     chaindb*       : BaseChainDB
     accessLogs*    : AccessLogs
     blockHeader*   : BlockHeader
     name*          : string
     tracingEnabled*: bool
     tracer*        : TransactionTracer
+    logEntries*    : seq[Log]
 
   AccessLogs* = ref object
     reads*: Table[string, string]
@@ -53,7 +53,6 @@ type
     rawOutput*:             seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
-    logEntries*:            seq[(EthAddress, seq[UInt256], seq[byte])]
     shouldEraseReturnData*: bool
     accountsToDelete*:      Table[EthAddress, EthAddress]
     opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]

@@ -1,6 +1,35 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
   ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto,
-  ../vm_state_transactions, sugar, ../utils, eth_trie/db, ../tracer, ./executor, json
+  ../vm_state_transactions, sugar, ../utils, eth_trie/db, ../tracer, ./executor, json,
+  eth_bloom
+
+type
+  # these types need to eradicated
+  # once eth_bloom and eth_common sync'ed
+  Bloom = eth_common.BloomFilter
+  LogsBloom = eth_bloom.BloomFilter
+
+func logsBloom(logs: openArray[Log]): LogsBloom =
+  for log in logs:
+    result.incl log.address
+    for topic in log.topics:
+      result.incl topic
+
+func createBloom*(receipts: openArray[Receipt]): Bloom =
+  var bloom: LogsBloom
+  for receipt in receipts:
+    bloom.value = bloom.value or logsBloom(receipt.logs).value
+  result = bloom.value.toByteArrayBE
+
+proc makeReceipt(vmState: BaseVMState, stateRoot: Hash256, cumulativeGasUsed: GasInt): Receipt =
+  # TODO: post byzantium fork use status instead of rootHash
+  # currently, vmState.rootHash vs stateDb.rootHash can be different
+  # need to wait #188 solved
+  #result.stateRootOrStatus = hashOrStatus(vmState.blockHeader.stateRoot)
+  result.stateRootOrStatus = hashOrStatus(stateRoot)
+  result.cumulativeGasUsed = cumulativeGasUsed
+  result.logs = vmState.getAndClearLogEntries()
+  result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
 type
   Chain* = ref object of AbstractChainDB
@@ -30,7 +59,7 @@ method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): b
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]) =
+method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): bool =
   # Run the VM here
   assert(headers.len == bodies.len)
 
@@ -45,6 +74,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     assert(head.blockNumber == headers[i].blockNumber - 1)
     var stateDb = newAccountStateDB(c.db.db, head.stateRoot, c.db.pruneTrie)
     var gasReward = 0.u256
+    var receipts = newSeq[Receipt](bodies[i].transactions.len)
 
     assert(bodies[i].transactions.calcTxRoot == headers[i].txRoot)
 
@@ -52,16 +82,21 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
       # assert(head.blockNumber == headers[i].blockNumber - 1)
       let vmState = newBaseVMState(head, c.db)
       assert(bodies[i].transactions.len != 0)
+      var cumulativeGasUsed = GasInt(0)
 
       if bodies[i].transactions.len != 0:
         trace "Has transactions", blockNumber = headers[i].blockNumber, blockHash = headers[i].blockHash
 
-        for t in bodies[i].transactions:
+        for txIndex, tx in bodies[i].transactions:
           var sender: EthAddress
-          if t.getSender(sender):
-            gasReward += processTransaction(stateDb, t, sender, vmState)
+          if tx.getSender(sender):
+            let txFee = processTransaction(stateDb, tx, sender, vmState)
+            gasReward += txFee
+            let gasUsed = (txFee div tx.gasPrice.u256).truncate(GasInt)
+            cumulativeGasUsed += gasUsed
           else:
             assert(false, "Could not get sender")
+          receipts[txIndex] = makeReceipt(vmState, stateDb.rootHash, cumulativeGasUsed)
 
     var mainReward = blockReward + gasReward
     #echo "mainReward = ", mainReward , " with blockReward = ", blockReward, " and gasReward = ", gasReward
@@ -87,10 +122,24 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
 
     assert(headers[i].stateRoot == stateDb.rootHash)
 
+    let bloom = createBloom(receipts)
+    if headers[i].bloom != bloom:
+      debug "wrong bloom in block", blockNumber = headers[i].blockNumber
+    assert(headers[i].bloom == bloom)
+
+    let receiptRoot = calcReceiptRoot(receipts)
+    if headers[i].receiptRoot != receiptRoot:
+      debug "wrong receipt in block", blockNumber = headers[i].blockNumber, receiptRoot, valid=headers[i].receiptRoot
+      echo "CA:", receipts
+      return false
+    assert(headers[i].receiptRoot == receiptRoot)
+
     discard c.db.persistHeaderToDb(headers[i])
     assert(c.db.getCanonicalHead().blockHash == headers[i].blockHash)
 
     c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
+    c.db.persistReceipts(receipts)
 
   transaction.commit()
+  result = true
 
