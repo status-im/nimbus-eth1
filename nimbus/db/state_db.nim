@@ -39,7 +39,7 @@ template createRangeFromAddress(address: EthAddress): ByteRange =
   ## it can remain searchable in the code.
   toRange(@address)
 
-proc getAccount(db: AccountStateDB, address: EthAddress): Account =
+proc getAccount*(db: AccountStateDB, address: EthAddress): Account =
   let recordFound = db.trie.get(createRangeFromAddress address)
   if recordFound.len > 0:
     result = rlp.decode(recordFound, Account)

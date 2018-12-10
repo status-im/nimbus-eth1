@@ -1,7 +1,7 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
   ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto,
   ../vm_state_transactions, sugar, ../utils, eth_trie/db, ../tracer, ./executor, json,
-  eth_bloom
+  eth_bloom, strutils
 
 type
   # these types need to eradicated
@@ -59,7 +59,7 @@ method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): b
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): bool =
+method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]) =
   # Run the VM here
   assert(headers.len == bodies.len)
 
@@ -68,18 +68,17 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
 
-  trace "Persisting blocks", range = headers[0].blockNumber & " - " & headers[^1].blockNumber
+  debug "Persisting blocks", range = $headers[0].blockNumber & " - " & $headers[^1].blockNumber
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
     assert(head.blockNumber == headers[i].blockNumber - 1)
     var stateDb = newAccountStateDB(c.db.db, head.stateRoot, c.db.pruneTrie)
-    var gasReward = 0.u256
     var receipts = newSeq[Receipt](bodies[i].transactions.len)
 
     assert(bodies[i].transactions.calcTxRoot == headers[i].txRoot)
 
     if headers[i].txRoot != BLANK_ROOT_HASH:
-      # assert(head.blockNumber == headers[i].blockNumber - 1)
+      assert(head.blockNumber == headers[i].blockNumber - 1)
       let vmState = newBaseVMState(head, c.db)
       assert(bodies[i].transactions.len != 0)
       var cumulativeGasUsed = GasInt(0)
@@ -91,16 +90,18 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
           var sender: EthAddress
           if tx.getSender(sender):
             let txFee = processTransaction(stateDb, tx, sender, vmState)
-            gasReward += txFee
+
+            # perhaps this can be moved somewhere else
             let gasUsed = (txFee div tx.gasPrice.u256).truncate(GasInt)
             cumulativeGasUsed += gasUsed
+
+            # miner fee
+            stateDb.addBalance(headers[i].coinbase, txFee)
           else:
             assert(false, "Could not get sender")
           receipts[txIndex] = makeReceipt(vmState, stateDb.rootHash, cumulativeGasUsed)
 
-    var mainReward = blockReward + gasReward
-    #echo "mainReward = ", mainReward , " with blockReward = ", blockReward, " and gasReward = ", gasReward
-
+    var mainReward = blockReward
     if headers[i].ommersHash != EMPTY_UNCLE_HASH:
       let h = c.db.persistUncles(bodies[i].uncles)
       assert(h == headers[i].ommersHash)
@@ -130,8 +131,6 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     let receiptRoot = calcReceiptRoot(receipts)
     if headers[i].receiptRoot != receiptRoot:
       debug "wrong receipt in block", blockNumber = headers[i].blockNumber, receiptRoot, valid=headers[i].receiptRoot
-      echo "CA:", receipts
-      return false
     assert(headers[i].receiptRoot == receiptRoot)
 
     discard c.db.persistHeaderToDb(headers[i])
@@ -141,5 +140,3 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     c.db.persistReceipts(receipts)
 
   transaction.commit()
-  result = true
-
