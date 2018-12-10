@@ -115,6 +115,7 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: Ba
     debug "execComputation() error", isError = c.isError
     if c.tracingEnabled:
       c.traceError()
+    vmState.clearLogs()
     return t.gasLimit.u256 * t.gasPrice.u256
 
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=

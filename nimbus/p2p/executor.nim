@@ -1,6 +1,7 @@
 import ../db/[db_chain, state_db], ../transaction, eth_common,
   ../vm_state, ../vm_types, ../vm_state_transactions, ranges,
-  chronicles, ../vm/[computation, interpreter_dispatch, message]
+  chronicles, ../vm/[computation, interpreter_dispatch, message],
+  ../rpc/hexstrings, byteutils, nimcrypto
 
 proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
   ## Process the transaction, write the results to db.
@@ -64,5 +65,4 @@ proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddr
     refund += t.value
 
   db.addBalance(sender, refund)
-
   return gasUsed.u256 * t.gasPrice.u256

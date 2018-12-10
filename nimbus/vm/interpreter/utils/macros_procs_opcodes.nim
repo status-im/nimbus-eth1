@@ -9,7 +9,7 @@
 # Macros to facilitate opcode procs creation
 
 import
-  macros, strformat, stint,
+  macros, strformat, stint, eth_common,
   ../../computation, ../../stack, ../../code_stream,
   ../../../constants, ../../../vm_types, ../../memory,
   ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values],
@@ -108,20 +108,18 @@ proc logImpl(c: var BaseComputation, opcode: Op, topicCount: int) =
   if memPos < 0 or len < 0:
     raise newException(OutOfBoundsRead, "Out of bounds memory access")
 
-  var topics = newSeqOfCap[UInt256](topicCount)
+  var log: Log
+  log.topics = newSeqOfCap[Topic](topicCount)
   for i in 0 ..< topicCount:
-    topics.add(c.stack.popInt())
+    log.topics.add(c.stack.popTopic())
   c.gasMeter.consumeGas(
     c.gasCosts[opcode].m_handler(c.memory.len, memPos, len),
     reason="Memory expansion, Log topic and data gas cost")
 
   c.memory.extend(memPos, len)
-  let logData = c.memory.read(memPos, len)
-  addLogEntry(
-    c,
-    account = c.msg.storageAddress,
-    topics = topics,
-    data = logData)
+  log.data = c.memory.read(memPos, len)
+  log.address = c.msg.storageAddress
+  c.addLogEntry(log)
 
 template genLog*() =
   proc log0*(c: var BaseComputation) {.inline.} = logImpl(c, Log0, 0)

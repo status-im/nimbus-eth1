@@ -33,6 +33,7 @@ proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set
   result.chaindb = chainDB
   result.tracer.initTracer(tracerFlags)
   result.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
+  result.logEntries = @[]
 
 method blockhash*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.hash
@@ -116,3 +117,14 @@ proc beginTransaction*(vmState: BaseVMState): DbTransaction =
 proc getTracingResult*(vmState: BaseVMState): JsonNode =
   assert(vmState.tracingEnabled)
   vmState.tracer.trace
+
+proc addLogEntry*(vmState: BaseVMState, log: Log) =
+  vmState.logEntries.add(log)
+
+proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
+  shallowCopy(result, vmState.logEntries)
+  vmState.logEntries = @[]
+
+proc clearLogs*(vmState: BaseVMState) =
+  # call this when computation error
+  vmState.logEntries.setLen(0)

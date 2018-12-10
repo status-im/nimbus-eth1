@@ -26,7 +26,6 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Me
   result.gasMeter.init(message.gas)
   result.children = @[]
   result.accountsToDelete = initTable[EthAddress, EthAddress]()
-  result.logEntries = @[]
   result.code = newCodeStream(message.code)
   # result.rawOutput = "0x"
   result.gasCosts =
@@ -261,8 +260,8 @@ proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
-proc addLogEntry*(c: var BaseComputation, account: EthAddress, topics: seq[UInt256], data: seq[byte]) =
-  c.logEntries.add((account, topics, data))
+proc addLogEntry*(c: var BaseComputation, log: Log) {.inline.} =
+  c.vmState.addLogEntry(log)
 
 # many methods are basically TODO, but they still return valid values
 # in order to test some existing code
@@ -274,13 +273,6 @@ func getAccountsForDeletion*(c: BaseComputation): seq[EthAddress] =
     result = @[]
     for account in c.accountsToDelete.keys:
       result.add(account)
-
-proc getLogEntries*(c: BaseComputation): seq[(string, seq[UInt256], string)] =
-  # TODO
-  if c.isError:
-    result = @[]
-  else:
-    result = @[]
 
 proc getGasRefund*(c: BaseComputation): GasInt =
   if c.isError:

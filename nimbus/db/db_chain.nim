@@ -186,14 +186,19 @@ proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
   self.db.contains(genericHashKey(blockHash).toOpenArray)
 
-iterator getReceipts*(self: BaseChainDB; header: BlockHeader; receiptClass: typedesc): Receipt =
+proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]) =
+  var trie = initHexaryTrie(self.db)
+  for idx, rec in receipts:
+    trie.put(rlp.encode(idx).toRange, rlp.encode(rec).toRange)
+
+iterator getReceipts*(self: BaseChainDB; header: BlockHeader): Receipt =
   var receiptDb = initHexaryTrie(self.db, header.receiptRoot)
   var receiptIdx = 0
   while true:
     let receiptKey = rlp.encode(receiptIdx).toRange
     if receiptKey in receiptDb:
       let receiptData = receiptDb.get(receiptKey)
-      yield rlp.decode(receiptData, receiptClass)
+      yield rlp.decode(receiptData, Receipt)
     else:
       break
     inc receiptIdx

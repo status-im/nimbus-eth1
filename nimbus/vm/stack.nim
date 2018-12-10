@@ -33,6 +33,7 @@ proc toStackElement(v: MDigest, elem: var StackElement) {.inline.} = elem.initFr
 proc fromStackElement(elem: StackElement, v: var UInt256) {.inline.} = v = elem
 proc fromStackElement(elem: StackElement, v: var EthAddress) {.inline.} = v[0 .. ^1] = elem.toByteArrayBE().toOpenArray(12, 31)
 proc fromStackElement(elem: StackElement, v: var Hash256) {.inline.} = v.data = elem.toByteArrayBE()
+proc fromStackElement(elem: StackElement, v: var Topic) {.inline.} = v = elem.toByteArrayBE()
 
 proc toStackElement(v: openarray[byte], elem: var StackElement) {.inline.} =
   # TODO: This needs to go
@@ -85,6 +86,9 @@ proc popInt*(stack: var Stack, numItems: static[int]): auto {.inline.} =
   return r
 
 proc popAddress*(stack: var Stack): EthAddress {.inline.} =
+  popAux(stack, result)
+
+proc popTopic*(stack: var Stack): Topic {.inline.} =
   popAux(stack, result)
 
 proc newStack*(): Stack =
