@@ -9,7 +9,7 @@ import
   unittest, strformat, strutils, tables, json, ospaths, times,
   byteutils, ranges/typedranges, nimcrypto/[keccak, hash], options,
   rlp, eth_trie/db, eth_common,
-  eth_keys,
+  eth_keys, chronicles,
   ./test_helpers,
   ../nimbus/[constants, errors],
   ../nimbus/[vm_state, vm_types, vm_state_transactions],
@@ -24,7 +24,11 @@ suite "generalstate json tests":
 
 
 proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transaction, sender: EthAddress, expectedHash: string, testStatusIMPL: var TestStatus, fork: Fork) =
-  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
+  when enabledLogLevel <= TRACE:
+    let tracerFlags = {TracerFlags.EnableTracing}
+  else:
+    let tracerFlags: set[TracerFlags] = {}
+  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()), tracerFlags)
   vmState.mutateStateDB:
     setupStateDB(pre, db)
 
