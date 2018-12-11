@@ -19,7 +19,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     captureDB = newCaptureDB(db.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?
-    vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {TracerFlags.EnableTracing})
+    vmState = newBaseVMState(parent, captureChainDB, tracerFlags)
 
   var stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
   if header.txRoot == BLANK_ROOT_HASH: return
@@ -30,9 +30,13 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
   for idx, tx in body.transactions:
     var sender: EthAddress
     if tx.getSender(sender):
+      if idx == txIndex:
+        vmState.enableTracing()
       let txFee = processTransaction(stateDb, tx, sender, vmState)
       gasUsed = (txFee div tx.gasPrice.u256).truncate(GasInt)
-      if idx == txIndex: break
+      if idx == txIndex:
+        vmState.disableTracing()
+        break
     else:
       assert(false, "Could not get sender")
 
