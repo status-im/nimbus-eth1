@@ -458,7 +458,6 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
       prevGasUsed = receipt.cumulativeGasUsed
       if idx == txDetails.index:
-        echo idx
         return populateReceipt(receipt, gasUsed, body.transactions[txDetails.index], txDetails.index, header)
       idx.inc
 
