@@ -128,3 +128,9 @@ proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
 proc clearLogs*(vmState: BaseVMState) =
   # call this when computation error
   vmState.logEntries.setLen(0)
+
+proc enableTracing*(vmState: BaseVMState) =
+  vmState.tracingEnabled = true
+
+proc disableTracing*(vmState: BaseVMState) =
+  vmState.tracingEnabled = false
