@@ -16,6 +16,9 @@ import
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
 
+proc hashLogEntries(logs: seq[Log]): string =
+  toLowerAscii("0x" & $keccak256.digest(rlp.encode(logs)))
+
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
 suite "vm json tests":
@@ -69,12 +72,11 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     if computation.isError:
       echo "Computation error: ", computation.error.info
 
-    let logEntries = computation.getLogEntries()
+    let logEntries = vmState.getAndClearLogEntries()
     if not fixture{"logs"}.isNil:
-      discard
-      # TODO hashLogEntries let actualLogsHash = hashLogEntries(logEntries)
-      # let expectedLogsHash = fixture{"logs"}.getStr
-      # check(expectedLogsHash == actualLogsHash)
+      let actualLogsHash = hashLogEntries(logEntries)
+      let expectedLogsHash = toLowerAscii(fixture{"logs"}.getStr)
+      check(expectedLogsHash == actualLogsHash)
     elif logEntries.len > 0:
       checkpoint(&"Got log entries: {logEntries}")
       fail()
