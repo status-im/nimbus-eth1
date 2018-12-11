@@ -63,7 +63,6 @@ func output*(c: BaseComputation): seq[byte] =
 
 func `output=`*(c: var BaseComputation, value: openarray[byte]) =
   c.rawOutput = @value
-  c.lastOpCodeHasRetVal = true
 
 proc outputHex*(c: BaseComputation): string =
   if c.shouldEraseReturnData:
@@ -295,11 +294,11 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
 proc tracingEnabled*(c: BaseComputation): bool =
   c.vmState.tracingEnabled
 
-proc traceOpCodeStarted*(c: BaseComputation, op: string) =
-  traceOpCodeStarted(c.vmState.tracer, c, op)
+proc traceOpCodeStarted*(c: BaseComputation, op: Op) =
+  c.vmState.tracer.traceOpCodeStarted(c, op)
 
-proc traceOpCodeEnded*(c: BaseComputation) =
-  c.vmState.tracer.traceOpCodeEnded(c)
+proc traceOpCodeEnded*(c: BaseComputation, op: Op) =
+  c.vmState.tracer.traceOpCodeEnded(c, op)
 
 proc traceError*(c: BaseComputation) =
   c.vmState.tracer.traceError(c)

@@ -58,7 +58,6 @@ type
     opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     opCodeExec*:            OpcodeExecutor
-    lastOpCodeHasRetVal*:   bool
     forkOverride*:          Option[Fork]
 
   Error* = ref object

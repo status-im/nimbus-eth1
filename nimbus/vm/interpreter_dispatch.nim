@@ -197,21 +197,19 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
         if BaseGasCosts[op].kind == GckFixed:
           quote do:
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeStarted($`asOp`)
+              `computation`.traceOpCodeStarted(`asOp`)
             `computation`.gasMeter.consumeGas(`computation`.gasCosts[`asOp`].cost, reason = $`asOp`)
-            `computation`.lastOpCodeHasRetVal = false
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeEnded()
+              `computation`.traceOpCodeEnded(`asOp`)
             `instr` = `computation`.code.next()
         else:
           quote do:
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeStarted($`asOp`)
-            `computation`.lastOpCodeHasRetVal = false
+              `computation`.traceOpCodeStarted(`asOp`)
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeEnded()
+              `computation`.traceOpCodeEnded(`asOp`)
             when `asOp` in {Return, Revert, SelfDestruct}:
               break
             else:
