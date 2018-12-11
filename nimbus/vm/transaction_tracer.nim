@@ -2,7 +2,8 @@ import
   json, strutils,
   chronicles, nimcrypto, eth_common, stint,
   ../vm_types, memory, stack, ../db/[db_chain, state_db],
-  eth_trie/hexary, ./message, ranges/typedranges
+  eth_trie/hexary, ./message, ranges/typedranges,
+  ./interpreter/opcode_values
 
 logScope:
   topics = "vm opcode"
@@ -18,14 +19,14 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.trace["structLogs"] = newJArray()
   tracer.flags = flags
 
-proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: string) =
+proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   if unlikely tracer.trace.isNil:
     tracer.initTracer()
 
   let j = newJObject()
   tracer.trace["structLogs"].add(j)
 
-  j["op"] = %op.toUpperAscii
+  j["op"] = %(($op).toUpperAscii)
   j["pc"] = %(c.code.pc - 1)
   j["depth"] = %1 # stub
   j["gas"] = %c.gasMeter.gasRemaining
@@ -47,7 +48,7 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
       mem.add(%c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex())
     j["memory"] = mem
 
-proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
+proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   let j = tracer.trace["structLogs"].elems[^1]
 
   # TODO: figure out how to get storage
@@ -61,7 +62,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
 
   j["gasCost"] = %(tracer.gasRemaining - c.gasMeter.gasRemaining)
 
-  if c.lastOpCodeHasRetVal:
+  if op in {Return, Revert}:
     let returnValue = %("0x" & toHex(c.rawOutput, true))
     j["returnValue"] = returnValue
     tracer.trace["returnValue"] = returnValue
