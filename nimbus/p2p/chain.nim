@@ -130,7 +130,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
 
     let receiptRoot = calcReceiptRoot(receipts)
     if headers[i].receiptRoot != receiptRoot:
-      debug "wrong receipt in block", blockNumber = headers[i].blockNumber, receiptRoot, valid=headers[i].receiptRoot
+      debug "wrong receiptRoot in block", blockNumber = headers[i].blockNumber, actual=receiptRoot, expected=headers[i].receiptRoot
     assert(headers[i].receiptRoot == receiptRoot)
 
     discard c.db.persistHeaderToDb(headers[i])
