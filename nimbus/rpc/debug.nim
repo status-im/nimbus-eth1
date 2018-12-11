@@ -60,3 +60,25 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       if opts.disableState.isTrue: flags.incl TracerFlags.DisableState
 
     traceTransaction(chainDB, blockHeader, blockBody, txDetails.index, flags)
+
+  rpcsrv.rpc("debug_dumpBlockStateByNumber") do(quantityTag: string) -> JsonNode:
+    ## Retrieves the state that corresponds to the block number and returns
+    ## a list of accounts (including storage and code).
+    ##
+    ## quantityTag: integer of a block number, or the string "earliest",
+    ## "latest" or "pending", as in the default block parameter.
+    let
+      header = chainDB.headerFromTag(quantityTag)
+
+    dumpBlockState(header)
+
+  rpcsrv.rpc("debug_dumpBlockStateByHash") do(data: EthHashStr) -> JsonNode:
+    ## Retrieves the state that corresponds to the block number and returns
+    ## a list of accounts (including storage and code).
+    ##
+    ## data: Hash of a block.
+    let
+      h = data.toHash
+      header = chainDB.getBlockHeader(h)
+
+    dumpBlockState(header)

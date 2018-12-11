@@ -87,3 +87,6 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     for k, v in pairsInMemoryDB(memoryDB):
       n[k.prefixHex] = %v.prefixHex
     result["state"] = n
+
+proc dumpBlockState*(header: BlockHeader): JsonNode =
+  discard

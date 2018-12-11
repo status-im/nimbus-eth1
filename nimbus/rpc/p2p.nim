@@ -33,20 +33,6 @@ template balance(addressDb: AccountStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
   addressDb.getBalance(address).truncate(int64)
 
-func headerFromTag(chain:BaseChainDB, blockTag: string): BlockHeader =
-  let tag = blockTag.toLowerAscii
-  case tag
-  of "latest": result = chain.getCanonicalHead()
-  of "earliest": result = chain.getBlockHeader(GENESIS_BLOCK_NUMBER)
-  of "pending":
-    #TODO: Implement get pending block
-    raise newException(ValueError, "Pending tag not yet implemented")
-  else:
-    # Raises are trapped and wrapped in JSON when returned to the user.
-    tag.validateHexQuantity
-    let blockNum = stint.fromHex(UInt256, tag)
-    result = chain.getBlockHeader(blockNum)
-
 proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
 
   func getAccountDb(header: BlockHeader, readOnly = true): AccountStateDb =
