@@ -165,3 +165,30 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody): Jso
     after.captureAccount(stateAfter, uncle.coinbase, uncleName & $idx)
 
   result = %{"before": before, "after": after}
+
+proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
+  let
+    parent = db.getParentHeader(header)
+    memoryDB = newMemoryDB()
+    captureDB = newCaptureDB(db.db, memoryDB)
+    captureTrieDB = trieDB captureDB
+    captureChainDB = newBaseChainDB(captureTrieDB, false)
+    vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {EnableTracing})
+
+  var
+    stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
+
+  if header.txRoot == BLANK_ROOT_HASH: return
+  assert(body.transactions.calcTxRoot == header.txRoot)
+  assert(body.transactions.len != 0)
+
+  var gasUsed = GasInt(0)
+
+  for tx in body.transactions:
+    let
+      sender = tx.getSender
+      txFee = processTransaction(stateDb, tx, sender, vmState)
+    gasUsed = gasUsed + (txFee div tx.gasPrice.u256).truncate(GasInt)
+
+  result = vmState.getTracingResult()
+  result["gas"] = %gasUsed
