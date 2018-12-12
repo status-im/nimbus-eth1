@@ -9,7 +9,7 @@ proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
 proc prefixHex(x: openArray[byte]): string =
   "0x" & toHex(x, true)
 
-proc toJson(db: AccountStateDB, address: EthAddress, name: string): JsonNode =
+proc accountToJson(db: AccountStateDB, address: EthAddress, name: string): JsonNode =
   result = newJObject()
   result["name"] = %name
   result["address"] = %($address)
@@ -28,14 +28,14 @@ proc toJson(db: AccountStateDB, address: EthAddress, name: string): JsonNode =
   result["storage"] = storage
 
 proc captureStateAccount(n: JsonNode, db: AccountStateDB, sender: EthAddress, header: BlockHeader, tx: Transaction) =
-  n.add toJson(db, sender, "sender")
-  n.add toJson(db, header.coinbase, "miner")
+  n.add accountToJson(db, sender, "sender")
+  n.add accountToJson(db, header.coinbase, "miner")
 
   if tx.isContractCreation:
     let contractAddress = generateAddress(sender, tx.accountNonce)
-    n.add toJson(db, contractAddress, "contract")
+    n.add accountToJson(db, contractAddress, "contract")
   else:
-    n.add toJson(db, tx.to, "recipient")
+    n.add accountToJson(db, tx.to, "recipient")
 
 proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
@@ -88,5 +88,5 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       n[k.prefixHex] = %v.prefixHex
     result["state"] = n
 
-proc dumpBlockState*(header: BlockHeader): JsonNode =
+proc dumpBlockState*(header: BlockHeader, body: BlockBody): JsonNode =
   discard
