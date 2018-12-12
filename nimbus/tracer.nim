@@ -41,6 +41,12 @@ proc captureAccount(n: JsonNode, db: AccountStateDB, address: EthAddress, name: 
 
   n.add jaccount
 
+proc dumpMemoryDB*(node: JsonNode, memoryDB: TrieDatabaseRef) =
+  var n = newJObject()
+  for k, v in pairsInMemoryDB(memoryDB):
+    n[k.prefixHex] = %v.prefixHex
+  node["state"] = n
+
 const
   senderName = "sender"
   recipientName = "recipient"
@@ -60,7 +66,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     vmState = newBaseVMState(parent, captureChainDB, tracerFlags)
 
   var stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
-  if header.txRoot == BLANK_ROOT_HASH: return
+  if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   assert(body.transactions.calcTxRoot == header.txRoot)
   assert(body.transactions.len != 0)
 
@@ -96,12 +102,9 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
 
   # now we dump captured state db
   if TracerFlags.DisableState notin tracerFlags:
-    var n = newJObject()
-    for k, v in pairsInMemoryDB(memoryDB):
-      n[k.prefixHex] = %v.prefixHex
-    result["state"] = n
+    result.dumpMemoryDB(memoryDB)
 
-proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody): JsonNode =
+proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dumpState = false): JsonNode =
   # TODO: scan tracing result and find internal transaction address
   # then do account dump as usual, before and after
   # cons: unreliable and prone to error.
@@ -157,6 +160,9 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody): Jso
 
   result = %{"before": before, "after": after}
 
+  if dumpState:
+    result.dumpMemoryDB(memoryDB)
+
 proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
     parent = db.getParentHeader(header)
@@ -169,7 +175,7 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
   var
     stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
 
-  if header.txRoot == BLANK_ROOT_HASH: return
+  if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   assert(body.transactions.calcTxRoot == header.txRoot)
   assert(body.transactions.len != 0)
 
@@ -183,6 +189,9 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed
+
+  if TracerFlags.DisableState notin tracerFlags:
+    result.dumpMemoryDB(memoryDB)
 
 proc dumpDebuggingMetaData*(db: BaseChainDB, header: BlockHeader, body: BlockBody) =
   # TODO: tidying this up and make it available to debugging tool
