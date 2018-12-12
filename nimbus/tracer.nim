@@ -2,7 +2,7 @@ import
   db/[db_chain, state_db, capturedb], eth_common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth_trie/db, nimcrypto, strutils, ranges, ./utils/addresses,
-  sets
+  sets, chronicles
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
@@ -192,3 +192,13 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed
+
+proc dumpDebuggingMetaData*(db: BaseChainDB, header: BlockHeader, body: BlockBody) =
+  # TODO: tidying this up and make it available to debugging tool
+  let ttrace = traceTransaction(db, header, body, body.transactions.len - 1, {})
+  trace "NIMBUS TRACE", transactionTrace=ttrace.pretty()
+  let dump = dumpBlockState(db, header, body)
+  trace "NIMBUS STATE DUMP", dump=dump.pretty()
+  let blockTrace = traceBlock(db, header, body, {})
+  trace "NIMBUS BLOCK TRACE", blockTrace=blockTrace
+  # dump receipt #195
