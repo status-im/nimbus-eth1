@@ -2,7 +2,7 @@ import
   db/[db_chain, state_db, capturedb], eth_common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth_trie/db, nimcrypto, strutils, ranges, ./utils/addresses,
-  sets, chronicles
+  chronicles
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
@@ -30,9 +30,9 @@ proc captureAccount(n: JsonNode, db: AccountStateDB, address: EthAddress, name: 
   jaccount["balance"] = %(account.balance.toHex)
 
   let code = db.getCode(address)
-  jaccount["codeHash"] = %($account.codeHash)
+  jaccount["codeHash"] = %(($account.codeHash).toLowerAscii)
   jaccount["code"] = %(toHex(code.toOpenArray, true))
-  jaccount["storageRoot"] = %($account.storageRoot)
+  jaccount["storageRoot"] = %(($account.storageRoot).toLowerAscii)
 
   var storage = newJObject()
   for key, value in db.storage(address):
@@ -66,8 +66,8 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
 
   var
     gasUsed: GasInt
-    before = newJObject()
-    after = newJObject()
+    before = newJArray()
+    after = newJArray()
     stateDiff = %{"before": before, "after": after}
 
   for idx, tx in body.transactions:
@@ -81,10 +81,10 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       before.captureAccount(stateDb, header.coinbase, minerName)
 
     let txFee = processTransaction(stateDb, tx, sender, vmState)
+    stateDb.addBalance(header.coinbase, txFee)
 
     if idx == txIndex:
       gasUsed = (txFee div tx.gasPrice.u256).truncate(GasInt)
-      vmState.disableTracing()
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, header.coinbase, minerName)
@@ -126,21 +126,16 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody): Jso
     vmState = newBaseVMState(parent, captureChainDB, {EnableTracing, DisableMemory, DisableStorage})
 
   var
-    before = newJObject()
-    after = newJObject()
+    before = newJArray()
+    after = newJArray()
     stateBefore = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
     stateAfter = newAccountStateDB(captureTrieDB, header.stateRoot, db.pruneTrie)
-    accountSet = initSet[EthAddress]()
 
-  for tx in body.transactions:
+  for idx, tx in body.transactions:
     let sender = tx.getSender
     let recipient = tx.getRecipient
-    if sender notin accountSet:
-      before.captureAccount(stateBefore, sender, senderName)
-      accountSet.incl sender
-    if recipient notin accountSet:
-      before.captureAccount(stateBefore, recipient, recipientName)
-      accountSet.incl recipient
+    before.captureAccount(stateBefore, sender, senderName & $idx)
+    before.captureAccount(stateBefore, recipient, recipientName & $idx)
 
   before.captureAccount(stateBefore, header.coinbase, minerName)
 
@@ -149,15 +144,11 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody): Jso
 
   discard captureChainDB.processBlock(parent, header, body, vmState)
 
-  for tx in body.transactions:
+  for idx, tx in body.transactions:
     let sender = tx.getSender
     let recipient = tx.getRecipient
-    if sender notin accountSet:
-      after.captureAccount(stateAfter, sender, senderName)
-      accountSet.incl sender
-    if recipient notin accountSet:
-      after.captureAccount(stateAfter, recipient, recipientName)
-      accountSet.incl recipient
+    after.captureAccount(stateAfter, sender, senderName & $idx)
+    after.captureAccount(stateAfter, recipient, recipientName & $idx)
 
   after.captureAccount(stateAfter, header.coinbase, minerName)
 
