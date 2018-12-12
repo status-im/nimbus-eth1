@@ -81,13 +81,9 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
                   else: nil
     let success = processBlock(c.db, head, headers[i], bodies[i], vmState)
 
-    if not success:
-      # TODO: move this back into tracer.nim and produce a nice bundle of
-      # debugging tool metadata
-      let ttrace = traceTransaction(c.db, headers[i], bodies[i], bodies[i].transactions.len - 1, {})
-      trace "NIMBUS TRACE", transactionTrace=ttrace.pretty()
-      let dump = dumpBlockState(c.db, headers[i], bodies[i])
-      trace "NIMBUS STATE DUMP", dump=dump.pretty()
+    when not defined(release):
+      if not success:
+        dumpDebuggingMetaData(c.db, headers[i], bodies[i])
 
     assert(success)
 
