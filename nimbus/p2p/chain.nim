@@ -71,80 +71,23 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     debug "Number of headers not matching number of bodies"
     return ValidationResult.Error
 
-  let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
-
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
 
   trace "Persisting blocks", fromBlock = headers[0].blockNumber, toBlock = headers[^1].blockNumber
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
-    var stateDb = newAccountStateDB(c.db.db, head.stateRoot, c.db.pruneTrie)
-    var receipts = newSeq[Receipt](bodies[i].transactions.len)
+    let vmState = if headers[i].txRoot != BLANK_ROOT_HASH: newBaseVMState(head, c.db)
+                  else: nil
+    let success = processBlock(c.db, head, headers[i], bodies[i], vmState)
 
-    if bodies[i].transactions.calcTxRoot != headers[i].txRoot:
-      debug "Mismatched txRoot", i
-      return ValidationResult.Error
+    if not success:
+      let ttrace = traceTransaction(c.db, headers[i], bodies[i], bodies[i].transactions.len - 1, {})
+      trace "NIMBUS TRACE", transactionTrace=ttrace.pretty()
+      let dump = dumpBlockState(headers[i], bodies[i])
+      trace "NIMBUS STATE DUMP", dump=dump.pretty()
 
-    if headers[i].txRoot != BLANK_ROOT_HASH:
-      let vmState = newBaseVMState(head, c.db)
-      if bodies[i].transactions.len == 0:
-        debug "No transactions in body", i
-        return ValidationResult.Error
-      else:
-        trace "Has transactions", blockNumber = headers[i].blockNumber, blockHash = headers[i].blockHash
-
-        var cumulativeGasUsed = GasInt(0)
-        for txIndex, tx in bodies[i].transactions:
-          var sender: EthAddress
-          if tx.getSender(sender):
-            let txFee = processTransaction(stateDb, tx, sender, vmState)
-
-            # perhaps this can be altered somehow
-            # or processTransaction return only gasUsed
-            # a `div` here is ugly and possibly div by zero
-            let gasUsed = (txFee div tx.gasPrice.u256).truncate(GasInt)
-            cumulativeGasUsed += gasUsed
-
-            # miner fee
-            stateDb.addBalance(headers[i].coinbase, txFee)
-          else:
-            debug "Could not get sender", i, tx
-            return ValidationResult.Error
-          receipts[txIndex] = makeReceipt(vmState, stateDb.rootHash, cumulativeGasUsed)
-
-    var mainReward = blockReward
-    if headers[i].ommersHash != EMPTY_UNCLE_HASH:
-      let h = c.db.persistUncles(bodies[i].uncles)
-      if h != headers[i].ommersHash:
-        debug "Uncle hash mismatch"
-        return ValidationResult.Error
-      for u in 0 ..< bodies[i].uncles.len:
-        var uncleReward = bodies[i].uncles[u].blockNumber + 8.u256
-        uncleReward -= headers[i].blockNumber
-        uncleReward = uncleReward * blockReward
-        uncleReward = uncleReward div 8.u256
-        stateDb.addBalance(bodies[i].uncles[u].coinbase, uncleReward)
-        mainReward += blockReward div 32.u256
-
-    # Reward beneficiary
-    stateDb.addBalance(headers[i].coinbase, mainReward)
-
-    if headers[i].stateRoot != stateDb.rootHash:
-      error "Wrong state root in block", blockNumber = headers[i].blockNumber, expected = headers[i].stateRoot, actual = stateDb.rootHash, arrivedFrom = c.db.getCanonicalHead().stateRoot
-      # this one is a show stopper until we are confident in our VM's
-      # compatibility with the main chain
-      raise(newException(Exception, "Wrong state root in block"))
-
-    let bloom = createBloom(receipts)
-    if headers[i].bloom != bloom:
-      debug "wrong bloom in block", blockNumber = headers[i].blockNumber
-    assert(headers[i].bloom == bloom)
-
-    let receiptRoot = calcReceiptRoot(receipts)
-    if headers[i].receiptRoot != receiptRoot:
-      debug "wrong receiptRoot in block", blockNumber = headers[i].blockNumber, actual=receiptRoot, expected=headers[i].receiptRoot
-    assert(headers[i].receiptRoot == receiptRoot)
+    assert(success)
 
     discard c.db.persistHeaderToDb(headers[i])
     if c.db.getCanonicalHead().blockHash != headers[i].blockHash:

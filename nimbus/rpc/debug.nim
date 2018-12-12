@@ -69,8 +69,10 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
     ## "latest" or "pending", as in the default block parameter.
     let
       header = chainDB.headerFromTag(quantityTag)
+      blockHash = chainDB.getBlockHash(header.blockNumber)
+      body = getBlockBody(blockHash)
 
-    dumpBlockState(header)
+    dumpBlockState(header, body)
 
   rpcsrv.rpc("debug_dumpBlockStateByHash") do(data: EthHashStr) -> JsonNode:
     ## Retrieves the state that corresponds to the block number and returns
@@ -80,5 +82,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
     let
       h = data.toHash
       header = chainDB.getBlockHeader(h)
+      blockHash = chainDB.getBlockHash(header.blockNumber)
+      body = getBlockBody(blockHash)
 
-    dumpBlockState(header)
+    dumpBlockState(header, body)
