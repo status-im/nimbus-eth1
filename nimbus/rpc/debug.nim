@@ -72,7 +72,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       blockHash = chainDB.getBlockHash(header.blockNumber)
       body = getBlockBody(blockHash)
 
-    dumpBlockState(header, body)
+    dumpBlockState(chainDB, header, body)
 
   rpcsrv.rpc("debug_dumpBlockStateByHash") do(data: EthHashStr) -> JsonNode:
     ## Retrieves the state that corresponds to the block number and returns
@@ -85,4 +85,4 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       blockHash = chainDB.getBlockHash(header.blockNumber)
       body = getBlockBody(blockHash)
 
-    dumpBlockState(header, body)
+    dumpBlockState(chainDB, header, body)

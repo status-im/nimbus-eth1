@@ -1,7 +1,8 @@
 import
   db/[db_chain, state_db, capturedb], eth_common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
-  eth_trie/db, nimcrypto, strutils, ranges, ./utils/addresses
+  eth_trie/db, nimcrypto, strutils, ranges, ./utils/addresses,
+  sets
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
@@ -9,33 +10,42 @@ proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
 proc prefixHex(x: openArray[byte]): string =
   "0x" & toHex(x, true)
 
-proc accountToJson(db: AccountStateDB, address: EthAddress, name: string): JsonNode =
-  result = newJObject()
-  result["name"] = %name
-  result["address"] = %($address)
+proc getSender(tx: Transaction): EthAddress =
+  if not tx.getSender(result):
+    raise newException(ValueError, "Could not get sender")
+
+proc getRecipient(tx: Transaction): EthAddress =
+  if tx.isContractCreation:
+    let sender = tx.getSender()
+    result = generateAddress(sender, tx.accountNonce)
+  else:
+    result = tx.to
+
+proc captureAccount(n: JsonNode, db: AccountStateDB, address: EthAddress, name: string) =
+  var jaccount = newJObject()
+  jaccount["name"] = %name
+  jaccount["address"] = %($address)
   let account = db.getAccount(address)
-  result["nonce"] = %(account.nonce.toHex)
-  result["balance"] = %(account.balance.toHex)
+  jaccount["nonce"] = %(account.nonce.toHex)
+  jaccount["balance"] = %(account.balance.toHex)
 
   let code = db.getCode(address)
-  result["codeHash"] = %($account.codeHash)
-  result["code"] = %(toHex(code.toOpenArray, true))
-  result["storageRoot"] = %($account.storageRoot)
+  jaccount["codeHash"] = %($account.codeHash)
+  jaccount["code"] = %(toHex(code.toOpenArray, true))
+  jaccount["storageRoot"] = %($account.storageRoot)
 
   var storage = newJObject()
   for key, value in db.storage(address):
     storage[key.dumpHex] = %(value.dumpHex)
-  result["storage"] = storage
+  jaccount["storage"] = storage
 
-proc captureStateAccount(n: JsonNode, db: AccountStateDB, sender: EthAddress, header: BlockHeader, tx: Transaction) =
-  n.add accountToJson(db, sender, "sender")
-  n.add accountToJson(db, header.coinbase, "miner")
+  n.add jaccount
 
-  if tx.isContractCreation:
-    let contractAddress = generateAddress(sender, tx.accountNonce)
-    n.add accountToJson(db, contractAddress, "contract")
-  else:
-    n.add accountToJson(db, tx.to, "recipient")
+const
+  senderName = "sender"
+  recipientName = "recipient"
+  minerName = "miner"
+  uncleName = "uncle"
 
 proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
@@ -61,21 +71,24 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     stateDiff = %{"before": before, "after": after}
 
   for idx, tx in body.transactions:
-    var sender: EthAddress
-    if tx.getSender(sender):
-      if idx == txIndex:
-        vmState.enableTracing()
-        before.captureStateAccount(stateDb, sender, header, tx)
+    let sender = tx.getSender
+    let recipient = tx.getRecipient
 
-      let txFee = processTransaction(stateDb, tx, sender, vmState)
+    if idx == txIndex:
+      vmState.enableTracing()
+      before.captureAccount(stateDb, sender, senderName)
+      before.captureAccount(stateDb, recipient, recipientName)
+      before.captureAccount(stateDb, header.coinbase, minerName)
+
+    let txFee = processTransaction(stateDb, tx, sender, vmState)
+
+    if idx == txIndex:
       gasUsed = (txFee div tx.gasPrice.u256).truncate(GasInt)
-
-      if idx == txIndex:
-        vmState.disableTracing()
-        after.captureStateAccount(stateDb, sender, header, tx)
-        break
-    else:
-      assert(false, "Could not get sender")
+      vmState.disableTracing()
+      after.captureAccount(stateDb, sender, senderName)
+      after.captureAccount(stateDb, recipient, recipientName)
+      after.captureAccount(stateDb, header.coinbase, minerName)
+      break
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed
@@ -88,5 +101,67 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       n[k.prefixHex] = %v.prefixHex
     result["state"] = n
 
-proc dumpBlockState*(header: BlockHeader, body: BlockBody): JsonNode =
-  discard
+proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody): JsonNode =
+  # TODO: scan tracing result and find internal transaction address
+  # then do account dump as usual, before and after
+  # cons: unreliable and prone to error.
+  # pros: no need to map account secure key back to address.
+
+  # alternative: capture state trie using captureDB, and then dump every
+  # account for this block.
+  # cons: we need to map account secure key back to account address.
+  # pros: no account will be missed, we will get all account touched by this block
+  # we can turn this address capture/mapping only during dumping block state and
+  # disable it during normal operation.
+  # also the order of capture needs to be reversed, collecting addresses *after*
+  # processing block then using that addresses to collect accounts from parent block
+
+  let
+    parent = db.getParentHeader(header)
+    memoryDB = newMemoryDB()
+    captureDB = newCaptureDB(db.db, memoryDB)
+    captureTrieDB = trieDB captureDB
+    captureChainDB = newBaseChainDB(captureTrieDB, false)
+    # we only need stack dump if we want to scan for internal transaction address
+    vmState = newBaseVMState(parent, captureChainDB, {EnableTracing, DisableMemory, DisableStorage})
+
+  var
+    before = newJObject()
+    after = newJObject()
+    stateBefore = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
+    stateAfter = newAccountStateDB(captureTrieDB, header.stateRoot, db.pruneTrie)
+    accountSet = initSet[EthAddress]()
+
+  for tx in body.transactions:
+    let sender = tx.getSender
+    let recipient = tx.getRecipient
+    if sender notin accountSet:
+      before.captureAccount(stateBefore, sender, senderName)
+      accountSet.incl sender
+    if recipient notin accountSet:
+      before.captureAccount(stateBefore, recipient, recipientName)
+      accountSet.incl recipient
+
+  before.captureAccount(stateBefore, header.coinbase, minerName)
+
+  for idx, uncle in body.uncles:
+    before.captureAccount(stateBefore, uncle.coinbase, uncleName & $idx)
+
+  discard captureChainDB.processBlock(parent, header, body, vmState)
+
+  for tx in body.transactions:
+    let sender = tx.getSender
+    let recipient = tx.getRecipient
+    if sender notin accountSet:
+      after.captureAccount(stateAfter, sender, senderName)
+      accountSet.incl sender
+    if recipient notin accountSet:
+      after.captureAccount(stateAfter, recipient, recipientName)
+      accountSet.incl recipient
+
+  after.captureAccount(stateAfter, header.coinbase, minerName)
+
+  for idx, uncle in body.uncles:
+    after.captureAccount(stateAfter, uncle.coinbase, uncleName & $idx)
+
+  result = %{"before": before, "after": after}
