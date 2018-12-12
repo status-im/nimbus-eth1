@@ -277,7 +277,7 @@ proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
   if lb in PrecompileAddresses.low.byte .. PrecompileAddresses.high.byte:
     result = true
     let precompile = PrecompileAddresses(lb)
-    trace "Call precompile ", precompile = precompile, codeAddr = computation.msg.codeAddress
+    trace "Call precompile", precompile = precompile, codeAddr = computation.msg.codeAddress
     case precompile
     of paEcRecover: ecRecover(computation)
     of paSha256: sha256(computation)

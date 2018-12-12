@@ -1,7 +1,11 @@
 import
-  json, strutils, nimcrypto, eth_common, stint,
+  json, strutils,
+  chronicles, nimcrypto, eth_common, stint,
   ../vm_types, memory, stack, ../db/[db_chain, state_db],
   eth_trie/hexary, ./message, ranges/typedranges
+
+logScope:
+  topics = "vm opcode"
 
 proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.trace = newJObject()
@@ -47,7 +51,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
   let j = tracer.trace["structLogs"].elems[^1]
 
   # TODO: figure out how to get storage
-  # when contract excecution interrupted by exception
+  # when contract execution interrupted by exception
   if TracerFlags.DisableStorage notin tracer.flags:
     var storage = newJObject()
     var stateDB = c.vmState.chaindb.getStateDb(c.vmState.blockHeader.stateRoot, readOnly = true)
@@ -62,6 +66,8 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation) =
     j["returnValue"] = returnValue
     tracer.trace["returnValue"] = returnValue
 
+  trace "Op", json = j.pretty()
+
 proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
   let j = tracer.trace["structLogs"].elems[^1]
 
@@ -72,3 +78,5 @@ proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
 
   j["error"] = %(c.error.info)
   tracer.trace["failed"] = %true
+
+  trace "Error", json = j.pretty()

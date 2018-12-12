@@ -13,6 +13,9 @@ import
   ../vm_types, ../errors, precompiles,
   ./stack, ./computation, terminal # Those are only needed for logging
 
+logScope:
+  topics = "vm opcode"
+
 func invalidInstruction*(computation: var BaseComputation) {.inline.} =
   raise newException(ValueError, "Invalid instruction, received an opcode not implemented in the current fork.")
 
@@ -186,7 +189,9 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
   for op, opImpl in opTable.pairs:
     let branchStmt = block:
       if op == Stop:
-        quote do: break
+        quote do:
+          trace "op: Stop"
+          break
       else:
         let asOp = quote do: Op(`op`) # TODO: unfortunately when passing to runtime, ops are transformed into int
         if BaseGasCosts[op].kind == GckFixed:
