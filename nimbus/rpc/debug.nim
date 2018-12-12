@@ -14,7 +14,7 @@ import
   eth_common, ../tracer, ../vm_state, ../vm_types
 
 type
-  TraceTxOptions = object
+  TraceOptions = object
     disableStorage: Option[bool]
     disableMemory: Option[bool]
     disableStack: Option[bool]
@@ -23,13 +23,21 @@ type
 proc isTrue(x: Option[bool]): bool =
   result = x.isSome and x.get() == true
 
+proc traceOptionsToFlags(options: Option[TraceOptions]): set[TracerFlags] =
+  if options.isSome:
+    let opts = options.get
+    if opts.disableStorage.isTrue: result.incl TracerFlags.DisableStorage
+    if opts.disableMemory.isTrue : result.incl TracerFlags.DisableMemory
+    if opts.disableStack.isTrue  : result.incl TracerFlags.DisableStack
+    if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
+
 proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
 
   proc getBlockBody(hash: Hash256): BlockBody =
     if not chainDB.getBlockBody(hash, result):
       raise newException(ValueError, "Error when retrieving block body")
 
-  rpcsrv.rpc("debug_traceTransaction") do(data: EthHashStr, options: Option[TraceTxOptions]) -> JsonNode:
+  rpcsrv.rpc("debug_traceTransaction") do(data: EthHashStr, options: Option[TraceOptions]) -> JsonNode:
     ## The traceTransaction debugging method will attempt to run the transaction in the exact
     ## same manner as it was executed on the network. It will replay any transaction that may
     ## have been executed prior to this one before it will finally attempt to execute the
@@ -48,16 +56,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       blockHeader = chainDB.getBlockHeader(txDetails.blockNumber)
       blockHash = chainDB.getBlockHash(txDetails.blockNumber)
       blockBody = getBlockBody(blockHash)
-
-    var
-      flags: set[TracerFlags]
-
-    if options.isSome:
-      let opts = options.get
-      if opts.disableStorage.isTrue: flags.incl TracerFlags.DisableStorage
-      if opts.disableMemory.isTrue: flags.incl TracerFlags.DisableMemory
-      if opts.disableStack.isTrue: flags.incl TracerFlags.DisableStack
-      if opts.disableState.isTrue: flags.incl TracerFlags.DisableState
+      flags = traceOptionsToFlags(options)
 
     traceTransaction(chainDB, blockHeader, blockBody, txDetails.index, flags)
 
@@ -86,3 +85,33 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       body = getBlockBody(blockHash)
 
     dumpBlockState(chainDB, header, body)
+
+  rpcsrv.rpc("debug_traceBlockByNumber") do(quantityTag: string, options: Option[TraceOptions]) -> JsonNode:
+    ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
+    ## that were included included in this block.
+    ##
+    ## quantityTag: integer of a block number, or the string "earliest",
+    ## "latest" or "pending", as in the default block parameter.
+    ## options: see debug_traceTransaction
+    let
+      header = chainDB.headerFromTag(quantityTag)
+      blockHash = chainDB.getBlockHash(header.blockNumber)
+      body = getBlockBody(blockHash)
+      flags = traceOptionsToFlags(options)
+
+    traceBlock(chainDB, header, body, flags)
+
+  rpcsrv.rpc("debug_traceBlockByHash") do(data: EthHashStr, options: Option[TraceOptions]) -> JsonNode:
+    ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
+    ## that were included included in this block.
+    ##
+    ## data: Hash of a block.
+    ## options: see debug_traceTransaction
+    let
+      h = data.toHash
+      header = chainDB.getBlockHeader(h)
+      blockHash = chainDB.getBlockHash(header.blockNumber)
+      body = getBlockBody(blockHash)
+      flags = traceOptionsToFlags(options)
+
+    traceBlock(chainDB, header, body, flags)
