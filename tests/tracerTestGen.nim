@@ -1,14 +1,7 @@
 import
-  json, eth_common,
-  stint, strutils, times, byteutils, nimcrypto,
-  chronicles, options, os, rlp
-
-import
-  eth_trie/[hexary, db, defs],
-  ../nimbus/db/[storage_types, db_chain, state_db, capturedb],
-  ../nimbus/[genesis, utils, config],
-  ../nimbus/[p2p/chain, transaction, rpc/hexstrings],
-  ../nimbus/[tracer, vm_types]
+  json, os, eth_common, stint, chronicles,
+  eth_trie/[db], ../nimbus/db/[db_chain, capturedb],
+  ../nimbus/[tracer, vm_types, config]
 
 const backEnd {.strdefine.} = "lmdb"
 
@@ -18,10 +11,6 @@ elif backEnd == "rocksdb":
   import ../nimbus/db/backends/rocksdb_backend
 else:
   import ../nimbus/db/backends/lmdb_backend
-
-proc getBlockBody(chainDB: BaseChainDB, hash: Hash256): BlockBody =
-  if not chainDB.getBlockBody(hash, result):
-    raise newException(ValueError, "Error when retrieving block body")
 
 proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
   var

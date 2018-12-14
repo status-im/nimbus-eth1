@@ -6,24 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, json, os, tables, strutils, times, strformat,
-  eth_common, byteutils, nimcrypto, rlp,
-  eth_trie/[hexary, db, defs]
-
-import
-  ./test_helpers,
-  ../nimbus/db/[storage_types, db_chain, state_db, capturedb],
-  ../nimbus/[transaction, rpc/hexstrings],
-  ../nimbus/[tracer, vm_types, utils]
+  unittest, json, os, tables, strformat,
+  eth_common, byteutils, eth_trie/db,
+  ./test_helpers, ../nimbus/db/db_chain, ../nimbus/[tracer, vm_types]
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
 suite "tracer json tests":
   jsonTest("TracerTests", testFixture)
-
-proc getBlockBody(chainDB: BaseChainDB, hash: Hash256): BlockBody =
-  if not chainDB.getBlockBody(hash, result):
-    raise newException(ValueError, "Error when retrieving block body")
 
 # use tracerTestGen.nim to generate additional test data
 
