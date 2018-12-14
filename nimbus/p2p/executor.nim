@@ -1,8 +1,8 @@
-import ../db/[db_chain, state_db], ../transaction, eth_common,
-  ../vm_state, ../vm_types, ../vm_state_transactions, ranges,
-  chronicles, ../vm/[computation, interpreter_dispatch, message],
-  ../rpc/hexstrings, byteutils, nimcrypto,
-  ../utils, ../constants
+import eth_common, ranges, chronicles,
+  ../db/[db_chain, state_db],
+  ../utils, ../constants, ../transaction,
+  ../vm_state, ../vm_types, ../vm_state_transactions,
+  ../vm/[computation, interpreter_dispatch, message]
 
 proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
   ## Process the transaction, write the results to db.
@@ -68,6 +68,39 @@ proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddr
   db.addBalance(sender, refund)
   return gasUsed.u256 * t.gasPrice.u256
 
+type
+  # TODO: these types need to be removed
+  # once eth_bloom and eth_common sync'ed
+  Bloom = eth_common.BloomFilter
+  LogsBloom = eth_bloom.BloomFilter
+
+# TODO: move these three receipt procs below somewhere else more appropriate
+func logsBloom(logs: openArray[Log]): LogsBloom =
+  for log in logs:
+    result.incl log.address
+    for topic in log.topics:
+      result.incl topic
+
+func createBloom*(receipts: openArray[Receipt]): Bloom =
+  var bloom: LogsBloom
+  for receipt in receipts:
+    bloom.value = bloom.value or logsBloom(receipt.logs).value
+  result = bloom.value.toByteArrayBE
+
+proc makeReceipt(vmState: BaseVMState, stateRoot: Hash256, cumulativeGasUsed: GasInt, fork = FkFrontier): Receipt =
+  if fork < FkByzantium:
+    # TODO: which one: vmState.blockHeader.stateRoot or stateDb.rootHash?
+    # currently, vmState.blockHeader.stateRoot vs stateDb.rootHash can be different
+    # need to wait #188 solved
+    result.stateRootOrStatus = hashOrStatus(stateRoot)
+  else:
+    # TODO: post byzantium fork use status instead of rootHash
+    let vmStatus = true # success or failure
+    result.stateRootOrStatus = hashOrStatus(vmStatus)
+
+  result.cumulativeGasUsed = cumulativeGasUsed
+  result.logs = vmState.getAndClearLogEntries()
+  result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
 proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockBody, vmState: BaseVMState): bool =
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH

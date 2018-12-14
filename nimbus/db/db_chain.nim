@@ -149,6 +149,10 @@ proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody)
       else:
         result = false
 
+proc getBlockBody*(self: BaseChainDB, hash: Hash256): BlockBody =
+  if not self.getBlockBody(hash, result):
+    raise newException(ValueError, "Error when retrieving block body")
+
 proc getTransactionKey*(self: BaseChainDB, transactionHash: Hash256): tuple[blockNumber: BlockNumber, index: int] {.inline.} =
   let
     tx = self.db.get(transactionHashToBlockKey(transactionHash).toOpenArray).toRange

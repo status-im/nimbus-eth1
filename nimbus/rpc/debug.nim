@@ -8,10 +8,10 @@
 # those terms.
 
 import
-  strutils, hexstrings, eth_p2p, options,
-  ../db/[db_chain, state_db, storage_types],
-  json_rpc/rpcserver, json, macros, rpc_utils,
-  eth_common, ../tracer, ../vm_state, ../vm_types
+  strutils, json, options,
+  json_rpc/rpcserver, rpc_utils, eth_common,
+  hexstrings, ../tracer, ../vm_state, ../vm_types,
+  ../db/[db_chain, storage_types]
 
 type
   TraceOptions = object
@@ -33,10 +33,6 @@ proc traceOptionsToFlags(options: Option[TraceOptions]): set[TracerFlags] =
 
 proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
 
-  proc getBlockBody(hash: Hash256): BlockBody =
-    if not chainDB.getBlockBody(hash, result):
-      raise newException(ValueError, "Error when retrieving block body")
-
   rpcsrv.rpc("debug_traceTransaction") do(data: EthHashStr, options: Option[TraceOptions]) -> JsonNode:
     ## The traceTransaction debugging method will attempt to run the transaction in the exact
     ## same manner as it was executed on the network. It will replay any transaction that may
@@ -55,7 +51,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       txDetails = chainDB.getTransactionKey(txHash)
       blockHeader = chainDB.getBlockHeader(txDetails.blockNumber)
       blockHash = chainDB.getBlockHash(txDetails.blockNumber)
-      blockBody = getBlockBody(blockHash)
+      blockBody = chainDB.getBlockBody(blockHash)
       flags = traceOptionsToFlags(options)
 
     traceTransaction(chainDB, blockHeader, blockBody, txDetails.index, flags)
@@ -69,7 +65,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
     let
       header = chainDB.headerFromTag(quantityTag)
       blockHash = chainDB.getBlockHash(header.blockNumber)
-      body = getBlockBody(blockHash)
+      body = chainDB.getBlockBody(blockHash)
 
     dumpBlockState(chainDB, header, body)
 
@@ -82,7 +78,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       h = data.toHash
       header = chainDB.getBlockHeader(h)
       blockHash = chainDB.getBlockHash(header.blockNumber)
-      body = getBlockBody(blockHash)
+      body = chainDB.getBlockBody(blockHash)
 
     dumpBlockState(chainDB, header, body)
 
@@ -96,7 +92,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
     let
       header = chainDB.headerFromTag(quantityTag)
       blockHash = chainDB.getBlockHash(header.blockNumber)
-      body = getBlockBody(blockHash)
+      body = chainDB.getBlockBody(blockHash)
       flags = traceOptionsToFlags(options)
 
     traceBlock(chainDB, header, body, flags)
@@ -111,7 +107,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       h = data.toHash
       header = chainDB.getBlockHeader(h)
       blockHash = chainDB.getBlockHash(header.blockNumber)
-      body = getBlockBody(blockHash)
+      body = chainDB.getBlockBody(blockHash)
       flags = traceOptionsToFlags(options)
 
     traceBlock(chainDB, header, body, flags)

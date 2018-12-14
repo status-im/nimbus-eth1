@@ -1,41 +1,6 @@
 import ../db/[db_chain, state_db], eth_common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
-  ../vm/[computation, interpreter_dispatch, message, interpreter/vm_forks], ../constants, stint, nimcrypto,
-  ../vm_state_transactions, sugar, ../utils, eth_trie/db, ../tracer, ./executor, json,
-  eth_bloom, strutils
-
-type
-  # TODO: these types need to be removed
-  # once eth_bloom and eth_common sync'ed
-  Bloom = eth_common.BloomFilter
-  LogsBloom = eth_bloom.BloomFilter
-
-# TODO: move these three receipt procs below somewhere else more appropriate
-func logsBloom(logs: openArray[Log]): LogsBloom =
-  for log in logs:
-    result.incl log.address
-    for topic in log.topics:
-      result.incl topic
-
-func createBloom*(receipts: openArray[Receipt]): Bloom =
-  var bloom: LogsBloom
-  for receipt in receipts:
-    bloom.value = bloom.value or logsBloom(receipt.logs).value
-  result = bloom.value.toByteArrayBE
-
-proc makeReceipt(vmState: BaseVMState, stateRoot: Hash256, cumulativeGasUsed: GasInt, fork = FkFrontier): Receipt =
-  if fork < FkByzantium:
-    # TODO: which one: vmState.blockHeader.stateRoot or stateDb.rootHash?
-    # currently, vmState.blockHeader.stateRoot vs stateDb.rootHash can be different
-    # need to wait #188 solved
-    result.stateRootOrStatus = hashOrStatus(stateRoot)
-  else:
-    # TODO: post byzantium fork use status instead of rootHash
-    let vmStatus = true # success or failure
-    result.stateRootOrStatus = hashOrStatus(vmStatus)
-
-  result.cumulativeGasUsed = cumulativeGasUsed
-  result.logs = vmState.getAndClearLogEntries()
-  result.bloom = logsBloom(result.logs).value.toByteArrayBE
+  ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto,
+  ../vm_state_transactions, sugar, ../utils, eth_trie/db, ../tracer, ./executor
 
 type
   Chain* = ref object of AbstractChainDB
