@@ -7,7 +7,7 @@
 
 import
   tables, sequtils, algorithm,
-  rlp, ranges, state_db, nimcrypto, eth_trie/[hexary, db], eth_common, byteutils,
+  rlp, ranges, state_db, nimcrypto, eth_trie/[hexary, db], eth_common, byteutils, chronicles,
   ../errors, ../block_types, ../utils/header, ../constants, ./storage_types.nim
 
 type
@@ -243,7 +243,7 @@ proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 
   result = keccak256.digest(enc)
   self.db.put(genericHashKey(result).toOpenArray, enc)
 
-proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
+proc persistBlockToDb*(self: BaseChainDB; blk: Block): ValidationResult =
   ## Persist the given block's header and uncles.
   ## Assumes all block transactions have been persisted already.
   let newCanonicalHeaders = self.persistHeaderToDb(blk.header)
@@ -255,7 +255,9 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block) =
 
   if blk.uncles.len != 0:
     let ommersHash = self.persistUncles(blk.uncles)
-    assert ommersHash == blk.header.ommersHash
+    if ommersHash != blk.header.ommersHash:
+      debug "ommersHash mismatch"
+      return ValidationResult.Error
 
 # proc addTransaction*(self: BaseChainDB; blockHeader: BlockHeader; indexKey: cstring;
 #                     transaction: FrontierTransaction): cstring =
