@@ -65,33 +65,36 @@ method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): b
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]) =
+method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): ValidationResult =
   # Run the VM here
-  assert(headers.len == bodies.len)
+  if headers.len != bodies.len:
+    debug "Number of headers not matching number of bodies"
+    return ValidationResult.Error
 
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
 
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
 
-  debug "Persisting blocks", range = $headers[0].blockNumber & " - " & $headers[^1].blockNumber
+  trace "Persisting blocks", fromBlock = headers[0].blockNumber, toBlock = headers[^1].blockNumber
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
-    assert(head.blockNumber == headers[i].blockNumber - 1)
     var stateDb = newAccountStateDB(c.db.db, head.stateRoot, c.db.pruneTrie)
     var receipts = newSeq[Receipt](bodies[i].transactions.len)
 
-    assert(bodies[i].transactions.calcTxRoot == headers[i].txRoot)
+    if bodies[i].transactions.calcTxRoot != headers[i].txRoot:
+      debug "Mismatched txRoot", i
+      return ValidationResult.Error
 
     if headers[i].txRoot != BLANK_ROOT_HASH:
-      assert(head.blockNumber == headers[i].blockNumber - 1)
       let vmState = newBaseVMState(head, c.db)
-      assert(bodies[i].transactions.len != 0)
-      var cumulativeGasUsed = GasInt(0)
-
-      if bodies[i].transactions.len != 0:
+      if bodies[i].transactions.len == 0:
+        debug "No transactions in body", i
+        return ValidationResult.Error
+      else:
         trace "Has transactions", blockNumber = headers[i].blockNumber, blockHash = headers[i].blockHash
 
+        var cumulativeGasUsed = GasInt(0)
         for txIndex, tx in bodies[i].transactions:
           var sender: EthAddress
           if tx.getSender(sender):
@@ -106,13 +109,16 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
             # miner fee
             stateDb.addBalance(headers[i].coinbase, txFee)
           else:
-            assert(false, "Could not get sender")
+            debug "Could not get sender", i, tx
+            return ValidationResult.Error
           receipts[txIndex] = makeReceipt(vmState, stateDb.rootHash, cumulativeGasUsed)
 
     var mainReward = blockReward
     if headers[i].ommersHash != EMPTY_UNCLE_HASH:
       let h = c.db.persistUncles(bodies[i].uncles)
-      assert(h == headers[i].ommersHash)
+      if h != headers[i].ommersHash:
+        debug "Uncle hash mismatch"
+        return ValidationResult.Error
       for u in 0 ..< bodies[i].uncles.len:
         var uncleReward = bodies[i].uncles[u].blockNumber + 8.u256
         uncleReward -= headers[i].blockNumber
@@ -125,11 +131,10 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     stateDb.addBalance(headers[i].coinbase, mainReward)
 
     if headers[i].stateRoot != stateDb.rootHash:
-      debug "Wrong state root in block", blockNumber = headers[i].blockNumber, expected = headers[i].stateRoot, actual = stateDb.rootHash, arrivedFrom = c.db.getCanonicalHead().stateRoot
-      let ttrace = traceTransaction(c.db, headers[i], bodies[i], bodies[i].transactions.len - 1, {})
-      trace "NIMBUS TRACE", transactionTrace=ttrace.pretty()
-
-    assert(headers[i].stateRoot == stateDb.rootHash)
+      error "Wrong state root in block", blockNumber = headers[i].blockNumber, expected = headers[i].stateRoot, actual = stateDb.rootHash, arrivedFrom = c.db.getCanonicalHead().stateRoot
+      # this one is a show stopper until we are confident in our VM's
+      # compatibility with the main chain
+      raise(newException(Exception, "Wrong state root in block"))
 
     let bloom = createBloom(receipts)
     if headers[i].bloom != bloom:
@@ -142,7 +147,9 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     assert(headers[i].receiptRoot == receiptRoot)
 
     discard c.db.persistHeaderToDb(headers[i])
-    assert(c.db.getCanonicalHead().blockHash == headers[i].blockHash)
+    if c.db.getCanonicalHead().blockHash != headers[i].blockHash:
+      debug "Stored block header hash doesn't match declared hash"
+      return ValidationResult.Error
 
     c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
     c.db.persistReceipts(receipts)
