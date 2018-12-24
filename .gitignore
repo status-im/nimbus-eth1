@@ -1,7 +1,13 @@
-nimcache/
+/nimcache
 
 # Executables shall be put in an ignored build/ directory
-build/
+/build
+
+# external packages
+/vendor
+
+# ntags/ctags output
+/tags
 
 # Ignore dynamic, static libs and libtool archive files
 *.so

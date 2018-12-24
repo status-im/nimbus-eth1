@@ -6,9 +6,11 @@ author        = "Status Research & Development GmbH"
 description   = "An Ethereum 2.0 Sharding Client for Resource-Restricted Devices"
 license       = "Apache License 2.0"
 skipDirs      = @["tests", "examples"]
-bin           = @["nimbus/nimbus"]
+# we can't have the result of a custom task in the "bin" var - https://github.com/nim-lang/nimble/issues/542
+# bin           = @["build/nimbus"]
 
 requires "nim >= 0.18.1",
+         "chronicles",
          "nimcrypto",
          "rlp",
          "stint",
@@ -21,7 +23,7 @@ requires "nim >= 0.18.1",
          "eth_keyfile",
          "eth_keys",
          "eth_bloom",
-         "https://github.com/status-im/nim-bncurve >= 1.0.1"
+         "bncurve"
 
 proc buildBinary(name: string, srcDir = ".", lang = "c") =
   if not dirExists "build": mkDir "build"
@@ -29,7 +31,7 @@ proc buildBinary(name: string, srcDir = ".", lang = "c") =
   setCommand lang, srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
-  --define: "chronicles_log_level=ERROR"
+  --define:"chronicles_log_level=ERROR"
   --run
   buildBinary name, "tests/"
 
@@ -38,3 +40,4 @@ task test, "Run tests":
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/"
+
