@@ -51,5 +51,9 @@ install:
   - cd ../..
 
 script:
-  - nimble install -y
+  # fail fast
+  - set -e
+  - nimble install -y --depsOnly
+  - nimble nimbus
+  - ./build/nimbus --help
   - nimble test
