@@ -52,6 +52,7 @@ const
   recipientName = "recipient"
   minerName = "miner"
   uncleName = "uncle"
+  internalTxName = "internalTx"
 
 proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
@@ -63,9 +64,11 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     captureDB = newCaptureDB(db.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?
-    vmState = newBaseVMState(parent, captureChainDB, tracerFlags)
+    vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {EnableAccount})
 
   var stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
+  var stateBefore = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
+  # stateDb and stateBefore will not the same after transaction execution
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   assert(body.transactions.calcTxRoot == header.txRoot)
   assert(body.transactions.len != 0)
@@ -85,6 +88,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       before.captureAccount(stateDb, sender, senderName)
       before.captureAccount(stateDb, recipient, recipientName)
       before.captureAccount(stateDb, header.coinbase, minerName)
+      stateDiff["beforeRoot"] = %($vmState.blockHeader.stateRoot)
 
     let txFee = processTransaction(stateDb, tx, sender, vmState)
     stateDb.addBalance(header.coinbase, txFee)
@@ -94,7 +98,15 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, header.coinbase, minerName)
+      stateDiff["afterRoot"] = %($vmState.blockHeader.stateRoot)
       break
+
+  # internal transactions:
+  for idx, acc in tracedAccountsPairs(vmState):
+    before.captureAccount(stateBefore, acc, internalTxName & $idx)
+
+  for idx, acc in tracedAccountsPairs(vmState):
+    after.captureAccount(stateDb, acc, internalTxName & $idx)
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed
@@ -105,20 +117,6 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     result.dumpMemoryDB(memoryDB)
 
 proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dumpState = false): JsonNode =
-  # TODO: scan tracing result and find internal transaction address
-  # then do account dump as usual, before and after
-  # cons: unreliable and prone to error.
-  # pros: no need to map account secure key back to address.
-
-  # alternative: capture state trie using captureDB, and then dump every
-  # account for this block.
-  # cons: we need to map account secure key back to account address.
-  # pros: no account will be missed, we will get all account touched by this block
-  # we can turn this address capture/mapping only during dumping block state and
-  # disable it during normal operation.
-  # also the order of capture needs to be reversed, collecting addresses *after*
-  # processing block then using that addresses to collect accounts from parent block
-
   let
     parent = db.getParentHeader(header)
     memoryDB = newMemoryDB()
@@ -126,7 +124,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false)
     # we only need stack dump if we want to scan for internal transaction address
-    vmState = newBaseVMState(parent, captureChainDB, {EnableTracing, DisableMemory, DisableStorage})
+    vmState = newBaseVMState(parent, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
 
   var
     before = newJArray()
@@ -157,6 +155,13 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
 
   for idx, uncle in body.uncles:
     after.captureAccount(stateAfter, uncle.coinbase, uncleName & $idx)
+
+  # internal transactions:
+  for idx, acc in tracedAccountsPairs(vmState):
+    before.captureAccount(stateBefore, acc, internalTxName & $idx)
+
+  for idx, acc in tracedAccountsPairs(vmState):
+    after.captureAccount(stateAfter, acc, internalTxName & $idx)
 
   result = %{"before": before, "after": after}
 

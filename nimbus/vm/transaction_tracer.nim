@@ -18,6 +18,7 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
 
   tracer.trace["structLogs"] = newJArray()
   tracer.flags = flags
+  tracer.accounts = @[]
 
 proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   if unlikely tracer.trace.isNil:
@@ -47,6 +48,17 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
     for i in 0 ..< numChunks:
       mem.add(%c.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex())
     j["memory"] = mem
+
+  if TracerFlags.EnableAccount in tracer.flags:
+    case op
+    of Call, CallCode, DelegateCall, StaticCall:
+      assert(c.stack.values.len > 2)
+      tracer.accounts.add c.stack[^2, EthAddress]
+    of SelfDestruct:
+      assert(c.stack.values.len > 1)
+      tracer.accounts.add c.stack[^1, EthAddress]
+    else:
+      discard
 
 proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   let j = tracer.trace["structLogs"].elems[^1]

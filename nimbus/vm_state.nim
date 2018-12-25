@@ -134,3 +134,11 @@ proc enableTracing*(vmState: BaseVMState) =
 
 proc disableTracing*(vmState: BaseVMState) =
   vmState.tracingEnabled = false
+
+iterator tracedAccounts*(vmState: BaseVMState): EthAddress =
+  for acc in vmState.tracer.accounts:
+    yield acc
+
+iterator tracedAccountsPairs*(vmState: BaseVMState): (int, EthAddress) =
+  for idx, acc in vmState.tracer.accounts:
+    yield (idx, acc)
