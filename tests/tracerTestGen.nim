@@ -1,5 +1,5 @@
 import
-  json, os, eth_common, stint, chronicles,
+  json, os, eth_common, stint, chronicles, byteutils, nimcrypto,
   eth_trie/[db], ../nimbus/db/[db_chain, capturedb],
   ../nimbus/[tracer, vm_types, config]
 
@@ -13,24 +13,34 @@ else:
   import ../nimbus/db/backends/lmdb_backend
 
 proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
+  let
+    blockNumber = blockNumber.u256
+
   var
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false)
 
-  var blockNumber = blockNumber.u256
-  var header = captureChainDB.getBlockHeader(blockNumber)
-  var headerHash = header.blockHash
-  var blockBody = captureChainDB.getBlockBody(headerHash)
+  let
+    header = captureChainDB.getBlockHeader(blockNumber)
+    headerHash = header.blockHash
+    blockBody = captureChainDB.getBlockBody(headerHash)
+    txTrace = traceTransactions(captureChainDB, header, blockBody)
+    stateDump = dumpBlockState(captureChainDB, header, blockBody)
+    blockTrace = traceBlock(captureChainDB, header, blockBody, {DisableState})
+    receipts = dumpReceipts(captureChainDB, header)
 
-  let txTrace = traceTransaction(captureChainDB, header, blockBody, 0, {DisableState})
-  let stateDump = dumpBlockState(captureChainDB, header, blockBody)
-  let blockTrace = traceBlock(captureChainDB, header, blockBody, {DisableState})
+  var metaData = %{
+    "blockNumber": %blockNumber.toHex,
+    "txTraces": txTrace,
+    "stateDump": stateDump,
+    "blockTrace": blockTrace,
+    "receipts": receipts
+  }
 
-  var testData = %{"blockNumber": %blockNumber.toHex, "txTrace": txTrace, "stateDump": stateDump, "blockTrace": blockTrace}
-  testData.dumpMemoryDB(memoryDB)
-  writeFile("block" & $blockNumber & ".json", testData.pretty())
+  metaData.dumpMemoryDB(memoryDB)
+  writeFile("block" & $blockNumber & ".json", metaData.pretty())
 
 proc main() =
   # 97 block with uncles

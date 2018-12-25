@@ -19,6 +19,7 @@ type
     disableMemory: Option[bool]
     disableStack: Option[bool]
     disableState: Option[bool]
+    disableStateDiff: Option[bool]
 
 proc isTrue(x: Option[bool]): bool =
   result = x.isSome and x.get() == true
@@ -30,6 +31,7 @@ proc traceOptionsToFlags(options: Option[TraceOptions]): set[TracerFlags] =
     if opts.disableMemory.isTrue : result.incl TracerFlags.DisableMemory
     if opts.disableStack.isTrue  : result.incl TracerFlags.DisableStack
     if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
+    if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
 
 proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
 

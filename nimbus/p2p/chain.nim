@@ -48,7 +48,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
 
     when not defined(release):
       if validationResult == ValidationResult.Error:
-        dumpDebuggingMetaData(c.db, headers[i], bodies[i])
+        dumpDebuggingMetaData(c.db, headers[i], bodies[i], vmState.receipts)
 
     assert(validationResult == ValidationResult.OK)
 

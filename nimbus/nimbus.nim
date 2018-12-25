@@ -15,12 +15,14 @@ import
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
   eth_trie/db
 
-const UseSqlite = false
+const nimbus_db_backend {.strdefine.} = "rocksdb"
 
-when UseSqlite:
-  import db/backends/sqlite_backend
+when nimbus_db_backend == "sqlite":
+  import ../nimbus/db/backends/sqlite_backend
+elif nimbus_db_backend == "rocksdb":
+  import ../nimbus/db/backends/rocksdb_backend
 else:
-  import db/backends/rocksdb_backend
+  import ../nimbus/db/backends/lmdb_backend
 
 ## TODO:
 ## * No IPv6 support

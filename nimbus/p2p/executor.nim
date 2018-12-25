@@ -1,4 +1,4 @@
-import eth_common, ranges, chronicles, eth_bloom,
+import eth_common, ranges, chronicles, eth_bloom, nimcrypto,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
@@ -160,7 +160,7 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
     error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
     # this one is a show stopper until we are confident in our VM's
     # compatibility with the main chain
-    raise(newException(Exception, "Wrong state root in block"))
+    return ValidationResult.Error
 
   let bloom = createBloom(vmState.receipts)
   if header.bloom != bloom:
