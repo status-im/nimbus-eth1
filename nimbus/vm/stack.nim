@@ -122,3 +122,7 @@ proc peek*(stack: Stack): UInt256 =
 proc `$`*(stack: Stack): string =
   let values = stack.values.mapIt(&"  {$it}").join("\n")
   &"Stack:\n{values}"
+
+proc `[]`*(stack: Stack, i: BackwardsIndex, T: typedesc): T =
+  # This should be used only for tracer/test/debugging
+  fromStackElement(stack.values[i], result)

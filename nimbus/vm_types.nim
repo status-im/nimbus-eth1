@@ -34,11 +34,13 @@ type
     DisableMemory
     DisableStack
     DisableState
+    EnableAccount
 
   TransactionTracer* = object
     trace*: JsonNode
     gasRemaining*: GasInt
     flags*: set[TracerFlags]
+    accounts*: seq[EthAddress]
 
   OpcodeExecutor* = proc(computation: var BaseComputation)
 
