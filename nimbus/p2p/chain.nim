@@ -44,13 +44,13 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     let head = c.db.getCanonicalHead()
     let vmState = if headers[i].txRoot != BLANK_ROOT_HASH: newBaseVMState(head, c.db)
                   else: nil
-    let success = processBlock(c.db, head, headers[i], bodies[i], vmState)
+    let validationResult = processBlock(c.db, head, headers[i], bodies[i], vmState)
 
     when not defined(release):
-      if not success:
+      if validationResult == ValidationResult.Error:
         dumpDebuggingMetaData(c.db, headers[i], bodies[i])
 
-    assert(success)
+    assert(validationResult == ValidationResult.OK)
 
     discard c.db.persistHeaderToDb(headers[i])
     if c.db.getCanonicalHead().blockHash != headers[i].blockHash:
@@ -58,6 +58,6 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
       return ValidationResult.Error
 
     c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
-    c.db.persistReceipts(receipts)
+    c.db.persistReceipts(vmState.receipts)
 
   transaction.commit()

@@ -1,8 +1,9 @@
-import eth_common, ranges, chronicles,
+import eth_common, ranges, chronicles, eth_bloom,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
-  ../vm/[computation, interpreter_dispatch, message]
+  ../vm/[computation, interpreter_dispatch, message],
+  ../vm/interpreter/vm_forks
 
 proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
   ## Process the transaction, write the results to db.
@@ -102,26 +103,25 @@ proc makeReceipt(vmState: BaseVMState, stateRoot: Hash256, cumulativeGasUsed: Ga
   result.logs = vmState.getAndClearLogEntries()
   result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
-proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockBody, vmState: BaseVMState): bool =
+proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
 
-  var stateDb = newAccountStateDB(c.db.db, head.stateRoot, c.db.pruneTrie)
-  var receipts = newSeq[Receipt](bodies[i].transactions.len)
+  var stateDb = newAccountStateDB(chainDB.db, head.stateRoot, chainDB.pruneTrie)
+  vmState.receipts = newSeq[Receipt](body.transactions.len)
 
-  if bodies[i].transactions.calcTxRoot != headers[i].txRoot:
-    debug "Mismatched txRoot", i
+  if body.transactions.calcTxRoot != header.txRoot:
+    debug "Mismatched txRoot", blockNumber=header.blockNumber
     return ValidationResult.Error
 
-  if headers[i].txRoot != BLANK_ROOT_HASH:
-    let vmState = newBaseVMState(head, c.db)
-    if bodies[i].transactions.len == 0:
-      debug "No transactions in body", i
+  if header.txRoot != BLANK_ROOT_HASH:
+    if body.transactions.len == 0:
+      debug "No transactions in body", blockNumber=header.blockNumber
       return ValidationResult.Error
     else:
-      trace "Has transactions", blockNumber = headers[i].blockNumber, blockHash = headers[i].blockHash
+      trace "Has transactions", blockNumber = header.blockNumber, blockHash = header.blockHash
 
       var cumulativeGasUsed = GasInt(0)
-      for txIndex, tx in bodies[i].transactions:
+      for txIndex, tx in body.transactions:
         var sender: EthAddress
         if tx.getSender(sender):
           let txFee = processTransaction(stateDb, tx, sender, vmState)
@@ -133,41 +133,41 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
           cumulativeGasUsed += gasUsed
 
           # miner fee
-          stateDb.addBalance(headers[i].coinbase, txFee)
+          stateDb.addBalance(header.coinbase, txFee)
         else:
-          debug "Could not get sender", i, tx
+          debug "Could not get sender", txIndex, tx
           return ValidationResult.Error
-        receipts[txIndex] = makeReceipt(vmState, stateDb.rootHash, cumulativeGasUsed)
+        vmState.receipts[txIndex] = makeReceipt(vmState, stateDb.rootHash, cumulativeGasUsed)
 
   var mainReward = blockReward
-  if headers[i].ommersHash != EMPTY_UNCLE_HASH:
-    let h = c.db.persistUncles(bodies[i].uncles)
-    if h != headers[i].ommersHash:
+  if header.ommersHash != EMPTY_UNCLE_HASH:
+    let h = chainDB.persistUncles(body.uncles)
+    if h != header.ommersHash:
       debug "Uncle hash mismatch"
       return ValidationResult.Error
-    for u in 0 ..< bodies[i].uncles.len:
-      var uncleReward = bodies[i].uncles[u].blockNumber + 8.u256
-      uncleReward -= headers[i].blockNumber
+    for uncle in body.uncles:
+      var uncleReward = uncle.blockNumber + 8.u256
+      uncleReward -= header.blockNumber
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
-      stateDb.addBalance(bodies[i].uncles[u].coinbase, uncleReward)
+      stateDb.addBalance(uncle.coinbase, uncleReward)
       mainReward += blockReward div 32.u256
 
   # Reward beneficiary
-  stateDb.addBalance(headers[i].coinbase, mainReward)
+  stateDb.addBalance(header.coinbase, mainReward)
 
-  if headers[i].stateRoot != stateDb.rootHash:
-    error "Wrong state root in block", blockNumber = headers[i].blockNumber, expected = headers[i].stateRoot, actual = stateDb.rootHash, arrivedFrom = c.db.getCanonicalHead().stateRoot
+  if header.stateRoot != stateDb.rootHash:
+    error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
     # this one is a show stopper until we are confident in our VM's
     # compatibility with the main chain
     raise(newException(Exception, "Wrong state root in block"))
 
-  let bloom = createBloom(receipts)
-  if headers[i].bloom != bloom:
-    debug "wrong bloom in block", blockNumber = headers[i].blockNumber
-  assert(headers[i].bloom == bloom)
+  let bloom = createBloom(vmState.receipts)
+  if header.bloom != bloom:
+    debug "wrong bloom in block", blockNumber=header.blockNumber
+    return ValidationResult.Error
 
-  let receiptRoot = calcReceiptRoot(receipts)
-  if headers[i].receiptRoot != receiptRoot:
-    debug "wrong receiptRoot in block", blockNumber = headers[i].blockNumber, actual=receiptRoot, expected=headers[i].receiptRoot
-  assert(headers[i].receiptRoot == receiptRoot)
+  let receiptRoot = calcReceiptRoot(vmState.receipts)
+  if header.receiptRoot != receiptRoot:
+    debug "wrong receiptRoot in block", blockNumber=header.blockNumber, actual=receiptRoot, expected=header.receiptRoot
+    return ValidationResult.Error

@@ -22,6 +22,7 @@ type
     tracingEnabled*: bool
     tracer*        : TransactionTracer
     logEntries*    : seq[Log]
+    receipts*      : seq[Receipt]
 
   AccessLogs* = ref object
     reads*: Table[string, string]
