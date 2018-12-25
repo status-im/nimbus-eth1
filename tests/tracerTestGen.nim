@@ -3,11 +3,11 @@ import
   eth_trie/[db], ../nimbus/db/[db_chain, capturedb],
   ../nimbus/[tracer, vm_types, config]
 
-const backEnd {.strdefine.} = "lmdb"
+const nimbus_db_backend {.strdefine.} = "rocksdb"
 
-when backEnd == "sqlite":
+when nimbus_db_backend == "sqlite":
   import ../nimbus/db/backends/sqlite_backend
-elif backEnd == "rocksdb":
+elif nimbus_db_backend == "rocksdb":
   import ../nimbus/db/backends/rocksdb_backend
 else:
   import ../nimbus/db/backends/lmdb_backend
