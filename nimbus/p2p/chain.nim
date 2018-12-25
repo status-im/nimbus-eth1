@@ -42,8 +42,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   trace "Persisting blocks", fromBlock = headers[0].blockNumber, toBlock = headers[^1].blockNumber
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
-    let vmState = if headers[i].txRoot != BLANK_ROOT_HASH: newBaseVMState(head, c.db)
-                  else: nil
+    let vmState = newBaseVMState(head, c.db)
     let validationResult = processBlock(c.db, head, headers[i], bodies[i], vmState)
 
     when not defined(release):

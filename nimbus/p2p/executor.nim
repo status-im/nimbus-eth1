@@ -107,7 +107,6 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
 
   var stateDb = newAccountStateDB(chainDB.db, head.stateRoot, chainDB.pruneTrie)
-  vmState.receipts = newSeq[Receipt](body.transactions.len)
 
   if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot", blockNumber=header.blockNumber
@@ -120,6 +119,7 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
     else:
       trace "Has transactions", blockNumber = header.blockNumber, blockHash = header.blockHash
 
+      vmState.receipts = newSeq[Receipt](body.transactions.len)
       var cumulativeGasUsed = GasInt(0)
       for txIndex, tx in body.transactions:
         var sender: EthAddress

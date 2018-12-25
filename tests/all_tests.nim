@@ -16,4 +16,5 @@ import  ./test_code_stream,
         ./test_vm_json,
         ./test_precompiles,
         ./test_generalstate_json,
-        ./test_tracer_json
+        ./test_tracer_json,
+        ./test_persistblock_json
