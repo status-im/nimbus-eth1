@@ -34,6 +34,7 @@ type
     DisableMemory
     DisableStack
     DisableState
+    DisableStateDiff
     EnableAccount
 
   TransactionTracer* = object

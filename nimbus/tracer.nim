@@ -7,8 +7,30 @@ import
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
 
-proc prefixHex(x: openArray[byte]): string =
-  "0x" & toHex(x, true)
+proc `%`(x: openArray[byte]): JsonNode =
+  result = %toHex(x, false)
+
+proc toJson(receipt: Receipt): JsonNode =
+  result = newJObject()
+
+  result["cumulativeGasUsed"] = %receipt.cumulativeGasUsed
+  result["bloom"] = %receipt.bloom
+  result["logs"] = %receipt.logs
+
+  if receipt.hasStateRoot:
+    result["root"] = %($receipt.stateRoot)
+  else:
+    result["status"] = %receipt.status
+
+proc dumpReceipts*(chainDB: BaseChainDB, header: BlockHeader): JsonNode =
+  result = newJArray()
+  for receipt in chainDB.getReceipts(header):
+    result.add receipt.toJson
+
+proc toJson(receipts: seq[Receipt]): JsonNode =
+  result = newJArray()
+  for receipt in receipts:
+    result.add receipt.toJson
 
 proc getSender(tx: Transaction): EthAddress =
   if not tx.getSender(result):
@@ -44,7 +66,7 @@ proc captureAccount(n: JsonNode, db: AccountStateDB, address: EthAddress, name: 
 proc dumpMemoryDB*(node: JsonNode, memoryDB: TrieDatabaseRef) =
   var n = newJObject()
   for k, v in pairsInMemoryDB(memoryDB):
-    n[k.prefixHex] = %v.prefixHex
+    n[k.toHex(false)] = %v
   node["state"] = n
 
 const
@@ -88,7 +110,8 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       before.captureAccount(stateDb, sender, senderName)
       before.captureAccount(stateDb, recipient, recipientName)
       before.captureAccount(stateDb, header.coinbase, minerName)
-      stateDiff["beforeRoot"] = %($vmState.blockHeader.stateRoot)
+      stateDiff["beforeRoot"] = %($stateDb.rootHash)
+      #stateDiff["beforeRoot"] = %($vmState.blockHeader.stateRoot)
 
     let txFee = processTransaction(stateDb, tx, sender, vmState)
     stateDb.addBalance(header.coinbase, txFee)
@@ -98,7 +121,8 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, header.coinbase, minerName)
-      stateDiff["afterRoot"] = %($vmState.blockHeader.stateRoot)
+      stateDiff["afterRoot"] = %($stateDb.rootHash)
+      #stateDiff["afterRoot"] = %($vmState.blockHeader.stateRoot)
       break
 
   # internal transactions:
@@ -110,7 +134,9 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed
-  result["statediff"] = stateDiff
+
+  if TracerFlags.DisableStateDiff notin tracerFlags:
+    result["stateDiff"] = stateDiff
 
   # now we dump captured state db
   if TracerFlags.DisableState notin tracerFlags:
@@ -198,12 +224,35 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
   if TracerFlags.DisableState notin tracerFlags:
     result.dumpMemoryDB(memoryDB)
 
-proc dumpDebuggingMetaData*(db: BaseChainDB, header: BlockHeader, body: BlockBody) =
-  # TODO: tidying this up and make it available to debugging tool
-  let ttrace = traceTransaction(db, header, body, body.transactions.len - 1, {})
-  trace "NIMBUS TRACE", transactionTrace=ttrace.pretty()
-  let dump = dumpBlockState(db, header, body)
-  trace "NIMBUS STATE DUMP", dump=dump.pretty()
-  let blockTrace = traceBlock(db, header, body, {})
-  trace "NIMBUS BLOCK TRACE", blockTrace=blockTrace
-  # dump receipt #195
+proc traceTransactions*(chainDB: BaseChainDB, header: BlockHeader, blockBody: BlockBody): JsonNode =
+  result = newJArray()
+  for i in 0 ..< blockBody.transactions.len:
+    result.add traceTransaction(chainDB, header, blockBody, i, {DisableState})
+
+proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader, blockBody: BlockBody, receipts: seq[Receipt]) =
+  let
+    blockNumber = header.blockNumber
+
+  var
+    memoryDB = newMemoryDB()
+    captureDB = newCaptureDB(chainDB.db, memoryDB)
+    captureTrieDB = trieDB captureDB
+    captureChainDB = newBaseChainDB(captureTrieDB, false)
+
+  let
+    txTraces = traceTransactions(captureChainDB, header, blockBody)
+    stateDump = dumpBlockState(captureChainDB, header, blockBody)
+    blockTrace = traceBlock(captureChainDB, header, blockBody, {DisableState})
+    receipts = toJson(receipts)
+
+  var metaData = %{
+    "blockNumber": %blockNumber.toHex,
+    "txTraces": txTraces,
+    "stateDump": stateDump,
+    "blockTrace": blockTrace,
+    "receipts": receipts
+  }
+
+  metaData.dumpMemoryDB(memoryDB)
+  # this is a placeholder until premix debugging tool is ready
+  writeFile("debug_meta_data.json", metaData.pretty())
