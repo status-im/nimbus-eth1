@@ -173,6 +173,9 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
 
     let `symbol`: array[Status, string] = ["+", "-", " "]
     var raw = ""
+    var okCountTotal = 0
+    var failCountTotal = 0
+    var skipCountTotal = 0
     raw.add(`s` & "\n")
     raw.add("===\n")
     for folder, statuses in status:
@@ -192,7 +195,14 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
           of Status.Skip: skipCount += 1
       raw.add("```\n")
       let sum = okCount + failCount + skipCount
+      okCountTotal += okCount
+      failCountTotal += failCount
+      skipCountTotal += skipCount
       raw.add("OK: " & $okCount & "/" & $sum & " Fail: " & $failCount & "/" & $sum & " Skip: " & $skipCount & "/" & $sum & "\n")
+
+    let sumTotal = okCountTotal + failCountTotal + skipCountTotal
+    raw.add("\n---TOTAL---\n")
+    raw.add("OK: $1/$4 Fail: $2/$4 Skip: $3/$4\n" % [$okCountTotal, $failCountTotal, $skipCountTotal, $sumTotal])
     writeFile(`s` & ".md", raw)
 
 func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
