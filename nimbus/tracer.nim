@@ -89,8 +89,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {EnableAccount})
 
   var stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
-  var stateBefore = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
-  # stateDb and stateBefore will not the same after transaction execution
+
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   assert(body.transactions.calcTxRoot == header.txRoot)
   assert(body.transactions.len != 0)
@@ -100,6 +99,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     before = newJArray()
     after = newJArray()
     stateDiff = %{"before": before, "after": after}
+    beforeRoot: Hash256
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
@@ -111,7 +111,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       before.captureAccount(stateDb, recipient, recipientName)
       before.captureAccount(stateDb, header.coinbase, minerName)
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
-      #stateDiff["beforeRoot"] = %($vmState.blockHeader.stateRoot)
+      beforeRoot = stateDb.rootHash
 
     let txFee = processTransaction(stateDb, tx, sender, vmState)
     stateDb.addBalance(header.coinbase, txFee)
@@ -122,10 +122,10 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, header.coinbase, minerName)
       stateDiff["afterRoot"] = %($stateDb.rootHash)
-      #stateDiff["afterRoot"] = %($vmState.blockHeader.stateRoot)
       break
 
   # internal transactions:
+  var stateBefore = newAccountStateDB(captureTrieDB, beforeRoot, db.pruneTrie)
   for idx, acc in tracedAccountsPairs(vmState):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
