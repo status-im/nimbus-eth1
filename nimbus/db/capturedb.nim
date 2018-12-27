@@ -17,7 +17,8 @@ proc get*(db: CaptureDB, key: openArray[byte]): seq[byte] =
   result = db.dstDb.get(key)
   if result.len != 0: return
   result = db.srcDb.get(key)
-  db.dstDb.put(key, result)
+  if result.len == 0:
+    db.dstDb.put(key, result)
 
 proc put*(db: CaptureDB, key, value: openArray[byte]) =
   db.dstDb.put(key, value)
