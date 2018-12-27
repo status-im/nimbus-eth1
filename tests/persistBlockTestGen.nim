@@ -1,17 +1,8 @@
 import
   json, os, eth_common, stint, chronicles, byteutils, nimcrypto, rlp,
-  eth_trie/[db], ../nimbus/db/[db_chain, capturedb, storage_types],
+  eth_trie/[db], ../nimbus/db/[db_chain, capturedb, storage_types, select_backend],
   ../nimbus/[tracer, vm_types, config],
   ../nimbus/p2p/chain
-
-const nimbus_db_backend {.strdefine.} = "rocksdb"
-
-when nimbus_db_backend == "sqlite":
-  import ../nimbus/db/backends/sqlite_backend
-elif nimbus_db_backend == "rocksdb":
-  import ../nimbus/db/backends/rocksdb_backend
-else:
-  import ../nimbus/db/backends/lmdb_backend
 
 proc putCanonicalHead(chainDB: BaseChainDB, header: BlockHeader) =
   var headerHash = rlpHash(header)
