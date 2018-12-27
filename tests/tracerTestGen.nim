@@ -1,16 +1,7 @@
 import
   json, os, eth_common, stint, chronicles, byteutils, nimcrypto,
-  eth_trie/[db], ../nimbus/db/[db_chain, capturedb],
+  eth_trie/[db], ../nimbus/db/[db_chain, capturedb, select_backend],
   ../nimbus/[tracer, vm_types, config]
-
-const nimbus_db_backend {.strdefine.} = "rocksdb"
-
-when nimbus_db_backend == "sqlite":
-  import ../nimbus/db/backends/sqlite_backend
-elif nimbus_db_backend == "rocksdb":
-  import ../nimbus/db/backends/rocksdb_backend
-else:
-  import ../nimbus/db/backends/lmdb_backend
 
 proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
   let

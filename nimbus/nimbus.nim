@@ -8,21 +8,12 @@
 # those terms.
 
 import
-  os, strutils, net, eth_common, db/[storage_types, db_chain],
+  os, strutils, net, eth_common, db/[storage_types, db_chain, select_backend],
   asyncdispatch2, json_rpc/rpcserver, eth_keys, chronicles,
   eth_p2p, eth_p2p/rlpx_protocols/[eth_protocol, les_protocol],
   eth_p2p/blockchain_sync,
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
   eth_trie/db
-
-const nimbus_db_backend {.strdefine.} = "rocksdb"
-
-when nimbus_db_backend == "sqlite":
-  import ../nimbus/db/backends/sqlite_backend
-elif nimbus_db_backend == "rocksdb":
-  import ../nimbus/db/backends/rocksdb_backend
-else:
-  import ../nimbus/db/backends/lmdb_backend
 
 ## TODO:
 ## * No IPv6 support
