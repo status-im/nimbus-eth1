@@ -1,9 +1,6 @@
 # Nimbus: an Ethereum 2.0 Sharding Client for Resource-Restricted Devices
 
-Windows 64-bit: [![Windows x64 build status (Appveyor)](https://appveyor-matrix-badges.herokuapp.com/repos/nimbus/nimbus/branch/master/2 "Windows x64 build status (Appveyor)")](https://ci.appveyor.com/project/nimbus/nimbus)
-
-Windows 32-bit: [![Windows x86 build status (Appveyor)](https://appveyor-matrix-badges.herokuapp.com/repos/nimbus/nimbus/branch/master/1 "Windows x86 build status (Appveyor)")](https://ci.appveyor.com/project/nimbus/nimbus)
-
+[![Windows build status (Appveyor)](https://img.shields.io/appveyor/ci/nimbus/nimbus/master.svg?label=Windows "Windows build status (Appveyor)")](https://ci.appveyor.com/project/nimbus/nimbus)
 [![Build Status (Travis)](https://img.shields.io/travis/status-im/nimbus/master.svg?label=Linux%20/%20macOS "Linux/macOS build status (Travis)")](https://travis-ci.org/status-im/nimbus)
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -17,6 +14,10 @@ Join the Status community chats:
 
 ## Rationale
 [Nimbus: an Ethereum 2.0 Sharding Client](https://our.status.im/nimbus-for-newbies/). The code in this repository is currently focusing on Ethereum 1.0 feature parity, while all 2.0 research and development is happening in parallel in [nim-beacon-chain](https://github.com/status-im/nim-beacon-chain). The two repositories are expected to merge in Q1 2019.
+
+## Development Updates
+
+To keep up to date with changes and development progress, follow the [Nimbus blog](https://our.status.im/tag/nimbus/).
 
 ## Building & Testing
 
@@ -61,6 +62,15 @@ and for [pairing Nimbus with a locally running copy of Geth][2].
 [1]: https://github.com/status-im/nimbus/wiki/Understanding-and-debugging-Nimbus-EVM-JSON-tests
 [2]: https://github.com/status-im/nimbus/wiki/Debugging-state-reconstruction
 
+### Build and Run Nimbus
+
+```bash
+nimble nimbus
+./build/nimbus
+```
+
+Report any errors you encounter, please, if not [already documented](https://github.com/status-im/nimbus)!
+
 #### Troubleshooting
 
 Sometimes, the build will fail even though the latest CI is green - here are a few tips to handle this:
@@ -77,7 +87,12 @@ Sometimes, the build will fail even though the latest CI is green - here are a f
 
 ## License
 
-Licensed under both of the following:
+Licensed and distributed under either of
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license: [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
+* MIT license: [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
+
+or
+
+* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+
+at your option. This file may not be copied, modified, or distributed except according to those terms.
