@@ -340,7 +340,7 @@ proc processEthArguments(key, value: string): ConfigStatus =
       config.keyFile = value
     else:
       result = ErrorIncorrectOption
-  of "dataDir":
+  of "datadir":
     config.dataDir = value
   of "prune":
     result = processPruneList(value, config.prune)
