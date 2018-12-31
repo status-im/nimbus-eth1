@@ -1,4 +1,4 @@
-const nimbus_db_backend {.strdefine.} = "rocksdb"
+const nimbus_db_backend* {.strdefine.} = "rocksdb"
 
 when nimbus_db_backend == "sqlite":
   import ./backends/sqlite_backend as database_backend

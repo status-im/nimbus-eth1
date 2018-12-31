@@ -33,7 +33,7 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
     readOnlyDB.getBalance(sender) >= gas_cost
 
-proc setupComputation*(header: BlockHeader, vmState: BaseVMState, transaction: Transaction, sender: EthAddress, forkOverride=none(Fork)) : BaseComputation =
+proc setupComputation*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress, forkOverride=none(Fork)) : BaseComputation =
   let message = newMessage(
       gas = transaction.gasLimit - transaction.payload.intrinsicGas,
       gasPrice = transaction.gasPrice,
@@ -45,10 +45,15 @@ proc setupComputation*(header: BlockHeader, vmState: BaseVMState, transaction: T
       options = newMessageOptions(origin = sender,
                                   createAddress = transaction.to))
 
-  result = newBaseComputation(vmState, header.blockNumber, message, forkOverride)
+  result = newBaseComputation(vmState, vmState.blockNumber, message, forkOverride)
   doAssert result.isOriginComputation
 
 proc execComputation*(computation: var BaseComputation): bool =
+  # TODO: use AccountStateDB revert/commit after JournalDB implemented
+  let stateDb = computation.vmState.accountDb
+  let intermediateRoot = stateDb.rootHash
+  computation.vmState.blockHeader.stateRoot = stateDb.rootHash
+
   try:
     computation.executeOpcodes()
     computation.vmState.mutateStateDB:
@@ -59,7 +64,12 @@ proc execComputation*(computation: var BaseComputation): bool =
   except ValueError:
     result = false
 
-proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
+  if result:
+    stateDb.rootHash = computation.vmState.blockHeader.stateRoot
+  else:
+    stateDb.rootHash = intermediateRoot
+
+proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
   doAssert t.isContractCreation
   # TODO: clean up params
   trace "Contract creation"
@@ -76,9 +86,11 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: Ba
   let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload,
                        options = newMessageOptions(origin = sender,
                                                    createAddress = contractAddress))
+
   var c = newBaseComputation(vmState, vmState.blockNumber, msg, forkOverride)
 
   if execComputation(c):
+    var db = vmState.accountDb
     db.addBalance(contractAddress, t.value)
 
     # XXX: copy/pasted from GST fixture
@@ -111,6 +123,7 @@ proc applyCreateTransaction*(db: var AccountStateDB, t: Transaction, vmState: Ba
     # FIXME: don't do this revert, but rather only subBalance correctly
     # the if transactionfailed at end is what is supposed to pick it up
     # especially when it's cross-function, it's ugly/fragile
+    var db = vmState.accountDb
     db.addBalance(sender, t.value)
     debug "execComputation() error", isError = c.isError
     if c.tracingEnabled:

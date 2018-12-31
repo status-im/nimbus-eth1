@@ -9,6 +9,7 @@ type
     transactionHashToBlock
     canonicalHeadHash
     slotHashToSlot
+    contractHash
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -46,6 +47,11 @@ proc slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   assert(h.len == 32)
   result.data[0] = byte ord(slotHashToSlot)
   result.data[1 .. 32] = h
+  result.dataEndPos = uint8 32
+
+proc contractHashKey*(h: Hash256): DbKey {.inline.} =
+  result.data[0] = byte ord(contractHash)
+  result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
 const hashHolderKinds = {genericHash, blockHashToScore, transactionHashToBlock}

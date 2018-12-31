@@ -67,7 +67,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op
   # when contract execution interrupted by exception
   if TracerFlags.DisableStorage notin tracer.flags:
     var storage = newJObject()
-    var stateDB = c.vmState.chaindb.getStateDb(c.vmState.blockHeader.stateRoot, readOnly = true)
+    var stateDB = c.vmState.accountDb
     for key, value in stateDB.storage(c.msg.storageAddress):
       storage[key.dumpHex] = %(value.dumpHex)
     j["storage"] = storage

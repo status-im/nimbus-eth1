@@ -16,21 +16,20 @@ logScope:
 
 type
   AccountStateDB* = ref object
-    trie:         SecureHexaryTrie
-    accountCodes: TableRef[Hash256, ByteRange]
+    trie: SecureHexaryTrie
 
-proc rootHash*(accountDb: AccountStateDB): KeccakHash =
-  accountDb.trie.rootHash
+  ReadOnlyStateDB* = distinct AccountStateDB
 
-# proc `rootHash=`*(db: var AccountStateDB, value: string) =
-# TODO: self.Trie.rootHash = value
+proc rootHash*(db: AccountStateDB): KeccakHash =
+  db.trie.rootHash
+
+proc `rootHash=`*(db: AccountStateDB, root: KeccakHash) =
+  db.trie = initSecureHexaryTrie(HexaryTrie(db.trie).db, root, db.trie.isPruning)
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
-                        root: KeccakHash, pruneTrie: bool, readOnly: bool = false,
-                        accountCodes = newTable[Hash256, ByteRange]()): AccountStateDB =
+                        root: KeccakHash, pruneTrie: bool): AccountStateDB =
   result.new()
   result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
-  result.accountCodes = accountCodes
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
   ## XXX: The name of this proc is intentionally long, because it
@@ -142,7 +141,7 @@ proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt2
   else:
     result = (0.u256, false)
 
-proc setNonce*(db: var AccountStateDB, address: EthAddress, newNonce: AccountNonce) =
+proc setNonce*(db: AccountStateDB, address: EthAddress, newNonce: AccountNonce) =
   var account = db.getAccount(address)
   if newNonce != account.nonce:
     account.nonce = newNonce
@@ -152,18 +151,25 @@ proc getNonce*(db: AccountStateDB, address: EthAddress): AccountNonce =
   let account = db.getAccount(address)
   account.nonce
 
-proc setCode*(db: var AccountStateDB, address: EthAddress, code: ByteRange) =
+proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
   var account = db.getAccount(address)
-  let newCodeHash = keccak256.digest code.toOpenArray
-  if newCodeHash != account.codeHash:
-    account.codeHash = newCodeHash
-    db.accountCodes[newCodeHash] = code
-    # XXX: this uses the journaldb in py-evm
-    # db.trie.put(account.codeHash.toByteRange_Unnecessary, code)
-    db.setAccount(address, account)
+  # TODO: implement JournalDB to store code and storage
+  # also use JournalDB to revert state trie
+
+  let
+    newCodeHash = keccak256.digest code.toOpenArray
+    triedb = HexaryTrie(db.trie).db
+
+  if code.len != 0:
+    triedb.put(contractHashKey(newCodeHash).toOpenArray, code.toOpenArray)
+
+  account.codeHash = newCodeHash
+  db.setAccount(address, account)
 
 proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
-  db.accountCodes.getOrDefault(db.getCodeHash(address))
+  let triedb = HexaryTrie(db.trie).db
+  let data = triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
+  data.toRange
 
 proc hasCodeOrNonce*(account: AccountStateDB, address: EthAddress): bool {.inline.} =
   account.getNonce(address) != 0 or account.getCodeHash(address) != EMPTY_SHA3
@@ -172,3 +178,12 @@ proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   let address = addressS.parseAddress
   return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
 
+proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
+proc getAccount*(db: ReadOnlyStateDB, address: EthAddress): Account {.borrow.}
+proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
+proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}
+proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
+proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) {.borrow.}
+proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
+proc getCode*(db: ReadOnlyStateDB, address: EthAddress): ByteRange {.borrow.}
+proc hasCodeOrNonce*(account: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
