@@ -10,7 +10,7 @@ import
   ./constants, json,
   ./vm/[memory, stack, code_stream],
   ./vm/interpreter/[gas_costs, opcode_values, vm_forks], # TODO - will be hidden at a lower layer
-  ./db/db_chain
+  ./db/[db_chain, state_db]
 
 type
   BaseVMState* = ref object of RootObj
@@ -23,6 +23,7 @@ type
     tracer*        : TransactionTracer
     logEntries*    : seq[Log]
     receipts*      : seq[Receipt]
+    accountDb*     : AccountStateDB
 
   AccessLogs* = ref object
     reads*: Table[string, string]

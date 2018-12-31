@@ -12,12 +12,7 @@ import
 
 type
   BaseChainDB* = ref object
-    db*:           TrieDatabaseRef
-    # XXX: intentionally simple stand-in for one use of full JournalDB
-    # Doesn't handle CREATE+revert, etc. But also creates minimal tech
-    # debt while setting a CI baseline from which to improve/replace.
-    accountCodes*: TableRef[Hash256, ByteRange]
-    # TODO db*: JournalDB
+    db*       : TrieDatabaseRef
     pruneTrie*: bool
 
   KeyType = enum
@@ -31,7 +26,6 @@ type
 proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true): BaseChainDB =
   new(result)
   result.db = db
-  result.accountCodes = newTable[Hash256, ByteRange]()
   result.pruneTrie = pruneTrie
 
 proc `$`*(db: BaseChainDB): string =
@@ -262,34 +256,6 @@ proc persistBlockToDb*(self: BaseChainDB; blk: Block): ValidationResult =
     if ommersHash != blk.header.ommersHash:
       debug "ommersHash mismatch"
       return ValidationResult.Error
-
-# proc addTransaction*(self: BaseChainDB; blockHeader: BlockHeader; indexKey: cstring;
-#                     transaction: FrontierTransaction): cstring =
-#   var transactionDb = HexaryTrie(self.db)
-#   transactionDb[indexKey] = rlp.encode(transaction)
-#   return transactionDb.rootHash
-
-# proc addReceipt*(self: BaseChainDB; blockHeader: BlockHeader; indexKey: cstring;
-#                 receipt: Receipt): cstring =
-#   var receiptDb = HexaryTrie()
-#   receiptDb[indexKey] = rlp.encode(receipt)
-#   return receiptDb.rootHash
-
-#proc snapshot*(self: BaseChainDB): UUID =
-  # Snapshots are a combination of the state_root at the time of the
-  # snapshot and the id of the changeset from the journaled DB.
-  #return self.db.snapshot()
-
-# proc commit*(self: BaseChainDB; checkpoint: UUID): void =
-#   self.db.commit(checkpoint)
-
-# proc clear*(self: BaseChainDB): void =
-#   self.db.clear()
-
-proc getStateDb*(self: BaseChainDB; stateRoot: Hash256; readOnly: bool = false): AccountStateDB =
-  # TODO: readOnly is not used.
-  result = newAccountStateDB(self.db, stateRoot, self.pruneTrie, readOnly, self.accountCodes)
-
 
 # Deprecated:
 proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader {.deprecated.} =

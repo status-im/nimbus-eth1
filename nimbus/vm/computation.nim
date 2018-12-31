@@ -99,8 +99,8 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
 
   if computation.msg.value != 0:
     let senderBalance =
-      computation.vmState.chainDb.getStateDb(
-        computation.vmState.blockHeader.hash, false).
+      computation.vmState.getStateDb(
+        computation.vmState.blockHeader.hash).
         getBalance(computation.msg.sender)
     var newBalance = senderBalance
 

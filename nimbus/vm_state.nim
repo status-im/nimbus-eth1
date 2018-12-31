@@ -34,6 +34,10 @@ proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set
   result.tracer.initTracer(tracerFlags)
   result.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
   result.logEntries = @[]
+  result.accountDb = newAccountStateDB(chainDB.db, header.stateRoot, chainDB.pruneTrie)
+
+proc stateRoot*(vmState: BaseVMState): Hash256 =
+  vmState.blockHeader.stateRoot
 
 method blockhash*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.hash
@@ -94,20 +98,26 @@ when false:
         # TODO `db`.db = nil
         # state._trie = None
 
+proc getStateDb*(vmState: BaseVMState; stateRoot: Hash256): AccountStateDB =
+  # TODO: use AccountStateDB revert/commit after JournalDB implemented
+  vmState.accountDb.rootHash = stateRoot
+  vmState.accountDb
+
+proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
+  ReadOnlyStateDB(vmState.accountDb)
+
 template mutateStateDB*(vmState: BaseVMState, body: untyped) =
   # This should provide more clever change handling in the future
+  # TODO: use AccountStateDB revert/commit after JournalDB implemented
   block:
     let initialStateRoot = vmState.blockHeader.stateRoot
-    var db {.inject.} = vmState.chaindb.getStateDB(initialStateRoot, false)
+    var db {.inject.} = vmState.getStateDB(initialStateRoot)
 
     body
 
     let finalStateRoot = db.rootHash
     if finalStateRoot != initialStateRoot:
       vmState.blockHeader.stateRoot = finalStateRoot
-
-proc readOnlyStateDB*(vmState: BaseVMState): AccountStateDB {.inline.}=
-  vmState.chaindb.getStateDb(vmState.blockHeader.stateRoot, readOnly = true)
 
 export DbTransaction, commit, rollback, dispose, safeDispose
 

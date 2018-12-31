@@ -518,8 +518,8 @@ op create, inline = false, value, startPosition, size:
   computation.memory.extend(memPos, len)
 
   let senderBalance =
-    computation.vmState.chainDb.getStateDb(
-      computation.vmState.blockHeader.rlphash, false).
+    computation.vmState.getStateDb(
+      computation.vmState.blockHeader.rlphash).
       getBalance(computation.msg.sender)
 
   if senderBalance < value:

@@ -27,7 +27,7 @@ proc dumpReceipts*(chainDB: BaseChainDB, header: BlockHeader): JsonNode =
   for receipt in chainDB.getReceipts(header):
     result.add receipt.toJson
 
-proc toJson(receipts: seq[Receipt]): JsonNode =
+proc toJson*(receipts: seq[Receipt]): JsonNode =
   result = newJArray()
   for receipt in receipts:
     result.add receipt.toJson
@@ -88,7 +88,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?
     vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {EnableAccount})
 
-  var stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
+  var stateDb = vmState.accountDb
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   assert(body.transactions.calcTxRoot == header.txRoot)
@@ -113,7 +113,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
 
-    let txFee = processTransaction(stateDb, tx, sender, vmState)
+    let txFee = processTransaction(tx, sender, vmState)
     stateDb.addBalance(header.coinbase, txFee)
 
     if idx == txIndex:
@@ -203,9 +203,6 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
     captureChainDB = newBaseChainDB(captureTrieDB, false)
     vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {EnableTracing})
 
-  var
-    stateDb = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
-
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   assert(body.transactions.calcTxRoot == header.txRoot)
   assert(body.transactions.len != 0)
@@ -215,7 +212,7 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
   for tx in body.transactions:
     let
       sender = tx.getSender
-      txFee = processTransaction(stateDb, tx, sender, vmState)
+      txFee = processTransaction(tx, sender, vmState)
     gasUsed = gasUsed + (txFee div tx.gasPrice.u256).truncate(GasInt)
 
   result = vmState.getTracingResult()

@@ -29,18 +29,18 @@ import
 proc `%`*(value: Time): JsonNode =
   result = %value.toSeconds
 
-template balance(addressDb: AccountStateDb, address: EthAddress): GasInt =
+template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
   addressDb.getBalance(address).truncate(int64)
 
 proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
 
-  func getAccountDb(header: BlockHeader, readOnly = true): AccountStateDb =
+  func getAccountDb(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
     let vmState = newBaseVMState(header, chain)
-    result = vmState.chaindb.getStateDb(vmState.blockHeader.hash, readOnly)
+    result = vmState.readOnlyStateDB()
 
-  func accountDbFromTag(tag: string, readOnly = true): AccountStateDb =
+  func accountDbFromTag(tag: string, readOnly = true): ReadOnlyStateDB =
     result = getAccountDb(chain.headerFromTag(tag))
 
   proc getBlockBody(hash: KeccakHash): BlockBody =
@@ -188,7 +188,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## data: address.
     ## message: message to sign.
     ## Returns signature.
-    let accountDb = getAccountDb(chain.getCanonicalHead(), true)
+    let accountDb = getAccountDb(chain.getCanonicalHead())
     var privateKey: PrivateKey  # TODO: Get from key store
     result = ("0x" & sign(privateKey, message.string)).HexDataStr
 
@@ -341,7 +341,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
   proc populateTransactionObject(transaction: Transaction, txIndex: int64, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =
     let
       vmState = newBaseVMState(blockHeader, chain)
-      accountDb = vmState.chaindb.getStateDb(blockHash, true)
+      accountDb = vmState.readOnlyStateDB()
       address = transaction.getSender()
       txCount = accountDb.getNonce(address)
       txHash = transaction.rlpHash
@@ -439,7 +439,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     var
       idx = 0
       prevGasUsed = GasInt(0)
-      
+
     for receipt in chain.getReceipts(header):
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
       prevGasUsed = receipt.cumulativeGasUsed

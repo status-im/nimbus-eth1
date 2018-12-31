@@ -1,15 +1,54 @@
-import eth_common, ranges, chronicles, eth_bloom, nimcrypto,
+import options,
+  eth_common, ranges, chronicles, eth_bloom, nimcrypto,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
   ../vm/[computation, interpreter_dispatch, message],
   ../vm/interpreter/vm_forks
 
-proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
+proc contractCall(t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
+  # TODO: this function body was copied from GST with it's comments and TODOs.
+  # Right now it's main purpose is to produce VM tracing when syncing block with
+  # contract call. At later stage, this proc together with applyCreateTransaction
+  # and processTransaction need to be restructured.
+
+  # TODO: replace with cachingDb or similar approach; necessary
+  # when calls/subcalls/etc come in, too.
+  var db = vmState.accountDb
+  let storageRoot = db.getStorageRoot(t.to)
+
+  var computation = setupComputation(vmState, t, sender, forkOverride)
+  # contract creation transaction.to == 0, so ensure happens after
+  db.addBalance(t.to, t.value)
+
+  let header = vmState.blockHeader
+  let gasCost = t.gasLimit.u256 * t.gasPrice.u256
+
+  if execComputation(computation):
+    let
+      gasRemaining = computation.gasMeter.gasRemaining.u256
+      gasRefunded = computation.gasMeter.gasRefunded.u256
+      gasUsed = t.gasLimit.u256 - gasRemaining
+      gasRefund = min(gasRefunded, gasUsed div 2)
+      gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
+
+    db.addBalance(sender, gasRefundAmount)
+
+    return (t.gasLimit.u256 - gasRemaining - gasRefund) * t.gasPrice.u256
+  else:
+    db.subBalance(t.to, t.value)
+    db.addBalance(sender, t.value)
+    db.setStorageRoot(t.to, storageRoot)
+    if computation.tracingEnabled: computation.traceError()
+    vmState.clearLogs()
+    return t.gasLimit.u256 * t.gasPrice.u256
+
+proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
   trace "txHash", rlpHash = t.rlpHash
+  var db = vmState.accountDb
   # Inct nonce:
   db.setNonce(sender, db.getNonce(sender) + 1)
   var transactionFailed = false
@@ -43,7 +82,7 @@ proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddr
   else:
     if t.isContractCreation:
       # TODO: re-derive sender in callee for cleaner interface, perhaps
-      return applyCreateTransaction(db, t, vmState, sender)
+      return applyCreateTransaction(t, vmState, sender)
 
     else:
       let code = db.getCode(t.to)
@@ -56,8 +95,9 @@ proc processTransaction*(db: var AccountStateDB, t: Transaction, sender: EthAddr
         # Contract call
         trace "Contract call"
         trace "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
-        let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
-        # TODO: Run the vm
+        #let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
+        # TODO: Run the vm with proper fork
+        return contractCall(t, vmState, sender)
 
   if gasUsed > t.gasLimit:
     gasUsed = t.gasLimit
@@ -88,12 +128,9 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
     bloom.value = bloom.value or logsBloom(receipt.logs).value
   result = bloom.value.toByteArrayBE
 
-proc makeReceipt(vmState: BaseVMState, stateRoot: Hash256, cumulativeGasUsed: GasInt, fork = FkFrontier): Receipt =
+proc makeReceipt(vmState: BaseVMState, cumulativeGasUsed: GasInt, fork = FkFrontier): Receipt =
   if fork < FkByzantium:
-    # TODO: which one: vmState.blockHeader.stateRoot or stateDb.rootHash?
-    # currently, vmState.blockHeader.stateRoot vs stateDb.rootHash can be different
-    # need to wait #188 solved
-    result.stateRootOrStatus = hashOrStatus(stateRoot)
+    result.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
   else:
     # TODO: post byzantium fork use status instead of rootHash
     let vmStatus = true # success or failure
@@ -106,12 +143,11 @@ proc makeReceipt(vmState: BaseVMState, stateRoot: Hash256, cumulativeGasUsed: Ga
 proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
 
-  var stateDb = newAccountStateDB(chainDB.db, head.stateRoot, chainDB.pruneTrie)
-
   if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot", blockNumber=header.blockNumber
     return ValidationResult.Error
 
+  var stateDb = vmState.accountDb
   if header.txRoot != BLANK_ROOT_HASH:
     if body.transactions.len == 0:
       debug "No transactions in body", blockNumber=header.blockNumber
@@ -124,7 +160,7 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
       for txIndex, tx in body.transactions:
         var sender: EthAddress
         if tx.getSender(sender):
-          let txFee = processTransaction(stateDb, tx, sender, vmState)
+          let txFee = processTransaction(tx, sender, vmState)
 
           # perhaps this can be altered somehow
           # or processTransaction return only gasUsed
@@ -137,7 +173,7 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
         else:
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error
-        vmState.receipts[txIndex] = makeReceipt(vmState, stateDb.rootHash, cumulativeGasUsed)
+        vmState.receipts[txIndex] = makeReceipt(vmState, cumulativeGasUsed)
 
   var mainReward = blockReward
   if header.ommersHash != EMPTY_UNCLE_HASH:
