@@ -60,12 +60,13 @@ proc main() =
   let chainDB = newBaseChainDB(trieDB, false)
 
   chainDB.dumpTest(97)
-  chainDB.dumpTest(98) # not uncles and no tx
+  chainDB.dumpTest(98) # no uncles and no tx
   chainDB.dumpTest(46147)
   chainDB.dumpTest(46400)
   chainDB.dumpTest(46402)
   chainDB.dumpTest(47205)
   chainDB.dumpTest(48712)
   chainDB.dumpTest(48915)
+  chainDB.dumpTest(49018)
 
 main()

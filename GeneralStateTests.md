@@ -70,7 +70,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 2/3 Fail: 0/3 Skip: 1/3
 ## stCallCodes
 ```diff
-  call_OOG_additionalGasCosts1.json                               Skip
++ call_OOG_additionalGasCosts1.json                               OK
 + call_OOG_additionalGasCosts2.json                               OK
   callcall_00.json                                                Skip
   callcall_00_OOGE.json                                           Skip
@@ -150,7 +150,7 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
   callcodecallcodecallcode_111_SuicideMiddle.json                 Skip
   callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 1/79 Fail: 0/79 Skip: 78/79
+OK: 2/79 Fail: 0/79 Skip: 77/79
 ## stCallCreateCallCodeTest
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -354,21 +354,21 @@ OK: 0/58 Fail: 0/58 Skip: 58/58
 OK: 4/30 Fail: 0/30 Skip: 26/30
 ## stCodeCopyTest
 ```diff
-  ExtCodeCopyTests.json                                           Skip
++ ExtCodeCopyTests.json                                           OK
 ```
-OK: 0/1 Fail: 0/1 Skip: 1/1
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stCodeSizeLimit
 ```diff
-  codesizeInit.json                                               Skip
++ codesizeInit.json                                               OK
 + codesizeOOGInvalidSize.json                                     OK
 + codesizeValid.json                                              OK
 ```
-OK: 2/3 Fail: 0/3 Skip: 1/3
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## stCreateTest
 ```diff
   CREATE_AcreateB_BSuicide_BStore.json                            Skip
   CREATE_ContractRETURNBigOffset.json                             Skip
-  CREATE_ContractSSTOREDuringInit.json                            Skip
++ CREATE_ContractSSTOREDuringInit.json                            OK
   CREATE_ContractSuicideDuringInit.json                           Skip
   CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json       Skip
   CREATE_ContractSuicideDuringInit_WithValue.json                 Skip
@@ -393,11 +393,11 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
   CreateOOGafterInitCodeReturndataSize.json                       Skip
   CreateOOGafterInitCodeRevert.json                               Skip
   CreateOOGafterInitCodeRevert2.json                              Skip
-  TransactionCollisionToEmpty.json                                Skip
++ TransactionCollisionToEmpty.json                                OK
   TransactionCollisionToEmptyButCode.json                         Skip
   TransactionCollisionToEmptyButNonce.json                        Skip
 ```
-OK: 0/30 Fail: 0/30 Skip: 30/30
+OK: 2/30 Fail: 0/30 Skip: 28/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -472,7 +472,7 @@ OK: 0/13 Fail: 0/13 Skip: 13/13
 + RawCallGasValueTransferMemoryAsk.json                           OK
   RawCallMemoryGas.json                                           Skip
   RawCallMemoryGasAsk.json                                        Skip
-  RawCreateFailGasValueTransfer.json                              Skip
++ RawCreateFailGasValueTransfer.json                              OK
   RawCreateFailGasValueTransfer2.json                             Skip
   RawCreateGas.json                                               Skip
   RawCreateGasMemory.json                                         Skip
@@ -486,7 +486,7 @@ OK: 0/13 Fail: 0/13 Skip: 13/13
 + RawExtCodeCopyMemoryGas.json                                    OK
 + RawExtCodeSizeGas.json                                          OK
 ```
-OK: 8/30 Fail: 0/30 Skip: 22/30
+OK: 9/30 Fail: 0/30 Skip: 21/30
 ## stEIP158Specific
 ```diff
   CALL_OneVCallSuicide.json                                       Skip
@@ -992,7 +992,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest131.json                                         OK
 + randomStatetest133.json                                         OK
 + randomStatetest134.json                                         OK
-  randomStatetest135.json                                         Skip
++ randomStatetest135.json                                         OK
 + randomStatetest136.json                                         OK
 + randomStatetest137.json                                         OK
   randomStatetest138.json                                         Skip
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 306/327 Fail: 0/327 Skip: 21/327
+OK: 307/327 Fail: 0/327 Skip: 20/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -1705,7 +1705,7 @@ OK: 8/16 Fail: 0/16 Skip: 8/16
   OverflowGasMakeMoney.json                                       Skip
 + StackDepthLimitSEC.json                                         OK
   block504980.json                                                Skip
-  deploymentError.json                                            Skip
++ deploymentError.json                                            OK
   failed_tx_xcf416c53.json                                        Skip
   gasPrice0.json                                                  Skip
 + makeMoney.json                                                  OK
@@ -1713,7 +1713,7 @@ OK: 8/16 Fail: 0/16 Skip: 8/16
   txCost-sec73.json                                               Skip
   tx_e1c174e2.json                                                Skip
 ```
-OK: 3/13 Fail: 0/13 Skip: 10/13
+OK: 4/13 Fail: 0/13 Skip: 9/13
 ## stStackTests
 ```diff
   shallowStack.json                                               Skip
@@ -2134,9 +2134,9 @@ OK: 22/67 Fail: 0/67 Skip: 45/67
 OK: 28/44 Fail: 0/44 Skip: 16/44
 ## stTransitionTest
 ```diff
-  createNameRegistratorPerTxsAfter.json                           Skip
-  createNameRegistratorPerTxsAt.json                              Skip
-  createNameRegistratorPerTxsBefore.json                          Skip
++ createNameRegistratorPerTxsAfter.json                           OK
++ createNameRegistratorPerTxsAt.json                              OK
++ createNameRegistratorPerTxsBefore.json                          OK
   createNameRegistratorPerTxsNotEnoughGasAfter.json               Skip
   createNameRegistratorPerTxsNotEnoughGasAt.json                  Skip
   createNameRegistratorPerTxsNotEnoughGasBefore.json              Skip
@@ -2144,12 +2144,12 @@ OK: 28/44 Fail: 0/44 Skip: 16/44
   delegatecallAtTransition.json                                   Skip
   delegatecallBeforeTransition.json                               Skip
 ```
-OK: 0/9 Fail: 0/9 Skip: 9/9
+OK: 3/9 Fail: 0/9 Skip: 6/9
 ## stWalletTest
 ```diff
-  dayLimitConstruction.json                                       Skip
++ dayLimitConstruction.json                                       OK
   dayLimitConstructionOOG.json                                    Skip
-  dayLimitConstructionPartial.json                                Skip
++ dayLimitConstructionPartial.json                                OK
   dayLimitResetSpentToday.json                                    Skip
   dayLimitSetDailyLimit.json                                      Skip
   dayLimitSetDailyLimitNoData.json                                Skip
@@ -2162,7 +2162,7 @@ OK: 0/9 Fail: 0/9 Skip: 9/9
   multiOwnedChangeRequirementTo0.json                             Skip
   multiOwnedChangeRequirementTo1.json                             Skip
   multiOwnedChangeRequirementTo2.json                             Skip
-  multiOwnedConstructionCorrect.json                              Skip
++ multiOwnedConstructionCorrect.json                              OK
   multiOwnedConstructionNotEnoughGas.json                         Skip
   multiOwnedConstructionNotEnoughGasPartial.json                  Skip
   multiOwnedIsOwnerFalse.json                                     Skip
@@ -2176,9 +2176,9 @@ OK: 0/9 Fail: 0/9 Skip: 9/9
 + walletChangeOwnerRemovePendingTransaction.json                  OK
 + walletChangeRequirementRemovePendingTransaction.json            OK
   walletConfirm.json                                              Skip
-  walletConstruction.json                                         Skip
++ walletConstruction.json                                         OK
   walletConstructionOOG.json                                      Skip
-  walletConstructionPartial.json                                  Skip
++ walletConstructionPartial.json                                  OK
   walletDefault.json                                              Skip
   walletDefaultWithOutValue.json                                  Skip
   walletExecuteOverDailyLimitMultiOwner.json                      Skip
@@ -2190,7 +2190,7 @@ OK: 0/9 Fail: 0/9 Skip: 9/9
   walletKillToWallet.json                                         Skip
 + walletRemoveOwnerRemovePendingTransaction.json                  OK
 ```
-OK: 6/42 Fail: 0/42 Skip: 36/42
+OK: 11/42 Fail: 0/42 Skip: 31/42
 ## stZeroCallsRevert
 ```diff
   ZeroValue_CALLCODE_OOGRevert.json                               Skip

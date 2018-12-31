@@ -59,5 +59,6 @@ proc main() =
   chainDB.dumpTest(47205)
   chainDB.dumpTest(48712)
   chainDB.dumpTest(48915)
+  chainDB.dumpTest(49018)
 
 main()

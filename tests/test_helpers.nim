@@ -227,7 +227,7 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
     stateDB.setCode(account, code)
     stateDB.setBalance(account, balance)
 
-proc verifyStateDB*(wantedState: JsonNode, stateDB: AccountStateDB) =
+proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:
