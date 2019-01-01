@@ -1,5 +1,5 @@
 import
-  json, strutils,
+  json, strutils, sets,
   chronicles, nimcrypto, eth_common, stint,
   ../vm_types, memory, stack, ../db/[db_chain, state_db],
   eth_trie/hexary, ./message, ranges/typedranges,
@@ -18,7 +18,7 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
 
   tracer.trace["structLogs"] = newJArray()
   tracer.flags = flags
-  tracer.accounts = @[]
+  tracer.accounts = initSet[EthAddress]()
 
 proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   if unlikely tracer.trace.isNil:
@@ -53,10 +53,10 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
     case op
     of Call, CallCode, DelegateCall, StaticCall:
       assert(c.stack.values.len > 2)
-      tracer.accounts.add c.stack[^2, EthAddress]
-    of SelfDestruct:
+      tracer.accounts.incl c.stack[^2, EthAddress]
+    of ExtCodeCopy, ExtCodeSize, Balance, SelfDestruct:
       assert(c.stack.values.len > 1)
-      tracer.accounts.add c.stack[^1, EthAddress]
+      tracer.accounts.incl c.stack[^1, EthAddress]
     else:
       discard
 

@@ -121,6 +121,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, header.coinbase, minerName)
+      vmState.removeTracedAccounts(sender, recipient, header.coinbase)
       stateDiff["afterRoot"] = %($stateDb.rootHash)
       break
 
@@ -176,11 +177,14 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     let recipient = tx.getRecipient
     after.captureAccount(stateAfter, sender, senderName & $idx)
     after.captureAccount(stateAfter, recipient, recipientName & $idx)
+    vmState.removeTracedAccounts(sender, recipient)
 
   after.captureAccount(stateAfter, header.coinbase, minerName)
+  vmState.removeTracedAccounts(header.coinbase)
 
   for idx, uncle in body.uncles:
     after.captureAccount(stateAfter, uncle.coinbase, uncleName & $idx)
+    vmState.removeTracedAccounts(uncle.coinbase)
 
   # internal transactions:
   for idx, acc in tracedAccountsPairs(vmState):
