@@ -186,6 +186,13 @@ proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockH
 
   return newCanonicalHeaders
 
+proc setHead*(self: BaseChainDB, header: BlockHeader, writeHeader = false) =
+  var headerHash = rlpHash(header)
+  if writeHeader:
+    self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
+  self.addBlockNumberToHashLookup(header)
+  self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
+
 proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
   self.db.contains(genericHashKey(blockHash).toOpenArray)

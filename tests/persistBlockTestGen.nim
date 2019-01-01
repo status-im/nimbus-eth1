@@ -4,12 +4,6 @@ import
   ../nimbus/[tracer, vm_types, config],
   ../nimbus/p2p/chain
 
-proc putCanonicalHead(chainDB: BaseChainDB, header: BlockHeader) =
-  var headerHash = rlpHash(header)
-  chainDB.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
-  chainDB.addBlockNumberToHashLookup(header)
-  chainDB.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
-
 proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
   let
     blockNumber = blockNumber.u256
@@ -30,7 +24,7 @@ proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
     headers = @[header]
     bodies = @[blockBody]
 
-  captureChainDB.putCanonicalHead(parent)
+  captureChainDB.setHead(parent, true)
   discard chain.persistBlocks(headers, bodies)
 
   var metaData = %{
