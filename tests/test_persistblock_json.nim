@@ -16,12 +16,6 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 suite "persist block json tests":
   jsonTest("PersistBlockTests", testFixture)
 
-proc putCanonicalHead(chainDB: BaseChainDB, header: BlockHeader) =
-  var headerHash = rlpHash(header)
-  chainDB.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
-  chainDB.addBlockNumberToHashLookup(header)
-  chainDB.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
-
 # use tracerTestGen.nim to generate additional test data
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   var
@@ -45,6 +39,6 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     headers = @[header]
     bodies = @[blockBody]
 
-  chainDB.putCanonicalHead(parent)
+  chainDB.setHead(parent, true)
   let validationResult = chain.persistBlocks(headers, bodies)
   check validationResult == ValidationResult.OK
