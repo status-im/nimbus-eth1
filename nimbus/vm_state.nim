@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  macros, strformat, tables,
+  macros, strformat, tables, sets,
   eth_common, eth_trie/db,
   ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
   ./utils/header, json, vm_types, vm/transaction_tracer
@@ -150,5 +150,12 @@ iterator tracedAccounts*(vmState: BaseVMState): EthAddress =
     yield acc
 
 iterator tracedAccountsPairs*(vmState: BaseVMState): (int, EthAddress) =
-  for idx, acc in vmState.tracer.accounts:
+  var idx = 0
+  for acc in vmState.tracer.accounts:
     yield (idx, acc)
+    inc idx
+
+proc removeTracedAccounts*(vmState: BaseVMState, accounts: varargs[EthAddress]) =
+  for acc in accounts:
+    vmState.tracer.accounts.excl acc
+
