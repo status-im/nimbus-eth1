@@ -1,10 +1,19 @@
-const nimbus_db_backend* {.strdefine.} = "rocksdb"
+import strutils
 
-when nimbus_db_backend == "sqlite":
+type DbBackend = enum
+  sqlite,
+  rocksdb,
+  lmdb
+
+const
+  nimbus_db_backend* {.strdefine.} = "rocksdb"
+  dbBackend = parseEnum[DbBackend](nimbus_db_backend)
+
+when dbBackend == sqlite:
   import ./backends/sqlite_backend as database_backend
-elif nimbus_db_backend == "rocksdb":
+elif dbBackend == rocksdb:
   import ./backends/rocksdb_backend as database_backend
-else:
+elif dbBackend == lmdb:
   import ./backends/lmdb_backend as database_backend
 
 export database_backend
