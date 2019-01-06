@@ -12,3 +12,6 @@ TracerTests
 + block97.json                                                    OK
 ```
 OK: 8/8 Fail: 0/8 Skip: 0/8
+
+---TOTAL---
+OK: 8/8 Fail: 0/8 Skip: 0/8

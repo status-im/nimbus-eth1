@@ -13,3 +13,6 @@ PersistBlockTests
 + block98.json                                                    OK
 ```
 OK: 9/9 Fail: 0/9 Skip: 0/9
+
+---TOTAL---
+OK: 9/9 Fail: 0/9 Skip: 0/9
