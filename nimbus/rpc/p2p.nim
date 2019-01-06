@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2019 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -13,7 +13,7 @@ import
   eth_common, eth_p2p, eth_keys, eth_trie/db, rlp,
   ../utils/header, ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../vm_state_transactions, ../utils/addresses,
-  ../vm/[interpreter_dispatch, computation],
+  ../db/[db_chain, state_db, storage_types],
   rpc_types, rpc_utils, ../vm/[message, computation, interpreter_dispatch]
 
 #[
@@ -37,11 +37,10 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
   proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): BaseComputation =
     # Note that vmState may be altered
     setupComputation(
-        vmState.blockHeader,
         vmState,
         transaction,
         sender)
-  
+
   proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
     Transaction(
       accountNonce: 0.AccountNonce,
@@ -54,53 +53,7 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
     hiGas = vmState.gasLimit
     loGas = transaction.intrinsicGas
     gasPrice = transaction.gasPrice # TODO: Or zero?
-  
-  proc tryTransaction(vmState: var BaseVMState, gasLimit: GasInt): bool =
-    var
-      spoofTransaction = dummyTransaction(gasLimit, gasPrice, transaction.to, transaction.value)
-      computation = vmState.dummyComputation(spoofTransaction, sender)
-    computation.executeOpcodes
-    if not computation.isError:
-      return true
 
-  if vmState.tryTransaction(loGas):
-    return loGas
-  if not vmState.tryTransaction(hiGas):
-    return 0.GasInt # TODO: Reraise error from computation
-
-  var
-    minVal = vmState.gasLimit
-    maxVal = transaction.intrinsicGas
-  while loGas - hiGas > tolerance:
-    let midPoint = (loGas + hiGas) div 2
-    if vmState.tryTransaction(midPoint):
-      minVal = midPoint
-    else:
-      maxVal = midPoint
-  result = minVal
-
-proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
-  proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): BaseComputation =
-    # Note that vmState may be altered
-    setupComputation(
-        vmState.blockHeader,
-        vmState,
-        transaction,
-        sender)
-  
-  proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
-    Transaction(
-      accountNonce: 0.AccountNonce,
-      gasPrice: gasPrice,
-      gasLimit: gasLimit,
-      to: destination,
-      value: value
-    )
-  var
-    hiGas = vmState.gasLimit
-    loGas = transaction.intrinsicGas
-    gasPrice = transaction.gasPrice # TODO: Or zero?
-  
   proc tryTransaction(vmState: var BaseVMState, gasLimit: GasInt): bool =
     var
       spoofTransaction = dummyTransaction(gasLimit, gasPrice, transaction.to, transaction.value)
@@ -192,7 +145,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     let
       accountDb = accountDbFromTag(quantityTag)
       addrBytes = data.toAddress
-      balance = accountDb.get_balance(addrBytes)
+      balance = accountDb.getBalance(addrBytes)
 
     result = balance
 
@@ -366,7 +319,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
 
     discard comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
-  
+
   rpcsrv.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> GasInt:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
@@ -391,7 +344,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       destination = if
         call.to.isSome: call.to.get.toAddress
         else: ZERO_ADDRESS
-      curState = chain.getStateDb(header.stateRoot, true)
+      curState = vmState.readOnlyStateDb()
       nonce = curState.getNonce(sender)
       value = if
         call.value.isSome: call.value.get
