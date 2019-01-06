@@ -12,14 +12,6 @@ import
   ./transaction, ./vm_types, ./vm_state, ./block_types, ./db/[db_chain, state_db], ./utils/header,
   ./vm/interpreter, ./vm/interpreter/gas_costs, ./utils/addresses
 
-func intrinsicGas*(data: openarray[byte]): GasInt =
-  result = 21_000
-  for i in data:
-    if i == 0:
-      result += 4
-    else:
-      result += 68
-
 proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   # XXX: lots of avoidable u256 construction

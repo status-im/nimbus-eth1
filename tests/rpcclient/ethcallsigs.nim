@@ -1,7 +1,17 @@
+# Nimbus
+# Copyright (c) 2018-2019 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 ## This module contains signatures for the Ethereum client RPCs.
 ## The signatures are not imported directly, but read and processed with parseStmt,
 ## then a procedure body is generated to marshal native Nim parameters to json and visa versa.
-import json, stint, eth_common, ../../nimbus/rpc/hexstrings
+import
+  json,
+  stint, eth_common,
+  ../../nimbus/rpc/hexstrings, ../../nimbus/rpc/rpc_types
 
 proc web3_clientVersion(): string
 proc web3_sha3(data: string): string
@@ -27,11 +37,11 @@ proc eth_getCode(data: EthAddressStr, quantityTag: string): HexDataStr
 proc eth_sign(data:EthAddressStr, message: HexDataStr): HexDataStr
 #proc eth_sendRawTransaction(data: string, quantityTag: int): UInt256
 proc eth_call(call: EthCall, quantityTag: string): string
+proc eth_estimateGas(call: EthCall, quantityTag: string): GasInt
 
 # TODO: Use eth_common types
 
 #[proc eth_sendTransaction(obj: EthSend): UInt256
-proc eth_estimateGas(call: EthCall, quantityTag: string): UInt256
 proc eth_getBlockByHash(data: array[32, byte], fullTransactions: bool): BlockObject
 proc eth_getBlockByNumber(quantityTag: string, fullTransactions: bool): BlockObject
 proc eth_getTransactionByHash(data: Uint256): TransactionObject

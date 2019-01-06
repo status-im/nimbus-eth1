@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2019 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -14,7 +14,7 @@ import
   ../utils/header, ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../vm_state_transactions, ../utils/addresses,
   ../db/[db_chain, state_db, storage_types],
-  rpc_types, rpc_utils, ../vm/[message, computation]
+  rpc_types, rpc_utils, ../vm/[message, computation, interpreter_dispatch]
 
 #[
   Note:
@@ -32,6 +32,51 @@ proc `%`*(value: Time): JsonNode =
 template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
   addressDb.getBalance(address).truncate(int64)
+
+proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
+  proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): BaseComputation =
+    # Note that vmState may be altered
+    setupComputation(
+        vmState,
+        transaction,
+        sender)
+
+  proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
+    Transaction(
+      accountNonce: 0.AccountNonce,
+      gasPrice: gasPrice,
+      gasLimit: gasLimit,
+      to: destination,
+      value: value
+    )
+  var
+    hiGas = vmState.gasLimit
+    loGas = transaction.intrinsicGas
+    gasPrice = transaction.gasPrice # TODO: Or zero?
+
+  proc tryTransaction(vmState: var BaseVMState, gasLimit: GasInt): bool =
+    var
+      spoofTransaction = dummyTransaction(gasLimit, gasPrice, transaction.to, transaction.value)
+      computation = vmState.dummyComputation(spoofTransaction, sender)
+    computation.executeOpcodes
+    if not computation.isError:
+      return true
+
+  if vmState.tryTransaction(loGas):
+    return loGas
+  if not vmState.tryTransaction(hiGas):
+    return 0.GasInt # TODO: Reraise error from computation
+
+  var
+    minVal = vmState.gasLimit
+    maxVal = transaction.intrinsicGas
+  while loGas - hiGas > tolerance:
+    let midPoint = (loGas + hiGas) div 2
+    if vmState.tryTransaction(midPoint):
+      minVal = midPoint
+    else:
+      maxVal = midPoint
+  result = minVal
 
 proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
 
@@ -100,7 +145,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     let
       accountDb = accountDbFromTag(quantityTag)
       addrBytes = data.toAddress
-      balance = accountDb.get_balance(addrBytes)
+      balance = accountDb.getBalance(addrBytes)
 
     result = balance
 
@@ -283,7 +328,37 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## call: the transaction call object.
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the amount of gas used.
-    discard
+    var
+      header = chain.headerFromTag(quantityTag)
+      vmState = newBaseVMState(header, chain)
+    let
+      gasLimit = if
+        call.gas.isSome and call.gas.get > 0.GasInt: call.gas.get
+        else: header.gasLimit
+      gasPrice = if
+        call.gasPrice.isSome and call.gasPrice.get > 0: call.gasPrice.get
+        else: 0.GasInt
+      sender = if
+        call.source.isSome: call.source.get.toAddress
+        else: ZERO_ADDRESS
+      destination = if
+        call.to.isSome: call.to.get.toAddress
+        else: ZERO_ADDRESS
+      curState = vmState.readOnlyStateDb()
+      nonce = curState.getNonce(sender)
+      value = if
+        call.value.isSome: call.value.get
+        else: 0.u256
+
+      transaction = Transaction(
+        accountNonce: nonce,
+        gasPrice: gasPrice,
+        gasLimit: gasLimit,
+        to: destination,
+        value: value,
+        payload: @[]
+      )
+    result = vmState.binarySearchGas(transaction, sender, gasPrice)
 
   func populateBlockObject(header: BlockHeader, blockBody: BlockBody): BlockObject =
     result.number = some(header.blockNumber)

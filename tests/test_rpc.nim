@@ -1,15 +1,21 @@
+# Nimbus
+# Copyright (c) 2018-2019 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
 import
-  unittest, json, strformat, nimcrypto, rlp, options,
+  unittest, json, strformat, options,
+  nimcrypto, rlp, eth_trie/db, eth_p2p, eth_keys,
   json_rpc/[rpcserver, rpcclient],
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
   ../nimbus/constants,
-  ../nimbus/nimbus/[vm_state, config],
-  ../nimbus/db/[state_db, db_chain], eth_common, byteutils,
+  ../nimbus/[vm_state, config],
+  ../nimbus/db/[state_db, db_chain, storage_types], eth_common, byteutils,
   ../nimbus/p2p/chain,
-  ../nimbus/genesis,  
-  eth_trie/db,
-  eth_p2p, eth_keys
-import rpcclient/test_hexstrings
+  ../nimbus/genesis,
+  ./rpcclient/test_hexstrings
 
 # Perform checks for hex string validation
 doHexStrTests()
@@ -58,34 +64,41 @@ proc doTests =
   defaultGenesisBlockForNetwork(conf.net.networkId.toPublicNetwork()).commit(chain)
   state.mutateStateDB:
     db.setBalance(address, balance)
-  
+  doAssert(canonicalHeadHashKey().toOpenArray in state.chainDb.db)
+
   # Create Ethereum RPCs
+  let RPC_PORT = 8545
   var
-    rpcServer = newRpcSocketServer(["localhost:8545"])
+    rpcServer = newRpcSocketServer(["localhost:" & $RPC_PORT])
     client = newRpcSocketClient()
   setupCommonRpc(rpcServer)
   setupEthRpc(ethNode, chain, rpcServer)
 
   # Begin tests
   rpcServer.start()
-  waitFor client.connect("localhost", Port(8545))
+  waitFor client.connect("localhost", Port(RPC_PORT))
 
+  # TODO: add more tests here
   suite "Remote Procedure Calls":
-    # TODO: Currently returning 'block not found' when fetching header in p2p, so cannot perform tests
     test "eth_call":
       let
         blockNum = state.blockheader.blockNumber
         callParams = EthCall(value: some(100.u256))
-      var r = waitFor client.eth_call(callParams, "0x" & blockNum.toHex)
-      echo r
+        r1 = waitFor client.eth_call(callParams, "0x" & blockNum.toHex)
+      check r1 == "0x"
     test "eth_getBalance":
-      expect ValueError:
-        # check error is raised on null address
-        var r = waitFor client.eth_getBalance(ZERO_ADDRESS.toEthAddressStr, "0x0")
+      let r2 = waitFor client.eth_getBalance(ZERO_ADDRESS.toEthAddressStr, "0x0")
+      check r2 == 0
 
       let blockNum = state.blockheader.blockNumber
-      var r = waitFor client.eth_getBalance(address.toEthAddressStr, "0x" & blockNum.toHex)
-      echo r
+      let r3 = waitFor client.eth_getBalance(address.toEthAddressStr, "0x" & blockNum.toHex)
+      check r3 == 0
+    test "eth_estimateGas":
+      let
+        call = EthCall()
+        blockNum = state.blockheader.blockNumber
+        r4 = waitFor client.eth_estimateGas(call, "0x" & blockNum.toHex)
+      check r4 == 21_000
 
   rpcServer.stop()
   rpcServer.close()

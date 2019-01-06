@@ -20,11 +20,19 @@ proc initTransaction*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAd
   result.S = S
   result.isContractCreation = isContractCreation
 
+func intrinsicGas*(data: openarray[byte]): GasInt =
+  result = 21_000   # GasTransaction
+  for i in data:
+    if i == 0:
+      result += 4   # GasTXDataZero
+    else:
+      result += 68  # GasTXDataNonZero
+
 proc intrinsicGas*(t: Transaction): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
-  raise newException(ValueError, "not implemented intrinsicGas")
+  result = t.payload.intrinsicGas
 
 proc validate*(t: Transaction) =
   # Hook called during instantiation to ensure that all transaction

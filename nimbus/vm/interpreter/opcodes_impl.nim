@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2019 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -781,8 +781,8 @@ op selfDestruct, inline = false:
 
   computation.vmState.mutateStateDB:
     let
-      local_balance = db.get_balance(computation.msg.storage_address)
-      beneficiary_balance = db.get_balance(beneficiary)
+      local_balance = db.getBalance(computation.msg.storage_address)
+      beneficiary_balance = db.getBalance(beneficiary)
 
     # Transfer to beneficiary
     db.setBalance(beneficiary, local_balance + beneficiary_balance)
