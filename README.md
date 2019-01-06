@@ -71,6 +71,12 @@ nimble nimbus
 
 Report any errors you encounter, please, if not [already documented](https://github.com/status-im/nimbus)!
 
+### Development tips
+
+- you can switch the DB backend with a Nim compiler define:
+  `-d:nimbus_db_backend=...` where the (case-insensitive) value is one of
+  "rocksdb" (the default), "sqlite", "lmdb".
+
 #### Troubleshooting
 
 Sometimes, the build will fail even though the latest CI is green - here are a few tips to handle this:

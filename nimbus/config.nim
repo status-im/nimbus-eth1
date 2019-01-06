@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2019 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -8,15 +8,16 @@
 # those terms.
 
 import
-  parseopt, strutils, macros, os,
+  parseopt, strutils, macros, os, times,
   asyncdispatch2, eth_keys, eth_p2p, eth_common, chronicles, nimcrypto/hash,
+  ./db/select_backend,
   ./vm/interpreter/vm_forks
 
-const
+let
   NimbusName* = "Nimbus"
   ## project name string
 
-  NimbusCopyright* = "Copyright (C) 2018 Status Research & Development GmbH"
+  NimbusCopyright* = "Copyright (C) 2018-" & $(now().utc.year) & " Status Research & Development GmbH"
   ## copyright string
 
   NimbusMajor*: int = 0
@@ -32,7 +33,7 @@ const
   ## is the version of Nimbus as a string.
 
   NimbusHeader* = NimbusName & " Version " & NimbusVersion &
-                  " [" & hostOS & ": " & hostCPU & "]\r\n" &
+                  " [" & hostOS & ": " & hostCPU & ", " & nimbus_db_backend & "]\r\n" &
                   NimbusCopyright
   ## is the header which printed, when nimbus binary got executed
 
