@@ -2,12 +2,12 @@
 
 import
   eth_common, stint, byteutils, nimcrypto,
-  chronicles, rlp, downloader
+  chronicles, rlp, downloader, configuration
 
 import
   eth_trie/[hexary, db, defs],
   ../nimbus/db/[storage_types, db_chain, select_backend],
-  ../nimbus/[genesis, utils, config],
+  ../nimbus/[genesis, utils],
   ../nimbus/p2p/chain
 
 const
@@ -39,8 +39,9 @@ proc main() =
   let chainDB = newBaseChainDB(trieDB, false)
 
   # move head to block number ...
-  #var parentBlock = requestBlock(49438.u256)
-  #chainDB.setHead(parentBlock.header)
+  if conf.head != 0.u256:
+    var parentBlock = requestBlock(conf.head)
+    chainDB.setHead(parentBlock.header)
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     persistToDb(db):
@@ -51,16 +52,16 @@ proc main() =
   var blockNumber = head.blockNumber + 1
   var chain = newChain(chainDB)
 
-  const
-    numBlocksToCommit = 128
-    numBlocksToDownload = 20000
+  let numBlocksToCommit = conf.numCommits
 
   var headers = newSeqOfCap[BlockHeader](numBlocksToCommit)
   var bodies  = newSeqOfCap[BlockBody](numBlocksToCommit)
   var one     = 1.u256
 
   var numBlocks = 0
-  for _ in 0 ..< numBlocksToDownload:
+  var counter = 0
+
+  while true:
     info "REQUEST HEADER", blockNumber=blockNumber
     var thisBlock = requestBlock(blockNumber)
 
@@ -71,13 +72,30 @@ proc main() =
 
     if numBlocks == numBlocksToCommit:
       persistToDb(db):
-        discard chain.persistBlocks(headers, bodies)
+        if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
+          break
       numBlocks = 0
       headers.setLen(0)
       bodies.setLen(0)
+
+    inc counter
+    if conf.maxBlocks != 0 and counter >= conf.maxBlocks:
+      break
 
   if numBlocks > 0:
     persistToDb(db):
       discard chain.persistBlocks(headers, bodies)
 
-main()
+when isMainModule:
+  var message: string
+
+  ## Processing command line arguments
+  if processArguments(message) != Success:
+    echo message
+    quit(QuitFailure)
+  else:
+    if len(message) > 0:
+      echo message
+      quit(QuitSuccess)
+
+  main()
