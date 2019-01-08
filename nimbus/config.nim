@@ -222,7 +222,7 @@ proc processList(v: string, o: var seq[string]) =
       if len(n) > 0:
         o.add(n)
 
-proc processInteger(v: string, o: var int): ConfigStatus =
+proc processInteger*(v: string, o: var int): ConfigStatus =
   ## Convert string to integer.
   try:
     o  = parseInt(v)
@@ -512,6 +512,14 @@ template checkArgument(a, b, c, e: untyped) =
     result = res
     break
 
+proc getDefaultDataDir*(): string =
+  when defined(windows):
+    "AppData" / "Roaming" / "Nimbus" / "DB"
+  elif defined(macosx):
+    "Library" / "Application Support" / "Nimbus" / "DB"
+  else:
+    ".cache" / "nimbus" / "db"
+
 proc initConfiguration(): NimbusConfiguration =
   ## Allocates and initializes `NimbusConfiguration` with default values
   result = new NimbusConfiguration
@@ -527,12 +535,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.discPort = 30303'u16
   result.net.ident = NimbusIdent
 
-  const dataDir = when defined(windows):
-                    "AppData" / "Roaming" / "Nimbus" / "DB"
-                  elif defined(macosx):
-                    "Library" / "Application Support" / "Nimbus" / "DB"
-                  else:
-                    ".cache" / "nimbus" / "db"
+  const dataDir = getDefaultDataDir()
 
   result.dataDir = getHomeDir() / dataDir
   result.prune = PruneMode.Full
