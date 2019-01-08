@@ -10,15 +10,6 @@ import
   ../nimbus/[genesis, utils, config],
   ../nimbus/p2p/chain
 
-# TODO: move this one and the one in nimbus.nim to db_chain.nim
-proc initializeEmptyDb(db: BaseChainDB) =
-  echo "Writing genesis to DB"
-  let networkId = getConfiguration().net.networkId.toPublicNetwork()
-  if networkId == CustomNet:
-    raise newException(Exception, "Custom genesis not implemented")
-  else:
-    defaultGenesisBlockForNetwork(networkId).commit(db)
-
 const
   manualCommit = nimbus_db_backend == "lmdb"
 

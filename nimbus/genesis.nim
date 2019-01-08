@@ -104,3 +104,11 @@ proc commit*(g: Genesis, db: BaseChainDB) =
   let b = g.toBlock(db)
   assert(b.blockNumber == 0, "can't commit genesis block with number > 0")
   discard db.persistHeaderToDb(b)
+
+proc initializeEmptyDb*(db: BaseChainDB) =
+  trace "Writing genesis to DB"
+  let networkId = getConfiguration().net.networkId.toPublicNetwork()
+  if networkId == CustomNet:
+    raise newException(Exception, "Custom genesis not implemented")
+  else:
+    defaultGenesisBlockForNetwork(networkId).commit(db)

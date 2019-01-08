@@ -8,7 +8,7 @@
 import
   tables, sequtils, algorithm,
   rlp, ranges, state_db, nimcrypto, eth_trie/[hexary, db], eth_common, byteutils, chronicles,
-  ../errors, ../block_types, ../utils/header, ../constants, ./storage_types.nim
+  ../errors, ../block_types, ../utils/header, ../constants, ./storage_types
 
 type
   BaseChainDB* = ref object

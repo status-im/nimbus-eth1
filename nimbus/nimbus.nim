@@ -35,14 +35,6 @@ type
     ethNode*: EthereumNode
     state*: NimbusState
 
-proc initializeEmptyDb(db: BaseChainDB) =
-  trace "Writing genesis to DB"
-  let networkId = getConfiguration().net.networkId.toPublicNetwork()
-  if networkId == CustomNet:
-    raise newException(Exception, "Custom genesis not implemented")
-  else:
-    defaultGenesisBlockForNetwork(networkId).commit(db)
-
 proc start(): NimbusObject =
   var nimbus = NimbusObject()
   var conf = getConfiguration()
