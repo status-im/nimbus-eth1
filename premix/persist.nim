@@ -2,7 +2,8 @@
 
 import
   eth_common, stint, byteutils, nimcrypto,
-  chronicles, rlp, downloader, configuration
+  chronicles, rlp, downloader, configuration,
+  ../nimbus/errors
 
 import
   eth_trie/[hexary, db, defs],
@@ -73,7 +74,7 @@ proc main() =
     if numBlocks == numBlocksToCommit:
       persistToDb(db):
         if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
-          break
+          raise newException(ValidationError, "Error when validating blocks")
       numBlocks = 0
       headers.setLen(0)
       bodies.setLen(0)
@@ -84,7 +85,8 @@ proc main() =
 
   if numBlocks > 0:
     persistToDb(db):
-      discard chain.persistBlocks(headers, bodies)
+      if chain.persistBlocks(headers, bodies) != ValidationResult.OK:
+        raise newException(ValidationError, "Error when validating blocks")
 
 when isMainModule:
   var message: string
@@ -98,4 +100,7 @@ when isMainModule:
       echo message
       quit(QuitSuccess)
 
-  main()
+  try:
+    main()
+  except:
+    echo getCurrentExceptionMsg()

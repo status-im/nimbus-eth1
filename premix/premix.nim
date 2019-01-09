@@ -1,5 +1,5 @@
 import
-  json, downloader, stint, strutils,
+  json, downloader, stint, strutils, os,
   ../nimbus/tracer, chronicles, prestate
 
 proc fakeAlloc(n: JsonNode) =
@@ -93,15 +93,35 @@ proc generatePremixData(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block
   var data = "var debugMetaData = " & metaData.pretty & "\n"
   writeFile("premixData.js", data)
 
-proc main() =
-  let
-    nimbus = parseFile("debug_meta_data.json")
-    blockNumber = UInt256.fromHex(nimbus["blockNumber"].getStr())
-    thisBlock   = downloader.requestBlock(blockNumber, {DownloadReceipts, DownloadTxTrace})
-    postState   = requestPostState(thisBlock)
-    accounts    = processPostState(postState)
+proc printDebugInstruction(blockNumber: Uint256) =
+  var text = """
 
-  generatePremixData(nimbus, blockNumber, thisBlock, postState, accounts)
-  generatePrestate(nimbus, blockNumber, thisBlock)
+Successfully created debugging environment for block $1.
+You can continue to find nimbus EVM bug by viewing premix report page `./index.html`.
+After that you can try to debug that single block using `nim c -r debug block$1.json` command.
+
+Happy bug hunting
+""" % [$blockNumber]
+
+  echo text
+
+proc main() =
+  if paramCount() == 0:
+    echo "usage: premix debug_meta_data.json"
+    quit(QuitFailure)
+
+  try:
+    let
+      nimbus      = json.parseFile(paramStr(1))
+      blockNumber = UInt256.fromHex(nimbus["blockNumber"].getStr())
+      thisBlock   = downloader.requestBlock(blockNumber, {DownloadReceipts, DownloadTxTrace})
+      postState   = requestPostState(thisBlock)
+      accounts    = processPostState(postState)
+
+    generatePremixData(nimbus, blockNumber, thisBlock, postState, accounts)
+    generatePrestate(nimbus, blockNumber, thisBlock)
+    printDebugInstruction(blockNumber)
+  except:
+    echo getCurrentExceptionMsg()
 
 main()
