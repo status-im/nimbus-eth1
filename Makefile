@@ -75,8 +75,8 @@ build:
 	mkdir $@
 
 #- runs only the first time and after `make update` actually updates some repo,
-#  so have a "normal" (timestamp-checked) prerequisite here
-deps: $(NIMBLE_DIR)
+#  or new repos are cloned, so have "normal" (timestamp-checked) prerequisites here
+deps: $(REPOS) $(NIMBLE_DIR)
 
 #- depends on Git repos being fetched and our Nim and Nimble being built
 #- runs `nimble develop` in those repos (but not in the Nimbus repo) - not
@@ -89,8 +89,10 @@ $(NIMBLE_DIR): | $(REPOS) $(NIM_DIR)
 
 #- clones the Git repos
 #- can run in parallel with `make -jN`
+#- deletes the ".nimble" dir to force Nimble's package db regeneration (useful for newly added repositories to REPOS)
 $(REPOS):
-	$(GIT_CLONE) https://github.com/$(subst $(REPOS_DIR)/,,$@) $@
+	$(GIT_CLONE) https://github.com/$(subst $(REPOS_DIR)/,,$@) $@ && \
+		rm -rf $(NIMBLE_DIR)
 
 #- clones and builds the Nim compiler and Nimble
 $(NIM_DIR):
