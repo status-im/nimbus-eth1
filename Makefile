@@ -7,7 +7,7 @@ GIT_STATUS := git status
 #- duplicated in "env.sh" for the env var with the same name
 NIMBLE_DIR := vendor/.nimble
 NIMBLE := nimble -y
-REPOS_DIR := vendor/repos
+REPOS_DIR := vendor
 # we want a "recursively expanded" (delayed interpolation) variable here, so we can set CMD in rule recipes
 RUN_CMD_IN_ALL_REPOS = for D in . vendor/Nim $(REPOS); do echo -e "\n\e[32m$${D}:\e[39m"; cd "$$D"; $(CMD); cd - >/dev/null; done
 # absolute path, since it will be run at various subdirectory depths
@@ -21,13 +21,13 @@ BUILD_NIM := cd $(NIM_DIR) && \
 	sh build_all.sh && \
 	$(ENV_SCRIPT) nim c -d:release --noNimblePath -p:compiler --nilseqs:on -o:bin/nimble dist/nimble/src/nimble.nim
 
-#- Git repositories for those dependencies that a Nimbus developer might want to
+#- GitHub repositories for those dependencies that a Nimbus developer might want to
 #  modify and test locally
 #- their order ensures that `nimble develop` will run in a certain package's
 #  repo before Nimble tries to install it as a (direct or indirect) dependency, in
 #  order to avoid duplicate dirs in ".nimble/pgks/"
 #- dependencies not listed here are handled entirely by Nimble with "install -y --depsOnly"
-REPOS := $(addprefix $(REPOS_DIR)/, \
+GITHUB_REPOS := \
 	status-im/nim-chronicles \
 	cheatfate/nimcrypto \
 	status-im/nim-ranges \
@@ -53,8 +53,9 @@ REPOS := $(addprefix $(REPOS_DIR)/, \
 	status-im/nim-eth-bloom \
 	status-im/nim-bncurve \
 	status-im/nim-confutils \
-	status-im/nim-beacon-chain \
-	)
+	status-im/nim-beacon-chain
+# "foo/bar" -> "$(REPOS_DIR)/bar"
+REPOS := $(addprefix $(REPOS_DIR)/, $(foreach github_repo,$(GITHUB_REPOS),$(word 2,$(subst /, ,$(github_repo)))))
 
 .PHONY: all deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
 
@@ -89,7 +90,8 @@ $(NIMBLE_DIR): | $(REPOS) $(NIM_DIR)
 #- can run in parallel with `make -jN`
 #- deletes the ".nimble" dir to force Nimble's package db regeneration (useful for newly added repositories to REPOS)
 $(REPOS):
-	$(GIT_CLONE) https://github.com/$(subst $(REPOS_DIR)/,,$@) $@ && \
+	$(eval PROJ_NAME := $(subst $(REPOS_DIR)/,,$@))
+	$(GIT_CLONE) https://github.com/$(filter %/$(PROJ_NAME),$(GITHUB_REPOS)) $@ && \
 		rm -rf $(NIMBLE_DIR)
 
 #- clones and builds the Nim compiler and Nimble
@@ -103,7 +105,7 @@ test: | build deps
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,all_tests,*.exe} $(NIMBLE_DIR)
+	rm -rf build/{nimbus,all_tests,beacon_node,validator_keygen,*.exe} $(NIMBLE_DIR)
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete
 mrproper: clean
@@ -111,7 +113,7 @@ mrproper: clean
 
 # for when you have write access to a repo and you want to use SSH keys
 github-ssh:
-	sed -i 's#https://github.com/#git@github.com:#' .git/config $(NIM_DIR)/.git/config $(REPOS_DIR)/*/*/.git/config
+	sed -i 's#https://github.com/#git@github.com:#' .git/config $(NIM_DIR)/.git/config $(REPOS_DIR)/*/.git/config
 
 #- re-builds the Nim compiler (not usually needed, because `make update` does it when necessary)
 build-nim: | $(NIM_DIR)
@@ -141,17 +143,15 @@ status: | $(REPOS)
 ntags:
 	ntags -R .
 
-beacon_node: | build deps
-	$(ENV_SCRIPT) nim c -o:build/beacon_node vendor/repos/status-im/nim-beacon-chain/beacon_chain/beacon_node.nim
-
-validator_keygen: | build deps
-	$(ENV_SCRIPT) nim c -o:build/beacon_node vendor/repos/status-im/nim-beacon-chain/beacon_chain/validator_keygen.nim
+#- actually binaries, but have them as phony targets to force rebuilds
+beacon_node validator_keygen: | build deps
+	$(ENV_SCRIPT) nim c -o:build/$@ $(REPOS_DIR)/nim-beacon-chain/beacon_chain/$@.nim
 
 clean_eth2_network_simulation_files:
-	rm -f vendor/repos/status-im/nim-beacon-chain/tests/simulation/*.json
+	rm -f $(REPOS_DIR)/nim-beacon-chain/tests/simulation/*.json
 
 eth2_network_simulation: | beacon_node validator_keygen clean_eth2_network_simulation_files
-	SKIP_BUILDS=1 $(ENV_SCRIPT) vendor/repos/status-im/nim-beacon-chain/tests/simulation/start.sh
+	SKIP_BUILDS=1 $(ENV_SCRIPT) $(REPOS_DIR)/nim-beacon-chain/tests/simulation/start.sh
 
 #- a few files need to be excluded because they trigger an infinite loop in https://github.com/universal-ctags/ctags
 #- limiting it to Nim files, because there are a lot of C files we don't care about
@@ -175,7 +175,7 @@ ctags:
 	--exclude='*/Nim/tests' \
 	--exclude='*/Nim/csources' \
 	--exclude=nimbus/genesis_alloc.nim \
-	--exclude=$(REPOS_DIR)/status-im/nim-bncurve/tests/tvectors.nim \
+	--exclude=$(REPOS_DIR)/nim-bncurve/tests/tvectors.nim \
 	.
 
 ############################
