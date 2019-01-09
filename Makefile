@@ -52,6 +52,8 @@ REPOS := $(addprefix $(REPOS_DIR)/, \
 	status-im/nim-eth-keyfile \
 	status-im/nim-eth-bloom \
 	status-im/nim-bncurve \
+	status-im/nim-confutils \
+	status-im/nim-beacon-chain \
 	)
 
 .PHONY: all deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls
@@ -138,6 +140,18 @@ status: | $(REPOS)
 # https://bitbucket.org/nimcontrib/ntags/ - currently fails with "out of memory"
 ntags:
 	ntags -R .
+
+beacon_node: | $(NIMBLE_DIR)
+	$(ENV_SCRIPT) nim c -o:build/beacon_node vendor/repos/status-im/nim-beacon-chain/beacon_chain/beacon_node.nim
+
+validator_keygen: | $(NIMBLE_DIR)
+	$(ENV_SCRIPT) nim c -o:build/beacon_node vendor/repos/status-im/nim-beacon-chain/beacon_chain/validator_keygen.nim
+
+clean_eth2_network_simulation_files:
+	rm -f vendor/repos/status-im/nim-beacon-chain/tests/simulation/*.json
+
+eth2_network_simulation: | beacon_node validator_keygen clean_eth2_network_simulation_files
+	SKIP_BUILDS=1 $(ENV_SCRIPT) vendor/repos/status-im/nim-beacon-chain/tests/simulation/start.sh
 
 #- a few files need to be excluded because they trigger an infinite loop in https://github.com/universal-ctags/ctags
 #- limiting it to Nim files, because there are a lot of C files we don't care about
