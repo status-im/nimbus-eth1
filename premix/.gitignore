@@ -1,0 +1,6 @@
+*.db
+*.db-lock
+/output
+/temp
+*.json
+premixData.js
