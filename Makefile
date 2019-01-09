@@ -56,19 +56,17 @@ REPOS := $(addprefix $(REPOS_DIR)/, \
 	status-im/nim-beacon-chain \
 	)
 
-.PHONY: all deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls
+.PHONY: all deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
 
 # default target, because it's the first one that doesn't start with '.'
 all: nimbus
 
 #- "--nimbleDir" is ignored for custom tasks: https://github.com/nim-lang/nimble/issues/495
 #  so we can't run `nimble ... nimbus` or `nimble ... test`. We have to duplicate those custom tasks here.
-#- we could use a way to convince Nimble not to check the dependencies each and every time - https://github.com/nim-lang/nimble/issues/589
-#- we don't want "-y" here, because the user should be reminded to run `make update`
-#  after a manual `git pull` that adds to $(REPOS)
 #- a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps
-	$(ENV_SCRIPT) $(NIMBLE) c -o:build/nimbus nimbus/nimbus.nim && echo -e "\nThe binary is in './build/nimbus'."
+	$(ENV_SCRIPT) nim c -o:build/nimbus nimbus/nimbus.nim && \
+		echo -e "\nThe binary is in './build/nimbus'."
 
 # dir
 build:
@@ -101,7 +99,7 @@ $(NIM_DIR):
 
 # builds and runs all tests
 test: | build deps
-	$(ENV_SCRIPT) $(NIMBLE) c -r -d:chronicles_log_level=ERROR -o:build/all_tests tests/all_tests.nim
+	$(ENV_SCRIPT) nim c -r -d:chronicles_log_level=ERROR -o:build/all_tests tests/all_tests.nim
 
 # usual cleaning
 clean:
@@ -143,10 +141,10 @@ status: | $(REPOS)
 ntags:
 	ntags -R .
 
-beacon_node: | $(NIMBLE_DIR)
+beacon_node: | build deps
 	$(ENV_SCRIPT) nim c -o:build/beacon_node vendor/repos/status-im/nim-beacon-chain/beacon_chain/beacon_node.nim
 
-validator_keygen: | $(NIMBLE_DIR)
+validator_keygen: | build deps
 	$(ENV_SCRIPT) nim c -o:build/beacon_node vendor/repos/status-im/nim-beacon-chain/beacon_chain/validator_keygen.nim
 
 clean_eth2_network_simulation_files:
