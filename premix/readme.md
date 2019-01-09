@@ -18,44 +18,59 @@ This test case then can be integrated with nimbus project test suite.
 ![screenshot](assets/images/premix_screenshot.png)
 
 ## Requirements
-Before you start to use premix debugging tool there are several things you need to prepare. The first one is you need to install `geth` from [source](https://github.com/ethereum/go-ethereum/releases) or [binary](https://ethereum.github.io/go-ethereum/downloads/). Then you can run it with this command:
+Before you start to use premix debugging tool there are several things you need to prepare.
+The first one is you need to install `geth` from [source](https://github.com/ethereum/go-ethereum/releases)
+or [binary](https://ethereum.github.io/go-ethereum/downloads/). Then you can run it with this command:
 
 ```bash
 geth --rpc --rpcapi eth,debug --syncmode full --gcmode=archive
 ```
 
-You need to run it until it synced past the problematic block you want to debug. After that you can stop it by pressing `CTRL-C` and rerun it with addition flags `--maxpeers 0` if you want it to stop syncing or let it run as is if you want keep syncing.
+You need to run it until it synced past the problematic block you want to debug.
+After that you can stop it by pressing `CTRL-C` and rerun it with additional
+flags `--maxpeers 0` if you want it to stop syncing or let it run as is if you want keep syncing.
 
-The next requirement is you should build nimbus and premix with latest dependencies:
+The next requirement is you should build Nimbus and Premix with latest dependencies:
 
 ```bash
 nim c nimbus/nimbus
 nim c premix/premix
 ```
 
-After you successfully build nimbus and premix,  you can run nimbus with this command.
+After you successfully build nimbus and premix, you can run nimbus with this command.
 
 ```bash
 nimbus --prune:archive
 ```
 
-Nimbus will try to sync up to problematic block then it will stop and execute premix. You can see the premix report page by opening `premix/index.html` if premix failed to open your default browser.
+Nimbus will try to sync up to problematic block then it will stop and execute Premix.
+Premix then will launch browser to display a report page. If premix failed to open your default browser,
+you can see the report page by opening `premix/index.html`.
 
 In the browser, you can try to navigate tracing result and find where the problem/bug is.
 
 ## Helper tools
 
 * Persist Tool
-Because nimbus p2p layer still contains bugs, you may become impatient when try to syncing blocks. In `/premix` directory, you can find a `persist.nim` tool. It will help you to sync relative quicker because it will bypass p2p layer and download blocks from `geth` via `rpc-api`.
+
+Because nimbus p2p layer still contains bugs, you may become impatient when try to syncing blocks.
+In `/premix` directory, you can find a `persist.nim` tool.
+It will help you to sync relative quicker because it will bypass p2p layer and download blocks from `geth` via `rpc-api`.
 
 ```bash
-nim c -r premix/persist --dataDir:your_database_directory
+nim c -r premix/persist [--dataDir:your_database_directory] [--head: blockNumber] [--maxBlocks: number] [--numCommits: number]
 ```
 
 * Debug Tool
-Premix debugging tool also produce a set of debugging meta data that you can use to quickly find the bug without the need to run p2p layer or any other unnecessary code.
-Also in `/premix` directory you'll find `debug.nim` tool that you can use to execute this debug meta data and you'll only need to work with one block and one transaction at a time instead of multiple confusing multiple blocks or transactions.
+
+Premix debugging tool also produce a set of debugging meta data that you can use to quickly
+find the bug without the need to run p2p layer or any other unnecessary code.
+In `/premix` directory you'll find `debug.nim` tool that you can use to execute
+this debug meta data and you'll only need to work with one block and one transaction
+at a time instead of multiple confusing blocks or transactions.
 
 ```bash
-nim c -r premix/debug (TODO: more options will come)
+nim c -r premix/debug blockxxx.json
 ```
+
+`blockxxx.json` contains database snapshot needed to debug a single block produced by Premix tool.
