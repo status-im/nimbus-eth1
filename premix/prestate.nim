@@ -3,13 +3,11 @@ import
   ../nimbus/db/[db_chain, storage_types], rlp, eth_common,
   ../nimbus/p2p/chain, ../nimbus/tracer
 
-proc generatePrestate*(nimbus: JsonNode) =
+proc generatePrestate*(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block) =
   let
     state  = nimbus["state"]
-    blockNumber  = 49439.u256
     parentNumber = blockNumber - 1.u256
     parentBlock  = requestBlock(parentNumber)
-    thisBlock    = requestBlock(blockNumber)
     headerHash   = rlpHash(thisBlock.header)
 
   var
