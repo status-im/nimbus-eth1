@@ -45,11 +45,13 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     let vmState = newBaseVMState(head, c.db)
     let validationResult = processBlock(c.db, head, headers[i], bodies[i], vmState)
 
-    when not defined(release):
+    when not defined(release) and not defined(debugging_tool):
       if validationResult == ValidationResult.Error:
         dumpDebuggingMetaData(c.db, headers[i], bodies[i], vmState.receipts)
 
-    assert(validationResult == ValidationResult.OK)
+    if validationResult != ValidationResult.OK:
+      result = validationResult
+      return
 
     discard c.db.persistHeaderToDb(headers[i])
     if c.db.getCanonicalHead().blockHash != headers[i].blockHash:
