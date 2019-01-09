@@ -37,6 +37,11 @@ proc test(name: string, lang = "c") =
 
 task test, "Run tests":
   test "all_tests"
+  # debugging tools don't yet have tests
+  # but they should be compilable
+  nim c premix/debug
+  nim c premix/persist
+  nim c premix/premix
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/"
