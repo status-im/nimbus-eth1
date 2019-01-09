@@ -8,5 +8,6 @@ export PATH="${abs_path}/vendor/Nim/bin:$PATH"
 
 #- Nimble needs this to be an absolute path
 export NIMBLE_DIR="${abs_path}/vendor/.nimble"
+export BUILD_OUTPUTS_DIR="${abs_path}/build"
 
 exec "$@"
