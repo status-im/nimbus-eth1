@@ -32,11 +32,37 @@ proc requestPostState(n: JsonNode, jsTracer: string): JsonNode =
         raise newException(ValueError, "Error when retrieving transaction postState")
       result.add txTrace
 
+proc requestLastPostState(n: JsonNode, jsTracer: string, arr: JsonNode) =
+  let txs = n["transactions"]
+  if txs.len > 0:
+    let tracer = %{
+      "tracer": %jsTracer
+    }
+
+    let
+      tx = txs[txs.len - 1]
+      txHash = tx["hash"]
+      txTrace = request("debug_traceTransaction", %[txHash, tracer])
+    if txTrace.kind == JNull:
+      error "requested postState not available", txHash=txHash
+      raise newException(ValueError, "Error when retrieving transaction postState")
+    arr.add txTrace
+
 proc requestPostState(thisBlock: Block): JsonNode =
   let
     tmp = readFile("poststate_tracer.js.template")
     tracer = tmp % [ $thisBlock.jsonData["miner"] ]
-  requestPostState(thisBlock.jsonData, tracer)
+  result = requestPostState(thisBlock.jsonData, tracer)
+
+  var uncles = ""
+  for i, uncle in thisBlock.body.uncles:
+    uncles.add $uncle.coinbase
+    if i < thisBlock.body.uncles.len - 1:
+      uncles.add ", "
+
+  if uncles.len > 0:
+    let tracer = tmp % [uncles]
+    requestLastPostState(thisBlock.jsonData, tracer, result)
 
 proc copyAccount(acc: JsonNode): JsonNode =
   result = newJObject()
@@ -85,12 +111,12 @@ proc generatePremixData(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block
     "accounts": accounts
   }
 
-  var metaData = %{
+  var premixData = %{
     "nimbus": nimbus,
     "geth": geth
   }
 
-  var data = "var debugMetaData = " & metaData.pretty & "\n"
+  var data = "var premixData = " & premixData.pretty & "\n"
   writeFile("premixData.js", data)
 
 proc printDebugInstruction(blockNumber: Uint256) =
