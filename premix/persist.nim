@@ -34,7 +34,7 @@ proc main() =
   # 52029 first block with receipts logs
   # 66407 failed transaction
 
-  var conf = getConfiguration()
+  let conf = getConfiguration()
   let db = newChainDb(conf.dataDir)
   let trieDB = trieDB db
   let chainDB = newBaseChainDB(trieDB, false)

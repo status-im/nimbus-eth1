@@ -67,7 +67,7 @@ proc requestPostState(thisBlock: Block): JsonNode =
 proc copyAccount(acc: JsonNode): JsonNode =
   result = newJObject()
   result["balance"] = newJString(acc["balance"].getStr)
-  result["nonce"] = newJString(acc["nonce"].getStr)
+  result["nonce"] = newJString(toHex(acc["nonce"].getInt))
   result["code"] = newJString(acc["code"].getStr)
   var storage = newJObject()
   for k, v in acc["storage"]:
@@ -76,7 +76,7 @@ proc copyAccount(acc: JsonNode): JsonNode =
 
 proc updateAccount(a, b: JsonNode) =
   a["balance"] = newJString(b["balance"].getStr)
-  a["nonce"] = newJString(b["nonce"].getStr)
+  a["nonce"] = newJString(toHex(b["nonce"].getInt))
   a["code"] = newJString(b["code"].getStr)
   var storage = a["storage"]
   for k, v in b["storage"]:
@@ -133,7 +133,7 @@ Happy bug hunting
 
 proc main() =
   if paramCount() == 0:
-    echo "usage: premix debug_meta_data.json"
+    echo "usage: premix debugxxx.json"
     quit(QuitFailure)
 
   try:
