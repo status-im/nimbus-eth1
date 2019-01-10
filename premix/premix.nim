@@ -1,6 +1,8 @@
 import
   json, downloader, stint, strutils, os,
-  ../nimbus/tracer, chronicles, prestate
+  ../nimbus/tracer, chronicles, prestate,
+  js_tracer, eth_common, byteutils, parser,
+  nimcrypto
 
 proc fakeAlloc(n: JsonNode) =
   const
@@ -17,52 +19,49 @@ proc fakeAlloc(n: JsonNode) =
       for _ in 0 ..< diff:
         prevMem.add %chunk
 
+proc jsonTracer(tracer: string): JsonNode =
+  result = %{ "tracer": %tracer }
+
+proc requestTrace(txHash, tracer: JsonNode): JsonNode =
+  let txTrace = request("debug_traceTransaction", %[txHash, tracer])
+  if txTrace.kind == JNull:
+    error "requested postState not available", txHash=txHash
+    raise newException(ValueError, "Error when retrieving transaction postState")
+  result = txTrace
+
 proc requestPostState(n: JsonNode, jsTracer: string): JsonNode =
   let txs = n["transactions"]
-  if txs.len > 0:
-    result = newJArray()
-    let tracer = %{
-      "tracer": %jsTracer
-    }
-    for tx in txs:
-      let txHash = tx["hash"]
-      let txTrace = request("debug_traceTransaction", %[txHash, tracer])
-      if txTrace.kind == JNull:
-        error "requested postState not available", txHash=txHash
-        raise newException(ValueError, "Error when retrieving transaction postState")
-      result.add txTrace
+  result = newJArray()
+  if txs.len == 0: return
 
-proc requestLastPostState(n: JsonNode, jsTracer: string, arr: JsonNode) =
-  let txs = n["transactions"]
-  if txs.len > 0:
-    let tracer = %{
-      "tracer": %jsTracer
-    }
-
+  let tracer = jsonTracer(jsTracer)
+  for tx in txs:
+    if tx["to"].kind != JNull:
+      result.add newJObject()
+      continue
     let
-      tx = txs[txs.len - 1]
       txHash = tx["hash"]
-      txTrace = request("debug_traceTransaction", %[txHash, tracer])
-    if txTrace.kind == JNull:
-      error "requested postState not available", txHash=txHash
-      raise newException(ValueError, "Error when retrieving transaction postState")
-    arr.add txTrace
+      txTrace = requestTrace(txHash, tracer)
+    result.add txTrace
 
-proc requestPostState(thisBlock: Block): JsonNode =
-  let
-    tmp = readFile("poststate_tracer.js.template")
-    tracer = tmp % [ $thisBlock.jsonData["miner"] ]
-  result = requestPostState(thisBlock.jsonData, tracer)
+proc padding(x: string): JsonNode =
+  let val = x.substr(2)
+  let pad = repeat('0', 64 - val.len)
+  result = newJString("0x" & pad & val)
 
-  var uncles = ""
-  for i, uncle in thisBlock.body.uncles:
-    uncles.add $uncle.coinbase
-    if i < thisBlock.body.uncles.len - 1:
-      uncles.add ", "
+proc requestBlockState(postState: JsonNode, thisBlock: Block) =
+  let number = %(thisBlock.header.blockNumber.prefixHex)
 
-  if uncles.len > 0:
-    let tracer = tmp % [uncles]
-    requestLastPostState(thisBlock.jsonData, tracer, result)
+  for state in postState:
+    for address, account in state:
+      var storage = newJArray()
+      for k, _ in account["storage"]:
+        storage.add %k
+      let trace = request("eth_getProof", %[%address, storage, number])
+      account["codeHash"] = trace["codeHash"]
+      account["storageHash"] = trace["storageHash"]
+      for x in trace["storageProof"]:
+        account["storage"][x["key"].getStr] = padding(x["value"].getStr())
 
 proc copyAccount(acc: JsonNode): JsonNode =
   result = newJObject()
@@ -82,6 +81,24 @@ proc updateAccount(a, b: JsonNode) =
   for k, v in b["storage"]:
     storage[k] = newJString(v.getStr)
 
+proc requestBlockState(postState: JsonNode, thisBlock: Block, addresses: seq[EthAddress]) =
+  let number = %(thisBlock.header.blockNumber.prefixHex)
+
+  var txTrace = newJObject()
+  for a in addresses:
+    let address = a.prefixHex
+    let trace = request("eth_getProof", %[%address, %[], number])
+    let account = %{
+      "codeHash": trace["codeHash"],
+      "storageHash": trace["storageHash"],
+      "balance": trace["balance"],
+      "nonce": trace["nonce"],
+      "code": newJString("0x"),
+      "storage": newJObject()
+    }
+    txTrace[address] = account
+  postState.add txTrace
+
 proc processPostState(postState: JsonNode): JsonNode =
   var accounts = newJObject()
 
@@ -94,7 +111,18 @@ proc processPostState(postState: JsonNode): JsonNode =
 
   result = accounts
 
-proc generatePremixData(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block, postState, accounts: JsonNode) =
+proc requestPostState(thisBlock: Block): JsonNode =
+  let postState = requestPostState(thisBlock.jsonData, postStateTracer)
+  requestBlockState(postState, thisBlock)
+
+  var addresses = @[thisBlock.header.coinbase]
+  for uncle in thisBlock.body.uncles:
+    addresses.add uncle.coinbase
+
+  requestBlockState(postState, thisBlock, addresses)
+  processPostState(postState)
+
+proc generatePremixData(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block, accounts: JsonNode) =
   let
     receipts = toJson(thisBlock.receipts)
     txTraces = nimbus["txTraces"]
@@ -107,7 +135,6 @@ proc generatePremixData(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block
     "txTraces": thisBlock.traces,
     "receipts": receipts,
     "block": thisBlock.jsonData,
-    "postState": postState,
     "accounts": accounts
   }
 
@@ -141,10 +168,9 @@ proc main() =
       nimbus      = json.parseFile(paramStr(1))
       blockNumber = UInt256.fromHex(nimbus["blockNumber"].getStr())
       thisBlock   = downloader.requestBlock(blockNumber, {DownloadReceipts, DownloadTxTrace})
-      postState   = requestPostState(thisBlock)
-      accounts    = processPostState(postState)
+      accounts    = requestPostState(thisBlock)
 
-    generatePremixData(nimbus, blockNumber, thisBlock, postState, accounts)
+    generatePremixData(nimbus, blockNumber, thisBlock, accounts)
     generatePrestate(nimbus, blockNumber, thisBlock)
     printDebugInstruction(blockNumber)
   except:

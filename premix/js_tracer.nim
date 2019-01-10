@@ -1,6 +1,5 @@
-{
+const postStateTracer* = """{
 	postState: null,
-  accounts: [$1],
 
 	// lookupAccount injects the specified account into the postState object.
 	lookupAccount: function(addr, db){
@@ -22,10 +21,7 @@
 		var idx = toHex(key);
 
 		if (this.postState[acc].storage[idx] === undefined) {
-			var val = toHex(db.getState(addr, key));
-			if (val != "0x0000000000000000000000000000000000000000000000000000000000000000") {
-				this.postState[acc].storage[idx] = toHex(db.getState(addr, key));
-			}
+      this.postState[acc].storage[idx] = "";//toHex(db.getState(addr, key));
 		}
 	},
 
@@ -34,10 +30,6 @@
 	result: function(ctx, db) {
 		this.lookupAccount(ctx.from, db);
     this.lookupAccount(ctx.to, db);
-
-    for(var i in this.accounts) {
-      this.lookupAccount(toAddress(this.accounts[i]), db)
-    }
 
 		// Return the assembled allocations (postState)
 		return this.postState;
@@ -73,3 +65,4 @@
 	// fault is invoked when the actual execution of an opcode fails.
 	fault: function(log, db) {}
 }
+"""
