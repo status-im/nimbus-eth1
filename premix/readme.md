@@ -20,7 +20,8 @@ This test case then can be integrated with nimbus project test suite.
 ## Requirements
 Before you start to use premix debugging tool there are several things you need to prepare.
 The first one is you need to install `geth` from [source](https://github.com/ethereum/go-ethereum/releases)
-or [binary](https://ethereum.github.io/go-ethereum/downloads/). Then you can run it with this command:
+or [binary](https://ethereum.github.io/go-ethereum/downloads/). Minimum required geth version is 1.8.18.
+Then you can run it with this command:
 
 ```bash
 geth --rpc --rpcapi eth,debug --syncmode full --gcmode=archive
