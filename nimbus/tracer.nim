@@ -32,11 +32,11 @@ proc toJson*(receipts: seq[Receipt]): JsonNode =
   for receipt in receipts:
     result.add receipt.toJson
 
-proc getSender(tx: Transaction): EthAddress =
+proc getSender*(tx: Transaction): EthAddress =
   if not tx.getSender(result):
     raise newException(ValueError, "Could not get sender")
 
-proc getRecipient(tx: Transaction): EthAddress =
+proc getRecipient*(tx: Transaction): EthAddress =
   if tx.isContractCreation:
     let sender = tx.getSender()
     result = generateAddress(sender, tx.accountNonce)
