@@ -240,20 +240,14 @@ proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader, blockBody
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false)
 
-  let
-    txTraces = traceTransactions(captureChainDB, header, blockBody)
-    stateDump = dumpBlockState(captureChainDB, header, blockBody)
-    blockTrace = traceBlock(captureChainDB, header, blockBody, {DisableState})
-    receipts = toJson(receipts)
-
   var metaData = %{
     "blockNumber": %blockNumber.toHex,
-    "txTraces": txTraces,
-    "stateDump": stateDump,
-    "blockTrace": blockTrace,
-    "receipts": receipts
+    "txTraces": traceTransactions(captureChainDB, header, blockBody),
+    "stateDump": dumpBlockState(captureChainDB, header, blockBody),
+    "blockTrace": traceBlock(captureChainDB, header, blockBody, {DisableState}),
+    "receipts": toJson(receipts)
   }
 
   metaData.dumpMemoryDB(memoryDB)
   # this is a placeholder until premix debugging tool is ready
-  writeFile("debug_meta_data.json", metaData.pretty())
+  writeFile("debug" & $blockNumber & ".json", metaData.pretty())
