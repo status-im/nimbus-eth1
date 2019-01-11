@@ -34,8 +34,8 @@ var premix = function() {
 
     renderRow: function(body, nimbus, geth, x) {
       let row = $('<tr/>').appendTo(body);
-      let ncr = nimbus[x].toString().toLowerCase();
-      let gcr = geth[x].toString().toLowerCase();
+      let ncr = nimbus instanceof Object ? nimbus[x].toString().toLowerCase() : nimbus;
+      let gcr = geth instanceof Object ? geth[x].toString().toLowerCase() : geth;
       let cls = ncr == gcr ? '' : 'class="uk-text-danger"';
       $(`<td ${cls}>${split32(x)}</td>`).appendTo(row);
       $(`<td ${cls}>${split32(ncr)}</td>`).appendTo(row);
@@ -86,12 +86,22 @@ function renderTrace(title, nimbus, geth) {
 }
 
 function opCodeRenderer(txId, nimbus, geth) {
+  function analyzeList(nimbus, geth) {
+    for(var i in nimbus) {
+      if(nimbus[i].toString().toLowerCase() != geth[i].toString().toLowerCase()) return false;
+    }
+    return true;
+  }
+
   function analyze(nimbus, geth) {
     for(var x of premix.fields) {
-      if(nimbus[x] != geth[x]) return false;
+      if(nimbus[x].toString().toLowerCase() != geth[x].toString().toLowerCase()) return false;
     }
-    // TODO: analyze stack, storage, mem
-    return true;
+
+    let result = analyzeList(nimbus.memory, geth.memory);
+    result = result && analyzeList(nimbus.stack, geth.stack);
+    result = result && analyzeList(nimbus.storage, geth.storage);
+    return result;
   }
 
   txId = parseInt(txId);
@@ -109,7 +119,7 @@ function opCodeRenderer(txId, nimbus, geth) {
     }
     nav.children('a').click(function(ev) {
       let idx = this.rel;
-      $('#sideBar li').removeClass('uk-active');
+      $('#opCodeSideBar li').removeClass('uk-active');
       $(this).parent().addClass('uk-active');
       renderTrace('tx', ncs[idx], gcs[idx]);
     });
@@ -130,8 +140,49 @@ function transactionsRenderer(txId, nimbus, geth) {
     for(var x of fields) {
       premix.renderRow(body, nimbus, geth, x);
     }
+    $('<hr class="uk-divider-icon">').appendTo(container);
 
-    // TODO: render receipt logs
+    if(nimbus.root || geth.root) {
+      if(geth.root === undefined) geth.root = '';
+      if(nimbus.root == undefined) nimbus.root = '';
+      premix.renderRow(body, nimbus, geth, 'root');
+    }
+
+    if(nimbus.status || geth.status) {
+      if(geth.status === undefined) geth.status = '';
+      if(nimbus.status == undefined) nimbus.status = '';
+      premix.renderRow(body, nimbus, geth, 'status');
+    }
+
+    function fillEmptyLogs(a, b) {
+      function emptyLog() {
+        return {address: '', topics: [], data: ''};
+      }
+
+      if(a.logs.length > b.logs.length) {
+        for(var i in a.logs) {
+          if(b.logs[i] === undefined) {
+            b.logs[i] = emptyLog();
+          }
+        }
+      }
+    }
+
+    fillEmptyLogs(geth, nimbus);
+    fillEmptyLogs(nimbus, geth);
+
+    for(var i in nimbus.logs) {
+      $(`<h4>Receipt Log #${i}</h4>`).appendTo(container);
+      let a = nimbus.logs[i];
+      let b = geth.logs[i];
+      a.topics = a.topics.join(',');
+      b.topics = b.topics.join(',');
+      let body = premix.newTable(container);
+      premix.renderRow(body, a, b, 'address');
+      premix.renderRow(body, a, b, 'data');
+      premix.renderRow(body, a, b, 'topics');
+      $('<hr class="uk-divider-icon">').appendTo(container);
+    }
   }
 
   txId = parseInt(txId);
@@ -172,10 +223,14 @@ function headerRenderer(nimbus, geth) {
     };
   }
 
+  function deepCopy(src) {
+    return JSON.parse(JSON.stringify(src));
+  }
+
   let container = $('#headerContainer').empty();
 
-  let ncs = nimbus.stateDump.after;
-  let gcs = geth.accounts;
+  let ncs = deepCopy(nimbus.stateDump.after);
+  let gcs = deepCopy(geth.accounts);
   let accounts = [];
 
   for(var address in ncs) {
@@ -204,6 +259,35 @@ function headerRenderer(nimbus, geth) {
     for(var x of fields) {
       premix.renderRow(body, acc.nimbus, acc.geth, x);
     }
+
+    let storage = [];
+    let nss = acc.nimbus.storage;
+    let gss = acc.geth.storage;
+
+    for(var idx in nss) {
+      if(gss[idx]) {
+        storage.push({idx: idx, nimbus: nss[idx], geth: gss[idx]});
+        delete gss[idx];
+      } else {
+        if(nss[idx] != "0x0000000000000000000000000000000000000000000000000000000000000000") {
+          storage.push({idx: idx, nimbus: nss[idx], geth: ''});
+        }
+      }
+    }
+    for(var idx in gss) {
+      if(gss[idx] != "0x0000000000000000000000000000000000000000000000000000000000000000") {
+        storage.push({idx: idx, nimbus: '', geth: gss[idx]});
+      }
+    }
+
+    if(storage.length > 0) {
+      $(`<h4>${acc.name} Storage</h4>`).appendTo(container);
+      let body = premix.newTable(container);
+      for(var s of storage) {
+        premix.renderRow(body, s.nimbus, s.geth, s.idx);
+      }
+    }
+
     $('<hr class="uk-divider-icon">').appendTo(container);
   }
 }
