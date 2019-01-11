@@ -120,6 +120,7 @@ function opCodeRenderer(txId, nimbus, geth) {
 }
 
 function transactionsRenderer(txId, nimbus, geth) {
+  txId = parseInt(txId);
   $('#transactionsTitle').text(`Tx #${(txId+1)}`);
   let container = $('#transactionsContainer').empty();
 
@@ -130,12 +131,16 @@ function transactionsRenderer(txId, nimbus, geth) {
       premix.renderRow(body, nimbus, geth, x);
     }
 
-    // TODO: receipt logs
+    // TODO: render receipt logs
   }
 
   txId = parseInt(txId);
   let ntx = nimbus.txTraces[txId];
   let gtx = geth.txTraces[txId];
+
+  if(ntx.returnValue.length == 0) {
+    ntx.returnValue = "0x";
+  }
 
   let ncr = $.extend({
     gas: ntx.gas,
@@ -155,36 +160,52 @@ function transactionsRenderer(txId, nimbus, geth) {
 }
 
 function headerRenderer(nimbus, geth) {
+  function emptyAccount() {
+    return {
+      address: '',
+      nonce: '',
+      balance: '',
+      codeHash: '',
+      code: '',
+      storageRoot: '',
+      storage: {}
+    };
+  }
+
   let container = $('#headerContainer').empty();
 
   let ncs = nimbus.stateDump.after;
   let gcs = geth.accounts;
+  let accounts = [];
 
-
-  for(var n of ncs) {
-    n.address = '0x' + n.address;
-    n.balance = '0x' + n.balance;
-    n.code = '0x' + n.code;
-    let g = gcs[n.address];
-
+  for(var address in ncs) {
+    let n = ncs[address];
+    n.address = address;
+    if(gcs[address]) {
+      let geth = gcs[address];
+      geth.address = address;
+      accounts.push({name: n.name, nimbus: n, geth: geth});
+      delete gcs[address];
+    } else {
+      accounts.push({name: n.name, nimbus: n, geth: emptyAccount()});
+    }
   }
 
-          /*"name": "internalTx0",
-          "address": "0000000000000000000000000000000000000004",
-          "nonce": "0000000000000000",
-          "balance": "0",
-          "codeHash": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-          "code": "",
-          "storageRoot": "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
-          "storage": {}*/
+  for(var address in gcs) {
+    let geth = gcs[address];
+    geth.address = address;
+    accounts.push({name: "unknown", nimbus: emptyAccount(), geth: geth});
+  }
 
-        /*"0xf927a40c8b7f6e07c5af7fa2155b4864a4112b13": {
-        "balance": "0x607c9cea65ef7e19dd8",
-        "nonce": "0000000000000000",
-        "code": "0x",
-        "storage": {}*/
-
-
+  for(var acc of accounts) {
+    $(`<h4>Account Name: ${acc.name}</h4>`).appendTo(container);
+    let body = premix.newTable(container);
+    const fields = ['address', 'nonce', 'balance', 'codeHash', 'code', 'storageRoot'];
+    for(var x of fields) {
+      premix.renderRow(body, acc.nimbus, acc.geth, x);
+    }
+    $('<hr class="uk-divider-icon">').appendTo(container);
+  }
 }
 
 function generateNavigation(txs, nimbus, geth) {
@@ -201,8 +222,8 @@ function generateNavigation(txs, nimbus, geth) {
       let list = $('<ul class="uk-nav uk-dropdown-nav"/>').appendTo(div);
 
       for(var i in txs) {
-        let id = i.toString();
-        $(`<li class="uk-active"><a rel="${id}" href="#">TX #${id}</a></li>`).appendTo(list);
+        let id = parseInt(i) + 1;
+        $(`<li class="uk-active"><a rel="${i}" href="#">TX #${id}</a></li>`).appendTo(list);
       }
 
       list.find('li a').click(function(ev) {

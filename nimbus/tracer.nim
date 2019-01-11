@@ -2,7 +2,7 @@ import
   db/[db_chain, state_db, capturedb], eth_common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth_trie/db, nimcrypto, strutils, ranges, ./utils/addresses,
-  chronicles
+  chronicles, rpc/hexstrings
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
@@ -46,19 +46,19 @@ proc getRecipient*(tx: Transaction): EthAddress =
 proc captureAccount(n: JsonNode, db: AccountStateDB, address: EthAddress, name: string) =
   var jaccount = newJObject()
   jaccount["name"] = %name
-  jaccount["address"] = %($address)
+  jaccount["address"] = %("0x" & $address)
   let account = db.getAccount(address)
-  jaccount["nonce"] = %(account.nonce.toHex)
-  jaccount["balance"] = %(account.balance.toHex)
+  jaccount["nonce"] = %(encodeQuantity(account.nonce).toLowerAscii)
+  jaccount["balance"] = %("0x" & account.balance.toHex)
 
   let code = db.getCode(address)
-  jaccount["codeHash"] = %(($account.codeHash).toLowerAscii)
-  jaccount["code"] = %(toHex(code.toOpenArray, true))
-  jaccount["storageRoot"] = %(($account.storageRoot).toLowerAscii)
+  jaccount["codeHash"] = %("0x" & ($account.codeHash).toLowerAscii)
+  jaccount["code"] = %("0x" & toHex(code.toOpenArray, true))
+  jaccount["storageRoot"] = %("0x" & ($account.storageRoot).toLowerAscii)
 
   var storage = newJObject()
   for key, value in db.storage(address):
-    storage[key.dumpHex] = %(value.dumpHex)
+    storage["0x" & key.dumpHex] = %("0x" & value.dumpHex)
   jaccount["storage"] = storage
 
   n.add jaccount
