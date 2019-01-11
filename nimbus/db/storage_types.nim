@@ -16,8 +16,6 @@ type
     data*: array[33, byte]
     dataEndPos*: uint8 # the last populated position in the data
 
-  StorageError* = object of Exception
-
 proc genericHashKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(genericHash)
   result.data[1 .. 32] = h.data
@@ -75,19 +73,4 @@ proc `==`*[T](lhs, rhs: openarray[T]): bool =
 
 proc `==`*(a, b: DbKey): bool {.inline.} =
   a.toOpenArray == b.toOpenArray
-
-template raiseStorageInitError* =
-  raise newException(StorageError, "failure to initialize storage")
-
-template raiseKeyReadError*(key: auto) =
-  raise newException(StorageError, "failed to read key " & $key)
-
-template raiseKeyWriteError*(key: auto) =
-  raise newException(StorageError, "failed to write key " & $key)
-
-template raiseKeySearchError*(key: auto) =
-  raise newException(StorageError, "failure during search for key " & $key)
-
-template raiseKeyDeletionError*(key: auto) =
-  raise newException(StorageError, "failure to delete key " & $key)
 
