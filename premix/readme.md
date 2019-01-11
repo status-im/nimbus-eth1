@@ -50,19 +50,27 @@ you can see the report page by opening `premix/index.html`.
 
 In the browser, you can try to navigate tracing result and find where the problem/bug is.
 
-## Helper tools
+## Tools
 
-* Persist Tool
+* Premix
+
+`Premix` is the main tool in this tool set. It produce data that can be viewed with browser and
+debug data that can be consumed by `debug` tool. `Premix` consume data produced either by `nimbus`, `persist`, or `dumper`.
+You can run `Premix` manually using this command: `premix debugxxx.json`
+
+* Persist
 
 Because nimbus p2p layer still contains bugs, you may become impatient when try to syncing blocks.
 In `/premix` directory, you can find a `persist.nim` tool.
-It will help you to sync relative quicker because it will bypass p2p layer and download blocks from `geth` via `rpc-api`.
+It will help you to sync relatively quicker because it will bypass p2p layer and download blocks from `geth` via `rpc-api`.
+
+When it encounter problematic block during syncing, it will stop and produce debugging data like nimbus does.
 
 ```bash
 nim c -r premix/persist [--dataDir:your_database_directory] [--head: blockNumber] [--maxBlocks: number] [--numCommits: number]
 ```
 
-* Debug Tool
+* Debug
 
 Premix debugging tool also produce a set of debugging meta data that you can use to quickly
 find the bug without the need to run p2p layer or any other unnecessary code.
@@ -75,3 +83,14 @@ nim c -r premix/debug blockxxx.json
 ```
 
 `blockxxx.json` contains database snapshot needed to debug a single block produced by Premix tool.
+
+* Dumper
+
+`Dumper` was designed specifically to produce debugging data that can be further processed by `Premix` from
+information already stored in database. It will create a single block tracing information if the block already persisted.
+If you want to produce problematic block debug data, better to use `Persist` too. `Dumper` produced data
+usually used to debug features of `Premix` and it's report page logic.
+
+```bash
+usage: dumper [--datadir:your_path] --head:blockNumber
+```
