@@ -61,16 +61,16 @@ proc requestReceipts(n: JsonNode): seq[Receipt] =
       result.add parseReceipt(rec)
 
 proc requestTxTraces(n: JsonNode): JsonNode =
+  result = newJArray()
   let txs = n["transactions"]
-  if txs.len > 0:
-    result = newJArray()
-    for tx in txs:
-      let txHash = tx["hash"]
-      let txTrace = request("debug_traceTransaction", %[txHash])
-      if txTrace.kind == JNull:
-        error "requested trace not available", txHash=txHash
-        raise newException(ValueError, "Error when retrieving transaction trace")
-      result.add txTrace
+  if txs.len == 0: return
+  for tx in txs:
+    let txHash = tx["hash"]
+    let txTrace = request("debug_traceTransaction", %[txHash])
+    if txTrace.kind == JNull:
+      error "requested trace not available", txHash=txHash
+      raise newException(ValueError, "Error when retrieving transaction trace")
+    result.add txTrace
 
 proc requestBlock*(blockNumber: BlockNumber, flags: set[DownloadFlags] = {}): Block =
   var header = request("eth_getBlockByNumber", %[%blockNumber.prefixHex, %true])

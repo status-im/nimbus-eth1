@@ -29,20 +29,53 @@ proc requestTrace(txHash, tracer: JsonNode): JsonNode =
     raise newException(ValueError, "Error when retrieving transaction postState")
   result = txTrace
 
-proc requestPostState(n: JsonNode, jsTracer: string): JsonNode =
+proc requestBlockState(postState: JsonNode, thisBlock: Block, addresses: openArray[EthAddress]) =
+  let number = %(thisBlock.header.blockNumber.prefixHex)
+
+  var txTrace = newJObject()
+  for a in addresses:
+    let address = a.prefixHex
+    let trace = request("eth_getProof", %[%address, %[], number])
+    let account = %{
+      "codeHash": trace["codeHash"],
+      "storageRoot": trace["storageHash"],
+      "balance": trace["balance"],
+      "nonce": trace["nonce"],
+      "code": newJString("0x"),
+      "storage": newJObject()
+    }
+    txTrace[address] = account
+  postState.add txTrace
+
+proc hasTracerData(tx: JsonNode, blockNumber: Uint256): bool =
+  let number = %(blockNumber.prefixHex)
+
+  if tx["to"].kind == JNull:
+    let t = parseTransaction(tx)
+    let code = request("eth_getCode", %[%t.getRecipient.prefixHex, number])
+    return code.getStr.len > 2 # "0x"
+
+  let code = request("eth_getCode", %[tx["to"], number])
+  result = code.getStr.len > 2 # "0x"
+
+proc requestPostState(n: JsonNode, jsTracer: string, thisBlock: Block): JsonNode =
   let txs = n["transactions"]
   result = newJArray()
   if txs.len == 0: return
 
   let tracer = jsonTracer(jsTracer)
   for tx in txs:
-    if tx["to"].kind != JNull:
-      result.add newJObject()
-      continue
-    let
-      txHash = tx["hash"]
-      txTrace = requestTrace(txHash, tracer)
-    result.add txTrace
+    if hasTracerData(tx, thisBlock.header.blockNumber):
+      let
+        txHash = tx["hash"]
+        txTrace = requestTrace(txHash, tracer)
+      result.add txTrace
+    else:
+      let t = parseTransaction(tx)
+      var address: array[2, EthAddress]
+      address[0] = t.getRecipient
+      address[1] = t.getSender
+      requestBlockState(result, thisBlock, address)
 
 proc padding(x: string): JsonNode =
   let val = x.substr(2)
@@ -59,45 +92,37 @@ proc requestBlockState(postState: JsonNode, thisBlock: Block) =
         storage.add %k
       let trace = request("eth_getProof", %[%address, storage, number])
       account["codeHash"] = trace["codeHash"]
-      account["storageHash"] = trace["storageHash"]
+      account["storageRoot"] = trace["storageHash"]
+      account["nonce"] = trace["nonce"]
+      account["balance"] = trace["balance"]
       for x in trace["storageProof"]:
         account["storage"][x["key"].getStr] = padding(x["value"].getStr())
 
 proc copyAccount(acc: JsonNode): JsonNode =
   result = newJObject()
+  if acc.hasKey("name"):
+    result["name"] = newJString(acc["name"].getStr)
   result["balance"] = newJString(acc["balance"].getStr)
-  result["nonce"] = newJString(toHex(acc["nonce"].getInt))
+  result["nonce"] = newJString(acc["nonce"].getStr)
   result["code"] = newJString(acc["code"].getStr)
   var storage = newJObject()
   for k, v in acc["storage"]:
     storage[k] = newJString(v.getStr)
   result["storage"] = storage
+  result["storageRoot"] = newJString(acc["storageRoot"].getStr)
+  result["codeHash"] = newJString(acc["codeHash"].getStr)
 
 proc updateAccount(a, b: JsonNode) =
+  if b.hasKey("name"):
+    a["name"] = newJString(b["name"].getStr)
   a["balance"] = newJString(b["balance"].getStr)
-  a["nonce"] = newJString(toHex(b["nonce"].getInt))
+  a["nonce"] = newJString(b["nonce"].getStr)
   a["code"] = newJString(b["code"].getStr)
   var storage = a["storage"]
   for k, v in b["storage"]:
     storage[k] = newJString(v.getStr)
-
-proc requestBlockState(postState: JsonNode, thisBlock: Block, addresses: seq[EthAddress]) =
-  let number = %(thisBlock.header.blockNumber.prefixHex)
-
-  var txTrace = newJObject()
-  for a in addresses:
-    let address = a.prefixHex
-    let trace = request("eth_getProof", %[%address, %[], number])
-    let account = %{
-      "codeHash": trace["codeHash"],
-      "storageHash": trace["storageHash"],
-      "balance": trace["balance"],
-      "nonce": trace["nonce"],
-      "code": newJString("0x"),
-      "storage": newJObject()
-    }
-    txTrace[address] = account
-  postState.add txTrace
+  a["storageRoot"] = newJString(b["storageRoot"].getStr)
+  a["codeHash"] = newJString(b["codeHash"].getStr)
 
 proc processPostState(postState: JsonNode): JsonNode =
   var accounts = newJObject()
@@ -111,8 +136,19 @@ proc processPostState(postState: JsonNode): JsonNode =
 
   result = accounts
 
+proc removePostStateDup(nimbus: JsonNode) =
+  let postState = nimbus["stateDump"]["after"]
+  var accounts = newJObject()
+  for acc in postState:
+    let address = acc["address"].getStr
+    if accounts.hasKey(address):
+      updateAccount(accounts[address], acc)
+    else:
+      accounts[address] = copyAccount(acc)
+  nimbus["stateDump"]["after"] = accounts
+
 proc requestPostState(thisBlock: Block): JsonNode =
-  let postState = requestPostState(thisBlock.jsonData, postStateTracer)
+  let postState = requestPostState(thisBlock.jsonData, postStateTracer, thisBlock)
   requestBlockState(postState, thisBlock)
 
   var addresses = @[thisBlock.header.coinbase]
@@ -170,6 +206,7 @@ proc main() =
       thisBlock   = downloader.requestBlock(blockNumber, {DownloadReceipts, DownloadTxTrace})
       accounts    = requestPostState(thisBlock)
 
+    removePostStateDup(nimbus)
     generatePremixData(nimbus, blockNumber, thisBlock, accounts)
     generatePrestate(nimbus, blockNumber, thisBlock)
     printDebugInstruction(blockNumber)

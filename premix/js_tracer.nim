@@ -1,13 +1,11 @@
 const postStateTracer* = """{
-	postState: null,
+	postState: {},
 
 	// lookupAccount injects the specified account into the postState object.
 	lookupAccount: function(addr, db){
 		var acc = toHex(addr);
 		if (this.postState[acc] === undefined) {
 			this.postState[acc] = {
-				balance: '0x' + db.getBalance(addr).toString(16),
-				nonce:   db.getNonce(addr),
 				code:    toHex(db.getCode(addr)),
 				storage: {}
 			};
@@ -19,9 +17,9 @@ const postStateTracer* = """{
 	lookupStorage: function(addr, key, db){
 		var acc = toHex(addr);
 		var idx = toHex(key);
-
+    this.lookupAccount(addr, db);    
 		if (this.postState[acc].storage[idx] === undefined) {
-      this.postState[acc].storage[idx] = "";//toHex(db.getState(addr, key));
+      this.postState[acc].storage[idx] = "";
 		}
 	},
 

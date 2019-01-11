@@ -39,9 +39,10 @@ task test, "Run tests":
   test "all_tests"
   # debugging tools don't yet have tests
   # but they should be compilable
-  buildBinary "premix", "premix/"
-  buildBinary "persist", "premix/"
-  buildBinary "debug", "premix/"
+  exec "nim c premix/premix"
+  exec "nim c premix/persist"
+  exec "nim c premix/debug"
+  exec "nim c premix/dumper"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/"

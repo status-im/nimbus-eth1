@@ -6,7 +6,7 @@ import
 import
   ../nimbus/[transaction, rpc/hexstrings]
 
-func hexToInt(s: string, T: typedesc[SomeInteger]): T =
+func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
   var i = 0
   if s[i] == '0' and (s[i+1] in {'x', 'X'}): inc(i, 2)
   if s.len - i > sizeof(T) * 2:
