@@ -53,7 +53,7 @@ proc hasTracerData(tx: JsonNode, blockNumber: Uint256): bool =
   if tx["to"].kind == JNull:
     let t = parseTransaction(tx)
     let code = request("eth_getCode", %[%t.getRecipient.prefixHex, number])
-    return code.getStr.len > 2 # "0x"
+    return code.getStr.len > 2 or t.payload.len > 0
 
   let code = request("eth_getCode", %[tx["to"], number])
   result = code.getStr.len > 2 # "0x"

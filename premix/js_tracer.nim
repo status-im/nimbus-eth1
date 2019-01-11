@@ -17,7 +17,7 @@ const postStateTracer* = """{
 	lookupStorage: function(addr, key, db){
 		var acc = toHex(addr);
 		var idx = toHex(key);
-    this.lookupAccount(addr, db);    
+    this.lookupAccount(addr, db);
 		if (this.postState[acc].storage[idx] === undefined) {
       this.postState[acc].storage[idx] = "";
 		}
