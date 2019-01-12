@@ -45,7 +45,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     let vmState = newBaseVMState(head, c.db)
     let validationResult = processBlock(c.db, head, headers[i], bodies[i], vmState)
 
-    when not defined(release) and not defined(debugging_tool):
+    when not defined(release):
       if validationResult == ValidationResult.Error:
         dumpDebuggingMetaData(c.db, headers[i], bodies[i], vmState.receipts)
 
