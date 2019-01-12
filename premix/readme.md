@@ -88,7 +88,7 @@ nim c -r premix/debug blockxxx.json
 
 `Dumper` was designed specifically to produce debugging data that can be further processed by `Premix` from
 information already stored in database. It will create a single block tracing information if the block already persisted.
-If you want to produce problematic block debug data, better to use `Persist` too. `Dumper` produced data
+If you want to produce problematic block debug data, better to use `Persist` tool. `Dumper` produced data
 usually used to debug features of `Premix` and it's report page logic.
 
 ```bash
