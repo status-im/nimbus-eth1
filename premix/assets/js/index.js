@@ -65,6 +65,11 @@ function renderTrace(title, nimbus, geth) {
     premix.renderRow(body, nimbus, geth, x);
   }
 
+  if(nimbus.error) {
+    geth.error = '';
+    premix.renderRow(body, nimbus, geth, 'error');
+  }
+
   function renderExtra(name) {
     let nk = Object.keys(nimbus[name]);
     let gk = Object.keys(geth[name]);
@@ -95,6 +100,8 @@ function opCodeRenderer(txId, nimbus, geth) {
 
   function analyze(nimbus, geth) {
     for(var x of premix.fields) {
+      if(nimbus[x] === undefined) nimbus[x] = '';
+      if(geth[x] === undefined) geth[x] = '';
       if(nimbus[x].toString().toLowerCase() != geth[x].toString().toLowerCase()) return false;
     }
 
@@ -109,6 +116,22 @@ function opCodeRenderer(txId, nimbus, geth) {
   var gcs = geth.txTraces[txId].structLogs;
   var sideBar = $('#opCodeSideBar').empty();
   $('#opCodeTitle').text(`Tx #${(txId+1)}`);
+
+  function fillEmptyOp(a, b) {
+    const emptyOp = {op: '', pc: '', gas: '', gasCost: '', depth: '',
+      storage:{}, memory: [], stack: []};
+
+    if(a.length > b.length) {
+      for(var i in a) {
+        if(b[i] === undefined) {
+          b[i] = emptyOp;
+        }
+      }
+    }
+  }
+
+  fillEmptyOp(ncs, gcs);
+  fillEmptyOp(gcs, ncs);
 
   for(var i in ncs) {
     var pc = ncs[i];
@@ -125,7 +148,10 @@ function opCodeRenderer(txId, nimbus, geth) {
     });
   }
 
-  renderTrace("tx", ncs[0], gcs[0]);
+  if(ncs.length > 0) {
+    renderTrace("tx", ncs[0], gcs[0]);
+  }
+
   windowResize();
 }
 
@@ -155,14 +181,12 @@ function transactionsRenderer(txId, nimbus, geth) {
     }
 
     function fillEmptyLogs(a, b) {
-      function emptyLog() {
-        return {address: '', topics: [], data: ''};
-      }
+      const emptyLog = {address: '', topics: [], data: ''};
 
       if(a.logs.length > b.logs.length) {
         for(var i in a.logs) {
           if(b.logs[i] === undefined) {
-            b.logs[i] = emptyLog();
+            b.logs[i] = emptyLog;
           }
         }
       }
