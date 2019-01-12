@@ -2,7 +2,7 @@ import
   db/[db_chain, state_db, capturedb], eth_common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth_trie/db, nimcrypto, strutils, ranges, ./utils/addresses,
-  chronicles, rpc/hexstrings
+  chronicles, rpc/hexstrings, launcher
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
@@ -230,7 +230,8 @@ proc traceTransactions*(chainDB: BaseChainDB, header: BlockHeader, blockBody: Bl
   for i in 0 ..< blockBody.transactions.len:
     result.add traceTransaction(chainDB, header, blockBody, i, {DisableState})
 
-proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader, blockBody: BlockBody, receipts: seq[Receipt]) =
+proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader,
+                            blockBody: BlockBody, receipts: seq[Receipt], launchDebugger = true) =
   let
     blockNumber = header.blockNumber
 
@@ -249,5 +250,9 @@ proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader, blockBody
   }
 
   metaData.dumpMemoryDB(memoryDB)
-  # this is a placeholder until premix debugging tool is ready
-  writeFile("debug" & $blockNumber & ".json", metaData.pretty())
+
+  let jsonFileName = "debug" & $blockNumber & ".json"
+  if launchDebugger:
+    launchPremix(jsonFileName, metaData)
+  else:
+    writeFile(jsonFileName, metaData.pretty())
