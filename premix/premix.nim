@@ -48,15 +48,16 @@ proc requestBlockState(postState: JsonNode, thisBlock: Block, addresses: openArr
   postState.add txTrace
 
 proc hasTracerData(tx: JsonNode, blockNumber: Uint256): bool =
-  let number = %(blockNumber.prefixHex)
+  let
+    number = %(blockNumber.prefixHex)
+    t = parseTransaction(tx)
+    code = request("eth_getCode", %[%t.getRecipient.prefixHex, number])
+    recipientHasCode = code.getStr.len > 2 # "0x"
 
-  if tx["to"].kind == JNull:
-    let t = parseTransaction(tx)
-    let code = request("eth_getCode", %[%t.getRecipient.prefixHex, number])
-    return code.getStr.len > 2 or t.payload.len > 0
+  if t.isContractCreation:
+    return recipientHasCode or t.payload.len > 0
 
-  let code = request("eth_getCode", %[tx["to"], number])
-  result = code.getStr.len > 2 # "0x"
+  recipientHasCode
 
 proc requestPostState(n: JsonNode, jsTracer: string, thisBlock: Block): JsonNode =
   let txs = n["transactions"]
@@ -206,9 +207,17 @@ proc main() =
       thisBlock   = downloader.requestBlock(blockNumber, {DownloadReceipts, DownloadTxTrace})
       accounts    = requestPostState(thisBlock)
 
+    # remove duplicate accounts with same address
+    # and only take newest one
     removePostStateDup(nimbus)
+
+    # premix data goes to report page
     generatePremixData(nimbus, blockNumber, thisBlock, accounts)
+
+    # prestate data goes to debug tool and contains data
+    # needed to execute single block
     generatePrestate(nimbus, blockNumber, thisBlock)
+
     printDebugInstruction(blockNumber)
   except:
     echo getCurrentExceptionMsg()
