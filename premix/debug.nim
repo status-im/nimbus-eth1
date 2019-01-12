@@ -1,7 +1,7 @@
 import
   json, os, stint, eth_trie/db, byteutils, eth_common,
-  ../nimbus/db/[db_chain], ../nimbus/p2p/chain,
-  chronicles
+  ../nimbus/db/[db_chain], chronicles, ../nimbus/vm_state,
+  ../nimbus/p2p/executor
 
 proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
   let state = node["state"]
@@ -13,18 +13,16 @@ proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
 
 proc executeBlock(memoryDB: TrieDatabaseRef, blockNumber: Uint256) =
   let
-    chainDB = newBaseChainDB(memoryDB, false)
     parentNumber = blockNumber - 1
+    chainDB = newBaseChainDB(memoryDB, false)
     parent = chainDB.getBlockHeader(parentNumber)
     header = chainDB.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    body    = chainDB.getBlockBody(headerHash)
-    chain   = newChain(chainDB)
-    headers = @[header]
-    bodies  = @[body]
+    body   = chainDB.getBlockBody(header.blockHash)
 
-  chainDB.setHead(parent, true)
-  let validationResult = chain.persistBlocks(headers, bodies)
+  let
+    vmState = newBaseVMState(parent, chainDB)
+    validationResult = processBlock(chainDB, parent, header, body, vmState)
+
   if validationResult != ValidationResult.OK:
     error "block validation error", validationResult
   else:
