@@ -3,39 +3,35 @@ import
   ../nimbus/db/[db_chain, storage_types], rlp, eth_common,
   ../nimbus/p2p/chain, ../nimbus/tracer
 
-proc generatePrestate*(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block) =
+proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: Uint256, parent, header: BlockHeader, body: BlockBody) =
   let
-    state  = nimbus["state"]
-    parentNumber = blockNumber - 1.u256
-    parentBlock  = requestBlock(parentNumber)
-    headerHash   = rlpHash(thisBlock.header)
+    state = nimbus["state"]
+    headerHash = rlpHash(header)
+    #parentNumber = parent.blockNumber
 
   var
     memoryDB = newMemoryDB()
     chainDB = newBaseChainDB(memoryDB, false)
 
-  chainDB.setHead(parentBlock.header, true)
-  chainDB.persistTransactions(blockNumber, thisBlock.body.transactions)
-  discard chainDB.persistUncles(thisBlock.body.uncles)
+  chainDB.setHead(parent, true)
+  chainDB.persistTransactions(blockNumber, body.transactions)
+  discard chainDB.persistUncles(body.uncles)
 
-  memoryDB.put(genericHashKey(headerHash).toOpenArray, rlp.encode(thisBlock.header))
-  chainDB.addBlockNumberToHashLookup(thisBlock.header)
+  memoryDB.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
+  chainDB.addBlockNumberToHashLookup(header)
 
   for k, v in state:
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
     memoryDB.put(key, value)
 
-  let
-    chain = newChain(chainDB)
-    parent = chainDB.getBlockHeader(parentNumber)
-    header = chainDB.getBlockHeader(blockNumber)
-    body = chainDB.getBlockBody(headerHash)
-    headers = @[header]
-    bodies = @[body]
+  #discard chainDB.getBlockHeader(parentNumber)
+  #discard chainDB.getBlockHeader(blockNumber)
+  #discard chainDB.getBlockBody(headerHash)
 
   var metaData = %{
-    "blockNumber": %blockNumber.toHex
+    "blockNumber": %blockNumber.toHex,
+    "geth": geth
   }
 
   metaData.dumpMemoryDB(memoryDB)
