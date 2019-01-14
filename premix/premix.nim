@@ -2,22 +2,7 @@ import
   json, downloader, stint, strutils, os,
   ../nimbus/tracer, chronicles, prestate,
   js_tracer, eth_common, byteutils, parser,
-  nimcrypto
-
-proc fakeAlloc(n: JsonNode) =
-  const
-    chunk = repeat('0', 64)
-
-  for i in 1 ..< n.len:
-    if not n[i].hasKey("memory"): return
-    let
-      prevMem = n[i-1]["memory"]
-      currMem = n[i]["memory"]
-
-    if currMem.len > prevMem.len:
-      let diff = currMem.len - prevMem.len
-      for _ in 0 ..< diff:
-        prevMem.add %chunk
+  nimcrypto, premixcore
 
 proc jsonTracer(tracer: string): JsonNode =
   result = %{ "tracer": %tracer }
@@ -99,32 +84,6 @@ proc requestBlockState(postState: JsonNode, thisBlock: Block) =
       for x in trace["storageProof"]:
         account["storage"][x["key"].getStr] = padding(x["value"].getStr())
 
-proc copyAccount(acc: JsonNode): JsonNode =
-  result = newJObject()
-  if acc.hasKey("name"):
-    result["name"] = newJString(acc["name"].getStr)
-  result["balance"] = newJString(acc["balance"].getStr)
-  result["nonce"] = newJString(acc["nonce"].getStr)
-  result["code"] = newJString(acc["code"].getStr)
-  var storage = newJObject()
-  for k, v in acc["storage"]:
-    storage[k] = newJString(v.getStr)
-  result["storage"] = storage
-  result["storageRoot"] = newJString(acc["storageRoot"].getStr)
-  result["codeHash"] = newJString(acc["codeHash"].getStr)
-
-proc updateAccount(a, b: JsonNode) =
-  if b.hasKey("name"):
-    a["name"] = newJString(b["name"].getStr)
-  a["balance"] = newJString(b["balance"].getStr)
-  a["nonce"] = newJString(b["nonce"].getStr)
-  a["code"] = newJString(b["code"].getStr)
-  var storage = a["storage"]
-  for k, v in b["storage"]:
-    storage[k] = newJString(v.getStr)
-  a["storageRoot"] = newJString(b["storageRoot"].getStr)
-  a["codeHash"] = newJString(b["codeHash"].getStr)
-
 proc processPostState(postState: JsonNode): JsonNode =
   var accounts = newJObject()
 
@@ -137,17 +96,6 @@ proc processPostState(postState: JsonNode): JsonNode =
 
   result = accounts
 
-proc removePostStateDup(nimbus: JsonNode) =
-  let postState = nimbus["stateDump"]["after"]
-  var accounts = newJObject()
-  for acc in postState:
-    let address = acc["address"].getStr
-    if accounts.hasKey(address):
-      updateAccount(accounts[address], acc)
-    else:
-      accounts[address] = copyAccount(acc)
-  nimbus["stateDump"]["after"] = accounts
-
 proc requestPostState(thisBlock: Block): JsonNode =
   let postState = requestPostState(thisBlock.jsonData, postStateTracer, thisBlock)
   requestBlockState(postState, thisBlock)
@@ -159,15 +107,11 @@ proc requestPostState(thisBlock: Block): JsonNode =
   requestBlockState(postState, thisBlock, addresses)
   processPostState(postState)
 
-proc generatePremixData(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block, accounts: JsonNode) =
+proc generateGethData(thisBlock: Block, blockNumber: Uint256, accounts: JsonNode): JsonNode =
   let
     receipts = toJson(thisBlock.receipts)
-    txTraces = nimbus["txTraces"]
 
-  for trace in txTraces:
-    trace["structLogs"].fakeAlloc()
-
-  var geth = %{
+  let geth = %{
     "blockNumber": %blockNumber.toHex,
     "txTraces": thisBlock.traces,
     "receipts": receipts,
@@ -175,13 +119,7 @@ proc generatePremixData(nimbus: JsonNode, blockNumber: Uint256, thisBlock: Block
     "accounts": accounts
   }
 
-  var premixData = %{
-    "nimbus": nimbus,
-    "geth": geth
-  }
-
-  var data = "var premixData = " & premixData.pretty & "\n"
-  writeFile("premixData.js", data)
+  result = geth
 
 proc printDebugInstruction(blockNumber: Uint256) =
   var text = """
@@ -206,17 +144,18 @@ proc main() =
       blockNumber = UInt256.fromHex(nimbus["blockNumber"].getStr())
       thisBlock   = downloader.requestBlock(blockNumber, {DownloadReceipts, DownloadTxTrace})
       accounts    = requestPostState(thisBlock)
+      geth        = generateGethData(thisBlock, blockNumber, accounts)
+      parentNumber = blockNumber - 1.u256
+      parentBlock  = requestBlock(parentNumber)
 
-    # remove duplicate accounts with same address
-    # and only take newest one
-    removePostStateDup(nimbus)
+    processNimbusData(nimbus)
 
     # premix data goes to report page
-    generatePremixData(nimbus, blockNumber, thisBlock, accounts)
+    generatePremixData(nimbus, geth)
 
     # prestate data goes to debug tool and contains data
     # needed to execute single block
-    generatePrestate(nimbus, blockNumber, thisBlock)
+    generatePrestate(nimbus, geth, blockNumber, parentBlock.header, thisBlock.header, thisBlock.body)
 
     printDebugInstruction(blockNumber)
   except:

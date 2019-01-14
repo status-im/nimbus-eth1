@@ -252,6 +252,7 @@ function headerRenderer(nimbus, geth) {
   }
 
   let container = $('#headerContainer').empty();
+  $('#headerTitle').text('Block #' + parseInt(geth.block.number, 16));
 
   let ncs = deepCopy(nimbus.stateDump.after);
   let gcs = deepCopy(geth.accounts);

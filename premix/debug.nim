@@ -1,7 +1,7 @@
 import
   json, os, stint, eth_trie/db, byteutils, eth_common,
   ../nimbus/db/[db_chain], chronicles, ../nimbus/vm_state,
-  ../nimbus/p2p/executor
+  ../nimbus/p2p/executor, premixcore, prestate, ../nimbus/tracer
 
 proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
   let state = node["state"]
@@ -11,7 +11,7 @@ proc prepareBlockEnv(node: JsonNode, memoryDB: TrieDatabaseRef) =
     let value = hexToSeqByte(v.getStr())
     memoryDB.put(key, value)
 
-proc executeBlock(memoryDB: TrieDatabaseRef, blockNumber: Uint256) =
+proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Uint256) =
   let
     parentNumber = blockNumber - 1
     chainDB = newBaseChainDB(memoryDB, false)
@@ -28,6 +28,21 @@ proc executeBlock(memoryDB: TrieDatabaseRef, blockNumber: Uint256) =
   else:
     info "block validation success", validationResult, blockNumber
 
+  dumpDebuggingMetaData(chainDB, header, body, vmState.receipts, false)
+  let
+    fileName = "debug" & $blockNumber & ".json"
+    nimbus   = json.parseFile(fileName)
+    geth     = blockEnv["geth"]
+
+  processNimbusData(nimbus)
+
+  # premix data goes to report page
+  generatePremixData(nimbus, geth)
+
+  # prestate data goes to debug tool and contains data
+  # needed to execute single block
+  generatePrestate(nimbus, geth, blockNumber, parent, header, body)
+
 proc main() =
   if paramCount() == 0:
     echo "usage: debug blockxxx.json"
@@ -39,6 +54,6 @@ proc main() =
     blockNumber = UInt256.fromHex(blockEnv["blockNumber"].getStr())
 
   prepareBlockEnv(blockEnv, memoryDB)
-  executeBlock(memoryDB, blockNumber)
+  executeBlock(blockEnv, memoryDB, blockNumber)
 
 main()
