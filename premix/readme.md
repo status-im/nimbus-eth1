@@ -94,3 +94,11 @@ usually used to debug features of `Premix` and it's report page logic.
 ```bash
 usage: dumper [--datadir:your_path] --head:blockNumber
 ```
+
+* Hunter
+
+`Hunter` purpose is to tracking down problematic block and create debugging meta data associated with that block.
+`Hunter` will will not access your on disk database, it has it's own prestate construction code.
+`Hunter` will download all it needed data from geth, make sure your geth version at least 1.8.18.
+`Hunter` depends on `eth_getProof`[(EIP1186)](https://github.com/ethereum/EIPs/issues/1186).
+Make sure your installed geth support this functionality(lower version don't have this implemented).
