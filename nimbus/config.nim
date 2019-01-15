@@ -13,12 +13,9 @@ import
   ./db/select_backend,
   ./vm/interpreter/vm_forks
 
-let
+const
   NimbusName* = "Nimbus"
   ## project name string
-
-  NimbusCopyright* = "Copyright (C) 2018-" & $(now().utc.year) & " Status Research & Development GmbH"
-  ## copyright string
 
   NimbusMajor*: int = 0
   ## is the major number of Nimbus' version.
@@ -32,13 +29,17 @@ let
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
 
+  NimbusIdent* = "$1/$2 ($3/$4)" % [NimbusName, NimbusVersion, hostCPU, hostOS]
+  ## project ident name for networking services
+
+let
+  NimbusCopyright* = "Copyright (C) 2018-" & $(now().utc.year) & " Status Research & Development GmbH"
+  ## copyright string
+
   NimbusHeader* = NimbusName & " Version " & NimbusVersion &
                   " [" & hostOS & ": " & hostCPU & ", " & nimbus_db_backend & "]\r\n" &
                   NimbusCopyright
   ## is the header which printed, when nimbus binary got executed
-
-  NimbusIdent* = "$1/$2 ($3/$4)" % [NimbusName, NimbusVersion, hostCPU, hostOS]
-  ## project ident name for networking services
 
 const
   MainnetBootnodes = [
@@ -533,8 +534,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16
   result.net.discPort = 30303'u16
-  {.gcsafe.}:
-    result.net.ident = NimbusIdent
+  result.net.ident = NimbusIdent
 
   const dataDir = getDefaultDataDir()
 
