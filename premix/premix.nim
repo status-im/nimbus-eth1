@@ -4,17 +4,6 @@ import
   js_tracer, eth_common, byteutils, parser,
   nimcrypto, premixcore
 
-proc requestPostState(thisBlock: Block): JsonNode =
-  let blockNumber = thisBlock.header.blockNumber
-  var premix = initPremix()
-
-  premix.requestPostState(thisBlock.jsonData, blockNumber)
-  premix.requestAccount(blockNumber, thisBlock.header.coinbase)
-  for uncle in thisBlock.body.uncles:
-    premix.requestAccount(blockNumber, uncle.coinbase)
-
-  removePostStateDup(premix.accounts)
-
 proc generateGethData(thisBlock: Block, blockNumber: Uint256, accounts: JsonNode): JsonNode =
   let
     receipts = toJson(thisBlock.receipts)
@@ -46,7 +35,7 @@ proc main() =
     echo "usage: premix debugxxx.json"
     quit(QuitFailure)
 
-  block:
+  try:
     let
       nimbus      = json.parseFile(paramStr(1))
       blockNumber = UInt256.fromHex(nimbus["blockNumber"].getStr())
@@ -66,7 +55,7 @@ proc main() =
     generatePrestate(nimbus, geth, blockNumber, parentBlock.header, thisBlock.header, thisBlock.body)
 
     printDebugInstruction(blockNumber)
-  #except:
-    #echo getCurrentExceptionMsg()
+  except:
+    echo getCurrentExceptionMsg()
 
 main()
