@@ -7,7 +7,6 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: Uint256, parent, hea
   let
     state = nimbus["state"]
     headerHash = rlpHash(header)
-    #parentNumber = parent.blockNumber
 
   var
     memoryDB = newMemoryDB()
@@ -24,10 +23,6 @@ proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: Uint256, parent, hea
     let key = hexToSeqByte(k)
     let value = hexToSeqByte(v.getStr())
     memoryDB.put(key, value)
-
-  #discard chainDB.getBlockHeader(parentNumber)
-  #discard chainDB.getBlockHeader(blockNumber)
-  #discard chainDB.getBlockBody(headerHash)
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,
