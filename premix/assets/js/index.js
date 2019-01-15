@@ -98,12 +98,41 @@ function opCodeRenderer(txId, nimbus, geth) {
     return true;
   }
 
+  function fillEmptyList(a, b) {
+    if(a.length > b.length) {
+      for(var i in a) {
+        if(b[i] === undefined) {
+          b[i] = '';
+        }
+      }
+    }
+  }
+
+  function fillEmptyMap(a, b) {
+    if(Object.keys(a).length > Object.keys(b).length) {
+      for(var i in a) {
+        if(b[i] === undefined) {
+          b[i] = '';
+        }
+      }
+    }
+  }
+
   function analyze(nimbus, geth) {
     for(var x of premix.fields) {
       if(nimbus[x] === undefined) nimbus[x] = '';
       if(geth[x] === undefined) geth[x] = '';
       if(nimbus[x].toString().toLowerCase() != geth[x].toString().toLowerCase()) return false;
     }
+
+    fillEmptyList(nimbus.memory, geth.memory);
+    fillEmptyList(geth.memory, nimbus.memory);
+
+    fillEmptyList(nimbus.stack, geth.stack);
+    fillEmptyList(geth.stack, nimbus.stack);
+
+    fillEmptyMap(nimbus.storage, geth.storage);
+    fillEmptyMap(geth.storage, nimbus.storage);
 
     let result = analyzeList(nimbus.memory, geth.memory);
     result = result && analyzeList(nimbus.stack, geth.stack);
@@ -132,6 +161,9 @@ function opCodeRenderer(txId, nimbus, geth) {
 
   fillEmptyOp(ncs, gcs);
   fillEmptyOp(gcs, ncs);
+
+  console.log(ncs[0]);
+  console.log(gcs[0]);
 
   for(var i in ncs) {
     var pc = ncs[i];
