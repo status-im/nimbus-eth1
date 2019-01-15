@@ -14,8 +14,7 @@ import
 
 proc setupCommonRPC*(server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
-    {.gcsafe.}:
-      result = NimbusIdent
+    result = NimbusIdent
 
   server.rpc("web3_sha3") do(data: HexDataStr) -> string:
     var rawdata = nimcrypto.fromHex(data.string)
