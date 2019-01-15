@@ -39,25 +39,25 @@ proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set
 proc stateRoot*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.stateRoot
 
-method blockhash*(vmState: BaseVMState): Hash256 =
+method blockhash*(vmState: BaseVMState): Hash256 {.base, gcsafe.} =
   vmState.blockHeader.hash
 
-method coinbase*(vmState: BaseVMState): EthAddress =
+method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
   vmState.blockHeader.coinbase
 
-method timestamp*(vmState: BaseVMState): EthTime =
+method timestamp*(vmState: BaseVMState): EthTime {.base, gcsafe.} =
   vmState.blockHeader.timestamp
 
-method blockNumber*(vmState: BaseVMState): BlockNumber =
+method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
   vmState.blockHeader.blockNumber
 
-method difficulty*(vmState: BaseVMState): UInt256 =
+method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   vmState.blockHeader.difficulty
 
-method gasLimit*(vmState: BaseVMState): GasInt =
+method gasLimit*(vmState: BaseVMState): GasInt {.base, gcsafe.} =
   vmState.blockHeader.gasLimit
 
-method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 =
+method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base, gcsafe.} =
   var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1
   if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH or ancestorDepth < 0:
     return
