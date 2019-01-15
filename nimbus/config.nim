@@ -533,7 +533,8 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16
   result.net.discPort = 30303'u16
-  result.net.ident = NimbusIdent
+  {.gcsafe.}:
+    result.net.ident = NimbusIdent
 
   const dataDir = getDefaultDataDir()
 

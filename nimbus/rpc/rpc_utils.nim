@@ -19,7 +19,7 @@ func toHash*(value: array[32, byte]): Hash256 {.inline.} =
 func toHash*(value: EthHashStr): Hash256 {.inline.} =
   result = hexToPaddedByteArray[32](value.string).toHash
 
-func headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
+proc headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
   let tag = blockTag.toLowerAscii
   case tag
   of "latest": result = chain.getCanonicalHead()

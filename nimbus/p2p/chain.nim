@@ -10,20 +10,20 @@ proc newChain*(db: BaseChainDB): Chain =
   result.new
   result.db = db
 
-method genesisHash*(c: Chain): KeccakHash =
+method genesisHash*(c: Chain): KeccakHash {.gcsafe.} =
   c.db.getBlockHash(0.toBlockNumber)
 
-method getBlockHeader*(c: Chain, b: HashOrNum, output: var BlockHeader): bool =
+method getBlockHeader*(c: Chain, b: HashOrNum, output: var BlockHeader): bool {.gcsafe.} =
   case b.isHash
   of true:
     c.db.getBlockHeader(b.hash, output)
   else:
     c.db.getBlockHeader(b.number, output)
 
-method getBestBlockHeader*(c: Chain): BlockHeader =
+method getBestBlockHeader*(c: Chain): BlockHeader {.gcsafe.} =
   c.db.getCanonicalHead()
 
-method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): bool =
+method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): bool {.gcsafe.} =
   let n = h.blockNumber + 1
   c.db.getBlockHeader(n, output)
 
