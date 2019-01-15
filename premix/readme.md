@@ -102,3 +102,10 @@ usage: dumper [--datadir:your_path] --head:blockNumber
 `Hunter` will download all it needed data from geth, make sure your geth version at least 1.8.18.
 `Hunter` depends on `eth_getProof`[(EIP1186)](https://github.com/ethereum/EIPs/issues/1186).
 Make sure your installed geth support this functionality(lower version don't have this implemented).
+
+```bash
+usage: hunter --head:blockNumber --maxBlocks:number
+```
+
+`blockNumber` is the starting block where hunting begin.
+`maxBlocks` is the number of problematic blocks you want to capture before stop hunting.
