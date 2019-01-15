@@ -162,9 +162,6 @@ function opCodeRenderer(txId, nimbus, geth) {
   fillEmptyOp(ncs, gcs);
   fillEmptyOp(gcs, ncs);
 
-  console.log(ncs[0]);
-  console.log(gcs[0]);
-
   for(var i in ncs) {
     var pc = ncs[i];
     if(!analyze(ncs[i], gcs[i])) {
