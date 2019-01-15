@@ -209,7 +209,7 @@ function transactionsRenderer(txId, nimbus, geth) {
     }
   }
 
-  txId = parseInt(txId);
+  let tx  = geth.block.transactions[txId];
   let ntx = nimbus.txTraces[txId];
   let gtx = geth.txTraces[txId];
 
@@ -231,6 +231,7 @@ function transactionsRenderer(txId, nimbus, geth) {
     geth.receipts[txId]
   );
 
+  $(`<h4>Transaction Kind: ${tx.txKind}</h4>`).appendTo(container);
   renderTx(ncr, gcr);
 }
 

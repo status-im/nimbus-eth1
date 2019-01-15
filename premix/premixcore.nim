@@ -130,20 +130,31 @@ proc updateAccount*(address: string, account: JsonNode, blockNumber: Uint256) =
     account["storage"][x["key"].getStr] = x["value"]
 
 proc requestPostState*(premix, n: JsonNode, blockNumber: Uint256) =
+  type
+    TxKind {.pure.} = enum
+      Regular
+      ContractCreation
+      ContractCall
+
   let txs = n["transactions"]
   if txs.len == 0: return
 
   let tracer = jsonTracer(postStateTracer)
   for t in txs:
+    var txKind = TxKind.Regular
     let tx = parseTransaction(t)
+    if tx.isContractCreation: txKind = TxKind.ContractCreation
     if hasInternalTx(tx, blockNumber):
       let txTrace = requestInternalTx(t["hash"], tracer)
       for address, account in txTrace:
         updateAccount(address, account, blockNumber)
         premix.add account
+      if not tx.isContractCreation: txKind = TxKind.ContractCall
     else:
       premix.requestAccount(blockNumber, tx.getRecipient)
       premix.requestAccount(blockNumber, tx.getSender)
+
+    t["txKind"] = %($txKind)
 
 proc requestPostState*(thisBlock: Block): JsonNode =
   let blockNumber = thisBlock.header.blockNumber
