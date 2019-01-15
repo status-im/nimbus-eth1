@@ -65,15 +65,6 @@ proc generatePremixData*(nimbus, geth: JsonNode) =
   var data = "var premixData = " & premixData.pretty & "\n"
   writeFile("premixData.js", data)
 
-type
-  Premix* = object
-    accounts*: JsonNode
-    proofs*: JsonNode
-
-proc initPremix*(): Premix =
-  result.accounts = newJArray()
-  result.proofs = newJArray()
-
 proc hasInternalTx(tx: Transaction, blockNumber: Uint256): bool =
   let
     number = %(blockNumber.prefixHex)
@@ -95,7 +86,7 @@ proc requestInternalTx(txHash, tracer: JsonNode): JsonNode =
     raise newException(ValueError, "Error when retrieving transaction postState")
   result = txTrace
 
-proc requestAccount*(premix: var Premix, blockNumber: Uint256, address: EthAddress) =
+proc requestAccount*(premix: JsonNode, blockNumber: Uint256, address: EthAddress) =
   let
     number = %(blockNumber.prefixHex)
     address = address.prefixHex
@@ -108,17 +99,18 @@ proc requestAccount*(premix: var Premix, blockNumber: Uint256, address: EthAddre
     "balance": proof["balance"],
     "nonce": proof["nonce"],
     "code": newJString("0x"),
-    "storage": newJObject()
+    "storage": newJObject(),
+    "accountProof": proof["accountProof"],
+    "storageProof": proof["storageProof"]
   }
-  premix.accounts.add account
-  premix.proofs.add proof
+  premix.add account
 
 proc padding(x: string): JsonNode =
   let val = x.substr(2)
   let pad = repeat('0', 64 - val.len)
   result = newJString("0x" & pad & val)
 
-proc updateAccount(address: string, account: JsonNode, blockNumber: Uint256): JsonNode =
+proc updateAccount*(address: string, account: JsonNode, blockNumber: Uint256) =
   let number = %(blockNumber.prefixHex)
 
   var storage = newJArray()
@@ -131,12 +123,13 @@ proc updateAccount(address: string, account: JsonNode, blockNumber: Uint256): Js
   account["storageRoot"] = proof["storageHash"]
   account["nonce"]       = proof["nonce"]
   account["balance"]     = proof["balance"]
+  account["accountProof"]= proof["accountProof"]
+  account["storageProof"]= proof["storageProof"]
   for x in proof["storageProof"]:
     x["value"] = padding(x["value"].getStr())
     account["storage"][x["key"].getStr] = x["value"]
-  proof
 
-proc requestPostState*(premix: var Premix, n: JsonNode, blockNumber: Uint256) =
+proc requestPostState*(premix, n: JsonNode, blockNumber: Uint256) =
   let txs = n["transactions"]
   if txs.len == 0: return
 
@@ -146,8 +139,19 @@ proc requestPostState*(premix: var Premix, n: JsonNode, blockNumber: Uint256) =
     if hasInternalTx(tx, blockNumber):
       let txTrace = requestInternalTx(t["hash"], tracer)
       for address, account in txTrace:
-        premix.proofs.add updateAccount(address, account, blockNumber)
-        premix.accounts.add account
+        updateAccount(address, account, blockNumber)
+        premix.add account
     else:
       premix.requestAccount(blockNumber, tx.getRecipient)
       premix.requestAccount(blockNumber, tx.getSender)
+
+proc requestPostState*(thisBlock: Block): JsonNode =
+  let blockNumber = thisBlock.header.blockNumber
+  var premix = newJArray()
+
+  premix.requestPostState(thisBlock.jsonData, blockNumber)
+  premix.requestAccount(blockNumber, thisBlock.header.coinbase)
+  for uncle in thisBlock.body.uncles:
+    premix.requestAccount(blockNumber, uncle.coinbase)
+
+  removePostStateDup(premix)

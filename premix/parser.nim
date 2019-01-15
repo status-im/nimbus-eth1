@@ -127,3 +127,9 @@ proc parseReceipt*(n: JsonNode): Receipt =
 
 proc headerHash*(n: JsonNode): Hash256 =
   n.fromJson "hash", result
+
+proc parseAccount*(n: JsonNode): Account =
+  n.fromJson "nonce", result.nonce
+  n.fromJson "balance", result.balance
+  n.fromJson "storageRoot", result.storageRoot
+  n.fromJson "codeHash", result.codeHash
