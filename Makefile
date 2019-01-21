@@ -148,7 +148,7 @@ beacon_node validator_keygen: | build deps
 	$(ENV_SCRIPT) nim c -o:build/$@ $(REPOS_DIR)/nim-beacon-chain/beacon_chain/$@.nim
 
 clean_eth2_network_simulation_files:
-	rm -f $(REPOS_DIR)/nim-beacon-chain/tests/simulation/*.json
+	rm -f $(REPOS_DIR)/nim-beacon-chain/tests/simulation/data
 
 eth2_network_simulation: | beacon_node validator_keygen clean_eth2_network_simulation_files
 	SKIP_BUILDS=1 $(ENV_SCRIPT) $(REPOS_DIR)/nim-beacon-chain/tests/simulation/start.sh
