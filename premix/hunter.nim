@@ -50,6 +50,9 @@ proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): TrieDatabaseRef =
       let codeStr = request("eth_getCode", %[%address.prefixHex, parentNumber])
       let code = hexToSeqByte(codeStr.getStr).toRange
       accountDB.setCode(address, code)
+
+    accountDB.setAccount(address, acc)
+
   result = memoryDB
 
 proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
@@ -66,10 +69,12 @@ proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
   chainDB.setHead(parentBlock.header, true)
 
   let
+    transaction = memoryDB.beginTransaction()
     vmState = newBaseVMState(parentBlock.header, chainDB)
     validationResult = processBlock(chainDB, parentBlock.header, thisBlock.header, thisBlock.body, vmState)
 
   if validationResult != ValidationResult.OK:
+    transaction.dispose()
     dumpDebuggingMetaData(chainDB, thisBlock.header, thisBlock.body, vmState.receipts, false)
 
   result = validationResult
