@@ -13,28 +13,35 @@ else:
     premixExecutable = "premix"
     browserLauncher = "xdg-open"
 
-proc getPremixDir(): (bool, string) =
-  var premixDir = [
+proc getFileDir*(file: string): string =
+  var searchDirs = [
     "." ,
-    ".." & DirSep & "premix"
+    "." / "build" ,
+    "." / "premix"
   ]
 
-  for c in premixDir:
-    if fileExists(c & DirSep & premixExecutable):
-      return (true, c)
+  for dir in searchDirs:
+    if fileExists(dir / file):
+      return dir
 
-  result = (false, ".")
+  result = ""
+
+proc getFilePath(file: string): string =
+  let dir = getFileDir(file)
+  if dir.len > 0:
+    return dir / file
+  else:
+    return ""
 
 proc launchPremix*(fileName: string, metaData: JsonNode) =
-  let
-    (premixAvailable, premixDir) = getPremixDir()
-    premixExe = premixDir & DirSep & premixExecutable
+  let premixExe = getFilePath(premixExecutable)
 
-  writeFile(premixDir & DirSep & fileName, metaData.pretty)
+  writeFile(fileName, metaData.pretty)
 
-  if premixAvailable:
-    if execCmd(premixExe & " " & premixDir & DirSep & fileName) == 0:
-      if execCmd(browserLauncher & " " & premixDir & DirSep & "index.html") != 0:
+  if premixExe.len > 0:
+    if execCmd(premixExe & " " & fileName) == 0:
+      if execCmd(browserLauncher & " " & getFilePath("index.html")) != 0:
         echo "failed to launch default browser"
     else:
-      echo "failed to execute premix debugging tool"
+      echo "failed to execute the premix debugging tool"
+

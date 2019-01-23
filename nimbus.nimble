@@ -43,6 +43,7 @@ task test, "Run tests":
   exec "nim c premix/persist"
   exec "nim c premix/debug"
   exec "nim c premix/dumper"
+  exec "nim c premix/hunter"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/"
