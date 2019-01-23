@@ -57,7 +57,7 @@ In your browser, you can explore the tracing result and find where the problem i
 
 ## Tools
 
-* Premix
+### Premix
 
 Premix is the main debugging tool. It produces reports that can be viewed in
 a browser and serialised debug data that can be consumed by the `debug` tool.
@@ -69,7 +69,7 @@ You can run it manually using this command:
 ./build/premix debug*.json
 ```
 
-* Persist
+### Persist
 
 Because the Nimbus P2P layer still contains bugs, you may become impatient when
 trying to sync blocks. In the `./premix` directory, you can find a `persist`
@@ -83,7 +83,7 @@ debugging data just like Nimbus does.
 ./build/persist [--dataDir:your_database_directory] [--head: blockNumber] [--maxBlocks: number] [--numCommits: number]
 ```
 
-* Debug
+### Debug
 
 In the same `./premix` directory you'll find the `debug` tool that you can use
 to process previously generated debugging info in order to work with one block
@@ -97,7 +97,7 @@ transactions.
 where `block*.json` contains the database snapshot needed to debug a single
 block produced by the Premix tool.
 
-* Dumper
+### Dumper
 
 Dumper was designed specifically to produce debugging data that can be further
 processed by Premix from information already stored in database. It will create
@@ -113,7 +113,7 @@ general and the report page logic in particular.
 ./build/dumper [--datadir:your_path] --head:blockNumber
 ```
 
-* Hunter
+### Hunter
 
 Hunter's purpose is to track down problematic blocks and create debugging info
 associated with them. It will not access your on-disk database, because it has
