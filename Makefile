@@ -1,3 +1,10 @@
+# Copyright (c) 2018-2019 Status Research & Development GmbH. Licensed under
+# either of:
+# - Apache License, version 2.0
+# - MIT license
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
 SHELL := bash # the shell used internally by "make"
 GIT_CLONE := git clone --quiet --recurse-submodules
 GIT_PULL := git pull --recurse-submodules
@@ -57,17 +64,22 @@ GITHUB_REPOS := \
 # "foo/bar" -> "$(REPOS_DIR)/bar"
 REPOS := $(addprefix $(REPOS_DIR)/, $(foreach github_repo,$(GITHUB_REPOS),$(word 2,$(subst /, ,$(github_repo)))))
 
-.PHONY: all deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
+.PHONY: all premix persist debug dumper hunter deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
 
 # default target, because it's the first one that doesn't start with '.'
-all: nimbus
+all: premix persist debug dumper hunter nimbus
+
+# debugging tools
+premix persist debug dumper hunter: | build deps
+	$(ENV_SCRIPT) nim c -o:build/$@ premix/$@.nim && \
+		echo -e "\nThe binary is in './build/$@'.\n"
 
 #- "--nimbleDir" is ignored for custom tasks: https://github.com/nim-lang/nimble/issues/495
 #  so we can't run `nimble ... nimbus` or `nimble ... test`. We have to duplicate those custom tasks here.
 #- a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps
 	$(ENV_SCRIPT) nim c -o:build/nimbus nimbus/nimbus.nim && \
-		echo -e "\nThe binary is in './build/nimbus'."
+		echo -e "\nThe binary is in './build/nimbus'.\n"
 
 # dir
 build:
@@ -94,7 +106,7 @@ $(REPOS):
 	$(GIT_CLONE) https://github.com/$(filter %/$(PROJ_NAME),$(GITHUB_REPOS)) $@ && \
 		rm -rf $(NIMBLE_DIR)
 
-#- clones and builds the Nim compiler and Nimble
+# clones and builds the Nim compiler and Nimble
 $(NIM_DIR):
 	$(GIT_CLONE) --depth 1 https://github.com/status-im/Nim $@
 	$(BUILD_NIM)

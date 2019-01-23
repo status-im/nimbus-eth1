@@ -13,6 +13,7 @@ Join the Status community chats:
 
 
 ## Rationale
+
 [Nimbus: an Ethereum 2.0 Sharding Client](https://our.status.im/nimbus-for-newbies/). The code in this repository is currently focusing on Ethereum 1.0 feature parity, while all 2.0 research and development is happening in parallel in [nim-beacon-chain](https://github.com/status-im/nim-beacon-chain). The two repositories are expected to merge in Q1 2019.
 
 ## Development Updates
@@ -95,7 +96,9 @@ You can now follow those instructions in the previous section by replacing `make
 
 - you can switch the DB backend with a Nim compiler define:
   `-d:nimbus_db_backend=...` where the (case-insensitive) value is one of
-  "rocksdb" (the default), "sqlite", "lmdb".
+  "rocksdb" (the default), "sqlite", "lmdb"
+
+- the Premix debugging tools are [documented separately](premix/readme.md)
 
 ### Troubleshooting
 
@@ -133,7 +136,7 @@ or
 
 * Apache License, Version 2.0, ([LICENSE-APACHEv2](LICENSE-APACHEv2) or http://www.apache.org/licenses/LICENSE-2.0)
 
-at your option. This file may not be copied, modified, or distributed except according to those terms.
+at your option. These files may not be copied, modified, or distributed except according to those terms.
 
 [1]: https://github.com/status-im/nimbus/wiki/Understanding-and-debugging-Nimbus-EVM-JSON-tests
 [2]: https://github.com/status-im/nimbus/wiki/Debugging-state-reconstruction

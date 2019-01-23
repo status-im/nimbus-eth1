@@ -1,7 +1,8 @@
 import
-  json, strutils, stint, parser, downloader,
-  ../nimbus/tracer, chronicles, eth_common,
-  js_tracer
+  json, strutils, os,
+  stint, chronicles, eth_common,
+  ../nimbus/tracer, ../nimbus/launcher,
+  ./js_tracer, ./parser, ./downloader
 
 proc fakeAlloc(n: JsonNode) =
   const
@@ -63,7 +64,7 @@ proc generatePremixData*(nimbus, geth: JsonNode) =
   }
 
   var data = "var premixData = " & premixData.pretty & "\n"
-  writeFile("premixData.js", data)
+  writeFile(getFileDir("index.html") / "premixData.js", data)
 
 proc hasInternalTx(tx: Transaction, blockNumber: Uint256): bool =
   let
