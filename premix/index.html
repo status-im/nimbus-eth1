@@ -122,42 +122,31 @@
           <div class="uk-container uk-container-xsmall">
             <h2>Help</h2>
 
-            <p>The top navigation is ordered from left to right like the picture below.</p>
-
-            <ul class="uk-subnav uk-subnav-divider" uk-margin>
-              <li><span>OpCode</span><span uk-icon="icon: triangle-down"></span></li>
-              <li><span>Transactions</span><span uk-icon="icon: triangle-down"></span></li>
-              <li><span>Header</span></li>
-              <li><span>Help</span></li>
-            </ul>
-
             <p>
-              Usually you will start from left, then move to the right to find out where the bug might located.
-              If you see <span class="uk-text-warning">red colored text</span>, it means you already found the difference between nimbus and other ethereum
-              client tracing result.
+              Work your way through the top-right menu, left to right, to find out where the bug might be located.
+              If you see <span class="uk-text-danger">red colored text</span>, it means you already found the difference between Nimbus and the other Ethereum
+              client's tracing result.
             </p>
 
             <p>
-              If there is no red colored text in opcode section, it means the bug might be located in transactions section,
-              or in header section.
+              If there is no red colored text in the <strong>OPCODE</strong> section, it means the bug might be located in the <strong>TRANSACTIONS</strong> section, or in the <strong>HEADER</strong> section.
             </p>
 
             <p>
-              Once you already located the bug, you can use <span class="uk-text-primary">debug.nim</span> located in <span class="uk-text-primary">&#47;premix</span>
-              to sort things out until there is no more error or it pass block validation.
+              Once you locate the bug, you can use the <span class="uk-text-primary">./build/debug</span> tool
+              to sort things out until there are no more errors and the block passes validation.
             </p>
 
             <p>
-              Block with multiple transactions will have triangle pointing downward in the navigation bar.
-              Usually only the first transaction with red colored text have the problem, but it might affect the rest
-              of other transactions. In opcode section, the same thing happened, perhaps only the first instruction
-              with red colored text have the problem, but it will affect the rest of other instructions.
+              Blocks with multiple transactions will have submenus in the navigation bar.
+              Usually, only the first transaction with red colored text is problematic, but it might affect the
+	      other transactions. In the <strong>OPCODE</strong> section, the same thing happens. Perhaps only the first red-colored instruction
+              is problematic, but it will affect the other instructions.
             </p>
 
             <p>
-              In <span class="uk-text-success">Transactions</span> section, you'll see the transaction kind.
-              It has three kind: <span class="uk-text-warning">Regular, ContractCreation, and ContractCall</span>.
-              Each kind will help you locate the bug in Nimbus implementation, they have their own proc.
+		    Transactions in the <strong>TRANSACTIONS</strong> section are marked as: <span class="uk-text-warning">Regular, ContractCreation, or ContractCall</span>.
+              Each kind is processed separately by Nimbus, in different procedures.
             </p>
           </div>
         </div>

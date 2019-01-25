@@ -30,9 +30,10 @@ geth --rpc --rpcapi eth,debug --syncmode full --gcmode=archive
 ```
 
 You need to run it until it fully syncs past the problematic block you want to
-debug (note that it will first do a fast sync of all blocks before going back
-to do the full sync). After that, you can stop it by pressing `CTRL-C` and
-rerun it with the additional flag `--maxpeers 0` if you want it to stop syncing
+debug (you might need to do it on an empty db, because some geth versions will
+keep on doing a fast sync if that's what was done before). After that, you can
+stop it by pressing `CTRL-C` and rerun it with the additional flag `--maxpeers
+0` if you want it to stop syncing
 - or just let it run as is if you want to keep syncing.
 
 The next requirement is building Nimbus and Premix:
