@@ -19,6 +19,8 @@ const postStateTracer* = """{
     var idx = toHex(key);
     this.lookupAccount(addr, db);
     if (this.postState[acc].storage[idx] === undefined) {
+      // bug in geth js tracer
+      // we will use eth_getProof to fill the storage later
       this.postState[acc].storage[idx] = "";
     }
   },
