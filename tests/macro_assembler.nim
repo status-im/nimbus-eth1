@@ -379,7 +379,8 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
 
 proc initDatabase*(): (Uint256, BaseChainDB) =
   let
-    node = json.parseFile(blockFile)
+    appDir = getAppDir()
+    node = json.parseFile(appDir / blockFile)
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
     memoryDB = newMemoryDB()
     state = node["state"]
