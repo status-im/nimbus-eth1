@@ -358,7 +358,7 @@ proc assemblerImpl(boa: var Assembler, codes: NimNode): NimNode =
     echo result.toStrLit.strVal
 
 const
-  blockFile = "fixtures" / "PersistBlockTests" / "block47205.json"
+  blockFile = "tests" / "fixtures" / "PersistBlockTests" / "block47205.json"
 
 proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, data: seq[byte], forkOverride=none(Fork)) : BaseComputation =
   assert tx.isContractCreation
@@ -379,8 +379,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
 
 proc initDatabase*(): (Uint256, BaseChainDB) =
   let
-    appDir = getAppDir()
-    node = json.parseFile(appDir / blockFile)
+    node = json.parseFile(blockFile)
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
     memoryDB = newMemoryDB()
     state = node["state"]
