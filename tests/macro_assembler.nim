@@ -1,7 +1,8 @@
 import
   macros, macrocache, strutils, unittest,
   byteutils, chronicles, ranges, eth_common,
-  ../nimbus/vm/interpreter/opcode_values
+  ../nimbus/vm/interpreter/opcode_values,
+  std_shims/macros_shim
 
 import
   options, json, os, eth_trie/[db, hexary],
@@ -166,94 +167,18 @@ proc parseCode(codes: NimNode): seq[byte] =
     result.addOpCode(bindSym"Stop", emptyNode)
 
 proc generateVMProxy(boa: Assembler): NimNode =
-  let vmProxy = genSym(nskProc, "vmProxy")
-  var body = newStmtList()
   let
-    boaIdent = ident("boa")
-    title = boa.title
-    success = ident(if boa.success: "true" else: "false")
-    code = boa.code.toHex()
+    vmProxy = genSym(nskProc, "vmProxy")
     blockNumber = ident("blockNumber")
     chainDB = ident("chainDB")
-    gasLimit = boa.gasLimit
-    gasUsed = boa.gasUsed
-    data = boa.data.toHex()
-    output = boa.output.toHex()
-
-  body.add quote do:
-    var `boaIdent`: Assembler
-    `boaIdent`.success = `success`
-    `boaIdent`.code = hexToSeqByte(`code`)
-    `boaIdent`.title = `title`
-    `boaIdent`.gasLimit = `gasLimit`
-    `boaIdent`.gasUsed = `gasUsed`
-
-  if boa.data.len > 0:
-    body.add quote do:
-      `boaIdent`.data = hexToSeqByte(`data`)
-
-  if boa.output.len > 0:
-    body.add quote do:
-      `boaIdent`.output = hexToSeqByte(`output`)
-
-  if boa.stack.len > 0:
-    let len = boa.stack.len
-    body.add quote do:
-      `boaIdent`.stack = newSeq[VMWord](`len`)
-
-  if boa.memory.len > 0:
-    let len = boa.memory.len
-    body.add quote do:
-      `boaIdent`.memory = newSeq[VMWord](`len`)
-
-  if boa.storage.len > 0:
-    let len = boa.storage.len
-    body.add quote do:
-      `boaIdent`.storage = newSeq[Storage](`len`)
-
-  for i, s in boa.stack:
-    let val = s.toHex()
-    body.add quote do:
-      hexToByteArray(`val`, `boaIdent`.stack[`i`])
-
-  for i, s in boa.memory:
-    let val = s.toHex()
-    body.add quote do:
-      hexToByteArray(`val`, `boaIdent`.memory[`i`])
-
-  for i, kv in boa.storage:
-    let key = kv[0].toHex()
-    let val = kv[1].toHex()
-    body.add quote do:
-      hexToByteArray(`key`, `boaIdent`.storage[`i`].key)
-      hexToByteArray(`val`, `boaIdent`.storage[`i`].val)
-
-  if boa.logs.len > 0:
-    let len = boa.logs.len
-    body.add quote do:
-      `boaIdent`.logs = newSeq[Log](`len`)
-
-  for i, log in boa.logs:
-    let address = log.address.toHex()
-    let data = log.data.toHex()
-    body.add quote do:
-      hexToByteArray(`address`, `boaIdent`.logs[`i`].address)
-      `boaIdent`.logs[`i`].data = hexToSeqByte(`data`)
-    if log.topics.len > 0:
-      let len = log.topics.len
-      body.add quote do:
-        `boaIdent`.logs[`i`].topics = newSeq[Topic](`len`)
-    for x, t in log.topics:
-      let topic = t.toHex()
-      body.add quote do:
-        hexToByteArray(`topic`, `boaIdent`.logs[`i`].topics[`x`])
-
-  body.add quote do: runVM(`blockNumber`, `chainDB`, `boaIdent`)
+    title = boa.title
+    body = newLitFixed(boa)
 
   result = quote do:
     test `title`:
       proc `vmProxy`(): bool =
-        `body`
+        let boa = `body`
+        runVM(`blockNumber`, `chainDB`, boa)
       check `vmProxy`()
 
   when defined(macro_assembler_debug):
