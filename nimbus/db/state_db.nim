@@ -171,12 +171,25 @@ proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
   let data = triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
   data.toRange
 
-proc hasCodeOrNonce*(account: AccountStateDB, address: EthAddress): bool {.inline.} =
-  account.getNonce(address) != 0 or account.getCodeHash(address) != EMPTY_SHA3
+proc hasCodeOrNonce*(db: AccountStateDB, address: EthAddress): bool {.inline.} =
+  db.getNonce(address) != 0 or db.getCodeHash(address) != EMPTY_SHA3
 
 proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   let address = addressS.parseAddress
   return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
+
+proc accountExist*(db: AccountStateDB, address: EthAddress): bool =
+  db.trie.get(createRangeFromAddress address).len > 0
+
+proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
+  let recordFound = db.trie.get(createRangeFromAddress address)
+  if recordFound.len > 0:
+    let account = rlp.decode(recordFound, Account)
+    result = account.codeHash == EMPTY_SHA3 and
+      account.balance.isZero and
+      account.nonce == 0
+  else:
+    result = true
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getAccount*(db: ReadOnlyStateDB, address: EthAddress): Account {.borrow.}
@@ -186,4 +199,6 @@ proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
 proc getCode*(db: ReadOnlyStateDB, address: EthAddress): ByteRange {.borrow.}
-proc hasCodeOrNonce*(account: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc accountExist*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
