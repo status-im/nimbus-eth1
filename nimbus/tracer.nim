@@ -157,7 +157,6 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     before = newJArray()
     after = newJArray()
     stateBefore = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
-    stateAfter = newAccountStateDB(captureTrieDB, header.stateRoot, db.pruneTrie)
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
@@ -171,6 +170,8 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     before.captureAccount(stateBefore, uncle.coinbase, uncleName & $idx)
 
   discard captureChainDB.processBlock(parent, header, body, vmState)
+
+  var stateAfter = vmState.accountDb
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
