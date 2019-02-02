@@ -178,7 +178,7 @@ proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   let address = addressS.parseAddress
   return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
 
-proc accountExist*(db: AccountStateDB, address: EthAddress): bool =
+proc accountExists*(db: AccountStateDB, address: EthAddress): bool =
   db.trie.get(createRangeFromAddress address).len > 0
 
 proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
@@ -200,5 +200,5 @@ proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): (UInt
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
 proc getCode*(db: ReadOnlyStateDB, address: EthAddress): ByteRange {.borrow.}
 proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
-proc accountExist*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
