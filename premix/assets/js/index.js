@@ -281,6 +281,20 @@ function headerRenderer(nimbus, geth) {
     return JSON.parse(JSON.stringify(src));
   }
 
+  function precompiledContractsName(address) {
+    switch(address) {
+      case "0x0000000000000000000000000000000000000001": return "ecRecover";
+      case "0x0000000000000000000000000000000000000002": return "Sha256";
+      case "0x0000000000000000000000000000000000000003": return "RipeMd160";
+      case "0x0000000000000000000000000000000000000004": return "Identity";
+      case "0x0000000000000000000000000000000000000005": return "ModExp";
+      case "0x0000000000000000000000000000000000000006": return "bn256ecAdd";
+      case "0x0000000000000000000000000000000000000007": return "bn256ecMul";
+      case "0x0000000000000000000000000000000000000008": return "bn256ecPairing";
+      default: return "";
+    }
+  }
+
   let container = $('#headerContainer').empty();
   $('#headerTitle').text('Block #' + parseInt(geth.block.number, 16));
 
@@ -308,7 +322,9 @@ function headerRenderer(nimbus, geth) {
   }
 
   for(var acc of accounts) {
-    $(`<h4>Account Name: ${acc.name}</h4>`).appendTo(container);
+    let pa = precompiledContractsName(acc.nimbus.address);
+    let precompiledContract = pa == '' ? '' : ` or Precompiled Contract(${pa})`;
+    $(`<h4>Account Name: ${acc.name}${precompiledContract}</h4>`).appendTo(container);
     let body = premix.newTable(container);
     const fields = ['address', 'nonce', 'balance', 'codeHash', 'code', 'storageRoot'];
     for(var x of fields) {
