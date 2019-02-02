@@ -15,31 +15,31 @@ suite "Account State DB":
     trie = initHexaryTrie(memDB)
     stateDB = newAccountStateDB(memDB, trie.rootHash, true)
     address: EthAddress
-  
+
   hexToByteArray("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6", address)
-  
-  test "accountExist and isDeadAccount":
-    check stateDB.accountExist(address) == false
+
+  test "accountExists and isDeadAccount":
+    check stateDB.accountExists(address) == false
     check stateDB.isDeadAccount(address) == true
-    
+
     var acc = stateDB.getAccount(address)
     acc.balance = 1000.u256
     stateDB.setAccount(address, acc)
-    
-    check stateDB.accountExist(address) == true
+
+    check stateDB.accountExists(address) == true
     check stateDB.isDeadAccount(address) == false
 
     acc.balance = 0.u256
     acc.nonce = 1
     stateDB.setAccount(address, acc)
     check stateDB.isDeadAccount(address) == false
-    
+
     var code = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
     stateDB.setCode(address, code.toRange)
     stateDB.setNonce(address, 0)
     check stateDB.isDeadAccount(address) == false
-    
+
     code = @[]
     stateDB.setCode(address, code.toRange)
     check stateDB.isDeadAccount(address) == true
-    check stateDB.accountExist(address) == true
+    check stateDB.accountExists(address) == true
