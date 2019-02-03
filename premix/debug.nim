@@ -28,7 +28,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Ui
   else:
     info "block validation success", validationResult, blockNumber
 
-  dumpDebuggingMetaData(chainDB, header, body, vmState.receipts, false)
+  dumpDebuggingMetaData(chainDB, header, body, vmState, false)
   let
     fileName = "debug" & $blockNumber & ".json"
     nimbus   = json.parseFile(fileName)

@@ -26,7 +26,7 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
 
   captureChainDB.setHead(parent, true)
   let validationResult = processBlock(captureChainDB, parent, header, body, vmState)
-  dumpDebuggingMetaData(captureChainDB, header, body, vmState.receipts, false)
+  dumpDebuggingMetaData(captureChainDB, header, body, vmState, false)
 
 proc main() =
   let conf = getConfiguration()

@@ -232,7 +232,7 @@ proc traceTransactions*(chainDB: BaseChainDB, header: BlockHeader, blockBody: Bl
     result.add traceTransaction(chainDB, header, blockBody, i, {DisableState})
 
 proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader,
-                            blockBody: BlockBody, receipts: seq[Receipt], launchDebugger = true) =
+                            blockBody: BlockBody, vmState: BaseVMState, launchDebugger = true) =
   let
     blockNumber = header.blockNumber
 
@@ -241,13 +241,21 @@ proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader,
     captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false)
+    bloom = createBloom(vmState.receipts)
+
+  let blockSummary = %{
+    "receiptsRoot": %("0x" & toHex(calcReceiptRoot(vmState.receipts).data)),
+    "stateRoot": %("0x" & toHex(vmState.accountDb.rootHash.data)),
+    "logsBloom": %("0x" & toHex(bloom))
+  }
 
   var metaData = %{
     "blockNumber": %blockNumber.toHex,
     "txTraces": traceTransactions(captureChainDB, header, blockBody),
     "stateDump": dumpBlockState(captureChainDB, header, blockBody),
     "blockTrace": traceBlock(captureChainDB, header, blockBody, {DisableState}),
-    "receipts": toJson(receipts)
+    "receipts": toJson(vmState.receipts),
+    "block": blockSummary
   }
 
   metaData.dumpMemoryDB(memoryDB)

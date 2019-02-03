@@ -367,6 +367,11 @@ function headerRenderer(nimbus, geth) {
   let container = $('#headerContainer').empty();
   $('#headerTitle').text('Block #' + parseInt(geth.block.number, 16));
 
+  let body = premix.newTable(container);
+  const blockSummary = ['stateRoot', 'receiptsRoot', 'logsBloom'];
+  for(var idx of blockSummary) {
+    premix.renderRow(body, nimbus.block, geth.block, idx);
+  }
 }
 
 function generateNavigation(txs, nimbus, geth) {
