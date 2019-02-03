@@ -75,7 +75,7 @@ proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
 
   if validationResult != ValidationResult.OK:
     transaction.dispose()
-    dumpDebuggingMetaData(chainDB, thisBlock.header, thisBlock.body, vmState.receipts, false)
+    dumpDebuggingMetaData(chainDB, thisBlock.header, thisBlock.body, vmState, false)
 
   result = validationResult
 

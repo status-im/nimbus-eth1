@@ -47,7 +47,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
 
     when not defined(release):
       if validationResult == ValidationResult.Error:
-        dumpDebuggingMetaData(c.db, headers[i], bodies[i], vmState.receipts)
+        dumpDebuggingMetaData(c.db, headers[i], bodies[i], vmState)
         raise newException(Exception, "Validation error. Debugging metadata dumped.")
 
     if validationResult != ValidationResult.OK:
