@@ -46,6 +46,7 @@
         <ul class="uk-subnav uk-subnav-divider" uk-switcher="connect:#switcherSection">
           <li><a id="opCodeMenu" href="#">OpCode</a></li>
           <li><a id="transactionsMenu" href="#">Transactions</a></li>
+          <li><a id="accountsMenu" href="#">Accounts</a></li>
           <li><a id="headerMenu" href="#">Header</a></li>
           <li class="uk-active"><a href="#">Help</a></li>
         </ul>
@@ -105,10 +106,22 @@
       </li>
 
       <li>
+        <!-- Accounts Page -->
+        <div class="uk-section-small uk-section-default">
+          <div class="uk-container uk-container-medium">
+            <h3>Post State Accounts <span id="accountsTitle" class="uk-text-primary uk-text-small">Block #</span></h3>
+            <div id="accountsContainer">
+            </div>
+          </div>
+        </div>
+        <!-- Accounts Page -->
+      </li>
+
+      <li>
         <!-- Header Page -->
         <div class="uk-section-small uk-section-default">
           <div class="uk-container uk-container-medium">
-            <h3>Header Post State Accounts <span id="headerTitle" class="uk-text-primary uk-text-small">Block #</span></h3>
+            <h3>Header Summary <span id="headerTitle" class="uk-text-primary uk-text-small">Block #</span></h3>
             <div id="headerContainer">
             </div>
           </div>

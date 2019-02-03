@@ -264,7 +264,7 @@ function transactionsRenderer(txId, nimbus, geth) {
   renderTx(ncr, gcr);
 }
 
-function headerRenderer(nimbus, geth) {
+function accountsRenderer(nimbus, geth) {
   function emptyAccount() {
     return {
       address: '',
@@ -295,8 +295,8 @@ function headerRenderer(nimbus, geth) {
     }
   }
 
-  let container = $('#headerContainer').empty();
-  $('#headerTitle').text('Block #' + parseInt(geth.block.number, 16));
+  let container = $('#accountsContainer').empty();
+  $('#accountsTitle').text('Block #' + parseInt(geth.block.number, 16));
 
   let ncs = deepCopy(nimbus.stateDump.after);
   let gcs = deepCopy(geth.accounts);
@@ -363,6 +363,12 @@ function headerRenderer(nimbus, geth) {
   }
 }
 
+function headerRenderer(nimbus, geth) {
+  let container = $('#headerContainer').empty();
+  $('#headerTitle').text('Block #' + parseInt(geth.block.number, 16));
+
+}
+
 function generateNavigation(txs, nimbus, geth) {
   function navAux(menuId, renderer) {
     let menu = $(menuId).click(function(ev) {
@@ -389,6 +395,10 @@ function generateNavigation(txs, nimbus, geth) {
 
   navAux('#opCodeMenu', opCodeRenderer);
   navAux('#transactionsMenu', transactionsRenderer);
+
+  $('#accountsMenu').click(function(ev) {
+    accountsRenderer(nimbus, geth);
+  });
 
   $('#headerMenu').click(function(ev) {
     headerRenderer(nimbus, geth);
