@@ -4,9 +4,9 @@
 #
 
 import
-  configuration, stint, eth_common,
+  configuration, stint, eth/common,
   ../nimbus/db/[storage_types, db_chain, select_backend, capturedb],
-  eth_trie/[hexary, db, defs], ../nimbus/p2p/executor,
+  eth/trie/[hexary, db, trie_defs], ../nimbus/p2p/executor,
   ../nimbus/[tracer, vm_state]
 
 proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =

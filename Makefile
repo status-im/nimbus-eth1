@@ -38,12 +38,10 @@ GITHUB_REPOS := \
 	status-im/nim-chronicles \
 	cheatfate/nimcrypto \
 	status-im/nim-ranges \
-	status-im/nim-rlp \
 	status-im/nim-stint \
 	status-im/nim-rocksdb \
-	status-im/nim-eth-trie \
+	status-im/nim-eth \
 	status-im/nim-byteutils \
-	status-im/nim-eth-common \
 	status-im/nim-http-utils \
 	status-im/nim-asyncdispatch2 \
 	status-im/nim-json-rpc \
@@ -54,10 +52,6 @@ GITHUB_REPOS := \
 	zah/nim-package-visible-types \
 	status-im/nim-secp256k1 \
 	jangko/snappy \
-	status-im/nim-eth-keys \
-	status-im/nim-eth-p2p \
-	status-im/nim-eth-keyfile \
-	status-im/nim-eth-bloom \
 	status-im/nim-bncurve \
 	status-im/nim-confutils \
 	status-im/nim-beacon-chain

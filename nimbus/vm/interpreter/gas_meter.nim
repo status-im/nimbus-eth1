@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, strformat, eth_common, # GasInt
+  chronicles, strformat, eth/common, # GasInt
   ../../errors, ../../vm_types
 
 logScope:

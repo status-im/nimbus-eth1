@@ -1,5 +1,5 @@
 import
-  hashes, eth_common
+  hashes, eth/common
 
 type
   DBKeyKind* = enum

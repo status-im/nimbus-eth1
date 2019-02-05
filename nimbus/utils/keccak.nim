@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  nimcrypto, strutils, eth_common
+  nimcrypto, strutils, eth/common
 
 proc keccak*(value: openarray[byte]): Hash256 {.inline.} =
   keccak256.digest value

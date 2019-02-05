@@ -1,7 +1,7 @@
 import
   json, strutils, times, options, os,
-  rlp, httputils, nimcrypto, chronicles,
-  stint, eth_common, byteutils
+  eth/[rlp, common], httputils, nimcrypto, chronicles,
+  stint, byteutils
 
 import
   ../nimbus/[transaction, rpc/hexstrings]

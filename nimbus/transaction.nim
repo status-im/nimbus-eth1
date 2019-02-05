@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth_common, eth_keys, nimcrypto, rlp
+  constants, errors, eth/[common, rlp, keys], nimcrypto
 
 proc initTransaction*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
   value: UInt256, payload: Blob, V: byte, R, S: UInt256, isContractCreation = false): Transaction =

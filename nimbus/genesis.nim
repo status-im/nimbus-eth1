@@ -1,7 +1,7 @@
 import
   times, tables,
-  eth_common, stint, byteutils, rlp, ranges, block_types, nimcrypto,
-  chronicles, eth_trie, eth_trie/db,
+  eth/[common, rlp, trie], stint, byteutils, ranges, block_types, nimcrypto,
+  chronicles, eth/trie/db,
   db/[db_chain, state_db], genesis_alloc, config, constants
 
 type

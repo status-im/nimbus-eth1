@@ -7,7 +7,7 @@
 
 import
   ranges/typedranges, sequtils, strformat, tables, options,
-  eth_common, chronicles,
+  eth/common, chronicles,
   ./constants, ./errors, ./vm/computation,
   ./transaction, ./vm_types, ./vm_state, ./block_types, ./db/[db_chain, state_db], ./utils/header,
   ./vm/interpreter, ./vm/interpreter/gas_costs, ./utils/addresses

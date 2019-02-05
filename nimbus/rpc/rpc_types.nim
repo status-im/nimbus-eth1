@@ -1,4 +1,4 @@
-import eth_common, hexstrings, options
+import eth/common, hexstrings, options
 
 #[
   Notes:
@@ -38,7 +38,7 @@ type
     data*: Option[EthHashStr]       # (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI.
 
   ## A block object, or null when no block was found
-  ## Note that this includes slightly different information from eth_common.BlockHeader
+  ## Note that this includes slightly different information from eth/common.BlockHeader
   BlockObject* = object
     # Returned to user
     number*: Option[BlockNumber]    # the block number. null when its pending block.

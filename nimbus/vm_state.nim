@@ -7,7 +7,7 @@
 
 import
   macros, strformat, tables, sets,
-  eth_common, eth_trie/db,
+  eth/common, eth/trie/db,
   ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
   ./utils/header, json, vm_types, vm/transaction_tracer
 

@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import hexstrings, nimcrypto, eth_common, byteutils,
+import hexstrings, nimcrypto, eth/common, byteutils,
   ../db/[db_chain, state_db, storage_types], strutils,
   ../constants, stint
 

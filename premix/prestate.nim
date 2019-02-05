@@ -1,6 +1,6 @@
 import
-  json, downloader, stint, eth_trie/db, byteutils,
-  ../nimbus/db/[db_chain, storage_types], rlp, eth_common,
+  json, downloader, stint, eth/trie/db, byteutils,
+  ../nimbus/db/[db_chain, storage_types], eth/[rlp, common],
   ../nimbus/p2p/chain, ../nimbus/tracer
 
 proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: Uint256, parent, header: BlockHeader, body: BlockBody) =

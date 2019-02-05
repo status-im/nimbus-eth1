@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 
-import eth_common, ../constants, strformat, times, ../validation, rlp
+import eth/[common, rlp], ../constants, strformat, times, ../validation
 
 export BlockHeader
 
@@ -94,6 +94,6 @@ proc generateHeaderFromParentHeader*(
 
 import nimcrypto
 # TODO: required otherwise
-# eth_common/rlp_serialization.nim(18, 12) template/generic instantiation from here
+# eth/common/rlp_serialization.nim(18, 12) template/generic instantiation from here
 # nimcrypto/hash.nim(46, 6) Error: attempting to call undeclared routine: 'init'
 proc hash*(b: BlockHeader): Hash256 {.inline.} = rlpHash(b)

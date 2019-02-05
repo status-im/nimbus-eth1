@@ -1,8 +1,8 @@
 import
   json, downloader, stint, strutils, byteutils, parser, nimcrypto,
-  chronicles, ../nimbus/tracer, eth_trie/[defs, db], ../nimbus/vm_state,
+  chronicles, ../nimbus/tracer, eth/trie/[trie_defs, db], ../nimbus/vm_state,
   ../nimbus/db/[db_chain, state_db], ../nimbus/p2p/executor, premixcore,
-  eth_common, configuration
+  eth/common, configuration
 
 const
   emptyCodeHash = blankStringHash

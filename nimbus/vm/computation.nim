@@ -7,11 +7,11 @@
 
 import
   chronicles, strformat, strutils, sequtils, macros, terminal, math, tables, options,
-  eth_common,
+  eth/[common, keys],
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
-  ../utils/header, byteutils, ranges, eth_keys, precompiles,
+  ../utils/header, byteutils, ranges, precompiles,
   transaction_tracer
 
 logScope:

@@ -7,7 +7,7 @@
 
 import
   strformat, strutils, sequtils, endians, macros,
-  eth_common/eth_types, rlp,
+  eth/common/eth_types, eth/rlp,
   ../../../constants
 
 # some methods based on py-evm utils/numeric

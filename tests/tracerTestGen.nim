@@ -1,6 +1,6 @@
 import
-  json, os, eth_common, stint, chronicles, byteutils, nimcrypto,
-  eth_trie/[db], ../nimbus/db/[db_chain, capturedb, select_backend],
+  json, os, eth/common, stint, chronicles, byteutils, nimcrypto,
+  eth/trie/db, ../nimbus/db/[db_chain, capturedb, select_backend],
   ../nimbus/[tracer, vm_types, config]
 
 proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =

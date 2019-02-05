@@ -1,4 +1,4 @@
-import unittest, ../nimbus/[genesis, config], eth_common, nimcrypto/hash
+import unittest, ../nimbus/[genesis, config], eth/common, nimcrypto/hash
 
 suite "Genesis":
   test "Correct mainnet hash":

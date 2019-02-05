@@ -7,7 +7,7 @@
 
 import
   unittest, sequtils,
-  eth_common/eth_types,
+  eth/common/eth_types,
   ../nimbus/[constants, errors, vm/memory]
 
 proc memory32: Memory =

@@ -8,7 +8,7 @@
 import
   unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
   byteutils, ranges/typedranges, nimcrypto/[keccak, hash],
-  rlp, eth_trie/db, eth_common,
+  eth/[rlp, common], eth/trie/db,
   ./test_helpers,
   ../nimbus/[constants, errors],
   ../nimbus/[vm_state, vm_types],

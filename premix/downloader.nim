@@ -1,6 +1,6 @@
 import
   json_rpc/[rpcclient], json, parser, httputils, strutils,
-  eth_common, chronicles, ../nimbus/[utils], rlp, nimcrypto
+  eth/[common, rlp], chronicles, ../nimbus/[utils], nimcrypto
 
 logScope:
   topics = "downloader"

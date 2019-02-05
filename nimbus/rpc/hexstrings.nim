@@ -22,7 +22,7 @@
     * ref BloomFilter
 ]#
 
-import eth_common/eth_types, stint, byteutils, nimcrypto
+import eth/common/eth_types, stint, byteutils, nimcrypto
 
 type
   HexQuantityStr* = distinct string

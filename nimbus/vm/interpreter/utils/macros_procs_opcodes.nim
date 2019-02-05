@@ -9,7 +9,7 @@
 # Macros to facilitate opcode procs creation
 
 import
-  macros, strformat, stint, eth_common,
+  macros, strformat, stint, eth/common,
   ../../computation, ../../stack, ../../code_stream,
   ../../../constants, ../../../vm_types, ../../memory,
   ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values],

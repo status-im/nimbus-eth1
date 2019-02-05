@@ -1,6 +1,6 @@
 import
   ../vm_types, interpreter/[gas_meter, gas_costs, utils/utils_numeric],
-  ../errors, stint, eth_keys, eth_common, chronicles, tables, macros,
+  ../errors, stint, eth/[keys, common], chronicles, tables, macros,
   message, math, nimcrypto, bncurve/[fields, groups]
 
 type
