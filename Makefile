@@ -13,10 +13,9 @@ GIT_STATUS := git status
 #  version numbers in repo dirs (because those would be in its subdirectories)
 #- duplicated in "env.sh" for the env var with the same name
 NIMBLE_DIR := vendor/.nimble
-NIMBLE := nimble -y
 REPOS_DIR := vendor
 # we want a "recursively expanded" (delayed interpolation) variable here, so we can set CMD in rule recipes
-RUN_CMD_IN_ALL_REPOS = for D in . vendor/Nim $(REPOS); do echo -e "\n\e[32m$${D}:\e[39m"; cd "$$D"; $(CMD); cd - >/dev/null; done
+RUN_CMD_IN_ALL_REPOS = git submodule foreach --recursive --quiet 'echo -e "\n\e[32m$$name:\e[39m"; $(CMD)'; echo -e "\n\e[32m$$(pwd):\e[39m"; $(CMD)
 # absolute path, since it will be run at various subdirectory depths
 ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
@@ -28,38 +27,9 @@ BUILD_NIM := cd $(NIM_DIR) && \
 	sh build_all.sh && \
 	$(ENV_SCRIPT) nim c -d:release --noNimblePath -p:compiler --nilseqs:on -o:bin/nimble dist/nimble/src/nimble.nim
 
-#- GitHub repositories for those dependencies that a Nimbus developer might want to
-#  modify and test locally
-#- their order ensures that `nimble develop` will run in a certain package's
-#  repo before Nimble tries to install it as a (direct or indirect) dependency, in
-#  order to avoid duplicate dirs in ".nimble/pgks/"
-#- dependencies not listed here are handled entirely by Nimble with "install -y --depsOnly"
-GITHUB_REPOS := \
-	status-im/nim-chronicles \
-	cheatfate/nimcrypto \
-	status-im/nim-ranges \
-	status-im/nim-stint \
 	OpenSystemsLab/tempfile.nim \
-	status-im/nim-rocksdb \
-	status-im/nim-byteutils \
-	status-im/nim-http-utils \
-	status-im/nim-chronos \
-	status-im/nim-json-rpc \
-	status-im/nim-faststreams \
-	status-im/nim-std-shims \
-	status-im/nim-serialization \
-	status-im/nim-json-serialization \
-	zah/nim-package-visible-types \
-	status-im/nim-secp256k1 \
-	jangko/snappy \
 	status-im/nim-eth \
-	status-im/nim-bncurve \
-	status-im/nim-confutils \
 	status-im/nim-blscurve \
-	status-im/nim-beacon-chain
-# "foo/bar" -> "$(REPOS_DIR)/bar"
-REPOS := $(addprefix $(REPOS_DIR)/, $(foreach github_repo,$(GITHUB_REPOS),$(word 2,$(subst /, ,$(github_repo)))))
-
 .PHONY: all premix persist debug dumper hunter deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
 
 # default target, because it's the first one that doesn't start with '.'
@@ -83,29 +53,19 @@ build:
 
 #- runs only the first time and after `make update` actually updates some repo,
 #  or new repos are cloned, so have "normal" (timestamp-checked) prerequisites here
-deps: $(REPOS) $(NIMBLE_DIR)
+deps: $(NIM_DIR)/bin/nim $(NIMBLE_DIR)
 
 #- depends on Git repos being fetched and our Nim and Nimble being built
 #- runs `nimble develop` in those repos (but not in the Nimbus repo) - not
 #  parallelizable, because package order matters
 #- installs any remaining Nimbus dependency (those not in $(REPOS))
-$(NIMBLE_DIR): | $(REPOS) $(NIM_DIR)
-	$(eval CMD := [ "$$$$D" = "." ] && continue; $(ENV_SCRIPT) $(NIMBLE) develop)
-	$(RUN_CMD_IN_ALL_REPOS)
-	$(ENV_SCRIPT) $(NIMBLE) install --depsOnly
-
-#- clones the Git repos
-#- can run in parallel with `make -jN`
-#- deletes the ".nimble" dir to force Nimble's package db regeneration (useful for newly added repositories to REPOS)
-$(REPOS):
-	$(eval PROJ_NAME := $(subst $(REPOS_DIR)/,,$@))
-	$(GIT_CLONE) https://github.com/$(filter %/$(PROJ_NAME),$(GITHUB_REPOS)) $@ && \
-		rm -rf $(NIMBLE_DIR)
-
-# clones and builds the Nim compiler and Nimble
-$(NIM_DIR):
-	$(GIT_CLONE) --depth 1 https://github.com/status-im/Nim $@
-	$(BUILD_NIM)
+$(NIMBLE_DIR): | $(NIM_DIR)/bin/nim
+	mkdir -p $(NIMBLE_DIR)/pkgs
+	git submodule foreach --quiet '\
+		[ `ls -1 *.nimble 2>/dev/null | wc -l ` -gt 0 ] && { \
+			mkdir -p $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head;\
+			echo -e "$$(pwd)\n$$(pwd)" > $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head/$${sm_path#*/}.nimble-link;\
+		}'
 
 # builds and runs all tests
 test: | build deps
@@ -120,27 +80,26 @@ mrproper: clean
 	rm -rf vendor
 
 # for when you have write access to a repo and you want to use SSH keys
+# TODO: https://stackoverflow.com/questions/39894103/can-i-override-the-url-of-a-nested-git-submodule-without-forking
 github-ssh:
 	sed -i 's#https://github.com/#git@github.com:#' .git/config $(NIM_DIR)/.git/config $(REPOS_DIR)/*/.git/config
 
 #- re-builds the Nim compiler (not usually needed, because `make update` does it when necessary)
-build-nim: | $(NIM_DIR)
+build-nim: | deps
 	$(BUILD_NIM)
 
 #- runs `git pull` in all Git repos, if there are new commits in the remote branch
 #- rebuilds the Nim compiler after pulling new commits
 #- deletes the ".nimble" dir to force the execution of the "deps" target if at least one repo was updated
 #- ignores non-zero exit codes from [...] tests
-update: | $(REPOS)
-	$(eval CMD := \
-		git remote update && \
-		[ -n "$$$$(git rev-parse @{u})" -a "$$$$(git rev-parse @)" != "$$$$(git rev-parse @{u})" ] && \
-		REPO_UPDATED=1 && \
-		$(GIT_PULL) && \
-		{ [ "$$$$D" = "$(NIM_DIR)" ] && { cd - >/dev/null; $(BUILD_NIM); }; } \
-		|| true \
-	)
-	REPO_UPDATED=0; $(RUN_CMD_IN_ALL_REPOS); [ $$REPO_UPDATED = 1 ] && echo -e "\nAt least one repo updated. Deleting '$(NIMBLE_DIR)'." && rm -rf $(NIMBLE_DIR) || true
+$(NIM_DIR)/bin/nim update:
+	git submodule update --init --recursive --rebase
+	git submodule foreach --recursive 'git checkout $$(git config -f $$toplevel/.gitmodules submodule.$$name.branch || echo master)'
+	rm -rf $(NIMBLE_DIR)
+	[ -e $(NIM_DIR)/bin/nim ] || { $(BUILD_NIM); }
+
+update-remote:
+	git submodule update --remote --recursive --rebase
 
 # runs `git status` in all Git repos
 status: | $(REPOS)
