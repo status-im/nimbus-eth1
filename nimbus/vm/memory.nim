@@ -7,7 +7,7 @@
 
 import
   sequtils,
-  chronicles, eth_common/eth_types,
+  chronicles, eth/common/eth_types,
   ../constants, ../errors, ../validation,
   ./interpreter/utils/utils_numeric
 

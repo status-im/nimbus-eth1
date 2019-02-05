@@ -7,7 +7,7 @@
 
 import
   unittest, ../nimbus/vm/precompiles, json, byteutils, test_helpers, ospaths, tables,
-  strformat, strutils, eth_trie/db, eth_common, ../nimbus/db/[db_chain, state_db],
+  strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/[db_chain, state_db],
   ../nimbus/[constants, vm_types, vm_state], ../nimbus/vm/[computation, message], macros
 
 proc initAddress(i: byte): EthAddress = result[19] = i

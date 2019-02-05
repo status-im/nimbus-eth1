@@ -1,4 +1,4 @@
-import eth_trie/db, eth_trie, rlp, eth_common
+import eth/trie/db, eth/[trie, rlp, common]
 
 proc calcRootHash[T](items: openArray[T]): Hash256 =
   var tr = initHexaryTrie(newMemoryDB())

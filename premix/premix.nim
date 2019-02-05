@@ -1,7 +1,7 @@
 import
   json, downloader, stint, strutils, os,
   ../nimbus/tracer, chronicles, prestate,
-  js_tracer, eth_common, byteutils, parser,
+  js_tracer, eth/common, byteutils, parser,
   nimcrypto, premixcore
 
 proc generateGethData(thisBlock: Block, blockNumber: Uint256, accounts: JsonNode): JsonNode =

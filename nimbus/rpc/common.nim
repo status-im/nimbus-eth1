@@ -9,7 +9,7 @@
 
 import
   strutils,
-  nimcrypto, eth_common, stint, json_rpc/server,
+  nimcrypto, eth/common as eth_common, stint, json_rpc/server,
   ../vm_state, ../db/[db_chain, state_db], ../constants, ../config, hexstrings
 
 proc setupCommonRPC*(server: RpcServer) =

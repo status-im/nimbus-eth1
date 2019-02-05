@@ -7,7 +7,7 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  byteutils, eth_common, eth_keys, ranges/typedranges,
+  byteutils, eth/[common, keys], ranges/typedranges,
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/transaction,

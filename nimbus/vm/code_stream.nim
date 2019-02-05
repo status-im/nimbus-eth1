@@ -7,7 +7,7 @@
 
 import
   chronicles, strformat, strutils, sequtils, parseutils, sets, macros,
-  eth_common,
+  eth/common,
   ../constants, ./interpreter/opcode_values
 
 logScope:

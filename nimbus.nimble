@@ -9,21 +9,15 @@ skipDirs      = @["tests", "examples"]
 # we can't have the result of a custom task in the "bin" var - https://github.com/nim-lang/nimble/issues/542
 # bin           = @["build/nimbus"]
 
-requires "nim >= 0.18.1",
+requires "nim >= 0.19",
          "chronicles",
          "nimcrypto",
-         "rlp",
          "stint",
-         "rocksdb",
-         "eth_trie",
-         "eth_common",
          "json_rpc",
          "asyncdispatch2",
-         "eth_p2p",
-         "eth_keyfile",
-         "eth_keys",
-         "eth_bloom",
-         "bncurve"
+         "bncurve",
+         "https://github.com/status-im/nim-eth",
+         "std_shims"
 
 proc buildBinary(name: string, srcDir = ".", lang = "c") =
   if not dirExists "build": mkDir "build"

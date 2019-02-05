@@ -1,7 +1,7 @@
 import
-  db/[db_chain, state_db, capturedb], eth_common, utils, json,
+  db/[db_chain, state_db, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
-  eth_trie/db, nimcrypto, strutils, ranges, ./utils/addresses,
+  eth/trie/db, nimcrypto, strutils, ranges, ./utils/addresses,
   chronicles, rpc/hexstrings, launcher
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =

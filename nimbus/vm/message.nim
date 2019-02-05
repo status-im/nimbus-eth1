@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  eth_common,
+  eth/common,
   ../constants, ../validation, ../vm_types, chronicles
 
 logScope:

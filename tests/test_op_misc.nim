@@ -1,6 +1,6 @@
 import
   macro_assembler, unittest, macros, strutils,
-  byteutils, eth_common, ../nimbus/db/state_db,
+  byteutils, eth/common, ../nimbus/db/state_db,
   ../nimbus/db/db_chain, ranges
 
 suite "Misc Opcodes":

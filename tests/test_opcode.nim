@@ -7,14 +7,14 @@
 
 import
   unittest, tables, parseutils, byteutils,
-  eth_trie/db, eth_common/eth_types,
+  eth/trie/db, eth/common/eth_types,
   ../nimbus/[constants, vm_types, vm_state],
   ../nimbus/vm/interpreter,
   ../nimbus/utils/header,
   ../nimbus/db/[db_chain, state_db],
   ./test_helpers
 
-from eth_common import GasInt
+from eth/common import GasInt
 
 proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputation =
   let header = BlockHeader(blockNumber: blockNum)

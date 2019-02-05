@@ -1,5 +1,5 @@
 import options,
-  eth_common, ranges, chronicles, eth_bloom, nimcrypto,
+  eth/[common, bloom], ranges, chronicles, nimcrypto,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
@@ -111,9 +111,9 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
 
 type
   # TODO: these types need to be removed
-  # once eth_bloom and eth_common sync'ed
-  Bloom = eth_common.BloomFilter
-  LogsBloom = eth_bloom.BloomFilter
+  # once eth/bloom and eth/common sync'ed
+  Bloom = common.BloomFilter
+  LogsBloom = bloom.BloomFilter
 
 # TODO: move these three receipt procs below somewhere else more appropriate
 func logsBloom(logs: openArray[Log]): LogsBloom =

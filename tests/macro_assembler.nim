@@ -1,11 +1,11 @@
 import
   macros, macrocache, strutils, unittest,
-  byteutils, chronicles, ranges, eth_common,
+  byteutils, chronicles, ranges, eth/common,
   ../nimbus/vm/interpreter/opcode_values,
   std_shims/macros_shim
 
 import
-  options, json, os, eth_trie/[db, hexary],
+  options, json, os, eth/trie/[db, hexary],
   ../nimbus/[vm_state, tracer, vm_types, transaction],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm_state_transactions,

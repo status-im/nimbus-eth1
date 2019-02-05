@@ -7,7 +7,7 @@
 
 import
   strformat, times, ranges, sequtils,
-  chronicles, stint, nimcrypto, ranges/typedranges, eth_common,
+  chronicles, stint, nimcrypto, ranges/typedranges, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,

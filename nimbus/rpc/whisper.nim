@@ -1,4 +1,4 @@
-import json_rpc/rpcserver, rpc_types, stint, hexstrings, eth_common
+import json_rpc/rpcserver, rpc_types, stint, hexstrings, eth/common
 
 proc setupWhisperRPC*(rpcsrv: RpcServer) =
   rpcsrv.rpc("shh_version") do() -> string:

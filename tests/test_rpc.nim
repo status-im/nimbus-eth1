@@ -7,12 +7,12 @@
 
 import
   unittest, json, strformat, options,
-  nimcrypto, rlp, eth_trie/db, eth_p2p, eth_keys,
+  nimcrypto, eth/[rlp, keys], eth/trie/db, eth/p2p as eth_p2p,
   json_rpc/[rpcserver, rpcclient],
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
   ../nimbus/constants,
   ../nimbus/[vm_state, config],
-  ../nimbus/db/[state_db, db_chain, storage_types], eth_common, byteutils,
+  ../nimbus/db/[state_db, db_chain, storage_types], eth/common as eth_common, byteutils,
   ../nimbus/p2p/chain,
   ../nimbus/genesis,
   ./rpcclient/test_hexstrings

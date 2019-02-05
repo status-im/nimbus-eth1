@@ -7,7 +7,7 @@
 
 import
   tables, sequtils, algorithm,
-  rlp, ranges, state_db, nimcrypto, eth_trie/[hexary, db], eth_common, byteutils, chronicles,
+  ranges, state_db, nimcrypto, eth/trie/[hexary, db], eth/[common, rlp], byteutils, chronicles,
   ../errors, ../block_types, ../utils/header, ../constants, ./storage_types
 
 type

@@ -10,7 +10,7 @@
 ## then a procedure body is generated to marshal native Nim parameters to json and visa versa.
 import
   json,
-  stint, eth_common,
+  stint, eth/common,
   ../../nimbus/rpc/hexstrings, ../../nimbus/rpc/rpc_types
 
 proc web3_clientVersion(): string
@@ -39,7 +39,7 @@ proc eth_sign(data:EthAddressStr, message: HexDataStr): HexDataStr
 proc eth_call(call: EthCall, quantityTag: string): string
 proc eth_estimateGas(call: EthCall, quantityTag: string): GasInt
 
-# TODO: Use eth_common types
+# TODO: Use eth/common types
 
 #[proc eth_sendTransaction(obj: EthSend): UInt256
 proc eth_getBlockByHash(data: array[32, byte], fullTransactions: bool): BlockObject

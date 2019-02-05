@@ -7,7 +7,7 @@
 
 import
   unittest, macros, strformat,
-  eth_common/eth_types,
+  eth/common/eth_types,
   ../nimbus/[vm_types, errors, vm/interpreter]
 
 # TODO: quicktest

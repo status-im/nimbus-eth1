@@ -7,7 +7,7 @@
 
 import
   unittest,
-  eth_common/eth_types,
+  eth/common/eth_types,
   ../nimbus/[constants, errors, vm/interpreter]
 
 
