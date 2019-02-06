@@ -10,7 +10,7 @@
 import
   os, strutils, net, eth/keys, db/[storage_types, db_chain, select_backend],
   eth/common as eth_common, eth/p2p as eth_p2p,
-  asyncdispatch2, json_rpc/rpcserver, chronicles,
+  chronos, json_rpc/rpcserver, chronicles,
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol],
   eth/p2p/blockchain_sync,
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,

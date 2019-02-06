@@ -43,7 +43,7 @@ GITHUB_REPOS := \
 	status-im/nim-eth \
 	status-im/nim-byteutils \
 	status-im/nim-http-utils \
-	status-im/nim-asyncdispatch2 \
+	status-im/nim-chronos \
 	status-im/nim-json-rpc \
 	status-im/nim-faststreams \
 	status-im/nim-std-shims \
