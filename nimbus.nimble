@@ -14,9 +14,9 @@ requires "nim >= 0.19",
          "nimcrypto",
          "stint",
          "json_rpc",
-         "nim-chronos",
+         "chronos",
          "bncurve",
-         "nim-eth",
+         "eth",
          "std_shims"
 
 proc buildBinary(name: string, srcDir = ".", lang = "c") =
