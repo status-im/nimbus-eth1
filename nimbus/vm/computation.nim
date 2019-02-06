@@ -131,11 +131,11 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
       newBalance = senderBalance - computation.msg.value
       computation.vmState.mutateStateDb:
         db.setBalance(computation.msg.sender, newBalance)
-        db.addBalance(computation.msg.storage_address, computation.msg.value)
+        db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
       trace "Value transferred",
         source = computation.msg.sender,
-        dest = computation.msg.storage_address,
+        dest = computation.msg.storageAddress,
         value = computation.msg.value,
         oldSenderBalance = senderBalance,
         newSenderBalance = newBalance,
@@ -146,9 +146,15 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
       value = computation.msg.value,
       senderBalance = newBalance,
       sender = computation.msg.sender.toHex,
-      address = computation.msg.storage_address.toHex,
+      address = computation.msg.storageAddress.toHex,
       gasPrice = computation.msg.gasPrice,
       gas = computation.msg.gas
+  else:
+    # even though the value is zero, the account
+    # should be exist.
+    when opCode in {Call, CallCode}:
+      computation.vmState.mutateStateDb:
+        db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
   # Run code
   # We cannot use the normal dispatching function `executeOpcodes`
@@ -184,7 +190,7 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: st
           computation.gasCosts[Create].m_handler(0, 0, contractCode.len),
           reason = "Write contract code for CREATE")
 
-        let storageAddr = computation.msg.storage_address
+        let storageAddr = computation.msg.storageAddress
         trace "SETTING CODE",
           address = storageAddr.toHex,
           length = len(contract_code),
