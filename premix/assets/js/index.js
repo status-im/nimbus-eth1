@@ -118,13 +118,25 @@ function opCodeRenderer(txId, nimbus, geth) {
     }
   }
 
-  function analyze(nimbus, geth) {
-    for(var x of premix.fields) {
-      if(nimbus[x] === undefined) nimbus[x] = '';
-      if(geth[x] === undefined) geth[x] = '';
-      if(nimbus[x].toString().toLowerCase() != geth[x].toString().toLowerCase()) return false;
+  function fillEmptyField(nimbus, geth) {
+    if(nimbus.memory === undefined) {
+      nimbus.memory = [];
     }
-
+    if(geth.memory === undefined) {
+      geth.memory = [];
+    }
+    if(nimbus.stack === undefined) {
+      nimbus.stack = [];
+    }
+    if(geth.stack === undefined) {
+      geth.stack = [];
+    }
+    if(nimbus.storage === undefined) {
+      nimbus.storage = {};
+    }
+    if(geth.storage === undefined) {
+      geth.storage = {};
+    }
     fillEmptyList(nimbus.memory, geth.memory);
     fillEmptyList(geth.memory, nimbus.memory);
 
@@ -133,6 +145,20 @@ function opCodeRenderer(txId, nimbus, geth) {
 
     fillEmptyMap(nimbus.storage, geth.storage);
     fillEmptyMap(geth.storage, nimbus.storage);
+  }
+
+  function moveStack(ncs, gcs, i) {
+    let idx = parseInt(i);
+    ncs[idx-1].stack = ncs[idx].stack;
+    gcs[idx-1].stack = gcs[idx].stack;
+  }
+
+  function analyze(nimbus, geth) {
+    for(var x of premix.fields) {
+      if(nimbus[x] === undefined) nimbus[x] = '';
+      if(geth[x] === undefined) geth[x] = '';
+      if(nimbus[x].toString().toLowerCase() != geth[x].toString().toLowerCase()) return false;
+    }
 
     let result = analyzeList(nimbus.memory, geth.memory);
     result = result && analyzeList(nimbus.stack, geth.stack);
@@ -147,13 +173,15 @@ function opCodeRenderer(txId, nimbus, geth) {
   $('#opCodeTitle').text(`Tx #${(txId+1)}`);
 
   function fillEmptyOp(a, b) {
-    const emptyOp = {op: '', pc: '', gas: '', gasCost: '', depth: '',
-      storage:{}, memory: [], stack: []};
+    function emptyOp() {
+      return {op: '', pc: '', gas: '', gasCost: '', depth: '',
+        storage:{}, memory: [], stack: []};
+    }
 
     if(a.length > b.length) {
       for(var i in a) {
         if(b[i] === undefined) {
-          b[i] = emptyOp;
+          b[i] = emptyOp();
         }
       }
     }
@@ -163,11 +191,19 @@ function opCodeRenderer(txId, nimbus, geth) {
   fillEmptyOp(gcs, ncs);
 
   for(var i in ncs) {
-    var pc = ncs[i];
+    fillEmptyField(ncs[i], gcs[i]);
+    if(parseInt(i) > 0) {
+      moveStack(ncs, gcs, i);
+    }
+  }
+
+  for(var i in ncs) {
+    let pc = ncs[i].pc == '' ? gcs[i].pc : ncs[i].pc;
+    let op = ncs[i].op == '' ? gcs[i].op : ncs[i].op;
     if(!analyze(ncs[i], gcs[i])) {
-      var nav = $(`<li><a class="tm-text-danger" rel="${i}" href="#">${pc.pc + ' ' + pc.op}</a></li>`).appendTo(sideBar);
+      var nav = $(`<li><a class="tm-text-danger" rel="${i}" href="#">${pc + ' ' + op}</a></li>`).appendTo(sideBar);
     } else {
-      var nav = $(`<li><a rel="${i}" href="#">${pc.pc + ' ' + pc.op}</a></li>`).appendTo(sideBar);
+      var nav = $(`<li><a rel="${i}" href="#">${pc + ' ' + op}</a></li>`).appendTo(sideBar);
     }
     nav.children('a').click(function(ev) {
       let idx = this.rel;
