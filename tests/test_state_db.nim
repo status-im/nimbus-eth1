@@ -5,8 +5,8 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest, strutils, eth_trie/[hexary, db],
-        ../nimbus/db/state_db, byteutils, eth_common,
+import  unittest, strutils, eth/trie/[hexary, db],
+        ../nimbus/db/state_db, byteutils, eth/common,
         ranges
 
 suite "Account State DB":
