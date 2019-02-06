@@ -42,11 +42,13 @@ stdenv.mkDerivation rec {
     openssl pcre readline sqlite git
   ];
 
-  buildPhase   = ''
-    export HOME=$TMP
-    export GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
-    sh build_all.sh
-  '';
+  buildPhase   =
+    let caBundle = ./ca-bundle.pem;
+    in ''
+      export HOME=$TMP
+      export GIT_SSL_CAINFO=${caBundle}
+      sh build_all.sh
+    '';
 
   installPhase = ''
     install -Dt $out/bin bin/* koch
