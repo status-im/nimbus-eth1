@@ -43,6 +43,7 @@ type
     gasRemaining*: GasInt
     flags*: set[TracerFlags]
     accounts*: HashSet[EthAddress]
+    storageKeys*: HashSet[Uint256]
 
   OpcodeExecutor* = proc(computation: var BaseComputation)
 
