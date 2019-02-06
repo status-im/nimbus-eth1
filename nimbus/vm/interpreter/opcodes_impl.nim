@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times, ranges, sequtils,
+  strformat, times, ranges, sequtils, options,
   chronicles, stint, nimcrypto, ranges/typedranges, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
@@ -599,7 +599,7 @@ proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress
        memoryInputStartPosition, memoryInputSize,
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(5)
 
-  let to = computation.msg.storageAddress
+  let to = codeAddress
   let sender = computation.msg.storageAddress
 
   result = (gas,
@@ -689,18 +689,29 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.cleanMemRef, memoryInputSize.cleanMemRef, memoryOutputStartPosition.cleanMemRef, memoryOutputSize.cleanMemRef)
 
-    let (gasCost, childMsgGas) = computation.gasCosts[opCode].c_handler(
+    let isNewAccount = if getFork(computation) >= FkSpurious:
+                         computation.vmState.readOnlyStateDb.isDeadAccount(to)
+                       else:
+                         not computation.vmState.readOnlyStateDb.accountExists(to)
+
+    let (memOffset, memLength) = if memInPos + memInLen > memOutPos + memOutLen:
+                                    (memInPos, memInLen)
+                                 else:
+                                    (memOutPos, memOutLen)
+
+    let (childGasFee, childGasLimit) = computation.gasCosts[opCode].c_handler(
       value,
       GasParams(kind: Call,
-                c_isNewAccount: true, # TODO stub
-                c_gasBalance: 0,
-                c_contractGas: 0,
+                c_isNewAccount: isNewAccount,
+                c_gasBalance: computation.gasMeter.gasRemaining,
+                c_contractGas: gas.truncate(GasInt),
                 c_currentMemSize: computation.memory.len,
-                c_memOffset: 0, # TODO make sure if we pass the largest mem requested
-                c_memLength: 0  # or an addition of mem requested
+                c_memOffset: memOffset,
+                c_memLength: memLength
       ))
-    trace "Call (" & callName.astToStr & ")", gasCost = gasCost, childCost = childMsgGas
-    computation.gasMeter.consumeGas(gasCost, reason = $opCode)
+
+    trace "Call (" & callName.astToStr & ")", childGasLimit, childGasFee
+    computation.gasMeter.consumeGas(childGasFee, reason = $opCode)
 
     computation.memory.extend(memInPos, memInLen)
     computation.memory.extend(memOutPos, memOutLen)
@@ -715,7 +726,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     var childMsg = prepareChildMessage(
       computation,
-      childMsgGas,
+      childGasLimit,
       to,
       value,
       callData,

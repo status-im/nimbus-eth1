@@ -126,10 +126,10 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     #   M(currentMemSize, f, l) = currentMemSize
 
     let
-      prev_words: int64 = currentMemSize.wordCount
-      new_words: int64 = (memOffset + memLength).wordCount
+      prevWords: int64 = currentMemSize.wordCount
+      newWords: int64 = (memOffset + memLength).wordCount
 
-    if memLength == 0 or new_words <= prev_words:
+    if memLength == 0 or newWords <= prevWords:
       # Special subcase of memory-expansion cost
       # currentMemSize - currentMemSize = 0
       # "Referencing a zero length range ... does not require memory to be extended
@@ -141,13 +141,13 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
       return 0
 
     let
-      prev_cost = prev_words * static(FeeSchedule[GasMemory]) +
-        (prev_words ^ 2) shr 9 # div 512
-      new_cost = new_words * static(FeeSchedule[GasMemory]) +
-        (new_words ^ 2) shr 9 # div 512
+      prevCost = prevWords * static(FeeSchedule[GasMemory]) +
+        (prevWords ^ 2) shr 9 # div 512
+      newCost = newWords * static(FeeSchedule[GasMemory]) +
+        (newWords ^ 2) shr 9 # div 512
 
     # TODO: add logging
-    result = max(new_cost - prev_cost, 0)
+    result = max(newCost - prevCost, 0)
 
   func `prefix all_but_one_64th`(gas: GasInt): GasInt {.inline.} =
     ## Computes all but 1/64th
@@ -169,7 +169,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
   func `prefix gasCreate`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
-    result = 
+    result =
       static(FeeSchedule[GasCreate]) +
       static(FeeSchedule[GasCodeDeposit]) * memLength
 
@@ -202,10 +202,10 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
       gSreset = FeeSchedule[GasSreset]
 
     # Gas cost - literal translation of Yellow Paper
-    result.gasCost =  if value.isZero.not and gasParams.s_isStorageEmpty:
-                        gSet
-                      else:
-                        gSreset
+    result.gasCost = if value.isZero.not and gasParams.s_isStorageEmpty:
+                       gSet
+                     else:
+                       gSreset
 
     # Refund
     if value.isZero and not gasParams.s_isStorageEmpty:
@@ -319,10 +319,12 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
         if gasParams.c_gasBalance >= result.gasCost:
           min(
             `prefix all_but_one_64th`(gasParams.c_gasBalance - result.gasCost),
-            gasParams.c_contract_gas
+            gasParams.c_contractGas
           )
         else:
-          gasParams.c_contract_gas
+          gasParams.c_contractGas
+    else:
+      result.gasCost += gasParams.c_contractGas
 
     # Ccallgas - Gas sent to the child message
     result.gasRefund = result.gasCost
