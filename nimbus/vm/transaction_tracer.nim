@@ -1,5 +1,5 @@
 import
-  json, strutils, sets,
+  json, strutils, sets, hashes,
   chronicles, nimcrypto, eth/common, stint,
   ../vm_types, memory, stack, ../db/[db_chain, state_db],
   eth/trie/hexary, ./message, ranges/typedranges,
@@ -7,6 +7,9 @@ import
 
 logScope:
   topics = "vm opcode"
+
+proc hash*(x: Uint256): Hash =
+  result = hash(x.toByteArrayBE)
 
 proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.trace = newJObject()
@@ -19,6 +22,7 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.trace["structLogs"] = newJArray()
   tracer.flags = flags
   tracer.accounts = initSet[EthAddress]()
+  tracer.storageKeys = initSet[Uint256]()
 
 proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   if unlikely tracer.trace.isNil:
@@ -60,6 +64,11 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
     else:
       discard
 
+  if TracerFlags.DisableStorage notin tracer.flags:
+    if op == Sstore:
+      assert(c.stack.values.len > 1)
+      tracer.storageKeys.incl c.stack[^1, Uint256]
+
 proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   let j = tracer.trace["structLogs"].elems[^1]
 
@@ -68,7 +77,8 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op
   if TracerFlags.DisableStorage notin tracer.flags:
     var storage = newJObject()
     var stateDB = c.vmState.accountDb
-    for key, value in stateDB.storage(c.msg.storageAddress):
+    for key in tracer.storageKeys:
+      let (value, _) = stateDB.getStorage(c.msg.storageAddress, key)
       storage[key.dumpHex] = %(value.dumpHex)
     j["storage"] = storage
 
