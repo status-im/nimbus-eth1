@@ -264,12 +264,12 @@ suite "Custom Opcodes Test":
       TimeStamp
     stack: "0x0000000000000000000000000000000000000000000000000000000055c46bb3"
 
-  # current number or parent number?
+  # it should be current block number
   assembler: # NUMBER OP
     title: "NUMBER_1"
     code:
       Number
-    stack: "0x000000000000000000000000000000000000000000000000000000000000b864"
+    stack: "0x000000000000000000000000000000000000000000000000000000000000b865"
 
   # current difficulty or parent dificulty?
   assembler: # DIFFICULTY OP

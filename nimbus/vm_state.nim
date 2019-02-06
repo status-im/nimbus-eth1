@@ -49,7 +49,9 @@ method timestamp*(vmState: BaseVMState): EthTime {.base, gcsafe.} =
   vmState.blockHeader.timestamp
 
 method blockNumber*(vmState: BaseVMState): BlockNumber {.base, gcsafe.} =
-  vmState.blockHeader.blockNumber
+  # it should return current block number
+  # and not head.blockNumber
+  vmState.blockHeader.blockNumber + 1
 
 method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   vmState.blockHeader.difficulty
