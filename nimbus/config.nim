@@ -9,7 +9,7 @@
 
 import
   parseopt, strutils, macros, os, times,
-  asyncdispatch2, eth/[keys, common, p2p], chronicles, nimcrypto/hash,
+  chronos, eth/[keys, common, p2p], chronicles, nimcrypto/hash,
   ./db/select_backend,
   ./vm/interpreter/vm_forks
 
