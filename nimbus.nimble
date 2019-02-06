@@ -14,7 +14,7 @@ requires "nim >= 0.19",
          "nimcrypto",
          "stint",
          "json_rpc",
-         "https://github.com/status-im/chronos",
+         "https://github.com/status-im/nim-chronos",
          "bncurve",
          "https://github.com/status-im/nim-eth",
          "std_shims"
