@@ -53,6 +53,10 @@ var premix = function() {
   };
 }();
 
+function deepCopy(src) {
+  return JSON.parse(JSON.stringify(src));
+}
+
 function windowResize() {
   let bodyHeight = $(window).height();
   $('#opCodeSideBar').css('height', parseInt(bodyHeight) - 80);
@@ -149,8 +153,8 @@ function opCodeRenderer(txId, nimbus, geth) {
 
   function moveStack(ncs, gcs, i) {
     let idx = parseInt(i);
-    ncs[idx-1].stack = ncs[idx].stack;
-    gcs[idx-1].stack = gcs[idx].stack;
+    ncs[idx-1].stack = deepCopy(ncs[idx].stack);
+    gcs[idx-1].stack = deepCopy(gcs[idx].stack);
   }
 
   function analyze(nimbus, geth) {
@@ -167,8 +171,8 @@ function opCodeRenderer(txId, nimbus, geth) {
   }
 
   txId = parseInt(txId);
-  var ncs = nimbus.txTraces[txId].structLogs;
-  var gcs = geth.txTraces[txId].structLogs;
+  var ncs = deepCopy(nimbus.txTraces[txId].structLogs);
+  var gcs = deepCopy(geth.txTraces[txId].structLogs);
   var sideBar = $('#opCodeSideBar').empty();
   $('#opCodeTitle').text(`Tx #${(txId+1)}`);
 
@@ -215,6 +219,8 @@ function opCodeRenderer(txId, nimbus, geth) {
 
   if(ncs.length > 0) {
     renderTrace("tx", ncs[0], gcs[0]);
+  } else {
+    $('#opCodeContainer').empty();
   }
 
   windowResize();
@@ -311,10 +317,6 @@ function accountsRenderer(nimbus, geth) {
       storageRoot: '',
       storage: {}
     };
-  }
-
-  function deepCopy(src) {
-    return JSON.parse(JSON.stringify(src));
   }
 
   function precompiledContractsName(address) {
