@@ -61,4 +61,19 @@ proc main() =
   chainDB.dumpTest(48915)
   chainDB.dumpTest(49018)
 
-main()
+when isMainModule:
+  var message: string
+
+  ## Processing command line arguments
+  if processArguments(message) != Success:
+    echo message
+    quit(QuitFailure)
+  else:
+    if len(message) > 0:
+      echo message
+      quit(QuitSuccess)
+
+  try:
+    main()
+  except:
+    echo getCurrentExceptionMsg()

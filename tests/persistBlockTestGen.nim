@@ -62,5 +62,23 @@ proc main() =
   chainDB.dumpTest(48712)
   chainDB.dumpTest(48915)
   chainDB.dumpTest(49018)
+  chainDB.dumpTest(49439) # call opcode bug
+  chainDB.dumpTest(49891) # number opcode bug
+  chainDB.dumpTest(50111) # apply message bug
 
-main()
+when isMainModule:
+  var message: string
+
+  ## Processing command line arguments
+  if processArguments(message) != Success:
+    echo message
+    quit(QuitFailure)
+  else:
+    if len(message) > 0:
+      echo message
+      quit(QuitSuccess)
+
+  try:
+    main()
+  except:
+    echo getCurrentExceptionMsg()
