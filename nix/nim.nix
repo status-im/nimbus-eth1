@@ -5,6 +5,11 @@ let
     sha256 = "00mzzhnp1myjbn3rw8qfnz593phn8vmcffw2lf1r2ncppck5jbpj";
   };
 
+  nimble = fetchTarball {
+    url = https://github.com/nim-lang/nimble/archive/3d6dc90cd4dfc12b8ae9d1958e84610cf21b34bb.tar.gz;
+    sha256 = "19zmimnrwyhj59dfac9q7z1mrb65439sqzhvfz8bvxa1ibzws5lz";
+  };
+
 in stdenv.mkDerivation rec {
   # This derivation may be a bit confusing at first, because it builds the Status'
   # Nimbus branch of Nim using the standard Nim compiler provided by Nix.
@@ -46,8 +51,10 @@ in stdenv.mkDerivation rec {
 
   buildPhase   = ''
     export HOME=$TMP
+    mkdir -p dist
+    cp -r ${nimble} dist/nimble
     cp -r ${csources} csources
-    chmod 755 $(find csources -type d)
+    chmod 755 $(find csources dist/nimble -type d)
     cd csources
     sh build.sh
     cd ..
