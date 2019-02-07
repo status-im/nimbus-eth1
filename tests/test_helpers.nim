@@ -47,6 +47,7 @@ func slowTest*(folder: string, name: string): bool =
 
 func failIn32Bits(folder, name: string): bool =
   return name in @[
+    "Call10.json",
     "randomStatetest94.json",
     "calldatacopy_dejavu.json",
     "calldatacopy_dejavu2.json",
