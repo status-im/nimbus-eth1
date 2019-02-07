@@ -5,8 +5,6 @@ let
     sha256 = "00mzzhnp1myjbn3rw8qfnz593phn8vmcffw2lf1r2ncppck5jbpj";
   };
 
- caBundle = ./ca-bundle.pem;
-
 in stdenv.mkDerivation rec {
   # This derivation may be a bit confusing at first, because it builds the Status'
   # Nimbus branch of Nim using the standard Nim compiler provided by Nix.
@@ -48,7 +46,6 @@ in stdenv.mkDerivation rec {
 
   buildPhase   = ''
     export HOME=$TMP
-    export GIT_SSL_CAINFO=${caBundle}
     cp -r ${csources} csources
     chmod 755 $(find csources -type d)
     cd csources
