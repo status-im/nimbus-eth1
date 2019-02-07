@@ -16,8 +16,9 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false)
 
+  let transaction = memoryDB.beginTransaction()
+  defer: transaction.dispose()
   let
-    transaction = memoryDB.beginTransaction()
     parentNumber = blockNumber - 1
     parent = captureChainDB.getBlockHeader(parentNumber)
     header = captureChainDB.getBlockHeader(blockNumber)
@@ -28,8 +29,6 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
   captureChainDB.setHead(parent, true)
   let validationResult = processBlock(captureChainDB, parent, header, body, vmState)
 
-  # success or not dispose it
-  transaction.dispose()
   dumpDebuggingMetaData(captureChainDB, header, body, vmState, false)
 
 proc main() =

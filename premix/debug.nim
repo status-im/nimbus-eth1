@@ -19,19 +19,17 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Ui
     header = chainDB.getBlockHeader(blockNumber)
     body   = chainDB.getBlockBody(header.blockHash)
 
+  let transaction = memoryDB.beginTransaction()
+  defer: transaction.dispose()
   let
-    transaction = memoryDB.beginTransaction()
     vmState = newBaseVMState(parent, chainDB)
     validationResult = processBlock(chainDB, parent, header, body, vmState)
 
-  if validationResult != ValidationResult.OK:    
+  if validationResult != ValidationResult.OK:
     error "block validation error", validationResult
   else:
     info "block validation success", validationResult, blockNumber
 
-  # success or not dispose it
-  transaction.dispose()
-  
   dumpDebuggingMetaData(chainDB, header, body, vmState, false)
   let
     fileName = "debug" & $blockNumber & ".json"
