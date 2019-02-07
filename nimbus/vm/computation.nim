@@ -99,12 +99,11 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
 
   if computation.msg.value != 0:
     let senderBalance =
-      computation.vmState.getStateDb(
-        computation.vmState.blockHeader.hash).
+      computation.vmState.readOnlyStateDb().
         getBalance(computation.msg.sender)
     var newBalance = senderBalance
 
-    if sender_balance < computation.msg.value:
+    if senderBalance < computation.msg.value:
       raise newException(InsufficientFunds,
           &"Insufficient funds: {senderBalance} < {computation.msg.value}"
       )
