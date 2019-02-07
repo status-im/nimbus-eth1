@@ -1,6 +1,13 @@
 { stdenv, lib, makeWrapper, git, nodejs, openssl, pcre, readline, sqlite }:
+let
+  csources = fetchTarball {
+    url = https://github.com/nim-lang/csources/archive/b56e49bbedf62db22eb26388f98262e2948b2cbc.tar.gz;
+    sha256 = "00mzzhnp1myjbn3rw8qfnz593phn8vmcffw2lf1r2ncppck5jbpj";
+  };
 
-stdenv.mkDerivation rec {
+ caBundle = ./ca-bundle.pem;
+
+in stdenv.mkDerivation rec {
   # This derivation may be a bit confusing at first, because it builds the Status'
   # Nimbus branch of Nim using the standard Nim compiler provided by Nix.
   #
@@ -11,14 +18,11 @@ stdenv.mkDerivation rec {
   # to time.
 
   name = "status-nim";
-  version = "0.18.1";
+  version = "0.19.0";
 
-  src = fetchGit {
-    url = "git://github.com/status-im/Nim";
-    ref = "nimbus";
-
-    # Set this to the hash of the head commit in the nimbus branch:
-    rev = "c240806756579c3375b1a79e1e65c40087a52ac5";
+  src = fetchTarball {
+    url = https://github.com/status-im/Nim/archive/c240806756579c3375b1a79e1e65c40087a52ac5.tar.gz;
+    sha256 = "1fa1ca145qhi002zj1a4kcq6ihxnyjzq1c5ys7adz796m7g5jw7i";
   };
 
   doCheck = true;
@@ -42,13 +46,18 @@ stdenv.mkDerivation rec {
     openssl pcre readline sqlite git
   ];
 
-  buildPhase   =
-    let caBundle = ./ca-bundle.pem;
-    in ''
-      export HOME=$TMP
-      export GIT_SSL_CAINFO=${caBundle}
-      sh build_all.sh
-    '';
+  buildPhase   = ''
+    export HOME=$TMP
+    export GIT_SSL_CAINFO=${caBundle}
+    cp -r ${csources} csources
+    chmod 755 $(find csources -type d)
+    cd csources
+    sh build.sh
+    cd ..
+    bin/nim c -d:release koch.nim
+    ./koch boot -d:release
+    ./koch tools -d:release
+  '';
 
   installPhase = ''
     install -Dt $out/bin bin/* koch
