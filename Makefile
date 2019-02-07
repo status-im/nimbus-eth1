@@ -79,10 +79,12 @@ clean:
 mrproper: clean
 	rm -rf vendor
 
-# for when you have write access to a repo and you want to use SSH keys
-# TODO: https://stackoverflow.com/questions/39894103/can-i-override-the-url-of-a-nested-git-submodule-without-forking
+# for when you want to use SSH keys
 github-ssh:
-	sed -i 's#https://github.com/#git@github.com:#' .git/config $(NIM_DIR)/.git/config $(REPOS_DIR)/*/.git/config
+	sed -i 's#https://github.com/#git@github.com:#' .git/config
+	git config --file .gitmodules --get-regexp url | while read LINE; do \
+		git config `echo $${LINE} | sed 's#https://github.com/#git@github.com:#'` \
+		;done
 
 #- re-builds the Nim compiler (not usually needed, because `make update` does it when necessary)
 build-nim: | deps
