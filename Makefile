@@ -20,10 +20,13 @@ RUN_CMD_IN_ALL_REPOS = git submodule foreach --recursive --quiet 'echo -e "\n\e[
 ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
 NIM_DIR := vendor/Nim
-#- forces an update of csources and Nimble repos and a complete rebuild, in case we're called after pulling a new Nim version
+#- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
+#- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
 #- recompiles Nimble with -d:release until we upgrade to nim-0.20 where koch does it by default
 BUILD_NIM := cd $(NIM_DIR) && \
 	rm -rf bin/nim_csources csources dist/nimble && \
+	ln -sr ../Nim-csources csources && \
+	ln -sr ../nimble dist/nimble && \
 	sh build_all.sh && \
 	$(ENV_SCRIPT) nim c -d:release --noNimblePath -p:compiler --nilseqs:on -o:bin/nimble dist/nimble/src/nimble.nim
 
@@ -65,7 +68,7 @@ $(NIMBLE_DIR): | $(NIM_DIR)/bin/nim
 		[ `ls -1 *.nimble 2>/dev/null | wc -l ` -gt 0 ] && { \
 			mkdir -p $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head;\
 			echo -e "$$(pwd)\n$$(pwd)" > $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head/$${sm_path#*/}.nimble-link;\
-		}'
+		} || true'
 
 # builds and runs all tests
 test: | build deps
