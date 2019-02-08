@@ -23,6 +23,7 @@ NIM_DIR := vendor/Nim
 #- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
 #- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
 #- recompiles Nimble with -d:release until we upgrade to nim-0.20 where koch does it by default
+#  (we don't actually use Nimble in this Makefile, but we need it in submodules to manually run tests: "../../env.sh nimble test")
 BUILD_NIM := cd $(NIM_DIR) && \
 	rm -rf bin/nim_csources csources dist/nimble && \
 	ln -sr ../Nim-csources csources && \
@@ -54,14 +55,15 @@ nimbus: | build deps
 build:
 	mkdir $@
 
-#- runs only the first time and after `make update` actually updates some repo,
-#  or new repos are cloned, so have "normal" (timestamp-checked) prerequisites here
+#- runs only the first time and after `make update`, so have "normal"
+#  (timestamp-checked) prerequisites here
+#- $(NIM_DIR)/bin/nim is both a proxy for submodules having been initialised
+#  and a check for the actual compiler build
 deps: $(NIM_DIR)/bin/nim $(NIMBLE_DIR)
 
-#- depends on Git repos being fetched and our Nim and Nimble being built
-#- runs `nimble develop` in those repos (but not in the Nimbus repo) - not
-#  parallelizable, because package order matters
-#- installs any remaining Nimbus dependency (those not in $(REPOS))
+#- depends on Git submodules being initialised and our Nim and Nimble being built
+#- fakes a Nimble package repository with the minimum info needed by the Nim compiler
+#  for runtime path (i.e.: the second line in $(NIMBLE_DIR)/pkgs/*/*.nimble-link)
 $(NIMBLE_DIR): | $(NIM_DIR)/bin/nim
 	mkdir -p $(NIMBLE_DIR)/pkgs
 	git submodule foreach --quiet '\
@@ -82,7 +84,7 @@ clean:
 mrproper: clean
 	rm -rf vendor
 
-# for when you want to use SSH keys
+# for when you want to use SSH keys with GitHub
 github-ssh:
 	sed -i 's#https://github.com/#git@github.com:#' .git/config
 	git config --file .gitmodules --get-regexp url | while read LINE; do \
@@ -93,16 +95,17 @@ github-ssh:
 build-nim: | deps
 	$(BUILD_NIM)
 
-#- runs `git pull` in all Git repos, if there are new commits in the remote branch
-#- rebuilds the Nim compiler after pulling new commits
-#- deletes the ".nimble" dir to force the execution of the "deps" target if at least one repo was updated
+#- inits and updates the Git submodules, making sure we're not left on a detached HEAD
+#- deletes the ".nimble" dir to force the execution of the "deps" target
 #- ignores non-zero exit codes from [...] tests
+#- TODO: rebuild the Nim compiler after the corresponding submodule is updated
 $(NIM_DIR)/bin/nim update:
 	git submodule update --init --recursive --rebase
 	git submodule foreach --recursive 'git checkout $$(git config -f $$toplevel/.gitmodules submodule.$$name.branch || echo master)'
 	rm -rf $(NIMBLE_DIR)
 	[ -e $(NIM_DIR)/bin/nim ] || { $(BUILD_NIM); }
 
+# don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
 update-remote:
 	git submodule update --remote --recursive --rebase
 
