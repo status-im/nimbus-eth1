@@ -108,3 +108,13 @@
 	url = https://github.com/status-im/nim-blscurve
 	ignore = dirty
 	branch = master
+[submodule "vendor/Nim-csources"]
+	path = vendor/Nim-csources
+	url = https://github.com/nim-lang/csources.git
+	ignore = dirty
+	branch = master
+[submodule "vendor/nimble"]
+	path = vendor/nimble
+	url = https://github.com/nim-lang/nimble.git
+	ignore = dirty
+	branch = master
