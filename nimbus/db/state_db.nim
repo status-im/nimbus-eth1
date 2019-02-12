@@ -80,7 +80,10 @@ template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # morally equivalent to toByteRange_Unnecessary but with different types
 
 template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
-  initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot)
+  # non-pruning trie at other places is optional
+  # but storage trie seems prefer non-pruning trie
+  # see bug #228
+  initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot, false)
 
 # XXX: https://github.com/status-im/nimbus/issues/142#issuecomment-420583181
 proc setStorageRoot*(db: var AccountStateDB, address: EthAddress, storageRoot: Hash256) =

@@ -146,8 +146,8 @@ proc prepareVMState(vmState: BaseVMState, header: BlockHeader) =
   # blockNumber returned from VM should be current block number
   # and not something else
   vmState.blockHeader.blockNumber = header.blockNumber
+  vmState.blockHeader.timeStamp = header.timeStamp
 
-  # time stamp?
   # gas limit?
   # etc?
 
