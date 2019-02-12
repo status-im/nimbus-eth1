@@ -14,20 +14,48 @@ GIT_STATUS := git status
 #- duplicated in "env.sh" for the env var with the same name
 NIMBLE_DIR := vendor/.nimble
 REPOS_DIR := vendor
+ifeq ($(OS), Windows_NT)
+  PWD := pwd -W
+else
+  PWD := pwd
+endif
 # we want a "recursively expanded" (delayed interpolation) variable here, so we can set CMD in rule recipes
-RUN_CMD_IN_ALL_REPOS = git submodule foreach --recursive --quiet 'echo -e "\n\e[32m$$name:\e[39m"; $(CMD)'; echo -e "\n\e[32m$$(pwd):\e[39m"; $(CMD)
+RUN_CMD_IN_ALL_REPOS = git submodule foreach --recursive --quiet 'echo -e "\n\e[32m$$name:\e[39m"; $(CMD)'; echo -e "\n\e[32m$$($(PWD)):\e[39m"; $(CMD)
 # absolute path, since it will be run at various subdirectory depths
 ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
 NIM_DIR := vendor/Nim
 #- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
 #- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
+#- build_all.sh looks at the parent dir to decide whether to copy the resulting csources binary there,
+#  but this is broken when using symlinks, so build csources separately (we get parallel compiling as a bonus)
+#- Windows is a special case, as usual
 #- recompiles Nimble with -d:release until we upgrade to nim-0.20 where koch does it by default
 #  (we don't actually use Nimble in this Makefile, but we need it in submodules to manually run tests: "../../env.sh nimble test")
+ifeq ($(OS), Windows_NT)
+  BUILD_CSOURCES := \
+    $(MAKE) myos=windows clean && \
+    $(MAKE) myos=windows CC=gcc LD=gcc
+else
+  BUILD_CSOURCES := \
+    $(MAKE) clean && \
+    $(MAKE) LD=$(CC)
+endif
 BUILD_NIM := cd $(NIM_DIR) && \
 	rm -rf bin/nim_csources csources dist/nimble && \
 	ln -sr ../Nim-csources csources && \
+	mkdir -p dist && \
 	ln -sr ../nimble dist/nimble && \
+	cd csources && \
+	$(BUILD_CSOURCES) && \
+	cd - && \
+	[ -e csources/bin ] && { \
+		cp -a csources/bin/nim bin/nim && \
+		cp -a csources/bin/nim bin/nim_csources && \
+		rm -rf csources/bin; \
+	} || { \
+		cp -a bin/nim bin/nim_csources; \
+	} && \
 	sh build_all.sh && \
 	$(ENV_SCRIPT) nim c -d:release --noNimblePath -p:compiler --nilseqs:on -o:bin/nimble dist/nimble/src/nimble.nim
 
@@ -69,7 +97,7 @@ $(NIMBLE_DIR): | $(NIM_DIR)/bin/nim
 	git submodule foreach --quiet '\
 		[ `ls -1 *.nimble 2>/dev/null | wc -l ` -gt 0 ] && { \
 			mkdir -p $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head;\
-			echo -e "$$(pwd)\n$$(pwd)" > $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head/$${sm_path#*/}.nimble-link;\
+			echo -e "$$($(PWD))\n$$($(PWD))" > $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head/$${sm_path#*/}.nimble-link;\
 		} || true'
 
 # builds and runs all tests
@@ -78,7 +106,7 @@ test: | build deps
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,all_tests,beacon_node,validator_keygen,*.exe} $(NIMBLE_DIR)
+	rm -rf build/{nimbus,all_tests,beacon_node,validator_keygen,*.exe} $(NIMBLE_DIR) $(NIM_DIR)/bin/nim
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete
 mrproper: clean
@@ -92,22 +120,22 @@ github-ssh:
 		;done
 
 #- re-builds the Nim compiler (not usually needed, because `make update` does it when necessary)
+#- allows parallel building with the '+' prefix
 build-nim: | deps
-	$(BUILD_NIM)
+	+ $(BUILD_NIM)
 
-#- inits and updates the Git submodules, making sure we're not left on a detached HEAD
+#- initialises and updates the Git submodules
 #- deletes the ".nimble" dir to force the execution of the "deps" target
-#- ignores non-zero exit codes from [...] tests
+#- allows parallel building with the '+' prefix
 #- TODO: rebuild the Nim compiler after the corresponding submodule is updated
 $(NIM_DIR)/bin/nim update:
-	git submodule update --init --recursive --rebase
-	git submodule foreach --recursive 'git checkout $$(git config -f $$toplevel/.gitmodules submodule.$$name.branch || echo master)'
+	git submodule update --init --recursive
 	rm -rf $(NIMBLE_DIR)
-	[ -e $(NIM_DIR)/bin/nim ] || { $(BUILD_NIM); }
+	+ [ -e $(NIM_DIR)/bin/nim ] || { $(BUILD_NIM); }
 
 # don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
 update-remote:
-	git submodule update --remote --recursive --rebase
+	git submodule update --remote --rebase
 
 # runs `git status` in all Git repos
 status: | $(REPOS)

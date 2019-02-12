@@ -59,6 +59,7 @@ make test
 
 To pull the latest changes in all the Git repositories involved:
 ```bash
+git pull
 make update
 ```
 
@@ -99,6 +100,59 @@ You can now follow those instructions in the previous section by replacing `make
   "rocksdb" (the default), "sqlite", "lmdb"
 
 - the Premix debugging tools are [documented separately](premix/readme.md)
+
+#### Git submodule workflow
+
+Working on a dependency:
+
+```bash
+cd vendor/nim-chronicles
+git checkout -b mybranch
+# make some changes
+git status
+git commit -a
+git push origin mybranch
+# create a GitHub PR and wait for it to be approved and merged
+git checkout master
+git pull
+git branch -d mybranch
+# realise that the merge was done without "--no-ff"
+git branch -D mybranch
+# update the submodule's commit in the superproject
+cd ../..
+git status
+git add vendor/nim-chronicles
+git commit
+```
+
+It's important that you only update the submodule commit after it's available upstream.
+
+You might want to do this on a new branch of the superproject, so you can make
+a GitHub PR for it and see the CI test results.
+
+Don't update all Git submodules at once, just because you found the relevant
+Git command or `make` target. You risk updating submodules to other people's
+latest commits when they are not ready to be used in the superproject.
+
+Adding the submodule "https://github.com/status-im/foo" to "vendor/foo":
+
+```bash
+./add_submodule.sh status-im/foo
+```
+
+Removing the submodule "vendor/bar":
+
+```bash
+git submodule deinit -f -- vendor/bar
+git rm -f vendor/bar
+```
+
+Checking out older commits, either to bisect something or to reproduce an older build:
+
+```bash
+git checkout <commit hash here>
+make -j8 clean update
+```
 
 ### Troubleshooting
 
