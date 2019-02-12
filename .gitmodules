@@ -43,11 +43,6 @@
 	url = https://github.com/status-im/nim-http-utils.git
 	ignore = dirty
 	branch = master
-[submodule "vendor/nim-asyncdispatch2"]
-	path = vendor/nim-asyncdispatch2
-	url = https://github.com/status-im/nim-asyncdispatch2.git
-	ignore = dirty
-	branch = master
 [submodule "vendor/nim-json-rpc"]
 	path = vendor/nim-json-rpc
 	url = https://github.com/status-im/nim-json-rpc.git
@@ -116,5 +111,10 @@
 [submodule "vendor/nimble"]
 	path = vendor/nimble
 	url = https://github.com/nim-lang/nimble.git
+	ignore = dirty
+	branch = master
+[submodule "vendor/nim-chronos"]
+	path = vendor/nim-chronos
+	url = https://github.com/status-im/nim-chronos.git
 	ignore = dirty
 	branch = master
