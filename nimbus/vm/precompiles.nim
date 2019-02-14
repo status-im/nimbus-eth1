@@ -94,7 +94,7 @@ proc ripemd160*(computation: var BaseComputation) =
 
 proc identity*(computation: var BaseComputation) =
   let
-    wordCount = computation.msg.data.len div 32
+    wordCount = wordCount(computation.msg.data.len)
     gasFee = GasIdentity + wordCount * GasIdentityWord
 
   computation.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
