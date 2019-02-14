@@ -118,3 +118,8 @@
 	url = https://github.com/status-im/nim-chronos.git
 	ignore = dirty
 	branch = master
+[submodule "vendor/tempfile.nim"]
+	path = vendor/tempfile.nim
+	url = https://github.com/OpenSystemsLab/tempfile.nim.git
+	ignore = dirty
+	branch = master
