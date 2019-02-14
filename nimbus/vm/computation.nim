@@ -216,17 +216,24 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: st
 proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
   var childComp = newBaseComputation(
       computation.vmState,
-      computation.vmState.blockHeader.blockNumber,
+      computation.vmState.blockNumber,
       childMsg,
       some(fork))
 
   # Copy the fork op code executor proc (assumes child computation is in the same fork)
   childComp.opCodeExec = computation.opCodeExec
 
-  if childMsg.isCreate:
-    fork.applyCreateMessage(childComp, opCode)
-  else:
-    applyMessage(childComp, opCode)
+  try:
+    if childMsg.isCreate:
+      fork.applyCreateMessage(childComp, opCode)
+    else:
+      applyMessage(childComp, opCode)
+  except VMError:
+    # weird Nim bug
+    type T = vm_types.Error
+    childComp.error = T(info: getCurrentExceptionMsg())
+    debug "applyMesage() failed", error = getCurrentExceptionMsg()
+
   return childComp
 
 proc addChildComputation(fork: Fork, computation: BaseComputation, child: BaseComputation) =
@@ -249,7 +256,7 @@ proc getFork*(computation: BaseComputation): Fork =
     if computation.forkOverride.isSome:
       computation.forkOverride.get
     else:
-      computation.vmState.blockHeader.blockNumber.toFork
+      computation.vmState.blockNumber.toFork
 
 proc applyChildComputation*(computation: BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
   ## Apply the vm message childMsg as a child computation.
