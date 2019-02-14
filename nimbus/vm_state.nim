@@ -24,7 +24,8 @@ proc `$`*(vmState: BaseVMState): string =
   else:
     result = &"VMState {vmState.name}:\n  header: {vmState.blockHeader}\n  chaindb:  {vmState.chaindb}"
 
-proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
+proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
+                     chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
   new result
   result.prevHeaders = @[]
   result.name = "BaseVM"
@@ -34,7 +35,8 @@ proc newBaseVMState*(header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set
   result.tracer.initTracer(tracerFlags)
   result.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
   result.logEntries = @[]
-  result.accountDb = newAccountStateDB(chainDB.db, header.stateRoot, chainDB.pruneTrie)
+  result.blockHeader.stateRoot = prevStateRoot
+  result.accountDb = newAccountStateDB(chainDB.db, prevStateRoot, chainDB.pruneTrie)
 
 proc stateRoot*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.stateRoot

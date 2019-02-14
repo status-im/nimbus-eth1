@@ -22,7 +22,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Ui
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
   let
-    vmState = newBaseVMState(parent, chainDB)
+    vmState = newBaseVMState(parent.stateRoot, header, chainDB)
     validationResult = processBlock(chainDB, parent, header, body, vmState)
 
   if validationResult != ValidationResult.OK:

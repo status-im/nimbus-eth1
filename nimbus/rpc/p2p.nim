@@ -82,7 +82,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
 
   func getAccountDb(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
-    let vmState = newBaseVMState(header, chain)
+    # TODO: header.stateRoot to prevStateRoot
+    let vmState = newBaseVMState(header.stateRoot, header, chain)
     result = vmState.readOnlyStateDB()
 
   proc accountDbFromTag(tag: string, readOnly = true): ReadOnlyStateDB =
@@ -293,7 +294,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns the return value of executed contract.
     let header = headerFromTag(chain, quantityTag)
     var
-      vmState = newBaseVMState(header, chain)
+      # TODO: header.stateRoot to prevStateRoot
+      vmState = newBaseVMState(header.stateRoot, header, chain)
       gasLimit =
         if call.gas.isSome: call.gas.get
         else: 0.GasInt
@@ -330,7 +332,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns the amount of gas used.
     var
       header = chain.headerFromTag(quantityTag)
-      vmState = newBaseVMState(header, chain)
+      # TODO: header.stateRoot to prevStateRoot?
+      vmState = newBaseVMState(header.stateRoot, header, chain)
     let
       gasLimit = if
         call.gas.isSome and call.gas.get > 0.GasInt: call.gas.get
@@ -411,11 +414,13 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns BlockObject or nil when no block was found.
     let
       header = chain.headerFromTag(quantityTag)
+    
     result = some(populateBlockObject(header, getBlockBody(header.hash)))
 
   proc populateTransactionObject(transaction: Transaction, txIndex: int64, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =
     let
-      vmState = newBaseVMState(blockHeader, chain)
+      # TODO: header.stateRoot to prevStateRoot?
+      vmState = newBaseVMState(blockHeader.stateRoot, blockHeader, chain)
       accountDb = vmState.readOnlyStateDB()
       address = transaction.getSender()
       txCount = accountDb.getNonce(address)

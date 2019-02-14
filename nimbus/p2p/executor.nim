@@ -140,25 +140,12 @@ proc makeReceipt(vmState: BaseVMState, cumulativeGasUsed: GasInt, fork = FkFront
   result.logs = vmState.getAndClearLogEntries()
   result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
-proc prepareVMState(vmState: BaseVMState, header: BlockHeader) =
-  # TODO: move this proc to somewhere else if it already complete
-
-  # blockNumber returned from VM should be current block number
-  # and not something else
-  vmState.blockHeader.blockNumber = header.blockNumber
-
-  # time stamp?
-  # gas limit?
-  # etc?
-
 proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
 
   if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot", blockNumber=header.blockNumber
     return ValidationResult.Error
-
-  prepareVMState(vmState, header)
 
   var stateDb = vmState.accountDb
   if header.txRoot != BLANK_ROOT_HASH:

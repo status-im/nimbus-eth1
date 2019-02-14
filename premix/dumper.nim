@@ -24,7 +24,7 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
     header = captureChainDB.getBlockHeader(blockNumber)
     headerHash = header.blockHash
     body = captureChainDB.getBlockBody(headerHash)
-    vmState = newBaseVMState(parent, captureChainDB)
+    vmState = newBaseVMState(parent.stateRoot, header, captureChainDB)
 
   captureChainDB.setHead(parent, true)
   let validationResult = processBlock(captureChainDB, parent, header, body, vmState)

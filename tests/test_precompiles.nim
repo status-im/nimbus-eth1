@@ -23,7 +23,7 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
     var
       dataStr = test["input"].getStr
       data = if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
-      vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()))
+      vmState = newBaseVMState(header.stateRoot, header, newBaseChainDB(newMemoryDb()))
       gas = 1_000_000.GasInt
       gasPrice = 1.GasInt
       sender: EthAddress

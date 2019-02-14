@@ -42,7 +42,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     stateRoot: emptyRlpHash
     )
 
-  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDB()))
+  var vmState = newBaseVMState(emptyRlpHash, header, newBaseChainDB(newMemoryDB()))
   let fexec = fixture["exec"]
   var code: seq[byte]
   vmState.mutateStateDB:
