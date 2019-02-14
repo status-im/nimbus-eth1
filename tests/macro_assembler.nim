@@ -225,7 +225,7 @@ proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: 
     header = chainDB.getBlockHeader(blockNumber)
     headerHash = header.blockHash
     body = chainDB.getBlockBody(headerHash)
-    vmState = newBaseVMState(parent, chainDB)
+    vmState = newBaseVMState(parent.stateRoot, header, chainDB)
 
   var
     tx = body.transactions[0]

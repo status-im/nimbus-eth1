@@ -54,7 +54,7 @@ proc doTests =
     header = BlockHeader(stateRoot: emptyRlpHash)
   var
     chain = newBaseChainDB(newMemoryDb())
-    state = newBaseVMState(header, chain)
+    state = newBaseVMState(emptyRlpHash, header, chain)
   ethNode.chain = newChain(chain)
 
   let

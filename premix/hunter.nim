@@ -71,7 +71,7 @@ proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
   let
-    vmState = newBaseVMState(parentBlock.header, chainDB)
+    vmState = newBaseVMState(parentBlock.header.stateRoot, thisBlock.header, chainDB)
     validationResult = processBlock(chainDB, parentBlock.header, thisBlock.header, thisBlock.body, vmState)
 
   if validationResult != ValidationResult.OK:

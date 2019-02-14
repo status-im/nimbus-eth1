@@ -22,12 +22,12 @@ suite "generalstate json tests":
   jsonTest("GeneralStateTests", testFixture)
 
 
-proc testFixtureIndexes(header: BlockHeader, pre: JsonNode, transaction: Transaction, sender: EthAddress, expectedHash: string, testStatusIMPL: var TestStatus, fork: Fork) =
+proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNode, transaction: Transaction, sender: EthAddress, expectedHash: string, testStatusIMPL: var TestStatus, fork: Fork) =
   when enabledLogLevel <= TRACE:
     let tracerFlags = {TracerFlags.EnableTracing}
   else:
     let tracerFlags: set[TracerFlags] = {}
-  var vmState = newBaseVMState(header, newBaseChainDB(newMemoryDb()), tracerFlags)
+  var vmState = newBaseVMState(prevStateRoot, header, newBaseChainDB(newMemoryDb()), tracerFlags)
   vmState.mutateStateDB:
     setupStateDB(pre, db)
 
@@ -124,4 +124,4 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
           valueIndex = indexes["value"].getInt
         let transaction = ftrans.getFixtureTransaction(dataIndex, gasIndex, valueIndex)
         let sender = ftrans.getFixtureTransactionSender
-        testFixtureIndexes(header, fixture["pre"], transaction, sender, expectedHash, testStatusIMPL, fork)
+        testFixtureIndexes(emptyRlpHash, header, fixture["pre"], transaction, sender, expectedHash, testStatusIMPL, fork)

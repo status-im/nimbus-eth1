@@ -86,7 +86,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     captureDB = newCaptureDB(db.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?
-    vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {EnableAccount})
+    vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableAccount})
 
   var stateDb = vmState.accountDb
 
@@ -151,7 +151,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false)
     # we only need stack dump if we want to scan for internal transaction address
-    vmState = newBaseVMState(parent, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
+    vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
 
   var
     before = newJArray()
@@ -206,7 +206,7 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
     captureDB = newCaptureDB(db.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false)
-    vmState = newBaseVMState(parent, captureChainDB, tracerFlags + {EnableTracing})
+    vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableTracing})
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   assert(body.transactions.calcTxRoot == header.txRoot)
