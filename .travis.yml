@@ -1,13 +1,13 @@
 language: c # or other C/C++ variants
 
 # https://docs.travis-ci.com/user/caching/
-#
-# Caching the whole nim folder is better than relying on ccache - this way, we
-# skip the expensive bootstrap process and linking
 cache:
   directories:
-    - nim
     - rocksdb
+
+git:
+  depth: 1
+  submodules_depth: 1
 
 matrix:
   include:
@@ -22,38 +22,18 @@ matrix:
         - export NPROC=$(sysctl -n hw.ncpu)
 
 install:
-  # build nim from our own branch - this to avoid the day-to-day churn and
-  # regressions of the fast-paced Nim development while maintaining the
-  # flexibility to apply patches
-  #
-  # check version of remote branch
-  - "export NIMVER=$(git ls-remote https://github.com/status-im/nim.git HEAD | cut -f 1)"
-
-  # after building nim, wipe csources to save on cache space
-  - "{ [ -f nim/$NIMVER/bin/nim ] && [ -f nim/$NIMVER/bin/nimble ] ; } ||
-      { rm -rf nim ;
-        mkdir -p nim ;
-        git clone --depth=1 https://github.com/status-im/nim.git nim/$NIMVER ;
-        cd nim/$NIMVER ;
-        sh build_all.sh ;
-        rm -rf csources ;
-        cd ../.. ;
-      }"
-  - "export PATH=$PWD/nim/$NIMVER/bin:$PATH"
-
   # build our own rocksdb to test with a fixed version that we think works
   - "export ROCKSDBVER=5.14.2"
   - "[ -f rocksdb/rocksdb-$ROCKSDBVER/Makefile ] || { rm -rf rocksdb ; mkdir -p rocksdb; cd rocksdb; wget https://github.com/facebook/rocksdb/archive/v$ROCKSDBVER.tar.gz && tar xvf v$ROCKSDBVER.tar.gz; cd ..; }"
   - cd rocksdb/rocksdb-$ROCKSDBVER
   - "[ -f util/build_version.cc ] || { make util/build_version.cc ; }" # use cached version if possible
   - export NO_UPDATE_BUILD_VERSION=1
-  - make shared_lib -j$NPROC && sudo make install-shared
+  - make -j${NPROC} shared_lib && sudo make install-shared
   - cd ../..
 
 script:
-  # fail fast
-  - set -e
-  - nimble install -y --depsOnly
-  - nimble nimbus
+  - set -e # fail fast
+  - make -j${NPROC} nimbus
   - ./build/nimbus --help
-  - nimble test
+  - make -j${NPROC} test
+
