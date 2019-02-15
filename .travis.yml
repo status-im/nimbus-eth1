@@ -6,8 +6,9 @@ cache:
     - rocksdb
 
 git:
-  depth: 1
-  submodules_depth: 1
+  # when multiple CI builds are queued, the tested commit needs to be in the last X commits cloned with "--depth X"
+  depth: 10
+  submodules_depth: 10
 
 matrix:
   include:
