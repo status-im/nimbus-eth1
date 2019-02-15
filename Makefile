@@ -72,11 +72,9 @@ premix persist debug dumper hunter: | build deps
 	$(ENV_SCRIPT) nim c -o:build/$@ premix/$@.nim && \
 		echo -e "\nThe binary is in './build/$@'.\n"
 
-#- "--nimbleDir" is ignored for custom tasks: https://github.com/nim-lang/nimble/issues/495
-#  so we can't run `nimble ... nimbus` or `nimble ... test`. We have to duplicate those custom tasks here.
 #- a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps
-	$(ENV_SCRIPT) nim c -o:build/nimbus nimbus/nimbus.nim && \
+	./nimble.sh nimbus && \
 		echo -e "\nThe binary is in './build/nimbus'.\n"
 
 # dir
@@ -102,7 +100,7 @@ $(NIMBLE_DIR): | $(NIM_DIR)/bin/nim
 
 # builds and runs all tests
 test: | build deps
-	$(ENV_SCRIPT) nim c -r -d:chronicles_log_level=ERROR -o:build/all_tests tests/all_tests.nim
+	./nimble.sh test
 
 # usual cleaning
 clean:

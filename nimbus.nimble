@@ -25,22 +25,26 @@ proc buildBinary(name: string, srcDir = ".", lang = "c") =
   setCommand lang, srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
-  --define:"chronicles_log_level=ERROR"
+  switch("define", "chronicles_log_level=ERROR")
   --run
   buildBinary name, "tests/"
 
 task test, "Run tests":
-  test "all_tests"
   # debugging tools don't yet have tests
   # but they should be compilable
-  exec "nim c -r tests/test_rpc"
-  exec "nim c premix/premix"
-  exec "nim c premix/persist"
-  exec "nim c premix/debug"
-  exec "nim c premix/dumper"
-  exec "nim c premix/hunter"
-  exec "nim c tests/tracerTestGen"
-  exec "nim c tests/persistBlockTestGen"
+  for binary in [
+      "premix/premix",
+      "premix/persist",
+      "premix/debug",
+      "premix/dumper",
+      "premix/hunter",
+      "tests/tracerTestGen",
+      "tests/persistBlockTestGen",
+    ]:
+    exec "nim c --verbosity:0 --hints:off --warnings:off " & binary
+    rmFile binary
+  # executed last, no matter where you place it, because of "setCommand"
+  test "all_tests"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/"
