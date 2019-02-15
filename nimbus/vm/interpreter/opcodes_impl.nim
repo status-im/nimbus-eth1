@@ -708,7 +708,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
                 c_contractGas: gas.truncate(GasInt),
                 c_currentMemSize: computation.memory.len,
                 c_memOffset: memOffset,
-                c_memLength: memLength
+                c_memLength: memLength,
+                c_opCode: opCode
       ))
 
     trace "Call (" & callName.astToStr & ")", childGasLimit, childGasFee
