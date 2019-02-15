@@ -133,7 +133,7 @@ $(NIM_DIR)/bin/nim update:
 
 # don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
 update-remote:
-	git submodule update --remote --rebase
+	git submodule update --remote
 
 # runs `git status` in all Git repos
 status: | $(REPOS)
