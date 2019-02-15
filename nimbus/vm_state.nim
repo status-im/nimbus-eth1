@@ -66,12 +66,15 @@ method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256
   if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH or ancestorDepth < 0:
     return
 
-  let idx = ancestorDepth.toInt
-  if idx >= vmState.prevHeaders.len:
-    return
+  result = vmState.chainDB.getBlockHash(blockNumber)
+  #TODO: should we use deque here?
+  when false:
+    let idx = ancestorDepth.toInt
+    if idx >= vmState.prevHeaders.len:
+      return
 
-  var header = vmState.prevHeaders[idx]
-  result = header.hash
+    var header = vmState.prevHeaders[idx]
+    result = header.hash
 
 when false:
   # this was an older version of `mutateStateDB`, kept here for reference
