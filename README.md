@@ -154,6 +154,15 @@ git checkout <commit hash here>
 make -j8 clean update
 ```
 
+Running a dependency's test suite using `nim` instead of `nimble` (which cannot be
+convinced not to run a dependency check, thus clashing with our jury-rigged
+"vendor/.nimble/pkgs"):
+
+```bash
+cd vendor/nim-blscurve
+../../nimble.sh test
+```
+
 ### Troubleshooting
 
 Report any errors you encounter, please, if not [already documented](https://github.com/status-im/nimbus/issues)!
