@@ -71,6 +71,7 @@ type
       c_currentMemSize*: Natural
       c_memOffset*: Natural
       c_memLength*: Natural
+      c_opCode*: Op
     else:
       discard
 
@@ -293,7 +294,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
                       )
 
     # Cnew_account
-    if gasParams.c_isNewAccount:
+    if gasParams.c_isNewAccount and gasParams.c_opCode == Call:
       if fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
         result.gasCost += static(FeeSchedule[GasNewAccount])

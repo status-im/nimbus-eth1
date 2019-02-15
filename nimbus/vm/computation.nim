@@ -127,10 +127,11 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
         push: 0
         return
 
-      newBalance = senderBalance - computation.msg.value
-      computation.vmState.mutateStateDb:
-        db.setBalance(computation.msg.sender, newBalance)
-        db.addBalance(computation.msg.storageAddress, computation.msg.value)
+      when opCode == Call:
+        newBalance = senderBalance - computation.msg.value
+        computation.vmState.mutateStateDb:
+          db.setBalance(computation.msg.sender, newBalance)
+          db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
       trace "Value transferred",
         source = computation.msg.sender,
@@ -151,7 +152,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
   else:
     # even though the value is zero, the account
     # should be exist.
-    when opCode in {Call, CallCode}:
+    when opCode == Call:
       computation.vmState.mutateStateDb:
         db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
