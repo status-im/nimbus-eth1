@@ -223,13 +223,14 @@ proc writePaddedResult(mem: var Memory,
   mem.extend(memPos, len)
   let dataEndPosition = dataPos.int64 + len - 1
   let sourceBytes = data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
-
   mem.write(memPos, sourceBytes)
 
-  # Don't duplicate zero-padding of mem.extend
-  let paddingOffset = memPos + sourceBytes.len
-  # TODO: avoid unnecessary memory allocation
-  mem.write(paddingOffset, repeat(paddingValue, max(prevLen - paddingOffset, 0)))
+  # geth doesn't do padding, it causes block validation error
+  when false:
+    # Don't duplicate zero-padding of mem.extend
+    let paddingOffset = memPos + sourceBytes.len
+    # TODO: avoid unnecessary memory allocation
+    mem.write(paddingOffset, repeat(paddingValue, max(prevLen - paddingOffset, 0)))
 
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
