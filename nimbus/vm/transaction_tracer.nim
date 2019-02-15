@@ -33,7 +33,7 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
 
   j["op"] = %(($op).toUpperAscii)
   j["pc"] = %(c.code.pc - 1)
-  j["depth"] = %1 # stub
+  j["depth"] = %(c.msg.depth + 1)
   j["gas"] = %c.gasMeter.gasRemaining
   tracer.gasRemaining = c.gasMeter.gasRemaining
 
