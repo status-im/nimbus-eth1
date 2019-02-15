@@ -30,6 +30,7 @@ NIM_DIR := vendor/Nim
 #- build_all.sh looks at the parent dir to decide whether to copy the resulting csources binary there,
 #  but this is broken when using symlinks, so build csources separately (we get parallel compiling as a bonus)
 #- Windows is a special case, as usual
+#- macOS is also a special case, with its "ln" not supporting "-r"
 #- recompiles Nimble with -d:release until we upgrade to nim-0.20 where koch does it by default
 #  (we don't actually use Nimble in this Makefile, but we need it in submodules to manually run tests: "../../env.sh nimble test")
 ifeq ($(OS), Windows_NT)
@@ -43,9 +44,9 @@ else
 endif
 BUILD_NIM := cd $(NIM_DIR) && \
 	rm -rf bin/nim_csources csources dist/nimble && \
-	ln -sr ../Nim-csources csources && \
+	ln -s ../Nim-csources csources && \
 	mkdir -p dist && \
-	ln -sr ../nimble dist/nimble && \
+	ln -s ../../nimble dist/nimble && \
 	cd csources && \
 	$(BUILD_CSOURCES) && \
 	cd - && \
