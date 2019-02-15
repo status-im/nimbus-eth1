@@ -310,12 +310,11 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
     # Cextra
     result.gasCost += static(FeeSchedule[GasCall])
-    let cextra = result.gasCost
 
     # Cgascap
     if fork >= FkTangerine:
       # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
-      result.gasCost =
+      result.gasRefund =
         if gasParams.c_gasBalance >= result.gasCost:
           min(
             `prefix all_but_one_64th`(gasParams.c_gasBalance - result.gasCost),
@@ -324,15 +323,13 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
         else:
           gasParams.c_contractGas
     else:
-      result.gasCost += gasParams.c_contractGas
+      result.gasRefund += gasParams.c_contractGas
+
+    result.gasCost += result.gasRefund
 
     # Ccallgas - Gas sent to the child message
-    result.gasRefund = result.gasCost
     if not value.isZero:
       result.gasRefund += static(FeeSchedule[GasCallStipend])
-
-    # Ccall
-    result.gasCost += cextra
 
   func `prefix gasHalt`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
     `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
