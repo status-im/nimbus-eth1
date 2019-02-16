@@ -35,10 +35,12 @@ ifeq ($(OS), Windows_NT)
   BUILD_CSOURCES := \
     $(MAKE) myos=windows clean && \
     $(MAKE) myos=windows CC=gcc LD=gcc
+  EXE_SUFFIX := .exe
 else
   BUILD_CSOURCES := \
     $(MAKE) clean && \
     $(MAKE) LD=$(CC)
+  EXE_SUFFIX :=
 endif
 BUILD_NIM := cd $(NIM_DIR) && \
 	rm -rf bin/nim_csources csources dist/nimble && \
@@ -56,6 +58,7 @@ BUILD_NIM := cd $(NIM_DIR) && \
 		cp -a bin/nim bin/nim_csources; \
 	} && \
 	sh build_all.sh
+NIM_BINARY := $(NIM_DIR)/bin/nim$(EXE_SUFFIX)
 
 	OpenSystemsLab/tempfile.nim \
 	status-im/nim-eth \
@@ -81,14 +84,14 @@ build:
 
 #- runs only the first time and after `make update`, so have "normal"
 #  (timestamp-checked) prerequisites here
-#- $(NIM_DIR)/bin/nim is both a proxy for submodules having been initialised
+#- $(NIM_BINARY) is both a proxy for submodules having been initialised
 #  and a check for the actual compiler build
-deps: $(NIM_DIR)/bin/nim $(NIMBLE_DIR)
+deps: $(NIM_BINARY) $(NIMBLE_DIR)
 
-#- depends on Git submodules being initialised and our Nim and Nimble being built
+#- depends on Git submodules being initialised
 #- fakes a Nimble package repository with the minimum info needed by the Nim compiler
 #  for runtime path (i.e.: the second line in $(NIMBLE_DIR)/pkgs/*/*.nimble-link)
-$(NIMBLE_DIR): | $(NIM_DIR)/bin/nim
+$(NIMBLE_DIR): | $(NIM_BINARY)
 	mkdir -p $(NIMBLE_DIR)/pkgs
 	git submodule foreach --quiet '\
 		[ `ls -1 *.nimble 2>/dev/null | wc -l ` -gt 0 ] && { \
@@ -102,7 +105,7 @@ test: | build deps
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,all_tests,beacon_node,validator_keygen,*.exe} $(NIMBLE_DIR) $(NIM_DIR)/bin/nim
+	rm -rf build/{nimbus,all_tests,beacon_node,validator_keygen,*.exe} $(NIMBLE_DIR) $(NIM_BINARY)
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete
 mrproper: clean
@@ -124,10 +127,10 @@ build-nim: | deps
 #- deletes the ".nimble" dir to force the execution of the "deps" target
 #- allows parallel building with the '+' prefix
 #- TODO: rebuild the Nim compiler after the corresponding submodule is updated
-$(NIM_DIR)/bin/nim update:
+$(NIM_BINARY) update:
 	git submodule update --init --recursive
 	rm -rf $(NIMBLE_DIR)
-	+ [ -e $(NIM_DIR)/bin/nim ] || { $(BUILD_NIM); }
+	+ [ -e $(NIM_BINARY) ] || { $(BUILD_NIM); }
 
 # don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
 update-remote:
