@@ -231,8 +231,11 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
       applyMessage(childComp, opCode)
   except VMError:
     # weird Nim bug
-    type T = vm_types.Error
-    childComp.error = T(info: getCurrentExceptionMsg())
+    # cannot use `Error` directly when constructing error object
+    # it seems the compiler confused in the presence of static[Op]
+    # param
+    type ErrorT = vm_types.Error
+    childComp.error = ErrorT(info: getCurrentExceptionMsg())
     debug "applyMesage() failed", error = getCurrentExceptionMsg()
 
   return childComp
