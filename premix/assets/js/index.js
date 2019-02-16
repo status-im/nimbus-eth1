@@ -23,6 +23,13 @@ var premix = function() {
     }
   }
 
+  function renderCells(row, cls, cells) {
+    for(var text of cells) {
+      let cell = $(`<td ${cls}>${split32(text)}</td>`).appendTo(row);
+      if(text.length > 32) cell.addClass('tm-monospace-cell');
+    }
+  }
+
   return {
     fields: ['op', 'pc', 'gas', 'gasCost', 'depth'],
 
@@ -37,9 +44,7 @@ var premix = function() {
       let ncr = nimbus instanceof Object ? nimbus[x].toString().toLowerCase() : nimbus;
       let gcr = geth instanceof Object ? geth[x].toString().toLowerCase() : geth;
       let cls = ncr == gcr ? '' : 'class="uk-text-danger"';
-      $(`<td ${cls}>${split32(x)}</td>`).appendTo(row);
-      $(`<td ${cls}>${split32(ncr)}</td>`).appendTo(row);
-      $(`<td ${cls}>${split32(gcr)}</td>`).appendTo(row);
+      renderCells(row, cls, [x, ncr, gcr]);
     },
 
     newSection: function(container, title, colored) {
