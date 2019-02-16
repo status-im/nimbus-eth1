@@ -22,7 +22,20 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.trace["structLogs"] = newJArray()
   tracer.flags = flags
   tracer.accounts = initSet[EthAddress]()
-  tracer.storageKeys = initSet[Uint256]()
+  tracer.storageKeys = @[]
+
+proc rememberStorageKey(tracer: var TransactionTracer, compDepth: int, key: Uint256) =
+  assert compDepth >= 0 and compDepth <= tracer.storageKeys.len
+  if compDepth == tracer.storageKeys.len:
+    tracer.storageKeys.setLen(compDepth + 1)
+    tracer.storageKeys[compDepth] = initSet[Uint256]()
+
+  tracer.storageKeys[compDepth].incl key
+
+iterator storage(tracer: TransactionTracer, compDepth: int): Uint256 =
+  assert compDepth >= 0 and compDepth < tracer.storageKeys.len
+  for key in tracer.storageKeys[compDepth]:
+    yield key
 
 proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   if unlikely tracer.trace.isNil:
@@ -67,7 +80,7 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
   if TracerFlags.DisableStorage notin tracer.flags:
     if op == Sstore:
       assert(c.stack.values.len > 1)
-      tracer.storageKeys.incl c.stack[^1, Uint256]
+      tracer.rememberStorageKey(c.msg.depth, c.stack[^1, Uint256])
 
 proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
   let j = tracer.trace["structLogs"].elems[^1]
@@ -76,11 +89,12 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op
   # when contract execution interrupted by exception
   if TracerFlags.DisableStorage notin tracer.flags:
     var storage = newJObject()
-    var stateDB = c.vmState.accountDb
-    for key in tracer.storageKeys:
-      let (value, _) = stateDB.getStorage(c.msg.storageAddress, key)
-      storage[key.dumpHex] = %(value.dumpHex)
-    j["storage"] = storage
+    if c.msg.depth < tracer.storageKeys.len:
+      var stateDB = c.vmState.accountDb
+      for key in tracer.storage(c.msg.depth):
+        let (value, _) = stateDB.getStorage(c.msg.storageAddress, key)
+        storage[key.dumpHex] = %(value.dumpHex)
+      j["storage"] = storage
 
   j["gasCost"] = %(tracer.gasRemaining - c.gasMeter.gasRemaining)
 
