@@ -34,7 +34,7 @@ install:
 
 script:
   - set -e # fail fast
-  - make -j${NPROC} nimbus
+  - make -j${NPROC} V=0 nimbus
   - ./build/nimbus --help
-  - make -j${NPROC} test
+  - make -j${NPROC} V=0 test test-reproducibility
 

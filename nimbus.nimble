@@ -19,19 +19,20 @@ requires "nim >= 0.19",
          "eth",
          "std_shims"
 
-proc buildBinary(name: string, srcDir = ".", lang = "c") =
-  if not dirExists "build": mkDir "build"
-  switch("out", ("./build/" & name))
-  setCommand lang, srcDir & name & ".nim"
+proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
+  if not dirExists "build":
+    mkDir "build"
+  # allow something like "nim nimbus --verbosity:0 --hints:off nimbus.nims"
+  var extra_params = params
+  for i in 2..<paramCount():
+    extra_params &= " " & paramStr(i)
+  exec "nim " & lang & " --out:./build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
-  switch("define", "chronicles_log_level=ERROR")
-  --run
-  buildBinary name, "tests/"
+  buildBinary name, "tests/", "-r -d:chronicles_log_level=ERROR"
 
 task test, "Run tests":
-  # debugging tools don't yet have tests
-  # but they should be compilable
+  # debugging tools don't have tests yet, but they should be compilable
   for binary in [
       "premix/premix",
       "premix/persist",
@@ -43,7 +44,6 @@ task test, "Run tests":
     ]:
     exec "nim c --verbosity:0 --hints:off --warnings:off " & binary
     rmFile binary
-  # executed last, no matter where you place it, because of "setCommand"
   test "all_tests"
 
 task nimbus, "Build Nimbus":

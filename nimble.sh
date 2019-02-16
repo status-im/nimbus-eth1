@@ -18,14 +18,12 @@ done
 
 # "nim" seems to only run custom NimScript files if they have a "nims" extension
 NIMS="${F%.nimble}.nims"
-ln -s "$F" "$NIMS"
-
 # delete the temporary symlink on script exit
 cleanup() {
 	rm -rf "$NIMS"
 }
-trap cleanup EXIT
+[ -e "$NIMS" ] || { ln -s "$F" "$NIMS"; trap cleanup EXIT; }
 
 # can't have an "exec" here or the EXIT pseudo-signal won't be triggered
-$(dirname $0)/env.sh nim "$1" "$NIMS"
+$(dirname $0)/env.sh nim "$@" "$NIMS"
 
