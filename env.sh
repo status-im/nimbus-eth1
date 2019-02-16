@@ -13,3 +13,4 @@ export NIMBLE_DIR="${abs_path}/vendor/.nimble"
 export BUILD_OUTPUTS_DIR="${abs_path}/build"
 
 exec "$@"
+

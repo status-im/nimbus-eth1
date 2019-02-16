@@ -66,6 +66,12 @@ BUILD_NIM := cd $(NIM_DIR) && \
 	} && \
 	sh build_all.sh
 NIM_BINARY := $(NIM_DIR)/bin/nim$(EXE_SUFFIX)
+# verbosity level
+V := 1
+NIM_PARAMS := --verbosity:$(V)
+ifeq ($(V), 0)
+  NIM_PARAMS := $(NIM_PARAMS) --hints:off --warnings:off
+endif
 
 	OpenSystemsLab/tempfile.nim \
 	status-im/nim-eth \
@@ -77,12 +83,12 @@ all: premix persist debug dumper hunter nimbus
 
 # debugging tools
 premix persist debug dumper hunter: | build deps
-	$(ENV_SCRIPT) nim c -o:build/$@ premix/$@.nim && \
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ premix/$@.nim && \
 		echo -e "\nThe binary is in './build/$@'.\n"
 
 #- a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps
-	./nimble.sh nimbus && \
+	$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims && \
 		echo -e "\nThe binary is in './build/nimbus'.\n"
 
 # dir
@@ -108,7 +114,16 @@ $(NIMBLE_DIR): | $(NIM_BINARY)
 
 # builds and runs all tests
 test: | build deps
-	./nimble.sh test
+	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
+
+# primitive reproducibility test
+test-reproducibility:
+	+ [ -e build/nimbus ] || $(MAKE) V=0 nimbus; \
+		MD5SUM1=$$(md5sum build/nimbus | cut -d ' ' -f 1); \
+		$(MAKE) V=0 nimbus; \
+		MD5SUM2=$$(md5sum build/nimbus | cut -d ' ' -f 1); \
+		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo "Success: identical binaries." || \
+			{ echo "Failure: the binary changed between builds."; exit 1; }
 
 # usual cleaning
 clean:
@@ -154,7 +169,7 @@ ntags:
 
 #- actually binaries, but have them as phony targets to force rebuilds
 beacon_node validator_keygen: | build deps
-	$(ENV_SCRIPT) nim c -o:build/$@ $(REPOS_DIR)/nim-beacon-chain/beacon_chain/$@.nim
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ $(REPOS_DIR)/nim-beacon-chain/beacon_chain/$@.nim
 
 clean_eth2_network_simulation_files:
 	rm -rf $(REPOS_DIR)/nim-beacon-chain/tests/simulation/data
