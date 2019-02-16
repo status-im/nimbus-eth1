@@ -32,9 +32,16 @@ NIM_DIR := vendor/Nim
 #- Windows is a special case, as usual
 #- macOS is also a special case, with its "ln" not supporting "-r"
 ifeq ($(OS), Windows_NT)
+  # the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection
+  ifeq ($(ARCH_OVERRIDE), x86)
+    UCPU := ucpu=i686
+  else
+    UCPU :=
+  endif
+
   BUILD_CSOURCES := \
-    $(MAKE) myos=windows clean && \
-    $(MAKE) myos=windows CC=gcc LD=gcc
+    $(MAKE) myos=windows $(UCPU) clean && \
+    $(MAKE) myos=windows $(UCPU) CC=gcc LD=gcc
   EXE_SUFFIX := .exe
 else
   BUILD_CSOURCES := \
@@ -189,21 +196,31 @@ ifeq ($(OS), Windows_NT)
   SQLITE_ARCHIVE_32 := sqlite-dll-win32-x86-3240000.zip
   SQLITE_ARCHIVE_64 := sqlite-dll-win64-x64-3240000.zip
 
-  ifeq ($(PROCESSOR_ARCHITEW6432), AMD64)
+  # the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection
+  ifeq ($(ARCH_OVERRIDE), x86)
+    ARCH := x86
+  else
+    ifeq ($(PROCESSOR_ARCHITEW6432), AMD64)
+      ARCH := x64
+    else
+      ifeq ($(PROCESSOR_ARCHITECTURE), AMD64)
+        ARCH := x64
+      endif
+      ifeq ($(PROCESSOR_ARCHITECTURE), x86)
+        ARCH := x86
+      endif
+    endif
+  endif
+
+  ifeq ($(ARCH), x86)
+    SQLITE_ARCHIVE := $(SQLITE_ARCHIVE_32)
+    SQLITE_SUFFIX := _32
+    ROCKSDB_DIR := x86
+  endif
+  ifeq ($(ARCH), x64)
     SQLITE_ARCHIVE := $(SQLITE_ARCHIVE_64)
     SQLITE_SUFFIX := _64
     ROCKSDB_DIR := x64
-  else
-    ifeq ($(PROCESSOR_ARCHITECTURE), AMD64)
-      SQLITE_ARCHIVE := $(SQLITE_ARCHIVE_64)
-      SQLITE_SUFFIX := _64
-      ROCKSDB_DIR := x64
-    endif
-    ifeq ($(PROCESSOR_ARCHITECTURE), x86)
-      SQLITE_ARCHIVE := $(SQLITE_ARCHIVE_32)
-      SQLITE_SUFFIX := _32
-      ROCKSDB_DIR := x86
-    endif
   endif
 
   SQLITE_URL := https://www.sqlite.org/2018/$(SQLITE_ARCHIVE)
