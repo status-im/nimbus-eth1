@@ -99,7 +99,7 @@ build:
 #  (timestamp-checked) prerequisites here
 #- $(NIM_BINARY) is both a proxy for submodules having been initialised
 #  and a check for the actual compiler build
-deps: $(NIM_BINARY) $(NIMBLE_DIR)
+deps: $(NIM_BINARY) $(NIMBLE_DIR) nimbus.nims
 
 #- depends on Git submodules being initialised
 #- fakes a Nimble package repository with the minimum info needed by the Nim compiler
@@ -111,6 +111,10 @@ $(NIMBLE_DIR): | $(NIM_BINARY)
 			mkdir -p $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head;\
 			echo -e "$$($(PWD))\n$$($(PWD))" > $$toplevel/$(NIMBLE_DIR)/pkgs/$${sm_path#*/}-#head/$${sm_path#*/}.nimble-link;\
 		} || true'
+
+# symlink
+nimbus.nims:
+	ln -s nimbus.nimble $@
 
 # builds and runs all tests
 test: | build deps

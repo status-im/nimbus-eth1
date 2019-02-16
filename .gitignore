@@ -9,6 +9,9 @@
 # ntags/ctags output
 /tags
 
+# a symlink that can't be added to the repo because of Windows
+/nimbus.nims
+
 # Ignore dynamic, static libs and libtool archive files
 *.so
 *.dylib
