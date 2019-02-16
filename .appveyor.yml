@@ -1,8 +1,11 @@
 version: '{build}'
 
-cache:
-- x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z -> .appveyor.yml
-- i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z -> .appveyor.yml
+#cache:
+#- x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z -> .appveyor.yml
+#- i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z -> .appveyor.yml
+
+# https://www.appveyor.com/docs/windows-images-software/#mingw-msys-cygwin
+image: Visual Studio 2015
 
 matrix:
   # We always want 32 and 64-bit compilation
@@ -16,27 +19,30 @@ platform:
 clone_depth: 10
 
 install:
-  - setlocal EnableExtensions EnableDelayedExpansion
+  #- setlocal EnableExtensions EnableDelayedExpansion
 
-  - IF "%PLATFORM%" == "x86" (
-      SET "MINGW_ARCHIVE=i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z" &
-      SET "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains%%20targetting%%20Win32/Personal%%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z" &
-      SET "MINGW_DIR=mingw32"
-    ) ELSE (
-      IF "%PLATFORM%" == "x64" (
-        SET "MINGW_ARCHIVE=x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z" &
-        SET "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains%%20targetting%%20Win64/Personal%%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z" &
-        SET "MINGW_DIR=mingw64"
-      ) else (
-        echo "Unknown platform"
-      )
-    )
+  #- IF "%PLATFORM%" == "x86" (
+      #SET "MINGW_ARCHIVE=i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z" &
+      #SET "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains%%20targetting%%20Win32/Personal%%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z" &
+      #SET "MINGW_DIR=mingw32"
+    #) ELSE (
+      #IF "%PLATFORM%" == "x64" (
+        #SET "MINGW_ARCHIVE=x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z" &
+        #SET "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains%%20targetting%%20Win64/Personal%%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z" &
+        #SET "MINGW_DIR=mingw64"
+      #) else (
+        #echo "Unknown platform"
+      #)
+    #)
 
-  - SET "PATH=%CD%\%MINGW_DIR%\bin;%PATH%"
+  #- SET "PATH=%CD%\%MINGW_DIR%\bin;%PATH%"
 
-  # download and unpack Mingw-w64
-  - IF NOT EXIST "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
-  - 7z x -y "%MINGW_ARCHIVE%" > nul
+  ## download and unpack Mingw-w64
+  #- IF NOT EXIST "%MINGW_ARCHIVE%" appveyor DownloadFile "%MINGW_URL%" -FileName "%MINGW_ARCHIVE%"
+  #- 7z x -y "%MINGW_ARCHIVE%" > nul
+
+  - IF "%PLATFORM%" == "x86" SET PATH=C:\mingw-w64\i686-6.3.0-posix-dwarf-rt_v5-rev1\mingw64\bin;%PATH%
+  - IF "%PLATFORM%" == "x64" SET PATH=C:\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0\mingw64\bin;%PATH%
 
 build_script:
   - cd C:\projects\%APPVEYOR_PROJECT_SLUG%
