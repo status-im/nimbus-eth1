@@ -80,6 +80,11 @@ template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # morally equivalent to toByteRange_Unnecessary but with different types
 
 template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
+  # TODO: implement `prefix-db` to solve issue #228 permanently.
+  # the `prefix-db` will automatically insert account address to the
+  # underlying-db key without disturb how the trie works.
+  # it will create virtual container for each account.
+  # see nim-eth#9
   initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot, false)
 
 # XXX: https://github.com/status-im/nimbus/issues/142#issuecomment-420583181

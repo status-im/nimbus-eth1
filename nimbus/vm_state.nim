@@ -68,6 +68,8 @@ method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256
 
   result = vmState.chainDB.getBlockHash(blockNumber)
   #TODO: should we use deque here?
+  # someday we may revive this code when
+  # we already have working miner
   when false:
     let idx = ancestorDepth.toInt
     if idx >= vmState.prevHeaders.len:
