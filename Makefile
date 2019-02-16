@@ -105,7 +105,7 @@ test: | build deps
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,all_tests,beacon_node,validator_keygen,*.exe} $(NIMBLE_DIR) $(NIM_BINARY)
+	rm -rf build/{nimbus,premix,persist,debug,dumper,hunter,all_tests,beacon_node,validator_keygen,*.exe} $(NIMBLE_DIR) $(NIM_BINARY)
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete
 mrproper: clean
