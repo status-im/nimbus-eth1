@@ -57,8 +57,7 @@ BUILD_NIM := cd $(NIM_DIR) && \
 	} || { \
 		cp -a bin/nim bin/nim_csources; \
 	} && \
-	sh build_all.sh && \
-	$(ENV_SCRIPT) nim c -d:release --noNimblePath -p:compiler --nilseqs:on -o:bin/nimble dist/nimble/src/nimble.nim
+	sh build_all.sh
 
 	OpenSystemsLab/tempfile.nim \
 	status-im/nim-eth \
