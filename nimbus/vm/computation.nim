@@ -224,6 +224,11 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
   # Copy the fork op code executor proc (assumes child computation is in the same fork)
   childComp.opCodeExec = computation.opCodeExec
 
+  # TODO: use AccountStateDB revert/commit after JournalDB implemented
+  let stateDb = computation.vmState.accountDb
+  let intermediateRoot = stateDb.rootHash
+  computation.vmState.blockHeader.stateRoot = stateDb.rootHash
+
   try:
     if childMsg.isCreate:
       fork.applyCreateMessage(childComp, opCode)
@@ -236,7 +241,16 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
     # param
     type ErrorT = vm_types.Error
     childComp.error = ErrorT(info: getCurrentExceptionMsg())
-    debug "applyMesage() failed", error = getCurrentExceptionMsg()
+    if childMsg.isCreate:
+      debug "childComputation: createMessage() failed", error = getCurrentExceptionMsg()
+    else:
+      debug "childComputation: applyMessage() failed", error = getCurrentExceptionMsg()
+
+  if childComp.isError:
+    stateDb.rootHash = intermediateRoot
+    computation.vmState.blockHeader.stateRoot = intermediateRoot
+  else:
+    stateDb.rootHash = computation.vmState.blockHeader.stateRoot
 
   return childComp
 
