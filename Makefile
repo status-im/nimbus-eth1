@@ -31,8 +31,6 @@ NIM_DIR := vendor/Nim
 #  but this is broken when using symlinks, so build csources separately (we get parallel compiling as a bonus)
 #- Windows is a special case, as usual
 #- macOS is also a special case, with its "ln" not supporting "-r"
-#- recompiles Nimble with -d:release until we upgrade to nim-0.20 where koch does it by default
-#  (we don't actually use Nimble in this Makefile, but we need it in submodules to manually run tests: "../../env.sh nimble test")
 ifeq ($(OS), Windows_NT)
   BUILD_CSOURCES := \
     $(MAKE) myos=windows clean && \
