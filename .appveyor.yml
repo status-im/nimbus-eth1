@@ -21,12 +21,12 @@ install:
   - IF "%PLATFORM%" == "x86" (
       SET "MINGW_ARCHIVE=i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z" &
       SET "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains%%20targetting%%20Win32/Personal%%20Builds/mingw-builds/4.9.2/threads-win32/dwarf/i686-4.9.2-release-win32-dwarf-rt_v4-rev4.7z" &
-      SET "MINGW_DIR=mingw32" &
+      SET "MINGW_DIR=mingw32"
     ) ELSE (
       IF "%PLATFORM%" == "x64" (
         SET "MINGW_ARCHIVE=x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z" &
         SET "MINGW_URL=https://sourceforge.net/projects/mingw-w64/files/Toolchains%%20targetting%%20Win64/Personal%%20Builds/mingw-builds/4.9.2/threads-win32/seh/x86_64-4.9.2-release-win32-seh-rt_v4-rev4.7z" &
-        SET "MINGW_DIR=mingw64" &
+        SET "MINGW_DIR=mingw64"
       ) else (
         echo "Unknown platform"
       )
