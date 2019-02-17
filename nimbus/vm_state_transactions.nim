@@ -41,25 +41,21 @@ proc setupComputation*(vmState: BaseVMState, transaction: Transaction, sender: E
   doAssert result.isOriginComputation
 
 proc execComputation*(computation: var BaseComputation): bool =
-  # TODO: use AccountStateDB revert/commit after JournalDB implemented
-  let stateDb = computation.vmState.accountDb
-  let intermediateRoot = stateDb.rootHash
-  computation.vmState.blockHeader.stateRoot = stateDb.rootHash
+  var snapshot = computation.snapshot()
 
   try:
     computation.executeOpcodes()
     computation.vmState.mutateStateDB:
       for deletedAccount in computation.getAccountsForDeletion:
         db.deleteAccount deletedAccount
-
     result = not computation.isError
   except ValueError:
     result = false
 
   if result:
-    stateDb.rootHash = computation.vmState.blockHeader.stateRoot
+    snapshot.commit()
   else:
-    stateDb.rootHash = intermediateRoot
+    snapshot.revert()
 
 proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
   doAssert t.isContractCreation

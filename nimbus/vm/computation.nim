@@ -90,12 +90,25 @@ proc prepareChildMessage*(
     code,
     childOptions)
 
-proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
-  var transaction = computation.vmState.beginTransaction()
-  defer: transaction.dispose()
+type
+  ComputationSnapshot* = object
+    snapshot: Snapshot
+    computation: BaseComputation
 
+proc snapshot*(computation: BaseComputation): ComputationSnapshot =
+  result.snapshot = computation.vmState.snapshot()
+  result.computation = computation
+
+proc revert*(snapshot: var ComputationSnapshot, burnsGas: bool = false) =
+  snapshot.snapshot.revert()
+  snapshot.computation.error = Error(info: getCurrentExceptionMsg(), burnsGas: burnsGas)
+
+proc commit*(snapshot: var ComputationSnapshot) =
+  snapshot.snapshot.commit()
+
+proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
   if computation.msg.depth > STACK_DEPTH_LIMIT:
-      raise newException(StackDepthError, "Stack depth limit reached")
+    raise newException(StackDepthError, "Stack depth limit reached")
 
   if computation.msg.value != 0:
     let senderBalance =
@@ -156,65 +169,62 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
       computation.vmState.mutateStateDb:
         db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
-  # Run code
-  # We cannot use the normal dispatching function `executeOpcodes`
-  # within `interpreter_dispatch.nim` due to a cyclic dependency.
-  if not computation.execPrecompiles:
-    computation.opcodeExec(computation)
+proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
+  var snapshot = computation.snapshot()
+  try:
+    computation.applyMessageAux(opCode)
+  except VMError:
+    snapshot.revert()
+    debug "applyMessageAux failed", msg = computation.error.info
+    return
 
-  if not computation.isError:
-    trace "Computation committed"
-    transaction.commit()
-  else:
-    debug "Computation rolled back due to error"
+  try:
+    # Run code
+    # We cannot use the normal dispatching function `executeOpcodes`
+    # within `interpreter_dispatch.nim` due to a cyclic dependency.
+    if not computation.execPrecompiles:
+      computation.opcodeExec(computation)
+    snapshot.commit()
+  except VMError:
+    snapshot.revert(true)
+    debug "applyMessage failed", msg = computation.error.info
 
 proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: static[Op]) =
   computation.applyMessage(opCode)
+  if computation.isError: return
 
-  var transaction: DbTransaction
-  defer: transaction.safeDispose()
+  let contractCode = computation.output
+  if contractCode.len == 0: return
 
-  if fork >= FkFrontier:
-    transaction = computation.vmState.beginTransaction()
+  var snapshot = computation.snapshot()
 
-  if computation.isError:
-    return
-  else:
-    let contractCode = computation.output
-    if contractCode.len > 0:
-      if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
-        raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
+  if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
+    raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
 
-      try:
-        computation.gasMeter.consumeGas(
-          computation.gasCosts[Create].m_handler(0, 0, contractCode.len),
-          reason = "Write contract code for CREATE")
+  try:
+    computation.gasMeter.consumeGas(
+      computation.gasCosts[Create].m_handler(0, 0, contractCode.len),
+      reason = "Write contract code for CREATE")
 
-        let storageAddr = computation.msg.storageAddress
-        trace "SETTING CODE",
-          address = storageAddr.toHex,
-          length = len(contract_code),
-          hash = contractCode.rlpHash
+    let storageAddr = computation.msg.storageAddress
+    trace "SETTING CODE",
+      address = storageAddr.toHex,
+      length = len(contract_code),
+      hash = contractCode.rlpHash
 
-        computation.vmState.mutateStateDb:
-          db.setCode(storageAddr, contractCode.toRange)
+    computation.vmState.mutateStateDb:
+      db.setCode(storageAddr, contractCode.toRange)
 
-        if transaction != nil:
-          transaction.commit()
-
-      except OutOfGas:
-        if fork == FkFrontier:
-          computation.output = @[]
-        else:
-          # Different from Frontier:
-          # Reverts state on gas failure while writing contract code.
-          # Transaction are reverted automatically by safeDispose.
-          discard
+    snapshot.commit()
+  except OutOfGas:
+    if fork == FkFrontier:
+      computation.output = @[]
     else:
-      if transaction != nil:
-        transaction.commit()
+      # Different from Frontier:
+      # Reverts state on gas failure while writing contract code.
+      snapshot.revert()
 
-proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
+proc generateChildComputation*(fork: Fork, computation: var BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
   var childComp = newBaseComputation(
       computation.vmState,
       computation.vmState.blockNumber,
@@ -224,37 +234,14 @@ proc generateChildComputation*(fork: Fork, computation: BaseComputation, childMs
   # Copy the fork op code executor proc (assumes child computation is in the same fork)
   childComp.opCodeExec = computation.opCodeExec
 
-  # TODO: use AccountStateDB revert/commit after JournalDB implemented
-  let stateDb = computation.vmState.accountDb
-  let intermediateRoot = stateDb.rootHash
-  computation.vmState.blockHeader.stateRoot = stateDb.rootHash
-
-  try:
-    if childMsg.isCreate:
-      fork.applyCreateMessage(childComp, opCode)
-    else:
-      applyMessage(childComp, opCode)
-  except VMError:
-    # weird Nim bug
-    # cannot use `Error` directly when constructing error object
-    # it seems the compiler confused in the presence of static[Op]
-    # param
-    type ErrorT = vm_types.Error
-    childComp.error = ErrorT(info: getCurrentExceptionMsg())
-    if childMsg.isCreate:
-      debug "childComputation: createMessage() failed", error = getCurrentExceptionMsg()
-    else:
-      debug "childComputation: applyMessage() failed", error = getCurrentExceptionMsg()
-
-  if childComp.isError:
-    stateDb.rootHash = intermediateRoot
-    computation.vmState.blockHeader.stateRoot = intermediateRoot
+  if childMsg.isCreate:
+    fork.applyCreateMessage(childComp, opCode)
   else:
-    stateDb.rootHash = computation.vmState.blockHeader.stateRoot
+    applyMessage(childComp, opCode)
 
   return childComp
 
-proc addChildComputation(fork: Fork, computation: BaseComputation, child: BaseComputation) =
+proc addChildComputation(fork: Fork, computation: var BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
       computation.returnData = child.output
@@ -276,7 +263,7 @@ proc getFork*(computation: BaseComputation): Fork =
     else:
       computation.vmState.blockNumber.toFork
 
-proc applyChildComputation*(computation: BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
+proc applyChildComputation*(computation: var BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
   ## Apply the vm message childMsg as a child computation.
   let fork = computation.getFork
   result = fork.generateChildComputation(computation, childMsg, opCode)

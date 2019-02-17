@@ -679,9 +679,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
-    var transaction = computation.vmState.beginTransaction()
-    defer: transaction.dispose()
-
     let (gas, value, to, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
@@ -753,8 +750,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
         childComputation.output.toOpenArray(0, actualOutputSize - 1))
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
-    if not isError(computation):
-      transaction.commit()
 
 genCall(call, Call)
 genCall(callCode, CallCode)

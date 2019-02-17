@@ -130,8 +130,27 @@ template mutateStateDB*(vmState: BaseVMState, body: untyped) =
 
 export DbTransaction, commit, rollback, dispose, safeDispose
 
-proc beginTransaction*(vmState: BaseVMState): DbTransaction =
-  vmState.chaindb.db.beginTransaction()
+type
+  Snapshot* = object
+    transaction: DbTransaction
+    intermediateRoot: Hash256
+    vmState: BaseVMState
+
+proc snapshot*(vmState: BaseVMState): Snapshot =
+  # TODO: use AccountStateDB revert/commit after JournalDB implemented
+  result.transaction = vmState.chaindb.db.beginTransaction()
+  result.intermediateRoot = vmState.accountDb.rootHash
+  vmState.blockHeader.stateRoot = vmState.accountDb.rootHash
+  result.vmState = vmState
+
+proc revert*(s: var Snapshot) =
+  s.transaction.dispose()
+  s.vmState.accountDb.rootHash = s.intermediateRoot
+  s.vmState.blockHeader.stateRoot = s.intermediateRoot
+
+proc commit*(s: var Snapshot) =
+  s.transaction.commit()
+  s.vmState.accountDb.rootHash = s.vmState.blockHeader.stateRoot
 
 proc getTracingResult*(vmState: BaseVMState): JsonNode =
   assert(vmState.tracingEnabled)
