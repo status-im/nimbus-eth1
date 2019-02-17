@@ -72,6 +72,12 @@ NIM_PARAMS := --verbosity:$(V)
 ifeq ($(V), 0)
   NIM_PARAMS := $(NIM_PARAMS) --hints:off --warnings:off
 endif
+# md5sum - macOS is a special case
+ifeq ($(shell uname), Darwin)
+  MD5SUM := md5 -r
+else
+  MD5SUM := md5sum
+endif
 
 	OpenSystemsLab/tempfile.nim \
 	status-im/nim-eth \
@@ -123,9 +129,9 @@ test: | build deps
 # primitive reproducibility test
 test-reproducibility:
 	+ [ -e build/nimbus ] || $(MAKE) V=0 nimbus; \
-		MD5SUM1=$$(md5sum build/nimbus | cut -d ' ' -f 1); \
+		MD5SUM1=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1); \
 		$(MAKE) V=0 nimbus; \
-		MD5SUM2=$$(md5sum build/nimbus | cut -d ' ' -f 1); \
+		MD5SUM2=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1); \
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo "Success: identical binaries." || \
 			{ echo "Failure: the binary changed between builds."; exit 1; }
 
