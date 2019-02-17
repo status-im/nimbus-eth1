@@ -28,6 +28,7 @@ build_script:
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 nimbus
 
 test_script:
+  - dir C:\mingw-w64
   - build\nimbus.exe --help
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 test test-reproducibility
 
