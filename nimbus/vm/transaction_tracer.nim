@@ -25,10 +25,11 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.storageKeys = @[]
 
 proc rememberStorageKey(tracer: var TransactionTracer, compDepth: int, key: Uint256) =
-  assert compDepth >= 0 and compDepth <= tracer.storageKeys.len
-  if compDepth == tracer.storageKeys.len:
+  if compDepth >= tracer.storageKeys.len:
+    let prevLen = tracer.storageKeys.len
     tracer.storageKeys.setLen(compDepth + 1)
-    tracer.storageKeys[compDepth] = initSet[Uint256]()
+    for i in prevLen ..< tracer.storageKeys.len:
+      tracer.storageKeys[i] = initSet[Uint256]()
 
   tracer.storageKeys[compDepth].incl key
 
