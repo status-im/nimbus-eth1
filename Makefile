@@ -25,6 +25,14 @@ RUN_CMD_IN_ALL_REPOS = git submodule foreach --recursive --quiet 'echo -e "\n\e[
 ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
 NIM_DIR := vendor/Nim
+# verbosity level
+V := 1
+NIM_PARAMS := --verbosity:$(V)
+HANDLE_OUTPUT :=
+ifeq ($(V), 0)
+  NIM_PARAMS := $(NIM_PARAMS) --hints:off --warnings:off
+  HANDLE_OUTPUT := &>/dev/null
+endif
 #- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
 #- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
 #- build_all.sh looks at the parent dir to decide whether to copy the resulting csources binary there,
@@ -40,13 +48,13 @@ ifeq ($(OS), Windows_NT)
   endif
 
   BUILD_CSOURCES := \
-    $(MAKE) myos=windows $(UCPU) clean && \
-    $(MAKE) myos=windows $(UCPU) CC=gcc LD=gcc
+    $(MAKE) myos=windows $(UCPU) clean $(HANDLE_OUTPUT) && \
+    $(MAKE) myos=windows $(UCPU) CC=gcc LD=gcc $(HANDLE_OUTPUT)
   EXE_SUFFIX := .exe
 else
   BUILD_CSOURCES := \
-    $(MAKE) clean && \
-    $(MAKE) LD=$(CC)
+    $(MAKE) clean $(HANDLE_OUTPUT) && \
+    $(MAKE) LD=$(CC) $(HANDLE_OUTPUT)
   EXE_SUFFIX :=
 endif
 BUILD_NIM := cd $(NIM_DIR) && \
@@ -64,14 +72,8 @@ BUILD_NIM := cd $(NIM_DIR) && \
 	} || { \
 		cp -a bin/nim bin/nim_csources; \
 	} && \
-	sh build_all.sh
+	sh build_all.sh $(HANDLE_OUTPUT)
 NIM_BINARY := $(NIM_DIR)/bin/nim$(EXE_SUFFIX)
-# verbosity level
-V := 1
-NIM_PARAMS := --verbosity:$(V)
-ifeq ($(V), 0)
-  NIM_PARAMS := $(NIM_PARAMS) --hints:off --warnings:off
-endif
 # md5sum - macOS is a special case
 ifeq ($(shell uname), Darwin)
   MD5SUM := md5 -r
