@@ -267,7 +267,7 @@
             "0000000000000000000000000000000000000000000000000000000000000000",
             "0000000000000000000000000000000000000000000000000000000000000060"
           ],
-          "error": ""
+          "error": "Invalid instruction, received an opcode not implemented in the current fork."
         }
       ],
       "stateDiff": {
@@ -672,7 +672,7 @@
           "0000000000000000000000000000000000000000000000000000000000000000",
           "0000000000000000000000000000000000000000000000000000000000000060"
         ],
-        "error": ""
+        "error": "Invalid instruction, received an opcode not implemented in the current fork."
       }
     ]
   },
