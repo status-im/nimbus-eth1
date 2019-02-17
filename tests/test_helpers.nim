@@ -66,6 +66,7 @@ func failIn32Bits(folder, name: string): bool =
     "OverflowGasRequire2.json",
     "RevertInCreateInInit.json",
     "FailedCreateRevertsDeletion.json",
+    "Callcode1024BalanceTooLow.json",
 
     # TODO: obvious theme; check returndatasize/returndatacopy
     "call_ecrec_success_empty_then_returndatasize.json",
