@@ -64,7 +64,7 @@ BUILD_NIM := cd $(NIM_DIR) && \
 	ln -s ../../nimble dist/nimble && \
 	cd csources && \
 	$(BUILD_CSOURCES) && \
-	cd - && \
+	cd - >/dev/null && \
 	[ -e csources/bin ] && { \
 		cp -a csources/bin/nim bin/nim && \
 		cp -a csources/bin/nim bin/nim_csources && \
@@ -139,7 +139,8 @@ test-reproducibility:
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,premix,persist,debug,dumper,hunter,all_tests,beacon_node,validator_keygen,*.exe} $(NIMBLE_DIR) $(NIM_BINARY)
+	rm -rf build/{nimbus,premix,persist,debug,dumper,hunter,all_tests,beacon_node,validator_keygen,*.exe} \
+		$(NIMBLE_DIR) $(NIM_BINARY) $(NIM_DIR)/nimcache nimcache
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete
 mrproper: clean
