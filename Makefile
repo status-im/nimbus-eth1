@@ -131,9 +131,10 @@ test: | build deps
 # primitive reproducibility test
 test-reproducibility:
 	+ [ -e build/nimbus ] || $(MAKE) V=0 nimbus; \
-		MD5SUM1=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1); \
-		$(MAKE) V=0 nimbus; \
-		MD5SUM2=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1); \
+		MD5SUM1=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1) && \
+		rm -rf nimcache/*/nimbus && \
+		$(MAKE) V=0 nimbus && \
+		MD5SUM2=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1) && \
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo "Success: identical binaries." || \
 			{ echo "Failure: the binary changed between builds."; exit 1; }
 
