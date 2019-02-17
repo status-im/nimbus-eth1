@@ -135,8 +135,8 @@ test-reproducibility:
 		rm -rf nimcache/*/nimbus && \
 		$(MAKE) V=0 nimbus && \
 		MD5SUM2=$$($(MD5SUM) build/nimbus | cut -d ' ' -f 1) && \
-		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo "Success: identical binaries." || \
-			{ echo "Failure: the binary changed between builds."; exit 1; }
+		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
+			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
 # usual cleaning
 clean:
