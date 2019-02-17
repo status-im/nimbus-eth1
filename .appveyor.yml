@@ -29,7 +29,7 @@ build_script:
 
 test_script:
   - build\nimbus.exe --help
-  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 test
+  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 test test-reproducibility
 
 deploy: off
 
