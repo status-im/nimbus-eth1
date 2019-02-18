@@ -23,7 +23,9 @@ Before you can use the Premix debugging tool there are several things you need
 to prepare. The first requirement is a recent version of `geth` installed from
 [source](https://github.com/ethereum/go-ethereum/releases) or
 [binary](https://ethereum.github.io/go-ethereum/downloads/). The minimum
-required version is 1.8.18. Afterwards, you can run it with this command:
+required version is 1.8.18. Beware that version 1.8.x contains bugs in
+transaction tracer, upgrade it to 1.9.x soon after it has been released.
+Afterwards, you can run it with this command:
 
 ```bash
 geth --rpc --rpcapi eth,debug --syncmode full --gcmode=archive
