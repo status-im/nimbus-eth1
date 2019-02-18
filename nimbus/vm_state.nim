@@ -144,13 +144,16 @@ proc snapshot*(vmState: BaseVMState): Snapshot =
   result.vmState = vmState
 
 proc revert*(s: var Snapshot) =
-  s.transaction.dispose()
+  s.transaction.rollback()
   s.vmState.accountDb.rootHash = s.intermediateRoot
   s.vmState.blockHeader.stateRoot = s.intermediateRoot
 
 proc commit*(s: var Snapshot) =
   s.transaction.commit()
   s.vmState.accountDb.rootHash = s.vmState.blockHeader.stateRoot
+
+proc dispose*(s: var Snapshot) {.inline.} =
+  s.transaction.dispose()
 
 proc getTracingResult*(vmState: BaseVMState): JsonNode =
   assert(vmState.tracingEnabled)

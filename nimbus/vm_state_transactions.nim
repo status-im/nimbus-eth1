@@ -42,6 +42,7 @@ proc setupComputation*(vmState: BaseVMState, transaction: Transaction, sender: E
 
 proc execComputation*(computation: var BaseComputation): bool =
   var snapshot = computation.snapshot()
+  defer: snapshot.dispose()
 
   try:
     computation.executeOpcodes()

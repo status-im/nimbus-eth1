@@ -103,8 +103,11 @@ proc revert*(snapshot: var ComputationSnapshot, burnsGas: bool = false) =
   snapshot.snapshot.revert()
   snapshot.computation.error = Error(info: getCurrentExceptionMsg(), burnsGas: burnsGas)
 
-proc commit*(snapshot: var ComputationSnapshot) =
+proc commit*(snapshot: var ComputationSnapshot) {.inline.} =
   snapshot.snapshot.commit()
+
+proc dispose*(snapshot: var ComputationSnapshot) {.inline.} =
+  snapshot.snapshot.dispose()
 
 proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
   if computation.msg.depth > STACK_DEPTH_LIMIT:
@@ -171,6 +174,8 @@ proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
 
 proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
   var snapshot = computation.snapshot()
+  defer: snapshot.dispose()
+
   try:
     computation.applyMessageAux(opCode)
   except VMError:
@@ -197,6 +202,7 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: st
   if contractCode.len == 0: return
 
   var snapshot = computation.snapshot()
+  defer: snapshot.dispose()
 
   if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
     raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
