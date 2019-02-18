@@ -25,12 +25,13 @@ build_script:
   - git submodule update --init --recursive --depth 10
   # the 32-bit build is done on a 64-bit image, so we need to override the architecture
   - mingw32-make ARCH_OVERRIDE=%PLATFORM% fetch-dlls
-  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 nimbus
+  - dir C:\mingw-w64
 
 test_script:
-  - dir C:\mingw-w64
+  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 nimbus
   - build\nimbus.exe --help
-  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 test test-reproducibility
+  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 test
+  - IF "%PLATFORM%" == "x64" mingw32-make -j2 test-reproducibility
 
 deploy: off
 
