@@ -161,7 +161,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "recursiveCreate.json",
     "recursiveCreateReturnValue.json",
     "refundSuicide50procentCap.json",
-    "refund_CallA.json",
     "refund_CallToSuicideNoStorage.json",
     "refund_CallToSuicideStorage.json",
     "refund_CallToSuicideTwice.json",
@@ -219,9 +218,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "CreateMessageSuccess.json",
     "EmptyTransaction2.json",
     "EmptyTransaction3.json",
-    "InternlCallStoreClearsSucces.json",
     "Opcodes_TransactionInit.json",
-    "StoreClearsAndInternlCallStoreClearsOOG.json",
     "StoreGasOnCreate.json",
     "SuicidesAndInternlCallSuicidesBonusGasAtCall.json",
     "SuicidesAndInternlCallSuicidesSuccess.json",
@@ -241,9 +238,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "pointMulAdd2.json",
     # 2018-12-07:
     "delegatecallInInitcodeToExistingContractOOG.json",
-    "create_callprecompile_returndatasize.json",
-    "returndatacopy_following_revert_in_create.json",
-    "RevertOpcodeInCreateReturns.json",
     "CallRecursiveBomb3.json",
     # 2019-02-07:
     "call_ecrec_success_empty_then_returndatasize.json",
@@ -255,20 +249,11 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest116.json",
     "randomStatetest237.json",
     "randomStatetest7.json",
-    "TouchToEmptyAccountRevert.json",
     # 2019-02-17:
-    "returndatacopy_after_failing_callcode.json",
-    "returndatacopy_following_failing_call.json",
-    "returndatacopy_following_revert.json",
-    "returndatasize_after_failing_callcode.json",
-    "RevertInCallCode.json",
-    "RevertInCreateInInit.json",
-    "RevertInDelegateCall.json",
-    "FailedCreateRevertsDeletion.json",
-    "callcallcallcode_001_OOGE.json",
     "callcallcallcode_ABCB_RECURSIVE.json",
     "callcallcodecall_ABCB_RECURSIVE.json",
     "callcallcodecallcode_ABCB_RECURSIVE.json",
-    "Call1024BalanceTooLow.json"
+    "Call1024BalanceTooLow.json",
+    "callcallcallcode_001_OOGE.json"
   ]
   result = name in allowedFailingGeneralStateTests
