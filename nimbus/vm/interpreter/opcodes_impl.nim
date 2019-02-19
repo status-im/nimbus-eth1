@@ -510,17 +510,14 @@ op create, inline = false, value, startPosition, size:
   # TODO: Forked create for Homestead
 
   let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
+  let gasCost = computation.gasCosts[Create].m_handler(0, 0, 0)
+  let reason = &"CREATE: GasCreate + {len} * memory expansion"
 
-  computation.gasMeter.consumeGas(
-    computation.gasCosts[Create].m_handler(computation.memory.len, memPos, len),
-    reason = &"CREATE: GasCreate + {len} * memory expansion"
-    )
-
+  computation.gasMeter.consumeGas(gasCost, reason = reason)
   computation.memory.extend(memPos, len)
 
   let senderBalance =
-    computation.vmState.getStateDb(
-      computation.vmState.blockHeader.rlphash).
+    computation.vmState.readOnlyStateDb().
       getBalance(computation.msg.sender)
 
   if senderBalance < value:
@@ -552,6 +549,7 @@ op create, inline = false, value, startPosition, size:
   let
     callData = computation.memory.read(memPos, len)
     createMsgGas = computation.getGasRemaining()
+
   # Consume gas here that will be passed to child
   computation.gasMeter.consumeGas(createMsgGas, reason="CREATE")
 
@@ -584,6 +582,7 @@ op create, inline = false, value, startPosition, size:
     options = MessageOptions(createAddress: contractAddress)
     )
 
+  childMsg.sender = computation.msg.storageAddress
   let childComputation = computation.applyChildComputation(childMsg, Create)
 
   if childComputation.isError:

@@ -208,8 +208,8 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: st
     raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
 
   try:
-    computation.gasMeter.consumeGas(
-      computation.gasCosts[Create].m_handler(0, 0, contractCode.len),
+    let gasCost = computation.gasCosts[Create].m_handler(0, 0, contractCode.len)
+    computation.gasMeter.consumeGas(gasCost,
       reason = "Write contract code for CREATE")
 
     let storageAddr = computation.msg.storageAddress
