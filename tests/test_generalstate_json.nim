@@ -73,7 +73,7 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
   if execComputation(computation):
     let
       gasRemaining = computation.gasMeter.gasRemaining.u256
-      gasRefunded = computation.gasMeter.gasRefunded.u256
+      gasRefunded = computation.getGasRefund().u256
       gasUsed = transaction.gasLimit.u256 - gasRemaining
       gasRefund = min(gasRefunded, gasUsed div 2)
       gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice.u256

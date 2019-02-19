@@ -27,7 +27,7 @@ proc contractCall(t: Transaction, vmState: BaseVMState, sender: EthAddress, fork
   if execComputation(computation):
     let
       gasRemaining = computation.gasMeter.gasRemaining.u256
-      gasRefunded = computation.gasMeter.gasRefunded.u256
+      gasRefunded = computation.getGasRefund().u256
       gasUsed = t.gasLimit.u256 - gasRemaining
       gasRefund = min(gasRefunded, gasUsed div 2)
       gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
