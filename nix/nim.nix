@@ -1,4 +1,5 @@
-{ stdenv, lib, makeWrapper, git, nodejs, openssl, pcre, readline, sqlite }:
+{ stdenv, lib, makeWrapper, git, clang, nodejs, openssl, pcre, readline, sqlite }:
+
 let
   csources = fetchTarball {
     url = https://github.com/nim-lang/csources/archive/b56e49bbedf62db22eb26388f98262e2948b2cbc.tar.gz;
@@ -44,23 +45,23 @@ in stdenv.mkDerivation rec {
   #    used for bootstrapping, but koch insists on moving the nim compiler around
   #    as part of building it, so it cannot be read-only
 
-  buildInputs  = [
+  buildInputs = [
     makeWrapper nodejs
-    openssl pcre readline sqlite git
+    clang openssl pcre readline sqlite git
   ];
 
-  buildPhase   = ''
+  buildPhase = ''
     export HOME=$TMP
     mkdir -p dist
     cp -r ${nimble} dist/nimble
     cp -r ${csources} csources
     chmod 755 $(find csources dist/nimble -type d)
     cd csources
-    sh build.sh
+    CC="clang" LD="clang" sh build.sh
     cd ..
-    bin/nim c -d:release koch.nim
-    ./koch boot -d:release
-    ./koch tools -d:release
+    bin/nim c --cc:clang -d:release koch.nim
+    ./koch boot --cc:clang -d:release
+    ./koch tools --cc:clang -d:release
   '';
 
   installPhase = ''

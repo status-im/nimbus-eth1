@@ -1,8 +1,7 @@
-{ pkgs ? import <nixpkgs> {  } }:
+{ stdenv, callPackage, sqlite, clang, rocksdb }:
 
 let
-  stdenv = pkgs.stdenv;
-  nim = pkgs.callPackage ./nim.nix {};
+  nim = callPackage ./nim.nix {};
   makeLibraryPath = stdenv.lib.makeLibraryPath;
 
 in
@@ -15,11 +14,11 @@ stdenv.mkDerivation rec {
     description = "An Ethereum 2.0 Sharding Client for Resource-Restricted Devices";
     homepage = https://github.com/status-im/nimbus;
     license = [licenses.asl20];
-    platforms = platforms.unix;
+    platforms = platforms.unix ++ platforms.windows;
   };
 
   src = ./.;
-  buildInputs = [pkgs.clang nim pkgs.rocksdb pkgs.sqlite];
+  buildInputs = [clang nim rocksdb sqlite];
   LD_LIBRARY_PATH = "${makeLibraryPath buildInputs}";
 }
 
