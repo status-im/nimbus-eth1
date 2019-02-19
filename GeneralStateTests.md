@@ -349,9 +349,9 @@ OK: 28/58 Fail: 0/58 Skip: 30/58
 + callcodecallcodecallcode_111_OOGMAfter_2.json                   OK
 + callcodecallcodecallcode_111_OOGMAfter_3.json                   OK
 + contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
-  createInitFail_OOGduringInit.json                               Skip
++ createInitFail_OOGduringInit.json                               OK
 ```
-OK: 26/30 Fail: 0/30 Skip: 4/30
+OK: 27/30 Fail: 0/30 Skip: 3/30
 ## stCodeCopyTest
 ```diff
 + ExtCodeCopyTests.json                                           OK
@@ -374,16 +374,16 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
   CREATE_ContractSuicideDuringInit_WithValue.json                 Skip
   CREATE_ContractSuicideDuringInit_WithValueToItself.json         Skip
   CREATE_EContractCreateEContractInInit_Tr.json                   Skip
-  CREATE_EContractCreateNEContractInInitOOG_Tr.json               Skip
-  CREATE_EContractCreateNEContractInInit_Tr.json                  Skip
++ CREATE_EContractCreateNEContractInInitOOG_Tr.json               OK
++ CREATE_EContractCreateNEContractInInit_Tr.json                  OK
   CREATE_EContract_ThenCALLToNonExistentAcc.json                  Skip
   CREATE_EmptyContract.json                                       Skip
   CREATE_EmptyContractAndCallIt_0wei.json                         Skip
   CREATE_EmptyContractAndCallIt_1wei.json                         Skip
   CREATE_EmptyContractWithBalance.json                            Skip
-  CREATE_EmptyContractWithStorage.json                            Skip
-  CREATE_EmptyContractWithStorageAndCallIt_0wei.json              Skip
-  CREATE_EmptyContractWithStorageAndCallIt_1wei.json              Skip
++ CREATE_EmptyContractWithStorage.json                            OK
++ CREATE_EmptyContractWithStorageAndCallIt_0wei.json              OK
++ CREATE_EmptyContractWithStorageAndCallIt_1wei.json              OK
   CREATE_empty000CreateinInitCode_Transaction.json                Skip
   CreateCollisionToEmpty.json                                     Skip
   CreateOOGafterInitCode.json                                     Skip
@@ -397,7 +397,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
   TransactionCollisionToEmptyButCode.json                         Skip
   TransactionCollisionToEmptyButNonce.json                        Skip
 ```
-OK: 2/30 Fail: 0/30 Skip: 28/30
+OK: 7/30 Fail: 0/30 Skip: 23/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -472,7 +472,7 @@ OK: 0/13 Fail: 0/13 Skip: 13/13
 + RawCallGasValueTransferMemoryAsk.json                           OK
 + RawCallMemoryGas.json                                           OK
 + RawCallMemoryGasAsk.json                                        OK
-+ RawCreateFailGasValueTransfer.json                              OK
+  RawCreateFailGasValueTransfer.json                              Skip
   RawCreateFailGasValueTransfer2.json                             Skip
   RawCreateGas.json                                               Skip
   RawCreateGasMemory.json                                         Skip
@@ -486,7 +486,7 @@ OK: 0/13 Fail: 0/13 Skip: 13/13
 + RawExtCodeCopyMemoryGas.json                                    OK
 + RawExtCodeSizeGas.json                                          OK
 ```
-OK: 21/30 Fail: 0/30 Skip: 9/30
+OK: 20/30 Fail: 0/30 Skip: 10/30
 ## stEIP158Specific
 ```diff
   CALL_OneVCallSuicide.json                                       Skip
@@ -589,12 +589,12 @@ OK: 46/46 Fail: 0/46 Skip: 0/46
 + CallAskMoreGasOnDepth2ThenTransactionHasWithMemExpandingCalls.jsonOK
 + CallGoesOOGOnSecondLevel2WithMemExpandingCalls.json             OK
 + CallGoesOOGOnSecondLevelWithMemExpandingCalls.json              OK
-  CreateAndGasInsideCreateWithMemExpandingCalls.json              Skip
++ CreateAndGasInsideCreateWithMemExpandingCalls.json              OK
 + DelegateCallOnEIPWithMemExpandingCalls.json                     OK
 + ExecuteCallThatAskMoreGasThenTransactionHasWithMemExpandingCalls.jsonOK
   NewGasPriceForCodesWithMemExpandingCalls.json                   Skip
 ```
-OK: 6/8 Fail: 0/8 Skip: 2/8
+OK: 7/8 Fail: 0/8 Skip: 1/8
 ## stMemoryStressTest
 ```diff
   CALLCODE_Bounds.json                                            Skip
@@ -1605,7 +1605,7 @@ OK: 33/37 Fail: 0/37 Skip: 4/37
 + RevertOnEmptyStack.json                                         OK
 + RevertOpcode.json                                               OK
   RevertOpcodeCalls.json                                          Skip
-  RevertOpcodeCreate.json                                         Skip
++ RevertOpcodeCreate.json                                         OK
   RevertOpcodeDirectCall.json                                     Skip
   RevertOpcodeInCallsOnNonEmptyReturnData.json                    Skip
 + RevertOpcodeInCreateReturns.json                                OK
@@ -1625,14 +1625,14 @@ OK: 33/37 Fail: 0/37 Skip: 4/37
 + RevertPrefoundEmptyOOG.json                                     OK
 + RevertPrefoundOOG.json                                          OK
   RevertRemoteSubCallStorageOOG.json                              Skip
-  RevertRemoteSubCallStorageOOG2.json                             Skip
++ RevertRemoteSubCallStorageOOG2.json                             OK
 + RevertSubCallStorageOOG.json                                    OK
 + RevertSubCallStorageOOG2.json                                   OK
 + TouchToEmptyAccountRevert.json                                  OK
 + TouchToEmptyAccountRevert2.json                                 OK
   TouchToEmptyAccountRevert3.json                                 Skip
 ```
-OK: 24/43 Fail: 0/43 Skip: 19/43
+OK: 26/43 Fail: 0/43 Skip: 17/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -1681,14 +1681,14 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 ```diff
 + AmbiguousMethod.json                                            OK
 + CallInfiniteLoop.json                                           OK
-  CallLowLevelCreatesSolidity.json                                Skip
++ CallLowLevelCreatesSolidity.json                                OK
 + CallRecursiveMethods.json                                       OK
-  ContractInheritance.json                                        Skip
-  CreateContractFromMethod.json                                   Skip
++ ContractInheritance.json                                        OK
++ CreateContractFromMethod.json                                   OK
   RecursiveCreateContracts.json                                   Skip
   RecursiveCreateContractsCreate4Contracts.json                   Skip
 + TestBlockAndTransactionProperties.json                          OK
-  TestContractInteraction.json                                    Skip
++ TestContractInteraction.json                                    OK
   TestContractSuicide.json                                        Skip
   TestCryptographicFunctions.json                                 Skip
 + TestKeywords.json                                               OK
@@ -1696,7 +1696,7 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 + TestStoreGasPrices.json                                         OK
 + TestStructuresAndVariabless.json                                OK
 ```
-OK: 8/16 Fail: 0/16 Skip: 8/16
+OK: 12/16 Fail: 0/16 Skip: 4/16
 ## stSpecialTest
 ```diff
 + FailedCreateRevertsDeletion.json                                OK
@@ -2026,7 +2026,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
   CallRecursiveBomb0_OOG_atMaxCallDepth.json                      Skip
   CallRecursiveBomb1.json                                         Skip
   CallRecursiveBomb2.json                                         Skip
-  CallRecursiveBomb3.json                                         Skip
++ CallRecursiveBomb3.json                                         OK
   CallRecursiveBombLog.json                                       Skip
   CallRecursiveBombLog2.json                                      Skip
 + CallToNameRegistrator0.json                                     OK
@@ -2057,10 +2057,10 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
   callcodeToReturn1.json                                          Skip
 + callerAccountBalance.json                                       OK
   createNameRegistrator.json                                      Skip
-+ createNameRegistratorOOG_MemExpansionOOV.json                   OK
+  createNameRegistratorOOG_MemExpansionOOV.json                   Skip
   createNameRegistratorOutOfMemoryBonds0.json                     Skip
-+ createNameRegistratorOutOfMemoryBonds1.json                     OK
-  createNameRegistratorValueTooHigh.json                          Skip
+  createNameRegistratorOutOfMemoryBonds1.json                     Skip
++ createNameRegistratorValueTooHigh.json                          OK
   createNameRegistratorZeroMem.json                               Skip
   createNameRegistratorZeroMem2.json                              Skip
   createNameRegistratorZeroMemExpansion.json                      Skip
@@ -2089,7 +2089,7 @@ OK: 40/67 Fail: 0/67 Skip: 27/67
 + ContractStoreClearsOOG.json                                     OK
 + ContractStoreClearsSuccess.json                                 OK
 + CreateMessageReverted.json                                      OK
-  CreateMessageSuccess.json                                       Skip
++ CreateMessageSuccess.json                                       OK
 + CreateTransactionReverted.json                                  OK
 + CreateTransactionSuccess.json                                   OK
 + EmptyTransaction.json                                           OK
@@ -2108,7 +2108,7 @@ OK: 40/67 Fail: 0/67 Skip: 27/67
 + RefundOverflow2.json                                            OK
 + StoreClearsAndInternlCallStoreClearsOOG.json                    OK
 + StoreClearsAndInternlCallStoreClearsSuccess.json                OK
-  StoreGasOnCreate.json                                           Skip
++ StoreGasOnCreate.json                                           OK
   SuicidesAndInternlCallSuicidesBonusGasAtCall.json               Skip
 + SuicidesAndInternlCallSuicidesBonusGasAtCallFailed.json         OK
 + SuicidesAndInternlCallSuicidesOOG.json                          OK
@@ -2131,7 +2131,7 @@ OK: 40/67 Fail: 0/67 Skip: 27/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 34/44 Fail: 0/44 Skip: 10/44
+OK: 36/44 Fail: 0/44 Skip: 8/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1082/2334 Fail: 0/2334 Skip: 1252/2334
+OK: 1096/2334 Fail: 0/2334 Skip: 1238/2334
