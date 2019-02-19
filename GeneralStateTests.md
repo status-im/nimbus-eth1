@@ -1529,7 +1529,7 @@ OK: 0/2 Fail: 0/2 Skip: 2/2
 + refund50percentCap.json                                         OK
 + refund600.json                                                  OK
   refundSuicide50procentCap.json                                  Skip
-  refund_CallA.json                                               Skip
++ refund_CallA.json                                               OK
 + refund_CallA_OOG.json                                           OK
 + refund_CallA_notEnoughGasInCall.json                            OK
   refund_CallToSuicideNoStorage.json                              Skip
@@ -1544,18 +1544,18 @@ OK: 0/2 Fail: 0/2 Skip: 2/2
   refund_multimpleSuicide.json                                    Skip
   refund_singleSuicide.json                                       Skip
 ```
-OK: 12/19 Fail: 0/19 Skip: 7/19
+OK: 13/19 Fail: 0/19 Skip: 6/19
 ## stReturnDataTest
 ```diff
   call_ecrec_success_empty_then_returndatasize.json               Skip
 + call_outsize_then_create_successful_then_returndatasize.json    OK
 + call_then_call_value_fail_then_returndatasize.json              OK
 + call_then_create_successful_then_returndatasize.json            OK
-  create_callprecompile_returndatasize.json                       Skip
++ create_callprecompile_returndatasize.json                       OK
   modexp_modsize0_returndatasize.json                             Skip
 + returndatacopy_0_0_following_successful_create.json             OK
   returndatacopy_afterFailing_create.json                         Skip
-  returndatacopy_after_failing_callcode.json                      Skip
++ returndatacopy_after_failing_callcode.json                      OK
 + returndatacopy_after_failing_delegatecall.json                  OK
 + returndatacopy_after_failing_staticcall.json                    OK
 + returndatacopy_after_revert_in_staticcall.json                  OK
@@ -1564,16 +1564,16 @@ OK: 12/19 Fail: 0/19 Skip: 7/19
 + returndatacopy_after_successful_staticcall.json                 OK
 + returndatacopy_following_call.json                              OK
 + returndatacopy_following_create.json                            OK
-  returndatacopy_following_failing_call.json                      Skip
-  returndatacopy_following_revert.json                            Skip
-  returndatacopy_following_revert_in_create.json                  Skip
++ returndatacopy_following_failing_call.json                      OK
++ returndatacopy_following_revert.json                            OK
++ returndatacopy_following_revert_in_create.json                  OK
 + returndatacopy_following_successful_create.json                 OK
 + returndatacopy_following_too_big_transfer.json                  OK
 + returndatacopy_initial.json                                     OK
 + returndatacopy_initial_256.json                                 OK
 + returndatacopy_initial_big_sum.json                             OK
 + returndatacopy_overrun.json                                     OK
-  returndatasize_after_failing_callcode.json                      Skip
++ returndatasize_after_failing_callcode.json                      OK
   returndatasize_after_failing_delegatecall.json                  Skip
 + returndatasize_after_failing_staticcall.json                    OK
 + returndatasize_after_oog_after_deeper.json                      OK
@@ -1585,7 +1585,7 @@ OK: 12/19 Fail: 0/19 Skip: 7/19
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
 ```
-OK: 27/37 Fail: 0/37 Skip: 10/37
+OK: 33/37 Fail: 0/37 Skip: 4/37
 ## stRevertTest
 ```diff
 + LoopCallsDepthThenRevert.json                                   OK
@@ -1598,9 +1598,9 @@ OK: 27/37 Fail: 0/37 Skip: 10/37
 + RevertDepth2.json                                               OK
   RevertDepthCreateAddressCollision.json                          Skip
 + RevertDepthCreateOOG.json                                       OK
-  RevertInCallCode.json                                           Skip
-  RevertInCreateInInit.json                                       Skip
-  RevertInDelegateCall.json                                       Skip
++ RevertInCallCode.json                                           OK
++ RevertInCreateInInit.json                                       OK
++ RevertInDelegateCall.json                                       OK
 + RevertInStaticCall.json                                         OK
 + RevertOnEmptyStack.json                                         OK
 + RevertOpcode.json                                               OK
@@ -1608,7 +1608,7 @@ OK: 27/37 Fail: 0/37 Skip: 10/37
   RevertOpcodeCreate.json                                         Skip
   RevertOpcodeDirectCall.json                                     Skip
   RevertOpcodeInCallsOnNonEmptyReturnData.json                    Skip
-  RevertOpcodeInCreateReturns.json                                Skip
++ RevertOpcodeInCreateReturns.json                                OK
   RevertOpcodeInInit.json                                         Skip
   RevertOpcodeMultipleSubCalls.json                               Skip
   RevertOpcodeReturn.json                                         Skip
@@ -1628,11 +1628,11 @@ OK: 27/37 Fail: 0/37 Skip: 10/37
   RevertRemoteSubCallStorageOOG2.json                             Skip
 + RevertSubCallStorageOOG.json                                    OK
 + RevertSubCallStorageOOG2.json                                   OK
-  TouchToEmptyAccountRevert.json                                  Skip
++ TouchToEmptyAccountRevert.json                                  OK
 + TouchToEmptyAccountRevert2.json                                 OK
   TouchToEmptyAccountRevert3.json                                 Skip
 ```
-OK: 19/43 Fail: 0/43 Skip: 24/43
+OK: 24/43 Fail: 0/43 Skip: 19/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -1699,7 +1699,7 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 OK: 8/16 Fail: 0/16 Skip: 8/16
 ## stSpecialTest
 ```diff
-  FailedCreateRevertsDeletion.json                                Skip
++ FailedCreateRevertsDeletion.json                                OK
   JUMPDEST_Attack.json                                            Skip
   JUMPDEST_AttackwithJump.json                                    Skip
   OverflowGasMakeMoney.json                                       Skip
@@ -1713,7 +1713,7 @@ OK: 8/16 Fail: 0/16 Skip: 8/16
   txCost-sec73.json                                               Skip
   tx_e1c174e2.json                                                Skip
 ```
-OK: 2/13 Fail: 0/13 Skip: 11/13
+OK: 3/13 Fail: 0/13 Skip: 10/13
 ## stStackTests
 ```diff
   shallowStack.json                                               Skip
@@ -2100,13 +2100,13 @@ OK: 40/67 Fail: 0/67 Skip: 27/67
 + InternalCallHittingGasLimit2.json                               OK
 + InternalCallHittingGasLimitSuccess.json                         OK
 + InternlCallStoreClearsOOG.json                                  OK
-  InternlCallStoreClearsSucces.json                               Skip
++ InternlCallStoreClearsSucces.json                               OK
   Opcodes_TransactionInit.json                                    Skip
 + OverflowGasRequire.json                                         OK
 + OverflowGasRequire2.json                                        OK
 + RefundOverflow.json                                             OK
 + RefundOverflow2.json                                            OK
-  StoreClearsAndInternlCallStoreClearsOOG.json                    Skip
++ StoreClearsAndInternlCallStoreClearsOOG.json                    OK
 + StoreClearsAndInternlCallStoreClearsSuccess.json                OK
   StoreGasOnCreate.json                                           Skip
   SuicidesAndInternlCallSuicidesBonusGasAtCall.json               Skip
@@ -2131,7 +2131,7 @@ OK: 40/67 Fail: 0/67 Skip: 27/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 32/44 Fail: 0/44 Skip: 12/44
+OK: 34/44 Fail: 0/44 Skip: 10/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1067/2334 Fail: 0/2334 Skip: 1267/2334
+OK: 1082/2334 Fail: 0/2334 Skip: 1252/2334
