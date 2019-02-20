@@ -123,40 +123,39 @@ proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
       raise newException(InsufficientFunds,
           &"Insufficient funds: {senderBalance} < {computation.msg.value}"
       )
-    when opCode in {Call, CallCode}:
-      let
-        insufficientFunds = senderBalance < computation.msg.value
-        stackTooDeep = computation.msg.depth >= MaxCallDepth
 
-      if insufficientFunds or stackTooDeep:
-        computation.returnData = @[]
-        var errMessage: string
-        if insufficientFunds:
-          errMessage = &"Insufficient Funds: have: {$senderBalance} need: {$computation.msg.value}"
-        elif stackTooDeep:
-          errMessage = "Stack Limit Reached"
-        else:
-          raise newException(VMError, "Invariant: Unreachable code path")
+    let
+      insufficientFunds = senderBalance < computation.msg.value
+      stackTooDeep = computation.msg.depth >= MaxCallDepth
 
-        debug "Computation failure", msg = errMessage
-        computation.gasMeter.returnGas(computation.msg.gas)
-        push: 0
-        return
+    if insufficientFunds or stackTooDeep:
+      computation.returnData = @[]
+      var errMessage: string
+      if insufficientFunds:
+        errMessage = &"Insufficient Funds: have: {$senderBalance} need: {$computation.msg.value}"
+      elif stackTooDeep:
+        errMessage = "Stack Limit Reached"
+      else:
+        raise newException(VMError, "Invariant: Unreachable code path")
 
-      when opCode == Call:
-        newBalance = senderBalance - computation.msg.value
-        computation.vmState.mutateStateDb:
-          db.setBalance(computation.msg.sender, newBalance)
-          db.addBalance(computation.msg.storageAddress, computation.msg.value)
+      debug "Computation failure", msg = errMessage
+      computation.gasMeter.returnGas(computation.msg.gas)
+      push: 0
+      return
 
-      trace "Value transferred",
-        source = computation.msg.sender,
-        dest = computation.msg.storageAddress,
-        value = computation.msg.value,
-        oldSenderBalance = senderBalance,
-        newSenderBalance = newBalance,
-        gasPrice = computation.msg.gasPrice,
-        gas = computation.msg.gas
+    newBalance = senderBalance - computation.msg.value
+    computation.vmState.mutateStateDb:
+      db.setBalance(computation.msg.sender, newBalance)
+      db.addBalance(computation.msg.storageAddress, computation.msg.value)
+
+    trace "Value transferred",
+      source = computation.msg.sender,
+      dest = computation.msg.storageAddress,
+      value = computation.msg.value,
+      oldSenderBalance = senderBalance,
+      newSenderBalance = newBalance,
+      gasPrice = computation.msg.gasPrice,
+      gas = computation.msg.gas
 
     trace "Apply message",
       value = computation.msg.value,
@@ -168,20 +167,20 @@ proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
   else:
     # even though the value is zero, the account
     # should be exist.
-    when opCode == Call:
-      computation.vmState.mutateStateDb:
-        db.addBalance(computation.msg.storageAddress, computation.msg.value)
+    computation.vmState.mutateStateDb:
+      db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
 proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
   var snapshot = computation.snapshot()
   defer: snapshot.dispose()
 
-  try:
-    computation.applyMessageAux(opCode)
-  except VMError:
-    snapshot.revert()
-    debug "applyMessageAux failed", msg = computation.error.info
-    return
+  when opCode == Call:
+    try:
+      computation.applyMessageAux(opCode)
+    except VMError:
+      snapshot.revert()
+      debug "applyMessageAux failed", msg = computation.error.info
+      return
 
   if computation.gasMeter.gasRemaining <= 0:
     snapshot.commit()
