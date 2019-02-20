@@ -183,6 +183,10 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
     debug "applyMessageAux failed", msg = computation.error.info
     return
 
+  if computation.gasMeter.gasRemaining <= 0:
+    snapshot.commit()
+    return
+
   try:
     # Run code
     # We cannot use the normal dispatching function `executeOpcodes`
@@ -192,7 +196,9 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
     snapshot.commit()
   except VMError:
     snapshot.revert(true)
-    debug "applyMessage failed", msg = computation.error.info
+    debug "applyMessage failed",
+      msg = computation.error.info,
+      depth = computation.msg.depth
 
 proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: static[Op]) =
   computation.applyMessage(opCode)

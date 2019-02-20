@@ -751,6 +751,9 @@ template genCall(callName: untyped, opCode: Op): untyped =
       if not childComputation.shouldBurnGas:
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
+    if computation.gasMeter.gasRemaining <= 0:
+      raise newException(OutOfGas, "computation out of gas after contract call")
+
 genCall(call, Call)
 genCall(callCode, CallCode)
 genCall(delegateCall, DelegateCall)
