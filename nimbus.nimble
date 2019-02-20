@@ -31,6 +31,7 @@ proc test(name: string, lang = "c") =
 
 task test, "Run tests":
   test "all_tests"
+  test "test_rpc"
   # debugging tools don't yet have tests
   # but they should be compilable
   exec "nim c premix/premix"
