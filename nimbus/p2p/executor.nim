@@ -43,6 +43,13 @@ proc contractCall(t: Transaction, vmState: BaseVMState, sender: EthAddress, fork
     vmState.clearLogs()
     return t.gasLimit.u256 * t.gasPrice.u256
 
+# this proc should not be here, we need to refactor
+# processTransaction
+proc isPrecompiles*(address: EthAddress): bool {.inline.} =
+  for i in 0..18:
+    if address[i] != 0: return
+  result = address[19] >= 1.byte and address[19] <= 8.byte
+
 proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
@@ -86,7 +93,7 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
 
     else:
       let code = db.getCode(t.to)
-      if code.len == 0:
+      if code.len == 0 and not isPrecompiles(t.to):
         # Value transfer
         trace "Transfer", value = t.value, sender, to = t.to
 
