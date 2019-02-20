@@ -170,10 +170,9 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
       result += static(FeeSchedule[GasExpByte]) * (1 + log256(value))
 
   func `prefix gasCreate`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
-    if currentMemSize + memOffset + memLength == 0:
-      result = static(FeeSchedule[GasCreate])
-    else:
-      result = static(FeeSchedule[GasCodeDeposit]) * memLength
+    # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
+    result = currentMemSize * static(FeeSchedule[GasCreate]) +
+      static(FeeSchedule[GasCodeDeposit]) * memLength
 
   func `prefix gasSha3`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
 

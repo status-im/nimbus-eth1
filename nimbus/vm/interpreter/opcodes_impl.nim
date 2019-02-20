@@ -510,7 +510,8 @@ op create, inline = false, value, startPosition, size:
   # TODO: Forked create for Homestead
 
   let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
-  let gasCost = computation.gasCosts[Create].m_handler(0, 0, 0)
+  # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
+  let gasCost = computation.gasCosts[Create].m_handler(1, 0, 0)
   let reason = &"CREATE: GasCreate + {len} * memory expansion"
 
   computation.gasMeter.consumeGas(gasCost, reason = reason)
