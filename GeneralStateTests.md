@@ -428,14 +428,14 @@ OK: 8/30 Fail: 0/30 Skip: 22/30
 + delegatecallEmptycontract.json                                  OK
   delegatecallInInitcodeToEmptyContract.json                      Skip
   delegatecallInInitcodeToExistingContract.json                   Skip
-  delegatecallInInitcodeToExistingContractOOG.json                Skip
++ delegatecallInInitcodeToExistingContractOOG.json                OK
 + delegatecallOOGinCall.json                                      OK
   delegatecallSenderCheck.json                                    Skip
   delegatecallValueCheck.json                                     Skip
   delegatecodeDynamicCode.json                                    Skip
   delegatecodeDynamicCode2SelfCall.json                           Skip
 ```
-OK: 4/34 Fail: 0/34 Skip: 30/34
+OK: 5/34 Fail: 0/34 Skip: 29/34
 ## stEIP150Specific
 ```diff
   CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
@@ -504,13 +504,13 @@ OK: 0/6 Fail: 0/6 Skip: 6/6
 OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stHomesteadSpecific
 ```diff
-  contractCreationOOGdontLeaveEmptyContract.json                  Skip
++ contractCreationOOGdontLeaveEmptyContract.json                  OK
 + contractCreationOOGdontLeaveEmptyContractViaTransaction.json    OK
   createContractViaContract.json                                  Skip
   createContractViaContractOOGInitCode.json                       Skip
   createContractViaTransactionCost53000.json                      Skip
 ```
-OK: 1/5 Fail: 0/5 Skip: 4/5
+OK: 2/5 Fail: 0/5 Skip: 3/5
 ## stInitCodeTest
 ```diff
   CallContractToCreateContractAndCallItOOG.json                   Skip
@@ -519,7 +519,7 @@ OK: 1/5 Fail: 0/5 Skip: 4/5
   CallContractToCreateContractOOGBonusGas.json                    Skip
   CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonSkip
   CallContractToCreateContractWhichWouldCreateContractInInitCode.jsonSkip
-  CallRecursiveContract.json                                      Skip
++ CallRecursiveContract.json                                      OK
   CallTheContractToCreateEmptyContract.json                       Skip
 + NotEnoughCashContractCreation.json                              OK
   OutOfGasContractCreation.json                                   Skip
@@ -532,7 +532,7 @@ OK: 1/5 Fail: 0/5 Skip: 4/5
 + TransactionCreateStopInInitcode.json                            OK
 + TransactionCreateSuicideInInitcode.json                         OK
 ```
-OK: 7/18 Fail: 0/18 Skip: 11/18
+OK: 8/18 Fail: 0/18 Skip: 10/18
 ## stLogTests
 ```diff
 + log0_emptyMem.json                                              OK
@@ -1624,7 +1624,7 @@ OK: 34/37 Fail: 0/37 Skip: 3/37
 + RevertPrefoundEmptyCallOOG.json                                 OK
 + RevertPrefoundEmptyOOG.json                                     OK
 + RevertPrefoundOOG.json                                          OK
-  RevertRemoteSubCallStorageOOG.json                              Skip
++ RevertRemoteSubCallStorageOOG.json                              OK
 + RevertRemoteSubCallStorageOOG2.json                             OK
 + RevertSubCallStorageOOG.json                                    OK
 + RevertSubCallStorageOOG2.json                                   OK
@@ -1632,7 +1632,7 @@ OK: 34/37 Fail: 0/37 Skip: 3/37
 + TouchToEmptyAccountRevert2.json                                 OK
   TouchToEmptyAccountRevert3.json                                 Skip
 ```
-OK: 27/43 Fail: 0/43 Skip: 16/43
+OK: 28/43 Fail: 0/43 Skip: 15/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -2018,7 +2018,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + ABAcalls0.json                                                  OK
   ABAcalls1.json                                                  Skip
   ABAcalls2.json                                                  Skip
-  ABAcalls3.json                                                  Skip
++ ABAcalls3.json                                                  OK
 + ABAcallsSuicide0.json                                           OK
   ABAcallsSuicide1.json                                           Skip
 + Call10.json                                                     OK
@@ -2064,7 +2064,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
   createNameRegistratorZeroMem.json                               Skip
   createNameRegistratorZeroMem2.json                              Skip
   createNameRegistratorZeroMemExpansion.json                      Skip
-  createWithInvalidOpcode.json                                    Skip
++ createWithInvalidOpcode.json                                    OK
 + currentAccountBalance.json                                      OK
 + doubleSelfdestructTest.json                                     OK
 + doubleSelfdestructTest2.json                                    OK
@@ -2083,7 +2083,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideSendEtherToMe.json                                       OK
   testRandomTest.json                                             Skip
 ```
-OK: 43/67 Fail: 0/67 Skip: 24/67
+OK: 45/67 Fail: 0/67 Skip: 22/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1116/2334 Fail: 0/2334 Skip: 1218/2334
+OK: 1122/2334 Fail: 0/2334 Skip: 1212/2334
