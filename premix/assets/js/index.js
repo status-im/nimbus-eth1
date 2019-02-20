@@ -257,12 +257,14 @@ function transactionsRenderer(txId, nimbus, geth) {
     }
 
     function fillEmptyLogs(a, b) {
-      const emptyLog = {address: '', topics: [], data: ''};
+      function emptyLog() {
+        return {address: '', topics: [], data: ''};
+      }
 
       if(a.logs.length > b.logs.length) {
         for(var i in a.logs) {
           if(b.logs[i] === undefined) {
-            b.logs[i] = emptyLog;
+            b.logs[i] = emptyLog();
           }
         }
       }
@@ -275,6 +277,7 @@ function transactionsRenderer(txId, nimbus, geth) {
       $(`<h4>Receipt Log #${i}</h4>`).appendTo(container);
       let a = nimbus.logs[i];
       let b = geth.logs[i];
+      //console.log(a.topics);
       a.topics = a.topics.join(',');
       b.topics = b.topics.join(',');
       let body = premix.newTable(container);
@@ -297,14 +300,14 @@ function transactionsRenderer(txId, nimbus, geth) {
     gas: ntx.gas,
     returnValue: ntx.returnValue
   },
-    nimbus.receipts[txId]
+    deepCopy(nimbus.receipts[txId])
   );
 
   let gcr = $.extend({
     gas: gtx.gas,
     returnValue: "0x" + gtx.returnValue
   },
-    geth.receipts[txId]
+    deepCopy(geth.receipts[txId])
   );
 
   $(`<h4>Transaction Kind: ${tx.txKind}</h4>`).appendTo(container);
