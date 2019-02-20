@@ -590,7 +590,9 @@ op create, inline = false, value, startPosition, size:
     push: 0
   else:
     push: contractAddress
-  computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
+
+  if not childComputation.shouldBurnGas:
+    computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
 proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
@@ -710,7 +712,11 @@ template genCall(callName: untyped, opCode: Op): untyped =
       ))
 
     trace "Call (" & callName.astToStr & ")", childGasLimit, childGasFee
-    computation.gasMeter.consumeGas(childGasFee, reason = $opCode)
+    if childGasFee >= 0:
+      computation.gasMeter.consumeGas(childGasFee, reason = $opCode)
+
+    if childGasFee < 0 and childGasLimit <= 0:
+      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callName.astToStr & ")")
 
     computation.memory.extend(memInPos, memInLen)
     computation.memory.extend(memOutPos, memOutLen)
