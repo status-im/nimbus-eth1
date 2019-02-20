@@ -1099,7 +1099,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest245.json                                         OK
 + randomStatetest246.json                                         OK
 + randomStatetest247.json                                         OK
-+ randomStatetest248.json                                         OK
+  randomStatetest248.json                                         Skip
 + randomStatetest249.json                                         OK
 + randomStatetest25.json                                          OK
 + randomStatetest250.json                                         OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 314/327 Fail: 0/327 Skip: 13/327
+OK: 313/327 Fail: 0/327 Skip: 14/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -1458,7 +1458,7 @@ OK: 314/327 Fail: 0/327 Skip: 13/327
 + randomStatetest576.json                                         OK
 + randomStatetest577.json                                         OK
 + randomStatetest578.json                                         OK
-  randomStatetest579.json                                         Skip
++ randomStatetest579.json                                         OK
 + randomStatetest580.json                                         OK
 + randomStatetest581.json                                         OK
 + randomStatetest582.json                                         OK
@@ -1515,7 +1515,7 @@ OK: 314/327 Fail: 0/327 Skip: 13/327
   randomStatetest646.json                                         Skip
   randomStatetest647.json                                         Skip
 ```
-OK: 218/227 Fail: 0/227 Skip: 9/227
+OK: 219/227 Fail: 0/227 Skip: 8/227
 ## stRecursiveCreate
 ```diff
   recursiveCreate.json                                            Skip

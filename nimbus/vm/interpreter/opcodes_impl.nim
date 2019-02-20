@@ -626,7 +626,7 @@ proc callCodeParams(computation: var BaseComputation): (UInt256, UInt256, EthAdd
     value,
     to,
     ZERO_ADDRESS,  # sender
-    ZERO_ADDRESS,  # code_address
+    to,  # code_address
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,
@@ -738,7 +738,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     if opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
-      
+
     var childComputation = applyChildComputation(computation, childMsg, opCode)
 
     if childComputation.isError:
@@ -755,7 +755,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
         computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
 
     if computation.gasMeter.gasRemaining <= 0:
-      raise newException(OutOfGas, "computation out of gas after contract call")
+      raise newException(OutOfGas, "computation out of gas after contract call (" & callName.astToStr & ")")
 
 genCall(call, Call)
 genCall(callCode, CallCode)
