@@ -81,7 +81,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "RawCreateGasMemory.json",
     "RawCreateGasValueTransfer.json",
     "RawCreateGasValueTransferMemory.json",
-    "contractCreationOOGdontLeaveEmptyContract.json",
     "createContractViaContract.json",
     "createContractViaContractOOGInitCode.json",
     "createContractViaTransactionCost53000.json",
@@ -91,7 +90,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "CallContractToCreateContractOOGBonusGas.json",
     "CallContractToCreateContractWhichWouldCreateContractIfCalled.json",
     "CallContractToCreateContractWhichWouldCreateContractInInitCode.json",
-    "CallRecursiveContract.json",
     "CallTheContractToCreateEmptyContract.json",
     "OutOfGasContractCreation.json",
     "OutOfGasPrefundedContractCreation.json",
@@ -152,19 +150,16 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "RevertOpcodeWithBigOutputInInit.json",
     "RevertPrefound.json",
     "RevertPrefoundEmpty.json",
-    "RevertRemoteSubCallStorageOOG.json",
     "TouchToEmptyAccountRevert3.json",
     "TestContractSuicide.json",
     "TestCryptographicFunctions.json",
     "tx_e1c174e2.json",
-    "ABAcalls3.json",
     "ABAcallsSuicide1.json",
     "CreateHashCollision.json",
     "createNameRegistrator.json",
     "createNameRegistratorZeroMem.json",
     "createNameRegistratorZeroMem2.json",
     "createNameRegistratorZeroMemExpansion.json",
-    "createWithInvalidOpcode.json",
     "suicideCoinbase.json",
     "suicideSendEtherPostDeath.json",
     "testRandomTest.json",
@@ -183,7 +178,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "delegatecallAtTransition.json",
     "delegatecallBeforeTransition.json",
     # 2018-12-07:
-    "delegatecallInInitcodeToExistingContractOOG.json",
     # 2019-02-07:
     "makeMoney.json",
     # 2019-02-15:
@@ -196,7 +190,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     # 2019-02-17:
     "RawCreateFailGasValueTransfer.json",
     "createInitFail_OOGduringInit.json",
-    "Call1024BalanceTooLow.json",
     "NewGasPriceForCodes.json",
     "NewGasPriceForCodesWithMemExpandingCalls.json",
     "NonZeroValue_CALLCODE_ToNonNonZeroBalance.json",
@@ -227,5 +220,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "CallRecursiveBomb2.json",
     "CallRecursiveBombLog.json",
     "CallRecursiveBombLog2.json",
+    "Call1024BalanceTooLow.json"
   ]
   result = name in allowedFailingGeneralStateTests
