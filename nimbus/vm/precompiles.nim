@@ -28,7 +28,8 @@ proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
       # Note that we need to rearrange to R, S, V
       bytes[0..63] = data[64..127]
       let v = data[63]  # TODO: Endian
-      assert v.int in 27..28
+      if v.int notin 27..28:
+        raise newException(ValidationError, "Invalid V in getSignature")
       bytes[64] = v - 27
 
   if recoverSignature(bytes, result[1]) != EthKeysStatus.Success:

@@ -255,5 +255,6 @@ proc executeOpcodes*(computation: var BaseComputation) =
     computation.updateOpcodeExec(fork)
   except VMError:
     computation.error = Error(info: getCurrentExceptionMsg())
-    debug "executeOpcodes() failed", error = getCurrentExceptionMsg()
-
+    debug "VM Error executeOpcodes() failed", error = getCurrentExceptionMsg()
+  except EVMError:
+    debug "EVM Error executeOpcodes() failed", error = getCurrentExceptionMsg()

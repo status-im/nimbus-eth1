@@ -196,7 +196,12 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
     snapshot.commit()
   except VMError:
     snapshot.revert(true)
-    debug "applyMessage failed",
+    debug "VMError applyMessage failed",
+      msg = computation.error.info,
+      depth = computation.msg.depth
+  except EVMError:
+    snapshot.revert() # TODO: true or false?
+    debug "EVMError applyMessage failed",
       msg = computation.error.info,
       depth = computation.msg.depth
 
