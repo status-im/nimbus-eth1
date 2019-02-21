@@ -13,8 +13,10 @@ proc fakeAlloc(n: JsonNode) =
     let
       prevMem = n[i-1]["memory"]
       currMem = n[i]["memory"]
-
-    if currMem.len > prevMem.len:
+      prevPc = n[i-1]["pc"].getInt()
+      currPc = n[i]["pc"].getInt()
+      
+    if currMem.len > prevMem.len and prevPc == currPc - 1:
       let diff = currMem.len - prevMem.len
       for _ in 0 ..< diff:
         prevMem.add %chunk

@@ -196,20 +196,22 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
         let asOp = quote do: Op(`op`) # TODO: unfortunately when passing to runtime, ops are transformed into int
         if BaseGasCosts[op].kind == GckFixed:
           quote do:
+            var lastOpIndex: int
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeStarted(`asOp`)
+              lastOpIndex = `computation`.traceOpCodeStarted(`asOp`)
             `computation`.gasMeter.consumeGas(`computation`.gasCosts[`asOp`].cost, reason = $`asOp`)
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeEnded(`asOp`)
+              `computation`.traceOpCodeEnded(`asOp`, lastOpIndex)
             `instr` = `computation`.code.next()
         else:
           quote do:
+            var lastOpIndex: int
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeStarted(`asOp`)
+              lastOpIndex = `computation`.traceOpCodeStarted(`asOp`)
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeEnded(`asOp`)
+              `computation`.traceOpCodeEnded(`asOp`, lastOpIndex)
             when `asOp` in {Return, Revert, SelfDestruct}:
               break
             else:
