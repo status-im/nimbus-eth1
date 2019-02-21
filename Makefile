@@ -149,10 +149,8 @@ mrproper: clean
 
 # for when you want to use SSH keys with GitHub
 github-ssh:
-	sed -i 's#https://github.com/#git@github.com:#' .git/config
-	git config --file .gitmodules --get-regexp url | while read LINE; do \
-		git config `echo $${LINE} | sed 's#https://github.com/#git@github.com:#'` \
-		;done
+	git config url."git@github.com:".insteadOf "https://github.com/"
+	git submodule foreach --recursive 'git config url."git@github.com:".insteadOf "https://github.com/"'
 
 #- re-builds the Nim compiler (not usually needed, because `make update` does it when necessary)
 #- allows parallel building with the '+' prefix
