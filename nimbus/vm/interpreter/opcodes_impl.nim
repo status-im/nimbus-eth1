@@ -801,16 +801,16 @@ op selfDestruct, inline = false:
 
   computation.vmState.mutateStateDB:
     let
-      local_balance = db.getBalance(computation.msg.storage_address)
-      beneficiary_balance = db.getBalance(beneficiary)
+      localBalance = db.getBalance(computation.msg.storageAddress)
+      beneficiaryBalance = db.getBalance(beneficiary)
 
     # Transfer to beneficiary
-    db.setBalance(beneficiary, local_balance + beneficiary_balance)
+    db.setBalance(beneficiary, localBalance + beneficiaryBalance)
 
     # Zero the balance of the address being deleted.
     # This must come after sending to beneficiary in case the
     # contract named itself as the beneficiary.
-    db.set_balance(computation.msg.storage_address, 0.u256)
+    db.setBalance(computation.msg.storageAddress, 0.u256)
 
     # Register the account to be deleted
     computation.registerAccountForDeletion(beneficiary)
@@ -819,6 +819,6 @@ op selfDestruct, inline = false:
     computation.gasMeter.refundGas(RefundSelfDestruct)
 
     trace "SELFDESTRUCT",
-      storage_address = computation.msg.storage_address.toHex,
-      local_balance = local_balance.toString,
+      storageAddress = computation.msg.storageAddress.toHex,
+      localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex

@@ -234,7 +234,10 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: st
 
     snapshot.commit()
   except OutOfGas:
-    if fork == FkFrontier:
+    debug "applyCreateMessage failed: ",
+      msg = getCurrentExceptionMsg(),
+      depth = computation.msg.depth
+    if fork < FkHomestead:
       computation.output = @[]
     else:
       # Different from Frontier:
@@ -271,6 +274,8 @@ proc addChildComputation(fork: Fork, computation: var BaseComputation, child: Ba
       computation.returnData = @[]
     else:
       computation.returnData = child.output
+    for k, v in child.accountsToDelete:
+      computation.accountsToDelete[k] = v
   computation.children.add(child)
 
 proc getFork*(computation: BaseComputation): Fork =
