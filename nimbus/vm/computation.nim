@@ -333,11 +333,11 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
 proc tracingEnabled*(c: BaseComputation): bool =
   c.vmState.tracingEnabled
 
-proc traceOpCodeStarted*(c: BaseComputation, op: Op) =
+proc traceOpCodeStarted*(c: BaseComputation, op: Op): int =
   c.vmState.tracer.traceOpCodeStarted(c, op)
 
-proc traceOpCodeEnded*(c: BaseComputation, op: Op) =
-  c.vmState.tracer.traceOpCodeEnded(c, op)
+proc traceOpCodeEnded*(c: BaseComputation, op: Op, lastIndex: int) =
+  c.vmState.tracer.traceOpCodeEnded(c, op, lastIndex)
 
 proc traceError*(c: BaseComputation) =
   c.vmState.tracer.traceError(c)

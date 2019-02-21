@@ -38,7 +38,7 @@ iterator storage(tracer: TransactionTracer, compDepth: int): Uint256 =
   for key in tracer.storageKeys[compDepth]:
     yield key
 
-proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
+proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: Op): int =
   if unlikely tracer.trace.isNil:
     tracer.initTracer()
 
@@ -49,7 +49,6 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
   j["pc"] = %(c.code.pc - 1)
   j["depth"] = %(c.msg.depth + 1)
   j["gas"] = %c.gasMeter.gasRemaining
-  tracer.gasRemaining = c.gasMeter.gasRemaining
 
   # log stack
   if TracerFlags.DisableStack notin tracer.flags:
@@ -83,8 +82,10 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
       assert(c.stack.values.len > 1)
       tracer.rememberStorageKey(c.msg.depth, c.stack[^1, Uint256])
 
-proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op) =
-  let j = tracer.trace["structLogs"].elems[^1]
+  result = tracer.trace["structLogs"].len - 1
+
+proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op, lastIndex: int) =
+  let j = tracer.trace["structLogs"].elems[lastIndex]
 
   # TODO: figure out how to get storage
   # when contract execution interrupted by exception
@@ -97,7 +98,8 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op
         storage[key.dumpHex] = %(value.dumpHex)
       j["storage"] = storage
 
-  j["gasCost"] = %(tracer.gasRemaining - c.gasMeter.gasRemaining)
+  let gasRemaining = j["gas"].getInt()
+  j["gasCost"] = %(gasRemaining - c.gasMeter.gasRemaining)
 
   if op in {Return, Revert}:
     let returnValue = %("0x" & toHex(c.rawOutput, true))

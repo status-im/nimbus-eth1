@@ -40,7 +40,6 @@ type
 
   TransactionTracer* = object
     trace*: JsonNode
-    gasRemaining*: GasInt
     flags*: set[TracerFlags]
     accounts*: HashSet[EthAddress]
     storageKeys*: seq[HashSet[Uint256]]
