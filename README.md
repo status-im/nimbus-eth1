@@ -108,6 +108,12 @@ make V=0 # quiet
 make V=2 test # more verbose than usual
 ```
 
+- if you want to use SSH keys with GitHub:
+
+```bash
+make github-ssh
+```
+
 #### Git submodule workflow
 
 Working on a dependency:
