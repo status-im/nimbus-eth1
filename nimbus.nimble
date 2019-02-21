@@ -45,6 +45,7 @@ task test, "Run tests":
     exec "nim c --verbosity:0 --hints:off --warnings:off " & binary
     rmFile binary
   test "all_tests"
+  test "test_rpc"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/"
