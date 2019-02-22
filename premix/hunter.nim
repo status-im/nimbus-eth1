@@ -75,6 +75,7 @@ proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
     validationResult = processBlock(chainDB, parentBlock.header, thisBlock.header, thisBlock.body, vmState)
 
   if validationResult != ValidationResult.OK:
+    transaction.rollback()
     dumpDebuggingMetaData(chainDB, thisBlock.header, thisBlock.body, vmState, false)
 
   result = validationResult
