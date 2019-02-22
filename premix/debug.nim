@@ -30,6 +30,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Ui
   else:
     info "block validation success", validationResult, blockNumber
 
+  transaction.rollback()
   dumpDebuggingMetaData(chainDB, header, body, vmState, false)
   let
     fileName = "debug" & $blockNumber & ".json"
