@@ -2,7 +2,8 @@ import
   json, downloader, stint, strutils, byteutils, parser, nimcrypto,
   chronicles, ../nimbus/tracer, eth/trie/[trie_defs, db], ../nimbus/vm_state,
   ../nimbus/db/[db_chain, state_db], ../nimbus/p2p/executor, premixcore,
-  eth/common, configuration
+  eth/common, configuration, tables, ../nimbus/vm_types, hashes,
+  ../nimbus/utils/header
 
 const
   emptyCodeHash = blankStringHash
@@ -55,6 +56,31 @@ proc prepareBlockEnv(parent: BlockHeader, thisBlock: Block): TrieDatabaseRef =
 
   result = memoryDB
 
+type
+  HunterVMState = ref object of BaseVMState
+    headers: Table[BlockNumber, BlockHeader]
+
+proc hash*(x: Uint256): Hash =
+  result = hash(x.toByteArrayBE)
+
+proc newHunterVMState(prevStateRoot: Hash256, header: BlockHeader, chainDB: BaseChainDB): HunterVMState =
+  new result
+  result.init(prevStateRoot, header, chainDB)
+  result.headers = initTable[BlockNumber, BlockHeader]()
+
+method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+  if blockNumber in vmState.headers:
+    result = vmState.headers[blockNumber].hash
+  else:
+    let data = requestHeader(blockNumber)
+    let header = parseBlockHeader(data)
+    result = header.hash
+    vmState.headers[blockNumber] = header
+
+proc putAncestorsIntoDB(vmState: HunterVMState, db: BaseChainDB) =
+  for header in vmState.headers.values:
+    db.addBlockNumberToHashLookup(header)
+
 proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
   let
     # prepare needed state from previous block
@@ -71,11 +97,12 @@ proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
   let
-    vmState = newBaseVMState(parentBlock.header.stateRoot, thisBlock.header, chainDB)
+    vmState = newHunterVMState(parentBlock.header.stateRoot, thisBlock.header, chainDB)
     validationResult = processBlock(chainDB, parentBlock.header, thisBlock.header, thisBlock.body, vmState)
 
   if validationResult != ValidationResult.OK:
     transaction.rollback()
+    putAncestorsIntoDB(vmState, chainDB)
     dumpDebuggingMetaData(chainDB, thisBlock.header, thisBlock.body, vmState, false)
 
   result = validationResult
