@@ -142,7 +142,6 @@ proc addOpCode(code: var seq[byte], node, params: NimNode) =
 proc parseCode(codes: NimNode): seq[byte] =
   let emptyNode = newEmptyNode()
   codes.expectKind nnkStmtList
-  var addStop = true
   for pc, line in codes:
     line.expectKind({nnkCommand, nnkIdent, nnkStrLit})
     if line.kind == nnkStrLit:
@@ -151,8 +150,6 @@ proc parseCode(codes: NimNode): seq[byte] =
       let sym = bindSym(line)
       validateOpcode(sym)
       result.addOpCode(sym, emptyNode)
-      if pc == codes.len - 1:
-        addStop = $sym != "Stop"
     elif line.kind == nnkCommand:
       let sym = bindSym(line[0])
       validateOpcode(sym)
@@ -162,9 +159,6 @@ proc parseCode(codes: NimNode): seq[byte] =
       result.addOpCode(sym, params)
     else:
       error("unknown syntax: " & line.toStrLit.strVal, line)
-
-  if addStop:
-    result.addOpCode(bindSym"Stop", emptyNode)
 
 proc generateVMProxy(boa: Assembler): NimNode =
   let
