@@ -187,13 +187,17 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
   # Add a branch for each (opcode, proc) pair
   # We dispatch to the next instruction at the end of each branch
   for op, opImpl in opTable.pairs:
+    let asOp = quote do: Op(`op`) # TODO: unfortunately when passing to runtime, ops are transformed into int
     let branchStmt = block:
       if op == Stop:
         quote do:
           trace "op: Stop"
+          if not `computation`.code.atEnd() and `computation`.tracingEnabled:
+            # we only trace `REAL STOP` and ignore `FAKE STOP`
+            let lastOpIndex = `computation`.traceOpCodeStarted(`asOp`)
+            `computation`.traceOpCodeEnded(`asOp`, lastOpIndex)
           break
       else:
-        let asOp = quote do: Op(`op`) # TODO: unfortunately when passing to runtime, ops are transformed into int
         if BaseGasCosts[op].kind == GckFixed:
           quote do:
             var lastOpIndex: int

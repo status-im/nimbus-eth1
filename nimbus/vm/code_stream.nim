@@ -152,7 +152,9 @@ proc displayDecompiled*(c: CodeStream) =
   for op in opcodes:
     echo op[0], " ", op[1], " ", op[2]
 
-
 proc hasSStore*(c: var CodeStream): bool =
   let opcodes = c.decompile()
   result = opcodes.anyIt(it[1] == SSTORE)
+
+proc atEnd*(c: CodeStream): bool =
+  result = c.pc >= c.bytes.len
