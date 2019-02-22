@@ -72,12 +72,14 @@ proc requestTxTraces(n: JsonNode): JsonNode =
       raise newException(ValueError, "Error when retrieving transaction trace")
     result.add txTrace
 
-proc requestBlock*(blockNumber: BlockNumber, flags: set[DownloadFlags] = {}): Block =
-  var header = request("eth_getBlockByNumber", %[%blockNumber.prefixHex, %true])
-  if header.kind == JNull:
+proc requestHeader*(blockNumber: BlockNumber): JsonNode =
+  result = request("eth_getBlockByNumber", %[%blockNumber.prefixHex, %true])
+  if result.kind == JNull:
     error "requested block not available", blockNumber=blockNumber
     raise newException(ValueError, "Error when retrieving block header")
 
+proc requestBlock*(blockNumber: BlockNumber, flags: set[DownloadFlags] = {}): Block =
+  let header = requestHeader(blockNumber)
   result.jsonData   = header
   result.header     = parseBlockHeader(header)
   result.body       = requestBlockBody(header, blockNumber)

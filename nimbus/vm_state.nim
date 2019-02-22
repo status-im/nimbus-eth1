@@ -24,19 +24,23 @@ proc `$`*(vmState: BaseVMState): string =
   else:
     result = &"VMState {vmState.name}:\n  header: {vmState.blockHeader}\n  chaindb:  {vmState.chaindb}"
 
+proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
+           chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}) =
+  self.prevHeaders = @[]
+  self.name = "BaseVM"
+  self.accessLogs = newAccessLogs()
+  self.blockHeader = header
+  self.chaindb = chainDB
+  self.tracer.initTracer(tracerFlags)
+  self.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
+  self.logEntries = @[]
+  self.blockHeader.stateRoot = prevStateRoot
+  self.accountDb = newAccountStateDB(chainDB.db, prevStateRoot, chainDB.pruneTrie)
+
 proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
                      chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
   new result
-  result.prevHeaders = @[]
-  result.name = "BaseVM"
-  result.accessLogs = newAccessLogs()
-  result.blockHeader = header
-  result.chaindb = chainDB
-  result.tracer.initTracer(tracerFlags)
-  result.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
-  result.logEntries = @[]
-  result.blockHeader.stateRoot = prevStateRoot
-  result.accountDb = newAccountStateDB(chainDB.db, prevStateRoot, chainDB.pruneTrie)
+  result.init(prevStateRoot, header, chainDB, tracerFlags)
 
 proc stateRoot*(vmState: BaseVMState): Hash256 =
   vmState.blockHeader.stateRoot
