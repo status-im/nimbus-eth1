@@ -39,8 +39,8 @@ GITHUB_REPOS := \
 	cheatfate/nimcrypto \
 	status-im/nim-ranges \
 	status-im/nim-stint \
+	OpenSystemsLab/tempfile.nim \
 	status-im/nim-rocksdb \
-	status-im/nim-eth \
 	status-im/nim-byteutils \
 	status-im/nim-http-utils \
 	status-im/nim-chronos \
@@ -52,8 +52,10 @@ GITHUB_REPOS := \
 	zah/nim-package-visible-types \
 	status-im/nim-secp256k1 \
 	jangko/snappy \
+	status-im/nim-eth \
 	status-im/nim-bncurve \
 	status-im/nim-confutils \
+	status-im/nim-blscurve \
 	status-im/nim-beacon-chain
 # "foo/bar" -> "$(REPOS_DIR)/bar"
 REPOS := $(addprefix $(REPOS_DIR)/, $(foreach github_repo,$(GITHUB_REPOS),$(word 2,$(subst /, ,$(github_repo)))))
