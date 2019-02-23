@@ -69,18 +69,18 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
   if TracerFlags.EnableAccount in tracer.flags:
     case op
     of Call, CallCode, DelegateCall, StaticCall:
-      assert(c.stack.values.len > 2)
-      tracer.accounts.incl c.stack[^2, EthAddress]
+      if c.stack.values.len > 2:
+        tracer.accounts.incl c.stack[^2, EthAddress]
     of ExtCodeCopy, ExtCodeSize, Balance, SelfDestruct:
-      assert(c.stack.values.len > 1)
-      tracer.accounts.incl c.stack[^1, EthAddress]
+      if c.stack.values.len > 1:
+        tracer.accounts.incl c.stack[^1, EthAddress]
     else:
       discard
 
   if TracerFlags.DisableStorage notin tracer.flags:
     if op == Sstore:
-      assert(c.stack.values.len > 1)
-      tracer.rememberStorageKey(c.msg.depth, c.stack[^1, Uint256])
+      if c.stack.values.len > 1:
+        tracer.rememberStorageKey(c.msg.depth, c.stack[^1, Uint256])
 
   result = tracer.trace["structLogs"].len - 1
 

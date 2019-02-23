@@ -80,7 +80,6 @@ proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAd
 
   if execComputation(c):
     var db = vmState.accountDb
-    db.addBalance(contractAddress, t.value)
 
     # XXX: copy/pasted from GST fixture
     # TODO: more merging/refactoring/etc
@@ -99,15 +98,20 @@ proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAd
     # This apparently is not supposed to actually consume the gas, just be able to,
     # for purposes of accounting. Py-EVM apparently does consume the gas, but it is
     # not matching observed blockchain balances if consumeGas is called.
-    if gasRemaining >= codeCost.u256:
-      db.setCode(contractAddress, c.output.toRange)
-    else:
-      # XXX: Homestead behaves differently; reverts state on gas failure
-      # https://github.com/ethereum/py-evm/blob/master/eth/vm/forks/homestead/computation.py
-      codeCost = 0
-      db.setCode(contractAddress, ByteRange())
-    db.addBalance(sender, (t.gasLimit.u256 - gasUsed2 - codeCost.u256)*t.gasPrice.u256)
-    return (gasUsed2 + codeCost.u256) * t.gasPrice.u256
+
+    if db.accountExists(contractAddress):
+      # make changes only if it not selfdestructed
+      db.addBalance(contractAddress, t.value)
+      if gasRemaining >= codeCost.u256:
+        db.setCode(contractAddress, c.output.toRange)
+      else:
+        # XXX: Homestead behaves differently; reverts state on gas failure
+        # https://github.com/ethereum/py-evm/blob/master/eth/vm/forks/homestead/computation.py
+        codeCost = 0
+        db.setCode(contractAddress, ByteRange())
+
+    db.addBalance(sender, (t.gasLimit.u256 - gasUsed2 - codeCost.u256 + gasRefund) * t.gasPrice.u256)
+    return (gasUsed2 + codeCost.u256 - gasRefund) * t.gasPrice.u256
   else:
     # FIXME: don't do this revert, but rather only subBalance correctly
     # the if transactionfailed at end is what is supposed to pick it up
