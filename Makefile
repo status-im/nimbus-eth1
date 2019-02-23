@@ -81,9 +81,6 @@ else
   MD5SUM := md5sum
 endif
 
-	OpenSystemsLab/tempfile.nim \
-	status-im/nim-eth \
-	status-im/nim-blscurve \
 .PHONY: all premix persist debug dumper hunter deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
 
 # default target, because it's the first one that doesn't start with '.'
