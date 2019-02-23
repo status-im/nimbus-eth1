@@ -121,10 +121,11 @@ op signExtend, inline = false, bits, value:
   var res: UInt256
   if bits <= 31.u256:
     let
+      one = 1.u256
       testBit = bits.toInt * 8 + 7
-      bitPos = (1 shl testBit)
-      mask = u256(bitPos - 1)
-    if not isZero(value and bitPos.u256):
+      bitPos = one shl testBit
+      mask = bitPos - one
+    if not isZero(value and bitPos):
       res = value or (not mask)
     else:
       res = value and mask
