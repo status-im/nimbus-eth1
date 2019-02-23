@@ -280,8 +280,6 @@ suite "Environmental Information Opcodes":
       "0x5E"
       "0x07"
 
-  # macro_assembler automatically insert STOP instruction at the end,
-  # so codesize become 63, not 62 like ethereumj
   assembler: # CODESIZE OP
     title: "CODESIZE_1"
     code:
@@ -289,7 +287,7 @@ suite "Environmental Information Opcodes":
       "0x602001600a5254516040016014525451606001601e5254516080016028525460"
       "0xa052546016604860003960166000f26000603f556103e75660005460005360200235"
     stack:
-      "0x0000000000000000000000000000000000000000000000000000000000000063"
+      "0x0000000000000000000000000000000000000000000000000000000000000062"
     success: false
 
   # 0x94 == 148 bytes
