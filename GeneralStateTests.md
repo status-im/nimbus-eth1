@@ -262,62 +262,62 @@ OK: 14/58 Fail: 0/58 Skip: 44/58
 + callcallcallcode_001_OOGE.json                                  OK
 + callcallcallcode_001_OOGMAfter.json                             OK
 + callcallcallcode_001_OOGMBefore.json                            OK
-  callcallcallcode_001_SuicideEnd.json                            Skip
-  callcallcallcode_001_SuicideMiddle.json                         Skip
++ callcallcallcode_001_SuicideEnd.json                            OK
++ callcallcallcode_001_SuicideMiddle.json                         OK
 + callcallcallcode_ABCB_RECURSIVE.json                            OK
   callcallcode_01.json                                            Skip
 + callcallcode_01_OOGE.json                                       OK
-  callcallcode_01_SuicideEnd.json                                 Skip
++ callcallcode_01_SuicideEnd.json                                 OK
   callcallcodecall_010.json                                       Skip
 + callcallcodecall_010_OOGE.json                                  OK
 + callcallcodecall_010_OOGMAfter.json                             OK
 + callcallcodecall_010_OOGMBefore.json                            OK
-  callcallcodecall_010_SuicideEnd.json                            Skip
-  callcallcodecall_010_SuicideMiddle.json                         Skip
++ callcallcodecall_010_SuicideEnd.json                            OK
++ callcallcodecall_010_SuicideMiddle.json                         OK
 + callcallcodecall_ABCB_RECURSIVE.json                            OK
   callcallcodecallcode_011.json                                   Skip
 + callcallcodecallcode_011_OOGE.json                              OK
 + callcallcodecallcode_011_OOGMAfter.json                         OK
 + callcallcodecallcode_011_OOGMBefore.json                        OK
-  callcallcodecallcode_011_SuicideEnd.json                        Skip
-  callcallcodecallcode_011_SuicideMiddle.json                     Skip
++ callcallcodecallcode_011_SuicideEnd.json                        OK
++ callcallcodecallcode_011_SuicideMiddle.json                     OK
 + callcallcodecallcode_ABCB_RECURSIVE.json                        OK
 + callcodecall_10.json                                            OK
 + callcodecall_10_OOGE.json                                       OK
-  callcodecall_10_SuicideEnd.json                                 Skip
++ callcodecall_10_SuicideEnd.json                                 OK
   callcodecallcall_100.json                                       Skip
 + callcodecallcall_100_OOGE.json                                  OK
 + callcodecallcall_100_OOGMAfter.json                             OK
 + callcodecallcall_100_OOGMBefore.json                            OK
-  callcodecallcall_100_SuicideEnd.json                            Skip
-  callcodecallcall_100_SuicideMiddle.json                         Skip
++ callcodecallcall_100_SuicideEnd.json                            OK
++ callcodecallcall_100_SuicideMiddle.json                         OK
 + callcodecallcall_ABCB_RECURSIVE.json                            OK
   callcodecallcallcode_101.json                                   Skip
 + callcodecallcallcode_101_OOGE.json                              OK
 + callcodecallcallcode_101_OOGMAfter.json                         OK
 + callcodecallcallcode_101_OOGMBefore.json                        OK
-  callcodecallcallcode_101_SuicideEnd.json                        Skip
-  callcodecallcallcode_101_SuicideMiddle.json                     Skip
++ callcodecallcallcode_101_SuicideEnd.json                        OK
++ callcodecallcallcode_101_SuicideMiddle.json                     OK
 + callcodecallcallcode_ABCB_RECURSIVE.json                        OK
   callcodecallcode_11.json                                        Skip
 + callcodecallcode_11_OOGE.json                                   OK
-  callcodecallcode_11_SuicideEnd.json                             Skip
++ callcodecallcode_11_SuicideEnd.json                             OK
   callcodecallcodecall_110.json                                   Skip
 + callcodecallcodecall_110_OOGE.json                              OK
 + callcodecallcodecall_110_OOGMAfter.json                         OK
 + callcodecallcodecall_110_OOGMBefore.json                        OK
-  callcodecallcodecall_110_SuicideEnd.json                        Skip
-  callcodecallcodecall_110_SuicideMiddle.json                     Skip
++ callcodecallcodecall_110_SuicideEnd.json                        OK
++ callcodecallcodecall_110_SuicideMiddle.json                     OK
 + callcodecallcodecall_ABCB_RECURSIVE.json                        OK
   callcodecallcodecallcode_111.json                               Skip
 + callcodecallcodecallcode_111_OOGE.json                          OK
 + callcodecallcodecallcode_111_OOGMAfter.json                     OK
 + callcodecallcodecallcode_111_OOGMBefore.json                    OK
-  callcodecallcodecallcode_111_SuicideEnd.json                    Skip
-  callcodecallcodecallcode_111_SuicideMiddle.json                 Skip
++ callcodecallcodecallcode_111_SuicideEnd.json                    OK
++ callcodecallcodecallcode_111_SuicideMiddle.json                 OK
 + callcodecallcodecallcode_ABCB_RECURSIVE.json                    OK
 ```
-OK: 32/58 Fail: 0/58 Skip: 26/58
+OK: 49/58 Fail: 0/58 Skip: 9/58
 ## stChangedEIP150
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -366,13 +366,13 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 3/3 Fail: 0/3 Skip: 0/3
 ## stCreateTest
 ```diff
-  CREATE_AcreateB_BSuicide_BStore.json                            Skip
++ CREATE_AcreateB_BSuicide_BStore.json                            OK
   CREATE_ContractRETURNBigOffset.json                             Skip
 + CREATE_ContractSSTOREDuringInit.json                            OK
-  CREATE_ContractSuicideDuringInit.json                           Skip
++ CREATE_ContractSuicideDuringInit.json                           OK
   CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json       Skip
   CREATE_ContractSuicideDuringInit_WithValue.json                 Skip
-  CREATE_ContractSuicideDuringInit_WithValueToItself.json         Skip
++ CREATE_ContractSuicideDuringInit_WithValueToItself.json         OK
   CREATE_EContractCreateEContractInInit_Tr.json                   Skip
 + CREATE_EContractCreateNEContractInInitOOG_Tr.json               OK
 + CREATE_EContractCreateNEContractInInit_Tr.json                  OK
@@ -397,7 +397,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
   TransactionCollisionToEmptyButCode.json                         Skip
   TransactionCollisionToEmptyButNonce.json                        Skip
 ```
-OK: 8/30 Fail: 0/30 Skip: 22/30
+OK: 11/30 Fail: 0/30 Skip: 19/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -1528,23 +1528,23 @@ OK: 0/2 Fail: 0/2 Skip: 2/2
 + refund50_2.json                                                 OK
 + refund50percentCap.json                                         OK
 + refund600.json                                                  OK
-  refundSuicide50procentCap.json                                  Skip
++ refundSuicide50procentCap.json                                  OK
 + refund_CallA.json                                               OK
 + refund_CallA_OOG.json                                           OK
 + refund_CallA_notEnoughGasInCall.json                            OK
-  refund_CallToSuicideNoStorage.json                              Skip
-  refund_CallToSuicideStorage.json                                Skip
-  refund_CallToSuicideTwice.json                                  Skip
++ refund_CallToSuicideNoStorage.json                              OK
++ refund_CallToSuicideStorage.json                                OK
++ refund_CallToSuicideTwice.json                                  OK
 + refund_NoOOG_1.json                                             OK
 + refund_OOG.json                                                 OK
 + refund_TxToSuicide.json                                         OK
 + refund_TxToSuicideOOG.json                                      OK
 + refund_changeNonZeroStorage.json                                OK
 + refund_getEtherBack.json                                        OK
-  refund_multimpleSuicide.json                                    Skip
-  refund_singleSuicide.json                                       Skip
++ refund_multimpleSuicide.json                                    OK
++ refund_singleSuicide.json                                       OK
 ```
-OK: 13/19 Fail: 0/19 Skip: 6/19
+OK: 19/19 Fail: 0/19 Skip: 0/19
 ## stReturnDataTest
 ```diff
 + call_ecrec_success_empty_then_returndatasize.json               OK
@@ -1630,9 +1630,9 @@ OK: 34/37 Fail: 0/37 Skip: 3/37
 + RevertSubCallStorageOOG2.json                                   OK
 + TouchToEmptyAccountRevert.json                                  OK
 + TouchToEmptyAccountRevert2.json                                 OK
-  TouchToEmptyAccountRevert3.json                                 Skip
++ TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 28/43 Fail: 0/43 Skip: 15/43
+OK: 29/43 Fail: 0/43 Skip: 14/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -1689,14 +1689,14 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 + RecursiveCreateContractsCreate4Contracts.json                   OK
 + TestBlockAndTransactionProperties.json                          OK
 + TestContractInteraction.json                                    OK
-  TestContractSuicide.json                                        Skip
++ TestContractSuicide.json                                        OK
   TestCryptographicFunctions.json                                 Skip
 + TestKeywords.json                                               OK
 + TestOverflow.json                                               OK
 + TestStoreGasPrices.json                                         OK
 + TestStructuresAndVariabless.json                                OK
 ```
-OK: 14/16 Fail: 0/16 Skip: 2/16
+OK: 15/16 Fail: 0/16 Skip: 1/16
 ## stSpecialTest
 ```diff
 + FailedCreateRevertsDeletion.json                                OK
@@ -2020,7 +2020,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
   ABAcalls2.json                                                  Skip
 + ABAcalls3.json                                                  OK
 + ABAcallsSuicide0.json                                           OK
-  ABAcallsSuicide1.json                                           Skip
++ ABAcallsSuicide1.json                                           OK
 + Call10.json                                                     OK
   CallRecursiveBomb0.json                                         Skip
   CallRecursiveBomb0_OOG_atMaxCallDepth.json                      Skip
@@ -2079,11 +2079,11 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
   suicideCoinbase.json                                            Skip
 + suicideNotExistingAccount.json                                  OK
 + suicideOrigin.json                                              OK
-  suicideSendEtherPostDeath.json                                  Skip
++ suicideSendEtherPostDeath.json                                  OK
 + suicideSendEtherToMe.json                                       OK
   testRandomTest.json                                             Skip
 ```
-OK: 45/67 Fail: 0/67 Skip: 22/67
+OK: 47/67 Fail: 0/67 Skip: 20/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2109,10 +2109,10 @@ OK: 45/67 Fail: 0/67 Skip: 22/67
 + StoreClearsAndInternlCallStoreClearsOOG.json                    OK
 + StoreClearsAndInternlCallStoreClearsSuccess.json                OK
 + StoreGasOnCreate.json                                           OK
-  SuicidesAndInternlCallSuicidesBonusGasAtCall.json               Skip
++ SuicidesAndInternlCallSuicidesBonusGasAtCall.json               OK
 + SuicidesAndInternlCallSuicidesBonusGasAtCallFailed.json         OK
 + SuicidesAndInternlCallSuicidesOOG.json                          OK
-  SuicidesAndInternlCallSuicidesSuccess.json                      Skip
++ SuicidesAndInternlCallSuicidesSuccess.json                      OK
 + SuicidesAndSendMoneyToItselfEtherDestroyed.json                 OK
   SuicidesMixingCoinbase.json                                     Skip
 + SuicidesStopAfterSuicide.json                                   OK
@@ -2131,7 +2131,7 @@ OK: 45/67 Fail: 0/67 Skip: 22/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 36/44 Fail: 0/44 Skip: 8/44
+OK: 38/44 Fail: 0/44 Skip: 6/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1122/2334 Fail: 0/2334 Skip: 1212/2334
+OK: 1154/2334 Fail: 0/2334 Skip: 1180/2334
