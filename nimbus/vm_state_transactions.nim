@@ -87,7 +87,7 @@ proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAd
     # once verified in GST fixture
     let
       gasRemaining = c.gasMeter.gasRemaining.u256
-      gasRefunded = c.gasMeter.gasRefunded.u256
+      gasRefunded = c.getGasRefund().u256
       gasUsed2 = t.gasLimit.u256 - gasRemaining
       gasRefund = min(gasRefunded, gasUsed2 div 2)
       gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
@@ -99,7 +99,7 @@ proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAd
     # for purposes of accounting. Py-EVM apparently does consume the gas, but it is
     # not matching observed blockchain balances if consumeGas is called.
 
-    if db.accountExists(contractAddress):
+    if not c.isSuicided(contractAddress):
       # make changes only if it not selfdestructed
       db.addBalance(contractAddress, t.value)
       if gasRemaining >= codeCost.u256:

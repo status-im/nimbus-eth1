@@ -298,6 +298,9 @@ proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
+proc isSuicided*(c: var BaseComputation, address: EthAddress): bool =
+  result = address in c.accountsToDelete
+
 proc addLogEntry*(c: var BaseComputation, log: Log) {.inline.} =
   c.vmState.addLogEntry(log)
 
