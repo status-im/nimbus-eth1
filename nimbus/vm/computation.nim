@@ -113,6 +113,8 @@ proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
   if computation.msg.depth > STACK_DEPTH_LIMIT:
     raise newException(StackDepthError, "Stack depth limit reached")
 
+  let nilai = computation.vmState.readOnlyStateDb().getBalance(computation.msg.sender)
+
   if computation.msg.value != 0:
     let senderBalance =
       computation.vmState.readOnlyStateDb().
@@ -174,7 +176,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
   var snapshot = computation.snapshot()
   defer: snapshot.dispose()
 
-  when opCode == Call:
+  when opCode in {Call, Create}:
     try:
       computation.applyMessageAux(opCode)
     except VMError:
