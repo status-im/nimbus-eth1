@@ -349,9 +349,9 @@ OK: 49/58 Fail: 0/58 Skip: 9/58
 + callcodecallcodecallcode_111_OOGMAfter_2.json                   OK
 + callcodecallcodecallcode_111_OOGMAfter_3.json                   OK
 + contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
-  createInitFail_OOGduringInit.json                               Skip
++ createInitFail_OOGduringInit.json                               OK
 ```
-OK: 26/30 Fail: 0/30 Skip: 4/30
+OK: 27/30 Fail: 0/30 Skip: 3/30
 ## stCodeCopyTest
 ```diff
 + ExtCodeCopyTests.json                                           OK
@@ -414,14 +414,14 @@ OK: 11/30 Fail: 0/30 Skip: 19/30
   callOutput3Fail.json                                            Skip
   callOutput3partial.json                                         Skip
   callOutput3partialFail.json                                     Skip
-  callWithHighValueAndGasOOG.json                                 Skip
++ callWithHighValueAndGasOOG.json                                 OK
   callcodeOutput1.json                                            Skip
   callcodeOutput2.json                                            Skip
   callcodeOutput3.json                                            Skip
   callcodeOutput3Fail.json                                        Skip
   callcodeOutput3partial.json                                     Skip
   callcodeOutput3partialFail.json                                 Skip
-  callcodeWithHighValueAndGasOOG.json                             Skip
++ callcodeWithHighValueAndGasOOG.json                             OK
   deleagateCallAfterValueTransfer.json                            Skip
 + delegatecallAndOOGatTxLevel.json                                OK
 + delegatecallBasic.json                                          OK
@@ -435,7 +435,7 @@ OK: 11/30 Fail: 0/30 Skip: 19/30
   delegatecodeDynamicCode.json                                    Skip
   delegatecodeDynamicCode2SelfCall.json                           Skip
 ```
-OK: 5/34 Fail: 0/34 Skip: 29/34
+OK: 7/34 Fail: 0/34 Skip: 27/34
 ## stEIP150Specific
 ```diff
   CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
@@ -1708,12 +1708,12 @@ OK: 15/16 Fail: 0/16 Skip: 1/16
 + deploymentError.json                                            OK
   failed_tx_xcf416c53.json                                        Skip
   gasPrice0.json                                                  Skip
-  makeMoney.json                                                  Skip
++ makeMoney.json                                                  OK
   sha3_deja.json                                                  Skip
   txCost-sec73.json                                               Skip
   tx_e1c174e2.json                                                Skip
 ```
-OK: 3/13 Fail: 0/13 Skip: 10/13
+OK: 4/13 Fail: 0/13 Skip: 9/13
 ## stStackTests
 ```diff
   shallowStack.json                                               Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1154/2334 Fail: 0/2334 Skip: 1180/2334
+OK: 1158/2334 Fail: 0/2334 Skip: 1176/2334
