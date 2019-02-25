@@ -24,13 +24,16 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.accounts = initSet[EthAddress]()
   tracer.storageKeys = @[]
 
-proc rememberStorageKey(tracer: var TransactionTracer, compDepth: int, key: Uint256) =
+proc prepare*(tracer: var TransactionTracer, compDepth: int) =
   if compDepth >= tracer.storageKeys.len:
     let prevLen = tracer.storageKeys.len
     tracer.storageKeys.setLen(compDepth + 1)
-    for i in prevLen ..< tracer.storageKeys.len:
+    for i in prevLen ..< tracer.storageKeys.len - 1:
       tracer.storageKeys[i] = initSet[Uint256]()
 
+  tracer.storageKeys[compDepth] = initSet[Uint256]()
+
+proc rememberStorageKey(tracer: var TransactionTracer, compDepth: int, key: Uint256) =
   tracer.storageKeys[compDepth].incl key
 
 iterator storage(tracer: TransactionTracer, compDepth: int): Uint256 =

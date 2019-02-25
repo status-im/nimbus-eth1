@@ -344,3 +344,6 @@ proc traceOpCodeEnded*(c: BaseComputation, op: Op, lastIndex: int) =
 
 proc traceError*(c: BaseComputation) =
   c.vmState.tracer.traceError(c)
+
+proc prepareTracer*(c: BaseComputation) =
+  c.vmState.tracer.prepare(c.msg.depth)
