@@ -147,17 +147,13 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "delegatecallBeforeTransition.json",
     # 2018-12-07:
     # 2019-02-07:
-    "makeMoney.json",
     # 2019-02-15:
-    "callWithHighValueAndGasOOG.json",
-    "callcodeWithHighValueAndGasOOG.json",
     "randomStatetest101.json",
     "randomStatetest116.json",
     "randomStatetest237.json",
     "randomStatetest7.json",
     # 2019-02-17:
     "RawCreateFailGasValueTransfer.json",
-    "createInitFail_OOGduringInit.json",
     "NewGasPriceForCodes.json",
     "NewGasPriceForCodesWithMemExpandingCalls.json",
     "NonZeroValue_CALLCODE_ToNonNonZeroBalance.json",
