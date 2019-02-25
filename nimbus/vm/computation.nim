@@ -182,7 +182,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
       debug "applyMessageAux failed", msg = computation.error.info
       return
 
-  if computation.gasMeter.gasRemaining <= 0:
+  if computation.gasMeter.gasRemaining < 0:
     snapshot.commit()
     return
 

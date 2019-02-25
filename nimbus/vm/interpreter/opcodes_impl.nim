@@ -700,6 +700,9 @@ template genCall(callName: untyped, opCode: Op): untyped =
                                  else:
                                     (memOutPos, memOutLen)
 
+    if gas > high(GasInt).u256:
+      raise newException(TypeError, "GasInt Overflow (" & callName.astToStr & ")")
+
     let (childGasFee, childGasLimit) = computation.gasCosts[opCode].c_handler(
       value,
       GasParams(kind: Call,
@@ -742,8 +745,10 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     if sender != ZERO_ADDRESS:
       childMsg.sender = sender
-
-    if opCode == CallCode:
+    else:
+      childMsg.sender = computation.msg.storageAddress
+      
+    if opCode == CallCode:      
       childMsg.storageAddress = computation.msg.storageAddress
 
     var childComputation = applyChildComputation(computation, childMsg, opCode)
