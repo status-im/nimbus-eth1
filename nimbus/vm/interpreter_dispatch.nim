@@ -228,7 +228,8 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
 
   # Wrap the case statement in while true + computed goto
   result = quote do:
-    `computation`.prepareTracer()
+    if `computation`.tracingEnabled:
+      `computation`.prepareTracer()
     var `instr` = `computation`.code.next()
     while true:
       {.computedGoto.}

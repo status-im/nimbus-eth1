@@ -113,8 +113,6 @@ proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
   if computation.msg.depth > STACK_DEPTH_LIMIT:
     raise newException(StackDepthError, "Stack depth limit reached")
 
-  let nilai = computation.vmState.readOnlyStateDb().getBalance(computation.msg.sender)
-
   if computation.msg.value != 0:
     let senderBalance =
       computation.vmState.readOnlyStateDb().
