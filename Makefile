@@ -137,7 +137,7 @@ test-reproducibility:
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,premix,persist,debug,dumper,hunter,all_tests,beacon_node,validator_keygen,*.exe} \
+	rm -rf build/{nimbus,premix,persist,debug,dumper,hunter,all_tests,beacon_node,validator_keygen,*.exe} vendor/go/bin \
 		$(NIMBLE_DIR) $(NIM_BINARY) $(NIM_DIR)/nimcache nimcache
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete
@@ -172,10 +172,6 @@ status: | $(REPOS)
 	$(eval CMD := $(GIT_STATUS))
 	$(RUN_CMD_IN_ALL_REPOS)
 
-# https://bitbucket.org/nimcontrib/ntags/ - currently fails with "out of memory"
-ntags:
-	ntags -R .
-
 #- actually binaries, but have them as phony targets to force rebuilds
 beacon_node validator_keygen: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ $(REPOS_DIR)/nim-beacon-chain/beacon_chain/$@.nim
@@ -185,6 +181,19 @@ clean_eth2_network_simulation_files:
 
 eth2_network_simulation: | beacon_node validator_keygen clean_eth2_network_simulation_files
 	SKIP_BUILDS=1 $(ENV_SCRIPT) $(REPOS_DIR)/nim-beacon-chain/tests/simulation/start.sh
+
+vendor/go/bin/p2pd:
+	cd vendor/go/src/github.com/libp2p/go-libp2p-daemon && \
+		$(ENV_SCRIPT) $(MAKE)
+
+test-libp2p-daemon: | vendor/go/bin/p2pd deps
+	cd vendor/nim-libp2p && \
+		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) tests/testdaemon.nim && \
+		rm -f tests/testdaemon
+
+# https://bitbucket.org/nimcontrib/ntags/ - currently fails with "out of memory"
+ntags:
+	ntags -R .
 
 #- a few files need to be excluded because they trigger an infinite loop in https://github.com/universal-ctags/ctags
 #- limiting it to Nim files, because there are a lot of C files we don't care about
