@@ -12,7 +12,7 @@ import
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
   ../../vm_state, ../../errors, ../../constants, ../../vm_types,
-  ../../db/[db_chain, state_db], ../../utils/addresses
+  ../../db/[db_chain, state_db], ../../utils
 
 logScope:
   topics = "opcode impl"

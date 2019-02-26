@@ -6,11 +6,10 @@ import
 
 import
   options, json, os, eth/trie/[db, hexary],
-  ../nimbus/[vm_state, tracer, vm_types, transaction],
+  ../nimbus/[vm_state, tracer, vm_types, transaction, utils],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm_state_transactions,
   ../nimbus/vm/interpreter/[vm_forks, gas_costs],
-  ../nimbus/utils/addresses,
   ../nimbus/vm/[message, computation, memory]
 
 export opcode_values, byteutils
@@ -223,7 +222,7 @@ proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: 
 
   var
     tx = body.transactions[0]
-    sender = tracer.getSender(tx)
+    sender = transaction.getSender(tx)
 
   tx.payload = payload
   tx.gasLimit = 500000000

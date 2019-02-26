@@ -1,10 +1,9 @@
 import
-  json, downloader, stint, strutils, byteutils, parser, nimcrypto,
-  chronicles, ../nimbus/tracer, eth/trie/[trie_defs, db], ../nimbus/vm_state,
+  json, downloader, stint, strutils, byteutils, parser, 
+  chronicles, ../nimbus/[tracer, vm_state, utils], eth/trie/[trie_defs, db],
   ../nimbus/db/[db_chain, state_db], ../nimbus/p2p/executor, premixcore,
-  eth/common, configuration, tables, ../nimbus/vm_types, hashes,
-  ../nimbus/utils/header
-
+  eth/common, configuration, tables, ../nimbus/vm_types, hashes
+  
 const
   emptyCodeHash = blankStringHash
   emptyStorageHash = emptyRlpHash
@@ -12,7 +11,7 @@ const
 proc store(memoryDB: TrieDatabaseRef, branch: JsonNode) =
   for p in branch:
     let rlp = hexToSeqByte(p.getStr)
-    let hash = keccak256.digest(rlp)
+    let hash = keccak(rlp)
     memoryDB.put(hash.data, rlp)
 
 proc parseAddress(address: string): EthAddress =

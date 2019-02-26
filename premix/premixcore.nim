@@ -1,7 +1,7 @@
 import
   json, strutils, os,
   stint, chronicles, eth/common,
-  ../nimbus/tracer, ../nimbus/launcher,
+  ../nimbus/transaction, ../nimbus/launcher,
   ./js_tracer, ./parser, ./downloader
 
 proc fakeAlloc(n: JsonNode) =

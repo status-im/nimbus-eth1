@@ -1,7 +1,7 @@
 import
   db/[db_chain, state_db, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
-  eth/trie/db, nimcrypto, strutils, ranges, ./utils/addresses,
+  eth/trie/db, nimcrypto, strutils, ranges,
   chronicles, rpc/hexstrings, launcher
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
@@ -31,17 +31,6 @@ proc toJson*(receipts: seq[Receipt]): JsonNode =
   result = newJArray()
   for receipt in receipts:
     result.add receipt.toJson
-
-proc getSender*(tx: Transaction): EthAddress =
-  if not tx.getSender(result):
-    raise newException(ValueError, "Could not get sender")
-
-proc getRecipient*(tx: Transaction): EthAddress =
-  if tx.isContractCreation:
-    let sender = tx.getSender()
-    result = generateAddress(sender, tx.accountNonce)
-  else:
-    result = tx.to
 
 proc captureAccount(n: JsonNode, db: AccountStateDB, address: EthAddress, name: string) =
   var jaccount = newJObject()
