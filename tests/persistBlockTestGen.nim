@@ -65,6 +65,21 @@ proc main() =
   chainDB.dumpTest(49439) # call opcode bug
   chainDB.dumpTest(49891) # number opcode bug
   chainDB.dumpTest(50111) # apply message bug
+  chainDB.dumpTest(78458 )
+  chainDB.dumpTest(81383 ) # tracer gas cost, stop opcode
+  chainDB.dumpTest(81666 ) # create opcode
+  chainDB.dumpTest(85858 ) # call oog
+  chainDB.dumpTest(116524) # codecall address
+  chainDB.dumpTest(146675) # precompiled contracts ecRecover
+  chainDB.dumpTest(196647) # not enough gas to call
+  chainDB.dumpTest(226147) # create return gas
+  chainDB.dumpTest(226522) # return
+  chainDB.dumpTest(231501) # selfdestruct
+  chainDB.dumpTest(243826) # create contract self destruct
+  chainDB.dumpTest(248032) # signextend over/undeflow
+  chainDB.dumpTest(299804) # GasInt overflow
+  chainDB.dumpTest(420301) # computation gas cost LTE(<=) 0 to LT(<) 0
+  chainDB.dumpTest(512335) # create apply message
 
 when isMainModule:
   var message: string
