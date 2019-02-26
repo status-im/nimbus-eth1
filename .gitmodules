@@ -123,3 +123,13 @@
 	url = https://github.com/OpenSystemsLab/tempfile.nim.git
 	ignore = dirty
 	branch = master
+[submodule "vendor/go/src/github.com/libp2p/go-libp2p-daemon"]
+	path = vendor/go/src/github.com/libp2p/go-libp2p-daemon
+	url = https://github.com/libp2p/go-libp2p-daemon.git
+	ignore = dirty
+	branch = master
+[submodule "vendor/nim-libp2p"]
+	path = vendor/nim-libp2p
+	url = https://github.com/status-im/nim-libp2p.git
+	ignore = dirty
+	branch = master
