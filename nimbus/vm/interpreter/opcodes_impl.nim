@@ -747,8 +747,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
       childMsg.sender = sender
     else:
       childMsg.sender = computation.msg.storageAddress
-      
-    if opCode == CallCode:      
+
+    when opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
 
     var childComputation = applyChildComputation(computation, childMsg, opCode)

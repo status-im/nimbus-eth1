@@ -174,7 +174,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
   var snapshot = computation.snapshot()
   defer: snapshot.dispose()
 
-  when opCode == Call:
+  when opCode in {Call, Create}:
     try:
       computation.applyMessageAux(opCode)
     except VMError:
@@ -344,3 +344,6 @@ proc traceOpCodeEnded*(c: BaseComputation, op: Op, lastIndex: int) =
 
 proc traceError*(c: BaseComputation) =
   c.vmState.tracer.traceError(c)
+
+proc prepareTracer*(c: BaseComputation) =
+  c.vmState.tracer.prepare(c.msg.depth)
