@@ -11,8 +11,7 @@ import
   eth/[rlp, common, keys], eth/trie/db, chronicles,
   ./test_helpers,
   ../nimbus/[constants, errors],
-  ../nimbus/[vm_state, vm_types, vm_state_transactions],
-  ../nimbus/utils/[header, addresses],
+  ../nimbus/[vm_state, vm_types, vm_state_transactions, utils],
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
 

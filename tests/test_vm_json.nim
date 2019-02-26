@@ -12,12 +12,12 @@ import
   ./test_helpers,
   ../nimbus/[constants, errors],
   ../nimbus/[vm_state, vm_types],
-  ../nimbus/utils/header,
+  ../nimbus/utils,
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
 
 proc hashLogEntries(logs: seq[Log]): string =
-  toLowerAscii("0x" & $keccak256.digest(rlp.encode(logs)))
+  toLowerAscii("0x" & $keccak(rlp.encode(logs)))
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -32,7 +32,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     break
 
   let fenv = fixture["env"]
-  var emptyRlpHash = keccak256.digest(rlp.encode(""))
+  var emptyRlpHash = keccak(rlp.encode(""))
   let header = BlockHeader(
     coinbase: fenv{"currentCoinbase"}.getStr.parseAddress,
     difficulty: fromHex(UInt256, fenv{"currentDifficulty"}.getStr),

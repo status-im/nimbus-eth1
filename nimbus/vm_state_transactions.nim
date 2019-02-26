@@ -7,10 +7,9 @@
 
 import
   ranges/typedranges, sequtils, strformat, tables, options,
-  eth/common, chronicles,
-  ./constants, ./errors, ./vm/computation,
-  ./transaction, ./vm_types, ./vm_state, ./block_types, ./db/[db_chain, state_db], ./utils/header,
-  ./vm/interpreter, ./vm/interpreter/gas_costs, ./utils/addresses
+  eth/common, chronicles, ./db/[db_chain, state_db],
+  constants, errors, transaction, vm_types, vm_state, utils,
+  ./vm/[computation, interpreter], ./vm/interpreter/gas_costs
 
 proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
@@ -124,6 +123,7 @@ proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAd
     vmState.clearLogs()
     return t.gasLimit.u256 * t.gasPrice.u256
 
+#[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
   # Execute the transaction in the vm
   # TODO: introduced here: https://github.com/ethereum/py-evm/commit/21c57f2d56ab91bb62723c3f9ebe291d0b132dde
@@ -184,3 +184,4 @@ method applyTransaction*(
   else:
     var (computation, blockHeader) = vmState.executeTransaction(transaction)
     return (computation, nil, initTable[string, string]())
+]#

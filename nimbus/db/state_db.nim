@@ -7,8 +7,8 @@
 
 import
   sequtils, strformat, tables,
-  chronicles, eth/[common, rlp], nimcrypto, eth/trie/[hexary, db],
-  ../constants, ../errors, ../validation,
+  chronicles, eth/[common, rlp], eth/trie/[hexary, db],
+  ../constants, ../errors, ../validation, ../utils,
   storage_types
 
 logScope:
@@ -115,7 +115,7 @@ proc setStorage*(db: var AccountStateDB,
   var
     triedb = HexaryTrie(db.trie).db
     # slotHash can be obtained from accountTrie.put?
-    slotHash = keccak256.digest(slot.toByteArrayBE)
+    slotHash = keccak(slot.toByteArrayBE)
   triedb.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
 
   account.storageRoot = accountTrie.rootHash
@@ -162,7 +162,7 @@ proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
   # also use JournalDB to revert state trie
 
   let
-    newCodeHash = keccak256.digest code.toOpenArray
+    newCodeHash = keccak code.toOpenArray
     triedb = HexaryTrie(db.trie).db
 
   if code.len != 0:

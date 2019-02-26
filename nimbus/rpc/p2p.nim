@@ -9,10 +9,10 @@
 
 import
   strutils, times, options,
-  nimcrypto, json_rpc/rpcserver, hexstrings, stint, byteutils, ranges/typedranges,
-  eth/[common, keys, rlp, p2p], eth/trie/db,
-  ../utils/header, ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
-  ../vm_state_transactions, ../utils/addresses,
+  json_rpc/rpcserver, hexstrings, stint, byteutils, ranges/typedranges,
+  eth/[common, keys, rlp, p2p], eth/trie/db, nimcrypto,
+  ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
+  ../vm_state_transactions, ../utils,
   ../db/[db_chain, state_db, storage_types],
   rpc_types, rpc_utils, ../vm/[message, computation, interpreter_dispatch]
 
@@ -376,7 +376,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     for i in 0 ..< blockBody.uncles.len:
       rawData[startIdx .. startIdx + 32] = blockBody.uncles[i].hash.data
       startIdx += 32
-    result.sha3Uncles = keccak256.digest(rawData)
+    result.sha3Uncles = keccak(rawData)
 
     result.logsBloom = some(header.bloom)
     result.transactionsRoot = header.txRoot
@@ -414,7 +414,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## Returns BlockObject or nil when no block was found.
     let
       header = chain.headerFromTag(quantityTag)
-    
+
     result = some(populateBlockObject(header, getBlockBody(header.hash)))
 
   proc populateTransactionObject(transaction: Transaction, txIndex: int64, blockHeader: BlockHeader, blockHash: Hash256): TransactionObject =

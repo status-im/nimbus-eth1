@@ -7,18 +7,20 @@
 
 import
   tables, sequtils, algorithm,
-  ranges, state_db, nimcrypto, eth/trie/[hexary, db], eth/[common, rlp], byteutils, chronicles,
-  ../errors, ../block_types, ../utils/header, ../constants, ./storage_types
+  ranges, state_db, eth/trie/[hexary, db],
+  eth/[common, rlp], byteutils, chronicles,
+  ../errors,  ../constants, ./storage_types,
+  ../utils
 
 type
   BaseChainDB* = ref object
     db*       : TrieDatabaseRef
     pruneTrie*: bool
 
-  KeyType = enum
-    blockNumberToHash
-    blockHashToScore
-
+  #KeyType = enum
+  #  blockNumberToHash
+  #  blockHashToScore
+  #
   TransactionKey = tuple
     blockNumber: BlockNumber
     index: int
@@ -105,7 +107,7 @@ proc persistTransactions*(self: BaseChainDB, blockNumber: BlockNumber, transacti
   for idx, tx in transactions:
     let
       encodedTx = rlp.encode(tx).toRange
-      txHash = keccak256.digest(encodedTx.toOpenArray)
+      txHash = keccak(encodedTx.toOpenArray)
       txKey: TransactionKey = (blockNumber, idx)
     trie.put(rlp.encode(idx).toRange, encodedTx)
     self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(txKey))
@@ -125,7 +127,7 @@ iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader):
   ## Returns an iterable of the transaction hashes from th block specified
   ## by the given block header.
   for encodedTx in self.getBlockTransactionData(blockHeader.txRoot):
-    yield keccak256.digest(encodedTx.toOpenArray)
+    yield keccak(encodedTx.toOpenArray)
 
 proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody): bool =
   var header: BlockHeader
@@ -245,24 +247,24 @@ proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
-  result = keccak256.digest(enc)
+  result = keccak(enc)
   self.db.put(genericHashKey(result).toOpenArray, enc)
 
-proc persistBlockToDb*(self: BaseChainDB; blk: Block): ValidationResult =
-  ## Persist the given block's header and uncles.
-  ## Assumes all block transactions have been persisted already.
-  let newCanonicalHeaders = self.persistHeaderToDb(blk.header)
-  for header in newCanonicalHeaders:
-    var index = 0
-    for txHash in self.getBlockTransactionHashes(header):
-      self.addTransactionToCanonicalChain(txHash, header, index)
-      inc index
-
-  if blk.uncles.len != 0:
-    let ommersHash = self.persistUncles(blk.uncles)
-    if ommersHash != blk.header.ommersHash:
-      debug "ommersHash mismatch"
-      return ValidationResult.Error
+#proc persistBlockToDb*(self: BaseChainDB; blk: Block): ValidationResult =
+#  ## Persist the given block's header and uncles.
+#  ## Assumes all block transactions have been persisted already.
+#  let newCanonicalHeaders = self.persistHeaderToDb(blk.header)
+#  for header in newCanonicalHeaders:
+#    var index = 0
+#    for txHash in self.getBlockTransactionHashes(header):
+#      self.addTransactionToCanonicalChain(txHash, header, index)
+#      inc index
+#
+#  if blk.uncles.len != 0:
+#    let ommersHash = self.persistUncles(blk.uncles)
+#    if ommersHash != blk.header.ommersHash:
+#      debug "ommersHash mismatch"
+#      return ValidationResult.Error
 
 # Deprecated:
 proc getBlockHeaderByHash*(self: BaseChainDB; blockHash: Hash256): BlockHeader {.deprecated.} =
@@ -273,4 +275,3 @@ proc lookupBlockHash*(self: BaseChainDB; n: BlockNumber): Hash256 {.deprecated.}
 
 proc getCanonicalBlockHeaderByNumber*(self: BaseChainDB; n: BlockNumber): BlockHeader {.deprecated.} =
   self.getBlockHeader(n)
-

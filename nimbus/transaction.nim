@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth/[common, rlp, keys], nimcrypto
+  constants, errors, eth/[common, rlp, keys], nimcrypto, utils
 
 proc initTransaction*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
   value: UInt256, payload: Blob, V: byte, R, S: UInt256, isContractCreation = false): Transaction =
@@ -15,6 +15,7 @@ proc initTransaction*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAd
   result.gasLimit = gasLimit
   result.to = to
   result.value = value
+  result.payload = payload
   result.V = V
   result.R = R
   result.S = S
@@ -115,3 +116,9 @@ proc getSender*(transaction: Transaction): EthAddress =
   if not transaction.getSender(result):
     raise newException(ValidationError, "Could not derive sender address from transaction")
 
+proc getRecipient*(tx: Transaction): EthAddress =
+  if tx.isContractCreation:
+    let sender = tx.getSender()
+    result = generateAddress(sender, tx.accountNonce)
+  else:
+    result = tx.to

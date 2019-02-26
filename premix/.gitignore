@@ -2,5 +2,7 @@
 *.db-lock
 /output
 /temp
+/data
+/nimcache
 *.json
 premixData.js
