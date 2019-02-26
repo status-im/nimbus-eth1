@@ -1,5 +1,7 @@
 import eth/trie/db, eth/[trie, rlp, common], nimcrypto
 
+export nimcrypto.`$`
+
 proc calcRootHash[T](items: openArray[T]): Hash256 =
   var tr = initHexaryTrie(newMemoryDB())
   for i, t in items:
