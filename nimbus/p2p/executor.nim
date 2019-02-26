@@ -57,7 +57,7 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
   trace "txHash", rlpHash = t.rlpHash
   var db = vmState.accountDb
   # Inct nonce:
-  db.setNonce(sender, db.getNonce(sender) + 1)
+  db.incNonce(sender)
   var transactionFailed = false
 
   #t.dump

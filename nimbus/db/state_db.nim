@@ -156,6 +156,9 @@ proc getNonce*(db: AccountStateDB, address: EthAddress): AccountNonce =
   let account = db.getAccount(address)
   account.nonce
 
+proc incNonce*(db: AccountStateDB, address: EthAddress) {.inline.} =
+  db.setNonce(address, db.getNonce(address) + 1)
+
 proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
   var account = db.getAccount(address)
   # TODO: implement JournalDB to store code and storage

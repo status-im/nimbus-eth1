@@ -47,10 +47,10 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
   var readOnly = vmState.readOnlyStateDB
   let storageRoot = readOnly.getStorageRoot(transaction.to)
 
-  let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
+  let gasCost = transaction.gasLimit.u256 * transaction.gasPrice.u256
   vmState.mutateStateDB:
-    db.setNonce(sender, db.getNonce(sender) + 1)
-    db.subBalance(sender, transaction.value + gas_cost)
+    db.incNonce(sender)
+    db.subBalance(sender, transaction.value + gasCost)
 
   if transaction.isContractCreation and transaction.payload.len > 0:
     vmState.mutateStateDB:
@@ -82,7 +82,7 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
       # that would simplify/combine codepaths
       if header.coinbase notin computation.getAccountsForDeletion:
         db.subBalance(header.coinbase, gasRefundAmount)
-        db.addBalance(header.coinbase, gas_cost)
+        db.addBalance(header.coinbase, gasCost)
       db.addBalance(sender, gasRefundAmount)
     # TODO: only here does one commit, with some nuance/caveat
   else:
@@ -91,7 +91,7 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
       db.subBalance(transaction.to, transaction.value)
       db.addBalance(sender, transaction.value)
       db.setStorageRoot(transaction.to, storageRoot)
-      db.addBalance(header.coinbase, gas_cost)
+      db.addBalance(header.coinbase, gasCost)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode
