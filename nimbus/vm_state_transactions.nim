@@ -80,7 +80,7 @@ proc execComputation*(computation: var BaseComputation): bool =
   else:
     snapshot.revert()
 
-proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
+proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
   doAssert tx.isContractCreation
   # TODO: clean up params
   trace "Contract creation"
@@ -96,12 +96,10 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
     # also a couple lines can collapse because variable used once
     # once verified in GST fixture
     let
-      gasRemaining = c.gasMeter.gasRemaining.u256
-      gasRefunded = c.getGasRefund().u256
-      gasUsed = tx.gasLimit.u256 - gasRemaining
+      gasRemaining = c.gasMeter.gasRemaining
+      gasRefunded = c.getGasRefund()
+      gasUsed = tx.gasLimit - gasRemaining
       gasRefund = min(gasRefunded, gasUsed div 2)
-      gasRefundAmount = (gasRefund + gasRemaining) * tx.gasPrice.u256
-    #echo "gasRemaining is ", gasRemaining, " and gasRefunded = ", gasRefunded, " and gasUsed = ", gasUsed, " and gasRefund = ", gasRefund, " and gasRefundAmount = ", gasRefundAmount
 
     var codeCost = 200 * c.output.len
 
@@ -112,7 +110,7 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
     if not c.isSuicided(contractAddress):
       # make changes only if it not selfdestructed
       db.addBalance(contractAddress, tx.value)
-      if gasRemaining >= codeCost.u256:
+      if gasRemaining >= codeCost:
         db.setCode(contractAddress, c.output.toRange)
       else:
         # XXX: Homestead behaves differently; reverts state on gas failure
@@ -120,8 +118,8 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
         codeCost = 0
         db.setCode(contractAddress, ByteRange())
 
-    db.addBalance(sender, (tx.gasLimit.u256 - gasUsed - codeCost.u256 + gasRefund) * tx.gasPrice.u256)
-    return (gasUsed + codeCost.u256 - gasRefund) * tx.gasPrice.u256
+    db.addBalance(sender, (tx.gasLimit - gasUsed - codeCost + gasRefund).u256 * tx.gasPrice.u256)
+    return (gasUsed + codeCost - gasRefund)
   else:
     # FIXME: don't do this revert, but rather only subBalance correctly
     # the if transactionfailed at end is what is supposed to pick it up
@@ -132,7 +130,7 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
     if c.tracingEnabled:
       c.traceError()
     vmState.clearLogs()
-    return tx.gasLimit.u256 * tx.gasPrice.u256
+    return tx.gasLimit
 
 #[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=

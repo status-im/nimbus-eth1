@@ -6,7 +6,7 @@ import options,
   ../vm/[computation, interpreter_dispatch, message],
   ../vm/interpreter/vm_forks
 
-proc contractCall(t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
+proc contractCall(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
   # TODO: this function body was copied from GST with it's comments and TODOs.
   # Right now it's main purpose is to produce VM tracing when syncing block with
   # contract call. At later stage, this proc together with applyCreateTransaction
@@ -15,33 +15,30 @@ proc contractCall(t: Transaction, vmState: BaseVMState, sender: EthAddress, fork
   # TODO: replace with cachingDb or similar approach; necessary
   # when calls/subcalls/etc come in, too.
   var db = vmState.accountDb
-  let storageRoot = db.getStorageRoot(t.to)
+  let storageRoot = db.getStorageRoot(tx.to)
 
-  var computation = setupComputation(vmState, t, sender, forkOverride)
+  var computation = setupComputation(vmState, tx, sender, forkOverride)
   # contract creation transaction.to == 0, so ensure happens after
-  db.addBalance(t.to, t.value)
-
-  let header = vmState.blockHeader
-  let gasCost = t.gasLimit.u256 * t.gasPrice.u256
+  db.addBalance(tx.to, tx.value)
 
   if execComputation(computation):
     let
-      gasRemaining = computation.gasMeter.gasRemaining.u256
-      gasRefunded = computation.getGasRefund().u256
-      gasUsed = t.gasLimit.u256 - gasRemaining
+      gasRemaining = computation.gasMeter.gasRemaining
+      gasRefunded = computation.getGasRefund()
+      gasUsed = tx.gasLimit - gasRemaining
       gasRefund = min(gasRefunded, gasUsed div 2)
-      gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
+      gasRefundAmount = (gasRefund + gasRemaining).u256 * tx.gasPrice.u256
 
     db.addBalance(sender, gasRefundAmount)
 
-    return (t.gasLimit.u256 - gasRemaining - gasRefund) * t.gasPrice.u256
+    return (tx.gasLimit - gasRemaining - gasRefund)
   else:
-    db.subBalance(t.to, t.value)
-    db.addBalance(sender, t.value)
-    db.setStorageRoot(t.to, storageRoot)
+    db.subBalance(tx.to, tx.value)
+    db.addBalance(sender, tx.value)
+    db.setStorageRoot(tx.to, storageRoot)
     if computation.tracingEnabled: computation.traceError()
     vmState.clearLogs()
-    return t.gasLimit.u256 * t.gasPrice.u256
+    return tx.gasLimit
 
 # this proc should not be here, we need to refactor
 # processTransaction
@@ -50,7 +47,7 @@ proc isPrecompiles*(address: EthAddress): bool {.inline.} =
     if address[i] != 0: return
   result = address[19] >= 1.byte and address[19] <= 8.byte
 
-proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMState): UInt256 =
+proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMState): GasInt =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
@@ -68,10 +65,10 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
   var balance = db.getBalance(sender)
   if balance < upfrontCost:
     if balance <= upfrontGasCost:
-      result = balance
+      result = (balance div t.gasPrice.u256).truncate(GasInt)
       balance = 0.u256
     else:
-      result = upfrontGasCost
+      result = t.gasLimit
       balance -= upfrontGasCost
     transactionFailed = true
   else:
@@ -81,7 +78,7 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
   if transactionFailed:
     return
 
-  var gasUsed = t.payload.intrinsicGas.GasInt # += 32000 appears in Homestead when contract create
+  var gasUsed = t.intrinsicGas # += 32000 appears in Homestead when contract create
 
   if gasUsed > t.gasLimit:
     debug "Transaction failed. Out of gas."
@@ -114,7 +111,7 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
     refund += t.value
 
   db.addBalance(sender, refund)
-  return gasUsed.u256 * t.gasPrice.u256
+  return gasUsed
 
 type
   # TODO: these types need to be removed
@@ -167,15 +164,11 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
       for txIndex, tx in body.transactions:
         var sender: EthAddress
         if tx.getSender(sender):
-          let txFee = processTransaction(tx, sender, vmState)
-
-          # perhaps this can be altered somehow
-          # or processTransaction return only gasUsed
-          # a `div` here is ugly and possibly div by zero
-          let gasUsed = (txFee div tx.gasPrice.u256).truncate(GasInt)
+          let gasUsed = processTransaction(tx, sender, vmState)
           cumulativeGasUsed += gasUsed
 
           # miner fee
+          let txFee = gasUsed.u256 * tx.gasPrice.u256
           stateDb.addBalance(header.coinbase, txFee)
         else:
           debug "Could not get sender", txIndex, tx

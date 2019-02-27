@@ -102,11 +102,11 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
 
-    let txFee = processTransaction(tx, sender, vmState)
+    let gasUsed = processTransaction(tx, sender, vmState)
+    let txFee = gasUsed.u256 * tx.gasPrice.u256
     stateDb.addBalance(header.coinbase, txFee)
 
     if idx == txIndex:
-      gasUsed = (txFee div tx.gasPrice.u256).truncate(GasInt)
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, header.coinbase, minerName)
@@ -204,10 +204,8 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
   var gasUsed = GasInt(0)
 
   for tx in body.transactions:
-    let
-      sender = tx.getSender
-      txFee = processTransaction(tx, sender, vmState)
-    gasUsed = gasUsed + (txFee div tx.gasPrice.u256).truncate(GasInt)
+    let sender = tx.getSender
+    gasUsed = gasUsed + processTransaction(tx, sender, vmState)
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed
