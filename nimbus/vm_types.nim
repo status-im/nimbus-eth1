@@ -64,6 +64,7 @@ type
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     opCodeExec*:            OpcodeExecutor
     forkOverride*:          Option[Fork]
+    logEntries*:            seq[Log]
 
   Error* = ref object
     info*:                  string

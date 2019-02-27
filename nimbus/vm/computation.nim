@@ -276,6 +276,7 @@ proc addChildComputation(fork: Fork, computation: var BaseComputation, child: Ba
       computation.returnData = child.output
     for k, v in child.accountsToDelete:
       computation.accountsToDelete[k] = v
+    computation.logEntries.add child.logEntries
   computation.children.add(child)
 
 proc getFork*(computation: BaseComputation): Fork =
@@ -302,7 +303,7 @@ proc isSuicided*(c: var BaseComputation, address: EthAddress): bool =
   result = address in c.accountsToDelete
 
 proc addLogEntry*(c: var BaseComputation, log: Log) {.inline.} =
-  c.vmState.addLogEntry(log)
+  c.logEntries.add(log)
 
 # many methods are basically TODO, but they still return valid values
 # in order to test some existing code

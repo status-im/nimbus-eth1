@@ -163,16 +163,12 @@ proc getTracingResult*(vmState: BaseVMState): JsonNode =
   assert(vmState.tracingEnabled)
   vmState.tracer.trace
 
-proc addLogEntry*(vmState: BaseVMState, log: Log) =
-  vmState.logEntries.add(log)
+proc addLogs*(vmState: BaseVMState, logs: seq[Log]) =
+  shallowCopy(vmState.logEntries, logs)
 
 proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
   shallowCopy(result, vmState.logEntries)
   vmState.logEntries = @[]
-
-proc clearLogs*(vmState: BaseVMState) =
-  # call this when computation error
-  vmState.logEntries.setLen(0)
 
 proc enableTracing*(vmState: BaseVMState) =
   vmState.tracingEnabled = true
