@@ -16,13 +16,13 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
   # XXX: lots of avoidable u256 construction
   var readOnlyDB = vmState.readOnlyStateDB
   let limitAndValue = transaction.gasLimit.u256 + transaction.value
-  let gas_cost = transaction.gasLimit.u256 * transaction.gasPrice.u256
+  let gasCost = transaction.gasLimit.u256 * transaction.gasPrice.u256
 
-  transaction.gasLimit >= transaction.payload.intrinsicGas and
+  transaction.gasLimit >= transaction.intrinsicGas and
     transaction.gasPrice <= (1 shl 34) and
     limitAndValue <= readOnlyDB.getBalance(sender) and
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
-    readOnlyDB.getBalance(sender) >= gas_cost
+    readOnlyDB.getBalance(sender) >= gasCost
 
 proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, forkOverride=none(Fork)) : BaseComputation =
   let fork =
@@ -66,6 +66,9 @@ proc execComputation*(computation: var BaseComputation): bool =
   var snapshot = computation.snapshot()
   defer: snapshot.dispose()
 
+  computation.vmState.mutateStateDB:
+    db.addBalance(computation.msg.storageAddress, computation.msg.value)
+
   try:
     computation.executeOpcodes()
     computation.vmState.mutateStateDB:
@@ -74,6 +77,7 @@ proc execComputation*(computation: var BaseComputation): bool =
     result = not computation.isError
   except ValueError:
     result = false
+    debug "execComputation() error", msg = getCurrentExceptionMsg()
 
   if result:
     snapshot.commit()
@@ -86,7 +90,6 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
   trace "Contract creation"
 
   var c = setupComputation(vmState, tx, sender, forkOverride)
-  let contractAddress = c.msg.storageAddress
 
   if execComputation(c):
     var db = vmState.accountDb
@@ -107,9 +110,9 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
     # for purposes of accounting. Py-EVM apparently does consume the gas, but it is
     # not matching observed blockchain balances if consumeGas is called.
 
+    let contractAddress = c.msg.storageAddress
     if not c.isSuicided(contractAddress):
       # make changes only if it not selfdestructed
-      db.addBalance(contractAddress, tx.value)
       if gasRemaining >= codeCost:
         db.setCode(contractAddress, c.output.toRange)
       else:
@@ -126,7 +129,6 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
     # especially when it's cross-function, it's ugly/fragile
     var db = vmState.accountDb
     db.addBalance(sender, tx.value)
-    debug "execComputation() error", isError = c.isError
     if c.tracingEnabled:
       c.traceError()
     vmState.clearLogs()
