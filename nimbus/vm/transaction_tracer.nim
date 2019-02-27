@@ -25,6 +25,9 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
   tracer.storageKeys = @[]
 
 proc prepare*(tracer: var TransactionTracer, compDepth: int) =
+  # this uncommon arragement is intentional
+  # compDepth will be varying up and down: 1,2,3,4,3,3,2,2,1
+  # see issue #245 and PR #247 discussion
   if compDepth >= tracer.storageKeys.len:
     let prevLen = tracer.storageKeys.len
     tracer.storageKeys.setLen(compDepth + 1)
