@@ -67,6 +67,7 @@ proc execComputation*(computation: var BaseComputation): bool =
   defer: snapshot.dispose()
 
   computation.vmState.mutateStateDB:
+    db.subBalance(computation.msg.origin, computation.msg.value)
     db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
   try:
@@ -124,13 +125,7 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
     db.addBalance(sender, (tx.gasLimit - gasUsed - codeCost + gasRefund).u256 * tx.gasPrice.u256)
     return (gasUsed + codeCost - gasRefund)
   else:
-    # FIXME: don't do this revert, but rather only subBalance correctly
-    # the if transactionfailed at end is what is supposed to pick it up
-    # especially when it's cross-function, it's ugly/fragile
-    var db = vmState.accountDb
-    db.addBalance(sender, tx.value)
-    if c.tracingEnabled:
-      c.traceError()
+    if c.tracingEnabled: c.traceError()
     vmState.clearLogs()
     return tx.gasLimit
 

@@ -50,7 +50,7 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
   let gasCost = transaction.gasLimit.u256 * transaction.gasPrice.u256
   vmState.mutateStateDB:
     db.incNonce(sender)
-    db.subBalance(sender, transaction.value + gasCost)
+    db.subBalance(sender, gasCost)
 
   if transaction.isContractCreation and transaction.payload.len > 0:
     vmState.mutateStateDB:
@@ -83,9 +83,6 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
     # TODO: only here does one commit, with some nuance/caveat
   else:
     vmState.mutateStateDB:
-      # XXX: the coinbase has to be committed; the rest are basically reverts
-      db.addBalance(sender, transaction.value)
-      db.setStorageRoot(transaction.to, storageRoot)
       db.addBalance(header.coinbase, gasCost)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
