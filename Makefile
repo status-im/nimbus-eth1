@@ -81,7 +81,7 @@ else
   MD5SUM := md5sum
 endif
 
-.PHONY: all premix persist debug dumper hunter regress deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
+.PHONY: all premix persist debug dumper hunter regress deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation test-libp2p-daemon
 
 # default target, because it's the first one that doesn't start with '.'
 all: premix persist debug dumper hunter regress nimbus
