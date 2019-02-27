@@ -82,6 +82,7 @@ proc execComputation*(computation: var BaseComputation): bool =
 
   if result:
     snapshot.commit()
+    computation.vmState.addLogs(computation.logEntries)
   else:
     snapshot.revert()
 
@@ -126,7 +127,6 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
     return (gasUsed + codeCost - gasRefund)
   else:
     if c.tracingEnabled: c.traceError()
-    vmState.clearLogs()
     return tx.gasLimit
 
 #[

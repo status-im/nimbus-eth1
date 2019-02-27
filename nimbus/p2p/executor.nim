@@ -21,7 +21,6 @@ proc contractCall*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, fo
     return (tx.gasLimit - gasRemaining - gasRefund)
   else:
     if computation.tracingEnabled: computation.traceError()
-    vmState.clearLogs()
     return tx.gasLimit
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState): GasInt =
