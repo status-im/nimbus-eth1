@@ -24,19 +24,42 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
     readOnlyDB.getBalance(sender) >= gas_cost
 
-proc setupComputation*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress, forkOverride=none(Fork)) : BaseComputation =
-  let message = newMessage(
-      gas = transaction.gasLimit - transaction.payload.intrinsicGas,
-      gasPrice = transaction.gasPrice,
-      to = transaction.to,
-      sender = sender,
-      value = transaction.value,
-      data = transaction.payload,
-      code = vmState.readOnlyStateDB.getCode(transaction.to).toSeq,
-      options = newMessageOptions(origin = sender,
-                                  createAddress = transaction.to))
+proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, forkOverride=none(Fork)) : BaseComputation =
+  let fork =
+    if forkOverride.isSome:
+      forkOverride.get
+    else:
+      vmState.blockNumber.toFork
 
-  result = newBaseComputation(vmState, vmState.blockNumber, message, forkOverride)
+  var recipient: EthAddress
+  var gas = tx.gasLimit - tx.intrinsicGas
+
+  # TODO: refactor message to use byterange
+  # instead of seq[byte]
+  var data, code: seq[byte]
+
+  if tx.isContractCreation:
+    recipient = generateAddress(sender, tx.accountNonce)
+    gas = gas - gasFees[fork][GasTXCreate]
+    data = @[]
+    code = tx.payload
+  else:
+    recipient = tx.to
+    data = tx.payload
+    code = vmState.readOnlyStateDB.getCode(tx.to).toSeq
+
+  let msg = newMessage(
+    gas = gas,
+    gasPrice = tx.gasPrice,
+    to = tx.to,
+    sender = sender,
+    value = tx.value,
+    data = data,
+    code = code,
+    options = newMessageOptions(origin = sender,
+                                createAddress = recipient))
+
+  result = newBaseComputation(vmState, vmState.blockNumber, msg, forkOverride)
   doAssert result.isOriginComputation
 
 proc execComputation*(computation: var BaseComputation): bool =
@@ -57,25 +80,13 @@ proc execComputation*(computation: var BaseComputation): bool =
   else:
     snapshot.revert()
 
-proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
-  doAssert t.isContractCreation
+proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): UInt256 =
+  doAssert tx.isContractCreation
   # TODO: clean up params
   trace "Contract creation"
 
-  let fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.blockNumber.toFork
-  let gasUsed = t.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
-
-  # TODO: setupComputation refactoring
-  let contractAddress = generateAddress(sender, t.accountNonce)
-  let msg = newMessage(t.gasLimit - gasUsed, t.gasPrice, t.to, sender, t.value, @[], t.payload,
-                       options = newMessageOptions(origin = sender,
-                                                   createAddress = contractAddress))
-
-  var c = newBaseComputation(vmState, vmState.blockNumber, msg, forkOverride)
+  var c = setupComputation(vmState, tx, sender, forkOverride)
+  let contractAddress = c.msg.storageAddress
 
   if execComputation(c):
     var db = vmState.accountDb
@@ -87,10 +98,10 @@ proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAd
     let
       gasRemaining = c.gasMeter.gasRemaining.u256
       gasRefunded = c.getGasRefund().u256
-      gasUsed2 = t.gasLimit.u256 - gasRemaining
-      gasRefund = min(gasRefunded, gasUsed2 div 2)
-      gasRefundAmount = (gasRefund + gasRemaining) * t.gasPrice.u256
-    #echo "gasRemaining is ", gasRemaining, " and gasRefunded = ", gasRefunded, " and gasUsed2 = ", gasUsed2, " and gasRefund = ", gasRefund, " and gasRefundAmount = ", gasRefundAmount
+      gasUsed = tx.gasLimit.u256 - gasRemaining
+      gasRefund = min(gasRefunded, gasUsed div 2)
+      gasRefundAmount = (gasRefund + gasRemaining) * tx.gasPrice.u256
+    #echo "gasRemaining is ", gasRemaining, " and gasRefunded = ", gasRefunded, " and gasUsed = ", gasUsed, " and gasRefund = ", gasRefund, " and gasRefundAmount = ", gasRefundAmount
 
     var codeCost = 200 * c.output.len
 
@@ -100,7 +111,7 @@ proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAd
 
     if not c.isSuicided(contractAddress):
       # make changes only if it not selfdestructed
-      db.addBalance(contractAddress, t.value)
+      db.addBalance(contractAddress, tx.value)
       if gasRemaining >= codeCost.u256:
         db.setCode(contractAddress, c.output.toRange)
       else:
@@ -109,19 +120,19 @@ proc applyCreateTransaction*(t: Transaction, vmState: BaseVMState, sender: EthAd
         codeCost = 0
         db.setCode(contractAddress, ByteRange())
 
-    db.addBalance(sender, (t.gasLimit.u256 - gasUsed2 - codeCost.u256 + gasRefund) * t.gasPrice.u256)
-    return (gasUsed2 + codeCost.u256 - gasRefund) * t.gasPrice.u256
+    db.addBalance(sender, (tx.gasLimit.u256 - gasUsed - codeCost.u256 + gasRefund) * tx.gasPrice.u256)
+    return (gasUsed + codeCost.u256 - gasRefund) * tx.gasPrice.u256
   else:
     # FIXME: don't do this revert, but rather only subBalance correctly
     # the if transactionfailed at end is what is supposed to pick it up
     # especially when it's cross-function, it's ugly/fragile
     var db = vmState.accountDb
-    db.addBalance(sender, t.value)
+    db.addBalance(sender, tx.value)
     debug "execComputation() error", isError = c.isError
     if c.tracingEnabled:
       c.traceError()
     vmState.clearLogs()
-    return t.gasLimit.u256 * t.gasPrice.u256
+    return tx.gasLimit.u256 * tx.gasPrice.u256
 
 #[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
