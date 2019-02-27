@@ -64,10 +64,6 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
     return
   var computation = setupComputation(vmState, transaction, sender, some(fork))
 
-  vmState.mutateStateDB:
-    # contract creation transaction.to == 0, so ensure happens after
-    db.addBalance(transaction.to, transaction.value)
-
   # What remains is call and/or value transfer
   if execComputation(computation):
     let
@@ -88,7 +84,6 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
   else:
     vmState.mutateStateDB:
       # XXX: the coinbase has to be committed; the rest are basically reverts
-      db.subBalance(transaction.to, transaction.value)
       db.addBalance(sender, transaction.value)
       db.setStorageRoot(transaction.to, storageRoot)
       db.addBalance(header.coinbase, gasCost)

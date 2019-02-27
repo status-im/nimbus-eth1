@@ -18,9 +18,6 @@ proc contractCall(tx: Transaction, vmState: BaseVMState, sender: EthAddress, for
   let storageRoot = db.getStorageRoot(tx.to)
 
   var computation = setupComputation(vmState, tx, sender, forkOverride)
-  # contract creation transaction.to == 0, so ensure happens after
-  db.addBalance(tx.to, tx.value)
-
   if execComputation(computation):
     let
       gasRemaining = computation.gasMeter.gasRemaining
@@ -33,7 +30,6 @@ proc contractCall(tx: Transaction, vmState: BaseVMState, sender: EthAddress, for
 
     return (tx.gasLimit - gasRemaining - gasRefund)
   else:
-    db.subBalance(tx.to, tx.value)
     db.addBalance(sender, tx.value)
     db.setStorageRoot(tx.to, storageRoot)
     if computation.tracingEnabled: computation.traceError()
