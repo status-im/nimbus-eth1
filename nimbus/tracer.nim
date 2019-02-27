@@ -102,7 +102,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
 
-    let gasUsed = processTransaction(tx, sender, vmState)
+    gasUsed = processTransaction(tx, sender, vmState)
     let txFee = gasUsed.u256 * tx.gasPrice.u256
     stateDb.addBalance(header.coinbase, txFee)
 
