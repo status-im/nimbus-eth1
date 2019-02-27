@@ -6,7 +6,7 @@ import options,
   ../vm/[computation, interpreter_dispatch, message],
   ../vm/interpreter/vm_forks
 
-proc contractCall(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
+proc contractCall*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
   var db = vmState.accountDb
   var computation = setupComputation(vmState, tx, sender, forkOverride)
   if execComputation(computation):
@@ -24,74 +24,39 @@ proc contractCall(tx: Transaction, vmState: BaseVMState, sender: EthAddress, for
     vmState.clearLogs()
     return tx.gasLimit
 
-# this proc should not be here, we need to refactor
-# processTransaction
-proc isPrecompiles*(address: EthAddress): bool {.inline.} =
-  for i in 0..18:
-    if address[i] != 0: return
-  result = address[19] >= 1.byte and address[19] <= 8.byte
-
-proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMState): GasInt =
+proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState): GasInt =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
-  trace "txHash", rlpHash = t.rlpHash
+  trace "txHash", rlpHash = tx.rlpHash
+
   var db = vmState.accountDb
-  # Inct nonce:
-  db.incNonce(sender)
   var transactionFailed = false
 
-  #t.dump
-
   # TODO: combine/refactor re validate
-  let upfrontGasCost = t.gasLimit.u256 * t.gasPrice.u256
-  let upfrontCost = upfrontGasCost + t.value
+  let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
+  let upfrontCost = upfrontGasCost + tx.value
   var balance = db.getBalance(sender)
   if balance < upfrontCost:
     if balance <= upfrontGasCost:
-      result = (balance div t.gasPrice.u256).truncate(GasInt)
+      result = (balance div tx.gasPrice.u256).truncate(GasInt)
       balance = 0.u256
     else:
-      result = t.gasLimit
+      result = tx.gasLimit
       balance -= upfrontGasCost
     transactionFailed = true
   else:
     balance -= upfrontGasCost
 
+  db.incNonce(sender)
   db.setBalance(sender, balance)
-  if transactionFailed:
-    return
+  if transactionFailed: return
 
-  var gasUsed = t.intrinsicGas # += 32000 appears in Homestead when contract create
-
-  if gasUsed > t.gasLimit:
-    debug "Transaction failed. Out of gas."
-    transactionFailed = true
+  # TODO: Run the vm with proper fork
+  if tx.isContractCreation:
+    result = applyCreateTransaction(tx, vmState, sender)
   else:
-    if t.isContractCreation:
-      # TODO: re-derive sender in callee for cleaner interface, perhaps
-      return applyCreateTransaction(t, vmState, sender)
-
-    else:
-      let code = db.getCode(t.to)
-      if code.len == 0 and not isPrecompiles(t.to):
-        # Value transfer
-        trace "Transfer", value = t.value, sender, to = t.to
-        db.subBalance(sender, t.value)
-        db.addBalance(t.to, t.value)
-      else:
-        # Contract call
-        trace "Contract call"
-        trace "Transaction", sender, to = t.to, value = t.value, hasCode = code.len != 0
-        #let msg = newMessage(t.gasLimit, t.gasPrice, t.to, sender, t.value, t.payload, code.toSeq)
-        # TODO: Run the vm with proper fork
-        return contractCall(t, vmState, sender)
-
-  if gasUsed > t.gasLimit: gasUsed = t.gasLimit
-  var refund = (t.gasLimit - gasUsed).u256 * t.gasPrice.u256
-  if transactionFailed: refund += t.value  
-  db.addBalance(sender, refund)
-  return gasUsed
+    result = contractCall(tx, vmState, sender)
 
 type
   # TODO: these types need to be removed
