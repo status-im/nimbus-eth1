@@ -9,7 +9,7 @@ import
   unittest, strformat, strutils, tables, json, ospaths, times,
   byteutils, ranges/typedranges, nimcrypto/[keccak, hash], options,
   eth/[rlp, common, keys], eth/trie/db, chronicles,
-  ./test_helpers,
+  ./test_helpers, ../nimbus/p2p/executor,
   ../nimbus/[constants, errors],
   ../nimbus/[vm_state, vm_types, vm_state_transactions, utils],
   ../nimbus/vm/interpreter,
@@ -20,8 +20,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 suite "generalstate json tests":
   jsonTest("GeneralStateTests", testFixture)
 
-
-proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNode, transaction: Transaction, sender: EthAddress, expectedHash: string, testStatusIMPL: var TestStatus, fork: Fork) =
+proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNode, tx: Transaction, sender: EthAddress, expectedHash: string, testStatusIMPL: var TestStatus, fork: Fork) =
   when enabledLogLevel <= TRACE:
     let tracerFlags = {TracerFlags.EnableTracing}
   else:
@@ -35,55 +34,32 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
     let obtainedHash = "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii
     check obtainedHash == expectedHash
 
-  if not validateTransaction(vmState, transaction, sender):
+  if not validateTransaction(vmState, tx, sender):
     vmState.mutateStateDB:
       # pre-EIP158 (e.g., Byzantium) should ensure currentCoinbase exists
       # in later forks, don't create at all
       db.addBalance(header.coinbase, 0.u256)
     return
 
-  # TODO: replace with cachingDb or similar approach; necessary
-  # when calls/subcalls/etc come in, too.
-  var readOnly = vmState.readOnlyStateDB
-  let storageRoot = readOnly.getStorageRoot(transaction.to)
-
-  let gasCost = transaction.gasLimit.u256 * transaction.gasPrice.u256
+  let gasCost = tx.gasLimit.u256 * tx.gasPrice.u256
   vmState.mutateStateDB:
     db.incNonce(sender)
     db.subBalance(sender, gasCost)
 
-  if transaction.isContractCreation and transaction.payload.len > 0:
+  if tx.isContractCreation and tx.payload.len > 0:
     vmState.mutateStateDB:
       # TODO: move into applyCreateTransaction
       # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToZero.json
       # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToEmpty.json
       #db.addBalance(generateAddress(sender, transaction.accountNonce), transaction.value)
 
-      let createGasUsed = applyCreateTransaction(transaction, vmState, sender, some(fork))
-      db.addBalance(header.coinbase, createGasUsed.u256 * transaction.gasPrice.u256)
+      let createGasUsed = applyCreateTransaction(tx, vmState, sender, some(fork))
+      db.addBalance(header.coinbase, createGasUsed.u256 * tx.gasPrice.u256)
     return
-  var computation = setupComputation(vmState, transaction, sender, some(fork))
 
-  # What remains is call and/or value transfer
-  if execComputation(computation):
-    let
-      gasRemaining = computation.gasMeter.gasRemaining.u256
-      gasRefunded = computation.getGasRefund().u256
-      gasUsed = transaction.gasLimit.u256 - gasRemaining
-      gasRefund = min(gasRefunded, gasUsed div 2)
-      gasRefundAmount = (gasRefund + gasRemaining) * transaction.gasPrice.u256
-
-    vmState.mutateStateDB:
-      # TODO if the balance/etc calls were gated on gAFD or similar,
-      # that would simplify/combine codepaths
-      if header.coinbase notin computation.getAccountsForDeletion:
-        db.subBalance(header.coinbase, gasRefundAmount)
-        db.addBalance(header.coinbase, gasCost)
-      db.addBalance(sender, gasRefundAmount)
-    # TODO: only here does one commit, with some nuance/caveat
-  else:
-    vmState.mutateStateDB:
-      db.addBalance(header.coinbase, gasCost)
+  vmState.mutateStateDB:
+    let gasUsed = contractCall(tx, vmState, sender, some(fork))
+    db.addBalance(header.coinbase, gasUsed.u256 * tx.gasPrice.u256)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode
