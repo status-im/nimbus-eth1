@@ -60,7 +60,7 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
       #db.addBalance(generateAddress(sender, transaction.accountNonce), transaction.value)
 
       let createGasUsed = applyCreateTransaction(transaction, vmState, sender, some(fork))
-      db.addBalance(header.coinbase, createGasUsed)
+      db.addBalance(header.coinbase, createGasUsed.u256 * transaction.gasPrice.u256)
     return
   var computation = setupComputation(vmState, transaction, sender, some(fork))
 
