@@ -48,11 +48,6 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
 
   if tx.isContractCreation and tx.payload.len > 0:
     vmState.mutateStateDB:
-      # TODO: move into applyCreateTransaction
-      # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToZero.json
-      # fixtures/GeneralStateTests/stTransactionTest/TransactionSendingToEmpty.json
-      #db.addBalance(generateAddress(sender, transaction.accountNonce), transaction.value)
-
       let createGasUsed = applyCreateTransaction(tx, vmState, sender, some(fork))
       db.addBalance(header.coinbase, createGasUsed.u256 * tx.gasPrice.u256)
     return
