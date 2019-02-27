@@ -140,3 +140,14 @@ have this implemented).
 `maxBlocks` is the number of problematic blocks you want to capture before
 stopping the hunt.
 
+### Regress
+
+Regress is an offline block validation tool. It will not download block
+information from anywhere like Persist tool. Regress will validate your
+already persisted block in database. It will try to find any regression
+introduced either by bugfixing or refactoring.
+
+```bash
+# usage:
+./build/regress [--dataDir:your_db_path] --head:blockNumber
+```

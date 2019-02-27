@@ -81,13 +81,13 @@ else
   MD5SUM := md5sum
 endif
 
-.PHONY: all premix persist debug dumper hunter deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
+.PHONY: all premix persist debug dumper hunter regress deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation
 
 # default target, because it's the first one that doesn't start with '.'
-all: premix persist debug dumper hunter nimbus
+all: premix persist debug dumper hunter regress nimbus
 
 # debugging tools
-premix persist debug dumper hunter: | build deps
+premix persist debug dumper hunter regress: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ premix/$@.nim && \
 		echo -e "\nThe binary is in './build/$@'.\n"
 
@@ -137,7 +137,7 @@ test-reproducibility:
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,premix,persist,debug,dumper,hunter,all_tests,beacon_node,validator_keygen,*.exe} vendor/go/bin \
+	rm -rf build/{nimbus,premix,persist,debug,dumper,hunter,regress,all_tests,beacon_node,validator_keygen,*.exe} vendor/go/bin \
 		$(NIMBLE_DIR) $(NIM_BINARY) $(NIM_DIR)/nimcache nimcache
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete

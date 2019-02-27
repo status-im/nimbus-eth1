@@ -39,6 +39,7 @@ task test, "Run tests":
       "premix/debug",
       "premix/dumper",
       "premix/hunter",
+      "premix/regress",
       "tests/tracerTestGen",
       "tests/persistBlockTestGen",
     ]:
