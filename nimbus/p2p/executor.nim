@@ -7,16 +7,7 @@ import options,
   ../vm/interpreter/vm_forks
 
 proc contractCall(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
-  # TODO: this function body was copied from GST with it's comments and TODOs.
-  # Right now it's main purpose is to produce VM tracing when syncing block with
-  # contract call. At later stage, this proc together with applyCreateTransaction
-  # and processTransaction need to be restructured.
-
-  # TODO: replace with cachingDb or similar approach; necessary
-  # when calls/subcalls/etc come in, too.
   var db = vmState.accountDb
-  let storageRoot = db.getStorageRoot(tx.to)
-
   var computation = setupComputation(vmState, tx, sender, forkOverride)
   if execComputation(computation):
     let
@@ -27,11 +18,8 @@ proc contractCall(tx: Transaction, vmState: BaseVMState, sender: EthAddress, for
       gasRefundAmount = (gasRefund + gasRemaining).u256 * tx.gasPrice.u256
 
     db.addBalance(sender, gasRefundAmount)
-
     return (tx.gasLimit - gasRemaining - gasRefund)
   else:
-    db.addBalance(sender, tx.value)
-    db.setStorageRoot(tx.to, storageRoot)
     if computation.tracingEnabled: computation.traceError()
     vmState.clearLogs()
     return tx.gasLimit
@@ -68,7 +56,7 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
       balance -= upfrontGasCost
     transactionFailed = true
   else:
-    balance -= upfrontCost
+    balance -= upfrontGasCost
 
   db.setBalance(sender, balance)
   if transactionFailed:
@@ -89,7 +77,7 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
       if code.len == 0 and not isPrecompiles(t.to):
         # Value transfer
         trace "Transfer", value = t.value, sender, to = t.to
-
+        db.subBalance(sender, t.value)
         db.addBalance(t.to, t.value)
       else:
         # Contract call
@@ -99,13 +87,9 @@ proc processTransaction*(t: Transaction, sender: EthAddress, vmState: BaseVMStat
         # TODO: Run the vm with proper fork
         return contractCall(t, vmState, sender)
 
-  if gasUsed > t.gasLimit:
-    gasUsed = t.gasLimit
-
+  if gasUsed > t.gasLimit: gasUsed = t.gasLimit
   var refund = (t.gasLimit - gasUsed).u256 * t.gasPrice.u256
-  if transactionFailed:
-    refund += t.value
-
+  if transactionFailed: refund += t.value  
   db.addBalance(sender, refund)
   return gasUsed
 
