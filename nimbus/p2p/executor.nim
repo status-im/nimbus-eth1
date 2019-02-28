@@ -9,19 +9,18 @@ import options,
 proc contractCall*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
   var db = vmState.accountDb
   var computation = setupComputation(vmState, tx, sender, forkOverride)
+  result = tx.gasLimit
+
   if execComputation(computation):
     let
       gasRemaining = computation.gasMeter.gasRemaining
       gasRefunded = computation.getGasRefund()
       gasUsed = tx.gasLimit - gasRemaining
       gasRefund = min(gasRefunded, gasUsed div 2)
-      gasRefundAmount = (gasRefund + gasRemaining).u256 * tx.gasPrice.u256
+      gasRefundAmount = (gasRemaining + gasRefund).u256 * tx.gasPrice.u256
 
     db.addBalance(sender, gasRefundAmount)
-    return (tx.gasLimit - gasRemaining - gasRefund)
-  else:
-    if computation.tracingEnabled: computation.traceError()
-    return tx.gasLimit
+    return (gasUsed - gasRefund)
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState): GasInt =
   ## Process the transaction, write the results to db.
@@ -53,9 +52,9 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   # TODO: Run the vm with proper fork
   if tx.isContractCreation:
-    result = applyCreateTransaction(tx, vmState, sender)
+    result = tx.contractCreate(vmState, sender)
   else:
-    result = contractCall(tx, vmState, sender)
+    result = tx.contractCall(vmState, sender)
 
 type
   # TODO: these types need to be removed

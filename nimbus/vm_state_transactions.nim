@@ -85,28 +85,22 @@ proc execComputation*(computation: var BaseComputation): bool =
     computation.vmState.addLogs(computation.logEntries)
   else:
     snapshot.revert()
+    if computation.tracingEnabled: computation.traceError()
 
-proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
+proc contractCreate*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
   doAssert tx.isContractCreation
-  # TODO: clean up params
-  trace "Contract creation"
-
   var c = setupComputation(vmState, tx, sender, forkOverride)
+  result = tx.gasLimit
 
   if execComputation(c):
     var db = vmState.accountDb
-
-    # XXX: copy/pasted from GST fixture
-    # TODO: more merging/refactoring/etc
-    # also a couple lines can collapse because variable used once
-    # once verified in GST fixture
     let
       gasRemaining = c.gasMeter.gasRemaining
       gasRefunded = c.getGasRefund()
       gasUsed = tx.gasLimit - gasRemaining
       gasRefund = min(gasRefunded, gasUsed div 2)
 
-    var codeCost = 200 * c.output.len
+    var codeCost = c.gasCosts[Create].m_handler(0, 0, c.output.len)
 
     # This apparently is not supposed to actually consume the gas, just be able to,
     # for purposes of accounting. Py-EVM apparently does consume the gas, but it is
@@ -123,11 +117,8 @@ proc applyCreateTransaction*(tx: Transaction, vmState: BaseVMState, sender: EthA
         codeCost = 0
         db.setCode(contractAddress, ByteRange())
 
-    db.addBalance(sender, (tx.gasLimit - gasUsed - codeCost + gasRefund).u256 * tx.gasPrice.u256)
-    return (gasUsed + codeCost - gasRefund)
-  else:
-    if c.tracingEnabled: c.traceError()
-    return tx.gasLimit
+    db.addBalance(sender, (gasRemaining + gasRefund - codeCost).u256 * tx.gasPrice.u256)
+    return (gasUsed - gasRefund + codeCost)
 
 #[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=

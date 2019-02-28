@@ -45,15 +45,10 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
   vmState.mutateStateDB:
     db.incNonce(sender)
     db.subBalance(sender, gasCost)
-
-  if tx.isContractCreation and tx.payload.len > 0:
-    vmState.mutateStateDB:
-      let createGasUsed = applyCreateTransaction(tx, vmState, sender, some(fork))
-      db.addBalance(header.coinbase, createGasUsed.u256 * tx.gasPrice.u256)
-    return
-
-  vmState.mutateStateDB:
-    let gasUsed = contractCall(tx, vmState, sender, some(fork))
+    let gasUsed = if tx.isContractCreation and tx.payload.len > 0:
+                    tx.contractCreate(vmState, sender, some(fork))
+                  else:
+                    tx.contractCall(vmState, sender, some(fork))
     db.addBalance(header.coinbase, gasUsed.u256 * tx.gasPrice.u256)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
