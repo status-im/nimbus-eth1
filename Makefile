@@ -81,17 +81,27 @@ else
   MD5SUM := md5sum
 endif
 
-.PHONY: all premix persist debug dumper hunter regress deps github-ssh build-nim update status ntags ctags nimbus test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation test-libp2p-daemon
+# guess who does parsing before variable expansion
+COMMA := ,
+EMPTY :=
+SPACE := $(EMPTY) $(EMPTY)
+# debugging tools + testing tools
+TOOLS := premix persist debug dumper hunter regress tracerTestGen persistBlockTestGen
+# comma-separated values for the "clean" target
+TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
+
+.PHONY: all $(TOOLS) deps github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation test-libp2p-daemon
 
 # default target, because it's the first one that doesn't start with '.'
-all: premix persist debug dumper hunter regress nimbus
+all: $(TOOLS) nimbus
 
-# debugging tools
-premix persist debug dumper hunter regress: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ premix/$@.nim && \
+# builds the tools, wherever they are
+$(TOOLS): | build deps
+	for D in premix tests; do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim" && \
 		echo -e "\nThe binary is in './build/$@'.\n"
 
-#- a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
+# a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps
 	$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims && \
 		echo -e "\nThe binary is in './build/nimbus'.\n"
@@ -121,9 +131,13 @@ $(NIMBLE_DIR): | $(NIM_BINARY)
 nimbus.nims:
 	ln -s nimbus.nimble $@
 
-# builds and runs all tests
-test: | build deps
+# builds and runs the testsuite
+testsuite: | build deps
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
+
+#- builds the tools, to make sure they're still compilable
+#- builds and runs all tests
+test: | $(TOOLS) testsuite
 
 # primitive reproducibility test
 test-reproducibility:
@@ -137,7 +151,7 @@ test-reproducibility:
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,premix,persist,debug,dumper,hunter,regress,all_tests,beacon_node,validator_keygen,*.exe} vendor/go/bin \
+	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,beacon_node,validator_keygen,*.exe} vendor/go/bin \
 		$(NIMBLE_DIR) $(NIM_BINARY) $(NIM_DIR)/nimcache nimcache
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete

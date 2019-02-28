@@ -32,19 +32,6 @@ proc test(name: string, lang = "c") =
   buildBinary name, "tests/", "-r -d:chronicles_log_level=ERROR"
 
 task test, "Run tests":
-  # debugging tools don't have tests yet, but they should be compilable
-  for binary in [
-      "premix/premix",
-      "premix/persist",
-      "premix/debug",
-      "premix/dumper",
-      "premix/hunter",
-      "premix/regress",
-      "tests/tracerTestGen",
-      "tests/persistBlockTestGen",
-    ]:
-    exec "nim c --verbosity:0 --hints:off --warnings:off " & binary
-    rmFile binary
   test "all_tests"
   test "test_rpc"
 
