@@ -199,21 +199,22 @@ proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: st
     raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
 
   try:
-    # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
-    let gasCost = computation.gasCosts[Create].m_handler(0, 0, contractCode.len)
-    computation.gasMeter.consumeGas(gasCost,
-      reason = "Write contract code for CREATE")
-
     let storageAddr = computation.msg.storageAddress
-    trace "SETTING CODE",
-      address = storageAddr.toHex,
-      length = len(contract_code),
-      hash = contractCode.rlpHash
+    if not computation.isSuicided(storageAddr):
+      # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
+      let gasCost = computation.gasCosts[Create].m_handler(0, 0, contractCode.len)
+      computation.gasMeter.consumeGas(gasCost,
+        reason = "Write contract code for CREATE")
 
-    computation.vmState.mutateStateDb:
-      db.setCode(storageAddr, contractCode.toRange)
+      trace "SETTING CODE",
+        address = storageAddr.toHex,
+        length = len(contract_code),
+        hash = contractCode.rlpHash
 
-    snapshot.commit()
+      computation.vmState.mutateStateDb:
+        db.setCode(storageAddr, contractCode.toRange)
+
+      snapshot.commit()
   except OutOfGas:
     debug "applyCreateMessage failed: ",
       msg = getCurrentExceptionMsg(),
