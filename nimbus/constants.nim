@@ -11,7 +11,6 @@ const
   ZERO_ADDRESS* =                           default(EthAddress)
   CREATE_CONTRACT_ADDRESS* =                ZERO_ADDRESS
   ZERO_HASH32* =                            Hash256()
-  STACK_DEPTH_LIMIT* =                      1024
 
   GAS_LIMIT_EMA_DENOMINATOR* =              1_024
   GAS_LIMIT_ADJUSTMENT_FACTOR* =            1_024
