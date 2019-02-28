@@ -110,7 +110,7 @@ proc dispose*(snapshot: var ComputationSnapshot) {.inline.} =
   snapshot.snapshot.dispose()
 
 proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
-  if computation.msg.depth > STACK_DEPTH_LIMIT:
+  if computation.msg.depth >= MaxCallDepth:
     raise newException(StackDepthError, "Stack depth limit reached")
 
   if computation.msg.value != 0:
@@ -123,25 +123,6 @@ proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
       raise newException(InsufficientFunds,
           &"Insufficient funds: {senderBalance} < {computation.msg.value}"
       )
-
-    let
-      insufficientFunds = senderBalance < computation.msg.value
-      stackTooDeep = computation.msg.depth >= MaxCallDepth
-
-    if insufficientFunds or stackTooDeep:
-      computation.returnData = @[]
-      var errMessage: string
-      if insufficientFunds:
-        errMessage = &"Insufficient Funds: have: {$senderBalance} need: {$computation.msg.value}"
-      elif stackTooDeep:
-        errMessage = "Stack Limit Reached"
-      else:
-        raise newException(VMError, "Invariant: Unreachable code path")
-
-      debug "Computation failure", msg = errMessage
-      computation.gasMeter.returnGas(computation.msg.gas)
-      push: 0
-      return
 
     newBalance = senderBalance - computation.msg.value
     computation.vmState.mutateStateDb:
