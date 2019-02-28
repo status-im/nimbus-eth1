@@ -15,12 +15,16 @@ import
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
 
+proc hashLogEntries(logs: seq[Log]): string =
+  toLowerAscii("0x" & $keccak(rlp.encode(logs)))
+
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
 suite "generalstate json tests":
   jsonTest("GeneralStateTests", testFixture)
 
-proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNode, tx: Transaction, sender: EthAddress, expectedHash: string, testStatusIMPL: var TestStatus, fork: Fork) =
+proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNode, tx: Transaction,
+                        sender: EthAddress, expectedHash, expectedLogs: string, testStatusIMPL: var TestStatus, fork: Fork) =
   when enabledLogLevel <= TRACE:
     let tracerFlags = {TracerFlags.EnableTracing}
   else:
@@ -33,6 +37,10 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
     #echo vmState.readOnlyStateDB.dumpAccount("c94f5374fce5edbc8e2a8697c15331677e6ebf0b")
     let obtainedHash = "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii
     check obtainedHash == expectedHash
+    let logEntries = vmState.getAndClearLogEntries()
+    let actualLogsHash = hashLogEntries(logEntries)
+    let expectedLogsHash = toLowerAscii(expectedLogs)
+    check(expectedLogsHash == actualLogsHash)
 
   if not validateTransaction(vmState, tx, sender):
     vmState.mutateStateDB:
@@ -70,15 +78,18 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
   let ftrans = fixture["transaction"]
   for fork in supportedForks:
-    if fixture["post"].has_key(forkNames[fork]):
+    if fixture["post"].hasKey(forkNames[fork]):
       # echo "[fork: ", forkNames[fork], "]"
       for expectation in fixture["post"][forkNames[fork]]:
         let
           expectedHash = expectation["hash"].getStr
+          expectedLogs = expectation["logs"].getStr
           indexes = expectation["indexes"]
           dataIndex = indexes["data"].getInt
           gasIndex = indexes["gas"].getInt
           valueIndex = indexes["value"].getInt
         let transaction = ftrans.getFixtureTransaction(dataIndex, gasIndex, valueIndex)
         let sender = ftrans.getFixtureTransactionSender
-        testFixtureIndexes(emptyRlpHash, header, fixture["pre"], transaction, sender, expectedHash, testStatusIMPL, fork)
+        testFixtureIndexes(emptyRlpHash, header, fixture["pre"], transaction,
+                           sender, expectedHash, expectedLogs, testStatusIMPL, fork)
+
