@@ -72,7 +72,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     if computation.isError:
       echo "Computation error: ", computation.error.info
 
-    let logEntries = vmState.getAndClearLogEntries()
+    let logEntries = computation.logEntries
     if not fixture{"logs"}.isNil:
       let actualLogsHash = hashLogEntries(logEntries)
       let expectedLogsHash = toLowerAscii(fixture{"logs"}.getStr)
