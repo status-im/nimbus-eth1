@@ -277,17 +277,12 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   result.value = fromHex(UInt256, j["value"][valueIndex].getStr)
   result.payload = j["data"][dataIndex].getStr.safeHexToSeqByte
 
-proc getFixtureTransactionSender*(j: JsonNode): EthAddress =
   var secretKey = j["secretKey"].getStr
   removePrefix(secretKey, "0x")
   let privateKey = initPrivateKey(secretKey)
+  let sig = signMessage(privateKey, result.rlpEncode)
+  let raw = sig.getRaw()
 
-  var pubKey: PublicKey
-  let transaction = j.getFixtureTransaction(0, 0, 0)
-  if recoverSignatureKey(signMessage(privateKey, transaction.rlpEncode),
-                         transaction.txHashNoSignature.data,
-                         pubKey) == EthKeysStatus.Success:
-    return pubKey.toCanonicalAddress()
-  else:
-    # XXX: appropriate failure mode; probably raise something
-    discard
+  result.R = fromBytesBE(Uint256, raw[0..31])
+  result.S = fromBytesBE(Uint256, raw[32..63])
+  result.V = raw[64] + 27.byte
