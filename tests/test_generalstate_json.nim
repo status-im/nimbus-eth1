@@ -10,7 +10,7 @@ import
   byteutils, ranges/typedranges, nimcrypto/[keccak, hash], options,
   eth/[rlp, common, keys], eth/trie/db, chronicles,
   ./test_helpers, ../nimbus/p2p/executor,
-  ../nimbus/[constants, errors],
+  ../nimbus/[constants, errors, transaction],
   ../nimbus/[vm_state, vm_types, vm_state_transactions, utils],
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
@@ -24,7 +24,7 @@ suite "generalstate json tests":
   jsonTest("GeneralStateTests", testFixture)
 
 proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNode, tx: Transaction,
-                        sender: EthAddress, expectedHash, expectedLogs: string, testStatusIMPL: var TestStatus, fork: Fork) =
+                        expectedHash, expectedLogs: string, testStatusIMPL: var TestStatus, fork: Fork) =
   when enabledLogLevel <= TRACE:
     let tracerFlags = {TracerFlags.EnableTracing}
   else:
@@ -42,6 +42,7 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
     let expectedLogsHash = toLowerAscii(expectedLogs)
     check(expectedLogsHash == actualLogsHash)
 
+  let sender = tx.getSender()
   if not validateTransaction(vmState, tx, sender):
     vmState.mutateStateDB:
       # pre-EIP158 (e.g., Byzantium) should ensure currentCoinbase exists
@@ -89,7 +90,5 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
           gasIndex = indexes["gas"].getInt
           valueIndex = indexes["value"].getInt
         let transaction = ftrans.getFixtureTransaction(dataIndex, gasIndex, valueIndex)
-        let sender = ftrans.getFixtureTransactionSender
         testFixtureIndexes(emptyRlpHash, header, fixture["pre"], transaction,
-                           sender, expectedHash, expectedLogs, testStatusIMPL, fork)
-
+                           expectedHash, expectedLogs, testStatusIMPL, fork)
