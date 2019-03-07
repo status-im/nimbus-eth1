@@ -103,8 +103,9 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       beforeRoot = stateDb.rootHash
 
     gasUsed = processTransaction(tx, sender, vmState)
-    let txFee = gasUsed.u256 * tx.gasPrice.u256
-    stateDb.addBalance(header.coinbase, txFee)
+    vmState.mutateStateDB:
+      let txFee = gasUsed.u256 * tx.gasPrice.u256
+      db.addBalance(header.coinbase, txFee)
 
     if idx == txIndex:
       after.captureAccount(stateDb, sender, senderName)
