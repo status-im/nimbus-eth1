@@ -9,6 +9,7 @@ abs_path="$(cd $rel_path; ${PWD_CMD})"
 
 # used by libp2p/go-libp2p-daemon
 export GOPATH="${abs_path}/vendor/go"
+export GO111MODULE=on
 
 # make it an absolute path, so we can call this script from other dirs
 export PATH="${abs_path}/vendor/Nim/bin:${GOPATH}/bin:${PATH}"

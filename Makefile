@@ -198,7 +198,8 @@ eth2_network_simulation: | beacon_node validator_keygen clean_eth2_network_simul
 
 vendor/go/bin/p2pd:
 	cd vendor/go/src/github.com/libp2p/go-libp2p-daemon && \
-		$(ENV_SCRIPT) $(MAKE)
+		$(ENV_SCRIPT) go get ./... && \
+		$(ENV_SCRIPT) go install ./...
 
 test-libp2p-daemon: | vendor/go/bin/p2pd deps
 	cd vendor/nim-libp2p && \
