@@ -67,7 +67,6 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
     debug "Mismatched txRoot", blockNumber=header.blockNumber
     return ValidationResult.Error
 
-  var stateDb = vmState.accountDb
   if header.txRoot != BLANK_ROOT_HASH:
     if body.transactions.len == 0:
       debug "No transactions in body", blockNumber=header.blockNumber
@@ -85,7 +84,8 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
 
           # miner fee
           let txFee = gasUsed.u256 * tx.gasPrice.u256
-          stateDb.addBalance(header.coinbase, txFee)
+          vmState.mutateStateDB:
+            db.addBalance(header.coinbase, txFee)
         else:
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error
@@ -102,12 +102,15 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
       uncleReward -= header.blockNumber
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
-      stateDb.addBalance(uncle.coinbase, uncleReward)
+      vmState.mutateStateDB:
+        db.addBalance(uncle.coinbase, uncleReward)
       mainReward += blockReward div 32.u256
 
   # Reward beneficiary
-  stateDb.addBalance(header.coinbase, mainReward)
+  vmState.mutateStateDB:
+    db.addBalance(header.coinbase, mainReward)
 
+  let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
     error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
     # this one is a show stopper until we are confident in our VM's
