@@ -53,9 +53,9 @@ OK: 0/46 Fail: 0/46 Skip: 46/46
 ## stAttackTest
 ```diff
   ContractCreationSpam.json                                       Skip
-  CrashingTransaction.json                                        Skip
++ CrashingTransaction.json                                        OK
 ```
-OK: 0/2 Fail: 0/2 Skip: 2/2
+OK: 1/2 Fail: 0/2 Skip: 1/2
 ## stBadOpcode
 ```diff
 + badOpcodes.json                                                 OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1179/2334 Fail: 0/2334 Skip: 1155/2334
+OK: 1180/2334 Fail: 0/2334 Skip: 1154/2334

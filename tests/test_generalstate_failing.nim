@@ -12,8 +12,7 @@
 # table once, but notion's that it should shrink reasonable quickly and disappear,
 # being mostly used for short-term regression prevention.
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
-  let allowedFailingGeneralStateTests = @[
-    "CrashingTransaction.json",
+  let allowedFailingGeneralStateTests = @[    
     "callcallcallcode_001.json",
     "callcallcallcode_001.json",
     "callcallcode_01.json",

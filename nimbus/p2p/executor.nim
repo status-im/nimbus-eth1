@@ -6,55 +6,28 @@ import options,
   ../vm/[computation, interpreter_dispatch, message],
   ../vm/interpreter/vm_forks
 
-proc contractCall*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
-  var db = vmState.accountDb
-  var computation = setupComputation(vmState, tx, sender, forkOverride)
-  result = tx.gasLimit
-
-  if execComputation(computation):
-    let
-      gasRemaining = computation.gasMeter.gasRemaining
-      gasRefunded = computation.getGasRefund()
-      gasUsed = tx.gasLimit - gasRemaining
-      gasRefund = min(gasRefunded, gasUsed div 2)
-      gasRefundAmount = (gasRemaining + gasRefund).u256 * tx.gasPrice.u256
-
-    db.addBalance(sender, gasRefundAmount)
-    return (gasUsed - gasRefund)
-
-proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState): GasInt =
+proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, forkOverride=none(Fork)): GasInt =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
-  var db = vmState.accountDb
-  var transactionFailed = false
-
-  # TODO: combine/refactor re validate
   let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
-  let upfrontCost = upfrontGasCost + tx.value
-  var balance = db.getBalance(sender)
-  if balance < upfrontCost:
-    if balance <= upfrontGasCost:
-      result = (balance div tx.gasPrice.u256).truncate(GasInt)
-      balance = 0.u256
-    else:
-      result = tx.gasLimit
-      balance -= upfrontGasCost
-    transactionFailed = true
-  else:
-    balance -= upfrontGasCost
+  var balance = vmState.readOnlyStateDb().getBalance(sender)
+  if balance < upfrontGasCost:
+    return tx.gasLimit
 
-  db.incNonce(sender)
-  db.setBalance(sender, balance)
-  if transactionFailed: return
+  vmState.mutateStateDB:
+    db.incNonce(sender)
+    db.subBalance(sender, upfrontGasCost)
 
-  # TODO: Run the vm with proper fork
-  if tx.isContractCreation:
-    result = tx.contractCreate(vmState, sender)
-  else:
-    result = tx.contractCall(vmState, sender)
+  var computation = setupComputation(vmState, tx, sender, forkOverride)
+  result = tx.gasLimit
+
+  if execComputation(computation):
+    if tx.isContractCreation:
+      computation.writeContract()
+    result = computation.refundGas(tx, sender)
 
 type
   # TODO: these types need to be removed
