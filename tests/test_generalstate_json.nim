@@ -16,7 +16,7 @@ import
   ../nimbus/db/[db_chain, state_db]
 
 proc hashLogEntries(logs: seq[Log]): string =
-  toLowerAscii("0x" & $keccak(rlp.encode(logs)))
+  toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 

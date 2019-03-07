@@ -17,7 +17,7 @@ import
   ../nimbus/db/[db_chain, state_db]
 
 proc hashLogEntries(logs: seq[Log]): string =
-  toLowerAscii("0x" & $keccak(rlp.encode(logs)))
+  toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -32,7 +32,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     break
 
   let fenv = fixture["env"]
-  var emptyRlpHash = keccak(rlp.encode(""))
+  var emptyRlpHash = keccakHash(rlp.encode(""))
   let header = BlockHeader(
     coinbase: fenv{"currentCoinbase"}.getStr.parseAddress,
     difficulty: fromHex(UInt256, fenv{"currentDifficulty"}.getStr),

@@ -376,7 +376,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     for i in 0 ..< blockBody.uncles.len:
       rawData[startIdx .. startIdx + 32] = blockBody.uncles[i].hash.data
       startIdx += 32
-    result.sha3Uncles = keccak(rawData)
+    result.sha3Uncles = keccakHash(rawData)
 
     result.logsBloom = some(header.bloom)
     result.transactionsRoot = header.txRoot
