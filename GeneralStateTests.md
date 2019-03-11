@@ -53,9 +53,9 @@ OK: 0/46 Fail: 0/46 Skip: 46/46
 ## stAttackTest
 ```diff
   ContractCreationSpam.json                                       Skip
-  CrashingTransaction.json                                        Skip
++ CrashingTransaction.json                                        OK
 ```
-OK: 0/2 Fail: 0/2 Skip: 2/2
+OK: 1/2 Fail: 0/2 Skip: 1/2
 ## stBadOpcode
 ```diff
 + badOpcodes.json                                                 OK
@@ -839,18 +839,18 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
 ## stPreCompiledContracts2
 ```diff
 + CALLCODEEcrecover0.json                                         OK
-  CALLCODEEcrecover0_0input.json                                  Skip
++ CALLCODEEcrecover0_0input.json                                  OK
 + CALLCODEEcrecover0_Gas2999.json                                 OK
 + CALLCODEEcrecover0_NoGas.json                                   OK
 + CALLCODEEcrecover0_completeReturnValue.json                     OK
 + CALLCODEEcrecover0_gas3000.json                                 OK
 + CALLCODEEcrecover0_overlappingInputOutput.json                  OK
-  CALLCODEEcrecover1.json                                         Skip
-  CALLCODEEcrecover2.json                                         Skip
++ CALLCODEEcrecover1.json                                         OK
++ CALLCODEEcrecover2.json                                         OK
 + CALLCODEEcrecover3.json                                         OK
-  CALLCODEEcrecover80.json                                        Skip
++ CALLCODEEcrecover80.json                                        OK
 + CALLCODEEcrecoverH_prefixed0.json                               OK
-  CALLCODEEcrecoverR_prefixed0.json                               Skip
++ CALLCODEEcrecoverR_prefixed0.json                               OK
 + CALLCODEEcrecoverS_prefixed0.json                               OK
 + CALLCODEEcrecoverV_prefixed0.json                               OK
   CALLCODEEcrecoverV_prefixedf0.json                              Skip
@@ -865,38 +865,38 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
 + CALLCODEIdentity_5.json                                         OK
 + CALLCODERipemd160_0.json                                        OK
 + CALLCODERipemd160_1.json                                        OK
-  CALLCODERipemd160_2.json                                        Skip
-  CALLCODERipemd160_3.json                                        Skip
-  CALLCODERipemd160_3_postfixed0.json                             Skip
-  CALLCODERipemd160_3_prefixed0.json                              Skip
++ CALLCODERipemd160_2.json                                        OK
++ CALLCODERipemd160_3.json                                        OK
++ CALLCODERipemd160_3_postfixed0.json                             OK
++ CALLCODERipemd160_3_prefixed0.json                              OK
 + CALLCODERipemd160_4.json                                        OK
 + CALLCODERipemd160_4_gas719.json                                 OK
 + CALLCODERipemd160_5.json                                        OK
 + CALLCODESha256_0.json                                           OK
 + CALLCODESha256_1.json                                           OK
 + CALLCODESha256_1_nonzeroValue.json                              OK
-  CALLCODESha256_2.json                                           Skip
-  CALLCODESha256_3.json                                           Skip
-  CALLCODESha256_3_postfix0.json                                  Skip
-  CALLCODESha256_3_prefix0.json                                   Skip
++ CALLCODESha256_2.json                                           OK
++ CALLCODESha256_3.json                                           OK
++ CALLCODESha256_3_postfix0.json                                  OK
++ CALLCODESha256_3_prefix0.json                                   OK
 + CALLCODESha256_4.json                                           OK
 + CALLCODESha256_4_gas99.json                                     OK
 + CALLCODESha256_5.json                                           OK
 + CallEcrecover0.json                                             OK
-  CallEcrecover0_0input.json                                      Skip
++ CallEcrecover0_0input.json                                      OK
 + CallEcrecover0_Gas2999.json                                     OK
 + CallEcrecover0_NoGas.json                                       OK
 + CallEcrecover0_completeReturnValue.json                         OK
 + CallEcrecover0_gas3000.json                                     OK
 + CallEcrecover0_overlappingInputOutput.json                      OK
-  CallEcrecover1.json                                             Skip
-  CallEcrecover2.json                                             Skip
++ CallEcrecover1.json                                             OK
++ CallEcrecover2.json                                             OK
 + CallEcrecover3.json                                             OK
-  CallEcrecover80.json                                            Skip
++ CallEcrecover80.json                                            OK
 + CallEcrecoverCheckLength.json                                   OK
-  CallEcrecoverCheckLengthWrongV.json                             Skip
++ CallEcrecoverCheckLengthWrongV.json                             OK
 + CallEcrecoverH_prefixed0.json                                   OK
-  CallEcrecoverR_prefixed0.json                                   Skip
++ CallEcrecoverR_prefixed0.json                                   OK
 + CallEcrecoverS_prefixed0.json                                   OK
 + CallEcrecoverV_prefixed0.json                                   OK
 + CallIdentitiy_0.json                                            OK
@@ -910,20 +910,20 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
 + CallIdentity_5.json                                             OK
 + CallRipemd160_0.json                                            OK
 + CallRipemd160_1.json                                            OK
-  CallRipemd160_2.json                                            Skip
-  CallRipemd160_3.json                                            Skip
-  CallRipemd160_3_postfixed0.json                                 Skip
-  CallRipemd160_3_prefixed0.json                                  Skip
++ CallRipemd160_2.json                                            OK
++ CallRipemd160_3.json                                            OK
++ CallRipemd160_3_postfixed0.json                                 OK
++ CallRipemd160_3_prefixed0.json                                  OK
 + CallRipemd160_4.json                                            OK
 + CallRipemd160_4_gas719.json                                     OK
 + CallRipemd160_5.json                                            OK
 + CallSha256_0.json                                               OK
 + CallSha256_1.json                                               OK
 + CallSha256_1_nonzeroValue.json                                  OK
-  CallSha256_2.json                                               Skip
-  CallSha256_3.json                                               Skip
-  CallSha256_3_postfix0.json                                      Skip
-  CallSha256_3_prefix0.json                                       Skip
++ CallSha256_2.json                                               OK
++ CallSha256_3.json                                               OK
++ CallSha256_3_postfix0.json                                      OK
++ CallSha256_3_prefix0.json                                       OK
 + CallSha256_4.json                                               OK
 + CallSha256_4_gas99.json                                         OK
 + CallSha256_5.json                                               OK
@@ -933,7 +933,7 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
   modexp_0_0_0_25000.json                                         Skip
   modexp_0_0_0_35000.json                                         Skip
 ```
-OK: 61/94 Fail: 0/94 Skip: 33/94
+OK: 88/94 Fail: 0/94 Skip: 6/94
 ## stQuadraticComplexityTest
 ```diff
   Call1MB1024Calldepth.json                                       Skip
@@ -1690,13 +1690,13 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 + TestBlockAndTransactionProperties.json                          OK
 + TestContractInteraction.json                                    OK
 + TestContractSuicide.json                                        OK
-  TestCryptographicFunctions.json                                 Skip
++ TestCryptographicFunctions.json                                 OK
 + TestKeywords.json                                               OK
 + TestOverflow.json                                               OK
 + TestStoreGasPrices.json                                         OK
 + TestStructuresAndVariabless.json                                OK
 ```
-OK: 15/16 Fail: 0/16 Skip: 1/16
+OK: 16/16 Fail: 0/16 Skip: 0/16
 ## stSpecialTest
 ```diff
 + FailedCreateRevertsDeletion.json                                OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1179/2334 Fail: 0/2334 Skip: 1155/2334
+OK: 1208/2334 Fail: 0/2334 Skip: 1126/2334

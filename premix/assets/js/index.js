@@ -176,57 +176,111 @@ function opCodeRenderer(txId, nimbus, geth) {
   }
 
   txId = parseInt(txId);
-  var ncs = deepCopy(nimbus.txTraces[txId].structLogs);
-  var gcs = deepCopy(geth.txTraces[txId].structLogs);
-  var sideBar = $('#opCodeSideBar').empty();
   $('#opCodeTitle').text(`Tx #${(txId+1)}`);
+  const numRows = Math.max(nimbus.txTraces[txId].structLogs.length, geth.txTraces[txId].structLogs.length);
 
-  function fillEmptyOp(a, b) {
-    function emptyOp() {
-      return {op: '', pc: '', gas: '', gasCost: '', depth: '',
-        storage:{}, memory: [], stack: []};
-    }
+  if(numRows == 0) {
+    $('#opCodeContainer').empty();
+    $('#paging').empty();
+    $('#opCodeSideBar').empty();
+    return;
+  }
 
-    if(a.length > b.length) {
-      for(var i in a) {
-        if(b[i] === undefined) {
-          b[i] = emptyOp();
+  const rowsPerPage = 500;
+  var numPages = numRows / rowsPerPage;
+  if(numRows % rowsPerPage != 0) numPages++;
+    
+  $("#paging").paging(numRows, {
+    format: numPages < 10 ? "n".repeat(numPages) : '[< (qq -) nnncnnn (- pp) >]',
+    perpage: rowsPerPage,
+    lapping: 1,
+    page: 1,
+    onSelect: function (page) {
+      const data = this.slice;
+      const start = data[0];
+      const stop = data[1];
+
+      var ncs = deepCopy(nimbus.txTraces[txId].structLogs.slice(start, stop));
+      var gcs = deepCopy(geth.txTraces[txId].structLogs.slice(start, stop));
+      var sideBar = $('#opCodeSideBar').empty();
+
+      function fillEmptyOp(a, b) {
+        function emptyOp() {
+          return {op: '', pc: '', gas: '', gasCost: '', depth: '',
+            storage:{}, memory: [], stack: []};
+        }
+
+        if(a.length > b.length) {
+          for(var i in a) {
+            if(b[i] === undefined) {
+              b[i] = emptyOp();
+            }
+          }
         }
       }
+
+      fillEmptyOp(ncs, gcs);
+      fillEmptyOp(gcs, ncs);
+
+      for(var i in ncs) {
+        fillEmptyField(ncs[i], gcs[i]);
+        if(parseInt(i) > 0) {
+          moveStack(ncs, gcs, i);
+        }
+      }
+
+      for(var i in ncs) {
+        let pc = ncs[i].pc == '' ? gcs[i].pc : ncs[i].pc;
+        let op = ncs[i].op == '' ? gcs[i].op : ncs[i].op;
+        if(!analyze(ncs[i], gcs[i])) {
+          var nav = $(`<li><a class="tm-text-danger" rel="${i}" href="#">${pc + ' ' + op}</a></li>`).appendTo(sideBar);
+        } else {
+          var nav = $(`<li><a rel="${i}" href="#">${pc + ' ' + op}</a></li>`).appendTo(sideBar);
+        }
+        nav.children('a').click(function(ev) {
+          let idx = this.rel;
+          $('#opCodeSideBar li').removeClass('uk-active');
+          $(this).parent().addClass('uk-active');
+          renderTrace('tx', ncs[idx], gcs[idx]);
+        });
+      }
+
+      if(ncs.length > 0) {
+        renderTrace("tx", ncs[0], gcs[0]);
+      } else {
+        $('#opCodeContainer').empty();
+      }
+
+    },
+    onFormat: function (type) {
+      switch (type) {
+      case 'block': // n and c
+        if (this.value == this.page) {
+          return '<li class="uk-active"><span>' + this.value + '</span></li>';
+        } else {
+          return '<li><a href="#">' + this.value + '</a></li>';
+        }
+      case 'next': // >
+        return '<li><a href="#"><span uk-pagination-next></span></a></li>';
+      case 'prev': // <
+        return '<li><a href="#"><span uk-pagination-previous></span></a></li>';
+      case 'first': // [
+        return '<li><a href="#">first</a></li>';
+      case 'last': // ]
+        return '<li><a href="#">last</a></li>';
+      case "leap":
+        return "  ";
+      case 'fill':
+        return '<li class="uk-disabled"><span>...</span></li>';
+      case 'left':
+        if(this.value >= this.page) return '';
+        return '<li><a href="#">' + this.value + '</a></li>';
+      case 'right':
+        if(this.value <= this.page) return '';
+        return '<li><a href="#">' + this.value + '</a></li>';
+      }
     }
-  }
-
-  fillEmptyOp(ncs, gcs);
-  fillEmptyOp(gcs, ncs);
-
-  for(var i in ncs) {
-    fillEmptyField(ncs[i], gcs[i]);
-    if(parseInt(i) > 0) {
-      moveStack(ncs, gcs, i);
-    }
-  }
-
-  for(var i in ncs) {
-    let pc = ncs[i].pc == '' ? gcs[i].pc : ncs[i].pc;
-    let op = ncs[i].op == '' ? gcs[i].op : ncs[i].op;
-    if(!analyze(ncs[i], gcs[i])) {
-      var nav = $(`<li><a class="tm-text-danger" rel="${i}" href="#">${pc + ' ' + op}</a></li>`).appendTo(sideBar);
-    } else {
-      var nav = $(`<li><a rel="${i}" href="#">${pc + ' ' + op}</a></li>`).appendTo(sideBar);
-    }
-    nav.children('a').click(function(ev) {
-      let idx = this.rel;
-      $('#opCodeSideBar li').removeClass('uk-active');
-      $(this).parent().addClass('uk-active');
-      renderTrace('tx', ncs[idx], gcs[idx]);
-    });
-  }
-
-  if(ncs.length > 0) {
-    renderTrace("tx", ncs[0], gcs[0]);
-  } else {
-    $('#opCodeContainer').empty();
-  }
+  });
 
   windowResize();
 }

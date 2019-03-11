@@ -16,7 +16,7 @@ import
   ../nimbus/db/[db_chain, state_db]
 
 proc hashLogEntries(logs: seq[Log]): string =
-  toLowerAscii("0x" & $keccak(rlp.encode(logs)))
+  toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -50,14 +50,8 @@ proc testFixtureIndexes(prevStateRoot: Hash256, header: BlockHeader, pre: JsonNo
       db.addBalance(header.coinbase, 0.u256)
     return
 
-  let gasCost = tx.gasLimit.u256 * tx.gasPrice.u256
   vmState.mutateStateDB:
-    db.incNonce(sender)
-    db.subBalance(sender, gasCost)
-    let gasUsed = if tx.isContractCreation and tx.payload.len > 0:
-                    tx.contractCreate(vmState, sender, some(fork))
-                  else:
-                    tx.contractCall(vmState, sender, some(fork))
+    let gasUsed = tx.processTransaction(sender, vmState, some(fork))
     db.addBalance(header.coinbase, gasUsed.u256 * tx.gasPrice.u256)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =

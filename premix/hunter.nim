@@ -11,7 +11,7 @@ const
 proc store(memoryDB: TrieDatabaseRef, branch: JsonNode) =
   for p in branch:
     let rlp = hexToSeqByte(p.getStr)
-    let hash = keccak(rlp)
+    let hash = keccakHash(rlp)
     memoryDB.put(hash.data, rlp)
 
 proc parseAddress(address: string): EthAddress =

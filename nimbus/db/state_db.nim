@@ -115,7 +115,7 @@ proc setStorage*(db: var AccountStateDB,
   var
     triedb = HexaryTrie(db.trie).db
     # slotHash can be obtained from accountTrie.put?
-    slotHash = keccak(slot.toByteArrayBE)
+    slotHash = keccakHash(slot.toByteArrayBE)
   triedb.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
 
   account.storageRoot = accountTrie.rootHash
@@ -165,7 +165,7 @@ proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
   # also use JournalDB to revert state trie
 
   let
-    newCodeHash = keccak code.toOpenArray
+    newCodeHash = keccakHash(code.toOpenArray)
     triedb = HexaryTrie(db.trie).db
 
   if code.len != 0:

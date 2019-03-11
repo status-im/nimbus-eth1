@@ -107,7 +107,7 @@ proc persistTransactions*(self: BaseChainDB, blockNumber: BlockNumber, transacti
   for idx, tx in transactions:
     let
       encodedTx = rlp.encode(tx).toRange
-      txHash = keccak(encodedTx.toOpenArray)
+      txHash = keccakHash(encodedTx.toOpenArray)
       txKey: TransactionKey = (blockNumber, idx)
     trie.put(rlp.encode(idx).toRange, encodedTx)
     self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(txKey))
@@ -127,7 +127,7 @@ iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader):
   ## Returns an iterable of the transaction hashes from th block specified
   ## by the given block header.
   for encodedTx in self.getBlockTransactionData(blockHeader.txRoot):
-    yield keccak(encodedTx.toOpenArray)
+    yield keccakHash(encodedTx.toOpenArray)
 
 proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody): bool =
   var header: BlockHeader
@@ -247,7 +247,7 @@ proc persistUncles*(self: BaseChainDB, uncles: openarray[BlockHeader]): Hash256 
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
-  result = keccak(enc)
+  result = keccakHash(enc)
   self.db.put(genericHashKey(result).toOpenArray, enc)
 
 #proc persistBlockToDb*(self: BaseChainDB; blk: Block): ValidationResult =
