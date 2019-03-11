@@ -279,12 +279,18 @@ proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
     result = true
     let precompile = PrecompileAddresses(lb)
     trace "Call precompile", precompile = precompile, codeAddr = computation.msg.codeAddress
-    case precompile
-    of paEcRecover: ecRecover(computation)
-    of paSha256: sha256(computation)
-    of paRipeMd160: ripeMd160(computation)
-    of paIdentity: identity(computation)
-    of paModExp: modExp(computation)
-    of paEcAdd: bn256ecAdd(computation)
-    of paEcMul: bn256ecMul(computation)
-    of paPairing: bn256ecPairing(computation)
+    try:
+      case precompile
+      of paEcRecover: ecRecover(computation)
+      of paSha256: sha256(computation)
+      of paRipeMd160: ripeMd160(computation)
+      of paIdentity: identity(computation)
+      of paModExp: modExp(computation)
+      of paEcAdd: bn256ecAdd(computation)
+      of paEcMul: bn256ecMul(computation)
+      of paPairing: bn256ecPairing(computation)
+    except ValidationError:
+      # swallow any precompiles errors
+      debug "execPrecompiles validation error", msg=getCurrentExceptionMsg()
+    except ValueError:
+      debug "execPrecompiles value error", msg=getCurrentExceptionMsg()
