@@ -12,6 +12,12 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
+  let fork =
+    if forkOverride.isSome:
+      forkOverride.get
+    else:
+      vmState.blockNumber.toFork
+
   let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
   var balance = vmState.readOnlyStateDb().getBalance(sender)
   if balance < upfrontGasCost:
@@ -21,13 +27,22 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     db.incNonce(sender)
     db.subBalance(sender, upfrontGasCost)
 
+  var snapshot = vmState.snapshot()
   var computation = setupComputation(vmState, tx, sender, forkOverride)
+  var contractOK = true
   result = tx.gasLimit
 
   if execComputation(computation):
     if tx.isContractCreation:
-      computation.writeContract()
+      contractOK = computation.writeContract()
     result = computation.refundGas(tx, sender)
+
+  if not contractOK and fork == FkHomestead:
+    snapshot.revert()
+    # consume all gas
+    result = tx.gasLimit
+  else:
+    snapshot.commit()
 
 type
   # TODO: these types need to be removed
