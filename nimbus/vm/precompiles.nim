@@ -76,7 +76,7 @@ proc ecRecover*(computation: var BaseComputation) =
 
 proc sha256*(computation: var BaseComputation) =
   let
-    wordCount = computation.msg.data.len div 32
+    wordCount = wordCount(computation.msg.data.len)
     gasFee = GasSHA256 + wordCount * GasSHA256Word
 
   computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
@@ -85,7 +85,7 @@ proc sha256*(computation: var BaseComputation) =
 
 proc ripemd160*(computation: var BaseComputation) =
   let
-    wordCount = computation.msg.data.len div 32
+    wordCount = wordCount(computation.msg.data.len)
     gasFee = GasRIPEMD160 + wordCount * GasRIPEMD160Word
 
   computation.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
