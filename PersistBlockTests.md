@@ -2,6 +2,8 @@ PersistBlockTests
 ===
 ## PersistBlockTests
 ```diff
++ block1017395.json                                               OK
++ block1149150.json                                               OK
 + block116524.json                                                OK
 + block146675.json                                                OK
 + block196647.json                                                OK
@@ -16,6 +18,7 @@ PersistBlockTests
 + block46400.json                                                 OK
 + block46402.json                                                 OK
 + block47205.json                                                 OK
++ block47216.json                                                 OK
 + block48712.json                                                 OK
 + block48915.json                                                 OK
 + block49018.json                                                 OK
@@ -23,6 +26,8 @@ PersistBlockTests
 + block49891.json                                                 OK
 + block50111.json                                                 OK
 + block512335.json                                                OK
++ block652148.json                                                OK
++ block668910.json                                                OK
 + block78458.json                                                 OK
 + block81383.json                                                 OK
 + block81666.json                                                 OK
@@ -30,7 +35,7 @@ PersistBlockTests
 + block97.json                                                    OK
 + block98.json                                                    OK
 ```
-OK: 27/27 Fail: 0/27 Skip: 0/27
+OK: 32/32 Fail: 0/32 Skip: 0/32
 
 ---TOTAL---
-OK: 27/27 Fail: 0/27 Skip: 0/27
+OK: 32/32 Fail: 0/32 Skip: 0/32
