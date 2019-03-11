@@ -6,55 +6,28 @@ import options,
   ../vm/[computation, interpreter_dispatch, message],
   ../vm/interpreter/vm_forks
 
-proc contractCall*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
-  var db = vmState.accountDb
-  var computation = setupComputation(vmState, tx, sender, forkOverride)
-  result = tx.gasLimit
-
-  if execComputation(computation):
-    let
-      gasRemaining = computation.gasMeter.gasRemaining
-      gasRefunded = computation.getGasRefund()
-      gasUsed = tx.gasLimit - gasRemaining
-      gasRefund = min(gasRefunded, gasUsed div 2)
-      gasRefundAmount = (gasRemaining + gasRefund).u256 * tx.gasPrice.u256
-
-    db.addBalance(sender, gasRefundAmount)
-    return (gasUsed - gasRefund)
-
-proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState): GasInt =
+proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, forkOverride=none(Fork)): GasInt =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
-  var db = vmState.accountDb
-  var transactionFailed = false
-
-  # TODO: combine/refactor re validate
   let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
-  let upfrontCost = upfrontGasCost + tx.value
-  var balance = db.getBalance(sender)
-  if balance < upfrontCost:
-    if balance <= upfrontGasCost:
-      result = (balance div tx.gasPrice.u256).truncate(GasInt)
-      balance = 0.u256
-    else:
-      result = tx.gasLimit
-      balance -= upfrontGasCost
-    transactionFailed = true
-  else:
-    balance -= upfrontGasCost
+  var balance = vmState.readOnlyStateDb().getBalance(sender)
+  if balance < upfrontGasCost:
+    return tx.gasLimit
 
-  db.incNonce(sender)
-  db.setBalance(sender, balance)
-  if transactionFailed: return
+  vmState.mutateStateDB:
+    db.incNonce(sender)
+    db.subBalance(sender, upfrontGasCost)
 
-  # TODO: Run the vm with proper fork
-  if tx.isContractCreation:
-    result = tx.contractCreate(vmState, sender)
-  else:
-    result = tx.contractCall(vmState, sender)
+  var computation = setupComputation(vmState, tx, sender, forkOverride)
+  result = tx.gasLimit
+
+  if execComputation(computation):
+    if tx.isContractCreation:
+      computation.writeContract()
+    result = computation.refundGas(tx, sender)
 
 type
   # TODO: these types need to be removed
@@ -94,7 +67,6 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
     debug "Mismatched txRoot", blockNumber=header.blockNumber
     return ValidationResult.Error
 
-  var stateDb = vmState.accountDb
   if header.txRoot != BLANK_ROOT_HASH:
     if body.transactions.len == 0:
       debug "No transactions in body", blockNumber=header.blockNumber
@@ -112,7 +84,8 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
 
           # miner fee
           let txFee = gasUsed.u256 * tx.gasPrice.u256
-          stateDb.addBalance(header.coinbase, txFee)
+          vmState.mutateStateDB:
+            db.addBalance(header.coinbase, txFee)
         else:
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error
@@ -129,12 +102,15 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
       uncleReward -= header.blockNumber
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
-      stateDb.addBalance(uncle.coinbase, uncleReward)
+      vmState.mutateStateDB:
+        db.addBalance(uncle.coinbase, uncleReward)
       mainReward += blockReward div 32.u256
 
   # Reward beneficiary
-  stateDb.addBalance(header.coinbase, mainReward)
+  vmState.mutateStateDB:
+    db.addBalance(header.coinbase, mainReward)
 
+  let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
     error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
     # this one is a show stopper until we are confident in our VM's

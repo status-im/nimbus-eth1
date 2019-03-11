@@ -62,12 +62,13 @@ proc main() =
   var numBlocks = 0
   var counter = 0
 
-  while true:
-    info "REQUEST HEADER", blockNumber=blockNumber
+  while true:    
     var thisBlock = requestBlock(blockNumber)
 
     headers.add thisBlock.header
     bodies.add thisBlock.body
+    info "REQUEST HEADER", blockNumber=blockNumber, txs=thisBlock.body.transactions.len
+    
     inc numBlocks
     blockNumber += one
 

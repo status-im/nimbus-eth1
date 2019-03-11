@@ -87,38 +87,32 @@ proc execComputation*(computation: var BaseComputation): bool =
     snapshot.revert()
     if computation.tracingEnabled: computation.traceError()
 
-proc contractCreate*(tx: Transaction, vmState: BaseVMState, sender: EthAddress, forkOverride=none(Fork)): GasInt =
-  doAssert tx.isContractCreation
-  var c = setupComputation(vmState, tx, sender, forkOverride)
-  result = tx.gasLimit
+proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddress): GasInt =
+  let
+    gasRemaining = computation.gasMeter.gasRemaining
+    gasRefunded = computation.getGasRefund()
+    gasUsed = tx.gasLimit - gasRemaining
+    gasRefund = min(gasRefunded, gasUsed div 2)
 
-  if execComputation(c):
-    var db = vmState.accountDb
-    let
-      gasRemaining = c.gasMeter.gasRemaining
-      gasRefunded = c.getGasRefund()
-      gasUsed = tx.gasLimit - gasRemaining
-      gasRefund = min(gasRefunded, gasUsed div 2)
+  computation.vmState.mutateStateDB:
+    db.addBalance(sender, (gasRemaining + gasRefund).u256 * tx.gasPrice.u256)
 
-    var codeCost = c.gasCosts[Create].m_handler(0, 0, c.output.len)
+  result = gasUsed - gasRefund
 
-    # This apparently is not supposed to actually consume the gas, just be able to,
-    # for purposes of accounting. Py-EVM apparently does consume the gas, but it is
-    # not matching observed blockchain balances if consumeGas is called.
-
-    let contractAddress = c.msg.storageAddress
-    if not c.isSuicided(contractAddress):
-      # make changes only if it not selfdestructed
-      if gasRemaining >= codeCost:
-        db.setCode(contractAddress, c.output.toRange)
-      else:
-        # XXX: Homestead behaves differently; reverts state on gas failure
-        # https://github.com/ethereum/py-evm/blob/master/eth/vm/forks/homestead/computation.py
-        codeCost = 0
+proc writeContract*(computation: var BaseComputation) =
+  let codeCost = computation.gasCosts[Create].m_handler(0, 0, computation.output.len)
+  let contractAddress = computation.msg.storageAddress
+  if not computation.isSuicided(contractAddress):
+    # make changes only if it not selfdestructed
+    if computation.gasMeter.gasRemaining >= codeCost:
+      computation.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
+      computation.vmState.mutateStateDB:
+        db.setCode(contractAddress, computation.output.toRange)
+    else:
+      # XXX: Homestead behaves differently; reverts state on gas failure
+      # https://github.com/ethereum/py-evm/blob/master/eth/vm/forks/homestead/computation.py
+      computation.vmState.mutateStateDB:
         db.setCode(contractAddress, ByteRange())
-
-    db.addBalance(sender, (gasRemaining + gasRefund - codeCost).u256 * tx.gasPrice.u256)
-    return (gasUsed - gasRefund + codeCost)
 
 #[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
