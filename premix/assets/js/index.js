@@ -186,9 +186,13 @@ function opCodeRenderer(txId, nimbus, geth) {
     return;
   }
 
+  const rowsPerPage = 500;
+  var numPages = numRows / rowsPerPage;
+  if(numRows % rowsPerPage != 0) numPages++;
+    
   $("#paging").paging(numRows, {
-    format: '[< (qq -) nnncnnn (- pp) >]',
-    perpage: 500,
+    format: numPages < 10 ? "n".repeat(numPages) : '[< (qq -) nnncnnn (- pp) >]',
+    perpage: rowsPerPage,
     lapping: 1,
     page: 1,
     onSelect: function (page) {
@@ -269,8 +273,10 @@ function opCodeRenderer(txId, nimbus, geth) {
       case 'fill':
         return '<li class="uk-disabled"><span>...</span></li>';
       case 'left':
+        if(this.value >= this.page) return '';
         return '<li><a href="#">' + this.value + '</a></li>';
       case 'right':
+        if(this.value <= this.page) return '';
         return '<li><a href="#">' + this.value + '</a></li>';
       }
     }
