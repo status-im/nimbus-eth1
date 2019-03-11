@@ -80,6 +80,11 @@ proc main() =
   chainDB.dumpTest(299804) # GasInt overflow
   chainDB.dumpTest(420301) # computation gas cost LTE(<=) 0 to LT(<) 0
   chainDB.dumpTest(512335) # create apply message
+  chainDB.dumpTest(47216)   # regression
+  chainDB.dumpTest(652148)  # contract transfer bug
+  chainDB.dumpTest(668910)  # uncleared logs bug
+  chainDB.dumpTest(1017395) # sha256 and ripemd precompiles wordcount bug
+  chainDB.dumpTest(1149150) # need to swallow precompiles errors
 
 when isMainModule:
   var message: string
