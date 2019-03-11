@@ -108,6 +108,13 @@ make V=0 # quiet
 make V=2 test # more verbose than usual
 ```
 
+- same for the [Chronicles log level](https://github.com/status-im/nim-chronicles#chronicles_log_level):
+
+```bash
+make LOG_LEVEL=DEBUG nimbus # this is the default
+make LOG_LEVEL=TRACE nimbus # log everything
+```
+
 - if you want to use SSH keys with GitHub:
 
 ```bash
