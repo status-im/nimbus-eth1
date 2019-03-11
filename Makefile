@@ -25,14 +25,20 @@ RUN_CMD_IN_ALL_REPOS = git submodule foreach --recursive --quiet 'echo -e "\n\e[
 ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
 NIM_DIR := vendor/Nim
+# extra parameters for the Nim compiler
+NIM_PARAMS :=
 # verbosity level
 V := 1
-NIM_PARAMS := --verbosity:$(V)
+NIM_PARAMS := $(NIM_PARAMS) --verbosity:$(V)
 HANDLE_OUTPUT :=
 ifeq ($(V), 0)
   NIM_PARAMS := $(NIM_PARAMS) --hints:off --warnings:off
   HANDLE_OUTPUT := &>/dev/null
 endif
+# Chronicles log level
+LOG_LEVEL := DEBUG
+NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_log_level=$(LOG_LEVEL)
+
 #- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
 #- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
 #- build_all.sh looks at the parent dir to decide whether to copy the resulting csources binary there,
