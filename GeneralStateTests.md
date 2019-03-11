@@ -865,20 +865,20 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
 + CALLCODEIdentity_5.json                                         OK
 + CALLCODERipemd160_0.json                                        OK
 + CALLCODERipemd160_1.json                                        OK
-  CALLCODERipemd160_2.json                                        Skip
-  CALLCODERipemd160_3.json                                        Skip
-  CALLCODERipemd160_3_postfixed0.json                             Skip
-  CALLCODERipemd160_3_prefixed0.json                              Skip
++ CALLCODERipemd160_2.json                                        OK
++ CALLCODERipemd160_3.json                                        OK
++ CALLCODERipemd160_3_postfixed0.json                             OK
++ CALLCODERipemd160_3_prefixed0.json                              OK
 + CALLCODERipemd160_4.json                                        OK
 + CALLCODERipemd160_4_gas719.json                                 OK
 + CALLCODERipemd160_5.json                                        OK
 + CALLCODESha256_0.json                                           OK
 + CALLCODESha256_1.json                                           OK
 + CALLCODESha256_1_nonzeroValue.json                              OK
-  CALLCODESha256_2.json                                           Skip
-  CALLCODESha256_3.json                                           Skip
-  CALLCODESha256_3_postfix0.json                                  Skip
-  CALLCODESha256_3_prefix0.json                                   Skip
++ CALLCODESha256_2.json                                           OK
++ CALLCODESha256_3.json                                           OK
++ CALLCODESha256_3_postfix0.json                                  OK
++ CALLCODESha256_3_prefix0.json                                   OK
 + CALLCODESha256_4.json                                           OK
 + CALLCODESha256_4_gas99.json                                     OK
 + CALLCODESha256_5.json                                           OK
@@ -910,20 +910,20 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
 + CallIdentity_5.json                                             OK
 + CallRipemd160_0.json                                            OK
 + CallRipemd160_1.json                                            OK
-  CallRipemd160_2.json                                            Skip
-  CallRipemd160_3.json                                            Skip
-  CallRipemd160_3_postfixed0.json                                 Skip
-  CallRipemd160_3_prefixed0.json                                  Skip
++ CallRipemd160_2.json                                            OK
++ CallRipemd160_3.json                                            OK
++ CallRipemd160_3_postfixed0.json                                 OK
++ CallRipemd160_3_prefixed0.json                                  OK
 + CallRipemd160_4.json                                            OK
 + CallRipemd160_4_gas719.json                                     OK
 + CallRipemd160_5.json                                            OK
 + CallSha256_0.json                                               OK
 + CallSha256_1.json                                               OK
 + CallSha256_1_nonzeroValue.json                                  OK
-  CallSha256_2.json                                               Skip
-  CallSha256_3.json                                               Skip
-  CallSha256_3_postfix0.json                                      Skip
-  CallSha256_3_prefix0.json                                       Skip
++ CallSha256_2.json                                               OK
++ CallSha256_3.json                                               OK
++ CallSha256_3_postfix0.json                                      OK
++ CallSha256_3_prefix0.json                                       OK
 + CallSha256_4.json                                               OK
 + CallSha256_4_gas99.json                                         OK
 + CallSha256_5.json                                               OK
@@ -933,7 +933,7 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
   modexp_0_0_0_25000.json                                         Skip
   modexp_0_0_0_35000.json                                         Skip
 ```
-OK: 61/94 Fail: 0/94 Skip: 33/94
+OK: 77/94 Fail: 0/94 Skip: 17/94
 ## stQuadraticComplexityTest
 ```diff
   Call1MB1024Calldepth.json                                       Skip
@@ -1690,13 +1690,13 @@ OK: 38/40 Fail: 0/40 Skip: 2/40
 + TestBlockAndTransactionProperties.json                          OK
 + TestContractInteraction.json                                    OK
 + TestContractSuicide.json                                        OK
-  TestCryptographicFunctions.json                                 Skip
++ TestCryptographicFunctions.json                                 OK
 + TestKeywords.json                                               OK
 + TestOverflow.json                                               OK
 + TestStoreGasPrices.json                                         OK
 + TestStructuresAndVariabless.json                                OK
 ```
-OK: 15/16 Fail: 0/16 Skip: 1/16
+OK: 16/16 Fail: 0/16 Skip: 0/16
 ## stSpecialTest
 ```diff
 + FailedCreateRevertsDeletion.json                                OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1180/2334 Fail: 0/2334 Skip: 1154/2334
+OK: 1197/2334 Fail: 0/2334 Skip: 1137/2334
