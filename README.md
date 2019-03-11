@@ -35,7 +35,7 @@ To keep up to date with changes and development progress, follow the [Nimbus blo
 Users of the [Nix package manager](https://nixos.org/nix/download.html) can install all prerequisites simply by running:
 
 ``` bash
-nix-shell nimbus.nix
+nix-shell default.nix
 ```
 
 ### Build & Develop
