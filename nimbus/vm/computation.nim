@@ -151,7 +151,7 @@ proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
     computation.vmState.mutateStateDb:
       db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
-proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
+proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
   var snapshot = computation.snapshot()
   defer: snapshot.dispose()
 
@@ -185,46 +185,31 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]) =
       msg = computation.error.info,
       depth = computation.msg.depth
 
-proc applyCreateMessage(fork: Fork, computation: var BaseComputation, opCode: static[Op]) =
-  computation.applyMessage(opCode)
-  if computation.isError: return
+  result = not computation.isError
+
+proc writeContract(fork: Fork, computation: var BaseComputation, opCode: static[Op]): bool =
+  result = true
 
   let contractCode = computation.output
   if contractCode.len == 0: return
 
-  var snapshot = computation.snapshot()
-  defer: snapshot.dispose()
-
   if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
-    raise newException(OutOfGas, &"Contract code size exceeds EIP170 limit of {EIP170_CODE_SIZE_LIMIT}.  Got code of size: {contractCode.len}")
+    debug "Contract code size exceeds EIP170", limit=EIP170_CODE_SIZE_LIMIT, actual=contractCode.len
+    return false
 
-  try:
-    let storageAddr = computation.msg.storageAddress
-    if not computation.isSuicided(storageAddr):
-      # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
-      let gasCost = computation.gasCosts[Create].m_handler(0, 0, contractCode.len)
-      computation.gasMeter.consumeGas(gasCost,
-        reason = "Write contract code for CREATE")
+  let storageAddr = computation.msg.storageAddress
+  if computation.isSuicided(storageAddr): return
 
-      trace "SETTING CODE",
-        address = storageAddr.toHex,
-        length = len(contract_code),
-        hash = contractCode.rlpHash
-
-      computation.vmState.mutateStateDb:
-        db.setCode(storageAddr, contractCode.toRange)
-
-      snapshot.commit()
-  except OutOfGas:
-    debug "applyCreateMessage failed: ",
-      msg = getCurrentExceptionMsg(),
-      depth = computation.msg.depth
-    if fork < FkHomestead:
-      computation.output = @[]
-    else:
-      # Different from Frontier:
-      # Reverts state on gas failure while writing contract code.
-      snapshot.revert()
+  # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
+  let codeCost = computation.gasCosts[Create].m_handler(0, 0, contractCode.len)
+  if computation.gasMeter.gasRemaining >= codeCost:
+    computation.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
+    computation.vmState.mutateStateDb:
+      db.setCode(storageAddr, contractCode.toRange)
+    result = true
+  else:
+    if fork < FkHomestead: computation.output = @[]
+    result = false
 
 proc generateChildComputation*(fork: Fork, computation: var BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
   var childComp = newBaseComputation(
@@ -236,10 +221,19 @@ proc generateChildComputation*(fork: Fork, computation: var BaseComputation, chi
   # Copy the fork op code executor proc (assumes child computation is in the same fork)
   childComp.opCodeExec = computation.opCodeExec
 
-  if childMsg.isCreate:
-    fork.applyCreateMessage(childComp, opCode)
+  var snapshot = computation.snapshot()
+  defer: snapshot.dispose()
+  var contractOK = true
+
+  if applyMessage(childComp, opCode):
+    if childMsg.isCreate:
+      contractOK = fork.writeContract(childComp, opCode)
+
+  if not contractOK and fork == FkHomestead:
+    # consume all gas
+    snapshot.revert(true)
   else:
-    applyMessage(childComp, opCode)
+    snapshot.commit()
 
   return childComp
 
