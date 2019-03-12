@@ -115,6 +115,12 @@ make LOG_LEVEL=DEBUG nimbus # this is the default
 make LOG_LEVEL=TRACE nimbus # log everything
 ```
 
+- pass arbitrary parameters to the Nim compiler:
+
+```bash
+make EXTRA_NIM_PARAMS="-d:release"
+```
+
 - if you want to use SSH keys with GitHub:
 
 ```bash

@@ -26,7 +26,7 @@ ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
 NIM_DIR := vendor/Nim
 # extra parameters for the Nim compiler
-NIM_PARAMS :=
+NIM_PARAMS := $(EXTRA_NIM_PARAMS)
 # verbosity level
 V := 1
 NIM_PARAMS := $(NIM_PARAMS) --verbosity:$(V)
