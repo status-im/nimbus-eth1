@@ -99,20 +99,21 @@ proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddres
 
   result = gasUsed - gasRefund
 
-proc writeContract*(computation: var BaseComputation) =
-  let codeCost = computation.gasCosts[Create].m_handler(0, 0, computation.output.len)
+proc writeContract*(computation: var BaseComputation): bool =
+  result = true
   let contractAddress = computation.msg.storageAddress
-  if not computation.isSuicided(contractAddress):
-    # make changes only if it not selfdestructed
-    if computation.gasMeter.gasRemaining >= codeCost:
-      computation.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
-      computation.vmState.mutateStateDB:
-        db.setCode(contractAddress, computation.output.toRange)
-    else:
-      # XXX: Homestead behaves differently; reverts state on gas failure
-      # https://github.com/ethereum/py-evm/blob/master/eth/vm/forks/homestead/computation.py
-      computation.vmState.mutateStateDB:
-        db.setCode(contractAddress, ByteRange())
+  if computation.isSuicided(contractAddress): return
+
+  let codeCost = computation.gasCosts[Create].m_handler(0, 0, computation.output.len)
+  if computation.gasMeter.gasRemaining >= codeCost:
+    computation.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
+    computation.vmState.mutateStateDB:
+      db.setCode(contractAddress, computation.output.toRange)
+    result = true
+  else:
+    computation.vmState.mutateStateDB:
+      db.setCode(contractAddress, ByteRange())
+    result = false
 
 #[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
