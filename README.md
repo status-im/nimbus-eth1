@@ -177,7 +177,8 @@ Checking out older commits, either to bisect something or to reproduce an older 
 
 ```bash
 git checkout <commit hash here>
-make -j8 clean update
+make clean
+make -j8 update
 ```
 
 Running a dependency's test suite using `nim` instead of `nimble` (which cannot be
@@ -200,7 +201,8 @@ Sometimes, the build will fail even though the latest CI is green - here are a f
 
 * Turn it off and on again:
 ```bash
-make clean update
+make clean
+make update
 ```
 
 #### Using Nimble directly
