@@ -252,10 +252,6 @@ proc updateOpcodeExec*(computation: var BaseComputation, fork: Fork) =
   else:
     raise newException(VMError, "Unknown or not implemented fork: " & $fork)
 
-proc updateOpcodeExec*(computation: var BaseComputation) =
-  let fork = computation.getFork
-  computation.updateOpcodeExec(fork)
-
 proc executeOpcodes*(computation: var BaseComputation) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   let fork = computation.getFork
