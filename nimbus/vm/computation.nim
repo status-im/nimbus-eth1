@@ -109,29 +109,20 @@ proc commit*(snapshot: var ComputationSnapshot) {.inline.} =
 proc dispose*(snapshot: var ComputationSnapshot) {.inline.} =
   snapshot.snapshot.dispose()
 
-proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
+proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
   if computation.msg.depth >= MaxCallDepth:
     raise newException(StackDepthError, "Stack depth limit reached")
 
-  if computation.msg.value != 0:
-    let senderBalance =
-      computation.vmState.readOnlyStateDb().
-        getBalance(computation.msg.sender)
+  let senderBalance = computation.vmState.readOnlyStateDb().
+                      getBalance(computation.msg.sender)
 
-    if senderBalance < computation.msg.value:
-      raise newException(InsufficientFunds,
-          &"Insufficient funds: {senderBalance} < {computation.msg.value}"
-      )
+  if senderBalance < computation.msg.value:
+    raise newException(InsufficientFunds,
+      &"Insufficient funds: {senderBalance} < {computation.msg.value}")
 
-    computation.vmState.mutateStateDb:
-      db.subBalance(computation.msg.sender, computation.msg.value)
-      db.addBalance(computation.msg.storageAddress, computation.msg.value)
-
-  else:
-    # even though the value is zero, the account
-    # should be exist.
-    computation.vmState.mutateStateDb:
-      db.addBalance(computation.msg.storageAddress, computation.msg.value)
+  computation.vmState.mutateStateDb:
+    db.subBalance(computation.msg.sender, computation.msg.value)
+    db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
 proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
   var snapshot = computation.snapshot()
@@ -139,10 +130,10 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
 
   when opCode in {Call, Create}:
     try:
-      computation.applyMessageAux(opCode)
+      computation.transferBalance(opCode)
     except VMError:
       snapshot.revert()
-      debug "applyMessageAux failed", msg = computation.error.info
+      debug "transferBalance failed", msg = computation.error.info
       return
 
   if computation.gasMeter.gasRemaining < 0:
