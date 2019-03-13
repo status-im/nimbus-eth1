@@ -64,6 +64,6 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
 
   transaction.commit()
 
-method getStateDb*(c: Chain): TrieDatabaseRef {.gcsafe.} =
+method getTrieDB*(c: Chain): TrieDatabaseRef {.gcsafe.} =
   c.db.db
 
