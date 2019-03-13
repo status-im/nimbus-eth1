@@ -171,8 +171,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
     # Run code
     # We cannot use the normal dispatching function `executeOpcodes`
     # within `interpreter_dispatch.nim` due to a cyclic dependency.
-    if not computation.execPrecompiles:
-      computation.opcodeExec(computation)
+    computation.opcodeExec(computation)
     snapshot.commit()
   except VMError:
     snapshot.revert(true)
