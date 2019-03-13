@@ -63,3 +63,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     c.db.persistReceipts(vmState.receipts)
 
   transaction.commit()
+
+method getTrieDB*(c: Chain): TrieDatabaseRef {.gcsafe.} =
+  c.db.db
+
