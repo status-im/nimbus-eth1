@@ -109,7 +109,7 @@ proc commit*(snapshot: var ComputationSnapshot) {.inline.} =
 proc dispose*(snapshot: var ComputationSnapshot) {.inline.} =
   snapshot.snapshot.dispose()
 
-proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
+proc transferBalance(computation: var BaseComputation) =
   if computation.msg.depth >= MaxCallDepth:
     raise newException(StackDepthError, "Stack depth limit reached")
 
@@ -130,7 +130,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
 
   when opCode in {Call, Create}:
     try:
-      computation.transferBalance(opCode)
+      computation.transferBalance()
     except VMError:
       snapshot.revert()
       debug "transferBalance failed", msg = computation.error.info
