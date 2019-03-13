@@ -518,9 +518,12 @@ op create, inline = false, value, startPosition, size:
   computation.gasMeter.consumeGas(gasCost, reason = reason)
   computation.memory.extend(memPos, len)
 
+  # the sender is childmsg sender, not parent msg sender
+  # perhaps we need to move this code somewhere else
+  # to avoid confusion
   let senderBalance =
     computation.vmState.readOnlyStateDb().
-      getBalance(computation.msg.sender)
+      getBalance(computation.msg.storageAddress)
 
   if senderBalance < value:
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance
