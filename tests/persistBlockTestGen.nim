@@ -85,6 +85,8 @@ proc main() =
   chainDB.dumpTest(668910)  # uncleared logs bug
   chainDB.dumpTest(1017395) # sha256 and ripemd precompiles wordcount bug
   chainDB.dumpTest(1149150) # need to swallow precompiles errors
+  chainDB.dumpTest(1155095) # homestead codeCost OOG
+  chainDB.dumpTest(1317742) # CREATE childmsg sender
 
 when isMainModule:
   var message: string
