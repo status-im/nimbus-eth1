@@ -16,6 +16,7 @@ type
   DownloadFlags* = enum
     DownloadReceipts
     DownloadTxTrace
+    DownloadAndValidate
 
 proc request*(methodName: string, params: JsonNode): JsonNode =
   var client = newRpcHttpClient()
@@ -87,14 +88,6 @@ proc requestBlock*(blockNumber: BlockNumber, flags: set[DownloadFlags] = {}): Bl
   if DownloadTxTrace in flags:
     result.traces     = requestTxTraces(header)
 
-  let
-    txRoot        = calcTxRoot(result.body.transactions).prefixHex
-    txRootOK      = result.header.txRoot.prefixHex
-    ommersHash    = rlpHash(result.body.uncles).prefixHex
-    ommersHashOK  = result.header.ommersHash.prefixHex
-    headerHash    = rlpHash(result.header).prefixHex
-    headerHashOK  = header["hash"].getStr().toLowerAscii
-
   if DownloadReceipts in flags:
     result.receipts   = requestReceipts(header)
     let
@@ -104,14 +97,23 @@ proc requestBlock*(blockNumber: BlockNumber, flags: set[DownloadFlags] = {}): Bl
       debug "wrong receipt root", receiptRoot, receiptRootOK, blockNumber
       raise newException(ValueError, "Error when validating receipt root")
 
-  if txRoot != txRootOK:
-    debug "wrong tx root", txRoot, txRootOK, blockNumber
-    raise newException(ValueError, "Error when validating tx root")
+  if DownloadAndValidate in flags:
+    let
+      txRoot        = calcTxRoot(result.body.transactions).prefixHex
+      txRootOK      = result.header.txRoot.prefixHex
+      ommersHash    = rlpHash(result.body.uncles).prefixHex
+      ommersHashOK  = result.header.ommersHash.prefixHex
+      headerHash    = rlpHash(result.header).prefixHex
+      headerHashOK  = header["hash"].getStr().toLowerAscii
 
-  if ommersHash != ommersHashOK:
-    debug "wrong ommers hash", ommersHash, ommersHashOK, blockNumber
-    raise newException(ValueError, "Error when validating ommers hash")
+    if txRoot != txRootOK:
+      debug "wrong tx root", txRoot, txRootOK, blockNumber
+      raise newException(ValueError, "Error when validating tx root")
 
-  if headerHash != headerHashOK:
-    debug "wrong header hash", headerHash, headerHashOK, blockNumber
-    raise newException(ValueError, "Error when validating block header hash")
+    if ommersHash != ommersHashOK:
+      debug "wrong ommers hash", ommersHash, ommersHashOK, blockNumber
+      raise newException(ValueError, "Error when validating ommers hash")
+
+    if headerHash != headerHashOK:
+      debug "wrong header hash", headerHash, headerHashOK, blockNumber
+      raise newException(ValueError, "Error when validating block header hash")
