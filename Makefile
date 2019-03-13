@@ -36,8 +36,10 @@ ifeq ($(V), 0)
   HANDLE_OUTPUT := &>/dev/null
 endif
 # Chronicles log level
-LOG_LEVEL := DEBUG
-NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_log_level=$(LOG_LEVEL)
+LOG_LEVEL :=
+ifdef LOG_LEVEL
+  NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_log_level=$(LOG_LEVEL)
+endif
 
 #- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
 #- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
