@@ -4,7 +4,9 @@ PersistBlockTests
 ```diff
 + block1017395.json                                               OK
 + block1149150.json                                               OK
++ block1155095.json                                               OK
 + block116524.json                                                OK
++ block1317742.json                                               OK
 + block146675.json                                                OK
 + block196647.json                                                OK
 + block226147.json                                                OK
@@ -35,7 +37,7 @@ PersistBlockTests
 + block97.json                                                    OK
 + block98.json                                                    OK
 ```
-OK: 32/32 Fail: 0/32 Skip: 0/32
+OK: 34/34 Fail: 0/34 Skip: 0/34
 
 ---TOTAL---
-OK: 32/32 Fail: 0/32 Skip: 0/32
+OK: 34/34 Fail: 0/34 Skip: 0/34
