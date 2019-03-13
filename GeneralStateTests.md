@@ -472,7 +472,7 @@ OK: 0/13 Fail: 0/13 Skip: 13/13
 + RawCallGasValueTransferMemoryAsk.json                           OK
 + RawCallMemoryGas.json                                           OK
 + RawCallMemoryGasAsk.json                                        OK
-  RawCreateFailGasValueTransfer.json                              Skip
++ RawCreateFailGasValueTransfer.json                              OK
   RawCreateFailGasValueTransfer2.json                             Skip
 + RawCreateGas.json                                               OK
   RawCreateGasMemory.json                                         Skip
@@ -486,7 +486,7 @@ OK: 0/13 Fail: 0/13 Skip: 13/13
 + RawExtCodeCopyMemoryGas.json                                    OK
 + RawExtCodeSizeGas.json                                          OK
 ```
-OK: 26/30 Fail: 0/30 Skip: 4/30
+OK: 27/30 Fail: 0/30 Skip: 3/30
 ## stEIP158Specific
 ```diff
   CALL_OneVCallSuicide.json                                       Skip
@@ -514,8 +514,8 @@ OK: 4/5 Fail: 0/5 Skip: 1/5
 ## stInitCodeTest
 ```diff
 + CallContractToCreateContractAndCallItOOG.json                   OK
-  CallContractToCreateContractNoCash.json                         Skip
-  CallContractToCreateContractOOG.json                            Skip
++ CallContractToCreateContractNoCash.json                         OK
++ CallContractToCreateContractOOG.json                            OK
 + CallContractToCreateContractOOGBonusGas.json                    OK
   CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonSkip
   CallContractToCreateContractWhichWouldCreateContractInInitCode.jsonSkip
@@ -532,7 +532,7 @@ OK: 4/5 Fail: 0/5 Skip: 1/5
 + TransactionCreateStopInInitcode.json                            OK
 + TransactionCreateSuicideInInitcode.json                         OK
 ```
-OK: 11/18 Fail: 0/18 Skip: 7/18
+OK: 13/18 Fail: 0/18 Skip: 5/18
 ## stLogTests
 ```diff
 + log0_emptyMem.json                                              OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1209/2334 Fail: 0/2334 Skip: 1125/2334
+OK: 1212/2334 Fail: 0/2334 Skip: 1122/2334
