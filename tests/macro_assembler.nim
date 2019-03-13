@@ -60,7 +60,7 @@ proc validateStorage(val: NimNode): Storage =
   val.expectKind(nnkCall)
   val[0].expectKind(nnkStrLit)
   val[1].expectKind(nnkStmtList)
-  assert(val[1].len == 1)
+  doAssert(val[1].len == 1)
   val[1][0].expectKind(nnkStrLit)
   result = (validateVMWord(val[0]), validateVMWord(val[1][0]))
 
@@ -181,7 +181,7 @@ const
   blockFile = "tests" / "fixtures" / "PersistBlockTests" / "block47205.json"
 
 proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, data: seq[byte], forkOverride=none(Fork)) : BaseComputation =
-  assert tx.isContractCreation
+  doAssert tx.isContractCreation
 
   let fork =
     if forkOverride.isSome:

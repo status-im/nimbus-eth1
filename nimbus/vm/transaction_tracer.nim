@@ -40,7 +40,7 @@ proc rememberStorageKey(tracer: var TransactionTracer, compDepth: int, key: Uint
   tracer.storageKeys[compDepth].incl key
 
 iterator storage(tracer: TransactionTracer, compDepth: int): Uint256 =
-  assert compDepth >= 0 and compDepth < tracer.storageKeys.len
+  doAssert compDepth >= 0 and compDepth < tracer.storageKeys.len
   for key in tracer.storageKeys[compDepth]:
     yield key
 

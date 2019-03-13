@@ -33,7 +33,7 @@ proc transactionHashToBlockKey*(h: Hash256): DbKey {.inline.} =
 
 proc blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} =
   result.data[0] = byte ord(blockNumberToHash)
-  assert sizeof(u) <= 32
+  doAssert sizeof(u) <= 32
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
@@ -42,7 +42,7 @@ proc canonicalHeadHashKey*(): DbKey {.inline.} =
   result.dataEndPos = 1
 
 proc slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
-  assert(h.len == 32)
+  doAssert(h.len == 32)
   result.data[0] = byte ord(slotHashToSlot)
   result.data[1 .. 32] = h
   result.dataEndPos = uint8 32

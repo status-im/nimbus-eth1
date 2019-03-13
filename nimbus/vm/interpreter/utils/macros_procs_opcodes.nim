@@ -101,7 +101,7 @@ macro genSwap*(): untyped =
         computation.stack.swap(`pos`)
 
 proc logImpl(c: var BaseComputation, opcode: Op, topicCount: int) =
-  assert(topicCount in 0 .. 4)
+  doAssert(topicCount in 0 .. 4)
   let (memStartPosition, size) = c.stack.popInt(2)
   let (memPos, len) = (memStartPosition.cleanMemRef, size.cleanMemRef)
 

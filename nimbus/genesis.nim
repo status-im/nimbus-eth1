@@ -102,7 +102,7 @@ proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
 
 proc commit*(g: Genesis, db: BaseChainDB) =
   let b = g.toBlock(db)
-  assert(b.blockNumber == 0, "can't commit genesis block with number > 0")
+  doAssert(b.blockNumber == 0, "can't commit genesis block with number > 0")
   discard db.persistHeaderToDb(b)
 
 proc initializeEmptyDb*(db: BaseChainDB) =

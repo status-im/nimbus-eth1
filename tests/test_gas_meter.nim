@@ -30,9 +30,9 @@ macro all(element: untyped, handler: untyped): untyped =
 # @pytest.mark.parametrize("value", (0, 10))
 # def test_start_gas_on_instantiation(value):
 #     meter = GasMeter(value)
-#     assert meter.start_gas == value
-#     assert meter.gas_remaining == value
-#     assert meter.gas_refunded == 0
+#     doAssert meter.start_gas == value
+#     doAssert meter.gas_remaining == value
+#     doAssert meter.gas_refunded == 0
 
 
 # @pytest.mark.parametrize("value", (-1, 2**256, 'a'))
@@ -44,18 +44,18 @@ macro all(element: untyped, handler: untyped): untyped =
 # @pytest.mark.parametrize("amount", (0, 1, 10))
 # def test_consume_gas(gas_meter, amount):
 #     gas_meter.consume_gas(amount, "reason")
-#     assert gas_meter.gas_remaining == gas_meter.start_gas - amount
+#     doAssert gas_meter.gas_remaining == gas_meter.start_gas - amount
 
 
 # @pytest.mark.parametrize("amount", (0, 1, 99))
 # def test_return_gas(gas_meter, amount):
 #     gas_meter.return_gas(amount)
-#     assert gas_meter.gas_remaining == (gas_meter.start_gas + amount)
+#     doAssert gas_meter.gas_remaining == (gas_meter.start_gas + amount)
 
 # @pytest.mark.parametrize("amount", (0, 1, 99))
 # def test_refund_gas(gas_meter, amount):
 #     gas_meter.refund_gas(amount)
-#     assert gas_meter.gas_refunded == amount
+#     doAssert gas_meter.gas_refunded == amount
 
 
 suite "gasMeter":

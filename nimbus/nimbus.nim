@@ -64,7 +64,7 @@ proc start(): NimbusObject =
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)
-    assert(canonicalHeadHashKey().toOpenArray in trieDB)
+    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId)

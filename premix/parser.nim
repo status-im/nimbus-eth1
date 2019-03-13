@@ -35,27 +35,27 @@ type
 
 proc fromJson(n: JsonNode, name: string, x: var SomeData) =
   hexToByteArray(n[name].getStr(), x)
-  assert(x.prefixHex == toLowerAscii(n[name].getStr()))
+  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()))
 
 proc fromJson(n: JsonNode, name: string, x: var Hash256) =
   hexToByteArray(n[name].getStr(), x.data)
-  assert(x.prefixHex == toLowerAscii(n[name].getStr()))
+  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()))
 
 proc fromJson(n: JsonNode, name: string, x: var Blob) =
   x = hexToSeqByte(n[name].getStr())
-  assert(x.prefixHex == toLowerAscii(n[name].getStr()))
+  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()))
 
 proc fromJson(n: JsonNode, name: string, x: var UInt256) =
   x = UInt256.fromHex(n[name].getStr())
-  assert(x.prefixHex == toLowerAscii(n[name].getStr()))
+  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()))
 
 proc fromJson(n: JsonNode, name: string, x: var SomeInteger) =
   x = hexToInt(n[name].getStr(), type(x))
-  assert(x.prefixHex == toLowerAscii(n[name].getStr()))
+  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()))
 
 proc fromJson(n: JsonNode, name: string, x: var EthTime) =
   x = initTime(hexToInt(n[name].getStr(), int64), 0)
-  assert(x.toUnix.prefixHex == toLowerAscii(n[name].getStr()))
+  doAssert(x.toUnix.prefixHex == toLowerAscii(n[name].getStr()))
 
 proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "parentHash", result.parentHash
@@ -90,8 +90,8 @@ proc parseTransaction*(n: JsonNode): Transaction =
   n.fromJson "s", result.S
 
   var sender = result.getSender()
-  assert sender.prefixHex == n["from"].getStr()
-  assert n["hash"].getStr() == result.rlpHash().prefixHex
+  doAssert sender.prefixHex == n["from"].getStr()
+  doAssert n["hash"].getStr() == result.rlpHash().prefixHex
 
 proc parseLog(n: JsonNode): Log =
   n.fromJson "address", result.address

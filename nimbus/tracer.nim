@@ -80,8 +80,8 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
   var stateDb = vmState.accountDb
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
-  assert(body.transactions.calcTxRoot == header.txRoot)
-  assert(body.transactions.len != 0)
+  doAssert(body.transactions.calcTxRoot == header.txRoot)
+  doAssert(body.transactions.len != 0)
 
   var
     gasUsed: GasInt
@@ -199,8 +199,8 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableTracing})
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
-  assert(body.transactions.calcTxRoot == header.txRoot)
-  assert(body.transactions.len != 0)
+  doAssert(body.transactions.calcTxRoot == header.txRoot)
+  doAssert(body.transactions.len != 0)
 
   var gasUsed = GasInt(0)
 

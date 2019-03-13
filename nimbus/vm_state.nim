@@ -97,7 +97,7 @@ when false:
         if `readOnly`:
           # This acts as a secondary check that no mutation took place for
           # read_only databases.
-          assert `db`.rootHash == `vmState`.blockHeader.stateRoot
+          doAssert `db`.rootHash == `vmState`.blockHeader.stateRoot
         elif `vmState`.blockHeader.stateRoot != `db`.rootHash:
           `vmState`.blockHeader.stateRoot = `db`.rootHash
 
@@ -160,7 +160,7 @@ proc dispose*(s: var Snapshot) {.inline.} =
   s.transaction.dispose()
 
 proc getTracingResult*(vmState: BaseVMState): JsonNode =
-  assert(vmState.tracingEnabled)
+  doAssert(vmState.tracingEnabled)
   vmState.tracer.trace
 
 proc addLogs*(vmState: BaseVMState, logs: seq[Log]) =

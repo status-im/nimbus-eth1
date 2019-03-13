@@ -493,7 +493,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         let contractAddress = generateAddress(sender, tx.accountNonce)
         result.contractAddress = some(contractAddress)
       else:
-        assert(false)
+        doAssert(false)
     else:
       result.contractAddress = none(EthAddress)
 

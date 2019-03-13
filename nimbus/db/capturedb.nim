@@ -27,7 +27,7 @@ proc put*(db: CaptureDB, key, value: openArray[byte]) =
 
 proc contains*(db: CaptureDB, key: openArray[byte]): bool =
   result = db.srcDb.contains(key)
-  assert(db.dstDb.contains(key) == result)
+  doAssert(db.dstDb.contains(key) == result)
 
 proc del*(db: CaptureDB, key: openArray[byte]) =
   db.dstDb.del(key)

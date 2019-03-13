@@ -16,10 +16,10 @@ const
 
 template persistToDb(db: ChainDB, body: untyped) =
   when manualCommit:
-    if not db.txBegin(): assert(false)
+    if not db.txBegin(): doAssert(false)
   body
   when manualCommit:
-    if not db.txCommit(): assert(false)
+    if not db.txCommit(): doAssert(false)
 
 proc main() =
   # 97 block with uncles
@@ -47,7 +47,7 @@ proc main() =
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     persistToDb(db):
       initializeEmptyDb(chainDB)
-    assert(canonicalHeadHashKey().toOpenArray in trieDB)
+    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   var head = chainDB.getCanonicalHead()
   var blockNumber = head.blockNumber + 1
