@@ -117,34 +117,16 @@ proc applyMessageAux(computation: var BaseComputation, opCode: static[Op]) =
     let senderBalance =
       computation.vmState.readOnlyStateDb().
         getBalance(computation.msg.sender)
-    var newBalance = senderBalance
 
     if senderBalance < computation.msg.value:
       raise newException(InsufficientFunds,
           &"Insufficient funds: {senderBalance} < {computation.msg.value}"
       )
 
-    newBalance = senderBalance - computation.msg.value
     computation.vmState.mutateStateDb:
-      db.setBalance(computation.msg.sender, newBalance)
+      db.subBalance(computation.msg.sender, computation.msg.value)
       db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
-    trace "Value transferred",
-      source = computation.msg.sender,
-      dest = computation.msg.storageAddress,
-      value = computation.msg.value,
-      oldSenderBalance = senderBalance,
-      newSenderBalance = newBalance,
-      gasPrice = computation.msg.gasPrice,
-      gas = computation.msg.gas
-
-    trace "Apply message",
-      value = computation.msg.value,
-      senderBalance = newBalance,
-      sender = computation.msg.sender.toHex,
-      address = computation.msg.storageAddress.toHex,
-      gasPrice = computation.msg.gasPrice,
-      gas = computation.msg.gas
   else:
     # even though the value is zero, the account
     # should be exist.
