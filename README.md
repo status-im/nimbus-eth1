@@ -25,7 +25,7 @@ To keep up to date with changes and development progress, follow the [Nimbus blo
 ### Prerequisites
 
 * A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/)
-  * Compile [from source](https://github.com/facebook/rocksdb/blob/master/INSTALL.md) or use the package manager of your OS; for example, [Debian](https://packages.debian.org/search?keywords=librocksdb-dev&searchon=names&exact=1&suite=all&section=all), [Ubuntu](https://packages.ubuntu.com/search?keywords=librocksdb-dev&searchon=names&exact=1&suite=all&section=all), and [Fedora](https://apps.fedoraproject.org/packages/rocksdb) have working RocksDB packages
+  * Compile [from source](https://github.com/facebook/rocksdb/blob/master/INSTALL.md) or use the package manager of your OS; for example, [macOS](https://formulae.brew.sh/formula/rocksdb), [Debian](https://packages.debian.org/search?keywords=librocksdb-dev&searchon=names&exact=1&suite=all&section=all), [Ubuntu](https://packages.ubuntu.com/search?keywords=librocksdb-dev&searchon=names&exact=1&suite=all&section=all), and [Fedora](https://apps.fedoraproject.org/packages/rocksdb) have working RocksDB packages
   * on Windows, you can [download pre-compiled DLLs](#windows)
 
 * GNU make, Bash and the usual POSIX utilities
