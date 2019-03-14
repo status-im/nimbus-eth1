@@ -506,11 +506,7 @@ genLog()
 # ##########################################
 # f0s: System operations.
 
-op create, inline = false, value, startPosition, size:
-  ## 0xf0, Create a new account with associated code.
-  # TODO: Forked create for Homestead
-
-  let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
+proc transferBalance(computation: BaseComputation, memPos, len: int, value: Uint256): bool =
   # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
   let gasCost = computation.gasCosts[Create].m_handler(1, 0, 0)
   let reason = &"CREATE: GasCreate + {len} * memory expansion"
@@ -527,30 +523,15 @@ op create, inline = false, value, startPosition, size:
 
   if senderBalance < value:
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance
-    push: 0
-    return
+    return false
 
   if computation.msg.depth >= MaxCallDepth:
     debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = computation.msg.depth
-    push: 0
-    return
+    return false
 
-  ##### getBalance type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
-  # computation.vmState.db(readOnly=true):
-  #   when ForkName >= FkHomestead: # TODO this is done in Geth but not Parity and Py-EVM
-  #     let insufficientFunds = db.getBalance(computation.msg.storageAddress) < value # TODO check gas balance rollover
-  #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
+  result = true
 
-  #     # TODO: error message
-  #     if insufficientFunds or stackTooDeep:
-  #       push: 0
-  #       return
-  #   else:
-  #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
-  #     if stackTooDeep:
-  #       push: 0
-  #       return
-
+proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint256): (BaseComputation, EthAddress) =
   let
     callData = computation.memory.read(memPos, len)
     createMsgGas = computation.getGasRemaining()
@@ -588,15 +569,28 @@ op create, inline = false, value, startPosition, size:
     )
 
   childMsg.sender = computation.msg.storageAddress
-  let childComputation = computation.applyChildComputation(childMsg, Create)
+  var childComp = generateChildComputation(computation.getFork, computation, childMsg)
+  result = (childComp, contractAddress)
 
-  if childComputation.isError:
+op create, inline = false, value, startPosition, size:
+  ## 0xf0, Create a new account with associated code.
+  # TODO: Forked create for Homestead
+
+  let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
+  if not computation.transferBalance(memPos, len, value):
+    push: 0
+    return
+
+  var (childComp, contractAddress) = setupCreate(computation, memPos, len, value)
+  computation.applyChildComputation(childComp, Create)
+
+  if childComp.isError:
     push: 0
   else:
     push: contractAddress
 
-  if not childComputation.shouldBurnGas:
-    computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
+  if not childComp.shouldBurnGas:
+    computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
 
 proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
@@ -680,11 +674,7 @@ proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthA
     emvcStatic) # is_static
 
 template genCall(callName: untyped, opCode: Op): untyped =
-  op callName, inline = false:
-    ## CALL, 0xf1, Message-Call into an account
-    ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
-    ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
-    ## STATICCALL, 0xfa, Static message-call into an account.
+  proc `callName Setup`(computation: var BaseComputation, callNameStr: string): (BaseComputation, int, int) =
     let (gas, value, to, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
@@ -704,7 +694,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
                                     (memOutPos, memOutLen)
 
     if gas > high(GasInt).u256:
-      raise newException(TypeError, "GasInt Overflow (" & callName.astToStr & ")")
+      raise newException(TypeError, "GasInt Overflow (" & callNameStr & ")")
 
     let (childGasFee, childGasLimit) = computation.gasCosts[opCode].c_handler(
       value,
@@ -718,12 +708,12 @@ template genCall(callName: untyped, opCode: Op): untyped =
                 c_opCode: opCode
       ))
 
-    trace "Call (" & callName.astToStr & ")", childGasLimit, childGasFee
+    #trace "Call (" & callNameStr & ")", childGasLimit, childGasFee
     if childGasFee >= 0:
       computation.gasMeter.consumeGas(childGasFee, reason = $opCode)
 
     if childGasFee < 0 and childGasLimit <= 0:
-      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callName.astToStr & ")")
+      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callNameStr & ")")
 
     computation.memory.extend(memInPos, memInLen)
     computation.memory.extend(memOutPos, memOutLen)
@@ -754,20 +744,30 @@ template genCall(callName: untyped, opCode: Op): untyped =
     when opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
 
-    var childComputation = applyChildComputation(computation, childMsg, opCode)
+    var childComp = generateChildComputation(computation.getFork, computation, childMsg)
+    result = (childComp, memOutPos, memOutLen)
 
-    if childComputation.isError:
+  op callName, inline = false:
+    ## CALL, 0xf1, Message-Call into an account
+    ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
+    ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
+    ## STATICCALL, 0xfa, Static message-call into an account.
+    var (childComp, memOutPos, memOutLen) = `callName Setup`(computation, callName.astToStr)
+
+    applyChildComputation(computation, childComp, opCode)
+
+    if childComp.isError:
       push: 0
     else:
       push: 1
 
-    if not childComputation.shouldEraseReturnData:
-      let actualOutputSize = min(memOutLen, childComputation.output.len)
+    if not childComp.shouldEraseReturnData:
+      let actualOutputSize = min(memOutLen, childComp.output.len)
       computation.memory.write(
         memOutPos,
-        childComputation.output.toOpenArray(0, actualOutputSize - 1))
-      if not childComputation.shouldBurnGas:
-        computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
+        childComp.output.toOpenArray(0, actualOutputSize - 1))
+      if not childComp.shouldBurnGas:
+        computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
 
     if computation.gasMeter.gasRemaining <= 0:
       raise newException(OutOfGas, "computation out of gas after contract call (" & callName.astToStr & ")")

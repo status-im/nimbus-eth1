@@ -183,7 +183,7 @@ proc writeContract(fork: Fork, computation: var BaseComputation, opCode: static[
     if fork < FkHomestead: computation.output = @[]
     result = false
 
-proc generateChildComputation*(fork: Fork, computation: var BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
+proc generateChildComputation*(fork: Fork, computation: var BaseComputation, childMsg: Message): BaseComputation =
   var childComp = newBaseComputation(
       computation.vmState,
       computation.vmState.blockNumber,
@@ -192,20 +192,6 @@ proc generateChildComputation*(fork: Fork, computation: var BaseComputation, chi
 
   # Copy the fork op code executor proc (assumes child computation is in the same fork)
   childComp.opCodeExec = computation.opCodeExec
-
-  var snapshot = computation.snapshot()
-  defer: snapshot.dispose()
-  var contractOK = true
-
-  if applyMessage(childComp, opCode):
-    if childMsg.isCreate:
-      contractOK = fork.writeContract(childComp, opCode)
-
-  if not contractOK and fork == FkHomestead:
-    # consume all gas
-    snapshot.revert(true)
-  else:
-    snapshot.commit()
 
   return childComp
 
@@ -234,11 +220,25 @@ proc getFork*(computation: BaseComputation): Fork =
     else:
       computation.vmState.blockNumber.toFork
 
-proc applyChildComputation*(computation: var BaseComputation, childMsg: Message, opCode: static[Op]): BaseComputation =
+proc applyChildComputation*(parentComp, childComp: var BaseComputation, opCode: static[Op]) =
   ## Apply the vm message childMsg as a child computation.
-  let fork = computation.getFork
-  result = fork.generateChildComputation(computation, childMsg, opCode)
-  fork.addChildComputation(computation, result)
+  let fork = parentComp.getFork
+
+  var snapshot = parentComp.snapshot()
+  defer: snapshot.dispose()
+  var contractOK = true
+
+  if applyMessage(childComp, opCode):
+    if childComp.msg.isCreate:
+      contractOK = fork.writeContract(childComp, opCode)
+
+  if not contractOK and fork == FkHomestead:
+    # consume all gas
+    snapshot.revert(true)
+  else:
+    snapshot.commit()
+
+  fork.addChildComputation(parentComp, childComp)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:
