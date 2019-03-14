@@ -34,6 +34,9 @@ brew install rocksdb
 
 # Fedora
 dnf install rocksdb-devel
+
+# Debian and Ubuntu
+sudo apt-get install librocksdb-dev
 ```
 
 On Windows, you can [download pre-compiled DLLs](#windows).
