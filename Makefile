@@ -145,7 +145,7 @@ testsuite: | build deps
 
 #- builds the tools, to make sure they're still compilable
 #- builds and runs all tests
-test: | $(TOOLS) testsuite
+test: | testsuite
 
 # primitive reproducibility test
 test-reproducibility:
