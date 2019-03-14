@@ -24,13 +24,29 @@ To keep up to date with changes and development progress, follow the [Nimbus blo
 
 ### Prerequisites
 
-* A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/)
-  * Compile [from source](https://github.com/facebook/rocksdb/blob/master/INSTALL.md) or use the package manager of your OS; for example, [macOS](https://formulae.brew.sh/formula/rocksdb), [Debian](https://packages.debian.org/search?keywords=librocksdb-dev&searchon=names&exact=1&suite=all&section=all), [Ubuntu](https://packages.ubuntu.com/search?keywords=librocksdb-dev&searchon=names&exact=1&suite=all&section=all), and [Fedora](https://apps.fedoraproject.org/packages/rocksdb) have working RocksDB packages
-  * on Windows, you can [download pre-compiled DLLs](#windows)
+#### Rocksdb
 
-* GNU make, Bash and the usual POSIX utilities
+A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/) is needed - it can usually be installed using a package manager of your choice:
+
+```bash
+# MacOS
+brew install rocksdb
+
+# Fedora
+dnf install rocksdb-devel
+```
+
+On Windows, you can [download pre-compiled DLLs](#windows).
+
+You can also build and install it by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md)
+
+#### Developer tools
+
+GNU make, Bash and the usual POSIX utilities
 
 #### Obtaining the prerequisites through the Nix package manager
+
+*Experimental*
 
 Users of the [Nix package manager](https://nixos.org/nix/download.html) can install all prerequisites simply by running:
 
@@ -65,7 +81,8 @@ make update
 
 To run a command that might use binaries from the Status Nim fork:
 ```bash
-./env.sh vim
+./env.sh bash
+which nim
 ```
 
 Our Wiki provides additional helpful information for [debugging individual test cases][1]
