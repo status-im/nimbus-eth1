@@ -506,7 +506,7 @@ genLog()
 # ##########################################
 # f0s: System operations.
 
-proc transferBalance(computation: BaseComputation, memPos, len: int, value: Uint256): bool =
+proc canTransfer(computation: BaseComputation, memPos, len: int, value: Uint256): bool =
   # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
   let gasCost = computation.gasCosts[Create].m_handler(1, 0, 0)
   let reason = &"CREATE: GasCreate + {len} * memory expansion"
@@ -531,7 +531,7 @@ proc transferBalance(computation: BaseComputation, memPos, len: int, value: Uint
 
   result = true
 
-proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint256): (BaseComputation, EthAddress) =
+proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint256): BaseComputation =
   let
     callData = computation.memory.read(memPos, len)
     createMsgGas = computation.getGasRemaining()
@@ -569,25 +569,24 @@ proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint
     )
 
   childMsg.sender = computation.msg.storageAddress
-  var childComp = generateChildComputation(computation.getFork, computation, childMsg)
-  result = (childComp, contractAddress)
+  result = generateChildComputation(computation.getFork, computation, childMsg)
 
 op create, inline = false, value, startPosition, size:
   ## 0xf0, Create a new account with associated code.
   # TODO: Forked create for Homestead
 
   let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
-  if not computation.transferBalance(memPos, len, value):
+  if not computation.canTransfer(memPos, len, value):
     push: 0
     return
 
-  var (childComp, contractAddress) = setupCreate(computation, memPos, len, value)
+  var childComp = setupCreate(computation, memPos, len, value)
   computation.applyChildComputation(childComp, Create)
 
   if childComp.isError:
     push: 0
   else:
-    push: contractAddress
+    push: childComp.msg.storageAddress
 
   if not childComp.shouldBurnGas:
     computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
