@@ -139,13 +139,9 @@ $(NIMBLE_DIR): | $(NIM_BINARY)
 nimbus.nims:
 	ln -s nimbus.nimble $@
 
-# builds and runs the testsuite
-testsuite: | build deps
+# builds and runs the test suite
+test: | build deps
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
-
-#- builds the tools, to make sure they're still compilable
-#- builds and runs all tests
-test: | testsuite
 
 # primitive reproducibility test
 test-reproducibility:

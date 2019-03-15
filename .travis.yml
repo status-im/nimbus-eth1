@@ -35,5 +35,6 @@ script:
   - set -e # fail fast
   - make -j${NPROC} V=0
   - ./build/nimbus --help
-  - make -j${NPROC} V=0 test test-reproducibility
+  - make -j${NPROC} V=0 EXTRA_NIM_PARAMS="-d:release" test
+  - make -j${NPROC} V=0 test-reproducibility
 
