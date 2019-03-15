@@ -506,13 +506,17 @@ genLog()
 # ##########################################
 # f0s: System operations.
 
-proc canTransfer(computation: BaseComputation, memPos, len: int, value: Uint256): bool =
-  # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
-  let gasCost = computation.gasCosts[Create].m_handler(1, 0, 0)
-  let reason = &"CREATE: GasCreate + {len} * memory expansion"
+proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint256): bool =
+  let gasParams = GasParams(kind: Create,
+    cr_currentMemSize: computation.memory.len,
+    cr_memOffset: memPos,
+    cr_memLength: memLen
+    )
+  let gasCost = computation.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
+  let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
 
   computation.gasMeter.consumeGas(gasCost, reason = reason)
-  computation.memory.extend(memPos, len)
+  computation.memory.extend(memPos, memLen)
 
   # the sender is childmsg sender, not parent msg sender
   # perhaps we need to move this code somewhere else

@@ -175,8 +175,8 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
   let storageAddr = computation.msg.storageAddress
   if computation.isSuicided(storageAddr): return
 
-  # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
-  let codeCost = computation.gasCosts[Create].m_handler(0, 0, contractCode.len)
+  let gasParams = GasParams(kind: Create, cr_memLength: contractCode.len)
+  let codeCost = computation.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
   if computation.gasMeter.gasRemaining >= codeCost:
     computation.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
     computation.vmState.mutateStateDb:
