@@ -69,6 +69,9 @@ proc outputHex*(c: BaseComputation): string =
     return "0x"
   c.rawOutput.bytesToHex
 
+proc isSuicided*(c: var BaseComputation, address: EthAddress): bool =
+  result = address in c.accountsToDelete
+
 proc prepareChildMessage*(
     c: var BaseComputation,
     gas: GasInt,
@@ -159,7 +162,7 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
 
   result = not computation.isError
 
-proc writeContract(fork: Fork, computation: var BaseComputation, opCode: static[Op]): bool =
+proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
   result = true
 
   let contractCode = computation.output
@@ -230,7 +233,7 @@ proc applyChildComputation*(parentComp, childComp: var BaseComputation, opCode: 
 
   if applyMessage(childComp, opCode):
     if childComp.msg.isCreate:
-      contractOK = fork.writeContract(childComp, opCode)
+      contractOK = childComp.writeContract(fork)
 
   if not contractOK and fork == FkHomestead:
     # consume all gas
@@ -246,9 +249,6 @@ proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress
       "invariant:  should be impossible for an account to be " &
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
-
-proc isSuicided*(c: var BaseComputation, address: EthAddress): bool =
-  result = address in c.accountsToDelete
 
 proc addLogEntry*(c: var BaseComputation, log: Log) {.inline.} =
   c.logEntries.add(log)

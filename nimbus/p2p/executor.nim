@@ -42,7 +42,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   if execComputation(computation):
     if tx.isContractCreation:
-      contractOK = computation.writeContract()
+      contractOK = computation.writeContract(fork)
     result = computation.refundGas(tx, sender)
 
   if not contractOK and fork == FkHomestead:

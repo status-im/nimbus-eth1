@@ -99,22 +99,6 @@ proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddres
 
   result = gasUsed - gasRefund
 
-proc writeContract*(computation: var BaseComputation): bool =
-  result = true
-  let contractAddress = computation.msg.storageAddress
-  if computation.isSuicided(contractAddress): return
-
-  let codeCost = computation.gasCosts[Create].m_handler(0, 0, computation.output.len)
-  if computation.gasMeter.gasRemaining >= codeCost:
-    computation.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
-    computation.vmState.mutateStateDB:
-      db.setCode(contractAddress, computation.output.toRange)
-    result = true
-  else:
-    computation.vmState.mutateStateDB:
-      db.setCode(contractAddress, ByteRange())
-    result = false
-
 #[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
   # Execute the transaction in the vm
