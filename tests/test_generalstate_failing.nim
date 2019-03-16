@@ -75,9 +75,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "pointMulAdd.json",
     "pointMulAdd2.json",
     # most likely to crash:
-    "createNameRegistratorOOG_MemExpansionOOV.json",
-    "createNameRegistratorOutOfMemoryBonds0.json",
-    "createNameRegistratorOutOfMemoryBonds1.json",
     "ContractCreationSpam.json",
     "Call1024OOG.json",
     "Call1024PreCalls.json",
