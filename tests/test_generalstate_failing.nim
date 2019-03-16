@@ -63,7 +63,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "RevertOpcodeReturn.json",
     "RevertOpcodeWithBigOutputInInit.json",
     "tx_e1c174e2.json",
-    "CreateHashCollision.json",
     "suicideCoinbase.json",
     "Opcodes_TransactionInit.json",
     "SuicidesMixingCoinbase.json",

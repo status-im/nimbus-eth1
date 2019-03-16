@@ -2044,7 +2044,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + CallToReturn1ForDynamicJump0.json                               OK
 + CallToReturn1ForDynamicJump1.json                               OK
 + CalltoReturn2.json                                              OK
-  CreateHashCollision.json                                        Skip
++ CreateHashCollision.json                                        OK
 + PostToReturn1.json                                              OK
 + TestNameRegistrator.json                                        OK
 + balanceInputAddressTooBig.json                                  OK
@@ -2083,7 +2083,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 52/67 Fail: 0/67 Skip: 15/67
+OK: 53/67 Fail: 0/67 Skip: 14/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1229/2334 Fail: 0/2334 Skip: 1105/2334
+OK: 1230/2334 Fail: 0/2334 Skip: 1104/2334

@@ -560,7 +560,7 @@ proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint
   if isCollision:
     debug "Address collision while creating contract", address = contractAddress.toHex
     push: 0
-    raise newException(ValidationError, "Contract creation failed, address already in use")
+    return
 
   let childMsg = prepareChildMessage(
     computation,
@@ -585,6 +585,8 @@ op create, inline = false, value, startPosition, size:
     return
 
   var childComp = setupCreate(computation, memPos, len, value)
+  if childComp.isNil: return
+
   computation.applyChildComputation(childComp, Create)
 
   if childComp.isError:
