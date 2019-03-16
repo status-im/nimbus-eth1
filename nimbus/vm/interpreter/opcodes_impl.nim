@@ -220,18 +220,16 @@ proc writePaddedResult(mem: var Memory,
                        data: openarray[byte],
                        memPos, dataPos, len: Natural,
                        paddingValue = 0.byte) =
-  let prevLen = mem.len
+  
   mem.extend(memPos, len)
   let dataEndPosition = dataPos.int64 + len - 1
   let sourceBytes = data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
   mem.write(memPos, sourceBytes)
-
-  # geth doesn't do padding, it causes block validation error
-  when false:
-    # Don't duplicate zero-padding of mem.extend
-    let paddingOffset = memPos + sourceBytes.len
-    # TODO: avoid unnecessary memory allocation
-    mem.write(paddingOffset, repeat(paddingValue, max(prevLen - paddingOffset, 0)))
+    
+  # Don't duplicate zero-padding of mem.extend
+  let paddingOffset = memPos + sourceBytes.len
+  # TODO: avoid unnecessary memory allocation
+  mem.write(paddingOffset, repeat(paddingValue, min(mem.len - paddingOffset, len)))
 
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
@@ -257,7 +255,6 @@ op callValue, inline = true:
 
 op callDataLoad, inline = false, startPos:
   ## 0x35, Get input data of current environment
-  # TODO simplification: https://github.com/status-im/nimbus/issues/67
   let dataPos = startPos.cleanMemRef
   if dataPos >= computation.msg.data.len:
     push: 0
@@ -295,11 +292,11 @@ op callDataCopy, inline = false, memStartPos, copyStartPos, size:
 
   computation.memory.writePaddedResult(computation.msg.data, memPos, copyPos, len)
 
-op codesize, inline = true:
+op codeSize, inline = true:
   ## 0x38, Get size of code running in current environment.
   push: computation.code.len
 
-op codecopy, inline = false, memStartPos, copyStartPos, size:
+op codeCopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x39, Copy code running in current environment to memory.
   # TODO tests: https://github.com/status-im/nimbus/issues/67
 
@@ -344,7 +341,7 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
 
   computation.gasMeter.consumeGas(
     computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
-    reason="ExtCodeCopy fee")
+    reason="returnDataCopy fee")
 
   if copyPos + len > computation.returnData.len:
     # TODO Geth additionally checks copyPos + len < 64

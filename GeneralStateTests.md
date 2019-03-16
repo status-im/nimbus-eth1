@@ -639,10 +639,10 @@ OK: 7/8 Fail: 0/8 Skip: 1/8
 OK: 5/38 Fail: 0/38 Skip: 33/38
 ## stMemoryTest
 ```diff
-  callDataCopyOffset.json                                         Skip
++ callDataCopyOffset.json                                         OK
 + calldatacopy_dejavu.json                                        OK
 + calldatacopy_dejavu2.json                                       OK
-  codeCopyOffset.json                                             Skip
++ codeCopyOffset.json                                             OK
 + codecopy_dejavu.json                                            OK
 + codecopy_dejavu2.json                                           OK
 + extcodecopy_dejavu.json                                         OK
@@ -707,7 +707,7 @@ OK: 5/38 Fail: 0/38 Skip: 33/38
 + stackLimitPush32_1024.json                                      OK
 + stackLimitPush32_1025.json                                      OK
 ```
-OK: 65/67 Fail: 0/67 Skip: 2/67
+OK: 67/67 Fail: 0/67 Skip: 0/67
 ## stNonZeroCallsTest
 ```diff
 + NonZeroValue_CALL.json                                          OK
@@ -974,7 +974,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest112.json                                         OK
 + randomStatetest114.json                                         OK
 + randomStatetest115.json                                         OK
-  randomStatetest116.json                                         Skip
++ randomStatetest116.json                                         OK
 + randomStatetest117.json                                         OK
 + randomStatetest118.json                                         OK
 + randomStatetest119.json                                         OK
@@ -1089,7 +1089,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest232.json                                         OK
 + randomStatetest233.json                                         OK
 + randomStatetest236.json                                         OK
-  randomStatetest237.json                                         Skip
++ randomStatetest237.json                                         OK
 + randomStatetest238.json                                         OK
 + randomStatetest24.json                                          OK
 + randomStatetest241.json                                         OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 315/327 Fail: 0/327 Skip: 12/327
+OK: 317/327 Fail: 0/327 Skip: 10/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1230/2334 Fail: 0/2334 Skip: 1104/2334
+OK: 1234/2334 Fail: 0/2334 Skip: 1100/2334

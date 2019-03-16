@@ -48,8 +48,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "delegatecodeDynamicCode2SelfCall.json",
     "OutOfGasContractCreation.json",
     "OutOfGasPrefundedContractCreation.json",
-    "callDataCopyOffset.json",
-    "codeCopyOffset.json",
     "CALLCODEEcrecoverV_prefixedf0.json",
     "randomStatetest14.json",
     "randomStatetest184.json",
@@ -77,8 +75,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     # 2019-02-07:
     # 2019-02-15:
     "randomStatetest101.json",
-    "randomStatetest116.json",
-    "randomStatetest237.json",
     "randomStatetest7.json",
     # 2019-02-17:
     "NewGasPriceForCodes.json",
