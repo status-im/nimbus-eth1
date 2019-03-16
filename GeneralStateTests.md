@@ -445,14 +445,14 @@ OK: 7/34 Fail: 0/34 Skip: 27/34
   CreateAndGasInsideCreate.json                                   Skip
   DelegateCallOnEIP.json                                          Skip
   ExecuteCallThatAskForeGasThenTrabsactionHas.json                Skip
-  NewGasPriceForCodes.json                                        Skip
++ NewGasPriceForCodes.json                                        OK
   SuicideToExistingContract.json                                  Skip
   SuicideToNotExistingContract.json                               Skip
   Transaction64Rule_d64e0.json                                    Skip
   Transaction64Rule_d64m1.json                                    Skip
   Transaction64Rule_d64p1.json                                    Skip
 ```
-OK: 0/13 Fail: 0/13 Skip: 13/13
+OK: 1/13 Fail: 0/13 Skip: 12/13
 ## stEIP150singleCodeGasPrices
 ```diff
 + RawBalanceGas.json                                              OK
@@ -592,9 +592,9 @@ OK: 46/46 Fail: 0/46 Skip: 0/46
 + CreateAndGasInsideCreateWithMemExpandingCalls.json              OK
 + DelegateCallOnEIPWithMemExpandingCalls.json                     OK
 + ExecuteCallThatAskMoreGasThenTransactionHasWithMemExpandingCalls.jsonOK
-  NewGasPriceForCodesWithMemExpandingCalls.json                   Skip
++ NewGasPriceForCodesWithMemExpandingCalls.json                   OK
 ```
-OK: 7/8 Fail: 0/8 Skip: 1/8
+OK: 8/8 Fail: 0/8 Skip: 0/8
 ## stMemoryStressTest
 ```diff
   CALLCODE_Bounds.json                                            Skip
@@ -713,7 +713,7 @@ OK: 67/67 Fail: 0/67 Skip: 0/67
 + NonZeroValue_CALL.json                                          OK
 + NonZeroValue_CALLCODE.json                                      OK
 + NonZeroValue_CALLCODE_ToEmpty.json                              OK
-  NonZeroValue_CALLCODE_ToNonNonZeroBalance.json                  Skip
++ NonZeroValue_CALLCODE_ToNonNonZeroBalance.json                  OK
 + NonZeroValue_CALLCODE_ToOneStorageKey.json                      OK
 + NonZeroValue_CALL_ToEmpty.json                                  OK
 + NonZeroValue_CALL_ToNonNonZeroBalance.json                      OK
@@ -735,7 +735,7 @@ OK: 67/67 Fail: 0/67 Skip: 0/67
 + NonZeroValue_TransactionCALLwithData_ToNonNonZeroBalance.json   OK
 + NonZeroValue_TransactionCALLwithData_ToOneStorageKey.json       OK
 ```
-OK: 23/24 Fail: 0/24 Skip: 1/24
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
   identity_to_bigger.json                                         Skip
@@ -1099,7 +1099,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest245.json                                         OK
 + randomStatetest246.json                                         OK
 + randomStatetest247.json                                         OK
-  randomStatetest248.json                                         Skip
++ randomStatetest248.json                                         OK
 + randomStatetest249.json                                         OK
 + randomStatetest25.json                                          OK
 + randomStatetest250.json                                         OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 317/327 Fail: 0/327 Skip: 10/327
+OK: 318/327 Fail: 0/327 Skip: 9/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -1609,10 +1609,10 @@ OK: 34/37 Fail: 0/37 Skip: 3/37
   RevertOpcodeDirectCall.json                                     Skip
   RevertOpcodeInCallsOnNonEmptyReturnData.json                    Skip
 + RevertOpcodeInCreateReturns.json                                OK
-  RevertOpcodeInInit.json                                         Skip
++ RevertOpcodeInInit.json                                         OK
   RevertOpcodeMultipleSubCalls.json                               Skip
   RevertOpcodeReturn.json                                         Skip
-  RevertOpcodeWithBigOutputInInit.json                            Skip
++ RevertOpcodeWithBigOutputInInit.json                            OK
   RevertPrecompiledTouch.json                                     Skip
   RevertPrecompiledTouchCC.json                                   Skip
   RevertPrecompiledTouchDC.json                                   Skip
@@ -1632,7 +1632,7 @@ OK: 34/37 Fail: 0/37 Skip: 3/37
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 31/43 Fail: 0/43 Skip: 12/43
+OK: 33/43 Fail: 0/43 Skip: 10/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1239/2334 Fail: 0/2334 Skip: 1095/2334
+OK: 1245/2334 Fail: 0/2334 Skip: 1089/2334

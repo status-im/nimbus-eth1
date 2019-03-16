@@ -112,7 +112,7 @@ proc commit*(snapshot: var ComputationSnapshot) {.inline.} =
 proc dispose*(snapshot: var ComputationSnapshot) {.inline.} =
   snapshot.snapshot.dispose()
 
-proc transferBalance(computation: var BaseComputation) =
+proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
   if computation.msg.depth >= MaxCallDepth:
     raise newException(StackDepthError, "Stack depth limit reached")
 
@@ -123,17 +123,18 @@ proc transferBalance(computation: var BaseComputation) =
     raise newException(InsufficientFunds,
       &"Insufficient funds: {senderBalance} < {computation.msg.value}")
 
-  computation.vmState.mutateStateDb:
-    db.subBalance(computation.msg.sender, computation.msg.value)
-    db.addBalance(computation.msg.storageAddress, computation.msg.value)
+  when opCode in {Call, Create}:
+    computation.vmState.mutateStateDb:
+      db.subBalance(computation.msg.sender, computation.msg.value)
+      db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
 proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
   var snapshot = computation.snapshot()
   defer: snapshot.dispose()
 
-  when opCode in {Call, Create}:
+  when opCode in {CallCode, Call, Create}:
     try:
-      computation.transferBalance()
+      computation.transferBalance(opCode)
     except VMError:
       snapshot.revert()
       debug "transferBalance failed", msg = computation.error.info
