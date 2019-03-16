@@ -522,8 +522,8 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + CallRecursiveContract.json                                      OK
 + CallTheContractToCreateEmptyContract.json                       OK
 + NotEnoughCashContractCreation.json                              OK
-  OutOfGasContractCreation.json                                   Skip
-  OutOfGasPrefundedContractCreation.json                          Skip
++ OutOfGasContractCreation.json                                   OK
++ OutOfGasPrefundedContractCreation.json                          OK
 + ReturnTest.json                                                 OK
 + ReturnTest2.json                                                OK
 + StackUnderFlowContractCreation.json                             OK
@@ -532,7 +532,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + TransactionCreateStopInInitcode.json                            OK
 + TransactionCreateSuicideInInitcode.json                         OK
 ```
-OK: 16/18 Fail: 0/18 Skip: 2/18
+OK: 18/18 Fail: 0/18 Skip: 0/18
 ## stLogTests
 ```diff
 + log0_emptyMem.json                                              OK
@@ -2137,14 +2137,14 @@ OK: 41/44 Fail: 0/44 Skip: 3/44
 + createNameRegistratorPerTxsAfter.json                           OK
 + createNameRegistratorPerTxsAt.json                              OK
 + createNameRegistratorPerTxsBefore.json                          OK
-  createNameRegistratorPerTxsNotEnoughGasAfter.json               Skip
-  createNameRegistratorPerTxsNotEnoughGasAt.json                  Skip
-  createNameRegistratorPerTxsNotEnoughGasBefore.json              Skip
++ createNameRegistratorPerTxsNotEnoughGasAfter.json               OK
++ createNameRegistratorPerTxsNotEnoughGasAt.json                  OK
++ createNameRegistratorPerTxsNotEnoughGasBefore.json              OK
   delegatecallAfterTransition.json                                Skip
   delegatecallAtTransition.json                                   Skip
   delegatecallBeforeTransition.json                               Skip
 ```
-OK: 3/9 Fail: 0/9 Skip: 6/9
+OK: 6/9 Fail: 0/9 Skip: 3/9
 ## stWalletTest
 ```diff
 + dayLimitConstruction.json                                       OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1234/2334 Fail: 0/2334 Skip: 1100/2334
+OK: 1239/2334 Fail: 0/2334 Skip: 1095/2334

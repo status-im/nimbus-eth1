@@ -48,6 +48,10 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
     data = tx.payload
     code = vmState.readOnlyStateDB.getCode(tx.to).toSeq
 
+  if gas < 0:
+    debug "not enough gas to perform calculation", gas=gas
+    return
+
   let msg = newMessage(
     gas = gas,
     gasPrice = tx.gasPrice,
