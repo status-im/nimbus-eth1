@@ -28,7 +28,7 @@ build_script:
 test_script:
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0
   - build\nimbus.exe --help
-  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 EXTRA_NIM_PARAMS="-d:release" test
+  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% V=0 NIMFLAGS="-d:release" test
   - IF "%PLATFORM%" == "x64" mingw32-make -j2 test-reproducibility
 
 deploy: off
