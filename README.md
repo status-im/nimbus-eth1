@@ -138,7 +138,7 @@ make LOG_LEVEL=TRACE nimbus # log everything
 - pass arbitrary parameters to the Nim compiler:
 
 ```bash
-make EXTRA_NIM_PARAMS="-d:release"
+make NIMFLAGS="-d:release"
 ```
 
 - if you want to use SSH keys with GitHub:

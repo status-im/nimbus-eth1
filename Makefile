@@ -25,8 +25,9 @@ RUN_CMD_IN_ALL_REPOS = git submodule foreach --recursive --quiet 'echo -e "\n\e[
 ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
 NIM_DIR := vendor/Nim
-# extra parameters for the Nim compiler
-NIM_PARAMS := $(EXTRA_NIM_PARAMS)
+#- extra parameters for the Nim compiler
+#- NIMFLAGS should come from the environment or make's command line
+NIM_PARAMS := $(NIMFLAGS)
 # verbosity level
 V := 1
 NIM_PARAMS := $(NIM_PARAMS) --verbosity:$(V)
@@ -139,13 +140,9 @@ $(NIMBLE_DIR): | $(NIM_BINARY)
 nimbus.nims:
 	ln -s nimbus.nimble $@
 
-# builds and runs the testsuite
-testsuite: | build deps
+# builds and runs the test suite
+test: | build deps
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
-
-#- builds the tools, to make sure they're still compilable
-#- builds and runs all tests
-test: | testsuite
 
 # primitive reproducibility test
 test-reproducibility:
