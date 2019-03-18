@@ -29,17 +29,23 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   if balance < upfrontGasCost:
     return tx.gasLimit
 
-  var computation = setupComputation(vmState, tx, sender, forkOverride)
+  let recipient = tx.getRecipient()
+  let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
+
+  var computation = setupComputation(vmState, tx, sender, recipient, forkOverride)
   if computation.isNil:
     return 0
-    
+
   vmState.mutateStateDB:
     db.incNonce(sender)
     db.subBalance(sender, upfrontGasCost)
 
+  if tx.isContractCreation and isCollision:
+    return tx.gasLimit
+
   var snapshot = vmState.snapshot()
   defer: snapshot.dispose()
- 
+
   var contractOK = true
   result = tx.gasLimit
 

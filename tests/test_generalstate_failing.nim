@@ -78,8 +78,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "callcodecallcallcode_ABCB_RECURSIVE.json",
     "callcodecallcodecall_ABCB_RECURSIVE.json",
     "callcodecallcodecallcode_ABCB_RECURSIVE.json",
-    # Frontier failed test cases
-    "createJS_ExampleContract.json",
+    # Frontier failed test cases    
     "callcallcallcode_001_OOGMAfter_1.json",
     "callcallcallcode_001_OOGMAfter_2.json",
     "createInitFailUndefinedInstruction.json",

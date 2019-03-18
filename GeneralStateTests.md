@@ -186,14 +186,14 @@ OK: 50/79 Fail: 0/79 Skip: 29/79
   createInitFailUndefinedInstruction.json                         Skip
 + createInitFail_OOGduringInit.json                               OK
 + createInitOOGforCREATE.json                                     OK
-  createJS_ExampleContract.json                                   Skip
++ createJS_ExampleContract.json                                   OK
 + createJS_NoCollision.json                                       OK
 + createNameRegistratorPerTxs.json                                OK
 + createNameRegistratorPerTxsNotEnoughGas.json                    OK
 + createNameRegistratorPreStore1NotEnoughGas.json                 OK
 + createNameRegistratorendowmentTooHigh.json                      OK
 ```
-OK: 18/39 Fail: 0/39 Skip: 21/39
+OK: 19/39 Fail: 0/39 Skip: 20/39
 ## stCallDelegateCodesCallCodeHomestead
 ```diff
   callcallcallcode_001.json                                       Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1309/2334 Fail: 0/2334 Skip: 1025/2334
+OK: 1310/2334 Fail: 0/2334 Skip: 1024/2334

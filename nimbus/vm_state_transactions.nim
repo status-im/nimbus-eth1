@@ -24,14 +24,13 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
     readOnlyDB.getBalance(sender) >= gasCost
 
-proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, forkOverride=none(Fork)) : BaseComputation =
+proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, forkOverride=none(Fork)) : BaseComputation =
   let fork =
     if forkOverride.isSome:
       forkOverride.get
     else:
       vmState.blockNumber.toFork
 
-  var recipient: EthAddress
   var gas = tx.gasLimit - tx.intrinsicGas
 
   # TODO: refactor message to use byterange
@@ -39,12 +38,10 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
   var data, code: seq[byte]
 
   if tx.isContractCreation:
-    recipient = generateAddress(sender, tx.accountNonce)
     gas = gas - gasFees[fork][GasTXCreate]
     data = @[]
     code = tx.payload
   else:
-    recipient = tx.to
     data = tx.payload
     code = vmState.readOnlyStateDB.getCode(tx.to).toSeq
 
