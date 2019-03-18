@@ -13,7 +13,6 @@
 # being mostly used for short-term regression prevention.
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
-    "CALLCODEEcrecoverV_prefixedf0.json",
     "randomStatetest14.json",
     "randomStatetest85.json",
     "tx_e1c174e2.json",
