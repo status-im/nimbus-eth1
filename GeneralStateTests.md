@@ -960,7 +960,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
   randomStatetest1.json                                           Skip
 + randomStatetest10.json                                          OK
 + randomStatetest100.json                                         OK
-  randomStatetest101.json                                         Skip
++ randomStatetest101.json                                         OK
 + randomStatetest102.json                                         OK
 + randomStatetest103.json                                         OK
 + randomStatetest104.json                                         OK
@@ -1259,7 +1259,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest66.json                                          OK
 + randomStatetest67.json                                          OK
 + randomStatetest69.json                                          OK
-  randomStatetest7.json                                           Skip
++ randomStatetest7.json                                           OK
 + randomStatetest72.json                                          OK
 + randomStatetest73.json                                          OK
 + randomStatetest74.json                                          OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 319/327 Fail: 0/327 Skip: 8/327
+OK: 321/327 Fail: 0/327 Skip: 6/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1430/2334 Fail: 0/2334 Skip: 904/2334
+OK: 1432/2334 Fail: 0/2334 Skip: 902/2334

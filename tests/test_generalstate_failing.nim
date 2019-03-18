@@ -16,9 +16,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest14.json",
     "randomStatetest85.json",
     "tx_e1c174e2.json",
-    # 2019-02-15:
-    "randomStatetest101.json",
-    "randomStatetest7.json",
     # 2019-02-17:
     "pairingTest.json",
     "pointAdd.json",
