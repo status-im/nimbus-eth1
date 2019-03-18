@@ -109,19 +109,24 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
       vmState.receipts = newSeq[Receipt](body.transactions.len)
       var cumulativeGasUsed = GasInt(0)
       for txIndex, tx in body.transactions:
-        var sender: EthAddress
-        if tx.getSender(sender):
-          let gasUsed = processTransaction(tx, sender, vmState)
-          cumulativeGasUsed += gasUsed
-
-          # miner fee
-          let txFee = gasUsed.u256 * tx.gasPrice.u256
+        if cumulativeGasUsed + tx.gasLimit > header.gasLimit:
           vmState.mutateStateDB:
-            db.addBalance(header.coinbase, txFee)
+            db.addBalance(header.coinbase, 0.u256)
+          # TODO: do we need to break or continue execution?
         else:
-          debug "Could not get sender", txIndex, tx
-          return ValidationResult.Error
-        vmState.receipts[txIndex] = makeReceipt(vmState, cumulativeGasUsed)
+          var sender: EthAddress
+          if tx.getSender(sender):
+            let gasUsed = processTransaction(tx, sender, vmState)
+            cumulativeGasUsed += gasUsed
+
+            # miner fee
+            let txFee = gasUsed.u256 * tx.gasPrice.u256
+            vmState.mutateStateDB:
+              db.addBalance(header.coinbase, txFee)
+          else:
+            debug "Could not get sender", txIndex, tx
+            return ValidationResult.Error
+          vmState.receipts[txIndex] = makeReceipt(vmState, cumulativeGasUsed)
 
   var mainReward = blockReward
   if header.ommersHash != EMPTY_UNCLE_HASH:

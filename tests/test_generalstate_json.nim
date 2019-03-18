@@ -83,9 +83,17 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
     return
 
   var gasUsed: GasInt
-  vmState.mutateStateDB:
-    gasUsed = tester.tx.processTransaction(sender, vmState, some(tester.fork))
-    db.addBalance(tester.header.coinbase, gasUsed.u256 * tester.tx.gasPrice.u256)
+  if gasUsed + tester.tx.gasLimit <= tester.header.gasLimit:
+    vmState.mutateStateDB:
+      gasUsed = tester.tx.processTransaction(sender, vmState, some(tester.fork))
+      db.addBalance(tester.header.coinbase, gasUsed.u256 * tester.tx.gasPrice.u256)
+  else:
+    debug "invalid tx: block header gasLimit reached",
+      blockGasLimit=tester.header.gasLimit,
+      gasUsed=gasUsed,
+      txGasLimit=tester.tx.gasLimit
+    vmState.mutateStateDB:
+      db.addBalance(tester.header.coinbase, 0.u256)
 
   if tester.debugMode:
     tester.dumpDebugData(vmState, sender, gasUsed)
