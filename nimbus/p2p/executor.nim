@@ -60,6 +60,9 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     result = tx.gasLimit
   else:
     snapshot.commit()
+  
+  if computation.isSuicided(vmState.blockHeader.coinbase):
+    return 0
 
 type
   # TODO: these types need to be removed

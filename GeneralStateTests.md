@@ -2076,14 +2076,14 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideCaller.json                                              OK
 + suicideCallerAddresTooBigLeft.json                              OK
 + suicideCallerAddresTooBigRight.json                             OK
-  suicideCoinbase.json                                            Skip
++ suicideCoinbase.json                                            OK
 + suicideNotExistingAccount.json                                  OK
 + suicideOrigin.json                                              OK
 + suicideSendEtherPostDeath.json                                  OK
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 56/67 Fail: 0/67 Skip: 11/67
+OK: 57/67 Fail: 0/67 Skip: 10/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2114,7 +2114,7 @@ OK: 56/67 Fail: 0/67 Skip: 11/67
 + SuicidesAndInternlCallSuicidesOOG.json                          OK
 + SuicidesAndInternlCallSuicidesSuccess.json                      OK
 + SuicidesAndSendMoneyToItselfEtherDestroyed.json                 OK
-  SuicidesMixingCoinbase.json                                     Skip
++ SuicidesMixingCoinbase.json                                     OK
 + SuicidesStopAfterSuicide.json                                   OK
 + TransactionDataCosts652.json                                    OK
 + TransactionFromCoinbaseHittingBlockGasLimit.json                OK
@@ -2131,7 +2131,7 @@ OK: 56/67 Fail: 0/67 Skip: 11/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 43/44 Fail: 0/44 Skip: 1/44
+OK: 44/44 Fail: 0/44 Skip: 0/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1428/2334 Fail: 0/2334 Skip: 906/2334
+OK: 1430/2334 Fail: 0/2334 Skip: 904/2334
