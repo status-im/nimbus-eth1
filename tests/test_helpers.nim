@@ -290,7 +290,6 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   result.R = fromBytesBE(Uint256, raw[0..31])
   result.S = fromBytesBE(Uint256, raw[32..63])
   result.V = raw[64] + 27.byte
-  
+
 proc hashLogEntries*(logs: seq[Log]): string =
   toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
-  

@@ -86,7 +86,7 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
   callcallcallcode_001.json                                       Skip
   callcallcallcode_001_OOGE.json                                  Skip
   callcallcallcode_001_OOGMAfter.json                             Skip
-+ callcallcallcode_001_OOGMBefore.json                            OK
+  callcallcallcode_001_OOGMBefore.json                            Skip
   callcallcallcode_001_SuicideEnd.json                            Skip
 + callcallcallcode_001_SuicideMiddle.json                         OK
   callcallcallcode_ABCB_RECURSIVE.json                            Skip
@@ -94,16 +94,16 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
   callcallcode_01_OOGE.json                                       Skip
   callcallcode_01_SuicideEnd.json                                 Skip
   callcallcodecall_010.json                                       Skip
-  callcallcodecall_010_OOGE.json                                  Skip
-+ callcallcodecall_010_OOGMAfter.json                             OK
++ callcallcodecall_010_OOGE.json                                  OK
+  callcallcodecall_010_OOGMAfter.json                             Skip
   callcallcodecall_010_OOGMBefore.json                            Skip
   callcallcodecall_010_SuicideEnd.json                            Skip
   callcallcodecall_010_SuicideMiddle.json                         Skip
   callcallcodecall_ABCB_RECURSIVE.json                            Skip
   callcallcodecallcode_011.json                                   Skip
-  callcallcodecallcode_011_OOGE.json                              Skip
-+ callcallcodecallcode_011_OOGMAfter.json                         OK
-  callcallcodecallcode_011_OOGMBefore.json                        Skip
++ callcallcodecallcode_011_OOGE.json                              OK
+  callcallcodecallcode_011_OOGMAfter.json                         Skip
++ callcallcodecallcode_011_OOGMBefore.json                        OK
   callcallcodecallcode_011_SuicideEnd.json                        Skip
   callcallcodecallcode_011_SuicideMiddle.json                     Skip
   callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
@@ -115,42 +115,42 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 + callcodeInInitcodeToExistingContract.json                       OK
 + callcodeInInitcodeToExistingContractWithValueTransfer.json      OK
 + callcode_checkPC.json                                           OK
-  callcodecall_10.json                                            Skip
-  callcodecall_10_OOGE.json                                       Skip
-  callcodecall_10_SuicideEnd.json                                 Skip
++ callcodecall_10.json                                            OK
++ callcodecall_10_OOGE.json                                       OK
++ callcodecall_10_SuicideEnd.json                                 OK
   callcodecallcall_100.json                                       Skip
-  callcodecallcall_100_OOGE.json                                  Skip
++ callcodecallcall_100_OOGE.json                                  OK
 + callcodecallcall_100_OOGMAfter.json                             OK
-  callcodecallcall_100_OOGMBefore.json                            Skip
-  callcodecallcall_100_SuicideEnd.json                            Skip
-  callcodecallcall_100_SuicideMiddle.json                         Skip
++ callcodecallcall_100_OOGMBefore.json                            OK
++ callcodecallcall_100_SuicideEnd.json                            OK
++ callcodecallcall_100_SuicideMiddle.json                         OK
   callcodecallcall_ABCB_RECURSIVE.json                            Skip
   callcodecallcallcode_101.json                                   Skip
-  callcodecallcallcode_101_OOGE.json                              Skip
-  callcodecallcallcode_101_OOGMAfter.json                         Skip
-  callcodecallcallcode_101_OOGMBefore.json                        Skip
-  callcodecallcallcode_101_SuicideEnd.json                        Skip
-  callcodecallcallcode_101_SuicideMiddle.json                     Skip
++ callcodecallcallcode_101_OOGE.json                              OK
++ callcodecallcallcode_101_OOGMAfter.json                         OK
++ callcodecallcallcode_101_OOGMBefore.json                        OK
++ callcodecallcallcode_101_SuicideEnd.json                        OK
++ callcodecallcallcode_101_SuicideMiddle.json                     OK
   callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
   callcodecallcode_11.json                                        Skip
-  callcodecallcode_11_OOGE.json                                   Skip
-  callcodecallcode_11_SuicideEnd.json                             Skip
++ callcodecallcode_11_OOGE.json                                   OK
++ callcodecallcode_11_SuicideEnd.json                             OK
   callcodecallcodecall_110.json                                   Skip
-  callcodecallcodecall_110_OOGE.json                              Skip
-  callcodecallcodecall_110_OOGMAfter.json                         Skip
-  callcodecallcodecall_110_OOGMBefore.json                        Skip
-  callcodecallcodecall_110_SuicideEnd.json                        Skip
-  callcodecallcodecall_110_SuicideMiddle.json                     Skip
++ callcodecallcodecall_110_OOGE.json                              OK
++ callcodecallcodecall_110_OOGMAfter.json                         OK
++ callcodecallcodecall_110_OOGMBefore.json                        OK
++ callcodecallcodecall_110_SuicideEnd.json                        OK
++ callcodecallcodecall_110_SuicideMiddle.json                     OK
   callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
   callcodecallcodecallcode_111.json                               Skip
-  callcodecallcodecallcode_111_OOGE.json                          Skip
++ callcodecallcodecallcode_111_OOGE.json                          OK
 + callcodecallcodecallcode_111_OOGMAfter.json                     OK
-  callcodecallcodecallcode_111_OOGMBefore.json                    Skip
-  callcodecallcodecallcode_111_SuicideEnd.json                    Skip
-  callcodecallcodecallcode_111_SuicideMiddle.json                 Skip
++ callcodecallcodecallcode_111_OOGMBefore.json                    OK
++ callcodecallcodecallcode_111_SuicideEnd.json                    OK
++ callcodecallcodecallcode_111_SuicideMiddle.json                 OK
   callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 27/79 Fail: 0/79 Skip: 52/79
+OK: 50/79 Fail: 0/79 Skip: 29/79
 ## stCallCreateCallCodeTest
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -183,7 +183,7 @@ OK: 27/79 Fail: 0/79 Skip: 52/79
 + createInitFailBadJumpDestination.json                           OK
 + createInitFailStackSizeLargerThan1024.json                      OK
 + createInitFailStackUnderflow.json                               OK
-+ createInitFailUndefinedInstruction.json                         OK
+  createInitFailUndefinedInstruction.json                         Skip
 + createInitFail_OOGduringInit.json                               OK
 + createInitOOGforCREATE.json                                     OK
   createJS_ExampleContract.json                                   Skip
@@ -193,13 +193,13 @@ OK: 27/79 Fail: 0/79 Skip: 52/79
 + createNameRegistratorPreStore1NotEnoughGas.json                 OK
 + createNameRegistratorendowmentTooHigh.json                      OK
 ```
-OK: 19/39 Fail: 0/39 Skip: 20/39
+OK: 18/39 Fail: 0/39 Skip: 21/39
 ## stCallDelegateCodesCallCodeHomestead
 ```diff
   callcallcallcode_001.json                                       Skip
   callcallcallcode_001_OOGE.json                                  Skip
   callcallcallcode_001_OOGMAfter.json                             Skip
-+ callcallcallcode_001_OOGMBefore.json                            OK
+  callcallcallcode_001_OOGMBefore.json                            Skip
   callcallcallcode_001_SuicideEnd.json                            Skip
 + callcallcallcode_001_SuicideMiddle.json                         OK
   callcallcallcode_ABCB_RECURSIVE.json                            Skip
@@ -207,61 +207,61 @@ OK: 19/39 Fail: 0/39 Skip: 20/39
   callcallcode_01_OOGE.json                                       Skip
   callcallcode_01_SuicideEnd.json                                 Skip
   callcallcodecall_010.json                                       Skip
-  callcallcodecall_010_OOGE.json                                  Skip
-+ callcallcodecall_010_OOGMAfter.json                             OK
++ callcallcodecall_010_OOGE.json                                  OK
+  callcallcodecall_010_OOGMAfter.json                             Skip
   callcallcodecall_010_OOGMBefore.json                            Skip
   callcallcodecall_010_SuicideEnd.json                            Skip
   callcallcodecall_010_SuicideMiddle.json                         Skip
   callcallcodecall_ABCB_RECURSIVE.json                            Skip
   callcallcodecallcode_011.json                                   Skip
-  callcallcodecallcode_011_OOGE.json                              Skip
-+ callcallcodecallcode_011_OOGMAfter.json                         OK
-  callcallcodecallcode_011_OOGMBefore.json                        Skip
++ callcallcodecallcode_011_OOGE.json                              OK
+  callcallcodecallcode_011_OOGMAfter.json                         Skip
++ callcallcodecallcode_011_OOGMBefore.json                        OK
   callcallcodecallcode_011_SuicideEnd.json                        Skip
   callcallcodecallcode_011_SuicideMiddle.json                     Skip
   callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
-  callcodecall_10.json                                            Skip
-  callcodecall_10_OOGE.json                                       Skip
-  callcodecall_10_SuicideEnd.json                                 Skip
++ callcodecall_10.json                                            OK
++ callcodecall_10_OOGE.json                                       OK
++ callcodecall_10_SuicideEnd.json                                 OK
   callcodecallcall_100.json                                       Skip
-  callcodecallcall_100_OOGE.json                                  Skip
++ callcodecallcall_100_OOGE.json                                  OK
 + callcodecallcall_100_OOGMAfter.json                             OK
-  callcodecallcall_100_OOGMBefore.json                            Skip
-  callcodecallcall_100_SuicideEnd.json                            Skip
-  callcodecallcall_100_SuicideMiddle.json                         Skip
++ callcodecallcall_100_OOGMBefore.json                            OK
++ callcodecallcall_100_SuicideEnd.json                            OK
++ callcodecallcall_100_SuicideMiddle.json                         OK
   callcodecallcall_ABCB_RECURSIVE.json                            Skip
   callcodecallcallcode_101.json                                   Skip
-  callcodecallcallcode_101_OOGE.json                              Skip
-  callcodecallcallcode_101_OOGMAfter.json                         Skip
-  callcodecallcallcode_101_OOGMBefore.json                        Skip
-  callcodecallcallcode_101_SuicideEnd.json                        Skip
-  callcodecallcallcode_101_SuicideMiddle.json                     Skip
++ callcodecallcallcode_101_OOGE.json                              OK
++ callcodecallcallcode_101_OOGMAfter.json                         OK
++ callcodecallcallcode_101_OOGMBefore.json                        OK
++ callcodecallcallcode_101_SuicideEnd.json                        OK
++ callcodecallcallcode_101_SuicideMiddle.json                     OK
   callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
   callcodecallcode_11.json                                        Skip
-  callcodecallcode_11_OOGE.json                                   Skip
-  callcodecallcode_11_SuicideEnd.json                             Skip
++ callcodecallcode_11_OOGE.json                                   OK
++ callcodecallcode_11_SuicideEnd.json                             OK
   callcodecallcodecall_110.json                                   Skip
-  callcodecallcodecall_110_OOGE.json                              Skip
-  callcodecallcodecall_110_OOGMAfter.json                         Skip
-  callcodecallcodecall_110_OOGMBefore.json                        Skip
-  callcodecallcodecall_110_SuicideEnd.json                        Skip
-  callcodecallcodecall_110_SuicideMiddle.json                     Skip
++ callcodecallcodecall_110_OOGE.json                              OK
++ callcodecallcodecall_110_OOGMAfter.json                         OK
++ callcodecallcodecall_110_OOGMBefore.json                        OK
++ callcodecallcodecall_110_SuicideEnd.json                        OK
++ callcodecallcodecall_110_SuicideMiddle.json                     OK
   callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
   callcodecallcodecallcode_111.json                               Skip
-  callcodecallcodecallcode_111_OOGE.json                          Skip
++ callcodecallcodecallcode_111_OOGE.json                          OK
 + callcodecallcodecallcode_111_OOGMAfter.json                     OK
-  callcodecallcodecallcode_111_OOGMBefore.json                    Skip
-  callcodecallcodecallcode_111_SuicideEnd.json                    Skip
-  callcodecallcodecallcode_111_SuicideMiddle.json                 Skip
++ callcodecallcodecallcode_111_OOGMBefore.json                    OK
++ callcodecallcodecallcode_111_SuicideEnd.json                    OK
++ callcodecallcodecallcode_111_SuicideMiddle.json                 OK
   callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 6/58 Fail: 0/58 Skip: 52/58
+OK: 29/58 Fail: 0/58 Skip: 29/58
 ## stCallDelegateCodesHomestead
 ```diff
   callcallcallcode_001.json                                       Skip
   callcallcallcode_001_OOGE.json                                  Skip
   callcallcallcode_001_OOGMAfter.json                             Skip
-+ callcallcallcode_001_OOGMBefore.json                            OK
+  callcallcallcode_001_OOGMBefore.json                            Skip
   callcallcallcode_001_SuicideEnd.json                            Skip
 + callcallcallcode_001_SuicideMiddle.json                         OK
   callcallcallcode_ABCB_RECURSIVE.json                            Skip
@@ -269,55 +269,55 @@ OK: 6/58 Fail: 0/58 Skip: 52/58
   callcallcode_01_OOGE.json                                       Skip
   callcallcode_01_SuicideEnd.json                                 Skip
   callcallcodecall_010.json                                       Skip
-  callcallcodecall_010_OOGE.json                                  Skip
-+ callcallcodecall_010_OOGMAfter.json                             OK
++ callcallcodecall_010_OOGE.json                                  OK
+  callcallcodecall_010_OOGMAfter.json                             Skip
   callcallcodecall_010_OOGMBefore.json                            Skip
   callcallcodecall_010_SuicideEnd.json                            Skip
   callcallcodecall_010_SuicideMiddle.json                         Skip
   callcallcodecall_ABCB_RECURSIVE.json                            Skip
   callcallcodecallcode_011.json                                   Skip
-  callcallcodecallcode_011_OOGE.json                              Skip
-+ callcallcodecallcode_011_OOGMAfter.json                         OK
-  callcallcodecallcode_011_OOGMBefore.json                        Skip
++ callcallcodecallcode_011_OOGE.json                              OK
+  callcallcodecallcode_011_OOGMAfter.json                         Skip
++ callcallcodecallcode_011_OOGMBefore.json                        OK
   callcallcodecallcode_011_SuicideEnd.json                        Skip
   callcallcodecallcode_011_SuicideMiddle.json                     Skip
   callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
-  callcodecall_10.json                                            Skip
-  callcodecall_10_OOGE.json                                       Skip
-  callcodecall_10_SuicideEnd.json                                 Skip
++ callcodecall_10.json                                            OK
++ callcodecall_10_OOGE.json                                       OK
++ callcodecall_10_SuicideEnd.json                                 OK
   callcodecallcall_100.json                                       Skip
-  callcodecallcall_100_OOGE.json                                  Skip
++ callcodecallcall_100_OOGE.json                                  OK
 + callcodecallcall_100_OOGMAfter.json                             OK
-  callcodecallcall_100_OOGMBefore.json                            Skip
-  callcodecallcall_100_SuicideEnd.json                            Skip
-  callcodecallcall_100_SuicideMiddle.json                         Skip
++ callcodecallcall_100_OOGMBefore.json                            OK
++ callcodecallcall_100_SuicideEnd.json                            OK
++ callcodecallcall_100_SuicideMiddle.json                         OK
   callcodecallcall_ABCB_RECURSIVE.json                            Skip
   callcodecallcallcode_101.json                                   Skip
-  callcodecallcallcode_101_OOGE.json                              Skip
-  callcodecallcallcode_101_OOGMAfter.json                         Skip
-  callcodecallcallcode_101_OOGMBefore.json                        Skip
-  callcodecallcallcode_101_SuicideEnd.json                        Skip
-  callcodecallcallcode_101_SuicideMiddle.json                     Skip
++ callcodecallcallcode_101_OOGE.json                              OK
++ callcodecallcallcode_101_OOGMAfter.json                         OK
++ callcodecallcallcode_101_OOGMBefore.json                        OK
++ callcodecallcallcode_101_SuicideEnd.json                        OK
++ callcodecallcallcode_101_SuicideMiddle.json                     OK
   callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
   callcodecallcode_11.json                                        Skip
-  callcodecallcode_11_OOGE.json                                   Skip
-  callcodecallcode_11_SuicideEnd.json                             Skip
++ callcodecallcode_11_OOGE.json                                   OK
++ callcodecallcode_11_SuicideEnd.json                             OK
   callcodecallcodecall_110.json                                   Skip
-  callcodecallcodecall_110_OOGE.json                              Skip
-  callcodecallcodecall_110_OOGMAfter.json                         Skip
-  callcodecallcodecall_110_OOGMBefore.json                        Skip
-  callcodecallcodecall_110_SuicideEnd.json                        Skip
-  callcodecallcodecall_110_SuicideMiddle.json                     Skip
++ callcodecallcodecall_110_OOGE.json                              OK
++ callcodecallcodecall_110_OOGMAfter.json                         OK
++ callcodecallcodecall_110_OOGMBefore.json                        OK
++ callcodecallcodecall_110_SuicideEnd.json                        OK
++ callcodecallcodecall_110_SuicideMiddle.json                     OK
   callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
   callcodecallcodecallcode_111.json                               Skip
-  callcodecallcodecallcode_111_OOGE.json                          Skip
++ callcodecallcodecallcode_111_OOGE.json                          OK
 + callcodecallcodecallcode_111_OOGMAfter.json                     OK
-  callcodecallcodecallcode_111_OOGMBefore.json                    Skip
-  callcodecallcodecallcode_111_SuicideEnd.json                    Skip
-  callcodecallcodecallcode_111_SuicideMiddle.json                 Skip
++ callcodecallcodecallcode_111_OOGMBefore.json                    OK
++ callcodecallcodecallcode_111_SuicideEnd.json                    OK
++ callcodecallcodecallcode_111_SuicideMiddle.json                 OK
   callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 6/58 Fail: 0/58 Skip: 52/58
+OK: 29/58 Fail: 0/58 Skip: 29/58
 ## stChangedEIP150
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -335,7 +335,7 @@ OK: 6/58 Fail: 0/58 Skip: 52/58
 + callcallcodecall_010_OOGMAfter_3.json                           OK
 + callcallcodecallcode_011_OOGMAfter_1.json                       OK
 + callcallcodecallcode_011_OOGMAfter_2.json                       OK
-  callcodecallcall_100_OOGMAfter_1.json                           Skip
++ callcodecallcall_100_OOGMAfter_1.json                           OK
 + callcodecallcall_100_OOGMAfter_2.json                           OK
 + callcodecallcall_100_OOGMAfter_3.json                           OK
 + callcodecallcallcode_101_OOGMAfter_1.json                       OK
@@ -351,7 +351,7 @@ OK: 6/58 Fail: 0/58 Skip: 52/58
 + contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
 + createInitFail_OOGduringInit.json                               OK
 ```
-OK: 25/30 Fail: 0/30 Skip: 5/30
+OK: 26/30 Fail: 0/30 Skip: 4/30
 ## stCodeCopyTest
 ```diff
 + ExtCodeCopyTests.json                                           OK
@@ -592,9 +592,9 @@ OK: 46/46 Fail: 0/46 Skip: 0/46
 + CreateAndGasInsideCreateWithMemExpandingCalls.json              OK
 + DelegateCallOnEIPWithMemExpandingCalls.json                     OK
 + ExecuteCallThatAskMoreGasThenTransactionHasWithMemExpandingCalls.jsonOK
-  NewGasPriceForCodesWithMemExpandingCalls.json                   Skip
++ NewGasPriceForCodesWithMemExpandingCalls.json                   OK
 ```
-OK: 7/8 Fail: 0/8 Skip: 1/8
+OK: 8/8 Fail: 0/8 Skip: 0/8
 ## stMemoryStressTest
 ```diff
   CALLCODE_Bounds.json                                            Skip
@@ -718,10 +718,10 @@ OK: 67/67 Fail: 0/67 Skip: 0/67
 + NonZeroValue_CALL_ToEmpty.json                                  OK
 + NonZeroValue_CALL_ToNonNonZeroBalance.json                      OK
 + NonZeroValue_CALL_ToOneStorageKey.json                          OK
-  NonZeroValue_DELEGATECALL.json                                  Skip
-  NonZeroValue_DELEGATECALL_ToEmpty.json                          Skip
-  NonZeroValue_DELEGATECALL_ToNonNonZeroBalance.json              Skip
-  NonZeroValue_DELEGATECALL_ToOneStorageKey.json                  Skip
++ NonZeroValue_DELEGATECALL.json                                  OK
++ NonZeroValue_DELEGATECALL_ToEmpty.json                          OK
++ NonZeroValue_DELEGATECALL_ToNonNonZeroBalance.json              OK
++ NonZeroValue_DELEGATECALL_ToOneStorageKey.json                  OK
 + NonZeroValue_SUICIDE.json                                       OK
 + NonZeroValue_SUICIDE_ToEmpty.json                               OK
 + NonZeroValue_SUICIDE_ToNonNonZeroBalance.json                   OK
@@ -735,7 +735,7 @@ OK: 67/67 Fail: 0/67 Skip: 0/67
 + NonZeroValue_TransactionCALLwithData_ToNonNonZeroBalance.json   OK
 + NonZeroValue_TransactionCALLwithData_ToOneStorageKey.json       OK
 ```
-OK: 20/24 Fail: 0/24 Skip: 4/24
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
   identity_to_bigger.json                                         Skip
@@ -2229,10 +2229,10 @@ OK: 0/24 Fail: 0/24 Skip: 24/24
 + ZeroValue_CALL_ToEmpty.json                                     OK
 + ZeroValue_CALL_ToNonZeroBalance.json                            OK
 + ZeroValue_CALL_ToOneStorageKey.json                             OK
-  ZeroValue_DELEGATECALL.json                                     Skip
-  ZeroValue_DELEGATECALL_ToEmpty.json                             Skip
-  ZeroValue_DELEGATECALL_ToNonZeroBalance.json                    Skip
-  ZeroValue_DELEGATECALL_ToOneStorageKey.json                     Skip
++ ZeroValue_DELEGATECALL.json                                     OK
++ ZeroValue_DELEGATECALL_ToEmpty.json                             OK
++ ZeroValue_DELEGATECALL_ToNonZeroBalance.json                    OK
++ ZeroValue_DELEGATECALL_ToOneStorageKey.json                     OK
 + ZeroValue_SUICIDE.json                                          OK
 + ZeroValue_SUICIDE_ToEmpty.json                                  OK
 + ZeroValue_SUICIDE_ToNonZeroBalance.json                         OK
@@ -2246,7 +2246,7 @@ OK: 0/24 Fail: 0/24 Skip: 24/24
 + ZeroValue_TransactionCALLwithData_ToNonZeroBalance.json         OK
 + ZeroValue_TransactionCALLwithData_ToOneStorageKey.json          OK
 ```
-OK: 20/24 Fail: 0/24 Skip: 4/24
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stZeroKnowledge
 ```diff
   ecmul_1-2_2_28000_128.json                                      Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1231/2334 Fail: 0/2334 Skip: 1103/2334
+OK: 1309/2334 Fail: 0/2334 Skip: 1025/2334
