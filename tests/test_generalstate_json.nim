@@ -8,8 +8,8 @@
 import
   unittest, strformat, strutils, tables, json, ospaths, times, os,
   byteutils, ranges/typedranges, nimcrypto, options,
-  eth/[rlp, common, keys], eth/trie/[db, trie_defs], chronicles,
-  ./test_helpers, ../nimbus/p2p/executor,
+  eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
+  ./test_helpers, ../nimbus/p2p/executor, test_config,
   ../nimbus/[constants, errors, transaction],
   ../nimbus/[vm_state, vm_types, vm_state_transactions, utils],
   ../nimbus/vm/interpreter,
@@ -90,7 +90,8 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   if tester.debugMode:
     tester.dumpDebugData(vmState, sender, gasUsed)
 
-proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus, debugMode = false) =
+proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
+                 debugMode = false, supportedForks: set[Fork] = supportedForks) =
   var tester: Tester
   var fixture: JsonNode
   for label, child in fixtures:
@@ -110,9 +111,10 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus, debugMode =
 
   tester.debugMode = debugMode
   let ftrans = fixture["transaction"]
+  var testedInFork = false
   for fork in supportedForks:
     if fixture["post"].hasKey(forkNames[fork]):
-      # echo "[fork: ", forkNames[fork], "]"
+      testedInFork = true
       for expectation in fixture["post"][forkNames[fork]]:
         tester.expectedHash = expectation["hash"].getStr
         tester.expectedLogs = expectation["logs"].getStr
@@ -126,6 +128,9 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus, debugMode =
         tester.fork = fork
         testFixtureIndexes(tester, testStatusIMPL)
 
+  if not testedInFork:
+    echo "test subject '", tester.name, "' not tested in any forks"
+
 proc main() =
   if paramCount() == 0:
     # run all test fixtures
@@ -133,9 +138,28 @@ proc main() =
       jsonTest("GeneralStateTests", testFixture)
   else:
     # execute single test in debug mode
-    let path = "tests" / "fixtures" / "GeneralStateTests"
-    let n = json.parseFile(path / paramStr(1))
-    var testStatusIMPL: TestStatus
-    testFixture(n, testStatusIMPL, true)
+    let config = getConfiguration()
+    if config.testSubject.len == 0:
+      echo "missing test subject"
+      quit(QuitFailure)
 
-main()
+    let path = "tests" / "fixtures" / "GeneralStateTests"
+    let n = json.parseFile(path / config.testSubject)
+    var testStatusIMPL: TestStatus
+    var forks: set[Fork] = {}
+    forks.incl config.fork
+    testFixture(n, testStatusIMPL, true, forks)
+
+when isMainModule:
+  var message: string
+
+  ## Processing command line arguments
+  if processArguments(message) != Success:
+    echo message
+    quit(QuitFailure)
+  else:
+    if len(message) > 0:
+      echo message
+      quit(QuitSuccess)
+
+  main()
