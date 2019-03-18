@@ -75,21 +75,14 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "callcallcallcode_001_OOGMAfter_2.json",
 
     # Failed in homestead but OK in Frontier
-    "callcallcallcode_001.json",
-    "callcallcode_01.json",
-    "callcallcodecall_010.json",
     "callcallcodecallcode_011.json",
-    "callcallcallcode_001.json",
-    "callcallcode_01.json",
-    "callcallcodecall_010.json",
-    "callcallcodecallcode_011.json",
-    "callcodecallcall_100.json",
-    "callcodecallcallcode_101.json",
-    "callcodecallcode_11.json",
-    "callcodecallcodecall_110.json",
     "callcodecallcodecallcode_111.json",
-    "CallLoseGasOOG.json",
-    "CallcodeLoseGasOOG.json",
-    "callcodeOutput3partialFail.json"
+    "callcallcode_01.json",
+    "callcodecallcall_100.json",
+    "callcodecallcode_11.json",
+    "callcallcallcode_001.json",
+    "callcodecallcodecall_110.json",
+    "callcallcodecall_010.json",
+    "callcodecallcallcode_101.json"
   ]
   result = name in allowedFailingGeneralStateTests

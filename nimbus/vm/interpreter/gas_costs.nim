@@ -64,14 +64,13 @@ type
     case kind*: Op
     of Sstore:
       s_isStorageEmpty*: bool
-    of Call:
+    of Call, CallCode, DelegateCall, StaticCall:
       c_isNewAccount*: bool
       c_gasBalance*: GasInt
       c_contractGas*: Gasint
       c_currentMemSize*: Natural
       c_memOffset*: Natural
       c_memLength*: Natural
-      c_opCode*: Op
     of Create:
       cr_currentMemSize*: Natural
       cr_memOffset*: Natural
@@ -303,7 +302,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
                       )
 
     # Cnew_account
-    if gasParams.c_isNewAccount and gasParams.c_opCode == Call:
+    if gasParams.c_isNewAccount and gasParams.kind == Call:
       if fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
         result.gasCost += static(FeeSchedule[GasNewAccount])
@@ -315,7 +314,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           result.gasCost += static(FeeSchedule[GasNewAccount])
 
     # Cxfer
-    if not value.isZero:
+    if not value.isZero and gasParams.kind in {Call, CallCode}:
       result.gasCost += static(FeeSchedule[GasCallValue])
 
     # Cextra
@@ -338,7 +337,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     result.gasCost += result.gasRefund
 
     # Ccallgas - Gas sent to the child message
-    if not value.isZero:
+    if not value.isZero and gasParams.kind in {Call, CallCode}:
       result.gasRefund += static(FeeSchedule[GasCallStipend])
 
   func `prefix gasHalt`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =

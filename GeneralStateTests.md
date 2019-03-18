@@ -156,11 +156,11 @@ OK: 63/79 Fail: 0/79 Skip: 16/79
   Call1024BalanceTooLow.json                                      Skip
   Call1024OOG.json                                                Skip
   Call1024PreCalls.json                                           Skip
-  CallLoseGasOOG.json                                             Skip
++ CallLoseGasOOG.json                                             OK
   CallRecursiveBombPreCall.json                                   Skip
 + Callcode1024BalanceTooLow.json                                  OK
   Callcode1024OOG.json                                            Skip
-  CallcodeLoseGasOOG.json                                         Skip
++ CallcodeLoseGasOOG.json                                         OK
 + callOutput1.json                                                OK
 + callOutput2.json                                                OK
 + callOutput3.json                                                OK
@@ -176,7 +176,7 @@ OK: 63/79 Fail: 0/79 Skip: 16/79
 + callcodeOutput3.json                                            OK
 + callcodeOutput3Fail.json                                        OK
 + callcodeOutput3partial.json                                     OK
-  callcodeOutput3partialFail.json                                 Skip
++ callcodeOutput3partialFail.json                                 OK
 + callcodeWithHighValue.json                                      OK
 + callcodeWithHighValueAndGasOOG.json                             OK
 + createFailBalanceTooLow.json                                    OK
@@ -193,7 +193,7 @@ OK: 63/79 Fail: 0/79 Skip: 16/79
 + createNameRegistratorPreStore1NotEnoughGas.json                 OK
 + createNameRegistratorendowmentTooHigh.json                      OK
 ```
-OK: 31/39 Fail: 0/39 Skip: 8/39
+OK: 34/39 Fail: 0/39 Skip: 5/39
 ## stCallDelegateCodesCallCodeHomestead
 ```diff
   callcallcallcode_001.json                                       Skip
@@ -403,9 +403,9 @@ OK: 23/30 Fail: 0/30 Skip: 7/30
   Call1024BalanceTooLow.json                                      Skip
   Call1024OOG.json                                                Skip
   Call1024PreCalls.json                                           Skip
-  CallLoseGasOOG.json                                             Skip
++ CallLoseGasOOG.json                                             OK
   CallRecursiveBombPreCall.json                                   Skip
-  CallcodeLoseGasOOG.json                                         Skip
++ CallcodeLoseGasOOG.json                                         OK
   Delegatecall1024.json                                           Skip
   Delegatecall1024OOG.json                                        Skip
 + callOutput1.json                                                OK
@@ -420,7 +420,7 @@ OK: 23/30 Fail: 0/30 Skip: 7/30
 + callcodeOutput3.json                                            OK
 + callcodeOutput3Fail.json                                        OK
 + callcodeOutput3partial.json                                     OK
-  callcodeOutput3partialFail.json                                 Skip
++ callcodeOutput3partialFail.json                                 OK
 + callcodeWithHighValueAndGasOOG.json                             OK
   deleagateCallAfterValueTransfer.json                            Skip
 + delegatecallAndOOGatTxLevel.json                                OK
@@ -435,7 +435,7 @@ OK: 23/30 Fail: 0/30 Skip: 7/30
   delegatecodeDynamicCode.json                                    Skip
   delegatecodeDynamicCode2SelfCall.json                           Skip
 ```
-OK: 18/34 Fail: 0/34 Skip: 16/34
+OK: 21/34 Fail: 0/34 Skip: 13/34
 ## stEIP150Specific
 ```diff
   CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1381/2334 Fail: 0/2334 Skip: 953/2334
+OK: 1387/2334 Fail: 0/2334 Skip: 947/2334

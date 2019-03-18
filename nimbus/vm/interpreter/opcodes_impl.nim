@@ -220,12 +220,12 @@ proc writePaddedResult(mem: var Memory,
                        data: openarray[byte],
                        memPos, dataPos, len: Natural,
                        paddingValue = 0.byte) =
-  
+
   mem.extend(memPos, len)
   let dataEndPosition = dataPos.int64 + len - 1
   let sourceBytes = data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
   mem.write(memPos, sourceBytes)
-    
+
   # Don't duplicate zero-padding of mem.extend
   let paddingOffset = memPos + sourceBytes.len
   # TODO: avoid unnecessary memory allocation
@@ -700,17 +700,15 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     let (childGasFee, childGasLimit) = computation.gasCosts[opCode].c_handler(
       value,
-      GasParams(kind: Call,
+      GasParams(kind: opCode,
                 c_isNewAccount: isNewAccount,
                 c_gasBalance: computation.gasMeter.gasRemaining,
                 c_contractGas: gas.truncate(GasInt),
                 c_currentMemSize: computation.memory.len,
                 c_memOffset: memOffset,
-                c_memLength: memLength,
-                c_opCode: opCode
+                c_memLength: memLength
       ))
 
-    #trace "Call (" & callNameStr & ")", childGasLimit, childGasFee
     if childGasFee >= 0:
       computation.gasMeter.consumeGas(childGasFee, reason = $opCode)
 
