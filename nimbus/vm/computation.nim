@@ -160,7 +160,12 @@ proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
     debug "EVMError applyMessage failed",
       msg = computation.error.info,
       depth = computation.msg.depth
-
+  except ValueError:
+    snapshot.revert(true)
+    debug "ValueError applyMessage failed",
+      msg = computation.error.info,
+      depth = computation.msg.depth
+      
   result = not computation.isError
 
 proc writeContract*(computation: var BaseComputation, fork: Fork): bool =

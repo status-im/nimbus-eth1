@@ -183,7 +183,7 @@ OK: 50/79 Fail: 0/79 Skip: 29/79
 + createInitFailBadJumpDestination.json                           OK
 + createInitFailStackSizeLargerThan1024.json                      OK
 + createInitFailStackUnderflow.json                               OK
-  createInitFailUndefinedInstruction.json                         Skip
++ createInitFailUndefinedInstruction.json                         OK
 + createInitFail_OOGduringInit.json                               OK
 + createInitOOGforCREATE.json                                     OK
 + createJS_ExampleContract.json                                   OK
@@ -193,7 +193,7 @@ OK: 50/79 Fail: 0/79 Skip: 29/79
 + createNameRegistratorPreStore1NotEnoughGas.json                 OK
 + createNameRegistratorendowmentTooHigh.json                      OK
 ```
-OK: 19/39 Fail: 0/39 Skip: 20/39
+OK: 20/39 Fail: 0/39 Skip: 19/39
 ## stCallDelegateCodesCallCodeHomestead
 ```diff
   callcallcallcode_001.json                                       Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1310/2334 Fail: 0/2334 Skip: 1024/2334
+OK: 1311/2334 Fail: 0/2334 Skip: 1023/2334
