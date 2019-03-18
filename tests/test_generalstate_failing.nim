@@ -27,7 +27,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "pointAddTrunc.json",
     "pointMulAdd.json",
     "pointMulAdd2.json",
-    # most likely to crash:
+    # Homestead recursives
     "ContractCreationSpam.json",
     "Call1024OOG.json",
     "Call1024PreCalls.json",
@@ -47,7 +47,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "CallRecursiveBombLog.json",
     "CallRecursiveBombLog2.json",
     "Call1024BalanceTooLow.json",
-    # Frontier recursive
+    # Frontier recursives
     "Callcode1024OOG.json",
     "callcallcodecall_ABCB_RECURSIVE.json",
     "callcallcodecallcode_ABCB_RECURSIVE.json",
@@ -56,7 +56,5 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "callcodecallcodecall_ABCB_RECURSIVE.json",
     "callcodecallcodecallcode_ABCB_RECURSIVE.json",
     "callcallcallcode_ABCB_RECURSIVE.json",
-    # Failed in homestead but OK in Frontier
-    "callcodecallcallcode_101.json"
   ]
   result = name in allowedFailingGeneralStateTests

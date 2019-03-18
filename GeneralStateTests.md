@@ -125,7 +125,7 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 + callcodecallcall_100_SuicideEnd.json                            OK
 + callcodecallcall_100_SuicideMiddle.json                         OK
   callcodecallcall_ABCB_RECURSIVE.json                            Skip
-  callcodecallcallcode_101.json                                   Skip
++ callcodecallcallcode_101.json                                   OK
 + callcodecallcallcode_101_OOGE.json                              OK
 + callcodecallcallcode_101_OOGMAfter.json                         OK
 + callcodecallcallcode_101_OOGMBefore.json                        OK
@@ -150,7 +150,7 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 + callcodecallcodecallcode_111_SuicideMiddle.json                 OK
   callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 71/79 Fail: 0/79 Skip: 8/79
+OK: 72/79 Fail: 0/79 Skip: 7/79
 ## stCallCreateCallCodeTest
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -230,7 +230,7 @@ OK: 34/39 Fail: 0/39 Skip: 5/39
 + callcodecallcall_100_SuicideEnd.json                            OK
 + callcodecallcall_100_SuicideMiddle.json                         OK
   callcodecallcall_ABCB_RECURSIVE.json                            Skip
-  callcodecallcallcode_101.json                                   Skip
++ callcodecallcallcode_101.json                                   OK
 + callcodecallcallcode_101_OOGE.json                              OK
 + callcodecallcallcode_101_OOGMAfter.json                         OK
 + callcodecallcallcode_101_OOGMBefore.json                        OK
@@ -255,7 +255,7 @@ OK: 34/39 Fail: 0/39 Skip: 5/39
 + callcodecallcodecallcode_111_SuicideMiddle.json                 OK
   callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 50/58 Fail: 0/58 Skip: 8/58
+OK: 51/58 Fail: 0/58 Skip: 7/58
 ## stCallDelegateCodesHomestead
 ```diff
 + callcallcallcode_001.json                                       OK
@@ -292,7 +292,7 @@ OK: 50/58 Fail: 0/58 Skip: 8/58
 + callcodecallcall_100_SuicideEnd.json                            OK
 + callcodecallcall_100_SuicideMiddle.json                         OK
   callcodecallcall_ABCB_RECURSIVE.json                            Skip
-  callcodecallcallcode_101.json                                   Skip
++ callcodecallcallcode_101.json                                   OK
 + callcodecallcallcode_101_OOGE.json                              OK
 + callcodecallcallcode_101_OOGMAfter.json                         OK
 + callcodecallcallcode_101_OOGMBefore.json                        OK
@@ -317,7 +317,7 @@ OK: 50/58 Fail: 0/58 Skip: 8/58
 + callcodecallcodecallcode_111_SuicideMiddle.json                 OK
   callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 50/58 Fail: 0/58 Skip: 8/58
+OK: 51/58 Fail: 0/58 Skip: 7/58
 ## stChangedEIP150
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1425/2334 Fail: 0/2334 Skip: 909/2334
+OK: 1428/2334 Fail: 0/2334 Skip: 906/2334
