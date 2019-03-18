@@ -13,26 +13,12 @@
 # being mostly used for short-term regression prevention.
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
-    "deleagateCallAfterValueTransfer.json",
-    "delegatecallInInitcodeToEmptyContract.json",
-    "delegatecallInInitcodeToExistingContract.json",
-    "delegatecallSenderCheck.json",
-    "delegatecallValueCheck.json",
-    "delegatecodeDynamicCode.json",
-    "delegatecodeDynamicCode2SelfCall.json",
     "CALLCODEEcrecoverV_prefixedf0.json",
     "randomStatetest14.json",
     "randomStatetest85.json",
-    "RevertOpcodeMultipleSubCalls.json",
     "tx_e1c174e2.json",
     "suicideCoinbase.json",
-    "Opcodes_TransactionInit.json",
     "SuicidesMixingCoinbase.json",
-    "delegatecallAfterTransition.json",
-    "delegatecallAtTransition.json",
-    "delegatecallBeforeTransition.json",
-    # 2018-12-07:
-    # 2019-02-07:
     # 2019-02-15:
     "randomStatetest101.json",
     "randomStatetest7.json",
@@ -71,18 +57,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "callcodecallcodecall_ABCB_RECURSIVE.json",
     "callcodecallcodecallcode_ABCB_RECURSIVE.json",
     "callcallcallcode_ABCB_RECURSIVE.json",
-    # Frontier failed test cases
-    "callcallcallcode_001_OOGMAfter_2.json",
-
     # Failed in homestead but OK in Frontier
-    "callcallcodecallcode_011.json",
-    "callcodecallcodecallcode_111.json",
-    "callcallcode_01.json",
-    "callcodecallcall_100.json",
-    "callcodecallcode_11.json",
-    "callcallcallcode_001.json",
-    "callcodecallcodecall_110.json",
-    "callcallcodecall_010.json",
     "callcodecallcallcode_101.json"
   ]
   result = name in allowedFailingGeneralStateTests

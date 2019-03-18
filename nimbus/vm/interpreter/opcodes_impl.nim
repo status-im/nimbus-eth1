@@ -627,7 +627,7 @@ proc callCodeParams(computation: var BaseComputation): (UInt256, UInt256, EthAdd
   result = (gas,
     value,
     to,
-    ZERO_ADDRESS,  # sender
+    computation.msg.storageAddress,  # sender
     to,  # code_address
     memoryInputStartPosition,
     memoryInputSize,
@@ -643,7 +643,7 @@ proc delegateCallParams(computation: var BaseComputation): (UInt256, UInt256, Et
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
 
   let to = computation.msg.storageAddress
-  let sender = computation.msg.storageAddress
+  let sender = computation.msg.sender
   let value = computation.msg.value
 
   result = (gas,
@@ -720,11 +720,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     let
       callData = computation.memory.read(memInPos, memInLen)
-      code =
-        if codeAddress != ZERO_ADDRESS:
-          computation.vmState.readOnlyStateDb.getCode(codeAddress)
-        else:
-          computation.vmState.readOnlyStateDb.getCode(to)
+      code = computation.vmState.readOnlyStateDb.getCode(codeAddress)
 
     var childMsg = prepareChildMessage(
       computation,
@@ -736,10 +732,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       MessageOptions(flags: flags)
     )
 
-    if sender != ZERO_ADDRESS:
-      childMsg.sender = sender
-    else:
-      childMsg.sender = computation.msg.storageAddress
+    childMsg.sender = sender
 
     when opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
