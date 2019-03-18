@@ -26,6 +26,26 @@ type
     fork: Fork
     debugMode: bool
 
+  GST_VMState = ref object of BaseVMState
+
+proc toBytes(x: string): seq[byte] =
+  result = newSeq[byte](x.len)
+  for i in 0..<x.len: result[i] = x[i].byte
+
+proc newGST_VMState(prevStateRoot: Hash256, header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set[TracerFlags]): GST_VMState =
+  new result
+  result.init(prevStateRoot, header, chainDB, tracerFlags)
+
+method getAncestorHash*(vmState: GST_VMState, blockNumber: BlockNumber): Hash256 {.gcsafe.} =
+  if blockNumber >= vmState.blockNumber:
+    return
+  elif blockNumber < 0:
+    return
+  elif blockNumber < vmState.blockNumber - 256:
+    return
+  else:
+    return keccakHash(toBytes($blockNumber))
+
 proc dumpAccount(accountDb: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
   result = %{
     "name": %name,
@@ -62,7 +82,7 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
 
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   var tracerFlags: set[TracerFlags] = if tester.debugMode: {TracerFlags.EnableTracing} else : {}
-  var vmState = newBaseVMState(emptyRlpHash, tester.header, newBaseChainDB(newMemoryDb()), tracerFlags)
+  var vmState = newGST_VMState(emptyRlpHash, tester.header, newBaseChainDB(newMemoryDb()), tracerFlags)
   vmState.mutateStateDB:
     setupStateDB(tester.pre, db)
 
