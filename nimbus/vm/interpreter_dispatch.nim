@@ -258,7 +258,7 @@ proc homesteadVM(computation: var BaseComputation) =
 
 proc updateOpcodeExec*(computation: var BaseComputation, fork: Fork) =
   case fork
-  of FkFrontier:
+  of FkFrontier..FkThawing:
     computation.opCodeExec = frontierVM
     computation.frontierVM()
   of FkHomestead..FkSpurious:
