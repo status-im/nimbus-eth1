@@ -7,10 +7,10 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  byteutils, eth/[common, keys], ranges/typedranges,
+  byteutils, eth/[common, keys, rlp], ranges/typedranges,
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
-  ../nimbus/transaction,
+  ../nimbus/[transaction, utils],
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
   ../tests/test_generalstate_failing
 
@@ -290,3 +290,7 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   result.R = fromBytesBE(Uint256, raw[0..31])
   result.S = fromBytesBE(Uint256, raw[32..63])
   result.V = raw[64] + 27.byte
+  
+proc hashLogEntries*(logs: seq[Log]): string =
+  toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
+  
