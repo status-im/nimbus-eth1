@@ -227,9 +227,11 @@ proc writePaddedResult(mem: var Memory,
   mem.write(memPos, sourceBytes)
 
   # Don't duplicate zero-padding of mem.extend
-  let paddingOffset = memPos + sourceBytes.len
-  # TODO: avoid unnecessary memory allocation
-  mem.write(paddingOffset, repeat(paddingValue, min(mem.len - paddingOffset, len)))
+  let paddingOffset = min(memPos + sourceBytes.len, mem.len)
+  let numPaddingBytes = min(mem.len - paddingOffset, len - sourceBytes.len)
+  if numPaddingBytes > 0:
+    # TODO: avoid unnecessary memory allocation
+    mem.write(paddingOffset, repeat(paddingValue, numPaddingBytes))
 
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
@@ -340,7 +342,7 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
   let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
+    computation.gasCosts[ReturnDataCopy].m_handler(memPos, copyPos, len),
     reason="returnDataCopy fee")
 
   if copyPos + len > computation.returnData.len:

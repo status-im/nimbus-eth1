@@ -87,6 +87,8 @@ proc main() =
   chainDB.dumpTest(1149150) # need to swallow precompiles errors
   chainDB.dumpTest(1155095) # homestead codeCost OOG
   chainDB.dumpTest(1317742) # CREATE childmsg sender
+  chainDB.dumpTest(1368834) # writepadded regression padding len
+  chainDB.dumpTest(1417555) # writepadded regression zero len
 
 when isMainModule:
   var message: string
