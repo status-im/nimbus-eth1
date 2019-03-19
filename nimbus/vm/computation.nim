@@ -236,14 +236,10 @@ proc addLogEntry*(c: var BaseComputation, log: Log) {.inline.} =
 
 # many methods are basically TODO, but they still return valid values
 # in order to test some existing code
-func getAccountsForDeletion*(c: BaseComputation): seq[EthAddress] =
-  # TODO
-  if c.isError:
-    result = @[]
-  else:
-    result = @[]
+iterator accountsForDeletion*(c: BaseComputation): EthAddress =
+  if not c.isError:
     for account in c.accountsToDelete.keys:
-      result.add(account)
+      yield account
 
 proc getGasRefund*(c: BaseComputation): GasInt =
   if c.isError:

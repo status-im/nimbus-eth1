@@ -12,18 +12,6 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
-  # TODO: we have identical `fork` code in setupComputation.
-  # at later stage, we need to get rid of it
-  # and apply changes in eth_*, debug_* RPC,
-  # macro assembler and premix tool set.
-  # at every place where setupComputation and
-  # processTransaction are used.
-  let fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.blockNumber.toFork
-
   let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
   var balance = vmState.readOnlyStateDb().getBalance(sender)
   if balance < upfrontGasCost:
@@ -46,7 +34,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   result = tx.gasLimit
   if execComputation(computation):
     result = computation.refundGas(tx, sender)
-  
+
   if computation.isSuicided(vmState.blockHeader.coinbase):
     return 0
 
