@@ -46,6 +46,4 @@ proc processArguments*(msg: var string): ConfigStatus =
         result = ErrorUnknownOption
         break
     of cmdEnd:
-      msg = "Error processing option [" & key & "]"
-      result = ErrorParseOption
-      break
+      doAssert(false)
