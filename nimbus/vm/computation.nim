@@ -112,61 +112,12 @@ proc commit*(snapshot: var ComputationSnapshot) {.inline.} =
 proc dispose*(snapshot: var ComputationSnapshot) {.inline.} =
   snapshot.snapshot.dispose()
 
-proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
-  if computation.msg.depth >= MaxCallDepth:
-    raise newException(StackDepthError, "Stack depth limit reached")
-
-  let senderBalance = computation.vmState.readOnlyStateDb().
-                      getBalance(computation.msg.sender)
-
-  if senderBalance < computation.msg.value:
-    raise newException(InsufficientFunds,
-      &"Insufficient funds: {senderBalance} < {computation.msg.value}")
-
-  when opCode in {Call, Create}:
-    computation.vmState.mutateStateDb:
-      db.subBalance(computation.msg.sender, computation.msg.value)
-      db.addBalance(computation.msg.storageAddress, computation.msg.value)
-
-proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
-  var snapshot = computation.snapshot()
-  defer: snapshot.dispose()
-
-  when opCode in {CallCode, Call, Create}:
-    try:
-      computation.transferBalance(opCode)
-    except VMError:
-      snapshot.revert()
-      debug "transferBalance failed", msg = computation.error.info
-      return
-
-  if computation.gasMeter.gasRemaining < 0:
-    snapshot.commit()
-    return
-
-  try:
-    # Run code
-    # We cannot use the normal dispatching function `executeOpcodes`
-    # within `interpreter_dispatch.nim` due to a cyclic dependency.
-    computation.opcodeExec(computation)
-    snapshot.commit()
-  except VMError:
-    snapshot.revert(true)
-    debug "VMError applyMessage failed",
-      msg = computation.error.info,
-      depth = computation.msg.depth
-  except EVMError:
-    snapshot.revert() # TODO: true or false?
-    debug "EVMError applyMessage failed",
-      msg = computation.error.info,
-      depth = computation.msg.depth
-  except ValueError:
-    snapshot.revert(true)
-    debug "ValueError applyMessage failed",
-      msg = computation.error.info,
-      depth = computation.msg.depth
-      
-  result = not computation.isError
+proc getFork*(computation: BaseComputation): Fork =
+  result =
+    if computation.forkOverride.isSome:
+      computation.forkOverride.get
+    else:
+      computation.vmState.blockNumber.toFork
 
 proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
   result = true
@@ -191,6 +142,60 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
   else:
     if fork < FkHomestead: computation.output = @[]
     result = false
+
+proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
+  if computation.msg.depth >= MaxCallDepth:
+    raise newException(StackDepthError, "Stack depth limit reached")
+
+  let senderBalance = computation.vmState.readOnlyStateDb().
+                      getBalance(computation.msg.sender)
+
+  if senderBalance < computation.msg.value:
+    raise newException(InsufficientFunds,
+      &"Insufficient funds: {senderBalance} < {computation.msg.value}")
+
+  when opCode in {Call, Create}:
+    computation.vmState.mutateStateDb:
+      db.subBalance(computation.msg.sender, computation.msg.value)
+      db.addBalance(computation.msg.storageAddress, computation.msg.value)
+
+proc applyMessage(fork: Fork, computation: var BaseComputation, opCode: static[Op]) =
+  var snapshot = computation.snapshot()
+  defer: snapshot.dispose()
+
+  when opCode in {CallCode, Call, Create}:
+    try:
+      computation.transferBalance(opCode)
+    except VMError:
+      snapshot.revert()
+      debug "transferBalance failed", msg = computation.error.info
+      return
+
+  if computation.gasMeter.gasRemaining < 0:
+    snapshot.commit()
+    return
+
+  var success = true
+  try:
+    # Run code
+    # We cannot use the normal dispatching function `executeOpcodes`
+    # within `interpreter_dispatch.nim` due to a cyclic dependency.
+    computation.opcodeExec(computation)
+    success = not computation.isError
+  except VMError:
+    success = false
+    debug "applyMessage failed", 
+      msg = getCurrentExceptionMsg(),
+      depth = computation.msg.depth
+
+  if success and computation.msg.isCreate:
+    let contractFailed = not computation.writeContract(fork)
+    success = not(contractFailed and fork == FkHomestead)
+
+  if success:
+    snapshot.commit()
+  else:
+    snapshot.revert(true)
 
 proc generateChildComputation*(fork: Fork, computation: var BaseComputation, childMsg: Message): BaseComputation =
   var childComp = newBaseComputation(
@@ -222,31 +227,10 @@ proc addChildComputation(fork: Fork, computation: var BaseComputation, child: Ba
     computation.logEntries.add child.logEntries
   computation.children.add(child)
 
-proc getFork*(computation: BaseComputation): Fork =
-  result =
-    if computation.forkOverride.isSome:
-      computation.forkOverride.get
-    else:
-      computation.vmState.blockNumber.toFork
-
 proc applyChildComputation*(parentComp, childComp: var BaseComputation, opCode: static[Op]) =
   ## Apply the vm message childMsg as a child computation.
-  let fork = parentComp.getFork
-
-  var snapshot = parentComp.snapshot()
-  defer: snapshot.dispose()
-  var contractOK = true
-
-  if applyMessage(childComp, opCode):
-    if childComp.msg.isCreate:
-      contractOK = childComp.writeContract(fork)
-
-  if not contractOK and fork == FkHomestead:
-    # consume all gas
-    snapshot.revert(true)
-  else:
-    snapshot.commit()
-
+  var fork = parentComp.getFork
+  fork.applyMessage(childComp, opCode)
   fork.addChildComputation(parentComp, childComp)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
