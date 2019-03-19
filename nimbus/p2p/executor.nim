@@ -43,23 +43,9 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   if tx.isContractCreation and isCollision:
     return tx.gasLimit
 
-  var snapshot = vmState.snapshot()
-  defer: snapshot.dispose()
-
-  var contractOK = true
   result = tx.gasLimit
-
   if execComputation(computation):
-    if tx.isContractCreation:
-      contractOK = computation.writeContract(fork)
     result = computation.refundGas(tx, sender)
-
-  if not contractOK and fork == FkHomestead:
-    snapshot.revert()
-    # consume all gas
-    result = tx.gasLimit
-  else:
-    snapshot.commit()
   
   if computation.isSuicided(vmState.blockHeader.coinbase):
     return 0

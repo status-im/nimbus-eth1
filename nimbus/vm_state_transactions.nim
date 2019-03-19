@@ -81,6 +81,11 @@ proc execComputation*(computation: var BaseComputation): bool =
     result = false
     debug "execComputation() error", msg = getCurrentExceptionMsg()
 
+  if result and computation.msg.isCreate:
+    let fork = computation.getFork
+    let contractFailed = not computation.writeContract(fork)
+    result = not(contractFailed and fork == FkHomestead)
+
   if result:
     snapshot.commit()
     computation.vmState.addLogs(computation.logEntries)
