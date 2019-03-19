@@ -3,7 +3,7 @@ import options,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
-  ../vm/[computation, interpreter_dispatch, message],
+  ../vm/[computation, message],
   ../vm/interpreter/vm_forks
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, forkOverride=none(Fork)): GasInt =

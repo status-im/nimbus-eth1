@@ -143,48 +143,47 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
     if fork < FkHomestead: computation.output = @[]
     result = false
 
-proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
+proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool =
   if computation.msg.depth >= MaxCallDepth:
-    raise newException(StackDepthError, "Stack depth limit reached")
+    debug "Stack depth limit reached", depth=computation.msg.depth
+    return false
 
   let senderBalance = computation.vmState.readOnlyStateDb().
                       getBalance(computation.msg.sender)
 
   if senderBalance < computation.msg.value:
-    raise newException(InsufficientFunds,
-      &"Insufficient funds: {senderBalance} < {computation.msg.value}")
+    debug "insufficient funds", available=senderBalance, needed=computation.msg.value
+    return false
 
   when opCode in {Call, Create}:
     computation.vmState.mutateStateDb:
       db.subBalance(computation.msg.sender, computation.msg.value)
       db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
+  result = true
+
+proc executeOpcodes*(computation: var BaseComputation)
+
 proc applyMessage(fork: Fork, computation: var BaseComputation, opCode: static[Op]) =
   var snapshot = computation.snapshot()
   defer: snapshot.dispose()
 
   when opCode in {CallCode, Call, Create}:
-    try:
-      computation.transferBalance(opCode)
-    except VMError:
+    if not computation.transferBalance(opCode): 
       snapshot.revert()
-      debug "transferBalance failed", msg = computation.error.info
       return
-
+  
   if computation.gasMeter.gasRemaining < 0:
     snapshot.commit()
     return
 
   var success = true
   try:
-    # Run code
-    # We cannot use the normal dispatching function `executeOpcodes`
-    # within `interpreter_dispatch.nim` due to a cyclic dependency.
-    computation.opcodeExec(computation)
+    executeOpcodes(computation)
     success = not computation.isError
   except VMError:
     success = false
-    debug "applyMessage failed", 
+    debug "applyMessage failed",
       msg = getCurrentExceptionMsg(),
       depth = computation.msg.depth
 
@@ -196,18 +195,6 @@ proc applyMessage(fork: Fork, computation: var BaseComputation, opCode: static[O
     snapshot.commit()
   else:
     snapshot.revert(true)
-
-proc generateChildComputation*(fork: Fork, computation: var BaseComputation, childMsg: Message): BaseComputation =
-  var childComp = newBaseComputation(
-      computation.vmState,
-      computation.vmState.blockNumber,
-      childMsg,
-      some(fork))
-
-  # Copy the fork op code executor proc (assumes child computation is in the same fork)
-  childComp.opCodeExec = computation.opCodeExec
-
-  return childComp
 
 proc addChildComputation(fork: Fork, computation: var BaseComputation, child: BaseComputation) =
   if child.isError:
@@ -286,3 +273,5 @@ proc traceError*(c: BaseComputation) =
 
 proc prepareTracer*(c: BaseComputation) =
   c.vmState.tracer.prepare(c.msg.depth)
+
+include interpreter_dispatch

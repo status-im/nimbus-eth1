@@ -11,7 +11,7 @@ import
   ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter, utils/macros_gen_opcodes],
   ./code_stream,
   ../vm_types, ../errors, precompiles,
-  ./stack, ./computation, terminal # Those are only needed for logging
+  ./stack, terminal # Those are only needed for logging
 
 logScope:
   topics = "vm opcode"
@@ -256,20 +256,14 @@ proc homesteadVM(computation: var BaseComputation) =
   if not computation.execPrecompiles:
     genHomesteadDispatch(computation)
 
-proc executeOpcodes*(computation: var BaseComputation) =
+proc executeOpcodes(computation: var BaseComputation) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   let fork = computation.getFork
 
-  try:
-    case fork
-    of FkFrontier..FkThawing:
-      computation.opCodeExec = frontierVM
-      computation.frontierVM()
-    of FkHomestead..FkSpurious:
-      computation.opCodeExec = homesteadVM
-      computation.homesteadVM()
-    else:
-      raise newException(VMError, "Unknown or not implemented fork: " & $fork)
-  except VMError:
-    computation.error = Error(info: getCurrentExceptionMsg())
-    debug "VM Error executeOpcodes() failed", error = getCurrentExceptionMsg()
+  case fork
+  of FkFrontier..FkThawing:
+    computation.frontierVM()
+  of FkHomestead..FkSpurious:
+    computation.homesteadVM()
+  else:
+    raise newException(VMError, "Unknown or not implemented fork: " & $fork)

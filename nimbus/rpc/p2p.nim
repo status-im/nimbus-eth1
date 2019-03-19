@@ -14,7 +14,7 @@ import
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../vm_state_transactions, ../utils,
   ../db/[db_chain, state_db, storage_types],
-  rpc_types, rpc_utils, ../vm/[message, computation, interpreter_dispatch]
+  rpc_types, rpc_utils, ../vm/[message, computation]
 
 #[
   Note:

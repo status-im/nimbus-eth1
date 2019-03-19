@@ -77,9 +77,12 @@ proc execComputation*(computation: var BaseComputation): bool =
       for deletedAccount in computation.getAccountsForDeletion:
         db.deleteAccount deletedAccount
     result = not computation.isError
+  except VMError:
+    result = false
+    debug "execComputation() VM Error", error = getCurrentExceptionMsg()
   except ValueError:
     result = false
-    debug "execComputation() error", msg = getCurrentExceptionMsg()
+    debug "execComputation() Value Error", msg = getCurrentExceptionMsg()
 
   if result and computation.msg.isCreate:
     let fork = computation.getFork
