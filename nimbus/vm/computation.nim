@@ -162,41 +162,46 @@ proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool
 
   result = true
 
-proc executeOpcodes*(computation: var BaseComputation)
+proc executeOpcodes*(computation: var BaseComputation) {.gcsafe.}
 
-proc applyMessage(fork: Fork, computation: var BaseComputation, opCode: static[Op]) =
+proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =
   var snapshot = computation.snapshot()
   defer: snapshot.dispose()
 
   when opCode in {CallCode, Call, Create}:
-    if not computation.transferBalance(opCode): 
+    if not computation.transferBalance(opCode):
       snapshot.revert()
       return
-  
+
   if computation.gasMeter.gasRemaining < 0:
     snapshot.commit()
     return
 
-  var success = true
   try:
     executeOpcodes(computation)
-    success = not computation.isError
+    result = not computation.isError
   except VMError:
-    success = false
-    debug "applyMessage failed",
+    result = false
+    debug "applyMessage VM Error",
+      msg = getCurrentExceptionMsg(),
+      depth = computation.msg.depth
+  except ValueError:
+    result = false
+    debug "applyMessage Value Error",
       msg = getCurrentExceptionMsg(),
       depth = computation.msg.depth
 
-  if success and computation.msg.isCreate:
+  if result and computation.msg.isCreate:
+    var fork = computation.getFork
     let contractFailed = not computation.writeContract(fork)
-    success = not(contractFailed and fork == FkHomestead)
+    result = not(contractFailed and fork == FkHomestead)
 
-  if success:
+  if result:
     snapshot.commit()
   else:
     snapshot.revert(true)
 
-proc addChildComputation(fork: Fork, computation: var BaseComputation, child: BaseComputation) =
+proc addChildComputation(computation: var BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
       computation.returnData = child.output
@@ -216,9 +221,8 @@ proc addChildComputation(fork: Fork, computation: var BaseComputation, child: Ba
 
 proc applyChildComputation*(parentComp, childComp: var BaseComputation, opCode: static[Op]) =
   ## Apply the vm message childMsg as a child computation.
-  var fork = parentComp.getFork
-  fork.applyMessage(childComp, opCode)
-  fork.addChildComputation(parentComp, childComp)
+  discard childComp.applyMessage(opCode)
+  parentComp.addChildComputation(childComp)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:
