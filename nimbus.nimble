@@ -36,5 +36,5 @@ task test, "Run tests":
   test "test_rpc"
 
 task nimbus, "Build Nimbus":
-  buildBinary "nimbus", "nimbus/"
+  buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
 
