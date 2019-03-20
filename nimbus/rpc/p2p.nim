@@ -35,11 +35,13 @@ template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
 
 proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
   proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): BaseComputation =
+    let recipient = transaction.getRecipient()
     # Note that vmState may be altered
     setupComputation(
         vmState,
         transaction,
-        sender)
+        sender, 
+        recipient)
 
   proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
     Transaction(

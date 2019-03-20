@@ -632,9 +632,7 @@ proc processArguments*(msg: var string): ConfigStatus =
           checkArgument processNetArguments, key, value, msg
           checkArgument processDebugArguments, key, value, msg
     of cmdEnd:
-      msg = "Error processing option [" & key & "]"
-      result = ErrorParseOption
-      break
+      doAssert(false)
 
   if config.net.bootNodes.len == 0:
     # No custom bootnodes were specified on the command line, restore to

@@ -29,20 +29,29 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   if balance < upfrontGasCost:
     return tx.gasLimit
 
+  let recipient = tx.getRecipient()
+  let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
+
+  var computation = setupComputation(vmState, tx, sender, recipient, forkOverride)
+  if computation.isNil:
+    return 0
+
   vmState.mutateStateDB:
     db.incNonce(sender)
     db.subBalance(sender, upfrontGasCost)
 
+  if tx.isContractCreation and isCollision:
+    return tx.gasLimit
+
   var snapshot = vmState.snapshot()
   defer: snapshot.dispose()
 
-  var computation = setupComputation(vmState, tx, sender, forkOverride)
   var contractOK = true
   result = tx.gasLimit
 
   if execComputation(computation):
     if tx.isContractCreation:
-      contractOK = computation.writeContract()
+      contractOK = computation.writeContract(fork)
     result = computation.refundGas(tx, sender)
 
   if not contractOK and fork == FkHomestead:
@@ -51,6 +60,9 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     result = tx.gasLimit
   else:
     snapshot.commit()
+  
+  if computation.isSuicided(vmState.blockHeader.coinbase):
+    return 0
 
 type
   # TODO: these types need to be removed
@@ -100,19 +112,24 @@ proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockB
       vmState.receipts = newSeq[Receipt](body.transactions.len)
       var cumulativeGasUsed = GasInt(0)
       for txIndex, tx in body.transactions:
-        var sender: EthAddress
-        if tx.getSender(sender):
-          let gasUsed = processTransaction(tx, sender, vmState)
-          cumulativeGasUsed += gasUsed
-
-          # miner fee
-          let txFee = gasUsed.u256 * tx.gasPrice.u256
+        if cumulativeGasUsed + tx.gasLimit > header.gasLimit:
           vmState.mutateStateDB:
-            db.addBalance(header.coinbase, txFee)
+            db.addBalance(header.coinbase, 0.u256)
+          # TODO: do we need to break or continue execution?
         else:
-          debug "Could not get sender", txIndex, tx
-          return ValidationResult.Error
-        vmState.receipts[txIndex] = makeReceipt(vmState, cumulativeGasUsed)
+          var sender: EthAddress
+          if tx.getSender(sender):
+            let gasUsed = processTransaction(tx, sender, vmState)
+            cumulativeGasUsed += gasUsed
+
+            # miner fee
+            let txFee = gasUsed.u256 * tx.gasPrice.u256
+            vmState.mutateStateDB:
+              db.addBalance(header.coinbase, txFee)
+          else:
+            debug "Could not get sender", txIndex, tx
+            return ValidationResult.Error
+          vmState.receipts[txIndex] = makeReceipt(vmState, cumulativeGasUsed)
 
   var mainReward = blockReward
   if header.ommersHash != EMPTY_UNCLE_HASH:

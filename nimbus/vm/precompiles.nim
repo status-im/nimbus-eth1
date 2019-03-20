@@ -27,8 +27,12 @@ proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
       # Copy message data to buffer
       # Note that we need to rearrange to R, S, V
       bytes[0..63] = data[64..127]
-      let v = data[63]  # TODO: Endian
-      if v.int notin 27..28:
+      var VOK = true
+      let v = data[63]
+      for x in 32..<63:
+        if data[x] != 0: VOK = false
+      VOK = VOK and v.int in 27..28
+      if not VOK:
         raise newException(ValidationError, "Invalid V in getSignature")
       bytes[64] = v - 27
 

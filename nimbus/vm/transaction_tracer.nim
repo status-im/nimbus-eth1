@@ -115,14 +115,14 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op
   trace "Op", json = j.pretty()
 
 proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
-  let j = tracer.trace["structLogs"].elems[^1]
+  if tracer.trace["structLogs"].elems.len > 0:
+    let j = tracer.trace["structLogs"].elems[^1]
+    j["error"] = %(c.error.info)
+    trace "Error", json = j.pretty()
 
   # TODO: figure out how to get gasCost
   # when contract execution failed before traceOpCodeEnded called
   # because exception raised
   #j["gasCost"] = %
 
-  j["error"] = %(c.error.info)
   tracer.trace["failed"] = %true
-
-  trace "Error", json = j.pretty()

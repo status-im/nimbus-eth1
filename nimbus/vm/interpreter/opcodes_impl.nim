@@ -220,18 +220,18 @@ proc writePaddedResult(mem: var Memory,
                        data: openarray[byte],
                        memPos, dataPos, len: Natural,
                        paddingValue = 0.byte) =
-  let prevLen = mem.len
+
   mem.extend(memPos, len)
   let dataEndPosition = dataPos.int64 + len - 1
   let sourceBytes = data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
   mem.write(memPos, sourceBytes)
 
-  # geth doesn't do padding, it causes block validation error
-  when false:
-    # Don't duplicate zero-padding of mem.extend
-    let paddingOffset = memPos + sourceBytes.len
+  # Don't duplicate zero-padding of mem.extend
+  let paddingOffset = min(memPos + sourceBytes.len, mem.len)
+  let numPaddingBytes = min(mem.len - paddingOffset, len - sourceBytes.len)
+  if numPaddingBytes > 0:
     # TODO: avoid unnecessary memory allocation
-    mem.write(paddingOffset, repeat(paddingValue, max(prevLen - paddingOffset, 0)))
+    mem.write(paddingOffset, repeat(paddingValue, numPaddingBytes))
 
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
@@ -257,7 +257,6 @@ op callValue, inline = true:
 
 op callDataLoad, inline = false, startPos:
   ## 0x35, Get input data of current environment
-  # TODO simplification: https://github.com/status-im/nimbus/issues/67
   let dataPos = startPos.cleanMemRef
   if dataPos >= computation.msg.data.len:
     push: 0
@@ -295,11 +294,11 @@ op callDataCopy, inline = false, memStartPos, copyStartPos, size:
 
   computation.memory.writePaddedResult(computation.msg.data, memPos, copyPos, len)
 
-op codesize, inline = true:
+op codeSize, inline = true:
   ## 0x38, Get size of code running in current environment.
   push: computation.code.len
 
-op codecopy, inline = false, memStartPos, copyStartPos, size:
+op codeCopy, inline = false, memStartPos, copyStartPos, size:
   ## 0x39, Copy code running in current environment to memory.
   # TODO tests: https://github.com/status-im/nimbus/issues/67
 
@@ -343,8 +342,8 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
   let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
   computation.gasMeter.consumeGas(
-    computation.gasCosts[CodeCopy].m_handler(memPos, copyPos, len),
-    reason="ExtCodeCopy fee")
+    computation.gasCosts[ReturnDataCopy].m_handler(memPos, copyPos, len),
+    reason="returnDataCopy fee")
 
   if copyPos + len > computation.returnData.len:
     # TODO Geth additionally checks copyPos + len < 64
@@ -506,17 +505,17 @@ genLog()
 # ##########################################
 # f0s: System operations.
 
-op create, inline = false, value, startPosition, size:
-  ## 0xf0, Create a new account with associated code.
-  # TODO: Forked create for Homestead
-
-  let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
-  # tricky gasCost: 1,0,0 -> createCost. 0,0,x -> depositCost
-  let gasCost = computation.gasCosts[Create].m_handler(1, 0, 0)
-  let reason = &"CREATE: GasCreate + {len} * memory expansion"
+proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint256): bool =
+  let gasParams = GasParams(kind: Create,
+    cr_currentMemSize: computation.memory.len,
+    cr_memOffset: memPos,
+    cr_memLength: memLen
+    )
+  let gasCost = computation.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
+  let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
 
   computation.gasMeter.consumeGas(gasCost, reason = reason)
-  computation.memory.extend(memPos, len)
+  computation.memory.extend(memPos, memLen)
 
   # the sender is childmsg sender, not parent msg sender
   # perhaps we need to move this code somewhere else
@@ -527,30 +526,15 @@ op create, inline = false, value, startPosition, size:
 
   if senderBalance < value:
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance
-    push: 0
-    return
+    return false
 
   if computation.msg.depth >= MaxCallDepth:
     debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = computation.msg.depth
-    push: 0
-    return
+    return false
 
-  ##### getBalance type error: expression 'db' is of type: proc (vmState: untyped, readOnly: untyped, handler: untyped): untyped{.noSideEffect, gcsafe, locks: <unknown>.}
-  # computation.vmState.db(readOnly=true):
-  #   when ForkName >= FkHomestead: # TODO this is done in Geth but not Parity and Py-EVM
-  #     let insufficientFunds = db.getBalance(computation.msg.storageAddress) < value # TODO check gas balance rollover
-  #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
+  result = true
 
-  #     # TODO: error message
-  #     if insufficientFunds or stackTooDeep:
-  #       push: 0
-  #       return
-  #   else:
-  #     let stackTooDeep = computation.msg.depth >= MaxCallDepth
-  #     if stackTooDeep:
-  #       push: 0
-  #       return
-
+proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint256): BaseComputation =
   let
     callData = computation.memory.read(memPos, len)
     createMsgGas = computation.getGasRemaining()
@@ -575,7 +559,7 @@ op create, inline = false, value, startPosition, size:
   if isCollision:
     debug "Address collision while creating contract", address = contractAddress.toHex
     push: 0
-    raise newException(ValidationError, "Contract creation failed, address already in use")
+    return
 
   let childMsg = prepareChildMessage(
     computation,
@@ -588,15 +572,29 @@ op create, inline = false, value, startPosition, size:
     )
 
   childMsg.sender = computation.msg.storageAddress
-  let childComputation = computation.applyChildComputation(childMsg, Create)
+  result = generateChildComputation(computation.getFork, computation, childMsg)
 
-  if childComputation.isError:
+op create, inline = false, value, startPosition, size:
+  ## 0xf0, Create a new account with associated code.
+  # TODO: Forked create for Homestead
+
+  let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
+  if not computation.canTransfer(memPos, len, value):
+    push: 0
+    return
+
+  var childComp = setupCreate(computation, memPos, len, value)
+  if childComp.isNil: return
+
+  computation.applyChildComputation(childComp, Create)
+
+  if childComp.isError:
     push: 0
   else:
-    push: contractAddress
+    push: childComp.msg.storageAddress
 
-  if not childComputation.shouldBurnGas:
-    computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
+  if not childComp.shouldBurnGas:
+    computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
 
 proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
@@ -631,7 +629,7 @@ proc callCodeParams(computation: var BaseComputation): (UInt256, UInt256, EthAdd
   result = (gas,
     value,
     to,
-    ZERO_ADDRESS,  # sender
+    computation.msg.storageAddress,  # sender
     to,  # code_address
     memoryInputStartPosition,
     memoryInputSize,
@@ -647,7 +645,7 @@ proc delegateCallParams(computation: var BaseComputation): (UInt256, UInt256, Et
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
 
   let to = computation.msg.storageAddress
-  let sender = computation.msg.storageAddress
+  let sender = computation.msg.sender
   let value = computation.msg.value
 
   result = (gas,
@@ -680,11 +678,7 @@ proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthA
     emvcStatic) # is_static
 
 template genCall(callName: untyped, opCode: Op): untyped =
-  op callName, inline = false:
-    ## CALL, 0xf1, Message-Call into an account
-    ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
-    ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
-    ## STATICCALL, 0xfa, Static message-call into an account.
+  proc `callName Setup`(computation: var BaseComputation, callNameStr: string): (BaseComputation, int, int) =
     let (gas, value, to, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
@@ -704,37 +698,31 @@ template genCall(callName: untyped, opCode: Op): untyped =
                                     (memOutPos, memOutLen)
 
     if gas > high(GasInt).u256:
-      raise newException(TypeError, "GasInt Overflow (" & callName.astToStr & ")")
+      raise newException(TypeError, "GasInt Overflow (" & callNameStr & ")")
 
     let (childGasFee, childGasLimit) = computation.gasCosts[opCode].c_handler(
       value,
-      GasParams(kind: Call,
+      GasParams(kind: opCode,
                 c_isNewAccount: isNewAccount,
                 c_gasBalance: computation.gasMeter.gasRemaining,
                 c_contractGas: gas.truncate(GasInt),
                 c_currentMemSize: computation.memory.len,
                 c_memOffset: memOffset,
-                c_memLength: memLength,
-                c_opCode: opCode
+                c_memLength: memLength
       ))
 
-    trace "Call (" & callName.astToStr & ")", childGasLimit, childGasFee
     if childGasFee >= 0:
       computation.gasMeter.consumeGas(childGasFee, reason = $opCode)
 
     if childGasFee < 0 and childGasLimit <= 0:
-      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callName.astToStr & ")")
+      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callNameStr & ")")
 
     computation.memory.extend(memInPos, memInLen)
     computation.memory.extend(memOutPos, memOutLen)
 
     let
       callData = computation.memory.read(memInPos, memInLen)
-      code =
-        if codeAddress != ZERO_ADDRESS:
-          computation.vmState.readOnlyStateDb.getCode(codeAddress)
-        else:
-          computation.vmState.readOnlyStateDb.getCode(to)
+      code = computation.vmState.readOnlyStateDb.getCode(codeAddress)
 
     var childMsg = prepareChildMessage(
       computation,
@@ -746,28 +734,35 @@ template genCall(callName: untyped, opCode: Op): untyped =
       MessageOptions(flags: flags)
     )
 
-    if sender != ZERO_ADDRESS:
-      childMsg.sender = sender
-    else:
-      childMsg.sender = computation.msg.storageAddress
+    childMsg.sender = sender
 
     when opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
 
-    var childComputation = applyChildComputation(computation, childMsg, opCode)
+    var childComp = generateChildComputation(computation.getFork, computation, childMsg)
+    result = (childComp, memOutPos, memOutLen)
 
-    if childComputation.isError:
+  op callName, inline = false:
+    ## CALL, 0xf1, Message-Call into an account
+    ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
+    ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
+    ## STATICCALL, 0xfa, Static message-call into an account.
+    var (childComp, memOutPos, memOutLen) = `callName Setup`(computation, callName.astToStr)
+
+    applyChildComputation(computation, childComp, opCode)
+
+    if childComp.isError:
       push: 0
     else:
       push: 1
 
-    if not childComputation.shouldEraseReturnData:
-      let actualOutputSize = min(memOutLen, childComputation.output.len)
+    if not childComp.shouldEraseReturnData:
+      let actualOutputSize = min(memOutLen, childComp.output.len)
       computation.memory.write(
         memOutPos,
-        childComputation.output.toOpenArray(0, actualOutputSize - 1))
-      if not childComputation.shouldBurnGas:
-        computation.gasMeter.returnGas(childComputation.gasMeter.gasRemaining)
+        childComp.output.toOpenArray(0, actualOutputSize - 1))
+      if not childComp.shouldBurnGas:
+        computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
 
     if computation.gasMeter.gasRemaining <= 0:
       raise newException(OutOfGas, "computation out of gas after contract call (" & callName.astToStr & ")")
