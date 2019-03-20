@@ -7,7 +7,7 @@
 
 import
   chronicles, strformat, strutils, sequtils, macros, terminal, math, tables, options,
-  eth/[common, keys],
+  eth/[common, keys], eth/trie/db as triedb,
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
@@ -93,24 +93,23 @@ proc prepareChildMessage*(
     code,
     childOptions)
 
-type
-  ComputationSnapshot* = object
-    snapshot: Snapshot
-    computation: BaseComputation
+proc snapshot*(comp: BaseComputation) =
+  comp.dbsnapshot.transaction = comp.vmState.chaindb.db.beginTransaction()
+  comp.dbsnapshot.intermediateRoot = comp.vmState.accountDb.rootHash
+  comp.vmState.blockHeader.stateRoot = comp.vmState.accountDb.rootHash
 
-proc snapshot*(computation: BaseComputation): ComputationSnapshot =
-  result.snapshot = computation.vmState.snapshot()
-  result.computation = computation
+proc revert*(comp: BaseComputation, burnsGas = false) =
+  comp.dbsnapshot.transaction.rollback()
+  comp.vmState.accountDb.rootHash = comp.dbsnapshot.intermediateRoot
+  comp.vmState.blockHeader.stateRoot = comp.dbsnapshot.intermediateRoot
+  comp.error = Error(info: getCurrentExceptionMsg(), burnsGas: burnsGas)
 
-proc revert*(snapshot: var ComputationSnapshot, burnsGas: bool = false) =
-  snapshot.snapshot.revert()
-  snapshot.computation.error = Error(info: getCurrentExceptionMsg(), burnsGas: burnsGas)
+proc commit*(comp: BaseComputation) =
+  comp.dbsnapshot.transaction.commit()
+  comp.vmState.accountDb.rootHash = comp.vmState.blockHeader.stateRoot
 
-proc commit*(snapshot: var ComputationSnapshot) {.inline.} =
-  snapshot.snapshot.commit()
-
-proc dispose*(snapshot: var ComputationSnapshot) {.inline.} =
-  snapshot.snapshot.dispose()
+proc dispose*(comp: BaseComputation) {.inline.} =
+  comp.dbsnapshot.transaction.dispose()
 
 proc getFork*(computation: BaseComputation): Fork =
   result =
@@ -165,16 +164,16 @@ proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool
 proc executeOpcodes*(computation: var BaseComputation) {.gcsafe.}
 
 proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =
-  var snapshot = computation.snapshot()
-  defer: snapshot.dispose()
+  computation.snapshot()
+  defer: computation.dispose()
 
   when opCode in {CallCode, Call, Create}:
     if not computation.transferBalance(opCode):
-      snapshot.revert()
+      computation.revert()
       return
 
   if computation.gasMeter.gasRemaining < 0:
-    snapshot.commit()
+    computation.commit()
     return
 
   try:
@@ -197,9 +196,9 @@ proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =
     result = not(contractFailed and fork == FkHomestead)
 
   if result:
-    snapshot.commit()
+    computation.commit()
   else:
-    snapshot.revert(true)
+    computation.revert(true)
 
 proc addChildComputation(computation: var BaseComputation, child: BaseComputation) =
   if child.isError:
