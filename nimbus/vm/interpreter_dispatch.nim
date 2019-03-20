@@ -172,12 +172,17 @@ let FrontierOpDispatch {.compileTime.}: array[Op, NimNode] = block:
       Call: newIdentNode "call",
       CallCode: newIdentNode "callCode",
       Return: newIdentNode "returnOp",
-      DelegateCall: newIdentNode "delegateCall",
       # StaticCall: introduced in Byzantium
       # Revert: introduced in Byzantium
       # Invalid: newIdentNode "invalid",
       SelfDestruct: newIdentNode "selfDestruct"
     ]
+
+proc genHomesteadJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  result[DelegateCall] = newIdentNode "delegateCall"
+
+let HomesteadOpDispatch {.compileTime.}: array[Op, NimNode] = genHomesteadJumpTable(FrontierOpDispatch)
 
 proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNode =
 
@@ -240,21 +245,27 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
 macro genFrontierDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(FrontierOpDispatch, computation)
 
+macro genHomesteadDispatch(computation: BaseComputation): untyped =
+  result = opTableToCaseStmt(HomesteadOpDispatch, computation)
+
 proc frontierVM(computation: var BaseComputation) =
   if not computation.execPrecompiles:
     genFrontierDispatch(computation)
 
+proc homesteadVM(computation: var BaseComputation) =
+  if not computation.execPrecompiles:
+    genHomesteadDispatch(computation)
+
 proc updateOpcodeExec*(computation: var BaseComputation, fork: Fork) =
   case fork
-  of FkFrontier..FkSpurious:
+  of FkFrontier..FkThawing:
     computation.opCodeExec = frontierVM
     computation.frontierVM()
+  of FkHomestead..FkSpurious:
+    computation.opCodeExec = homesteadVM
+    computation.homesteadVM()
   else:
     raise newException(VMError, "Unknown or not implemented fork: " & $fork)
-
-proc updateOpcodeExec*(computation: var BaseComputation) =
-  let fork = computation.getFork
-  computation.updateOpcodeExec(fork)
 
 proc executeOpcodes*(computation: var BaseComputation) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary

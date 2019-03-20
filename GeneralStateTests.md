@@ -73,251 +73,251 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 + call_OOG_additionalGasCosts1.json                               OK
 + call_OOG_additionalGasCosts2.json                               OK
 + callcall_00.json                                                OK
-  callcall_00_OOGE.json                                           Skip
-  callcall_00_OOGE_valueTransfer.json                             Skip
-  callcall_00_SuicideEnd.json                                     Skip
-  callcallcall_000.json                                           Skip
-  callcallcall_000_OOGE.json                                      Skip
-  callcallcall_000_OOGMAfter.json                                 Skip
-  callcallcall_000_OOGMBefore.json                                Skip
-  callcallcall_000_SuicideEnd.json                                Skip
-  callcallcall_000_SuicideMiddle.json                             Skip
-  callcallcall_ABCB_RECURSIVE.json                                Skip
-  callcallcallcode_001.json                                       Skip
-  callcallcallcode_001_OOGE.json                                  Skip
-  callcallcallcode_001_OOGMAfter.json                             Skip
-  callcallcallcode_001_OOGMBefore.json                            Skip
-  callcallcallcode_001_SuicideEnd.json                            Skip
-  callcallcallcode_001_SuicideMiddle.json                         Skip
-  callcallcallcode_ABCB_RECURSIVE.json                            Skip
-  callcallcode_01.json                                            Skip
-  callcallcode_01_OOGE.json                                       Skip
-  callcallcode_01_SuicideEnd.json                                 Skip
-  callcallcodecall_010.json                                       Skip
-  callcallcodecall_010_OOGE.json                                  Skip
-  callcallcodecall_010_OOGMAfter.json                             Skip
-  callcallcodecall_010_OOGMBefore.json                            Skip
-  callcallcodecall_010_SuicideEnd.json                            Skip
-  callcallcodecall_010_SuicideMiddle.json                         Skip
-  callcallcodecall_ABCB_RECURSIVE.json                            Skip
-  callcallcodecallcode_011.json                                   Skip
-  callcallcodecallcode_011_OOGE.json                              Skip
-  callcallcodecallcode_011_OOGMAfter.json                         Skip
-  callcallcodecallcode_011_OOGMBefore.json                        Skip
-  callcallcodecallcode_011_SuicideEnd.json                        Skip
-  callcallcodecallcode_011_SuicideMiddle.json                     Skip
-  callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
-  callcodeDynamicCode.json                                        Skip
-  callcodeDynamicCode2SelfCall.json                               Skip
-  callcodeEmptycontract.json                                      Skip
-  callcodeInInitcodeToEmptyContract.json                          Skip
-  callcodeInInitcodeToExisContractWithVTransferNEMoney.json       Skip
-  callcodeInInitcodeToExistingContract.json                       Skip
-  callcodeInInitcodeToExistingContractWithValueTransfer.json      Skip
-+ callcode_checkPC.json                                           OK
-  callcodecall_10.json                                            Skip
-  callcodecall_10_OOGE.json                                       Skip
-  callcodecall_10_SuicideEnd.json                                 Skip
-  callcodecallcall_100.json                                       Skip
-  callcodecallcall_100_OOGE.json                                  Skip
-  callcodecallcall_100_OOGMAfter.json                             Skip
-  callcodecallcall_100_OOGMBefore.json                            Skip
-  callcodecallcall_100_SuicideEnd.json                            Skip
-  callcodecallcall_100_SuicideMiddle.json                         Skip
-  callcodecallcall_ABCB_RECURSIVE.json                            Skip
-  callcodecallcallcode_101.json                                   Skip
-  callcodecallcallcode_101_OOGE.json                              Skip
-  callcodecallcallcode_101_OOGMAfter.json                         Skip
-  callcodecallcallcode_101_OOGMBefore.json                        Skip
-  callcodecallcallcode_101_SuicideEnd.json                        Skip
-  callcodecallcallcode_101_SuicideMiddle.json                     Skip
-  callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
-  callcodecallcode_11.json                                        Skip
-+ callcodecallcode_11_OOGE.json                                   OK
-  callcodecallcode_11_SuicideEnd.json                             Skip
-  callcodecallcodecall_110.json                                   Skip
-  callcodecallcodecall_110_OOGE.json                              Skip
-  callcodecallcodecall_110_OOGMAfter.json                         Skip
-  callcodecallcodecall_110_OOGMBefore.json                        Skip
-  callcodecallcodecall_110_SuicideEnd.json                        Skip
-  callcodecallcodecall_110_SuicideMiddle.json                     Skip
-  callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
-  callcodecallcodecallcode_111.json                               Skip
-  callcodecallcodecallcode_111_OOGE.json                          Skip
-  callcodecallcodecallcode_111_OOGMAfter.json                     Skip
-  callcodecallcodecallcode_111_OOGMBefore.json                    Skip
-  callcodecallcodecallcode_111_SuicideEnd.json                    Skip
-  callcodecallcodecallcode_111_SuicideMiddle.json                 Skip
-  callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
-```
-OK: 5/79 Fail: 0/79 Skip: 74/79
-## stCallCreateCallCodeTest
-```diff
-  Call1024BalanceTooLow.json                                      Skip
-  Call1024OOG.json                                                Skip
-  Call1024PreCalls.json                                           Skip
-  CallLoseGasOOG.json                                             Skip
-  CallRecursiveBombPreCall.json                                   Skip
-  Callcode1024BalanceTooLow.json                                  Skip
-  Callcode1024OOG.json                                            Skip
-  CallcodeLoseGasOOG.json                                         Skip
-  callOutput1.json                                                Skip
-  callOutput2.json                                                Skip
-  callOutput3.json                                                Skip
-  callOutput3Fail.json                                            Skip
-  callOutput3partial.json                                         Skip
-  callOutput3partialFail.json                                     Skip
-  callWithHighValue.json                                          Skip
-  callWithHighValueAndGasOOG.json                                 Skip
-  callWithHighValueAndOOGatTxLevel.json                           Skip
-  callWithHighValueOOGinCall.json                                 Skip
-  callcodeOutput1.json                                            Skip
-  callcodeOutput2.json                                            Skip
-  callcodeOutput3.json                                            Skip
-  callcodeOutput3Fail.json                                        Skip
-  callcodeOutput3partial.json                                     Skip
-  callcodeOutput3partialFail.json                                 Skip
-  callcodeWithHighValue.json                                      Skip
-  callcodeWithHighValueAndGasOOG.json                             Skip
-  createFailBalanceTooLow.json                                    Skip
-  createInitFailBadJumpDestination.json                           Skip
-  createInitFailStackSizeLargerThan1024.json                      Skip
-  createInitFailStackUnderflow.json                               Skip
-  createInitFailUndefinedInstruction.json                         Skip
-  createInitFail_OOGduringInit.json                               Skip
-  createInitOOGforCREATE.json                                     Skip
-  createJS_ExampleContract.json                                   Skip
-  createJS_NoCollision.json                                       Skip
-  createNameRegistratorPerTxs.json                                Skip
-  createNameRegistratorPerTxsNotEnoughGas.json                    Skip
-  createNameRegistratorPreStore1NotEnoughGas.json                 Skip
-  createNameRegistratorendowmentTooHigh.json                      Skip
-```
-OK: 0/39 Fail: 0/39 Skip: 39/39
-## stCallDelegateCodesCallCodeHomestead
-```diff
-  callcallcallcode_001.json                                       Skip
-+ callcallcallcode_001_OOGE.json                                  OK
-+ callcallcallcode_001_OOGMAfter.json                             OK
-  callcallcallcode_001_OOGMBefore.json                            Skip
-  callcallcallcode_001_SuicideEnd.json                            Skip
-  callcallcallcode_001_SuicideMiddle.json                         Skip
-+ callcallcallcode_ABCB_RECURSIVE.json                            OK
-  callcallcode_01.json                                            Skip
-  callcallcode_01_OOGE.json                                       Skip
-  callcallcode_01_SuicideEnd.json                                 Skip
-  callcallcodecall_010.json                                       Skip
-  callcallcodecall_010_OOGE.json                                  Skip
-+ callcallcodecall_010_OOGMAfter.json                             OK
-  callcallcodecall_010_OOGMBefore.json                            Skip
-  callcallcodecall_010_SuicideEnd.json                            Skip
-  callcallcodecall_010_SuicideMiddle.json                         Skip
-+ callcallcodecall_ABCB_RECURSIVE.json                            OK
-  callcallcodecallcode_011.json                                   Skip
-  callcallcodecallcode_011_OOGE.json                              Skip
-  callcallcodecallcode_011_OOGMAfter.json                         Skip
-  callcallcodecallcode_011_OOGMBefore.json                        Skip
-  callcallcodecallcode_011_SuicideEnd.json                        Skip
-  callcallcodecallcode_011_SuicideMiddle.json                     Skip
-+ callcallcodecallcode_ABCB_RECURSIVE.json                        OK
-  callcodecall_10.json                                            Skip
-  callcodecall_10_OOGE.json                                       Skip
-  callcodecall_10_SuicideEnd.json                                 Skip
-  callcodecallcall_100.json                                       Skip
-  callcodecallcall_100_OOGE.json                                  Skip
-+ callcodecallcall_100_OOGMAfter.json                             OK
-  callcodecallcall_100_OOGMBefore.json                            Skip
-  callcodecallcall_100_SuicideEnd.json                            Skip
-  callcodecallcall_100_SuicideMiddle.json                         Skip
-+ callcodecallcall_ABCB_RECURSIVE.json                            OK
-  callcodecallcallcode_101.json                                   Skip
-  callcodecallcallcode_101_OOGE.json                              Skip
-+ callcodecallcallcode_101_OOGMAfter.json                         OK
-  callcodecallcallcode_101_OOGMBefore.json                        Skip
-  callcodecallcallcode_101_SuicideEnd.json                        Skip
-  callcodecallcallcode_101_SuicideMiddle.json                     Skip
-+ callcodecallcallcode_ABCB_RECURSIVE.json                        OK
-  callcodecallcode_11.json                                        Skip
-  callcodecallcode_11_OOGE.json                                   Skip
-  callcodecallcode_11_SuicideEnd.json                             Skip
-  callcodecallcodecall_110.json                                   Skip
-  callcodecallcodecall_110_OOGE.json                              Skip
-+ callcodecallcodecall_110_OOGMAfter.json                         OK
-  callcodecallcodecall_110_OOGMBefore.json                        Skip
-  callcodecallcodecall_110_SuicideEnd.json                        Skip
-  callcodecallcodecall_110_SuicideMiddle.json                     Skip
-+ callcodecallcodecall_ABCB_RECURSIVE.json                        OK
-  callcodecallcodecallcode_111.json                               Skip
-  callcodecallcodecallcode_111_OOGE.json                          Skip
-+ callcodecallcodecallcode_111_OOGMAfter.json                     OK
-  callcodecallcodecallcode_111_OOGMBefore.json                    Skip
-  callcodecallcodecallcode_111_SuicideEnd.json                    Skip
-  callcodecallcodecallcode_111_SuicideMiddle.json                 Skip
-+ callcodecallcodecallcode_ABCB_RECURSIVE.json                    OK
-```
-OK: 14/58 Fail: 0/58 Skip: 44/58
-## stCallDelegateCodesHomestead
-```diff
-  callcallcallcode_001.json                                       Skip
++ callcall_00_OOGE.json                                           OK
++ callcall_00_OOGE_valueTransfer.json                             OK
++ callcall_00_SuicideEnd.json                                     OK
++ callcallcall_000.json                                           OK
++ callcallcall_000_OOGE.json                                      OK
++ callcallcall_000_OOGMAfter.json                                 OK
++ callcallcall_000_OOGMBefore.json                                OK
++ callcallcall_000_SuicideEnd.json                                OK
++ callcallcall_000_SuicideMiddle.json                             OK
++ callcallcall_ABCB_RECURSIVE.json                                OK
++ callcallcallcode_001.json                                       OK
 + callcallcallcode_001_OOGE.json                                  OK
 + callcallcallcode_001_OOGMAfter.json                             OK
 + callcallcallcode_001_OOGMBefore.json                            OK
 + callcallcallcode_001_SuicideEnd.json                            OK
 + callcallcallcode_001_SuicideMiddle.json                         OK
-+ callcallcallcode_ABCB_RECURSIVE.json                            OK
-  callcallcode_01.json                                            Skip
+  callcallcallcode_ABCB_RECURSIVE.json                            Skip
++ callcallcode_01.json                                            OK
 + callcallcode_01_OOGE.json                                       OK
 + callcallcode_01_SuicideEnd.json                                 OK
-  callcallcodecall_010.json                                       Skip
++ callcallcodecall_010.json                                       OK
 + callcallcodecall_010_OOGE.json                                  OK
 + callcallcodecall_010_OOGMAfter.json                             OK
 + callcallcodecall_010_OOGMBefore.json                            OK
 + callcallcodecall_010_SuicideEnd.json                            OK
 + callcallcodecall_010_SuicideMiddle.json                         OK
-+ callcallcodecall_ABCB_RECURSIVE.json                            OK
-  callcallcodecallcode_011.json                                   Skip
+  callcallcodecall_ABCB_RECURSIVE.json                            Skip
++ callcallcodecallcode_011.json                                   OK
 + callcallcodecallcode_011_OOGE.json                              OK
 + callcallcodecallcode_011_OOGMAfter.json                         OK
 + callcallcodecallcode_011_OOGMBefore.json                        OK
 + callcallcodecallcode_011_SuicideEnd.json                        OK
 + callcallcodecallcode_011_SuicideMiddle.json                     OK
-+ callcallcodecallcode_ABCB_RECURSIVE.json                        OK
+  callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
++ callcodeDynamicCode.json                                        OK
++ callcodeDynamicCode2SelfCall.json                               OK
++ callcodeEmptycontract.json                                      OK
++ callcodeInInitcodeToEmptyContract.json                          OK
++ callcodeInInitcodeToExisContractWithVTransferNEMoney.json       OK
++ callcodeInInitcodeToExistingContract.json                       OK
++ callcodeInInitcodeToExistingContractWithValueTransfer.json      OK
++ callcode_checkPC.json                                           OK
 + callcodecall_10.json                                            OK
 + callcodecall_10_OOGE.json                                       OK
 + callcodecall_10_SuicideEnd.json                                 OK
-  callcodecallcall_100.json                                       Skip
++ callcodecallcall_100.json                                       OK
 + callcodecallcall_100_OOGE.json                                  OK
 + callcodecallcall_100_OOGMAfter.json                             OK
 + callcodecallcall_100_OOGMBefore.json                            OK
 + callcodecallcall_100_SuicideEnd.json                            OK
 + callcodecallcall_100_SuicideMiddle.json                         OK
-+ callcodecallcall_ABCB_RECURSIVE.json                            OK
-  callcodecallcallcode_101.json                                   Skip
+  callcodecallcall_ABCB_RECURSIVE.json                            Skip
++ callcodecallcallcode_101.json                                   OK
 + callcodecallcallcode_101_OOGE.json                              OK
 + callcodecallcallcode_101_OOGMAfter.json                         OK
 + callcodecallcallcode_101_OOGMBefore.json                        OK
 + callcodecallcallcode_101_SuicideEnd.json                        OK
 + callcodecallcallcode_101_SuicideMiddle.json                     OK
-+ callcodecallcallcode_ABCB_RECURSIVE.json                        OK
-  callcodecallcode_11.json                                        Skip
+  callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
++ callcodecallcode_11.json                                        OK
 + callcodecallcode_11_OOGE.json                                   OK
 + callcodecallcode_11_SuicideEnd.json                             OK
-  callcodecallcodecall_110.json                                   Skip
++ callcodecallcodecall_110.json                                   OK
 + callcodecallcodecall_110_OOGE.json                              OK
 + callcodecallcodecall_110_OOGMAfter.json                         OK
 + callcodecallcodecall_110_OOGMBefore.json                        OK
 + callcodecallcodecall_110_SuicideEnd.json                        OK
 + callcodecallcodecall_110_SuicideMiddle.json                     OK
-+ callcodecallcodecall_ABCB_RECURSIVE.json                        OK
-  callcodecallcodecallcode_111.json                               Skip
+  callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
++ callcodecallcodecallcode_111.json                               OK
 + callcodecallcodecallcode_111_OOGE.json                          OK
 + callcodecallcodecallcode_111_OOGMAfter.json                     OK
 + callcodecallcodecallcode_111_OOGMBefore.json                    OK
 + callcodecallcodecallcode_111_SuicideEnd.json                    OK
 + callcodecallcodecallcode_111_SuicideMiddle.json                 OK
-+ callcodecallcodecallcode_ABCB_RECURSIVE.json                    OK
+  callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 49/58 Fail: 0/58 Skip: 9/58
+OK: 72/79 Fail: 0/79 Skip: 7/79
+## stCallCreateCallCodeTest
+```diff
+  Call1024BalanceTooLow.json                                      Skip
+  Call1024OOG.json                                                Skip
+  Call1024PreCalls.json                                           Skip
++ CallLoseGasOOG.json                                             OK
+  CallRecursiveBombPreCall.json                                   Skip
++ Callcode1024BalanceTooLow.json                                  OK
+  Callcode1024OOG.json                                            Skip
++ CallcodeLoseGasOOG.json                                         OK
++ callOutput1.json                                                OK
++ callOutput2.json                                                OK
++ callOutput3.json                                                OK
++ callOutput3Fail.json                                            OK
++ callOutput3partial.json                                         OK
++ callOutput3partialFail.json                                     OK
++ callWithHighValue.json                                          OK
++ callWithHighValueAndGasOOG.json                                 OK
++ callWithHighValueAndOOGatTxLevel.json                           OK
++ callWithHighValueOOGinCall.json                                 OK
++ callcodeOutput1.json                                            OK
++ callcodeOutput2.json                                            OK
++ callcodeOutput3.json                                            OK
++ callcodeOutput3Fail.json                                        OK
++ callcodeOutput3partial.json                                     OK
++ callcodeOutput3partialFail.json                                 OK
++ callcodeWithHighValue.json                                      OK
++ callcodeWithHighValueAndGasOOG.json                             OK
++ createFailBalanceTooLow.json                                    OK
++ createInitFailBadJumpDestination.json                           OK
++ createInitFailStackSizeLargerThan1024.json                      OK
++ createInitFailStackUnderflow.json                               OK
++ createInitFailUndefinedInstruction.json                         OK
++ createInitFail_OOGduringInit.json                               OK
++ createInitOOGforCREATE.json                                     OK
++ createJS_ExampleContract.json                                   OK
++ createJS_NoCollision.json                                       OK
++ createNameRegistratorPerTxs.json                                OK
++ createNameRegistratorPerTxsNotEnoughGas.json                    OK
++ createNameRegistratorPreStore1NotEnoughGas.json                 OK
++ createNameRegistratorendowmentTooHigh.json                      OK
+```
+OK: 34/39 Fail: 0/39 Skip: 5/39
+## stCallDelegateCodesCallCodeHomestead
+```diff
++ callcallcallcode_001.json                                       OK
++ callcallcallcode_001_OOGE.json                                  OK
++ callcallcallcode_001_OOGMAfter.json                             OK
++ callcallcallcode_001_OOGMBefore.json                            OK
++ callcallcallcode_001_SuicideEnd.json                            OK
++ callcallcallcode_001_SuicideMiddle.json                         OK
+  callcallcallcode_ABCB_RECURSIVE.json                            Skip
++ callcallcode_01.json                                            OK
++ callcallcode_01_OOGE.json                                       OK
++ callcallcode_01_SuicideEnd.json                                 OK
++ callcallcodecall_010.json                                       OK
++ callcallcodecall_010_OOGE.json                                  OK
++ callcallcodecall_010_OOGMAfter.json                             OK
++ callcallcodecall_010_OOGMBefore.json                            OK
++ callcallcodecall_010_SuicideEnd.json                            OK
++ callcallcodecall_010_SuicideMiddle.json                         OK
+  callcallcodecall_ABCB_RECURSIVE.json                            Skip
++ callcallcodecallcode_011.json                                   OK
++ callcallcodecallcode_011_OOGE.json                              OK
++ callcallcodecallcode_011_OOGMAfter.json                         OK
++ callcallcodecallcode_011_OOGMBefore.json                        OK
++ callcallcodecallcode_011_SuicideEnd.json                        OK
++ callcallcodecallcode_011_SuicideMiddle.json                     OK
+  callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
++ callcodecall_10.json                                            OK
++ callcodecall_10_OOGE.json                                       OK
++ callcodecall_10_SuicideEnd.json                                 OK
++ callcodecallcall_100.json                                       OK
++ callcodecallcall_100_OOGE.json                                  OK
++ callcodecallcall_100_OOGMAfter.json                             OK
++ callcodecallcall_100_OOGMBefore.json                            OK
++ callcodecallcall_100_SuicideEnd.json                            OK
++ callcodecallcall_100_SuicideMiddle.json                         OK
+  callcodecallcall_ABCB_RECURSIVE.json                            Skip
++ callcodecallcallcode_101.json                                   OK
++ callcodecallcallcode_101_OOGE.json                              OK
++ callcodecallcallcode_101_OOGMAfter.json                         OK
++ callcodecallcallcode_101_OOGMBefore.json                        OK
++ callcodecallcallcode_101_SuicideEnd.json                        OK
++ callcodecallcallcode_101_SuicideMiddle.json                     OK
+  callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
++ callcodecallcode_11.json                                        OK
++ callcodecallcode_11_OOGE.json                                   OK
++ callcodecallcode_11_SuicideEnd.json                             OK
++ callcodecallcodecall_110.json                                   OK
++ callcodecallcodecall_110_OOGE.json                              OK
++ callcodecallcodecall_110_OOGMAfter.json                         OK
++ callcodecallcodecall_110_OOGMBefore.json                        OK
++ callcodecallcodecall_110_SuicideEnd.json                        OK
++ callcodecallcodecall_110_SuicideMiddle.json                     OK
+  callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
++ callcodecallcodecallcode_111.json                               OK
++ callcodecallcodecallcode_111_OOGE.json                          OK
++ callcodecallcodecallcode_111_OOGMAfter.json                     OK
++ callcodecallcodecallcode_111_OOGMBefore.json                    OK
++ callcodecallcodecallcode_111_SuicideEnd.json                    OK
++ callcodecallcodecallcode_111_SuicideMiddle.json                 OK
+  callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
+```
+OK: 51/58 Fail: 0/58 Skip: 7/58
+## stCallDelegateCodesHomestead
+```diff
++ callcallcallcode_001.json                                       OK
++ callcallcallcode_001_OOGE.json                                  OK
++ callcallcallcode_001_OOGMAfter.json                             OK
++ callcallcallcode_001_OOGMBefore.json                            OK
++ callcallcallcode_001_SuicideEnd.json                            OK
++ callcallcallcode_001_SuicideMiddle.json                         OK
+  callcallcallcode_ABCB_RECURSIVE.json                            Skip
++ callcallcode_01.json                                            OK
++ callcallcode_01_OOGE.json                                       OK
++ callcallcode_01_SuicideEnd.json                                 OK
++ callcallcodecall_010.json                                       OK
++ callcallcodecall_010_OOGE.json                                  OK
++ callcallcodecall_010_OOGMAfter.json                             OK
++ callcallcodecall_010_OOGMBefore.json                            OK
++ callcallcodecall_010_SuicideEnd.json                            OK
++ callcallcodecall_010_SuicideMiddle.json                         OK
+  callcallcodecall_ABCB_RECURSIVE.json                            Skip
++ callcallcodecallcode_011.json                                   OK
++ callcallcodecallcode_011_OOGE.json                              OK
++ callcallcodecallcode_011_OOGMAfter.json                         OK
++ callcallcodecallcode_011_OOGMBefore.json                        OK
++ callcallcodecallcode_011_SuicideEnd.json                        OK
++ callcallcodecallcode_011_SuicideMiddle.json                     OK
+  callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
++ callcodecall_10.json                                            OK
++ callcodecall_10_OOGE.json                                       OK
++ callcodecall_10_SuicideEnd.json                                 OK
++ callcodecallcall_100.json                                       OK
++ callcodecallcall_100_OOGE.json                                  OK
++ callcodecallcall_100_OOGMAfter.json                             OK
++ callcodecallcall_100_OOGMBefore.json                            OK
++ callcodecallcall_100_SuicideEnd.json                            OK
++ callcodecallcall_100_SuicideMiddle.json                         OK
+  callcodecallcall_ABCB_RECURSIVE.json                            Skip
++ callcodecallcallcode_101.json                                   OK
++ callcodecallcallcode_101_OOGE.json                              OK
++ callcodecallcallcode_101_OOGMAfter.json                         OK
++ callcodecallcallcode_101_OOGMBefore.json                        OK
++ callcodecallcallcode_101_SuicideEnd.json                        OK
++ callcodecallcallcode_101_SuicideMiddle.json                     OK
+  callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
++ callcodecallcode_11.json                                        OK
++ callcodecallcode_11_OOGE.json                                   OK
++ callcodecallcode_11_SuicideEnd.json                             OK
++ callcodecallcodecall_110.json                                   OK
++ callcodecallcodecall_110_OOGE.json                              OK
++ callcodecallcodecall_110_OOGMAfter.json                         OK
++ callcodecallcodecall_110_OOGMBefore.json                        OK
++ callcodecallcodecall_110_SuicideEnd.json                        OK
++ callcodecallcodecall_110_SuicideMiddle.json                     OK
+  callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
++ callcodecallcodecallcode_111.json                               OK
++ callcodecallcodecallcode_111_OOGE.json                          OK
++ callcodecallcodecallcode_111_OOGMAfter.json                     OK
++ callcodecallcodecallcode_111_OOGMBefore.json                    OK
++ callcodecallcodecallcode_111_SuicideEnd.json                    OK
++ callcodecallcodecallcode_111_SuicideMiddle.json                 OK
+  callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
+```
+OK: 51/58 Fail: 0/58 Skip: 7/58
 ## stChangedEIP150
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -335,7 +335,7 @@ OK: 49/58 Fail: 0/58 Skip: 9/58
 + callcallcodecall_010_OOGMAfter_3.json                           OK
 + callcallcodecallcode_011_OOGMAfter_1.json                       OK
 + callcallcodecallcode_011_OOGMAfter_2.json                       OK
-  callcodecallcall_100_OOGMAfter_1.json                           Skip
++ callcodecallcall_100_OOGMAfter_1.json                           OK
 + callcodecallcall_100_OOGMAfter_2.json                           OK
 + callcodecallcall_100_OOGMAfter_3.json                           OK
 + callcodecallcallcode_101_OOGMAfter_1.json                       OK
@@ -351,7 +351,7 @@ OK: 49/58 Fail: 0/58 Skip: 9/58
 + contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
 + createInitFail_OOGduringInit.json                               OK
 ```
-OK: 27/30 Fail: 0/30 Skip: 3/30
+OK: 28/30 Fail: 0/30 Skip: 2/30
 ## stCodeCopyTest
 ```diff
 + ExtCodeCopyTests.json                                           OK
@@ -367,20 +367,20 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
-  CREATE_ContractRETURNBigOffset.json                             Skip
++ CREATE_ContractRETURNBigOffset.json                             OK
 + CREATE_ContractSSTOREDuringInit.json                            OK
 + CREATE_ContractSuicideDuringInit.json                           OK
 + CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.json       OK
 + CREATE_ContractSuicideDuringInit_WithValue.json                 OK
 + CREATE_ContractSuicideDuringInit_WithValueToItself.json         OK
-  CREATE_EContractCreateEContractInInit_Tr.json                   Skip
++ CREATE_EContractCreateEContractInInit_Tr.json                   OK
 + CREATE_EContractCreateNEContractInInitOOG_Tr.json               OK
 + CREATE_EContractCreateNEContractInInit_Tr.json                  OK
-  CREATE_EContract_ThenCALLToNonExistentAcc.json                  Skip
-  CREATE_EmptyContract.json                                       Skip
-  CREATE_EmptyContractAndCallIt_0wei.json                         Skip
-  CREATE_EmptyContractAndCallIt_1wei.json                         Skip
-  CREATE_EmptyContractWithBalance.json                            Skip
++ CREATE_EContract_ThenCALLToNonExistentAcc.json                  OK
++ CREATE_EmptyContract.json                                       OK
++ CREATE_EmptyContractAndCallIt_0wei.json                         OK
++ CREATE_EmptyContractAndCallIt_1wei.json                         OK
++ CREATE_EmptyContractWithBalance.json                            OK
 + CREATE_EmptyContractWithStorage.json                            OK
 + CREATE_EmptyContractWithStorageAndCallIt_0wei.json              OK
 + CREATE_EmptyContractWithStorageAndCallIt_1wei.json              OK
@@ -394,48 +394,48 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
   CreateOOGafterInitCodeRevert.json                               Skip
   CreateOOGafterInitCodeRevert2.json                              Skip
 + TransactionCollisionToEmpty.json                                OK
-  TransactionCollisionToEmptyButCode.json                         Skip
-  TransactionCollisionToEmptyButNonce.json                        Skip
++ TransactionCollisionToEmptyButCode.json                         OK
++ TransactionCollisionToEmptyButNonce.json                        OK
 ```
-OK: 14/30 Fail: 0/30 Skip: 16/30
+OK: 23/30 Fail: 0/30 Skip: 7/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
   Call1024OOG.json                                                Skip
   Call1024PreCalls.json                                           Skip
-  CallLoseGasOOG.json                                             Skip
++ CallLoseGasOOG.json                                             OK
   CallRecursiveBombPreCall.json                                   Skip
-  CallcodeLoseGasOOG.json                                         Skip
++ CallcodeLoseGasOOG.json                                         OK
   Delegatecall1024.json                                           Skip
   Delegatecall1024OOG.json                                        Skip
-  callOutput1.json                                                Skip
-  callOutput2.json                                                Skip
-  callOutput3.json                                                Skip
-  callOutput3Fail.json                                            Skip
-  callOutput3partial.json                                         Skip
-  callOutput3partialFail.json                                     Skip
++ callOutput1.json                                                OK
++ callOutput2.json                                                OK
++ callOutput3.json                                                OK
++ callOutput3Fail.json                                            OK
++ callOutput3partial.json                                         OK
++ callOutput3partialFail.json                                     OK
 + callWithHighValueAndGasOOG.json                                 OK
-  callcodeOutput1.json                                            Skip
-  callcodeOutput2.json                                            Skip
-  callcodeOutput3.json                                            Skip
-  callcodeOutput3Fail.json                                        Skip
-  callcodeOutput3partial.json                                     Skip
-  callcodeOutput3partialFail.json                                 Skip
++ callcodeOutput1.json                                            OK
++ callcodeOutput2.json                                            OK
++ callcodeOutput3.json                                            OK
++ callcodeOutput3Fail.json                                        OK
++ callcodeOutput3partial.json                                     OK
++ callcodeOutput3partialFail.json                                 OK
 + callcodeWithHighValueAndGasOOG.json                             OK
-  deleagateCallAfterValueTransfer.json                            Skip
++ deleagateCallAfterValueTransfer.json                            OK
 + delegatecallAndOOGatTxLevel.json                                OK
 + delegatecallBasic.json                                          OK
 + delegatecallEmptycontract.json                                  OK
-  delegatecallInInitcodeToEmptyContract.json                      Skip
-  delegatecallInInitcodeToExistingContract.json                   Skip
++ delegatecallInInitcodeToEmptyContract.json                      OK
++ delegatecallInInitcodeToExistingContract.json                   OK
 + delegatecallInInitcodeToExistingContractOOG.json                OK
 + delegatecallOOGinCall.json                                      OK
-  delegatecallSenderCheck.json                                    Skip
-  delegatecallValueCheck.json                                     Skip
-  delegatecodeDynamicCode.json                                    Skip
-  delegatecodeDynamicCode2SelfCall.json                           Skip
++ delegatecallSenderCheck.json                                    OK
++ delegatecallValueCheck.json                                     OK
++ delegatecodeDynamicCode.json                                    OK
++ delegatecodeDynamicCode2SelfCall.json                           OK
 ```
-OK: 7/34 Fail: 0/34 Skip: 27/34
+OK: 28/34 Fail: 0/34 Skip: 6/34
 ## stEIP150Specific
 ```diff
   CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
@@ -445,14 +445,14 @@ OK: 7/34 Fail: 0/34 Skip: 27/34
   CreateAndGasInsideCreate.json                                   Skip
   DelegateCallOnEIP.json                                          Skip
   ExecuteCallThatAskForeGasThenTrabsactionHas.json                Skip
-  NewGasPriceForCodes.json                                        Skip
++ NewGasPriceForCodes.json                                        OK
   SuicideToExistingContract.json                                  Skip
   SuicideToNotExistingContract.json                               Skip
   Transaction64Rule_d64e0.json                                    Skip
   Transaction64Rule_d64m1.json                                    Skip
   Transaction64Rule_d64p1.json                                    Skip
 ```
-OK: 0/13 Fail: 0/13 Skip: 13/13
+OK: 1/13 Fail: 0/13 Skip: 12/13
 ## stEIP150singleCodeGasPrices
 ```diff
 + RawBalanceGas.json                                              OK
@@ -473,11 +473,11 @@ OK: 0/13 Fail: 0/13 Skip: 13/13
 + RawCallMemoryGas.json                                           OK
 + RawCallMemoryGasAsk.json                                        OK
 + RawCreateFailGasValueTransfer.json                              OK
-  RawCreateFailGasValueTransfer2.json                             Skip
++ RawCreateFailGasValueTransfer2.json                             OK
 + RawCreateGas.json                                               OK
-  RawCreateGasMemory.json                                         Skip
++ RawCreateGasMemory.json                                         OK
 + RawCreateGasValueTransfer.json                                  OK
-  RawCreateGasValueTransferMemory.json                            Skip
++ RawCreateGasValueTransferMemory.json                            OK
 + RawDelegateCallGas.json                                         OK
 + RawDelegateCallGasAsk.json                                      OK
 + RawDelegateCallGasMemory.json                                   OK
@@ -486,7 +486,7 @@ OK: 0/13 Fail: 0/13 Skip: 13/13
 + RawExtCodeCopyMemoryGas.json                                    OK
 + RawExtCodeSizeGas.json                                          OK
 ```
-OK: 27/30 Fail: 0/30 Skip: 3/30
+OK: 30/30 Fail: 0/30 Skip: 0/30
 ## stEIP158Specific
 ```diff
   CALL_OneVCallSuicide.json                                       Skip
@@ -507,23 +507,23 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + contractCreationOOGdontLeaveEmptyContract.json                  OK
 + contractCreationOOGdontLeaveEmptyContractViaTransaction.json    OK
 + createContractViaContract.json                                  OK
-  createContractViaContractOOGInitCode.json                       Skip
++ createContractViaContractOOGInitCode.json                       OK
 + createContractViaTransactionCost53000.json                      OK
 ```
-OK: 4/5 Fail: 0/5 Skip: 1/5
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## stInitCodeTest
 ```diff
 + CallContractToCreateContractAndCallItOOG.json                   OK
 + CallContractToCreateContractNoCash.json                         OK
 + CallContractToCreateContractOOG.json                            OK
 + CallContractToCreateContractOOGBonusGas.json                    OK
-  CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonSkip
-  CallContractToCreateContractWhichWouldCreateContractInInitCode.jsonSkip
++ CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonOK
++ CallContractToCreateContractWhichWouldCreateContractInInitCode.jsonOK
 + CallRecursiveContract.json                                      OK
-  CallTheContractToCreateEmptyContract.json                       Skip
++ CallTheContractToCreateEmptyContract.json                       OK
 + NotEnoughCashContractCreation.json                              OK
-  OutOfGasContractCreation.json                                   Skip
-  OutOfGasPrefundedContractCreation.json                          Skip
++ OutOfGasContractCreation.json                                   OK
++ OutOfGasPrefundedContractCreation.json                          OK
 + ReturnTest.json                                                 OK
 + ReturnTest2.json                                                OK
 + StackUnderFlowContractCreation.json                             OK
@@ -532,7 +532,7 @@ OK: 4/5 Fail: 0/5 Skip: 1/5
 + TransactionCreateStopInInitcode.json                            OK
 + TransactionCreateSuicideInInitcode.json                         OK
 ```
-OK: 13/18 Fail: 0/18 Skip: 5/18
+OK: 18/18 Fail: 0/18 Skip: 0/18
 ## stLogTests
 ```diff
 + log0_emptyMem.json                                              OK
@@ -592,9 +592,9 @@ OK: 46/46 Fail: 0/46 Skip: 0/46
 + CreateAndGasInsideCreateWithMemExpandingCalls.json              OK
 + DelegateCallOnEIPWithMemExpandingCalls.json                     OK
 + ExecuteCallThatAskMoreGasThenTransactionHasWithMemExpandingCalls.jsonOK
-  NewGasPriceForCodesWithMemExpandingCalls.json                   Skip
++ NewGasPriceForCodesWithMemExpandingCalls.json                   OK
 ```
-OK: 7/8 Fail: 0/8 Skip: 1/8
+OK: 8/8 Fail: 0/8 Skip: 0/8
 ## stMemoryStressTest
 ```diff
   CALLCODE_Bounds.json                                            Skip
@@ -639,10 +639,10 @@ OK: 7/8 Fail: 0/8 Skip: 1/8
 OK: 5/38 Fail: 0/38 Skip: 33/38
 ## stMemoryTest
 ```diff
-  callDataCopyOffset.json                                         Skip
++ callDataCopyOffset.json                                         OK
 + calldatacopy_dejavu.json                                        OK
 + calldatacopy_dejavu2.json                                       OK
-  codeCopyOffset.json                                             Skip
++ codeCopyOffset.json                                             OK
 + codecopy_dejavu.json                                            OK
 + codecopy_dejavu2.json                                           OK
 + extcodecopy_dejavu.json                                         OK
@@ -707,13 +707,13 @@ OK: 5/38 Fail: 0/38 Skip: 33/38
 + stackLimitPush32_1024.json                                      OK
 + stackLimitPush32_1025.json                                      OK
 ```
-OK: 65/67 Fail: 0/67 Skip: 2/67
+OK: 67/67 Fail: 0/67 Skip: 0/67
 ## stNonZeroCallsTest
 ```diff
 + NonZeroValue_CALL.json                                          OK
 + NonZeroValue_CALLCODE.json                                      OK
 + NonZeroValue_CALLCODE_ToEmpty.json                              OK
-  NonZeroValue_CALLCODE_ToNonNonZeroBalance.json                  Skip
++ NonZeroValue_CALLCODE_ToNonNonZeroBalance.json                  OK
 + NonZeroValue_CALLCODE_ToOneStorageKey.json                      OK
 + NonZeroValue_CALL_ToEmpty.json                                  OK
 + NonZeroValue_CALL_ToNonNonZeroBalance.json                      OK
@@ -735,7 +735,7 @@ OK: 65/67 Fail: 0/67 Skip: 2/67
 + NonZeroValue_TransactionCALLwithData_ToNonNonZeroBalance.json   OK
 + NonZeroValue_TransactionCALLwithData_ToOneStorageKey.json       OK
 ```
-OK: 23/24 Fail: 0/24 Skip: 1/24
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
   identity_to_bigger.json                                         Skip
@@ -853,7 +853,7 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
 + CALLCODEEcrecoverR_prefixed0.json                               OK
 + CALLCODEEcrecoverS_prefixed0.json                               OK
 + CALLCODEEcrecoverV_prefixed0.json                               OK
-  CALLCODEEcrecoverV_prefixedf0.json                              Skip
++ CALLCODEEcrecoverV_prefixedf0.json                              OK
 + CALLCODEIdentitiy_0.json                                        OK
 + CALLCODEIdentitiy_1.json                                        OK
 + CALLCODEIdentity_1_nonzeroValue.json                            OK
@@ -933,7 +933,7 @@ OK: 0/96 Fail: 0/96 Skip: 96/96
   modexp_0_0_0_25000.json                                         Skip
   modexp_0_0_0_35000.json                                         Skip
 ```
-OK: 88/94 Fail: 0/94 Skip: 6/94
+OK: 89/94 Fail: 0/94 Skip: 5/94
 ## stQuadraticComplexityTest
 ```diff
   Call1MB1024Calldepth.json                                       Skip
@@ -960,7 +960,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
   randomStatetest1.json                                           Skip
 + randomStatetest10.json                                          OK
 + randomStatetest100.json                                         OK
-  randomStatetest101.json                                         Skip
++ randomStatetest101.json                                         OK
 + randomStatetest102.json                                         OK
 + randomStatetest103.json                                         OK
 + randomStatetest104.json                                         OK
@@ -974,7 +974,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest112.json                                         OK
 + randomStatetest114.json                                         OK
 + randomStatetest115.json                                         OK
-  randomStatetest116.json                                         Skip
++ randomStatetest116.json                                         OK
 + randomStatetest117.json                                         OK
 + randomStatetest118.json                                         OK
 + randomStatetest119.json                                         OK
@@ -1039,7 +1039,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest18.json                                          OK
 + randomStatetest180.json                                         OK
 + randomStatetest183.json                                         OK
-  randomStatetest184.json                                         Skip
++ randomStatetest184.json                                         OK
 + randomStatetest185.json                                         OK
 + randomStatetest187.json                                         OK
 + randomStatetest188.json                                         OK
@@ -1089,7 +1089,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest232.json                                         OK
 + randomStatetest233.json                                         OK
 + randomStatetest236.json                                         OK
-  randomStatetest237.json                                         Skip
++ randomStatetest237.json                                         OK
 + randomStatetest238.json                                         OK
 + randomStatetest24.json                                          OK
 + randomStatetest241.json                                         OK
@@ -1099,7 +1099,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest245.json                                         OK
 + randomStatetest246.json                                         OK
 + randomStatetest247.json                                         OK
-  randomStatetest248.json                                         Skip
++ randomStatetest248.json                                         OK
 + randomStatetest249.json                                         OK
 + randomStatetest25.json                                          OK
 + randomStatetest250.json                                         OK
@@ -1259,7 +1259,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest66.json                                          OK
 + randomStatetest67.json                                          OK
 + randomStatetest69.json                                          OK
-  randomStatetest7.json                                           Skip
++ randomStatetest7.json                                           OK
 + randomStatetest72.json                                          OK
 + randomStatetest73.json                                          OK
 + randomStatetest74.json                                          OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 315/327 Fail: 0/327 Skip: 12/327
+OK: 321/327 Fail: 0/327 Skip: 6/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -1512,10 +1512,10 @@ OK: 315/327 Fail: 0/327 Skip: 12/327
 + randomStatetest643.json                                         OK
 + randomStatetest644.json                                         OK
 + randomStatetest645.json                                         OK
-  randomStatetest646.json                                         Skip
++ randomStatetest646.json                                         OK
   randomStatetest647.json                                         Skip
 ```
-OK: 222/227 Fail: 0/227 Skip: 5/227
+OK: 223/227 Fail: 0/227 Skip: 4/227
 ## stRecursiveCreate
 ```diff
   recursiveCreate.json                                            Skip
@@ -1604,22 +1604,22 @@ OK: 34/37 Fail: 0/37 Skip: 3/37
 + RevertInStaticCall.json                                         OK
 + RevertOnEmptyStack.json                                         OK
 + RevertOpcode.json                                               OK
-  RevertOpcodeCalls.json                                          Skip
++ RevertOpcodeCalls.json                                          OK
 + RevertOpcodeCreate.json                                         OK
-  RevertOpcodeDirectCall.json                                     Skip
-  RevertOpcodeInCallsOnNonEmptyReturnData.json                    Skip
++ RevertOpcodeDirectCall.json                                     OK
++ RevertOpcodeInCallsOnNonEmptyReturnData.json                    OK
 + RevertOpcodeInCreateReturns.json                                OK
-  RevertOpcodeInInit.json                                         Skip
-  RevertOpcodeMultipleSubCalls.json                               Skip
-  RevertOpcodeReturn.json                                         Skip
-  RevertOpcodeWithBigOutputInInit.json                            Skip
++ RevertOpcodeInInit.json                                         OK
++ RevertOpcodeMultipleSubCalls.json                               OK
++ RevertOpcodeReturn.json                                         OK
++ RevertOpcodeWithBigOutputInInit.json                            OK
   RevertPrecompiledTouch.json                                     Skip
   RevertPrecompiledTouchCC.json                                   Skip
   RevertPrecompiledTouchDC.json                                   Skip
-  RevertPrefound.json                                             Skip
++ RevertPrefound.json                                             OK
 + RevertPrefoundCall.json                                         OK
 + RevertPrefoundCallOOG.json                                      OK
-  RevertPrefoundEmpty.json                                        Skip
++ RevertPrefoundEmpty.json                                        OK
 + RevertPrefoundEmptyCall.json                                    OK
 + RevertPrefoundEmptyCallOOG.json                                 OK
 + RevertPrefoundEmptyOOG.json                                     OK
@@ -1632,7 +1632,7 @@ OK: 34/37 Fail: 0/37 Skip: 3/37
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 29/43 Fail: 0/43 Skip: 14/43
+OK: 38/43 Fail: 0/43 Skip: 5/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -2044,7 +2044,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + CallToReturn1ForDynamicJump0.json                               OK
 + CallToReturn1ForDynamicJump1.json                               OK
 + CalltoReturn2.json                                              OK
-  CreateHashCollision.json                                        Skip
++ CreateHashCollision.json                                        OK
 + PostToReturn1.json                                              OK
 + TestNameRegistrator.json                                        OK
 + balanceInputAddressTooBig.json                                  OK
@@ -2057,9 +2057,9 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + callcodeToReturn1.json                                          OK
 + callerAccountBalance.json                                       OK
 + createNameRegistrator.json                                      OK
-  createNameRegistratorOOG_MemExpansionOOV.json                   Skip
-  createNameRegistratorOutOfMemoryBonds0.json                     Skip
-  createNameRegistratorOutOfMemoryBonds1.json                     Skip
++ createNameRegistratorOOG_MemExpansionOOV.json                   OK
++ createNameRegistratorOutOfMemoryBonds0.json                     OK
++ createNameRegistratorOutOfMemoryBonds1.json                     OK
 + createNameRegistratorValueTooHigh.json                          OK
 + createNameRegistratorZeroMem.json                               OK
 + createNameRegistratorZeroMem2.json                              OK
@@ -2076,14 +2076,14 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideCaller.json                                              OK
 + suicideCallerAddresTooBigLeft.json                              OK
 + suicideCallerAddresTooBigRight.json                             OK
-  suicideCoinbase.json                                            Skip
++ suicideCoinbase.json                                            OK
 + suicideNotExistingAccount.json                                  OK
 + suicideOrigin.json                                              OK
 + suicideSendEtherPostDeath.json                                  OK
 + suicideSendEtherToMe.json                                       OK
-  testRandomTest.json                                             Skip
++ testRandomTest.json                                             OK
 ```
-OK: 51/67 Fail: 0/67 Skip: 16/67
+OK: 57/67 Fail: 0/67 Skip: 10/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2101,7 +2101,7 @@ OK: 51/67 Fail: 0/67 Skip: 16/67
 + InternalCallHittingGasLimitSuccess.json                         OK
 + InternlCallStoreClearsOOG.json                                  OK
 + InternlCallStoreClearsSucces.json                               OK
-  Opcodes_TransactionInit.json                                    Skip
++ Opcodes_TransactionInit.json                                    OK
 + OverflowGasRequire.json                                         OK
 + OverflowGasRequire2.json                                        OK
 + RefundOverflow.json                                             OK
@@ -2114,11 +2114,11 @@ OK: 51/67 Fail: 0/67 Skip: 16/67
 + SuicidesAndInternlCallSuicidesOOG.json                          OK
 + SuicidesAndInternlCallSuicidesSuccess.json                      OK
 + SuicidesAndSendMoneyToItselfEtherDestroyed.json                 OK
-  SuicidesMixingCoinbase.json                                     Skip
++ SuicidesMixingCoinbase.json                                     OK
 + SuicidesStopAfterSuicide.json                                   OK
 + TransactionDataCosts652.json                                    OK
 + TransactionFromCoinbaseHittingBlockGasLimit.json                OK
-  TransactionFromCoinbaseHittingBlockGasLimit1.json               Skip
++ TransactionFromCoinbaseHittingBlockGasLimit1.json               OK
 + TransactionFromCoinbaseNotEnoughFounds.json                     OK
 + TransactionNonceCheck.json                                      OK
 + TransactionNonceCheck2.json                                     OK
@@ -2131,24 +2131,24 @@ OK: 51/67 Fail: 0/67 Skip: 16/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 41/44 Fail: 0/44 Skip: 3/44
+OK: 44/44 Fail: 0/44 Skip: 0/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
 + createNameRegistratorPerTxsAt.json                              OK
 + createNameRegistratorPerTxsBefore.json                          OK
-  createNameRegistratorPerTxsNotEnoughGasAfter.json               Skip
-  createNameRegistratorPerTxsNotEnoughGasAt.json                  Skip
-  createNameRegistratorPerTxsNotEnoughGasBefore.json              Skip
-  delegatecallAfterTransition.json                                Skip
-  delegatecallAtTransition.json                                   Skip
-  delegatecallBeforeTransition.json                               Skip
++ createNameRegistratorPerTxsNotEnoughGasAfter.json               OK
++ createNameRegistratorPerTxsNotEnoughGasAt.json                  OK
++ createNameRegistratorPerTxsNotEnoughGasBefore.json              OK
++ delegatecallAfterTransition.json                                OK
++ delegatecallAtTransition.json                                   OK
++ delegatecallBeforeTransition.json                               OK
 ```
-OK: 3/9 Fail: 0/9 Skip: 6/9
+OK: 9/9 Fail: 0/9 Skip: 0/9
 ## stWalletTest
 ```diff
 + dayLimitConstruction.json                                       OK
-  dayLimitConstructionOOG.json                                    Skip
++ dayLimitConstructionOOG.json                                    OK
 + dayLimitConstructionPartial.json                                OK
   dayLimitResetSpentToday.json                                    Skip
   dayLimitSetDailyLimit.json                                      Skip
@@ -2164,7 +2164,7 @@ OK: 3/9 Fail: 0/9 Skip: 6/9
   multiOwnedChangeRequirementTo2.json                             Skip
 + multiOwnedConstructionCorrect.json                              OK
   multiOwnedConstructionNotEnoughGas.json                         Skip
-  multiOwnedConstructionNotEnoughGasPartial.json                  Skip
++ multiOwnedConstructionNotEnoughGasPartial.json                  OK
   multiOwnedIsOwnerFalse.json                                     Skip
   multiOwnedIsOwnerTrue.json                                      Skip
   multiOwnedRemoveOwner.json                                      Skip
@@ -2177,7 +2177,7 @@ OK: 3/9 Fail: 0/9 Skip: 6/9
 + walletChangeRequirementRemovePendingTransaction.json            OK
 + walletConfirm.json                                              OK
 + walletConstruction.json                                         OK
-  walletConstructionOOG.json                                      Skip
++ walletConstructionOOG.json                                      OK
 + walletConstructionPartial.json                                  OK
   walletDefault.json                                              Skip
   walletDefaultWithOutValue.json                                  Skip
@@ -2190,7 +2190,7 @@ OK: 3/9 Fail: 0/9 Skip: 6/9
   walletKillToWallet.json                                         Skip
 + walletRemoveOwnerRemovePendingTransaction.json                  OK
 ```
-OK: 12/42 Fail: 0/42 Skip: 30/42
+OK: 15/42 Fail: 0/42 Skip: 27/42
 ## stZeroCallsRevert
 ```diff
   ZeroValue_CALLCODE_OOGRevert.json                               Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1212/2334 Fail: 0/2334 Skip: 1122/2334
+OK: 1432/2334 Fail: 0/2334 Skip: 902/2334

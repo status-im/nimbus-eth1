@@ -7,10 +7,10 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  byteutils, eth/[common, keys], ranges/typedranges,
+  byteutils, eth/[common, keys, rlp], ranges/typedranges,
   ../nimbus/[vm_state, constants],
   ../nimbus/db/[db_chain, state_db],
-  ../nimbus/transaction,
+  ../nimbus/[transaction, utils],
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
   ../tests/test_generalstate_failing
 
@@ -24,7 +24,7 @@ const
     FkByzantium: "Byzantium",
   }.toTable
 
-  supportedForks* = [FkHomestead]
+  supportedForks* = {FkFrontier, FkHomestead}
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
@@ -119,10 +119,10 @@ func validTest*(folder: string, name: string): bool =
     not slowTest(folder, name) and
     not allowedFailInCurrentBuild(folder, name)
 
-proc lacksSupportedForks*(filename: string): bool =
+proc lacksSupportedForks*(fixtures: JsonNode): bool =
   # XXX: Until Nimbus supports Byzantine or newer forks, as opposed
   # to Homestead, ~1k of ~2.5k GeneralStateTests won't work.
-  let fixtures = parseJSON(readFile(filename))
+
   var fixture: JsonNode
   for label, child in fixtures:
     fixture = child
@@ -131,10 +131,10 @@ proc lacksSupportedForks*(filename: string): bool =
   # not all fixtures make a distinction between forks, so default to accepting
   # them all, until we find the ones that specify forks in their "post" section
   result = false
-  if fixture.kind == JObject and fixture.has_key("transaction") and fixture.has_key("post"):
+  if fixture.kind == JObject and fixture.hasKey("transaction") and fixture.hasKey("post"):
     result = true
     for fork in supportedForks:
-      if fixture["post"].has_key(forkNames[fork]):
+      if fixture["post"].hasKey(forkNames[fork]):
         result = false
         break
 
@@ -158,15 +158,19 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       if not status.hasKey(last):
         status[last] = initOrderedTable[string, Status]()
       status[last][name] = Status.Skip
-      if last.validTest(name) and not filename.lacksSupportedForks:
+      if last.validTest(name):
         filenames.add((filename, last, name))
     for child in filenames:
       let (filename, folder, name) = child
       # we set this here because exceptions might be raised in the handler:
       status[folder][name] = Status.Fail
+      let fixtures = parseJSON(readFile(filename))
+      if fixtures.lacksSupportedForks:
+        status[folder][name] = Status.Skip
+        continue
       test filename:
         echo folder / name
-        `handler`(parseJSON(readFile(filename)), `testStatusIMPL`)
+        `handler`(fixtures, `testStatusIMPL`)
         if `testStatusIMPL` == OK:
           status[folder][name] = Status.OK
 
@@ -286,3 +290,6 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   result.R = fromBytesBE(Uint256, raw[0..31])
   result.S = fromBytesBE(Uint256, raw[32..63])
   result.V = raw[64] + 27.byte
+
+proc hashLogEntries*(logs: seq[Log]): string =
+  toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))

@@ -24,14 +24,13 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
     readOnlyDB.getBalance(sender) >= gasCost
 
-proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, forkOverride=none(Fork)) : BaseComputation =
+proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, forkOverride=none(Fork)) : BaseComputation =
   let fork =
     if forkOverride.isSome:
       forkOverride.get
     else:
       vmState.blockNumber.toFork
 
-  var recipient: EthAddress
   var gas = tx.gasLimit - tx.intrinsicGas
 
   # TODO: refactor message to use byterange
@@ -39,14 +38,16 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
   var data, code: seq[byte]
 
   if tx.isContractCreation:
-    recipient = generateAddress(sender, tx.accountNonce)
     gas = gas - gasFees[fork][GasTXCreate]
     data = @[]
     code = tx.payload
   else:
-    recipient = tx.to
     data = tx.payload
     code = vmState.readOnlyStateDB.getCode(tx.to).toSeq
+
+  if gas < 0:
+    debug "not enough gas to perform calculation", gas=gas
+    return
 
   let msg = newMessage(
     gas = gas,
@@ -98,22 +99,6 @@ proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddres
     db.addBalance(sender, (gasRemaining + gasRefund).u256 * tx.gasPrice.u256)
 
   result = gasUsed - gasRefund
-
-proc writeContract*(computation: var BaseComputation): bool =
-  result = true
-  let contractAddress = computation.msg.storageAddress
-  if computation.isSuicided(contractAddress): return
-
-  let codeCost = computation.gasCosts[Create].m_handler(0, 0, computation.output.len)
-  if computation.gasMeter.gasRemaining >= codeCost:
-    computation.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
-    computation.vmState.mutateStateDB:
-      db.setCode(contractAddress, computation.output.toRange)
-    result = true
-  else:
-    computation.vmState.mutateStateDB:
-      db.setCode(contractAddress, ByteRange())
-    result = false
 
 #[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
