@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables, eth/common, options,
-  ./constants, json, sets,
+  tables, eth/common, eth/trie/db,
+  options, ./constants, json, sets,
   ./vm/[memory, stack, code_stream],
   ./vm/interpreter/[gas_costs, opcode_values, vm_forks], # TODO - will be hidden at a lower layer
   ./db/[db_chain, state_db]
@@ -44,6 +44,10 @@ type
     accounts*: HashSet[EthAddress]
     storageKeys*: seq[HashSet[Uint256]]
 
+  Snapshot* = object
+    transaction*: DbTransaction
+    intermediateRoot*: Hash256
+
   BaseComputation* = ref object of RootObj
     # The execution computation
     vmState*:               BaseVMState
@@ -56,12 +60,11 @@ type
     rawOutput*:             seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
-    shouldEraseReturnData*: bool
     accountsToDelete*:      Table[EthAddress, EthAddress]
-    opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     forkOverride*:          Option[Fork]
     logEntries*:            seq[Log]
+    dbsnapshot*:            Snapshot
 
   Error* = ref object
     info*:                  string
