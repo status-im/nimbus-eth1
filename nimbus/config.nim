@@ -136,6 +136,8 @@ type
   DebugConfiguration* = object
     ## Debug configuration object
     flags*: set[DebugFlags]       ## Debug flags
+    logLevel*: LogLevel           ## Log level
+    logFile*: string              ## Log file
 
   PruneMode* {.pure.} = enum
     Full
@@ -168,6 +170,7 @@ type
 
 const
   defaultRpcApi = {RpcFlags.Eth, RpcFlags.Shh}
+  defaultLogLevel = LogLevel.WARN
 
 var nimbusConfig {.threadvar.}: NimbusConfiguration
 
@@ -491,25 +494,38 @@ proc processDebugArguments(key, value: string): ConfigStatus =
         config.debug.flags.incl(DebugFlags.Test2)
       elif item == "test3":
         config.debug.flags.incl(DebugFlags.Test3)
-  else:
-    result = EmptyOption
+  elif skey == "log-level":
+    try:
+      let logLevel = parseEnum[LogLevel](value)
+      if logLevel >= enabledLogLevel:
+        config.debug.logLevel = logLevel
+      else:
+        result = ErrorIncorrectOption
+    except ValueError:
+      result = ErrorIncorrectOption
+  elif skey == "log-file":
+    if len(value) == 0:
+      result = ErrorIncorrectOption
+    else:
+      config.debug.logFile = value
 
 proc dumpConfiguration*(): string =
   ## Dumps current configuration as string
   let config = getConfiguration()
   result = repr config
 
-template checkArgument(a, b, c, e: untyped) =
+template processArgument(processor, key, value, msg: untyped) =
   ## Checks if arguments got processed successfully
-  var res = (a)(string((b)), string((c)))
+  var res = processor(string(key), string(value))
   if res == Success:
+    result = res
     continue
   elif res == ErrorParseOption:
-    (e) = "Error processing option [" & key & "] with value [" & value & "]"
+    msg = "Error processing option '" & key & "' with value '" & value & "'."
     result = res
     break
   elif res == ErrorIncorrectOption:
-    (e) = "Incorrect value for option [" & key & "] value [" & value & "]"
+    msg = "Incorrect value for option '" & key & "': '" & value & "'."
     result = res
     break
 
@@ -543,6 +559,7 @@ proc initConfiguration(): NimbusConfiguration =
 
   ## Debug defaults
   result.debug.flags = {}
+  result.debug.logLevel = defaultLogLevel
 
 proc getConfiguration*(): NimbusConfiguration =
   ## Retreive current configuration object `NimbusConfiguration`.
@@ -551,6 +568,12 @@ proc getConfiguration*(): NimbusConfiguration =
   result = nimbusConfig
 
 proc getHelpString*(): string =
+  var logLevels: seq[string]
+  for level in LogLevel:
+    if level < enabledLogLevel:
+      continue
+    logLevels.add($level)
+
   result = """
 
 USAGE:
@@ -586,10 +609,14 @@ API AND CONSOLE OPTIONS:
   --rpcapi:<value>        Enable specific set of rpc api from comma separated list(eth, shh, debug)
 
 LOGGING AND DEBUGGING OPTIONS:
+  --log-level:<value>     One of: $2 (default: $3)
+  --log-file:<value>      Optional log file, replacing stdout
   --debug                 Enable debug mode
   --test:<value>          Perform specified test
 """ % [
-    NimbusIdent
+    NimbusIdent,
+    join(logLevels, ", "),
+    $defaultLogLevel
   ]
 
 proc processArguments*(msg: var string): ConfigStatus =
@@ -612,6 +639,7 @@ proc processArguments*(msg: var string): ConfigStatus =
   var opt = initOptParser()
   var length = 0
   for kind, key, value in opt.getopt():
+    result = Error
     case kind
     of cmdArgument:
       discard
@@ -627,12 +655,14 @@ proc processArguments*(msg: var string): ConfigStatus =
           result = Success
           break
         else:
-          checkArgument processEthArguments, key, value, msg
-          checkArgument processRpcArguments, key, value, msg
-          checkArgument processNetArguments, key, value, msg
-          checkArgument processDebugArguments, key, value, msg
+          processArgument processEthArguments, key, value, msg
+          processArgument processRpcArguments, key, value, msg
+          processArgument processNetArguments, key, value, msg
+          processArgument processDebugArguments, key, value, msg
+          if result != Success:
+            msg = "Unknown option: '" & key & "'."
     of cmdEnd:
-      doAssert(false)
+      doAssert(false) # we're never getting this kind here
 
   if config.net.bootNodes.len == 0:
     # No custom bootnodes were specified on the command line, restore to
@@ -642,6 +672,7 @@ proc processArguments*(msg: var string): ConfigStatus =
   if config.net.discPort == 0:
     config.net.discPort = config.net.bindPort
 
-proc processConfig*(pathname: string): ConfigStatus =
+proc processConfiguration*(pathname: string): ConfigStatus =
   ## Process configuration file `pathname` and update `NimbusConfiguration`.
   result = Success
+

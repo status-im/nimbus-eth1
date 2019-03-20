@@ -40,6 +40,12 @@ proc start(): NimbusObject =
   var nimbus = NimbusObject()
   var conf = getConfiguration()
 
+  setLogLevel(conf.debug.logLevel)
+  if len(conf.debug.logFile) != 0:
+    discard defaultChroniclesStream.output.open(conf.debug.logFile, fmAppend)
+  else:
+    discard defaultChroniclesStream.output.open(stdout)
+
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:
     nimbus.rpcServer = newRpcHttpServer(conf.rpc.binds)
