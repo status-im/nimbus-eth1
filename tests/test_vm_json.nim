@@ -7,13 +7,9 @@
 
 import
   unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
-  byteutils, ranges/typedranges,
-  eth/[rlp, common], eth/trie/db,
-  ./test_helpers,
-  ../nimbus/[constants, errors],
-  ../nimbus/[vm_state, vm_types],
-  ../nimbus/utils,
-  ../nimbus/vm/interpreter,
+  byteutils, ranges/typedranges, eth/[rlp, common], eth/trie/db,
+  ./test_helpers, ../nimbus/vm/interpreter,
+  ../nimbus/[constants, errors, vm_state, vm_types, utils],
   ../nimbus/db/[db_chain, state_db]
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
@@ -60,7 +56,10 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
                                   createAddress = toAddress))
 
   var computation = newBaseComputation(vmState, header.blockNumber, message)
-  computation.executeOpcodes()
+  try:
+    computation.executeOpcodes()
+  except VMError:
+    computation.error = Error(info: getCurrentExceptionMsg())
 
   if not fixture{"post"}.isNil:
     # Success checks
