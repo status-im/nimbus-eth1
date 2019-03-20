@@ -91,7 +91,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     if not fixture{"post"}.isNil:
       verifyStateDb(fixture{"post"}, computation.vmState.readOnlyStateDB)
   else:
-      # Error checks
-      check(computation.isError)
-      # TODO postState = fixture{"pre"}
-
+    # Error checks
+    check(computation.isError)
+    if not fixture{"pre"}.isNil:
+      verifyStateDb(fixture{"pre"}, computation.vmState.readOnlyStateDB)
