@@ -27,7 +27,7 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB)
 
   captureChainDB.setHead(parent, true)
-  let validationResult = processBlock(captureChainDB, parent, header, body, vmState)
+  let validationResult = processBlock(captureChainDB, header, body, vmState)
 
   transaction.rollback()
   dumpDebuggingMetaData(captureChainDB, header, body, vmState, false)

@@ -31,7 +31,7 @@ proc validateBlock(chainDB: BaseChainDB, blockNumber: BlockNumber): BlockNumber 
 
     let
       vmState = newBaseVMState(parent.stateRoot, headers[i], chainDB)
-      validationResult = processBlock(chainDB, parent, headers[i], bodies[i], vmState)
+      validationResult = processBlock(chainDB, headers[i], bodies[i], vmState)
 
     if validationResult != ValidationResult.OK:
       error "block validation error", validationResult, blockNumber = blockNumber + i.u256

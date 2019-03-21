@@ -95,7 +95,7 @@ proc makeReceipt(vmState: BaseVMState, cumulativeGasUsed: GasInt, fork = FkFront
   result.logs = vmState.getAndClearLogEntries()
   result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
-proc processBlock*(chainDB: BaseChainDB, head, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
+proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
 
   if body.transactions.calcTxRoot != header.txRoot:

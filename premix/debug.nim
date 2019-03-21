@@ -23,7 +23,7 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Ui
   defer: transaction.dispose()
   let
     vmState = newBaseVMState(parent.stateRoot, header, chainDB)
-    validationResult = processBlock(chainDB, parent, header, body, vmState)
+    validationResult = processBlock(chainDB, header, body, vmState)
 
   if validationResult != ValidationResult.OK:
     error "block validation error", validationResult

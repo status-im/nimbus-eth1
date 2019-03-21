@@ -43,7 +43,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   for i in 0 ..< headers.len:
     let head = c.db.getCanonicalHead()
     let vmState = newBaseVMState(head.stateRoot, headers[i], c.db)
-    let validationResult = processBlock(c.db, head, headers[i], bodies[i], vmState)
+    let validationResult = processBlock(c.db, headers[i], bodies[i], vmState)
 
     when not defined(release):
       if validationResult == ValidationResult.Error:
