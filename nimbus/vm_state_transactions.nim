@@ -70,8 +70,14 @@ proc execComputation*(computation: var BaseComputation): bool =
     result = computation.applyMessage(Call)
 
   computation.vmState.mutateStateDB:
+    var suicidedCount = 0
     for deletedAccount in computation.accountsForDeletion:
       db.deleteAccount deletedAccount
+      inc suicidedCount
+    
+    # FIXME: hook this into actual RefundSelfDestruct
+    const RefundSelfDestruct = 24_000
+    computation.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
 
   if result:
     computation.vmState.addLogs(computation.logEntries)
