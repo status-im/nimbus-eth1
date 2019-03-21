@@ -64,28 +64,18 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
   doAssert result.isOriginComputation
 
 proc execComputation*(computation: var BaseComputation): bool =
-  var snapshot = computation.snapshot()
-  defer: snapshot.dispose()
+  if computation.msg.isCreate:
+    result = computation.applyMessage(Create)
+  else:
+    result = computation.applyMessage(Call)
 
   computation.vmState.mutateStateDB:
-    db.subBalance(computation.msg.origin, computation.msg.value)
-    db.addBalance(computation.msg.storageAddress, computation.msg.value)
-
-  try:
-    computation.executeOpcodes()
-    computation.vmState.mutateStateDB:
-      for deletedAccount in computation.getAccountsForDeletion:
-        db.deleteAccount deletedAccount
-    result = not computation.isError
-  except ValueError:
-    result = false
-    debug "execComputation() error", msg = getCurrentExceptionMsg()
+    for deletedAccount in computation.accountsForDeletion:
+      db.deleteAccount deletedAccount
 
   if result:
-    snapshot.commit()
     computation.vmState.addLogs(computation.logEntries)
   else:
-    snapshot.revert()
     if computation.tracingEnabled: computation.traceError()
 
 proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddress): GasInt =

@@ -10,11 +10,11 @@ import
   ./interpreter/vm_forks
 
 import # Used in vm_types. Beware of recursive dependencies
-  ./code_stream, ./computation, ./stack, ./message, interpreter_dispatch
+  ./code_stream, ./computation, ./stack, ./message
 
 export
   opcode_values, gas_meter,
   vm_forks
 
 export
-  code_stream, computation, stack, message, interpreter_dispatch
+  code_stream, computation, stack, message

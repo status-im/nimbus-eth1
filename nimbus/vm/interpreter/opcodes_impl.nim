@@ -572,7 +572,11 @@ proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint
     )
 
   childMsg.sender = computation.msg.storageAddress
-  result = generateChildComputation(computation.getFork, computation, childMsg)
+  result = newBaseComputation(
+    computation.vmState,
+    computation.vmState.blockNumber,
+    childMsg,
+    some(computation.getFork))
 
 op create, inline = false, value, startPosition, size:
   ## 0xf0, Create a new account with associated code.
@@ -739,7 +743,12 @@ template genCall(callName: untyped, opCode: Op): untyped =
     when opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
 
-    var childComp = generateChildComputation(computation.getFork, computation, childMsg)
+    var childComp = newBaseComputation(
+      computation.vmState,
+      computation.vmState.blockNumber,
+      childMsg,
+      some(computation.getFork))
+
     result = (childComp, memOutPos, memOutLen)
 
   op callName, inline = false:

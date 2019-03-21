@@ -1,5 +1,5 @@
 import ../db/[db_chain, state_db], eth/common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
-  ../vm/[computation, interpreter_dispatch, message], ../constants, stint, nimcrypto,
+  ../vm/[computation, message], ../constants, stint, nimcrypto,
   ../vm_state_transactions, sugar, ../utils, eth/trie/db, ../tracer, ./executor
 
 type

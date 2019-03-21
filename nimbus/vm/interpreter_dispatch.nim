@@ -11,13 +11,13 @@ import
   ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter, utils/macros_gen_opcodes],
   ./code_stream,
   ../vm_types, ../errors, precompiles,
-  ./stack, ./computation, terminal # Those are only needed for logging
+  ./stack, terminal # Those are only needed for logging
 
 logScope:
   topics = "vm opcode"
 
 func invalidInstruction*(computation: var BaseComputation) {.inline.} =
-  raise newException(ValueError, "Invalid instruction, received an opcode not implemented in the current fork.")
+  raise newException(InvalidInstruction, "Invalid instruction, received an opcode not implemented in the current fork.")
 
 let FrontierOpDispatch {.compileTime.}: array[Op, NimNode] = block:
   fill_enum_table_holes(Op, newIdentNode("invalidInstruction")):
@@ -256,24 +256,14 @@ proc homesteadVM(computation: var BaseComputation) =
   if not computation.execPrecompiles:
     genHomesteadDispatch(computation)
 
-proc updateOpcodeExec*(computation: var BaseComputation, fork: Fork) =
+proc executeOpcodes(computation: var BaseComputation) =
+  # TODO: Optimise getting fork and updating opCodeExec only when necessary
+  let fork = computation.getFork
+
   case fork
   of FkFrontier..FkThawing:
-    computation.opCodeExec = frontierVM
     computation.frontierVM()
   of FkHomestead..FkSpurious:
-    computation.opCodeExec = homesteadVM
     computation.homesteadVM()
   else:
     raise newException(VMError, "Unknown or not implemented fork: " & $fork)
-
-proc executeOpcodes*(computation: var BaseComputation) =
-  # TODO: Optimise getting fork and updating opCodeExec only when necessary
-  let fork = computation.getFork
-  try:
-    computation.updateOpcodeExec(fork)
-  except VMError:
-    computation.error = Error(info: getCurrentExceptionMsg())
-    debug "VM Error executeOpcodes() failed", error = getCurrentExceptionMsg()
-  except EVMError:
-    debug "EVM Error executeOpcodes() failed", error = getCurrentExceptionMsg()
