@@ -145,10 +145,10 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
   let ftrans = fixture["transaction"]
   var testedInFork = false
   for fork in supportedForks:
-    if fixture["post"].hasKey(forkNames[fork]):      
+    if fixture["post"].hasKey(forkNames[fork]):
       for expectation in fixture["post"][forkNames[fork]]:
         inc tester.index
-        if specifyIndex > 0 and tester.index != specifyIndex: 
+        if specifyIndex > 0 and tester.index != specifyIndex:
           continue
         testedInFork = true
         tester.expectedHash = expectation["hash"].getStr
