@@ -528,7 +528,9 @@ proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint2
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance
     return false
 
-  if computation.msg.depth > MaxCallDepth:
+  # if this is a child comp like CALL*
+  # it will be `if computation.msg.depth > MaxCallDepth:`
+  if computation.msg.depth + 1 > MaxCallDepth:
     debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = computation.msg.depth
     return false
 
