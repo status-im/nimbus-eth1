@@ -48,6 +48,8 @@ type
     transaction*: DbTransaction
     intermediateRoot*: Hash256
 
+  TailProc* = proc(computation, childComp: var BaseComputation)
+  
   BaseComputation* = ref object of RootObj
     # The execution computation
     vmState*:               BaseVMState
@@ -65,6 +67,9 @@ type
     forkOverride*:          Option[Fork]
     logEntries*:            seq[Log]
     dbsnapshot*:            Snapshot
+    opIndex*:               int
+    instr*:                 Op
+    tailProc*:              TailProc
 
   Error* = ref object
     info*:                  string

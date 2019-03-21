@@ -528,7 +528,7 @@ proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint2
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance
     return false
 
-  if computation.msg.depth >= MaxCallDepth:
+  if computation.msg.depth > MaxCallDepth:
     debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = computation.msg.depth
     return false
 
@@ -682,7 +682,7 @@ proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthA
     emvcStatic) # is_static
 
 template genCall(callName: untyped, opCode: Op): untyped =
-  proc `callName Setup`(computation: var BaseComputation, callNameStr: string): (BaseComputation, int, int) =
+  proc `callName Setup`(computation: var BaseComputation, callNameStr: string): BaseComputation =
     let (gas, value, to, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
@@ -749,32 +749,33 @@ template genCall(callName: untyped, opCode: Op): untyped =
       childMsg,
       some(computation.getFork))
 
-    result = (childComp, memOutPos, memOutLen)
+    computation.tailProc = proc(comp, childComp: var BaseComputation) =
+      if childComp.isError:
+        comp.stack.push 0
+      else:
+        comp.stack.push 1
+
+      if not childComp.shouldEraseReturnData:
+        let actualOutputSize = min(memOutLen, childComp.output.len)
+        comp.memory.write(
+          memOutPos,
+          childComp.output.toOpenArray(0, actualOutputSize - 1))
+        if not childComp.shouldBurnGas:
+          comp.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
+
+      if comp.gasMeter.gasRemaining <= 0:
+        raise newException(OutOfGas, "computation out of gas after contract call ()")
+
+    result = childComp
 
   op callName, inline = false:
     ## CALL, 0xf1, Message-Call into an account
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
-    var (childComp, memOutPos, memOutLen) = `callName Setup`(computation, callName.astToStr)
-
+    var childComp = `callName Setup`(computation, callName.astToStr)
     applyChildComputation(computation, childComp, opCode)
-
-    if childComp.isError:
-      push: 0
-    else:
-      push: 1
-
-    if not childComp.shouldEraseReturnData:
-      let actualOutputSize = min(memOutLen, childComp.output.len)
-      computation.memory.write(
-        memOutPos,
-        childComp.output.toOpenArray(0, actualOutputSize - 1))
-      if not childComp.shouldBurnGas:
-        computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
-
-    if computation.gasMeter.gasRemaining <= 0:
-      raise newException(OutOfGas, "computation out of gas after contract call (" & callName.astToStr & ")")
+    computation.tailProc(computation, childComp)
 
 genCall(call, Call)
 genCall(callCode, CallCode)

@@ -186,7 +186,7 @@ let HomesteadOpDispatch {.compileTime.}: array[Op, NimNode] = genHomesteadJumpTa
 
 proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNode =
 
-  let instr = genSym(nskVar)
+  let instr = quote do: `computation`.instr
   result = nnkCaseStmt.newTree(instr)
 
   # Add a branch for each (opcode, proc) pair
@@ -199,32 +199,30 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
           trace "op: Stop"
           if not `computation`.code.atEnd() and `computation`.tracingEnabled:
             # we only trace `REAL STOP` and ignore `FAKE STOP`
-            let lastOpIndex = `computation`.traceOpCodeStarted(`asOp`)
-            `computation`.traceOpCodeEnded(`asOp`, lastOpIndex)
+            `computation`.opIndex = `computation`.traceOpCodeStarted(`asOp`)
+            `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
           break
       else:
         if BaseGasCosts[op].kind == GckFixed:
           quote do:
-            var lastOpIndex: int
             if `computation`.tracingEnabled:
-              lastOpIndex = `computation`.traceOpCodeStarted(`asOp`)
+              `computation`.opIndex = `computation`.traceOpCodeStarted(`asOp`)
             `computation`.gasMeter.consumeGas(`computation`.gasCosts[`asOp`].cost, reason = $`asOp`)
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeEnded(`asOp`, lastOpIndex)
-            `instr` = `computation`.code.next()
+              `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
+            `computation`.instr = `computation`.code.next()
         else:
-          quote do:
-            var lastOpIndex: int
+          quote do:            
             if `computation`.tracingEnabled:
-              lastOpIndex = `computation`.traceOpCodeStarted(`asOp`)
+              `computation`.opIndex = `computation`.traceOpCodeStarted(`asOp`)
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
-              `computation`.traceOpCodeEnded(`asOp`, lastOpIndex)
+              `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
             when `asOp` in {Return, Revert, SelfDestruct}:
               break
             else:
-              `instr` = `computation`.code.next()
+              `computation`.instr = `computation`.code.next()
 
     result.add nnkOfBranch.newTree(
       newIdentNode($op),
@@ -235,7 +233,7 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
   result = quote do:
     if `computation`.tracingEnabled:
       `computation`.prepareTracer()
-    var `instr` = `computation`.code.next()
+    `computation`.instr = `computation`.code.next()
     while true:
       {.computedGoto.}
       # TODO lots of macro magic here to unravel, with chronicles...

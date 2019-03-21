@@ -143,7 +143,7 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
     result = false
 
 proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool =
-  if computation.msg.depth >= MaxCallDepth:
+  if computation.msg.depth > MaxCallDepth:
     debug "Stack depth limit reached", depth=computation.msg.depth
     return false
 
@@ -163,7 +163,7 @@ proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool
 
 proc executeOpcodes*(computation: var BaseComputation) {.gcsafe.}
 
-proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =
+proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =  
   computation.snapshot()
   defer: computation.dispose()
 
