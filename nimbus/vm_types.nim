@@ -44,8 +44,6 @@ type
     accounts*: HashSet[EthAddress]
     storageKeys*: seq[HashSet[Uint256]]
 
-  OpcodeExecutor* = proc(computation: var BaseComputation)
-
   BaseComputation* = ref object of RootObj
     # The execution computation
     vmState*:               BaseVMState
@@ -62,7 +60,6 @@ type
     accountsToDelete*:      Table[EthAddress, EthAddress]
     opcodes*:               Table[Op, proc(computation: var BaseComputation){.nimcall.}]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
-    opCodeExec*:            OpcodeExecutor
     forkOverride*:          Option[Fork]
     logEntries*:            seq[Log]
 
@@ -70,13 +67,6 @@ type
     info*:                  string
     burnsGas*:              bool
     erasesReturnData*:      bool
-
-  Opcode* = ref object of RootObj
-    # TODO can't use a stack-allocated object because
-    # "BaseComputation is not a concrete type"
-    # TODO: We can probably remove this.
-    kind*: Op
-    runLogic*:  proc(computation: var BaseComputation)
 
   GasMeter* = object
     gasRefunded*: GasInt

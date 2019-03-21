@@ -3,7 +3,7 @@ import options,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
-  ../vm/[computation, interpreter_dispatch, message],
+  ../vm/[computation, message],
   ../vm/interpreter/vm_forks
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, forkOverride=none(Fork)): GasInt =
@@ -11,18 +11,6 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
-
-  # TODO: we have identical `fork` code in setupComputation.
-  # at later stage, we need to get rid of it
-  # and apply changes in eth_*, debug_* RPC,
-  # macro assembler and premix tool set.
-  # at every place where setupComputation and
-  # processTransaction are used.
-  let fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.blockNumber.toFork
 
   let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
   var balance = vmState.readOnlyStateDb().getBalance(sender)
@@ -43,24 +31,10 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   if tx.isContractCreation and isCollision:
     return tx.gasLimit
 
-  var snapshot = vmState.snapshot()
-  defer: snapshot.dispose()
-
-  var contractOK = true
   result = tx.gasLimit
-
   if execComputation(computation):
-    if tx.isContractCreation:
-      contractOK = computation.writeContract(fork)
     result = computation.refundGas(tx, sender)
 
-  if not contractOK and fork == FkHomestead:
-    snapshot.revert()
-    # consume all gas
-    result = tx.gasLimit
-  else:
-    snapshot.commit()
-  
   if computation.isSuicided(vmState.blockHeader.coinbase):
     return 0
 

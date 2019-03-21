@@ -112,61 +112,12 @@ proc commit*(snapshot: var ComputationSnapshot) {.inline.} =
 proc dispose*(snapshot: var ComputationSnapshot) {.inline.} =
   snapshot.snapshot.dispose()
 
-proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
-  if computation.msg.depth >= MaxCallDepth:
-    raise newException(StackDepthError, "Stack depth limit reached")
-
-  let senderBalance = computation.vmState.readOnlyStateDb().
-                      getBalance(computation.msg.sender)
-
-  if senderBalance < computation.msg.value:
-    raise newException(InsufficientFunds,
-      &"Insufficient funds: {senderBalance} < {computation.msg.value}")
-
-  when opCode in {Call, Create}:
-    computation.vmState.mutateStateDb:
-      db.subBalance(computation.msg.sender, computation.msg.value)
-      db.addBalance(computation.msg.storageAddress, computation.msg.value)
-
-proc applyMessage(computation: var BaseComputation, opCode: static[Op]): bool =
-  var snapshot = computation.snapshot()
-  defer: snapshot.dispose()
-
-  when opCode in {CallCode, Call, Create}:
-    try:
-      computation.transferBalance(opCode)
-    except VMError:
-      snapshot.revert()
-      debug "transferBalance failed", msg = computation.error.info
-      return
-
-  if computation.gasMeter.gasRemaining < 0:
-    snapshot.commit()
-    return
-
-  try:
-    # Run code
-    # We cannot use the normal dispatching function `executeOpcodes`
-    # within `interpreter_dispatch.nim` due to a cyclic dependency.
-    computation.opcodeExec(computation)
-    snapshot.commit()
-  except VMError:
-    snapshot.revert(true)
-    debug "VMError applyMessage failed",
-      msg = computation.error.info,
-      depth = computation.msg.depth
-  except EVMError:
-    snapshot.revert() # TODO: true or false?
-    debug "EVMError applyMessage failed",
-      msg = computation.error.info,
-      depth = computation.msg.depth
-  except ValueError:
-    snapshot.revert(true)
-    debug "ValueError applyMessage failed",
-      msg = computation.error.info,
-      depth = computation.msg.depth
-      
-  result = not computation.isError
+proc getFork*(computation: BaseComputation): Fork =
+  result =
+    if computation.forkOverride.isSome:
+      computation.forkOverride.get
+    else:
+      computation.vmState.blockNumber.toFork
 
 proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
   result = true
@@ -192,19 +143,65 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
     if fork < FkHomestead: computation.output = @[]
     result = false
 
-proc generateChildComputation*(fork: Fork, computation: var BaseComputation, childMsg: Message): BaseComputation =
-  var childComp = newBaseComputation(
-      computation.vmState,
-      computation.vmState.blockNumber,
-      childMsg,
-      some(fork))
+proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool =
+  if computation.msg.depth >= MaxCallDepth:
+    debug "Stack depth limit reached", depth=computation.msg.depth
+    return false
 
-  # Copy the fork op code executor proc (assumes child computation is in the same fork)
-  childComp.opCodeExec = computation.opCodeExec
+  let senderBalance = computation.vmState.readOnlyStateDb().
+                      getBalance(computation.msg.sender)
 
-  return childComp
+  if senderBalance < computation.msg.value:
+    debug "insufficient funds", available=senderBalance, needed=computation.msg.value
+    return false
 
-proc addChildComputation(fork: Fork, computation: var BaseComputation, child: BaseComputation) =
+  when opCode in {Call, Create}:
+    computation.vmState.mutateStateDb:
+      db.subBalance(computation.msg.sender, computation.msg.value)
+      db.addBalance(computation.msg.storageAddress, computation.msg.value)
+
+  result = true
+
+proc executeOpcodes*(computation: var BaseComputation) {.gcsafe.}
+
+proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =
+  var snapshot = computation.snapshot()
+  defer: snapshot.dispose()
+
+  when opCode in {CallCode, Call, Create}:
+    if not computation.transferBalance(opCode):
+      snapshot.revert()
+      return
+
+  if computation.gasMeter.gasRemaining < 0:
+    snapshot.commit()
+    return
+
+  try:
+    executeOpcodes(computation)
+    result = not computation.isError
+  except VMError:
+    result = false
+    debug "applyMessage VM Error",
+      msg = getCurrentExceptionMsg(),
+      depth = computation.msg.depth
+  except ValueError:
+    result = false
+    debug "applyMessage Value Error",
+      msg = getCurrentExceptionMsg(),
+      depth = computation.msg.depth
+
+  if result and computation.msg.isCreate:
+    var fork = computation.getFork
+    let contractFailed = not computation.writeContract(fork)
+    result = not(contractFailed and fork == FkHomestead)
+
+  if result:
+    snapshot.commit()
+  else:
+    snapshot.revert(true)
+
+proc addChildComputation(computation: var BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
       computation.returnData = child.output
@@ -222,32 +219,10 @@ proc addChildComputation(fork: Fork, computation: var BaseComputation, child: Ba
     computation.logEntries.add child.logEntries
   computation.children.add(child)
 
-proc getFork*(computation: BaseComputation): Fork =
-  result =
-    if computation.forkOverride.isSome:
-      computation.forkOverride.get
-    else:
-      computation.vmState.blockNumber.toFork
-
 proc applyChildComputation*(parentComp, childComp: var BaseComputation, opCode: static[Op]) =
   ## Apply the vm message childMsg as a child computation.
-  let fork = parentComp.getFork
-
-  var snapshot = parentComp.snapshot()
-  defer: snapshot.dispose()
-  var contractOK = true
-
-  if applyMessage(childComp, opCode):
-    if childComp.msg.isCreate:
-      contractOK = childComp.writeContract(fork)
-
-  if not contractOK and fork == FkHomestead:
-    # consume all gas
-    snapshot.revert(true)
-  else:
-    snapshot.commit()
-
-  fork.addChildComputation(parentComp, childComp)
+  discard childComp.applyMessage(opCode)
+  parentComp.addChildComputation(childComp)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:
@@ -261,14 +236,10 @@ proc addLogEntry*(c: var BaseComputation, log: Log) {.inline.} =
 
 # many methods are basically TODO, but they still return valid values
 # in order to test some existing code
-func getAccountsForDeletion*(c: BaseComputation): seq[EthAddress] =
-  # TODO
-  if c.isError:
-    result = @[]
-  else:
-    result = @[]
+iterator accountsForDeletion*(c: BaseComputation): EthAddress =
+  if not c.isError:
     for account in c.accountsToDelete.keys:
-      result.add(account)
+      yield account
 
 proc getGasRefund*(c: BaseComputation): GasInt =
   if c.isError:
@@ -302,3 +273,5 @@ proc traceError*(c: BaseComputation) =
 
 proc prepareTracer*(c: BaseComputation) =
   c.vmState.tracer.prepare(c.msg.depth)
+
+include interpreter_dispatch
