@@ -25,6 +25,7 @@ type
     expectedLogs: string
     fork: Fork
     debugMode: bool
+    index: int
 
   GST_VMState = ref object of BaseVMState
 
@@ -56,7 +57,7 @@ proc dumpAccount(accountDb: ReadOnlyStateDB, address: EthAddress, name: string):
     "storageRoot": %($accountDb.getStorageRoot(address))
   }
 
-proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gasUsed: GasInt) =
+proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gasUsed: GasInt, success: bool) =
   let recipient = tester.tx.getRecipient()
   let miner = tester.header.coinbase
   var accounts = newJObject()
@@ -78,11 +79,15 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
     "structLogs": vmState.getTracingResult(),
     "accounts": accounts
   }
-  writeFile("debug_" & tester.name & ".json", debugData.pretty())
+  let status = if success: "_success" else: "_failed"
+  writeFile("debug_" & tester.name & "_" & $tester.index & status & ".json", debugData.pretty())
 
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   var tracerFlags: set[TracerFlags] = if tester.debugMode: {TracerFlags.EnableTracing} else : {}
   var vmState = newGST_VMState(emptyRlpHash, tester.header, newBaseChainDB(newMemoryDb()), tracerFlags)
+  var gasUsed: GasInt
+  let sender = tester.tx.getSender()
+
   vmState.mutateStateDB:
     setupStateDB(tester.pre, db)
 
@@ -93,8 +98,10 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
     let actualLogsHash = hashLogEntries(logEntries)
     let expectedLogsHash = toLowerAscii(tester.expectedLogs)
     check(expectedLogsHash == actualLogsHash)
+    if tester.debugMode:
+      let success = expectedLogsHash == actualLogsHash and obtainedHash == tester.expectedHash
+      tester.dumpDebugData(vmState, sender, gasUsed, success)
 
-  let sender = tester.tx.getSender()
   if not validateTransaction(vmState, tester.tx, sender):
     vmState.mutateStateDB:
       # pre-EIP158 (e.g., Byzantium) should ensure currentCoinbase exists
@@ -102,7 +109,6 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       db.addBalance(tester.header.coinbase, 0.u256)
     return
 
-  var gasUsed: GasInt
   if gasUsed + tester.tx.gasLimit <= tester.header.gasLimit:
     vmState.mutateStateDB:
       gasUsed = tester.tx.processTransaction(sender, vmState, some(tester.fork))
@@ -114,9 +120,6 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       txGasLimit=tester.tx.gasLimit
     vmState.mutateStateDB:
       db.addBalance(tester.header.coinbase, 0.u256)
-
-  if tester.debugMode:
-    tester.dumpDebugData(vmState, sender, gasUsed)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
                  debugMode = false, supportedForks: set[Fork] = supportedForks) =
@@ -137,13 +140,17 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
     stateRoot: emptyRlpHash
     )
 
+  let specifyIndex = getConfiguration().index
   tester.debugMode = debugMode
   let ftrans = fixture["transaction"]
   var testedInFork = false
   for fork in supportedForks:
-    if fixture["post"].hasKey(forkNames[fork]):
-      testedInFork = true
+    if fixture["post"].hasKey(forkNames[fork]):      
       for expectation in fixture["post"][forkNames[fork]]:
+        inc tester.index
+        if specifyIndex > 0 and tester.index != specifyIndex: 
+          continue
+        testedInFork = true
         tester.expectedHash = expectation["hash"].getStr
         tester.expectedLogs = expectation["logs"].getStr
         let
