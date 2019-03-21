@@ -15,12 +15,14 @@ type
   Configuration = ref object
     testSubject*: string
     fork*: Fork
+    index*: int
 
 var testConfig {.threadvar.}: Configuration
 
 proc initConfiguration(): Configuration =
   result = new Configuration
   result.fork = FkFrontier
+  result.index = 0
 
 proc getConfiguration*(): Configuration {.gcsafe.} =
   if isNil(testConfig):
@@ -40,6 +42,7 @@ proc processArguments*(msg: var string): ConfigStatus =
     of cmdLongOption, cmdShortOption:
       case key.toLowerAscii()
       of "fork": config.fork = parseEnum[Fork](strip(value))
+      of "index": config.index = parseInt(value)
       else:
         msg = "Unknown option " & key
         if value.len > 0: msg = msg & " : " & value
