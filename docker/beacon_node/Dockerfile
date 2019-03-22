@@ -20,6 +20,7 @@ RUN cd nimbus && \
       -d:with$network_backend \
       -d:SHARD_COUNT=$SHARD_COUNT \
       -d:SLOTS_PER_EPOCH=$SLOTS_PER_EPOCH \
+      -d:chronicles_sinks=json \
       c vendor/nim-beacon-chain/beacon_chain/beacon_node.nim
 
 ENTRYPOINT ["beacon_node"]
