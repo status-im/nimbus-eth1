@@ -75,3 +75,28 @@ proc shh_uninstallFilter(id: int): bool
 proc shh_getFilterChanges(id: int): seq[WhisperMessage]
 proc shh_getMessages(id: int): seq[WhisperMessage]
 ]#
+
+proc shh_version(): string
+proc shh_info(): WhisperInfo
+proc shh_setMaxMessageSize(size: uint64): bool
+proc shh_setMinPoW(pow: float): bool
+proc shh_markTrustedPeer(enode: string): bool
+
+proc shh_newKeyPair(): IdentifierStr
+proc shh_addPrivateKey(key: string): IdentifierStr
+proc shh_deleteKeyPair(id: IdentifierStr): bool
+proc shh_hasKeyPair(id: IdentifierStr): bool
+proc shh_getPublicKey(id: IdentifierStr): PublicKeyStr
+proc shh_getPrivateKey(id: IdentifierStr): PrivateKeyStr
+
+proc shh_newSymKey(): IdentifierStr
+proc shh_addSymKey(key: string): IdentifierStr
+proc shh_generateSymKeyFromPassword(password: string): IdentifierStr
+proc shh_hasSymKey(id: IdentifierStr): bool
+proc shh_getSymKey(id: IdentifierStr): SymKeyStr
+proc shh_deleteSymKey(id: IdentifierStr): bool
+
+proc shh_newMessageFilter(options: WhisperFilterOptions): IdentifierStr
+proc shh_deleteMessageFilter(id: IdentifierStr): bool
+proc shh_getFilterMessages(id: IdentifierStr): seq[WhisperFilterMessage]
+proc shh_post(message: WhisperPostMessage): bool

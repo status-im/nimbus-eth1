@@ -108,7 +108,8 @@ proc start(): NimbusObject =
   if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:
     setupEthRpc(nimbus.ethNode, chainDB, nimbus.rpcServer)
   if RpcFlags.Shh in conf.rpc.flags and ProtocolFlags.Shh in conf.net.protocols:
-    setupWhisperRPC(nimbus.rpcServer)
+    let keys = newWhisperKeys()
+    setupWhisperRPC(nimbus.ethNode, keys, nimbus.rpcServer)
   if RpcFlags.Debug in conf.rpc.flags:
     setupDebugRpc(chainDB, nimbus.rpcServer)
 
