@@ -1711,9 +1711,9 @@ OK: 16/16 Fail: 0/16 Skip: 0/16
 + makeMoney.json                                                  OK
   sha3_deja.json                                                  Skip
   txCost-sec73.json                                               Skip
-  tx_e1c174e2.json                                                Skip
++ tx_e1c174e2.json                                                OK
 ```
-OK: 4/13 Fail: 0/13 Skip: 9/13
+OK: 5/13 Fail: 0/13 Skip: 8/13
 ## stStackTests
 ```diff
   shallowStack.json                                               Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1432/2334 Fail: 0/2334 Skip: 902/2334
+OK: 1433/2334 Fail: 0/2334 Skip: 901/2334
