@@ -65,6 +65,8 @@ type
     forkOverride*:          Option[Fork]
     logEntries*:            seq[Log]
     dbsnapshot*:            Snapshot
+    instr*:                 Op
+    opIndex*:               int
 
   Error* = ref object
     info*:                  string
