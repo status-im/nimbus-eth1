@@ -1,9 +1,7 @@
 #!/bin/bash
 
 set -euv
+cd $(dirname "$0")
 
-CONTAINER_NAME=statusteam/nimbus
-
-docker build -t $CONTAINER_NAME nimbus
-docker push $CONTAINER_NAME
+(cd nimbus && make push)
 

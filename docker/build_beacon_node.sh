@@ -2,13 +2,13 @@
 
 set -euv
 
-DOCKERHUB_REPO_NAME=statusteam/nimbus_beacon_node
+cd $(dirname "$0")
 
 buildAndPush() {
   export NETWORK=$1
   export NETWORK_BACKEND=$2
 
-  (cd $(dirname "$0")/beacon_node && make push)
+  (cd beacon_node && make push)
 }
 
 buildAndPush testnet0 rlpx

@@ -5,8 +5,11 @@ RUN apt update \
  && apt clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+ARG GIT_REVISION
+
 RUN git clone https://github.com/status-im/nimbus.git \
  && cd nimbus \
+ && git reset --hard ${GIT_REVISION} \
  && make update deps
 
 ARG NETWORK
@@ -18,6 +21,7 @@ RUN cd nimbus \
  && ./env.sh nim \
       -o:/usr/bin/beacon_node \
       -d:release \
+      --lineTrace:on \
       -d:with${NETWORK_BACKEND} \
       -d:SHARD_COUNT=${SHARD_COUNT} \
       -d:SLOTS_PER_EPOCH=${SLOTS_PER_EPOCH} \
@@ -29,7 +33,7 @@ RUN cd nimbus \
 FROM debian:9-slim
 
 RUN apt update \
- && apt install -y librocksdb-dev \
+ && apt install -y librocksdb-dev curl \
  && apt clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
