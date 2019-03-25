@@ -4,6 +4,8 @@ set -euv
 
 cd $(dirname "$0")
 
+export GIT_REVISION=$(git rev-parse HEAD)
+
 buildAndPush() {
   export NETWORK=$1
   export NETWORK_BACKEND=$2
