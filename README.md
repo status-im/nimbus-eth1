@@ -37,6 +37,9 @@ dnf install rocksdb-devel
 
 # Debian and Ubuntu
 sudo apt-get install librocksdb-dev
+
+# Arch (AUR)
+pakku -S rocksdb
 ```
 
 On Windows, you can [download pre-compiled DLLs](#windows).
