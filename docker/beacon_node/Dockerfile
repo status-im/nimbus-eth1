@@ -25,6 +25,7 @@ RUN cd nimbus \
       -d:with${NETWORK_BACKEND} \
       -d:SHARD_COUNT=${SHARD_COUNT} \
       -d:SLOTS_PER_EPOCH=${SLOTS_PER_EPOCH} \
+      -d:chronicles_sinks=json \
       c vendor/nim-beacon-chain/beacon_chain/beacon_node.nim
 
 # --------------------------------- #
