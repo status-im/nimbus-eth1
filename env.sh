@@ -20,5 +20,8 @@ export NIMBLE_DIR="${abs_path}/vendor/.nimble"
 # used by nim-beacon-chain/tests/simulation/start.sh
 export BUILD_OUTPUTS_DIR="${abs_path}/build"
 
+# change the prompt in shells that source this file
+export PS1="${PS1%\\\$ } [Nimbus env]\\$ "
+
 exec "$@"
 
