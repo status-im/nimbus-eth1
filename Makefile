@@ -5,7 +5,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-SHELL := bash # the shell used internally by "make"
+# common parts
+include common.mk
+
 GIT_CLONE := git clone --quiet --recurse-submodules
 GIT_PULL := git pull --recurse-submodules
 GIT_STATUS := git status
@@ -25,22 +27,6 @@ RUN_CMD_IN_ALL_REPOS = git submodule foreach --recursive --quiet 'echo -e "\n\e[
 ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
 NIM_DIR := vendor/Nim
-#- extra parameters for the Nim compiler
-#- NIMFLAGS should come from the environment or make's command line
-NIM_PARAMS := $(NIMFLAGS)
-# verbosity level
-V := 1
-NIM_PARAMS := $(NIM_PARAMS) --verbosity:$(V)
-HANDLE_OUTPUT :=
-ifeq ($(V), 0)
-  NIM_PARAMS := $(NIM_PARAMS) --hints:off --warnings:off
-  HANDLE_OUTPUT := &>/dev/null
-endif
-# Chronicles log level
-LOG_LEVEL :=
-ifdef LOG_LEVEL
-  NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_log_level=$(LOG_LEVEL)
-endif
 
 #- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
 #- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
@@ -90,12 +76,9 @@ else
   MD5SUM := md5sum
 endif
 
-# guess who does parsing before variable expansion
-COMMA := ,
-EMPTY :=
-SPACE := $(EMPTY) $(EMPTY)
 # debugging tools + testing tools
 TOOLS := premix persist debug dumper hunter regress tracerTestGen persistBlockTestGen
+TOOLS_DIRS := premix tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
@@ -106,7 +89,7 @@ all: $(TOOLS) nimbus
 
 # builds the tools, wherever they are
 $(TOOLS): | build deps
-	for D in premix tests; do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
+	for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim" && \
 		echo -e "\nThe binary is in './build/$@'.\n"
 
