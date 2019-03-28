@@ -132,33 +132,6 @@ template mutateStateDB*(vmState: BaseVMState, body: untyped) =
     if finalStateRoot != initialStateRoot:
       vmState.blockHeader.stateRoot = finalStateRoot
 
-export DbTransaction, commit, rollback, dispose, safeDispose
-
-type
-  Snapshot* = object
-    transaction: DbTransaction
-    intermediateRoot: Hash256
-    vmState: BaseVMState
-
-proc snapshot*(vmState: BaseVMState): Snapshot =
-  # TODO: use AccountStateDB revert/commit after JournalDB implemented
-  result.transaction = vmState.chaindb.db.beginTransaction()
-  result.intermediateRoot = vmState.accountDb.rootHash
-  vmState.blockHeader.stateRoot = vmState.accountDb.rootHash
-  result.vmState = vmState
-
-proc revert*(s: var Snapshot) =
-  s.transaction.rollback()
-  s.vmState.accountDb.rootHash = s.intermediateRoot
-  s.vmState.blockHeader.stateRoot = s.intermediateRoot
-
-proc commit*(s: var Snapshot) =
-  s.transaction.commit()
-  s.vmState.accountDb.rootHash = s.vmState.blockHeader.stateRoot
-
-proc dispose*(s: var Snapshot) {.inline.} =
-  s.transaction.dispose()
-
 proc getTracingResult*(vmState: BaseVMState): JsonNode =
   doAssert(vmState.tracingEnabled)
   vmState.tracer.trace
@@ -189,4 +162,3 @@ iterator tracedAccountsPairs*(vmState: BaseVMState): (int, EthAddress) =
 proc removeTracedAccounts*(vmState: BaseVMState, accounts: varargs[EthAddress]) =
   for acc in accounts:
     vmState.tracer.accounts.excl acc
-
