@@ -37,4 +37,5 @@ script:
   - ./build/nimbus --help
   - make -j${NPROC} V=0 NIMFLAGS="-d:release" test
   - make -j${NPROC} V=0 test-reproducibility
+  - make -C vendor/nim-beacon-chain -j${NPROC} V=0 test
 
