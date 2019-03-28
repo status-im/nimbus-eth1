@@ -21,7 +21,8 @@ RUN cd nimbus \
  && ./env.sh nim \
       -o:/usr/bin/beacon_node \
       -d:release \
-      --lineTrace:on \
+      --debugger:native \
+      --debugInfo \
       -d:with${NETWORK_BACKEND} \
       -d:SHARD_COUNT=${SHARD_COUNT} \
       -d:SLOTS_PER_EPOCH=${SLOTS_PER_EPOCH} \
