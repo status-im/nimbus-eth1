@@ -82,7 +82,7 @@ TOOLS_DIRS := premix tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-.PHONY: all $(TOOLS) deps github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls beacon_node validator_keygen clean_eth2_network_simulation_files eth2_network_simulation test-libp2p-daemon
+.PHONY: all $(TOOLS) deps github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon
 
 # default target, because it's the first one that doesn't start with '.'
 all: $(TOOLS) nimbus
@@ -139,7 +139,7 @@ test-reproducibility:
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,beacon_node,validator_keygen,*.exe} vendor/go/bin \
+	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*.exe} vendor/go/bin \
 		$(NIMBLE_DIR) $(NIM_BINARY) $(NIM_DIR)/nimcache nimcache
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete
@@ -173,16 +173,6 @@ update-remote:
 status: | $(REPOS)
 	$(eval CMD := $(GIT_STATUS))
 	$(RUN_CMD_IN_ALL_REPOS)
-
-#- actually binaries, but have them as phony targets to force rebuilds
-beacon_node validator_keygen: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ $(REPOS_DIR)/nim-beacon-chain/beacon_chain/$@.nim
-
-clean_eth2_network_simulation_files:
-	rm -rf $(REPOS_DIR)/nim-beacon-chain/tests/simulation/data
-
-eth2_network_simulation: | beacon_node validator_keygen clean_eth2_network_simulation_files
-	SKIP_BUILDS=1 $(ENV_SCRIPT) $(REPOS_DIR)/nim-beacon-chain/tests/simulation/start.sh
 
 vendor/go/bin/p2pd:
 	cd vendor/go/src/github.com/libp2p/go-libp2p-daemon && \
