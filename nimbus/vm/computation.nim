@@ -144,7 +144,7 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
     result = false
 
 proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool =
-  if computation.msg.depth >= MaxCallDepth:
+  if computation.msg.depth > MaxCallDepth:
     debug "Stack depth limit reached", depth=computation.msg.depth
     return false
 
