@@ -827,9 +827,6 @@ op selfDestruct, inline = false:
 
     # Register the account to be deleted
     computation.registerAccountForDeletion(beneficiary)
-    # FIXME: hook this into actual RefundSelfDestruct
-    let RefundSelfDestruct = 24_000
-    computation.gasMeter.refundGas(RefundSelfDestruct)
 
     trace "SELFDESTRUCT",
       storageAddress = computation.msg.storageAddress.toHex,
