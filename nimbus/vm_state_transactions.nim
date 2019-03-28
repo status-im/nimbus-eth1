@@ -19,7 +19,7 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
   let gasCost = transaction.gasLimit.u256 * transaction.gasPrice.u256
 
   transaction.gasLimit >= transaction.intrinsicGas and
-    transaction.gasPrice <= (1 shl 34) and
+    #transaction.gasPrice <= (1 shl 34) and
     limitAndValue <= readOnlyDB.getBalance(sender) and
     transaction.accountNonce == readOnlyDB.getNonce(sender) and
     readOnlyDB.getBalance(sender) >= gasCost
