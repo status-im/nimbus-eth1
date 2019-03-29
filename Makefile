@@ -53,7 +53,7 @@ else
     $(MAKE) LD=$(CC) $(HANDLE_OUTPUT)
   EXE_SUFFIX :=
 endif
-BUILD_NIM := echo "Building the Nim compiler." && \
+BUILD_NIM := echo -e $(BUILD_MSG) "Nim compiler" && \
 	cd $(NIM_DIR) && \
 	rm -rf bin/nim_csources csources dist/nimble && \
 	ln -s ../Nim-csources csources && \
@@ -90,16 +90,21 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 # default target, because it's the first one that doesn't start with '.'
 all: $(TOOLS) nimbus
 
+#- when the special ".SILENT" target is present, all recipes are silenced as if they all had a "@" prefix
+#- by setting SILENT_TARGET_PREFIX to a non-empty value, the name of this target becomes meaningless to `make`
+#- idea stolen from http://make.mad-scientist.net/managing-recipe-echoing/
+$(SILENT_TARGET_PREFIX).SILENT:
+
 # builds the tools, wherever they are
 $(TOOLS): | build deps
 	for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim" && \
-		echo -e "\nThe binary is in './build/$@'.\n"
+		echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
 nimbus: | build deps
-	$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims && \
-		echo -e "\nThe binary is in './build/nimbus'.\n"
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims
 
 # dir
 build:

@@ -124,11 +124,11 @@ You can now follow those instructions in the previous section by replacing `make
 
 - the Premix debugging tools are [documented separately](premix/readme.md)
 
-- you can control the Makefile's verbosity with the V variable (defaults to 1):
+- you can control the Makefile's verbosity with the V variable (defaults to 0):
 
 ```bash
-make V=0 # quiet
-make V=2 test # more verbose than usual
+make V=1 # verbose
+make V=2 test # even more verbose
 ```
 
 - same for the [Chronicles log level](https://github.com/status-im/nim-chronicles#chronicles_log_level):
