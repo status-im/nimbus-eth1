@@ -34,6 +34,7 @@ NIM_DIR := vendor/Nim
 #  but this is broken when using symlinks, so build csources separately (we get parallel compiling as a bonus)
 #- Windows is a special case, as usual
 #- macOS is also a special case, with its "ln" not supporting "-r"
+#- rebuilds Nimble in release mode, for those using it manually
 ifeq ($(OS), Windows_NT)
   # the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection
   ifeq ($(ARCH_OVERRIDE), x86)
@@ -68,7 +69,8 @@ BUILD_NIM := echo "Building the Nim compiler." && \
 	} || { \
 		cp -a bin/nim bin/nim_csources; \
 	} && \
-	sh build_all.sh $(HANDLE_OUTPUT)
+	sh build_all.sh $(HANDLE_OUTPUT) && \
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:release --noNimblePath -p:compiler --nilseqs:on -o:bin/nimble dist/nimble/src/nimble.nim
 NIM_BINARY := $(NIM_DIR)/bin/nim$(EXE_SUFFIX)
 # md5sum - macOS is a special case
 ifeq ($(shell uname), Darwin)
