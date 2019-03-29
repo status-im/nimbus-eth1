@@ -52,7 +52,8 @@ else
     $(MAKE) LD=$(CC) $(HANDLE_OUTPUT)
   EXE_SUFFIX :=
 endif
-BUILD_NIM := cd $(NIM_DIR) && \
+BUILD_NIM := echo "Building the Nim compiler." && \
+	cd $(NIM_DIR) && \
 	rm -rf bin/nim_csources csources dist/nimble && \
 	ln -s ../Nim-csources csources && \
 	mkdir -p dist && \
