@@ -22,6 +22,8 @@ To keep up to date with changes and development progress, follow the [Nimbus blo
 
 ## Building & Testing
 
+_We currently do not guarantee that Nimbus will work on Windows._
+
 ### Prerequisites
 
 #### Rocksdb
@@ -44,7 +46,7 @@ pakku -S rocksdb
 
 On Windows, you can [download pre-compiled DLLs](#windows).
 
-You can also build and install it by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md)
+You can also build and install it by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md).
 
 #### Developer tools
 
@@ -95,6 +97,8 @@ Our Wiki provides additional helpful information for [debugging individual test 
 and for [pairing Nimbus with a locally running copy of Geth][2].
 
 #### Windows
+
+_Experimental support!_
 
 Install Mingw-w64 for your architecture using the "[MinGW-W64 Online
 Installer](https://sourceforge.net/projects/mingw-w64/files/)" (first link
