@@ -221,28 +221,12 @@ cd vendor/nim-blscurve
 
 Report any errors you encounter, please, if not [already documented](https://github.com/status-im/nimbus/issues)!
 
-
-Sometimes, the build will fail even though the latest CI is green - here are a few tips to handle this:
-
-#### Using the Makefile
-
 * Turn it off and on again:
+
 ```bash
 make clean
 make update
 ```
-
-#### Using Nimble directly
-
-* Wrong Nim version
-  * We depend on many bleeding-edge features - Nim regressions often happen
-  * Use the [Status fork](https://github.com/status-im/Nim) of Nim
-* Wrong versions of dependencies
-  * nimble dependency tracking often breaks due to its global registry
-  * wipe the nimble folder and try again
-* C compile or link fails
-  * Nim compile cache is pretty buggy and sometimes will fail to recompile
-  * wipe your nimcache folder
 
 ## License
 
