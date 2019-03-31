@@ -33,9 +33,8 @@ install:
 
 script:
   - set -e # fail fast
-  - make -j${NPROC} V=0
+  - make -j${NPROC}
   - ./build/nimbus --help
-  - make -j${NPROC} V=0 NIMFLAGS="-d:release" test
-  - make -j${NPROC} V=0 test-reproducibility
-  - make -C vendor/nim-beacon-chain -j${NPROC} V=0 test
+  - make -j${NPROC} test test-reproducibility
+  - make -C vendor/nim-beacon-chain -j${NPROC} test
 
