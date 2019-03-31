@@ -51,8 +51,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
         raise newException(Exception, "Validation error. Debugging metadata dumped.")
 
     if validationResult != ValidationResult.OK:
-      result = validationResult
-      return
+      return validationResult
 
     discard c.db.persistHeaderToDb(headers[i])
     if c.db.getCanonicalHead().blockHash != headers[i].blockHash:
