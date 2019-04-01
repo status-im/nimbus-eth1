@@ -111,6 +111,14 @@ proc commit*(comp: BaseComputation) =
 proc dispose*(comp: BaseComputation) {.inline.} =
   comp.dbsnapshot.transaction.dispose()
 
+proc rollback*(comp: BaseComputation) =
+  comp.dbsnapshot.transaction.rollback()
+  comp.vmState.accountDb.rootHash = comp.dbsnapshot.intermediateRoot
+  comp.vmState.blockHeader.stateRoot = comp.dbsnapshot.intermediateRoot
+
+proc setError*(comp: BaseComputation, msg: string, burnsGas = false) {.inline.} =
+  comp.error = Error(info: msg, burnsGas: burnsGas)
+
 proc getFork*(computation: BaseComputation): Fork =
   result =
     if computation.forkOverride.isSome:
@@ -142,34 +150,33 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
     if fork < FkHomestead: computation.output = @[]
     result = false
 
-proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool =
+proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
   if computation.msg.depth > MaxCallDepth:
-    debug "Stack depth limit reached", depth=computation.msg.depth
-    return false
+    computation.setError(&"Stack depth limit reached depth={computation.msg.depth}")
+    return
 
   let senderBalance = computation.vmState.readOnlyStateDb().
                       getBalance(computation.msg.sender)
 
   if senderBalance < computation.msg.value:
-    debug "insufficient funds", available=senderBalance, needed=computation.msg.value
-    return false
+    computation.setError(&"insufficient funds available={senderBalance}, needed={computation.msg.value}")
+    return
 
   when opCode in {Call, Create}:
     computation.vmState.mutateStateDb:
       db.subBalance(computation.msg.sender, computation.msg.value)
       db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
-  result = true
-
 proc executeOpcodes*(computation: var BaseComputation) {.gcsafe.}
 
-proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =
+proc applyMessage*(computation: var BaseComputation, opCode: static[Op]) =
   computation.snapshot()
   defer: computation.dispose()
 
   when opCode in {CallCode, Call, Create}:
-    if not computation.transferBalance(opCode):
-      computation.revert()
+    computation.transferBalance(opCode)
+    if computation.isError():
+      computation.rollback()
       return
 
   if computation.gasMeter.gasRemaining < 0:
@@ -178,27 +185,20 @@ proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =
 
   try:
     executeOpcodes(computation)
-    result = not computation.isError
-  except VMError:
-    result = false
-    debug "applyMessage VM Error",
-      msg = getCurrentExceptionMsg(),
-      depth = computation.msg.depth
-  except ValueError:
-    result = false
-    debug "applyMessage Value Error",
-      msg = getCurrentExceptionMsg(),
-      depth = computation.msg.depth
+  except:
+    let msg = getCurrentExceptionMsg()
+    computation.setError(&"applyMessage Error msg={msg}, depth={computation.msg.depth}", true)
 
-  if result and computation.msg.isCreate:
-    var fork = computation.getFork
+  if computation.isSuccess and computation.msg.isCreate:
+    let fork = computation.getFork
     let contractFailed = not computation.writeContract(fork)
-    result = not(contractFailed and fork == FkHomestead)
+    if contractFailed and fork == FkHomestead:
+      computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
 
-  if result:
+  if computation.isSuccess:
     computation.commit()
   else:
-    computation.revert(true)
+    computation.rollback()
 
 proc addChildComputation(computation: var BaseComputation, child: BaseComputation) =
   if child.isError:
@@ -220,7 +220,7 @@ proc addChildComputation(computation: var BaseComputation, child: BaseComputatio
 
 proc applyChildComputation*(parentComp, childComp: var BaseComputation, opCode: static[Op]) =
   ## Apply the vm message childMsg as a child computation.
-  discard childComp.applyMessage(opCode)
+  childComp.applyMessage(opCode)
   parentComp.addChildComputation(childComp)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =

@@ -65,9 +65,9 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
 
 proc execComputation*(computation: var BaseComputation): bool =
   if computation.msg.isCreate:
-    result = computation.applyMessage(Create)
+    computation.applyMessage(Create)
   else:
-    result = computation.applyMessage(Call)
+    computation.applyMessage(Call)
 
   computation.vmState.mutateStateDB:
     var suicidedCount = 0
@@ -79,6 +79,7 @@ proc execComputation*(computation: var BaseComputation): bool =
     const RefundSelfDestruct = 24_000
     computation.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
 
+  result = computation.isSuccess
   if result:
     computation.vmState.addLogs(computation.logEntries)
   else:
