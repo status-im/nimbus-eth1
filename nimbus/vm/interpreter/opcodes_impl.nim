@@ -593,15 +593,13 @@ op create, inline = false, value, startPosition, size:
   var childComp = setupCreate(computation, memPos, len, value)
   if childComp.isNil: return
 
-  computation.applyChildComputation(childComp, Create)
+  childComp.applyMessage(Create)
+  computation.addChildComputation(childComp)
 
   if childComp.isError:
     push: 0
   else:
     push: childComp.msg.storageAddress
-
-  if not childComp.shouldBurnGas:
-    computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
 
 proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
@@ -761,7 +759,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
     ## STATICCALL, 0xfa, Static message-call into an account.
     var (childComp, memOutPos, memOutLen) = `callName Setup`(computation, callName.astToStr)
 
-    applyChildComputation(computation, childComp, opCode)
+    childComp.applyMessage(opCode)
+    addChildComputation(computation, childComp)
 
     if childComp.isError:
       push: 0
@@ -773,11 +772,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
       computation.memory.write(
         memOutPos,
         childComp.output.toOpenArray(0, actualOutputSize - 1))
-      if not childComp.shouldBurnGas:
-        computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
-
-    if computation.gasMeter.gasRemaining <= 0:
-      raise newException(OutOfGas, "computation out of gas after contract call (" & callName.astToStr & ")")
 
 genCall(call, Call)
 genCall(callCode, CallCode)

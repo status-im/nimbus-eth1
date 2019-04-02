@@ -200,7 +200,7 @@ proc applyMessage*(computation: var BaseComputation, opCode: static[Op]) =
   else:
     computation.rollback()
 
-proc addChildComputation(computation: var BaseComputation, child: BaseComputation) =
+proc addChildComputation*(computation: var BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
       computation.returnData = child.output
@@ -216,12 +216,10 @@ proc addChildComputation(computation: var BaseComputation, child: BaseComputatio
     for k, v in child.accountsToDelete:
       computation.accountsToDelete[k] = v
     computation.logEntries.add child.logEntries
-  computation.children.add(child)
 
-proc applyChildComputation*(parentComp, childComp: var BaseComputation, opCode: static[Op]) =
-  ## Apply the vm message childMsg as a child computation.
-  childComp.applyMessage(opCode)
-  parentComp.addChildComputation(childComp)
+  if not child.shouldBurnGas:
+    computation.gasMeter.returnGas(child.gasMeter.gasRemaining)
+  computation.children.add(child)
 
 proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:
