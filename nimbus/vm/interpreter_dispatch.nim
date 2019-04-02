@@ -247,12 +247,10 @@ macro genHomesteadDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(HomesteadOpDispatch, computation)
 
 proc frontierVM(computation: var BaseComputation) =
-  if not computation.execPrecompiles:
-    genFrontierDispatch(computation)
+  genFrontierDispatch(computation)
 
 proc homesteadVM(computation: var BaseComputation) =
-  if not computation.execPrecompiles:
-    genHomesteadDispatch(computation)
+  genHomesteadDispatch(computation)
 
 proc executeOpcodes(computation: var BaseComputation) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary

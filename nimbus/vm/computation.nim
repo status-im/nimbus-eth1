@@ -182,15 +182,17 @@ proc applyMessage*(computation: var BaseComputation, opCode: static[Op]) =
   if computation.gasMeter.gasRemaining < 0:
     computation.commit()
     return
-
+    
+  let fork = computation.getFork
+  
   try:
-    executeOpcodes(computation)
+    if not computation.execPrecompiles(fork):
+      executeOpcodes(computation)
   except:
     let msg = getCurrentExceptionMsg()
     computation.setError(&"applyMessage Error msg={msg}, depth={computation.msg.depth}", true)
 
-  if computation.isSuccess and computation.msg.isCreate:
-    let fork = computation.getFork
+  if computation.isSuccess and computation.msg.isCreate:    
     let contractFailed = not computation.writeContract(fork)
     if contractFailed and fork == FkHomestead:
       computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)

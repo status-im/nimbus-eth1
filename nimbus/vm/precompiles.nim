@@ -1,15 +1,16 @@
 import
-  ../vm_types, interpreter/[gas_meter, gas_costs, utils/utils_numeric],
+  ../vm_types, interpreter/[gas_meter, gas_costs, utils/utils_numeric, vm_forks],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
   message, math, nimcrypto, bncurve/[fields, groups]
 
 type
   PrecompileAddresses* = enum
+    # Frontier to Spurious Dragron
     paEcRecover = 1,
     paSha256,
     paRipeMd160,
     paIdentity,
-    #
+    # Byzantium onward
     paModExp,
     paEcAdd,
     paEcMul,
@@ -274,12 +275,13 @@ proc bn256ecPairing*(computation: var BaseComputation) =
   # computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
   computation.rawOutput = @output
 
-proc execPrecompiles*(computation: var BaseComputation): bool {.inline.} =
+proc execPrecompiles*(computation: var BaseComputation, fork: Fork): bool {.inline.} =
   for i in 0..18:
     if computation.msg.codeAddress[i] != 0: return
 
   let lb = computation.msg.codeAddress[19]
-  if lb in PrecompileAddresses.low.byte .. PrecompileAddresses.high.byte:
+  let maxPrecompileAddr = if fork < FkByzantium: paIdentity else: PrecompileAddresses.high
+  if lb in PrecompileAddresses.low.byte .. maxPrecompileAddr.byte:
     result = true
     let precompile = PrecompileAddresses(lb)
     trace "Call precompile", precompile = precompile, codeAddr = computation.msg.codeAddress

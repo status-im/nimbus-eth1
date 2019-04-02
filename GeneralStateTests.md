@@ -2377,13 +2377,13 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
   ecpairing_two_point_match_5.json                                Skip
   ecpairing_two_point_oog.json                                    Skip
   ecpairing_two_points_with_one_g2_zero.json                      Skip
-  pairingTest.json                                                Skip
-  pointAdd.json                                                   Skip
-  pointAddTrunc.json                                              Skip
-  pointMulAdd.json                                                Skip
-  pointMulAdd2.json                                               Skip
++ pairingTest.json                                                OK
++ pointAdd.json                                                   OK
++ pointAddTrunc.json                                              OK
++ pointMulAdd.json                                                OK
++ pointMulAdd2.json                                               OK
 ```
-OK: 0/133 Fail: 0/133 Skip: 133/133
+OK: 5/133 Fail: 0/133 Skip: 128/133
 ## stZeroKnowledge2
 ```diff
   ecadd_0-0_0-0_21000_0.json                                      Skip
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1433/2334 Fail: 0/2334 Skip: 901/2334
+OK: 1438/2334 Fail: 0/2334 Skip: 896/2334
