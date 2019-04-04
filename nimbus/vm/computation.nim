@@ -214,7 +214,7 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
 
   executeOpcodes(computation)
   computation.nextProc()
-  
+
 proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
