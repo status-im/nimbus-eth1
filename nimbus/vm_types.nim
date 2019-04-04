@@ -71,6 +71,7 @@ type
     nextProc*:              proc()
     memOutLen*:             int
     memOutPos*:             int
+    child*:                 BaseComputation
 
   Error* = ref object
     info*:                  string

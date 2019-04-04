@@ -213,7 +213,6 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
     postExecuteVM(computation)
 
   executeOpcodes(computation)
-  computation.nextProc()
 
 proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
   if child.isError:

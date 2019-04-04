@@ -234,6 +234,7 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
     try:
       let fork = `computation`.getFork
       if `computation`.execPrecompiles(fork):
+        computation.nextProc()
         return
 
       if `computation`.tracingEnabled:
@@ -248,6 +249,7 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
       let msg = getCurrentExceptionMsg()
       let errorMsg = "Opcode Dispatch Error msg=" & msg & ", depth=" & $computation.msg.depth
       `computation`.setError(errorMsg, true)
+    computation.nextProc()
 
 macro genFrontierDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(FrontierOpDispatch, computation)
