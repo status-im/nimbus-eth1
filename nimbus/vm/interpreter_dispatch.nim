@@ -211,7 +211,6 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
               `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
-            `instr` = `computation`.code.next()
         else:
           quote do:
             if `computation`.tracingEnabled:
@@ -221,8 +220,6 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
               `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
             when `asOp` in {Return, Revert, SelfDestruct}:
               break
-            else:
-              `instr` = `computation`.code.next()
 
     result.add nnkOfBranch.newTree(
       newIdentNode($op),
@@ -233,9 +230,11 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
   result = quote do:
     if `computation`.tracingEnabled:
       `computation`.prepareTracer()
-    `computation`.instr = `computation`.code.next()
     while true:
-      {.computedGoto.}
+      `instr` = `computation`.code.next()
+      #{.computedGoto.}
+      # computed goto causing stack overflow, it consumes a lot of space
+      # we could use manual jump table instead
       # TODO lots of macro magic here to unravel, with chronicles...
       # `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
       `result`
