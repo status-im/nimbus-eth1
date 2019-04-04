@@ -63,7 +63,7 @@ proc getFR(data: openarray[byte]): FR =
   if not result.fromBytes2(data):
     raise newException(ValidationError, "Could not get FR value")
 
-proc ecRecover*(computation: var BaseComputation) =
+proc ecRecover*(computation: BaseComputation) =
   computation.gasMeter.consumeGas(
     GasECRecover,
     reason="ECRecover Precompile")
@@ -79,7 +79,7 @@ proc ecRecover*(computation: var BaseComputation) =
   computation.rawOutput[12..31] = pubKey.toCanonicalAddress()
   trace "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
 
-proc sha256*(computation: var BaseComputation) =
+proc sha256*(computation: BaseComputation) =
   let
     wordCount = wordCount(computation.msg.data.len)
     gasFee = GasSHA256 + wordCount * GasSHA256Word
@@ -88,7 +88,7 @@ proc sha256*(computation: var BaseComputation) =
   computation.rawOutput = @(nimcrypto.sha_256.digest(computation.msg.data).data)
   trace "SHA256 precompile", output = computation.rawOutput.toHex
 
-proc ripemd160*(computation: var BaseComputation) =
+proc ripemd160*(computation: BaseComputation) =
   let
     wordCount = wordCount(computation.msg.data.len)
     gasFee = GasRIPEMD160 + wordCount * GasRIPEMD160Word
@@ -98,7 +98,7 @@ proc ripemd160*(computation: var BaseComputation) =
   computation.rawOutput[12..31] = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
   trace "RIPEMD160 precompile", output = computation.rawOutput.toHex
 
-proc identity*(computation: var BaseComputation) =
+proc identity*(computation: BaseComputation) =
   let
     wordCount = wordCount(computation.msg.data.len)
     gasFee = GasIdentity + wordCount * GasIdentityWord
@@ -107,7 +107,7 @@ proc identity*(computation: var BaseComputation) =
   computation.rawOutput = computation.msg.data
   trace "Identity precompile", output = computation.rawOutput.toHex
 
-proc modExpInternal(computation: var BaseComputation, base_len, exp_len, mod_len: int, T: type StUint) =
+proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: int, T: type StUint) =
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
 
@@ -171,7 +171,7 @@ proc modExpInternal(computation: var BaseComputation, base_len, exp_len, mod_len
     else:
       computation.rawOutput = @(powmod(base, exp, modulo).toByteArrayBE)
 
-proc modExp*(computation: var BaseComputation) =
+proc modExp*(computation: BaseComputation) =
   ## Modular exponentiation precompiled contract
   ## Yellow Paper Appendix E
   ## EIP-198 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md
@@ -200,7 +200,7 @@ proc modExp*(computation: var BaseComputation) =
   else:
     raise newException(ValueError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
-proc bn256ecAdd*(computation: var BaseComputation) =
+proc bn256ecAdd*(computation: BaseComputation) =
   var
     input: array[128, byte]
     output: array[64, byte]
@@ -220,7 +220,7 @@ proc bn256ecAdd*(computation: var BaseComputation) =
   # computation.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
   computation.rawOutput = @output
 
-proc bn256ecMul*(computation: var BaseComputation) =
+proc bn256ecMul*(computation: BaseComputation) =
   var
     input: array[96, byte]
     output: array[64, byte]
@@ -242,7 +242,7 @@ proc bn256ecMul*(computation: var BaseComputation) =
   # computation.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
   computation.rawOutput = @output
 
-proc bn256ecPairing*(computation: var BaseComputation) =
+proc bn256ecPairing*(computation: BaseComputation) =
   var output: array[32, byte]
 
   let msglen = len(computation.msg.data)
@@ -275,7 +275,7 @@ proc bn256ecPairing*(computation: var BaseComputation) =
   # computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
   computation.rawOutput = @output
 
-proc execPrecompiles*(computation: var BaseComputation, fork: Fork): bool {.inline.} =
+proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.} =
   for i in 0..18:
     if computation.msg.codeAddress[i] != 0: return
 

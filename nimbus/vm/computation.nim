@@ -61,7 +61,7 @@ func output*(c: BaseComputation): seq[byte] =
   else:
     c.rawOutput
 
-func `output=`*(c: var BaseComputation, value: openarray[byte]) =
+func `output=`*(c: BaseComputation, value: openarray[byte]) =
   c.rawOutput = @value
 
 proc outputHex*(c: BaseComputation): string =
@@ -69,11 +69,11 @@ proc outputHex*(c: BaseComputation): string =
     return "0x"
   c.rawOutput.bytesToHex
 
-proc isSuicided*(c: var BaseComputation, address: EthAddress): bool =
+proc isSuicided*(c: BaseComputation, address: EthAddress): bool =
   result = address in c.accountsToDelete
 
 proc prepareChildMessage*(
-    c: var BaseComputation,
+    c: BaseComputation,
     gas: GasInt,
     to: EthAddress,
     value: UInt256,
@@ -126,7 +126,7 @@ proc getFork*(computation: BaseComputation): Fork =
     else:
       computation.vmState.blockNumber.toFork
 
-proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
+proc writeContract*(computation: BaseComputation, fork: Fork): bool =
   result = true
 
   let contractCode = computation.output
@@ -150,7 +150,7 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
     if fork < FkHomestead: computation.output = @[]
     result = false
 
-proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
+proc transferBalance(computation: BaseComputation, opCode: static[Op]) =
   if computation.msg.depth > MaxCallDepth:
     computation.setError(&"Stack depth limit reached depth={computation.msg.depth}")
     return
@@ -167,9 +167,9 @@ proc transferBalance(computation: var BaseComputation, opCode: static[Op]) =
       db.subBalance(computation.msg.sender, computation.msg.value)
       db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
-proc executeOpcodes*(computation: var BaseComputation) {.gcsafe.}
+proc executeOpcodes*(computation: BaseComputation) {.gcsafe.}
 
-proc applyMessage*(computation: var BaseComputation, opCode: static[Op]) =
+proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   computation.snapshot()
   defer: computation.dispose()
 
@@ -202,7 +202,7 @@ proc applyMessage*(computation: var BaseComputation, opCode: static[Op]) =
   else:
     computation.rollback()
 
-proc addChildComputation*(computation: var BaseComputation, child: BaseComputation) =
+proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
       computation.returnData = child.output
@@ -223,14 +223,14 @@ proc addChildComputation*(computation: var BaseComputation, child: BaseComputati
     computation.gasMeter.returnGas(child.gasMeter.gasRemaining)
   computation.children.add(child)
 
-proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
+proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:
     raise newException(ValueError,
       "invariant:  should be impossible for an account to be " &
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
-proc addLogEntry*(c: var BaseComputation, log: Log) {.inline.} =
+proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
   c.logEntries.add(log)
 
 # many methods are basically TODO, but they still return valid values

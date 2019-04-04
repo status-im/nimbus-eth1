@@ -16,7 +16,7 @@ import
 logScope:
   topics = "vm opcode"
 
-func invalidInstruction*(computation: var BaseComputation) {.inline.} =
+func invalidInstruction*(computation: BaseComputation) {.inline.} =
   raise newException(InvalidInstruction, "Invalid instruction, received an opcode not implemented in the current fork.")
 
 let FrontierOpDispatch {.compileTime.}: array[Op, NimNode] = block:
@@ -246,13 +246,13 @@ macro genFrontierDispatch(computation: BaseComputation): untyped =
 macro genHomesteadDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(HomesteadOpDispatch, computation)
 
-proc frontierVM(computation: var BaseComputation) =
+proc frontierVM(computation: BaseComputation) =
   genFrontierDispatch(computation)
 
-proc homesteadVM(computation: var BaseComputation) =
+proc homesteadVM(computation: BaseComputation) =
   genHomesteadDispatch(computation)
 
-proc executeOpcodes(computation: var BaseComputation) =
+proc executeOpcodes(computation: BaseComputation) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   let fork = computation.getFork
 

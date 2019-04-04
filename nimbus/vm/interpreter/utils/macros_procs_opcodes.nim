@@ -59,12 +59,12 @@ macro op*(procname: untyped, inline: static[bool], stackParams_body: varargs[unt
   # TODO: replace by func to ensure no side effects
   if inline:
     result = quote do:
-      proc `procname`*(`computation`: var BaseComputation) {.inline.} =
+      proc `procname`*(`computation`: BaseComputation) {.inline.} =
         `popStackStmt`
         `body`
   else:
     result = quote do:
-      proc `procname`*(`computation`: var BaseComputation) =
+      proc `procname`*(`computation`: BaseComputation) =
         `popStackStmt`
         `body`
 
@@ -76,7 +76,7 @@ macro genPush*(): untyped =
   for size in 1 .. 32:
     let name = genName(size)
     result.add quote do:
-      func `name`*(computation: var BaseComputation) {.inline.}=
+      func `name`*(computation: BaseComputation) {.inline.}=
         ## Push `size`-byte(s) on the stack
         computation.stack.push computation.code.readVmWord(`size`)
 
@@ -87,7 +87,7 @@ macro genDup*(): untyped =
   for pos in 1 .. 16:
     let name = genName(pos)
     result.add quote do:
-      func `name`*(computation: var BaseComputation) {.inline.}=
+      func `name`*(computation: BaseComputation) {.inline.}=
         computation.stack.dup(`pos`)
 
 macro genSwap*(): untyped =
@@ -97,10 +97,10 @@ macro genSwap*(): untyped =
   for pos in 1 .. 16:
     let name = genName(pos)
     result.add quote do:
-      func `name`*(computation: var BaseComputation) {.inline.}=
+      func `name`*(computation: BaseComputation) {.inline.}=
         computation.stack.swap(`pos`)
 
-proc logImpl(c: var BaseComputation, opcode: Op, topicCount: int) =
+proc logImpl(c: BaseComputation, opcode: Op, topicCount: int) =
   doAssert(topicCount in 0 .. 4)
   let (memStartPosition, size) = c.stack.popInt(2)
   let (memPos, len) = (memStartPosition.cleanMemRef, size.cleanMemRef)
@@ -122,8 +122,8 @@ proc logImpl(c: var BaseComputation, opcode: Op, topicCount: int) =
   c.addLogEntry(log)
 
 template genLog*() =
-  proc log0*(c: var BaseComputation) {.inline.} = logImpl(c, Log0, 0)
-  proc log1*(c: var BaseComputation) {.inline.} = logImpl(c, Log1, 1)
-  proc log2*(c: var BaseComputation) {.inline.} = logImpl(c, Log2, 2)
-  proc log3*(c: var BaseComputation) {.inline.} = logImpl(c, Log3, 3)
-  proc log4*(c: var BaseComputation) {.inline.} = logImpl(c, Log4, 4)
+  proc log0*(c: BaseComputation) {.inline.} = logImpl(c, Log0, 0)
+  proc log1*(c: BaseComputation) {.inline.} = logImpl(c, Log1, 1)
+  proc log2*(c: BaseComputation) {.inline.} = logImpl(c, Log2, 2)
+  proc log3*(c: BaseComputation) {.inline.} = logImpl(c, Log3, 3)
+  proc log4*(c: BaseComputation) {.inline.} = logImpl(c, Log4, 4)

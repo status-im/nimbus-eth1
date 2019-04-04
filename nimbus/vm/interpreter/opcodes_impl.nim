@@ -452,7 +452,7 @@ op sstore, inline = false, slot, value:
   computation.vmState.mutateStateDB:
     db.setStorage(computation.msg.storageAddress, slot, value)
 
-proc jumpImpl(computation: var BaseComputation, jumpTarget: UInt256) =
+proc jumpImpl(computation: BaseComputation, jumpTarget: UInt256) =
   if jumpTarget >= computation.code.len.u256:
     raise newException(InvalidJumpDestination, "Invalid Jump Destination")
 
@@ -537,7 +537,7 @@ proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint2
 
   result = true
 
-proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint256): BaseComputation =
+proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256): BaseComputation =
   let
     callData = computation.memory.read(memPos, len)
     createMsgGas = computation.getGasRemaining()
@@ -601,7 +601,7 @@ op create, inline = false, value, startPosition, size:
   else:
     push: childComp.msg.storageAddress
 
-proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let codeAddress = computation.stack.popAddress()
 
@@ -623,7 +623,7 @@ proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress
     memoryOutputSize,
     computation.msg.flags)
 
-proc callCodeParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc callCodeParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let to = computation.stack.popAddress()
 
@@ -642,7 +642,7 @@ proc callCodeParams(computation: var BaseComputation): (UInt256, UInt256, EthAdd
     memoryOutputSize,
     computation.msg.flags)
 
-proc delegateCallParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc delegateCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let codeAddress = computation.stack.popAddress()
 
@@ -664,7 +664,7 @@ proc delegateCallParams(computation: var BaseComputation): (UInt256, UInt256, Et
     memoryOutputSize,
     computation.msg.flags)
 
-proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let to = computation.stack.popAddress()
 
@@ -683,7 +683,7 @@ proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthA
     emvcStatic) # is_static
 
 template genCall(callName: untyped, opCode: Op): untyped =
-  proc `callName Setup`(computation: var BaseComputation, callNameStr: string): (BaseComputation, int, int) =
+  proc `callName Setup`(computation: BaseComputation, callNameStr: string): (BaseComputation, int, int) =
     let (gas, value, to, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
