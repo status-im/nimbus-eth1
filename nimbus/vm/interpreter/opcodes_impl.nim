@@ -593,13 +593,15 @@ op create, inline = false, value, startPosition, size:
   var childComp = setupCreate(computation, memPos, len, value)
   if childComp.isNil: return
 
-  childComp.applyMessage(Create)
-  computation.addChildComputation(childComp)
+  continuation(childComp):
+    computation.addChildComputation(childComp)
 
-  if childComp.isError:
-    push: 0
-  else:
-    push: childComp.msg.storageAddress
+    if childComp.isError:
+      push: 0
+    else:
+      push: childComp.msg.storageAddress
+
+  childComp.applyMessage(Create)
 
 proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
@@ -683,7 +685,7 @@ proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddre
     emvcStatic) # is_static
 
 template genCall(callName: untyped, opCode: Op): untyped =
-  proc `callName Setup`(computation: BaseComputation, callNameStr: string): (BaseComputation, int, int) =
+  proc `callName Setup`(computation: BaseComputation, callNameStr: string): BaseComputation =
     let (gas, value, to, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
@@ -750,28 +752,32 @@ template genCall(callName: untyped, opCode: Op): untyped =
       childMsg,
       some(computation.getFork))
 
-    result = (childComp, memOutPos, memOutLen)
+    computation.memOutPos = memOutPos
+    computation.memOutLen = memOutLen
+    result = childComp
 
   op callName, inline = false:
     ## CALL, 0xf1, Message-Call into an account
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
-    var (childComp, memOutPos, memOutLen) = `callName Setup`(computation, callName.astToStr)
+    var childComp = `callName Setup`(computation, callName.astToStr)
+
+    continuation(childComp):
+      addChildComputation(computation, childComp)
+
+      if childComp.isError:
+        push: 0
+      else:
+        push: 1
+
+      if not childComp.shouldEraseReturnData:
+        let actualOutputSize = min(computation.memOutLen, childComp.output.len)
+        computation.memory.write(
+          computation.memOutPos,
+          childComp.output.toOpenArray(0, actualOutputSize - 1))
 
     childComp.applyMessage(opCode)
-    addChildComputation(computation, childComp)
-
-    if childComp.isError:
-      push: 0
-    else:
-      push: 1
-
-    if not childComp.shouldEraseReturnData:
-      let actualOutputSize = min(memOutLen, childComp.output.len)
-      computation.memory.write(
-        memOutPos,
-        childComp.output.toOpenArray(0, actualOutputSize - 1))
 
 genCall(call, Call)
 genCall(callCode, CallCode)

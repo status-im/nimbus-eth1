@@ -34,6 +34,9 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Me
     else:
       blockNumber.toFork.forkToSchedule
   result.forkOverride = forkOverride
+  # a dummy/terminus continuation proc
+  result.nextProc = proc() =
+    discard
 
 proc isOriginComputation*(c: BaseComputation): bool =
   # Is this computation the computation initiated by a transaction
@@ -168,6 +171,8 @@ proc transferBalance(computation: BaseComputation, opCode: static[Op]) =
       db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
 template continuation*(comp: BaseComputation, body: untyped) =
+  # this is a helper template to implement continuation
+  # passing and convert all recursion into tail call
   var tmpNext = comp.nextProc
   comp.nextProc = proc() =
     body
@@ -189,21 +194,27 @@ proc executeOpcodes*(computation: BaseComputation) {.gcsafe.}
 
 proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   computation.snapshot()
-  defer: computation.dispose()
+  defer:
+    computation.dispose()
 
   when opCode in {CallCode, Call, Create}:
     computation.transferBalance(opCode)
     if computation.isError():
       computation.rollback()
+      computation.nextProc()
       return
 
   if computation.gasMeter.gasRemaining < 0:
     computation.commit()
+    computation.nextProc()
     return
 
-  executeOpcodes(computation)
-  postExecuteVM(computation)
+  continuation(computation):
+    postExecuteVM(computation)
 
+  executeOpcodes(computation)
+  computation.nextProc()
+  
 proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
