@@ -16,7 +16,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest14.json", # SHA3 offset
     "randomStatetest85.json", # CALL* memoffset
     # Homestead recursives
-    "ContractCreationSpam.json",
+    #["ContractCreationSpam.json",
     "Call1024OOG.json",
     "Call1024PreCalls.json",
     "CallRecursiveBombPreCall.json",
@@ -43,6 +43,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "callcodecallcallcode_ABCB_RECURSIVE.json",
     "callcodecallcodecall_ABCB_RECURSIVE.json",
     "callcodecallcodecallcode_ABCB_RECURSIVE.json",
-    "callcallcallcode_ABCB_RECURSIVE.json",
+    "callcallcallcode_ABCB_RECURSIVE.json",]#
   ]
   result = name in allowedFailingGeneralStateTests
