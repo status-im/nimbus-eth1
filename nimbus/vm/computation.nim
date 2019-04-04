@@ -167,6 +167,24 @@ proc transferBalance(computation: BaseComputation, opCode: static[Op]) =
       db.subBalance(computation.msg.sender, computation.msg.value)
       db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
+template continuation*(comp: BaseComputation, body: untyped) =
+  var tmpNext = comp.nextProc
+  comp.nextProc = proc() =
+    body
+    tmpNext()
+
+proc postExecuteVM(computation: BaseComputation) =
+  if computation.isSuccess and computation.msg.isCreate:
+    let fork = computation.getFork
+    let contractFailed = not computation.writeContract(fork)
+    if contractFailed and fork == FkHomestead:
+      computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
+
+  if computation.isSuccess:
+    computation.commit()
+  else:
+    computation.rollback()
+
 proc executeOpcodes*(computation: BaseComputation) {.gcsafe.}
 
 proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
@@ -182,25 +200,9 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   if computation.gasMeter.gasRemaining < 0:
     computation.commit()
     return
-    
-  let fork = computation.getFork
-  
-  try:
-    if not computation.execPrecompiles(fork):
-      executeOpcodes(computation)
-  except:
-    let msg = getCurrentExceptionMsg()
-    computation.setError(&"applyMessage Error msg={msg}, depth={computation.msg.depth}", true)
 
-  if computation.isSuccess and computation.msg.isCreate:    
-    let contractFailed = not computation.writeContract(fork)
-    if contractFailed and fork == FkHomestead:
-      computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
-
-  if computation.isSuccess:
-    computation.commit()
-  else:
-    computation.rollback()
+  executeOpcodes(computation)
+  postExecuteVM(computation)
 
 proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
   if child.isError:

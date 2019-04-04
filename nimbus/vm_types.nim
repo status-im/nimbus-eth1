@@ -67,6 +67,7 @@ type
     dbsnapshot*:            Snapshot
     instr*:                 Op
     opIndex*:               int
+    nextProc*:              proc()
 
   Error* = ref object
     info*:                  string

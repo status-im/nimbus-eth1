@@ -231,14 +231,23 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
 
   # Wrap the case statement in while true + computed goto
   result = quote do:
-    if `computation`.tracingEnabled:
-      `computation`.prepareTracer()
-    `computation`.instr = `computation`.code.next()
-    while true:
-      {.computedGoto.}
-      # TODO lots of macro magic here to unravel, with chronicles...
-      # `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
-      `result`
+    try:
+      let fork = `computation`.getFork
+      if `computation`.execPrecompiles(fork):
+        return
+
+      if `computation`.tracingEnabled:
+        `computation`.prepareTracer()
+      `computation`.instr = `computation`.code.next()
+      while true:
+        {.computedGoto.}
+        # TODO lots of macro magic here to unravel, with chronicles...
+        # `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
+        `result`
+    except:
+      let msg = getCurrentExceptionMsg()
+      let errorMsg = "Opcode Dispatch Error msg=" & msg & ", depth=" & $computation.msg.depth
+      `computation`.setError(errorMsg, true)
 
 macro genFrontierDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(FrontierOpDispatch, computation)
