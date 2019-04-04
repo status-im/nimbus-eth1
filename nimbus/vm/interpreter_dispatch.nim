@@ -231,25 +231,14 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
 
   # Wrap the case statement in while true + computed goto
   result = quote do:
-    try:
-      let fork = `computation`.getFork
-      if `computation`.execPrecompiles(fork):
-        computation.nextProc()
-        return
-
-      if `computation`.tracingEnabled:
-        `computation`.prepareTracer()
-      `computation`.instr = `computation`.code.next()
-      while true:
-        {.computedGoto.}
-        # TODO lots of macro magic here to unravel, with chronicles...
-        # `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
-        `result`
-    except:
-      let msg = getCurrentExceptionMsg()
-      let errorMsg = "Opcode Dispatch Error msg=" & msg & ", depth=" & $computation.msg.depth
-      `computation`.setError(errorMsg, true)
-    computation.nextProc()
+    if `computation`.tracingEnabled:
+      `computation`.prepareTracer()
+    `computation`.instr = `computation`.code.next()
+    while true:
+      {.computedGoto.}
+      # TODO lots of macro magic here to unravel, with chronicles...
+      # `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
+      `result`
 
 macro genFrontierDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(FrontierOpDispatch, computation)
@@ -263,10 +252,8 @@ proc frontierVM(computation: BaseComputation) =
 proc homesteadVM(computation: BaseComputation) =
   genHomesteadDispatch(computation)
 
-proc executeOpcodes(computation: BaseComputation) =
+proc selectVM(computation: BaseComputation, fork: Fork) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
-  let fork = computation.getFork
-
   case fork
   of FkFrontier..FkThawing:
     computation.frontierVM()
@@ -274,3 +261,15 @@ proc executeOpcodes(computation: BaseComputation) =
     computation.homesteadVM()
   else:
     raise newException(VMError, "Unknown or not implemented fork: " & $fork)
+
+proc executeOpcodes(computation: BaseComputation) =
+  try:
+    let fork = computation.getFork
+    if `computation`.execPrecompiles(fork):
+      computation.nextProc()
+      return
+    computation.selectVM(fork)
+  except:
+    let msg = getCurrentExceptionMsg()
+    computation.setError(&"Opcode Dispatch Error msg={msg}, depth={computation.msg.depth}", true)
+  computation.nextProc()
