@@ -1,8 +1,8 @@
 import
   json_rpc/rpcserver, rpc_types, hexstrings, tables, options, sequtils,
-  eth/[common, rlp, keys, p2p], eth/p2p/rlpx_protocols/whisper_protocol
+  eth/[common, rlp, keys, p2p], eth/p2p/rlpx_protocols/whisper_protocol,
+  nimcrypto/[sysrand, hmac, sha2, pbkdf2]
 
-from nimcrypto/sysrand import randomBytes
 from byteutils import hexToSeqByte, hexToByteArray
 
 # Whisper RPC implemented mostly as in
@@ -161,8 +161,16 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ## password: Password.
     ##
     ## Returns key identifier on success and an error on failure.
-    # TODO: implement, can use nimcrypto/pbkdf2
-    discard
+    ## Warning: an empty string is used as salt because the shh RPC API does not
+    ## allow for passing a salt. A very good password is necessary (calculate
+    ## yourself what that means :))
+    var ctx: HMAC[sha256]
+    var symKey: SymKey
+    if pbkdf2(ctx, password, "", 65356, symKey) != sizeof(SymKey):
+      raise newException(ValueError, "Failed generating key")
+
+    result = generateRandomID().IdentifierStr
+    keys.symKeys.add(result.string, symKey)
 
   rpcsrv.rpc("shh_hasSymKey") do(id: IdentifierStr) -> bool:
     ## Returns true if there is a key associated with the name string.

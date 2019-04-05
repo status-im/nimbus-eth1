@@ -100,6 +100,19 @@ proc doTests =
         waitFor(client.shh_hasSymKey(keyID2)) == false
         waitFor(client.shh_deleteSymKey(keyID2)) == false
 
+      let keyID3 = waitFor client.shh_generateSymKeyFromPassword("password")
+      let keyID4 = waitFor client.shh_generateSymKeyFromPassword("password")
+      let keyID5 = waitFor client.shh_generateSymKeyFromPassword("nimbus!")
+      check:
+        waitFor(client.shh_getSymKey(keyID3)).string ==
+          waitFor(client.shh_getSymKey(keyID4)).string
+        waitFor(client.shh_getSymKey(keyID3)).string !=
+          waitFor(client.shh_getSymKey(keyID5)).string
+        waitFor(client.shh_hasSymKey(keyID3)) == true
+        waitFor(client.shh_deleteSymKey(keyID3)) == true
+        waitFor(client.shh_hasSymKey(keyID3)) == false
+        waitFor(client.shh_deleteSymKey(keyID3)) == false
+
     test "shh symKey post and filter":
       var options: WhisperFilterOptions
       options.symKeyID = some(waitFor client.shh_newSymKey())
