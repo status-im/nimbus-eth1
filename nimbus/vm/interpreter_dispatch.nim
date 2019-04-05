@@ -16,7 +16,7 @@ import
 logScope:
   topics = "vm opcode"
 
-func invalidInstruction*(computation: var BaseComputation) {.inline.} =
+func invalidInstruction*(computation: BaseComputation) {.inline.} =
   raise newException(InvalidInstruction, "Invalid instruction, received an opcode not implemented in the current fork.")
 
 let FrontierOpDispatch {.compileTime.}: array[Op, NimNode] = block:
@@ -211,7 +211,6 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
             `opImpl`(`computation`)
             if `computation`.tracingEnabled:
               `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
-            `instr` = `computation`.code.next()
         else:
           quote do:
             if `computation`.tracingEnabled:
@@ -221,8 +220,6 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
               `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
             when `asOp` in {Return, Revert, SelfDestruct}:
               break
-            else:
-              `instr` = `computation`.code.next()
 
     result.add nnkOfBranch.newTree(
       newIdentNode($op),
@@ -233,9 +230,11 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
   result = quote do:
     if `computation`.tracingEnabled:
       `computation`.prepareTracer()
-    `computation`.instr = `computation`.code.next()
     while true:
-      {.computedGoto.}
+      `instr` = `computation`.code.next()
+      #{.computedGoto.}
+      # computed goto causing stack overflow, it consumes a lot of space
+      # we could use manual jump table instead
       # TODO lots of macro magic here to unravel, with chronicles...
       # `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
       `result`
@@ -246,18 +245,14 @@ macro genFrontierDispatch(computation: BaseComputation): untyped =
 macro genHomesteadDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(HomesteadOpDispatch, computation)
 
-proc frontierVM(computation: var BaseComputation) =
-  if not computation.execPrecompiles:
-    genFrontierDispatch(computation)
+proc frontierVM(computation: BaseComputation) =
+  genFrontierDispatch(computation)
 
-proc homesteadVM(computation: var BaseComputation) =
-  if not computation.execPrecompiles:
-    genHomesteadDispatch(computation)
+proc homesteadVM(computation: BaseComputation) =
+  genHomesteadDispatch(computation)
 
-proc executeOpcodes(computation: var BaseComputation) =
+proc selectVM(computation: BaseComputation, fork: Fork) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
-  let fork = computation.getFork
-
   case fork
   of FkFrontier..FkThawing:
     computation.frontierVM()
@@ -265,3 +260,15 @@ proc executeOpcodes(computation: var BaseComputation) =
     computation.homesteadVM()
   else:
     raise newException(VMError, "Unknown or not implemented fork: " & $fork)
+
+proc executeOpcodes(computation: BaseComputation) =
+  try:
+    let fork = computation.getFork
+    if `computation`.execPrecompiles(fork):
+      computation.nextProc()
+      return
+    computation.selectVM(fork)
+  except:
+    let msg = getCurrentExceptionMsg()
+    computation.setError(&"Opcode Dispatch Error msg={msg}, depth={computation.msg.depth}", true)
+  computation.nextProc()

@@ -452,7 +452,7 @@ op sstore, inline = false, slot, value:
   computation.vmState.mutateStateDB:
     db.setStorage(computation.msg.storageAddress, slot, value)
 
-proc jumpImpl(computation: var BaseComputation, jumpTarget: UInt256) =
+proc jumpImpl(computation: BaseComputation, jumpTarget: UInt256) =
   if jumpTarget >= computation.code.len.u256:
     raise newException(InvalidJumpDestination, "Invalid Jump Destination")
 
@@ -537,7 +537,7 @@ proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint2
 
   result = true
 
-proc setupCreate(computation: var BaseComputation, memPos, len: int, value: Uint256): BaseComputation =
+proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256): BaseComputation =
   let
     callData = computation.memory.read(memPos, len)
     createMsgGas = computation.getGasRemaining()
@@ -593,17 +593,18 @@ op create, inline = false, value, startPosition, size:
   var childComp = setupCreate(computation, memPos, len, value)
   if childComp.isNil: return
 
-  computation.applyChildComputation(childComp, Create)
+  computation.child = childComp
+  continuation(childComp):
+    computation.addChildComputation(childComp)
 
-  if childComp.isError:
-    push: 0
-  else:
-    push: childComp.msg.storageAddress
+    if childComp.isError:
+      push: 0
+    else:
+      push: childComp.msg.storageAddress
 
-  if not childComp.shouldBurnGas:
-    computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
+  childComp.applyMessage(Create)
 
-proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let codeAddress = computation.stack.popAddress()
 
@@ -625,7 +626,7 @@ proc callParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress
     memoryOutputSize,
     computation.msg.flags)
 
-proc callCodeParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc callCodeParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let to = computation.stack.popAddress()
 
@@ -644,7 +645,7 @@ proc callCodeParams(computation: var BaseComputation): (UInt256, UInt256, EthAdd
     memoryOutputSize,
     computation.msg.flags)
 
-proc delegateCallParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc delegateCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let codeAddress = computation.stack.popAddress()
 
@@ -666,7 +667,7 @@ proc delegateCallParams(computation: var BaseComputation): (UInt256, UInt256, Et
     memoryOutputSize,
     computation.msg.flags)
 
-proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let to = computation.stack.popAddress()
 
@@ -685,7 +686,7 @@ proc staticCallParams(computation: var BaseComputation): (UInt256, UInt256, EthA
     emvcStatic) # is_static
 
 template genCall(callName: untyped, opCode: Op): untyped =
-  proc `callName Setup`(computation: var BaseComputation, callNameStr: string): (BaseComputation, int, int) =
+  proc `callName Setup`(computation: BaseComputation, callNameStr: string): BaseComputation =
     let (gas, value, to, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
@@ -752,32 +753,33 @@ template genCall(callName: untyped, opCode: Op): untyped =
       childMsg,
       some(computation.getFork))
 
-    result = (childComp, memOutPos, memOutLen)
+    computation.memOutPos = memOutPos
+    computation.memOutLen = memOutLen
+    result = childComp
 
   op callName, inline = false:
     ## CALL, 0xf1, Message-Call into an account
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
-    var (childComp, memOutPos, memOutLen) = `callName Setup`(computation, callName.astToStr)
+    var childComp = `callName Setup`(computation, callName.astToStr)
 
-    applyChildComputation(computation, childComp, opCode)
+    computation.child = childComp
+    continuation(childComp):
+      addChildComputation(computation, childComp)
 
-    if childComp.isError:
-      push: 0
-    else:
-      push: 1
+      if childComp.isError:
+        push: 0
+      else:
+        push: 1
 
-    if not childComp.shouldEraseReturnData:
-      let actualOutputSize = min(memOutLen, childComp.output.len)
-      computation.memory.write(
-        memOutPos,
-        childComp.output.toOpenArray(0, actualOutputSize - 1))
-      if not childComp.shouldBurnGas:
-        computation.gasMeter.returnGas(childComp.gasMeter.gasRemaining)
+      if not childComp.shouldEraseReturnData:
+        let actualOutputSize = min(computation.memOutLen, childComp.output.len)
+        computation.memory.write(
+          computation.memOutPos,
+          childComp.output.toOpenArray(0, actualOutputSize - 1))
 
-    if computation.gasMeter.gasRemaining <= 0:
-      raise newException(OutOfGas, "computation out of gas after contract call (" & callName.astToStr & ")")
+    childComp.applyMessage(opCode)
 
 genCall(call, Call)
 genCall(callCode, CallCode)

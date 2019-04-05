@@ -34,6 +34,9 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Me
     else:
       blockNumber.toFork.forkToSchedule
   result.forkOverride = forkOverride
+  # a dummy/terminus continuation proc
+  result.nextProc = proc() =
+    discard
 
 proc isOriginComputation*(c: BaseComputation): bool =
   # Is this computation the computation initiated by a transaction
@@ -61,7 +64,7 @@ func output*(c: BaseComputation): seq[byte] =
   else:
     c.rawOutput
 
-func `output=`*(c: var BaseComputation, value: openarray[byte]) =
+func `output=`*(c: BaseComputation, value: openarray[byte]) =
   c.rawOutput = @value
 
 proc outputHex*(c: BaseComputation): string =
@@ -69,11 +72,11 @@ proc outputHex*(c: BaseComputation): string =
     return "0x"
   c.rawOutput.bytesToHex
 
-proc isSuicided*(c: var BaseComputation, address: EthAddress): bool =
+proc isSuicided*(c: BaseComputation, address: EthAddress): bool =
   result = address in c.accountsToDelete
 
 proc prepareChildMessage*(
-    c: var BaseComputation,
+    c: BaseComputation,
     gas: GasInt,
     to: EthAddress,
     value: UInt256,
@@ -111,6 +114,14 @@ proc commit*(comp: BaseComputation) =
 proc dispose*(comp: BaseComputation) {.inline.} =
   comp.dbsnapshot.transaction.dispose()
 
+proc rollback*(comp: BaseComputation) =
+  comp.dbsnapshot.transaction.rollback()
+  comp.vmState.accountDb.rootHash = comp.dbsnapshot.intermediateRoot
+  comp.vmState.blockHeader.stateRoot = comp.dbsnapshot.intermediateRoot
+
+proc setError*(comp: BaseComputation, msg: string, burnsGas = false) {.inline.} =
+  comp.error = Error(info: msg, burnsGas: burnsGas)
+
 proc getFork*(computation: BaseComputation): Fork =
   result =
     if computation.forkOverride.isSome:
@@ -118,7 +129,7 @@ proc getFork*(computation: BaseComputation): Fork =
     else:
       computation.vmState.blockNumber.toFork
 
-proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
+proc writeContract*(computation: BaseComputation, fork: Fork): bool =
   result = true
 
   let contractCode = computation.output
@@ -142,65 +153,68 @@ proc writeContract*(computation: var BaseComputation, fork: Fork): bool =
     if fork < FkHomestead: computation.output = @[]
     result = false
 
-proc transferBalance(computation: var BaseComputation, opCode: static[Op]): bool =
+proc transferBalance(computation: BaseComputation, opCode: static[Op]) =
   if computation.msg.depth > MaxCallDepth:
-    debug "Stack depth limit reached", depth=computation.msg.depth
-    return false
+    computation.setError(&"Stack depth limit reached depth={computation.msg.depth}")
+    return
 
   let senderBalance = computation.vmState.readOnlyStateDb().
                       getBalance(computation.msg.sender)
 
   if senderBalance < computation.msg.value:
-    debug "insufficient funds", available=senderBalance, needed=computation.msg.value
-    return false
+    computation.setError(&"insufficient funds available={senderBalance}, needed={computation.msg.value}")
+    return
 
   when opCode in {Call, Create}:
     computation.vmState.mutateStateDb:
       db.subBalance(computation.msg.sender, computation.msg.value)
       db.addBalance(computation.msg.storageAddress, computation.msg.value)
 
-  result = true
+template continuation*(comp: BaseComputation, body: untyped) =
+  # this is a helper template to implement continuation
+  # passing and convert all recursion into tail call
+  var tmpNext = comp.nextProc
+  comp.nextProc = proc() =
+    body
+    tmpNext()
 
-proc executeOpcodes*(computation: var BaseComputation) {.gcsafe.}
+proc postExecuteVM(computation: BaseComputation) =
+  if computation.isSuccess and computation.msg.isCreate:
+    let fork = computation.getFork
+    let contractFailed = not computation.writeContract(fork)
+    if contractFailed and fork == FkHomestead:
+      computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
 
-proc applyMessage*(computation: var BaseComputation, opCode: static[Op]): bool =
+  if computation.isSuccess:
+    computation.commit()
+  else:
+    computation.rollback()
+
+proc executeOpcodes*(computation: BaseComputation) {.gcsafe.}
+
+proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   computation.snapshot()
-  defer: computation.dispose()
+  defer:
+    computation.dispose()
 
   when opCode in {CallCode, Call, Create}:
-    if not computation.transferBalance(opCode):
-      computation.revert()
+    computation.transferBalance(opCode)
+    if computation.isError():
+      computation.rollback()
+      computation.nextProc()
       return
 
   if computation.gasMeter.gasRemaining < 0:
     computation.commit()
+    computation.nextProc()
     return
 
-  try:
-    executeOpcodes(computation)
-    result = not computation.isError
-  except VMError:
-    result = false
-    debug "applyMessage VM Error",
-      msg = getCurrentExceptionMsg(),
-      depth = computation.msg.depth
-  except ValueError:
-    result = false
-    debug "applyMessage Value Error",
-      msg = getCurrentExceptionMsg(),
-      depth = computation.msg.depth
+  continuation(computation):
+    postExecuteVM(computation)
 
-  if result and computation.msg.isCreate:
-    var fork = computation.getFork
-    let contractFailed = not computation.writeContract(fork)
-    result = not(contractFailed and fork == FkHomestead)
+  executeOpcodes(computation)
 
-  if result:
-    computation.commit()
-  else:
-    computation.revert(true)
-
-proc addChildComputation(computation: var BaseComputation, child: BaseComputation) =
+proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
   if child.isError:
     if child.msg.isCreate:
       computation.returnData = child.output
@@ -216,21 +230,19 @@ proc addChildComputation(computation: var BaseComputation, child: BaseComputatio
     for k, v in child.accountsToDelete:
       computation.accountsToDelete[k] = v
     computation.logEntries.add child.logEntries
+
+  if not child.shouldBurnGas:
+    computation.gasMeter.returnGas(child.gasMeter.gasRemaining)
   computation.children.add(child)
 
-proc applyChildComputation*(parentComp, childComp: var BaseComputation, opCode: static[Op]) =
-  ## Apply the vm message childMsg as a child computation.
-  discard childComp.applyMessage(opCode)
-  parentComp.addChildComputation(childComp)
-
-proc registerAccountForDeletion*(c: var BaseComputation, beneficiary: EthAddress) =
+proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
   if c.msg.storageAddress in c.accountsToDelete:
     raise newException(ValueError,
       "invariant:  should be impossible for an account to be " &
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
 
-proc addLogEntry*(c: var BaseComputation, log: Log) {.inline.} =
+proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
   c.logEntries.add(log)
 
 # many methods are basically TODO, but they still return valid values

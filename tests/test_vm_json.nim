@@ -56,11 +56,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
                                   createAddress = toAddress))
 
   var computation = newBaseComputation(vmState, header.blockNumber, message)
-  try:
-    computation.executeOpcodes()
-  except VMError:
-    computation.error = Error(info: getCurrentExceptionMsg())
-
+  computation.executeOpcodes()
+  
   if not fixture{"post"}.isNil:
     # Success checks
     check(not computation.isError)

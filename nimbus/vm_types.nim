@@ -67,6 +67,11 @@ type
     dbsnapshot*:            Snapshot
     instr*:                 Op
     opIndex*:               int
+    # continuation helpers
+    nextProc*:              proc()
+    memOutLen*:             int
+    memOutPos*:             int
+    child*:                 BaseComputation
 
   Error* = ref object
     info*:                  string

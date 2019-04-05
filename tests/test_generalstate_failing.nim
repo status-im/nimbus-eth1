@@ -13,16 +13,10 @@
 # being mostly used for short-term regression prevention.
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
-    "randomStatetest14.json",
-    "randomStatetest85.json",
-    # 2019-02-17:
-    "pairingTest.json",
-    "pointAdd.json",
-    "pointAddTrunc.json",
-    "pointMulAdd.json",
-    "pointMulAdd2.json",
+    "randomStatetest14.json", # SHA3 offset
+    "randomStatetest85.json", # CALL* memoffset
     # Homestead recursives
-    "ContractCreationSpam.json",
+    #["ContractCreationSpam.json",
     "Call1024OOG.json",
     "Call1024PreCalls.json",
     "CallRecursiveBombPreCall.json",
@@ -49,6 +43,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "callcodecallcallcode_ABCB_RECURSIVE.json",
     "callcodecallcodecall_ABCB_RECURSIVE.json",
     "callcodecallcodecallcode_ABCB_RECURSIVE.json",
-    "callcallcallcode_ABCB_RECURSIVE.json",
+    "callcallcallcode_ABCB_RECURSIVE.json",]#
   ]
   result = name in allowedFailingGeneralStateTests
