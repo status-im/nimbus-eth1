@@ -10,12 +10,13 @@ import
   ranges, state_db, eth/trie/[hexary, db],
   eth/[common, rlp], byteutils, chronicles,
   ../errors,  ../constants, ./storage_types,
-  ../utils
+  ../utils, ../config
 
 type
   BaseChainDB* = ref object
     db*       : TrieDatabaseRef
     pruneTrie*: bool
+    config*   : ChainConfig
 
   #KeyType = enum
   #  blockNumberToHash
@@ -25,10 +26,11 @@ type
     blockNumber: BlockNumber
     index: int
 
-proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true): BaseChainDB =
+proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true, id: PublicNetwork = MainNet): BaseChainDB =
   new(result)
   result.db = db
   result.pruneTrie = pruneTrie
+  result.config = publicChainConfig(id)
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
