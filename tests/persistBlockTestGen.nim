@@ -89,6 +89,8 @@ proc main() =
   chainDB.dumpTest(1317742) # CREATE childmsg sender
   chainDB.dumpTest(1368834) # writepadded regression padding len
   chainDB.dumpTest(1417555) # writepadded regression zero len
+  chainDB.dumpTest(1_431_916) # deep recursion stack overflow problem
+  chainDB.dumpTest(1_487_668) # getScore uint64 vs uint256 overflow
 
 when isMainModule:
   var message: string

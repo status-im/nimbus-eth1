@@ -79,8 +79,8 @@ proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
   ## Raises BlockNotFound error if the block is not in the DB.
   self.getBlockHeader(self.getBlockHash(n))
 
-proc getScore*(self: BaseChainDB; blockHash: Hash256): uint64 =
-  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray).toRange, uint64)
+proc getScore*(self: BaseChainDB; blockHash: Hash256): Uint256 =
+  rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray).toRange, Uint256)
 
 iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
   ##         Returns the chain leading up from the given header until the first ancestor it has in
@@ -224,18 +224,18 @@ proc persistHeaderToDb*(self: BaseChainDB; header: BlockHeader): seq[BlockHeader
   self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
 
   let score = if isGenesis: header.difficulty
-              else: self.getScore(header.parentHash).u256 + header.difficulty
+              else: self.getScore(header.parentHash) + header.difficulty
   self.db.put(blockHashToScoreKey(headerHash).toOpenArray, rlp.encode(score))
 
   self.addBlockNumberToHashLookup(header)
 
-  var headScore: uint64
+  var headScore: Uint256
   try:
     headScore = self.getScore(self.getCanonicalHead().hash)
   except CanonicalHeadNotFound:
     return self.setAsCanonicalChainHead(headerHash)
 
-  if score > headScore.u256:
+  if score > headScore:
     result = self.setAsCanonicalChainHead(headerHash)
 
 proc addTransactionToCanonicalChain(self: BaseChainDB, txHash: Hash256,
