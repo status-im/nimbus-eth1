@@ -75,6 +75,8 @@ type
       cr_currentMemSize*: Natural
       cr_memOffset*: Natural
       cr_memLength*: Natural
+    of SelfDestruct:
+      sd_condition*: bool
     else:
       discard
 
@@ -344,8 +346,10 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
   func `prefix gasSelfDestruct`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
-    # TODO
-    discard
+    result.gasCost += static(FeeSchedule[GasSelfDestruct])
+    when fork >= FkTangerine:
+      if gasParams.sd_condition:
+        result.gasCost += static(FeeSchedule[GasNewAccount])
 
   # ###################################################################################################
 

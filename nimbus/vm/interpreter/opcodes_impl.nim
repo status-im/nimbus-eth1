@@ -815,13 +815,11 @@ op revert, inline = false, startPos, size:
   computation.memory.extend(pos, len)
   computation.output = computation.memory.read(pos, len)
 
-op selfDestruct, inline = false:
+proc selfDestructImpl(computation: BaseComputation, beneficiary: EthAddress) =
   ## 0xff Halt execution and register account for later deletion.
   # TODO: This is the basic implementation of the self destruct op,
   # Other forks have some extra functionality around this call.
   # In particular, EIP150 and EIP161 have extra requirements.
-  let beneficiary = computation.stack.popAddress()
-
   computation.vmState.mutateStateDB:
     let
       localBalance = db.getBalance(computation.msg.storageAddress)
@@ -842,3 +840,33 @@ op selfDestruct, inline = false:
       storageAddress = computation.msg.storageAddress.toHex,
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
+
+op selfDestruct, inline = false:
+  let beneficiary = computation.stack.popAddress()
+  selfDestructImpl(computation, beneficiary)
+
+op selfDestructEip150, inline = false:
+  let beneficiary = computation.stack.popAddress()
+
+  let gasParams = GasParams(kind: SelfDestruct,
+    sd_condition: not computation.vmState.readOnlyStateDb.accountExists(beneficiary)
+    )
+
+  let gasCost = computation.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
+  computation.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP150")
+  selfDestructImpl(computation, beneficiary)
+
+op selfDestructEip161, inline = false:
+  let
+    beneficiary = computation.stack.popAddress()
+    stateDb     = computation.vmState.readOnlyStateDb
+    isDead      = stateDb.isDeadAccount(beneficiary)
+    balance     = stateDb.getBalance(computation.msg.storageAddress)
+
+  let gasParams = GasParams(kind: SelfDestruct,
+    sd_condition: isDead and not balance.isZero
+    )
+
+  let gasCost = computation.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
+  computation.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP161")
+  selfDestructImpl(computation, beneficiary)
