@@ -540,7 +540,12 @@ proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint2
 proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256): BaseComputation =
   let
     callData = computation.memory.read(memPos, len)
+
+  var
     createMsgGas = computation.getGasRemaining()
+
+  if getFork(computation) >= FkTangerine:
+    createMsgGas -= createMsgGas div 64
 
   # Consume gas here that will be passed to child
   computation.gasMeter.consumeGas(createMsgGas, reason="CREATE")
