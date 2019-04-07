@@ -527,7 +527,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           Return:         memExpansion `prefix gasHalt`,
           DelegateCall:   complex `prefix gasCall`,
           StaticCall:     complex `prefix gasCall`,
-          Op.Revert:      memExpansion `prefix gasHalt`,
+          Revert:         memExpansion `prefix gasHalt`,
           Invalid:        fixed GasZero,
           SelfDestruct:   complex `prefix gasSelfDestruct`
         ]

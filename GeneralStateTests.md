@@ -406,7 +406,7 @@ OK: 23/30 Fail: 0/30 Skip: 7/30
 + CallLoseGasOOG.json                                             OK
 + CallRecursiveBombPreCall.json                                   OK
 + CallcodeLoseGasOOG.json                                         OK
-+ Delegatecall1024.json                                           OK
+  Delegatecall1024.json                                           Skip
 + Delegatecall1024OOG.json                                        OK
 + callOutput1.json                                                OK
 + callOutput2.json                                                OK
@@ -435,24 +435,24 @@ OK: 23/30 Fail: 0/30 Skip: 7/30
 + delegatecodeDynamicCode.json                                    OK
 + delegatecodeDynamicCode2SelfCall.json                           OK
 ```
-OK: 34/34 Fail: 0/34 Skip: 0/34
+OK: 33/34 Fail: 0/34 Skip: 1/34
 ## stEIP150Specific
 ```diff
-  CallAndCallcodeConsumeMoreGasThenTransactionHas.json            Skip
-  CallAskMoreGasOnDepth2ThenTransactionHas.json                   Skip
-  CallGoesOOGOnSecondLevel.json                                   Skip
-  CallGoesOOGOnSecondLevel2.json                                  Skip
-  CreateAndGasInsideCreate.json                                   Skip
-  DelegateCallOnEIP.json                                          Skip
-  ExecuteCallThatAskForeGasThenTrabsactionHas.json                Skip
++ CallAndCallcodeConsumeMoreGasThenTransactionHas.json            OK
++ CallAskMoreGasOnDepth2ThenTransactionHas.json                   OK
++ CallGoesOOGOnSecondLevel.json                                   OK
++ CallGoesOOGOnSecondLevel2.json                                  OK
++ CreateAndGasInsideCreate.json                                   OK
++ DelegateCallOnEIP.json                                          OK
++ ExecuteCallThatAskForeGasThenTrabsactionHas.json                OK
 + NewGasPriceForCodes.json                                        OK
-  SuicideToExistingContract.json                                  Skip
-  SuicideToNotExistingContract.json                               Skip
-  Transaction64Rule_d64e0.json                                    Skip
-  Transaction64Rule_d64m1.json                                    Skip
-  Transaction64Rule_d64p1.json                                    Skip
++ SuicideToExistingContract.json                                  OK
++ SuicideToNotExistingContract.json                               OK
++ Transaction64Rule_d64e0.json                                    OK
++ Transaction64Rule_d64m1.json                                    OK
++ Transaction64Rule_d64p1.json                                    OK
 ```
-OK: 1/13 Fail: 0/13 Skip: 12/13
+OK: 13/13 Fail: 0/13 Skip: 0/13
 ## stEIP150singleCodeGasPrices
 ```diff
 + RawBalanceGas.json                                              OK
@@ -491,12 +491,12 @@ OK: 30/30 Fail: 0/30 Skip: 0/30
 ```diff
   CALL_OneVCallSuicide.json                                       Skip
   CALL_ZeroVCallSuicide.json                                      Skip
-  EXP_Empty.json                                                  Skip
++ EXP_Empty.json                                                  OK
   EXTCODESIZE_toEpmty.json                                        Skip
   EXTCODESIZE_toNonExistent.json                                  Skip
-  vitalikTransactionTest.json                                     Skip
++ vitalikTransactionTest.json                                     OK
 ```
-OK: 0/6 Fail: 0/6 Skip: 6/6
+OK: 2/6 Fail: 0/6 Skip: 4/6
 ## stExample
 ```diff
 + add11.json                                                      OK
@@ -740,7 +740,7 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 ```diff
   identity_to_bigger.json                                         Skip
   identity_to_smaller.json                                        Skip
-  modexp.json                                                     Skip
++ modexp.json                                                     OK
   modexp_0_0_0_1000000.json                                       Skip
   modexp_0_0_0_155000.json                                        Skip
   modexp_0_1_0_1000000.json                                       Skip
@@ -835,7 +835,7 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
   modexp_9_3711_37111_25000.json                                  Skip
   sec80.json                                                      Skip
 ```
-OK: 0/96 Fail: 0/96 Skip: 96/96
+OK: 1/96 Fail: 0/96 Skip: 95/96
 ## stPreCompiledContracts2
 ```diff
 + CALLCODEEcrecover0.json                                         OK
@@ -1552,7 +1552,7 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + call_then_call_value_fail_then_returndatasize.json              OK
 + call_then_create_successful_then_returndatasize.json            OK
 + create_callprecompile_returndatasize.json                       OK
-  modexp_modsize0_returndatasize.json                             Skip
++ modexp_modsize0_returndatasize.json                             OK
 + returndatacopy_0_0_following_successful_create.json             OK
   returndatacopy_afterFailing_create.json                         Skip
 + returndatacopy_after_failing_callcode.json                      OK
@@ -1585,7 +1585,7 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
 ```
-OK: 34/37 Fail: 0/37 Skip: 3/37
+OK: 35/37 Fail: 0/37 Skip: 2/37
 ## stRevertTest
 ```diff
 + LoopCallsDepthThenRevert.json                                   OK
@@ -1732,7 +1732,7 @@ OK: 1/7 Fail: 0/7 Skip: 6/7
   static_ABAcalls2.json                                           Skip
   static_ABAcalls3.json                                           Skip
   static_ABAcallsSuicide0.json                                    Skip
-  static_ABAcallsSuicide1.json                                    Skip
++ static_ABAcallsSuicide1.json                                    OK
   static_CALL_OneVCallSuicide.json                                Skip
   static_CALL_ZeroVCallSuicide.json                               Skip
   static_CREATE_ContractSuicideDuringInit.json                    Skip
@@ -2012,13 +2012,13 @@ OK: 1/7 Fail: 0/7 Skip: 6/7
   static_refund_CallToSuicideNoStorage.json                       Skip
   static_refund_CallToSuicideTwice.json                           Skip
 ```
-OK: 0/284 Fail: 0/284 Skip: 284/284
+OK: 1/284 Fail: 0/284 Skip: 283/284
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
 + ABAcalls1.json                                                  OK
-+ ABAcalls2.json                                                  OK
-+ ABAcalls3.json                                                  OK
+  ABAcalls2.json                                                  Skip
+  ABAcalls3.json                                                  Skip
 + ABAcallsSuicide0.json                                           OK
 + ABAcallsSuicide1.json                                           OK
 + Call10.json                                                     OK
@@ -2066,8 +2066,8 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + createNameRegistratorZeroMemExpansion.json                      OK
 + createWithInvalidOpcode.json                                    OK
 + currentAccountBalance.json                                      OK
-+ doubleSelfdestructTest.json                                     OK
-+ doubleSelfdestructTest2.json                                    OK
+  doubleSelfdestructTest.json                                     Skip
+  doubleSelfdestructTest2.json                                    Skip
 + extcodecopy.json                                                OK
 + return0.json                                                    OK
 + return1.json                                                    OK
@@ -2083,7 +2083,7 @@ OK: 0/284 Fail: 0/284 Skip: 284/284
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 65/67 Fail: 0/67 Skip: 2/67
+OK: 61/67 Fail: 0/67 Skip: 6/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2520,4 +2520,4 @@ OK: 5/133 Fail: 0/133 Skip: 128/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1485/2334 Fail: 0/2334 Skip: 849/2334
+OK: 1497/2334 Fail: 0/2334 Skip: 837/2334
