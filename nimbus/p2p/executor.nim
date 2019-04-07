@@ -4,7 +4,8 @@ import options,
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
   ../vm/[computation, message],
-  ../vm/interpreter/vm_forks
+  ../vm/interpreter/vm_forks,
+  ./dao
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, forkOverride=none(Fork)): GasInt =
   ## Process the transaction, write the results to db.
@@ -71,6 +72,10 @@ proc makeReceipt(vmState: BaseVMState, cumulativeGasUsed: GasInt, fork = FkFront
 
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
   let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
+
+  if chainDB.config.daoForkSupport and header.blockNumber == chainDB.config.daoForkBlock:
+    vmState.mutateStateDB:
+      db.applyDAOHardFork()
 
   if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot", blockNumber=header.blockNumber

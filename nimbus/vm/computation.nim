@@ -182,7 +182,7 @@ proc postExecuteVM(computation: BaseComputation) =
   if computation.isSuccess and computation.msg.isCreate:
     let fork = computation.getFork
     let contractFailed = not computation.writeContract(fork)
-    if contractFailed and fork == FkHomestead:
+    if contractFailed and fork >= FkHomestead:
       computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
 
   if computation.isSuccess:
