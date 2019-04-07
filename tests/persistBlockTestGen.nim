@@ -91,6 +91,8 @@ proc main() =
   chainDB.dumpTest(1417555) # writepadded regression zero len
   chainDB.dumpTest(1_431_916) # deep recursion stack overflow problem
   chainDB.dumpTest(1_487_668) # getScore uint64 vs uint256 overflow
+  chainDB.dumpTest(1_920_000) # the DAO fork
+  chainDB.dumpTest(1_927_662) # fork comparison bug in postExecuteVM
 
 when isMainModule:
   var message: string
