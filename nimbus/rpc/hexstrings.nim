@@ -93,6 +93,9 @@ func isValidHexData*(value: string, header = true): bool =
       return false
   return true
 
+template isValidHexData(value: string, hexLen: int, header = true): bool =
+  value.len == hexLen and value.isValidHexData(header)
+
 func isValidEthAddress*(value: string): bool =
   # 20 bytes for EthAddress plus "0x"
   # Addresses are allowed to be shorter than 20 bytes for convenience
@@ -102,27 +105,31 @@ func isValidEthHash*(value: string): bool =
   # 32 bytes for EthAddress plus "0x"
   # Currently hashes are required to be exact lengths
   # TODO: Allow shorter hashes (pad with zeros) for convenience?
-  result = value.len == 66 and value.isValidHexData
+  result = value.isValidHexData(66)
 
 func isValidIdentifier*(value: string): bool =
   # 32 bytes for Whisper ID, no 0x prefix
-  result = value.len == 64 and value.isvalidHexData(header = false)
+  result = value.isValidHexData(64, false)
 
 func isValidPublicKey*(value: string): bool =
   # 65 bytes for Public Key plus 1 byte for 0x prefix
-  result = value.len == 132 and value.isValidHexData
+  result = value.isValidHexData(132)
 
 func isValidPrivateKey*(value: string): bool =
   # 32 bytes for Private Key plus 1 byte for 0x prefix
-  result = value.len == 66 and value.isValidHexData
+  result = value.isValidHexData(66)
 
 func isValidSymKey*(value: string): bool =
   # 32 bytes for Private Key plus 1 byte for 0x prefix
-  result = value.len == 66 and value.isValidHexData
+  result = value.isValidHexData(66)
+
+func isValidHash256*(value: string): bool =
+  # 32 bytes for Hash256 plus 1 byte for 0x prefix
+  result = value.isValidHexData(66)
 
 func isValidTopic*(value: string): bool =
   # 4 bytes for Topic plus 1 byte for 0x prefix
-  result = value.len == 10 and value.isValidHexData
+  result = value.isValidHexData(10)
 
 const
   SInvalidQuantity = "Invalid hex quantity format for Ethereum"
@@ -283,3 +290,34 @@ proc fromJson*(n: JsonNode, argName: string, result: var TopicStr) =
   if not hexStr.isValidTopic:
     raise newException(ValueError, invalidMsg(argName) & " as a topic \"" & hexStr & "\"")
   result = hexStr.TopicStr
+
+# Following procs currently required only for testing, the `createRpcSigs` macro
+# requires it as it will convert the JSON results back to the original Nim
+# types, but it needs the `fromJson` calls for those specific Nim types to do so
+proc fromJson*(n: JsonNode, argName: string, result: var whisper_protocol.Topic) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidTopic:
+    raise newException(ValueError, invalidMsg(argName) & " as a topic \"" & hexStr & "\"")
+  hexToByteArray(hexStr.string[2 .. ^1], result)
+
+proc fromJson*(n: JsonNode, argName: string, result: var Bytes) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidHexData:
+    raise newException(ValueError, invalidMsg(argName) & " as a hex data \"" & hexStr & "\"")
+  result = hexToSeqByte(hexStr.string)
+
+proc fromJson*(n: JsonNode, argName: string, result: var Hash256) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidHash256:
+    raise newException(ValueError, invalidMsg(argName) & " as a Hash256 \"" & hexStr & "\"")
+  hexToByteArray(hexStr.string, result.data)
+
+proc fromJson*(n: JsonNode, argName: string, result: var PublicKey) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidPublicKey:
+    raise newException(ValueError, invalidMsg(argName) & " as a public key \"" & hexStr & "\"")
+  result = initPublicKey(hexStr.string[4 .. ^1])

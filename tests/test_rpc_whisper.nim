@@ -1,5 +1,5 @@
 import
-  unittest, strformat, options, json_rpc/[rpcserver, rpcclient],
+  unittest, strformat, options, byteutils, json_rpc/[rpcserver, rpcclient],
   eth/common as eth_common, eth/p2p as eth_p2p,
   eth/[rlp, keys], eth/p2p/rlpx_protocols/whisper_protocol,
   ../nimbus/rpc/[common, hexstrings, rpc_types, whisper], ../nimbus/config
@@ -113,41 +113,100 @@ proc doTests =
         waitFor(client.shh_hasSymKey(keyID3)) == false
         waitFor(client.shh_deleteSymKey(keyID3)) == false
 
-    test "shh symKey post and filter":
-      var options: WhisperFilterOptions
-      options.symKeyID = some(waitFor client.shh_newSymKey())
-      options.topics = some(@["0x12345678".TopicStr])
-      let filterID = waitFor client.shh_newMessageFilter(options)
+    # Some defaults for the filter & post tests
+    let
+      ttl = 30'u64
+      topic = "0x12345678"
+      payload = "0x45879632"
+      # A very low target and long time so we are sure the test never fails
+      # because of this
+      powTarget = 0.001
+      powTime = 1.0
 
-      var message: WhisperPostMessage
-      message.symKeyID = options.symKeyID
-      message.ttl = 30
-      message.topic = some("0x12345678".TopicStr)
-      message.payload = "0x45879632".HexDataStr
-      message.powTime = 1.0
-      message.powTarget = 0.001
+    test "shh symKey post and filter loop":
+      let
+        symKeyID = waitFor client.shh_newSymKey()
+        options = WhisperFilterOptions(symKeyID: some(symKeyID),
+                                       topics: some(@[topic.TopicStr]))
+        filterID = waitFor client.shh_newMessageFilter(options)
+        message = WhisperPostMessage(symKeyID: some(symKeyID),
+                                     ttl: ttl,
+                                     topic: some(topic.TopicStr),
+                                     payload: payload.HexDataStr,
+                                     powTime: powTime,
+                                     powTarget: powTarget)
       check:
+        waitFor(client.shh_setMinPoW(powTarget)) == true
         waitFor(client.shh_post(message)) == true
-      # TODO: this does not work due to overloads?
-      # var messages = waitFor client.shh_getFilterMessages(filterID)
 
-    test "shh asymKey post and filter":
-      var options: WhisperFilterOptions
-      let keyID = waitFor client.shh_newKeyPair()
-      options.privateKeyID = some(keyID)
-      let filterID = waitFor client.shh_newMessageFilter(options)
-
-      var message: WhisperPostMessage
-      message.pubKey = some(waitFor(client.shh_getPublicKey(keyID)))
-      message.ttl = 30
-      message.topic = some("0x12345678".TopicStr)
-      message.payload = "0x45879632".HexDataStr
-      message.powTime = 1.0
-      message.powTarget = 0.001
+      let messages = waitFor client.shh_getFilterMessages(filterID)
       check:
+        messages.len == 1
+        messages[0].sig.isNone()
+        messages[0].recipientPublicKey.isNone()
+        messages[0].ttl == ttl
+        ("0x" & messages[0].topic.toHex) == topic
+        ("0x" & messages[0].payload.toHex) == payload
+        messages[0].padding.len > 0
+        messages[0].pow >= powTarget
+
+    test "shh asymKey post and filter loop":
+      let
+        privateKeyID = waitFor client.shh_newKeyPair()
+        options = WhisperFilterOptions(privateKeyID: some(privateKeyID))
+        filterID = waitFor client.shh_newMessageFilter(options)
+        pubKey = waitFor client.shh_getPublicKey(privateKeyID)
+        message = WhisperPostMessage(pubKey: some(pubKey),
+                                     ttl: ttl,
+                                     topic: some(topic.TopicStr),
+                                     payload: payload.HexDataStr,
+                                     powTime: powTime,
+                                     powTarget: powTarget)
+      check:
+        waitFor(client.shh_setMinPoW(powTarget)) == true
         waitFor(client.shh_post(message)) == true
-      # TODO: this does not work due to overloads?
-      # var messages = waitFor client.shh_getFilterMessages(filterID)
+
+      let messages = waitFor client.shh_getFilterMessages(filterID)
+      check:
+        messages.len == 1
+        messages[0].sig.isNone()
+        ("0x04" & $messages[0].recipientPublicKey.get()) == pubKey.string
+        messages[0].ttl == ttl
+        ("0x" & messages[0].topic.toHex) == topic
+        ("0x" & messages[0].payload.toHex) == payload
+        messages[0].padding.len > 0
+        messages[0].pow >= powTarget
+
+    test "shh signature in post and filter loop":
+      let
+        symKeyID = waitFor client.shh_newSymKey()
+        privateKeyID = waitFor client.shh_newKeyPair()
+        pubKey = waitFor client.shh_getPublicKey(privateKeyID)
+        options = WhisperFilterOptions(symKeyID: some(symKeyID),
+                                       topics: some(@[topic.TopicStr]),
+                                       sig: some(pubKey))
+        filterID = waitFor client.shh_newMessageFilter(options)
+        message = WhisperPostMessage(symKeyID: some(symKeyID),
+                                     sig: some(privateKeyID),
+                                     ttl: ttl,
+                                     topic: some(topic.TopicStr),
+                                     payload: payload.HexDataStr,
+                                     powTime: powTime,
+                                     powTarget: powTarget)
+      check:
+        waitFor(client.shh_setMinPoW(powTarget)) == true
+        waitFor(client.shh_post(message)) == true
+
+      let messages = waitFor client.shh_getFilterMessages(filterID)
+      check:
+        messages.len == 1
+        ("0x04" & $messages[0].sig.get()) == pubKey.string
+        messages[0].recipientPublicKey.isNone()
+        messages[0].ttl == ttl
+        ("0x" & messages[0].topic.toHex) == topic
+        ("0x" & messages[0].payload.toHex) == payload
+        messages[0].padding.len > 0
+        messages[0].pow >= powTarget
 
   rpcServer.stop()
   rpcServer.close()
