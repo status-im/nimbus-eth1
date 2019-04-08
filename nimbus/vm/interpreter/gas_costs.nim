@@ -75,6 +75,8 @@ type
       cr_currentMemSize*: Natural
       cr_memOffset*: Natural
       cr_memLength*: Natural
+    of SelfDestruct:
+      sd_condition*: bool
     else:
       discard
 
@@ -303,7 +305,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
     # Cnew_account
     if gasParams.c_isNewAccount and gasParams.kind == Call:
-      if fork < FkSpurious:
+      when fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
         result.gasCost += static(FeeSchedule[GasNewAccount])
       else:
@@ -321,7 +323,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     result.gasCost += static(FeeSchedule[GasCall])
 
     # Cgascap
-    if fork >= FkTangerine:
+    when fork >= FkTangerine:
       # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
       result.gasRefund =
         if gasParams.c_gasBalance >= result.gasCost:
@@ -344,8 +346,10 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
   func `prefix gasSelfDestruct`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
-    # TODO
-    discard
+    result.gasCost += static(FeeSchedule[GasSelfDestruct])
+    when fork >= FkTangerine:
+      if gasParams.sd_condition:
+        result.gasCost += static(FeeSchedule[GasNewAccount])
 
   # ###################################################################################################
 
@@ -523,7 +527,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           Return:         memExpansion `prefix gasHalt`,
           DelegateCall:   complex `prefix gasCall`,
           StaticCall:     complex `prefix gasCall`,
-          Op.Revert:      memExpansion `prefix gasHalt`,
+          Revert:         memExpansion `prefix gasHalt`,
           Invalid:        fixed GasZero,
           SelfDestruct:   complex `prefix gasSelfDestruct`
         ]
@@ -578,10 +582,11 @@ func homesteadGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
 func tangerineGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
   result = previous_fees
+  result[GasExtCode]      = 700
   result[GasSload]        = 200
   result[GasSelfDestruct] = 5000
   result[GasBalance]      = 400
-  result[GasCall]         = 40
+  result[GasCall]         = 700
 
 func spuriousGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-160.md

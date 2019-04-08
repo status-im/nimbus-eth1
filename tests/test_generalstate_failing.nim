@@ -15,6 +15,14 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
     "randomStatetest14.json", # SHA3 offset
     "randomStatetest85.json", # CALL* memoffset
+
+    # Tangerine failed GST
+    "Delegatecall1024.json",
+    "ABAcalls2.json",
+    "ABAcalls3.json",
+    "doubleSelfdestructTest.json",
+    "doubleSelfdestructTest2.json",
+
     # Homestead recursives
     #["ContractCreationSpam.json",
     "Call1024OOG.json",

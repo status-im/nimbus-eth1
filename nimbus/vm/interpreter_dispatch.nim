@@ -184,6 +184,18 @@ proc genHomesteadJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compil
 
 let HomesteadOpDispatch {.compileTime.}: array[Op, NimNode] = genHomesteadJumpTable(FrontierOpDispatch)
 
+proc genTangerineJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  result[SelfDestruct] = newIdentNode "selfDestructEIP150"
+
+let TangerineOpDispatch {.compileTime.}: array[Op, NimNode] = genTangerineJumpTable(HomesteadOpDispatch)
+
+proc genSpuriousJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  result[SelfDestruct] = newIdentNode "selfDestructEIP161"
+
+let SpuriousOpDispatch {.compileTime.}: array[Op, NimNode] = genSpuriousJumpTable(TangerineOpDispatch)
+
 proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNode =
 
   let instr = quote do: `computation`.instr
@@ -245,19 +257,35 @@ macro genFrontierDispatch(computation: BaseComputation): untyped =
 macro genHomesteadDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(HomesteadOpDispatch, computation)
 
+macro genTangerineDispatch(computation: BaseComputation): untyped =
+  result = opTableToCaseStmt(TangerineOpDispatch, computation)
+
+macro genSpuriousDispatch(computation: BaseComputation): untyped =
+  result = opTableToCaseStmt(SpuriousOpDispatch, computation)
+
 proc frontierVM(computation: BaseComputation) =
   genFrontierDispatch(computation)
 
 proc homesteadVM(computation: BaseComputation) =
   genHomesteadDispatch(computation)
 
+proc tangerineVM(computation: BaseComputation) =
+  genTangerineDispatch(computation)
+
+proc spuriousVM(computation: BaseComputation) =
+  genSpuriousDispatch(computation)
+
 proc selectVM(computation: BaseComputation, fork: Fork) =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
   of FkFrontier..FkThawing:
     computation.frontierVM()
-  of FkHomestead..FkSpurious:
+  of FkHomestead..FkDao:
     computation.homesteadVM()
+  of FkTangerine:
+    computation.tangerineVM()
+  of FkSpurious:
+    computation.spuriousVM()
   else:
     raise newException(VMError, "Unknown or not implemented fork: " & $fork)
 
