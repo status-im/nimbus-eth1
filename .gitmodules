@@ -68,11 +68,6 @@
 	url = https://github.com/status-im/nim-json-serialization.git
 	ignore = dirty
 	branch = master
-[submodule "vendor/nim-package-visible-types"]
-	path = vendor/nim-package-visible-types
-	url = https://github.com/zah/nim-package-visible-types.git
-	ignore = dirty
-	branch = master
 [submodule "vendor/nim-secp256k1"]
 	path = vendor/nim-secp256k1
 	url = https://github.com/status-im/nim-secp256k1.git
