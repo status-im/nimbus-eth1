@@ -30,6 +30,7 @@ test_script:
   - build\nimbus.exe --help
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% test
   - IF "%PLATFORM%" == "x64" mingw32-make -j2 test-reproducibility
+  - mingw32-make -C vendor/nim-beacon-chain -j2 test
 
 deploy: off
 
