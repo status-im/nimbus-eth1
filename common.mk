@@ -21,10 +21,6 @@ ifdef LOG_LEVEL
   NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_log_level=$(LOG_LEVEL)
 endif
 
-ifeq ($(OS), Windows_NT)
-  NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_colors=NoColors
-endif
-
 # guess who does parsing before variable expansion
 COMMA := ,
 EMPTY :=
