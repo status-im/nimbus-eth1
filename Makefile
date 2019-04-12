@@ -34,7 +34,6 @@ NIM_DIR := vendor/Nim
 #  but this is broken when using symlinks, so build csources separately (we get parallel compiling as a bonus)
 #- Windows is a special case, as usual
 #- macOS is also a special case, with its "ln" not supporting "-r"
-#- rebuilds Nimble in release mode, for those using it manually
 ifeq ($(OS), Windows_NT)
   # the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection
   ifeq ($(ARCH_OVERRIDE), x86)
@@ -69,8 +68,7 @@ BUILD_NIM := echo -e $(BUILD_MSG) "Nim compiler" && \
 	} || { \
 		cp -a bin/nim bin/nim_csources; \
 	} && \
-	sh build_all.sh $(HANDLE_OUTPUT) && \
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:release --noNimblePath -p:compiler --nilseqs:on -o:bin/nimble dist/nimble/src/nimble.nim
+	sh build_all.sh $(HANDLE_OUTPUT)
 NIM_BINARY := $(NIM_DIR)/bin/nim$(EXE_SUFFIX)
 # md5sum - macOS is a special case
 ifeq ($(shell uname), Darwin)
@@ -167,11 +165,11 @@ build-nim: | deps
 #- initialises and updates the Git submodules
 #- deletes the ".nimble" dir to force the execution of the "deps" target
 #- allows parallel building with the '+' prefix
-#- TODO: rebuild the Nim compiler after the corresponding submodule is updated
+#- rebuilds the Nim compiler after the corresponding submodule is updated
 $(NIM_BINARY) update:
 	git submodule update --init --recursive
 	rm -rf $(NIMBLE_DIR)
-	+ [ -e $(NIM_BINARY) ] || { $(BUILD_NIM); }
+	+ [[ -e $(NIM_BINARY) && $(NIM_BINARY) -nt $(NIM_DIR)/lib/system.nim ]] || { $(BUILD_NIM); }
 
 # don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
 update-remote:
