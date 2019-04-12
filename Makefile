@@ -225,8 +225,6 @@ ctags:
 
 ifeq ($(OS), Windows_NT)
   # no tabs allowed for indentation here
-  SQLITE_ARCHIVE_32 := sqlite-dll-win32-x86-3240000.zip
-  SQLITE_ARCHIVE_64 := sqlite-dll-win64-x64-3240000.zip
 
   # the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection
   ifeq ($(ARCH_OVERRIDE), x86)
@@ -245,17 +243,12 @@ ifeq ($(OS), Windows_NT)
   endif
 
   ifeq ($(ARCH), x86)
-    SQLITE_ARCHIVE := $(SQLITE_ARCHIVE_32)
-    SQLITE_SUFFIX := _32
     ROCKSDB_DIR := x86
   endif
   ifeq ($(ARCH), x64)
-    SQLITE_ARCHIVE := $(SQLITE_ARCHIVE_64)
-    SQLITE_SUFFIX := _64
     ROCKSDB_DIR := x64
   endif
 
-  SQLITE_URL := https://www.sqlite.org/2018/$(SQLITE_ARCHIVE)
   ROCKSDB_ARCHIVE := nimbus-deps.zip
   ROCKSDB_URL := https://github.com/status-im/nimbus-deps/releases/download/nimbus-deps/$(ROCKSDB_ARCHIVE)
   CURL := curl -O -L
@@ -264,12 +257,13 @@ ifeq ($(OS), Windows_NT)
 #- back to tabs
 #- copied from .appveyor.yml
 #- this is why we can't delete the whole "build" dir in the "clean" target
-fetch-dlls: | build
+fetch-dlls: | build deps
 	cd build && \
-		$(CURL) $(SQLITE_URL) && \
 		$(CURL) $(ROCKSDB_URL) && \
-		$(UNZIP) $(SQLITE_ARCHIVE) && \
-		cp -a sqlite3.dll sqlite3$(SQLITE_SUFFIX).dll && \
+		$(CURL) https://nim-lang.org/download/dlls.zip && \
 		$(UNZIP) $(ROCKSDB_ARCHIVE) && \
-		cp -a $(ROCKSDB_DIR)/*.dll .
+		cp -a $(ROCKSDB_DIR)/*.dll . && \
+		$(UNZIP) dlls.zip && \
+		mkdir -p vendor/nim-beacon-chain/build && \
+		cp -a *.dll vendor/nim-beacon-chain/build/
 endif
