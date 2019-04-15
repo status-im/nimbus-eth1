@@ -406,7 +406,7 @@ OK: 23/30 Fail: 0/30 Skip: 7/30
 + CallLoseGasOOG.json                                             OK
 + CallRecursiveBombPreCall.json                                   OK
 + CallcodeLoseGasOOG.json                                         OK
-  Delegatecall1024.json                                           Skip
++ Delegatecall1024.json                                           OK
 + Delegatecall1024OOG.json                                        OK
 + callOutput1.json                                                OK
 + callOutput2.json                                                OK
@@ -435,7 +435,7 @@ OK: 23/30 Fail: 0/30 Skip: 7/30
 + delegatecodeDynamicCode.json                                    OK
 + delegatecodeDynamicCode2SelfCall.json                           OK
 ```
-OK: 33/34 Fail: 0/34 Skip: 1/34
+OK: 34/34 Fail: 0/34 Skip: 0/34
 ## stEIP150Specific
 ```diff
 + CallAndCallcodeConsumeMoreGasThenTransactionHas.json            OK
@@ -2017,8 +2017,8 @@ OK: 1/284 Fail: 0/284 Skip: 283/284
 ```diff
 + ABAcalls0.json                                                  OK
 + ABAcalls1.json                                                  OK
-  ABAcalls2.json                                                  Skip
-  ABAcalls3.json                                                  Skip
++ ABAcalls2.json                                                  OK
++ ABAcalls3.json                                                  OK
 + ABAcallsSuicide0.json                                           OK
 + ABAcallsSuicide1.json                                           OK
 + Call10.json                                                     OK
@@ -2083,7 +2083,7 @@ OK: 1/284 Fail: 0/284 Skip: 283/284
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 61/67 Fail: 0/67 Skip: 6/67
+OK: 63/67 Fail: 0/67 Skip: 4/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2520,4 +2520,4 @@ OK: 5/133 Fail: 0/133 Skip: 128/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1497/2334 Fail: 0/2334 Skip: 837/2334
+OK: 1500/2334 Fail: 0/2334 Skip: 834/2334

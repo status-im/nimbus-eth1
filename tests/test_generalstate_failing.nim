@@ -17,9 +17,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest85.json", # CALL* memoffset
 
     # Tangerine failed GST
-    "Delegatecall1024.json",
-    "ABAcalls2.json",
-    "ABAcalls3.json",
     "doubleSelfdestructTest.json",
     "doubleSelfdestructTest2.json",
 
