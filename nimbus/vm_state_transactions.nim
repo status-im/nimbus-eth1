@@ -74,7 +74,7 @@ proc execComputation*(computation: var BaseComputation): bool =
     for deletedAccount in computation.accountsForDeletion:
       db.deleteAccount deletedAccount
       inc suicidedCount
-    
+
     # FIXME: hook this into actual RefundSelfDestruct
     const RefundSelfDestruct = 24_000
     computation.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
@@ -82,8 +82,6 @@ proc execComputation*(computation: var BaseComputation): bool =
   result = computation.isSuccess
   if result:
     computation.vmState.addLogs(computation.logEntries)
-  else:
-    if computation.tracingEnabled: computation.traceError()
 
 proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddress): GasInt =
   let
