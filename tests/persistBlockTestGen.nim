@@ -94,6 +94,11 @@ proc main() =
   chainDB.dumpTest(1_920_000) # the DAO fork
   chainDB.dumpTest(1_927_662) # fork comparison bug in postExecuteVM
 
+  # too big and too slow, we can skip it
+  # because it already covered by GST
+  #chainDB.dumpTest(2_283_416) # first DDOS spam attack block
+  chainDB.dumpTest(2_463_413) # tangerine call* gas cost bug
+
 when isMainModule:
   var message: string
 

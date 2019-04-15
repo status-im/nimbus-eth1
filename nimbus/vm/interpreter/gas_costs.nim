@@ -8,7 +8,7 @@
 import
   math, eth/common/eth_types,
   ./utils/[macros_gen_opcodes, utils_numeric],
-  ./opcode_values, ./vm_forks
+  ./opcode_values, ./vm_forks, ../../errors
 
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf
@@ -67,7 +67,7 @@ type
     of Call, CallCode, DelegateCall, StaticCall:
       c_isNewAccount*: bool
       c_gasBalance*: GasInt
-      c_contractGas*: Gasint
+      c_contractGas*: Uint256
       c_currentMemSize*: Natural
       c_memOffset*: Natural
       c_memLength*: Natural
@@ -325,16 +325,16 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     # Cgascap
     when fork >= FkTangerine:
       # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
-      result.gasRefund =
-        if gasParams.c_gasBalance >= result.gasCost:
-          min(
-            `prefix all_but_one_64th`(gasParams.c_gasBalance - result.gasCost),
-            gasParams.c_contractGas
-          )
-        else:
-          gasParams.c_contractGas
+      let gas = `prefix all_but_one_64th`(gasParams.c_gasBalance - result.gasCost)
+      if gasParams.c_contractGas > high(GasInt).u256 or
+        gas < gasParams.c_contractGas.truncate(GasInt):
+        result.gasRefund = gas
+      else:
+        result.gasRefund = gasParams.c_contractGas.truncate(GasInt)
     else:
-      result.gasRefund += gasParams.c_contractGas
+      if gasParams.c_contractGas > high(GasInt).u256:
+        raise newException(TypeError, "GasInt Overflow (" & $gasParams.kind & ") " & $gasParams.c_contractGas)
+      result.gasRefund = gasParams.c_contractGas.truncate(GasInt)
 
     result.gasCost += result.gasRefund
 

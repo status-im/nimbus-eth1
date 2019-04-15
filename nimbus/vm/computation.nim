@@ -154,10 +154,6 @@ proc writeContract*(computation: BaseComputation, fork: Fork): bool =
     result = false
 
 proc transferBalance(computation: BaseComputation, opCode: static[Op]) =
-  if computation.msg.depth > MaxCallDepth:
-    computation.setError(&"Stack depth limit reached depth={computation.msg.depth}")
-    return
-
   let senderBalance = computation.vmState.readOnlyStateDb().
                       getBalance(computation.msg.sender)
 
@@ -193,6 +189,11 @@ proc postExecuteVM(computation: BaseComputation) =
 proc executeOpcodes*(computation: BaseComputation) {.gcsafe.}
 
 proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
+  if computation.msg.depth > MaxCallDepth:
+    computation.setError(&"Stack depth limit reached depth={computation.msg.depth}")
+    computation.nextProc()
+    return
+
   computation.snapshot()
   defer:
     computation.dispose()

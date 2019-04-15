@@ -710,15 +710,12 @@ template genCall(callName: untyped, opCode: Op): untyped =
                                  else:
                                     (memOutPos, memOutLen)
 
-    if gas > high(GasInt).u256:
-      raise newException(TypeError, "GasInt Overflow (" & callNameStr & ")")
-
     let (childGasFee, childGasLimit) = computation.gasCosts[opCode].c_handler(
       value,
       GasParams(kind: opCode,
                 c_isNewAccount: isNewAccount,
                 c_gasBalance: computation.gasMeter.gasRemaining,
-                c_contractGas: gas.truncate(GasInt),
+                c_contractGas: gas,
                 c_currentMemSize: computation.memory.len,
                 c_memOffset: memOffset,
                 c_memLength: memLength
