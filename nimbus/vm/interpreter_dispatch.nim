@@ -300,3 +300,7 @@ proc executeOpcodes(computation: BaseComputation) =
     let msg = getCurrentExceptionMsg()
     computation.setError(&"Opcode Dispatch Error msg={msg}, depth={computation.msg.depth}", true)
   computation.nextProc()
+
+  if computation.isError():
+    if computation.tracingEnabled: computation.traceError()
+    debug "executeOpcodes error", msg=computation.error.info
