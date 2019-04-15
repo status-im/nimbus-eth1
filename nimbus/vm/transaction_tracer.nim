@@ -120,9 +120,10 @@ proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
     j["error"] = %(c.error.info)
     trace "Error", json = j.pretty()
 
-  # TODO: figure out how to get gasCost
-  # when contract execution failed before traceOpCodeEnded called
-  # because exception raised
-  #j["gasCost"] = %
+    # even though the gasCost is incorrect,
+    # we have something to display,
+    # it is an error anyway
+    let gasRemaining = j["gas"].getInt()
+    j["gasCost"] = %(gasRemaining - c.gasMeter.gasRemaining)
 
   tracer.trace["failed"] = %true
