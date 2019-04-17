@@ -69,9 +69,9 @@ proc start(): NimbusObject =
   else:
     # automated NAT traversal
     let extIP = getExternalIP(conf.net.nat)
-    # TODO: dynamic IPs are common, so our external IP might change while the
-    # program is running. How can we update our advertised enode address and any
-    # other place that might use this external IP?
+    # This external IP only appears in the logs, so don't worry about dynamic
+    # IPs. Don't remove it either, because the above call does initialisation
+    # and discovery for NAT-related objects.
     if extIP.isSome:
       address.ip = extIP.get()
       let extPorts = redirectPorts(tcpPort = address.tcpPort,
