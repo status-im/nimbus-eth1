@@ -612,14 +612,17 @@ const
 gasCosts(FkFrontier, base, BaseGasCosts)
 gasCosts(FkHomestead, homestead, HomesteadGasCosts)
 gasCosts(FkTangerine, tangerine, TangerineGasCosts)
+gasCosts(FkSpurious, spurious, SpuriousGasCosts)
 
 proc forkToSchedule*(fork: Fork): GasCosts =
   if fork < FkHomestead:
     BaseGasCosts
   elif fork < FkTangerine:
     HomesteadGasCosts
-  else:
+  elif fork < FkSpurious:
     TangerineGasCosts
+  else:
+    SpuriousGasCosts
 
 const
   ## Precompile costs
