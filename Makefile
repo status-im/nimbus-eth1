@@ -183,11 +183,12 @@ build-nim: | deps
 
 #- initialises and updates the Git submodules
 #- deletes the ".nimble" dir to force the execution of the "deps" target
+#- deletes "nimbus.nims" which on Windows is a copy instead of a proper symlink
 #- allows parallel building with the '+' prefix
 #- rebuilds the Nim compiler after the corresponding submodule is updated
 $(NIM_BINARY) update:
 	git submodule update --init --recursive
-	rm -rf $(NIMBLE_DIR)
+	rm -rf $(NIMBLE_DIR) nimbus.nims
 	+ [[ -e $(NIM_BINARY) && $(NIM_BINARY) -nt $(NIM_DIR)/lib/system.nim ]] || { $(BUILD_NIM); }
 
 # don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
