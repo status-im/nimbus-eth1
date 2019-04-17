@@ -83,6 +83,7 @@ proc execComputation*(computation: var BaseComputation): bool =
       var touchedAccounts = initSet[EthAddress]()
       computation.collectTouchedAccounts(touchedAccounts)
       for account in touchedAccounts:
+        debug "state clearing", account
         if db.accountExists(account) and db.isEmptyAccount(account):
           db.deleteAccount(account)
 

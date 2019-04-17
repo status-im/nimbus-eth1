@@ -174,12 +174,13 @@ template continuation*(comp: BaseComputation, body: untyped) =
     body
     tmpNext()
 
-proc postExecuteVM(computation: BaseComputation) =
-  if computation.isSuccess and computation.msg.isCreate:
-    let fork = computation.getFork
-    let contractFailed = not computation.writeContract(fork)
-    if contractFailed and fork >= FkHomestead:
-      computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
+proc postExecuteVM(computation: BaseComputation, opCode: static[Op]) =
+  when opCode == Create:
+    if computation.isSuccess:
+      let fork = computation.getFork
+      let contractFailed = not computation.writeContract(fork)
+      if contractFailed and fork >= FkHomestead:
+        computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
 
   if computation.isSuccess:
     computation.commit()
@@ -198,6 +199,12 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   defer:
     computation.dispose()
 
+  # EIP161 nonce incrementation
+  when opCode == Create:
+    if computation.getFork >= FkSpurious:
+      computation.vmState.mutateStateDb:
+        db.incNonce(computation.msg.storageAddress)
+
   when opCode in {CallCode, Call, Create}:
     computation.transferBalance(opCode)
     if computation.isError():
@@ -211,7 +218,7 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
     return
 
   continuation(computation):
-    postExecuteVM(computation)
+    postExecuteVM(computation, opCode)
 
   executeOpcodes(computation)
 
