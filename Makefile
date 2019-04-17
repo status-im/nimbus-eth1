@@ -83,7 +83,7 @@ TOOLS_DIRS := premix tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-.PHONY: all $(TOOLS) deps github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon
+.PHONY: all $(TOOLS) deps github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a
 
 # default target, because it's the first one that doesn't start with '.'
 all: $(TOOLS) nimbus
@@ -100,7 +100,7 @@ $(TOOLS): | build deps
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
-nimbus: | build deps
+nimbus: | build deps nat-libs
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims
 
@@ -113,6 +113,14 @@ build:
 #- $(NIM_BINARY) is both a proxy for submodules having been initialised
 #  and a check for the actual compiler build
 deps: $(NIM_BINARY) $(NIMBLE_DIR) nimbus.nims
+
+nat-libs: | libminiupnpc.a libnatpmp.a
+
+libminiupnpc.a: | deps
+	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc $@ $(HANDLE_OUTPUT)
+
+libnatpmp.a: | deps
+	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/libnatpmp $@ $(HANDLE_OUTPUT)
 
 #- depends on Git submodules being initialised
 #- fakes a Nimble package repository with the minimum info needed by the Nim compiler
@@ -147,6 +155,8 @@ test-reproducibility:
 clean:
 	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*.exe} vendor/go/bin \
 		$(NIMBLE_DIR) $(NIM_BINARY) $(NIM_DIR)/nimcache nimcache
+	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc clean $(HANDLE_OUTPUT)
+	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/libnatpmp clean $(HANDLE_OUTPUT)
 
 # dangerous cleaning, because you may have not-yet-pushed branches and commits in those vendor repos you're about to delete
 mrproper: clean

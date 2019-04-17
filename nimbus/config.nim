@@ -9,7 +9,7 @@
 
 import
   parseopt, strutils, macros, os, times,
-  chronos, eth/[keys, common, p2p], chronicles, nimcrypto/hash,
+  chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
   ./db/select_backend,
   ./vm/interpreter/vm_forks
 
@@ -132,6 +132,8 @@ type
     networkId*: uint              ## Network ID as integer
     ident*: string                ## Server ident name string
     nodeKey*: PrivateKey          ## Server private key
+    nat*: NatStrategy             ## NAT strategy
+    externalIP*: string           ## user-provided external IP
 
   DebugConfiguration* = object
     ## Debug configuration object
@@ -474,6 +476,23 @@ proc processNetArguments(key, value: string): ConfigStatus =
       config.net.nodeKey = res
   elif skey == "ident":
     config.net.ident = value
+  elif skey == "nat":
+    case value.toLowerAscii:
+      of "any":
+        config.net.nat = NatAny
+      of "upnp":
+        config.net.nat = NatUpnp
+      of "pmp":
+        config.net.nat = NatPmp
+      of "none":
+        config.net.nat = NatNone
+      else:
+        if isIpAddress(value):
+          config.net.externalIP = value
+          config.net.nat = NatNone
+        else:
+          error "not a valid NAT mechanism, nor a valid IP address", value
+          result = ErrorParseOption
   else:
     result = EmptyOption
 
@@ -551,6 +570,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.bindPort = 30303'u16
   result.net.discPort = 30303'u16
   result.net.ident = NimbusIdent
+  result.net.nat = NatAny
 
   const dataDir = getDefaultDataDir()
 
@@ -592,6 +612,7 @@ NETWORKING OPTIONS:
   --discport:<value>      Network listening UDP port (defaults to --port argument)
   --maxpeers:<value>      Maximum number of network peers (default: 25)
   --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
+  --nat:<value>           NAT port mapping mechanism (any|none|upnp|pmp|<external IP>) (default: "any")
   --nodiscover            Disables the peer discovery mechanism (manual peer addition)
   --v5discover            Enables the experimental RLPx V5 (Topic Discovery) mechanism
   --nodekey:<value>       P2P node private key (as hexadecimal string)

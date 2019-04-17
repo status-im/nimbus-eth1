@@ -8,11 +8,12 @@
 # those terms.
 
 import
-  os, strutils, net, eth/keys, db/[storage_types, db_chain, select_backend],
+  os, strutils, net, options,
+  eth/keys, db/[storage_types, db_chain, select_backend],
   eth/common as eth_common, eth/p2p as eth_p2p,
   chronos, json_rpc/rpcserver, chronicles,
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol],
-  eth/p2p/blockchain_sync,
+  eth/p2p/blockchain_sync, eth/net/nat,
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
   eth/trie/db
 
@@ -43,8 +44,6 @@ proc start(): NimbusObject =
   setLogLevel(conf.debug.logLevel)
   if len(conf.debug.logFile) != 0:
     discard defaultChroniclesStream.output.open(conf.debug.logFile, fmAppend)
-  else:
-    discard defaultChroniclesStream.output.open(stdout)
 
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:
@@ -63,6 +62,23 @@ proc start(): NimbusObject =
   address.ip = parseIpAddress("0.0.0.0")
   address.tcpPort = Port(conf.net.bindPort)
   address.udpPort = Port(conf.net.discPort)
+  if conf.net.nat == NatNone:
+    if conf.net.externalIP != "":
+      # any required port redirection is assumed to be done by hand
+      address.ip = parseIpAddress(conf.net.externalIP)
+  else:
+    # automated NAT traversal
+    let extIP = getExternalIP(conf.net.nat)
+    # TODO: dynamic IPs are common, so our external IP might change while the
+    # program is running. How can we update our advertised enode address and any
+    # other place that might use this external IP?
+    if extIP.isSome:
+      address.ip = extIP.get()
+      let extPorts = redirectPorts(tcpPort = address.tcpPort,
+                                    udpPort = address.udpPort,
+                                    description = NIMBUS_NAME & " " & NIMBUS_VERSION)
+      if extPorts.isSome:
+        (address.tcpPort, address.udpPort) = extPorts.get()
 
   createDir(conf.dataDir)
   let trieDB = trieDB newChainDb(conf.dataDir)
@@ -132,6 +148,9 @@ when isMainModule:
 
   ## Pring Nimbus header
   echo NimbusHeader
+
+  ## show logs on stdout until we get the user's logging choice
+  discard defaultChroniclesStream.output.open(stdout)
 
   ## Processing command line arguments
   if processArguments(message) != ConfigStatus.Success:
