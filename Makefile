@@ -117,10 +117,19 @@ deps: $(NIM_BINARY) $(NIMBLE_DIR) nimbus.nims
 nat-libs: | libminiupnpc.a libnatpmp.a
 
 libminiupnpc.a: | deps
+ifeq ($(OS), Windows_NT)
+	+ [ -e vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc/$@ ] || \
+		$(MAKE) -C vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc -f Makefile.mingw CC=gcc init $@ $(HANDLE_OUTPUT)
+else
 	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc $@ $(HANDLE_OUTPUT)
+endif
 
 libnatpmp.a: | deps
+ifeq ($(OS), Windows_NT)
+	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/libnatpmp CC=gcc CFLAGS="-Wall -Os -DWIN32 -DNATPMP_STATICLIB -DENABLE_STRNATPMPERR" $@ $(HANDLE_OUTPUT)
+else
 	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/libnatpmp $@ $(HANDLE_OUTPUT)
+endif
 
 #- depends on Git submodules being initialised
 #- fakes a Nimble package repository with the minimum info needed by the Nim compiler
