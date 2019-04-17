@@ -94,7 +94,7 @@ all: $(TOOLS) nimbus
 $(SILENT_TARGET_PREFIX).SILENT:
 
 # builds the tools, wherever they are
-$(TOOLS): | build deps
+$(TOOLS): | build deps nat-libs
 	for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim"
@@ -138,7 +138,7 @@ nimbus.nims:
 	ln -s nimbus.nimble $@
 
 # builds and runs the test suite
-test: | build deps
+test: | build deps nat-libs
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
 # primitive reproducibility test
