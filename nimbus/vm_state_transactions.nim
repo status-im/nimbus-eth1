@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ranges/typedranges, sequtils, strformat, tables, options,
+  ranges/typedranges, sequtils, strformat, tables, options, sets,
   eth/common, chronicles, ./db/[db_chain, state_db],
   constants, errors, transaction, vm_types, vm_state, utils,
   ./vm/[computation, interpreter], ./vm/interpreter/gas_costs
@@ -78,6 +78,13 @@ proc execComputation*(computation: var BaseComputation): bool =
     # FIXME: hook this into actual RefundSelfDestruct
     const RefundSelfDestruct = 24_000
     computation.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
+
+    if computation.getFork >= FkSpurious:
+      var touchedAccounts = initSet[EthAddress]()
+      computation.collectTouchedAccounts(touchedAccounts)
+      for account in touchedAccounts:
+        if db.accountExists(account) and db.isEmptyAccount(account):
+          db.deleteAccount(account)
 
   result = computation.isSuccess
   if result:

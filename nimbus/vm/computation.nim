@@ -7,7 +7,7 @@
 
 import
   chronicles, strformat, strutils, sequtils, macros, terminal, math, tables, options,
-  eth/[common, keys], eth/trie/db as triedb,
+  sets, eth/[common, keys], eth/trie/db as triedb,
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
@@ -270,6 +270,42 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
     result = 0
   else:
     result = c.gasMeter.gasRemaining
+
+proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]) =
+  ## Collect all of the accounts that *may* need to be deleted based on EIP161:
+  ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
+  ## also see: https://github.com/ethereum/EIPs/issues/716
+
+  proc cmpThree(address: EthAddress): bool =
+    for i in 0..18:
+      if address[i] != 0: return
+    result = address[19] == byte(3)
+
+  if c.isOriginComputation and c.msg.gasPrice == 0:
+    output.incl c.vmState.blockHeader.coinbase
+
+  for _, beneficiary in c.accountsToDelete:
+    if c.isError and c.isOriginComputation:
+      # Special case to account for geth+parity bug
+      # https://github.com/ethereum/EIPs/issues/716
+      if beneficiary.cmpThree:
+        output.incl beneficiary
+      continue
+    else:
+      output.incl beneficiary
+
+  if not c.msg.isCreate:
+    if c.isError and c.isOriginComputation:
+      # Special case to account for geth+parity bug
+      # https://github.com/ethereum/EIPs/issues/716
+      if cmpThree(c.msg.destination):
+        output.incl c.msg.destination
+    else:
+      output.incl c.msg.destination
+
+  if not c.isOriginComputation or not c.isError:
+    for child in c.children:
+      child.collectTouchedAccounts(output)
 
 proc tracingEnabled*(c: BaseComputation): bool =
   c.vmState.tracingEnabled
