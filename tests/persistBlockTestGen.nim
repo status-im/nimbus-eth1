@@ -99,6 +99,7 @@ proc main() =
   #chainDB.dumpTest(2_283_416) # first DDOS spam attack block
   chainDB.dumpTest(2_463_413) # tangerine call* gas cost bug
   chainDB.dumpTest(2_675_000) # spurious dragon first block
+  chainDB.dumpTest(2_675_002) # EIP155 tx.getSender
 
 when isMainModule:
   var message: string
