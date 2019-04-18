@@ -32,6 +32,7 @@ proc testCode(code: string, initialGas: GasInt, blockNum: UInt256): BaseComputat
     value=0.u256,
     data = @[],
     code=code.hexToSeqByte,
+    contractCreation = true,
     gas=initial_gas,
     gasPrice=1) # What is this used for?
     # gasPrice=fixture{"exec"}{"gasPrice"}.getHexadecimalInt.u256,
