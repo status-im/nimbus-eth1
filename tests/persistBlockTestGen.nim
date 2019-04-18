@@ -98,6 +98,7 @@ proc main() =
   # because it already covered by GST
   #chainDB.dumpTest(2_283_416) # first DDOS spam attack block
   chainDB.dumpTest(2_463_413) # tangerine call* gas cost bug
+  chainDB.dumpTest(2_675_000) # spurious dragon first block
 
 when isMainModule:
   var message: string
