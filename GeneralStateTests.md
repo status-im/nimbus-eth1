@@ -2076,14 +2076,14 @@ OK: 1/284 Fail: 0/284 Skip: 283/284
 + suicideCaller.json                                              OK
 + suicideCallerAddresTooBigLeft.json                              OK
 + suicideCallerAddresTooBigRight.json                             OK
-  suicideCoinbase.json                                            Skip
++ suicideCoinbase.json                                            OK
 + suicideNotExistingAccount.json                                  OK
 + suicideOrigin.json                                              OK
 + suicideSendEtherPostDeath.json                                  OK
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 62/67 Fail: 0/67 Skip: 5/67
+OK: 63/67 Fail: 0/67 Skip: 4/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2093,7 +2093,7 @@ OK: 62/67 Fail: 0/67 Skip: 5/67
 + CreateTransactionReverted.json                                  OK
 + CreateTransactionSuccess.json                                   OK
 + EmptyTransaction.json                                           OK
-  EmptyTransaction2.json                                          Skip
++ EmptyTransaction2.json                                          OK
 + EmptyTransaction3.json                                          OK
 + HighGasLimit.json                                               OK
 + InternalCallHittingGasLimit.json                                OK
@@ -2114,7 +2114,7 @@ OK: 62/67 Fail: 0/67 Skip: 5/67
 + SuicidesAndInternlCallSuicidesOOG.json                          OK
 + SuicidesAndInternlCallSuicidesSuccess.json                      OK
 + SuicidesAndSendMoneyToItselfEtherDestroyed.json                 OK
-  SuicidesMixingCoinbase.json                                     Skip
++ SuicidesMixingCoinbase.json                                     OK
 + SuicidesStopAfterSuicide.json                                   OK
 + TransactionDataCosts652.json                                    OK
 + TransactionFromCoinbaseHittingBlockGasLimit.json                OK
@@ -2128,10 +2128,10 @@ OK: 62/67 Fail: 0/67 Skip: 5/67
 + TransactionToItself.json                                        OK
 + TransactionToItselfNotEnoughFounds.json                         OK
 + UserTransactionGasLimitIsTooLowWhenZeroCost.json                OK
-  UserTransactionZeroCost.json                                    Skip
-  UserTransactionZeroCostWithData.json                            Skip
++ UserTransactionZeroCost.json                                    OK
++ UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 39/44 Fail: 0/44 Skip: 5/44
+OK: 43/44 Fail: 0/44 Skip: 1/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2520,4 +2520,4 @@ OK: 5/133 Fail: 0/133 Skip: 128/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1491/2334 Fail: 0/2334 Skip: 843/2334
+OK: 1496/2334 Fail: 0/2334 Skip: 838/2334

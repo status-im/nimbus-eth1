@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ranges/typedranges, sequtils, strformat, tables, options, sets,
+  ranges/typedranges, sequtils, strformat, tables, options,
   eth/common, chronicles, ./db/[db_chain, state_db],
   constants, errors, transaction, vm_types, vm_state, utils,
   ./vm/[computation, interpreter], ./vm/interpreter/gas_costs
@@ -14,7 +14,7 @@ import
 proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   # XXX: lots of avoidable u256 construction
-  let 
+  let
     account = vmState.readOnlyStateDB.getAccount(sender)
     gasLimit = transaction.gasLimit.u256
     limitAndValue = gasLimit + transaction.value
@@ -81,13 +81,8 @@ proc execComputation*(computation: var BaseComputation): bool =
     const RefundSelfDestruct = 24_000
     computation.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
 
-    if computation.getFork >= FkSpurious:
-      var touchedAccounts = initSet[EthAddress]()
-      computation.collectTouchedAccounts(touchedAccounts)
-      for account in touchedAccounts:
-        debug "state clearing", account
-        if db.accountExists(account) and db.isEmptyAccount(account):
-          db.deleteAccount(account)
+  if computation.getFork >= FkSpurious:
+    computation.collectTouchedAccounts(computation.vmState.touchedAccounts)
 
   result = computation.isSuccess
   if result:

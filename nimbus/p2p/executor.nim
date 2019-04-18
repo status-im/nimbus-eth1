@@ -1,4 +1,4 @@
-import options,
+import options, sets,
   eth/[common, bloom], ranges, chronicles, nimcrypto,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
@@ -32,7 +32,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
 
     var computation = setupComputation(vmState, tx, sender, recipient, forkOverride)
-    if computation.isNil:
+    if computation.isNil: # OOG in setupComputation
       gasUsed = 0
       break
 
@@ -53,6 +53,12 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   let txFee = gasUsed.u256 * tx.gasPrice.u256
   vmState.mutateStateDB:
     db.addBalance(vmState.blockHeader.coinbase, txFee)
+
+    # EIP158 state clearing
+    for account in vmState.touchedAccounts:
+      debug "state clearing", account
+      if db.accountExists(account) and db.isEmptyAccount(account):
+        db.deleteAccount(account)
 
   result = gasUsed
 
