@@ -2066,8 +2066,8 @@ OK: 1/284 Fail: 0/284 Skip: 283/284
 + createNameRegistratorZeroMemExpansion.json                      OK
 + createWithInvalidOpcode.json                                    OK
 + currentAccountBalance.json                                      OK
-  doubleSelfdestructTest.json                                     Skip
-  doubleSelfdestructTest2.json                                    Skip
++ doubleSelfdestructTest.json                                     OK
++ doubleSelfdestructTest2.json                                    OK
 + extcodecopy.json                                                OK
 + return0.json                                                    OK
 + return1.json                                                    OK
@@ -2083,7 +2083,7 @@ OK: 1/284 Fail: 0/284 Skip: 283/284
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 63/67 Fail: 0/67 Skip: 4/67
+OK: 65/67 Fail: 0/67 Skip: 2/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2520,4 +2520,4 @@ OK: 5/133 Fail: 0/133 Skip: 128/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1510/2334 Fail: 0/2334 Skip: 824/2334
+OK: 1512/2334 Fail: 0/2334 Skip: 822/2334

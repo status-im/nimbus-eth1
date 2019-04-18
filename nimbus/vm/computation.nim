@@ -237,8 +237,6 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
       computation.returnData = @[]
     else:
       computation.returnData = child.output
-    for k, v in child.accountsToDelete:
-      computation.accountsToDelete[k] = v
     computation.logEntries.add child.logEntries
 
   if not child.shouldBurnGas:
@@ -258,9 +256,16 @@ proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
 # many methods are basically TODO, but they still return valid values
 # in order to test some existing code
 iterator accountsForDeletion*(c: BaseComputation): EthAddress =
-  if not c.isError:
-    for account in c.accountsToDelete.keys:
-      yield account
+  var stack = @[c]
+  var deletedAccounts = initSet[EthAddress]()
+  while stack.len > 0:
+    let comp = stack.pop()
+    if comp.isError: continue
+    for account in comp.accountsToDelete.keys:
+      if account notin deletedAccounts:
+        deletedAccounts.incl account
+        yield account
+    stack.add comp.children
 
 proc getGasRefund*(c: BaseComputation): GasInt =
   if c.isError:

@@ -16,42 +16,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest14.json", # SHA3 offset
     "randomStatetest85.json", # CALL* memoffset
 
-    # Tangerine failed GST
-    "doubleSelfdestructTest.json",
-    "doubleSelfdestructTest2.json",
-
-    # Spurious Dragon failed GST
-    #"CallContractToCreateContractOOG.json",
-    #"failed_tx_xcf416c53.json",
-    #"TransactionSendingToZero.json"
-    #"OutOfGasContractCreation.json",
-    #"OutOfGasPrefundedContractCreation.json",
-    #"RevertOpcodeInInit.json",
-    #"RevertOpcodeWithBigOutputInInit.json",
-    #"createNameRegistratorPerTxsNotEnoughGasAfter.json",
-    #"createNameRegistratorPerTxsNotEnoughGasAt.json",
-    #"createNameRegistratorPerTxsNotEnoughGasBefore.json",
-    #"ZeroValue_CALLCODE_ToEmpty.json",
-    #"ZeroValue_CALLCODE_ToOneStorageKey.json",
-    #"NonZeroValue_CALLCODE_ToEmpty.json",
-    #"NonZeroValue_CALLCODE_ToOneStorageKey.json",
-    #"suicideCoinbase.json",
-    #"EmptyTransaction2.json",
-    #"SuicidesMixingCoinbase.json",
-    #"UserTransactionZeroCost.json",
-    #"UserTransactionZeroCostWithData.json",
-    #"NotEnoughCashContractCreation.json",
-    #"201503110226PYTHON_DUP6.json",
-    #"CreateTransactionReverted.json",
-    #"EmptyTransaction.json",
-    #"OverflowGasRequire.json",
-    #"RefundOverflow.json",
-    #"RefundOverflow2.json",
-    #"TransactionNonceCheck.json",
-    #"TransactionNonceCheck2.json",
-    #"TransactionToItselfNotEnoughFounds.json",
-    #"UserTransactionGasLimitIsTooLowWhenZeroCost.json",
-
     # Homestead recursives
     #["ContractCreationSpam.json",
     "Call1024OOG.json",
