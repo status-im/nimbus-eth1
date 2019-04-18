@@ -29,13 +29,13 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "failed_tx_xcf416c53.json",
     "createNameRegistratorPerTxsNotEnoughGasAfter.json",
     "createNameRegistratorPerTxsNotEnoughGasAt.json",
-    "createNameRegistratorPerTxsNotEnoughGasBefore.json",
-    "ZeroValue_CALLCODE_ToEmpty.json",
-    "ZeroValue_CALLCODE_ToOneStorageKey.json",
-    "NonZeroValue_CALLCODE_ToEmpty.json",
-    "NonZeroValue_CALLCODE_ToOneStorageKey.json",
+    "createNameRegistratorPerTxsNotEnoughGasBefore.json",    
     "TransactionSendingToZero.json"
     
+    #"ZeroValue_CALLCODE_ToEmpty.json",
+    #"ZeroValue_CALLCODE_ToOneStorageKey.json",
+    #"NonZeroValue_CALLCODE_ToEmpty.json",
+    #"NonZeroValue_CALLCODE_ToOneStorageKey.json",
     #"suicideCoinbase.json",
     #"EmptyTransaction2.json",
     #"SuicidesMixingCoinbase.json",

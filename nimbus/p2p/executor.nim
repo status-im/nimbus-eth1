@@ -56,8 +56,8 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
     # EIP158 state clearing
     for account in vmState.touchedAccounts:
-      debug "state clearing", account
       if db.accountExists(account) and db.isEmptyAccount(account):
+        debug "state clearing", account
         db.deleteAccount(account)
 
   result = gasUsed

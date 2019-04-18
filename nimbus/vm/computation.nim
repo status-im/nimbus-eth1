@@ -305,10 +305,10 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
     if c.isError and c.isOriginComputation:
       # Special case to account for geth+parity bug
       # https://github.com/ethereum/EIPs/issues/716
-      if cmpThree(c.msg.destination):
-        output.incl c.msg.destination
+      if cmpThree(c.msg.storageAddress):
+        output.incl c.msg.storageAddress
     else:
-      output.incl c.msg.destination
+      output.incl c.msg.storageAddress
 
   if not c.isOriginComputation or not c.isError:
     for child in c.children:

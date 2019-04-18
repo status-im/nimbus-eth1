@@ -712,9 +712,9 @@ OK: 67/67 Fail: 0/67 Skip: 0/67
 ```diff
 + NonZeroValue_CALL.json                                          OK
 + NonZeroValue_CALLCODE.json                                      OK
-  NonZeroValue_CALLCODE_ToEmpty.json                              Skip
++ NonZeroValue_CALLCODE_ToEmpty.json                              OK
 + NonZeroValue_CALLCODE_ToNonNonZeroBalance.json                  OK
-  NonZeroValue_CALLCODE_ToOneStorageKey.json                      Skip
++ NonZeroValue_CALLCODE_ToOneStorageKey.json                      OK
 + NonZeroValue_CALL_ToEmpty.json                                  OK
 + NonZeroValue_CALL_ToNonNonZeroBalance.json                      OK
 + NonZeroValue_CALL_ToOneStorageKey.json                          OK
@@ -735,7 +735,7 @@ OK: 67/67 Fail: 0/67 Skip: 0/67
 + NonZeroValue_TransactionCALLwithData_ToNonNonZeroBalance.json   OK
 + NonZeroValue_TransactionCALLwithData_ToOneStorageKey.json       OK
 ```
-OK: 22/24 Fail: 0/24 Skip: 2/24
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
   identity_to_bigger.json                                         Skip
@@ -2223,9 +2223,9 @@ OK: 0/24 Fail: 0/24 Skip: 24/24
 ```diff
 + ZeroValue_CALL.json                                             OK
 + ZeroValue_CALLCODE.json                                         OK
-  ZeroValue_CALLCODE_ToEmpty.json                                 Skip
++ ZeroValue_CALLCODE_ToEmpty.json                                 OK
 + ZeroValue_CALLCODE_ToNonZeroBalance.json                        OK
-  ZeroValue_CALLCODE_ToOneStorageKey.json                         Skip
++ ZeroValue_CALLCODE_ToOneStorageKey.json                         OK
 + ZeroValue_CALL_ToEmpty.json                                     OK
 + ZeroValue_CALL_ToNonZeroBalance.json                            OK
 + ZeroValue_CALL_ToOneStorageKey.json                             OK
@@ -2246,7 +2246,7 @@ OK: 0/24 Fail: 0/24 Skip: 24/24
 + ZeroValue_TransactionCALLwithData_ToNonZeroBalance.json         OK
 + ZeroValue_TransactionCALLwithData_ToOneStorageKey.json          OK
 ```
-OK: 22/24 Fail: 0/24 Skip: 2/24
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stZeroKnowledge
 ```diff
   ecmul_1-2_2_28000_128.json                                      Skip
@@ -2520,4 +2520,4 @@ OK: 5/133 Fail: 0/133 Skip: 128/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1496/2334 Fail: 0/2334 Skip: 838/2334
+OK: 1500/2334 Fail: 0/2334 Skip: 834/2334
