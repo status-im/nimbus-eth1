@@ -522,8 +522,8 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + CallRecursiveContract.json                                      OK
 + CallTheContractToCreateEmptyContract.json                       OK
 + NotEnoughCashContractCreation.json                              OK
-  OutOfGasContractCreation.json                                   Skip
-  OutOfGasPrefundedContractCreation.json                          Skip
++ OutOfGasContractCreation.json                                   OK
++ OutOfGasPrefundedContractCreation.json                          OK
 + ReturnTest.json                                                 OK
 + ReturnTest2.json                                                OK
 + StackUnderFlowContractCreation.json                             OK
@@ -532,7 +532,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + TransactionCreateStopInInitcode.json                            OK
 + TransactionCreateSuicideInInitcode.json                         OK
 ```
-OK: 15/18 Fail: 0/18 Skip: 3/18
+OK: 17/18 Fail: 0/18 Skip: 1/18
 ## stLogTests
 ```diff
 + log0_emptyMem.json                                              OK
@@ -1609,10 +1609,10 @@ OK: 35/37 Fail: 0/37 Skip: 2/37
 + RevertOpcodeDirectCall.json                                     OK
 + RevertOpcodeInCallsOnNonEmptyReturnData.json                    OK
 + RevertOpcodeInCreateReturns.json                                OK
-  RevertOpcodeInInit.json                                         Skip
++ RevertOpcodeInInit.json                                         OK
 + RevertOpcodeMultipleSubCalls.json                               OK
 + RevertOpcodeReturn.json                                         OK
-  RevertOpcodeWithBigOutputInInit.json                            Skip
++ RevertOpcodeWithBigOutputInInit.json                            OK
 + RevertPrecompiledTouch.json                                     OK
 + RevertPrecompiledTouchCC.json                                   OK
 + RevertPrecompiledTouchDC.json                                   OK
@@ -1632,7 +1632,7 @@ OK: 35/37 Fail: 0/37 Skip: 2/37
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 41/43 Fail: 0/43 Skip: 2/43
+OK: 43/43 Fail: 0/43 Skip: 0/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -2137,14 +2137,14 @@ OK: 43/44 Fail: 0/44 Skip: 1/44
 + createNameRegistratorPerTxsAfter.json                           OK
 + createNameRegistratorPerTxsAt.json                              OK
 + createNameRegistratorPerTxsBefore.json                          OK
-  createNameRegistratorPerTxsNotEnoughGasAfter.json               Skip
-  createNameRegistratorPerTxsNotEnoughGasAt.json                  Skip
-  createNameRegistratorPerTxsNotEnoughGasBefore.json              Skip
++ createNameRegistratorPerTxsNotEnoughGasAfter.json               OK
++ createNameRegistratorPerTxsNotEnoughGasAt.json                  OK
++ createNameRegistratorPerTxsNotEnoughGasBefore.json              OK
 + delegatecallAfterTransition.json                                OK
 + delegatecallAtTransition.json                                   OK
 + delegatecallBeforeTransition.json                               OK
 ```
-OK: 6/9 Fail: 0/9 Skip: 3/9
+OK: 9/9 Fail: 0/9 Skip: 0/9
 ## stWalletTest
 ```diff
 + dayLimitConstruction.json                                       OK
@@ -2520,4 +2520,4 @@ OK: 5/133 Fail: 0/133 Skip: 128/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1500/2334 Fail: 0/2334 Skip: 834/2334
+OK: 1507/2334 Fail: 0/2334 Skip: 827/2334

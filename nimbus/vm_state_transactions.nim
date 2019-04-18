@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ranges/typedranges, sequtils, strformat, tables, options,
+  ranges/typedranges, sequtils, strformat, tables, options, sets,
   eth/common, chronicles, ./db/[db_chain, state_db],
   constants, errors, transaction, vm_types, vm_state, utils,
   ./vm/[computation, interpreter], ./vm/interpreter/gas_costs
@@ -32,6 +32,9 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
       forkOverride.get
     else:
       vmState.blockNumber.toFork
+
+  if fork >= FkSpurious:
+    vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
 
   var gas = tx.gasLimit - tx.intrinsicGas
 

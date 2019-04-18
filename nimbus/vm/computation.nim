@@ -288,9 +288,6 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
       if address[i] != 0: return
     result = address[19] == byte(3)
 
-  if c.isOriginComputation and c.msg.gasPrice == 0:
-    output.incl c.vmState.blockHeader.coinbase
-
   for _, beneficiary in c.accountsToDelete:
     if c.isError and c.isOriginComputation:
       # Special case to account for geth+parity bug

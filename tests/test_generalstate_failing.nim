@@ -22,16 +22,16 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
 
     # Spurious Dragon failed GST
     "CallContractToCreateContractOOG.json",
-    "OutOfGasContractCreation.json",
-    "OutOfGasPrefundedContractCreation.json",
-    "RevertOpcodeInInit.json",
-    "RevertOpcodeWithBigOutputInInit.json",
     "failed_tx_xcf416c53.json",
-    "createNameRegistratorPerTxsNotEnoughGasAfter.json",
-    "createNameRegistratorPerTxsNotEnoughGasAt.json",
-    "createNameRegistratorPerTxsNotEnoughGasBefore.json",    
     "TransactionSendingToZero.json"
-    
+
+    #"OutOfGasContractCreation.json",
+    #"OutOfGasPrefundedContractCreation.json",
+    #"RevertOpcodeInInit.json",
+    #"RevertOpcodeWithBigOutputInInit.json",
+    #"createNameRegistratorPerTxsNotEnoughGasAfter.json",
+    #"createNameRegistratorPerTxsNotEnoughGasAt.json",
+    #"createNameRegistratorPerTxsNotEnoughGasBefore.json",
     #"ZeroValue_CALLCODE_ToEmpty.json",
     #"ZeroValue_CALLCODE_ToOneStorageKey.json",
     #"NonZeroValue_CALLCODE_ToEmpty.json",
