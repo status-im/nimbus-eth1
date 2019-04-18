@@ -82,6 +82,7 @@ proc prepareChildMessage*(
     value: UInt256,
     data: seq[byte],
     code: seq[byte],
+    contractCreation: bool,
     options: MessageOptions = newMessageOptions()): Message =
 
   var childOptions = options
@@ -94,6 +95,7 @@ proc prepareChildMessage*(
     value,
     data,
     code,
+    contractCreation,
     childOptions)
 
 proc snapshot*(comp: BaseComputation) =

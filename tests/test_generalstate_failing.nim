@@ -21,10 +21,9 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "doubleSelfdestructTest2.json",
 
     # Spurious Dragon failed GST
-    "CallContractToCreateContractOOG.json",
-    "failed_tx_xcf416c53.json",
-    "TransactionSendingToZero.json"
-
+    #"CallContractToCreateContractOOG.json",
+    #"failed_tx_xcf416c53.json",
+    #"TransactionSendingToZero.json"
     #"OutOfGasContractCreation.json",
     #"OutOfGasPrefundedContractCreation.json",
     #"RevertOpcodeInInit.json",

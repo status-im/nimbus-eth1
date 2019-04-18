@@ -43,6 +43,7 @@ proc newMessage*(
     value: UInt256,
     data: seq[byte],
     code: seq[byte],
+    contractCreation: bool,
     options: MessageOptions = newMessageOptions()): Message =
 
   validateGte(options.depth, minimum=0, title="Message.depth")
@@ -55,7 +56,8 @@ proc newMessage*(
     value = value,
     depth = options.depth,
     storageAddress = options.createAddress,
-    codeAddress = options.codeAddress
+    codeAddress = options.codeAddress,
+    contractCreation = contractCreation
 
   new(result)
   result.gas = gas
@@ -69,6 +71,7 @@ proc newMessage*(
   result.codeAddress = options.codeAddress
   result.flags = options.flags
   result.code = code
+  result.contractCreation = contractCreation
 
   if options.origin != ZERO_ADDRESS:
     result.internalOrigin = options.origin
@@ -97,4 +100,4 @@ proc `storageAddress`*(message: Message): EthAddress =
     message.destination
 
 proc isCreate*(message: Message): bool =
-  message.destination == CREATE_CONTRACT_ADDRESS
+  message.contractCreation

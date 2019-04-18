@@ -9,6 +9,9 @@ const
   INT_256_MAX_AS_UINT256* =                 high(Uint256) shr 1
   UINT160CEILING*: UInt256 =                2.u256.pow(160)
   ZERO_ADDRESS* =                           default(EthAddress)
+  # TODO: use Option[EthAddress]?
+  # create contract address cannot be ZERO_ADDRESS
+  # because actual zero address exists
   CREATE_CONTRACT_ADDRESS* =                ZERO_ADDRESS
   ZERO_HASH32* =                            Hash256()
 

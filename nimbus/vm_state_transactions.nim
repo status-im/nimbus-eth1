@@ -62,6 +62,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     value = tx.value,
     data = data,
     code = code,
+    tx.isContractCreation,
     options = newMessageOptions(origin = sender,
                                 createAddress = recipient))
 

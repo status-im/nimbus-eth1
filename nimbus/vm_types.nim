@@ -99,37 +99,24 @@ type
   Message* = ref object
     # A message for VM computation
     # https://github.com/ethereum/evmc/blob/master/include/evmc/evmc.h
-
-    # depth = None
-
-    # code = None
-    # codeAddress = None
-
-    # createAddress = None
-
-    # logger = logging.getLogger("evm.vm.message.Message")
-
     destination*:             EthAddress
     sender*:                  EthAddress
     value*:                   UInt256
     data*:                    seq[byte]
-    # size_t input_size;
-    codeHash*:                UInt256
-    create2Salt*:             Uint256
     gas*:                     GasInt
     gasPrice*:                GasInt
     depth*:                   int
-    kind*:                    CallKind
+    #kind*:                    CallKind
     flags*:                   MsgFlags
 
     # Not in EVMC API
-
     # TODO: Done via callback function (v)table in EVMC
     code*:                    seq[byte]
 
     internalOrigin*:          EthAddress
     internalCodeAddress*:     EthAddress
     internalStorageAddress*:  EthAddress
+    contractCreation*:        bool
 
   MessageOptions* = ref object
     origin*:                  EthAddress
