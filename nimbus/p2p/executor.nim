@@ -13,31 +13,48 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
-  let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
-  var balance = vmState.readOnlyStateDb().getBalance(sender)
-  if balance < upfrontGasCost:
-    return tx.gasLimit
+  var gasUsed = tx.gasLimit
 
-  let recipient = tx.getRecipient()
-  let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
+  block:
+    if vmState.cumulativeGasUsed + gasUsed > vmState.blockHeader.gasLimit:
+      debug "invalid tx: block header gasLimit reached",
+        blockGasLimit=vmState.blockHeader.gasLimit,
+        gasUsed=gasUsed,
+        txGasLimit=tx.gasLimit
+      gasUsed = 0
+      break
 
-  var computation = setupComputation(vmState, tx, sender, recipient, forkOverride)
-  if computation.isNil:
-    return 0
+    let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
+    var balance = vmState.readOnlyStateDb().getBalance(sender)
+    if balance < upfrontGasCost: break
 
+    let recipient = tx.getRecipient()
+    let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
+
+    var computation = setupComputation(vmState, tx, sender, recipient, forkOverride)
+    if computation.isNil:
+      gasUsed = 0
+      break
+
+    vmState.mutateStateDB:
+      db.incNonce(sender)
+      db.subBalance(sender, upfrontGasCost)
+
+    if tx.isContractCreation and isCollision: break
+    if execComputation(computation):
+      gasUsed = computation.refundGas(tx, sender)
+
+    if computation.isSuicided(vmState.blockHeader.coinbase):
+      gasUsed = 0
+
+  vmState.cumulativeGasUsed += gasUsed
+
+  # miner fee
+  let txFee = gasUsed.u256 * tx.gasPrice.u256
   vmState.mutateStateDB:
-    db.incNonce(sender)
-    db.subBalance(sender, upfrontGasCost)
+    db.addBalance(vmState.blockHeader.coinbase, txFee)
 
-  if tx.isContractCreation and isCollision:
-    return tx.gasLimit
-
-  result = tx.gasLimit
-  if execComputation(computation):
-    result = computation.refundGas(tx, sender)
-
-  if computation.isSuicided(vmState.blockHeader.coinbase):
-    return 0
+  result = gasUsed
 
 type
   # TODO: these types need to be removed
@@ -58,7 +75,7 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
     bloom.value = bloom.value or logsBloom(receipt.logs).value
   result = bloom.value.toByteArrayBE
 
-proc makeReceipt(vmState: BaseVMState, cumulativeGasUsed: GasInt, fork = FkFrontier): Receipt =
+proc makeReceipt(vmState: BaseVMState, fork = FkFrontier): Receipt =
   if fork < FkByzantium:
     result.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
   else:
@@ -66,7 +83,7 @@ proc makeReceipt(vmState: BaseVMState, cumulativeGasUsed: GasInt, fork = FkFront
     let vmStatus = true # success or failure
     result.stateRootOrStatus = hashOrStatus(vmStatus)
 
-  result.cumulativeGasUsed = cumulativeGasUsed
+  result.cumulativeGasUsed = vmState.cumulativeGasUsed
   result.logs = vmState.getAndClearLogEntries()
   result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
@@ -89,26 +106,15 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
       trace "Has transactions", blockNumber = header.blockNumber, blockHash = header.blockHash
 
       vmState.receipts = newSeq[Receipt](body.transactions.len)
-      var cumulativeGasUsed = GasInt(0)
+      vmState.cumulativeGasUsed = 0
       for txIndex, tx in body.transactions:
-        if cumulativeGasUsed + tx.gasLimit > header.gasLimit:
-          vmState.mutateStateDB:
-            db.addBalance(header.coinbase, 0.u256)
-          # TODO: do we need to break or continue execution?
+        var sender: EthAddress
+        if tx.getSender(sender):
+          let gasUsed = processTransaction(tx, sender, vmState)
         else:
-          var sender: EthAddress
-          if tx.getSender(sender):
-            let gasUsed = processTransaction(tx, sender, vmState)
-            cumulativeGasUsed += gasUsed
-
-            # miner fee
-            let txFee = gasUsed.u256 * tx.gasPrice.u256
-            vmState.mutateStateDB:
-              db.addBalance(header.coinbase, txFee)
-          else:
-            debug "Could not get sender", txIndex, tx
-            return ValidationResult.Error
-          vmState.receipts[txIndex] = makeReceipt(vmState, cumulativeGasUsed)
+          debug "Could not get sender", txIndex, tx
+          return ValidationResult.Error
+        vmState.receipts[txIndex] = makeReceipt(vmState)
 
   var mainReward = blockReward
   if header.ommersHash != EMPTY_UNCLE_HASH:

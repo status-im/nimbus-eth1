@@ -521,7 +521,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + CallContractToCreateContractWhichWouldCreateContractInInitCode.jsonOK
 + CallRecursiveContract.json                                      OK
 + CallTheContractToCreateEmptyContract.json                       OK
-  NotEnoughCashContractCreation.json                              Skip
++ NotEnoughCashContractCreation.json                              OK
   OutOfGasContractCreation.json                                   Skip
   OutOfGasPrefundedContractCreation.json                          Skip
 + ReturnTest.json                                                 OK
@@ -532,7 +532,7 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + TransactionCreateStopInInitcode.json                            OK
 + TransactionCreateSuicideInInitcode.json                         OK
 ```
-OK: 14/18 Fail: 0/18 Skip: 4/18
+OK: 15/18 Fail: 0/18 Skip: 3/18
 ## stLogTests
 ```diff
 + log0_emptyMem.json                                              OK
@@ -1287,7 +1287,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 OK: 321/327 Fail: 0/327 Skip: 6/327
 ## stRandom2
 ```diff
-  201503110226PYTHON_DUP6.json                                    Skip
++ 201503110226PYTHON_DUP6.json                                    OK
 + randomStatetest.json                                            OK
 + randomStatetest384.json                                         OK
 + randomStatetest385.json                                         OK
@@ -1515,7 +1515,7 @@ OK: 321/327 Fail: 0/327 Skip: 6/327
 + randomStatetest646.json                                         OK
   randomStatetest647.json                                         Skip
 ```
-OK: 222/227 Fail: 0/227 Skip: 5/227
+OK: 223/227 Fail: 0/227 Skip: 4/227
 ## stRecursiveCreate
 ```diff
 + recursiveCreate.json                                            OK
@@ -2090,9 +2090,9 @@ OK: 62/67 Fail: 0/67 Skip: 5/67
 + ContractStoreClearsSuccess.json                                 OK
 + CreateMessageReverted.json                                      OK
 + CreateMessageSuccess.json                                       OK
-  CreateTransactionReverted.json                                  Skip
++ CreateTransactionReverted.json                                  OK
 + CreateTransactionSuccess.json                                   OK
-  EmptyTransaction.json                                           Skip
++ EmptyTransaction.json                                           OK
   EmptyTransaction2.json                                          Skip
 + EmptyTransaction3.json                                          OK
 + HighGasLimit.json                                               OK
@@ -2102,10 +2102,10 @@ OK: 62/67 Fail: 0/67 Skip: 5/67
 + InternlCallStoreClearsOOG.json                                  OK
 + InternlCallStoreClearsSucces.json                               OK
 + Opcodes_TransactionInit.json                                    OK
-  OverflowGasRequire.json                                         Skip
++ OverflowGasRequire.json                                         OK
 + OverflowGasRequire2.json                                        OK
-  RefundOverflow.json                                             Skip
-  RefundOverflow2.json                                            Skip
++ RefundOverflow.json                                             OK
++ RefundOverflow2.json                                            OK
 + StoreClearsAndInternlCallStoreClearsOOG.json                    OK
 + StoreClearsAndInternlCallStoreClearsSuccess.json                OK
 + StoreGasOnCreate.json                                           OK
@@ -2120,18 +2120,18 @@ OK: 62/67 Fail: 0/67 Skip: 5/67
 + TransactionFromCoinbaseHittingBlockGasLimit.json                OK
 + TransactionFromCoinbaseHittingBlockGasLimit1.json               OK
 + TransactionFromCoinbaseNotEnoughFounds.json                     OK
-  TransactionNonceCheck.json                                      Skip
-  TransactionNonceCheck2.json                                     Skip
++ TransactionNonceCheck.json                                      OK
++ TransactionNonceCheck2.json                                     OK
 + TransactionSendingToEmpty.json                                  OK
   TransactionSendingToZero.json                                   Skip
 + TransactionToAddressh160minusOne.json                           OK
 + TransactionToItself.json                                        OK
-  TransactionToItselfNotEnoughFounds.json                         Skip
-  UserTransactionGasLimitIsTooLowWhenZeroCost.json                Skip
++ TransactionToItselfNotEnoughFounds.json                         OK
++ UserTransactionGasLimitIsTooLowWhenZeroCost.json                OK
   UserTransactionZeroCost.json                                    Skip
   UserTransactionZeroCostWithData.json                            Skip
 ```
-OK: 30/44 Fail: 0/44 Skip: 14/44
+OK: 39/44 Fail: 0/44 Skip: 5/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2520,4 +2520,4 @@ OK: 5/133 Fail: 0/133 Skip: 128/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1480/2334 Fail: 0/2334 Skip: 854/2334
+OK: 1491/2334 Fail: 0/2334 Skip: 843/2334

@@ -14,15 +14,17 @@ import
 proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   # XXX: lots of avoidable u256 construction
-  var readOnlyDB = vmState.readOnlyStateDB
-  let limitAndValue = transaction.gasLimit.u256 + transaction.value
-  let gasCost = transaction.gasLimit.u256 * transaction.gasPrice.u256
+  let 
+    account = vmState.readOnlyStateDB.getAccount(sender)
+    gasLimit = transaction.gasLimit.u256
+    limitAndValue = gasLimit + transaction.value
+    gasCost = gasLimit * transaction.gasPrice.u256
 
   transaction.gasLimit >= transaction.intrinsicGas and
     #transaction.gasPrice <= (1 shl 34) and
-    limitAndValue <= readOnlyDB.getBalance(sender) and
-    transaction.accountNonce == readOnlyDB.getNonce(sender) and
-    readOnlyDB.getBalance(sender) >= gasCost
+    limitAndValue <= account.balance and
+    transaction.accountNonce == account.nonce and
+    account.balance >= gasCost
 
 proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, forkOverride=none(Fork)) : BaseComputation =
   let fork =

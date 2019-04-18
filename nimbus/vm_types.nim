@@ -23,7 +23,8 @@ type
     tracer*        : TransactionTracer
     logEntries*    : seq[Log]
     receipts*      : seq[Receipt]
-    accountDb*     : AccountStateDB
+    accountDb*     : AccountStateDB    
+    cumulativeGasUsed*: GasInt
 
   AccessLogs* = ref object
     reads*: Table[string, string]
