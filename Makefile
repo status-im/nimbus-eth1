@@ -67,8 +67,11 @@ BUILD_NIM := echo -e $(BUILD_MSG) "Nim compiler" && \
 		rm -rf csources/bin; \
 	} || { \
 		cp -a bin/nim bin/nim_csources; \
-	} && \
-	sh build_all.sh $(HANDLE_OUTPUT)
+	} && { \
+		sed 's/koch tools/koch --stable tools/' build_all.sh > build_all_custom.sh; \
+		sh build_all_custom.sh $(HANDLE_OUTPUT); \
+		rm build_all_custom.sh; \
+	}
 NIM_BINARY := $(NIM_DIR)/bin/nim$(EXE_SUFFIX)
 # md5sum - macOS is a special case
 ifeq ($(shell uname), Darwin)
