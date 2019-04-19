@@ -1,5 +1,8 @@
 SHELL := bash # the shell used internally by "make"
 
+CC := gcc
+LD := $(CC)
+
 #- extra parameters for the Nim compiler
 #- NIMFLAGS should come from the environment or make's command line
 NIM_PARAMS := $(NIMFLAGS)

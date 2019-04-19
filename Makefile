@@ -83,7 +83,7 @@ TOOLS_DIRS := premix tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-.PHONY: all $(TOOLS) deps github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a
+.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a
 
 # default target, because it's the first one that doesn't start with '.'
 all: $(TOOLS) nimbus
@@ -112,7 +112,10 @@ build:
 #  (timestamp-checked) prerequisites here
 #- $(NIM_BINARY) is both a proxy for submodules having been initialised
 #  and a check for the actual compiler build
-deps: $(NIM_BINARY) $(NIMBLE_DIR) nimbus.nims
+deps: sanity-checks $(NIM_BINARY) $(NIMBLE_DIR) nimbus.nims
+
+sanity-checks:
+	which $(CC) &>/dev/null || { echo "C compiler ($(CC)) not installed. Aborting."; exit 1; }
 
 nat-libs: | libminiupnpc.a libnatpmp.a
 
@@ -186,7 +189,7 @@ build-nim: | deps
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 #- allows parallel building with the '+' prefix
 #- rebuilds the Nim compiler after the corresponding submodule is updated
-$(NIM_BINARY) update:
+$(NIM_BINARY) update: | sanity-checks
 	git submodule update --init --recursive
 	rm -rf $(NIMBLE_DIR) nimbus.nims && $(MAKE) nimbus.nims
 	+ [[ -e $(NIM_BINARY) && $(NIM_BINARY) -nt $(NIM_DIR)/lib/system.nim ]] || { $(BUILD_NIM); }
