@@ -489,14 +489,14 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 OK: 30/30 Fail: 0/30 Skip: 0/30
 ## stEIP158Specific
 ```diff
-  CALL_OneVCallSuicide.json                                       Skip
-  CALL_ZeroVCallSuicide.json                                      Skip
++ CALL_OneVCallSuicide.json                                       OK
++ CALL_ZeroVCallSuicide.json                                      OK
 + EXP_Empty.json                                                  OK
-  EXTCODESIZE_toEpmty.json                                        Skip
-  EXTCODESIZE_toNonExistent.json                                  Skip
++ EXTCODESIZE_toEpmty.json                                        OK
++ EXTCODESIZE_toNonExistent.json                                  OK
 + vitalikTransactionTest.json                                     OK
 ```
-OK: 2/6 Fail: 0/6 Skip: 4/6
+OK: 6/6 Fail: 0/6 Skip: 0/6
 ## stExample
 ```diff
 + add11.json                                                      OK
@@ -1589,8 +1589,8 @@ OK: 35/37 Fail: 0/37 Skip: 2/37
 ## stRevertTest
 ```diff
 + LoopCallsDepthThenRevert.json                                   OK
-  LoopCallsDepthThenRevert2.json                                  Skip
-  LoopCallsDepthThenRevert3.json                                  Skip
++ LoopCallsDepthThenRevert2.json                                  OK
++ LoopCallsDepthThenRevert3.json                                  OK
 + LoopCallsThenRevert.json                                        OK
 + LoopDelegateCallsDepthThenRevert.json                           OK
 + NashatyrevSuicideRevert.json                                    OK
@@ -1613,9 +1613,9 @@ OK: 35/37 Fail: 0/37 Skip: 2/37
 + RevertOpcodeMultipleSubCalls.json                               OK
 + RevertOpcodeReturn.json                                         OK
 + RevertOpcodeWithBigOutputInInit.json                            OK
-  RevertPrecompiledTouch.json                                     Skip
-  RevertPrecompiledTouchCC.json                                   Skip
-  RevertPrecompiledTouchDC.json                                   Skip
++ RevertPrecompiledTouch.json                                     OK
++ RevertPrecompiledTouchCC.json                                   OK
++ RevertPrecompiledTouchDC.json                                   OK
 + RevertPrefound.json                                             OK
 + RevertPrefoundCall.json                                         OK
 + RevertPrefoundCallOOG.json                                      OK
@@ -1632,7 +1632,7 @@ OK: 35/37 Fail: 0/37 Skip: 2/37
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 38/43 Fail: 0/43 Skip: 5/43
+OK: 43/43 Fail: 0/43 Skip: 0/43
 ## stShift
 ```diff
   sar00.json                                                      Skip
@@ -1706,14 +1706,14 @@ OK: 16/16 Fail: 0/16 Skip: 0/16
 + StackDepthLimitSEC.json                                         OK
   block504980.json                                                Skip
 + deploymentError.json                                            OK
-  failed_tx_xcf416c53.json                                        Skip
++ failed_tx_xcf416c53.json                                        OK
   gasPrice0.json                                                  Skip
 + makeMoney.json                                                  OK
   sha3_deja.json                                                  Skip
   txCost-sec73.json                                               Skip
 + tx_e1c174e2.json                                                OK
 ```
-OK: 7/13 Fail: 0/13 Skip: 6/13
+OK: 8/13 Fail: 0/13 Skip: 5/13
 ## stStackTests
 ```diff
   shallowStack.json                                               Skip
@@ -2066,8 +2066,8 @@ OK: 1/284 Fail: 0/284 Skip: 283/284
 + createNameRegistratorZeroMemExpansion.json                      OK
 + createWithInvalidOpcode.json                                    OK
 + currentAccountBalance.json                                      OK
-  doubleSelfdestructTest.json                                     Skip
-  doubleSelfdestructTest2.json                                    Skip
++ doubleSelfdestructTest.json                                     OK
++ doubleSelfdestructTest2.json                                    OK
 + extcodecopy.json                                                OK
 + return0.json                                                    OK
 + return1.json                                                    OK
@@ -2083,7 +2083,7 @@ OK: 1/284 Fail: 0/284 Skip: 283/284
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 63/67 Fail: 0/67 Skip: 4/67
+OK: 65/67 Fail: 0/67 Skip: 2/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2520,4 +2520,4 @@ OK: 5/133 Fail: 0/133 Skip: 128/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1500/2334 Fail: 0/2334 Skip: 834/2334
+OK: 1512/2334 Fail: 0/2334 Skip: 822/2334

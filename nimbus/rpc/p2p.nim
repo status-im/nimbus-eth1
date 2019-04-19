@@ -40,7 +40,7 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
     setupComputation(
         vmState,
         transaction,
-        sender, 
+        sender,
         recipient)
 
   proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
@@ -272,7 +272,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
   proc setupComputation(vmState: BaseVMState, blockNumber: BlockNumber,
       value: UInt256, data: seq[byte],
       sender, destination: EthAddress,
-      gasLimit, gasPrice: GasInt): BaseComputation =
+      gasLimit, gasPrice: GasInt,
+      contractCreation: bool): BaseComputation =
     let
       # Handle optional defaults.
       message = newMessage(
@@ -283,6 +284,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         value = value,
         data = data,
         code = vmState.readOnlyStateDB.getCode(destination).toSeq,
+        contractCreation = contractCreation,
         options = newMessageOptions(origin = sender,
                                     createAddress = destination))
 
@@ -319,7 +321,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       destination = if call.to.isSome: call.to.get.toAddress else: ZERO_ADDRESS
       data = if call.data.isSome: call.data.get.string.fromHex else: @[]
       value = if call.value.isSome: call.value.get else: 0.u256
-      comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice)
+      comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice, call.to.isNone)
 
     discard comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr

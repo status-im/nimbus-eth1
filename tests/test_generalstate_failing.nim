@@ -16,10 +16,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest14.json", # SHA3 offset
     "randomStatetest85.json", # CALL* memoffset
 
-    # Tangerine failed GST
-    "doubleSelfdestructTest.json",
-    "doubleSelfdestructTest2.json",
-
     # Homestead recursives
     #["ContractCreationSpam.json",
     "Call1024OOG.json",
@@ -27,8 +23,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "CallRecursiveBombPreCall.json",
     "Delegatecall1024.json",
     "Delegatecall1024OOG.json",
-    "recursiveCreate.json",
-    "recursiveCreateReturnValue.json",
     "JUMPDEST_Attack.json",
     "JUMPDEST_AttackwithJump.json",
     "ABAcalls1.json",

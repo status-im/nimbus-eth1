@@ -193,6 +193,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
 
   let contractAddress = generateAddress(sender, tx.accountNonce)
   let msg = newMessage(tx.gasLimit - gasUsed, tx.gasPrice, tx.to, sender, tx.value, data, tx.payload,
+                       contractCreation = false,
                        options = newMessageOptions(origin = sender, createAddress = contractAddress))
 
   newBaseComputation(vmState, vmState.blockNumber, msg, some(fork))

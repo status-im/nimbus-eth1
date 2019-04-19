@@ -189,7 +189,18 @@ proc dumpAccount*(db: AccountStateDB, addressS: string): string =
 proc accountExists*(db: AccountStateDB, address: EthAddress): bool =
   db.trie.get(createRangeFromAddress address).len > 0
 
-proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
+proc isEmptyAccount*(db: AccountStateDB, address: EthAddress): bool =
+  let recordFound = db.trie.get(createRangeFromAddress address)
+  assert(recordFound.len > 0)
+
+  let account = rlp.decode(recordFound, Account)
+  result = account.codeHash == EMPTY_SHA3 and
+    account.balance.isZero and
+    account.nonce == 0
+
+proc isDeadAccount*(db: AccountStateDB, address: EthAddress, dust: static[bool]): bool =
+  ## dust == true: deadAccount == accountExists or emptyAccount
+  ## dust == false: deadAccount == accountExists and emptyAccount(used in EIP158)
   let recordFound = db.trie.get(createRangeFromAddress address)
   if recordFound.len > 0:
     let account = rlp.decode(recordFound, Account)
@@ -197,7 +208,10 @@ proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
       account.balance.isZero and
       account.nonce == 0
   else:
-    result = true
+    result = dust
+
+template isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
+  isDeadAccount(db, address, true)
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getAccount*(db: ReadOnlyStateDB, address: EthAddress): Account {.borrow.}
@@ -209,4 +223,6 @@ proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.
 proc getCode*(db: ReadOnlyStateDB, address: EthAddress): ByteRange {.borrow.}
 proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
-proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+
+template isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool =
+  isDeadAccount(AccountStateDB(db), address, true)
