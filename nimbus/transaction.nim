@@ -53,16 +53,19 @@ type
     mIsContractCreation {.rlpIgnore.}: bool
 
 proc read(rlp: var Rlp, t: var TransHashObj, _: type EthAddress): EthAddress {.inline.} =
- if rlp.blobLen != 0:
-   result = rlp.read(EthAddress)
- else:
-   t.mIsContractCreation = true
+  if rlp.blobLen != 0:
+    result = rlp.read(EthAddress)
+  else:
+    t.mIsContractCreation = true
 
 proc append(rlpWriter: var RlpWriter, t: TransHashObj, a: EthAddress) {.inline.} =
   if t.mIsContractCreation:
     rlpWriter.append("")
   else:
     rlpWriter.append(a)
+
+const
+  EIP155_CHAIN_ID_OFFSET = 35
 
 func rlpEncode*(transaction: Transaction): auto =
   # Encode transaction without signature
@@ -76,25 +79,41 @@ func rlpEncode*(transaction: Transaction): auto =
     mIsContractCreation: transaction.isContractCreation
     ))
 
-func txHashNoSignature*(transaction: Transaction): Hash256 =
+func rlpEncodeEIP155*(tx: Transaction): auto =
+  let V = (tx.V.int - EIP155_CHAIN_ID_OFFSET) div 2
+  # Encode transaction without signature
+  return rlp.encode(Transaction(
+    accountNonce: tx.accountNonce,
+    gasPrice: tx.gasPrice,
+    gasLimit: tx.gasLimit,
+    to: tx.to,
+    value: tx.value,
+    payload: tx.payload,
+    isContractCreation: tx.isContractCreation,
+    V: V.byte,
+    R: 0.u256,
+    S: 0.u256
+    ))
+
+func txHashNoSignature*(tx: Transaction): Hash256 =
   # Hash transaction without signature
-  return keccak256.digest(transaction.rlpEncode)
+  return keccak256.digest(if tx.V.int >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEIP155 else: tx.rlpEncode)
 
 proc getSignature*(transaction: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
   bytes[0..31] = transaction.R.toByteArrayBE()
   bytes[32..63] = transaction.S.toByteArrayBE()
+
   # TODO: V will become a byte or range soon.
-  let v = transaction.V.int
-  var chainId: int
-  if v > 36:
-    chainId = (v - 35) div 2
+  var v = transaction.V.int
+  if v >= EIP155_CHAIN_ID_OFFSET:
+    v = 28 - (v and 0x01)
   elif v == 27 or v == 28:
-    chainId = -4
+    discard
   else:
     return false
 
-  bytes[64] = byte(v - (chainId * 2 + 35))
+  bytes[64] = byte(v - 27)
   result = recoverSignature(bytes, output) == EthKeysStatus.Success
 
 proc toSignature*(transaction: Transaction): Signature =
@@ -106,7 +125,7 @@ proc getSender*(transaction: Transaction, output: var EthAddress): bool =
   var sig: Signature
   if transaction.getSignature(sig):
     var pubKey: PublicKey
-    let txHash = transaction.txHashNoSignature
+    var txHash = transaction.txHashNoSignature
     if recoverSignatureKey(sig, txHash.data, pubKey) == EthKeysStatus.Success:
       output = pubKey.toCanonicalAddress()
       result = true

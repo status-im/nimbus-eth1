@@ -36,6 +36,7 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
   self.logEntries = @[]
   self.blockHeader.stateRoot = prevStateRoot
   self.accountDb = newAccountStateDB(chainDB.db, prevStateRoot, chainDB.pruneTrie)
+  self.touchedAccounts = initSet[EthAddress]()
 
 proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
                      chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =

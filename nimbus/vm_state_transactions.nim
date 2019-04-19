@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ranges/typedranges, sequtils, strformat, tables, options,
+  ranges/typedranges, sequtils, strformat, tables, options, sets,
   eth/common, chronicles, ./db/[db_chain, state_db],
   constants, errors, transaction, vm_types, vm_state, utils,
   ./vm/[computation, interpreter], ./vm/interpreter/gas_costs
@@ -14,15 +14,17 @@ import
 proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   # XXX: lots of avoidable u256 construction
-  var readOnlyDB = vmState.readOnlyStateDB
-  let limitAndValue = transaction.gasLimit.u256 + transaction.value
-  let gasCost = transaction.gasLimit.u256 * transaction.gasPrice.u256
+  let
+    account = vmState.readOnlyStateDB.getAccount(sender)
+    gasLimit = transaction.gasLimit.u256
+    limitAndValue = gasLimit + transaction.value
+    gasCost = gasLimit * transaction.gasPrice.u256
 
   transaction.gasLimit >= transaction.intrinsicGas and
     #transaction.gasPrice <= (1 shl 34) and
-    limitAndValue <= readOnlyDB.getBalance(sender) and
-    transaction.accountNonce == readOnlyDB.getNonce(sender) and
-    readOnlyDB.getBalance(sender) >= gasCost
+    limitAndValue <= account.balance and
+    transaction.accountNonce == account.nonce and
+    account.balance >= gasCost
 
 proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, forkOverride=none(Fork)) : BaseComputation =
   let fork =
@@ -30,6 +32,9 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
       forkOverride.get
     else:
       vmState.blockNumber.toFork
+
+  if fork >= FkSpurious:
+    vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
 
   var gas = tx.gasLimit - tx.intrinsicGas
 
@@ -57,6 +62,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     value = tx.value,
     data = data,
     code = code,
+    tx.isContractCreation,
     options = newMessageOptions(origin = sender,
                                 createAddress = recipient))
 
@@ -78,6 +84,9 @@ proc execComputation*(computation: var BaseComputation): bool =
     # FIXME: hook this into actual RefundSelfDestruct
     const RefundSelfDestruct = 24_000
     computation.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
+
+  if computation.getFork >= FkSpurious:
+    computation.collectTouchedAccounts(computation.vmState.touchedAccounts)
 
   result = computation.isSuccess
   if result:

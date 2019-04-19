@@ -7,7 +7,7 @@
 
 import
   chronicles, strformat, strutils, sequtils, macros, terminal, math, tables, options,
-  eth/[common, keys], eth/trie/db as triedb,
+  sets, eth/[common, keys], eth/trie/db as triedb,
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
@@ -82,6 +82,7 @@ proc prepareChildMessage*(
     value: UInt256,
     data: seq[byte],
     code: seq[byte],
+    contractCreation: bool,
     options: MessageOptions = newMessageOptions()): Message =
 
   var childOptions = options
@@ -94,6 +95,7 @@ proc prepareChildMessage*(
     value,
     data,
     code,
+    contractCreation,
     childOptions)
 
 proc snapshot*(comp: BaseComputation) =
@@ -174,12 +176,13 @@ template continuation*(comp: BaseComputation, body: untyped) =
     body
     tmpNext()
 
-proc postExecuteVM(computation: BaseComputation) =
-  if computation.isSuccess and computation.msg.isCreate:
-    let fork = computation.getFork
-    let contractFailed = not computation.writeContract(fork)
-    if contractFailed and fork >= FkHomestead:
-      computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
+proc postExecuteVM(computation: BaseComputation, opCode: static[Op]) =
+  when opCode == Create:
+    if computation.isSuccess:
+      let fork = computation.getFork
+      let contractFailed = not computation.writeContract(fork)
+      if contractFailed and fork >= FkHomestead:
+        computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
 
   if computation.isSuccess:
     computation.commit()
@@ -198,6 +201,12 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   defer:
     computation.dispose()
 
+  # EIP161 nonce incrementation
+  when opCode == Create:
+    if computation.getFork >= FkSpurious:
+      computation.vmState.mutateStateDb:
+        db.incNonce(computation.msg.storageAddress)
+
   when opCode in {CallCode, Call, Create}:
     computation.transferBalance(opCode)
     if computation.isError():
@@ -211,7 +220,7 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
     return
 
   continuation(computation):
-    postExecuteVM(computation)
+    postExecuteVM(computation, opCode)
 
   executeOpcodes(computation)
 
@@ -228,8 +237,6 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
       computation.returnData = @[]
     else:
       computation.returnData = child.output
-    for k, v in child.accountsToDelete:
-      computation.accountsToDelete[k] = v
     computation.logEntries.add child.logEntries
 
   if not child.shouldBurnGas:
@@ -249,9 +256,16 @@ proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
 # many methods are basically TODO, but they still return valid values
 # in order to test some existing code
 iterator accountsForDeletion*(c: BaseComputation): EthAddress =
-  if not c.isError:
-    for account in c.accountsToDelete.keys:
-      yield account
+  var stack = @[c]
+  var deletedAccounts = initSet[EthAddress]()
+  while stack.len > 0:
+    let comp = stack.pop()
+    if comp.isError: continue
+    for account in comp.accountsToDelete.keys:
+      if account notin deletedAccounts:
+        deletedAccounts.incl account
+        yield account
+    stack.add comp.children
 
 proc getGasRefund*(c: BaseComputation): GasInt =
   if c.isError:
@@ -270,6 +284,39 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
     result = 0
   else:
     result = c.gasMeter.gasRemaining
+
+proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]) =
+  ## Collect all of the accounts that *may* need to be deleted based on EIP161:
+  ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
+  ## also see: https://github.com/ethereum/EIPs/issues/716
+
+  proc cmpThree(address: EthAddress): bool =
+    for i in 0..18:
+      if address[i] != 0: return
+    result = address[19] == byte(3)
+
+  for _, beneficiary in c.accountsToDelete:
+    if c.isError and c.isOriginComputation:
+      # Special case to account for geth+parity bug
+      # https://github.com/ethereum/EIPs/issues/716
+      if beneficiary.cmpThree:
+        output.incl beneficiary
+      continue
+    else:
+      output.incl beneficiary
+
+  if not c.msg.isCreate:
+    if c.isError and c.isOriginComputation:
+      # Special case to account for geth+parity bug
+      # https://github.com/ethereum/EIPs/issues/716
+      if cmpThree(c.msg.storageAddress):
+        output.incl c.msg.storageAddress
+    else:
+      output.incl c.msg.storageAddress
+
+  if not c.isOriginComputation or not c.isError:
+    for child in c.children:
+      child.collectTouchedAccounts(output)
 
 proc tracingEnabled*(c: BaseComputation): bool =
   c.vmState.tracingEnabled

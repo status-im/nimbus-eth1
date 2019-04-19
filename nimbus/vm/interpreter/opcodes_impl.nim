@@ -576,6 +576,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256)
     value = value,
     data = @[],
     code = callData,
+    contractCreation = true,
     options = MessageOptions(createAddress: contractAddress)
     )
 
@@ -741,6 +742,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       value,
       callData,
       code.toSeq,
+      false,
       MessageOptions(flags: flags)
     )
 
