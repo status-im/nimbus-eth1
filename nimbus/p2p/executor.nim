@@ -85,9 +85,7 @@ proc makeReceipt(vmState: BaseVMState, fork = FkFrontier): Receipt =
   if fork < FkByzantium:
     result.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
   else:
-    # TODO: post byzantium fork use status instead of rootHash
-    let vmStatus = true # success or failure
-    result.stateRootOrStatus = hashOrStatus(vmStatus)
+    result.stateRootOrStatus = hashOrStatus(vmState.status)
 
   result.cumulativeGasUsed = vmState.cumulativeGasUsed
   result.logs = vmState.getAndClearLogEntries()

@@ -26,6 +26,7 @@ type
     accountDb*     : AccountStateDB
     cumulativeGasUsed*: GasInt
     touchedAccounts*: HashSet[EthAddress]
+    status*        : bool
 
   AccessLogs* = ref object
     reads*: Table[string, string]

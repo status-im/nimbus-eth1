@@ -87,8 +87,9 @@ proc execComputation*(computation: var BaseComputation): bool =
 
   if computation.getFork >= FkSpurious:
     computation.collectTouchedAccounts(computation.vmState.touchedAccounts)
-
+  
   result = computation.isSuccess
+  computation.vmstate.status = result
   if result:
     computation.vmState.addLogs(computation.logEntries)
 
