@@ -813,6 +813,8 @@ op revert, inline = false, startPos, size:
 
   computation.memory.extend(pos, len)
   computation.output = computation.memory.read(pos, len)
+  # setError(msg, false) will signal cheap revert
+  computation.setError("REVERT opcode executed", false)
 
 proc selfDestructImpl(computation: BaseComputation, beneficiary: EthAddress) =
   ## 0xff Halt execution and register account for later deletion.
