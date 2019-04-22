@@ -92,8 +92,6 @@ proc makeReceipt(vmState: BaseVMState, fork = FkFrontier): Receipt =
   result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
-  let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
-
   if chainDB.config.daoForkSupport and header.blockNumber == chainDB.config.daoForkBlock:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
@@ -101,6 +99,8 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
   if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot", blockNumber=header.blockNumber
     return ValidationResult.Error
+
+  let fork = vmState.blockNumber.toFork
 
   if header.txRoot != BLANK_ROOT_HASH:
     if body.transactions.len == 0:
@@ -114,11 +114,16 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
       for txIndex, tx in body.transactions:
         var sender: EthAddress
         if tx.getSender(sender):
-          let gasUsed = processTransaction(tx, sender, vmState)
+          let gasUsed = processTransaction(tx, sender, vmState, some(fork))
         else:
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error
-        vmState.receipts[txIndex] = makeReceipt(vmState)
+        vmState.receipts[txIndex] = makeReceipt(vmState, fork)
+
+  let blockReward = if fork >= FkByzantium:
+                     3.u256 * pow(10.u256, 18) # 3 ETH
+                   else:
+                     5.u256 * pow(10.u256, 18) # 5 ETH
 
   var mainReward = blockReward
   if header.ommersHash != EMPTY_UNCLE_HASH:
