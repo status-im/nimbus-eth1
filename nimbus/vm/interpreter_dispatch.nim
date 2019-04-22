@@ -201,6 +201,7 @@ proc genByzantiumJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compil
   result[Revert] = newIdentNode "revert"
   result[ReturnDataSize] = newIdentNode "returnDataSize"
   result[ReturnDataCopy] = newIdentNode "returnDataCopy"
+  result[StaticCall] = newIdentNode"staticCall"
 
 let ByzantiumOpDispatch {.compileTime.}: array[Op, NimNode] = genByzantiumJumpTable(SpuriousOpDispatch)
 
