@@ -24,7 +24,7 @@ const
     FkByzantium: "Byzantium",
   }.toTable
 
-  supportedForks* = {FkFrontier, FkHomestead, FkTangerine, FkSpurious}
+  supportedForks* = {FkFrontier, FkHomestead, FkTangerine, FkSpurious, FkByzantium}
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
