@@ -199,6 +199,8 @@ let SpuriousOpDispatch {.compileTime.}: array[Op, NimNode] = genSpuriousJumpTabl
 proc genByzantiumJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
   result = ops
   result[Revert] = newIdentNode "revert"
+  result[ReturnDataSize] = newIdentNode "returnDataSize"
+  result[ReturnDataCopy] = newIdentNode "returnDataCopy"
 
 let ByzantiumOpDispatch {.compileTime.}: array[Op, NimNode] = genByzantiumJumpTable(SpuriousOpDispatch)
 
