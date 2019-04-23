@@ -10,7 +10,7 @@ ARG GIT_REVISION
 RUN git clone https://github.com/status-im/nimbus.git \
  && cd nimbus \
  && git reset --hard ${GIT_REVISION} \
- && make update deps
+ && make update deps nat-libs
 
 ARG NETWORK
 ARG NETWORK_BACKEND
