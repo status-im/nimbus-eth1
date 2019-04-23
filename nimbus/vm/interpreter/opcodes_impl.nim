@@ -437,6 +437,7 @@ op sload, inline = true, slot:
 
 op sstore, inline = false, slot, value:
   ## 0x55, Save word to storage.
+  checkInStaticContext(computation)
 
   let (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
 
@@ -589,7 +590,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256)
 
 op create, inline = false, value, startPosition, size:
   ## 0xf0, Create a new account with associated code.
-  # TODO: Forked create for Homestead
+  checkInStaticContext(computation)
 
   let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
   if not computation.canTransfer(memPos, len, value):
@@ -766,6 +767,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
+    when opCode != StaticCall:
+      checkInStaticContext(computation)
     var childComp = `callName Setup`(computation, callName.astToStr)
 
     computation.child = childComp
@@ -858,6 +861,8 @@ op selfDestructEip150, inline = false:
   selfDestructImpl(computation, beneficiary)
 
 op selfDestructEip161, inline = false:
+  checkInStaticContext(computation)
+
   let
     beneficiary = computation.stack.popAddress()
     stateDb     = computation.vmState.readOnlyStateDb

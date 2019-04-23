@@ -65,6 +65,9 @@ type
   NotImplementedError* = object of VMError
     ## Not implemented error
 
+  StaticContextError* = object of VMError
+    ## State changes not allowed in static call context
+
 proc makeVMError*: ref VMError =
   new(result)
   result.burnsGas = true

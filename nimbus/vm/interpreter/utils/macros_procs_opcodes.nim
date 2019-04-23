@@ -100,8 +100,15 @@ macro genSwap*(): untyped =
       func `name`*(computation: BaseComputation) {.inline.}=
         computation.stack.swap(`pos`)
 
+template checkInStaticContext*(comp: BaseComputation) =
+  # TODO: if possible, this check only appear
+  # when fork >= FkByzantium
+  if emvcStatic == comp.msg.flags:
+    raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
+
 proc logImpl(c: BaseComputation, opcode: Op, topicCount: int) =
   doAssert(topicCount in 0 .. 4)
+  checkInStaticContext(c)
   let (memStartPosition, size) = c.stack.popInt(2)
   let (memPos, len) = (memStartPosition.cleanMemRef, size.cleanMemRef)
 
