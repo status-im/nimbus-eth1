@@ -683,8 +683,8 @@ proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddre
   result = (gas,
     0.u256, # value
     to,
-    ZERO_ADDRESS, # sender
-    ZERO_ADDRESS, # codeAddress
+    computation.msg.storageAddress, # sender
+    to, # codeAddress
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,

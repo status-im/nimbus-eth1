@@ -1579,13 +1579,13 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatasize_after_oog_after_deeper.json                      OK
 + returndatasize_after_successful_callcode.json                   OK
 + returndatasize_after_successful_delegatecall.json               OK
-  returndatasize_after_successful_staticcall.json                 Skip
++ returndatasize_after_successful_staticcall.json                 OK
 + returndatasize_bug.json                                         OK
 + returndatasize_following_successful_create.json                 OK
 + returndatasize_initial.json                                     OK
   returndatasize_initial_zero_read.json                           Skip
 ```
-OK: 22/37 Fail: 0/37 Skip: 15/37
+OK: 23/37 Fail: 0/37 Skip: 14/37
 ## stRevertTest
 ```diff
   LoopCallsDepthThenRevert.json                                   Skip
@@ -1759,9 +1759,9 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
   static_Call50000bytesContract50_3.json                          Skip
   static_CallAndCallcodeConsumeMoreGasThenTransactionHas.json     Skip
   static_CallAskMoreGasOnDepth2ThenTransactionHas.json            Skip
-  static_CallContractToCreateContractAndCallItOOG.json            Skip
++ static_CallContractToCreateContractAndCallItOOG.json            OK
 + static_CallContractToCreateContractOOG.json                     OK
-  static_CallContractToCreateContractOOGBonusGas.json             Skip
++ static_CallContractToCreateContractOOGBonusGas.json             OK
   static_CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonSkip
 + static_CallEcrecover0.json                                      OK
   static_CallEcrecover0_0input.json                               Skip
@@ -1790,16 +1790,16 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_CallIdentity_4_gas17.json                                OK
 + static_CallIdentity_4_gas18.json                                OK
 + static_CallIdentity_5.json                                      OK
-  static_CallLoseGasOOG.json                                      Skip
-  static_CallRecursiveBomb0.json                                  Skip
++ static_CallLoseGasOOG.json                                      OK
++ static_CallRecursiveBomb0.json                                  OK
   static_CallRecursiveBomb0_OOG_atMaxCallDepth.json               Skip
   static_CallRecursiveBomb1.json                                  Skip
   static_CallRecursiveBomb2.json                                  Skip
   static_CallRecursiveBomb3.json                                  Skip
   static_CallRecursiveBombLog.json                                Skip
   static_CallRecursiveBombLog2.json                               Skip
-  static_CallRecursiveBombPreCall.json                            Skip
-  static_CallRecursiveBombPreCall2.json                           Skip
++ static_CallRecursiveBombPreCall.json                            OK
++ static_CallRecursiveBombPreCall2.json                           OK
 + static_CallRipemd160_1.json                                     OK
 + static_CallRipemd160_2.json                                     OK
 + static_CallRipemd160_3.json                                     OK
@@ -1818,29 +1818,29 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_CallSha256_4_gas99.json                                  OK
 + static_CallSha256_5.json                                        OK
   static_CallToNameRegistrator0.json                              Skip
-  static_CallToReturn1.json                                       Skip
-  static_CalltoReturn2.json                                       Skip
-  static_CheckCallCostOOG.json                                    Skip
++ static_CallToReturn1.json                                       OK
++ static_CalltoReturn2.json                                       OK
++ static_CheckCallCostOOG.json                                    OK
   static_CheckOpcodes.json                                        Skip
   static_CheckOpcodes2.json                                       Skip
   static_CheckOpcodes3.json                                       Skip
-  static_CheckOpcodes4.json                                       Skip
-  static_CheckOpcodes5.json                                       Skip
++ static_CheckOpcodes4.json                                       OK
++ static_CheckOpcodes5.json                                       OK
   static_ExecuteCallThatAskForeGasThenTrabsactionHas.json         Skip
 + static_InternalCallHittingGasLimit.json                         OK
-  static_InternalCallHittingGasLimit2.json                        Skip
++ static_InternalCallHittingGasLimit2.json                        OK
 + static_InternlCallStoreClearsOOG.json                           OK
 + static_LoopCallsDepthThenRevert.json                            OK
   static_LoopCallsDepthThenRevert2.json                           Skip
   static_LoopCallsDepthThenRevert3.json                           Skip
 + static_LoopCallsThenRevert.json                                 OK
-  static_PostToReturn1.json                                       Skip
-  static_RETURN_Bounds.json                                       Skip
++ static_PostToReturn1.json                                       OK
++ static_RETURN_Bounds.json                                       OK
 + static_RETURN_BoundsOOG.json                                    OK
-  static_RawCallGasAsk.json                                       Skip
++ static_RawCallGasAsk.json                                       OK
 + static_Return50000_2.json                                       OK
-  static_ReturnTest.json                                          Skip
-  static_ReturnTest2.json                                         Skip
++ static_ReturnTest.json                                          OK
++ static_ReturnTest2.json                                         OK
   static_RevertDepth2.json                                        Skip
   static_RevertOpcodeCalls.json                                   Skip
 + static_ZeroValue_CALL_OOGRevert.json                            OK
@@ -1849,42 +1849,42 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
   static_callChangeRevert.json                                    Skip
   static_callCreate.json                                          Skip
   static_callCreate2.json                                         Skip
-  static_callCreate3.json                                         Skip
-+ static_callOutput1.json                                         OK
-+ static_callOutput2.json                                         OK
-+ static_callOutput3.json                                         OK
++ static_callCreate3.json                                         OK
+  static_callOutput1.json                                         Skip
+  static_callOutput2.json                                         Skip
+  static_callOutput3.json                                         Skip
 + static_callOutput3Fail.json                                     OK
-+ static_callOutput3partial.json                                  OK
+  static_callOutput3partial.json                                  Skip
 + static_callOutput3partialFail.json                              OK
-  static_callToCallCodeOpCodeCheck.json                           Skip
-  static_callToCallOpCodeCheck.json                               Skip
-  static_callToDelCallOpCodeCheck.json                            Skip
-  static_callToStaticOpCodeCheck.json                             Skip
-  static_callWithHighValue.json                                   Skip
-  static_callWithHighValueAndGasOOG.json                          Skip
-  static_callWithHighValueAndOOGatTxLevel.json                    Skip
-  static_callWithHighValueOOGinCall.json                          Skip
++ static_callToCallCodeOpCodeCheck.json                           OK
++ static_callToCallOpCodeCheck.json                               OK
++ static_callToDelCallOpCodeCheck.json                            OK
++ static_callToStaticOpCodeCheck.json                             OK
++ static_callWithHighValue.json                                   OK
++ static_callWithHighValueAndGasOOG.json                          OK
++ static_callWithHighValueAndOOGatTxLevel.json                    OK
++ static_callWithHighValueOOGinCall.json                          OK
 + static_call_OOG_additionalGasCosts1.json                        OK
 + static_call_OOG_additionalGasCosts2.json                        OK
-  static_call_value_inherit.json                                  Skip
-  static_call_value_inherit_from_call.json                        Skip
++ static_call_value_inherit.json                                  OK
++ static_call_value_inherit_from_call.json                        OK
   static_callcall_00.json                                         Skip
-  static_callcall_00_OOGE.json                                    Skip
++ static_callcall_00_OOGE.json                                    OK
   static_callcall_00_OOGE_1.json                                  Skip
   static_callcall_00_OOGE_2.json                                  Skip
   static_callcall_00_SuicideEnd.json                              Skip
   static_callcallcall_000.json                                    Skip
-  static_callcallcall_000_OOGE.json                               Skip
++ static_callcallcall_000_OOGE.json                               OK
   static_callcallcall_000_OOGMAfter.json                          Skip
-  static_callcallcall_000_OOGMAfter2.json                         Skip
-  static_callcallcall_000_OOGMBefore.json                         Skip
++ static_callcallcall_000_OOGMAfter2.json                         OK
++ static_callcallcall_000_OOGMBefore.json                         OK
   static_callcallcall_000_SuicideEnd.json                         Skip
   static_callcallcall_000_SuicideMiddle.json                      Skip
-  static_callcallcall_ABCB_RECURSIVE.json                         Skip
++ static_callcallcall_ABCB_RECURSIVE.json                         OK
   static_callcallcallcode_001.json                                Skip
   static_callcallcallcode_001_2.json                              Skip
-  static_callcallcallcode_001_OOGE.json                           Skip
-  static_callcallcallcode_001_OOGE_2.json                         Skip
++ static_callcallcallcode_001_OOGE.json                           OK
++ static_callcallcallcode_001_OOGE_2.json                         OK
   static_callcallcallcode_001_OOGMAfter.json                      Skip
   static_callcallcallcode_001_OOGMAfter2.json                     Skip
   static_callcallcallcode_001_OOGMAfter_2.json                    Skip
@@ -1895,14 +1895,14 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
   static_callcallcallcode_001_SuicideEnd2.json                    Skip
   static_callcallcallcode_001_SuicideMiddle.json                  Skip
   static_callcallcallcode_001_SuicideMiddle2.json                 Skip
-  static_callcallcallcode_ABCB_RECURSIVE.json                     Skip
-  static_callcallcallcode_ABCB_RECURSIVE2.json                    Skip
-  static_callcallcode_01_2.json                                   Skip
-  static_callcallcode_01_OOGE_2.json                              Skip
++ static_callcallcallcode_ABCB_RECURSIVE.json                     OK
++ static_callcallcallcode_ABCB_RECURSIVE2.json                    OK
++ static_callcallcode_01_2.json                                   OK
++ static_callcallcode_01_OOGE_2.json                              OK
   static_callcallcode_01_SuicideEnd.json                          Skip
   static_callcallcode_01_SuicideEnd2.json                         Skip
-  static_callcallcodecall_010.json                                Skip
-  static_callcallcodecall_010_2.json                              Skip
++ static_callcallcodecall_010.json                                OK
++ static_callcallcodecall_010_2.json                              OK
   static_callcallcodecall_010_OOGE.json                           Skip
   static_callcallcodecall_010_OOGE_2.json                         Skip
   static_callcallcodecall_010_OOGMAfter.json                      Skip
@@ -1915,12 +1915,12 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
   static_callcallcodecall_010_SuicideEnd2.json                    Skip
   static_callcallcodecall_010_SuicideMiddle.json                  Skip
   static_callcallcodecall_010_SuicideMiddle2.json                 Skip
-  static_callcallcodecall_ABCB_RECURSIVE.json                     Skip
-  static_callcallcodecall_ABCB_RECURSIVE2.json                    Skip
-  static_callcallcodecallcode_011.json                            Skip
-  static_callcallcodecallcode_011_2.json                          Skip
++ static_callcallcodecall_ABCB_RECURSIVE.json                     OK
++ static_callcallcodecall_ABCB_RECURSIVE2.json                    OK
++ static_callcallcodecallcode_011.json                            OK
++ static_callcallcodecallcode_011_2.json                          OK
   static_callcallcodecallcode_011_OOGE.json                       Skip
-  static_callcallcodecallcode_011_OOGE_2.json                     Skip
++ static_callcallcodecallcode_011_OOGE_2.json                     OK
   static_callcallcodecallcode_011_OOGMAfter.json                  Skip
   static_callcallcodecallcode_011_OOGMAfter2.json                 Skip
   static_callcallcodecallcode_011_OOGMAfter_1.json                Skip
@@ -1931,17 +1931,17 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
   static_callcallcodecallcode_011_SuicideEnd2.json                Skip
   static_callcallcodecallcode_011_SuicideMiddle.json              Skip
   static_callcallcodecallcode_011_SuicideMiddle2.json             Skip
-  static_callcallcodecallcode_ABCB_RECURSIVE.json                 Skip
-  static_callcallcodecallcode_ABCB_RECURSIVE2.json                Skip
++ static_callcallcodecallcode_ABCB_RECURSIVE.json                 OK
++ static_callcallcodecallcode_ABCB_RECURSIVE2.json                OK
 + static_callcode_checkPC.json                                    OK
-  static_callcodecall_10.json                                     Skip
-  static_callcodecall_10_2.json                                   Skip
++ static_callcodecall_10.json                                     OK
++ static_callcodecall_10_2.json                                   OK
   static_callcodecall_10_OOGE.json                                Skip
   static_callcodecall_10_OOGE_2.json                              Skip
   static_callcodecall_10_SuicideEnd.json                          Skip
-  static_callcodecall_10_SuicideEnd2.json                         Skip
-  static_callcodecallcall_100.json                                Skip
-  static_callcodecallcall_100_2.json                              Skip
++ static_callcodecall_10_SuicideEnd2.json                         OK
++ static_callcodecallcall_100.json                                OK
++ static_callcodecallcall_100_2.json                              OK
   static_callcodecallcall_100_OOGE.json                           Skip
   static_callcodecallcall_100_OOGE2.json                          Skip
 + static_callcodecallcall_100_OOGMAfter.json                      OK
@@ -1954,57 +1954,57 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
   static_callcodecallcall_100_SuicideEnd2.json                    Skip
   static_callcodecallcall_100_SuicideMiddle.json                  Skip
   static_callcodecallcall_100_SuicideMiddle2.json                 Skip
-  static_callcodecallcall_ABCB_RECURSIVE.json                     Skip
-  static_callcodecallcall_ABCB_RECURSIVE2.json                    Skip
-  static_callcodecallcallcode_101.json                            Skip
-  static_callcodecallcallcode_101_2.json                          Skip
-  static_callcodecallcallcode_101_OOGE.json                       Skip
-  static_callcodecallcallcode_101_OOGE_2.json                     Skip
++ static_callcodecallcall_ABCB_RECURSIVE.json                     OK
++ static_callcodecallcall_ABCB_RECURSIVE2.json                    OK
++ static_callcodecallcallcode_101.json                            OK
++ static_callcodecallcallcode_101_2.json                          OK
++ static_callcodecallcallcode_101_OOGE.json                       OK
++ static_callcodecallcallcode_101_OOGE_2.json                     OK
 + static_callcodecallcallcode_101_OOGMAfter.json                  OK
 + static_callcodecallcallcode_101_OOGMAfter2.json                 OK
   static_callcodecallcallcode_101_OOGMAfter_1.json                Skip
   static_callcodecallcallcode_101_OOGMAfter_3.json                Skip
-  static_callcodecallcallcode_101_OOGMBefore.json                 Skip
-  static_callcodecallcallcode_101_OOGMBefore2.json                Skip
++ static_callcodecallcallcode_101_OOGMBefore.json                 OK
++ static_callcodecallcallcode_101_OOGMBefore2.json                OK
   static_callcodecallcallcode_101_SuicideEnd.json                 Skip
   static_callcodecallcallcode_101_SuicideEnd2.json                Skip
   static_callcodecallcallcode_101_SuicideMiddle.json              Skip
   static_callcodecallcallcode_101_SuicideMiddle2.json             Skip
-  static_callcodecallcallcode_ABCB_RECURSIVE.json                 Skip
-  static_callcodecallcallcode_ABCB_RECURSIVE2.json                Skip
-  static_callcodecallcodecall_110.json                            Skip
-  static_callcodecallcodecall_1102.json                           Skip
-  static_callcodecallcodecall_110_2.json                          Skip
-  static_callcodecallcodecall_110_OOGE.json                       Skip
-  static_callcodecallcodecall_110_OOGE2.json                      Skip
++ static_callcodecallcallcode_ABCB_RECURSIVE.json                 OK
++ static_callcodecallcallcode_ABCB_RECURSIVE2.json                OK
++ static_callcodecallcodecall_110.json                            OK
++ static_callcodecallcodecall_1102.json                           OK
++ static_callcodecallcodecall_110_2.json                          OK
++ static_callcodecallcodecall_110_OOGE.json                       OK
++ static_callcodecallcodecall_110_OOGE2.json                      OK
 + static_callcodecallcodecall_110_OOGMAfter.json                  OK
 + static_callcodecallcodecall_110_OOGMAfter2.json                 OK
 + static_callcodecallcodecall_110_OOGMAfter_2.json                OK
 + static_callcodecallcodecall_110_OOGMAfter_3.json                OK
 + static_callcodecallcodecall_110_OOGMBefore.json                 OK
 + static_callcodecallcodecall_110_OOGMBefore2.json                OK
-  static_callcodecallcodecall_110_SuicideEnd.json                 Skip
-  static_callcodecallcodecall_110_SuicideEnd2.json                Skip
++ static_callcodecallcodecall_110_SuicideEnd.json                 OK
++ static_callcodecallcodecall_110_SuicideEnd2.json                OK
 + static_callcodecallcodecall_110_SuicideMiddle.json              OK
 + static_callcodecallcodecall_110_SuicideMiddle2.json             OK
-  static_callcodecallcodecall_ABCB_RECURSIVE.json                 Skip
-  static_callcodecallcodecall_ABCB_RECURSIVE2.json                Skip
++ static_callcodecallcodecall_ABCB_RECURSIVE.json                 OK
++ static_callcodecallcodecall_ABCB_RECURSIVE2.json                OK
   static_callcodecallcodecallcode_111_SuicideEnd.json             Skip
-  static_calldelcode_01.json                                      Skip
-  static_calldelcode_01_OOGE.json                                 Skip
++ static_calldelcode_01.json                                      OK
++ static_calldelcode_01_OOGE.json                                 OK
   static_contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonSkip
-  static_contractCreationOOGdontLeaveEmptyContractViaTransaction.jsonSkip
++ static_contractCreationOOGdontLeaveEmptyContractViaTransaction.jsonOK
   static_log0_emptyMem.json                                       Skip
-  static_log0_logMemStartTooHigh.json                             Skip
-  static_log0_logMemsizeTooHigh.json                              Skip
++ static_log0_logMemStartTooHigh.json                             OK
++ static_log0_logMemsizeTooHigh.json                              OK
   static_log0_logMemsizeZero.json                                 Skip
   static_log0_nonEmptyMem.json                                    Skip
   static_log0_nonEmptyMem_logMemSize1.json                        Skip
   static_log0_nonEmptyMem_logMemSize1_logMemStart31.json          Skip
-  static_log1_MaxTopic.json                                       Skip
++ static_log1_MaxTopic.json                                       OK
   static_log1_emptyMem.json                                       Skip
-  static_log1_logMemStartTooHigh.json                             Skip
-  static_log1_logMemsizeTooHigh.json                              Skip
++ static_log1_logMemStartTooHigh.json                             OK
++ static_log1_logMemsizeTooHigh.json                              OK
   static_log1_logMemsizeZero.json                                 Skip
   static_log_Caller.json                                          Skip
   static_makeMoney.json                                           Skip
@@ -2012,7 +2012,7 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
   static_refund_CallToSuicideNoStorage.json                       Skip
   static_refund_CallToSuicideTwice.json                           Skip
 ```
-OK: 76/284 Fail: 0/284 Skip: 208/284
+OK: 152/284 Fail: 0/284 Skip: 132/284
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1665/2334 Fail: 0/2334 Skip: 669/2334
+OK: 1742/2334 Fail: 0/2334 Skip: 592/2334
