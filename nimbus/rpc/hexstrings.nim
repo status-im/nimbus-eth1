@@ -36,14 +36,9 @@ type
   HexDataStr* = distinct string
   EthAddressStr* = distinct string        # Same as HexDataStr but must be less <= 20 bytes
   EthHashStr* = distinct string           # Same as HexDataStr but must be exactly 32 bytes
-  IdentifierStr* = distinct string        # 32 bytes, no 0x prefix!
-  PublicKeyStr* = distinct string         # 0x prefix + 65 bytes
-  PrivateKeyStr* = distinct string        # 0x prefix + 32 bytes
-  SymKeyStr* = distinct string            # 0x prefix + 32 bytes
-  TopicStr* = distinct string             # 0x prefix + 4 bytes
+  Identifier* = distinct string        # 32 bytes, no 0x prefix!
   HexStrings = HexQuantityStr | HexDataStr | EthAddressStr | EthHashStr |
-               IdentifierStr | PublicKeyStr | PrivateKeyStr | SymKeyStr |
-               TopicStr
+               Identifier
 
 template len*(value: HexStrings): int = value.string.len
 
@@ -136,11 +131,6 @@ const
   SInvalidData = "Invalid hex data format for Ethereum"
   SInvalidAddress = "Invalid address format for Ethereum"
   SInvalidHash = "Invalid hash format for Ethereum"
-  SInvalidIdentifier = "Invalid format for identifier"
-  SInvalidPublicKey = "Invalid format for public key"
-  SInvalidPrivateKey = "Invalid format for private key"
-  SInvalidSymKey = "Invalid format for symmetric key"
-  SInvalidTopic = "Invalid format for topic"
 
 proc validateHexQuantity*(value: string) {.inline.} =
   if unlikely(not value.isValidHexQuantity):
@@ -217,6 +207,21 @@ proc `%`*(value: whisper_protocol.Topic): JsonNode =
 proc `%`*(value: Bytes): JsonNode =
   result = %("0x" & value.toHex)
 
+
+# Helpers for the fromJson procs
+
+proc toPublicKey*(key: string): PublicKey {.inline.} =
+  result = initPublicKey(key[4 .. ^1])
+
+proc toPrivateKey*(key: string): PrivateKey {.inline.} =
+  result = initPrivateKey(key[2 .. ^1])
+
+proc toSymKey*(key: string): SymKey {.inline.} =
+  hexToByteArray(key[2 .. ^1], result)
+
+proc toTopic*(topic: string): whisper_protocol.Topic {.inline.} =
+  hexToByteArray(topic[2 .. ^1], result)
+
 # Marshalling from JSON to Nim types that includes format checking
 
 func invalidMsg(name: string): string = "When marshalling from JSON, parameter \"" & name & "\" is not valid"
@@ -249,12 +254,12 @@ proc fromJson*(n: JsonNode, argName: string, result: var EthHashStr) =
     raise newException(ValueError, invalidMsg(argName) & " as an Ethereum hash \"" & hexStr & "\"")
   result = hexStr.EthHashStr
 
-proc fromJson*(n: JsonNode, argName: string, result: var IdentifierStr) =
+proc fromJson*(n: JsonNode, argName: string, result: var Identifier) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidIdentifier:
     raise newException(ValueError, invalidMsg(argName) & " as a identifier \"" & hexStr & "\"")
-  result = hexStr.IdentifierStr
+  result = hexStr.Identifier
 
 proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
   n.kind.expect(JString, argName)
@@ -263,44 +268,37 @@ proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
     raise newException(ValueError, invalidMsg(argName) & " as a UInt256 \"" & hexStr & "\"")
   result = readUintBE[256](hexToPaddedByteArray[32](hexStr))
 
-proc fromJson*(n: JsonNode, argName: string, result: var PublicKeyStr) =
+proc fromJson*(n: JsonNode, argName: string, result: var PublicKey) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidPublicKey:
     raise newException(ValueError, invalidMsg(argName) & " as a public key \"" & hexStr & "\"")
-  result = hexStr.PublicKeyStr
+  result = hexStr.toPublicKey
 
-proc fromJson*(n: JsonNode, argName: string, result: var PrivateKeyStr) =
+proc fromJson*(n: JsonNode, argName: string, result: var PrivateKey) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidPrivateKey:
     raise newException(ValueError, invalidMsg(argName) & " as a private key \"" & hexStr & "\"")
-  result = hexStr.PrivateKeyStr
+  result = hexStr.toPrivateKey
 
-proc fromJson*(n: JsonNode, argName: string, result: var SymKeyStr) =
+proc fromJson*(n: JsonNode, argName: string, result: var SymKey) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidSymKey:
     raise newException(ValueError, invalidMsg(argName) & " as a symmetric key \"" & hexStr & "\"")
-  result = hexStr.SymKeyStr
+  result = toSymKey(hexStr)
 
-proc fromJson*(n: JsonNode, argName: string, result: var TopicStr) =
-  n.kind.expect(JString, argName)
-  let hexStr = n.getStr()
-  if not hexStr.isValidTopic:
-    raise newException(ValueError, invalidMsg(argName) & " as a topic \"" & hexStr & "\"")
-  result = hexStr.TopicStr
-
-# Following procs currently required only for testing, the `createRpcSigs` macro
-# requires it as it will convert the JSON results back to the original Nim
-# types, but it needs the `fromJson` calls for those specific Nim types to do so
 proc fromJson*(n: JsonNode, argName: string, result: var whisper_protocol.Topic) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidTopic:
     raise newException(ValueError, invalidMsg(argName) & " as a topic \"" & hexStr & "\"")
-  hexToByteArray(hexStr.string[2 .. ^1], result)
+  result = toTopic(hexStr)
 
+# Following procs currently required only for testing, the `createRpcSigs` macro
+# requires it as it will convert the JSON results back to the original Nim
+# types, but it needs the `fromJson` calls for those specific Nim types to do so
 proc fromJson*(n: JsonNode, argName: string, result: var Bytes) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
@@ -314,10 +312,3 @@ proc fromJson*(n: JsonNode, argName: string, result: var Hash256) =
   if not hexStr.isValidHash256:
     raise newException(ValueError, invalidMsg(argName) & " as a Hash256 \"" & hexStr & "\"")
   hexToByteArray(hexStr.string, result.data)
-
-proc fromJson*(n: JsonNode, argName: string, result: var PublicKey) =
-  n.kind.expect(JString, argName)
-  let hexStr = n.getStr()
-  if not hexStr.isValidPublicKey:
-    raise newException(ValueError, invalidMsg(argName) & " as a public key \"" & hexStr & "\"")
-  result = initPublicKey(hexStr.string[4 .. ^1])

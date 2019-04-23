@@ -82,21 +82,21 @@ proc shh_setMaxMessageSize(size: uint64): bool
 proc shh_setMinPoW(pow: float): bool
 proc shh_markTrustedPeer(enode: string): bool
 
-proc shh_newKeyPair(): IdentifierStr
-proc shh_addPrivateKey(key: string): IdentifierStr
-proc shh_deleteKeyPair(id: IdentifierStr): bool
-proc shh_hasKeyPair(id: IdentifierStr): bool
-proc shh_getPublicKey(id: IdentifierStr): PublicKeyStr
-proc shh_getPrivateKey(id: IdentifierStr): PrivateKeyStr
+proc shh_newKeyPair(): Identifier
+proc shh_addPrivateKey(key: string): Identifier
+proc shh_deleteKeyPair(id: Identifier): bool
+proc shh_hasKeyPair(id: Identifier): bool
+proc shh_getPublicKey(id: Identifier): PublicKey
+proc shh_getPrivateKey(id: Identifier): PrivateKey
 
-proc shh_newSymKey(): IdentifierStr
-proc shh_addSymKey(key: string): IdentifierStr
-proc shh_generateSymKeyFromPassword(password: string): IdentifierStr
-proc shh_hasSymKey(id: IdentifierStr): bool
-proc shh_getSymKey(id: IdentifierStr): SymKeyStr
-proc shh_deleteSymKey(id: IdentifierStr): bool
+proc shh_newSymKey(): Identifier
+proc shh_addSymKey(key: string): Identifier
+proc shh_generateSymKeyFromPassword(password: string): Identifier
+proc shh_hasSymKey(id: Identifier): bool
+proc shh_getSymKey(id: Identifier): SymKey
+proc shh_deleteSymKey(id: Identifier): bool
 
-proc shh_newMessageFilter(options: WhisperFilterOptions): IdentifierStr
-proc shh_deleteMessageFilter(id: IdentifierStr): bool
-proc shh_getFilterMessages(id: IdentifierStr): seq[WhisperFilterMessage]
+proc shh_newMessageFilter(options: WhisperFilterOptions): Identifier
+proc shh_deleteMessageFilter(id: Identifier): bool
+proc shh_getFilterMessages(id: Identifier): seq[WhisperFilterMessage]
 proc shh_post(message: WhisperPostMessage): bool

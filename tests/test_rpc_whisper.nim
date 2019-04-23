@@ -77,8 +77,8 @@ proc doTests =
       let pubkey = "0x04e5fd642a0f630bbb1e4cd7df629d7b8b019457a9a74f983c0484a045cebb176def86a54185b50bbba6bbf97779173695e92835d63109c23471e6da382f922fdb"
       let keyID2 = waitFor client.shh_addPrivateKey(privkey)
       check:
-        waitFor(client.shh_getPublicKey(keyID2)).string == pubkey
-        waitFor(client.shh_getPrivateKey(keyID2)).string == privkey
+        waitFor(client.shh_getPublicKey(keyID2)) == pubkey.toPublicKey
+        waitFor(client.shh_getPrivateKey(keyID2)) == privkey.toPrivateKey
         waitFor(client.shh_hasKeyPair(keyID2)) == true
         waitFor(client.shh_deleteKeyPair(keyID2)) == true
         waitFor(client.shh_hasKeyPair(keyID2)) == false
@@ -94,7 +94,7 @@ proc doTests =
       let symKey = "0x0000000000000000000000000000000000000000000000000000000000000001"
       let keyID2 = waitFor client.shh_addSymKey(symKey)
       check:
-        waitFor(client.shh_getSymKey(keyID2)).string == symKey
+        waitFor(client.shh_getSymKey(keyID2)) == symKey.toSymKey
         waitFor(client.shh_hasSymKey(keyID2)) == true
         waitFor(client.shh_deleteSymKey(keyID2)) == true
         waitFor(client.shh_hasSymKey(keyID2)) == false
@@ -104,10 +104,10 @@ proc doTests =
       let keyID4 = waitFor client.shh_generateSymKeyFromPassword("password")
       let keyID5 = waitFor client.shh_generateSymKeyFromPassword("nimbus!")
       check:
-        waitFor(client.shh_getSymKey(keyID3)).string ==
-          waitFor(client.shh_getSymKey(keyID4)).string
-        waitFor(client.shh_getSymKey(keyID3)).string !=
-          waitFor(client.shh_getSymKey(keyID5)).string
+        waitFor(client.shh_getSymKey(keyID3)) ==
+          waitFor(client.shh_getSymKey(keyID4))
+        waitFor(client.shh_getSymKey(keyID3)) !=
+          waitFor(client.shh_getSymKey(keyID5))
         waitFor(client.shh_hasSymKey(keyID3)) == true
         waitFor(client.shh_deleteSymKey(keyID3)) == true
         waitFor(client.shh_hasSymKey(keyID3)) == false
@@ -116,7 +116,7 @@ proc doTests =
     # Some defaults for the filter & post tests
     let
       ttl = 30'u64
-      topic = "0x12345678"
+      topicStr = "0x12345678"
       payload = "0x45879632"
       # A very low target and long time so we are sure the test never fails
       # because of this
@@ -125,13 +125,14 @@ proc doTests =
 
     test "shh symKey post and filter loop":
       let
+        topic = topicStr.toTopic()
         symKeyID = waitFor client.shh_newSymKey()
         options = WhisperFilterOptions(symKeyID: some(symKeyID),
-                                       topics: some(@[topic.TopicStr]))
+                                       topics: some(@[topic]))
         filterID = waitFor client.shh_newMessageFilter(options)
         message = WhisperPostMessage(symKeyID: some(symKeyID),
                                      ttl: ttl,
-                                     topic: some(topic.TopicStr),
+                                     topic: some(topic),
                                      payload: payload.HexDataStr,
                                      powTime: powTime,
                                      powTarget: powTarget)
@@ -145,20 +146,21 @@ proc doTests =
         messages[0].sig.isNone()
         messages[0].recipientPublicKey.isNone()
         messages[0].ttl == ttl
-        ("0x" & messages[0].topic.toHex) == topic
-        ("0x" & messages[0].payload.toHex) == payload
+        messages[0].topic == topic
+        messages[0].payload == hexToSeqByte(payload)
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
 
     test "shh asymKey post and filter loop":
       let
+        topic = topicStr.toTopic()
         privateKeyID = waitFor client.shh_newKeyPair()
         options = WhisperFilterOptions(privateKeyID: some(privateKeyID))
         filterID = waitFor client.shh_newMessageFilter(options)
         pubKey = waitFor client.shh_getPublicKey(privateKeyID)
         message = WhisperPostMessage(pubKey: some(pubKey),
                                      ttl: ttl,
-                                     topic: some(topic.TopicStr),
+                                     topic: some(topic),
                                      payload: payload.HexDataStr,
                                      powTime: powTime,
                                      powTarget: powTarget)
@@ -170,26 +172,27 @@ proc doTests =
       check:
         messages.len == 1
         messages[0].sig.isNone()
-        ("0x04" & $messages[0].recipientPublicKey.get()) == pubKey.string
+        messages[0].recipientPublicKey.get() == pubKey
         messages[0].ttl == ttl
-        ("0x" & messages[0].topic.toHex) == topic
-        ("0x" & messages[0].payload.toHex) == payload
+        messages[0].topic == topic
+        messages[0].payload == hexToSeqByte(payload)
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
 
     test "shh signature in post and filter loop":
       let
+        topic = topicStr.toTopic()
         symKeyID = waitFor client.shh_newSymKey()
         privateKeyID = waitFor client.shh_newKeyPair()
         pubKey = waitFor client.shh_getPublicKey(privateKeyID)
         options = WhisperFilterOptions(symKeyID: some(symKeyID),
-                                       topics: some(@[topic.TopicStr]),
+                                       topics: some(@[topic]),
                                        sig: some(pubKey))
         filterID = waitFor client.shh_newMessageFilter(options)
         message = WhisperPostMessage(symKeyID: some(symKeyID),
                                      sig: some(privateKeyID),
                                      ttl: ttl,
-                                     topic: some(topic.TopicStr),
+                                     topic: some(topic),
                                      payload: payload.HexDataStr,
                                      powTime: powTime,
                                      powTarget: powTarget)
@@ -200,11 +203,11 @@ proc doTests =
       let messages = waitFor client.shh_getFilterMessages(filterID)
       check:
         messages.len == 1
-        ("0x04" & $messages[0].sig.get()) == pubKey.string
+        messages[0].sig.get() == pubKey
         messages[0].recipientPublicKey.isNone()
         messages[0].ttl == ttl
-        ("0x" & messages[0].topic.toHex) == topic
-        ("0x" & messages[0].payload.toHex) == payload
+        messages[0].topic == topic
+        messages[0].payload == hexToSeqByte(payload)
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
 

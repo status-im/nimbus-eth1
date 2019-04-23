@@ -132,11 +132,11 @@ type
 
   WhisperFilterOptions* = object
     # Parameter from user
-    symKeyID*: Option[IdentifierStr]      # ID of symmetric key for message decryption.
-    privateKeyID*: Option[IdentifierStr]  # ID of private (asymmetric) key for message decryption.
-    sig*: Option[PublicKeyStr]            # (Optional) Public key of the signature.
+    symKeyID*: Option[Identifier]         # ID of symmetric key for message decryption.
+    privateKeyID*: Option[Identifier]     # ID of private (asymmetric) key for message decryption.
+    sig*: Option[PublicKey]               # (Optional) Public key of the signature.
     minPow*: Option[float64]              # (Optional) Minimal PoW requirement for incoming messages.
-    topics*: Option[seq[TopicStr]]        # (Optional when asym key): Array of possible topics (or partial topics).
+    topics*: Option[seq[whisper_protocol.Topic]] # (Optional when asym key): Array of possible topics (or partial topics).
     allowP2P*: Option[bool]               # (Optional) Indicates if this filter allows processing of direct peer-to-peer messages.
 
   WhisperFilterMessage* = object
@@ -153,11 +153,11 @@ type
 
   WhisperPostMessage* = object
     # Parameter from user
-    symKeyID*: Option[IdentifierStr]  # ID of symmetric key for message encryption.
-    pubKey*: Option[PublicKeyStr]     # Public key for message encryption.
-    sig*: Option[IdentifierStr]       # (Optional) ID of the signing key.
+    symKeyID*: Option[Identifier]     # ID of symmetric key for message encryption.
+    pubKey*: Option[PublicKey]        # Public key for message encryption.
+    sig*: Option[Identifier]          # (Optional) ID of the signing key.
     ttl*: uint64                      # Time-to-live in seconds.
-    topic*: Option[TopicStr]          # Message topic (mandatory when key is symmetric).
+    topic*: Option[whisper_protocol.Topic] # Message topic (mandatory when key is symmetric).
     payload*: HexDataStr              # Payload to be encrypted.
     padding*: Option[HexDataStr]      # (Optional) Padding (byte array of arbitrary length).
     powTime*: float64                 # Maximal time in seconds to be spent on proof of work.

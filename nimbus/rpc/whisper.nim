@@ -71,28 +71,26 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     let peerNode = newNode(enode)
     result = node.setPeerTrusted(peerNode.id)
 
-  rpcsrv.rpc("shh_newKeyPair") do() -> IdentifierStr:
+  rpcsrv.rpc("shh_newKeyPair") do() -> Identifier:
     ## Generates a new public and private key pair for message decryption and
     ## encryption.
     ##
     ## Returns key identifier on success and an error on failure.
-    result = generateRandomID().IdentifierStr
+    result = generateRandomID().Identifier
     keys.asymKeys.add(result.string, newKeyPair())
 
-  rpcsrv.rpc("shh_addPrivateKey") do(key: PrivateKeyStr) -> IdentifierStr:
+  rpcsrv.rpc("shh_addPrivateKey") do(key: PrivateKey) -> Identifier:
     ## Stores the key pair, and returns its ID.
     ##
     ## key: Private key as hex bytes.
     ##
     ## Returns key identifier on success and an error on failure.
-    result = generateRandomID().IdentifierStr
+    result = generateRandomID().Identifier
 
-    # No need to check if 0x prefix as the JSON Marshalling should handle this
-    var privkey = initPrivateKey(key.string[2 .. ^1])
-    keys.asymKeys.add(result.string, KeyPair(seckey: privkey,
-                                             pubkey: privkey.getPublicKey()))
+    keys.asymKeys.add(result.string, KeyPair(seckey: key,
+                                             pubkey: key.getPublicKey()))
 
-  rpcsrv.rpc("shh_deleteKeyPair") do(id: IdentifierStr) -> bool:
+  rpcsrv.rpc("shh_deleteKeyPair") do(id: Identifier) -> bool:
     ## Deletes the specifies key if it exists.
     ##
     ## id: Identifier of key pair
@@ -101,7 +99,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     var unneeded: KeyPair
     result = keys.asymKeys.take(id.string, unneeded)
 
-  rpcsrv.rpc("shh_hasKeyPair") do(id: IdentifierStr) -> bool:
+  rpcsrv.rpc("shh_hasKeyPair") do(id: Identifier) -> bool:
     ## Checks if the whisper node has a private key of a key pair matching the
     ## given ID.
     ##
@@ -110,7 +108,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ## Returns true on success and an error on failure.
     result = keys.asymkeys.hasKey(id.string)
 
-  rpcsrv.rpc("shh_getPublicKey") do(id: IdentifierStr) -> PublicKey:
+  rpcsrv.rpc("shh_getPublicKey") do(id: Identifier) -> PublicKey:
     ## Returns the public key for identity ID.
     ##
     ## id: Identifier of key pair
@@ -119,7 +117,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     # Note: key not found exception as error in case not existing
     result = keys.asymkeys[id.string].pubkey
 
-  rpcsrv.rpc("shh_getPrivateKey") do(id: IdentifierStr) -> PrivateKey:
+  rpcsrv.rpc("shh_getPrivateKey") do(id: Identifier) -> PrivateKey:
     ## Returns the private key for identity ID.
     ##
     ## id: Identifier of key pair
@@ -128,13 +126,13 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     # Note: key not found exception as error in case not existing
     result = keys.asymkeys[id.string].seckey
 
-  rpcsrv.rpc("shh_newSymKey") do() -> IdentifierStr:
+  rpcsrv.rpc("shh_newSymKey") do() -> Identifier:
     ## Generates a random symmetric key and stores it under an ID, which is then
     ## returned. Can be used encrypting and decrypting messages where the key is
     ## known to both parties.
     ##
     ## Returns key identifier on success and an error on failure.
-    result = generateRandomID().IdentifierStr
+    result = generateRandomID().Identifier
     var key: SymKey
     if randomBytes(key) != key.len:
       error "Generation of SymKey failed"
@@ -142,20 +140,17 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     keys.symKeys.add(result.string, key)
 
 
-  rpcsrv.rpc("shh_addSymKey") do(key: SymKeyStr) -> IdentifierStr:
+  rpcsrv.rpc("shh_addSymKey") do(key: SymKey) -> Identifier:
     ## Stores the key, and returns its ID.
     ##
     ## key: The raw key for symmetric encryption as hex bytes.
     ##
     ## Returns key identifier on success and an error on failure.
-    result = generateRandomID().IdentifierStr
+    result = generateRandomID().Identifier
 
-    var symKey: SymKey
-    # No need to check if 0x prefix as the JSON Marshalling should handle this
-    hexToByteArray(key.string[2 .. ^1], symKey)
-    keys.symKeys.add(result.string, symKey)
+    keys.symKeys.add(result.string, key)
 
-  rpcsrv.rpc("shh_generateSymKeyFromPassword") do(password: string) -> IdentifierStr:
+  rpcsrv.rpc("shh_generateSymKeyFromPassword") do(password: string) -> Identifier:
     ## Generates the key from password, stores it, and returns its ID.
     ##
     ## password: Password.
@@ -169,10 +164,10 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     if pbkdf2(ctx, password, "", 65356, symKey) != sizeof(SymKey):
       raise newException(ValueError, "Failed generating key")
 
-    result = generateRandomID().IdentifierStr
+    result = generateRandomID().Identifier
     keys.symKeys.add(result.string, symKey)
 
-  rpcsrv.rpc("shh_hasSymKey") do(id: IdentifierStr) -> bool:
+  rpcsrv.rpc("shh_hasSymKey") do(id: Identifier) -> bool:
     ## Returns true if there is a key associated with the name string.
     ## Otherwise, returns false.
     ##
@@ -181,7 +176,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ## Returns (true or false) on success and an error on failure.
     result = keys.symkeys.hasKey(id.string)
 
-  rpcsrv.rpc("shh_getSymKey") do(id: IdentifierStr) -> SymKey:
+  rpcsrv.rpc("shh_getSymKey") do(id: Identifier) -> SymKey:
     ## Returns the symmetric key associated with the given ID.
     ##
     ## id: Identifier of key.
@@ -190,7 +185,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     # Note: key not found exception as error in case not existing
     result = keys.symkeys[id.string]
 
-  rpcsrv.rpc("shh_deleteSymKey") do(id: IdentifierStr) -> bool:
+  rpcsrv.rpc("shh_deleteSymKey") do(id: Identifier) -> bool:
     ## Deletes the key associated with the name string if it exists.
     ##
     ## id: Identifier of key.
@@ -200,7 +195,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     result = keys.symKeys.take(id.string, unneeded)
 
   rpcsrv.rpc("shh_subscribe") do(id: string,
-                                 options: WhisperFilterOptions) -> IdentifierStr:
+                                 options: WhisperFilterOptions) -> Identifier:
     ## Creates and registers a new subscription to receive notifications for
     ## inbound whisper messages. Returns the ID of the newly created
     ## subscription.
@@ -214,7 +209,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     # TODO: implement subscriptions, only for WS & IPC?
     discard
 
-  rpcsrv.rpc("shh_unsubscribe") do(id: IdentifierStr) -> bool:
+  rpcsrv.rpc("shh_unsubscribe") do(id: Identifier) -> bool:
     ## Cancels and removes an existing subscription.
     ##
     ## id: Subscription identifier
@@ -229,7 +224,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     if asym.isNone() and topic.isNone():
       raise newException(ValueError, "Topic mandatory with symmetric key")
 
-  rpcsrv.rpc("shh_newMessageFilter") do(options: WhisperFilterOptions) -> IdentifierStr:
+  rpcsrv.rpc("shh_newMessageFilter") do(options: WhisperFilterOptions) -> Identifier:
     ## Create a new filter within the node. This filter can be used to poll for
     ## new messages that match the set of criteria.
     ##
@@ -248,24 +243,20 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     if options.symKeyID.isSome():
       filter.symKey= some(keys.symKeys[options.symKeyID.get().string])
 
-    if options.sig.isSome():
-      # Need to strip 0x04
-      filter.src = some(initPublicKey(options.sig.get().string[4 .. ^1]))
+    filter.src = options.sig
 
     if options.minPow.isSome():
       filter.powReq = options.minPow.get()
 
     if options.topics.isSome():
-      filter.topics = map(options.topics.get(),
-                          proc(x: TopicStr): whisper_protocol.Topic =
-                              hexToByteArray(x.string[2 .. ^1], result))
+      filter.topics = options.topics.get()
 
     if options.allowP2P.isSome():
       filter.allowP2P = options.allowP2P.get()
 
-    result = node.subscribeFilter(filter).IdentifierStr
+    result = node.subscribeFilter(filter).Identifier
 
-  rpcsrv.rpc("shh_deleteMessageFilter") do(id: IdentifierStr) -> bool:
+  rpcsrv.rpc("shh_deleteMessageFilter") do(id: Identifier) -> bool:
     ## Uninstall a message filter in the node.
     ##
     ## id: Filter identifier as returned when the filter was created.
@@ -273,7 +264,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ## Returns true on success, error on failure.
     result  = node.unsubscribeFilter(id.string)
 
-  rpcsrv.rpc("shh_getFilterMessages") do(id: IdentifierStr) -> seq[WhisperFilterMessage]:
+  rpcsrv.rpc("shh_getFilterMessages") do(id: Identifier) -> seq[WhisperFilterMessage]:
     ## Retrieve messages that match the filter criteria and are received between
     ## the last time this function was called and now.
     ##
@@ -320,8 +311,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
       padding: Option[Bytes]
       targetPeer: Option[NodeId]
 
-    if message.pubKey.isSome():
-      pubKey = some(initPublicKey(message.pubKey.get().string[4 .. ^1]))
+    pubKey = message.pubKey
 
     if message.sig.isSome():
       sigPrivKey = some(keys.asymKeys[message.sig.get().string].seckey)
@@ -331,7 +321,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
 
     # Note: If no topic it will be defaulted to 0x00000000
     if message.topic.isSome():
-      hexToByteArray(message.topic.get().string[2 .. ^1], topic)
+      topic = message.topic.get()
 
     if message.padding.isSome():
       padding = some(hexToSeqByte(message.padding.get().string))
