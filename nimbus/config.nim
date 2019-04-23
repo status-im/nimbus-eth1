@@ -10,6 +10,7 @@
 import
   parseopt, strutils, macros, os, times,
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
+  eth/p2p/rlpx_protocols/whisper_protocol,
   ./db/select_backend,
   ./vm/interpreter/vm_forks
 
@@ -96,6 +97,12 @@ type
     Shh                           ## enable shh_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
 
+  ProtocolFlags* {.pure.} = enum
+    ## Protocol flags
+    Eth                           ## enable eth subprotocol
+    Shh                           ## enable whisper subprotocol
+    Les                           ## enable les subprotocol
+
   RpcConfiguration* = object
     ## JSON-RPC configuration object
     flags*: set[RpcFlags]         ## RPC flags
@@ -125,6 +132,7 @@ type
     ## Network configuration object
     flags*: set[NetworkFlags]     ## Network flags
     bootNodes*: seq[ENode]        ## List of bootnodes
+    staticNodes*: seq[ENode]      ## List of static nodes to connect to
     bindPort*: uint16             ## Main TCP bind port
     discPort*: uint16             ## Discovery UDP bind port
     maxPeers*: int                ## Maximum allowed number of peers
@@ -134,6 +142,7 @@ type
     nodeKey*: PrivateKey          ## Server private key
     nat*: NatStrategy             ## NAT strategy
     externalIP*: string           ## user-provided external IP
+    protocols*: set[ProtocolFlags]## Enabled subprotocols
 
   DebugConfiguration* = object
     ## Debug configuration object
@@ -169,9 +178,11 @@ type
     rpc*: RpcConfiguration        ## JSON-RPC configuration
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
+    shh*: WhisperConfig           ## Whisper configuration
 
 const
   defaultRpcApi = {RpcFlags.Eth, RpcFlags.Shh}
+  defaultProtocols = {ProtocolFlags.Eth, ProtocolFlags.Shh}
   defaultLogLevel = LogLevel.WARN
 
 var nimbusConfig {.threadvar.}: NimbusConfiguration
@@ -236,6 +247,14 @@ proc processInteger*(v: string, o: var int): ConfigStatus =
   except:
     result = ErrorParseOption
 
+proc processFloat*(v: string, o: var float): ConfigStatus =
+  ## Convert string to float.
+  try:
+    o  = parseFloat(v)
+    result = Success
+  except:
+    result = ErrorParseOption
+
 proc processAddressPortsList(v: string,
                              o: var seq[TransportAddress]): ConfigStatus =
   ## Convert <hostname:port>;...;<hostname:port> to list of `TransportAddress`.
@@ -271,6 +290,19 @@ proc processRpcApiList(v: string, flags: var set[RpcFlags]): ConfigStatus =
     of "debug": flags.incl RpcFlags.Debug
     else:
       warn "unknown rpc api", name = item
+      result = ErrorIncorrectOption
+
+proc processProtocolList(v: string, flags: var set[ProtocolFlags]): ConfigStatus =
+  var list = newSeq[string]()
+  processList(v, list)
+  result = Success
+  for item in list:
+    case item.toLowerAscii()
+    of "eth": flags.incl ProtocolFlags.Eth
+    of "shh": flags.incl ProtocolFlags.Shh
+    of "les": flags.incl ProtocolFlags.Les
+    else:
+      warn "unknown protocol", name = item
       result = ErrorIncorrectOption
 
 proc processENode(v: string, o: var ENode): ConfigStatus =
@@ -427,6 +459,8 @@ proc processNetArguments(key, value: string): ConfigStatus =
     result = processENodesList(value, config.net.bootNodes)
   elif skey == "bootnodesv5":
     result = processENodesList(value, config.net.bootNodes)
+  elif skey == "staticnodes":
+    result = processENodesList(value, config.net.staticNodes)
   elif skey == "testnet":
     config.net.setNetwork(RopstenNet)
   elif skey == "mainnet":
@@ -493,6 +527,29 @@ proc processNetArguments(key, value: string): ConfigStatus =
         else:
           error "not a valid NAT mechanism, nor a valid IP address", value
           result = ErrorParseOption
+  elif skey == "protocols":
+    config.net.protocols = {}
+    result = processProtocolList(value, config.net.protocols)
+  else:
+    result = EmptyOption
+
+proc processShhArguments(key, value: string): ConfigStatus =
+  ## Processes only `Shh` related command line options
+  result = Success
+  let config = getConfiguration()
+  let skey = key.toLowerAscii()
+  if skey == "shh-maxsize":
+    var res = 0
+    result = processInteger(value, res)
+    if result == Success:
+      config.shh.maxMsgSize = res.uint32
+  elif skey == "shh-pow":
+    var res = 0.0
+    result = processFloat(value, res)
+    if result == Success:
+      config.shh.powRequirement = res
+  elif skey == "shh-light":
+    config.shh.isLightNode = true
   else:
     result = EmptyOption
 
@@ -571,11 +628,18 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.discPort = 30303'u16
   result.net.ident = NimbusIdent
   result.net.nat = NatAny
+  result.net.protocols = defaultProtocols
 
   const dataDir = getDefaultDataDir()
 
   result.dataDir = getHomeDir() / dataDir
   result.prune = PruneMode.Full
+
+  ## Whisper defaults
+  result.shh.maxMsgSize = defaultMaxMsgSize
+  result.shh.powRequirement = defaultMinPow
+  result.shh.isLightNode = false
+  result.shh.bloom = fullBloom()
 
   ## Debug defaults
   result.debug.flags = {}
@@ -608,6 +672,7 @@ NETWORKING OPTIONS:
   --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
   --bootnodesv4:<value>   Comma separated enode URLs for P2P v4 discovery bootstrap (light server, full nodes)
   --bootnodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
+  --staticnodes:<value>   Comma separated enode URLs to connect with
   --port:<value>          Network listening TCP port (default: 30303)
   --discport:<value>      Network listening UDP port (defaults to --port argument)
   --maxpeers:<value>      Maximum number of network peers (default: 25)
@@ -623,6 +688,12 @@ NETWORKING OPTIONS:
   --morden                Use Ethereum Morden Test Network
   --networkid:<value>     Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby) (default: 3)
   --ident:<value>         Client identifier (default is '$1')
+  --protocols:<value>     Enable specific set of protocols (default: $4)
+
+WHISPER OPTIONS:
+  --shh-maxsize:<value>   Max message size accepted (default: $5)
+  --shh-pow:<value>       Minimum POW accepted (default: $6)
+  --shh-light             Run as Whisper light client (no outgoing messages)
 
 API AND CONSOLE OPTIONS:
   --rpc                   Enable the HTTP-RPC server
@@ -637,7 +708,10 @@ LOGGING AND DEBUGGING OPTIONS:
 """ % [
     NimbusIdent,
     join(logLevels, ", "),
-    $defaultLogLevel
+    $defaultLogLevel,
+    strip($defaultProtocols, chars = {'{','}'}),
+    $defaultMaxMsgSize,
+    $defaultMinPow
   ]
 
 proc processArguments*(msg: var string): ConfigStatus =
@@ -679,6 +753,7 @@ proc processArguments*(msg: var string): ConfigStatus =
           processArgument processEthArguments, key, value, msg
           processArgument processRpcArguments, key, value, msg
           processArgument processNetArguments, key, value, msg
+          processArgument processShhArguments, key, value, msg
           processArgument processDebugArguments, key, value, msg
           if result != Success:
             msg = "Unknown option: '" & key & "'."
