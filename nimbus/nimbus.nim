@@ -12,8 +12,8 @@ import
   eth/keys, db/[storage_types, db_chain, select_backend],
   eth/common as eth_common, eth/p2p as eth_p2p,
   chronos, json_rpc/rpcserver, chronicles,
-  eth/p2p/rlpx_protocols/[eth_protocol, les_protocol],
-  eth/p2p/blockchain_sync, eth/net/nat,
+  eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
+  eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
   eth/trie/db
 
@@ -91,16 +91,24 @@ proc start(): NimbusObject =
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
-                                   nil, nimbusClientId)
+                                   nil, nimbusClientId,
+                                   addAllCapabilities = false)
+  # Add protocol capabilities based on protocol flags
+  if ProtocolFlags.Eth in conf.net.protocols:
+    nimbus.ethNode.addCapability eth
+  if ProtocolFlags.Shh in conf.net.protocols:
+    nimbus.ethNode.addCapability Whisper
+    nimbus.ethNode.configureWhisper(conf.shh)
+  if ProtocolFlags.Les in conf.net.protocols:
+    nimbus.ethNode.addCapability les
 
   nimbus.ethNode.chain = newChain(chainDB)
 
-  if RpcFlags.Eth in conf.rpc.flags:
+  # Enable RPC APIs based on RPC flags and protocol flags
+  if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:
     setupEthRpc(nimbus.ethNode, chainDB, nimbus.rpcServer)
-
-  if RpcFlags.Shh in conf.rpc.flags:
+  if RpcFlags.Shh in conf.rpc.flags and ProtocolFlags.Shh in conf.net.protocols:
     setupWhisperRPC(nimbus.rpcServer)
-
   if RpcFlags.Debug in conf.rpc.flags:
     setupDebugRpc(chainDB, nimbus.rpcServer)
 
@@ -112,13 +120,19 @@ proc start(): NimbusObject =
       result = "EXITING"
     nimbus.rpcServer.start()
 
+  # Connect directly to the static nodes
+  for enode in conf.net.staticNodes:
+    asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
+
+  # Connect via discovery
   waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes,
     enableDiscovery = NoDiscover notin conf.net.flags)
 
-  # TODO: temp code until the CLI/RPC interface is fleshed out
-  let status = waitFor nimbus.ethNode.fastBlockchainSync()
-  if status != syncSuccess:
-    debug "Block sync failed: ", status
+  if ProtocolFlags.Eth in conf.net.protocols:
+    # TODO: temp code until the CLI/RPC interface is fleshed out
+    let status = waitFor nimbus.ethNode.fastBlockchainSync()
+    if status != syncSuccess:
+      debug "Block sync failed: ", status
 
   nimbus.state = Running
   result = nimbus
