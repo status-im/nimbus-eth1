@@ -7,11 +7,14 @@ import options, sets,
   ../vm/interpreter/vm_forks,
   ./dao
 
-proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, forkOverride=none(Fork)): GasInt =
+proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
+
+  if fork >= FkSpurious:
+    vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
 
   var gasUsed = tx.gasLimit
 
@@ -31,7 +34,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     let recipient = tx.getRecipient()
     let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
 
-    var computation = setupComputation(vmState, tx, sender, recipient, forkOverride)
+    var computation = setupComputation(vmState, tx, sender, recipient, fork)
     if computation.isNil: # OOG in setupComputation
       gasUsed = 0
       break
@@ -114,7 +117,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
       for txIndex, tx in body.transactions:
         var sender: EthAddress
         if tx.getSender(sender):
-          let gasUsed = processTransaction(tx, sender, vmState, some(fork))
+          let gasUsed = processTransaction(tx, sender, vmState, fork)
         else:
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error

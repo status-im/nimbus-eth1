@@ -2,7 +2,8 @@ import
   db/[db_chain, state_db, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth/trie/db, nimcrypto, strutils, ranges,
-  chronicles, rpc/hexstrings, launcher
+  chronicles, rpc/hexstrings, launcher,
+  vm/interpreter/vm_forks
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
@@ -90,6 +91,8 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     stateDiff = %{"before": before, "after": after}
     beforeRoot: Hash256
 
+  let fork = header.blockNumber.toFork
+
   for idx, tx in body.transactions:
     let sender = tx.getSender
     let recipient = tx.getRecipient
@@ -102,7 +105,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
 
-    gasUsed = processTransaction(tx, sender, vmState)
+    gasUsed = processTransaction(tx, sender, vmState, fork)
 
     if idx == txIndex:
       after.captureAccount(stateDb, sender, senderName)
@@ -200,10 +203,11 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
   doAssert(body.transactions.len != 0)
 
   var gasUsed = GasInt(0)
+  let fork = header.blockNumber.toFork
 
   for tx in body.transactions:
     let sender = tx.getSender
-    gasUsed = gasUsed + processTransaction(tx, sender, vmState)
+    gasUsed = gasUsed + processTransaction(tx, sender, vmState, fork)
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed

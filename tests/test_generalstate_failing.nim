@@ -15,7 +15,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
     "randomStatetest14.json", # SHA3 offset
     "randomStatetest85.json", # CALL* memoffset
-
+    
     "returndatacopy_0_0_following_successful_create.json", # CRASH
     "CreateOOGafterInitCodeReturndata2.json", # CRASH
 
@@ -43,10 +43,8 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "ecmul_0-0_0_21000_0.json",
     "ecmul_1-3_0_28000_96.json",
     "static_log1_emptyMem.json",
-    "static_Call1024OOG.json",
     "ecadd_0-0_0-0_21000_64.json",
     "static_callcodecallcall_100_SuicideEnd.json",
-    "randomStatetest184.json",
     "ecmul_1-3_5616_28000_128.json",
     "ecmul_0-0_9_28000_128.json",
     "ecmul_0-3_9_28000_96.json",
@@ -161,7 +159,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "ecmul_1-2_2_28000_96.json",
     "ecmul_1-2_340282366920938463463374607431768211456_28000_80.json",
     "PythonRevertTestTue201814-1430.json",
-    "static_Call1024PreCalls3.json",
     "ecmul_1-2_5616_21000_128.json",
     "ecmul_1-2_616_28000_96.json",
     "modexp_3_5_100_22000.json",
@@ -183,7 +180,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "modexp_37120_37111_1_1000000.json",
     "ecmul_0-0_9935_21000_96.json",
     "pointMulAdd.json",
-    "static_Call1024PreCalls.json",
     "ecmul_7827-6598_5617_21000_96.json",
     "ecmul_7827-6598_5617_28000_96.json",
     "ecpairing_three_point_match_1.json",
@@ -283,7 +279,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "returndatacopy_afterFailing_create.json",
     "CreateOOGafterInitCodeRevert2.json",
     "ecmul_1-2_0_28000_80.json",
-    "static_Call1024BalanceTooLow2.json",
     "modexp_3_5_100_20500.json",
     "static_callcallcallcode_001_OOGMAfter2.json",
     "static_callcallcallcode_001_SuicideEnd2.json",
@@ -335,7 +330,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "static_callcallcallcode_001_2.json",
     "ecmul_1-3_5617_28000_128.json",
     "static_refund_CallA.json",
-    "static_Call1MB1024Calldepth.json",
     "ecadd_1-2_1-2_21000_128.json",
     "ecmul_7827-6598_9935_21000_128.json",
     "ecmul_0-0_9935_28000_96.json",
@@ -469,7 +463,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "RevertOpcodeInCreateReturns.json",
     "modexp_modsize0_returndatasize.json",
     "static_log0_logMemsizeZero.json",
-    "static_Call1024BalanceTooLow.json",
     "ecmul_1-3_5616_21000_128.json",
     "ecmul_0-3_5617_28000_96.json",
     "ZeroValue_TransactionCALL_ToOneStorageKey_OOGRevert.json",
@@ -488,18 +481,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "static_callOutput2.json",
     "static_callOutput3.json",
     "static_callOutput3partial.json",
-    "callOutput1.json",
-    "callOutput2.json",
-    "callOutput3.json",
-    "callOutput3Fail.json",
-    "callOutput3partial.json",
-    "callOutput3partialFail.json",
-    "callcodeOutput1.json",
-    "callcodeOutput2.json",
-    "callcodeOutput3.json",
-    "callcodeOutput3Fail.json",
-    "callcodeOutput3partial.json",
-    "callcodeOutput3partialFail.json",
 
     # byzantium slow
     "LoopCallsDepthThenRevert3.json",
@@ -516,6 +497,12 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "recursiveCreateReturnValue.json",
     "static_Call1024PreCalls2.json",
     "Callcode1024BalanceTooLow.json",
+    "static_Call1024BalanceTooLow.json",
+    "static_Call1024BalanceTooLow2.json",
+    "static_Call1024OOG.json",
+    "static_Call1024PreCalls3.json",
+    "static_Call1024PreCalls.json",
+    "static_Call1MB1024Calldepth.json",
 
     # Homestead recursives
     "ContractCreationSpam.json",

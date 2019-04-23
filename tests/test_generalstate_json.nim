@@ -122,7 +122,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
 
     return
 
-  gasUsed = tester.tx.processTransaction(sender, vmState, some(tester.fork))
+  gasUsed = tester.tx.processTransaction(sender, vmState, tester.fork)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
                  debugMode = false, supportedForks: set[Fork] = supportedForks) =

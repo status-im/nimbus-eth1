@@ -161,22 +161,22 @@ OK: 72/79 Fail: 0/79 Skip: 7/79
   Callcode1024BalanceTooLow.json                                  Skip
   Callcode1024OOG.json                                            Skip
 + CallcodeLoseGasOOG.json                                         OK
-  callOutput1.json                                                Skip
-  callOutput2.json                                                Skip
-  callOutput3.json                                                Skip
-  callOutput3Fail.json                                            Skip
-  callOutput3partial.json                                         Skip
-  callOutput3partialFail.json                                     Skip
++ callOutput1.json                                                OK
++ callOutput2.json                                                OK
++ callOutput3.json                                                OK
++ callOutput3Fail.json                                            OK
++ callOutput3partial.json                                         OK
++ callOutput3partialFail.json                                     OK
 + callWithHighValue.json                                          OK
 + callWithHighValueAndGasOOG.json                                 OK
 + callWithHighValueAndOOGatTxLevel.json                           OK
 + callWithHighValueOOGinCall.json                                 OK
-  callcodeOutput1.json                                            Skip
-  callcodeOutput2.json                                            Skip
-  callcodeOutput3.json                                            Skip
-  callcodeOutput3Fail.json                                        Skip
-  callcodeOutput3partial.json                                     Skip
-  callcodeOutput3partialFail.json                                 Skip
++ callcodeOutput1.json                                            OK
++ callcodeOutput2.json                                            OK
++ callcodeOutput3.json                                            OK
++ callcodeOutput3Fail.json                                        OK
++ callcodeOutput3partial.json                                     OK
++ callcodeOutput3partialFail.json                                 OK
 + callcodeWithHighValue.json                                      OK
 + callcodeWithHighValueAndGasOOG.json                             OK
 + createFailBalanceTooLow.json                                    OK
@@ -193,7 +193,7 @@ OK: 72/79 Fail: 0/79 Skip: 7/79
 + createNameRegistratorPreStore1NotEnoughGas.json                 OK
 + createNameRegistratorendowmentTooHigh.json                      OK
 ```
-OK: 21/39 Fail: 0/39 Skip: 18/39
+OK: 33/39 Fail: 0/39 Skip: 6/39
 ## stCallDelegateCodesCallCodeHomestead
 ```diff
 + callcallcallcode_001.json                                       OK
@@ -408,19 +408,19 @@ OK: 26/30 Fail: 0/30 Skip: 4/30
 + CallcodeLoseGasOOG.json                                         OK
   Delegatecall1024.json                                           Skip
   Delegatecall1024OOG.json                                        Skip
-  callOutput1.json                                                Skip
-  callOutput2.json                                                Skip
-  callOutput3.json                                                Skip
-  callOutput3Fail.json                                            Skip
-  callOutput3partial.json                                         Skip
-  callOutput3partialFail.json                                     Skip
++ callOutput1.json                                                OK
++ callOutput2.json                                                OK
++ callOutput3.json                                                OK
++ callOutput3Fail.json                                            OK
++ callOutput3partial.json                                         OK
++ callOutput3partialFail.json                                     OK
 + callWithHighValueAndGasOOG.json                                 OK
-  callcodeOutput1.json                                            Skip
-  callcodeOutput2.json                                            Skip
-  callcodeOutput3.json                                            Skip
-  callcodeOutput3Fail.json                                        Skip
-  callcodeOutput3partial.json                                     Skip
-  callcodeOutput3partialFail.json                                 Skip
++ callcodeOutput1.json                                            OK
++ callcodeOutput2.json                                            OK
++ callcodeOutput3.json                                            OK
++ callcodeOutput3Fail.json                                        OK
++ callcodeOutput3partial.json                                     OK
++ callcodeOutput3partialFail.json                                 OK
 + callcodeWithHighValueAndGasOOG.json                             OK
 + deleagateCallAfterValueTransfer.json                            OK
 + delegatecallAndOOGatTxLevel.json                                OK
@@ -435,7 +435,7 @@ OK: 26/30 Fail: 0/30 Skip: 4/30
 + delegatecodeDynamicCode.json                                    OK
 + delegatecodeDynamicCode2SelfCall.json                           OK
 ```
-OK: 16/34 Fail: 0/34 Skip: 18/34
+OK: 28/34 Fail: 0/34 Skip: 6/34
 ## stEIP150Specific
 ```diff
 + CallAndCallcodeConsumeMoreGasThenTransactionHas.json            OK
@@ -1039,7 +1039,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest18.json                                          OK
 + randomStatetest180.json                                         OK
 + randomStatetest183.json                                         OK
-  randomStatetest184.json                                         Skip
++ randomStatetest184.json                                         OK
 + randomStatetest185.json                                         OK
 + randomStatetest187.json                                         OK
 + randomStatetest188.json                                         OK
@@ -1284,7 +1284,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 320/327 Fail: 0/327 Skip: 7/327
+OK: 321/327 Fail: 0/327 Skip: 6/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -2520,4 +2520,4 @@ OK: 0/133 Fail: 0/133 Skip: 133/133
 OK: 0/130 Fail: 0/130 Skip: 130/130
 
 ---TOTAL---
-OK: 1742/2334 Fail: 0/2334 Skip: 592/2334
+OK: 1767/2334 Fail: 0/2334 Skip: 567/2334
