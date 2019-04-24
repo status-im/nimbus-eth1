@@ -7,10 +7,9 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  byteutils, eth/[common, keys, rlp], ranges/typedranges,
-  ../nimbus/[vm_state, constants],
+  byteutils, ranges/typedranges, net, eth/[common, keys, rlp, p2p],
+  ../nimbus/[vm_state, constants, config, transaction, utils],
   ../nimbus/db/[db_chain, state_db],
-  ../nimbus/[transaction, utils],
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
   ../tests/test_generalstate_failing
 
@@ -293,3 +292,19 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
 
 proc hashLogEntries*(logs: seq[Log]): string =
   toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
+
+proc setupEthNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
+  var
+    conf = getConfiguration()
+    keypair: KeyPair
+  keypair.seckey = conf.net.nodekey
+  keypair.pubkey = conf.net.nodekey.getPublicKey()
+
+  var srvAddress: Address
+  srvAddress.ip = parseIpAddress("0.0.0.0")
+  srvAddress.tcpPort = Port(conf.net.bindPort)
+  srvAddress.udpPort = Port(conf.net.discPort)
+  result = newEthereumNode(keypair, srvAddress, conf.net.networkId,
+                              nil, "nimbus 0.1.0", addAllCapabilities = false)
+  for capability in capabilities:
+    result.addCapability capability

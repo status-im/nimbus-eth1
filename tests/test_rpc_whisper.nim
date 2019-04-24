@@ -1,8 +1,7 @@
 import
   unittest, strformat, options, byteutils, json_rpc/[rpcserver, rpcclient],
-  eth/common as eth_common, eth/p2p as eth_p2p,
-  eth/[rlp, keys], eth/p2p/rlpx_protocols/whisper_protocol,
-  ../nimbus/rpc/[common, hexstrings, rpc_types, whisper], ../nimbus/config
+  eth/common as eth_common, eth/[rlp, keys], eth/p2p/rlpx_protocols/whisper_protocol,
+  ../nimbus/rpc/[common, hexstrings, rpc_types, whisper], ./test_helpers
 
 from os import DirSep
 from strutils import rsplit
@@ -13,23 +12,8 @@ template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const sigPath = &"{sourceDir}{DirSep}rpcclient{DirSep}ethcallsigs.nim"
 createRpcSigs(RpcSocketClient, sigPath)
 
-proc setupEthNode: EthereumNode =
-  var
-    conf = getConfiguration()
-    keypair: KeyPair
-  keypair.seckey = conf.net.nodekey
-  keypair.pubkey = conf.net.nodekey.getPublicKey()
-
-  var srvAddress: Address
-  srvAddress.ip = parseIpAddress("0.0.0.0")
-  srvAddress.tcpPort = Port(conf.net.bindPort)
-  srvAddress.udpPort = Port(conf.net.discPort)
-  result = newEthereumNode(keypair, srvAddress, conf.net.networkId,
-                              nil, "nimbus 0.1.0", addAllCapabilities = false)
-  result.addCapability Whisper
-
 proc doTests =
-  var ethNode = setupEthNode()
+  var ethNode = setupEthNode(Whisper)
 
   # Create Ethereum RPCs
   let RPC_PORT = 8545
@@ -37,7 +21,6 @@ proc doTests =
     rpcServer = newRpcSocketServer(["localhost:" & $RPC_PORT])
     client = newRpcSocketClient()
   let keys = newWhisperKeys()
-  setupCommonRPC(rpcServer)
   setupWhisperRPC(ethNode, keys, rpcServer)
 
   # Begin tests
@@ -128,6 +111,20 @@ proc doTests =
       powTarget = 0.001
       powTime = 1.0
 
+    test "shh filter create and delete":
+      let
+        topic = topicStr.toTopic()
+        symKeyID = waitFor client.shh_newSymKey()
+        options = WhisperFilterOptions(symKeyID: some(symKeyID),
+                                       topics: some(@[topic]))
+        filterID = waitFor client.shh_newMessageFilter(options)
+
+      check:
+        filterID.string.isValidIdentifier
+        waitFor(client.shh_deleteMessageFilter(filterID))
+      expect Exception:
+        discard waitFor(client.shh_deleteMessageFilter(filterID))
+
     test "shh symKey post and filter loop":
       let
         topic = topicStr.toTopic()
@@ -156,6 +153,8 @@ proc doTests =
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
 
+        waitFor(client.shh_deleteMessageFilter(filterID))
+
     test "shh asymKey post and filter loop":
       let
         topic = topicStr.toTopic()
@@ -183,6 +182,8 @@ proc doTests =
         messages[0].payload == hexToSeqByte(payload)
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
+
+        waitFor(client.shh_deleteMessageFilter(filterID))
 
     test "shh signature in post and filter loop":
       let
@@ -215,6 +216,8 @@ proc doTests =
         messages[0].payload == hexToSeqByte(payload)
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
+
+        waitFor(client.shh_deleteMessageFilter(filterID))
 
   rpcServer.stop()
   rpcServer.close()
