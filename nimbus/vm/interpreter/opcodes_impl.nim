@@ -590,8 +590,6 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256)
 
 op create, inline = false, value, startPosition, size:
   ## 0xf0, Create a new account with associated code.
-  checkInStaticContext(computation)
-
   let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
   if not computation.canTransfer(memPos, len, value):
     push: 0
@@ -609,6 +607,7 @@ op create, inline = false, value, startPosition, size:
     else:
       push: childComp.msg.storageAddress
 
+  checkInStaticContext(computation)
   childComp.applyMessage(Create)
 
 proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
@@ -767,8 +766,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
-    when opCode != StaticCall:
-      checkInStaticContext(computation)
     var childComp = `callName Setup`(computation, callName.astToStr)
 
     computation.child = childComp
@@ -785,6 +782,10 @@ template genCall(callName: untyped, opCode: Op): untyped =
         computation.memory.write(
           computation.memOutPos,
           childComp.output.toOpenArray(0, actualOutputSize - 1))
+
+    when opCode == Call:
+      if emvcStatic == computation.msg.flags and childComp.msg.value > 0.u256:
+        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
 
     childComp.applyMessage(opCode)
 
