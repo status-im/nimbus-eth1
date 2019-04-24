@@ -1554,19 +1554,19 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + create_callprecompile_returndatasize.json                       OK
   modexp_modsize0_returndatasize.json                             Skip
 + returndatacopy_0_0_following_successful_create.json             OK
-  returndatacopy_afterFailing_create.json                         Skip
++ returndatacopy_afterFailing_create.json                         OK
 + returndatacopy_after_failing_callcode.json                      OK
 + returndatacopy_after_failing_delegatecall.json                  OK
 + returndatacopy_after_failing_staticcall.json                    OK
-  returndatacopy_after_revert_in_staticcall.json                  Skip
-  returndatacopy_after_successful_callcode.json                   Skip
-  returndatacopy_after_successful_delegatecall.json               Skip
-  returndatacopy_after_successful_staticcall.json                 Skip
-  returndatacopy_following_call.json                              Skip
++ returndatacopy_after_revert_in_staticcall.json                  OK
++ returndatacopy_after_successful_callcode.json                   OK
++ returndatacopy_after_successful_delegatecall.json               OK
++ returndatacopy_after_successful_staticcall.json                 OK
++ returndatacopy_following_call.json                              OK
 + returndatacopy_following_create.json                            OK
 + returndatacopy_following_failing_call.json                      OK
-  returndatacopy_following_revert.json                            Skip
-  returndatacopy_following_revert_in_create.json                  Skip
++ returndatacopy_following_revert.json                            OK
++ returndatacopy_following_revert_in_create.json                  OK
 + returndatacopy_following_successful_create.json                 OK
 + returndatacopy_following_too_big_transfer.json                  OK
 + returndatacopy_initial.json                                     OK
@@ -1585,7 +1585,7 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
 ```
-OK: 28/37 Fail: 0/37 Skip: 9/37
+OK: 36/37 Fail: 0/37 Skip: 1/37
 ## stRevertTest
 ```diff
   LoopCallsDepthThenRevert.json                                   Skip
@@ -1594,13 +1594,13 @@ OK: 28/37 Fail: 0/37 Skip: 9/37
   LoopCallsThenRevert.json                                        Skip
   LoopDelegateCallsDepthThenRevert.json                           Skip
 + NashatyrevSuicideRevert.json                                    OK
-  PythonRevertTestTue201814-1430.json                             Skip
++ PythonRevertTestTue201814-1430.json                             OK
 + RevertDepth2.json                                               OK
 + RevertDepthCreateAddressCollision.json                          OK
 + RevertDepthCreateOOG.json                                       OK
-  RevertInCallCode.json                                           Skip
++ RevertInCallCode.json                                           OK
   RevertInCreateInInit.json                                       Skip
-  RevertInDelegateCall.json                                       Skip
++ RevertInDelegateCall.json                                       OK
 + RevertInStaticCall.json                                         OK
 + RevertOnEmptyStack.json                                         OK
 + RevertOpcode.json                                               OK
@@ -1632,7 +1632,7 @@ OK: 28/37 Fail: 0/37 Skip: 9/37
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 34/43 Fail: 0/43 Skip: 9/43
+OK: 37/43 Fail: 0/43 Skip: 6/43
 ## stShift
 ```diff
 + sar00.json                                                      OK
@@ -2520,4 +2520,4 @@ OK: 130/133 Fail: 0/133 Skip: 3/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2170/2334 Fail: 0/2334 Skip: 164/2334
+OK: 2181/2334 Fail: 0/2334 Skip: 153/2334

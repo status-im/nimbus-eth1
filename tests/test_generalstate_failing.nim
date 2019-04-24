@@ -19,21 +19,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "sec80.json",
     "txCost-sec73.json",
     "sha3_deja.json",
-
-    "returndatacopy_following_revert_in_create.json",
-    "returndatacopy_after_successful_callcode.json",
-    "returndatacopy_afterFailing_create.json",
-    "returndatacopy_after_successful_delegatecall.json",
-    "returndatacopy_following_revert.json",
-    "returndatacopy_after_successful_staticcall.json",
-    "returndatacopy_following_call.json",
-    "returndatacopy_after_revert_in_staticcall.json",
-
     "CreateOOGafterInitCodeReturndataSize.json",
-
-    "PythonRevertTestTue201814-1430.json",
-    "RevertInCallCode.json",
-    "RevertInDelegateCall.json",
     "RevertInCreateInInit.json",
 
     "modexpRandomInput.json",

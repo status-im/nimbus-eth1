@@ -340,9 +340,9 @@ op returnDataSize, inline = true:
 op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
   ## 0x3e, Copy output data from the previous call to memory.
   let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
-
+  let gasCost = computation.gasCosts[ReturnDataCopy].m_handler(computation.memory.len, memPos, len)
   computation.gasMeter.consumeGas(
-    computation.gasCosts[ReturnDataCopy].m_handler(memPos, copyPos, len),
+    gasCost,
     reason="returnDataCopy fee")
 
   if copyPos + len > computation.returnData.len:
@@ -354,10 +354,7 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
       &"for data from index {copyStartPos} to {copyStartPos + size}. Return data is {computation.returnData.len} in \n" &
       "length")
 
-  if len > 0:
-    computation.memory.extend(memPos, len)
-    computation.memory.write(memPos):
-      computation.returnData.toOpenArray(copyPos, copyPos+len)
+  computation.memory.writePaddedResult(computation.returnData, memPos, copyPos, len)
 
 # ##########################################
 # 40s: Block Information
@@ -750,7 +747,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     when opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
-      
+
     when opCode == DelegateCall:
       childMsg.codeAddress = codeAddress
 
@@ -812,7 +809,7 @@ op returnOp, inline = false, startPos, size:
 op revert, inline = false, startPos, size:
   ## 0xfd, Halt execution reverting state changes but returning data and remaining gas.
   let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-
+  #computation.gasMeter.resetGas()
   computation.gasMeter.consumeGas(
     computation.gasCosts[Revert].m_handler(computation.memory.len, pos, len),
     reason = "REVERT"
