@@ -16,17 +16,11 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest14.json", # SHA3 offset
     "randomStatetest85.json", # CALL* memoffset
 
-    "returndatacopy_0_0_following_successful_create.json", # CRASH
-    "CreateOOGafterInitCodeReturndata2.json", # CRASH
-
     "sec80.json",
     "txCost-sec73.json",
-    "Opcodes_TransactionInit.json",
     "sha3_deja.json",
-    "delegatecallNonConst.json",
 
     "returndatacopy_following_revert_in_create.json",
-    "returndatasize_initial_zero_read.json",
     "returndatacopy_after_successful_callcode.json",
     "returndatacopy_afterFailing_create.json",
     "returndatacopy_after_successful_delegatecall.json",
@@ -37,7 +31,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
 
     "CreateOOGafterInitCodeReturndataSize.json",
 
-    "static_RevertOpcodeCalls.json",
     "PythonRevertTestTue201814-1430.json",
     "RevertInCallCode.json",
     "RevertInDelegateCall.json",

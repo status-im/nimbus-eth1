@@ -309,7 +309,7 @@ proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
 proc executeOpcodes(computation: BaseComputation) =
   try:
     let fork = computation.getFork
-    if `computation`.execPrecompiles(fork):
+    if computation.execPrecompiles(fork):
       computation.nextProc()
       return
     computation.selectVM(fork)

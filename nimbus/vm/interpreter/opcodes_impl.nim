@@ -354,10 +354,10 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
       &"for data from index {copyStartPos} to {copyStartPos + size}. Return data is {computation.returnData.len} in \n" &
       "length")
 
-  computation.memory.extend(memPos, len)
-
-  computation.memory.write(memPos):
-    computation.returnData.toOpenArray(copyPos, copyPos+len)
+  if len > 0:
+    computation.memory.extend(memPos, len)
+    computation.memory.write(memPos):
+      computation.returnData.toOpenArray(copyPos, copyPos+len)
 
 # ##########################################
 # 40s: Block Information
@@ -750,6 +750,9 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     when opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
+      
+    when opCode == DelegateCall:
+      childMsg.codeAddress = codeAddress
 
     var childComp = newBaseComputation(
       computation.vmState,

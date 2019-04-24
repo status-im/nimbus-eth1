@@ -13,7 +13,7 @@ GeneralStateTests
 + calldataloadNonConst.json                                       OK
 + codecopyNonConst.json                                           OK
 + createNonConst.json                                             OK
-  delegatecallNonConst.json                                       Skip
++ delegatecallNonConst.json                                       OK
 + divNonConst.json                                                OK
 + eqNonConst.json                                                 OK
 + expNonConst.json                                                OK
@@ -49,7 +49,7 @@ GeneralStateTests
 + suicideNonConst.json                                            OK
 + xorNonConst.json                                                OK
 ```
-OK: 45/46 Fail: 0/46 Skip: 1/46
+OK: 46/46 Fail: 0/46 Skip: 0/46
 ## stAttackTest
 ```diff
   ContractCreationSpam.json                                       Skip
@@ -388,7 +388,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + CreateCollisionToEmpty.json                                     OK
 + CreateOOGafterInitCode.json                                     OK
 + CreateOOGafterInitCodeReturndata.json                           OK
-  CreateOOGafterInitCodeReturndata2.json                          Skip
++ CreateOOGafterInitCodeReturndata2.json                          OK
 + CreateOOGafterInitCodeReturndata3.json                          OK
   CreateOOGafterInitCodeReturndataSize.json                       Skip
 + CreateOOGafterInitCodeRevert.json                               OK
@@ -397,7 +397,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + TransactionCollisionToEmptyButCode.json                         OK
 + TransactionCollisionToEmptyButNonce.json                        OK
 ```
-OK: 28/30 Fail: 0/30 Skip: 2/30
+OK: 29/30 Fail: 0/30 Skip: 1/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -1553,7 +1553,7 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + call_then_create_successful_then_returndatasize.json            OK
 + create_callprecompile_returndatasize.json                       OK
   modexp_modsize0_returndatasize.json                             Skip
-  returndatacopy_0_0_following_successful_create.json             Skip
++ returndatacopy_0_0_following_successful_create.json             OK
   returndatacopy_afterFailing_create.json                         Skip
 + returndatacopy_after_failing_callcode.json                      OK
 + returndatacopy_after_failing_delegatecall.json                  OK
@@ -1583,9 +1583,9 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatasize_bug.json                                         OK
 + returndatasize_following_successful_create.json                 OK
 + returndatasize_initial.json                                     OK
-  returndatasize_initial_zero_read.json                           Skip
++ returndatasize_initial_zero_read.json                           OK
 ```
-OK: 26/37 Fail: 0/37 Skip: 11/37
+OK: 28/37 Fail: 0/37 Skip: 9/37
 ## stRevertTest
 ```diff
   LoopCallsDepthThenRevert.json                                   Skip
@@ -1842,7 +1842,7 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_ReturnTest.json                                          OK
 + static_ReturnTest2.json                                         OK
 + static_RevertDepth2.json                                        OK
-  static_RevertOpcodeCalls.json                                   Skip
++ static_RevertOpcodeCalls.json                                   OK
 + static_ZeroValue_CALL_OOGRevert.json                            OK
 + static_ZeroValue_SUICIDE_OOGRevert.json                         OK
 + static_callBasic.json                                           OK
@@ -2012,7 +2012,7 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_refund_CallToSuicideNoStorage.json                       OK
 + static_refund_CallToSuicideTwice.json                           OK
 ```
-OK: 270/284 Fail: 0/284 Skip: 14/284
+OK: 271/284 Fail: 0/284 Skip: 13/284
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
@@ -2101,7 +2101,7 @@ OK: 57/67 Fail: 0/67 Skip: 10/67
 + InternalCallHittingGasLimitSuccess.json                         OK
 + InternlCallStoreClearsOOG.json                                  OK
 + InternlCallStoreClearsSucces.json                               OK
-  Opcodes_TransactionInit.json                                    Skip
++ Opcodes_TransactionInit.json                                    OK
 + OverflowGasRequire.json                                         OK
 + OverflowGasRequire2.json                                        OK
 + RefundOverflow.json                                             OK
@@ -2131,7 +2131,7 @@ OK: 57/67 Fail: 0/67 Skip: 10/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 43/44 Fail: 0/44 Skip: 1/44
+OK: 44/44 Fail: 0/44 Skip: 0/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2520,4 +2520,4 @@ OK: 130/133 Fail: 0/133 Skip: 3/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2164/2334 Fail: 0/2334 Skip: 170/2334
+OK: 2170/2334 Fail: 0/2334 Skip: 164/2334
