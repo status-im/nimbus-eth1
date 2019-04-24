@@ -165,16 +165,22 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
         result[0] = 1
 
     # Start with EVM special cases
-    if modulo <= 1:
-      # If m == 0: EVM returns 0.
-      # If m == 1: we can shortcut that to 0 as well
-      computation.rawOutput = @(zero())
-    elif exp.isZero():
-      # If 0^0: EVM returns 1
-      # For all x != 0, x^0 == 1 as well
-      computation.rawOutput = @(one())
+    let output = if modulo <= 1:
+                    # If m == 0: EVM returns 0.
+                    # If m == 1: we can shortcut that to 0 as well
+                    zero()
+                 elif exp.isZero():
+                    # If 0^0: EVM returns 1
+                    # For all x != 0, x^0 == 1 as well
+                    one()
+                 else:
+                    powmod(base, exp, modulo).toByteArrayBE
+
+    if output.len >= mod_len:
+      computation.rawOutput = @(output[^mod_len..^1])
     else:
-      computation.rawOutput = @(powmod(base, exp, modulo).toByteArrayBE)
+      computation.rawOutput = newSeq[byte](mod_len)
+      computation.rawOutput[^output.len..^1] = output[0..^1]
 
 proc modExp*(computation: BaseComputation) =
   ## Modular exponentiation precompiled contract
