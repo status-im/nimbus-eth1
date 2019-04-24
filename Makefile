@@ -290,6 +290,6 @@ fetch-dlls: | build deps
 		$(UNZIP) $(ROCKSDB_ARCHIVE) && \
 		cp -a $(ROCKSDB_DIR)/*.dll . && \
 		$(UNZIP) dlls.zip && \
-		mkdir -p vendor/nim-beacon-chain/build && \
-		cp -a *.dll vendor/nim-beacon-chain/build/
+		mkdir -p ../vendor/nim-beacon-chain/build && \
+		cp -a *.dll ../vendor/nim-beacon-chain/build/
 endif
