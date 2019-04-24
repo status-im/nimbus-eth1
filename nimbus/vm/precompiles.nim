@@ -21,21 +21,26 @@ proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
   template data: untyped = computation.msg.data
   var bytes: array[65, byte]
   let maxPos = min(data.high, 127)
-  if maxPos >= 32:
+  if maxPos >= 31:
     # extract message hash
     result[0][0..31] = data[0..31]
     if maxPos >= 127:
       # Copy message data to buffer
       # Note that we need to rearrange to R, S, V
       bytes[0..63] = data[64..127]
-      var VOK = true
-      let v = data[63]
-      for x in 32..<63:
-        if data[x] != 0: VOK = false
-      VOK = VOK and v.int in 27..28
-      if not VOK:
-        raise newException(ValidationError, "Invalid V in getSignature")
-      bytes[64] = v - 27
+    elif maxPos >= 64:
+      bytes[0..(maxPos-64)] = data[64..maxPos]
+  else:
+    result[0][0..maxPos] = data[0..maxPos]
+
+  var VOK = true
+  let v = data[63]
+  for x in 32..<63:
+    if data[x] != 0: VOK = false
+  VOK = VOK and v.int in 27..28
+  if not VOK:
+    raise newException(ValidationError, "Invalid V in getSignature")
+  bytes[64] = v - 27
 
   if recoverSignature(bytes, result[1]) != EthKeysStatus.Success:
     raise newException(ValidationError, "Could not recover signature computation")

@@ -833,9 +833,9 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + modexp_9_37111_37111_22000.json                                 OK
 + modexp_9_37111_37111_35000.json                                 OK
 + modexp_9_3711_37111_25000.json                                  OK
-  sec80.json                                                      Skip
++ sec80.json                                                      OK
 ```
-OK: 59/96 Fail: 0/96 Skip: 37/96
+OK: 60/96 Fail: 0/96 Skip: 36/96
 ## stPreCompiledContracts2
 ```diff
 + CALLCODEEcrecover0.json                                         OK
@@ -2520,4 +2520,4 @@ OK: 130/133 Fail: 0/133 Skip: 3/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2181/2334 Fail: 0/2334 Skip: 153/2334
+OK: 2182/2334 Fail: 0/2334 Skip: 152/2334

@@ -15,10 +15,9 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
     "randomStatetest14.json", # SHA3 offset
     "randomStatetest85.json", # CALL* memoffset
+    "sha3_deja.json", # SHA3 startPos
 
-    "sec80.json",
     "txCost-sec73.json",
-    "sha3_deja.json",
     "CreateOOGafterInitCodeReturndataSize.json",
     "RevertInCreateInInit.json",
 
