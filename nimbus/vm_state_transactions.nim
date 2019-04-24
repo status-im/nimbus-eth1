@@ -60,7 +60,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
   result = newBaseComputation(vmState, vmState.blockNumber, msg, some(fork))
   doAssert result.isOriginComputation
 
-proc execComputation*(computation: var BaseComputation): bool =
+proc execComputation*(computation: var BaseComputation) =
   if computation.msg.isCreate:
     computation.applyMessage(Create)
   else:
@@ -79,9 +79,8 @@ proc execComputation*(computation: var BaseComputation): bool =
   if computation.getFork >= FkSpurious:
     computation.collectTouchedAccounts(computation.vmState.touchedAccounts)
 
-  result = computation.isSuccess
-  computation.vmstate.status = result
-  if result:
+  computation.vmstate.status = computation.isSuccess
+  if computation.isSuccess:
     computation.vmState.addLogs(computation.logEntries)
 
 proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddress): GasInt =

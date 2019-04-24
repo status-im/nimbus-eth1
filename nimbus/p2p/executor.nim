@@ -44,7 +44,8 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
       db.subBalance(sender, upfrontGasCost)
 
     if tx.isContractCreation and isCollision: break
-    if execComputation(computation):
+    execComputation(computation)
+    if not computation.shouldBurnGas:
       gasUsed = computation.refundGas(tx, sender)
 
     if computation.isSuicided(vmState.blockHeader.coinbase):

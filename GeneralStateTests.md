@@ -391,13 +391,13 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
   CreateOOGafterInitCodeReturndata2.json                          Skip
 + CreateOOGafterInitCodeReturndata3.json                          OK
   CreateOOGafterInitCodeReturndataSize.json                       Skip
-  CreateOOGafterInitCodeRevert.json                               Skip
-  CreateOOGafterInitCodeRevert2.json                              Skip
++ CreateOOGafterInitCodeRevert.json                               OK
++ CreateOOGafterInitCodeRevert2.json                              OK
 + TransactionCollisionToEmpty.json                                OK
 + TransactionCollisionToEmptyButCode.json                         OK
 + TransactionCollisionToEmptyButNonce.json                        OK
 ```
-OK: 26/30 Fail: 0/30 Skip: 4/30
+OK: 28/30 Fail: 0/30 Skip: 2/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -1573,9 +1573,9 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatacopy_initial_256.json                                 OK
 + returndatacopy_initial_big_sum.json                             OK
 + returndatacopy_overrun.json                                     OK
-  returndatasize_after_failing_callcode.json                      Skip
-  returndatasize_after_failing_delegatecall.json                  Skip
-  returndatasize_after_failing_staticcall.json                    Skip
++ returndatasize_after_failing_callcode.json                      OK
++ returndatasize_after_failing_delegatecall.json                  OK
++ returndatasize_after_failing_staticcall.json                    OK
 + returndatasize_after_oog_after_deeper.json                      OK
 + returndatasize_after_successful_callcode.json                   OK
 + returndatasize_after_successful_delegatecall.json               OK
@@ -1585,7 +1585,7 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatasize_initial.json                                     OK
   returndatasize_initial_zero_read.json                           Skip
 ```
-OK: 23/37 Fail: 0/37 Skip: 14/37
+OK: 26/37 Fail: 0/37 Skip: 11/37
 ## stRevertTest
 ```diff
   LoopCallsDepthThenRevert.json                                   Skip
@@ -1601,18 +1601,18 @@ OK: 23/37 Fail: 0/37 Skip: 14/37
   RevertInCallCode.json                                           Skip
   RevertInCreateInInit.json                                       Skip
   RevertInDelegateCall.json                                       Skip
-  RevertInStaticCall.json                                         Skip
-  RevertOnEmptyStack.json                                         Skip
-  RevertOpcode.json                                               Skip
-  RevertOpcodeCalls.json                                          Skip
-  RevertOpcodeCreate.json                                         Skip
-  RevertOpcodeDirectCall.json                                     Skip
-  RevertOpcodeInCallsOnNonEmptyReturnData.json                    Skip
-  RevertOpcodeInCreateReturns.json                                Skip
-  RevertOpcodeInInit.json                                         Skip
-  RevertOpcodeMultipleSubCalls.json                               Skip
-  RevertOpcodeReturn.json                                         Skip
-  RevertOpcodeWithBigOutputInInit.json                            Skip
++ RevertInStaticCall.json                                         OK
++ RevertOnEmptyStack.json                                         OK
++ RevertOpcode.json                                               OK
++ RevertOpcodeCalls.json                                          OK
++ RevertOpcodeCreate.json                                         OK
++ RevertOpcodeDirectCall.json                                     OK
++ RevertOpcodeInCallsOnNonEmptyReturnData.json                    OK
++ RevertOpcodeInCreateReturns.json                                OK
++ RevertOpcodeInInit.json                                         OK
++ RevertOpcodeMultipleSubCalls.json                               OK
++ RevertOpcodeReturn.json                                         OK
++ RevertOpcodeWithBigOutputInInit.json                            OK
 + RevertPrecompiledTouch.json                                     OK
 + RevertPrecompiledTouchCC.json                                   OK
 + RevertPrecompiledTouchDC.json                                   OK
@@ -1632,7 +1632,7 @@ OK: 23/37 Fail: 0/37 Skip: 14/37
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 22/43 Fail: 0/43 Skip: 21/43
+OK: 34/43 Fail: 0/43 Skip: 9/43
 ## stShift
 ```diff
 + sar00.json                                                      OK
@@ -2520,4 +2520,4 @@ OK: 130/133 Fail: 0/133 Skip: 3/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2147/2334 Fail: 0/2334 Skip: 187/2334
+OK: 2164/2334 Fail: 0/2334 Skip: 170/2334

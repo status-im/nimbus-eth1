@@ -233,10 +233,10 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   var computation = initComputation(blockNumber, chainDB, boa.code, boa.data)
 
   let gas = computation.gasMeter.gasRemaining
-  let computationResult = execComputation(computation)
+  execComputation(computation)
   let gasUsed = gas - computation.gasMeter.gasRemaining
 
-  if computationResult:
+  if computation.isSuccess:
     if boa.success == false:
       error "different success value", expected=boa.success, actual=true
       return false

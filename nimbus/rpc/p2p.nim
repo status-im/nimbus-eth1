@@ -325,7 +325,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       value = if call.value.isSome: call.value.get else: 0.u256
       comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice, call.to.isNone)
 
-    discard comp.execComputation
+    comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
 
   rpcsrv.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> GasInt:
