@@ -1710,10 +1710,10 @@ OK: 16/16 Fail: 0/16 Skip: 0/16
 + gasPrice0.json                                                  OK
 + makeMoney.json                                                  OK
   sha3_deja.json                                                  Skip
-  txCost-sec73.json                                               Skip
++ txCost-sec73.json                                               OK
 + tx_e1c174e2.json                                                OK
 ```
-OK: 9/13 Fail: 0/13 Skip: 4/13
+OK: 10/13 Fail: 0/13 Skip: 3/13
 ## stStackTests
 ```diff
 + shallowStack.json                                               OK
@@ -2210,15 +2210,15 @@ OK: 42/42 Fail: 0/42 Skip: 0/42
 + ZeroValue_SUICIDE_ToNonZeroBalance_OOGRevert.json               OK
 + ZeroValue_SUICIDE_ToOneStorageKey_OOGRevert.json                OK
 + ZeroValue_TransactionCALL_OOGRevert.json                        OK
-  ZeroValue_TransactionCALL_ToEmpty_OOGRevert.json                Skip
++ ZeroValue_TransactionCALL_ToEmpty_OOGRevert.json                OK
 + ZeroValue_TransactionCALL_ToNonZeroBalance_OOGRevert.json       OK
-  ZeroValue_TransactionCALL_ToOneStorageKey_OOGRevert.json        Skip
++ ZeroValue_TransactionCALL_ToOneStorageKey_OOGRevert.json        OK
 + ZeroValue_TransactionCALLwithData_OOGRevert.json                OK
-  ZeroValue_TransactionCALLwithData_ToEmpty_OOGRevert.json        Skip
++ ZeroValue_TransactionCALLwithData_ToEmpty_OOGRevert.json        OK
 + ZeroValue_TransactionCALLwithData_ToNonZeroBalance_OOGRevert.jsonOK
-  ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jsonSkip
++ ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jsonOK
 ```
-OK: 20/24 Fail: 0/24 Skip: 4/24
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stZeroCallsTest
 ```diff
 + ZeroValue_CALL.json                                             OK
@@ -2520,4 +2520,4 @@ OK: 130/133 Fail: 0/133 Skip: 3/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2182/2334 Fail: 0/2334 Skip: 152/2334
+OK: 2187/2334 Fail: 0/2334 Skip: 147/2334

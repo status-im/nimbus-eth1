@@ -114,7 +114,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       if tester.fork >= FkSpurious:
         let recipient = tester.tx.getRecipient()
         let miner = tester.header.coinbase
-        let touchedAccounts = [sender, miner, recipient]
+        let touchedAccounts = [miner] # [sender, miner, recipient]
         for account in touchedAccounts:
           debug "state clearing", account
           if db.accountExists(account) and db.isEmptyAccount(account):

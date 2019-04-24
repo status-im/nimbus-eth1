@@ -17,7 +17,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest85.json", # CALL* memoffset
     "sha3_deja.json", # SHA3 startPos
 
-    "txCost-sec73.json",
     "CreateOOGafterInitCodeReturndataSize.json",
     "RevertInCreateInInit.json",
 
@@ -63,11 +62,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "ecpairing_perturb_g2_by_field_modulus_again.json",
     "ecpairing_perturb_zeropoint_by_field_modulus.json",
     "ecpairing_perturb_g2_by_field_modulus.json",
-
-    "ZeroValue_TransactionCALL_ToOneStorageKey_OOGRevert.json",
-    "ZeroValue_TransactionCALL_ToEmpty_OOGRevert.json",
-    "ZeroValue_TransactionCALLwithData_ToEmpty_OOGRevert.json",
-    "ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.json",
 
     # byzantium slow
     "LoopCallsDepthThenRevert3.json",
