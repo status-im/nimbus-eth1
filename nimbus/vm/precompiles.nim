@@ -201,6 +201,8 @@ proc modExp*(computation: BaseComputation) =
     raise newException(ValueError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
 proc bn256ecAdd*(computation: BaseComputation) =
+  computation.gasMeter.consumeGas(GasECAdd, reason = "ecAdd Precompile")
+
   var
     input: array[128, byte]
     output: array[64, byte]
@@ -216,11 +218,11 @@ proc bn256ecAdd*(computation: BaseComputation) =
     # we can discard here because we supply proper buffer
     discard apo.get().toBytes(output)
 
-  # TODO: gas computation
-  # computation.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
   computation.rawOutput = @output
 
 proc bn256ecMul*(computation: BaseComputation) =
+  computation.gasMeter.consumeGas(GasECMul, reason="ecMul Precompile")
+
   var
     input: array[96, byte]
     output: array[64, byte]
@@ -238,17 +240,18 @@ proc bn256ecMul*(computation: BaseComputation) =
     # we can discard here because we supply buffer of proper size
     discard apo.get().toBytes(output)
 
-  # TODO: gas computation
-  # computation.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
   computation.rawOutput = @output
 
 proc bn256ecPairing*(computation: BaseComputation) =
-  var output: array[32, byte]
-
   let msglen = len(computation.msg.data)
   if msglen mod 192 != 0:
     raise newException(ValidationError, "Invalid input length")
 
+  let numPoints = msglen div 192
+  let gasFee = GasECPairingBase + numPoints * GasECPairingPerPoint
+  computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
+
+  var output: array[32, byte]
   if msglen == 0:
     # we can discard here because we supply buffer of proper size
     discard BNU256.one().toBytes(output)
@@ -271,8 +274,6 @@ proc bn256ecPairing*(computation: BaseComputation) =
       # we can discard here because we supply buffer of proper size
       discard BNU256.one().toBytes(output)
 
-  # TODO: gas computation
-  # computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
   computation.rawOutput = @output
 
 proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.} =
@@ -295,8 +296,14 @@ proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.}
       of paEcAdd: bn256ecAdd(computation)
       of paEcMul: bn256ecMul(computation)
       of paPairing: bn256ecPairing(computation)
-    except ValidationError:
-      # swallow any precompiles errors
-      debug "execPrecompiles validation error", msg=getCurrentExceptionMsg()
-    except ValueError:
-      debug "execPrecompiles value error", msg=getCurrentExceptionMsg()
+    except OutOfGas:
+      let msg = getCurrentExceptionMsg()
+      # cannot use setError here, cyclic dependency
+      computation.error = Error(info: msg, burnsGas: true)
+    except:
+      let msg = getCurrentExceptionMsg()
+      if fork >= FKByzantium and precompile > paIdentity:
+        computation.error = Error(info: msg, burnsGas: true)
+      else:
+        # swallow any other precompiles errors
+        debug "execPrecompiles validation error", msg=msg
