@@ -71,7 +71,8 @@ proc doTests =
         waitFor(client.shh_hasKeyPair(keyID)) == true
         waitFor(client.shh_deleteKeyPair(keyID)) == true
         waitFor(client.shh_hasKeyPair(keyID)) == false
-        waitFor(client.shh_deleteKeyPair(keyID)) == false
+      expect Exception:
+        discard waitFor(client.shh_deleteKeyPair(keyID))
 
       let privkey = "0x5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3"
       let pubkey = "0x04e5fd642a0f630bbb1e4cd7df629d7b8b019457a9a74f983c0484a045cebb176def86a54185b50bbba6bbf97779173695e92835d63109c23471e6da382f922fdb"
@@ -82,14 +83,16 @@ proc doTests =
         waitFor(client.shh_hasKeyPair(keyID2)) == true
         waitFor(client.shh_deleteKeyPair(keyID2)) == true
         waitFor(client.shh_hasKeyPair(keyID2)) == false
-        waitFor(client.shh_deleteKeyPair(keyID2)) == false
+      expect Exception:
+        discard waitFor(client.shh_deleteKeyPair(keyID2))
     test "shh symKey tests":
       let keyID = waitFor client.shh_newSymKey()
       check:
         waitFor(client.shh_hasSymKey(keyID)) == true
         waitFor(client.shh_deleteSymKey(keyID)) == true
         waitFor(client.shh_hasSymKey(keyID)) == false
-        waitFor(client.shh_deleteSymKey(keyID)) == false
+      expect Exception:
+        discard waitFor(client.shh_deleteSymKey(keyID))
 
       let symKey = "0x0000000000000000000000000000000000000000000000000000000000000001"
       let keyID2 = waitFor client.shh_addSymKey(symKey)
@@ -98,7 +101,8 @@ proc doTests =
         waitFor(client.shh_hasSymKey(keyID2)) == true
         waitFor(client.shh_deleteSymKey(keyID2)) == true
         waitFor(client.shh_hasSymKey(keyID2)) == false
-        waitFor(client.shh_deleteSymKey(keyID2)) == false
+      expect Exception:
+        discard waitFor(client.shh_deleteSymKey(keyID2))
 
       let keyID3 = waitFor client.shh_generateSymKeyFromPassword("password")
       let keyID4 = waitFor client.shh_generateSymKeyFromPassword("password")
@@ -111,7 +115,8 @@ proc doTests =
         waitFor(client.shh_hasSymKey(keyID3)) == true
         waitFor(client.shh_deleteSymKey(keyID3)) == true
         waitFor(client.shh_hasSymKey(keyID3)) == false
-        waitFor(client.shh_deleteSymKey(keyID3)) == false
+      expect Exception:
+        discard waitFor(client.shh_deleteSymKey(keyID3))
 
     # Some defaults for the filter & post tests
     let

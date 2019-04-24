@@ -15,6 +15,8 @@ type
     asymKeys*: Table[string, KeyPair]
     symKeys*: Table[string, SymKey]
 
+  KeyGenerationError = object of CatchableError
+
 proc newWhisperKeys*(): WhisperKeys =
   new(result)
   result.asymKeys = initTable[string, KeyPair]()
@@ -52,8 +54,13 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ## pow: The new PoW requirement.
     ##
     ## Returns true on success and an error on failure.
-    # TODO: is asyncCheck here OK?
-    asyncCheck node.setPowRequirement(pow)
+    # Note: If any of the `peer.powRequirement` calls fails, we do not care and
+    # don't see this as an error. Could move this to `setPowRequirement` if
+    # this is the general behaviour we want.
+    try:
+      waitFor node.setPowRequirement(pow)
+    except:
+      trace "setPowRequirement error occured"
     result = true
 
   # TODO: change string in to ENodeStr with extra checks
@@ -98,6 +105,8 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ## Returns true on success and an error on failure.
     var unneeded: KeyPair
     result = keys.asymKeys.take(id.string, unneeded)
+    if not result:
+      raise newException(ValueError, "Invalid key id")
 
   rpcsrv.rpc("shh_hasKeyPair") do(id: Identifier) -> bool:
     ## Checks if the whisper node has a private key of a key pair matching the
@@ -105,7 +114,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ##
     ## id: Identifier of key pair
     ##
-    ## Returns true on success and an error on failure.
+    ## Returns (true or false) on success and an error on failure.
     result = keys.asymkeys.hasKey(id.string)
 
   rpcsrv.rpc("shh_getPublicKey") do(id: Identifier) -> PublicKey:
@@ -135,7 +144,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     result = generateRandomID().Identifier
     var key: SymKey
     if randomBytes(key) != key.len:
-      error "Generation of SymKey failed"
+      raise newException(KeyGenerationError, "Failed generating key")
 
     keys.symKeys.add(result.string, key)
 
@@ -162,7 +171,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     var ctx: HMAC[sha256]
     var symKey: SymKey
     if pbkdf2(ctx, password, "", 65356, symKey) != sizeof(SymKey):
-      raise newException(ValueError, "Failed generating key")
+      raise newException(KeyGenerationError, "Failed generating key")
 
     result = generateRandomID().Identifier
     keys.symKeys.add(result.string, symKey)
@@ -193,6 +202,8 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ## Returns (true or false) on success and an error on failure.
     var unneeded: SymKey
     result = keys.symKeys.take(id.string, unneeded)
+    if not result:
+      raise newException(ValueError, "Invalid key id")
 
   rpcsrv.rpc("shh_subscribe") do(id: string,
                                  options: WhisperFilterOptions) -> Identifier:
@@ -214,8 +225,10 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ##
     ## id: Subscription identifier
     ##
-    ## Returns (true or false) on success, the error on failure
+    ## Returns true on success, the error on failure
     result  = node.unsubscribeFilter(id.string)
+    if not result:
+      raise newException(ValueError, "Invalid filter id")
 
   proc validateOptions[T,U,V](asym: Option[T], sym: Option[U], topic: Option[V]) =
     if (asym.isSome() and sym.isSome()) or (asym.isNone() and sym.isNone()):
@@ -262,7 +275,9 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ## id: Filter identifier as returned when the filter was created.
     ##
     ## Returns true on success, error on failure.
-    result  = node.unsubscribeFilter(id.string)
+    result = node.unsubscribeFilter(id.string)
+    if not result:
+      raise newException(ValueError, "Invalid filter id")
 
   rpcsrv.rpc("shh_getFilterMessages") do(id: Identifier) -> seq[WhisperFilterMessage]:
     ## Retrieve messages that match the filter criteria and are received between
@@ -283,7 +298,8 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
       filterMsg.topic = msg.topic
       filterMsg.timestamp = msg.timestamp
       filterMsg.payload = msg.decoded.payload
-      # TODO: could also remove the Option on padding in whisper_protocol?
+      # Note: whisper_protocol padding is an Option as there is the
+      # possibility of 0 padding in case of custom padding.
       if msg.decoded.padding.isSome():
         filterMsg.padding = msg.decoded.padding.get()
       filterMsg.pow = msg.pow
