@@ -60,7 +60,7 @@ proc rangeToPadded*[T: StUint](x: openarray[byte], first, last: int): T =
   ## including 0-length sequences.
 
   let lo = max(0, first)
-  let hi = min(x.high, last)
+  let hi = min(min(x.high, last), (lo+T.bits div 8)-1)
 
   if not(lo <= hi):
     return # 0
