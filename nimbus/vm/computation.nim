@@ -172,11 +172,6 @@ template continuation*(comp: BaseComputation, body: untyped) =
 
 proc postExecuteVM(computation: BaseComputation, opCode: static[Op]) {.gcsafe.} =
   when opCode == Create:
-    #if computation.instr == Revert:
-    #  assert(computation.isError)
-    #  computation.gasMeter.resetGas()
-    #  computation.error.erasesReturnData = true
-
     if computation.isSuccess:
       let fork = computation.getFork
       let contractFailed = not computation.writeContract(fork)

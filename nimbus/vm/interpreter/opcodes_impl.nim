@@ -809,7 +809,6 @@ op returnOp, inline = false, startPos, size:
 op revert, inline = false, startPos, size:
   ## 0xfd, Halt execution reverting state changes but returning data and remaining gas.
   let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-  #computation.gasMeter.resetGas()
   computation.gasMeter.consumeGas(
     computation.gasCosts[Revert].m_handler(computation.memory.len, pos, len),
     reason = "REVERT"
