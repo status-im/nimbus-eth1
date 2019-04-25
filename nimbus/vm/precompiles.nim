@@ -56,6 +56,24 @@ proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
     raise newException(ValidationError, "Could not get point value")
   if not py.fromBytes2(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
     raise newException(ValidationError, "Could not get point value")
+
+  # "ecpairing_perturb_g2_by_field_modulus_again.json",
+  # "ecpairing_perturb_zeropoint_by_field_modulus.json",
+  # "ecpairing_perturb_g2_by_field_modulus.json",
+  # modulus comparion in FQ2.fromBytes produce different result
+  const
+    modulus = Uint256.fromHex("30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47")
+  let a = Uint256.fromBytesBE(data.toOpenArray(0, 31), false)
+  let b = Uint256.fromBytesBE(data.toOpenArray(32, 63), false)
+  when T is G2:
+    let c = Uint256.fromBytesBE(data.toOpenArray(64, 95), false)
+    let d = Uint256.fromBytesBE(data.toOpenArray(96, 127), false)
+    if a >= modulus or b >= modulus or c >= modulus or d >= modulus:
+      raise newException(ValidationError, "value greater than field modulus")
+  else:
+    if a >= modulus or b >= modulus:
+      raise newException(ValidationError, "value greater than field modulus")
+
   if px.isZero() and py.isZero():
     result = T.zero()
   else:
@@ -138,6 +156,7 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
         else: log2(exp)    # highest-bit in exponent
       else:
         let first32 = rawMsg.rangeToPadded[:Uint256](96 + base_len, 95 + base_len + exp_len)
+        # TODO: `modexpRandomInput.json` require Uint256 arithmetic for this code below
         if not first32.isZero:
           8 * (exp_len - 32) + first32.log2
         else:
@@ -176,6 +195,8 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
                  else:
                     powmod(base, exp, modulo).toByteArrayBE
 
+    # maximum output len is the same as mod_len
+    # if it less than mod_len, it will be zero padded at left
     if output.len >= mod_len:
       computation.rawOutput = @(output[^mod_len..^1])
     else:

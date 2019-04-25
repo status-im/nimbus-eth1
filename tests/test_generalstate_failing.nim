@@ -25,10 +25,13 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "RevertInCreateInInit.json",
     "modexp.json",
 
+    # see precompiles getPoint[G2]
     "ecpairing_perturb_g2_by_field_modulus_again.json",
     "ecpairing_perturb_zeropoint_by_field_modulus.json",
     "ecpairing_perturb_g2_by_field_modulus.json",
 
+    # all these tests below actually pass
+    # but they are very slow
     # byzantium slow
     "LoopCallsDepthThenRevert3.json",
     "LoopCallsDepthThenRevert2.json",
