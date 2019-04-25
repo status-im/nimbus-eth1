@@ -70,7 +70,7 @@ type
     instr*:                 Op
     opIndex*:               int
     # continuation helpers
-    nextProc*:              proc()
+    nextProc*:              proc() {.gcsafe.}
     memOutLen*:             int
     memOutPos*:             int
     child*:                 BaseComputation

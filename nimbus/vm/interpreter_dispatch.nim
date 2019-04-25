@@ -272,10 +272,10 @@ proc homesteadVM(computation: BaseComputation) =
 proc tangerineVM(computation: BaseComputation) =
   genTangerineDispatch(computation)
 
-proc spuriousVM(computation: BaseComputation) =
+proc spuriousVM(computation: BaseComputation) {.gcsafe.} =
   genSpuriousDispatch(computation)
 
-proc selectVM(computation: BaseComputation, fork: Fork) =
+proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
   of FkFrontier..FkThawing:

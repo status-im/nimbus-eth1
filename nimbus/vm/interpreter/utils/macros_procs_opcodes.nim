@@ -64,7 +64,7 @@ macro op*(procname: untyped, inline: static[bool], stackParams_body: varargs[unt
         `body`
   else:
     result = quote do:
-      proc `procname`*(`computation`: BaseComputation) =
+      proc `procname`*(`computation`: BaseComputation) {.gcsafe.} =
         `popStackStmt`
         `body`
 

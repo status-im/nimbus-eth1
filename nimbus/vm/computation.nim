@@ -131,7 +131,7 @@ proc getFork*(computation: BaseComputation): Fork =
     else:
       computation.vmState.blockNumber.toFork
 
-proc writeContract*(computation: BaseComputation, fork: Fork): bool =
+proc writeContract*(computation: BaseComputation, fork: Fork): bool {.gcsafe.} =
   result = true
 
   let contractCode = computation.output
@@ -172,11 +172,11 @@ template continuation*(comp: BaseComputation, body: untyped) =
   # this is a helper template to implement continuation
   # passing and convert all recursion into tail call
   var tmpNext = comp.nextProc
-  comp.nextProc = proc() =
+  comp.nextProc = proc() {.gcsafe.} =
     body
     tmpNext()
 
-proc postExecuteVM(computation: BaseComputation, opCode: static[Op]) =
+proc postExecuteVM(computation: BaseComputation, opCode: static[Op]) {.gcsafe.} =
   when opCode == Create:
     if computation.isSuccess:
       let fork = computation.getFork

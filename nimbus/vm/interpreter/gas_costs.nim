@@ -96,11 +96,11 @@ type
     of GckFixed:
       cost*: GasInt
     of GckDynamic:
-      d_handler*: proc(value: Uint256): GasInt {.nimcall.}
+      d_handler*: proc(value: Uint256): GasInt {.nimcall, gcsafe.}
     of GckMemExpansion:
-      m_handler*: proc(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.}
+      m_handler*: proc(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall, gcsafe.}
     of GckComplex:
-      c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}
+      c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}
       # We use gasCost/gasRefund for:
       #   - Properly log and order cost and refund (for Sstore especially)
       #   - Allow to use unsigned integer in the future
@@ -362,13 +362,13 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     func fixed(gasFeeKind: static[GasFeeKind]): GasCost =
       GasCost(kind: GckFixed, cost: static(FeeSchedule[gasFeeKind]))
 
-    func dynamic(handler: proc(value: Uint256): GasInt {.nimcall.}): GasCost =
+    func dynamic(handler: proc(value: Uint256): GasInt {.nimcall, gcsafe.}): GasCost =
       GasCost(kind: GckDynamic, d_handler: handler)
 
-    func memExpansion(handler: proc(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.}): GasCost =
+    func memExpansion(handler: proc(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall, gcsafe.}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
-    func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall.}): GasCost =
+    func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}): GasCost =
       GasCost(kind: GckComplex, c_handler: handler)
 
     # Returned value
