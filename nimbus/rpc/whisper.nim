@@ -8,8 +8,6 @@ from byteutils import hexToSeqByte, hexToByteArray
 # Whisper RPC implemented mostly as in
 # https://github.com/ethereum/go-ethereum/wiki/Whisper-v6-RPC-API
 
-# TODO: rpc calls -> check all return values and matching documentation
-
 type
   WhisperKeys* = ref object
     asymKeys*: Table[string, KeyPair]
@@ -47,6 +45,8 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     ##
     ## Returns true on success and an error on failure.
     result = node.setMaxMessageSize(size.uint32)
+    if not result:
+      raise newException(ValueError, "Invalid size")
 
   rpcsrv.rpc("shh_setMinPoW") do(pow: float) -> bool:
     ## Sets the minimal PoW required by this node.
@@ -77,6 +77,8 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     # could also accept only the pubkey (like geth)?
     let peerNode = newNode(enode)
     result = node.setPeerTrusted(peerNode.id)
+    if not result:
+      raise newException(ValueError, "Not a peer")
 
   rpcsrv.rpc("shh_newKeyPair") do() -> Identifier:
     ## Generates a new public and private key pair for message decryption and
@@ -290,10 +292,8 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     for msg in messages:
       var filterMsg: WhisperFilterMessage
 
-      if msg.decoded.src.isSome():
-        filterMsg.sig = some(msg.decoded.src.get())
-      if msg.dst.isSome():
-        filterMsg.recipientPublicKey = some(msg.dst.get())
+      filterMsg.sig = msg.decoded.src
+      filterMsg.recipientPublicKey = msg.dst
       filterMsg.ttl = msg.ttl
       filterMsg.topic = msg.topic
       filterMsg.timestamp = msg.timestamp
@@ -320,14 +320,11 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     validateOptions(message.pubKey, message.symKeyID, message.topic)
 
     var
-      pubKey: Option[PublicKey]
       sigPrivKey: Option[PrivateKey]
       symKey: Option[SymKey]
       topic: whisper_protocol.Topic
       padding: Option[Bytes]
       targetPeer: Option[NodeId]
-
-    pubKey = message.pubKey
 
     if message.sig.isSome():
       sigPrivKey = some(keys.asymKeys[message.sig.get().string].seckey)
@@ -345,7 +342,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     if message.targetPeer.isSome():
       targetPeer = some(newNode(message.targetPeer.get()).id)
 
-    result = node.postMessage(pubKey,
+    result = node.postMessage(message.pubKey,
                               symKey,
                               sigPrivKey,
                               ttl = message.ttl.uint32,
@@ -355,3 +352,5 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
                               powTime = message.powTime,
                               powTarget = message.powTarget,
                               targetPeer = targetPeer)
+    if not result:
+      raise newException(ValueError, "Message could not be posted")

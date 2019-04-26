@@ -38,7 +38,8 @@ proc doTests =
       check waitFor(client.shh_setMaxMessageSize(testValue)) == true
       var info = waitFor client.shh_info()
       check info.maxMessageSize == testValue
-      check waitFor(client.shh_setMaxMessageSize(defaultMaxMsgSize + 1)) == false
+      expect Exception:
+        discard waitFor(client.shh_setMaxMessageSize(defaultMaxMsgSize + 1))
       info = waitFor client.shh_info()
       check info.maxMessageSize == testValue
     test "shh_setMinPoW":
