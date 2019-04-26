@@ -26,16 +26,7 @@ proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender
     transaction.accountNonce == account.nonce and
     account.balance >= gasCost
 
-proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, forkOverride=none(Fork)) : BaseComputation =
-  let fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.blockNumber.toFork
-
-  if fork >= FkSpurious:
-    vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
-
+proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, fork: Fork) : BaseComputation =
   var gas = tx.gasLimit - tx.intrinsicGas
 
   # TODO: refactor message to use byterange
@@ -66,10 +57,10 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     options = newMessageOptions(origin = sender,
                                 createAddress = recipient))
 
-  result = newBaseComputation(vmState, vmState.blockNumber, msg, forkOverride)
+  result = newBaseComputation(vmState, vmState.blockNumber, msg, some(fork))
   doAssert result.isOriginComputation
 
-proc execComputation*(computation: var BaseComputation): bool =
+proc execComputation*(computation: var BaseComputation) =
   if computation.msg.isCreate:
     computation.applyMessage(Create)
   else:
@@ -88,8 +79,8 @@ proc execComputation*(computation: var BaseComputation): bool =
   if computation.getFork >= FkSpurious:
     computation.collectTouchedAccounts(computation.vmState.touchedAccounts)
 
-  result = computation.isSuccess
-  if result:
+  computation.vmstate.status = computation.isSuccess
+  if computation.isSuccess:
     computation.vmState.addLogs(computation.logEntries)
 
 proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddress): GasInt =

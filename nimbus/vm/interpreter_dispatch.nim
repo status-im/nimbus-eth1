@@ -196,6 +196,15 @@ proc genSpuriousJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compile
 
 let SpuriousOpDispatch {.compileTime.}: array[Op, NimNode] = genSpuriousJumpTable(TangerineOpDispatch)
 
+proc genByzantiumJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  result[Revert] = newIdentNode "revert"
+  result[ReturnDataSize] = newIdentNode "returnDataSize"
+  result[ReturnDataCopy] = newIdentNode "returnDataCopy"
+  result[StaticCall] = newIdentNode"staticCall"
+
+let ByzantiumOpDispatch {.compileTime.}: array[Op, NimNode] = genByzantiumJumpTable(SpuriousOpDispatch)
+
 proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNode =
 
   let instr = quote do: `computation`.instr
@@ -263,6 +272,9 @@ macro genTangerineDispatch(computation: BaseComputation): untyped =
 macro genSpuriousDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(SpuriousOpDispatch, computation)
 
+macro genByzantiumDispatch(computation: BaseComputation): untyped =
+  result = opTableToCaseStmt(ByzantiumOpDispatch, computation)
+
 proc frontierVM(computation: BaseComputation) =
   genFrontierDispatch(computation)
 
@@ -275,6 +287,9 @@ proc tangerineVM(computation: BaseComputation) =
 proc spuriousVM(computation: BaseComputation) {.gcsafe.} =
   genSpuriousDispatch(computation)
 
+proc byzantiumVM(computation: BaseComputation) {.gcsafe.} =
+  genByzantiumDispatch(computation)
+
 proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
@@ -286,13 +301,15 @@ proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
     computation.tangerineVM()
   of FkSpurious:
     computation.spuriousVM()
+  of FKByzantium:
+    computation.byzantiumVM()
   else:
     raise newException(VMError, "Unknown or not implemented fork: " & $fork)
 
 proc executeOpcodes(computation: BaseComputation) =
   try:
     let fork = computation.getFork
-    if `computation`.execPrecompiles(fork):
+    if computation.execPrecompiles(fork):
       computation.nextProc()
       return
     computation.selectVM(fork)

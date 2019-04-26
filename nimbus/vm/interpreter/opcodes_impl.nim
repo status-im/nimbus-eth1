@@ -197,6 +197,11 @@ op sha3, inline = true, startPos, length:
   ## 0x20, Compute Keccak-256 hash.
   let (pos, len) = (startPos.toInt, length.toInt)
 
+  # TODO:
+  # "randomStatetest14.json", # SHA3 offset
+  # "sha3_deja.json", # SHA3 startPos
+  # both test require Uint256 to calculate startpos/offset
+
   if pos < 0 or len < 0 or pos > 2147483648:
     raise newException(OutOfBoundsRead, "Out of bounds memory access")
 
@@ -340,9 +345,9 @@ op returnDataSize, inline = true:
 op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
   ## 0x3e, Copy output data from the previous call to memory.
   let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
-
+  let gasCost = computation.gasCosts[ReturnDataCopy].m_handler(computation.memory.len, memPos, len)
   computation.gasMeter.consumeGas(
-    computation.gasCosts[ReturnDataCopy].m_handler(memPos, copyPos, len),
+    gasCost,
     reason="returnDataCopy fee")
 
   if copyPos + len > computation.returnData.len:
@@ -354,10 +359,7 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
       &"for data from index {copyStartPos} to {copyStartPos + size}. Return data is {computation.returnData.len} in \n" &
       "length")
 
-  computation.memory.extend(memPos, len)
-
-  computation.memory.write(memPos):
-    computation.returnData.toOpenArray(copyPos, copyPos+len)
+  computation.memory.writePaddedResult(computation.returnData, memPos, copyPos, len)
 
 # ##########################################
 # 40s: Block Information
@@ -437,6 +439,7 @@ op sload, inline = true, slot:
 
 op sstore, inline = false, slot, value:
   ## 0x55, Save word to storage.
+  checkInStaticContext(computation)
 
   let (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
 
@@ -589,8 +592,6 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256)
 
 op create, inline = false, value, startPosition, size:
   ## 0xf0, Create a new account with associated code.
-  # TODO: Forked create for Homestead
-
   let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
   if not computation.canTransfer(memPos, len, value):
     push: 0
@@ -608,6 +609,7 @@ op create, inline = false, value, startPosition, size:
     else:
       push: childComp.msg.storageAddress
 
+  checkInStaticContext(computation)
   childComp.applyMessage(Create)
 
 proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
@@ -683,8 +685,8 @@ proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddre
   result = (gas,
     0.u256, # value
     to,
-    ZERO_ADDRESS, # sender
-    ZERO_ADDRESS, # codeAddress
+    computation.msg.storageAddress, # sender
+    to, # codeAddress
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,
@@ -751,6 +753,9 @@ template genCall(callName: untyped, opCode: Op): untyped =
     when opCode == CallCode:
       childMsg.storageAddress = computation.msg.storageAddress
 
+    when opCode == DelegateCall:
+      childMsg.codeAddress = codeAddress
+
     var childComp = newBaseComputation(
       computation.vmState,
       computation.vmState.blockNumber,
@@ -783,6 +788,10 @@ template genCall(callName: untyped, opCode: Op): untyped =
           computation.memOutPos,
           childComp.output.toOpenArray(0, actualOutputSize - 1))
 
+    when opCode == Call:
+      if emvcStatic == computation.msg.flags and childComp.msg.value > 0.u256:
+        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
+
     childComp.applyMessage(opCode)
 
 genCall(call, Call)
@@ -805,7 +814,6 @@ op returnOp, inline = false, startPos, size:
 op revert, inline = false, startPos, size:
   ## 0xfd, Halt execution reverting state changes but returning data and remaining gas.
   let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-
   computation.gasMeter.consumeGas(
     computation.gasCosts[Revert].m_handler(computation.memory.len, pos, len),
     reason = "REVERT"
@@ -813,6 +821,8 @@ op revert, inline = false, startPos, size:
 
   computation.memory.extend(pos, len)
   computation.output = computation.memory.read(pos, len)
+  # setError(msg, false) will signal cheap revert
+  computation.setError("REVERT opcode executed", false)
 
 proc selfDestructImpl(computation: BaseComputation, beneficiary: EthAddress) =
   ## 0xff Halt execution and register account for later deletion.
@@ -856,6 +866,8 @@ op selfDestructEip150, inline = false:
   selfDestructImpl(computation, beneficiary)
 
 op selfDestructEip161, inline = false:
+  checkInStaticContext(computation)
+
   let
     beneficiary = computation.stack.popAddress()
     stateDb     = computation.vmState.readOnlyStateDb

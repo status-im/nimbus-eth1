@@ -103,12 +103,6 @@ proc snapshot*(comp: BaseComputation) =
   comp.dbsnapshot.intermediateRoot = comp.vmState.accountDb.rootHash
   comp.vmState.blockHeader.stateRoot = comp.vmState.accountDb.rootHash
 
-proc revert*(comp: BaseComputation, burnsGas = false) =
-  comp.dbsnapshot.transaction.rollback()
-  comp.vmState.accountDb.rootHash = comp.dbsnapshot.intermediateRoot
-  comp.vmState.blockHeader.stateRoot = comp.dbsnapshot.intermediateRoot
-  comp.error = Error(info: getCurrentExceptionMsg(), burnsGas: burnsGas)
-
 proc commit*(comp: BaseComputation) =
   comp.dbsnapshot.transaction.commit()
   comp.vmState.accountDb.rootHash = comp.vmState.blockHeader.stateRoot

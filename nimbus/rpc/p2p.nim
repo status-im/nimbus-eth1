@@ -14,7 +14,8 @@ import
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../vm_state_transactions, ../utils,
   ../db/[db_chain, state_db, storage_types],
-  rpc_types, rpc_utils, ../vm/[message, computation]
+  rpc_types, rpc_utils, ../vm/[message, computation],
+  ../vm/interpreter/vm_forks
 
 #[
   Note:
@@ -41,7 +42,8 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
         vmState,
         transaction,
         sender,
-        recipient)
+        recipient,
+        vmState.blockNumber.toFork)
 
   proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
     Transaction(
@@ -323,7 +325,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       value = if call.value.isSome: call.value.get else: 0.u256
       comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice, call.to.isNone)
 
-    discard comp.execComputation
+    comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
 
   rpcsrv.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> GasInt:

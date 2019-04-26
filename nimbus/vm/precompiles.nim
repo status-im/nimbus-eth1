@@ -21,21 +21,26 @@ proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
   template data: untyped = computation.msg.data
   var bytes: array[65, byte]
   let maxPos = min(data.high, 127)
-  if maxPos >= 32:
+  if maxPos >= 31:
     # extract message hash
     result[0][0..31] = data[0..31]
     if maxPos >= 127:
       # Copy message data to buffer
       # Note that we need to rearrange to R, S, V
       bytes[0..63] = data[64..127]
-      var VOK = true
-      let v = data[63]
-      for x in 32..<63:
-        if data[x] != 0: VOK = false
-      VOK = VOK and v.int in 27..28
-      if not VOK:
-        raise newException(ValidationError, "Invalid V in getSignature")
-      bytes[64] = v - 27
+    elif maxPos >= 64:
+      bytes[0..(maxPos-64)] = data[64..maxPos]
+  else:
+    result[0][0..maxPos] = data[0..maxPos]
+
+  var VOK = true
+  let v = data[63]
+  for x in 32..<63:
+    if data[x] != 0: VOK = false
+  VOK = VOK and v.int in 27..28
+  if not VOK:
+    raise newException(ValidationError, "Invalid V in getSignature")
+  bytes[64] = v - 27
 
   if recoverSignature(bytes, result[1]) != EthKeysStatus.Success:
     raise newException(ValidationError, "Could not recover signature computation")
@@ -51,6 +56,24 @@ proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
     raise newException(ValidationError, "Could not get point value")
   if not py.fromBytes2(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
     raise newException(ValidationError, "Could not get point value")
+
+  # "ecpairing_perturb_g2_by_field_modulus_again.json",
+  # "ecpairing_perturb_zeropoint_by_field_modulus.json",
+  # "ecpairing_perturb_g2_by_field_modulus.json",
+  # modulus comparion in FQ2.fromBytes produce different result
+  const
+    modulus = Uint256.fromHex("30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47")
+  let a = Uint256.fromBytesBE(data.toOpenArray(0, 31), false)
+  let b = Uint256.fromBytesBE(data.toOpenArray(32, 63), false)
+  when T is G2:
+    let c = Uint256.fromBytesBE(data.toOpenArray(64, 95), false)
+    let d = Uint256.fromBytesBE(data.toOpenArray(96, 127), false)
+    if a >= modulus or b >= modulus or c >= modulus or d >= modulus:
+      raise newException(ValidationError, "value greater than field modulus")
+  else:
+    if a >= modulus or b >= modulus:
+      raise newException(ValidationError, "value greater than field modulus")
+
   if px.isZero() and py.isZero():
     result = T.zero()
   else:
@@ -133,6 +156,7 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
         else: log2(exp)    # highest-bit in exponent
       else:
         let first32 = rawMsg.rangeToPadded[:Uint256](96 + base_len, 95 + base_len + exp_len)
+        # TODO: `modexpRandomInput.json` require Uint256 arithmetic for this code below
         if not first32.isZero:
           8 * (exp_len - 32) + first32.log2
         else:
@@ -160,16 +184,24 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
         result[0] = 1
 
     # Start with EVM special cases
-    if modulo <= 1:
-      # If m == 0: EVM returns 0.
-      # If m == 1: we can shortcut that to 0 as well
-      computation.rawOutput = @(zero())
-    elif exp.isZero():
-      # If 0^0: EVM returns 1
-      # For all x != 0, x^0 == 1 as well
-      computation.rawOutput = @(one())
+    let output = if modulo <= 1:
+                    # If m == 0: EVM returns 0.
+                    # If m == 1: we can shortcut that to 0 as well
+                    zero()
+                 elif exp.isZero():
+                    # If 0^0: EVM returns 1
+                    # For all x != 0, x^0 == 1 as well
+                    one()
+                 else:
+                    powmod(base, exp, modulo).toByteArrayBE
+
+    # maximum output len is the same as mod_len
+    # if it less than mod_len, it will be zero padded at left
+    if output.len >= mod_len:
+      computation.rawOutput = @(output[^mod_len..^1])
     else:
-      computation.rawOutput = @(powmod(base, exp, modulo).toByteArrayBE)
+      computation.rawOutput = newSeq[byte](mod_len)
+      computation.rawOutput[^output.len..^1] = output[0..^1]
 
 proc modExp*(computation: BaseComputation) =
   ## Modular exponentiation precompiled contract
@@ -201,6 +233,8 @@ proc modExp*(computation: BaseComputation) =
     raise newException(ValueError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
 proc bn256ecAdd*(computation: BaseComputation) =
+  computation.gasMeter.consumeGas(GasECAdd, reason = "ecAdd Precompile")
+
   var
     input: array[128, byte]
     output: array[64, byte]
@@ -216,11 +250,11 @@ proc bn256ecAdd*(computation: BaseComputation) =
     # we can discard here because we supply proper buffer
     discard apo.get().toBytes(output)
 
-  # TODO: gas computation
-  # computation.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
   computation.rawOutput = @output
 
 proc bn256ecMul*(computation: BaseComputation) =
+  computation.gasMeter.consumeGas(GasECMul, reason="ecMul Precompile")
+
   var
     input: array[96, byte]
     output: array[64, byte]
@@ -238,17 +272,18 @@ proc bn256ecMul*(computation: BaseComputation) =
     # we can discard here because we supply buffer of proper size
     discard apo.get().toBytes(output)
 
-  # TODO: gas computation
-  # computation.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
   computation.rawOutput = @output
 
 proc bn256ecPairing*(computation: BaseComputation) =
-  var output: array[32, byte]
-
   let msglen = len(computation.msg.data)
   if msglen mod 192 != 0:
     raise newException(ValidationError, "Invalid input length")
 
+  let numPoints = msglen div 192
+  let gasFee = GasECPairingBase + numPoints * GasECPairingPerPoint
+  computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
+
+  var output: array[32, byte]
   if msglen == 0:
     # we can discard here because we supply buffer of proper size
     discard BNU256.one().toBytes(output)
@@ -271,8 +306,6 @@ proc bn256ecPairing*(computation: BaseComputation) =
       # we can discard here because we supply buffer of proper size
       discard BNU256.one().toBytes(output)
 
-  # TODO: gas computation
-  # computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
   computation.rawOutput = @output
 
 proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.} =
@@ -295,8 +328,14 @@ proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.}
       of paEcAdd: bn256ecAdd(computation)
       of paEcMul: bn256ecMul(computation)
       of paPairing: bn256ecPairing(computation)
-    except ValidationError:
-      # swallow any precompiles errors
-      debug "execPrecompiles validation error", msg=getCurrentExceptionMsg()
-    except ValueError:
-      debug "execPrecompiles value error", msg=getCurrentExceptionMsg()
+    except OutOfGas:
+      let msg = getCurrentExceptionMsg()
+      # cannot use setError here, cyclic dependency
+      computation.error = Error(info: msg, burnsGas: true)
+    except:
+      let msg = getCurrentExceptionMsg()
+      if fork >= FKByzantium and precompile > paIdentity:
+        computation.error = Error(info: msg, burnsGas: true)
+      else:
+        # swallow any other precompiles errors
+        debug "execPrecompiles validation error", msg=msg

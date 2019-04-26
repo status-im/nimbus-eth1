@@ -7,11 +7,14 @@ import options, sets,
   ../vm/interpreter/vm_forks,
   ./dao
 
-proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, forkOverride=none(Fork)): GasInt =
+proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
   ## Process the transaction, write the results to db.
   ## Returns amount of ETH to be rewarded to miner
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
+
+  if fork >= FkSpurious:
+    vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
 
   var gasUsed = tx.gasLimit
 
@@ -31,7 +34,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     let recipient = tx.getRecipient()
     let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
 
-    var computation = setupComputation(vmState, tx, sender, recipient, forkOverride)
+    var computation = setupComputation(vmState, tx, sender, recipient, fork)
     if computation.isNil: # OOG in setupComputation
       gasUsed = 0
       break
@@ -41,7 +44,8 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
       db.subBalance(sender, upfrontGasCost)
 
     if tx.isContractCreation and isCollision: break
-    if execComputation(computation):
+    execComputation(computation)
+    if not computation.shouldBurnGas:
       gasUsed = computation.refundGas(tx, sender)
 
     if computation.isSuicided(vmState.blockHeader.coinbase):
@@ -85,17 +89,13 @@ proc makeReceipt(vmState: BaseVMState, fork = FkFrontier): Receipt =
   if fork < FkByzantium:
     result.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
   else:
-    # TODO: post byzantium fork use status instead of rootHash
-    let vmStatus = true # success or failure
-    result.stateRootOrStatus = hashOrStatus(vmStatus)
+    result.stateRootOrStatus = hashOrStatus(vmState.status)
 
   result.cumulativeGasUsed = vmState.cumulativeGasUsed
   result.logs = vmState.getAndClearLogEntries()
   result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
-  let blockReward = 5.u256 * pow(10.u256, 18) # 5 ETH
-
   if chainDB.config.daoForkSupport and header.blockNumber == chainDB.config.daoForkBlock:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
@@ -103,6 +103,8 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
   if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot", blockNumber=header.blockNumber
     return ValidationResult.Error
+
+  let fork = vmState.blockNumber.toFork
 
   if header.txRoot != BLANK_ROOT_HASH:
     if body.transactions.len == 0:
@@ -116,11 +118,16 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
       for txIndex, tx in body.transactions:
         var sender: EthAddress
         if tx.getSender(sender):
-          let gasUsed = processTransaction(tx, sender, vmState)
+          let gasUsed = processTransaction(tx, sender, vmState, fork)
         else:
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error
-        vmState.receipts[txIndex] = makeReceipt(vmState)
+        vmState.receipts[txIndex] = makeReceipt(vmState, fork)
+
+  let blockReward = if fork >= FkByzantium:
+                     3.u256 * pow(10.u256, 18) # 3 ETH
+                   else:
+                     5.u256 * pow(10.u256, 18) # 5 ETH
 
   var mainReward = blockReward
   if header.ommersHash != EMPTY_UNCLE_HASH:

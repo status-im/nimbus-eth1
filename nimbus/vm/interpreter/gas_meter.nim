@@ -31,3 +31,7 @@ proc returnGas*(gasMeter: var GasMeter; amount: GasInt) =
 proc refundGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRefunded += amount
   trace "GAS REFUND", consumed = gasMeter.gasRemaining - amount, amount, refunded = gasMeter.gasRefunded
+
+proc resetGas*(gasMeter: var GasMeter) =
+  gasMeter.gasRemaining = gasMeter.startGas
+  gasMeter.gasRefunded = 0

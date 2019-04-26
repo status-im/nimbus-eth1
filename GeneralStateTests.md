@@ -2,60 +2,60 @@ GeneralStateTests
 ===
 ## stArgsZeroOneBalance
 ```diff
-  addNonConst.json                                                Skip
-  addmodNonConst.json                                             Skip
-  andNonConst.json                                                Skip
-  balanceNonConst.json                                            Skip
-  byteNonConst.json                                               Skip
-  callNonConst.json                                               Skip
-  callcodeNonConst.json                                           Skip
-  calldatacopyNonConst.json                                       Skip
-  calldataloadNonConst.json                                       Skip
-  codecopyNonConst.json                                           Skip
-  createNonConst.json                                             Skip
-  delegatecallNonConst.json                                       Skip
-  divNonConst.json                                                Skip
-  eqNonConst.json                                                 Skip
-  expNonConst.json                                                Skip
-  extcodecopyNonConst.json                                        Skip
-  extcodesizeNonConst.json                                        Skip
-  gtNonConst.json                                                 Skip
-  iszeroNonConst.json                                             Skip
-  jumpNonConst.json                                               Skip
-  jumpiNonConst.json                                              Skip
-  log0NonConst.json                                               Skip
-  log1NonConst.json                                               Skip
-  log2NonConst.json                                               Skip
-  log3NonConst.json                                               Skip
-  ltNonConst.json                                                 Skip
-  mloadNonConst.json                                              Skip
-  modNonConst.json                                                Skip
-  mstore8NonConst.json                                            Skip
-  mstoreNonConst.json                                             Skip
-  mulNonConst.json                                                Skip
-  mulmodNonConst.json                                             Skip
-  notNonConst.json                                                Skip
-  orNonConst.json                                                 Skip
-  returnNonConst.json                                             Skip
-  sdivNonConst.json                                               Skip
-  sgtNonConst.json                                                Skip
-  sha3NonConst.json                                               Skip
-  signextNonConst.json                                            Skip
-  sloadNonConst.json                                              Skip
-  sltNonConst.json                                                Skip
-  smodNonConst.json                                               Skip
-  sstoreNonConst.json                                             Skip
-  subNonConst.json                                                Skip
-  suicideNonConst.json                                            Skip
-  xorNonConst.json                                                Skip
++ addNonConst.json                                                OK
++ addmodNonConst.json                                             OK
++ andNonConst.json                                                OK
++ balanceNonConst.json                                            OK
++ byteNonConst.json                                               OK
++ callNonConst.json                                               OK
++ callcodeNonConst.json                                           OK
++ calldatacopyNonConst.json                                       OK
++ calldataloadNonConst.json                                       OK
++ codecopyNonConst.json                                           OK
++ createNonConst.json                                             OK
++ delegatecallNonConst.json                                       OK
++ divNonConst.json                                                OK
++ eqNonConst.json                                                 OK
++ expNonConst.json                                                OK
++ extcodecopyNonConst.json                                        OK
++ extcodesizeNonConst.json                                        OK
++ gtNonConst.json                                                 OK
++ iszeroNonConst.json                                             OK
++ jumpNonConst.json                                               OK
++ jumpiNonConst.json                                              OK
++ log0NonConst.json                                               OK
++ log1NonConst.json                                               OK
++ log2NonConst.json                                               OK
++ log3NonConst.json                                               OK
++ ltNonConst.json                                                 OK
++ mloadNonConst.json                                              OK
++ modNonConst.json                                                OK
++ mstore8NonConst.json                                            OK
++ mstoreNonConst.json                                             OK
++ mulNonConst.json                                                OK
++ mulmodNonConst.json                                             OK
++ notNonConst.json                                                OK
++ orNonConst.json                                                 OK
++ returnNonConst.json                                             OK
++ sdivNonConst.json                                               OK
++ sgtNonConst.json                                                OK
++ sha3NonConst.json                                               OK
++ signextNonConst.json                                            OK
++ sloadNonConst.json                                              OK
++ sltNonConst.json                                                OK
++ smodNonConst.json                                               OK
++ sstoreNonConst.json                                             OK
++ subNonConst.json                                                OK
++ suicideNonConst.json                                            OK
++ xorNonConst.json                                                OK
 ```
-OK: 0/46 Fail: 0/46 Skip: 46/46
+OK: 46/46 Fail: 0/46 Skip: 0/46
 ## stAttackTest
 ```diff
-+ ContractCreationSpam.json                                       OK
+  ContractCreationSpam.json                                       Skip
 + CrashingTransaction.json                                        OK
 ```
-OK: 2/2 Fail: 0/2 Skip: 0/2
+OK: 1/2 Fail: 0/2 Skip: 1/2
 ## stBadOpcode
 ```diff
 + badOpcodes.json                                                 OK
@@ -65,9 +65,9 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 ```diff
 + evmBytecode.json                                                OK
 + returndatacopyPythonBug_Tue_03_48_41-1432.json                  OK
-  staticcall_createfails.json                                     Skip
++ staticcall_createfails.json                                     OK
 ```
-OK: 2/3 Fail: 0/3 Skip: 1/3
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## stCallCodes
 ```diff
 + call_OOG_additionalGasCosts1.json                               OK
@@ -89,7 +89,7 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 + callcallcallcode_001_OOGMBefore.json                            OK
 + callcallcallcode_001_SuicideEnd.json                            OK
 + callcallcallcode_001_SuicideMiddle.json                         OK
-+ callcallcallcode_ABCB_RECURSIVE.json                            OK
+  callcallcallcode_ABCB_RECURSIVE.json                            Skip
 + callcallcode_01.json                                            OK
 + callcallcode_01_OOGE.json                                       OK
 + callcallcode_01_SuicideEnd.json                                 OK
@@ -99,14 +99,14 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 + callcallcodecall_010_OOGMBefore.json                            OK
 + callcallcodecall_010_SuicideEnd.json                            OK
 + callcallcodecall_010_SuicideMiddle.json                         OK
-+ callcallcodecall_ABCB_RECURSIVE.json                            OK
+  callcallcodecall_ABCB_RECURSIVE.json                            Skip
 + callcallcodecallcode_011.json                                   OK
 + callcallcodecallcode_011_OOGE.json                              OK
 + callcallcodecallcode_011_OOGMAfter.json                         OK
 + callcallcodecallcode_011_OOGMBefore.json                        OK
 + callcallcodecallcode_011_SuicideEnd.json                        OK
 + callcallcodecallcode_011_SuicideMiddle.json                     OK
-+ callcallcodecallcode_ABCB_RECURSIVE.json                        OK
+  callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
 + callcodeDynamicCode.json                                        OK
 + callcodeDynamicCode2SelfCall.json                               OK
 + callcodeEmptycontract.json                                      OK
@@ -124,14 +124,14 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 + callcodecallcall_100_OOGMBefore.json                            OK
 + callcodecallcall_100_SuicideEnd.json                            OK
 + callcodecallcall_100_SuicideMiddle.json                         OK
-+ callcodecallcall_ABCB_RECURSIVE.json                            OK
+  callcodecallcall_ABCB_RECURSIVE.json                            Skip
 + callcodecallcallcode_101.json                                   OK
 + callcodecallcallcode_101_OOGE.json                              OK
 + callcodecallcallcode_101_OOGMAfter.json                         OK
 + callcodecallcallcode_101_OOGMBefore.json                        OK
 + callcodecallcallcode_101_SuicideEnd.json                        OK
 + callcodecallcallcode_101_SuicideMiddle.json                     OK
-+ callcodecallcallcode_ABCB_RECURSIVE.json                        OK
+  callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
 + callcodecallcode_11.json                                        OK
 + callcodecallcode_11_OOGE.json                                   OK
 + callcodecallcode_11_SuicideEnd.json                             OK
@@ -141,25 +141,25 @@ OK: 2/3 Fail: 0/3 Skip: 1/3
 + callcodecallcodecall_110_OOGMBefore.json                        OK
 + callcodecallcodecall_110_SuicideEnd.json                        OK
 + callcodecallcodecall_110_SuicideMiddle.json                     OK
-+ callcodecallcodecall_ABCB_RECURSIVE.json                        OK
+  callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
 + callcodecallcodecallcode_111.json                               OK
 + callcodecallcodecallcode_111_OOGE.json                          OK
 + callcodecallcodecallcode_111_OOGMAfter.json                     OK
 + callcodecallcodecallcode_111_OOGMBefore.json                    OK
 + callcodecallcodecallcode_111_SuicideEnd.json                    OK
 + callcodecallcodecallcode_111_SuicideMiddle.json                 OK
-+ callcodecallcodecallcode_ABCB_RECURSIVE.json                    OK
+  callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 79/79 Fail: 0/79 Skip: 0/79
+OK: 72/79 Fail: 0/79 Skip: 7/79
 ## stCallCreateCallCodeTest
 ```diff
-+ Call1024BalanceTooLow.json                                      OK
-+ Call1024OOG.json                                                OK
-+ Call1024PreCalls.json                                           OK
+  Call1024BalanceTooLow.json                                      Skip
+  Call1024OOG.json                                                Skip
+  Call1024PreCalls.json                                           Skip
 + CallLoseGasOOG.json                                             OK
-+ CallRecursiveBombPreCall.json                                   OK
-+ Callcode1024BalanceTooLow.json                                  OK
-+ Callcode1024OOG.json                                            OK
+  CallRecursiveBombPreCall.json                                   Skip
+  Callcode1024BalanceTooLow.json                                  Skip
+  Callcode1024OOG.json                                            Skip
 + CallcodeLoseGasOOG.json                                         OK
 + callOutput1.json                                                OK
 + callOutput2.json                                                OK
@@ -193,7 +193,7 @@ OK: 79/79 Fail: 0/79 Skip: 0/79
 + createNameRegistratorPreStore1NotEnoughGas.json                 OK
 + createNameRegistratorendowmentTooHigh.json                      OK
 ```
-OK: 39/39 Fail: 0/39 Skip: 0/39
+OK: 33/39 Fail: 0/39 Skip: 6/39
 ## stCallDelegateCodesCallCodeHomestead
 ```diff
 + callcallcallcode_001.json                                       OK
@@ -202,7 +202,7 @@ OK: 39/39 Fail: 0/39 Skip: 0/39
 + callcallcallcode_001_OOGMBefore.json                            OK
 + callcallcallcode_001_SuicideEnd.json                            OK
 + callcallcallcode_001_SuicideMiddle.json                         OK
-+ callcallcallcode_ABCB_RECURSIVE.json                            OK
+  callcallcallcode_ABCB_RECURSIVE.json                            Skip
 + callcallcode_01.json                                            OK
 + callcallcode_01_OOGE.json                                       OK
 + callcallcode_01_SuicideEnd.json                                 OK
@@ -212,14 +212,14 @@ OK: 39/39 Fail: 0/39 Skip: 0/39
 + callcallcodecall_010_OOGMBefore.json                            OK
 + callcallcodecall_010_SuicideEnd.json                            OK
 + callcallcodecall_010_SuicideMiddle.json                         OK
-+ callcallcodecall_ABCB_RECURSIVE.json                            OK
+  callcallcodecall_ABCB_RECURSIVE.json                            Skip
 + callcallcodecallcode_011.json                                   OK
 + callcallcodecallcode_011_OOGE.json                              OK
 + callcallcodecallcode_011_OOGMAfter.json                         OK
 + callcallcodecallcode_011_OOGMBefore.json                        OK
 + callcallcodecallcode_011_SuicideEnd.json                        OK
 + callcallcodecallcode_011_SuicideMiddle.json                     OK
-+ callcallcodecallcode_ABCB_RECURSIVE.json                        OK
+  callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
 + callcodecall_10.json                                            OK
 + callcodecall_10_OOGE.json                                       OK
 + callcodecall_10_SuicideEnd.json                                 OK
@@ -229,14 +229,14 @@ OK: 39/39 Fail: 0/39 Skip: 0/39
 + callcodecallcall_100_OOGMBefore.json                            OK
 + callcodecallcall_100_SuicideEnd.json                            OK
 + callcodecallcall_100_SuicideMiddle.json                         OK
-+ callcodecallcall_ABCB_RECURSIVE.json                            OK
+  callcodecallcall_ABCB_RECURSIVE.json                            Skip
 + callcodecallcallcode_101.json                                   OK
 + callcodecallcallcode_101_OOGE.json                              OK
 + callcodecallcallcode_101_OOGMAfter.json                         OK
 + callcodecallcallcode_101_OOGMBefore.json                        OK
 + callcodecallcallcode_101_SuicideEnd.json                        OK
 + callcodecallcallcode_101_SuicideMiddle.json                     OK
-+ callcodecallcallcode_ABCB_RECURSIVE.json                        OK
+  callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
 + callcodecallcode_11.json                                        OK
 + callcodecallcode_11_OOGE.json                                   OK
 + callcodecallcode_11_SuicideEnd.json                             OK
@@ -246,16 +246,16 @@ OK: 39/39 Fail: 0/39 Skip: 0/39
 + callcodecallcodecall_110_OOGMBefore.json                        OK
 + callcodecallcodecall_110_SuicideEnd.json                        OK
 + callcodecallcodecall_110_SuicideMiddle.json                     OK
-+ callcodecallcodecall_ABCB_RECURSIVE.json                        OK
+  callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
 + callcodecallcodecallcode_111.json                               OK
 + callcodecallcodecallcode_111_OOGE.json                          OK
 + callcodecallcodecallcode_111_OOGMAfter.json                     OK
 + callcodecallcodecallcode_111_OOGMBefore.json                    OK
 + callcodecallcodecallcode_111_SuicideEnd.json                    OK
 + callcodecallcodecallcode_111_SuicideMiddle.json                 OK
-+ callcodecallcodecallcode_ABCB_RECURSIVE.json                    OK
+  callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 58/58 Fail: 0/58 Skip: 0/58
+OK: 51/58 Fail: 0/58 Skip: 7/58
 ## stCallDelegateCodesHomestead
 ```diff
 + callcallcallcode_001.json                                       OK
@@ -264,7 +264,7 @@ OK: 58/58 Fail: 0/58 Skip: 0/58
 + callcallcallcode_001_OOGMBefore.json                            OK
 + callcallcallcode_001_SuicideEnd.json                            OK
 + callcallcallcode_001_SuicideMiddle.json                         OK
-+ callcallcallcode_ABCB_RECURSIVE.json                            OK
+  callcallcallcode_ABCB_RECURSIVE.json                            Skip
 + callcallcode_01.json                                            OK
 + callcallcode_01_OOGE.json                                       OK
 + callcallcode_01_SuicideEnd.json                                 OK
@@ -274,14 +274,14 @@ OK: 58/58 Fail: 0/58 Skip: 0/58
 + callcallcodecall_010_OOGMBefore.json                            OK
 + callcallcodecall_010_SuicideEnd.json                            OK
 + callcallcodecall_010_SuicideMiddle.json                         OK
-+ callcallcodecall_ABCB_RECURSIVE.json                            OK
+  callcallcodecall_ABCB_RECURSIVE.json                            Skip
 + callcallcodecallcode_011.json                                   OK
 + callcallcodecallcode_011_OOGE.json                              OK
 + callcallcodecallcode_011_OOGMAfter.json                         OK
 + callcallcodecallcode_011_OOGMBefore.json                        OK
 + callcallcodecallcode_011_SuicideEnd.json                        OK
 + callcallcodecallcode_011_SuicideMiddle.json                     OK
-+ callcallcodecallcode_ABCB_RECURSIVE.json                        OK
+  callcallcodecallcode_ABCB_RECURSIVE.json                        Skip
 + callcodecall_10.json                                            OK
 + callcodecall_10_OOGE.json                                       OK
 + callcodecall_10_SuicideEnd.json                                 OK
@@ -291,14 +291,14 @@ OK: 58/58 Fail: 0/58 Skip: 0/58
 + callcodecallcall_100_OOGMBefore.json                            OK
 + callcodecallcall_100_SuicideEnd.json                            OK
 + callcodecallcall_100_SuicideMiddle.json                         OK
-+ callcodecallcall_ABCB_RECURSIVE.json                            OK
+  callcodecallcall_ABCB_RECURSIVE.json                            Skip
 + callcodecallcallcode_101.json                                   OK
 + callcodecallcallcode_101_OOGE.json                              OK
 + callcodecallcallcode_101_OOGMAfter.json                         OK
 + callcodecallcallcode_101_OOGMBefore.json                        OK
 + callcodecallcallcode_101_SuicideEnd.json                        OK
 + callcodecallcallcode_101_SuicideMiddle.json                     OK
-+ callcodecallcallcode_ABCB_RECURSIVE.json                        OK
+  callcodecallcallcode_ABCB_RECURSIVE.json                        Skip
 + callcodecallcode_11.json                                        OK
 + callcodecallcode_11_OOGE.json                                   OK
 + callcodecallcode_11_SuicideEnd.json                             OK
@@ -308,21 +308,21 @@ OK: 58/58 Fail: 0/58 Skip: 0/58
 + callcodecallcodecall_110_OOGMBefore.json                        OK
 + callcodecallcodecall_110_SuicideEnd.json                        OK
 + callcodecallcodecall_110_SuicideMiddle.json                     OK
-+ callcodecallcodecall_ABCB_RECURSIVE.json                        OK
+  callcodecallcodecall_ABCB_RECURSIVE.json                        Skip
 + callcodecallcodecallcode_111.json                               OK
 + callcodecallcodecallcode_111_OOGE.json                          OK
 + callcodecallcodecallcode_111_OOGMAfter.json                     OK
 + callcodecallcodecallcode_111_OOGMBefore.json                    OK
 + callcodecallcodecallcode_111_SuicideEnd.json                    OK
 + callcodecallcodecallcode_111_SuicideMiddle.json                 OK
-+ callcodecallcodecallcode_ABCB_RECURSIVE.json                    OK
+  callcodecallcodecallcode_ABCB_RECURSIVE.json                    Skip
 ```
-OK: 58/58 Fail: 0/58 Skip: 0/58
+OK: 51/58 Fail: 0/58 Skip: 7/58
 ## stChangedEIP150
 ```diff
-+ Call1024BalanceTooLow.json                                      OK
-+ Call1024PreCalls.json                                           OK
-+ Callcode1024BalanceTooLow.json                                  OK
+  Call1024BalanceTooLow.json                                      Skip
+  Call1024PreCalls.json                                           Skip
+  Callcode1024BalanceTooLow.json                                  Skip
 + callcall_00_OOGE_1.json                                         OK
 + callcall_00_OOGE_2.json                                         OK
 + callcall_00_OOGE_valueTransfer.json                             OK
@@ -351,7 +351,7 @@ OK: 58/58 Fail: 0/58 Skip: 0/58
 + contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
 + createInitFail_OOGduringInit.json                               OK
 ```
-OK: 30/30 Fail: 0/30 Skip: 0/30
+OK: 27/30 Fail: 0/30 Skip: 3/30
 ## stCodeCopyTest
 ```diff
 + ExtCodeCopyTests.json                                           OK
@@ -386,28 +386,28 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + CREATE_EmptyContractWithStorageAndCallIt_1wei.json              OK
 + CREATE_empty000CreateinInitCode_Transaction.json                OK
 + CreateCollisionToEmpty.json                                     OK
-  CreateOOGafterInitCode.json                                     Skip
-  CreateOOGafterInitCodeReturndata.json                           Skip
-  CreateOOGafterInitCodeReturndata2.json                          Skip
-  CreateOOGafterInitCodeReturndata3.json                          Skip
++ CreateOOGafterInitCode.json                                     OK
++ CreateOOGafterInitCodeReturndata.json                           OK
++ CreateOOGafterInitCodeReturndata2.json                          OK
++ CreateOOGafterInitCodeReturndata3.json                          OK
   CreateOOGafterInitCodeReturndataSize.json                       Skip
-  CreateOOGafterInitCodeRevert.json                               Skip
-  CreateOOGafterInitCodeRevert2.json                              Skip
++ CreateOOGafterInitCodeRevert.json                               OK
++ CreateOOGafterInitCodeRevert2.json                              OK
 + TransactionCollisionToEmpty.json                                OK
 + TransactionCollisionToEmptyButCode.json                         OK
 + TransactionCollisionToEmptyButNonce.json                        OK
 ```
-OK: 23/30 Fail: 0/30 Skip: 7/30
+OK: 29/30 Fail: 0/30 Skip: 1/30
 ## stDelegatecallTestHomestead
 ```diff
-+ Call1024BalanceTooLow.json                                      OK
-+ Call1024OOG.json                                                OK
-+ Call1024PreCalls.json                                           OK
+  Call1024BalanceTooLow.json                                      Skip
+  Call1024OOG.json                                                Skip
+  Call1024PreCalls.json                                           Skip
 + CallLoseGasOOG.json                                             OK
-+ CallRecursiveBombPreCall.json                                   OK
+  CallRecursiveBombPreCall.json                                   Skip
 + CallcodeLoseGasOOG.json                                         OK
-+ Delegatecall1024.json                                           OK
-+ Delegatecall1024OOG.json                                        OK
+  Delegatecall1024.json                                           Skip
+  Delegatecall1024OOG.json                                        Skip
 + callOutput1.json                                                OK
 + callOutput2.json                                                OK
 + callOutput3.json                                                OK
@@ -435,7 +435,7 @@ OK: 23/30 Fail: 0/30 Skip: 7/30
 + delegatecodeDynamicCode.json                                    OK
 + delegatecodeDynamicCode2SelfCall.json                           OK
 ```
-OK: 34/34 Fail: 0/34 Skip: 0/34
+OK: 28/34 Fail: 0/34 Skip: 6/34
 ## stEIP150Specific
 ```diff
 + CallAndCallcodeConsumeMoreGasThenTransactionHas.json            OK
@@ -605,38 +605,38 @@ OK: 8/8 Fail: 0/8 Skip: 0/8
   CALL_Bounds2.json                                               Skip
   CALL_Bounds2a.json                                              Skip
   CALL_Bounds3.json                                               Skip
-  CREATE_Bounds.json                                              Skip
-  CREATE_Bounds2.json                                             Skip
-  CREATE_Bounds3.json                                             Skip
++ CREATE_Bounds.json                                              OK
++ CREATE_Bounds2.json                                             OK
++ CREATE_Bounds3.json                                             OK
   DELEGATECALL_Bounds.json                                        Skip
   DELEGATECALL_Bounds2.json                                       Skip
   DELEGATECALL_Bounds3.json                                       Skip
-  DUP_Bounds.json                                                 Skip
++ DUP_Bounds.json                                                 OK
 + FillStack.json                                                  OK
-  JUMPI_Bounds.json                                               Skip
-  JUMP_Bounds.json                                                Skip
-  JUMP_Bounds2.json                                               Skip
-  MLOAD_Bounds.json                                               Skip
-  MLOAD_Bounds2.json                                              Skip
-  MLOAD_Bounds3.json                                              Skip
-  MSTORE_Bounds.json                                              Skip
-  MSTORE_Bounds2.json                                             Skip
-  MSTORE_Bounds2a.json                                            Skip
-  POP_Bounds.json                                                 Skip
++ JUMPI_Bounds.json                                               OK
++ JUMP_Bounds.json                                                OK
++ JUMP_Bounds2.json                                               OK
++ MLOAD_Bounds.json                                               OK
++ MLOAD_Bounds2.json                                              OK
++ MLOAD_Bounds3.json                                              OK
++ MSTORE_Bounds.json                                              OK
++ MSTORE_Bounds2.json                                             OK
++ MSTORE_Bounds2a.json                                            OK
++ POP_Bounds.json                                                 OK
 + RETURN_Bounds.json                                              OK
-  SLOAD_Bounds.json                                               Skip
-  SSTORE_Bounds.json                                              Skip
-  mload32bitBound.json                                            Skip
++ SLOAD_Bounds.json                                               OK
++ SSTORE_Bounds.json                                              OK
++ mload32bitBound.json                                            OK
 + mload32bitBound2.json                                           OK
-  mload32bitBound_Msize.json                                      Skip
++ mload32bitBound_Msize.json                                      OK
 + mload32bitBound_return.json                                     OK
 + mload32bitBound_return2.json                                    OK
-  static_CALL_Bounds.json                                         Skip
-  static_CALL_Bounds2.json                                        Skip
-  static_CALL_Bounds2a.json                                       Skip
-  static_CALL_Bounds3.json                                        Skip
++ static_CALL_Bounds.json                                         OK
++ static_CALL_Bounds2.json                                        OK
++ static_CALL_Bounds2a.json                                       OK
++ static_CALL_Bounds3.json                                        OK
 ```
-OK: 5/38 Fail: 0/38 Skip: 33/38
+OK: 27/38 Fail: 0/38 Skip: 11/38
 ## stMemoryTest
 ```diff
 + callDataCopyOffset.json                                         OK
@@ -738,104 +738,104 @@ OK: 67/67 Fail: 0/67 Skip: 0/67
 OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
-  identity_to_bigger.json                                         Skip
-  identity_to_smaller.json                                        Skip
-+ modexp.json                                                     OK
-  modexp_0_0_0_1000000.json                                       Skip
-  modexp_0_0_0_155000.json                                        Skip
-  modexp_0_1_0_1000000.json                                       Skip
-  modexp_0_1_0_155000.json                                        Skip
-  modexp_0_1_0_20500.json                                         Skip
-  modexp_0_1_0_22000.json                                         Skip
-  modexp_0_1_0_25000.json                                         Skip
-  modexp_0_1_0_35000.json                                         Skip
-  modexp_0_3_100_1000000.json                                     Skip
-  modexp_0_3_100_155000.json                                      Skip
-  modexp_0_3_100_20500.json                                       Skip
-  modexp_0_3_100_22000.json                                       Skip
-  modexp_0_3_100_25000.json                                       Skip
-  modexp_0_3_100_35000.json                                       Skip
-  modexp_1_0_0_1000000.json                                       Skip
-  modexp_1_0_0_155000.json                                        Skip
-  modexp_1_0_0_20500.json                                         Skip
-  modexp_1_0_0_22000.json                                         Skip
-  modexp_1_0_0_25000.json                                         Skip
-  modexp_1_0_0_35000.json                                         Skip
-  modexp_1_0_1_1000000.json                                       Skip
-  modexp_1_0_1_155000.json                                        Skip
-  modexp_1_0_1_20500.json                                         Skip
-  modexp_1_0_1_22000.json                                         Skip
-  modexp_1_0_1_25000.json                                         Skip
-  modexp_1_0_1_35000.json                                         Skip
-  modexp_1_1_1_1000000.json                                       Skip
-  modexp_1_1_1_155000.json                                        Skip
-  modexp_1_1_1_20500.json                                         Skip
-  modexp_1_1_1_22000.json                                         Skip
-  modexp_1_1_1_25000.json                                         Skip
-  modexp_1_1_1_35000.json                                         Skip
-  modexp_37120_22411_22000.json                                   Skip
-  modexp_37120_37111_0_1000000.json                               Skip
-  modexp_37120_37111_0_155000.json                                Skip
-  modexp_37120_37111_0_20500.json                                 Skip
-  modexp_37120_37111_0_22000.json                                 Skip
-  modexp_37120_37111_0_25000.json                                 Skip
-  modexp_37120_37111_0_35000.json                                 Skip
-  modexp_37120_37111_1_1000000.json                               Skip
-  modexp_37120_37111_1_155000.json                                Skip
-  modexp_37120_37111_1_20500.json                                 Skip
-  modexp_37120_37111_1_25000.json                                 Skip
-  modexp_37120_37111_1_35000.json                                 Skip
-  modexp_37120_37111_37111_1000000.json                           Skip
-  modexp_37120_37111_37111_155000.json                            Skip
-  modexp_37120_37111_37111_20500.json                             Skip
-  modexp_37120_37111_37111_22000.json                             Skip
-  modexp_37120_37111_37111_25000.json                             Skip
-  modexp_37120_37111_37111_35000.json                             Skip
-  modexp_37120_37111_97_1000000.json                              Skip
-  modexp_37120_37111_97_155000.json                               Skip
-  modexp_37120_37111_97_20500.json                                Skip
-  modexp_37120_37111_97_22000.json                                Skip
-  modexp_37120_37111_97_25000.json                                Skip
-  modexp_37120_37111_97_35000.json                                Skip
-  modexp_39936_1_55201_1000000.json                               Skip
-  modexp_39936_1_55201_155000.json                                Skip
-  modexp_39936_1_55201_20500.json                                 Skip
-  modexp_39936_1_55201_22000.json                                 Skip
-  modexp_39936_1_55201_25000.json                                 Skip
-  modexp_39936_1_55201_35000.json                                 Skip
-  modexp_3_09984_39936_1000000.json                               Skip
-  modexp_3_09984_39936_155000.json                                Skip
-  modexp_3_09984_39936_22000.json                                 Skip
-  modexp_3_09984_39936_25000.json                                 Skip
-  modexp_3_09984_39936_35000.json                                 Skip
-  modexp_3_28948_11579_20500.json                                 Skip
-  modexp_3_5_100_1000000.json                                     Skip
-  modexp_3_5_100_155000.json                                      Skip
-  modexp_3_5_100_20500.json                                       Skip
-  modexp_3_5_100_22000.json                                       Skip
-  modexp_3_5_100_25000.json                                       Skip
-  modexp_3_5_100_35000.json                                       Skip
-  modexp_49_2401_2401_1000000.json                                Skip
-  modexp_49_2401_2401_155000.json                                 Skip
-  modexp_49_2401_2401_20500.json                                  Skip
-  modexp_49_2401_2401_22000.json                                  Skip
-  modexp_49_2401_2401_25000.json                                  Skip
-  modexp_49_2401_2401_35000.json                                  Skip
-  modexp_55190_55190_42965_1000000.json                           Skip
-  modexp_55190_55190_42965_155000.json                            Skip
-  modexp_55190_55190_42965_20500.json                             Skip
-  modexp_55190_55190_42965_22000.json                             Skip
-  modexp_55190_55190_42965_25000.json                             Skip
-  modexp_55190_55190_42965_35000.json                             Skip
-  modexp_9_37111_37111_1000000.json                               Skip
-  modexp_9_37111_37111_155000.json                                Skip
-  modexp_9_37111_37111_20500.json                                 Skip
-  modexp_9_37111_37111_22000.json                                 Skip
-  modexp_9_37111_37111_35000.json                                 Skip
-  modexp_9_3711_37111_25000.json                                  Skip
-  sec80.json                                                      Skip
++ identity_to_bigger.json                                         OK
++ identity_to_smaller.json                                        OK
+  modexp.json                                                     Skip
++ modexp_0_0_0_1000000.json                                       OK
++ modexp_0_0_0_155000.json                                        OK
++ modexp_0_1_0_1000000.json                                       OK
++ modexp_0_1_0_155000.json                                        OK
++ modexp_0_1_0_20500.json                                         OK
++ modexp_0_1_0_22000.json                                         OK
++ modexp_0_1_0_25000.json                                         OK
++ modexp_0_1_0_35000.json                                         OK
++ modexp_0_3_100_1000000.json                                     OK
++ modexp_0_3_100_155000.json                                      OK
++ modexp_0_3_100_20500.json                                       OK
++ modexp_0_3_100_22000.json                                       OK
++ modexp_0_3_100_25000.json                                       OK
++ modexp_0_3_100_35000.json                                       OK
++ modexp_1_0_0_1000000.json                                       OK
++ modexp_1_0_0_155000.json                                        OK
++ modexp_1_0_0_20500.json                                         OK
++ modexp_1_0_0_22000.json                                         OK
++ modexp_1_0_0_25000.json                                         OK
++ modexp_1_0_0_35000.json                                         OK
++ modexp_1_0_1_1000000.json                                       OK
++ modexp_1_0_1_155000.json                                        OK
++ modexp_1_0_1_20500.json                                         OK
++ modexp_1_0_1_22000.json                                         OK
++ modexp_1_0_1_25000.json                                         OK
++ modexp_1_0_1_35000.json                                         OK
++ modexp_1_1_1_1000000.json                                       OK
++ modexp_1_1_1_155000.json                                        OK
++ modexp_1_1_1_20500.json                                         OK
++ modexp_1_1_1_22000.json                                         OK
++ modexp_1_1_1_25000.json                                         OK
++ modexp_1_1_1_35000.json                                         OK
++ modexp_37120_22411_22000.json                                   OK
++ modexp_37120_37111_0_1000000.json                               OK
++ modexp_37120_37111_0_155000.json                                OK
++ modexp_37120_37111_0_20500.json                                 OK
++ modexp_37120_37111_0_22000.json                                 OK
++ modexp_37120_37111_0_25000.json                                 OK
++ modexp_37120_37111_0_35000.json                                 OK
++ modexp_37120_37111_1_1000000.json                               OK
++ modexp_37120_37111_1_155000.json                                OK
++ modexp_37120_37111_1_20500.json                                 OK
++ modexp_37120_37111_1_25000.json                                 OK
++ modexp_37120_37111_1_35000.json                                 OK
++ modexp_37120_37111_37111_1000000.json                           OK
++ modexp_37120_37111_37111_155000.json                            OK
++ modexp_37120_37111_37111_20500.json                             OK
++ modexp_37120_37111_37111_22000.json                             OK
++ modexp_37120_37111_37111_25000.json                             OK
++ modexp_37120_37111_37111_35000.json                             OK
++ modexp_37120_37111_97_1000000.json                              OK
++ modexp_37120_37111_97_155000.json                               OK
++ modexp_37120_37111_97_20500.json                                OK
++ modexp_37120_37111_97_22000.json                                OK
++ modexp_37120_37111_97_25000.json                                OK
++ modexp_37120_37111_97_35000.json                                OK
++ modexp_39936_1_55201_1000000.json                               OK
++ modexp_39936_1_55201_155000.json                                OK
++ modexp_39936_1_55201_20500.json                                 OK
++ modexp_39936_1_55201_22000.json                                 OK
++ modexp_39936_1_55201_25000.json                                 OK
++ modexp_39936_1_55201_35000.json                                 OK
++ modexp_3_09984_39936_1000000.json                               OK
++ modexp_3_09984_39936_155000.json                                OK
++ modexp_3_09984_39936_22000.json                                 OK
++ modexp_3_09984_39936_25000.json                                 OK
++ modexp_3_09984_39936_35000.json                                 OK
++ modexp_3_28948_11579_20500.json                                 OK
++ modexp_3_5_100_1000000.json                                     OK
++ modexp_3_5_100_155000.json                                      OK
++ modexp_3_5_100_20500.json                                       OK
++ modexp_3_5_100_22000.json                                       OK
++ modexp_3_5_100_25000.json                                       OK
++ modexp_3_5_100_35000.json                                       OK
++ modexp_49_2401_2401_1000000.json                                OK
++ modexp_49_2401_2401_155000.json                                 OK
++ modexp_49_2401_2401_20500.json                                  OK
++ modexp_49_2401_2401_22000.json                                  OK
++ modexp_49_2401_2401_25000.json                                  OK
++ modexp_49_2401_2401_35000.json                                  OK
++ modexp_55190_55190_42965_1000000.json                           OK
++ modexp_55190_55190_42965_155000.json                            OK
++ modexp_55190_55190_42965_20500.json                             OK
++ modexp_55190_55190_42965_22000.json                             OK
++ modexp_55190_55190_42965_25000.json                             OK
++ modexp_55190_55190_42965_35000.json                             OK
++ modexp_9_37111_37111_1000000.json                               OK
++ modexp_9_37111_37111_155000.json                                OK
++ modexp_9_37111_37111_20500.json                                 OK
++ modexp_9_37111_37111_22000.json                                 OK
++ modexp_9_37111_37111_35000.json                                 OK
++ modexp_9_3711_37111_25000.json                                  OK
++ sec80.json                                                      OK
 ```
-OK: 1/96 Fail: 0/96 Skip: 95/96
+OK: 95/96 Fail: 0/96 Skip: 1/96
 ## stPreCompiledContracts2
 ```diff
 + CALLCODEEcrecover0.json                                         OK
@@ -928,12 +928,12 @@ OK: 1/96 Fail: 0/96 Skip: 95/96
 + CallSha256_4_gas99.json                                         OK
 + CallSha256_5.json                                               OK
   modexpRandomInput.json                                          Skip
-  modexp_0_0_0_20500.json                                         Skip
-  modexp_0_0_0_22000.json                                         Skip
-  modexp_0_0_0_25000.json                                         Skip
-  modexp_0_0_0_35000.json                                         Skip
++ modexp_0_0_0_20500.json                                         OK
++ modexp_0_0_0_22000.json                                         OK
++ modexp_0_0_0_25000.json                                         OK
++ modexp_0_0_0_35000.json                                         OK
 ```
-OK: 89/94 Fail: 0/94 Skip: 5/94
+OK: 93/94 Fail: 0/94 Skip: 1/94
 ## stQuadraticComplexityTest
 ```diff
   Call1MB1024Calldepth.json                                       Skip
@@ -1291,7 +1291,7 @@ OK: 321/327 Fail: 0/327 Skip: 6/327
 + randomStatetest.json                                            OK
 + randomStatetest384.json                                         OK
 + randomStatetest385.json                                         OK
-  randomStatetest386.json                                         Skip
++ randomStatetest386.json                                         OK
 + randomStatetest387.json                                         OK
 + randomStatetest388.json                                         OK
 + randomStatetest389.json                                         OK
@@ -1513,15 +1513,15 @@ OK: 321/327 Fail: 0/327 Skip: 6/327
 + randomStatetest644.json                                         OK
 + randomStatetest645.json                                         OK
 + randomStatetest646.json                                         OK
-  randomStatetest647.json                                         Skip
++ randomStatetest647.json                                         OK
 ```
-OK: 223/227 Fail: 0/227 Skip: 4/227
+OK: 225/227 Fail: 0/227 Skip: 2/227
 ## stRecursiveCreate
 ```diff
 + recursiveCreate.json                                            OK
-+ recursiveCreateReturnValue.json                                 OK
+  recursiveCreateReturnValue.json                                 Skip
 ```
-OK: 2/2 Fail: 0/2 Skip: 0/2
+OK: 1/2 Fail: 0/2 Skip: 1/2
 ## stRefundTest
 ```diff
 + refund50_1.json                                                 OK
@@ -1554,7 +1554,7 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + create_callprecompile_returndatasize.json                       OK
 + modexp_modsize0_returndatasize.json                             OK
 + returndatacopy_0_0_following_successful_create.json             OK
-  returndatacopy_afterFailing_create.json                         Skip
++ returndatacopy_afterFailing_create.json                         OK
 + returndatacopy_after_failing_callcode.json                      OK
 + returndatacopy_after_failing_delegatecall.json                  OK
 + returndatacopy_after_failing_staticcall.json                    OK
@@ -1574,7 +1574,7 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatacopy_initial_big_sum.json                             OK
 + returndatacopy_overrun.json                                     OK
 + returndatasize_after_failing_callcode.json                      OK
-  returndatasize_after_failing_delegatecall.json                  Skip
++ returndatasize_after_failing_delegatecall.json                  OK
 + returndatasize_after_failing_staticcall.json                    OK
 + returndatasize_after_oog_after_deeper.json                      OK
 + returndatasize_after_successful_callcode.json                   OK
@@ -1585,21 +1585,21 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
 ```
-OK: 35/37 Fail: 0/37 Skip: 2/37
+OK: 37/37 Fail: 0/37 Skip: 0/37
 ## stRevertTest
 ```diff
-+ LoopCallsDepthThenRevert.json                                   OK
-+ LoopCallsDepthThenRevert2.json                                  OK
-+ LoopCallsDepthThenRevert3.json                                  OK
-+ LoopCallsThenRevert.json                                        OK
-+ LoopDelegateCallsDepthThenRevert.json                           OK
+  LoopCallsDepthThenRevert.json                                   Skip
+  LoopCallsDepthThenRevert2.json                                  Skip
+  LoopCallsDepthThenRevert3.json                                  Skip
+  LoopCallsThenRevert.json                                        Skip
+  LoopDelegateCallsDepthThenRevert.json                           Skip
 + NashatyrevSuicideRevert.json                                    OK
 + PythonRevertTestTue201814-1430.json                             OK
 + RevertDepth2.json                                               OK
 + RevertDepthCreateAddressCollision.json                          OK
 + RevertDepthCreateOOG.json                                       OK
 + RevertInCallCode.json                                           OK
-+ RevertInCreateInInit.json                                       OK
+  RevertInCreateInInit.json                                       Skip
 + RevertInDelegateCall.json                                       OK
 + RevertInStaticCall.json                                         OK
 + RevertOnEmptyStack.json                                         OK
@@ -1632,14 +1632,14 @@ OK: 35/37 Fail: 0/37 Skip: 2/37
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 43/43 Fail: 0/43 Skip: 0/43
+OK: 37/43 Fail: 0/43 Skip: 6/43
 ## stShift
 ```diff
-  sar00.json                                                      Skip
++ sar00.json                                                      OK
 + sar01.json                                                      OK
 + sar10.json                                                      OK
 + sar11.json                                                      OK
-  sar_0_256-1.json                                                Skip
++ sar_0_256-1.json                                                OK
 + sar_2^254_254.json                                              OK
 + sar_2^255-1_248.json                                            OK
 + sar_2^255-1_254.json                                            OK
@@ -1676,7 +1676,7 @@ OK: 43/43 Fail: 0/43 Skip: 0/43
 + shr_2^255_256.json                                              OK
 + shr_2^255_257.json                                              OK
 ```
-OK: 38/40 Fail: 0/40 Skip: 2/40
+OK: 40/40 Fail: 0/40 Skip: 0/40
 ## stSolidityTest
 ```diff
 + AmbiguousMethod.json                                            OK
@@ -1700,47 +1700,47 @@ OK: 16/16 Fail: 0/16 Skip: 0/16
 ## stSpecialTest
 ```diff
 + FailedCreateRevertsDeletion.json                                OK
-+ JUMPDEST_Attack.json                                            OK
-+ JUMPDEST_AttackwithJump.json                                    OK
-  OverflowGasMakeMoney.json                                       Skip
+  JUMPDEST_Attack.json                                            Skip
+  JUMPDEST_AttackwithJump.json                                    Skip
++ OverflowGasMakeMoney.json                                       OK
 + StackDepthLimitSEC.json                                         OK
-  block504980.json                                                Skip
++ block504980.json                                                OK
 + deploymentError.json                                            OK
 + failed_tx_xcf416c53.json                                        OK
-  gasPrice0.json                                                  Skip
++ gasPrice0.json                                                  OK
 + makeMoney.json                                                  OK
   sha3_deja.json                                                  Skip
-  txCost-sec73.json                                               Skip
++ txCost-sec73.json                                               OK
 + tx_e1c174e2.json                                                OK
 ```
-OK: 8/13 Fail: 0/13 Skip: 5/13
+OK: 10/13 Fail: 0/13 Skip: 3/13
 ## stStackTests
 ```diff
-  shallowStack.json                                               Skip
-  stackOverflow.json                                              Skip
-  stackOverflowDUP.json                                           Skip
-  stackOverflowM1.json                                            Skip
++ shallowStack.json                                               OK
++ stackOverflow.json                                              OK
++ stackOverflowDUP.json                                           OK
++ stackOverflowM1.json                                            OK
 + stackOverflowM1DUP.json                                         OK
-  stackOverflowM1PUSH.json                                        Skip
-  stackOverflowPUSH.json                                          Skip
++ stackOverflowM1PUSH.json                                        OK
++ stackOverflowPUSH.json                                          OK
 ```
-OK: 1/7 Fail: 0/7 Skip: 6/7
+OK: 7/7 Fail: 0/7 Skip: 0/7
 ## stStaticCall
 ```diff
-  static_ABAcalls0.json                                           Skip
-  static_ABAcalls1.json                                           Skip
-  static_ABAcalls2.json                                           Skip
-  static_ABAcalls3.json                                           Skip
-  static_ABAcallsSuicide0.json                                    Skip
++ static_ABAcalls0.json                                           OK
++ static_ABAcalls1.json                                           OK
++ static_ABAcalls2.json                                           OK
++ static_ABAcalls3.json                                           OK
++ static_ABAcallsSuicide0.json                                    OK
 + static_ABAcallsSuicide1.json                                    OK
-  static_CALL_OneVCallSuicide.json                                Skip
-  static_CALL_ZeroVCallSuicide.json                               Skip
-  static_CREATE_ContractSuicideDuringInit.json                    Skip
-  static_CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.jsonSkip
-  static_CREATE_ContractSuicideDuringInit_WithValue.json          Skip
-  static_CREATE_EmptyContractAndCallIt_0wei.json                  Skip
-  static_CREATE_EmptyContractWithStorageAndCallIt_0wei.json       Skip
-  static_Call10.json                                              Skip
++ static_CALL_OneVCallSuicide.json                                OK
++ static_CALL_ZeroVCallSuicide.json                               OK
++ static_CREATE_ContractSuicideDuringInit.json                    OK
++ static_CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.jsonOK
++ static_CREATE_ContractSuicideDuringInit_WithValue.json          OK
++ static_CREATE_EmptyContractAndCallIt_0wei.json                  OK
++ static_CREATE_EmptyContractWithStorageAndCallIt_0wei.json       OK
++ static_Call10.json                                              OK
   static_Call1024BalanceTooLow.json                               Skip
   static_Call1024BalanceTooLow2.json                              Skip
   static_Call1024OOG.json                                         Skip
@@ -1754,281 +1754,281 @@ OK: 1/7 Fail: 0/7 Skip: 6/7
   static_Call50000_identity2.json                                 Skip
   static_Call50000_rip160.json                                    Skip
   static_Call50000_sha256.json                                    Skip
-  static_Call50000bytesContract50_1.json                          Skip
-  static_Call50000bytesContract50_2.json                          Skip
-  static_Call50000bytesContract50_3.json                          Skip
-  static_CallAndCallcodeConsumeMoreGasThenTransactionHas.json     Skip
-  static_CallAskMoreGasOnDepth2ThenTransactionHas.json            Skip
-  static_CallContractToCreateContractAndCallItOOG.json            Skip
-  static_CallContractToCreateContractOOG.json                     Skip
-  static_CallContractToCreateContractOOGBonusGas.json             Skip
-  static_CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonSkip
-  static_CallEcrecover0.json                                      Skip
-  static_CallEcrecover0_0input.json                               Skip
-  static_CallEcrecover0_Gas2999.json                              Skip
-  static_CallEcrecover0_NoGas.json                                Skip
-  static_CallEcrecover0_completeReturnValue.json                  Skip
-  static_CallEcrecover0_gas3000.json                              Skip
-  static_CallEcrecover0_overlappingInputOutput.json               Skip
-  static_CallEcrecover1.json                                      Skip
-  static_CallEcrecover2.json                                      Skip
-  static_CallEcrecover3.json                                      Skip
-  static_CallEcrecover80.json                                     Skip
-  static_CallEcrecoverCheckLength.json                            Skip
-  static_CallEcrecoverCheckLengthWrongV.json                      Skip
-  static_CallEcrecoverH_prefixed0.json                            Skip
-  static_CallEcrecoverR_prefixed0.json                            Skip
-  static_CallEcrecoverS_prefixed0.json                            Skip
-  static_CallEcrecoverV_prefixed0.json                            Skip
-  static_CallGoesOOGOnSecondLevel.json                            Skip
-  static_CallGoesOOGOnSecondLevel2.json                           Skip
-  static_CallIdentitiy_1.json                                     Skip
-  static_CallIdentity_1_nonzeroValue.json                         Skip
-  static_CallIdentity_2.json                                      Skip
-  static_CallIdentity_3.json                                      Skip
-  static_CallIdentity_4.json                                      Skip
-  static_CallIdentity_4_gas17.json                                Skip
-  static_CallIdentity_4_gas18.json                                Skip
-  static_CallIdentity_5.json                                      Skip
-  static_CallLoseGasOOG.json                                      Skip
-  static_CallRecursiveBomb0.json                                  Skip
-  static_CallRecursiveBomb0_OOG_atMaxCallDepth.json               Skip
-  static_CallRecursiveBomb1.json                                  Skip
-  static_CallRecursiveBomb2.json                                  Skip
-  static_CallRecursiveBomb3.json                                  Skip
-  static_CallRecursiveBombLog.json                                Skip
-  static_CallRecursiveBombLog2.json                               Skip
-  static_CallRecursiveBombPreCall.json                            Skip
-  static_CallRecursiveBombPreCall2.json                           Skip
-  static_CallRipemd160_1.json                                     Skip
-  static_CallRipemd160_2.json                                     Skip
-  static_CallRipemd160_3.json                                     Skip
-  static_CallRipemd160_3_postfixed0.json                          Skip
-  static_CallRipemd160_3_prefixed0.json                           Skip
-  static_CallRipemd160_4.json                                     Skip
-  static_CallRipemd160_4_gas719.json                              Skip
-  static_CallRipemd160_5.json                                     Skip
-  static_CallSha256_1.json                                        Skip
-  static_CallSha256_1_nonzeroValue.json                           Skip
-  static_CallSha256_2.json                                        Skip
-  static_CallSha256_3.json                                        Skip
-  static_CallSha256_3_postfix0.json                               Skip
-  static_CallSha256_3_prefix0.json                                Skip
-  static_CallSha256_4.json                                        Skip
-  static_CallSha256_4_gas99.json                                  Skip
-  static_CallSha256_5.json                                        Skip
-  static_CallToNameRegistrator0.json                              Skip
-  static_CallToReturn1.json                                       Skip
-  static_CalltoReturn2.json                                       Skip
-  static_CheckCallCostOOG.json                                    Skip
-  static_CheckOpcodes.json                                        Skip
-  static_CheckOpcodes2.json                                       Skip
-  static_CheckOpcodes3.json                                       Skip
-  static_CheckOpcodes4.json                                       Skip
-  static_CheckOpcodes5.json                                       Skip
-  static_ExecuteCallThatAskForeGasThenTrabsactionHas.json         Skip
-  static_InternalCallHittingGasLimit.json                         Skip
-  static_InternalCallHittingGasLimit2.json                        Skip
-  static_InternlCallStoreClearsOOG.json                           Skip
-  static_LoopCallsDepthThenRevert.json                            Skip
-  static_LoopCallsDepthThenRevert2.json                           Skip
-  static_LoopCallsDepthThenRevert3.json                           Skip
-  static_LoopCallsThenRevert.json                                 Skip
-  static_PostToReturn1.json                                       Skip
-  static_RETURN_Bounds.json                                       Skip
-  static_RETURN_BoundsOOG.json                                    Skip
-  static_RawCallGasAsk.json                                       Skip
-  static_Return50000_2.json                                       Skip
-  static_ReturnTest.json                                          Skip
-  static_ReturnTest2.json                                         Skip
-  static_RevertDepth2.json                                        Skip
-  static_RevertOpcodeCalls.json                                   Skip
-  static_ZeroValue_CALL_OOGRevert.json                            Skip
-  static_ZeroValue_SUICIDE_OOGRevert.json                         Skip
-  static_callBasic.json                                           Skip
-  static_callChangeRevert.json                                    Skip
-  static_callCreate.json                                          Skip
-  static_callCreate2.json                                         Skip
-  static_callCreate3.json                                         Skip
-  static_callOutput1.json                                         Skip
-  static_callOutput2.json                                         Skip
-  static_callOutput3.json                                         Skip
-  static_callOutput3Fail.json                                     Skip
-  static_callOutput3partial.json                                  Skip
-  static_callOutput3partialFail.json                              Skip
-  static_callToCallCodeOpCodeCheck.json                           Skip
-  static_callToCallOpCodeCheck.json                               Skip
-  static_callToDelCallOpCodeCheck.json                            Skip
-  static_callToStaticOpCodeCheck.json                             Skip
-  static_callWithHighValue.json                                   Skip
-  static_callWithHighValueAndGasOOG.json                          Skip
-  static_callWithHighValueAndOOGatTxLevel.json                    Skip
-  static_callWithHighValueOOGinCall.json                          Skip
-  static_call_OOG_additionalGasCosts1.json                        Skip
-  static_call_OOG_additionalGasCosts2.json                        Skip
-  static_call_value_inherit.json                                  Skip
-  static_call_value_inherit_from_call.json                        Skip
-  static_callcall_00.json                                         Skip
-  static_callcall_00_OOGE.json                                    Skip
-  static_callcall_00_OOGE_1.json                                  Skip
-  static_callcall_00_OOGE_2.json                                  Skip
-  static_callcall_00_SuicideEnd.json                              Skip
-  static_callcallcall_000.json                                    Skip
-  static_callcallcall_000_OOGE.json                               Skip
-  static_callcallcall_000_OOGMAfter.json                          Skip
-  static_callcallcall_000_OOGMAfter2.json                         Skip
-  static_callcallcall_000_OOGMBefore.json                         Skip
-  static_callcallcall_000_SuicideEnd.json                         Skip
-  static_callcallcall_000_SuicideMiddle.json                      Skip
-  static_callcallcall_ABCB_RECURSIVE.json                         Skip
-  static_callcallcallcode_001.json                                Skip
-  static_callcallcallcode_001_2.json                              Skip
-  static_callcallcallcode_001_OOGE.json                           Skip
-  static_callcallcallcode_001_OOGE_2.json                         Skip
-  static_callcallcallcode_001_OOGMAfter.json                      Skip
-  static_callcallcallcode_001_OOGMAfter2.json                     Skip
-  static_callcallcallcode_001_OOGMAfter_2.json                    Skip
-  static_callcallcallcode_001_OOGMAfter_3.json                    Skip
-  static_callcallcallcode_001_OOGMBefore.json                     Skip
-  static_callcallcallcode_001_OOGMBefore2.json                    Skip
-  static_callcallcallcode_001_SuicideEnd.json                     Skip
-  static_callcallcallcode_001_SuicideEnd2.json                    Skip
-  static_callcallcallcode_001_SuicideMiddle.json                  Skip
-  static_callcallcallcode_001_SuicideMiddle2.json                 Skip
-  static_callcallcallcode_ABCB_RECURSIVE.json                     Skip
-  static_callcallcallcode_ABCB_RECURSIVE2.json                    Skip
-  static_callcallcode_01_2.json                                   Skip
-  static_callcallcode_01_OOGE_2.json                              Skip
-  static_callcallcode_01_SuicideEnd.json                          Skip
-  static_callcallcode_01_SuicideEnd2.json                         Skip
-  static_callcallcodecall_010.json                                Skip
-  static_callcallcodecall_010_2.json                              Skip
-  static_callcallcodecall_010_OOGE.json                           Skip
-  static_callcallcodecall_010_OOGE_2.json                         Skip
-  static_callcallcodecall_010_OOGMAfter.json                      Skip
-  static_callcallcodecall_010_OOGMAfter2.json                     Skip
-  static_callcallcodecall_010_OOGMAfter_2.json                    Skip
-  static_callcallcodecall_010_OOGMAfter_3.json                    Skip
-  static_callcallcodecall_010_OOGMBefore.json                     Skip
-  static_callcallcodecall_010_OOGMBefore2.json                    Skip
-  static_callcallcodecall_010_SuicideEnd.json                     Skip
-  static_callcallcodecall_010_SuicideEnd2.json                    Skip
-  static_callcallcodecall_010_SuicideMiddle.json                  Skip
-  static_callcallcodecall_010_SuicideMiddle2.json                 Skip
-  static_callcallcodecall_ABCB_RECURSIVE.json                     Skip
-  static_callcallcodecall_ABCB_RECURSIVE2.json                    Skip
-  static_callcallcodecallcode_011.json                            Skip
-  static_callcallcodecallcode_011_2.json                          Skip
-  static_callcallcodecallcode_011_OOGE.json                       Skip
-  static_callcallcodecallcode_011_OOGE_2.json                     Skip
-  static_callcallcodecallcode_011_OOGMAfter.json                  Skip
-  static_callcallcodecallcode_011_OOGMAfter2.json                 Skip
-  static_callcallcodecallcode_011_OOGMAfter_1.json                Skip
-  static_callcallcodecallcode_011_OOGMAfter_2.json                Skip
-  static_callcallcodecallcode_011_OOGMBefore.json                 Skip
-  static_callcallcodecallcode_011_OOGMBefore2.json                Skip
-  static_callcallcodecallcode_011_SuicideEnd.json                 Skip
-  static_callcallcodecallcode_011_SuicideEnd2.json                Skip
-  static_callcallcodecallcode_011_SuicideMiddle.json              Skip
-  static_callcallcodecallcode_011_SuicideMiddle2.json             Skip
-  static_callcallcodecallcode_ABCB_RECURSIVE.json                 Skip
-  static_callcallcodecallcode_ABCB_RECURSIVE2.json                Skip
-  static_callcode_checkPC.json                                    Skip
-  static_callcodecall_10.json                                     Skip
-  static_callcodecall_10_2.json                                   Skip
-  static_callcodecall_10_OOGE.json                                Skip
-  static_callcodecall_10_OOGE_2.json                              Skip
-  static_callcodecall_10_SuicideEnd.json                          Skip
-  static_callcodecall_10_SuicideEnd2.json                         Skip
-  static_callcodecallcall_100.json                                Skip
-  static_callcodecallcall_100_2.json                              Skip
-  static_callcodecallcall_100_OOGE.json                           Skip
-  static_callcodecallcall_100_OOGE2.json                          Skip
-  static_callcodecallcall_100_OOGMAfter.json                      Skip
-  static_callcodecallcall_100_OOGMAfter2.json                     Skip
-  static_callcodecallcall_100_OOGMAfter_2.json                    Skip
-  static_callcodecallcall_100_OOGMAfter_3.json                    Skip
-  static_callcodecallcall_100_OOGMBefore.json                     Skip
-  static_callcodecallcall_100_OOGMBefore2.json                    Skip
-  static_callcodecallcall_100_SuicideEnd.json                     Skip
-  static_callcodecallcall_100_SuicideEnd2.json                    Skip
-  static_callcodecallcall_100_SuicideMiddle.json                  Skip
-  static_callcodecallcall_100_SuicideMiddle2.json                 Skip
-  static_callcodecallcall_ABCB_RECURSIVE.json                     Skip
-  static_callcodecallcall_ABCB_RECURSIVE2.json                    Skip
-  static_callcodecallcallcode_101.json                            Skip
-  static_callcodecallcallcode_101_2.json                          Skip
-  static_callcodecallcallcode_101_OOGE.json                       Skip
-  static_callcodecallcallcode_101_OOGE_2.json                     Skip
-  static_callcodecallcallcode_101_OOGMAfter.json                  Skip
-  static_callcodecallcallcode_101_OOGMAfter2.json                 Skip
-  static_callcodecallcallcode_101_OOGMAfter_1.json                Skip
-  static_callcodecallcallcode_101_OOGMAfter_3.json                Skip
-  static_callcodecallcallcode_101_OOGMBefore.json                 Skip
-  static_callcodecallcallcode_101_OOGMBefore2.json                Skip
-  static_callcodecallcallcode_101_SuicideEnd.json                 Skip
-  static_callcodecallcallcode_101_SuicideEnd2.json                Skip
-  static_callcodecallcallcode_101_SuicideMiddle.json              Skip
-  static_callcodecallcallcode_101_SuicideMiddle2.json             Skip
-  static_callcodecallcallcode_ABCB_RECURSIVE.json                 Skip
-  static_callcodecallcallcode_ABCB_RECURSIVE2.json                Skip
-  static_callcodecallcodecall_110.json                            Skip
-  static_callcodecallcodecall_1102.json                           Skip
-  static_callcodecallcodecall_110_2.json                          Skip
-  static_callcodecallcodecall_110_OOGE.json                       Skip
-  static_callcodecallcodecall_110_OOGE2.json                      Skip
-  static_callcodecallcodecall_110_OOGMAfter.json                  Skip
-  static_callcodecallcodecall_110_OOGMAfter2.json                 Skip
-  static_callcodecallcodecall_110_OOGMAfter_2.json                Skip
-  static_callcodecallcodecall_110_OOGMAfter_3.json                Skip
-  static_callcodecallcodecall_110_OOGMBefore.json                 Skip
-  static_callcodecallcodecall_110_OOGMBefore2.json                Skip
-  static_callcodecallcodecall_110_SuicideEnd.json                 Skip
-  static_callcodecallcodecall_110_SuicideEnd2.json                Skip
-  static_callcodecallcodecall_110_SuicideMiddle.json              Skip
-  static_callcodecallcodecall_110_SuicideMiddle2.json             Skip
-  static_callcodecallcodecall_ABCB_RECURSIVE.json                 Skip
-  static_callcodecallcodecall_ABCB_RECURSIVE2.json                Skip
-  static_callcodecallcodecallcode_111_SuicideEnd.json             Skip
-  static_calldelcode_01.json                                      Skip
-  static_calldelcode_01_OOGE.json                                 Skip
-  static_contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonSkip
-  static_contractCreationOOGdontLeaveEmptyContractViaTransaction.jsonSkip
-  static_log0_emptyMem.json                                       Skip
-  static_log0_logMemStartTooHigh.json                             Skip
-  static_log0_logMemsizeTooHigh.json                              Skip
-  static_log0_logMemsizeZero.json                                 Skip
-  static_log0_nonEmptyMem.json                                    Skip
-  static_log0_nonEmptyMem_logMemSize1.json                        Skip
-  static_log0_nonEmptyMem_logMemSize1_logMemStart31.json          Skip
-  static_log1_MaxTopic.json                                       Skip
-  static_log1_emptyMem.json                                       Skip
-  static_log1_logMemStartTooHigh.json                             Skip
-  static_log1_logMemsizeTooHigh.json                              Skip
-  static_log1_logMemsizeZero.json                                 Skip
-  static_log_Caller.json                                          Skip
-  static_makeMoney.json                                           Skip
-  static_refund_CallA.json                                        Skip
-  static_refund_CallToSuicideNoStorage.json                       Skip
-  static_refund_CallToSuicideTwice.json                           Skip
++ static_Call50000bytesContract50_1.json                          OK
++ static_Call50000bytesContract50_2.json                          OK
++ static_Call50000bytesContract50_3.json                          OK
++ static_CallAndCallcodeConsumeMoreGasThenTransactionHas.json     OK
++ static_CallAskMoreGasOnDepth2ThenTransactionHas.json            OK
++ static_CallContractToCreateContractAndCallItOOG.json            OK
++ static_CallContractToCreateContractOOG.json                     OK
++ static_CallContractToCreateContractOOGBonusGas.json             OK
++ static_CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonOK
++ static_CallEcrecover0.json                                      OK
++ static_CallEcrecover0_0input.json                               OK
++ static_CallEcrecover0_Gas2999.json                              OK
++ static_CallEcrecover0_NoGas.json                                OK
++ static_CallEcrecover0_completeReturnValue.json                  OK
++ static_CallEcrecover0_gas3000.json                              OK
++ static_CallEcrecover0_overlappingInputOutput.json               OK
++ static_CallEcrecover1.json                                      OK
++ static_CallEcrecover2.json                                      OK
++ static_CallEcrecover3.json                                      OK
++ static_CallEcrecover80.json                                     OK
++ static_CallEcrecoverCheckLength.json                            OK
++ static_CallEcrecoverCheckLengthWrongV.json                      OK
++ static_CallEcrecoverH_prefixed0.json                            OK
++ static_CallEcrecoverR_prefixed0.json                            OK
++ static_CallEcrecoverS_prefixed0.json                            OK
++ static_CallEcrecoverV_prefixed0.json                            OK
++ static_CallGoesOOGOnSecondLevel.json                            OK
++ static_CallGoesOOGOnSecondLevel2.json                           OK
++ static_CallIdentitiy_1.json                                     OK
++ static_CallIdentity_1_nonzeroValue.json                         OK
++ static_CallIdentity_2.json                                      OK
++ static_CallIdentity_3.json                                      OK
++ static_CallIdentity_4.json                                      OK
++ static_CallIdentity_4_gas17.json                                OK
++ static_CallIdentity_4_gas18.json                                OK
++ static_CallIdentity_5.json                                      OK
++ static_CallLoseGasOOG.json                                      OK
++ static_CallRecursiveBomb0.json                                  OK
++ static_CallRecursiveBomb0_OOG_atMaxCallDepth.json               OK
++ static_CallRecursiveBomb1.json                                  OK
++ static_CallRecursiveBomb2.json                                  OK
++ static_CallRecursiveBomb3.json                                  OK
++ static_CallRecursiveBombLog.json                                OK
++ static_CallRecursiveBombLog2.json                               OK
++ static_CallRecursiveBombPreCall.json                            OK
++ static_CallRecursiveBombPreCall2.json                           OK
++ static_CallRipemd160_1.json                                     OK
++ static_CallRipemd160_2.json                                     OK
++ static_CallRipemd160_3.json                                     OK
++ static_CallRipemd160_3_postfixed0.json                          OK
++ static_CallRipemd160_3_prefixed0.json                           OK
++ static_CallRipemd160_4.json                                     OK
++ static_CallRipemd160_4_gas719.json                              OK
++ static_CallRipemd160_5.json                                     OK
++ static_CallSha256_1.json                                        OK
++ static_CallSha256_1_nonzeroValue.json                           OK
++ static_CallSha256_2.json                                        OK
++ static_CallSha256_3.json                                        OK
++ static_CallSha256_3_postfix0.json                               OK
++ static_CallSha256_3_prefix0.json                                OK
++ static_CallSha256_4.json                                        OK
++ static_CallSha256_4_gas99.json                                  OK
++ static_CallSha256_5.json                                        OK
++ static_CallToNameRegistrator0.json                              OK
++ static_CallToReturn1.json                                       OK
++ static_CalltoReturn2.json                                       OK
++ static_CheckCallCostOOG.json                                    OK
++ static_CheckOpcodes.json                                        OK
++ static_CheckOpcodes2.json                                       OK
++ static_CheckOpcodes3.json                                       OK
++ static_CheckOpcodes4.json                                       OK
++ static_CheckOpcodes5.json                                       OK
++ static_ExecuteCallThatAskForeGasThenTrabsactionHas.json         OK
++ static_InternalCallHittingGasLimit.json                         OK
++ static_InternalCallHittingGasLimit2.json                        OK
++ static_InternlCallStoreClearsOOG.json                           OK
++ static_LoopCallsDepthThenRevert.json                            OK
++ static_LoopCallsDepthThenRevert2.json                           OK
++ static_LoopCallsDepthThenRevert3.json                           OK
++ static_LoopCallsThenRevert.json                                 OK
++ static_PostToReturn1.json                                       OK
++ static_RETURN_Bounds.json                                       OK
++ static_RETURN_BoundsOOG.json                                    OK
++ static_RawCallGasAsk.json                                       OK
++ static_Return50000_2.json                                       OK
++ static_ReturnTest.json                                          OK
++ static_ReturnTest2.json                                         OK
++ static_RevertDepth2.json                                        OK
++ static_RevertOpcodeCalls.json                                   OK
++ static_ZeroValue_CALL_OOGRevert.json                            OK
++ static_ZeroValue_SUICIDE_OOGRevert.json                         OK
++ static_callBasic.json                                           OK
++ static_callChangeRevert.json                                    OK
++ static_callCreate.json                                          OK
++ static_callCreate2.json                                         OK
++ static_callCreate3.json                                         OK
++ static_callOutput1.json                                         OK
++ static_callOutput2.json                                         OK
++ static_callOutput3.json                                         OK
++ static_callOutput3Fail.json                                     OK
++ static_callOutput3partial.json                                  OK
++ static_callOutput3partialFail.json                              OK
++ static_callToCallCodeOpCodeCheck.json                           OK
++ static_callToCallOpCodeCheck.json                               OK
++ static_callToDelCallOpCodeCheck.json                            OK
++ static_callToStaticOpCodeCheck.json                             OK
++ static_callWithHighValue.json                                   OK
++ static_callWithHighValueAndGasOOG.json                          OK
++ static_callWithHighValueAndOOGatTxLevel.json                    OK
++ static_callWithHighValueOOGinCall.json                          OK
++ static_call_OOG_additionalGasCosts1.json                        OK
++ static_call_OOG_additionalGasCosts2.json                        OK
++ static_call_value_inherit.json                                  OK
++ static_call_value_inherit_from_call.json                        OK
++ static_callcall_00.json                                         OK
++ static_callcall_00_OOGE.json                                    OK
++ static_callcall_00_OOGE_1.json                                  OK
++ static_callcall_00_OOGE_2.json                                  OK
++ static_callcall_00_SuicideEnd.json                              OK
++ static_callcallcall_000.json                                    OK
++ static_callcallcall_000_OOGE.json                               OK
++ static_callcallcall_000_OOGMAfter.json                          OK
++ static_callcallcall_000_OOGMAfter2.json                         OK
++ static_callcallcall_000_OOGMBefore.json                         OK
++ static_callcallcall_000_SuicideEnd.json                         OK
++ static_callcallcall_000_SuicideMiddle.json                      OK
++ static_callcallcall_ABCB_RECURSIVE.json                         OK
++ static_callcallcallcode_001.json                                OK
++ static_callcallcallcode_001_2.json                              OK
++ static_callcallcallcode_001_OOGE.json                           OK
++ static_callcallcallcode_001_OOGE_2.json                         OK
++ static_callcallcallcode_001_OOGMAfter.json                      OK
++ static_callcallcallcode_001_OOGMAfter2.json                     OK
++ static_callcallcallcode_001_OOGMAfter_2.json                    OK
++ static_callcallcallcode_001_OOGMAfter_3.json                    OK
++ static_callcallcallcode_001_OOGMBefore.json                     OK
++ static_callcallcallcode_001_OOGMBefore2.json                    OK
++ static_callcallcallcode_001_SuicideEnd.json                     OK
++ static_callcallcallcode_001_SuicideEnd2.json                    OK
++ static_callcallcallcode_001_SuicideMiddle.json                  OK
++ static_callcallcallcode_001_SuicideMiddle2.json                 OK
++ static_callcallcallcode_ABCB_RECURSIVE.json                     OK
++ static_callcallcallcode_ABCB_RECURSIVE2.json                    OK
++ static_callcallcode_01_2.json                                   OK
++ static_callcallcode_01_OOGE_2.json                              OK
++ static_callcallcode_01_SuicideEnd.json                          OK
++ static_callcallcode_01_SuicideEnd2.json                         OK
++ static_callcallcodecall_010.json                                OK
++ static_callcallcodecall_010_2.json                              OK
++ static_callcallcodecall_010_OOGE.json                           OK
++ static_callcallcodecall_010_OOGE_2.json                         OK
++ static_callcallcodecall_010_OOGMAfter.json                      OK
++ static_callcallcodecall_010_OOGMAfter2.json                     OK
++ static_callcallcodecall_010_OOGMAfter_2.json                    OK
++ static_callcallcodecall_010_OOGMAfter_3.json                    OK
++ static_callcallcodecall_010_OOGMBefore.json                     OK
++ static_callcallcodecall_010_OOGMBefore2.json                    OK
++ static_callcallcodecall_010_SuicideEnd.json                     OK
++ static_callcallcodecall_010_SuicideEnd2.json                    OK
++ static_callcallcodecall_010_SuicideMiddle.json                  OK
++ static_callcallcodecall_010_SuicideMiddle2.json                 OK
++ static_callcallcodecall_ABCB_RECURSIVE.json                     OK
++ static_callcallcodecall_ABCB_RECURSIVE2.json                    OK
++ static_callcallcodecallcode_011.json                            OK
++ static_callcallcodecallcode_011_2.json                          OK
++ static_callcallcodecallcode_011_OOGE.json                       OK
++ static_callcallcodecallcode_011_OOGE_2.json                     OK
++ static_callcallcodecallcode_011_OOGMAfter.json                  OK
++ static_callcallcodecallcode_011_OOGMAfter2.json                 OK
++ static_callcallcodecallcode_011_OOGMAfter_1.json                OK
++ static_callcallcodecallcode_011_OOGMAfter_2.json                OK
++ static_callcallcodecallcode_011_OOGMBefore.json                 OK
++ static_callcallcodecallcode_011_OOGMBefore2.json                OK
++ static_callcallcodecallcode_011_SuicideEnd.json                 OK
++ static_callcallcodecallcode_011_SuicideEnd2.json                OK
++ static_callcallcodecallcode_011_SuicideMiddle.json              OK
++ static_callcallcodecallcode_011_SuicideMiddle2.json             OK
++ static_callcallcodecallcode_ABCB_RECURSIVE.json                 OK
++ static_callcallcodecallcode_ABCB_RECURSIVE2.json                OK
++ static_callcode_checkPC.json                                    OK
++ static_callcodecall_10.json                                     OK
++ static_callcodecall_10_2.json                                   OK
++ static_callcodecall_10_OOGE.json                                OK
++ static_callcodecall_10_OOGE_2.json                              OK
++ static_callcodecall_10_SuicideEnd.json                          OK
++ static_callcodecall_10_SuicideEnd2.json                         OK
++ static_callcodecallcall_100.json                                OK
++ static_callcodecallcall_100_2.json                              OK
++ static_callcodecallcall_100_OOGE.json                           OK
++ static_callcodecallcall_100_OOGE2.json                          OK
++ static_callcodecallcall_100_OOGMAfter.json                      OK
++ static_callcodecallcall_100_OOGMAfter2.json                     OK
++ static_callcodecallcall_100_OOGMAfter_2.json                    OK
++ static_callcodecallcall_100_OOGMAfter_3.json                    OK
++ static_callcodecallcall_100_OOGMBefore.json                     OK
++ static_callcodecallcall_100_OOGMBefore2.json                    OK
++ static_callcodecallcall_100_SuicideEnd.json                     OK
++ static_callcodecallcall_100_SuicideEnd2.json                    OK
++ static_callcodecallcall_100_SuicideMiddle.json                  OK
++ static_callcodecallcall_100_SuicideMiddle2.json                 OK
++ static_callcodecallcall_ABCB_RECURSIVE.json                     OK
++ static_callcodecallcall_ABCB_RECURSIVE2.json                    OK
++ static_callcodecallcallcode_101.json                            OK
++ static_callcodecallcallcode_101_2.json                          OK
++ static_callcodecallcallcode_101_OOGE.json                       OK
++ static_callcodecallcallcode_101_OOGE_2.json                     OK
++ static_callcodecallcallcode_101_OOGMAfter.json                  OK
++ static_callcodecallcallcode_101_OOGMAfter2.json                 OK
++ static_callcodecallcallcode_101_OOGMAfter_1.json                OK
++ static_callcodecallcallcode_101_OOGMAfter_3.json                OK
++ static_callcodecallcallcode_101_OOGMBefore.json                 OK
++ static_callcodecallcallcode_101_OOGMBefore2.json                OK
++ static_callcodecallcallcode_101_SuicideEnd.json                 OK
++ static_callcodecallcallcode_101_SuicideEnd2.json                OK
++ static_callcodecallcallcode_101_SuicideMiddle.json              OK
++ static_callcodecallcallcode_101_SuicideMiddle2.json             OK
++ static_callcodecallcallcode_ABCB_RECURSIVE.json                 OK
++ static_callcodecallcallcode_ABCB_RECURSIVE2.json                OK
++ static_callcodecallcodecall_110.json                            OK
++ static_callcodecallcodecall_1102.json                           OK
++ static_callcodecallcodecall_110_2.json                          OK
++ static_callcodecallcodecall_110_OOGE.json                       OK
++ static_callcodecallcodecall_110_OOGE2.json                      OK
++ static_callcodecallcodecall_110_OOGMAfter.json                  OK
++ static_callcodecallcodecall_110_OOGMAfter2.json                 OK
++ static_callcodecallcodecall_110_OOGMAfter_2.json                OK
++ static_callcodecallcodecall_110_OOGMAfter_3.json                OK
++ static_callcodecallcodecall_110_OOGMBefore.json                 OK
++ static_callcodecallcodecall_110_OOGMBefore2.json                OK
++ static_callcodecallcodecall_110_SuicideEnd.json                 OK
++ static_callcodecallcodecall_110_SuicideEnd2.json                OK
++ static_callcodecallcodecall_110_SuicideMiddle.json              OK
++ static_callcodecallcodecall_110_SuicideMiddle2.json             OK
++ static_callcodecallcodecall_ABCB_RECURSIVE.json                 OK
++ static_callcodecallcodecall_ABCB_RECURSIVE2.json                OK
++ static_callcodecallcodecallcode_111_SuicideEnd.json             OK
++ static_calldelcode_01.json                                      OK
++ static_calldelcode_01_OOGE.json                                 OK
++ static_contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
++ static_contractCreationOOGdontLeaveEmptyContractViaTransaction.jsonOK
++ static_log0_emptyMem.json                                       OK
++ static_log0_logMemStartTooHigh.json                             OK
++ static_log0_logMemsizeTooHigh.json                              OK
++ static_log0_logMemsizeZero.json                                 OK
++ static_log0_nonEmptyMem.json                                    OK
++ static_log0_nonEmptyMem_logMemSize1.json                        OK
++ static_log0_nonEmptyMem_logMemSize1_logMemStart31.json          OK
++ static_log1_MaxTopic.json                                       OK
++ static_log1_emptyMem.json                                       OK
++ static_log1_logMemStartTooHigh.json                             OK
++ static_log1_logMemsizeTooHigh.json                              OK
++ static_log1_logMemsizeZero.json                                 OK
++ static_log_Caller.json                                          OK
++ static_makeMoney.json                                           OK
++ static_refund_CallA.json                                        OK
++ static_refund_CallToSuicideNoStorage.json                       OK
++ static_refund_CallToSuicideTwice.json                           OK
 ```
-OK: 1/284 Fail: 0/284 Skip: 283/284
+OK: 271/284 Fail: 0/284 Skip: 13/284
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
-+ ABAcalls1.json                                                  OK
-+ ABAcalls2.json                                                  OK
+  ABAcalls1.json                                                  Skip
+  ABAcalls2.json                                                  Skip
 + ABAcalls3.json                                                  OK
 + ABAcallsSuicide0.json                                           OK
 + ABAcallsSuicide1.json                                           OK
 + Call10.json                                                     OK
-+ CallRecursiveBomb0.json                                         OK
-+ CallRecursiveBomb0_OOG_atMaxCallDepth.json                      OK
-+ CallRecursiveBomb1.json                                         OK
-+ CallRecursiveBomb2.json                                         OK
+  CallRecursiveBomb0.json                                         Skip
+  CallRecursiveBomb0_OOG_atMaxCallDepth.json                      Skip
+  CallRecursiveBomb1.json                                         Skip
+  CallRecursiveBomb2.json                                         Skip
 + CallRecursiveBomb3.json                                         OK
-+ CallRecursiveBombLog.json                                       OK
-+ CallRecursiveBombLog2.json                                      OK
+  CallRecursiveBombLog.json                                       Skip
+  CallRecursiveBombLog2.json                                      Skip
 + CallToNameRegistrator0.json                                     OK
 + CallToNameRegistratorAddressTooBigLeft.json                     OK
 + CallToNameRegistratorAddressTooBigRight.json                    OK
@@ -2083,7 +2083,7 @@ OK: 1/284 Fail: 0/284 Skip: 283/284
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 65/67 Fail: 0/67 Skip: 2/67
+OK: 57/67 Fail: 0/67 Skip: 10/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2150,28 +2150,28 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + dayLimitConstruction.json                                       OK
 + dayLimitConstructionOOG.json                                    OK
 + dayLimitConstructionPartial.json                                OK
-  dayLimitResetSpentToday.json                                    Skip
-  dayLimitSetDailyLimit.json                                      Skip
-  dayLimitSetDailyLimitNoData.json                                Skip
-  multiOwnedAddOwner.json                                         Skip
-  multiOwnedAddOwnerAddMyself.json                                Skip
-  multiOwnedChangeOwner.json                                      Skip
-  multiOwnedChangeOwnerNoArgument.json                            Skip
-  multiOwnedChangeOwner_fromNotOwner.json                         Skip
-  multiOwnedChangeOwner_toIsOwner.json                            Skip
-  multiOwnedChangeRequirementTo0.json                             Skip
-  multiOwnedChangeRequirementTo1.json                             Skip
-  multiOwnedChangeRequirementTo2.json                             Skip
++ dayLimitResetSpentToday.json                                    OK
++ dayLimitSetDailyLimit.json                                      OK
++ dayLimitSetDailyLimitNoData.json                                OK
++ multiOwnedAddOwner.json                                         OK
++ multiOwnedAddOwnerAddMyself.json                                OK
++ multiOwnedChangeOwner.json                                      OK
++ multiOwnedChangeOwnerNoArgument.json                            OK
++ multiOwnedChangeOwner_fromNotOwner.json                         OK
++ multiOwnedChangeOwner_toIsOwner.json                            OK
++ multiOwnedChangeRequirementTo0.json                             OK
++ multiOwnedChangeRequirementTo1.json                             OK
++ multiOwnedChangeRequirementTo2.json                             OK
 + multiOwnedConstructionCorrect.json                              OK
-  multiOwnedConstructionNotEnoughGas.json                         Skip
++ multiOwnedConstructionNotEnoughGas.json                         OK
 + multiOwnedConstructionNotEnoughGasPartial.json                  OK
-  multiOwnedIsOwnerFalse.json                                     Skip
-  multiOwnedIsOwnerTrue.json                                      Skip
-  multiOwnedRemoveOwner.json                                      Skip
++ multiOwnedIsOwnerFalse.json                                     OK
++ multiOwnedIsOwnerTrue.json                                      OK
++ multiOwnedRemoveOwner.json                                      OK
 + multiOwnedRemoveOwnerByNonOwner.json                            OK
-  multiOwnedRemoveOwner_mySelf.json                               Skip
-  multiOwnedRemoveOwner_ownerIsNotOwner.json                      Skip
-  multiOwnedRevokeNothing.json                                    Skip
++ multiOwnedRemoveOwner_mySelf.json                               OK
++ multiOwnedRemoveOwner_ownerIsNotOwner.json                      OK
++ multiOwnedRevokeNothing.json                                    OK
 + walletAddOwnerRemovePendingTransaction.json                     OK
 + walletChangeOwnerRemovePendingTransaction.json                  OK
 + walletChangeRequirementRemovePendingTransaction.json            OK
@@ -2179,46 +2179,46 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + walletConstruction.json                                         OK
 + walletConstructionOOG.json                                      OK
 + walletConstructionPartial.json                                  OK
-  walletDefault.json                                              Skip
-  walletDefaultWithOutValue.json                                  Skip
-  walletExecuteOverDailyLimitMultiOwner.json                      Skip
-  walletExecuteOverDailyLimitOnlyOneOwner.json                    Skip
-  walletExecuteOverDailyLimitOnlyOneOwnerNew.json                 Skip
-  walletExecuteUnderDailyLimit.json                               Skip
-  walletKill.json                                                 Skip
++ walletDefault.json                                              OK
++ walletDefaultWithOutValue.json                                  OK
++ walletExecuteOverDailyLimitMultiOwner.json                      OK
++ walletExecuteOverDailyLimitOnlyOneOwner.json                    OK
++ walletExecuteOverDailyLimitOnlyOneOwnerNew.json                 OK
++ walletExecuteUnderDailyLimit.json                               OK
++ walletKill.json                                                 OK
 + walletKillNotByOwner.json                                       OK
-  walletKillToWallet.json                                         Skip
++ walletKillToWallet.json                                         OK
 + walletRemoveOwnerRemovePendingTransaction.json                  OK
 ```
-OK: 15/42 Fail: 0/42 Skip: 27/42
+OK: 42/42 Fail: 0/42 Skip: 0/42
 ## stZeroCallsRevert
 ```diff
-  ZeroValue_CALLCODE_OOGRevert.json                               Skip
-  ZeroValue_CALLCODE_ToEmpty_OOGRevert.json                       Skip
-  ZeroValue_CALLCODE_ToNonZeroBalance_OOGRevert.json              Skip
-  ZeroValue_CALLCODE_ToOneStorageKey_OOGRevert.json               Skip
-  ZeroValue_CALL_OOGRevert.json                                   Skip
-  ZeroValue_CALL_ToEmpty_OOGRevert.json                           Skip
-  ZeroValue_CALL_ToNonZeroBalance_OOGRevert.json                  Skip
-  ZeroValue_CALL_ToOneStorageKey_OOGRevert.json                   Skip
-  ZeroValue_DELEGATECALL_OOGRevert.json                           Skip
-  ZeroValue_DELEGATECALL_ToEmpty_OOGRevert.json                   Skip
-  ZeroValue_DELEGATECALL_ToNonZeroBalance_OOGRevert.json          Skip
-  ZeroValue_DELEGATECALL_ToOneStorageKey_OOGRevert.json           Skip
-  ZeroValue_SUICIDE_OOGRevert.json                                Skip
-  ZeroValue_SUICIDE_ToEmpty_OOGRevert.json                        Skip
-  ZeroValue_SUICIDE_ToNonZeroBalance_OOGRevert.json               Skip
-  ZeroValue_SUICIDE_ToOneStorageKey_OOGRevert.json                Skip
-  ZeroValue_TransactionCALL_OOGRevert.json                        Skip
-  ZeroValue_TransactionCALL_ToEmpty_OOGRevert.json                Skip
-  ZeroValue_TransactionCALL_ToNonZeroBalance_OOGRevert.json       Skip
-  ZeroValue_TransactionCALL_ToOneStorageKey_OOGRevert.json        Skip
-  ZeroValue_TransactionCALLwithData_OOGRevert.json                Skip
-  ZeroValue_TransactionCALLwithData_ToEmpty_OOGRevert.json        Skip
-  ZeroValue_TransactionCALLwithData_ToNonZeroBalance_OOGRevert.jsonSkip
-  ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jsonSkip
++ ZeroValue_CALLCODE_OOGRevert.json                               OK
++ ZeroValue_CALLCODE_ToEmpty_OOGRevert.json                       OK
++ ZeroValue_CALLCODE_ToNonZeroBalance_OOGRevert.json              OK
++ ZeroValue_CALLCODE_ToOneStorageKey_OOGRevert.json               OK
++ ZeroValue_CALL_OOGRevert.json                                   OK
++ ZeroValue_CALL_ToEmpty_OOGRevert.json                           OK
++ ZeroValue_CALL_ToNonZeroBalance_OOGRevert.json                  OK
++ ZeroValue_CALL_ToOneStorageKey_OOGRevert.json                   OK
++ ZeroValue_DELEGATECALL_OOGRevert.json                           OK
++ ZeroValue_DELEGATECALL_ToEmpty_OOGRevert.json                   OK
++ ZeroValue_DELEGATECALL_ToNonZeroBalance_OOGRevert.json          OK
++ ZeroValue_DELEGATECALL_ToOneStorageKey_OOGRevert.json           OK
++ ZeroValue_SUICIDE_OOGRevert.json                                OK
++ ZeroValue_SUICIDE_ToEmpty_OOGRevert.json                        OK
++ ZeroValue_SUICIDE_ToNonZeroBalance_OOGRevert.json               OK
++ ZeroValue_SUICIDE_ToOneStorageKey_OOGRevert.json                OK
++ ZeroValue_TransactionCALL_OOGRevert.json                        OK
++ ZeroValue_TransactionCALL_ToEmpty_OOGRevert.json                OK
++ ZeroValue_TransactionCALL_ToNonZeroBalance_OOGRevert.json       OK
++ ZeroValue_TransactionCALL_ToOneStorageKey_OOGRevert.json        OK
++ ZeroValue_TransactionCALLwithData_OOGRevert.json                OK
++ ZeroValue_TransactionCALLwithData_ToEmpty_OOGRevert.json        OK
++ ZeroValue_TransactionCALLwithData_ToNonZeroBalance_OOGRevert.jsonOK
++ ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jsonOK
 ```
-OK: 0/24 Fail: 0/24 Skip: 24/24
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stZeroCallsTest
 ```diff
 + ZeroValue_CALL.json                                             OK
@@ -2249,275 +2249,275 @@ OK: 0/24 Fail: 0/24 Skip: 24/24
 OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stZeroKnowledge
 ```diff
-  ecmul_1-2_2_28000_128.json                                      Skip
-  ecmul_1-2_2_28000_96.json                                       Skip
-  ecmul_1-2_340282366920938463463374607431768211456_21000_128.jsonSkip
-  ecmul_1-2_340282366920938463463374607431768211456_21000_80.json Skip
-  ecmul_1-2_340282366920938463463374607431768211456_21000_96.json Skip
-  ecmul_1-2_340282366920938463463374607431768211456_28000_128.jsonSkip
-  ecmul_1-2_340282366920938463463374607431768211456_28000_80.json Skip
-  ecmul_1-2_340282366920938463463374607431768211456_28000_96.json Skip
-  ecmul_1-2_5616_21000_128.json                                   Skip
-  ecmul_1-2_5616_21000_96.json                                    Skip
-  ecmul_1-2_5616_28000_128.json                                   Skip
-  ecmul_1-2_5617_21000_128.json                                   Skip
-  ecmul_1-2_5617_21000_96.json                                    Skip
-  ecmul_1-2_5617_28000_128.json                                   Skip
-  ecmul_1-2_5617_28000_96.json                                    Skip
-  ecmul_1-2_616_28000_96.json                                     Skip
-  ecmul_1-2_9935_21000_128.json                                   Skip
-  ecmul_1-2_9935_21000_96.json                                    Skip
-  ecmul_1-2_9935_28000_128.json                                   Skip
-  ecmul_1-2_9935_28000_96.json                                    Skip
-  ecmul_1-2_9_21000_128.json                                      Skip
-  ecmul_1-2_9_21000_96.json                                       Skip
-  ecmul_1-2_9_28000_128.json                                      Skip
-  ecmul_1-2_9_28000_96.json                                       Skip
-  ecmul_1-3_0_21000_128.json                                      Skip
-  ecmul_1-3_0_21000_64.json                                       Skip
-  ecmul_1-3_0_21000_80.json                                       Skip
-  ecmul_1-3_0_21000_96.json                                       Skip
-  ecmul_1-3_0_28000_128.json                                      Skip
-  ecmul_1-3_0_28000_64.json                                       Skip
-  ecmul_1-3_0_28000_80.json                                       Skip
-  ecmul_1-3_0_28000_96.json                                       Skip
-  ecmul_1-3_1_21000_128.json                                      Skip
-  ecmul_1-3_1_21000_96.json                                       Skip
-  ecmul_1-3_1_28000_128.json                                      Skip
-  ecmul_1-3_1_28000_96.json                                       Skip
-  ecmul_1-3_2_21000_128.json                                      Skip
-  ecmul_1-3_2_21000_96.json                                       Skip
-  ecmul_1-3_2_28000_128.json                                      Skip
-  ecmul_1-3_2_28000_96.json                                       Skip
-  ecmul_1-3_340282366920938463463374607431768211456_21000_128.jsonSkip
-  ecmul_1-3_340282366920938463463374607431768211456_21000_80.json Skip
-  ecmul_1-3_340282366920938463463374607431768211456_21000_96.json Skip
-  ecmul_1-3_340282366920938463463374607431768211456_28000_128.jsonSkip
-  ecmul_1-3_340282366920938463463374607431768211456_28000_80.json Skip
-  ecmul_1-3_340282366920938463463374607431768211456_28000_96.json Skip
-  ecmul_1-3_5616_21000_128.json                                   Skip
-  ecmul_1-3_5616_21000_96.json                                    Skip
-  ecmul_1-3_5616_28000_128.json                                   Skip
-  ecmul_1-3_5616_28000_96.json                                    Skip
-  ecmul_1-3_5617_21000_128.json                                   Skip
-  ecmul_1-3_5617_21000_96.json                                    Skip
-  ecmul_1-3_5617_28000_128.json                                   Skip
-  ecmul_1-3_5617_28000_96.json                                    Skip
-  ecmul_1-3_9935_21000_128.json                                   Skip
-  ecmul_1-3_9935_21000_96.json                                    Skip
-  ecmul_1-3_9935_28000_128.json                                   Skip
-  ecmul_1-3_9935_28000_96.json                                    Skip
-  ecmul_1-3_9_21000_128.json                                      Skip
-  ecmul_1-3_9_21000_96.json                                       Skip
-  ecmul_1-3_9_28000_128.json                                      Skip
-  ecmul_1-3_9_28000_96.json                                       Skip
-  ecmul_7827-6598_0_21000_128.json                                Skip
-  ecmul_7827-6598_0_21000_64.json                                 Skip
-  ecmul_7827-6598_0_21000_80.json                                 Skip
-  ecmul_7827-6598_0_21000_96.json                                 Skip
-  ecmul_7827-6598_0_28000_128.json                                Skip
-  ecmul_7827-6598_0_28000_64.json                                 Skip
-  ecmul_7827-6598_0_28000_80.json                                 Skip
-  ecmul_7827-6598_0_28000_96.json                                 Skip
-  ecmul_7827-6598_1456_21000_128.json                             Skip
-  ecmul_7827-6598_1456_21000_80.json                              Skip
-  ecmul_7827-6598_1456_21000_96.json                              Skip
-  ecmul_7827-6598_1456_28000_128.json                             Skip
-  ecmul_7827-6598_1456_28000_80.json                              Skip
-  ecmul_7827-6598_1456_28000_96.json                              Skip
-  ecmul_7827-6598_1_21000_128.json                                Skip
-  ecmul_7827-6598_1_21000_96.json                                 Skip
-  ecmul_7827-6598_1_28000_128.json                                Skip
-  ecmul_7827-6598_1_28000_96.json                                 Skip
-  ecmul_7827-6598_2_21000_128.json                                Skip
-  ecmul_7827-6598_2_21000_96.json                                 Skip
-  ecmul_7827-6598_2_28000_128.json                                Skip
-  ecmul_7827-6598_2_28000_96.json                                 Skip
-  ecmul_7827-6598_5616_21000_128.json                             Skip
-  ecmul_7827-6598_5616_21000_96.json                              Skip
-  ecmul_7827-6598_5616_28000_128.json                             Skip
-  ecmul_7827-6598_5616_28000_96.json                              Skip
-  ecmul_7827-6598_5617_21000_128.json                             Skip
-  ecmul_7827-6598_5617_21000_96.json                              Skip
-  ecmul_7827-6598_5617_28000_128.json                             Skip
-  ecmul_7827-6598_5617_28000_96.json                              Skip
-  ecmul_7827-6598_9935_21000_128.json                             Skip
-  ecmul_7827-6598_9935_21000_96.json                              Skip
-  ecmul_7827-6598_9935_28000_128.json                             Skip
-  ecmul_7827-6598_9935_28000_96.json                              Skip
-  ecmul_7827-6598_9_21000_128.json                                Skip
-  ecmul_7827-6598_9_21000_96.json                                 Skip
-  ecmul_7827-6598_9_28000_128.json                                Skip
-  ecmul_7827-6598_9_28000_96.json                                 Skip
-  ecpairing_bad_length_191.json                                   Skip
-  ecpairing_bad_length_193.json                                   Skip
-  ecpairing_empty_data.json                                       Skip
-  ecpairing_empty_data_insufficient_gas.json                      Skip
-  ecpairing_one_point_fail.json                                   Skip
-  ecpairing_one_point_insufficient_gas.json                       Skip
-  ecpairing_one_point_not_in_subgroup.json                        Skip
-  ecpairing_one_point_with_g1_zero.json                           Skip
-  ecpairing_one_point_with_g2_zero.json                           Skip
-  ecpairing_one_point_with_g2_zero_and_g1_invalid.json            Skip
-  ecpairing_perturb_g2_by_curve_order.json                        Skip
++ ecmul_1-2_2_28000_128.json                                      OK
++ ecmul_1-2_2_28000_96.json                                       OK
++ ecmul_1-2_340282366920938463463374607431768211456_21000_128.jsonOK
++ ecmul_1-2_340282366920938463463374607431768211456_21000_80.json OK
++ ecmul_1-2_340282366920938463463374607431768211456_21000_96.json OK
++ ecmul_1-2_340282366920938463463374607431768211456_28000_128.jsonOK
++ ecmul_1-2_340282366920938463463374607431768211456_28000_80.json OK
++ ecmul_1-2_340282366920938463463374607431768211456_28000_96.json OK
++ ecmul_1-2_5616_21000_128.json                                   OK
++ ecmul_1-2_5616_21000_96.json                                    OK
++ ecmul_1-2_5616_28000_128.json                                   OK
++ ecmul_1-2_5617_21000_128.json                                   OK
++ ecmul_1-2_5617_21000_96.json                                    OK
++ ecmul_1-2_5617_28000_128.json                                   OK
++ ecmul_1-2_5617_28000_96.json                                    OK
++ ecmul_1-2_616_28000_96.json                                     OK
++ ecmul_1-2_9935_21000_128.json                                   OK
++ ecmul_1-2_9935_21000_96.json                                    OK
++ ecmul_1-2_9935_28000_128.json                                   OK
++ ecmul_1-2_9935_28000_96.json                                    OK
++ ecmul_1-2_9_21000_128.json                                      OK
++ ecmul_1-2_9_21000_96.json                                       OK
++ ecmul_1-2_9_28000_128.json                                      OK
++ ecmul_1-2_9_28000_96.json                                       OK
++ ecmul_1-3_0_21000_128.json                                      OK
++ ecmul_1-3_0_21000_64.json                                       OK
++ ecmul_1-3_0_21000_80.json                                       OK
++ ecmul_1-3_0_21000_96.json                                       OK
++ ecmul_1-3_0_28000_128.json                                      OK
++ ecmul_1-3_0_28000_64.json                                       OK
++ ecmul_1-3_0_28000_80.json                                       OK
++ ecmul_1-3_0_28000_96.json                                       OK
++ ecmul_1-3_1_21000_128.json                                      OK
++ ecmul_1-3_1_21000_96.json                                       OK
++ ecmul_1-3_1_28000_128.json                                      OK
++ ecmul_1-3_1_28000_96.json                                       OK
++ ecmul_1-3_2_21000_128.json                                      OK
++ ecmul_1-3_2_21000_96.json                                       OK
++ ecmul_1-3_2_28000_128.json                                      OK
++ ecmul_1-3_2_28000_96.json                                       OK
++ ecmul_1-3_340282366920938463463374607431768211456_21000_128.jsonOK
++ ecmul_1-3_340282366920938463463374607431768211456_21000_80.json OK
++ ecmul_1-3_340282366920938463463374607431768211456_21000_96.json OK
++ ecmul_1-3_340282366920938463463374607431768211456_28000_128.jsonOK
++ ecmul_1-3_340282366920938463463374607431768211456_28000_80.json OK
++ ecmul_1-3_340282366920938463463374607431768211456_28000_96.json OK
++ ecmul_1-3_5616_21000_128.json                                   OK
++ ecmul_1-3_5616_21000_96.json                                    OK
++ ecmul_1-3_5616_28000_128.json                                   OK
++ ecmul_1-3_5616_28000_96.json                                    OK
++ ecmul_1-3_5617_21000_128.json                                   OK
++ ecmul_1-3_5617_21000_96.json                                    OK
++ ecmul_1-3_5617_28000_128.json                                   OK
++ ecmul_1-3_5617_28000_96.json                                    OK
++ ecmul_1-3_9935_21000_128.json                                   OK
++ ecmul_1-3_9935_21000_96.json                                    OK
++ ecmul_1-3_9935_28000_128.json                                   OK
++ ecmul_1-3_9935_28000_96.json                                    OK
++ ecmul_1-3_9_21000_128.json                                      OK
++ ecmul_1-3_9_21000_96.json                                       OK
++ ecmul_1-3_9_28000_128.json                                      OK
++ ecmul_1-3_9_28000_96.json                                       OK
++ ecmul_7827-6598_0_21000_128.json                                OK
++ ecmul_7827-6598_0_21000_64.json                                 OK
++ ecmul_7827-6598_0_21000_80.json                                 OK
++ ecmul_7827-6598_0_21000_96.json                                 OK
++ ecmul_7827-6598_0_28000_128.json                                OK
++ ecmul_7827-6598_0_28000_64.json                                 OK
++ ecmul_7827-6598_0_28000_80.json                                 OK
++ ecmul_7827-6598_0_28000_96.json                                 OK
++ ecmul_7827-6598_1456_21000_128.json                             OK
++ ecmul_7827-6598_1456_21000_80.json                              OK
++ ecmul_7827-6598_1456_21000_96.json                              OK
++ ecmul_7827-6598_1456_28000_128.json                             OK
++ ecmul_7827-6598_1456_28000_80.json                              OK
++ ecmul_7827-6598_1456_28000_96.json                              OK
++ ecmul_7827-6598_1_21000_128.json                                OK
++ ecmul_7827-6598_1_21000_96.json                                 OK
++ ecmul_7827-6598_1_28000_128.json                                OK
++ ecmul_7827-6598_1_28000_96.json                                 OK
++ ecmul_7827-6598_2_21000_128.json                                OK
++ ecmul_7827-6598_2_21000_96.json                                 OK
++ ecmul_7827-6598_2_28000_128.json                                OK
++ ecmul_7827-6598_2_28000_96.json                                 OK
++ ecmul_7827-6598_5616_21000_128.json                             OK
++ ecmul_7827-6598_5616_21000_96.json                              OK
++ ecmul_7827-6598_5616_28000_128.json                             OK
++ ecmul_7827-6598_5616_28000_96.json                              OK
++ ecmul_7827-6598_5617_21000_128.json                             OK
++ ecmul_7827-6598_5617_21000_96.json                              OK
++ ecmul_7827-6598_5617_28000_128.json                             OK
++ ecmul_7827-6598_5617_28000_96.json                              OK
++ ecmul_7827-6598_9935_21000_128.json                             OK
++ ecmul_7827-6598_9935_21000_96.json                              OK
++ ecmul_7827-6598_9935_28000_128.json                             OK
++ ecmul_7827-6598_9935_28000_96.json                              OK
++ ecmul_7827-6598_9_21000_128.json                                OK
++ ecmul_7827-6598_9_21000_96.json                                 OK
++ ecmul_7827-6598_9_28000_128.json                                OK
++ ecmul_7827-6598_9_28000_96.json                                 OK
++ ecpairing_bad_length_191.json                                   OK
++ ecpairing_bad_length_193.json                                   OK
++ ecpairing_empty_data.json                                       OK
++ ecpairing_empty_data_insufficient_gas.json                      OK
++ ecpairing_one_point_fail.json                                   OK
++ ecpairing_one_point_insufficient_gas.json                       OK
++ ecpairing_one_point_not_in_subgroup.json                        OK
++ ecpairing_one_point_with_g1_zero.json                           OK
++ ecpairing_one_point_with_g2_zero.json                           OK
++ ecpairing_one_point_with_g2_zero_and_g1_invalid.json            OK
++ ecpairing_perturb_g2_by_curve_order.json                        OK
   ecpairing_perturb_g2_by_field_modulus.json                      Skip
   ecpairing_perturb_g2_by_field_modulus_again.json                Skip
-  ecpairing_perturb_g2_by_one.json                                Skip
-  ecpairing_perturb_zeropoint_by_curve_order.json                 Skip
++ ecpairing_perturb_g2_by_one.json                                OK
++ ecpairing_perturb_zeropoint_by_curve_order.json                 OK
   ecpairing_perturb_zeropoint_by_field_modulus.json               Skip
-  ecpairing_perturb_zeropoint_by_one.json                         Skip
-  ecpairing_three_point_fail_1.json                               Skip
-  ecpairing_three_point_match_1.json                              Skip
-  ecpairing_two_point_fail_1.json                                 Skip
-  ecpairing_two_point_fail_2.json                                 Skip
-  ecpairing_two_point_match_1.json                                Skip
-  ecpairing_two_point_match_2.json                                Skip
-  ecpairing_two_point_match_3.json                                Skip
-  ecpairing_two_point_match_4.json                                Skip
-  ecpairing_two_point_match_5.json                                Skip
-  ecpairing_two_point_oog.json                                    Skip
-  ecpairing_two_points_with_one_g2_zero.json                      Skip
++ ecpairing_perturb_zeropoint_by_one.json                         OK
++ ecpairing_three_point_fail_1.json                               OK
++ ecpairing_three_point_match_1.json                              OK
++ ecpairing_two_point_fail_1.json                                 OK
++ ecpairing_two_point_fail_2.json                                 OK
++ ecpairing_two_point_match_1.json                                OK
++ ecpairing_two_point_match_2.json                                OK
++ ecpairing_two_point_match_3.json                                OK
++ ecpairing_two_point_match_4.json                                OK
++ ecpairing_two_point_match_5.json                                OK
++ ecpairing_two_point_oog.json                                    OK
++ ecpairing_two_points_with_one_g2_zero.json                      OK
 + pairingTest.json                                                OK
 + pointAdd.json                                                   OK
 + pointAddTrunc.json                                              OK
 + pointMulAdd.json                                                OK
 + pointMulAdd2.json                                               OK
 ```
-OK: 5/133 Fail: 0/133 Skip: 128/133
+OK: 130/133 Fail: 0/133 Skip: 3/133
 ## stZeroKnowledge2
 ```diff
-  ecadd_0-0_0-0_21000_0.json                                      Skip
-  ecadd_0-0_0-0_21000_128.json                                    Skip
-  ecadd_0-0_0-0_21000_192.json                                    Skip
-  ecadd_0-0_0-0_21000_64.json                                     Skip
-  ecadd_0-0_0-0_21000_80.json                                     Skip
-  ecadd_0-0_0-0_25000_0.json                                      Skip
-  ecadd_0-0_0-0_25000_128.json                                    Skip
-  ecadd_0-0_0-0_25000_192.json                                    Skip
-  ecadd_0-0_0-0_25000_64.json                                     Skip
-  ecadd_0-0_0-0_25000_80.json                                     Skip
-  ecadd_0-0_1-2_21000_128.json                                    Skip
-  ecadd_0-0_1-2_21000_192.json                                    Skip
-  ecadd_0-0_1-2_25000_128.json                                    Skip
-  ecadd_0-0_1-2_25000_192.json                                    Skip
-  ecadd_0-0_1-3_21000_128.json                                    Skip
-  ecadd_0-0_1-3_25000_128.json                                    Skip
-  ecadd_0-3_1-2_21000_128.json                                    Skip
-  ecadd_0-3_1-2_25000_128.json                                    Skip
-  ecadd_1-2_0-0_21000_128.json                                    Skip
-  ecadd_1-2_0-0_21000_192.json                                    Skip
-  ecadd_1-2_0-0_21000_64.json                                     Skip
-  ecadd_1-2_0-0_25000_128.json                                    Skip
-  ecadd_1-2_0-0_25000_192.json                                    Skip
-  ecadd_1-2_0-0_25000_64.json                                     Skip
-  ecadd_1-2_1-2_21000_128.json                                    Skip
-  ecadd_1-2_1-2_21000_192.json                                    Skip
-  ecadd_1-2_1-2_25000_128.json                                    Skip
-  ecadd_1-2_1-2_25000_192.json                                    Skip
-  ecadd_1-3_0-0_21000_80.json                                     Skip
-  ecadd_1-3_0-0_25000_80.json                                     Skip
-  ecadd_1145-3932_1145-4651_21000_192.json                        Skip
-  ecadd_1145-3932_1145-4651_25000_192.json                        Skip
-  ecadd_1145-3932_2969-1336_21000_128.json                        Skip
-  ecadd_1145-3932_2969-1336_25000_128.json                        Skip
-  ecadd_6-9_19274124-124124_21000_128.json                        Skip
-  ecadd_6-9_19274124-124124_25000_128.json                        Skip
-  ecmul_0-0_0_21000_0.json                                        Skip
-  ecmul_0-0_0_21000_128.json                                      Skip
-  ecmul_0-0_0_21000_40.json                                       Skip
-  ecmul_0-0_0_21000_64.json                                       Skip
-  ecmul_0-0_0_21000_80.json                                       Skip
-  ecmul_0-0_0_21000_96.json                                       Skip
-  ecmul_0-0_0_28000_0.json                                        Skip
-  ecmul_0-0_0_28000_128.json                                      Skip
-  ecmul_0-0_0_28000_40.json                                       Skip
-  ecmul_0-0_0_28000_64.json                                       Skip
-  ecmul_0-0_0_28000_80.json                                       Skip
-  ecmul_0-0_0_28000_96.json                                       Skip
-  ecmul_0-0_1_21000_128.json                                      Skip
-  ecmul_0-0_1_21000_96.json                                       Skip
-  ecmul_0-0_1_28000_128.json                                      Skip
-  ecmul_0-0_1_28000_96.json                                       Skip
-  ecmul_0-0_2_21000_128.json                                      Skip
-  ecmul_0-0_2_21000_96.json                                       Skip
-  ecmul_0-0_2_28000_128.json                                      Skip
-  ecmul_0-0_2_28000_96.json                                       Skip
-  ecmul_0-0_340282366920938463463374607431768211456_21000_128.jsonSkip
-  ecmul_0-0_340282366920938463463374607431768211456_21000_80.json Skip
-  ecmul_0-0_340282366920938463463374607431768211456_21000_96.json Skip
-  ecmul_0-0_340282366920938463463374607431768211456_28000_128.jsonSkip
-  ecmul_0-0_340282366920938463463374607431768211456_28000_80.json Skip
-  ecmul_0-0_340282366920938463463374607431768211456_28000_96.json Skip
-  ecmul_0-0_5616_21000_128.json                                   Skip
-  ecmul_0-0_5616_21000_96.json                                    Skip
-  ecmul_0-0_5616_28000_128.json                                   Skip
-  ecmul_0-0_5616_28000_96.json                                    Skip
-  ecmul_0-0_5617_21000_128.json                                   Skip
-  ecmul_0-0_5617_21000_96.json                                    Skip
-  ecmul_0-0_5617_28000_128.json                                   Skip
-  ecmul_0-0_5617_28000_96.json                                    Skip
-  ecmul_0-0_9935_21000_128.json                                   Skip
-  ecmul_0-0_9935_21000_96.json                                    Skip
-  ecmul_0-0_9935_28000_128.json                                   Skip
-  ecmul_0-0_9935_28000_96.json                                    Skip
-  ecmul_0-0_9_21000_128.json                                      Skip
-  ecmul_0-0_9_21000_96.json                                       Skip
-  ecmul_0-0_9_28000_128.json                                      Skip
-  ecmul_0-0_9_28000_96.json                                       Skip
-  ecmul_0-3_0_21000_128.json                                      Skip
-  ecmul_0-3_0_21000_64.json                                       Skip
-  ecmul_0-3_0_21000_80.json                                       Skip
-  ecmul_0-3_0_21000_96.json                                       Skip
-  ecmul_0-3_0_28000_128.json                                      Skip
-  ecmul_0-3_0_28000_64.json                                       Skip
-  ecmul_0-3_0_28000_80.json                                       Skip
-  ecmul_0-3_0_28000_96.json                                       Skip
-  ecmul_0-3_1_21000_128.json                                      Skip
-  ecmul_0-3_1_21000_96.json                                       Skip
-  ecmul_0-3_1_28000_128.json                                      Skip
-  ecmul_0-3_1_28000_96.json                                       Skip
-  ecmul_0-3_2_21000_128.json                                      Skip
-  ecmul_0-3_2_21000_96.json                                       Skip
-  ecmul_0-3_2_28000_128.json                                      Skip
-  ecmul_0-3_2_28000_96.json                                       Skip
-  ecmul_0-3_340282366920938463463374607431768211456_21000_128.jsonSkip
-  ecmul_0-3_340282366920938463463374607431768211456_21000_80.json Skip
-  ecmul_0-3_340282366920938463463374607431768211456_21000_96.json Skip
-  ecmul_0-3_340282366920938463463374607431768211456_28000_128.jsonSkip
-  ecmul_0-3_340282366920938463463374607431768211456_28000_80.json Skip
-  ecmul_0-3_340282366920938463463374607431768211456_28000_96.json Skip
-  ecmul_0-3_5616_21000_128.json                                   Skip
-  ecmul_0-3_5616_21000_96.json                                    Skip
-  ecmul_0-3_5616_28000_128.json                                   Skip
-  ecmul_0-3_5616_28000_96.json                                    Skip
-  ecmul_0-3_5617_21000_128.json                                   Skip
-  ecmul_0-3_5617_21000_96.json                                    Skip
-  ecmul_0-3_5617_28000_128.json                                   Skip
-  ecmul_0-3_5617_28000_96.json                                    Skip
-  ecmul_0-3_9935_21000_128.json                                   Skip
-  ecmul_0-3_9935_21000_96.json                                    Skip
-  ecmul_0-3_9935_28000_128.json                                   Skip
-  ecmul_0-3_9935_28000_96.json                                    Skip
-  ecmul_0-3_9_21000_128.json                                      Skip
-  ecmul_0-3_9_21000_96.json                                       Skip
-  ecmul_0-3_9_28000_128.json                                      Skip
-  ecmul_0-3_9_28000_96.json                                       Skip
-  ecmul_1-2_0_21000_128.json                                      Skip
-  ecmul_1-2_0_21000_64.json                                       Skip
-  ecmul_1-2_0_21000_80.json                                       Skip
-  ecmul_1-2_0_21000_96.json                                       Skip
-  ecmul_1-2_0_28000_128.json                                      Skip
-  ecmul_1-2_0_28000_64.json                                       Skip
-  ecmul_1-2_0_28000_80.json                                       Skip
-  ecmul_1-2_0_28000_96.json                                       Skip
-  ecmul_1-2_1_21000_128.json                                      Skip
-  ecmul_1-2_1_21000_96.json                                       Skip
-  ecmul_1-2_1_28000_128.json                                      Skip
-  ecmul_1-2_1_28000_96.json                                       Skip
-  ecmul_1-2_2_21000_128.json                                      Skip
-  ecmul_1-2_2_21000_96.json                                       Skip
++ ecadd_0-0_0-0_21000_0.json                                      OK
++ ecadd_0-0_0-0_21000_128.json                                    OK
++ ecadd_0-0_0-0_21000_192.json                                    OK
++ ecadd_0-0_0-0_21000_64.json                                     OK
++ ecadd_0-0_0-0_21000_80.json                                     OK
++ ecadd_0-0_0-0_25000_0.json                                      OK
++ ecadd_0-0_0-0_25000_128.json                                    OK
++ ecadd_0-0_0-0_25000_192.json                                    OK
++ ecadd_0-0_0-0_25000_64.json                                     OK
++ ecadd_0-0_0-0_25000_80.json                                     OK
++ ecadd_0-0_1-2_21000_128.json                                    OK
++ ecadd_0-0_1-2_21000_192.json                                    OK
++ ecadd_0-0_1-2_25000_128.json                                    OK
++ ecadd_0-0_1-2_25000_192.json                                    OK
++ ecadd_0-0_1-3_21000_128.json                                    OK
++ ecadd_0-0_1-3_25000_128.json                                    OK
++ ecadd_0-3_1-2_21000_128.json                                    OK
++ ecadd_0-3_1-2_25000_128.json                                    OK
++ ecadd_1-2_0-0_21000_128.json                                    OK
++ ecadd_1-2_0-0_21000_192.json                                    OK
++ ecadd_1-2_0-0_21000_64.json                                     OK
++ ecadd_1-2_0-0_25000_128.json                                    OK
++ ecadd_1-2_0-0_25000_192.json                                    OK
++ ecadd_1-2_0-0_25000_64.json                                     OK
++ ecadd_1-2_1-2_21000_128.json                                    OK
++ ecadd_1-2_1-2_21000_192.json                                    OK
++ ecadd_1-2_1-2_25000_128.json                                    OK
++ ecadd_1-2_1-2_25000_192.json                                    OK
++ ecadd_1-3_0-0_21000_80.json                                     OK
++ ecadd_1-3_0-0_25000_80.json                                     OK
++ ecadd_1145-3932_1145-4651_21000_192.json                        OK
++ ecadd_1145-3932_1145-4651_25000_192.json                        OK
++ ecadd_1145-3932_2969-1336_21000_128.json                        OK
++ ecadd_1145-3932_2969-1336_25000_128.json                        OK
++ ecadd_6-9_19274124-124124_21000_128.json                        OK
++ ecadd_6-9_19274124-124124_25000_128.json                        OK
++ ecmul_0-0_0_21000_0.json                                        OK
++ ecmul_0-0_0_21000_128.json                                      OK
++ ecmul_0-0_0_21000_40.json                                       OK
++ ecmul_0-0_0_21000_64.json                                       OK
++ ecmul_0-0_0_21000_80.json                                       OK
++ ecmul_0-0_0_21000_96.json                                       OK
++ ecmul_0-0_0_28000_0.json                                        OK
++ ecmul_0-0_0_28000_128.json                                      OK
++ ecmul_0-0_0_28000_40.json                                       OK
++ ecmul_0-0_0_28000_64.json                                       OK
++ ecmul_0-0_0_28000_80.json                                       OK
++ ecmul_0-0_0_28000_96.json                                       OK
++ ecmul_0-0_1_21000_128.json                                      OK
++ ecmul_0-0_1_21000_96.json                                       OK
++ ecmul_0-0_1_28000_128.json                                      OK
++ ecmul_0-0_1_28000_96.json                                       OK
++ ecmul_0-0_2_21000_128.json                                      OK
++ ecmul_0-0_2_21000_96.json                                       OK
++ ecmul_0-0_2_28000_128.json                                      OK
++ ecmul_0-0_2_28000_96.json                                       OK
++ ecmul_0-0_340282366920938463463374607431768211456_21000_128.jsonOK
++ ecmul_0-0_340282366920938463463374607431768211456_21000_80.json OK
++ ecmul_0-0_340282366920938463463374607431768211456_21000_96.json OK
++ ecmul_0-0_340282366920938463463374607431768211456_28000_128.jsonOK
++ ecmul_0-0_340282366920938463463374607431768211456_28000_80.json OK
++ ecmul_0-0_340282366920938463463374607431768211456_28000_96.json OK
++ ecmul_0-0_5616_21000_128.json                                   OK
++ ecmul_0-0_5616_21000_96.json                                    OK
++ ecmul_0-0_5616_28000_128.json                                   OK
++ ecmul_0-0_5616_28000_96.json                                    OK
++ ecmul_0-0_5617_21000_128.json                                   OK
++ ecmul_0-0_5617_21000_96.json                                    OK
++ ecmul_0-0_5617_28000_128.json                                   OK
++ ecmul_0-0_5617_28000_96.json                                    OK
++ ecmul_0-0_9935_21000_128.json                                   OK
++ ecmul_0-0_9935_21000_96.json                                    OK
++ ecmul_0-0_9935_28000_128.json                                   OK
++ ecmul_0-0_9935_28000_96.json                                    OK
++ ecmul_0-0_9_21000_128.json                                      OK
++ ecmul_0-0_9_21000_96.json                                       OK
++ ecmul_0-0_9_28000_128.json                                      OK
++ ecmul_0-0_9_28000_96.json                                       OK
++ ecmul_0-3_0_21000_128.json                                      OK
++ ecmul_0-3_0_21000_64.json                                       OK
++ ecmul_0-3_0_21000_80.json                                       OK
++ ecmul_0-3_0_21000_96.json                                       OK
++ ecmul_0-3_0_28000_128.json                                      OK
++ ecmul_0-3_0_28000_64.json                                       OK
++ ecmul_0-3_0_28000_80.json                                       OK
++ ecmul_0-3_0_28000_96.json                                       OK
++ ecmul_0-3_1_21000_128.json                                      OK
++ ecmul_0-3_1_21000_96.json                                       OK
++ ecmul_0-3_1_28000_128.json                                      OK
++ ecmul_0-3_1_28000_96.json                                       OK
++ ecmul_0-3_2_21000_128.json                                      OK
++ ecmul_0-3_2_21000_96.json                                       OK
++ ecmul_0-3_2_28000_128.json                                      OK
++ ecmul_0-3_2_28000_96.json                                       OK
++ ecmul_0-3_340282366920938463463374607431768211456_21000_128.jsonOK
++ ecmul_0-3_340282366920938463463374607431768211456_21000_80.json OK
++ ecmul_0-3_340282366920938463463374607431768211456_21000_96.json OK
++ ecmul_0-3_340282366920938463463374607431768211456_28000_128.jsonOK
++ ecmul_0-3_340282366920938463463374607431768211456_28000_80.json OK
++ ecmul_0-3_340282366920938463463374607431768211456_28000_96.json OK
++ ecmul_0-3_5616_21000_128.json                                   OK
++ ecmul_0-3_5616_21000_96.json                                    OK
++ ecmul_0-3_5616_28000_128.json                                   OK
++ ecmul_0-3_5616_28000_96.json                                    OK
++ ecmul_0-3_5617_21000_128.json                                   OK
++ ecmul_0-3_5617_21000_96.json                                    OK
++ ecmul_0-3_5617_28000_128.json                                   OK
++ ecmul_0-3_5617_28000_96.json                                    OK
++ ecmul_0-3_9935_21000_128.json                                   OK
++ ecmul_0-3_9935_21000_96.json                                    OK
++ ecmul_0-3_9935_28000_128.json                                   OK
++ ecmul_0-3_9935_28000_96.json                                    OK
++ ecmul_0-3_9_21000_128.json                                      OK
++ ecmul_0-3_9_21000_96.json                                       OK
++ ecmul_0-3_9_28000_128.json                                      OK
++ ecmul_0-3_9_28000_96.json                                       OK
++ ecmul_1-2_0_21000_128.json                                      OK
++ ecmul_1-2_0_21000_64.json                                       OK
++ ecmul_1-2_0_21000_80.json                                       OK
++ ecmul_1-2_0_21000_96.json                                       OK
++ ecmul_1-2_0_28000_128.json                                      OK
++ ecmul_1-2_0_28000_64.json                                       OK
++ ecmul_1-2_0_28000_80.json                                       OK
++ ecmul_1-2_0_28000_96.json                                       OK
++ ecmul_1-2_1_21000_128.json                                      OK
++ ecmul_1-2_1_21000_96.json                                       OK
++ ecmul_1-2_1_28000_128.json                                      OK
++ ecmul_1-2_1_28000_96.json                                       OK
++ ecmul_1-2_2_21000_128.json                                      OK
++ ecmul_1-2_2_21000_96.json                                       OK
 ```
-OK: 0/130 Fail: 0/130 Skip: 130/130
+OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 1512/2334 Fail: 0/2334 Skip: 822/2334
+OK: 2223/2334 Fail: 0/2334 Skip: 111/2334
