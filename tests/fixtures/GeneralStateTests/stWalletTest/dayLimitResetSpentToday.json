@@ -2,10 +2,10 @@
     "dayLimitResetSpentToday" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stWalletTest/dayLimitResetSpentTodayFiller.json",
-            "sourceHash" : "c4488c43ad1d97717e9b5ce9d16b179c5fa498f53dcef0efe64d881743bbce03"
+            "sourceHash" : "d2f45e0c47da48966e59ced9b2eb3319cc684fc672e9579d0b79513c58f2373b"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xe51a9621a6a56da7a889ea18c1ecb980c9b527c28ec7f2fc745d671e3d8edbc0",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x31bd875e2a1b97f58f3b72ae983d1dd7efa06322b74970925df8d114adf86fb5"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x011e7d0271733e10de98a74fe29b262cb860909368808eb0070e3b7d8d49e426",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x31bd875e2a1b97f58f3b72ae983d1dd7efa06322b74970925df8d114adf86fb5"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xe51a9621a6a56da7a889ea18c1ecb980c9b527c28ec7f2fc745d671e3d8edbc0",
                     "indexes" : {

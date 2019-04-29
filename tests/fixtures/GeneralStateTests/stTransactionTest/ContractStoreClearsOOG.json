@@ -2,10 +2,10 @@
     "ContractStoreClearsOOG" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stTransactionTest/ContractStoreClearsOOGFiller.json",
-            "sourceHash" : "0bedba196ca25c7080879dc82e151b0a019ef6015da5fc423c513387d058cd77"
+            "sourceHash" : "37cb40b55739fe3978beccf78f66545555be6a021484bfa60ef8e652a27ac1a4"
         },
         "env" : {
             "currentCoinbase" : "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xd58cdfde7bf06a7f91ab36dc0fb0710ba8a9275390553616ff29f7366882bb26",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xd58cdfde7bf06a7f91ab36dc0fb0710ba8a9275390553616ff29f7366882bb26",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xd58cdfde7bf06a7f91ab36dc0fb0710ba8a9275390553616ff29f7366882bb26",
                     "indexes" : {

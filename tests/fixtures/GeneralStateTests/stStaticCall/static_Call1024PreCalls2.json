@@ -2,10 +2,11 @@
     "static_Call1024PreCalls2" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ab4ca6d1.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filling-rpc-server" : "aleth/1.6.0-alpha.1-13+commit.b52bb862.dirty/linux/gnu7.4.0/debug",
+            "filling-tool-version" : "retesteth-0.0.1+commit.7f410960.Linux.g++",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stStaticCall/static_Call1024PreCalls2Filler.json",
-            "sourceHash" : "076d81609f5d3877a0573a1828626df32e6ab47c2d604b14e0f689b16a17d0d6"
+            "sourceHash" : "3feda88ff1423942e2046ece575d74f0b1819de43954f8de23f5ad75f3a0241a"
         },
         "env" : {
             "currentCoinbase" : "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b",
@@ -18,7 +19,7 @@
         "post" : {
             "Byzantium" : [
                 {
-                    "hash" : "0xc3e703ec8eadb5f45a5be63ef75210aba7d62e94c4fff236682d23e3ab16394a",
+                    "hash" : "0x3aeee71b54a8590fae67a4d1d40a777b397cb25bd3440acc4b9abcf20e7e27ef",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
@@ -27,7 +28,47 @@
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 },
                 {
-                    "hash" : "0x39ed2fb5d5606b9b81c52284938fbb0b283ad86b9bac805058f42dcb5f55fd62",
+                    "hash" : "0x494afde1594611f42adf8ff95827902aeb195fdc8f80db5b5246237280da9773",
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xa32020416437b514c82195ffee264682ec7c10987bac9984410468b30774fe9b",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x494afde1594611f42adf8ff95827902aeb195fdc8f80db5b5246237280da9773",
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
+                {
+                    "hash" : "0x3aeee71b54a8590fae67a4d1d40a777b397cb25bd3440acc4b9abcf20e7e27ef",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x494afde1594611f42adf8ff95827902aeb195fdc8f80db5b5246237280da9773",
                     "indexes" : {
                         "data" : 1,
                         "gas" : 0,
@@ -47,7 +88,7 @@
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0fffffffffffffffffffffffffffffffff",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }
@@ -80,7 +121,7 @@
                 "0x000000000000000000000000cbbf5374fce5edbc8e2a8697c15331677e6ebf0b"
             ],
             "gasLimit" : [
-                "0x7ffffffffffffff0"
+                "0x7fe0000000000001"
             ],
             "gasPrice" : "0x01",
             "nonce" : "0x00",

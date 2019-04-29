@@ -1,11 +1,11 @@
 {
     "callcodecallcall_ABCB_RECURSIVE" : {
         "_info" : {
-            "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.619a6438.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "comment" : "CALLCODE -> CALL1 -> CALL2 -> CALL1 -> ...",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCallCodes/callcodecallcall_ABCB_RECURSIVEFiller.json",
-            "sourceHash" : "6606d7e04cd607e88b512ccb5b9485500eb7054c5288e485331909294c3f9cb1"
+            "sourceHash" : "e8c0f34ad5fe49b171d4b3be6b7792d1de88247884f1c1b0437f31757e7d5098"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xb45f7068d6c1f6400676563a22df1791b2bab70929f90b0d297e13f58db69932",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x9b1a2a9f616a162c1965b41c046d50a5ddf934e89d4322b8d61655f8861616b0",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xb45f7068d6c1f6400676563a22df1791b2bab70929f90b0d297e13f58db69932",
                     "indexes" : {

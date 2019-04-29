@@ -2,10 +2,10 @@
     "RevertInStaticCall" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ab4ca6d1.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stRevertTest/RevertInStaticCallFiller.json",
-            "sourceHash" : "2d28d63f48aa540dc36fe3c61280514e68da0a26990f12a7a750f5acbc883782"
+            "sourceHash" : "edf4f469a37c33a00ffec72475886123ceff14b5ce712b73ee849ed99f6ea5e9"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xb7340c8561e89cd183ba09d1e01210960582ec1995beb0a5e32cc50f5e0c40cf",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x622ec064339b1c7e0578f06af1d95267794c4019f9f1d0ebe787509a18532c05",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xb7340c8561e89cd183ba09d1e01210960582ec1995beb0a5e32cc50f5e0c40cf",
                     "indexes" : {

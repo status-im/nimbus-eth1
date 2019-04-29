@@ -2,10 +2,10 @@
     "ContractInheritance" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stSolidityTest/ContractInheritanceFiller.json",
-            "sourceHash" : "c3131423b19a5527edad09e5e713f21d8470231cdaea7d5f8732328ec66ea335"
+            "sourceHash" : "e59c7de7b518ab85239390ab2da6ada569bc228a2182ced681866b778826250c"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",

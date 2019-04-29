@@ -2,10 +2,10 @@
     "CreateOOGafterInitCodeReturndata2" : {
         "_info" : {
             "comment" : "Call RETURNDATASIZE and RETURNDATACOPY after CREATE deploy a contract. correct returndata copy.",
-            "filledwith" : "testeth 1.4.0.dev1-71+commit.d4c00a53.dirty",
-            "lllcversion" : "Version: 0.4.25-develop.2018.6.30+commit.e289c361.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCreateTest/CreateOOGafterInitCodeReturndata2Filler.json",
-            "sourceHash" : "6b38f2026571bfd4d42e78254244465329573d5a50ba09286a6ed621b7abef9d"
+            "sourceHash" : "d9a7cd408457183cfc679e5a7ac838fcd9789eb8126035a3bdc2e8c98d639b1d"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -37,6 +37,26 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0x49145bbbef7058e2b394c784f1f49e161895b3ddf2810d7f711228d17c1cb3f4",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0xa99c03ead68d80476d7246f55d5da09b48e94423843a78254cf11879e9ee1617",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 1,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x49145bbbef7058e2b394c784f1f49e161895b3ddf2810d7f711228d17c1cb3f4",
                     "indexes" : {

@@ -2,10 +2,10 @@
     "CrashingTransaction" : {
         "_info" : {
             "comment" : "https://ropsten.etherscan.io/tx/0x8ec445380649f6c75a042a438ea9256c2fab2a6a3437904c9e5a712fcbf8a54a",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stAttackTest/CrashingTransactionFiller.json",
-            "sourceHash" : "efa7bfb1799a9f01809fe1e2ba61116daab9666a81cc1246c2aaf66587ade2ae"
+            "sourceHash" : "07f236f84152994ae0b7e5d204d054a1fdbaa9bfa2ff46e3f61d188145eb0198"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xff08a9495550652210911b3534aa418c6fa298c7622f8e61a10ecf2c543115c9",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xff08a9495550652210911b3534aa418c6fa298c7622f8e61a10ecf2c543115c9",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xff08a9495550652210911b3534aa418c6fa298c7622f8e61a10ecf2c543115c9",
                     "indexes" : {

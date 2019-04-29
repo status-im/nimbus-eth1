@@ -2,10 +2,11 @@
     "LoopCallsDepthThenRevert2" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.6a813f04.Linux.g++",
-            "lllcversion" : "Version: 0.4.22-develop.2018.3.16+commit.2b2527f3.Linux.g++",
+            "filling-rpc-server" : "aleth/1.6.0-alpha.1-13+commit.b52bb862.dirty/linux/gnu7.4.0/relwithdebinfo",
+            "filling-tool-version" : "retesteth-0.0.1+commit.2071bfcb.Linux.g++",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stRevertTest/LoopCallsDepthThenRevert2Filler.json",
-            "sourceHash" : "2d78b54188ab30fd29da9acd2b1e67022e2bf2feda813c2dd5b5da0b21922dee"
+            "sourceHash" : "ababe971b9f4da920fdda553a573d581dfc419795d58fae5a95ba3adae8eae18"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -28,6 +29,17 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0x1638570f6c64791a6261820fa4ec95ba85d94fa5bddf070f0aec2393ceb79d98",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x216fd3110280abe8b81a5f5fde77efa3326f81dbb1edcd1334fccd093cdc935f",
                     "indexes" : {
@@ -60,7 +72,7 @@
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x13426172c74d822b878fe800000000",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x00",
                 "storage" : {
                 }
@@ -68,10 +80,10 @@
         },
         "transaction" : {
             "data" : [
-                "0x"
+                ""
             ],
             "gasLimit" : [
-                "0x7ffffffffffffff0"
+                "0x7fe0000000000001"
             ],
             "gasPrice" : "0x01",
             "nonce" : "0x00",

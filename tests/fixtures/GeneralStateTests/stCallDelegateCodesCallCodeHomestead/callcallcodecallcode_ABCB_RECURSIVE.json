@@ -1,11 +1,11 @@
 {
     "callcallcodecallcode_ABCB_RECURSIVE" : {
         "_info" : {
-            "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.619a6438.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "comment" : "CALLCODE -> DELEGATECALL1 -> DELEGATECALL2 -> DELEGATECALL1 -> ...",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCallDelegateCodesCallCodeHomestead/callcallcodecallcode_ABCB_RECURSIVEFiller.json",
-            "sourceHash" : "921ac20b265223bff91b2a411a0bb1b4ea28ed20a6241bdee3621d9d0de05ef1"
+            "sourceHash" : "8aa53c7c6d0d872618359c85a0f355d8e9fabe6d506f8108fccf879efd8d2665"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x0c68792192282aedd7ce980b75830b9582f44bc9b9ae24be9680320b70ad0f17",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x029ddba0541d213d3b513455a54c26ef56c94b4fe51437cb8fa82e870b77e733",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x0c68792192282aedd7ce980b75830b9582f44bc9b9ae24be9680320b70ad0f17",
                     "indexes" : {

@@ -2,10 +2,10 @@
     "NonZeroValue_TransactionCALL_ToNonNonZeroBalance" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.8fb57c56.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stNonZeroCallsTest/NonZeroValue_TransactionCALL_ToNonNonZeroBalanceFiller.json",
-            "sourceHash" : "f1d5514218ff82d9a26ce1c83424e832c67cf32634bfd2dd4fbbda07e515d9b1"
+            "sourceHash" : "9a3ac188806db58b65f3eb248cdb693fa6d471a26dd3c7424676c3e5e62cf815"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x1da2400dccfbef2a877eaa19db825342c26c14d8d11975367d53a82a94bce504",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x1da2400dccfbef2a877eaa19db825342c26c14d8d11975367d53a82a94bce504",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x1da2400dccfbef2a877eaa19db825342c26c14d8d11975367d53a82a94bce504",
                     "indexes" : {

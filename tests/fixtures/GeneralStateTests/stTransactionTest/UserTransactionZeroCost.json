@@ -2,10 +2,10 @@
     "UserTransactionZeroCost" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stTransactionTest/UserTransactionZeroCostFiller.json",
-            "sourceHash" : "4921b1e4c78745daed4935de3a5767a320dc3480aeb99003b83617e0056d87e7"
+            "sourceHash" : "50942c7b2776f7886bea38e423e23e9771b17892d877e1cb280eaf4e93805513"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x6fa96e06aa7cafbd86e0d99b4cbd4b2924eb3e5c8d66eccba3b11a2c93907652",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x6fa96e06aa7cafbd86e0d99b4cbd4b2924eb3e5c8d66eccba3b11a2c93907652",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x6fa96e06aa7cafbd86e0d99b4cbd4b2924eb3e5c8d66eccba3b11a2c93907652",
                     "indexes" : {

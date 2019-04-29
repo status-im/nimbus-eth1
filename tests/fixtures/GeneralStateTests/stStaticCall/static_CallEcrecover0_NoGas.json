@@ -2,10 +2,10 @@
     "static_CallEcrecover0_NoGas" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ab4ca6d1.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stStaticCall/static_CallEcrecover0_NoGasFiller.json",
-            "sourceHash" : "f34a3523d3b6dc09c213f5d8bafc38ec0d1b118e533a1c824412c65c298ebce2"
+            "sourceHash" : "e837953173c0ef58917fc77e696a20eaa6c4919cf54ba56ec323374fa4420962"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -19,6 +19,17 @@
             "Byzantium" : [
                 {
                     "hash" : "0xa3d80dd4832c8359f2fac4635f36c90b2850deba982b96eccd67a76ab0976359",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xa080274c943c073d4b916dbe9aa6a1e5d7b0a3e46252b790f953f507eee1ab98",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,

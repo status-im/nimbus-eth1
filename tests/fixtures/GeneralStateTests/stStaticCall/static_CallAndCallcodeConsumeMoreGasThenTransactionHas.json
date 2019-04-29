@@ -2,10 +2,10 @@
     "static_CallAndCallcodeConsumeMoreGasThenTransactionHas" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.6a813f04.Linux.g++",
-            "lllcversion" : "Version: 0.4.22-develop.2018.3.16+commit.2b2527f3.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stStaticCall/static_CallAndCallcodeConsumeMoreGasThenTransactionHasFiller.json",
-            "sourceHash" : "8d29505ead884bdd136441cac033b119828ec687f8327adbb3454c46a7ebcb3b"
+            "sourceHash" : "648dac36de980608c6a8b9a819b5a6d76138c1c429354831118eff37661ca14b"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -37,6 +37,26 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0x0a6c3402fe06dc0e6f70af7635a3456f263510a69a6793665402501ce48e57db",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x5ce6e42362f24ee3a630c7a5668b761f8d63f5e0bab65d3c0a31cf6a06877872",
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x0a6c3402fe06dc0e6f70af7635a3456f263510a69a6793665402501ce48e57db",
                     "indexes" : {

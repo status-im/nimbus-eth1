@@ -2,10 +2,10 @@
     "CreateOOGafterInitCode" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.4.0.dev1-71+commit.d4c00a53.dirty",
-            "lllcversion" : "Version: 0.4.25-develop.2018.6.30+commit.e289c361.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCreateTest/CreateOOGafterInitCodeFiller.json",
-            "sourceHash" : "f648b4cba01e81ed7b07af91e11a6b18f3d08ad22120c311acfe29264065fef9"
+            "sourceHash" : "c6236a01563fa911b22fb3528aee93c5432d77d98053215dacb67504f043d3d3"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -37,6 +37,26 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0x70f3a9f7478198ccdbeb5d377f2ba3fd278915269e433752ac367ca14131fdd9",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x271549a05d95290b71017c7365f600084a2e589263e67eccafcd985454a3005a",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 1,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x70f3a9f7478198ccdbeb5d377f2ba3fd278915269e433752ac367ca14131fdd9",
                     "indexes" : {

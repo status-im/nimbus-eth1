@@ -2,10 +2,10 @@
     "suicideSendEtherPostDeath" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stSystemOperationsTest/suicideSendEtherPostDeathFiller.json",
-            "sourceHash" : "1505cc7e3492fdeee92b17dcd98036b4845c53a09c9db1bf8135704c5971120d"
+            "sourceHash" : "8174ac4d56c5896d766106d28f20ac665aa1dbc003abea82645f9939b30282af"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xc53f10f790e3881fb81df07ff8b29693aa11f87177378494b81ee7d437a77468",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xc53f10f790e3881fb81df07ff8b29693aa11f87177378494b81ee7d437a77468",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xc53f10f790e3881fb81df07ff8b29693aa11f87177378494b81ee7d437a77468",
                     "indexes" : {
