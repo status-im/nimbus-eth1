@@ -2,10 +2,10 @@
     "TestStoreGasPrices" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stSolidityTest/TestStoreGasPricesFiller.json",
-            "sourceHash" : "c74829c3f0fe2fe820c002022f9ae077c37bf49f0ec384b8a2ae38f56301ecc5"
+            "sourceHash" : "479f4040e2b365789673d4dbf8435bdf52d53e067c9586daf208f1cf6b220345"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",

@@ -2,10 +2,10 @@
     "CREATE_EContractCreateEContractInInit_Tr" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.6a813f04.Linux.g++",
-            "lllcversion" : "Version: 0.4.22-develop.2018.3.16+commit.2b2527f3.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCreateTest/CREATE_EContractCreateEContractInInit_TrFiller.json",
-            "sourceHash" : "20b3c41e1a13347c1e060bff302a27ac05ec85133bf675a751e2b05717bbb241"
+            "sourceHash" : "fa57a9fb19e4036a8a7eaf8382c5dae0b47b287ff7e44c441ea94f5fa70be524"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -28,6 +28,17 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0x008b89d8adaea6f4f0fb50436a903b21ceecff1cc4cd96e77e87a73641815c7f",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x008b89d8adaea6f4f0fb50436a903b21ceecff1cc4cd96e77e87a73641815c7f",
                     "indexes" : {

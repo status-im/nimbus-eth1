@@ -2,10 +2,10 @@
     "SuicidesAndInternlCallSuicidesBonusGasAtCallFailed" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stTransactionTest/SuicidesAndInternlCallSuicidesBonusGasAtCallFailedFiller.json",
-            "sourceHash" : "b8dbf7ebebbc541fa3e7417cf15d61a160606c06b2a9a6877f40bce8aefa7bda"
+            "sourceHash" : "67b52d96cefe886114ecbd7128ce3053d4a6e7ff5a1a32140010c710f36aa0f3"
         },
         "env" : {
             "currentCoinbase" : "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x67e8629b58470a4fe1c51cf03c7f0f6093f6dd3564c02879f0ae10830c179307",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x67e8629b58470a4fe1c51cf03c7f0f6093f6dd3564c02879f0ae10830c179307",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x67e8629b58470a4fe1c51cf03c7f0f6093f6dd3564c02879f0ae10830c179307",
                     "indexes" : {

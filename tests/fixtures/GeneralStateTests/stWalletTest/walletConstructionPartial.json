@@ -2,10 +2,10 @@
     "walletConstructionPartial" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stWalletTest/walletConstructionPartialFiller.json",
-            "sourceHash" : "46945f09d7bc2327a1e5994e3d961fc6195bc68fca8d682fd2d2a1d85e6e229e"
+            "sourceHash" : "93a7f3a07070e2922de11ee4023cf6068f19c617a33515465835041bdcafb0b3"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x5d21e551199cf86e3d13645ec7f518611d676a76432196c10f2a8b8c5bf921f9",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x7a79e36e6f1bb12a68300dae021e4b2f81491d0498e3567bed56ae5e8c430255"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x62ece3e9dcc5850cb58be4d59472e5932bff3c0937b00fb295f04bbeb1f1d53b",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x7a79e36e6f1bb12a68300dae021e4b2f81491d0498e3567bed56ae5e8c430255"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x5d21e551199cf86e3d13645ec7f518611d676a76432196c10f2a8b8c5bf921f9",
                     "indexes" : {

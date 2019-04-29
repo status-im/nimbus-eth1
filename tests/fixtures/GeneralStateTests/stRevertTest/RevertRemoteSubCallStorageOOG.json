@@ -2,10 +2,10 @@
     "RevertRemoteSubCallStorageOOG" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.6a813f04.Linux.g++",
-            "lllcversion" : "Version: 0.4.22-develop.2018.3.16+commit.2b2527f3.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stRevertTest/RevertRemoteSubCallStorageOOGFiller.json",
-            "sourceHash" : "97072a40ef2bdc84978f1331a45a2f622dbb86103322e388762a26ab23bdcd06"
+            "sourceHash" : "30ebdbc7c007a8b5031d8d2b1bc7414d313c117b1f88364604453efcd54ba781"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -46,6 +46,35 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0x04068d2d81730e74a66ab864af1073c8b7ade7c47680d10d782638320f776c20",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x991a17af593912ef7be7d526b56e4605271135c8e3f9ab16260ecc53179727ab",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 1,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x55c8e8054f7f508f34286f7016c8a00d0d829ec3d0778bb3204fed4ae04b4607",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 2,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x04068d2d81730e74a66ab864af1073c8b7ade7c47680d10d782638320f776c20",
                     "indexes" : {

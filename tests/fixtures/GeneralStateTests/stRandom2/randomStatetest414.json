@@ -2,10 +2,10 @@
     "randomStatetest414" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.8fb57c56.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stRandom2/randomStatetest414Filler.json",
-            "sourceHash" : "40bb147fdf25b73e77846ac188b0984af20ee0eee394cf9da343725097b73da9"
+            "sourceHash" : "72847a4f49bc6187a9c75a90e5718c4f08e008036c81a3fb70ec6fcc257b2d10"
         },
         "env" : {
             "currentCoinbase" : "0x945304eb96065b2a98b57a48a06ae28d285a71b5",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xdab455db73ff719b0c2c947098879612bd577d7d600a849526ef17dde23bbfc8",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xdab455db73ff719b0c2c947098879612bd577d7d600a849526ef17dde23bbfc8",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xdab455db73ff719b0c2c947098879612bd577d7d600a849526ef17dde23bbfc8",
                     "indexes" : {

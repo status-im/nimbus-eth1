@@ -2,10 +2,10 @@
     "CreateOOGafterInitCodeReturndata" : {
         "_info" : {
             "comment" : "Call RETURNDATASIZE and RETURNDATACOPY after CREATE deploy a contract",
-            "filledwith" : "testeth 1.4.0.dev1-71+commit.d4c00a53.dirty",
-            "lllcversion" : "Version: 0.4.25-develop.2018.6.30+commit.e289c361.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCreateTest/CreateOOGafterInitCodeReturndataFiller.json",
-            "sourceHash" : "2ae593e4e941a20f5c5b845623a7edd946e99d6225af19fd82b99ee5290abc90"
+            "sourceHash" : "0fd3b289d1d6232b2678fbd89cc9c28220c484295f2803462593746a091ecdc3"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -37,6 +37,26 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0xc2cd07ddb37f96bbabe97cf662123f41712f596d7b36be9262e566295a0b878b",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x5f315c0b6aec9ea51fcb832afc61306fb7fa9b1ed65d22f25fed1bbe6ef662cd",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 1,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xc2cd07ddb37f96bbabe97cf662123f41712f596d7b36be9262e566295a0b878b",
                     "indexes" : {

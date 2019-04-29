@@ -2,10 +2,10 @@
     "createContractViaContract" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.6a813f04.Linux.g++",
-            "lllcversion" : "Version: 0.4.22-develop.2018.3.16+commit.2b2527f3.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stHomesteadSpecific/createContractViaContractFiller.json",
-            "sourceHash" : "76ad8adeae89dd312587551e739dccefa3dcacca6b2b4646c1c8cef74a9cffaa"
+            "sourceHash" : "030741af024a2438ab7413257ee0fbf856c638e77a258d75599ac971de96962e"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -28,6 +28,17 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0x00a243435c3922719d07f434874d20e02a1971ca2bc6d6359bcc18f7e1e766f1",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x00a243435c3922719d07f434874d20e02a1971ca2bc6d6359bcc18f7e1e766f1",
                     "indexes" : {

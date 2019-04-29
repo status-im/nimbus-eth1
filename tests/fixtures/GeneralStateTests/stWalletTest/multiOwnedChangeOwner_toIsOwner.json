@@ -2,31 +2,19 @@
     "multiOwnedChangeOwner_toIsOwner" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filling-rpc-server" : "aleth/1.6.0-alpha.1-13+commit.b52bb862.dirty/linux/gnu7.4.0/relwithdebinfo",
+            "filling-tool-version" : "retesteth-0.0.1+commit.2071bfcb.Linux.g++",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stWalletTest/multiOwnedChangeOwner_toIsOwnerFiller.json",
-            "sourceHash" : "a45e0f50bb088cf6cc94e4f5c5c6f71b2bda17895fc0603bf310568ecadf1231"
+            "sourceHash" : "8c0561ae130efd7ab1efa78b704dc3e3e511fa372e85997954dce3eb27fceb91"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
             "currentDifficulty" : "0x20000",
-            "currentGasLimit" : "0x989680",
+            "currentGasLimit" : "0x05f5e100",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
-        },
-        "post" : {
-            "Byzantium" : [
-                {
-                    "hash" : "0x88cbbea3a252ac70dd8fc4838a95d40945f8e0ad4d977c6cbb4f31aa0f237d84",
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "logs" : "0x582a16c2a1b55297d9a66a7b93c31f16841649fe082e1c65e896ac3828c15e6e"
-                }
-            ]
         },
         "pre" : {
             "0x6295ee1b4f6dd65047762f924ecd367c17eabf8f" : {
@@ -42,7 +30,7 @@
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0de0b6b3a75ef08f",
-                "code" : "",
+                "code" : "0x",
                 "nonce" : "0x01",
                 "storage" : {
                 }
@@ -61,6 +49,41 @@
             "to" : "0x6295ee1b4f6dd65047762f924ecd367c17eabf8f",
             "value" : [
                 "0x64"
+            ]
+        },
+        "post" : {
+            "Byzantium" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x88cbbea3a252ac70dd8fc4838a95d40945f8e0ad4d977c6cbb4f31aa0f237d84",
+                    "logs" : "0x582a16c2a1b55297d9a66a7b93c31f16841649fe082e1c65e896ac3828c15e6e"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0xbd426645368c1c54f211db1ed7b34e17176374d18e0741983bec89c96c2e7cc7",
+                    "logs" : "0x582a16c2a1b55297d9a66a7b93c31f16841649fe082e1c65e896ac3828c15e6e"
+                }
+            ],
+            "ConstantinopleFix" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x88cbbea3a252ac70dd8fc4838a95d40945f8e0ad4d977c6cbb4f31aa0f237d84",
+                    "logs" : "0x582a16c2a1b55297d9a66a7b93c31f16841649fe082e1c65e896ac3828c15e6e"
+                }
             ]
         }
     }

@@ -2,10 +2,10 @@
     "callDataCopyOffset" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stMemoryTest/callDataCopyOffsetFiller.json",
-            "sourceHash" : "5a5fb93139fbf01241587f72e55db9f1d0eac4225acb8387ca9eae1d1f868628"
+            "sourceHash" : "db8b1299c2d75aa3269e9d7d9cf0e66dbd7329a121615d31e996316096262a1e"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x981ab176b1dc6e69f705310613a0d73a74180e4c750bf42db7322f0c25698c4d",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x981ab176b1dc6e69f705310613a0d73a74180e4c750bf42db7322f0c25698c4d",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x981ab176b1dc6e69f705310613a0d73a74180e4c750bf42db7322f0c25698c4d",
                     "indexes" : {

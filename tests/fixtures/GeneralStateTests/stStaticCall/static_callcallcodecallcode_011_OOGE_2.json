@@ -2,10 +2,10 @@
     "static_callcallcodecallcode_011_OOGE_2" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ab4ca6d1.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stStaticCall/static_callcallcodecallcode_011_OOGE_2Filler.json",
-            "sourceHash" : "2ef8ae66825acd468200b5a4dd930a55352918c6b0506c988e36414766b6816c"
+            "sourceHash" : "7c36a659e3f9f215d2427878d8cfbff10c45f58a0e3a46114251089013f69443"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,46 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xc50926fa7b3798228ab87b4e6caef6880835e1f473776bc5942ab9cfb6067fb0",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x16776fdb7a0c07720faf28c0c3a68e7231f9b9a00de3cff098c1bccd8671568c",
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xc50926fa7b3798228ab87b4e6caef6880835e1f473776bc5942ab9cfb6067fb0",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x16776fdb7a0c07720faf28c0c3a68e7231f9b9a00de3cff098c1bccd8671568c",
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xc50926fa7b3798228ab87b4e6caef6880835e1f473776bc5942ab9cfb6067fb0",
                     "indexes" : {

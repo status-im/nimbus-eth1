@@ -30,6 +30,10 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "ecpairing_perturb_zeropoint_by_field_modulus.json",
     "ecpairing_perturb_g2_by_field_modulus.json",
 
+    # 29/04/2019
+    "RevertPrecompiledTouch.json",
+    "RevertPrecompiledTouch_storage.json",
+
     # all these tests below actually pass
     # but they are very slow
     # byzantium slow

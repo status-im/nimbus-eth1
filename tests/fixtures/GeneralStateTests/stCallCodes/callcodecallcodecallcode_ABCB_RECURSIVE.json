@@ -1,11 +1,11 @@
 {
     "callcodecallcodecallcode_ABCB_RECURSIVE" : {
         "_info" : {
-            "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.619a6438.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "comment" : "CALLCODE -> CALLCODE2 -> CALLCODE3 -> CALLCODE2 -> ...",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCallCodes/callcodecallcodecallcode_ABCB_RECURSIVEFiller.json",
-            "sourceHash" : "0e398dd0e587a9041707939dbf539ce79d4065bfac26f641f3c5e69d0de5ab75"
+            "sourceHash" : "36be6f8af031497f4e4d69b17e4725e3956f8bdd5967b5471bf1bbf4bdd2ddab"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xd7eb40ab8620545d410fc73953746a87439728298371a90e302b2ef531afaa17",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x68dfad9372cefebd33538c4c63cbdfacb6a7a004d9657dda0f5305825c42fd2f",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xd7eb40ab8620545d410fc73953746a87439728298371a90e302b2ef531afaa17",
                     "indexes" : {
