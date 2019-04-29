@@ -2,10 +2,10 @@
     "sar_0_256-1" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.5.0.dev0+commit.fb80a87c",
-            "lllcversion" : "Version: 0.4.25-develop.2018.7.27+commit.bc51b0f6.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stShift/sar_0_256-1Filler.json",
-            "sourceHash" : "305ee8cc917bebc9c92529203fcfb329bfeae320014dbf54ad3492f3adc9198a"
+            "sourceHash" : "1d48c9979df3b7cd3c863a79e9b2b826254809ed1a9ea5824688e21b3e2a480a"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -28,6 +28,17 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0xfda8adcee57d2a3c5d6168ce80fc93a631bb49c4f23808a3b46ce93b1a8e3f7c",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xfda8adcee57d2a3c5d6168ce80fc93a631bb49c4f23808a3b46ce93b1a8e3f7c",
                     "indexes" : {

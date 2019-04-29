@@ -2,11 +2,10 @@
     "callcodeOutput3" : {
         "_info" : {
             "comment" : "",
-            "filling-rpc-server" : "eth/v1.3.0/Linux/g++/Interpreter/Debug/37f37291*/",
-            "filling-tool-version" : "retesteth-0.0.1+commit.86270701.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stDelegatecallTestHomestead/callcodeOutput3Filler.json",
-            "sourceHash" : "fd1278b49d1ec124af92b794954bf4199b79636aa1c60a4c539245a1149399e6"
+            "sourceHash" : "5b851287cdc1d699473cf614e6c6e52d71f028b0b78e68c001c85e3f17a394bd"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -15,6 +14,52 @@
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "post" : {
+            "Byzantium" : [
+                {
+                    "hash" : "0xb3e4e1251821dfe4c6d52f8b9540b67f7f13c1d20269acae261c5defe3d67a9a",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xb3e4e1251821dfe4c6d52f8b9540b67f7f13c1d20269acae261c5defe3d67a9a",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
+                {
+                    "hash" : "0xb3e4e1251821dfe4c6d52f8b9540b67f7f13c1d20269acae261c5defe3d67a9a",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Homestead" : [
+                {
+                    "hash" : "0xa6860663e2a5a12c12e635ec35cfc1a64aa3e60832069d7338b3d420c29f9d9d",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
         },
         "pre" : {
             "0x095e7baea6a6c7c4c2dfeb977efac326af552d87" : {
@@ -26,7 +71,7 @@
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
                 "balance" : "0x0de0b6b3a7640000",
-                "code" : "0x",
+                "code" : "",
                 "nonce" : "0x00",
                 "storage" : {
                 }
@@ -41,7 +86,7 @@
         },
         "transaction" : {
             "data" : [
-                ""
+                "0x"
             ],
             "gasLimit" : [
                 "0x10c8e0"
@@ -52,41 +97,6 @@
             "to" : "0x095e7baea6a6c7c4c2dfeb977efac326af552d87",
             "value" : [
                 "0x0186a0"
-            ]
-        },
-        "post" : {
-            "Byzantium" : [
-                {
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "hash" : "0xb3e4e1251821dfe4c6d52f8b9540b67f7f13c1d20269acae261c5defe3d67a9a",
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Constantinople" : [
-                {
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "hash" : "0xb3e4e1251821dfe4c6d52f8b9540b67f7f13c1d20269acae261c5defe3d67a9a",
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Homestead" : [
-                {
-                    "indexes" : {
-                        "data" : 0,
-                        "gas" : 0,
-                        "value" : 0
-                    },
-                    "hash" : "0xa6860663e2a5a12c12e635ec35cfc1a64aa3e60832069d7338b3d420c29f9d9d",
-                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
             ]
         }
     }

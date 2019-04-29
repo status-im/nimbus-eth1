@@ -2,10 +2,10 @@
     "InternalCallHittingGasLimitSuccess" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stTransactionTest/InternalCallHittingGasLimitSuccessFiller.json",
-            "sourceHash" : "10f11738be0c2cd825f41e27cd878bb3a999183096ab0ef113c16949c71eaf16"
+            "sourceHash" : "4b1a0b9b317147817b97253921ad2dbeec83fe83f595c74f6bb642f3abad5482"
         },
         "env" : {
             "currentCoinbase" : "0x2adf5374fce5edbc8e2a8697c15331677e6ebf0b",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x2766392b322e4bc9ec7c60c6699445acdc7c66d4fe3cec79f4ddd852f16f8e68",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x2766392b322e4bc9ec7c60c6699445acdc7c66d4fe3cec79f4ddd852f16f8e68",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x2766392b322e4bc9ec7c60c6699445acdc7c66d4fe3cec79f4ddd852f16f8e68",
                     "indexes" : {

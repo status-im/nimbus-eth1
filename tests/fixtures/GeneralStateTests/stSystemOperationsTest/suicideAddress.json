@@ -2,10 +2,10 @@
     "suicideAddress" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stSystemOperationsTest/suicideAddressFiller.json",
-            "sourceHash" : "090bc6dd9dd8a6a13688074fcf0cd21c46d05ec64403b67e7238d5291f66e5a0"
+            "sourceHash" : "3015e28649b5a1d544bf8f49a3207a4a5f14bf9374109e09f133b10d41d96fb4"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x518390cc204dd02fd071a3d9f81dfac8916abb6d0302c84a106e60af7f38fc2c",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x518390cc204dd02fd071a3d9f81dfac8916abb6d0302c84a106e60af7f38fc2c",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x518390cc204dd02fd071a3d9f81dfac8916abb6d0302c84a106e60af7f38fc2c",
                     "indexes" : {

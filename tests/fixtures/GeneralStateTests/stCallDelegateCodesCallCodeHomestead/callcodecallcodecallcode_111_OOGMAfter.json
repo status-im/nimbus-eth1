@@ -2,10 +2,10 @@
     "callcodecallcodecallcode_111_OOGMAfter" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.619a6438.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCallDelegateCodesCallCodeHomestead/callcodecallcodecallcode_111_OOGMAfterFiller.json",
-            "sourceHash" : "7385b846e523dd7c68b58e50309bff8d75fa7005de91f55190b0b07c0801086b"
+            "sourceHash" : "fe0e46c2b8991b2757b77e707f7e5fbb04bbba2e6fbc454cc1ed2f340df4b2a8"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x711948edc65c8b7d199a7731e6054d7e07d06c083eb98c473d3cde0e85488e5a",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x56961591eff5546f1873096c5ba797bccd15de56cc8ba9c42346cd48293b98cc",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x711948edc65c8b7d199a7731e6054d7e07d06c083eb98c473d3cde0e85488e5a",
                     "indexes" : {

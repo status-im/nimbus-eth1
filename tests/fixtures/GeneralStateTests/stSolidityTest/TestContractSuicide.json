@@ -2,10 +2,10 @@
     "TestContractSuicide" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stSolidityTest/TestContractSuicideFiller.json",
-            "sourceHash" : "a5b5fba506c94a8d5aff296c2ac956f996c12890f2938d46e33ff76aaed7bfa4"
+            "sourceHash" : "1551dafe24ad8d240a152799c7064df43cd61a679079a4181dd73956d8b7e4d4"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",

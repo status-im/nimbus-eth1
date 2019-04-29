@@ -2,10 +2,10 @@
     "PythonRevertTestTue201814-1430" : {
         "_info" : {
             "comment" : "A random test that had failed in Python ethereum implementation",
-            "filledwith" : "cpp-1.3.0+commit.ab4ca6d1.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stRevertTest/PythonRevertTestTue201814-1430Filler.json",
-            "sourceHash" : "eeae6235c660d057389f510201b9babac08565fdecf0d66f3bdff9fd5d9d9735"
+            "sourceHash" : "fe79bee68dfdf23bb1c908b4b943d42ef8b4117b8ce7c0b1341af1de41ec7519"
         },
         "env" : {
             "currentCoinbase" : "0xc94f5374fce5edbc8e2a8697c15331677e6ebf0b",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x6c1167833a5b4dd0d6132a7d042695c75840b93aac24e4ecbd7e96d1fd25325b",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x6c1167833a5b4dd0d6132a7d042695c75840b93aac24e4ecbd7e96d1fd25325b",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x6c1167833a5b4dd0d6132a7d042695c75840b93aac24e4ecbd7e96d1fd25325b",
                     "indexes" : {

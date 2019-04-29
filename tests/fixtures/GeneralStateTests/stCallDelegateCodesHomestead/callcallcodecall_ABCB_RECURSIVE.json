@@ -1,11 +1,11 @@
 {
     "callcallcodecall_ABCB_RECURSIVE" : {
         "_info" : {
-            "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.619a6438.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "comment" : "CALL -> DELEGATECALL -> CALL2 -> DELEGATECALL -> ...",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stCallDelegateCodesHomestead/callcallcodecall_ABCB_RECURSIVEFiller.json",
-            "sourceHash" : "309de1128d947d15fd6018975d12f6d6e457e041066f42ea18ebc41b5c911d45"
+            "sourceHash" : "81086b3ceb2e2b24e5c94deec40a4e7b1c808fe998644c054be5322247de8c57"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -19,6 +19,17 @@
             "Byzantium" : [
                 {
                     "hash" : "0xe603e736b2478aff19fe9c113e4fdca7d5ed961015b595e5489a963c449ec96d",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x9541a08fc39913576c3131f73c2d4da9c2ba28184247f8411ce1e4215d63d24e",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,

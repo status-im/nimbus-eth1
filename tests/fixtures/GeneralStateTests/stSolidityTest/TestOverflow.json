@@ -2,10 +2,10 @@
     "TestOverflow" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stSolidityTest/TestOverflowFiller.json",
-            "sourceHash" : "5428193d424f3219ae31e011ff4741ab004c8d4d06acbbc0940c921e18d629e4"
+            "sourceHash" : "21594c35cb55dc92679eefa711ee10e29b3b86372c42644551e408cbcf95651b"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",

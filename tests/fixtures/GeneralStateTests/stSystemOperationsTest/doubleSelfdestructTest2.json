@@ -2,10 +2,10 @@
     "doubleSelfdestructTest2" : {
         "_info" : {
             "comment" : "The second test case requested here https://github.com/ethereum/tests/issues/431#issue-306081539 .\nInvoked Solidity 0.4.21 with solc --bin-runtime --optimize\ncontract DoubleSelfdestructTest2 {\n  address constant B = 0x3;\n  function remoteSelfdestruct() external {\n    selfdestruct(this);\n  }\n  function() external payable {\n    this.remoteSelfdestruct();\n    selfdestruct(B);\n  }\n}\nThe version of Solidity emits code that always enter OOG for Homestead and Frontier.  So no new accounts\nare created for Homestead and Frontier.  EIP158 changes the behavior of zero-amount transfer so that no new accounts are created.\nThis leaves EIP150 as a special case.\n",
-            "filledwith" : "cpp-1.3.0+commit.12a8c764.Linux.g++",
-            "lllcversion" : "Version: 0.4.21-develop.2018.4.10+commit.dfe3193c.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stSystemOperationsTest/doubleSelfdestructTest2Filler.yml",
-            "sourceHash" : "f2dbd5268cce9edfb88a991a76d9ceba3b0c2cbe48fdee485284220020b7c6e2"
+            "sourceHash" : "4327d0a91a302c8741b68ed1f0bc11f1618c3394e91548a30fcf0ad760b7f773"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -28,6 +28,17 @@
                 }
             ],
             "Constantinople" : [
+                {
+                    "hash" : "0x7b1a6d7d3321262293f37907f0ccf9dceb2eef08298ea8d1a2b1b275892ee714",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x7b1a6d7d3321262293f37907f0ccf9dceb2eef08298ea8d1a2b1b275892ee714",
                     "indexes" : {

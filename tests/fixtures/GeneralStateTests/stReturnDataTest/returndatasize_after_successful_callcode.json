@@ -2,21 +2,44 @@
     "returndatasize_after_successful_callcode" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filling-rpc-server" : "aleth/1.6.0-alpha.1-13+commit.b52bb862.dirty/linux/gnu7.4.0/relwithdebinfo",
+            "filling-tool-version" : "retesteth-0.0.1+commit.52ab294d.Linux.g++",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stReturnDataTest/returndatasize_after_successful_callcodeFiller.json",
-            "sourceHash" : "71c2e26ea1a0d8053f12cae2edc37934964e48ae725353728fb059ca2e788d32"
+            "sourceHash" : "4248cfc164f309b3eabe7f7f465d6364c7f68e470dadbb6ab1130f9984fed203"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
             "currentDifficulty" : "0x20000",
-            "currentGasLimit" : "0x0a00000000",
+            "currentGasLimit" : "0x1a00000000",
             "currentNumber" : "0x01",
             "currentTimestamp" : "0x03e8",
             "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0x56df17f2274a5aabdf01718e725431bba076ed9cbf5f5549ab68fd866cb26153",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0x56df17f2274a5aabdf01718e725431bba076ed9cbf5f5549ab68fd866cb26153",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x56df17f2274a5aabdf01718e725431bba076ed9cbf5f5549ab68fd866cb26153",
                     "indexes" : {
@@ -67,6 +90,7 @@
                 "code" : "0x6000600060006000600073a94f5374fce5edbc8e2a8697c15331677e6ebf0b61ea60f2503d600055",
                 "nonce" : "0x00",
                 "storage" : {
+                    "0x00" : "0x00"
                 }
             },
             "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
@@ -79,7 +103,7 @@
         },
         "transaction" : {
             "data" : [
-                "0x"
+                ""
             ],
             "gasLimit" : [
                 "0x0a00000000"

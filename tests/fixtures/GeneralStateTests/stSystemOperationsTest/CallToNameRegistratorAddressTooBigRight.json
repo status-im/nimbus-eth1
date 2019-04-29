@@ -2,10 +2,10 @@
     "CallToNameRegistratorAddressTooBigRight" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ee0c6776.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.2.4+commit.c696803f.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stSystemOperationsTest/CallToNameRegistratorAddressTooBigRightFiller.json",
-            "sourceHash" : "c7305820b6611f4b26634fb7d8861ce66a73040c64e711dde1df2dc5335c337d"
+            "sourceHash" : "92d326667f06770415a4bca0126cd79e597b736836f5aff2b819e1ce1b0a3226"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -17,6 +17,28 @@
         },
         "post" : {
             "Byzantium" : [
+                {
+                    "hash" : "0xe1600f478012c6e0fa7ce6c3d0e9eccee0863844281254ddd18288bbb7e4cc3e",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "Constantinople" : [
+                {
+                    "hash" : "0xe1600f478012c6e0fa7ce6c3d0e9eccee0863844281254ddd18288bbb7e4cc3e",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0xe1600f478012c6e0fa7ce6c3d0e9eccee0863844281254ddd18288bbb7e4cc3e",
                     "indexes" : {

@@ -2,10 +2,10 @@
     "TouchToEmptyAccountRevert2" : {
         "_info" : {
             "comment" : "",
-            "filledwith" : "cpp-1.3.0+commit.ab4ca6d1.Linux.g++",
-            "lllcversion" : "Version: 0.4.20-develop.2018.1.8+commit.2548228b.Linux.g++",
+            "filledwith" : "testeth 1.6.0-alpha.0-11+commit.978e68d2",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stRevertTest/TouchToEmptyAccountRevert2Filler.json",
-            "sourceHash" : "c952e5281cf23d1713451be814ff960dd3a8f4320219ec6775ac6a3cfbb174f4"
+            "sourceHash" : "58f3f6cc53481d5ea9bb80fa528e81dbe255424664c1a8a70ec46909200b1f12"
         },
         "env" : {
             "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
@@ -25,14 +25,52 @@
                         "value" : 0
                     },
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x17a7b5172753df16f6949429a5e24f13a57e219e9ef68f89e010fb1fbaef840d",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 1,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
                 }
             ],
-            "EIP150" : [
+            "Constantinople" : [
+                {
+                    "hash" : "0x8a5a71fdcee22fb770181616f0cff73b340e1f7f6eb8333dde3925c77b9a69d6",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x17a7b5172753df16f6949429a5e24f13a57e219e9ef68f89e010fb1fbaef840d",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 1,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ],
+            "ConstantinopleFix" : [
                 {
                     "hash" : "0x271c21195e9e41c52003339d0957473d172f67c4bb780a308e2ac800a0a50b24",
                     "indexes" : {
                         "data" : 0,
                         "gas" : 0,
+                        "value" : 0
+                    },
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "hash" : "0x17a7b5172753df16f6949429a5e24f13a57e219e9ef68f89e010fb1fbaef840d",
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 1,
                         "value" : 0
                     },
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
@@ -47,14 +85,12 @@
                         "value" : 0
                     },
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
-                }
-            ],
-            "Homestead" : [
+                },
                 {
-                    "hash" : "0xab0c055cc7ace4fbd1d251cabdafa7bca86064b231087adec534c90d6185eab2",
+                    "hash" : "0x17a7b5172753df16f6949429a5e24f13a57e219e9ef68f89e010fb1fbaef840d",
                     "indexes" : {
                         "data" : 0,
-                        "gas" : 0,
+                        "gas" : 1,
                         "value" : 0
                     },
                     "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
@@ -96,7 +132,8 @@
                 "0x"
             ],
             "gasLimit" : [
-                "0x012e58"
+                "0x012e58",
+                "0xd868"
             ],
             "gasPrice" : "0x01",
             "nonce" : "0x00",
