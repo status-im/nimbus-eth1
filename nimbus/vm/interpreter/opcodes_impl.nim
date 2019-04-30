@@ -881,3 +881,24 @@ op selfDestructEip161, inline = false:
   let gasCost = computation.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
   computation.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP161")
   selfDestructImpl(computation, beneficiary)
+
+# Constantinople's new opcodes
+op shlOp, inline = true, num, shift:
+  # TODO: implementation
+  discard
+
+op shrOp, inline = true, num, shift:
+  # TODO: implementation
+  discard
+
+op sarOp, inline = true, num, shift:
+  # TODO: implementation
+  discard
+
+op extCodeHash, inline = true, address:
+  # TODO: implementation
+  discard
+
+op create2, inline = false:
+  # TODO: implementation
+  discard

@@ -46,6 +46,9 @@ fill_enum_holes:
       Xor =            0x18, # Bitwise XOR operation.
       Not =            0x19, # Bitwise NOT operation.
       Byte =           0x1A, # Retrieve single byte from word.
+      Shl =            0x1B, # Shift left
+      Shr =            0x1C, # Logical shift right
+      Sar =            0x1D, # Arithmetic shift right
 
       # 20s: SHA3
       Sha3 =           0x20, # Compute Keccak-256 hash.
@@ -66,6 +69,7 @@ fill_enum_holes:
       ExtCodeCopy =    0x3c, # Copy an account's code to memory.
       ReturnDataSize = 0x3d, # Get size of output data from the previous call from the current environment.
       ReturnDataCopy = 0x3e, # Copy output data from the previous call to memory.
+      ExtCodeHash =    0x3f, # Returns the keccak256 hash of a contract’s code
 
       # 40s: Block Information
       Blockhash =      0x40, # Get the hash of one of the 256 most recent complete blocks.
@@ -172,6 +176,7 @@ fill_enum_holes:
       CallCode =       0xf2, # Message-call into this account with an alternative account's code.
       Return =         0xf3, # Halt execution returning output data.
       DelegateCall =   0xf4, # Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
+      Create2 =        0xf5, # Behaves identically to CREATE, except using keccak256( 0xff ++ address ++ salt ++ keccak256(init_code))[12:]
       StaticCall =     0xfa, # Static message-call into an account.
       Revert =         0xfd, # Halt execution reverting state changes but returning data and remaining gas.
       Invalid =        0xfe, # Designated invalid instruction.
