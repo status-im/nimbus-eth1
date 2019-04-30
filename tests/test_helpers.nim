@@ -21,6 +21,7 @@ const
     FkTangerine: "EIP150",
     FkSpurious: "EIP158",
     FkByzantium: "Byzantium",
+    FkConstantinople: "ConstantinopleFix"
   }.toTable
 
   supportedForks* = {FkFrontier, FkHomestead, FkTangerine, FkSpurious, FkByzantium}

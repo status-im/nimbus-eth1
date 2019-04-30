@@ -205,6 +205,16 @@ proc genByzantiumJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compil
 
 let ByzantiumOpDispatch {.compileTime.}: array[Op, NimNode] = genByzantiumJumpTable(SpuriousOpDispatch)
 
+proc genConstantinopleJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  result[Shl] = newIdentNode "shlOp"
+  result[Shr] = newIdentNode "shrOp"
+  result[Sar] = newIdentNode "sarOp"
+  result[ExtCodeHash] = newIdentNode "extCodeHash"
+  result[Create2] = newIdentNode "create2"
+
+let ConstantinopleOpDispatch {.compileTime.}: array[Op, NimNode] = genConstantinopleJumpTable(ByzantiumOpDispatch)
+
 proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNode =
 
   let instr = quote do: `computation`.instr
@@ -275,6 +285,9 @@ macro genSpuriousDispatch(computation: BaseComputation): untyped =
 macro genByzantiumDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(ByzantiumOpDispatch, computation)
 
+macro genConstantinopleDispatch(computation: BaseComputation): untyped =
+  result = opTableToCaseStmt(ConstantinopleOpDispatch, computation)
+
 proc frontierVM(computation: BaseComputation) =
   genFrontierDispatch(computation)
 
@@ -290,6 +303,9 @@ proc spuriousVM(computation: BaseComputation) {.gcsafe.} =
 proc byzantiumVM(computation: BaseComputation) {.gcsafe.} =
   genByzantiumDispatch(computation)
 
+proc constantinopleVM(computation: BaseComputation) {.gcsafe.} =
+  genConstantinopleDispatch(computation)
+
 proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
@@ -303,6 +319,8 @@ proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
     computation.spuriousVM()
   of FKByzantium:
     computation.byzantiumVM()
+  else:
+    computation.constantinopleVM()
 
 proc executeOpcodes(computation: BaseComputation) =
   try:

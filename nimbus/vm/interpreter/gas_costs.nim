@@ -48,7 +48,9 @@ type
     GasSha3,            # Paid for each SHA3 operation.
     GasSha3Word,        # Paid for each word (rounded up) for input data to a SHA3 operation.
     GasCopy,            # Partial payment for COPY operations, multiplied by words copied, rounded up.
-    GasBlockhash        # Payment for BLOCKHASH operation.
+    GasBlockhash,       # Payment for BLOCKHASH operation.
+    GasArithmetic,      # Payment for bitwise Shl and Shr operators
+    GasExtCodeHash      # Payment for contract's code hashing
 
   GasFeeSchedule = array[GasFeeKind, GasInt]
 
@@ -400,6 +402,9 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           Xor:             fixed GasVeryLow,
           Not:             fixed GasVeryLow,
           Byte:            fixed GasVeryLow,
+          Shl:             fixed GasArithmetic,
+          Shr:             fixed GasArithmetic,
+          Sar:             fixed GasVeryLow,
 
           # 20s: SHA3
           Sha3:            memExpansion `prefix gasSha3`,
@@ -420,6 +425,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           ExtCodeCopy:     memExpansion `prefix gasExtCodeCopy`,
           ReturnDataSize:  fixed GasBase,
           ReturnDataCopy:  memExpansion `prefix gasCopy`,
+          ExtCodeHash:     fixed GasExtCodeHash,
 
           # 40s: Block Information
           Blockhash:       fixed GasBlockhash,
@@ -526,6 +532,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           CallCode:       complex `prefix gasCall`,
           Return:         memExpansion `prefix gasHalt`,
           DelegateCall:   complex `prefix gasCall`,
+          Create2:        complex `prefix gasCall`,
           StaticCall:     complex `prefix gasCall`,
           Revert:         memExpansion `prefix gasHalt`,
           Invalid:        fixed GasZero,
@@ -570,7 +577,9 @@ const
     GasSha3:            30,
     GasSha3Word:        6,
     GasCopy:            3,
-    GasBlockhash:       20
+    GasBlockhash:       20,
+    GasArithmetic:      35,
+    GasExtCodeHash:     400
   ]
 
 # Create the schedule for each forks
@@ -605,7 +614,8 @@ const
     FkDao: HomesteadGasFees,
     FkTangerine: TangerineGasFees,
     FkSpurious: SpuriousGasFees,
-    FkByzantium: SpuriousGasFees, # not supported yet
+    FkByzantium: SpuriousGasFees,
+    FkConstantinople: SpuriousGasFees
   ]
 
 
