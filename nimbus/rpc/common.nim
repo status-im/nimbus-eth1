@@ -17,5 +17,5 @@ proc setupCommonRPC*(server: RpcServer) =
     result = NimbusIdent
 
   server.rpc("web3_sha3") do(data: HexDataStr) -> string:
-    var rawdata = nimcrypto.fromHex(data.string)
+    var rawdata = nimcrypto.fromHex(data.string[2 .. ^1])
     result = "0x" & $keccak_256.digest(rawdata)

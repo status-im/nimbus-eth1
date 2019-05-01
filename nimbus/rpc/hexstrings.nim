@@ -20,17 +20,25 @@
     * seq[byte]
     * openArray[seq]
     * ref BloomFilter
+    * PublicKey
+    * PrivateKey
+    * SymKey
+    * Topic
+    * Bytes
 ]#
 
-import eth/common/eth_types, stint, byteutils, nimcrypto
+import
+  stint, byteutils, eth/[keys, rlp], eth/common/eth_types,
+  eth/p2p/rlpx_protocols/whisper_protocol
 
 type
   HexQuantityStr* = distinct string
   HexDataStr* = distinct string
   EthAddressStr* = distinct string        # Same as HexDataStr but must be less <= 20 bytes
   EthHashStr* = distinct string           # Same as HexDataStr but must be exactly 32 bytes
-  WhisperIdentityStr* = distinct string   # 60 bytes
-  HexStrings = HexQuantityStr | HexDataStr | EthAddressStr | EthHashStr | WhisperIdentityStr
+  Identifier* = distinct string        # 32 bytes, no 0x prefix!
+  HexStrings = HexQuantityStr | HexDataStr | EthAddressStr | EthHashStr |
+               Identifier
 
 template len*(value: HexStrings): int = value.string.len
 
@@ -68,8 +76,8 @@ func isValidHexQuantity*(value: string): bool =
       return false
   return true
 
-func isValidHexData*(value: string): bool =
-  if not value.hasHexHeader:
+func isValidHexData*(value: string, header = true): bool =
+  if header and not value.hasHexHeader:
     return false
   # Must be even number of digits
   if value.len mod 2 != 0: return false
@@ -80,6 +88,9 @@ func isValidHexData*(value: string): bool =
       return false
   return true
 
+template isValidHexData(value: string, hexLen: int, header = true): bool =
+  value.len == hexLen and value.isValidHexData(header)
+
 func isValidEthAddress*(value: string): bool =
   # 20 bytes for EthAddress plus "0x"
   # Addresses are allowed to be shorter than 20 bytes for convenience
@@ -89,19 +100,37 @@ func isValidEthHash*(value: string): bool =
   # 32 bytes for EthAddress plus "0x"
   # Currently hashes are required to be exact lengths
   # TODO: Allow shorter hashes (pad with zeros) for convenience?
-  result = value.len == 66 and value.isValidHexData
+  result = value.isValidHexData(66)
 
-func isValidWhisperIdentity*(value: string): bool =
-  # 60 bytes for WhisperIdentity plus "0x"
-  # TODO: Are the HexData constratins applicable to Whisper identities?
-  result = value.len == 122 and value.isValidHexData
+func isValidIdentifier*(value: string): bool =
+  # 32 bytes for Whisper ID, no 0x prefix
+  result = value.isValidHexData(64, false)
+
+func isValidPublicKey*(value: string): bool =
+  # 65 bytes for Public Key plus 1 byte for 0x prefix
+  result = value.isValidHexData(132)
+
+func isValidPrivateKey*(value: string): bool =
+  # 32 bytes for Private Key plus 1 byte for 0x prefix
+  result = value.isValidHexData(66)
+
+func isValidSymKey*(value: string): bool =
+  # 32 bytes for Private Key plus 1 byte for 0x prefix
+  result = value.isValidHexData(66)
+
+func isValidHash256*(value: string): bool =
+  # 32 bytes for Hash256 plus 1 byte for 0x prefix
+  result = value.isValidHexData(66)
+
+func isValidTopic*(value: string): bool =
+  # 4 bytes for Topic plus 1 byte for 0x prefix
+  result = value.isValidHexData(10)
 
 const
   SInvalidQuantity = "Invalid hex quantity format for Ethereum"
   SInvalidData = "Invalid hex data format for Ethereum"
   SInvalidAddress = "Invalid address format for Ethereum"
   SInvalidHash = "Invalid hash format for Ethereum"
-  SInvalidWhisperIdentity = "Invalid format for whisper identity"
 
 proc validateHexQuantity*(value: string) {.inline.} =
   if unlikely(not value.isValidHexQuantity):
@@ -118,10 +147,6 @@ proc validateHexAddressStr*(value: string) {.inline.} =
 proc validateHashStr*(value: string) {.inline.} =
   if unlikely(not value.isValidEthHash):
     raise newException(ValueError, SInvalidHash & ": " & value)
-
-proc validateWhisperIdentity*(value: string) {.inline.} =
-  if unlikely(not value.isValidWhisperIdentity):  
-    raise newException(ValueError, SInvalidWhisperIdentity & ": " & value)
 
 # Initialisation
 
@@ -141,10 +166,6 @@ proc ethHashStr*(value: string): EthHashStr {.inline.} =
   value.validateHashStr
   result = value.EthHashStr
 
-proc whisperIdentity*(value: string): WhisperIdentityStr {.inline.} =
-  value.validateWhisperIdentity
-  result = value.WhisperIdentityStr
-
 # Converters for use in RPC
 
 import json
@@ -162,16 +183,44 @@ proc `%`*(value: ref EthAddress): JsonNode =
   result = %("0x" & value[].toHex)
 
 proc `%`*(value: Hash256): JsonNode =
-  result = %("0x" & $value)
+  #result = %("0x" & $value) # More clean but no lowercase :(
+  result = %("0x" & value.data.toHex)
 
 proc `%`*(value: UInt256): JsonNode =
   result = %("0x" & value.toString)
 
-proc `%`*(value: WhisperIdentity): JsonNode =
-  result = %("0x" & byteutils.toHex(value))
-
 proc `%`*(value: ref BloomFilter): JsonNode =
   result = %("0x" & toHex[256](value[]))
+
+proc `%`*(value: PublicKey): JsonNode =
+  result = %("0x04" & $value)
+
+proc `%`*(value: PrivateKey): JsonNode =
+  result = %("0x" & $value)
+
+proc `%`*(value: SymKey): JsonNode =
+  result = %("0x" & value.toHex)
+
+proc `%`*(value: whisper_protocol.Topic): JsonNode =
+  result = %("0x" & value.toHex)
+
+proc `%`*(value: Bytes): JsonNode =
+  result = %("0x" & value.toHex)
+
+
+# Helpers for the fromJson procs
+
+proc toPublicKey*(key: string): PublicKey {.inline.} =
+  result = initPublicKey(key[4 .. ^1])
+
+proc toPrivateKey*(key: string): PrivateKey {.inline.} =
+  result = initPrivateKey(key[2 .. ^1])
+
+proc toSymKey*(key: string): SymKey {.inline.} =
+  hexToByteArray(key[2 .. ^1], result)
+
+proc toTopic*(topic: string): whisper_protocol.Topic {.inline.} =
+  hexToByteArray(topic[2 .. ^1], result)
 
 # Marshalling from JSON to Nim types that includes format checking
 
@@ -205,12 +254,12 @@ proc fromJson*(n: JsonNode, argName: string, result: var EthHashStr) =
     raise newException(ValueError, invalidMsg(argName) & " as an Ethereum hash \"" & hexStr & "\"")
   result = hexStr.EthHashStr
 
-proc fromJson*(n: JsonNode, argName: string, result: var WhisperIdentityStr) =
+proc fromJson*(n: JsonNode, argName: string, result: var Identifier) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
-  if not hexStr.isValidWhisperIdentity:
-    raise newException(ValueError, invalidMsg(argName) & " as a Whisper identity \"" & hexStr & "\"")
-  result = hexStr.WhisperIdentityStr
+  if not hexStr.isValidIdentifier:
+    raise newException(ValueError, invalidMsg(argName) & " as a identifier \"" & hexStr & "\"")
+  result = hexStr.Identifier
 
 proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
   n.kind.expect(JString, argName)
@@ -219,3 +268,47 @@ proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
     raise newException(ValueError, invalidMsg(argName) & " as a UInt256 \"" & hexStr & "\"")
   result = readUintBE[256](hexToPaddedByteArray[32](hexStr))
 
+proc fromJson*(n: JsonNode, argName: string, result: var PublicKey) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidPublicKey:
+    raise newException(ValueError, invalidMsg(argName) & " as a public key \"" & hexStr & "\"")
+  result = hexStr.toPublicKey
+
+proc fromJson*(n: JsonNode, argName: string, result: var PrivateKey) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidPrivateKey:
+    raise newException(ValueError, invalidMsg(argName) & " as a private key \"" & hexStr & "\"")
+  result = hexStr.toPrivateKey
+
+proc fromJson*(n: JsonNode, argName: string, result: var SymKey) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidSymKey:
+    raise newException(ValueError, invalidMsg(argName) & " as a symmetric key \"" & hexStr & "\"")
+  result = toSymKey(hexStr)
+
+proc fromJson*(n: JsonNode, argName: string, result: var whisper_protocol.Topic) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidTopic:
+    raise newException(ValueError, invalidMsg(argName) & " as a topic \"" & hexStr & "\"")
+  result = toTopic(hexStr)
+
+# Following procs currently required only for testing, the `createRpcSigs` macro
+# requires it as it will convert the JSON results back to the original Nim
+# types, but it needs the `fromJson` calls for those specific Nim types to do so
+proc fromJson*(n: JsonNode, argName: string, result: var Bytes) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidHexData:
+    raise newException(ValueError, invalidMsg(argName) & " as a hex data \"" & hexStr & "\"")
+  result = hexToSeqByte(hexStr.string)
+
+proc fromJson*(n: JsonNode, argName: string, result: var Hash256) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidHash256:
+    raise newException(ValueError, invalidMsg(argName) & " as a Hash256 \"" & hexStr & "\"")
+  hexToByteArray(hexStr.string, result.data)

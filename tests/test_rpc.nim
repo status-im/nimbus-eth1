@@ -6,16 +6,16 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, json, strformat, options,
-  nimcrypto, eth/[rlp, keys], eth/trie/db, eth/p2p as eth_p2p,
-  json_rpc/[rpcserver, rpcclient],
+  unittest, json, strformat, options, nimcrypto, byteutils,
+  json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
+  eth/[rlp, keys], eth/trie/db, eth/p2p/rlpx_protocols/eth_protocol,
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
-  ../nimbus/constants,
-  ../nimbus/[vm_state, config],
-  ../nimbus/db/[state_db, db_chain, storage_types], eth/common as eth_common, byteutils,
+  ../nimbus/[constants, vm_state, config, genesis],
+  ../nimbus/db/[state_db, db_chain, storage_types],
   ../nimbus/p2p/chain,
-  ../nimbus/genesis,
-  ./rpcclient/test_hexstrings
+  ./rpcclient/test_hexstrings, ./test_helpers
+
+from eth/p2p/rlpx_protocols/whisper_protocol import SymKey
 
 # Perform checks for hex string validation
 doHexStrTests()
@@ -29,26 +29,12 @@ template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const sigPath = &"{sourceDir}{DirSep}rpcclient{DirSep}ethcallsigs.nim"
 createRpcSigs(RpcSocketClient, sigPath)
 
-proc setupEthNode: EthereumNode =
-  var
-    conf = getConfiguration()
-    keypair: KeyPair
-  keypair.seckey = conf.net.nodekey
-  keypair.pubkey = conf.net.nodekey.getPublicKey()
-
-  var srvAddress: Address
-  srvAddress.ip = parseIpAddress("0.0.0.0")
-  srvAddress.tcpPort = Port(conf.net.bindPort)
-  srvAddress.udpPort = Port(conf.net.discPort)
-  result = newEthereumNode(keypair, srvAddress, conf.net.networkId,
-                              nil, "nimbus 0.1.0")
-
 proc toEthAddressStr(address: EthAddress): EthAddressStr =
   result = ("0x" & address.toHex).ethAddressStr
 
 proc doTests =
   # TODO: Include other transports such as Http
-  var ethNode = setupEthNode()
+  var ethNode = setupEthNode(eth)
   let
     emptyRlpHash = keccak256.digest(rlp.encode(""))
     header = BlockHeader(stateRoot: emptyRlpHash)

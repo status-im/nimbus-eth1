@@ -1,4 +1,6 @@
-import eth/common, hexstrings, options
+import
+  hexstrings, options, eth/[common, keys, rlp],
+  eth/p2p/rlpx_protocols/whisper_protocol
 
 #[
   Notes:
@@ -26,7 +28,7 @@ type
     gasPrice*: GasInt         # (optional, default: To-Be-Determined) integer of the gasPrice used for each paid gas.
     value*: UInt256           # (optional) integer of the value sent with this transaction.
     data*: EthHashStr         # TODO: Support more data. The compiled code of a contract OR the hash of the invoked method signature and encoded parameters. For details see Ethereum Contract ABI.
-    nonce*: AccountNonce      # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce 
+    nonce*: AccountNonce      # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
 
   EthCall* = object
     # Parameter from user
@@ -119,28 +121,46 @@ type
     toBlock*: Option[string]              # (optional, default: "latest") integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
     address*: Option[EthAddress]          # (optional) contract address or a list of addresses from which logs should originate.
     topics*: Option[seq[FilterData]]      # (optional) list of DATA topics. Topics are order-dependent. Each topic can also be a list of DATA with "or" options.
-  
-  WhisperFilterOptions* = object
-    to*: Option[WhisperIdentityStr]
-    topics*: seq[HexDataStr]
 
-  WhisperPost* = object
-    # Parameter from user
-    source*: Option[WhisperIdentityStr]   # (optional) the identity of the sender.
-    to*: Option[WhisperIdentityStr]       # (optional) the identity of the receiver. When present whisper will encrypt the message so that only the receiver can decrypt it.
-    topics*: seq[HexDataStr]              # list of DATA topics, for the receiver to identify messages.
-    payload*: HexDataStr                  # the payload of the message.
-    priority*: int                        # integer of the priority in a rang from.
-    ttl*: int                             # integer of the time to live in seconds.
-
-  WhisperMessage* = object
+  WhisperInfo* = object
     # Returned to user
-    hash*: Hash256              # the hash of the message.
-    source*: WhisperIdentity    # the sender of the message, if a sender was specified.
-    to*: WhisperIdentity        # the receiver of the message, if a receiver was specified.
-    expiry*: int                # integer of the time in seconds when this message should expire.
-    ttl*: int                   # integer of the time the message should float in the system in seconds.
-    sent*: int                  # integer of the unix timestamp when the message was sent.
-    topics*: seq[UInt256]       # list of DATA topics the message contained.
-    payload*: Blob              # the payload of the message.
-    workProved*: int            # integer of the work this message required before it was send.
+    minPow*: float64        # Current minimum PoW requirement.
+    # TODO: may be uint32
+    maxMessageSize*: uint64 # Current message size limit in bytes.
+    memory*: int            # Memory size of the floating messages in bytes.
+    messages*: int          # Number of floating messages.
+
+  WhisperFilterOptions* = object
+    # Parameter from user
+    symKeyID*: Option[Identifier]         # ID of symmetric key for message decryption.
+    privateKeyID*: Option[Identifier]     # ID of private (asymmetric) key for message decryption.
+    sig*: Option[PublicKey]               # (Optional) Public key of the signature.
+    minPow*: Option[float64]              # (Optional) Minimal PoW requirement for incoming messages.
+    topics*: Option[seq[whisper_protocol.Topic]] # (Optional when asym key): Array of possible topics (or partial topics).
+    allowP2P*: Option[bool]               # (Optional) Indicates if this filter allows processing of direct peer-to-peer messages.
+
+  WhisperFilterMessage* = object
+    # Returned to user
+    sig*: Option[PublicKey]                 # Public key who signed this message.
+    recipientPublicKey*: Option[PublicKey]  # The recipients public key.
+    ttl*: uint64                            # Time-to-live in seconds.
+    timestamp*: uint64                      # Unix timestamp of the message generation.
+    topic*: whisper_protocol.Topic          # 4 Bytes: Message topic.
+    payload*: Bytes                         # Decrypted payload.
+    padding*: Bytes                         # (Optional) Padding (byte array of arbitrary length).
+    pow*: float64                           # Proof of work value.
+    hash*: Hash                             # Hash of the enveloped message.
+
+  WhisperPostMessage* = object
+    # Parameter from user
+    symKeyID*: Option[Identifier]     # ID of symmetric key for message encryption.
+    pubKey*: Option[PublicKey]        # Public key for message encryption.
+    sig*: Option[Identifier]          # (Optional) ID of the signing key.
+    ttl*: uint64                      # Time-to-live in seconds.
+    topic*: Option[whisper_protocol.Topic] # Message topic (mandatory when key is symmetric).
+    payload*: HexDataStr              # Payload to be encrypted.
+    padding*: Option[HexDataStr]      # (Optional) Padding (byte array of arbitrary length).
+    powTime*: float64                 # Maximal time in seconds to be spent on proof of work.
+    powTarget*: float64               # Minimal PoW target required for this message.
+    # TODO: EnodeStr
+    targetPeer*: Option[string]       # (Optional) Peer ID (for peer-to-peer message only).
