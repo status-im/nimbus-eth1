@@ -303,8 +303,6 @@ proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
     computation.spuriousVM()
   of FKByzantium:
     computation.byzantiumVM()
-  else:
-    raise newException(VMError, "Unknown or not implemented fork: " & $fork)
 
 proc executeOpcodes(computation: BaseComputation) =
   try:
