@@ -211,9 +211,9 @@ proc modExp*(computation: BaseComputation) =
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
   let # lengths Base, Exponent, Modulus
-    base_len = rawMsg.rangeToPadded[:Uint256](0, 31).truncate(int)
-    exp_len = rawMsg.rangeToPadded[:Uint256](32, 63).truncate(int)
-    mod_len = rawMsg.rangeToPadded[:Uint256](64, 95).truncate(int)
+    base_len = rawMsg.rangeToPadded[:Uint256](0, 31).safeInt
+    exp_len = rawMsg.rangeToPadded[:Uint256](32, 63).safeInt
+    mod_len = rawMsg.rangeToPadded[:Uint256](64, 95).safeInt
 
   let maxBytes = max(base_len, max(exp_len, mod_len))
 

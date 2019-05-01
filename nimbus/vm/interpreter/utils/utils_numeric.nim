@@ -69,3 +69,13 @@ proc rangeToPadded*[T: StUint](x: openarray[byte], first, last: int): T =
     x.toOpenArray(lo, hi),
     allowPadding = true
   )
+
+# calculates the memory size required for a step
+func calcMemSize*(offset, length: int): int {.inline.} =
+  if length.isZero: return 0
+  result = offset + length
+
+func safeInt*(x: Uint256): int {.inline.} =
+  result = x.truncate(int)
+  if x > high(int32).u256 or result < 0:
+    result = high(int32)

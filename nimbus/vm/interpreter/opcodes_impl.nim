@@ -195,12 +195,7 @@ op byteOp, inline = true, position, value:
 
 op sha3, inline = true, startPos, length:
   ## 0x20, Compute Keccak-256 hash.
-  let (pos, len) = (startPos.toInt, length.toInt)
-
-  # TODO:
-  # "randomStatetest14.json", # SHA3 offset
-  # "sha3_deja.json", # SHA3 startPos
-  # both test require Uint256 to calculate startpos/offset
+  let (pos, len) = (startPos.safeInt, length.safeInt)
 
   if pos < 0 or len < 0 or pos > 2147483648:
     raise newException(OutOfBoundsRead, "Out of bounds memory access")
@@ -708,7 +703,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
                        else:
                          not computation.vmState.readOnlyStateDb.accountExists(to)
 
-    let (memOffset, memLength) = if memInPos + memInLen > memOutPos + memOutLen:
+    let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
                                     (memInPos, memInLen)
                                  else:
                                     (memOutPos, memOutLen)
