@@ -308,7 +308,7 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
     else:
       output.incl c.msg.storageAddress
 
-  if not c.isOriginComputation or not c.isError:
+  if not c.isError:
     for child in c.children:
       child.collectTouchedAccounts(output)
 
