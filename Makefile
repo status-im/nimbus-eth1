@@ -232,6 +232,7 @@ ctags:
 	--regex-nim='/(\w+)\*?\s*=\s*range/\1/s,subrange/' \
 	--regex-nim='/(\w+)\*?\s*=\s*proc/\1/p,proctype/' \
 	--regex-nim='/proc\s+(\w+)/\1/f,procedure/' \
+	--regex-nim='/func\s+(\w+)/\1/f,procedure/' \
 	--regex-nim='/method\s+(\w+)/\1/m,method/' \
 	--regex-nim='/proc\s+`([^`]+)`/\1/o,operator/' \
 	--regex-nim='/template\s+(\w+)/\1/u,template/' \
