@@ -1013,13 +1013,13 @@ OK: 95/96 Fail: 0/96 Skip: 1/96
 + CallSha256_4.json                                               OK
 + CallSha256_4_gas99.json                                         OK
 + CallSha256_5.json                                               OK
-  modexpRandomInput.json                                          Skip
++ modexpRandomInput.json                                          OK
 + modexp_0_0_0_20500.json                                         OK
 + modexp_0_0_0_22000.json                                         OK
 + modexp_0_0_0_25000.json                                         OK
 + modexp_0_0_0_35000.json                                         OK
 ```
-OK: 96/97 Fail: 0/97 Skip: 1/97
+OK: 97/97 Fail: 0/97 Skip: 0/97
 ## stQuadraticComplexityTest
 ```diff
   Call1MB1024Calldepth.json                                       Skip
@@ -1083,7 +1083,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest137.json                                         OK
 + randomStatetest138.json                                         OK
 + randomStatetest139.json                                         OK
-  randomStatetest14.json                                          Skip
++ randomStatetest14.json                                          OK
 + randomStatetest142.json                                         OK
 + randomStatetest143.json                                         OK
 + randomStatetest144.json                                         OK
@@ -1357,7 +1357,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest82.json                                          OK
 + randomStatetest83.json                                          OK
 + randomStatetest84.json                                          OK
-  randomStatetest85.json                                          Skip
++ randomStatetest85.json                                          OK
 + randomStatetest87.json                                          OK
 + randomStatetest88.json                                          OK
 + randomStatetest89.json                                          OK
@@ -1370,7 +1370,7 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 321/327 Fail: 0/327 Skip: 6/327
+OK: 323/327 Fail: 0/327 Skip: 4/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -1834,11 +1834,11 @@ OK: 16/16 Fail: 0/16 Skip: 0/16
 + gasPrice0.json                                                  OK
 + makeMoney.json                                                  OK
   push32withoutByte.json                                          Skip
-  sha3_deja.json                                                  Skip
++ sha3_deja.json                                                  OK
 + txCost-sec73.json                                               OK
 + tx_e1c174e2.json                                                OK
 ```
-OK: 10/14 Fail: 0/14 Skip: 4/14
+OK: 11/14 Fail: 0/14 Skip: 3/14
 ## stStackTests
 ```diff
 + shallowStack.json                                               OK
@@ -2485,11 +2485,11 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + ecpairing_one_point_with_g2_zero.json                           OK
 + ecpairing_one_point_with_g2_zero_and_g1_invalid.json            OK
 + ecpairing_perturb_g2_by_curve_order.json                        OK
-  ecpairing_perturb_g2_by_field_modulus.json                      Skip
-  ecpairing_perturb_g2_by_field_modulus_again.json                Skip
++ ecpairing_perturb_g2_by_field_modulus.json                      OK
++ ecpairing_perturb_g2_by_field_modulus_again.json                OK
 + ecpairing_perturb_g2_by_one.json                                OK
 + ecpairing_perturb_zeropoint_by_curve_order.json                 OK
-  ecpairing_perturb_zeropoint_by_field_modulus.json               Skip
++ ecpairing_perturb_zeropoint_by_field_modulus.json               OK
 + ecpairing_perturb_zeropoint_by_one.json                         OK
 + ecpairing_three_point_fail_1.json                               OK
 + ecpairing_three_point_match_1.json                              OK
@@ -2508,7 +2508,7 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + pointMulAdd.json                                                OK
 + pointMulAdd2.json                                               OK
 ```
-OK: 130/133 Fail: 0/133 Skip: 3/133
+OK: 133/133 Fail: 0/133 Skip: 0/133
 ## stZeroKnowledge2
 ```diff
 + ecadd_0-0_0-0_21000_0.json                                      OK
@@ -2645,4 +2645,4 @@ OK: 130/133 Fail: 0/133 Skip: 3/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2245/2447 Fail: 0/2447 Skip: 202/2447
+OK: 2252/2447 Fail: 0/2447 Skip: 195/2447

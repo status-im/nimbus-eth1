@@ -13,22 +13,9 @@
 # being mostly used for short-term regression prevention.
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
-    # a family of UInt256 truncated to int problems
-    "randomStatetest14.json", # SHA3 offset
-    "randomStatetest85.json", # CALL* memoffset
-    "sha3_deja.json", # SHA3 startPos
-    # modexp exp_len & friends truncated to int
-    # and not OOG where it should OOG
-    "modexpRandomInput.json",
-
     "CreateOOGafterInitCodeReturndataSize.json",
     "RevertInCreateInInit.json",
     "modexp.json",
-
-    # see precompiles getPoint[G2]
-    "ecpairing_perturb_g2_by_field_modulus_again.json",
-    "ecpairing_perturb_zeropoint_by_field_modulus.json",
-    "ecpairing_perturb_g2_by_field_modulus.json",
 
     # 29/04/2019
     "RevertPrecompiledTouch.json",
