@@ -1700,12 +1700,12 @@ OK: 37/38 Fail: 0/38 Skip: 1/38
 + RevertOpcodeMultipleSubCalls.json                               OK
 + RevertOpcodeReturn.json                                         OK
 + RevertOpcodeWithBigOutputInInit.json                            OK
-  RevertPrecompiledTouch.json                                     Skip
++ RevertPrecompiledTouch.json                                     OK
 + RevertPrecompiledTouchCC.json                                   OK
 + RevertPrecompiledTouchDC.json                                   OK
 + RevertPrecompiledTouch_nonce.json                               OK
 + RevertPrecompiledTouch_noncestorage.json                        OK
-  RevertPrecompiledTouch_storage.json                             Skip
++ RevertPrecompiledTouch_storage.json                             OK
 + RevertPrefound.json                                             OK
 + RevertPrefoundCall.json                                         OK
 + RevertPrefoundCallOOG.json                                      OK
@@ -1722,7 +1722,7 @@ OK: 37/38 Fail: 0/38 Skip: 1/38
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 38/46 Fail: 0/46 Skip: 8/46
+OK: 40/46 Fail: 0/46 Skip: 6/46
 ## stSStoreTest
 ```diff
   InitCollision.json                                              Skip
@@ -2645,4 +2645,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2252/2447 Fail: 0/2447 Skip: 195/2447
+OK: 2254/2447 Fail: 0/2447 Skip: 193/2447

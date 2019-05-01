@@ -17,10 +17,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "RevertInCreateInInit.json",
     "modexp.json",
 
-    # 29/04/2019
-    "RevertPrecompiledTouch.json",
-    "RevertPrecompiledTouch_storage.json",
-
     # all these tests below actually pass
     # but they are very slow
     # byzantium slow
