@@ -13,7 +13,6 @@
 # being mostly used for short-term regression prevention.
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
-    "CreateOOGafterInitCodeReturndataSize.json",
     "modexp.json",
 
     # all these tests below actually pass
