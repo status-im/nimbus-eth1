@@ -12,7 +12,7 @@ import
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
   ../utils/header, byteutils, ranges, precompiles,
-  transaction_tracer
+  transaction_tracer, eth/trie/trie_defs
 
 logScope:
   topics = "vm computation"
@@ -199,7 +199,10 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   when opCode == Create:
     if computation.getFork >= FkSpurious:
       computation.vmState.mutateStateDb:
-        db.incNonce(computation.msg.storageAddress)
+        db.incNonce(computation.msg.storageAddress)        
+        if computation.getFork >= FkByzantium:
+          # RevertInCreateInInit.json
+          db.setStorageRoot(computation.msg.storageAddress, emptyRlpHash)
 
   when opCode in {CallCode, Call, Create}:
     computation.transferBalance(opCode)
