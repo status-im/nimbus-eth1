@@ -440,14 +440,14 @@ OK: 11/44 Fail: 0/44 Skip: 33/44
 + CreateOOGafterInitCodeReturndata.json                           OK
 + CreateOOGafterInitCodeReturndata2.json                          OK
 + CreateOOGafterInitCodeReturndata3.json                          OK
-  CreateOOGafterInitCodeReturndataSize.json                       Skip
++ CreateOOGafterInitCodeReturndataSize.json                       OK
 + CreateOOGafterInitCodeRevert.json                               OK
 + CreateOOGafterInitCodeRevert2.json                              OK
 + TransactionCollisionToEmpty.json                                OK
 + TransactionCollisionToEmptyButCode.json                         OK
 + TransactionCollisionToEmptyButNonce.json                        OK
 ```
-OK: 29/30 Fail: 0/30 Skip: 1/30
+OK: 30/30 Fail: 0/30 Skip: 0/30
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -2645,4 +2645,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2255/2447 Fail: 0/2447 Skip: 192/2447
+OK: 2256/2447 Fail: 0/2447 Skip: 191/2447

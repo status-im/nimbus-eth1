@@ -146,7 +146,7 @@ proc writeContract*(computation: BaseComputation, fork: Fork): bool {.gcsafe.} =
       db.setCode(storageAddr, contractCode.toRange)
     result = true
   else:
-    if fork < FkHomestead: computation.output = @[]
+    if fork < FkHomestead or fork >= FkByzantium: computation.output = @[]
     result = false
 
 proc transferBalance(computation: BaseComputation, opCode: static[Op]) =
@@ -199,7 +199,7 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   when opCode == Create:
     if computation.getFork >= FkSpurious:
       computation.vmState.mutateStateDb:
-        db.incNonce(computation.msg.storageAddress)        
+        db.incNonce(computation.msg.storageAddress)
         if computation.getFork >= FkByzantium:
           # RevertInCreateInInit.json
           db.setStorageRoot(computation.msg.storageAddress, emptyRlpHash)
