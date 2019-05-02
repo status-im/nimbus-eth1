@@ -14,7 +14,6 @@
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
     "CreateOOGafterInitCodeReturndataSize.json",
-    "RevertInCreateInInit.json",
     "modexp.json",
 
     # all these tests below actually pass
