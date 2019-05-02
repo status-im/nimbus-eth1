@@ -67,6 +67,7 @@ func failIn32Bits(folder, name: string): bool =
     "RevertInCreateInInit.json",
     "FailedCreateRevertsDeletion.json",
     "Callcode1024BalanceTooLow.json",
+    "sha3_bigSize.json", # from vm_test
 
     # TODO: obvious theme; check returndatasize/returndatacopy
     "call_ecrec_success_empty_then_returndatasize.json",
