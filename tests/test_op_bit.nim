@@ -106,7 +106,7 @@ suite "Bitwise Opcodes":
       BYTE
     success: false
     stack: "0xAABBCCDDEE3A"
-#[
+
   assembler: # SHL OP
     title: "SHL_1"
     code:
@@ -120,7 +120,8 @@ suite "Bitwise Opcodes":
     title: "SHL_2"
     code:
       PUSH32 "0x0000000000000000000000000000000000000000000000000000000000000001"
-      PUSH1 "0x01" SHL
+      PUSH1 "0x01"
+      SHL
     fork: constantinople
     stack: "0x0000000000000000000000000000000000000000000000000000000000000002"
 
@@ -447,7 +448,7 @@ suite "Bitwise Opcodes":
       SAR
     fork: constantinople
     stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
-]#
+
   assembler: # ISZERO OP
     title: "ISZERO_1"
     code:

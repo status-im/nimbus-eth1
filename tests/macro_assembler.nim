@@ -15,6 +15,14 @@ import
 export opcode_values, byteutils
 {.experimental: "dynamicBindSym".}
 
+# backported from Nim 0.19.9
+# remove this when we use newer Nim
+proc newLitFixed*(arg: enum): NimNode {.compileTime.} =
+  result = newCall(
+    arg.type.getTypeInst[1],
+    newLit(int(arg))
+  )
+
 type
   VMWord* = array[32, byte]
   Storage* = tuple[key, val: VMWord]
@@ -31,6 +39,7 @@ type
     gasUsed*: GasInt
     data*: seq[byte]
     output*: seq[byte]
+    fork*: Fork
 
 const
   idToOpcode = CacheTable"NimbusMacroAssembler"
@@ -159,6 +168,10 @@ proc parseCode(codes: NimNode): seq[byte] =
     else:
       error("unknown syntax: " & line.toStrLit.strVal, line)
 
+proc parseFork(fork: NimNode): Fork =
+  fork[0].expectKind({nnkIdent, nnkStrLit})
+  parseEnum[Fork](strip(fork[0].strVal))
+
 proc generateVMProxy(boa: Assembler): NimNode =
   let
     vmProxy = genSym(nskProc, "vmProxy")
@@ -212,7 +225,7 @@ proc initDatabase*(): (Uint256, BaseChainDB) =
 
   result = (blockNumber, newBaseChainDB(memoryDB, false))
 
-proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: seq[byte]): BaseComputation =
+proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: seq[byte], fork: Fork): BaseComputation =
   let
     parentNumber = blockNumber - 1
     parent = chainDB.getBlockHeader(parentNumber)
@@ -227,10 +240,10 @@ proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: 
 
   tx.payload = payload
   tx.gasLimit = 500000000
-  initComputation(vmState, tx, sender, data, none(Fork))
+  initComputation(vmState, tx, sender, data, some(fork))
 
 proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
-  var computation = initComputation(blockNumber, chainDB, boa.code, boa.data)
+  var computation = initComputation(blockNumber, chainDB, boa.code, boa.data, boa.fork)
 
   let gas = computation.gasMeter.gasRemaining
   execComputation(computation)
@@ -322,7 +335,7 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   result = true
 
 macro assembler*(list: untyped): untyped =
-  var boa = Assembler(success: true)
+  var boa = Assembler(success: true, fork: FkFrontier)
   list.expectKind nnkStmtList
   for callSection in list:
     callSection.expectKind(nnkCall)
@@ -341,5 +354,6 @@ macro assembler*(list: untyped): untyped =
     of "success": boa.success = parseSuccess(body)
     of "data": boa.data = parseData(body)
     of "output": boa.output = parseData(body)
+    of "fork": boa.fork = parseFork(body)
     else: error("unknown section '" & label & "'", callSection[0])
   result = boa.generateVMProxy()
