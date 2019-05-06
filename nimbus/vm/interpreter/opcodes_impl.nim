@@ -878,21 +878,37 @@ op selfDestructEip161, inline = false:
   selfDestructImpl(computation, beneficiary)
 
 # Constantinople's new opcodes
-op shlOp, inline = true, num, shift:
-  # TODO: implementation
-  discard
+op shlOp, inline = true, shift, num:
+  let shiftLen = shift.safeInt
+  if shiftLen >= 256:
+    push: 0
+  else:
+    push: num shl shiftLen
 
-op shrOp, inline = true, num, shift:
-  # TODO: implementation
-  discard
+op shrOp, inline = true, shift, num:
+  let shiftLen = shift.safeInt
+  if shiftLen >= 256:
+    push: 0
+  else:
+    push: num shr shiftLen
 
-op sarOp, inline = true, num, shift:
-  # TODO: implementation
-  discard
+op sarOp, inline = true:
+  let shiftLen = computation.stack.popInt().safeInt
+  let num = cast[Int256](computation.stack.popInt())
+  if shiftLen >= 256:
+    if num.isNegative:
+      push: cast[Uint256]((-1).i256)
+    else:
+      push: 0
+  else:
+    push: cast[Uint256](ashr(num, shiftLen))
 
-op extCodeHash, inline = true, address:
-  # TODO: implementation
-  discard
+op extCodeHash, inline = true:
+  let address = computation.stack.popAddress()
+  if computation.vmState.readOnlyStateDB.isEmptyAccount(address):
+    push: 0
+  else:
+    push: computation.vmState.readOnlyStateDB.getCodeHash(address)
 
 op create2, inline = false:
   # TODO: implementation
