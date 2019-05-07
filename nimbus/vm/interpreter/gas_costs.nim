@@ -49,7 +49,6 @@ type
     GasSha3Word,        # Paid for each word (rounded up) for input data to a SHA3 operation.
     GasCopy,            # Partial payment for COPY operations, multiplied by words copied, rounded up.
     GasBlockhash,       # Payment for BLOCKHASH operation.
-    GasArithmetic,      # Payment for bitwise Shl and Shr operators
     GasExtCodeHash      # Payment for contract's code hashing
 
   GasFeeSchedule = array[GasFeeKind, GasInt]
@@ -406,8 +405,8 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           Xor:             fixed GasVeryLow,
           Not:             fixed GasVeryLow,
           Byte:            fixed GasVeryLow,
-          Shl:             fixed GasArithmetic,
-          Shr:             fixed GasArithmetic,
+          Shl:             fixed GasVeryLow,
+          Shr:             fixed GasVeryLow,
           Sar:             fixed GasVeryLow,
 
           # 20s: SHA3
@@ -582,7 +581,6 @@ const
     GasSha3Word:        6,
     GasCopy:            3,
     GasBlockhash:       20,
-    GasArithmetic:      35,
     GasExtCodeHash:     400
   ]
 

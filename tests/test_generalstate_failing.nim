@@ -96,30 +96,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "returndatacopy_0_0_following_successful_create.json",
     "returndatasize_following_successful_create.json",
 
-    "shl10.json",
-    "shl01.json",
-    "shl01-0101.json",
-    "shl01-0100.json",
-    "shl11.json",
-    "shl_-1_256.json",
-    "shl01-ff.json",
-    "shl_-1_1.json",
-    "shl_2^255-1_1.json",
-    "shl_-1_0.json",
-    "shl_-1_255.json",
-
-    "shr_-1_1.json",
-    "shr_2^255_255.json",
-    "shr10.json",
-    "shr_2^255_1.json",
-    "shr01.json",
-    "shr_2^255_256.json",
-    "shr_2^255_257.json",
-    "shr_-1_255.json",
-    "shr_-1_256.json",
-    "shr_-1_0.json",
-    "shr11.json",
-
     # all these tests below actually pass
     # but they are very slow
     # byzantium slow

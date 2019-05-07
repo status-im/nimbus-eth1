@@ -1777,30 +1777,30 @@ OK: 5/29 Fail: 0/29 Skip: 24/29
 + sar_2^256-1_255.json                                            OK
 + sar_2^256-1_256.json                                            OK
   shiftCombinations.json                                          Skip
-  shl01-0100.json                                                 Skip
-  shl01-0101.json                                                 Skip
-  shl01-ff.json                                                   Skip
-  shl01.json                                                      Skip
-  shl10.json                                                      Skip
-  shl11.json                                                      Skip
-  shl_-1_0.json                                                   Skip
-  shl_-1_1.json                                                   Skip
-  shl_-1_255.json                                                 Skip
-  shl_-1_256.json                                                 Skip
-  shl_2^255-1_1.json                                              Skip
-  shr01.json                                                      Skip
-  shr10.json                                                      Skip
-  shr11.json                                                      Skip
-  shr_-1_0.json                                                   Skip
-  shr_-1_1.json                                                   Skip
-  shr_-1_255.json                                                 Skip
-  shr_-1_256.json                                                 Skip
-  shr_2^255_1.json                                                Skip
-  shr_2^255_255.json                                              Skip
-  shr_2^255_256.json                                              Skip
-  shr_2^255_257.json                                              Skip
++ shl01-0100.json                                                 OK
++ shl01-0101.json                                                 OK
++ shl01-ff.json                                                   OK
++ shl01.json                                                      OK
++ shl10.json                                                      OK
++ shl11.json                                                      OK
++ shl_-1_0.json                                                   OK
++ shl_-1_1.json                                                   OK
++ shl_-1_255.json                                                 OK
++ shl_-1_256.json                                                 OK
++ shl_2^255-1_1.json                                              OK
++ shr01.json                                                      OK
++ shr10.json                                                      OK
++ shr11.json                                                      OK
++ shr_-1_0.json                                                   OK
++ shr_-1_1.json                                                   OK
++ shr_-1_255.json                                                 OK
++ shr_-1_256.json                                                 OK
++ shr_2^255_1.json                                                OK
++ shr_2^255_255.json                                              OK
++ shr_2^255_256.json                                              OK
++ shr_2^255_257.json                                              OK
 ```
-OK: 18/41 Fail: 0/41 Skip: 23/41
+OK: 40/41 Fail: 0/41 Skip: 1/41
 ## stSolidityTest
 ```diff
 + AmbiguousMethod.json                                            OK
@@ -2645,4 +2645,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2240/2447 Fail: 0/2447 Skip: 207/2447
+OK: 2262/2447 Fail: 0/2447 Skip: 185/2447
