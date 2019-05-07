@@ -568,6 +568,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
       isCollision = db.hasCodeOrNonce(contractAddress)
   else:
     computation.vmState.mutateStateDB:
+      db.incNonce(computation.msg.storageAddress)
       let salt = computation.stack.popInt()
       contractAddress = generateSafeAddress(computation.msg.storageAddress, salt, callData)
       isCollision = db.hasCodeOrNonce(contractAddress)

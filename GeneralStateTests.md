@@ -371,49 +371,49 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
   CREATE2_Bounds.json                                             Skip
   CREATE2_Bounds2.json                                            Skip
 + CREATE2_Bounds3.json                                            OK
-  CREATE2_ContractSuicideDuringInit_ThenStoreThenReturn.json      Skip
-  CREATE2_Suicide.json                                            Skip
-  Create2OOGafterInitCode.json                                    Skip
++ CREATE2_ContractSuicideDuringInit_ThenStoreThenReturn.json      OK
++ CREATE2_Suicide.json                                            OK
++ Create2OOGafterInitCode.json                                    OK
 + Create2OOGafterInitCodeReturndata.json                          OK
-  Create2OOGafterInitCodeReturndata2.json                         Skip
++ Create2OOGafterInitCodeReturndata2.json                         OK
 + Create2OOGafterInitCodeReturndata3.json                         OK
-  Create2OOGafterInitCodeReturndataSize.json                      Skip
++ Create2OOGafterInitCodeReturndataSize.json                      OK
 + Create2OOGafterInitCodeRevert.json                              OK
 + Create2OOGafterInitCodeRevert2.json                             OK
-  Create2OnDepth1023.json                                         Skip
-  Create2OnDepth1024.json                                         Skip
++ Create2OnDepth1023.json                                         OK
++ Create2OnDepth1024.json                                         OK
   Create2Recursive.json                                           Skip
-  CreateMessageReverted.json                                      Skip
-  CreateMessageRevertedOOGInInit.json                             Skip
-  RevertDepthCreate2OOG.json                                      Skip
-  RevertDepthCreateAddressCollision.json                          Skip
-  RevertInCreateInInitCreate2.json                                Skip
-  RevertOpcodeCreate.json                                         Skip
-  RevertOpcodeInCreateReturnsCreate2.json                         Skip
-  call_outsize_then_create2_successful_then_returndatasize.json   Skip
-  call_then_create2_successful_then_returndatasize.json           Skip
++ CreateMessageReverted.json                                      OK
++ CreateMessageRevertedOOGInInit.json                             OK
++ RevertDepthCreate2OOG.json                                      OK
++ RevertDepthCreateAddressCollision.json                          OK
++ RevertInCreateInInitCreate2.json                                OK
++ RevertOpcodeCreate.json                                         OK
++ RevertOpcodeInCreateReturnsCreate2.json                         OK
++ call_outsize_then_create2_successful_then_returndatasize.json   OK
++ call_then_create2_successful_then_returndatasize.json           OK
   create2InitCodes.json                                           Skip
-  create2SmartInitCode.json                                       Skip
++ create2SmartInitCode.json                                       OK
   create2callPrecompiles.json                                     Skip
-  create2checkFieldsInInitcode.json                               Skip
-  create2collisionBalance.json                                    Skip
-  create2collisionCode.json                                       Skip
-  create2collisionCode2.json                                      Skip
-  create2collisionNonce.json                                      Skip
-  create2collisionSelfdestructed.json                             Skip
-  create2collisionSelfdestructed2.json                            Skip
++ create2checkFieldsInInitcode.json                               OK
++ create2collisionBalance.json                                    OK
++ create2collisionCode.json                                       OK
++ create2collisionCode2.json                                      OK
++ create2collisionNonce.json                                      OK
++ create2collisionSelfdestructed.json                             OK
++ create2collisionSelfdestructed2.json                            OK
 + create2collisionSelfdestructedOOG.json                          OK
 + create2collisionSelfdestructedRevert.json                       OK
-  create2collisionStorage.json                                    Skip
++ create2collisionStorage.json                                    OK
   create2noCash.json                                              Skip
-  returndatacopy_0_0_following_successful_create.json             Skip
-  returndatacopy_afterFailing_create.json                         Skip
++ returndatacopy_0_0_following_successful_create.json             OK
++ returndatacopy_afterFailing_create.json                         OK
 + returndatacopy_following_create.json                            OK
-  returndatacopy_following_revert_in_create.json                  Skip
++ returndatacopy_following_revert_in_create.json                  OK
 + returndatacopy_following_successful_create.json                 OK
-  returndatasize_following_successful_create.json                 Skip
++ returndatasize_following_successful_create.json                 OK
 ```
-OK: 9/44 Fail: 0/44 Skip: 35/44
+OK: 38/44 Fail: 0/44 Skip: 6/44
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -556,35 +556,35 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stExtCodeHash
 ```diff
   codeCopyZero.json                                               Skip
-  dynamicAccountOverwriteEmpty.json                               Skip
++ dynamicAccountOverwriteEmpty.json                               OK
 + extCodeCopyBounds.json                                          OK
 + extCodeHashAccountWithoutCode.json                              OK
 + extCodeHashCALL.json                                            OK
 + extCodeHashCALLCODE.json                                        OK
 + extCodeHashChangedAccount.json                                  OK
-  extCodeHashCreatedAndDeletedAccount.json                        Skip
-  extCodeHashCreatedAndDeletedAccountCall.json                    Skip
-  extCodeHashCreatedAndDeletedAccountRecheckInOuterCall.json      Skip
-  extCodeHashCreatedAndDeletedAccountStaticCall.json              Skip
++ extCodeHashCreatedAndDeletedAccount.json                        OK
++ extCodeHashCreatedAndDeletedAccountCall.json                    OK
++ extCodeHashCreatedAndDeletedAccountRecheckInOuterCall.json      OK
++ extCodeHashCreatedAndDeletedAccountStaticCall.json              OK
 + extCodeHashDELEGATECALL.json                                    OK
 + extCodeHashDeletedAccount.json                                  OK
 + extCodeHashDeletedAccount1.json                                 OK
 + extCodeHashDeletedAccount2.json                                 OK
-  extCodeHashDeletedAccount3.json                                 Skip
-  extCodeHashDeletedAccount4.json                                 Skip
++ extCodeHashDeletedAccount3.json                                 OK
++ extCodeHashDeletedAccount4.json                                 OK
   extCodeHashDynamicArgument.json                                 Skip
-  extCodeHashInInitCode.json                                      Skip
++ extCodeHashInInitCode.json                                      OK
 + extCodeHashMaxCodeSize.json                                     OK
-  extCodeHashNewAccount.json                                      Skip
++ extCodeHashNewAccount.json                                      OK
   extCodeHashNonExistingAccount.json                              Skip
   extCodeHashPrecompiles.json                                     Skip
 + extCodeHashSTATICCALL.json                                      OK
 + extCodeHashSelf.json                                            OK
-  extCodeHashSelfInInit.json                                      Skip
++ extCodeHashSelfInInit.json                                      OK
   extCodeHashSubcallOOG.json                                      Skip
 + extCodeHashSubcallSuicide.json                                  OK
 ```
-OK: 13/28 Fail: 0/28 Skip: 15/28
+OK: 23/28 Fail: 0/28 Skip: 5/28
 ## stHomesteadSpecific
 ```diff
 + contractCreationOOGdontLeaveEmptyContract.json                  OK
@@ -1639,8 +1639,8 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + call_then_create_successful_then_returndatasize.json            OK
 + create_callprecompile_returndatasize.json                       OK
 + modexp_modsize0_returndatasize.json                             OK
-  returndatacopy_0_0_following_successful_create.json             Skip
-  returndatacopy_afterFailing_create.json                         Skip
++ returndatacopy_0_0_following_successful_create.json             OK
++ returndatacopy_afterFailing_create.json                         OK
 + returndatacopy_after_failing_callcode.json                      OK
 + returndatacopy_after_failing_delegatecall.json                  OK
 + returndatacopy_after_failing_staticcall.json                    OK
@@ -1652,7 +1652,7 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatacopy_following_create.json                            OK
 + returndatacopy_following_failing_call.json                      OK
 + returndatacopy_following_revert.json                            OK
-  returndatacopy_following_revert_in_create.json                  Skip
++ returndatacopy_following_revert_in_create.json                  OK
 + returndatacopy_following_successful_create.json                 OK
 + returndatacopy_following_too_big_transfer.json                  OK
 + returndatacopy_initial.json                                     OK
@@ -1667,12 +1667,12 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatasize_after_successful_delegatecall.json               OK
 + returndatasize_after_successful_staticcall.json                 OK
 + returndatasize_bug.json                                         OK
-  returndatasize_following_successful_create.json                 Skip
++ returndatasize_following_successful_create.json                 OK
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
 + subcallReturnMoreThenExpected.json                              OK
 ```
-OK: 34/38 Fail: 0/38 Skip: 4/38
+OK: 38/38 Fail: 0/38 Skip: 0/38
 ## stRevertTest
 ```diff
   LoopCallsDepthThenRevert.json                                   Skip
@@ -1683,7 +1683,7 @@ OK: 34/38 Fail: 0/38 Skip: 4/38
 + NashatyrevSuicideRevert.json                                    OK
 + PythonRevertTestTue201814-1430.json                             OK
 + RevertDepth2.json                                               OK
-  RevertDepthCreateAddressCollision.json                          Skip
++ RevertDepthCreateAddressCollision.json                          OK
 + RevertDepthCreateOOG.json                                       OK
 + RevertInCallCode.json                                           OK
 + RevertInCreateInInit.json                                       OK
@@ -1692,7 +1692,7 @@ OK: 34/38 Fail: 0/38 Skip: 4/38
 + RevertOnEmptyStack.json                                         OK
 + RevertOpcode.json                                               OK
 + RevertOpcodeCalls.json                                          OK
-  RevertOpcodeCreate.json                                         Skip
++ RevertOpcodeCreate.json                                         OK
 + RevertOpcodeDirectCall.json                                     OK
 + RevertOpcodeInCallsOnNonEmptyReturnData.json                    OK
 + RevertOpcodeInCreateReturns.json                                OK
@@ -1722,40 +1722,40 @@ OK: 34/38 Fail: 0/38 Skip: 4/38
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 39/46 Fail: 0/46 Skip: 7/46
+OK: 41/46 Fail: 0/46 Skip: 5/46
 ## stSStoreTest
 ```diff
-  InitCollision.json                                              Skip
++ InitCollision.json                                              OK
 + InitCollisionNonZeroNonce.json                                  OK
 + SstoreCallToSelfSubRefundBelowZero.json                         OK
-  sstore_0to0.json                                                Skip
-  sstore_0to0to0.json                                             Skip
-  sstore_0to0toX.json                                             Skip
-  sstore_0toX.json                                                Skip
-  sstore_0toXto0.json                                             Skip
-  sstore_0toXto0toX.json                                          Skip
-  sstore_0toXtoX.json                                             Skip
-  sstore_0toXtoY.json                                             Skip
-  sstore_Xto0.json                                                Skip
-  sstore_Xto0to0.json                                             Skip
-  sstore_Xto0toX.json                                             Skip
-  sstore_Xto0toXto0.json                                          Skip
-  sstore_Xto0toY.json                                             Skip
-  sstore_XtoX.json                                                Skip
-  sstore_XtoXto0.json                                             Skip
-  sstore_XtoXtoX.json                                             Skip
-  sstore_XtoXtoY.json                                             Skip
-  sstore_XtoY.json                                                Skip
-  sstore_XtoYto0.json                                             Skip
-  sstore_XtoYtoX.json                                             Skip
-  sstore_XtoYtoY.json                                             Skip
-  sstore_XtoYtoZ.json                                             Skip
-  sstore_changeFromExternalCallInInitCode.json                    Skip
++ sstore_0to0.json                                                OK
++ sstore_0to0to0.json                                             OK
++ sstore_0to0toX.json                                             OK
++ sstore_0toX.json                                                OK
++ sstore_0toXto0.json                                             OK
++ sstore_0toXto0toX.json                                          OK
++ sstore_0toXtoX.json                                             OK
++ sstore_0toXtoY.json                                             OK
++ sstore_Xto0.json                                                OK
++ sstore_Xto0to0.json                                             OK
++ sstore_Xto0toX.json                                             OK
++ sstore_Xto0toXto0.json                                          OK
++ sstore_Xto0toY.json                                             OK
++ sstore_XtoX.json                                                OK
++ sstore_XtoXto0.json                                             OK
++ sstore_XtoXtoX.json                                             OK
++ sstore_XtoXtoY.json                                             OK
++ sstore_XtoY.json                                                OK
++ sstore_XtoYto0.json                                             OK
++ sstore_XtoYtoX.json                                             OK
++ sstore_XtoYtoY.json                                             OK
++ sstore_XtoYtoZ.json                                             OK
++ sstore_changeFromExternalCallInInitCode.json                    OK
 + sstore_combinations_initial0.json                               OK
 + sstore_combinations_initial1.json                               OK
 + sstore_combinations_initial2.json                               OK
 ```
-OK: 5/29 Fail: 0/29 Skip: 24/29
+OK: 29/29 Fail: 0/29 Skip: 0/29
 ## stShift
 ```diff
 + sar00.json                                                      OK
@@ -1776,7 +1776,7 @@ OK: 5/29 Fail: 0/29 Skip: 24/29
 + sar_2^256-1_1.json                                              OK
 + sar_2^256-1_255.json                                            OK
 + sar_2^256-1_256.json                                            OK
-  shiftCombinations.json                                          Skip
++ shiftCombinations.json                                          OK
 + shl01-0100.json                                                 OK
 + shl01-0101.json                                                 OK
 + shl01-ff.json                                                   OK
@@ -1800,7 +1800,7 @@ OK: 5/29 Fail: 0/29 Skip: 24/29
 + shr_2^255_256.json                                              OK
 + shr_2^255_257.json                                              OK
 ```
-OK: 40/41 Fail: 0/41 Skip: 1/41
+OK: 41/41 Fail: 0/41 Skip: 0/41
 ## stSolidityTest
 ```diff
 + AmbiguousMethod.json                                            OK
@@ -2213,7 +2213,7 @@ OK: 57/67 Fail: 0/67 Skip: 10/67
 ```diff
 + ContractStoreClearsOOG.json                                     OK
 + ContractStoreClearsSuccess.json                                 OK
-  CreateMessageReverted.json                                      Skip
++ CreateMessageReverted.json                                      OK
 + CreateMessageSuccess.json                                       OK
 + CreateTransactionReverted.json                                  OK
 + CreateTransactionSuccess.json                                   OK
@@ -2256,7 +2256,7 @@ OK: 57/67 Fail: 0/67 Skip: 10/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 43/44 Fail: 0/44 Skip: 1/44
+OK: 44/44 Fail: 0/44 Skip: 0/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2645,4 +2645,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2262/2447 Fail: 0/2447 Skip: 185/2447
+OK: 2333/2447 Fail: 0/2447 Skip: 114/2447
