@@ -503,14 +503,18 @@ genLog()
 # ##########################################
 # f0s: System operations.
 
-proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint256): bool =
-  let gasParams = GasParams(kind: Create,
-    cr_currentMemSize: computation.memory.len,
-    cr_memOffset: memPos,
-    cr_memLength: memLen
-    )
-  let gasCost = computation.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
-  let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
+proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint256, opCode: static[Op]): bool =
+  when opCode == Create:
+    let gasParams = GasParams(kind: Create,
+      cr_currentMemSize: computation.memory.len,
+      cr_memOffset: memPos,
+      cr_memLength: memLen
+      )
+    let gasCost = computation.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
+    let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
+  else:
+    let gasCost = computation.gasCosts[Create2].m_handler(0, 0, memLen)
+    let reason = &"CREATE2: GasCreate + {memLen} * GasSha3Word"
 
   computation.gasMeter.consumeGas(gasCost, reason = reason)
   computation.memory.extend(memPos, memLen)
@@ -535,7 +539,7 @@ proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint2
 
   result = true
 
-proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256): BaseComputation =
+proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256, opCode: static[Op]): BaseComputation =
   let
     callData = computation.memory.read(memPos, len)
 
@@ -553,14 +557,20 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256)
     contractAddress: EthAddress
     isCollision: bool
 
-  computation.vmState.mutateStateDB:
-    # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
-    # See: https://github.com/ethereum/EIPs/issues/684
-    let creationNonce = db.getNonce(computation.msg.storageAddress)
-    db.setNonce(computation.msg.storageAddress, creationNonce + 1)
+  when opCode == Create:
+    computation.vmState.mutateStateDB:
+      # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
+      # See: https://github.com/ethereum/EIPs/issues/684
+      let creationNonce = db.getNonce(computation.msg.storageAddress)
+      db.setNonce(computation.msg.storageAddress, creationNonce + 1)
 
-    contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
-    isCollision = db.hasCodeOrNonce(contractAddress)
+      contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
+      isCollision = db.hasCodeOrNonce(contractAddress)
+  else:
+    computation.vmState.mutateStateDB:
+      let salt = computation.stack.popInt()
+      contractAddress = generateSafeAddress(computation.msg.storageAddress, salt, callData)
+      isCollision = db.hasCodeOrNonce(contractAddress)
 
   if isCollision:
     debug "Address collision while creating contract", address = contractAddress.toHex
@@ -585,27 +595,31 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256)
     childMsg,
     some(computation.getFork))
 
-op create, inline = false, value, startPosition, size:
-  ## 0xf0, Create a new account with associated code.
-  let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
-  if not computation.canTransfer(memPos, len, value):
-    push: 0
-    return
-
-  var childComp = setupCreate(computation, memPos, len, value)
-  if childComp.isNil: return
-
-  computation.child = childComp
-  continuation(childComp):
-    computation.addChildComputation(childComp)
-
-    if childComp.isError:
+template genCreate(callName: untyped, opCode: Op): untyped =
+  op callName, inline = false, value, startPosition, size:
+    ## 0xf0, Create a new account with associated code.
+    let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
+    if not computation.canTransfer(memPos, len, value, opCode):
       push: 0
-    else:
-      push: childComp.msg.storageAddress
+      return
 
-  checkInStaticContext(computation)
-  childComp.applyMessage(Create)
+    var childComp = setupCreate(computation, memPos, len, value, opCode)
+    if childComp.isNil: return
+
+    computation.child = childComp
+    continuation(childComp):
+      addChildComputation(computation, childComp)
+
+      if childComp.isError:
+        push: 0
+      else:
+        push: childComp.msg.storageAddress
+
+    checkInStaticContext(computation)
+    childComp.applyMessage(Create)
+
+genCreate(create, Create)
+genCreate(create2, Create2)
 
 proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
@@ -909,7 +923,3 @@ op extCodeHash, inline = true:
     push: 0
   else:
     push: computation.vmState.readOnlyStateDB.getCodeHash(address)
-
-op create2, inline = false:
-  # TODO: implementation
-  discard

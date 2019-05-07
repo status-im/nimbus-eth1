@@ -196,7 +196,7 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
     computation.dispose()
 
   # EIP161 nonce incrementation
-  when opCode == Create:
+  when opCode in {Create, Create2}:
     if computation.getFork >= FkSpurious:
       computation.vmState.mutateStateDb:
         db.incNonce(computation.msg.storageAddress)
