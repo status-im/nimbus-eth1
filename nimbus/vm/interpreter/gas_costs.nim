@@ -353,6 +353,10 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
       if gasParams.sd_condition:
         result.gasCost += static(FeeSchedule[GasNewAccount])
 
+  func `prefix gasCreate2`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+    result = static(FeeSchedule[GasCreate]) +
+             static(FeeSchedule[GasSha3Word]) * (memLength).wordCount
+
   # ###################################################################################################
 
   # TODO - change this `let` into `const` - pending: https://github.com/nim-lang/Nim/issues/8015
@@ -532,7 +536,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           CallCode:       complex `prefix gasCall`,
           Return:         memExpansion `prefix gasHalt`,
           DelegateCall:   complex `prefix gasCall`,
-          Create2:        complex `prefix gasCall`,
+          Create2:        memExpansion `prefix gasCreate2`,
           StaticCall:     complex `prefix gasCall`,
           Revert:         memExpansion `prefix gasHalt`,
           Invalid:        fixed GasZero,

@@ -20,5 +20,21 @@ func keccakHash*(value: openarray[byte]): Hash256 {.inline.} =
 func generateAddress*(address: EthAddress, nonce: AccountNonce): EthAddress =
   result[0..19] = keccakHash(rlp.encodeList(address, nonce)).data.toOpenArray(12, 31)
 
+func generateSafeAddress*(address: EthAddress, salt: Uint256, data: openArray[byte]): EthAddress =
+  const prefix = [0xff.byte]
+  let dataHash = keccakHash(data)
+  var hashResult: Hash256
+
+  var ctx: keccak256
+  ctx.init()
+  ctx.update(prefix)
+  ctx.update(address)
+  ctx.update(salt.toByteArrayBE())
+  ctx.update(dataHash.data)
+  ctx.finish hashResult.data
+  ctx.clear()
+
+  result[0..19] = hashResult.data.toOpenArray(12, 31)
+
 func hash*(b: BlockHeader): Hash256 {.inline.} =
   rlpHash(b)
