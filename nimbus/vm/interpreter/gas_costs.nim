@@ -353,8 +353,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
         result.gasCost += static(FeeSchedule[GasNewAccount])
 
   func `prefix gasCreate2`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
-    result = static(FeeSchedule[GasCreate]) +
-             static(FeeSchedule[GasSha3Word]) * (memLength).wordCount
+    result = static(FeeSchedule[GasSha3Word]) * (memLength).wordCount
 
   # ###################################################################################################
 
