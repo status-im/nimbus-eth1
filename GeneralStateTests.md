@@ -58,9 +58,9 @@ OK: 46/46 Fail: 0/46 Skip: 0/46
 OK: 1/2 Fail: 0/2 Skip: 1/2
 ## stBadOpcode
 ```diff
-  badOpcodes.json                                                 Skip
++ badOpcodes.json                                                 OK
 ```
-OK: 0/1 Fail: 0/1 Skip: 1/1
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stBugs
 ```diff
 + evmBytecode.json                                                OK
@@ -368,8 +368,8 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 OK: 3/3 Fail: 0/3 Skip: 0/3
 ## stCreate2
 ```diff
-  CREATE2_Bounds.json                                             Skip
-  CREATE2_Bounds2.json                                            Skip
++ CREATE2_Bounds.json                                             OK
++ CREATE2_Bounds2.json                                            OK
 + CREATE2_Bounds3.json                                            OK
 + CREATE2_ContractSuicideDuringInit_ThenStoreThenReturn.json      OK
 + CREATE2_Suicide.json                                            OK
@@ -392,7 +392,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + RevertOpcodeInCreateReturnsCreate2.json                         OK
 + call_outsize_then_create2_successful_then_returndatasize.json   OK
 + call_then_create2_successful_then_returndatasize.json           OK
-  create2InitCodes.json                                           Skip
++ create2InitCodes.json                                           OK
 + create2SmartInitCode.json                                       OK
   create2callPrecompiles.json                                     Skip
 + create2checkFieldsInInitcode.json                               OK
@@ -413,7 +413,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 38/44 Fail: 0/44 Skip: 6/44
+OK: 41/44 Fail: 0/44 Skip: 3/44
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -2645,4 +2645,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2338/2447 Fail: 0/2447 Skip: 109/2447
+OK: 2342/2447 Fail: 0/2447 Skip: 105/2447

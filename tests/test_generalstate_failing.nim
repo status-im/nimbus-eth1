@@ -14,70 +14,7 @@
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
     "modexp.json",
-
-    "CREATE2_Bounds.json",
-    "CREATE2_Bounds2.json",
     "create2callPrecompiles.json",
-    "create2InitCodes.json",
     "create2noCash.json",
-
-    "badOpcodes.json",
-
-    # all these tests below actually pass
-    # but they are very slow
-
-    # constantinople slow tests
-    "Create2Recursive.json",
-
-    # byzantium slow tests
-    "LoopCallsDepthThenRevert3.json",
-    "LoopCallsDepthThenRevert2.json",
-    "LoopCallsDepthThenRevert.json",
-    "static_Call50000.json",
-    "static_Call50000_ecrec.json",
-    "static_Call50000_identity.json",
-    "static_Call50000_identity2.json",
-    "static_Call50000_rip160.json",
-    "static_Call50000_sha256.json",
-    "LoopCallsThenRevert.json",
-    "LoopDelegateCallsDepthThenRevert.json",
-    "recursiveCreateReturnValue.json",
-    "static_Call1024PreCalls2.json",
-    "Callcode1024BalanceTooLow.json",
-    "static_Call1024BalanceTooLow.json",
-    "static_Call1024BalanceTooLow2.json",
-    "static_Call1024OOG.json",
-    "static_Call1024PreCalls3.json",
-    "static_Call1024PreCalls.json",
-    "static_Call1MB1024Calldepth.json",
-
-    # Homestead recursives
-    "ContractCreationSpam.json",
-    "Call1024OOG.json",
-    "Call1024PreCalls.json",
-    "CallRecursiveBombPreCall.json",
-    "Delegatecall1024.json",
-    "Delegatecall1024OOG.json",
-    "JUMPDEST_Attack.json",
-    "JUMPDEST_AttackwithJump.json",
-    "ABAcalls1.json",
-    "ABAcalls2.json",
-    "CallRecursiveBomb0.json",
-    "CallRecursiveBomb0_OOG_atMaxCallDepth.json",
-    "CallRecursiveBomb1.json",
-    "CallRecursiveBomb2.json",
-    "CallRecursiveBombLog.json",
-    "CallRecursiveBombLog2.json",
-    "Call1024BalanceTooLow.json",
-
-    # Frontier recursives
-    "Callcode1024OOG.json",
-    "callcallcodecall_ABCB_RECURSIVE.json",
-    "callcallcodecallcode_ABCB_RECURSIVE.json",
-    "callcodecallcall_ABCB_RECURSIVE.json",
-    "callcodecallcallcode_ABCB_RECURSIVE.json",
-    "callcodecallcodecall_ABCB_RECURSIVE.json",
-    "callcodecallcodecallcode_ABCB_RECURSIVE.json",
-    "callcallcallcode_ABCB_RECURSIVE.json"
   ]
   result = name in allowedFailingGeneralStateTests

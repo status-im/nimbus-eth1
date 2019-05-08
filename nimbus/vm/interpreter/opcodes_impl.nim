@@ -504,17 +504,16 @@ genLog()
 # f0s: System operations.
 
 proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint256, opCode: static[Op]): bool =
-  when opCode == Create:
-    let gasParams = GasParams(kind: Create,
-      cr_currentMemSize: computation.memory.len,
-      cr_memOffset: memPos,
-      cr_memLength: memLen
-      )
-    let gasCost = computation.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
-    let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
-  else:
-    let gasCost = computation.gasCosts[Create2].m_handler(0, 0, memLen)
-    let reason = &"CREATE2: GasCreate + {memLen} * GasSha3Word"
+  let gasParams = GasParams(kind: Create,
+    cr_currentMemSize: computation.memory.len,
+    cr_memOffset: memPos,
+    cr_memLength: memLen
+    )
+  var gasCost = computation.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
+  let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
+
+  when opCode == Create2:
+    gasCost = gasCost + computation.gasCosts[Create2].m_handler(0, 0, memLen)
 
   computation.gasMeter.consumeGas(gasCost, reason = reason)
   computation.memory.extend(memPos, memLen)
@@ -599,7 +598,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
 template genCreate(callName: untyped, opCode: Op): untyped =
   op callName, inline = false, value, startPosition, size:
     ## 0xf0, Create a new account with associated code.
-    let (memPos, len) = (startPosition.cleanMemRef, size.cleanMemRef)
+    let (memPos, len) = (startPosition.safeInt, size.safeInt)
     if not computation.canTransfer(memPos, len, value, opCode):
       push: 0
       return
