@@ -133,11 +133,10 @@ proc identity*(computation: BaseComputation) =
 proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: int, T: type StUint) =
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
-
   let
-    base = rawMsg.rangeToPadded[:T](96, 95 + base_len)
-    exp = rawMsg.rangeToPadded[:T](96 + base_len, 95 + base_len + exp_len)
-    modulo = rawMsg.rangeToPadded[:T](96 + base_len + exp_len, 95 + base_len + exp_len + mod_len)
+    base = rawMsg.rangeToPadded[:T](96, 95 + base_len, base_len)
+    exp = rawMsg.rangeToPadded[:T](96 + base_len, 95 + base_len + exp_len, exp_len)
+    modulo = rawMsg.rangeToPadded[:T](96 + base_len + exp_len, 95 + base_len + exp_len + mod_len, mod_len)
 
   block: # Gas cost
     func gasModExp_f(x: Natural): int =
@@ -179,9 +178,9 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
     func zero(): static array[T.bits div 8, byte] = discard
     func one(): static array[T.bits div 8, byte] =
       when cpuEndian == bigEndian:
-        result[^1] = 1
-      else:
         result[0] = 1
+      else:
+        result[^1] = 1
 
     # Start with EVM special cases
     let output = if modulo <= 1:
@@ -216,7 +215,6 @@ proc modExp*(computation: BaseComputation) =
     mod_len = rawMsg.rangeToPadded[:Uint256](64, 95).safeInt
 
   let maxBytes = max(base_len, max(exp_len, mod_len))
-
   if maxBytes <= 32:
     computation.modExpInternal(base_len, exp_len, mod_len, UInt256)
   elif maxBytes <= 64:

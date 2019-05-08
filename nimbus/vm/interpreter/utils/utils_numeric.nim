@@ -54,21 +54,30 @@ func cleanMemRef*(x: UInt256): int {.inline.} =
     return high(int32) shr 2
   return x.toInt
 
-proc rangeToPadded*[T: StUint](x: openarray[byte], first, last: int): T =
+proc rangeToPadded*[T: StUint](x: openarray[byte], first, last: int, toLen = 0): T =
   ## Convert take a slice of a sequence of bytes interpret it as the big endian
   ## representation of an Uint256. Use padding for sequence shorter than 32 bytes
   ## including 0-length sequences.
+  const N = T.bits div 8
 
   let lo = max(0, first)
-  let hi = min(min(x.high, last), (lo+T.bits div 8)-1)
+  let hi = min(min(x.high, last), (lo+N)-1)
 
   if not(lo <= hi):
     return # 0
 
-  result = T.fromBytesBE(
-    x.toOpenArray(lo, hi),
-    allowPadding = true
-  )
+  if toLen > hi-lo+1:
+    var temp: array[N, byte]
+    temp[0..hi-lo] = x.toOpenArray(lo, hi)
+    result = T.fromBytesBE(
+      temp,
+      allowPadding = true
+    )
+  else:
+    result = T.fromBytesBE(
+      x.toOpenArray(lo, hi),
+      allowPadding = true
+    )
 
 # calculates the memory size required for a step
 func calcMemSize*(offset, length: int): int {.inline.} =
