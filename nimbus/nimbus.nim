@@ -41,8 +41,10 @@ proc start(): NimbusObject =
   var nimbus = NimbusObject()
   var conf = getConfiguration()
 
+  ## logging
   setLogLevel(conf.debug.logLevel)
   if len(conf.debug.logFile) != 0:
+    defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(conf.debug.logFile, fmAppend)
 
   ## Creating RPC Server
