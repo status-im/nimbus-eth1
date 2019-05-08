@@ -920,6 +920,10 @@ op sarOp, inline = true:
 
 op extCodeHash, inline = true:
   let address = computation.stack.popAddress()
+  if not computation.vmState.readOnlyStateDB.accountExists(address):
+    push: 0
+    return
+
   if computation.vmState.readOnlyStateDB.isEmptyAccount(address):
     push: 0
   else:

@@ -21,13 +21,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "create2InitCodes.json",
     "create2noCash.json",
 
-    "extCodeHashSubcallOOG.json",
-    "extCodeHashNonExistingAccount.json",
-    "extCodeHashPrecompiles.json",
-    "extCodeHashDynamicArgument.json",
-
     "badOpcodes.json",
-    "codeCopyZero.json",
 
     # all these tests below actually pass
     # but they are very slow

@@ -555,7 +555,7 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stExtCodeHash
 ```diff
-  codeCopyZero.json                                               Skip
++ codeCopyZero.json                                               OK
 + dynamicAccountOverwriteEmpty.json                               OK
 + extCodeCopyBounds.json                                          OK
 + extCodeHashAccountWithoutCode.json                              OK
@@ -572,19 +572,19 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + extCodeHashDeletedAccount2.json                                 OK
 + extCodeHashDeletedAccount3.json                                 OK
 + extCodeHashDeletedAccount4.json                                 OK
-  extCodeHashDynamicArgument.json                                 Skip
++ extCodeHashDynamicArgument.json                                 OK
 + extCodeHashInInitCode.json                                      OK
 + extCodeHashMaxCodeSize.json                                     OK
 + extCodeHashNewAccount.json                                      OK
-  extCodeHashNonExistingAccount.json                              Skip
-  extCodeHashPrecompiles.json                                     Skip
++ extCodeHashNonExistingAccount.json                              OK
++ extCodeHashPrecompiles.json                                     OK
 + extCodeHashSTATICCALL.json                                      OK
 + extCodeHashSelf.json                                            OK
 + extCodeHashSelfInInit.json                                      OK
-  extCodeHashSubcallOOG.json                                      Skip
++ extCodeHashSubcallOOG.json                                      OK
 + extCodeHashSubcallSuicide.json                                  OK
 ```
-OK: 23/28 Fail: 0/28 Skip: 5/28
+OK: 28/28 Fail: 0/28 Skip: 0/28
 ## stHomesteadSpecific
 ```diff
 + contractCreationOOGdontLeaveEmptyContract.json                  OK
@@ -2645,4 +2645,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2333/2447 Fail: 0/2447 Skip: 114/2447
+OK: 2338/2447 Fail: 0/2447 Skip: 109/2447
