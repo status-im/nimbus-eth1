@@ -323,17 +323,19 @@ proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
     computation.constantinopleVM()
 
 proc executeOpcodes(computation: BaseComputation) =
-  try:
-    let fork = computation.getFork
-    if computation.execPrecompiles(fork):
-      computation.nextProc()
-      return
-    computation.selectVM(fork)
-  except:
-    let msg = getCurrentExceptionMsg()
-    computation.setError(&"Opcode Dispatch Error msg={msg}, depth={computation.msg.depth}", true)
-  computation.nextProc()
+  let fork = computation.getFork
 
+  block:
+    if computation.execPrecompiles(fork):
+      break
+
+    try:
+      computation.selectVM(fork)
+    except:
+      let msg = getCurrentExceptionMsg()
+      computation.setError(&"Opcode Dispatch Error msg={msg}, depth={computation.msg.depth}", true)
+
+  computation.nextProc()
   if computation.isError():
     if computation.tracingEnabled: computation.traceError()
     debug "executeOpcodes error", msg=computation.error.info

@@ -150,11 +150,11 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
 
     let adj_exp_len = block:
       # TODO deal with negative length
+      let first32 = rawMsg.rangeToPadded2[:Uint256](96 + base_len, 95 + base_len + exp_len, min(exp_len, 32))
       if exp_len <= 32:
-        if exp.isZero(): 0
-        else: log2(exp)    # highest-bit in exponent
+        if first32.isZero(): 0
+        else: log2(first32)    # highest-bit in exponent
       else:
-        let first32 = rawMsg.rangeToPadded[:Uint256](96 + base_len, 95 + base_len + exp_len)
         # TODO: `modexpRandomInput.json` require Uint256 arithmetic for this code below
         if not first32.isZero:
           8 * (exp_len - 32) + first32.log2
