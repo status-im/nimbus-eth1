@@ -14,7 +14,6 @@
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
     "modexp.json",
-    "create2callPrecompiles.json",
     "create2noCash.json",
   ]
   result = name in allowedFailingGeneralStateTests

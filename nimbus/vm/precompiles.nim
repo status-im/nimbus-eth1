@@ -133,10 +133,6 @@ proc identity*(computation: BaseComputation) =
 proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: int, T: type StUint) =
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
-  let
-    base = rawMsg.rangeToPadded[:T](96, 95 + base_len, base_len)
-    exp = rawMsg.rangeToPadded[:T](96 + base_len, 95 + base_len + exp_len, exp_len)
-    modulo = rawMsg.rangeToPadded[:T](96 + base_len + exp_len, 95 + base_len + exp_len + mod_len, mod_len)
 
   block: # Gas cost
     func gasModExp_f(x: Natural): int =
@@ -170,6 +166,11 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
     computation.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
 
   block: # Processing
+    let
+      base = rawMsg.rangeToPadded[:T](96, 95 + base_len, base_len)
+      exp = rawMsg.rangeToPadded[:T](96 + base_len, 95 + base_len + exp_len, exp_len)
+      modulo = rawMsg.rangeToPadded[:T](96 + base_len + exp_len, 95 + base_len + exp_len + mod_len, mod_len)
+
     # TODO: specs mentions that we should return in "M" format
     #       i.e. if Base and exp are uint512 and Modulo an uint256
     #       we should return a 256-bit big-endian byte array
@@ -187,11 +188,11 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
                     # If m == 0: EVM returns 0.
                     # If m == 1: we can shortcut that to 0 as well
                     zero()
-                 elif exp.isZero():
+                elif exp.isZero():
                     # If 0^0: EVM returns 1
                     # For all x != 0, x^0 == 1 as well
                     one()
-                 else:
+                else:
                     powmod(base, exp, modulo).toByteArrayBE
 
     # maximum output len is the same as mod_len
@@ -209,6 +210,7 @@ proc modExp*(computation: BaseComputation) =
   # Parsing the data
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
+
   let # lengths Base, Exponent, Modulus
     base_len = rawMsg.rangeToPadded[:Uint256](0, 31).safeInt
     exp_len = rawMsg.rangeToPadded[:Uint256](32, 63).safeInt

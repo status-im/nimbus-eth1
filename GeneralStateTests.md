@@ -394,7 +394,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + call_then_create2_successful_then_returndatasize.json           OK
 + create2InitCodes.json                                           OK
 + create2SmartInitCode.json                                       OK
-  create2callPrecompiles.json                                     Skip
++ create2callPrecompiles.json                                     OK
 + create2checkFieldsInInitcode.json                               OK
 + create2collisionBalance.json                                    OK
 + create2collisionCode.json                                       OK
@@ -413,7 +413,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 41/44 Fail: 0/44 Skip: 3/44
+OK: 42/44 Fail: 0/44 Skip: 2/44
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -2645,4 +2645,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2342/2447 Fail: 0/2447 Skip: 105/2447
+OK: 2343/2447 Fail: 0/2447 Skip: 104/2447
