@@ -73,8 +73,7 @@ type
     # continuation helpers
     nextProc*:              proc() {.gcsafe.}
     memOutLen*:             int
-    memOutPos*:             int
-    child*:                 BaseComputation
+    memOutPos*:             int    
 
   Error* = ref object
     info*:                  string
