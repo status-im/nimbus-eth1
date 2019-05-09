@@ -606,7 +606,6 @@ template genCreate(callName: untyped, opCode: Op): untyped =
     var childComp = setupCreate(computation, memPos, len, value, opCode)
     if childComp.isNil: return
 
-    computation.child = childComp
     continuation(childComp):
       addChildComputation(computation, childComp)
 
@@ -782,7 +781,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
     ## STATICCALL, 0xfa, Static message-call into an account.
     var childComp = `callName Setup`(computation, callName.astToStr)
 
-    computation.child = childComp
     continuation(childComp):
       addChildComputation(computation, childComp)
 
