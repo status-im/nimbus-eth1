@@ -13,7 +13,13 @@
 # being mostly used for short-term regression prevention.
 func allowedFailingGeneralStateTest*(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
+    # conflicts between native int and big int.
+    # gasFee calculation in modexp precompiled
+    # contracts
     "modexp.json",
+    # perhaps a design flaw with create/create2 opcode.
+    # a conflict between balance checker and
+    # static call context checker
     "create2noCash.json",
   ]
   result = name in allowedFailingGeneralStateTests
