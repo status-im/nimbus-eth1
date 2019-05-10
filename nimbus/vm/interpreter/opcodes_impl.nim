@@ -906,17 +906,25 @@ op shrOp, inline = true, shift, num:
 
 op sarOp, inline = true:
   let shiftLen = computation.stack.popInt().safeInt
-  let num = cast[Int256](computation.stack.popInt())
+  let x = computation.stack.popInt()
+  #let num = cast[Int256](computation.stack.popInt())
   if shiftLen >= 256:
-    if num.isNegative:
+    #if num.isNegative:
+    if cast[Int256](x).isNegative:
       push: cast[Uint256]((-1).i256)
     else:
       push: 0
   else:
-    push: cast[Uint256](ashr(num, shiftLen))
+    # ashr depends on nim-stint/#76
+    # push: cast[Uint256](ashr(num, shiftLen))
+    # while waiting for stint/#76 merged, we use this workaround
+    push: (x shr shiftLen) or (((0-(x shr 255)) shl 1) shl (255-shiftLen))
 
 op extCodeHash, inline = true:
   let address = computation.stack.popAddress()
+  # this is very inefficient, it calls underlying
+  # database too much, we can reduce it by implementing accounts
+  # cache
   if not computation.vmState.readOnlyStateDB.accountExists(address):
     push: 0
     return
