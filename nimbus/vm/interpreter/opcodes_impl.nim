@@ -906,19 +906,14 @@ op shrOp, inline = true, shift, num:
 
 op sarOp, inline = true:
   let shiftLen = computation.stack.popInt().safeInt
-  let x = computation.stack.popInt()
-  #let num = cast[Int256](computation.stack.popInt())
+  let num = cast[Int256](computation.stack.popInt())
   if shiftLen >= 256:
-    #if num.isNegative:
-    if cast[Int256](x).isNegative:
+    if num.isNegative:
       push: cast[Uint256]((-1).i256)
     else:
       push: 0
   else:
-    # ashr depends on nim-stint/#76
-    # push: cast[Uint256](ashr(num, shiftLen))
-    # while waiting for stint/#76 merged, we use this workaround
-    push: (x shr shiftLen) or (((0-(x shr 255)) shl 1) shl (255-shiftLen))
+    push: cast[Uint256](ashr(num, shiftLen))
 
 op extCodeHash, inline = true:
   let address = computation.stack.popAddress()
