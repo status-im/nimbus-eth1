@@ -13,7 +13,7 @@ import
 # some methods based on py-evm utils/numeric
 
 func log2*[bits: static int](value: StUint[bits]): Natural {.inline.}=
-  (bits - 1) - value.countLeadingZeroBits
+  (bits - 1) - value.leadingZeros
 
 func log256*(value: UInt256): Natural {.inline.}=
   value.log2 shr 3 # div 8 (= log2(256), Logb x = Loga x/Loga b)
