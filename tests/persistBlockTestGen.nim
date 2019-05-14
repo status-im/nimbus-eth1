@@ -100,6 +100,7 @@ proc main() =
   chainDB.dumpTest(2_463_413) # tangerine call* gas cost bug
   chainDB.dumpTest(2_675_000) # spurious dragon first block
   chainDB.dumpTest(2_675_002) # EIP155 tx.getSender
+  chainDB.dumpTest(4_370_000) # Byzantium first block
 
 when isMainModule:
   var message: string
