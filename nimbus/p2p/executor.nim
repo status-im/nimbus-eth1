@@ -95,6 +95,24 @@ proc makeReceipt(vmState: BaseVMState, fork = FkFrontier): Receipt =
   result.logs = vmState.getAndClearLogEntries()
   result.bloom = logsBloom(result.logs).value.toByteArrayBE
 
+func eth(n: int): Uint256 {.compileTime.} =
+  n.u256 * pow(10.u256, 18)
+
+const
+  eth5 = 5.eth
+  eth3 = 3.eth
+  eth2 = 2.eth
+  blockRewards: array[Fork, Uint256] = [
+    eth5, # FkFrontier
+    eth5, # FkThawing
+    eth5, # FkHomestead
+    eth5, # FkDao
+    eth5, # FkTangerine
+    eth5, # FkSpurious
+    eth3, # FkByzantium
+    eth2  # FkConstantinople
+  ]
+
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
   if chainDB.config.daoForkSupport and header.blockNumber == chainDB.config.daoForkBlock:
     vmState.mutateStateDB:
@@ -124,11 +142,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
           return ValidationResult.Error
         vmState.receipts[txIndex] = makeReceipt(vmState, fork)
 
-  let blockReward = if fork >= FkByzantium:
-                     3.u256 * pow(10.u256, 18) # 3 ETH
-                   else:
-                     5.u256 * pow(10.u256, 18) # 5 ETH
-
+  let blockReward = blockRewards[fork]
   var mainReward = blockReward
   if header.ommersHash != EMPTY_UNCLE_HASH:
     let h = chainDB.persistUncles(body.uncles)
