@@ -1,5 +1,8 @@
 version: '{build}'
 
+cache:
+- Nim
+
 # use an image with recent Mingw-w64 versions available on both architectures: https://www.appveyor.com/docs/windows-images-software/#mingw-msys-cygwin
 image: Visual Studio 2015
 
@@ -8,7 +11,6 @@ matrix:
   fast_finish: false
 
 platform:
-  - x86
   - x64
 
 # when multiple CI builds are queued, the tested commit needs to be in the last X commits cloned with "--depth X"

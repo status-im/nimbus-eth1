@@ -32,9 +32,10 @@ proc test(name: string, lang = "c") =
   buildBinary name, "tests/", "-r -d:release -d:chronicles_log_level=ERROR"
 
 task test, "Run tests":
-  test "all_tests"
-  test "test_rpc"
-  test "test_rpc_whisper"
+#  test "all_tests"
+#  test "test_rpc"
+#  test "test_rpc_whisper"
+  exec "nim c -r -d:release -d:chronicles_log_level=TRACE tests/test_rpc_whisper test shh_setMaxMessageSize"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
