@@ -367,3 +367,8 @@ proc setupEthNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): Ethereu
                               nil, "nimbus 0.1.0", addAllCapabilities = false)
   for capability in capabilities:
     result.addCapability capability
+
+template asyncTest*(name, body: untyped) =
+  test name:
+    proc scenario {.async.} = body
+    waitFor scenario()

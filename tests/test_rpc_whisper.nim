@@ -33,19 +33,15 @@ proc doTests =
     test "shh_info":
       let info = waitFor client.shh_info()
       check info.maxMessageSize == defaultMaxMsgSize
-    test "shh_setMaxMessageSize":
+    asyncTest "shh_setMaxMessageSize":
       let testValue = 1024'u64
-      check waitFor(client.shh_setMaxMessageSize(testValue)) == true
-      var info = waitFor client.shh_info()
+      check await(client.shh_setMaxMessageSize(testValue)) == true
+      var info = await client.shh_info()
       check info.maxMessageSize == testValue
-
-      let f = client.shh_setMaxMessageSize(defaultMaxMsgSize + 1)
-      while not f.finished:
-        poll()
-        echo f.repr
-
-      # info = waitFor client.shh_info()
-      # check info.maxMessageSize == testValue
+      expect ValueError:
+        discard await client.shh_setMaxMessageSize(defaultMaxMsgSize + 1)
+      info = await client.shh_info()
+      check info.maxMessageSize == testValue
     test "shh_setMinPoW":
       let testValue = 0.0001
       check waitFor(client.shh_setMinPoW(testValue)) == true
