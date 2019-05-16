@@ -12,7 +12,7 @@ template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const sigPath = &"{sourceDir}{DirSep}rpcclient{DirSep}ethcallsigs.nim"
 createRpcSigs(RpcSocketClient, sigPath)
 
-proc doTests =
+proc doTests {.async.} =
   var ethNode = setupEthNode(Whisper)
 
   # Create Ethereum RPCs
@@ -25,82 +25,82 @@ proc doTests =
 
   # Begin tests
   rpcServer.start()
-  waitFor client.connect("localhost", Port(RPC_PORT))
+  await client.connect("localhost", Port(RPC_PORT))
 
   suite "Whisper Remote Procedure Calls":
     test "shh_version":
-      check waitFor(client.shh_version()) == whisperVersionStr
+      check await(client.shh_version()) == whisperVersionStr
     test "shh_info":
-      let info = waitFor client.shh_info()
+      let info = await client.shh_info()
       check info.maxMessageSize == defaultMaxMsgSize
     test "shh_setMaxMessageSize":
       let testValue = 1024'u64
-      check waitFor(client.shh_setMaxMessageSize(testValue)) == true
-      var info = waitFor client.shh_info()
+      check await(client.shh_setMaxMessageSize(testValue)) == true
+      var info = await client.shh_info()
       check info.maxMessageSize == testValue
-      expect Exception:
-        discard waitFor(client.shh_setMaxMessageSize(defaultMaxMsgSize + 1))
-      info = waitFor client.shh_info()
+      expect ValueError:
+        discard await(client.shh_setMaxMessageSize(defaultMaxMsgSize + 1))
+      info = await client.shh_info()
       check info.maxMessageSize == testValue
     test "shh_setMinPoW":
       let testValue = 0.0001
-      check waitFor(client.shh_setMinPoW(testValue)) == true
-      let info = waitFor client.shh_info()
+      check await(client.shh_setMinPoW(testValue)) == true
+      let info = await client.shh_info()
       check info.minPow == testValue
     # test "shh_markTrustedPeer":
       # TODO: need to connect a peer to test
     test "shh asymKey tests":
-      let keyID = waitFor client.shh_newKeyPair()
+      let keyID = await client.shh_newKeyPair()
       check:
-        waitFor(client.shh_hasKeyPair(keyID)) == true
-        waitFor(client.shh_deleteKeyPair(keyID)) == true
-        waitFor(client.shh_hasKeyPair(keyID)) == false
-      expect Exception:
-        discard waitFor(client.shh_deleteKeyPair(keyID))
+        await(client.shh_hasKeyPair(keyID)) == true
+        await(client.shh_deleteKeyPair(keyID)) == true
+        await(client.shh_hasKeyPair(keyID)) == false
+      expect ValueError:
+        discard await(client.shh_deleteKeyPair(keyID))
 
       let privkey = "0x5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3"
       let pubkey = "0x04e5fd642a0f630bbb1e4cd7df629d7b8b019457a9a74f983c0484a045cebb176def86a54185b50bbba6bbf97779173695e92835d63109c23471e6da382f922fdb"
-      let keyID2 = waitFor client.shh_addPrivateKey(privkey)
+      let keyID2 = await client.shh_addPrivateKey(privkey)
       check:
-        waitFor(client.shh_getPublicKey(keyID2)) == pubkey.toPublicKey
-        waitFor(client.shh_getPrivateKey(keyID2)) == privkey.toPrivateKey
-        waitFor(client.shh_hasKeyPair(keyID2)) == true
-        waitFor(client.shh_deleteKeyPair(keyID2)) == true
-        waitFor(client.shh_hasKeyPair(keyID2)) == false
-      expect Exception:
-        discard waitFor(client.shh_deleteKeyPair(keyID2))
+        await(client.shh_getPublicKey(keyID2)) == pubkey.toPublicKey
+        await(client.shh_getPrivateKey(keyID2)) == privkey.toPrivateKey
+        await(client.shh_hasKeyPair(keyID2)) == true
+        await(client.shh_deleteKeyPair(keyID2)) == true
+        await(client.shh_hasKeyPair(keyID2)) == false
+      expect ValueError:
+        discard await(client.shh_deleteKeyPair(keyID2))
     test "shh symKey tests":
-      let keyID = waitFor client.shh_newSymKey()
+      let keyID = await client.shh_newSymKey()
       check:
-        waitFor(client.shh_hasSymKey(keyID)) == true
-        waitFor(client.shh_deleteSymKey(keyID)) == true
-        waitFor(client.shh_hasSymKey(keyID)) == false
-      expect Exception:
-        discard waitFor(client.shh_deleteSymKey(keyID))
+        await(client.shh_hasSymKey(keyID)) == true
+        await(client.shh_deleteSymKey(keyID)) == true
+        await(client.shh_hasSymKey(keyID)) == false
+      expect ValueError:
+        discard await(client.shh_deleteSymKey(keyID))
 
       let symKey = "0x0000000000000000000000000000000000000000000000000000000000000001"
-      let keyID2 = waitFor client.shh_addSymKey(symKey)
+      let keyID2 = await client.shh_addSymKey(symKey)
       check:
-        waitFor(client.shh_getSymKey(keyID2)) == symKey.toSymKey
-        waitFor(client.shh_hasSymKey(keyID2)) == true
-        waitFor(client.shh_deleteSymKey(keyID2)) == true
-        waitFor(client.shh_hasSymKey(keyID2)) == false
-      expect Exception:
-        discard waitFor(client.shh_deleteSymKey(keyID2))
+        await(client.shh_getSymKey(keyID2)) == symKey.toSymKey
+        await(client.shh_hasSymKey(keyID2)) == true
+        await(client.shh_deleteSymKey(keyID2)) == true
+        await(client.shh_hasSymKey(keyID2)) == false
+      expect ValueError:
+        discard await(client.shh_deleteSymKey(keyID2))
 
-      let keyID3 = waitFor client.shh_generateSymKeyFromPassword("password")
-      let keyID4 = waitFor client.shh_generateSymKeyFromPassword("password")
-      let keyID5 = waitFor client.shh_generateSymKeyFromPassword("nimbus!")
+      let keyID3 = await client.shh_generateSymKeyFromPassword("password")
+      let keyID4 = await client.shh_generateSymKeyFromPassword("password")
+      let keyID5 = await client.shh_generateSymKeyFromPassword("nimbus!")
       check:
-        waitFor(client.shh_getSymKey(keyID3)) ==
-          waitFor(client.shh_getSymKey(keyID4))
-        waitFor(client.shh_getSymKey(keyID3)) !=
-          waitFor(client.shh_getSymKey(keyID5))
-        waitFor(client.shh_hasSymKey(keyID3)) == true
-        waitFor(client.shh_deleteSymKey(keyID3)) == true
-        waitFor(client.shh_hasSymKey(keyID3)) == false
-      expect Exception:
-        discard waitFor(client.shh_deleteSymKey(keyID3))
+        await(client.shh_getSymKey(keyID3)) ==
+          await(client.shh_getSymKey(keyID4))
+        await(client.shh_getSymKey(keyID3)) !=
+          await(client.shh_getSymKey(keyID5))
+        await(client.shh_hasSymKey(keyID3)) == true
+        await(client.shh_deleteSymKey(keyID3)) == true
+        await(client.shh_hasSymKey(keyID3)) == false
+      expect ValueError:
+        discard await(client.shh_deleteSymKey(keyID3))
 
     # Some defaults for the filter & post tests
     let
@@ -115,24 +115,24 @@ proc doTests =
     test "shh filter create and delete":
       let
         topic = topicStr.toTopic()
-        symKeyID = waitFor client.shh_newSymKey()
+        symKeyID = await client.shh_newSymKey()
         options = WhisperFilterOptions(symKeyID: some(symKeyID),
                                        topics: some(@[topic]))
-        filterID = waitFor client.shh_newMessageFilter(options)
+        filterID = await client.shh_newMessageFilter(options)
 
       check:
         filterID.string.isValidIdentifier
-        waitFor(client.shh_deleteMessageFilter(filterID))
-      expect Exception:
-        discard waitFor(client.shh_deleteMessageFilter(filterID))
+        await(client.shh_deleteMessageFilter(filterID)) == true
+      expect ValueError:
+        discard await(client.shh_deleteMessageFilter(filterID))
 
     test "shh symKey post and filter loop":
       let
         topic = topicStr.toTopic()
-        symKeyID = waitFor client.shh_newSymKey()
+        symKeyID = await client.shh_newSymKey()
         options = WhisperFilterOptions(symKeyID: some(symKeyID),
                                        topics: some(@[topic]))
-        filterID = waitFor client.shh_newMessageFilter(options)
+        filterID = await client.shh_newMessageFilter(options)
         message = WhisperPostMessage(symKeyID: some(symKeyID),
                                      ttl: ttl,
                                      topic: some(topic),
@@ -140,10 +140,10 @@ proc doTests =
                                      powTime: powTime,
                                      powTarget: powTarget)
       check:
-        waitFor(client.shh_setMinPoW(powTarget)) == true
-        waitFor(client.shh_post(message)) == true
+        await(client.shh_setMinPoW(powTarget)) == true
+        await(client.shh_post(message)) == true
 
-      let messages = waitFor client.shh_getFilterMessages(filterID)
+      let messages = await client.shh_getFilterMessages(filterID)
       check:
         messages.len == 1
         messages[0].sig.isNone()
@@ -154,15 +154,15 @@ proc doTests =
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
 
-        waitFor(client.shh_deleteMessageFilter(filterID))
+        await(client.shh_deleteMessageFilter(filterID)) == true
 
     test "shh asymKey post and filter loop":
       let
         topic = topicStr.toTopic()
-        privateKeyID = waitFor client.shh_newKeyPair()
+        privateKeyID = await client.shh_newKeyPair()
         options = WhisperFilterOptions(privateKeyID: some(privateKeyID))
-        filterID = waitFor client.shh_newMessageFilter(options)
-        pubKey = waitFor client.shh_getPublicKey(privateKeyID)
+        filterID = await client.shh_newMessageFilter(options)
+        pubKey = await client.shh_getPublicKey(privateKeyID)
         message = WhisperPostMessage(pubKey: some(pubKey),
                                      ttl: ttl,
                                      topic: some(topic),
@@ -170,10 +170,10 @@ proc doTests =
                                      powTime: powTime,
                                      powTarget: powTarget)
       check:
-        waitFor(client.shh_setMinPoW(powTarget)) == true
-        waitFor(client.shh_post(message)) == true
+        await(client.shh_setMinPoW(powTarget)) == true
+        await(client.shh_post(message)) == true
 
-      let messages = waitFor client.shh_getFilterMessages(filterID)
+      let messages = await client.shh_getFilterMessages(filterID)
       check:
         messages.len == 1
         messages[0].sig.isNone()
@@ -184,18 +184,18 @@ proc doTests =
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
 
-        waitFor(client.shh_deleteMessageFilter(filterID))
+        await(client.shh_deleteMessageFilter(filterID)) == true
 
     test "shh signature in post and filter loop":
       let
         topic = topicStr.toTopic()
-        symKeyID = waitFor client.shh_newSymKey()
-        privateKeyID = waitFor client.shh_newKeyPair()
-        pubKey = waitFor client.shh_getPublicKey(privateKeyID)
+        symKeyID = await client.shh_newSymKey()
+        privateKeyID = await client.shh_newKeyPair()
+        pubKey = await client.shh_getPublicKey(privateKeyID)
         options = WhisperFilterOptions(symKeyID: some(symKeyID),
                                        topics: some(@[topic]),
                                        sig: some(pubKey))
-        filterID = waitFor client.shh_newMessageFilter(options)
+        filterID = await client.shh_newMessageFilter(options)
         message = WhisperPostMessage(symKeyID: some(symKeyID),
                                      sig: some(privateKeyID),
                                      ttl: ttl,
@@ -204,10 +204,10 @@ proc doTests =
                                      powTime: powTime,
                                      powTarget: powTarget)
       check:
-        waitFor(client.shh_setMinPoW(powTarget)) == true
-        waitFor(client.shh_post(message)) == true
+        await(client.shh_setMinPoW(powTarget)) == true
+        await(client.shh_post(message)) == true
 
-      let messages = waitFor client.shh_getFilterMessages(filterID)
+      let messages = await client.shh_getFilterMessages(filterID)
       check:
         messages.len == 1
         messages[0].sig.get() == pubKey
@@ -218,9 +218,9 @@ proc doTests =
         messages[0].padding.len > 0
         messages[0].pow >= powTarget
 
-        waitFor(client.shh_deleteMessageFilter(filterID))
+        await(client.shh_deleteMessageFilter(filterID)) == true
 
   rpcServer.stop()
   rpcServer.close()
 
-doTests()
+waitFor doTests()
