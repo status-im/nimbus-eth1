@@ -25,6 +25,7 @@ PersistBlockTests
 + block2675002.json                                               OK
 + block299804.json                                                OK
 + block420301.json                                                OK
++ block4370000.json                                               OK
 + block46147.json                                                 OK
 + block46400.json                                                 OK
 + block46402.json                                                 OK
@@ -46,7 +47,7 @@ PersistBlockTests
 + block97.json                                                    OK
 + block98.json                                                    OK
 ```
-OK: 43/43 Fail: 0/43 Skip: 0/43
+OK: 44/44 Fail: 0/44 Skip: 0/44
 
 ---TOTAL---
-OK: 43/43 Fail: 0/43 Skip: 0/43
+OK: 44/44 Fail: 0/44 Skip: 0/44
