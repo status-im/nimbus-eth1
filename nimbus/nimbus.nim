@@ -155,7 +155,12 @@ proc process*(nimbus: NimbusObject) =
 
     # Main loop
     while nimbus.state == Running:
-      poll()
+      try:
+        poll()
+      except CatchableError:
+        debug "Exception in poll()",
+          exc = getCurrentException().name,
+          err = getCurrentExceptionMsg()
 
     # Stop loop
     waitFor nimbus.stop()
