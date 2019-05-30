@@ -60,7 +60,7 @@
 	branch = master
 [submodule "vendor/nim-secp256k1"]
 	path = vendor/nim-secp256k1
-	url = https://github.com/status-im/nim-secp256k1.git
+	url = https://github.com/oskarth/nim-secp256k1.git
 	ignore = dirty
 	branch = master
 [submodule "vendor/snappy"]
