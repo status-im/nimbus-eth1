@@ -6,16 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, json, os, tables, strformat, strutils,
+  unittest2, json, os, tables, strformat, strutils,
   eth/[common, rlp], stew/byteutils, eth/trie/db,
   ./test_helpers, ../nimbus/db/[db_chain, storage_types], ../nimbus/[tracer, vm_types],
   ../nimbus/p2p/chain
-
-proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
-
-proc persistBlockJsonMain*() =
-  suite "persist block json tests":
-    jsonTest("PersistBlockTests", testFixture)
 
 # use tracerTestGen.nim to generate additional test data
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
@@ -43,3 +37,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   chainDB.setHead(parent, true)
   let validationResult = chain.persistBlocks(headers, bodies)
   check validationResult == ValidationResult.OK
+
+proc persistBlockJsonMain*() =
+  suite "persist block json tests":
+    jsonTest("PersistBlockTests", testFixture)
+

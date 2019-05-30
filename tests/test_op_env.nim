@@ -1,11 +1,12 @@
 import
-  macro_assembler, unittest, macros, strutils,
+  macro_assembler, unittest2, macros, strutils,
   stew/byteutils, eth/common, ../nimbus/db/state_db,
   ../nimbus/db/db_chain, stew/ranges
 
 proc opEnvMain*() =
   suite "Environmental Information Opcodes":
-    let (blockNumber, chainDB) = initDatabase()
+    setup:
+      let (blockNumber, chainDB) = initDatabase()
 
     assembler: # CODECOPY OP
       title: "CODECOPY_1"
@@ -176,20 +177,23 @@ proc opEnvMain*() =
         "0x5e"
         "0x07"
 
-    var acc: EthAddress
-    hexToByteArray("0xfbe0afcd7658ba86be41922059dd879c192d4c73", acc)
-    var
-      parent = chainDB.getBlockHeader(blockNumber - 1)
-      stateDB = newAccountStateDB(chainDB.db, parent.stateRoot, false)
-      code = hexToSeqByte("0x0102030405060708090A0B0C0D0E0F" &
-        "611234600054615566602054603E6000602073471FD3AD3E9EEADEEC4608B92D" &
-        "16CE6B500704CC3C6000605f556014600054601e60205463abcddcba6040545b" &
-        "51602001600a5254516040016014525451606001601e52545160800160285254" &
-        "60a052546016604860003960166000f26000603f556103e756600054600053602002351234")
+  suite "Environmental Information Opcodes 2":
+    setup:
+      let (blockNumber, chainDB) = initDatabase()
+      var acc: EthAddress
+      hexToByteArray("0xfbe0afcd7658ba86be41922059dd879c192d4c73", acc)
+      var
+        parent = chainDB.getBlockHeader(blockNumber - 1)
+        stateDB = newAccountStateDB(chainDB.db, parent.stateRoot, false)
+        code = hexToSeqByte("0x0102030405060708090A0B0C0D0E0F" &
+          "611234600054615566602054603E6000602073471FD3AD3E9EEADEEC4608B92D" &
+          "16CE6B500704CC3C6000605f556014600054601e60205463abcddcba6040545b" &
+          "51602001600a5254516040016014525451606001601e52545160800160285254" &
+          "60a052546016604860003960166000f26000603f556103e756600054600053602002351234")
 
-    stateDB.setCode(acc, code.toRange)
-    parent.stateRoot = stateDB.rootHash
-    chainDB.setHead(parent, true)
+      stateDB.setCode(acc, code.toRange)
+      parent.stateRoot = stateDB.rootHash
+      chainDB.setHead(parent, true)
 
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_1"
