@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest, strutils, sequtils,
+import  unittest2, strutils, sequtils,
         ../nimbus/vm/interpreter
 
 proc codeStreamMain*() =
@@ -15,11 +15,11 @@ proc codeStreamMain*() =
       check(codeStream.len == 1)
 
 
-  # quicktest
-  # @pytest.mark.parametrize("code_bytes", (1010, '1010', True, bytearray(32)))
-  # def test_codeStream_rejects_invalid_code_byte_values(code_bytes):
-  #     with pytest.raises(ValidationError):
-  #         CodeStream(code_bytes)
+    # quicktest
+    # @pytest.mark.parametrize("code_bytes", (1010, '1010', True, bytearray(32)))
+    # def test_codeStream_rejects_invalid_code_byte_values(code_bytes):
+    #     with pytest.raises(ValidationError):
+    #         CodeStream(code_bytes)
 
     test "next returns the correct opcode":
       var codeStream = newCodeStream("\x01\x02\x30")

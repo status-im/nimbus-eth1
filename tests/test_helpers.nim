@@ -7,7 +7,7 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p],
+  stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p], unittest2,
   ../nimbus/[vm_state, constants, config, transaction, utils, errors],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
@@ -143,8 +143,7 @@ func validTest*(folder: string, name: string): bool =
     not allowedFailInCurrentBuild(folder, name)
 
 proc lacksSupportedForks*(fixtures: JsonNode): bool =
-  # XXX: Until Nimbus supports Byzantine or newer forks, as opposed
-  # to Homestead, ~1k of ~2.5k GeneralStateTests won't work.
+  # XXX: Until Nimbus supports all forks, some of the GeneralStateTests won't work.
 
   var fixture: JsonNode
   for label, child in fixtures:
@@ -161,9 +160,12 @@ proc lacksSupportedForks*(fixtures: JsonNode): bool =
         result = false
         break
 
+var status = initOrderedTable[string, OrderedTable[string, Status]]()
+
 macro jsonTest*(s: static[string], handler: untyped): untyped =
   let
     testStatusIMPL = ident("testStatusIMPL")
+    testName = ident("testName")
     # workaround for strformat in quote do: https://github.com/nim-lang/Nim/issues/8220
     symbol = newIdentNode"symbol"
     final  = newIdentNode"final"
@@ -171,8 +173,7 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
     formatted = newStrLitNode"{symbol[final]} {name:<64}{$final}{'\n'}"
 
   result = quote:
-    var filenames: seq[(string, string, string)] = @[]
-    var status = initOrderedTable[string, OrderedTable[string, Status]]()
+    var filenames: seq[string] = @[]
     for filename in walkDirRec("tests" / "fixtures" / `s`):
       if not filename.endsWith(".json"):
         continue
@@ -182,57 +183,65 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
         status[last] = initOrderedTable[string, Status]()
       status[last][name] = Status.Skip
       if last.validTest(name):
-        filenames.add((filename, last, name))
-    for child in filenames:
-      let (filename, folder, name) = child
-      # we set this here because exceptions might be raised in the handler:
-      status[folder][name] = Status.Fail
-      let fixtures = parseJSON(readFile(filename))
-      if fixtures.lacksSupportedForks:
-        status[folder][name] = Status.Skip
-        continue
-      test filename:
-        echo folder / name
-        `handler`(fixtures, `testStatusIMPL`)
-        if `testStatusIMPL` == OK:
-          status[folder][name] = Status.OK
+        filenames.add(filename)
+    for fname in filenames:
+      test fname:
+        {.gcsafe.}:
+          let
+            filename = `testName` # the first argument passed to the `test` template
+            (folder, name) = filename.splitPath()
+            last = folder.splitPath().tail
+          # we set this here because exceptions might be raised in the handler:
+          status[last][name] = Status.Fail
+          let fixtures = parseJSON(readFile(filename))
+          if fixtures.lacksSupportedForks:
+            status[last][name] = Status.Skip
+            skip()
+          else:
+            when not paralleliseTests:
+              echo filename
+            `handler`(fixtures, `testStatusIMPL`)
+            if `testStatusIMPL` == OK:
+              status[last][name] = Status.OK
 
-    status.sort do (a: (string, OrderedTable[string, Status]),
-                    b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
+    suiteTeardown:
+      status.sort do (a: (string, OrderedTable[string, Status]),
+                      b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
 
-    let `symbol`: array[Status, string] = ["+", "-", " "]
-    var raw = ""
-    var okCountTotal = 0
-    var failCountTotal = 0
-    var skipCountTotal = 0
-    raw.add(`s` & "\n")
-    raw.add("===\n")
-    for folder, statuses in status:
-      raw.add("## " & folder & "\n")
-      raw.add("```diff\n")
-      var sortedStatuses = statuses
-      sortedStatuses.sort do (a: (string, Status), b: (string, Status)) -> int:
-        cmp(a[0], b[0])
-      var okCount = 0
-      var failCount = 0
-      var skipCount = 0
-      for `name`, `final` in sortedStatuses:
-        raw.add(&`formatted`)
-        case `final`:
-          of Status.OK: okCount += 1
-          of Status.Fail: failCount += 1
-          of Status.Skip: skipCount += 1
-      raw.add("```\n")
-      let sum = okCount + failCount + skipCount
-      okCountTotal += okCount
-      failCountTotal += failCount
-      skipCountTotal += skipCount
-      raw.add("OK: " & $okCount & "/" & $sum & " Fail: " & $failCount & "/" & $sum & " Skip: " & $skipCount & "/" & $sum & "\n")
+      let `symbol`: array[Status, string] = ["+", "-", " "]
+      var raw = ""
+      var okCountTotal = 0
+      var failCountTotal = 0
+      var skipCountTotal = 0
+      raw.add(`s` & "\n")
+      raw.add("===\n")
+      for folder, statuses in status:
+        raw.add("## " & folder & "\n")
+        raw.add("```diff\n")
+        var sortedStatuses = statuses
+        sortedStatuses.sort do (a: (string, Status), b: (string, Status)) -> int:
+          cmp(a[0], b[0])
+        var okCount = 0
+        var failCount = 0
+        var skipCount = 0
+        for `name`, `final` in sortedStatuses:
+          raw.add(&`formatted`)
+          case `final`:
+            of Status.OK: okCount += 1
+            of Status.Fail: failCount += 1
+            of Status.Skip: skipCount += 1
+        raw.add("```\n")
+        let sum = okCount + failCount + skipCount
+        okCountTotal += okCount
+        failCountTotal += failCount
+        skipCountTotal += skipCount
+        raw.add("OK: " & $okCount & "/" & $sum & " Fail: " & $failCount & "/" & $sum & " Skip: " & $skipCount & "/" & $sum & "\n")
 
-    let sumTotal = okCountTotal + failCountTotal + skipCountTotal
-    raw.add("\n---TOTAL---\n")
-    raw.add("OK: $1/$4 Fail: $2/$4 Skip: $3/$4\n" % [$okCountTotal, $failCountTotal, $skipCountTotal, $sumTotal])
-    writeFile(`s` & ".md", raw)
+      let sumTotal = okCountTotal + failCountTotal + skipCountTotal
+      raw.add("\n---TOTAL---\n")
+      raw.add("OK: $1/$4 Fail: $2/$4 Skip: $3/$4\n" % [$okCountTotal, $failCountTotal, $skipCountTotal, $sumTotal])
+      writeFile(`s` & ".md", raw)
+      status.clear()
 
 func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
 

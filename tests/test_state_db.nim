@@ -5,19 +5,20 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest, strutils, eth/trie/[hexary, db],
+import  unittest2, strutils, eth/trie/[hexary, db],
         ../nimbus/db/state_db, stew/byteutils, eth/common,
         stew/ranges
 
 proc stateDBMain*() =
   suite "Account State DB":
-    var
-      memDB = newMemoryDB()
-      trie = initHexaryTrie(memDB)
-      stateDB = newAccountStateDB(memDB, trie.rootHash, true)
-      address: EthAddress
+    setup:
+      var
+        memDB = newMemoryDB()
+        trie = initHexaryTrie(memDB)
+        stateDB = newAccountStateDB(memDB, trie.rootHash, true)
+        address: EthAddress
 
-    hexToByteArray("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6", address)
+      hexToByteArray("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6", address)
 
     test "accountExists and isDeadAccount":
       check stateDB.accountExists(address) == false

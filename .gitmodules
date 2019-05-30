@@ -111,6 +111,12 @@
 [submodule "vendor/news"]
   path = vendor/news
   url = https://github.com/tormund/news
+  ignore = dirty
+  branch = master
+[submodule "vendor/nim-unittest2"]
+  path = vendor/nim-unittest2
+  url = https://github.com/stefantalpalaru/nim-unittest2.git
+  ignore = dirty
   branch = master
 [submodule "vendor/nim-metrics"]
   path = vendor/nim-metrics

@@ -1,4 +1,4 @@
-import unittest, strutils, tables, ospaths, json,
+import unittest2, strutils, tables, ospaths, json,
   ../nimbus/utils/difficulty, stint, times,
   eth/common, test_helpers, stew/byteutils
 
@@ -41,16 +41,16 @@ proc parseTests(name: string, hex: static[bool]): Tests =
     result[title] = t
 
 template runTests(name: string, hex: bool, calculator: typed) =
-  let data = parseTests(name, hex)
-  for title, t in data:
-    var p = BlockHeader(
-      difficulty: t.parentDifficulty,
-      timestamp: times.fromUnix(t.parentTimestamp),
-      blockNumber: t.currentBlockNumber - 1,
-      ommersHash: t.parentUncles)
+  test name:
+    let data = parseTests(name, hex)
+    for title, t in data:
+      var p = BlockHeader(
+        difficulty: t.parentDifficulty,
+        timestamp: times.fromUnix(t.parentTimestamp),
+        blockNumber: t.currentBlockNumber - 1,
+        ommersHash: t.parentUncles)
 
-    let diff = calculator(times.fromUnix(t.currentTimeStamp), p)
-    test name & " " & title:
+      let diff = calculator(times.fromUnix(t.currentTimeStamp), p)
       check diff == t.currentDifficulty
 
 proc difficultyMain*() =
