@@ -32,7 +32,7 @@ createRpcSigs(RpcSocketClient, sigPath)
 proc toEthAddressStr(address: EthAddress): EthAddressStr =
   result = ("0x" & address.toHex).ethAddressStr
 
-proc doTests =
+proc doTests {.async.} =
   # TODO: Include other transports such as Http
   var ethNode = setupEthNode(eth)
   let
@@ -62,7 +62,7 @@ proc doTests =
 
   # Begin tests
   rpcServer.start()
-  waitFor client.connect("localhost", Port(RPC_PORT))
+  await client.connect("localhost", Port(RPC_PORT))
 
   # TODO: add more tests here
   suite "Remote Procedure Calls":
@@ -70,23 +70,23 @@ proc doTests =
       let
         blockNum = state.blockheader.blockNumber
         callParams = EthCall(value: some(100.u256))
-        r1 = waitFor client.eth_call(callParams, "0x" & blockNum.toHex)
+        r1 = await client.eth_call(callParams, "0x" & blockNum.toHex)
       check r1 == "0x"
     test "eth_getBalance":
-      let r2 = waitFor client.eth_getBalance(ZERO_ADDRESS.toEthAddressStr, "0x0")
+      let r2 = await client.eth_getBalance(ZERO_ADDRESS.toEthAddressStr, "0x0")
       check r2 == 0
 
       let blockNum = state.blockheader.blockNumber
-      let r3 = waitFor client.eth_getBalance(address.toEthAddressStr, "0x" & blockNum.toHex)
+      let r3 = await client.eth_getBalance(address.toEthAddressStr, "0x" & blockNum.toHex)
       check r3 == 0
     test "eth_estimateGas":
       let
         call = EthCall()
         blockNum = state.blockheader.blockNumber
-        r4 = waitFor client.eth_estimateGas(call, "0x" & blockNum.toHex)
+        r4 = await client.eth_estimateGas(call, "0x" & blockNum.toHex)
       check r4 == 21_000
 
   rpcServer.stop()
   rpcServer.close()
 
-doTests()
+waitFor doTests()
