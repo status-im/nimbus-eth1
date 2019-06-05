@@ -94,7 +94,8 @@ proc start(): NimbusObject =
 
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId,
-                                   addAllCapabilities = false)
+                                   addAllCapabilities = false,
+                                   minPeers = conf.net.maxPeers)
   # Add protocol capabilities based on protocol flags
   if ProtocolFlags.Eth in conf.net.protocols:
     nimbus.ethNode.addCapability eth
