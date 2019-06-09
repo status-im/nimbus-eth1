@@ -71,7 +71,7 @@ BUILD_NIM := echo -e $(BUILD_MSG) "Nim compiler" && \
 		sed 's/koch tools/koch --stable tools/' build_all.sh > build_all_custom.sh; \
 		sh build_all_custom.sh $(HANDLE_OUTPUT); \
 		rm build_all_custom.sh; \
-	}
+	} && cd ../..
 NIM_BINARY := $(NIM_DIR)/bin/nim$(EXE_SUFFIX)
 # md5sum - macOS is a special case
 ifeq ($(shell uname), Darwin)
@@ -79,6 +79,8 @@ ifeq ($(shell uname), Darwin)
 else
   MD5SUM := md5sum
 endif
+# AppVeyor cache of $(NIM_DIR)/bin that doesn't get unpacked after all submodules have been checked out, like on Travis
+CI_CACHE :=
 
 # debugging tools + testing tools
 TOOLS := premix persist debug dumper hunter regress tracerTestGen persistBlockTestGen
@@ -188,14 +190,17 @@ build-nim: | deps
 	+ $(BUILD_NIM)
 
 #- initialises and updates the Git submodules
+#- manages the AppVeyor cache of Nim compiler binaries
 #- deletes the ".nimble" dir to force the execution of the "deps" target
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 #- allows parallel building with the '+' prefix
-#- rebuilds the Nim compiler after the corresponding submodule is updated
+#- rebuilds the Nim compiler after the corresponding submodule is updated (keep in mind that Git doesn't preserve file timestamps)
 $(NIM_BINARY) update: | sanity-checks
 	git submodule update --init --recursive
+	[[ -n "$(CI_CACHE)" && -d "$(CI_CACHE)" ]] && cp -a "$(CI_CACHE)"/* $(NIM_DIR)/bin/ || true
 	rm -rf $(NIMBLE_DIR) nimbus.nims && $(MAKE) nimbus.nims
-	+ [[ -e $(NIM_BINARY) && $(NIM_BINARY) -nt $(NIM_DIR)/lib/system.nim ]] || { $(BUILD_NIM); }
+	+ [[ -e $(NIM_BINARY) &&  $$(stat -c%Z $(NIM_BINARY)) -gt $$(git log --pretty=format:%cd -n 1 --date=unix --  vendor/Nim) ]] || \
+		{ $(BUILD_NIM); [[ -n "$(CI_CACHE)" ]] && rm -rf "$(CI_CACHE)" && mkdir $(CI_CACHE) && cp -a $(NIM_DIR)/bin/* "$(CI_CACHE)"/ || true; }
 
 # don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
 update-remote:
