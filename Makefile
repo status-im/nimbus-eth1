@@ -34,44 +34,14 @@ NIM_DIR := vendor/Nim
 #  but this is broken when using symlinks, so build csources separately (we get parallel compiling as a bonus)
 #- Windows is a special case, as usual
 #- macOS is also a special case, with its "ln" not supporting "-r"
+#- the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection with ARCH_OVERRIDE
+BUILD_NIM := echo -e $(BUILD_MSG) "Nim compiler" && \
+	V=$(V) CC=$(CC) MAKE=$(MAKE) ARCH_OVERRIDE=$(ARCH_OVERRIDE) "$(CURDIR)/build_nim.sh" "$(NIM_DIR)" ../Nim-csources ../nimble
 ifeq ($(OS), Windows_NT)
-  # the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection
-  ifeq ($(ARCH_OVERRIDE), x86)
-    UCPU := ucpu=i686
-  else
-    UCPU :=
-  endif
-
-  BUILD_CSOURCES := \
-    $(MAKE) myos=windows $(UCPU) clean $(HANDLE_OUTPUT) && \
-    $(MAKE) myos=windows $(UCPU) CC=gcc LD=gcc $(HANDLE_OUTPUT)
   EXE_SUFFIX := .exe
 else
-  BUILD_CSOURCES := \
-    $(MAKE) clean $(HANDLE_OUTPUT) && \
-    $(MAKE) LD=$(CC) $(HANDLE_OUTPUT)
   EXE_SUFFIX :=
 endif
-BUILD_NIM := echo -e $(BUILD_MSG) "Nim compiler" && \
-	cd $(NIM_DIR) && \
-	rm -rf bin/nim_csources csources dist/nimble && \
-	ln -s ../Nim-csources csources && \
-	mkdir -p dist && \
-	ln -s ../../nimble dist/nimble && \
-	cd csources && \
-	$(BUILD_CSOURCES) && \
-	cd - >/dev/null && \
-	[ -e csources/bin ] && { \
-		cp -a csources/bin/nim bin/nim && \
-		cp -a csources/bin/nim bin/nim_csources && \
-		rm -rf csources/bin; \
-	} || { \
-		cp -a bin/nim bin/nim_csources; \
-	} && { \
-		sed 's/koch tools/koch --stable tools/' build_all.sh > build_all_custom.sh; \
-		sh build_all_custom.sh $(HANDLE_OUTPUT); \
-		rm build_all_custom.sh; \
-	} && cd ../..
 NIM_BINARY := $(NIM_DIR)/bin/nim$(EXE_SUFFIX)
 # md5sum - macOS is a special case
 ifeq ($(shell uname), Darwin)
@@ -197,10 +167,20 @@ build-nim: | deps
 #- rebuilds the Nim compiler after the corresponding submodule is updated (keep in mind that Git doesn't preserve file timestamps)
 $(NIM_BINARY) update: | sanity-checks
 	git submodule update --init --recursive
-	[[ -n "$(CI_CACHE)" && -d "$(CI_CACHE)" ]] && cp -a "$(CI_CACHE)"/* $(NIM_DIR)/bin/ || true
-	rm -rf $(NIMBLE_DIR) nimbus.nims && $(MAKE) nimbus.nims
-	+ [[ -e $(NIM_BINARY) &&  $$(stat -c%Z $(NIM_BINARY)) -gt $$(git log --pretty=format:%cd -n 1 --date=unix --  vendor/Nim) ]] || \
-		{ $(BUILD_NIM); [[ -n "$(CI_CACHE)" ]] && rm -rf "$(CI_CACHE)" && mkdir $(CI_CACHE) && cp -a $(NIM_DIR)/bin/* "$(CI_CACHE)"/ || true; }
+	[[ -n "$(CI_CACHE)" && -d "$(CI_CACHE)" ]] && \
+		cp -a "$(CI_CACHE)"/* $(NIM_DIR)/bin/ || \
+		true
+	rm -rf $(NIMBLE_DIR) nimbus.nims && \
+		$(MAKE) nimbus.nims
+	+ "$(CURDIR)/nim_needs_rebuilding.sh" "$(NIM_DIR)" $(NIM_BINARY) && \
+		{ \
+			$(BUILD_NIM); \
+			[[ -n "$(CI_CACHE)" ]] && \
+			rm -rf "$(CI_CACHE)" && \
+			mkdir $(CI_CACHE) && \
+			cp -a $(NIM_DIR)/bin/* "$(CI_CACHE)"/ || \
+			true; \
+		} || true
 
 # don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
 update-remote:
