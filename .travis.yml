@@ -9,6 +9,8 @@ cache:
 git:
   # when multiple CI builds are queued, the tested commit needs to be in the last X commits cloned with "--depth X"
   depth: 10
+  # disable LFS file downloading during regular cloning
+  lfs_skip_smudge: true
 
 matrix:
   include:

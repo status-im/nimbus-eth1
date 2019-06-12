@@ -3,6 +3,10 @@ version: '{build}'
 # use an image with recent Mingw-w64 versions available on both architectures: https://www.appveyor.com/docs/windows-images-software/#mingw-msys-cygwin
 image: Visual Studio 2015
 
+environment:
+  # disable LFS file downloading during regular cloning
+  GIT_LFS_SKIP_SMUDGE: 1
+
 cache:
   - NimBinaries
 
