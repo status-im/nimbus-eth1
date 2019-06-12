@@ -32,6 +32,12 @@ else
 	ON_WINDOWS=0
 	EXE_SUFFIX=""
 fi
+# macOS
+if uname | grep -qi "darwin"; then
+	STAT_FORMAT="-f %m"
+else
+	STAT_FORMAT="-c %Y"
+fi
 
 NIM_BINARY="${NIM_DIR}/bin/nim${EXE_SUFFIX}"
 
@@ -48,7 +54,7 @@ nim_needs_rebuilding() {
 	fi
 
 	# compare binary mtime to the date of the last commit (keep in mind that Git doesn't preserve file timestamps)
-	if [[ -e "$NIM_BINARY" && $(stat -c%Y "$NIM_BINARY") -gt $(cd "$NIM_DIR"; git log --pretty=format:%cd -n 1 --date=unix) ]]; then
+	if [[ -e "$NIM_BINARY" && $(stat $STAT_FORMAT "$NIM_BINARY") -gt $(cd "$NIM_DIR"; git log --pretty=format:%cd -n 1 --date=unix) ]]; then
 		return $NO_REBUILD
 	else
 		return $REBUILD
