@@ -28,15 +28,6 @@ ENV_SCRIPT := "$(CURDIR)/env.sh"
 # duplicated in "env.sh" to prepend NIM_DIR/bin to PATH
 NIM_DIR := vendor/Nim
 
-#- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
-#- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
-#- build_all.sh looks at the parent dir to decide whether to copy the resulting csources binary there,
-#  but this is broken when using symlinks, so build csources separately (we get parallel compiling as a bonus)
-#- Windows is a special case, as usual
-#- macOS is also a special case, with its "ln" not supporting "-r"
-#- the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection with ARCH_OVERRIDE
-BUILD_NIM := echo -e $(BUILD_MSG) "Nim compiler" && \
-	V=$(V) CC=$(CC) MAKE=$(MAKE) ARCH_OVERRIDE=$(ARCH_OVERRIDE) "$(CURDIR)/build_nim.sh" "$(NIM_DIR)" ../Nim-csources ../nimble
 ifeq ($(OS), Windows_NT)
   EXE_SUFFIX := .exe
 else
@@ -49,7 +40,7 @@ ifeq ($(shell uname), Darwin)
 else
   MD5SUM := md5sum
 endif
-# AppVeyor cache of $(NIM_DIR)/bin that doesn't get unpacked after all submodules have been checked out, like on Travis
+# AppVeyor/Travis cache of $(NIM_DIR)/bin
 CI_CACHE :=
 
 # debugging tools + testing tools
@@ -154,33 +145,34 @@ github-ssh:
 	git config url."git@github.com:".insteadOf "https://github.com/"
 	git submodule foreach --recursive 'git config url."git@github.com:".insteadOf "https://github.com/"'
 
-#- re-builds the Nim compiler (not usually needed, because `make update` does it when necessary)
+#- conditionally re-builds the Nim compiler (not usually needed, because `make update` calls this rule; delete $(NIM_BINARY) to force it)
 #- allows parallel building with the '+' prefix
-build-nim: | deps
-	+ $(BUILD_NIM)
+#- forces a rebuild of csources, Nimble and a complete compiler rebuild, in case we're called after pulling a new Nim version
+#- uses our Git submodules for csources and Nimble (Git doesn't let us place them in another submodule)
+#- build_all.sh looks at the parent dir to decide whether to copy the resulting csources binary there,
+#  but this is broken when using symlinks, so build csources separately (we get parallel compiling as a bonus)
+#- Windows is a special case, as usual
+#- macOS is also a special case, with its "ln" not supporting "-r"
+#- the AppVeyor 32-build is done on a 64-bit image, so we need to override the architecture detection with ARCH_OVERRIDE
+build-nim: | sanity-checks
+	+ NIM_BUILD_MSG="$(BUILD_MSG) Nim compiler" \
+		V=$(V) \
+		CC=$(CC) \
+		MAKE=$(MAKE) \
+		ARCH_OVERRIDE=$(ARCH_OVERRIDE) \
+		"$(CURDIR)/build_nim.sh" "$(NIM_DIR)" ../Nim-csources ../nimble "$(CI_CACHE)"
 
 #- initialises and updates the Git submodules
 #- manages the AppVeyor cache of Nim compiler binaries
 #- deletes the ".nimble" dir to force the execution of the "deps" target
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 #- allows parallel building with the '+' prefix
-#- rebuilds the Nim compiler after the corresponding submodule is updated (keep in mind that Git doesn't preserve file timestamps)
+#- rebuilds the Nim compiler if the corresponding submodule is updated
 $(NIM_BINARY) update: | sanity-checks
 	git submodule update --init --recursive
-	[[ -n "$(CI_CACHE)" && -d "$(CI_CACHE)" ]] && \
-		cp -a "$(CI_CACHE)"/* $(NIM_DIR)/bin/ || \
-		true
 	rm -rf $(NIMBLE_DIR) nimbus.nims && \
 		$(MAKE) nimbus.nims
-	+ "$(CURDIR)/nim_needs_rebuilding.sh" "$(NIM_DIR)" $(NIM_BINARY) && \
-		{ \
-			$(BUILD_NIM); \
-			[[ -n "$(CI_CACHE)" ]] && \
-			rm -rf "$(CI_CACHE)" && \
-			mkdir $(CI_CACHE) && \
-			cp -a $(NIM_DIR)/bin/* "$(CI_CACHE)"/ || \
-			true; \
-		} || true
+	+ $(MAKE) build-nim
 
 # don't use this target, or you risk updating dependency repos that are not ready to be used in Nimbus
 update-remote:

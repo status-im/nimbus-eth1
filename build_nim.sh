@@ -7,77 +7,120 @@ CSOURCES_COMMIT="b56e49bbedf62db22eb26388f98262e2948b2cbc" # 0.19.0
 NIMBLE_COMMIT="c8d79fc0228682677330a9f57d14389aaa641153" # Mar 26 10:06:06 2019
 
 # script arguments
-[[ $# -ne 3 ]] && { echo "usage: $0 nim_dir csources_dir nimble_dir"; exit 1; }
+[[ $# -ne 4 ]] && { echo "usage: $0 nim_dir csources_dir nimble_dir ci_cache_dir"; exit 1; }
 NIM_DIR="$1"
 CSOURCES_DIR="$2"
 NIMBLE_DIR="$3"
+CI_CACHE="$4"
 
 ## env vars
 # verbosity level
 [[ -z "$V" ]] && V=0
-[[ "$V" == "0" ]] && exec &>/dev/null
 [[ -z "$CC" ]] && CC="gcc"
 # to build csources in parallel, set MAKE="make -jN"
 [[ -z "$MAKE" ]] && MAKE="make"
 # for 32-bit binaries on a 64-bit Windows host
 UCPU=""
 [[ "$ARCH_OVERRIDE" == "x86" ]] && UCPU="ucpu=i686"
+[[ -z "$NIM_BUILD_MSG" ]] && NIM_BUILD_MSG="Building the Nim compiler"
 
 # Windows detection
-ON_WINDOWS=0
-uname | grep -qi mingw && ON_WINDOWS=1
+if uname | grep -qi mingw; then
+	ON_WINDOWS=1
+	EXE_SUFFIX=".exe"
+else
+	ON_WINDOWS=0
+	EXE_SUFFIX=""
+fi
 
-# working directory
-cd "$NIM_DIR"
+NIM_BINARY="${NIM_DIR}/bin/nim${EXE_SUFFIX}"
 
-# Git repos for csources and Nimble
-[[ -d "$CSOURCES_DIR" ]] || { \
-	mkdir -p "$CSOURCES_DIR" && \
-	cd "$CSOURCES_DIR" && \
-	git clone https://github.com/nim-lang/csources.git . && \
-	git checkout $CSOURCES_COMMIT && \
-	cd - >/dev/null; \
+nim_needs_rebuilding() {
+	REBUILD=0
+	NO_REBUILD=1
+
+	if [[ -n "$CI_CACHE" && -d "$CI_CACHE" ]]; then
+		if [[ ! -e "$NIM_DIR" ]]; then
+			git clone --depth=1 https://github.com/status-im/Nim.git "$NIM_DIR"
+		fi
+		cp -a "$CI_CACHE"/* "$NIM_DIR"/bin/
+	fi
+
+	# compare binary mtime to the date of the last commit (keep in mind that Git doesn't preserve file timestamps)
+	if [[ -e "$NIM_BINARY" && $(stat -c%Y "$NIM_BINARY") -gt $(cd "$NIM_DIR"; git log --pretty=format:%cd -n 1 --date=unix) ]]; then
+		return $NO_REBUILD
+	else
+		return $REBUILD
+	fi
 }
-[[ "$CSOURCES_DIR" != "csources" ]] && \
-rm -rf csources && \
-ln -s "$CSOURCES_DIR" csources
 
-# we have to delete .git or koch.nim will checkout a branch tip
-[[ -d "$NIMBLE_DIR" ]] || { \
-	mkdir -p "$NIMBLE_DIR" && \
-	cd "$NIMBLE_DIR" && \
-	git clone https://github.com/nim-lang/nimble.git . && \
-	git checkout $NIMBLE_COMMIT && \
-	rm -rf .git && \
-	cd - >/dev/null; \
-}
-[[ "$NIMBLE_DIR" != "dist/nimble" ]] && \
-mkdir -p dist && \
-rm -rf dist/nimble && \
-ln -s ../"$NIMBLE_DIR" dist/nimble
+build_nim() {
+	echo -e "$NIM_BUILD_MSG"
+	[[ "$V" == "0" ]] && exec &>/dev/null
 
-# bootstrap the Nim compiler and build the tools
-rm -rf bin/nim_csources && \
-cd csources && { \
-	[[ "$ON_WINDOWS" == "0" ]] && { \
-		$MAKE clean && \
-		$MAKE LD=$CC; \
-	} || { \
-		$MAKE myos=windows $UCPU clean && \
-		$MAKE myos=windows $UCPU CC=gcc LD=gcc; \
-	}; \
-} && \
-cd - >/dev/null && { \
-	[ -e csources/bin ] && { \
-		cp -a csources/bin/nim bin/nim && \
-		cp -a csources/bin/nim bin/nim_csources && \
-		rm -rf csources/bin; \
-	} || { \
-		cp -a bin/nim bin/nim_csources; \
-	}; \
-} && { \
-	sed 's/koch tools/koch --stable tools/' build_all.sh > build_all_custom.sh; \
-	sh build_all_custom.sh; \
-	rm build_all_custom.sh; \
+	# working directory
+	cd "$NIM_DIR"
+
+	# Git repos for csources and Nimble
+	if [[ ! -d "$CSOURCES_DIR" ]]; then
+		mkdir -p "$CSOURCES_DIR"
+		cd "$CSOURCES_DIR"
+		git clone https://github.com/nim-lang/csources.git .
+		git checkout $CSOURCES_COMMIT
+		cd - >/dev/null
+	fi
+	if [[ "$CSOURCES_DIR" != "csources" ]]; then
+		rm -rf csources
+		ln -s "$CSOURCES_DIR" csources
+	fi
+
+	if [[ ! -d "$NIMBLE_DIR" ]]; then
+		mkdir -p "$NIMBLE_DIR"
+		cd "$NIMBLE_DIR"
+		git clone https://github.com/nim-lang/nimble.git .
+		git checkout $NIMBLE_COMMIT
+		# we have to delete .git or koch.nim will checkout a branch tip, overriding our target commit
+		rm -rf .git
+		cd - >/dev/null
+	fi
+	if [[ "$NIMBLE_DIR" != "dist/nimble" ]]; then
+		mkdir -p dist
+		rm -rf dist/nimble
+		ln -s ../"$NIMBLE_DIR" dist/nimble
+	fi
+
+	# bootstrap the Nim compiler and build the tools
+	rm -rf bin/nim_csources
+	cd csources
+	if [[ "$ON_WINDOWS" == "0" ]]; then
+		$MAKE clean
+		$MAKE LD=$CC
+	else
+		$MAKE myos=windows $UCPU clean
+		$MAKE myos=windows $UCPU CC=gcc LD=gcc
+	fi
+	cd - >/dev/null
+	if [[ -e csources/bin ]]; then
+		cp -a csources/bin/nim bin/nim
+		cp -a csources/bin/nim bin/nim_csources
+		rm -rf csources/bin
+	else
+		cp -a bin/nim bin/nim_csources
+	fi
+	sed 's/koch tools/koch --stable tools/' build_all.sh > build_all_custom.sh
+	sh build_all_custom.sh
+	rm build_all_custom.sh
+
+	# update the CI cache
+	cd - >/dev/null # we were in $NIM_DIR
+	if [[ -n "$CI_CACHE" ]]; then
+		rm -rf "$CI_CACHE"
+		mkdir "$CI_CACHE"
+		cp -a "$NIM_DIR"/bin/* "$CI_CACHE"/
+	fi
 }
+
+if nim_needs_rebuilding; then
+	build_nim
+fi
 
