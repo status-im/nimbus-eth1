@@ -148,10 +148,17 @@ make LOG_LEVEL=TRACE nimbus # log everything
 make NIMFLAGS="-d:release"
 ```
 
-- if you want to use SSH keys with GitHub:
+- if you want to use SSH keys with GitHub (also handles submodules):
 
 ```bash
 make github-ssh
+```
+
+- force a Nim compiler rebuild:
+
+```bash
+rm vendor/Nim/bin/nim
+make -j8 build-nim
 ```
 
 #### Git submodule workflow
