@@ -59,15 +59,15 @@ build_nim() {
 	[[ "$V" == "0" ]] && exec &>/dev/null
 
 	# working directory
-	cd "$NIM_DIR"
+	pushd "$NIM_DIR"
 
 	# Git repos for csources and Nimble
 	if [[ ! -d "$CSOURCES_DIR" ]]; then
 		mkdir -p "$CSOURCES_DIR"
-		cd "$CSOURCES_DIR"
+		pushd "$CSOURCES_DIR"
 		git clone https://github.com/nim-lang/csources.git .
 		git checkout $CSOURCES_COMMIT
-		cd - >/dev/null
+		popd
 	fi
 	if [[ "$CSOURCES_DIR" != "csources" ]]; then
 		rm -rf csources
@@ -76,12 +76,12 @@ build_nim() {
 
 	if [[ ! -d "$NIMBLE_DIR" ]]; then
 		mkdir -p "$NIMBLE_DIR"
-		cd "$NIMBLE_DIR"
+		pushd "$NIMBLE_DIR"
 		git clone https://github.com/nim-lang/nimble.git .
 		git checkout $NIMBLE_COMMIT
 		# we have to delete .git or koch.nim will checkout a branch tip, overriding our target commit
 		rm -rf .git
-		cd - >/dev/null
+		popd
 	fi
 	if [[ "$NIMBLE_DIR" != "dist/nimble" ]]; then
 		mkdir -p dist
@@ -91,7 +91,7 @@ build_nim() {
 
 	# bootstrap the Nim compiler and build the tools
 	rm -rf bin/nim_csources
-	cd csources
+	pushd csources
 	if [[ "$ON_WINDOWS" == "0" ]]; then
 		$MAKE clean
 		$MAKE LD=$CC
@@ -99,7 +99,7 @@ build_nim() {
 		$MAKE myos=windows $UCPU clean
 		$MAKE myos=windows $UCPU CC=gcc LD=gcc
 	fi
-	cd - >/dev/null
+	popd
 	if [[ -e csources/bin ]]; then
 		cp -a csources/bin/nim bin/nim
 		cp -a csources/bin/nim bin/nim_csources
@@ -112,7 +112,7 @@ build_nim() {
 	rm build_all_custom.sh
 
 	# update the CI cache
-	cd - >/dev/null # we were in $NIM_DIR
+	popd # we were in $NIM_DIR
 	if [[ -n "$CI_CACHE" ]]; then
 		rm -rf "$CI_CACHE"
 		mkdir "$CI_CACHE"
