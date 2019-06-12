@@ -25,7 +25,7 @@ UCPU=""
 [[ -z "$NIM_BUILD_MSG" ]] && NIM_BUILD_MSG="Building the Nim compiler"
 
 # Windows detection
-if uname | grep -qi mingw; then
+if uname | grep -qiE "mingw|msys"; then
 	ON_WINDOWS=1
 	EXE_SUFFIX=".exe"
 else
