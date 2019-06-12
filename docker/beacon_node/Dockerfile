@@ -10,7 +10,8 @@ ARG GIT_REVISION
 RUN git clone https://github.com/status-im/nimbus.git \
  && cd nimbus \
  && git reset --hard ${GIT_REVISION} \
- && make update deps nat-libs
+ && make update deps vendor/go/bin/p2pd nat-libs \
+ && cp vendor/go/bin/p2pd /usr/bin/p2pd
 
 ARG NETWORK
 ARG NETWORK_BACKEND
@@ -41,7 +42,8 @@ RUN apt update \
  && apt clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-COPY --from=build /usr/bin/beacon_node /usr/bin/beacon_node 
+COPY --from=build /usr/bin/beacon_node /usr/bin/beacon_node
+COPY --from=build /usr/bin/p2pd /usr/bin/p2pd
 
 MAINTAINER Zahary Karadjov <zahary@status.im>
 LABEL description="Nimbus installation that can act as an ETH2 network bootstrap node."
