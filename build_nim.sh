@@ -43,7 +43,7 @@ nim_needs_rebuilding() {
 		if [[ ! -e "$NIM_DIR" ]]; then
 			git clone --depth=1 https://github.com/status-im/Nim.git "$NIM_DIR"
 		fi
-		cp -a "$CI_CACHE"/* "$NIM_DIR"/bin/
+		cp -a "$CI_CACHE"/* "$NIM_DIR"/bin/ || true # let this one fail with an empty cache dir
 	fi
 
 	# compare binary mtime to the date of the last commit (keep in mind that Git doesn't preserve file timestamps)
