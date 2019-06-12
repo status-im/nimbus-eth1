@@ -39,10 +39,11 @@ nim_needs_rebuilding() {
 	REBUILD=0
 	NO_REBUILD=1
 
+	if [[ ! -e "$NIM_DIR" ]]; then
+		git clone --depth=1 https://github.com/status-im/Nim.git "$NIM_DIR"
+	fi
+
 	if [[ -n "$CI_CACHE" && -d "$CI_CACHE" ]]; then
-		if [[ ! -e "$NIM_DIR" ]]; then
-			git clone --depth=1 https://github.com/status-im/Nim.git "$NIM_DIR"
-		fi
 		cp -a "$CI_CACHE"/* "$NIM_DIR"/bin/ || true # let this one fail with an empty cache dir
 	fi
 
