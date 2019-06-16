@@ -3,7 +3,7 @@ language: c
 # https://docs.travis-ci.com/user/caching/
 cache:
   directories:
-    - rocksdb
+    - rocksdbCache
     - vendor/Nim/bin
 
 git:
@@ -17,27 +17,19 @@ matrix:
     - os: linux
       sudo: required
       before_install:
-        - export INSTALL_PATH=/usr
-        - export NPROC=$(nproc)
+        - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
     - os: osx
       before_install:
-        - export INSTALL_PATH=$HOME # included in DYLD_FALLBACK_LIBRARY_PATH
-        - export NPROC=$(sysctl -n hw.ncpu)
+        - launchctl setenv LIBRARY_PATH /usr/local/lib # for RocksDB
 
 install:
   # build our own rocksdb to test with a fixed version that we think works
-  - export ROCKSDBVER=5.14.2
-  - "[ -f rocksdb/rocksdb-$ROCKSDBVER/Makefile ] || { rm -rf rocksdb ; mkdir -p rocksdb; cd rocksdb; wget https://github.com/facebook/rocksdb/archive/v$ROCKSDBVER.tar.gz && tar xvf v$ROCKSDBVER.tar.gz; cd ..; }"
-  - cd rocksdb/rocksdb-$ROCKSDBVER
-  - "[ -f util/build_version.cc ] || { make util/build_version.cc ; }" # use cached version if possible
-  - export NO_UPDATE_BUILD_VERSION=1
-  - make -j${NPROC} shared_lib && sudo make install-shared
-  - cd ../..
+  - ./build_rocksdb.sh rocksdbCache
 
 script:
   - set -e # fail fast
-  - make -j${NPROC}
+  - make -j2
   - ./build/nimbus --help
-  - make -j${NPROC} test test-reproducibility
-  - make -C vendor/nim-beacon-chain -j${NPROC} test
+  - make -j2 test test-reproducibility
+  - make -C vendor/nim-beacon-chain -j2 test
 

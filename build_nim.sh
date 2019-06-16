@@ -1,4 +1,5 @@
 #!/bin/bash
+# used in Travis CI and AppVeyor scripts
 
 set -e
 
