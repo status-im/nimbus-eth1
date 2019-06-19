@@ -6,7 +6,7 @@ cd $(dirname "$0")
 
 export GIT_REVISION=$(git rev-parse HEAD)
 
-NETWORK=testnet0
+NETWORK=testnet1
 
 if [[ $(git rev-parse --abbrev-ref HEAD) == "devel" ]]; then
   NETWORK=testnet1
@@ -19,5 +19,6 @@ buildAndPush() {
   (cd beacon_node && make push)
 }
 
-buildAndPush $NETWORK rlpx
-#buildAndPush testnet0 libp2p
+# buildAndPush $NETWORK rlpx
+buildAndPush $NETWORK libp2p_spec
+

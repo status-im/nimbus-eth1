@@ -33,7 +33,7 @@ RUN cd nimbus \
       -d:release \
       --debugger:native \
       --debugInfo \
-      -d:with${NETWORK_BACKEND} \
+      -d:"network_type=${NETWORK_BACKEND}" \
       -d:SHARD_COUNT=${SHARD_COUNT} \
       -d:SLOTS_PER_EPOCH=${SLOTS_PER_EPOCH} \
       -d:SECONDS_PER_SLOT=${SECONDS_PER_SLOT} \
