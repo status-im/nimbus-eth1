@@ -187,7 +187,7 @@ proc `%`*(value: Hash256): JsonNode =
   result = %("0x" & value.data.toHex)
 
 proc `%`*(value: UInt256): JsonNode =
-  result = %("0x" & value.toString)
+  result = %("0x" & value.toString(16))
 
 proc `%`*(value: ref BloomFilter): JsonNode =
   result = %("0x" & toHex[256](value[]))
