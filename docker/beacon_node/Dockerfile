@@ -1,13 +1,22 @@
 FROM statusteam/nim-base AS build
 
 RUN apt update \
- && apt install -y build-essential make \
+ && apt install -y build-essential make wget \
  && apt clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+RUN export GO_TAR_GZ=go1.12.6.linux-amd64.tar.gz \
+ && cd /tmp/ \
+ && wget https://dl.google.com/go/$GO_TAR_GZ \
+ && tar -xvf $GO_TAR_GZ \
+ && mv go /usr/local \
+ && rm $GO_TAR_GZ
+
 ARG GIT_REVISION
 
-RUN git clone https://github.com/status-im/nimbus.git \
+RUN export GOROOT=/usr/local/go \
+ && export PATH=$GOROOT/bin:$PATH \
+ && git clone https://github.com/status-im/nimbus.git \
  && cd nimbus \
  && git reset --hard ${GIT_REVISION} \
  && make update deps vendor/go/bin/p2pd nat-libs \
