@@ -264,7 +264,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var Identifier) =
 proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
-  if hexStr.len <= 66 and hexStr.isValidHexData:
+  if not (hexStr.len <= 66 and hexStr.isValidHexQuantity):
     raise newException(ValueError, invalidMsg(argName) & " as a UInt256 \"" & hexStr & "\"")
   result = readUintBE[256](hexToPaddedByteArray[32](hexStr))
 
