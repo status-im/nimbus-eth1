@@ -138,3 +138,7 @@
 	url = https://github.com/status-im/nim-nat-traversal.git
 	ignore = dirty
 	branch = master
+[submodule "vendor/news"]
+	path = vendor/news
+	url = https://github.com/tormund/news
+	branch = master
