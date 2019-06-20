@@ -21,7 +21,7 @@ RUN export GOROOT=/usr/local/go \
  && git reset --hard ${GIT_REVISION} \
  && make update deps vendor/go/bin/p2pd nat-libs \
  && cp vendor/go/bin/p2pd /usr/bin/p2pd \
- && ls vendor/.nimble/pkgs
+ && cat vendor/.nimble/pkgs/*/*
 
 ARG NETWORK
 ARG NETWORK_TYPE
