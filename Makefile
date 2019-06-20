@@ -114,8 +114,8 @@ endif
 #  for runtime path (i.e.: the second line in $(NIMBLE_DIR)/pkgs/*/*.nimble-link)
 $(NIMBLE_DIR): | $(NIM_BINARY)
 	mkdir -p $(NIMBLE_DIR)/pkgs
-	NIMBLE_DIR="$(NIMBLE_DIR)" PWD_CMD="$(PWD)" \
-		git submodule foreach --quiet 'bash $(CURDIR)/scripts/create_nimble_link.sh'
+	NIMBLE_DIR="$(CURDIR)/$(NIMBLE_DIR)" PWD_CMD="$(PWD)" \
+		git submodule foreach --quiet 'bash $(CURDIR)/scripts/create_nimble_link.sh "$$sm_path"'
 
 # symlink
 nimbus.nims:
