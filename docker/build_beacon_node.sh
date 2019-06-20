@@ -14,7 +14,7 @@ fi
 
 buildAndPush() {
   export NETWORK=$1
-  export NETWORK_BACKEND=$2
+  export NETWORK_TYPE=$2
 
   (cd beacon_node && make push)
 }

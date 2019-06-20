@@ -20,10 +20,11 @@ RUN export GOROOT=/usr/local/go \
  && cd nimbus \
  && git reset --hard ${GIT_REVISION} \
  && make update deps vendor/go/bin/p2pd nat-libs \
- && cp vendor/go/bin/p2pd /usr/bin/p2pd
+ && cp vendor/go/bin/p2pd /usr/bin/p2pd \
+ && ls vendor/.nimble/pkgs
 
 ARG NETWORK
-ARG NETWORK_BACKEND
+ARG NETWORK_TYPE
 
 RUN cd nimbus \
  && set -a \
@@ -33,7 +34,7 @@ RUN cd nimbus \
       -d:release \
       --debugger:native \
       --debugInfo \
-      -d:"network_type=${NETWORK_BACKEND}" \
+      -d:"network_type=${NETWORK_TYPE}" \
       -d:SHARD_COUNT=${SHARD_COUNT} \
       -d:SLOTS_PER_EPOCH=${SLOTS_PER_EPOCH} \
       -d:SECONDS_PER_SLOT=${SECONDS_PER_SLOT} \
