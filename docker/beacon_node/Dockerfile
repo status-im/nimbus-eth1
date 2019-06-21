@@ -21,7 +21,7 @@ RUN export GOROOT=/usr/local/go \
  && git reset --hard ${GIT_REVISION} \
  && make update deps vendor/go/bin/p2pd nat-libs \
  && cp vendor/go/bin/p2pd /usr/bin/p2pd \
- && cat vendor/.nimble/pkgs/*/*
+ && cp docker/beacon_node/run_in_docker.sh /usr/bin/run_beacon_node.sh
 
 ARG NETWORK
 ARG NETWORK_TYPE
@@ -53,9 +53,10 @@ RUN apt update \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY --from=build /usr/bin/beacon_node /usr/bin/beacon_node
+COPY --from=build /usr/bin/run_beacon_node.sh /usr/bin/run_beacon_node.sh
 COPY --from=build /usr/bin/p2pd /usr/bin/p2pd
 
 MAINTAINER Zahary Karadjov <zahary@status.im>
 LABEL description="Nimbus installation that can act as an ETH2 network bootstrap node."
 
-ENTRYPOINT ["/usr/bin/beacon_node"]
+ENTRYPOINT ["/usr/bin/run_beacon_node.sh"]
