@@ -15,6 +15,3 @@ buildAndPush() {
 
 buildAndPush testnet0 rlpx
 buildAndPush testnet1 rlpx
-
-#buildAndPush testnet0 libp2p
-#buildAndPush testnet1 libp2p
