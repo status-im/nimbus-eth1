@@ -3,5 +3,5 @@
 killall p2pd
 rm -rf /tmp/*
 
-beacon_node $*
+beacon_node --nat:none $*
 
