@@ -2,17 +2,17 @@
 
 GIT_REVISION    ?= $(git rev-parse HEAD)
 
-NETWORK         ?= testnet0
-NETWORK_BACKEND ?= rlpx
+NETWORK         ?= testnet1
+NETWORK_TYPE    ?= libp2p_spec
 
-IMAGE_TAG       ?= $(NETWORK)-$(NETWORK_BACKEND)
+IMAGE_TAG       ?= $(NETWORK)
 IMAGE_NAME      ?= statusteam/nimbus_beacon_node:$(IMAGE_TAG)
 
 build: $(NIX_INSTALL)
 	docker build \
 		--build-arg="GIT_REVISION=$(GIT_REVISION)" \
 		--build-arg="NETWORK=$(NETWORK)" \
-		--build-arg="NETWORK_BACKEND=$(NETWORK_BACKEND)" \
+		--build-arg="NETWORK_TYPE=$(NETWORK_TYPE)" \
 		-t $(IMAGE_NAME) .
 
 push: build
