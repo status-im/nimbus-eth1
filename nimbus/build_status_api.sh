@@ -6,7 +6,7 @@
 
 ../env.sh nim c --opt:speed --lineTrace:off --verbosity:2 status_api
 
-gcc status_api.c ./libnimbus_api.a -lm -o xx
+gcc status_api.c ./libnimbus_api.so -lm -o xx
 
 ./xx
 
