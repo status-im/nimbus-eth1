@@ -124,6 +124,13 @@ proc start(): NimbusObject =
       result = "EXITING"
     nimbus.rpcServer.start()
 
+  # periodically log internal statistics
+  let statsInterval = 10.seconds
+  proc printStats(udata: pointer) {.closure, gcsafe.} =
+    info "stats", nimbusStats
+    addTimer(Moment.fromNow(statsInterval), printStats)
+  addTimer(Moment.fromNow(statsInterval), printStats)
+
   # Connect directly to the static nodes
   for enode in conf.net.staticNodes:
     asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
