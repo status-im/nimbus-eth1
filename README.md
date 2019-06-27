@@ -120,7 +120,7 @@ This will place the right DLLs for your architecture in the "build/" directory.
 
 You can now follow those instructions in the previous section by replacing `make` with `mingw32-make` (regardless of your 32-bit or 64-bit architecture).
 
-### Raspberry PI
+#### Raspberry PI
 
 *Experimental* The code can be compiled on a Raspberry PI:
 
