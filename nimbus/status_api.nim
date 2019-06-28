@@ -50,6 +50,7 @@ var
 
 proc subscribeChannel(
     channel: string, handler: proc (msg: ReceivedMessage) {.gcsafe.}) =
+  setupForeignThreadGc()
   var ctx: HMAC[sha256]
   var symKey: SymKey
   discard ctx.pbkdf2(channel, "", 65356, symKey)
@@ -85,6 +86,7 @@ proc subscribeChannel(
 #     notice "no luck parsing", message=getCurrentExceptionMsg()
 
 proc nimbus_start(port: uint16 = 30303) {.exportc.} =
+  setupForeignThreadGc()
   let address = Address(
     udpPort: port.Port, tcpPort: port.Port, ip: parseIpAddress("0.0.0.0"))
 
@@ -110,6 +112,7 @@ proc nimbus_start(port: uint16 = 30303) {.exportc.} =
     asyncCheck node.peerPool.connectToNode(whisperNode)
 
 proc nimbus_poll() {.exportc.} =
+  setupForeignThreadGc()
   poll()
 
 type
@@ -123,6 +126,7 @@ type
     hash*: Hash
 
 proc nimbus_subscribe(channel: cstring, handler: proc (msg: ptr CReceivedMessage) {.gcsafe, cdecl.}) {.exportc.} =
+  setupForeignThreadGc()
   if handler.isNil:
     subscribeChannel($channel, nil)
   else:
@@ -142,6 +146,7 @@ proc nimbus_subscribe(channel: cstring, handler: proc (msg: ptr CReceivedMessage
     subscribeChannel($channel, c_handler)
 
 proc nimbus_post(payload: cstring) {.exportc.} =
+  setupForeignThreadGc()
   let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
   let encPublicKey = encPrivateKey.getPublicKey()
 
@@ -163,6 +168,7 @@ proc nimbus_post(payload: cstring) {.exportc.} =
                            powTarget = 0.002)
 
 proc nimbus_add_peer(nodeId: cstring) {.exportc.} =
+  setupForeignThreadGc()
   var whisperENode: ENode
   discard initENode($nodeId, whisperENode)
   var whisperNode = newNode(whisperENode)
