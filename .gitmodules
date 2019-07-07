@@ -13,11 +13,6 @@
 	url = https://github.com/cheatfate/nimcrypto.git
 	ignore = dirty
 	branch = master
-[submodule "vendor/nim-ranges"]
-	path = vendor/nim-ranges
-	url = https://github.com/status-im/nim-ranges.git
-	ignore = dirty
-	branch = master
 [submodule "vendor/nim-stint"]
 	path = vendor/nim-stint
 	url = https://github.com/status-im/nim-stint.git
@@ -31,11 +26,6 @@
 [submodule "vendor/nim-eth"]
 	path = vendor/nim-eth
 	url = https://github.com/status-im/nim-eth.git
-	ignore = dirty
-	branch = master
-[submodule "vendor/nim-byteutils"]
-	path = vendor/nim-byteutils
-	url = https://github.com/status-im/nim-byteutils.git
 	ignore = dirty
 	branch = master
 [submodule "vendor/nim-http-utils"]
@@ -54,8 +44,8 @@
 	ignore = dirty
 	branch = master
 [submodule "vendor/nim-std-shims"]
-	path = vendor/nim-std-shims
-	url = https://github.com/status-im/nim-std-shims.git
+	path = vendor/nim-stew
+	url = https://github.com/status-im/nim-stew.git
 	ignore = dirty
 	branch = master
 [submodule "vendor/nim-serialization"]

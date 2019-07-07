@@ -2,7 +2,7 @@ import
   json, strutils, sets, hashes,
   chronicles, nimcrypto, eth/common, stint,
   ../vm_types, memory, stack, ../db/[db_chain, state_db],
-  eth/trie/hexary, ./message, ranges/typedranges,
+  eth/trie/hexary, ./message, stew/ranges/typedranges,
   ./interpreter/opcode_values
 
 logScope:

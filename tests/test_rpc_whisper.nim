@@ -1,5 +1,5 @@
 import
-  unittest, strformat, options, byteutils, json_rpc/[rpcserver, rpcclient],
+  unittest, strformat, options, stew/byteutils, json_rpc/[rpcserver, rpcclient],
   eth/common as eth_common, eth/[rlp, keys], eth/p2p/rlpx_protocols/whisper_protocol,
   ../nimbus/rpc/[common, hexstrings, rpc_types, whisper], ./test_helpers
 

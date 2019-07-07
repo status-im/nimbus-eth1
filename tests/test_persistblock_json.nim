@@ -7,7 +7,7 @@
 
 import
   unittest, json, os, tables, strformat, strutils,
-  eth/[common, rlp], byteutils, eth/trie/db,
+  eth/[common, rlp], stew/byteutils, eth/trie/db,
   ./test_helpers, ../nimbus/db/[db_chain, storage_types], ../nimbus/[tracer, vm_types],
   ../nimbus/p2p/chain
 

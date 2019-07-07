@@ -17,7 +17,7 @@ requires "nim >= 0.19",
          "chronos",
          "bncurve",
          "eth",
-         "std_shims"
+         "stew"
 
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   if not dirExists "build":

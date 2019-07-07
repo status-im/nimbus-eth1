@@ -7,7 +7,7 @@
 
 import
   unittest, strformat, strutils, tables, json, ospaths, times, os,
-  byteutils, ranges/typedranges, nimcrypto, options,
+  stew/byteutils, stew/ranges/typedranges, nimcrypto, options,
   eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
   ./test_helpers, ../nimbus/p2p/executor, test_config,
   ../nimbus/[constants, errors, transaction],

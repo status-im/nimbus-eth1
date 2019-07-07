@@ -7,7 +7,7 @@
 
 import
   unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
-  byteutils, ranges/typedranges, eth/[rlp, common], eth/trie/db,
+  stew/byteutils, stew/ranges/typedranges, eth/[rlp, common], eth/trie/db,
   ./test_helpers, ../nimbus/vm/interpreter,
   ../nimbus/[constants, errors, vm_state, vm_types, utils],
   ../nimbus/db/[db_chain, state_db]

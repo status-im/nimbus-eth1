@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times, ranges, sequtils, options,
-  chronicles, stint, nimcrypto, ranges/typedranges, eth/common,
+  strformat, times, stew/ranges, sequtils, options,
+  chronicles, stint, nimcrypto, stew/ranges/typedranges, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,

@@ -1,5 +1,5 @@
 import
-  json, os, eth/common, stint, chronicles, byteutils, nimcrypto,
+  json, os, eth/common, stint, chronicles, stew/byteutils, nimcrypto,
   eth/trie/db, ../nimbus/db/[db_chain, capturedb, select_backend],
   ../nimbus/[tracer, vm_types, config]
 

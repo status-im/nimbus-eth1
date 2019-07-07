@@ -1,4 +1,4 @@
-import ../db/[db_chain, state_db], eth/common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
+import ../db/[db_chain, state_db], eth/common, chronicles, ../vm_state, ../vm_types, ../transaction, stew/ranges,
   ../vm/[computation, message], ../constants, stint, nimcrypto,
   ../vm_state_transactions, sugar, ../utils, eth/trie/db, ../tracer, ./executor
 

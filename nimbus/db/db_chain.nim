@@ -7,8 +7,8 @@
 
 import
   tables, sequtils, algorithm,
-  ranges, state_db, eth/trie/[hexary, db],
-  eth/[common, rlp], byteutils, chronicles,
+  stew/[byteutils, ranges], state_db, eth/trie/[hexary, db],
+  eth/[common, rlp], chronicles,
   ../errors,  ../constants, ./storage_types,
   ../utils, ../config
 

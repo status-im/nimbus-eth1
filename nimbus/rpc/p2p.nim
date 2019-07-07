@@ -9,7 +9,7 @@
 
 import
   strutils, times, options,
-  json_rpc/rpcserver, hexstrings, stint, byteutils, ranges/typedranges,
+  json_rpc/rpcserver, hexstrings, stint, stew/byteutils, stew/ranges/typedranges,
   eth/[common, keys, rlp, p2p], eth/trie/db, nimcrypto,
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../vm_state_transactions, ../utils,

@@ -1,7 +1,7 @@
 import
   macro_assembler, unittest, macros, strutils,
-  byteutils, eth/common, ../nimbus/db/state_db,
-  ../nimbus/db/db_chain, ranges
+  stew/byteutils, eth/common, ../nimbus/db/state_db,
+  ../nimbus/db/db_chain, stew/ranges
 
 suite "Environmental Information Opcodes":
   let (blockNumber, chainDB) = initDatabase()

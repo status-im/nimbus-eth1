@@ -7,7 +7,7 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  byteutils, ranges/typedranges, net, eth/[common, keys, rlp, p2p],
+  stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p],
   ../nimbus/[vm_state, constants, config, transaction, utils],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],

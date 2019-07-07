@@ -1,4 +1,4 @@
-import eth/trie/db, ranges
+import eth/trie/db, stew/ranges
 
 type
   CaptureFlags* {.pure.} = enum

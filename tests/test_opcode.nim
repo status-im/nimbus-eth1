@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, tables, parseutils, byteutils,
+  unittest, tables, parseutils, stew/byteutils,
   eth/trie/db, eth/common/eth_types,
   ../nimbus/[constants, vm_types, vm_state],
   ../nimbus/vm/interpreter,

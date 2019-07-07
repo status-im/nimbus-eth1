@@ -1,5 +1,5 @@
 import options, sets,
-  eth/[common, bloom], ranges, chronicles, nimcrypto,
+  eth/[common, bloom], stew/ranges, chronicles, nimcrypto,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,

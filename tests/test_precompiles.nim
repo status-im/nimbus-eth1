@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, ../nimbus/vm/precompiles, json, byteutils, test_helpers, ospaths, tables,
+  unittest, ../nimbus/vm/precompiles, json, stew/byteutils, test_helpers, ospaths, tables,
   strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/[db_chain, state_db],
   ../nimbus/[constants, vm_types, vm_state], ../nimbus/vm/[computation, message], macros
 

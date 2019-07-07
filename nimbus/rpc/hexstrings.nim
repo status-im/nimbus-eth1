@@ -28,7 +28,7 @@
 ]#
 
 import
-  stint, byteutils, eth/[keys, rlp], eth/common/eth_types,
+  stint, stew/byteutils, eth/[keys, rlp], eth/common/eth_types,
   eth/p2p/rlpx_protocols/whisper_protocol
 
 type

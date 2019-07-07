@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import  unittest, strutils, eth/trie/[hexary, db],
-        ../nimbus/db/state_db, byteutils, eth/common,
-        ranges
+        ../nimbus/db/state_db, stew/byteutils, eth/common,
+        stew/ranges
 
 suite "Account State DB":
   var

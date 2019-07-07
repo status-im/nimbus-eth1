@@ -11,7 +11,7 @@ import
   ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
-  ../utils/header, byteutils, ranges, precompiles,
+  ../utils/header, stew/[byteutils, ranges], precompiles,
   transaction_tracer, eth/trie/trie_defs
 
 logScope:

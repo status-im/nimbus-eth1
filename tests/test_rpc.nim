@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, json, strformat, options, nimcrypto, byteutils,
+  unittest, json, strformat, options, nimcrypto, stew/byteutils,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
   eth/[rlp, keys], eth/trie/db, eth/p2p/rlpx_protocols/eth_protocol,
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
