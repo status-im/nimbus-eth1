@@ -43,7 +43,7 @@
 	url = https://github.com/status-im/nim-faststreams.git
 	ignore = dirty
 	branch = master
-[submodule "vendor/nim-std-shims"]
+[submodule "vendor/nim-stew"]
 	path = vendor/nim-stew
 	url = https://github.com/status-im/nim-stew.git
 	ignore = dirty
