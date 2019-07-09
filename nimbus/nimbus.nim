@@ -127,7 +127,9 @@ proc start(): NimbusObject =
   # periodically log internal statistics
   let statsInterval = 10.seconds
   proc printStats(udata: pointer) {.closure, gcsafe.} =
-    info "stats", nimbusStats
+    {.gcsafe.}:
+      let peers = peerGauge.value.int64
+    info "stats", peers
     addTimer(Moment.fromNow(statsInterval), printStats)
   addTimer(Moment.fromNow(statsInterval), printStats)
 

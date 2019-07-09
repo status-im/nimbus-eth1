@@ -596,14 +596,14 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
     some(computation.getFork))
 
 template genCreate(callName: untyped, opCode: Op): untyped =
-  op callName, inline = false, value, startPosition, size:
+  op callName, inline = false, val, startPosition, size:
     ## 0xf0, Create a new account with associated code.
     let (memPos, len) = (startPosition.safeInt, size.safeInt)
-    if not computation.canTransfer(memPos, len, value, opCode):
+    if not computation.canTransfer(memPos, len, val, opCode):
       push: 0
       return
 
-    var childComp = setupCreate(computation, memPos, len, value, opCode)
+    var childComp = setupCreate(computation, memPos, len, val, opCode)
     if childComp.isNil: return
 
     continuation(childComp):
