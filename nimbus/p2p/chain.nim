@@ -24,14 +24,14 @@ method getBestBlockHeader*(c: Chain): BlockHeader {.gcsafe.} =
   c.db.getCanonicalHead()
 
 method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.gcsafe.} =
-  let n = if skip > 0'u: h.blockNumber + 1 + skip.toBlockNumber
-          else: h.blockNumber + 1
-  result = c.db.getBlockHeader(n, output)
+  let offset = 1 + skip.toBlockNumber
+  if h.blockNumber <= (not 0.toBlockNumber) - offset:
+    result = c.db.getBlockHeader(h.blockNumber + offset, output)
 
 method getAncestorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.gcsafe.} =
-  let n = if skip > 0'u: h.blockNumber - 1 - skip.toBlockNumber
-          else: h.blockNumber - 1
-  c.db.getBlockHeader(n, output)
+  let offset = 1 + skip.toBlockNumber
+  if h.blockNumber >= offset:
+    result = c.db.getBlockHeader(h.blockNumber - offset, output)
 
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
