@@ -132,3 +132,8 @@
 	path = vendor/news
 	url = https://github.com/tormund/news
 	branch = master
+[submodule "vendor/nim-metrics"]
+	path = vendor/nim-metrics
+	url = https://github.com/status-im/nim-metrics.git
+	ignore = dirty
+	branch = master
