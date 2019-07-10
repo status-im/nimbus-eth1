@@ -206,24 +206,24 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
   of RopstenNet:
     ChainConfig(
       chainId:        RopstenNet.uint,
-      homesteadBlock: 0.u256,
+      homesteadBlock: 0.toBlockNumber,
       daoForkSupport: true,
-      eip150Block:    0.u256,
+      eip150Block:    0.toBlockNumber,
       eip150Hash:     toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
-      eip155Block:    10.u256,
-      eip158Block:    10.u256,
-      byzantiumBlock: 1700000.u256
+      eip155Block:    10.toBlockNumber,
+      eip158Block:    10.toBlockNumber,
+      byzantiumBlock: 1700000.toBlockNumber
     )
   of RinkebyNet:
     ChainConfig(
       chainId:        RinkebyNet.uint,
-      homesteadBlock: 1.u256,
+      homesteadBlock: 1.toBlockNumber,
       daoForkSupport: true,
-      eip150Block:    2.u256,
+      eip150Block:    2.toBlockNumber,
       eip150Hash:     toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
-      eip155Block:    3.u256,
-      eip158Block:    3.u256,
-      byzantiumBlock: 1035301.u256
+      eip155Block:    3.toBlockNumber,
+      eip158Block:    3.toBlockNumber,
+      byzantiumBlock: 1035301.toBlockNumber
     )
   else:
     error "No chain config for public network", networkId = id
