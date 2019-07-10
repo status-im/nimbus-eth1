@@ -46,11 +46,12 @@ proc start() =
   nimbus.state = Starting
 
   ## Ctrl+C handling
-  proc handler() {.noconv.} =
-    # workaround for https://github.com/nim-lang/Nim/issues/4057
-    setupForeignThreadGc()
+  proc controlCHandler() {.noconv.} =
+    when defined(windows):
+      # workaround for https://github.com/nim-lang/Nim/issues/4057
+      setupForeignThreadGc()
     nimbus.state = Stopping
-  setControlCHook(handler)
+  setControlCHook(controlCHandler)
 
   ## logging
   setLogLevel(conf.debug.logLevel)
