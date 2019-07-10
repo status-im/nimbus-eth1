@@ -63,11 +63,6 @@
 	url = https://github.com/status-im/nim-secp256k1.git
 	ignore = dirty
 	branch = master
-[submodule "vendor/snappy"]
-	path = vendor/snappy
-	url = https://github.com/jangko/snappy.git
-	ignore = dirty
-	branch = master
 [submodule "vendor/nim-bncurve"]
 	path = vendor/nim-bncurve
 	url = https://github.com/status-im/nim-bncurve.git
@@ -145,5 +140,15 @@
 [submodule "vendor/nim-byteutils"]
 	path = vendor/nim-byteutils
 	url = https://github.com/status-im/nim-byteutils.git
+	ignore = dirty
+	branch = master
+[submodule "vendor/nim-snappy"]
+	path = vendor/nim-snappy
+	url = https://github.com/status-im/nim-snappy.git
+	ignore = dirty
+	branch = master
+[submodule "vendor/NimYAML"]
+	path = vendor/NimYAML
+	url = https://github.com/flyx/NimYAML.git
 	ignore = dirty
 	branch = master

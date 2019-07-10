@@ -9,6 +9,8 @@ abs_path="$(cd $rel_path; pwd)"
 # do we still need this?
 abs_path_native="$(cd $rel_path; ${PWD_CMD})"
 
+export NIMBUS_ENV_DIR="${abs_path}"
+
 # used by libp2p/go-libp2p-daemon
 export GOPATH="${abs_path}/vendor/go"
 export GO111MODULE=on
