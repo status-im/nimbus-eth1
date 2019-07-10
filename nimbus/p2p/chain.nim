@@ -23,9 +23,15 @@ method getBlockHeader*(c: Chain, b: HashOrNum, output: var BlockHeader): bool {.
 method getBestBlockHeader*(c: Chain): BlockHeader {.gcsafe.} =
   c.db.getCanonicalHead()
 
-method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): bool {.gcsafe.} =
-  let n = h.blockNumber + 1
-  c.db.getBlockHeader(n, output)
+method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.gcsafe.} =
+  let offset = 1 + skip.toBlockNumber
+  if h.blockNumber <= (not 0.toBlockNumber) - offset:
+    result = c.db.getBlockHeader(h.blockNumber + offset, output)
+
+method getAncestorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.gcsafe.} =
+  let offset = 1 + skip.toBlockNumber
+  if h.blockNumber >= offset:
+    result = c.db.getBlockHeader(h.blockNumber - offset, output)
 
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
