@@ -36,7 +36,7 @@ const
 
   EMPTY_UNCLE_HASH* =                       "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
 
-  GENESIS_BLOCK_NUMBER* =                   0.u256
+  GENESIS_BLOCK_NUMBER* =                   0.toBlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
   GENESIS_GAS_LIMIT* =                      3_141_592
   GENESIS_PARENT_HASH* =                    ZERO_HASH32

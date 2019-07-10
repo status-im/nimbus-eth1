@@ -17,7 +17,7 @@ import
 logScope:
   topics = "vm computation"
 
-proc newBaseComputation*(vmState: BaseVMState, blockNumber: UInt256, message: Message, forkOverride=none(Fork)): BaseComputation =
+proc newBaseComputation*(vmState: BaseVMState, blockNumber: BlockNumber, message: Message, forkOverride=none(Fork)): BaseComputation =
   new result
   result.vmState = vmState
   result.msg = message
