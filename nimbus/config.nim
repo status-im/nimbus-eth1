@@ -135,6 +135,7 @@ type
     staticNodes*: seq[ENode]      ## List of static nodes to connect to
     bindPort*: uint16             ## Main TCP bind port
     discPort*: uint16             ## Discovery UDP bind port
+    metricsPort*: uint16          ## metrics HTTP server port
     maxPeers*: int                ## Maximum allowed number of peers
     maxPendingPeers*: int         ## Maximum allowed pending peers
     networkId*: uint              ## Network ID as integer
@@ -493,6 +494,11 @@ proc processNetArguments(key, value: string): ConfigStatus =
     result = processInteger(value, res)
     if result == Success:
       config.net.discPort = uint16(res and 0xFFFF)
+  elif skey == "metricsport":
+    var res = 0
+    result = processInteger(value, res)
+    if result == Success:
+      config.net.metricsPort = uint16(res and 0xFFFF)
   elif skey == "maxpeers":
     var res = 0
     result = processInteger(value, res)
@@ -626,6 +632,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16
   result.net.discPort = 30303'u16
+  result.net.metricsPort = 9093'u16
   result.net.ident = NimbusIdent
   result.net.nat = NatAny
   result.net.protocols = defaultProtocols
@@ -675,6 +682,7 @@ NETWORKING OPTIONS:
   --staticnodes:<value>   Comma separated enode URLs to connect with
   --port:<value>          Network listening TCP port (default: 30303)
   --discport:<value>      Network listening UDP port (defaults to --port argument)
+  --metricsport:<value>   Metrics HTTP server port on localhost (defaults to 9093, set to 0 to disable)
   --maxpeers:<value>      Maximum number of network peers (default: 25)
   --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
   --nat:<value>           NAT port mapping mechanism (any|none|upnp|pmp|<external IP>) (default: "any")

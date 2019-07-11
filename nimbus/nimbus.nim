@@ -15,7 +15,7 @@ import
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
-  eth/trie/db
+  eth/trie/db, metrics
 
 ## TODO:
 ## * No IPv6 support
@@ -136,14 +136,11 @@ proc start() =
       result = "EXITING"
     nimbus.rpcServer.start()
 
-  # periodically log internal statistics
-  let statsInterval = 10.seconds
-  proc printStats(udata: pointer) {.closure, gcsafe.} =
-    {.gcsafe.}:
-      let peers = peerGauge.value.int64
-    info "stats", peers
-    addTimer(Moment.fromNow(statsInterval), printStats)
-  addTimer(Moment.fromNow(statsInterval), printStats)
+  # metrics
+  if conf.net.metricsPort > 0.uint16:
+    let metricsAddress = "127.0.0.1"
+    info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsPort
+    metrics.startHttpServer(metricsAddress, Port(conf.net.metricsPort))
 
   # Connect directly to the static nodes
   for enode in conf.net.staticNodes:
