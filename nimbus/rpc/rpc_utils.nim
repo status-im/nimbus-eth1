@@ -31,4 +31,4 @@ proc headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
     # Raises are trapped and wrapped in JSON when returned to the user.
     tag.validateHexQuantity
     let blockNum = stint.fromHex(UInt256, tag)
-    result = chain.getBlockHeader(blockNum)
+    result = chain.getBlockHeader(blockNum.toBlockNumber)

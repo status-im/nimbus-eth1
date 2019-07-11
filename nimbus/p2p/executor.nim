@@ -150,8 +150,8 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
       debug "Uncle hash mismatch"
       return ValidationResult.Error
     for uncle in body.uncles:
-      var uncleReward = uncle.blockNumber + 8.u256
-      uncleReward -= header.blockNumber
+      var uncleReward = uncle.blockNumber.u256 + 8.u256
+      uncleReward -= header.blockNumber.u256
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
       vmState.mutateStateDB:

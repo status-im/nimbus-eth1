@@ -361,7 +361,7 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
 
 op blockhash, inline = true, blockNumber:
   ## 0x40, Get the hash of one of the 256 most recent complete blocks.
-  push: computation.vmState.getAncestorHash(blockNumber)
+  push: computation.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
 
 op coinbase, inline = true:
   ## 0x41, Get the block's beneficiary address.
@@ -373,7 +373,7 @@ op timestamp, inline = true:
 
 op blocknumber, inline = true:
   ## 0x43, Get the block's number.
-  push: computation.vmState.blockNumber
+  push: computation.vmState.blockNumber.blockNumberToVmWord
 
 op difficulty, inline = true:
   ## 0x44, Get the block's difficulty
