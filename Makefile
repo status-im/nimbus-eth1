@@ -49,7 +49,7 @@ TOOLS_DIRS := premix tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a
+.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a go-checks
 
 # default target, because it's the first one that doesn't start with '.'
 all: $(TOOLS) nimbus
@@ -180,7 +180,14 @@ status: | $(REPOS)
 	$(eval CMD := $(GIT_STATUS))
 	$(RUN_CMD_IN_ALL_REPOS)
 
-vendor/go/bin/p2pd:
+MIN_GO_VER := 1.12.0
+go-checks:
+	which go &>/dev/null || { echo "Go compiler not installed. Aborting."; exit 1; }
+	GO_VER="$$(go version | sed 's/^.*go\(\S\+\).*$$/\1/')"; \
+	       [[ $$(echo -e "$${GO_VER}\n$(MIN_GO_VER)" | sort -t '.' -k 1,1 -k 2,2 -k 3,3 -g | head -n 1) == "$(MIN_GO_VER)" ]] || \
+	       { echo "Minimum Go compiler version required: $(MIN_GO_VER). Version available: $$GO_VER. Aborting."; exit 1; }
+
+vendor/go/bin/p2pd: | go-checks
 	cd vendor/go/src/github.com/libp2p/go-libp2p-daemon && \
 		$(ENV_SCRIPT) go get ./... && \
 		$(ENV_SCRIPT) go install ./...
