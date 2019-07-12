@@ -193,6 +193,7 @@ const
   defaultRpcApi = {RpcFlags.Eth, RpcFlags.Shh}
   defaultProtocols = {ProtocolFlags.Eth, ProtocolFlags.Shh}
   defaultLogLevel = LogLevel.WARN
+  defaultNetwork = MainNet
 
 var nimbusConfig {.threadvar.}: NimbusConfiguration
 
@@ -478,8 +479,6 @@ proc processNetArguments(key, value: string): ConfigStatus =
     config.net.setNetwork(RopstenNet)
   elif skey == "rinkeby":
     config.net.setNetwork(RinkebyNet)
-  elif skey == "morden":
-    config.net.setNetwork(MordenNet)
   elif skey == "kovan":
     config.net.setNetwork(KovanNet)
   elif skey == "networkid":
@@ -646,7 +645,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
 
   ## Network defaults
-  result.net.setNetwork(MainNet)
+  result.net.setNetwork(defaultNetwork)
   result.net.maxPeers = 25
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16
@@ -718,12 +717,10 @@ NETWORKING OPTIONS:
   --nodiscover            Disables the peer discovery mechanism (manual peer addition)
   --v5discover            Enables the experimental RLPx V5 (Topic Discovery) mechanism
   --nodekey:<value>       P2P node private key (as hexadecimal string)
-  --testnet               Use Ethereum Ropsten Test Network (default)
+  --networkid:<value>     Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby) (default: $8)
+  --testnet               Use Ethereum Default Test Network (Ropsten)
+  --ropsten               Use Ethereum Ropsten Test Network
   --rinkeby               Use Ethereum Rinkeby Test Network
-  --ropsten               Use Ethereum Test Network (Ropsten Network)
-  --mainnet               Use Ethereum Main Network
-  --morden                Use Ethereum Morden Test Network
-  --networkid:<value>     Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby) (default: 3)
   --ident:<value>         Client identifier (default is '$1')
   --protocols:<value>     Enable specific set of protocols (default: $4)
 
@@ -752,6 +749,7 @@ LOGGING AND DEBUGGING OPTIONS:
     $defaultMaxMsgSize,
     $defaultMinPow,
     metricsServerHelp,
+    $ord(defaultNetwork)
   ]
 
 proc processArguments*(msg: var string): ConfigStatus =
