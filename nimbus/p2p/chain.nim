@@ -52,9 +52,10 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     let validationResult = processBlock(c.db, headers[i], bodies[i], vmState)
 
     when not defined(release):
-      if validationResult == ValidationResult.Error:
+      if validationResult == ValidationResult.Error and
+          bodies[i].transactions.calcTxRoot == headers[i].txRoot:
         dumpDebuggingMetaData(c.db, headers[i], bodies[i], vmState)
-        raise newException(Exception, "Validation error. Debugging metadata dumped.")
+        warn "Validation error. Debugging metadata dumped."
 
     if validationResult != ValidationResult.OK:
       return validationResult
