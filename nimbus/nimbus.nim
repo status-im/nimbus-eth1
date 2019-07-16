@@ -15,7 +15,7 @@ import
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
-  eth/trie/db, metrics
+  eth/trie/db, metrics, metrics/chronicles_support
 
 ## TODO:
 ## * No IPv6 support
@@ -58,6 +58,15 @@ proc start() =
   if len(conf.debug.logFile) != 0:
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(conf.debug.logFile, fmAppend)
+
+  # metrics logging
+  if conf.debug.logMetrics:
+    proc logMetrics(udata: pointer) {.closure, gcsafe.} =
+      {.gcsafe.}:
+        let registry = defaultRegistry
+      info "metrics", registry
+      addTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
+    addTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
 
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:
@@ -136,11 +145,11 @@ proc start() =
       result = "EXITING"
     nimbus.rpcServer.start()
 
-  # metrics
-  if conf.net.metricsPort > 0.uint16:
+  # metrics server
+  if conf.net.metricsServer:
     let metricsAddress = "127.0.0.1"
-    info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsPort
-    metrics.startHttpServer(metricsAddress, Port(conf.net.metricsPort))
+    info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsServerPort
+    metrics.startHttpServer(metricsAddress, Port(conf.net.metricsServerPort))
 
   # Connect directly to the static nodes
   for enode in conf.net.staticNodes:
