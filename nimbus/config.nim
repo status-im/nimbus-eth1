@@ -497,9 +497,9 @@ proc processNetArguments(key, value: string): ConfigStatus =
     result = processInteger(value, res)
     if result == Success:
       config.net.discPort = uint16(res and 0xFFFF)
-  elif skey == "metricsserver":
+  elif skey == "metricsserver" and defined(insecure):
     config.net.metricsServer = true
-  elif skey == "metricsserverport":
+  elif skey == "metricsserverport" and defined(insecure):
     var res = 0
     result = processInteger(value, res)
     if result == Success:
@@ -602,6 +602,8 @@ proc processDebugArguments(key, value: string): ConfigStatus =
     result = processInteger(value, res)
     if result == Success:
       config.debug.logMetricsInterval = res
+  else:
+    result = EmptyOption
 
 proc dumpConfiguration*(): string =
   ## Dumps current configuration as string
@@ -680,6 +682,14 @@ proc getHelpString*(): string =
       continue
     logLevels.add($level)
 
+  when defined(insecure):
+    let metricsServerHelp = """
+
+  --metricsServer         Enable the metrics HTTP server
+  --metricsServerPort:<value> Metrics HTTP server port on localhost (default: 9093)"""
+  else:
+    let metricsServerHelp = ""
+
   result = """
 
 USAGE:
@@ -696,9 +706,7 @@ NETWORKING OPTIONS:
   --bootnodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
   --staticnodes:<value>   Comma separated enode URLs to connect with
   --port:<value>          Network listening TCP port (default: 30303)
-  --discport:<value>      Network listening UDP port (defaults to --port argument)
-  --metricsServer         Enable the metrics HTTP server
-  --metricsServerPort:<value> Metrics HTTP server port on localhost (default: 9093)
+  --discport:<value>      Network listening UDP port (defaults to --port argument)$7
   --maxpeers:<value>      Maximum number of network peers (default: 25)
   --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
   --nat:<value>           NAT port mapping mechanism (any|none|upnp|pmp|<external IP>) (default: "any")
@@ -737,7 +745,8 @@ LOGGING AND DEBUGGING OPTIONS:
     $defaultLogLevel,
     strip($defaultProtocols, chars = {'{','}'}),
     $defaultMaxMsgSize,
-    $defaultMinPow
+    $defaultMinPow,
+    metricsServerHelp,
   ]
 
 proc processArguments*(msg: var string): ConfigStatus =
@@ -783,6 +792,7 @@ proc processArguments*(msg: var string): ConfigStatus =
           processArgument processDebugArguments, key, value, msg
           if result != Success:
             msg = "Unknown option: '" & key & "'."
+            break
     of cmdEnd:
       doAssert(false) # we're never getting this kind here
 
