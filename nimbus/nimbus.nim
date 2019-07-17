@@ -146,10 +146,11 @@ proc start() =
     nimbus.rpcServer.start()
 
   # metrics server
-  if conf.net.metricsServer:
-    let metricsAddress = "127.0.0.1"
-    info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsServerPort
-    metrics.startHttpServer(metricsAddress, Port(conf.net.metricsServerPort))
+  when defined(insecure):
+    if conf.net.metricsServer:
+      let metricsAddress = "127.0.0.1"
+      info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsServerPort
+      metrics.startHttpServer(metricsAddress, Port(conf.net.metricsServerPort))
 
   # Connect directly to the static nodes
   for enode in conf.net.staticNodes:
