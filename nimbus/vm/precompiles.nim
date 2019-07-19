@@ -233,7 +233,7 @@ proc modExp*(computation: BaseComputation) =
   elif maxBytes <= 1024:
     computation.modExpInternal(base_len, exp_len, mod_len, StUint[8192])
   else:
-    raise newException(ValueError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
+    raise newException(EVMError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
 proc bn256ecAdd*(computation: BaseComputation) =
   computation.gasMeter.consumeGas(GasECAdd, reason = "ecAdd Precompile")
@@ -335,7 +335,7 @@ proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.}
       let msg = getCurrentExceptionMsg()
       # cannot use setError here, cyclic dependency
       computation.error = Error(info: msg, burnsGas: true)
-    except:
+    except CatchableError:
       let msg = getCurrentExceptionMsg()
       if fork >= FKByzantium and precompile > paIdentity:
         computation.error = Error(info: msg, burnsGas: true)
