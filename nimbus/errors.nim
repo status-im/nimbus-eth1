@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 type
-  EVMError* = object of Exception
+  EVMError* = object of CatchableError
     ## Base error class for all evm errors.
 
   BlockNotFound* = object of EVMError
