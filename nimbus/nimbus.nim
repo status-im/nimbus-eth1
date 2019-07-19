@@ -51,6 +51,7 @@ proc start() =
       # workaround for https://github.com/nim-lang/Nim/issues/4057
       setupForeignThreadGc()
     nimbus.state = Stopping
+    echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
   setControlCHook(controlCHandler)
 
   ## logging
