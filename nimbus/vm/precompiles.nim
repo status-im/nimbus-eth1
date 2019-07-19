@@ -21,7 +21,7 @@ proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
   template data: untyped = computation.msg.data
   var bytes: array[65, byte]
   let maxPos = min(data.high, 127)
-  if maxPos >= 31:
+  if maxPos >= 63:
     # extract message hash
     result[0][0..31] = data[0..31]
     if maxPos >= 127:
@@ -31,7 +31,7 @@ proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
     elif maxPos >= 64:
       bytes[0..(maxPos-64)] = data[64..maxPos]
   else:
-    result[0][0..maxPos] = data[0..maxPos]
+    raise newException(ValidationError, "Invalid V in getSignature")
 
   var VOK = true
   let v = data[63]
