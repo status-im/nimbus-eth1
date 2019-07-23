@@ -6,9 +6,14 @@ import (
 	"time"
 )
 
-// #cgo LDFLAGS: libnimbus_api.so -lm
+// #cgo LDFLAGS: /home/oskarth/git/nimbus/nimbus/libnimbus_api.so -lm
 // #include "libnim.h"
 import "C"
+
+// Arrange that main.main runs on main thread.
+func init() {
+	runtime.LockOSThread()
+}
 
 func poll() {
 
@@ -41,7 +46,7 @@ func ListenAndPost() {
 	fmt.Println("[nim-status] ListenAndPost 1")
 	i := 0
 	for {
-		fmt.Println("[nim-status] ListenAndPost (post @i==1000) i= ", i)
+		//fmt.Println("[nim-status] ListenAndPost (post @i==1000) i= ", i)
 		C.nimbus_poll()
 		t := time.Now().UnixNano() / int64(time.Millisecond)
 		i = i + 1
