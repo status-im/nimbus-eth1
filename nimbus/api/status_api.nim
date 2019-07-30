@@ -10,34 +10,67 @@
 import
   sequtils, options, strutils, parseopt, chronos, json, times,
   nimcrypto/[bcmode, hmac, rijndael, pbkdf2, sha2, sysrand, utils, keccak, hash],
-  eth/keys, eth/rlp, eth/p2p, eth/p2p/rlpx_protocols/[whisper_protocol],
-  eth/p2p/[discovery, enode, peer_pool], chronicles
+  eth/[keys, rlp, p2p], eth/p2p/rlpx_protocols/[whisper_protocol],
+  eth/p2p/[discovery, enode, peer_pool], chronicles,
+  ../config
+
+type
+  CReceivedMessage* = object
+    decoded*: ptr byte
+    decodedLen*: csize
+    timestamp*: uint32
+    ttl*: uint32
+    topic*: Topic
+    pow*: float64
+    hash*: Hash
 
 proc `$`*(digest: SymKey): string =
   for c in digest: result &= hexChar(c.byte)
 
 const
-  MainBootnodes* = [
-    "enode://a979fb575495b8d6db44f750317d0f4622bf4c2aa3365d6af7c284339968eef29b69ad0dce72a4d8db5ebb4968de0e3bec910127f134779fbcb0cb6d3331163c@52.16.188.185:30303",
-    "enode://3f1d12044546b76342d59d4a05532c14b85aa669704bfe1f864fe079415aa2c02d743e03218e57a33fb94523adb54032871a6c51b2cc5514cb7c7e35b3ed0a99@13.93.211.84:30303",
-    "enode://78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d@191.235.84.50:30303",
-    "enode://158f8aab45f6d19c6cbf4a089c2670541a8da11978a2f90dbf6a502a4a3bab80d288afdbeb7ec0ef6d92de563767f3b1ea9e8e334ca711e9f8e2df5a0385e8e6@13.75.154.138:30303",
-    "enode://1118980bf48b0a3640bdba04e0fe78b1add18e1cd99bf22d53daac1fd9972ad650df52176e7c7d89d1114cfef2bc23a2959aa54998a46afcf7d91809f0855082@52.74.57.123:30303",
-    "enode://979b7fa28feeb35a4741660a16076f1943202cb72b6af70d327f053e248bab9ba81760f39d0701ef1d8f89cc1fbd2cacba0710a12cd5314d5e0c9021aa3637f9@5.1.83.226:30303",
+  # Can't import config.nim from here..
+  # TODO: refactor in nimbus, then move this.
+  MainnetBootnodes = [
+    # Ethereum Foundation Go Bootnodes
+    "enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303",   # bootnode-aws-ap-southeast-1-001
+    "enode://22a8232c3abc76a16ae9d6c3b164f98775fe226f0917b0ca871128a74a8e9630b458460865bab457221f1d448dd9791d24c4e5d88786180ac185df813a68d4de@3.209.45.79:30303",     # bootnode-aws-us-east-1-001
+    "enode://ca6de62fce278f96aea6ec5a2daadb877e51651247cb96ee310a318def462913b653963c155a0ef6c7d50048bba6e6cea881130857413d9f50a621546b590758@34.255.23.113:30303",   # bootnode-aws-eu-west-1-001
+    "enode://279944d8dcd428dffaa7436f25ca0ca43ae19e7bcf94a8fb7d1641651f92d121e972ac2e8f381414b80cc8e5555811c2ec6e1a99bb009b3f53c4c69923e11bd8@35.158.244.151:30303",  # bootnode-aws-eu-central-1-001
+    "enode://8499da03c47d637b20eee24eec3c356c9a2e6148d6fe25ca195c7949ab8ec2c03e3556126b0d7ed644675e78c4318b08691b7b57de10e5f0d40d05b09238fa0a@52.187.207.27:30303",   # bootnode-azure-australiaeast-001
+    "enode://103858bdb88756c71f15e9b5e09b56dc1be52f0a5021d46301dbbfb7e130029cc9d0d6f73f693bc29b665770fff7da4d34f3c6379fe12721b5d7a0bcb5ca1fc1@191.234.162.198:30303", # bootnode-azure-brazilsouth-001
+    "enode://715171f50508aba88aecd1250af392a45a330af91d7b90701c436b618c86aaa1589c9184561907bebbb56439b8f8787bc01f49a7c77276c58c1b09822d75e8e8@52.231.165.108:30303",  # bootnode-azure-koreasouth-001
+    "enode://5d6d7cd20d6da4bb83a1d28cadb5d409b64edf314c0335df658c1a54e32c7c4a7ab7823d57c39b6a757556e68ff1df17c748b698544a55cb488b52479a92b60f@104.42.217.25:30303",   # bootnode-azure-westus-001
+    # Ethereum Foundation C++ Bootnodes
+    "enode://979b7fa28feeb35a4741660a16076f1943202cb72b6af70d327f053e248bab9ba81760f39d0701ef1d8f89cc1fbd2cacba0710a12cd5314d5e0c9021aa3637f9@5.1.83.226:30303"      # DE
   ]
 
   # Whisper nodes taken from:
-  # https://github.com/status-im/status-react/blob/develop/resources/config/fleets.json
+  # curl -s  https://raw.githubusercontent.com/status-im/status-react/develop/resources/config/fleets.json | jq '"\"" + .fleets["eth.beta"].whisper[] + "\","' -r
   WhisperNodes* = [
-    "enode://2b01955d7e11e29dce07343b456e4e96c081760022d1652b1c4b641eaf320e3747871870fa682e9e9cfb85b819ce94ed2fee1ac458904d54fd0b97d33ba2c4a4@206.189.240.70:443",
     "enode://9c2b82304d988cd78bf290a09b6f81c6ae89e71f9c0f69c41d21bd5cabbd1019522d5d73d7771ea933adf0727de5e847c89e751bd807ba1f7f6fc3a0cd88d997@47.52.91.239:443",
     "enode://66ba15600cda86009689354c3a77bdf1a97f4f4fb3ab50ffe34dbc904fac561040496828397be18d9744c75881ffc6ac53729ddbd2cdbdadc5f45c400e2622f7@206.189.243.176:443",
     "enode://0440117a5bc67c2908fad94ba29c7b7f2c1536e96a9df950f3265a9566bf3a7306ea8ab5a1f9794a0a641dcb1e4951ce7c093c61c0d255f4ed5d2ed02c8fce23@35.224.15.65:443",
     "enode://a80eb084f6bf3f98bf6a492fd6ba3db636986b17643695f67f543115d93d69920fb72e349e0c617a01544764f09375bb85f452b9c750a892d01d0e627d9c251e@47.89.16.125:443",
     "enode://4ea35352702027984a13274f241a56a47854a7fd4b3ba674a596cff917d3c825506431cf149f9f2312a293bb7c2b1cca55db742027090916d01529fe0729643b@206.189.243.178:443",
-    "enode://d85b87dbcd251ca21bdc4085d938e54a9af3538dd6696e2b99ec9c4694bc3eb8c6689d191129f3d9ee67aac8f0174b089143e638369245c88b9b68b9291216ff@35.224.150.136:443",
+    "enode://552942cc4858073102a6bcd0df9fe4de6d9fc52ddf7363e8e0746eba21b0f98fb37e8270bc629f72cfe29e0b3522afaf51e309a05998736e2c0dad5288991148@130.211.215.133:443",
+    "enode://aa97756bc147d74be6d07adfc465266e17756339d3d18591f4be9d1b2e80b86baf314aed79adbe8142bcb42bc7bc40e83ee3bbd0b82548e595bf855d548906a1@47.52.188.241:443",
+    "enode://ce559a37a9c344d7109bd4907802dd690008381d51f658c43056ec36ac043338bd92f1ac6043e645b64953b06f27202d679756a9c7cf62fdefa01b2e6ac5098e@206.189.243.179:443",
+    "enode://b33dc678589931713a085d29f9dc0efee1783dacce1d13696eb5d3a546293198470d97822c40b187336062b39fd3464e9807858109752767d486ea699a6ab3de@35.193.151.184:443",
+    "enode://f34451823b173dc5f2ac0eec1668fdb13dba9452b174249a7e0272d6dce16fb811a01e623300d1b7a67c240ae052a462bff3f60e4a05e4c4bd23cc27dea57051@47.52.173.66:443",
+    "enode://4e0a8db9b73403c9339a2077e911851750fc955db1fc1e09f81a4a56725946884dd5e4d11258eac961f9078a393c45bcab78dd0e3bc74e37ce773b3471d2e29c@206.189.243.171:443",
+    "enode://eb4cc33c1948b1f4b9cb8157757645d78acd731cc8f9468ad91cef8a7023e9c9c62b91ddab107043aabc483742ac15cb4372107b23962d3bfa617b05583f2260@146.148.66.209:443",
+    "enode://7c80e37f324bbc767d890e6381854ef9985d33940285413311e8b5927bf47702afa40cd5d34be9aa6183ac467009b9545e24b0d0bc54ef2b773547bb8c274192@47.91.155.62:443",
+    "enode://a8bddfa24e1e92a82609b390766faa56cf7a5eef85b22a2b51e79b333c8aaeec84f7b4267e432edd1cf45b63a3ad0fc7d6c3a16f046aa6bc07ebe50e80b63b8c@206.189.243.172:443",
+    "enode://c7e00e5a333527c009a9b8f75659d9e40af8d8d896ebaa5dbdd46f2c58fc010e4583813bc7fc6da98fcf4f9ca7687d37ced8390330ef570d30b5793692875083@35.192.123.253:443",
+    "enode://4b2530d045b1d9e0e45afa7c008292744fe77675462090b4001f85faf03b87aa79259c8a3d6d64f815520ac76944e795cbf32ff9e2ce9ba38f57af00d1cc0568@47.90.29.122:443",
+    "enode://887cbd92d95afc2c5f1e227356314a53d3d18855880ac0509e0c0870362aee03939d4074e6ad31365915af41d34320b5094bfcc12a67c381788cd7298d06c875@206.189.243.177:443",
+    "enode://2af8f4f7a0b5aabaf49eb72b9b59474b1b4a576f99a869e00f8455928fa242725864c86bdff95638a8b17657040b21771a7588d18b0f351377875f5b46426594@35.232.187.4:443",
+    "enode://76ee16566fb45ca7644c8dec7ac74cadba3bfa0b92c566ad07bcb73298b0ffe1315fd787e1f829e90dba5cd3f4e0916e069f14e50e9cbec148bead397ac8122d@47.91.226.75:443",
+    "enode://2b01955d7e11e29dce07343b456e4e96c081760022d1652b1c4b641eaf320e3747871870fa682e9e9cfb85b819ce94ed2fee1ac458904d54fd0b97d33ba2c4a4@206.189.240.70:443",
+    "enode://19872f94b1e776da3a13e25afa71b47dfa99e658afd6427ea8d6e03c22a99f13590205a8826443e95a37eee1d815fc433af7a8ca9a8d0df7943d1f55684045b7@35.238.60.236:443",
+    "enode://960777f01b7dcda7c58319e3aded317a127f686631b1702a7168ad408b8f8b7616272d805ddfab7a5a6bc4bd07ae92c03e23b4b8cd4bf858d0f74d563ec76c9f@47.52.58.213:443",
     "enode://0d9d65fcd5592df33ed4507ce862b9c748b6dbd1ea3a1deb94e3750052760b4850aa527265bbaf357021d64d5cc53c02b410458e732fafc5b53f257944247760@167.99.18.187:443",
-    "enode://960777f01b7dcda7c58319e3aded317a127f686631b1702a7168ad408b8f8b7616272d805ddfab7a5a6bc4bd07ae92c03e23b4b8cd4bf858d0f74d563ec76c9f@47.52.58.213:443"
+    "enode://d85b87dbcd251ca21bdc4085d938e54a9af3538dd6696e2b99ec9c4694bc3eb8c6689d191129f3d9ee67aac8f0174b089143e638369245c88b9b68b9291216ff@35.224.150.136:443",
   ]
 
 # Don't do this at home, you'll never get rid of ugly globals like this!
@@ -94,7 +127,7 @@ proc nimbus_start(port: uint16 = 30303) {.exportc.} =
   node.protocolState(Whisper).config.powRequirement = 0.000001
 
   var bootnodes: seq[ENode] = @[]
-  for nodeId in MainBootnodes:
+  for nodeId in MainnetBootnodes:
     var bootnode: ENode
     discard initENode(nodeId, bootnode)
     bootnodes.add(bootnode)
@@ -112,19 +145,10 @@ proc nimbus_poll() {.exportc.} =
   setupForeignThreadGc()
   poll()
 
-type
-  CReceivedMessage = object
-    decoded*: ptr byte
-    decodedLen*: csize
-    timestamp*: uint32
-    ttl*: uint32
-    topic*: Topic
-    pow*: float64
-    hash*: Hash
-
 # TODO: Consider better naming to understand how it relates to public channels etc
 proc nimbus_subscribe(channel: cstring, handler: proc (msg: ptr CReceivedMessage) {.gcsafe, cdecl.}) {.exportc.} =
   setupForeignThreadGc()
+
   if handler.isNil:
     subscribeChannel($channel, nil)
   else:
@@ -145,16 +169,16 @@ proc nimbus_subscribe(channel: cstring, handler: proc (msg: ptr CReceivedMessage
 
 # TODO: Add signing key as parameter
 # TODO: How would we do key management? In nimbus (like in rpc) or in status go?
-proc nimbus_post(payload: cstring) {.exportc.} =
+proc nimbus_post(channel: cstring, payload: cstring) {.exportc.} =
   setupForeignThreadGc()
   let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
 
   var ctx: HMAC[sha256]
   var symKey: SymKey
   var npayload = cast[Bytes]($payload)
-  discard ctx.pbkdf2(channel, "", 65356, symKey)
+  discard ctx.pbkdf2($channel, "", 65356, symKey)
 
-  let channelHash = digest(keccak256, channel)
+  let channelHash = digest(keccak256, $channel)
   var topic: array[4, byte]
   for i in 0..<4:
     topic[i] = channelHash.data[i]

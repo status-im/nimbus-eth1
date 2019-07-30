@@ -54,7 +54,7 @@ func ListenAndPost() {
 		message := fmt.Sprintf("[\"~#c4\",[\"Message:%d\",\"text/plain\",\"~:public-group-user-message\",%d,%d,[\"^ \",\"~:chat-id\",\"status-test-c\",\"~:text\",\"Message:%d\"]]]", i, t*100, t, i)
 		if i%1000 == 0 {
 			fmt.Println("[nim-status] posting", message)
-			C.nimbus_post(C.CString(message))
+			C.nimbus_post(C.CString("status-test-c"), C.CString(message))
 		}
 	}
 }
