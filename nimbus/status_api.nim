@@ -13,10 +13,6 @@ import
   eth/keys, eth/rlp, eth/p2p, eth/p2p/rlpx_protocols/[whisper_protocol],
   eth/p2p/[discovery, enode, peer_pool], chronicles
 
-let channel: string = "status-test-c"
-
-echo "***Inside nim status"
-
 proc `$`*(digest: SymKey): string =
   for c in digest: result &= hexChar(c.byte)
 
@@ -48,6 +44,7 @@ const
 var
   node: EthereumNode
 
+# TODO: Return filter ID if we ever want to unsubscribe
 proc subscribeChannel(
     channel: string, handler: proc (msg: ReceivedMessage) {.gcsafe.}) =
   setupForeignThreadGc()
@@ -125,6 +122,7 @@ type
     pow*: float64
     hash*: Hash
 
+# TODO: Consider better naming to understand how it relates to public channels etc
 proc nimbus_subscribe(channel: cstring, handler: proc (msg: ptr CReceivedMessage) {.gcsafe, cdecl.}) {.exportc.} =
   setupForeignThreadGc()
   if handler.isNil:
@@ -145,10 +143,11 @@ proc nimbus_subscribe(channel: cstring, handler: proc (msg: ptr CReceivedMessage
 
     subscribeChannel($channel, c_handler)
 
+# TODO: Add signing key as parameter
+# TODO: How would we do key management? In nimbus (like in rpc) or in status go?
 proc nimbus_post(payload: cstring) {.exportc.} =
   setupForeignThreadGc()
   let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
-  let encPublicKey = encPrivateKey.getPublicKey()
 
   var ctx: HMAC[sha256]
   var symKey: SymKey
@@ -160,6 +159,7 @@ proc nimbus_post(payload: cstring) {.exportc.} =
   for i in 0..<4:
     topic[i] = channelHash.data[i]
 
+  # TODO: Handle error case
   discard node.postMessage(symKey = some(symKey),
                            src = some(encPrivateKey),
                            ttl = 20,
