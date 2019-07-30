@@ -14,7 +14,7 @@ Join the Status community chats:
 
 ## Rationale
 
-[Nimbus: an Ethereum 2.0 Sharding Client](https://our.status.im/nimbus-for-newbies/). The code in this repository is currently focusing on Ethereum 1.0 feature parity, while all 2.0 research and development is happening in parallel in [nim-beacon-chain](https://github.com/status-im/nim-beacon-chain). The two repositories are expected to merge in Q1 2019.
+[Nimbus: an Ethereum 2.0 Sharding Client](https://our.status.im/nimbus-for-newbies/). The code in this repository is currently focusing on Ethereum 1.0 feature parity, while all 2.0 research and development is happening in parallel in [nim-beacon-chain](https://github.com/status-im/nim-beacon-chain).
 
 ## Development Updates
 
@@ -119,6 +119,47 @@ mingw32-make fetch-dlls
 This will place the right DLLs for your architecture in the "build/" directory.
 
 You can now follow those instructions in the previous section by replacing `make` with `mingw32-make` (regardless of your 32-bit or 64-bit architecture).
+
+#### Raspberry PI
+
+*Experimental* The code can be compiled on a Raspberry PI:
+
+* Raspberry PI 3b+
+* 64gb SD Card (less might work too, but the default recommended 4-8GB will probably be too small)
+* [Rasbian Buster Lite](https://www.raspberrypi.org/downloads/raspbian/) - Lite version is enough to get going and will save some disk space!
+
+Assuming you're working with a freshly written image:
+
+```bash
+
+# Start by increasing swap size to 2gb:
+sudo vi /etc/dphys-swapfile
+# Set CONF_SWAPSIZE=2048
+# :wq
+sudo reboot
+
+# Install prerequisites
+sudo apt-get install git libgflags-dev libsnappy-dev
+
+mkdir status
+cd status
+
+# Install rocksdb
+git clone https://github.com/facebook/rocksdb.git
+cd rocksdb
+make shared_lib
+sudo make install
+cd..
+
+# Raspberry pi doesn't include /usr/local/lib in library search path - need to add
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+git clone https://github.com/status-im/nimbus.git
+
+cd nimbus
+
+# Follow instructions above!
+```
 
 ### Development tips
 
