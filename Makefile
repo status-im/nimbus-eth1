@@ -49,7 +49,7 @@ TOOLS_DIRS := premix tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a go-checks
+.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a go-checks libnimbus.so wrappers
 
 # default target, because it's the first one that doesn't start with '.'
 all: $(TOOLS) nimbus
@@ -128,7 +128,7 @@ test-reproducibility:
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*.exe} vendor/go/bin \
+	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*.exe,*.so,*.so.0,*_wrapper_test} vendor/go/bin \
 		$(NIMBLE_DIR) $(NIM_BINARY) $(NIM_DIR)/nimcache nimcache
 	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc clean $(HANDLE_OUTPUT)
 	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/libnatpmp clean $(HANDLE_OUTPUT)
@@ -196,6 +196,18 @@ test-libp2p-daemon: | vendor/go/bin/p2pd deps
 	cd vendor/nim-libp2p && \
 		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) tests/testdaemon.nim && \
 		rm -f tests/testdaemon
+
+libnimbus.so: | build deps nat-libs
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c --app:lib --noMain -d:"chronicles_sinks=textlines" --debuginfo --opt:speed --lineTrace:off $(NIM_PARAMS) -o:build/$@.0 wrappers/wrapper.nim && \
+		rm -f build/$@ && \
+		ln -s $@.0 build/$@
+
+wrappers: | build deps nat-libs libnimbus.so go-checks
+	echo -e $(BUILD_MSG) "build/C_wrapper_test" && \
+		$(CC) wrappers/wrapper.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_test
+	echo -e $(BUILD_MSG) "build/go_wrapper_test" && \
+		go build -o build/go_wrapper_test wrappers/wrapper.go
 
 # https://bitbucket.org/nimcontrib/ntags/ - currently fails with "out of memory"
 ntags:

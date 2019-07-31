@@ -752,60 +752,61 @@ LOGGING AND DEBUGGING OPTIONS:
     $ord(defaultNetwork)
   ]
 
-proc processArguments*(msg: var string): ConfigStatus =
-  ## Process command line argument and update `NimbusConfiguration`.
-  let config = getConfiguration()
+when declared(os.paramCount): # not available with `--app:lib`
+  proc processArguments*(msg: var string): ConfigStatus =
+    ## Process command line argument and update `NimbusConfiguration`.
+    let config = getConfiguration()
 
-  # At this point `config.net.bootnodes` is likely populated with network default
-  # bootnodes. We want to override those if at least one custom bootnode is
-  # specified on the command line. We temporarily set `config.net.bootNodes`
-  # to empty seq, and in the end restore it if no bootnodes were spricified on
-  # the command line.
-  # TODO: This is pretty hacky and it's better to refactor it to make a clear
-  # distinction between default and custom bootnodes.
-  var tempBootNodes: seq[ENode]
-  swap(tempBootNodes, config.net.bootNodes)
-
-  # The same trick is done to discPort
-  config.net.discPort = 0
-
-  var opt = initOptParser()
-  var length = 0
-  for kind, key, value in opt.getopt():
-    result = Error
-    case kind
-    of cmdArgument:
-      discard
-    of cmdLongOption, cmdShortOption:
-      inc(length)
-      case key.toLowerAscii()
-        of "help", "h":
-          msg = getHelpString()
-          result = Success
-          break
-        of "version", "ver", "v":
-          msg = NimbusVersion
-          result = Success
-          break
-        else:
-          processArgument processEthArguments, key, value, msg
-          processArgument processRpcArguments, key, value, msg
-          processArgument processNetArguments, key, value, msg
-          processArgument processShhArguments, key, value, msg
-          processArgument processDebugArguments, key, value, msg
-          if result != Success:
-            msg = "Unknown option: '" & key & "'."
-            break
-    of cmdEnd:
-      doAssert(false) # we're never getting this kind here
-
-  if config.net.bootNodes.len == 0:
-    # No custom bootnodes were specified on the command line, restore to
-    # previous values
+    # At this point `config.net.bootnodes` is likely populated with network default
+    # bootnodes. We want to override those if at least one custom bootnode is
+    # specified on the command line. We temporarily set `config.net.bootNodes`
+    # to empty seq, and in the end restore it if no bootnodes were spricified on
+    # the command line.
+    # TODO: This is pretty hacky and it's better to refactor it to make a clear
+    # distinction between default and custom bootnodes.
+    var tempBootNodes: seq[ENode]
     swap(tempBootNodes, config.net.bootNodes)
 
-  if config.net.discPort == 0:
-    config.net.discPort = config.net.bindPort
+    # The same trick is done to discPort
+    config.net.discPort = 0
+
+    var opt = initOptParser()
+    var length = 0
+    for kind, key, value in opt.getopt():
+      result = Error
+      case kind
+      of cmdArgument:
+        discard
+      of cmdLongOption, cmdShortOption:
+        inc(length)
+        case key.toLowerAscii()
+          of "help", "h":
+            msg = getHelpString()
+            result = Success
+            break
+          of "version", "ver", "v":
+            msg = NimbusVersion
+            result = Success
+            break
+          else:
+            processArgument processEthArguments, key, value, msg
+            processArgument processRpcArguments, key, value, msg
+            processArgument processNetArguments, key, value, msg
+            processArgument processShhArguments, key, value, msg
+            processArgument processDebugArguments, key, value, msg
+            if result != Success:
+              msg = "Unknown option: '" & key & "'."
+              break
+      of cmdEnd:
+        doAssert(false) # we're never getting this kind here
+
+    if config.net.bootNodes.len == 0:
+      # No custom bootnodes were specified on the command line, restore to
+      # previous values
+      swap(tempBootNodes, config.net.bootNodes)
+
+    if config.net.discPort == 0:
+      config.net.discPort = config.net.bindPort
 
 proc processConfiguration*(pathname: string): ConfigStatus =
   ## Process configuration file `pathname` and update `NimbusConfiguration`.

@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "status_api.h"
+#include "wrapper.h"
 
 void NimMain();
 

@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// #cgo LDFLAGS: /home/oskarth/git/nimbus/nimbus/libnimbus_api.so -lm
-// #include "libnim.h"
+// #cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus -lm
+// #include "wrapper.h"
 import "C"
 
 // Arrange that main.main runs on main thread.
