@@ -1,4 +1,4 @@
-/nimcache
+nimcache
 
 # Executables shall be put in an ignored build/ directory
 /build
@@ -27,4 +27,3 @@
 VMTests.md
 /debug*.json
 /block*.json
-
