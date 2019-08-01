@@ -19,3 +19,9 @@ build/C_wrapper_example
 build/go_wrapper_example
 ```
 
+To build statically linked versions:
+
+```bash
+make wrappers-static
+```
+

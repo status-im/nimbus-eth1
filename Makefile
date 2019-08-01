@@ -49,7 +49,7 @@ TOOLS_DIRS := premix tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a go-checks libnimbus.so wrappers
+.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a go-checks libnimbus.so libnimbus.a wrappers
 
 # default target, because it's the first one that doesn't start with '.'
 all: $(TOOLS) nimbus
@@ -208,6 +208,16 @@ wrappers: | build deps nat-libs libnimbus.so go-checks
 		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_example
 	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
 		go build -o build/go_wrapper_example wrappers/wrapper_example.go
+
+libnimbus.a: | build deps nat-libs
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c --app:staticlib --noMain $(NIM_PARAMS) -o:build/$@ wrappers/wrapper.nim
+
+wrappers-static: | build deps nat-libs libnimbus.a go-checks
+	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
+		$(CC) wrappers/wrapper_example.c -static -pthread -Lbuild -lnimbus -lm -ldl -g -o build/C_wrapper_example_static
+	echo -e $(BUILD_MSG) "build/go_wrapper_example_static" && \
+		go build -ldflags "-linkmode external -extldflags '-static -ldl'" -o build/go_wrapper_example_static wrappers/wrapper_example.go
 
 # https://bitbucket.org/nimcontrib/ntags/ - currently fails with "out of memory"
 ntags:
