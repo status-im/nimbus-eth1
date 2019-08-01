@@ -204,10 +204,10 @@ libnimbus.so: | build deps nat-libs
 		ln -s $@.0 build/$@
 
 wrappers: | build deps nat-libs libnimbus.so go-checks
-	echo -e $(BUILD_MSG) "build/C_wrapper_test" && \
-		$(CC) wrappers/wrapper.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_test
-	echo -e $(BUILD_MSG) "build/go_wrapper_test" && \
-		go build -o build/go_wrapper_test wrappers/wrapper.go
+	echo -e $(BUILD_MSG) "build/C_wrapper_example" && \
+		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_example
+	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
+		go build -o build/go_wrapper_example wrappers/wrapper_example.go
 
 # https://bitbucket.org/nimcontrib/ntags/ - currently fails with "out of memory"
 ntags:
