@@ -7,7 +7,7 @@ import (
 )
 
 // #cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus -lm
-// #include "wrapper.h"
+// #include "libnimbus.h"
 import "C"
 
 // Arrange that main.main runs on main thread.

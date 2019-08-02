@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "wrapper.h"
+#include "libnimbus.h"
 
 void NimMain();
 

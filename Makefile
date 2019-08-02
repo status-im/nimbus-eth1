@@ -199,7 +199,7 @@ test-libp2p-daemon: | vendor/go/bin/p2pd deps
 
 libnimbus.so: | build deps nat-libs
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c --app:lib --noMain -d:"chronicles_sinks=textlines" --debuginfo --opt:speed --lineTrace:off $(NIM_PARAMS) -o:build/$@.0 wrappers/wrapper.nim && \
+		$(ENV_SCRIPT) nim c --app:lib --noMain --nimcache:nimcache/libnimbus $(NIM_PARAMS) -o:build/$@.0 wrappers/libnimbus.nim && \
 		rm -f build/$@ && \
 		ln -s $@.0 build/$@
 
@@ -207,11 +207,12 @@ wrappers: | build deps nat-libs libnimbus.so go-checks
 	echo -e $(BUILD_MSG) "build/C_wrapper_example" && \
 		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_example
 	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
-		go build -o build/go_wrapper_example wrappers/wrapper_example.go
+		go build -linkshared -o build/go_wrapper_example wrappers/wrapper_example.go
 
 libnimbus.a: | build deps nat-libs
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c --app:staticlib --noMain $(NIM_PARAMS) -o:build/$@ wrappers/wrapper.nim
+		rm -f build/$@ && \
+		$(ENV_SCRIPT) nim c --app:staticlib --noMain --nimcache:nimcache/libnimbus $(NIM_PARAMS) -o:build/$@ wrappers/libnimbus.nim
 
 wrappers-static: | build deps nat-libs libnimbus.a go-checks
 	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
