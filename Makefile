@@ -188,7 +188,8 @@ go-checks:
 	       { echo "Minimum Go compiler version required: $(MIN_GO_VER). Version available: $$GO_VER. Aborting."; exit 1; }
 
 vendor/go/bin/p2pd: | go-checks
-	cd vendor/go/src/github.com/libp2p/go-libp2p-daemon && \
+	echo -e $(BUILD_MSG) "$@" && \
+		cd vendor/go/src/github.com/libp2p/go-libp2p-daemon && \
 		$(ENV_SCRIPT) go get ./... && \
 		$(ENV_SCRIPT) go install ./...
 
