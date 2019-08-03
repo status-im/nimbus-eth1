@@ -24,6 +24,11 @@ ifdef LOG_LEVEL
   NIM_PARAMS := $(NIM_PARAMS) -d:chronicles_log_level=$(LOG_LEVEL)
 endif
 
+# avoid a "libpcre.so.3: cannot open shared object file: No such file or directory" message, where possible
+ifneq ($(OS), Windows_NT)
+  NIM_PARAMS := $(NIM_PARAMS) -d:usePcreHeader --passL:\"-lpcre\"
+endif
+
 # guess who does parsing before variable expansion
 COMMA := ,
 EMPTY :=
