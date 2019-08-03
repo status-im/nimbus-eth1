@@ -49,7 +49,7 @@ TOOLS_DIRS := premix tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a go-checks
+.PHONY: all $(TOOLS) deps sanity-checks github-ssh build-nim update status ntags ctags nimbus testsuite test clean mrproper fetch-dlls test-libp2p-daemon nat-libs libminiupnpc.a libnatpmp.a go-checks libnimbus.so libnimbus.a wrappers
 
 # default target, because it's the first one that doesn't start with '.'
 all: $(TOOLS) nimbus
@@ -128,7 +128,7 @@ test-reproducibility:
 
 # usual cleaning
 clean:
-	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*.exe} vendor/go/bin \
+	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*.exe,*.so,*.so.0,*_wrapper_test} vendor/go/bin \
 		$(NIMBLE_DIR) $(NIM_BINARY) $(NIM_DIR)/nimcache nimcache
 	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc clean $(HANDLE_OUTPUT)
 	+ $(MAKE) -C vendor/nim-nat-traversal/vendor/libnatpmp clean $(HANDLE_OUTPUT)
@@ -196,6 +196,29 @@ test-libp2p-daemon: | vendor/go/bin/p2pd deps
 	cd vendor/nim-libp2p && \
 		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) tests/testdaemon.nim && \
 		rm -f tests/testdaemon
+
+libnimbus.so: | build deps nat-libs
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c --app:lib --noMain --nimcache:nimcache/libnimbus $(NIM_PARAMS) -o:build/$@.0 wrappers/libnimbus.nim && \
+		rm -f build/$@ && \
+		ln -s $@.0 build/$@
+
+wrappers: | build deps nat-libs libnimbus.so go-checks
+	echo -e $(BUILD_MSG) "build/C_wrapper_example" && \
+		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_example
+	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
+		go build -linkshared -o build/go_wrapper_example wrappers/wrapper_example.go
+
+libnimbus.a: | build deps nat-libs
+	echo -e $(BUILD_MSG) "build/$@" && \
+		rm -f build/$@ && \
+		$(ENV_SCRIPT) nim c --app:staticlib --noMain --nimcache:nimcache/libnimbus $(NIM_PARAMS) -o:build/$@ wrappers/libnimbus.nim
+
+wrappers-static: | build deps nat-libs libnimbus.a go-checks
+	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
+		$(CC) wrappers/wrapper_example.c -static -pthread -Lbuild -lnimbus -lm -ldl -g -o build/C_wrapper_example_static
+	echo -e $(BUILD_MSG) "build/go_wrapper_example_static" && \
+		go build -ldflags "-linkmode external -extldflags '-static -ldl'" -o build/go_wrapper_example_static wrappers/wrapper_example.go
 
 # https://bitbucket.org/nimcontrib/ntags/ - currently fails with "out of memory"
 ntags:

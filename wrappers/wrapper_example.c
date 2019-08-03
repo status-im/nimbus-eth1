@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 
-#include "status_api.h"
+#include "libnimbus.h"
 
 void NimMain();
 

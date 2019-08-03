@@ -1,5 +1,12 @@
+#ifndef __LIBNIMBUS_H__
+#define __LIBNIMBUS_H__
+
 #include <stdint.h>
 #include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
   uint8_t* decoded;
@@ -30,3 +37,10 @@ void nimbus_poll();
 
 void nimbus_post(const char* channel, const char* payload);
 void nimbus_subscribe(const char* channel, received_msg_handler msg);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif //__LIBNIMBUS_H__
+
