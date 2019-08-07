@@ -32,4 +32,5 @@ script:
   - ./build/nimbus --help
   - make -j2 test test-reproducibility
   - make -C vendor/nim-beacon-chain -j2 test
+  - make go-checks
 
