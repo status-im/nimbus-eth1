@@ -48,6 +48,26 @@ On Windows, you can [download pre-compiled DLLs](#windows).
 
 You can also build and install it by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md).
 
+### PCRE
+
+If you don't already have it, you will also need PCRE to build Nimbus.
+
+```bash
+# MacOS
+brew install pcre
+
+# Fedora
+dnf install pcre
+
+# Debian and Ubuntu
+sudo apt-get install libpcre libpcre-dev
+
+# Arch (AUR)
+pakku -S pcre-static 
+```
+
+On Windows, the aforementioned DLL download will take care of this for you ([download pre-compiled DLLs](#windows)).
+
 #### Developer tools
 
 GNU make, Bash and the usual POSIX utilities
