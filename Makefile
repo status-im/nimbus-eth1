@@ -185,7 +185,7 @@ status: | $(REPOS)
 MIN_GO_VER := 1.12.0
 go-checks:
 	which go &>/dev/null || { echo "Go compiler not installed. Aborting."; exit 1; }
-	GO_VER="$$(go version | sed 's/^.*go\(\S\+\).*$$/\1/')"; \
+	GO_VER="$$(go version | sed -E 's/^.*go([0-9.]+).*$$/\1/')"; \
 	       [[ $$(echo -e "$${GO_VER}\n$(MIN_GO_VER)" | sort -t '.' -k 1,1 -k 2,2 -k 3,3 -g | head -n 1) == "$(MIN_GO_VER)" ]] || \
 	       { echo "Minimum Go compiler version required: $(MIN_GO_VER). Version available: $$GO_VER. Aborting."; exit 1; }
 
