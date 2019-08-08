@@ -8,8 +8,8 @@ export GIT_REVISION=$(git rev-parse HEAD)
 
 NETWORK=testnet1
 
-if [[ $(git rev-parse --abbrev-ref HEAD) == "devel" ]]; then
-  NETWORK=testnet1
+if [[ $(git rev-parse --abbrev-ref HEAD) == "master" ]]; then
+  NETWORK=testnet0
 fi
 
 buildAndPush() {
@@ -20,5 +20,5 @@ buildAndPush() {
 }
 
 # buildAndPush $NETWORK rlpx
-buildAndPush $NETWORK libp2p_spec
+buildAndPush $NETWORK libp2p
 

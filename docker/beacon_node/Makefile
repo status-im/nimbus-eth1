@@ -3,7 +3,7 @@
 GIT_REVISION    ?= $(git rev-parse HEAD)
 
 NETWORK         ?= testnet1
-NETWORK_TYPE    ?= libp2p_spec
+NETWORK_TYPE    ?= libp2p
 
 IMAGE_TAG       ?= $(NETWORK)
 IMAGE_NAME      ?= statusteam/nimbus_beacon_node:$(IMAGE_TAG)
