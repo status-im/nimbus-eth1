@@ -49,17 +49,13 @@ op sdiv, inline = true, lhs, rhs:
   ## 0x05, Signed division
   var r: UInt256
   if rhs != 0:
-    const min = (1.u256 shl 255) - 1.u256
     var a = lhs
     var b = rhs
     var signA, signB: bool
     extractSign(a, signA)
     extractSign(b, signB)
-    if a == min and b == not zero(UInt256):
-      r = min
-    else:
-      r = a div b
-      setSign(r, signA xor signB)
+    r = a div b
+    setSign(r, signA xor signB)
   push(r)
 
 op modulo, inline = true, lhs, rhs:
