@@ -898,6 +898,7 @@ op shrOp, inline = true, shift, num:
   if shiftLen >= 256:
     push: 0
   else:
+    # uint version of `shr`
     push: num shr shiftLen
 
 op sarOp, inline = true:
@@ -909,7 +910,9 @@ op sarOp, inline = true:
     else:
       push: 0
   else:
-    push: cast[Uint256](ashr(num, shiftLen))
+    # int version of `shr` then force the result
+    # into uint256
+    push: cast[Uint256](num shr shiftLen)
 
 op extCodeHash, inline = true:
   let address = computation.stack.popAddress()
