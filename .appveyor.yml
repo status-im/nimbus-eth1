@@ -9,6 +9,7 @@ environment:
 
 cache:
   - NimBinaries
+  - jsonTestsCache
 
 matrix:
   # We always want 32-bit and 64-bit compilation
@@ -27,7 +28,7 @@ install:
   - IF "%PLATFORM%" == "x64" SET PATH=C:\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0\mingw64\bin;%PATH%
 
 build_script:
-  - cd C:\projects\%APPVEYOR_PROJECT_SLUG%
+  #- cd C:\projects\%APPVEYOR_PROJECT_SLUG%
   # the 32-bit build is done on a 64-bit image, so we need to override the architecture
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% CI_CACHE=NimBinaries update
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% fetch-dlls
@@ -38,8 +39,10 @@ test_script:
   - build\nimbus.exe --help
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% test
   - IF "%PLATFORM%" == "x64" mingw32-make -j2 test-reproducibility
-  - mingw32-make -C vendor/nim-beacon-chain -j2 test
-  - mingw32-make go-checks
+  # LFS test fixtures
+  - cd vendor\nim-beacon-chain & bash scripts\process_lfs.sh ..\..\jsonTestsCache & cd ..\..
+  - mingw32-make -C vendor/nim-beacon-chain DISABLE_LFS_SCRIPT=1 -j2 test
+  #- mingw32-make go-checks
 
 deploy: off
 
