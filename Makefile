@@ -160,7 +160,7 @@ build-nim: | sanity-checks
 		"$(CURDIR)/build_nim.sh" "$(NIM_DIR)" ../Nim-csources ../nimble "$(CI_CACHE)"
 
 #- in case of submodule URL changes, it propagates that change in the parent repo's .git directory
-#- initialises and updates the Git submodules
+#- initialises and updates the Git submodules, avoiding automated LFS downloads
 #- manages the AppVeyor cache of Nim compiler binaries
 #- deletes the ".nimble" dir to force the execution of the "deps" target
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
@@ -168,7 +168,7 @@ build-nim: | sanity-checks
 #- rebuilds the Nim compiler if the corresponding submodule is updated
 $(NIM_BINARY) update: | sanity-checks
 	git submodule sync --quiet --recursive
-	git submodule update --init --recursive
+	export GIT_LFS_SKIP_SMUDGE=1; git submodule update --init --recursive
 	rm -rf $(NIMBLE_DIR) nimbus.nims && \
 		$(MAKE) nimbus.nims
 	+ $(MAKE) build-nim
