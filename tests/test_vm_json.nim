@@ -81,10 +81,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt
     let actualGasRemaining = gasMeter.gasRemaining
     checkpoint(&"Remaining: {actualGasRemaining} - Expected: {expectedGasRemaining}")
-    check(actualGasRemaining == expectedGasRemaining or
-          computation.code.hasSStore() and
-            (actualGasRemaining > expectedGasRemaining and (actualGasRemaining - expectedGasRemaining) mod 15_000 == 0 or
-             expectedGasRemaining > actualGasRemaining and (expectedGasRemaining - actualGasRemaining) mod 15_000 == 0))
+    check(actualGasRemaining == expectedGasRemaining)
 
     if not fixture{"post"}.isNil:
       verifyStateDb(fixture{"post"}, computation.vmState.readOnlyStateDB)
