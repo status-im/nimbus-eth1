@@ -277,13 +277,19 @@ func safeHexToSeqByte*(hexStr: string): seq[byte] =
   else:
     hexStr.hexToSeqByte
 
+func getHexadecimalInt*(j: JsonNode): int64 =
+  # parseutils.parseHex works with int which will overflow in 32 bit
+  var data: StUInt[64]
+  data = fromHex(StUInt[64], j.getStr)
+  result = cast[int64](data)
+
 proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:
       stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
 
-    let nonce = accountData{"nonce"}.getStr.parseHexInt.AccountNonce
+    let nonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
     let code = accountData{"code"}.getStr.safeHexToSeqByte.toRange
     let balance = UInt256.fromHex accountData{"balance"}.getStr
 
@@ -316,16 +322,10 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
     doAssert wantedBalance == actualBalance, &"{wantedBalance.toHex} != {actualBalance.toHex}"
     doAssert wantedNonce == actualNonce, &"{wantedNonce.toHex} != {actualNonce.toHex}"
 
-func getHexadecimalInt*(j: JsonNode): int64 =
-  # parseutils.parseHex works with int which will overflow in 32 bit
-  var data: StUInt[64]
-  data = fromHex(StUInt[64], j.getStr)
-  result = cast[int64](data)
-
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
-  result.accountNonce = j["nonce"].getStr.parseHexInt.AccountNonce
-  result.gasPrice = j["gasPrice"].getStr.parseHexInt
-  result.gasLimit = j["gasLimit"][gasIndex].getStr.parseHexInt
+  result.accountNonce = j["nonce"].getHexadecimalInt.AccountNonce
+  result.gasPrice = j["gasPrice"].getHexadecimalInt
+  result.gasLimit = j["gasLimit"][gasIndex].getHexadecimalInt
 
   # TODO: there are a couple fixtures which appear to distinguish between
   # empty and 0 transaction.to; check/verify whether correct conditions.
