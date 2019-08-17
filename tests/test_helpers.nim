@@ -105,6 +105,12 @@ func slowTest*(folder: string, name: string): bool =
 func failIn32Bits(folder, name: string): bool =
   return name in @[
     "sha3_bigSize.json", # from vm_test
+
+    # crash with OOM
+    "static_Return50000_2.json",
+    "randomStatetest185.json",
+    "randomStatetest159.json",
+    "randomStatetest48.json"
   ]
 
 func allowedFailInCurrentBuild(folder, name: string): bool =
