@@ -104,7 +104,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op
         storage[key.dumpHex] = %(value.dumpHex)
       j["storage"] = storage
 
-  let gasRemaining = j["gas"].getInt()
+  let gasRemaining = j["gas"].getBiggestInt()
   j["gasCost"] = %(gasRemaining - c.gasMeter.gasRemaining)
 
   if op in {Return, Revert}:
@@ -123,7 +123,7 @@ proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
     # even though the gasCost is incorrect,
     # we have something to display,
     # it is an error anyway
-    let gasRemaining = j["gas"].getInt()
+    let gasRemaining = j["gas"].getBiggestInt()
     j["gasCost"] = %(gasRemaining - c.gasMeter.gasRemaining)
 
   tracer.trace["failed"] = %true
