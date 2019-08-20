@@ -81,6 +81,15 @@ suite "Custom Opcodes Test":
       CallDataLoad
     success: false
 
+  assembler: # CALLDATALOAD OP
+    title: "CALLDATALOAD_7"
+    data:
+      "0x00000000000000000000000000000000000000000000000000000000000000A1"
+      "0x00000000000000000000000000000000000000000000000000000000000000B1"
+    code:
+      Push1 "0x40"
+      CallDataLoad
+    stack: "0x00"
 
   assembler: # CALLDATACOPY OP
     title: "CALLDATACOPY_1"
@@ -185,7 +194,7 @@ suite "Custom Opcodes Test":
     code:
       Address
       Balance
-    stack: "0x00000000000000000000000000000000000000000000000000000000000003E8"
+    stack: "0x000000000000000000000000000000000000000000000000cff56a1b273a83e8"
 
   assembler: # ORIGIN OP
     title: "ORIGIN_1"
@@ -250,33 +259,33 @@ suite "Custom Opcodes Test":
     stack: "0xC89EFDAA54C0F20C7ADF612882DF0950F5A951637E0307CDCB4C672F298B8BC6"
 ]#
 
-  # current coinbase or parent coinbase?
+  # current block coinbase/miner
   assembler: # COINBASE OP
     title: "COINBASE_1"
     code:
       Coinbase
-    stack: "0x000000000000000000000000c0ede9a639d107851462c15f2fb729c7c61bbf62"
+    stack: "0x000000000000000000000000bb7b8287f3f0a933474a79eae42cbca977791171"
 
-  # current timestamp or parent timestamp?
+  # current block timestamp
   assembler: # TIMESTAMP OP
     title: "TIMESTAMP_1"
     code:
       TimeStamp
-    stack: "0x0000000000000000000000000000000000000000000000000000000055c46bb3"
+    stack: "0x0000000000000000000000000000000000000000000000000000000055c46bba"
 
-  # it should be current block number
+  # current block number
   assembler: # NUMBER OP
     title: "NUMBER_1"
     code:
       Number
     stack: "0x000000000000000000000000000000000000000000000000000000000000b865"
 
-  # current difficulty or parent dificulty?
+  # current difficulty
   assembler: # DIFFICULTY OP
     title: "DIFFICULTY_1"
     code:
       Difficulty
-    stack: "0x0000000000000000000000000000000000000000000000000000015451e94505"
+    stack: "0x000000000000000000000000000000000000000000000000000001547c73822d"
 
   # ??
   assembler: # GASPRICE OP
@@ -297,7 +306,7 @@ suite "Custom Opcodes Test":
     title: "GASLIMIT_1"
     code:
       GasLimit
-    stack: "0x000000000000000000000000000000000000000000000000000000000000a271"
+    stack: "0x000000000000000000000000000000000000000000000000000000000000a298"
 
   assembler: # INVALID OP
     title: "INVALID_1"
