@@ -1,20 +1,16 @@
-language: go
+language: c
 
 # https://docs.travis-ci.com/user/caching/
 cache:
   directories:
     - rocksdbCache
     - vendor/Nim/bin
-    - jsonTestsCache
 
 git:
   # when multiple CI builds are queued, the tested commit needs to be in the last X commits cloned with "--depth X"
   depth: 10
   # disable LFS file downloading during regular cloning
   lfs_skip_smudge: true
-
-go:
-  - "1.12.x"
 
 matrix:
   include:
@@ -28,16 +24,11 @@ matrix:
 
 install:
   # build our own rocksdb to test with a fixed version that we think works
-  - ./build_rocksdb.sh rocksdbCache
-
-  # LFS test fixtures
-  - cd vendor/nim-beacon-chain; scripts/process_lfs.sh ../../jsonTestsCache; cd ../..
+  - vendor/nimbus-build-system/scripts/build_rocksdb.sh rocksdbCache
 
 script:
   - set -e # fail fast
   - make -j2
-  - ./build/nimbus --help
+  - build/nimbus --help
   - make -j2 test test-reproducibility
-  - make -C vendor/nim-beacon-chain DISABLE_LFS_SCRIPT=1 -j2 test
-  - make go-checks
 
