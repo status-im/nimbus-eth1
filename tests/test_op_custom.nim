@@ -6,16 +6,6 @@ import
 suite "Custom Opcodes Test":
   let (blockNumber, chainDB) = initDatabase()
 
-  var acc: EthAddress
-  hexToByteArray("0xc669eaad75042be84daaf9b461b0e868b9ac1871", acc)
-  var
-    parent = chainDB.getBlockHeader(blockNumber - 1)
-    stateDB = newAccountStateDB(chainDB.db, parent.stateRoot, false)
-
-  stateDB.setBalance(acc, 1000.u256)
-  parent.stateRoot = stateDB.rootHash
-  chainDB.setHead(parent, true)
-
   assembler: # CALLDATASIZE OP
     title: "CALLDATASIZE_1"
     data:
@@ -194,7 +184,7 @@ suite "Custom Opcodes Test":
     code:
       Address
       Balance
-    stack: "0x000000000000000000000000000000000000000000000000cff56a1b273a83e8"
+    stack: "0x000000000000000000000000000000000000000000000000cff56a1b273a8000"
 
   assembler: # ORIGIN OP
     title: "ORIGIN_1"
@@ -250,14 +240,12 @@ suite "Custom Opcodes Test":
     stack: "0x02"
     memory: "0x0000000000000000000000000000000000000000000000000000000000000201"
 
-#[
   assembler: # BLOCKHASH OP
     title: "BLOCKHASH_1"
     code:
-      Push1 "0x01"
+      Push2 "0xb864" # 47204, parent header number
       Blockhash
-    stack: "0xC89EFDAA54C0F20C7ADF612882DF0950F5A951637E0307CDCB4C672F298B8BC6"
-]#
+    stack: "0xa85842a20755232169db76c5bd4ad4672c1551fca4b07d0bd139cd0e6fef684d"
 
   # current block coinbase/miner
   assembler: # COINBASE OP
