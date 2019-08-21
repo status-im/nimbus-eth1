@@ -1,0 +1,26 @@
+{
+    "aMalicousRLP" : {
+        "Byzantium" : {
+        },
+        "Constantinople" : {
+        },
+        "ConstantinopleFix" : {
+        },
+        "EIP150" : {
+        },
+        "EIP158" : {
+        },
+        "Frontier" : {
+        },
+        "Homestead" : {
+        },
+        "_info" : {
+            "comment" : "",
+            "filledwith" : "testeth 1.6.0-alpha.0-14+commit.80ca102e",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttWrongRLP/aMalicousRLPCopier.json",
+            "sourceHash" : "0d038e2c7088241fc86284c86542849288f72a0772f1b5075007de998952c268"
+        },
+        "rlp" : "0xb8"
+    }
+}
