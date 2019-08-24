@@ -152,3 +152,8 @@
 	url = https://github.com/flyx/NimYAML.git
 	ignore = dirty
 	branch = master
+[submodule "vendor/nimbus-build-system"]
+	path = vendor/nimbus-build-system
+	url = https://github.com/status-im/nimbus-build-system.git
+	ignore = dirty
+	branch = master

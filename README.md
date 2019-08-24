@@ -89,7 +89,7 @@ nix-shell default.nix
 To build Nimbus (in "build/nimbus"), just execute:
 
 ```bash
-make
+make # the first invocation will update all Git submodules and prompt you to run "make" again
 ```
 
 Running `./build/nimbus --help` will provide you with a list of
@@ -133,6 +133,7 @@ Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash" shell
 
 If you don't want to compile RocksDB and SQLite separately, you can fetch pre-compiled DLLs with:
 ```bash
+mingw32-make # this first invocation will update the Git submodules
 mingw32-make fetch-dlls
 ```
 
@@ -258,7 +259,11 @@ latest commits when they are not ready to be used in the superproject.
 Adding the submodule "https://github.com/status-im/foo" to "vendor/foo":
 
 ```bash
-./add_submodule.sh status-im/foo
+vendor/nimbus-build-system/scripts/add_submodule.sh status-im/foo
+# or
+./env.sh add_submodule status-im/foo
+# want to place it in "vendor/bar" instead?
+./env.sh add_submodule status-im/foo vendor/bar
 ```
 
 Removing the submodule "vendor/bar":
@@ -281,8 +286,10 @@ convinced not to run a dependency check, thus clashing with our jury-rigged
 "vendor/.nimble/pkgs"):
 
 ```bash
-cd vendor/nim-blscurve
-../../nimble.sh test
+cd vendor/nim-rocksdb
+../nimbus-build-system/scripts/nimble.sh test
+# or
+../../env.sh nimble test
 ```
 
 ### Troubleshooting
