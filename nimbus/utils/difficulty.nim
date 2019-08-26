@@ -142,9 +142,9 @@ template calcDifficultyConstantinople*(timeStamp: EthTime, parent: BlockHeader):
 func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
   if next >= forkBlocks[FkConstantinople]:
-    result = makeDifficultyCalculator(5_000_000, timeStamp, parent)
+    result = calcDifficultyConstantinople(timeStamp, parent)
   elif next >= forkBlocks[FkByzantium]:
-    result = makeDifficultyCalculator(3_000_000, timeStamp, parent)
+    result = calcDifficultyByzantium(timeStamp, parent)
   elif next >= forkBlocks[FkHomestead]:
     result = calcDifficultyHomestead(timeStamp, parent)
   else:
