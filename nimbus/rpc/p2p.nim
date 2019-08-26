@@ -54,8 +54,9 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
       value: value
     )
   var
+    fork  = vmState.blockNumber.toFork
     hiGas = vmState.gasLimit
-    loGas = transaction.intrinsicGas
+    loGas = transaction.intrinsicGas(fork)
     gasPrice = transaction.gasPrice # TODO: Or zero?
 
   proc tryTransaction(vmState: var BaseVMState, gasLimit: GasInt): bool =
@@ -73,7 +74,7 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
 
   var
     minVal = vmState.gasLimit
-    maxVal = transaction.intrinsicGas
+    maxVal = transaction.intrinsicGas(fork)
   while loGas - hiGas > tolerance:
     let midPoint = (loGas + hiGas) div 2
     if vmState.tryTransaction(midPoint):

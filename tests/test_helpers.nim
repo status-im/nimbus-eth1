@@ -13,6 +13,11 @@ import
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
   ../tests/test_generalstate_failing
 
+func revmap(x: Table[Fork, string]): Table[string, Fork] =
+  result = initTable[string, Fork]()
+  for k, v in x:
+    result[v] = k
+
 const
   # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
   forkNames* = {
@@ -25,6 +30,8 @@ const
   }.toTable
 
   supportedForks* = {FkFrontier, FkHomestead, FkTangerine, FkSpurious, FkByzantium, FkConstantinople}
+
+  nameToFork* = revmap(forkNames)
 
 type
   Status* {.pure.} = enum OK, Fail, Skip

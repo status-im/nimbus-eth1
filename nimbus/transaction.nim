@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth/[common, rlp, keys], nimcrypto, utils
+  constants, errors, eth/[common, rlp, keys], nimcrypto, utils,
+  ./vm/interpreter/[vm_forks, gas_costs]
 
 import eth/common/transaction as common_transaction
 export common_transaction
@@ -19,16 +20,19 @@ func intrinsicGas*(data: openarray[byte]): GasInt =
     else:
       result += 68  # GasTXDataNonZero
 
-proc intrinsicGas*(t: Transaction): GasInt =
+proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
-  result = t.payload.intrinsicGas
+  result = tx.payload.intrinsicGas
 
-proc validate*(t: Transaction) =
+  if tx.isContractCreation:
+    result = result - gasFees[fork][GasTXCreate]
+
+proc validate*(t: Transaction, fork: Fork) =
   # Hook called during instantiation to ensure that all transaction
   # parameters pass validation rules
-  if t.intrinsicGas() > t.gasLimit:
+  if t.intrinsicGas(fork) > t.gasLimit:
     raise newException(ValidationError, "Insufficient gas")
   #  self.check_signature_validity()
 
