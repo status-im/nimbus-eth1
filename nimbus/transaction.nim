@@ -27,7 +27,7 @@ proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
   result = tx.payload.intrinsicGas
 
   if tx.isContractCreation:
-    result = result - gasFees[fork][GasTXCreate]
+    result = result + gasFees[fork][GasTXCreate]
 
 proc validate*(t: Transaction, fork: Fork) =
   # Hook called during instantiation to ensure that all transaction
