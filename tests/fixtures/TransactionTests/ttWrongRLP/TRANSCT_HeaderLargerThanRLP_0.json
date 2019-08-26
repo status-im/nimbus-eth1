@@ -1,0 +1,26 @@
+{
+    "TRANSCT_HeaderLargerThanRLP_0" : {
+        "Byzantium" : {
+        },
+        "Constantinople" : {
+        },
+        "ConstantinopleFix" : {
+        },
+        "EIP150" : {
+        },
+        "EIP158" : {
+        },
+        "Frontier" : {
+        },
+        "Homestead" : {
+        },
+        "_info" : {
+            "comment" : "",
+            "filledwith" : "testeth 1.6.0-alpha.0-14+commit.80ca102e",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttWrongRLP/TRANSCT_HeaderLargerThanRLP_0Copier.json",
+            "sourceHash" : "5ef76e9fecd6ebc73f6d9a9156fb9797db386f046e12315c72226e15641f4cf3"
+        },
+        "rlp" : "0xf86f03018207d094b94f5374fce5edbc8e2a8697c15331677e6ebf0b0a8255441ca098ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4aa08887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a3"
+    }
+}

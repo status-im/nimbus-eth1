@@ -1,0 +1,26 @@
+{
+    "TRANSCT_rvalue_TooShort" : {
+        "Byzantium" : {
+        },
+        "Constantinople" : {
+        },
+        "ConstantinopleFix" : {
+        },
+        "EIP150" : {
+        },
+        "EIP158" : {
+        },
+        "Frontier" : {
+        },
+        "Homestead" : {
+        },
+        "_info" : {
+            "comment" : "",
+            "filledwith" : "testeth 1.6.0-alpha.0-14+commit.80ca102e",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttWrongRLP/TRANSCT_rvalue_TooShortCopier.json",
+            "sourceHash" : "e4dc26600d8b0d92ecf375de0bf3fde59c945c090aa5b70c4229e62a6f32d445"
+        },
+        "rlp" : "0xf85f03018207d094b94f5374fce5edbc8e2a8697c15331677e6ebf0b0a8255441c9e921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4aa08887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a3"
+    }
+}
