@@ -253,26 +253,19 @@ op callValue, inline = true:
 
 op callDataLoad, inline = false, startPos:
   ## 0x35, Get input data of current environment
-  let dataPos = startPos.cleanMemRef
-  if dataPos >= computation.msg.data.len:
+  let start = startPos.cleanMemRef
+  if start >= computation.msg.data.len:
     push: 0
     return
 
-  let dataEndPosition = dataPos + 31
+  # If the data does not take 32 bytes, pad with zeros
+  let endRange = min(computation.msg.data.len - 1, start + 31)
+  let presentBytes = endRange - start
+  # We rely on value being initialized with 0 by default
+  var value: array[32, byte]
+  value[0 .. presentBytes] = computation.msg.data.toOpenArray(start, endRange)
 
-  if dataEndPosition < computation.msg.data.len:
-    computation.stack.push(computation.msg.data[dataPos .. dataEndPosition])
-  else:
-    var bytes: array[32, byte]
-    var presentBytes = min(computation.msg.data.len - dataPos, 32)
-
-    if presentBytes > 0:
-      copyMem(addr bytes[0], addr computation.msg.data[dataPos], presentBytes)
-    else:
-      presentBytes = 0
-
-    for i in presentBytes ..< 32: bytes[i] = 0
-    computation.stack.push(bytes)
+  push: value
 
 op callDataSize, inline = true:
   ## 0x36, Get size of input data in current environment.
