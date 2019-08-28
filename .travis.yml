@@ -4,7 +4,7 @@ language: c
 cache:
   directories:
     - rocksdbCache
-    - vendor/Nim/bin
+    - vendor/nimbus-build-system/vendor/Nim/bin
 
 git:
   # when multiple CI builds are queued, the tested commit needs to be in the last X commits cloned with "--depth X"
