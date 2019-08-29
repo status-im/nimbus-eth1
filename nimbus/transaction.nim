@@ -7,7 +7,7 @@
 
 import
   constants, errors, eth/[common, rlp, keys], nimcrypto, utils,
-  ./vm/interpreter/[vm_forks, gas_costs]
+  ./vm/interpreter/[vm_forks, gas_costs], constants
 
 import eth/common/transaction as common_transaction
 export common_transaction
@@ -82,4 +82,26 @@ proc validate*(tx: Transaction, fork: Fork) =
   var sender: EthAddress
   if not tx.getSender(sender):
     raise newException(ValidationError, "Invalid signature or failed message verification")
+
+  var
+    vMin = 27
+    vMax = 28
+
+  if tx.V.int >= EIP155_CHAIN_ID_OFFSET:
+    let chainId = (tx.V.int - EIP155_CHAIN_ID_OFFSET) div 2
+    vMin = 35 + (2 * chainId)
+    vMax = vMin + 1
+
+  var isValid = tx.R >= Uint256.one
+  isValid = isValid and tx.S >= Uint256.one
+  isValid = isValid and tx.V.int >= vMin
+  isValid = isValid and tx.V.int <= vMax
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+
+  if fork >= FkHomestead:
+    isValid = isValid and tx.S < SECPK1_N div 2
+
+  if not isValid:
+    raise newException(ValidationError, "Invalid transaction")
 

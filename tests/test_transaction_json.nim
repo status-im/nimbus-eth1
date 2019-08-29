@@ -3,42 +3,6 @@ import
   eth/[common, rlp],
   ./test_helpers, ../nimbus/[transaction, utils, errors]
 
-
-#[
-    def v_min(self) -> int:
-        if is_eip_155_signed_transaction(self):
-            return 35 + (2 * self.chain_id)
-        else:
-            return 27
-
-    def v_max(self) -> int:
-        if is_eip_155_signed_transaction(self):
-            return 36 + (2 * self.chain_id)
-        else:
-            return 28
-
-
-    def v_min(self) -> int:
-        return 27
-
-    def v_max(self) -> int:
-        return 28
-
-    validate_lt_secpk1n(self.r, title="Transaction.r")
-    validate_gte(self.r, minimum=1, title="Transaction.r")
-    validate_lt_secpk1n(self.s, title="Transaction.s")
-    validate_gte(self.s, minimum=1, title="Transaction.s")
-
-    validate_gte(self.v, minimum=self.v_min, title="Transaction.v")
-    validate_lte(self.v, maximum=self.v_max, title="Transaction.v")
-
-    homestead
-    super.validate
-    validate_lt_secpk1n2(self.s, title="Transaction.s")
-
-    check_signature_validity()
-]#
-
 const
   FIXTURE_FORK_SKIPS = ["_info", "rlp", "Constantinople"]
 

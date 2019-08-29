@@ -24,15 +24,15 @@ OK: 8/8 Fail: 0/8 Skip: 0/8
 ```diff
 + NotEnoughGasLimit.json                                          OK
 + TransactionWithGasLimitOverflow.json                            OK
-- TransactionWithGasLimitOverflow2.json                           Fail
-- TransactionWithGasLimitOverflow63.json                          Fail
-- TransactionWithGasLimitOverflow63_1.json                        Fail
++ TransactionWithGasLimitOverflow2.json                           OK
++ TransactionWithGasLimitOverflow63.json                          OK
++ TransactionWithGasLimitOverflow63_1.json                        OK
 + TransactionWithGasLimitxPriceOverflow.json                      OK
 + TransactionWithGasLimitxPriceOverflow2.json                     OK
 + TransactionWithHighGas.json                                     OK
 + TransactionWithHihghGasLimit63m1.json                           OK
 ```
-OK: 6/9 Fail: 3/9 Skip: 0/9
+OK: 9/9 Fail: 0/9 Skip: 0/9
 ## ttGasPrice
 ```diff
 + TransactionWithGasPriceOverflow.json                            OK
@@ -221,4 +221,4 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 OK: 70/70 Fail: 0/70 Skip: 0/70
 
 ---TOTAL---
-OK: 176/179 Fail: 3/179 Skip: 0/179
+OK: 179/179 Fail: 0/179 Skip: 0/179
