@@ -29,13 +29,6 @@ proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
   if tx.isContractCreation:
     result = result + gasFees[fork][GasTXCreate]
 
-proc validate*(t: Transaction, fork: Fork) =
-  # Hook called during instantiation to ensure that all transaction
-  # parameters pass validation rules
-  if t.intrinsicGas(fork) > t.gasLimit:
-    raise newException(ValidationError, "Insufficient gas")
-  #  self.check_signature_validity()
-
 proc getSignature*(transaction: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
   bytes[0..31] = transaction.R.toByteArrayBE()
@@ -55,7 +48,7 @@ proc getSignature*(transaction: Transaction, output: var Signature): bool =
 
 proc toSignature*(transaction: Transaction): Signature =
   if not getSignature(transaction, result):
-    raise newException(Exception, "Invalid signaure")
+    raise newException(Exception, "Invalid signature")
 
 proc getSender*(transaction: Transaction, output: var EthAddress): bool =
   ## Find the address the transaction was sent from.
@@ -78,3 +71,15 @@ proc getRecipient*(tx: Transaction): EthAddress =
     result = generateAddress(sender, tx.accountNonce)
   else:
     result = tx.to
+
+proc validate*(tx: Transaction, fork: Fork) =
+  # Hook called during instantiation to ensure that all transaction
+  # parameters pass validation rules
+  if tx.intrinsicGas(fork) > tx.gasLimit:
+    raise newException(ValidationError, "Insufficient gas")
+
+  # check signature validity
+  var sender: EthAddress
+  if not tx.getSender(sender):
+    raise newException(ValidationError, "Invalid signature or failed message verification")
+
