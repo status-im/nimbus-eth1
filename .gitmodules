@@ -1,8 +1,3 @@
-[submodule "vendor/Nim"]
-	path = vendor/Nim
-	url = https://github.com/status-im/Nim.git
-	ignore = dirty
-	branch = nimbus
 [submodule "vendor/nim-chronicles"]
 	path = vendor/nim-chronicles
 	url = https://github.com/status-im/nim-chronicles.git
@@ -81,16 +76,6 @@
 [submodule "vendor/nim-blscurve"]
 	path = vendor/nim-blscurve
 	url = https://github.com/status-im/nim-blscurve
-	ignore = dirty
-	branch = master
-[submodule "vendor/Nim-csources"]
-	path = vendor/Nim-csources
-	url = https://github.com/nim-lang/csources.git
-	ignore = dirty
-	branch = master
-[submodule "vendor/nimble"]
-	path = vendor/nimble
-	url = https://github.com/nim-lang/nimble.git
 	ignore = dirty
 	branch = master
 [submodule "vendor/nim-chronos"]
