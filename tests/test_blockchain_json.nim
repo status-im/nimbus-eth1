@@ -11,7 +11,7 @@ import
   eth/[common, rlp], eth/trie/[db, trie_defs],
   ./test_helpers, ../premix/parser,
   ../nimbus/vm/interpreter/vm_forks,
-  ../nimbus/[vm_state, utils],
+  ../nimbus/[vm_state, utils, vm_types],
   ../nimbus/db/[db_chain, state_db]
 
 type
@@ -19,23 +19,28 @@ type
     NoProof
     Ethash
 
+  PlainBlock = object
+    header: BlockHeader
+    transactions: seq[Transaction]
+    uncles: seq[BlockHeader]
+
   TesterBlock = object
     blockHeader: Option[BlockHeader]
-    rlp: Blob
     transactions: seq[Transaction]
     uncles: seq[BlockHeader]
     blockNumber: Option[int]
     chainName: Option[string]
     chainNetwork: Option[Fork]
     exceptions: seq[(string, string)]
+    headerRLP: Blob
 
   Tester = object
-    name: string
     lastBlockHash: Hash256
     genesisBlockHeader: BlockHeader
     blocks: seq[TesterBlock]
     sealEngine: Option[SealEngine]
     network: string
+    good: bool
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -158,10 +163,7 @@ proc parseBlocks(blocks: JsonNode, testStatusIMPL: var TestStatus): seq[TesterBl
       of "chainnetwork":
         t.chainNetWork = some(parseEnum[Fork](value.getStr))
       of "rlp":
-        # var headerRLP: Blob
-        # fixture.fromJson "rlp", headerRLP
-        # check rlp.encode(t.blockHeader.get()) == headerRLP
-        discard
+        fixture.fromJson "rlp", t.headerRLP
       of "transactions":
         for tx in value:
           t.transactions.add parseTx(tx)
@@ -180,27 +182,63 @@ proc parseBlocks(blocks: JsonNode, testStatusIMPL: var TestStatus): seq[TesterBl
 
     result.add t
 
-proc runTester(t: Tester, testStatusIMPL: var TestStatus) =
-  discard
+proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
+  result.good = true
+  fixture.fromJson "lastblockhash", result.lastBlockHash
+  result.genesisBlockHeader = parseHeader(fixture["genesisBlockHeader"], testStatusIMPL)
+
+  if "genesisRLP" in fixture:
+    var genesisRLP: Blob
+    fixture.fromJson "genesisRLP", genesisRLP
+    let genesisBlock = PlainBlock(header: result.genesisBlockHeader)
+    check genesisRLP == rlp.encode(genesisBlock)
+
+  if "sealEngine" in fixture:
+    result.sealEngine = some(parseEnum[SealEngine](fixture["sealEngine"].getStr))
+  result.network = fixture["network"].getStr
+
+  try:
+    result.blocks = parseBlocks(fixture["blocks"], testStatusIMPL)
+  except ValueError:
+    result.good = false
+
+# apply_fixture_block_to_chain
+#
+# #var x = rlp.decode(headerRLP, PlainBlock)
+#
+# block = rlp.decode(block_fixture['rlp'], sedes=block_class)
+#
+#     mined_block, _, _ = chain.import_block(block, perform_validation=perform_validation)
+#
+#     rlp_encoded_mined_block = rlp.encode(mined_block, sedes=block_class)
+#
+#     return (block, mined_block, rlp_encoded_mined_block)
+
+proc runTester(t: Tester, vmState: BaseVMState, testStatusIMPL: var TestStatus) =
+  var chainDB = vmState.chainDB
+  discard chainDB.persistHeaderToDb(t.genesisBlockHeader)
+  check chainDB.getCanonicalHead().blockHash == t.genesisBlockHeader.blockHash
+
+  # 1 - mine the genesis block
+  # 2 - loop over blocks:
+  #     - apply transactions
+  #     - mine block
+  # 3 - diff resulting state with expected state
+  # 4 - check that all previous blocks were valid
+
+  for testerBlock in t.blocks:
+    let should_be_good_block = testerBlock.blockHeader.isSome
+
+    #if should_be_good_block:
+
+
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
-  var t: Tester
   for fixtureName, fixture in node:
-    t.name = fixtureName
+    var t = parseTester(fixture, testStatusIMPL)
     echo "TESTING: ", fixtureName
-    fixture.fromJson "lastblockhash", t.lastBlockHash
-    t.genesisBlockHeader = parseHeader(fixture["genesisBlockHeader"], testStatusIMPL)
 
-    # none of the fixtures pass this test
-    #if "genesisRLP" in fixture:
-    #  var genesisRLP: Blob
-    #  fixture.fromJson "genesisRLP", genesisRLP
-    #  check genesisRLP == rlp.encode(t.genesisBlockHeader)
-
-    if "sealEngine" in fixture:
-      t.sealEngine = some(parseEnum[SealEngine](fixture["sealEngine"].getStr))
-    t.network = fixture["network"].getStr
-    t.blocks = parseBlocks(fixture["blocks"], testStatusIMPL)
+    if not t.good: continue
 
     var vmState = newBaseVMState(emptyRlpHash,
       t.genesisBlockHeader, newBaseChainDB(newMemoryDb()))
@@ -211,8 +249,11 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     let obtainedHash = $(vmState.readOnlyStateDB.rootHash)
     check obtainedHash == $(t.genesisBlockHeader.stateRoot)
 
-    t.runTester(testStatusIMPL)
-    #verifyStateDB(fixture["postState"], vmState.readOnlyStateDB)
+    t.runTester(vmState, testStatusIMPL)
+
+    #latest_block_hash = chain.get_canonical_block_by_number(chain.get_block().number - 1).hash
+    #if latest_block_hash != fixture['lastblockhash']:
+      #verifyStateDB(fixture["postState"], vmState.readOnlyStateDB)
 
 # lastBlockHash -> every fixture has it, hash of a block header
 # genesisRLP -> NOT every fixture has it, rlp bytes of genesis block header
