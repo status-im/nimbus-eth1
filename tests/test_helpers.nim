@@ -120,7 +120,10 @@ func failIn32Bits(folder, name: string): bool =
     "randomStatetest48.json",
 
     # OOM in AppVeyor, not on my machine
-    "randomStatetest36.json"
+    "randomStatetest36.json",
+
+    # from test_transaction_json
+    "RLPHeaderSizeOverflowInt32.json"
   ]
 
 func allowedFailInCurrentBuild(folder, name: string): bool =
