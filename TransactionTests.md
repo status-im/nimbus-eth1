@@ -153,7 +153,7 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 + RLPElementIsListWhenItShouldntBe.json                           OK
 + RLPElementIsListWhenItShouldntBe2.json                          OK
 + RLPExtraRandomByteAtTheEnd.json                                 OK
-  RLPHeaderSizeOverflowInt32.json                                 Skip
++ RLPHeaderSizeOverflowInt32.json                                 OK
 + RLPIncorrectByteEncoding00.json                                 OK
 + RLPIncorrectByteEncoding01.json                                 OK
 + RLPIncorrectByteEncoding127.json                                OK
@@ -218,7 +218,7 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 + aMalicousRLP.json                                               OK
 + tr201506052141PYTHON.json                                       OK
 ```
-OK: 69/70 Fail: 0/70 Skip: 1/70
+OK: 70/70 Fail: 0/70 Skip: 0/70
 
 ---TOTAL---
-OK: 178/179 Fail: 0/179 Skip: 1/179
+OK: 179/179 Fail: 0/179 Skip: 0/179
