@@ -13,6 +13,11 @@ import
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
   ../tests/test_generalstate_failing
 
+func revmap(x: Table[Fork, string]): Table[string, Fork] =
+  result = initTable[string, Fork]()
+  for k, v in x:
+    result[v] = k
+
 const
   # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
   forkNames* = {
@@ -25,6 +30,8 @@ const
   }.toTable
 
   supportedForks* = {FkFrontier, FkHomestead, FkTangerine, FkSpurious, FkByzantium, FkConstantinople}
+
+  nameToFork* = revmap(forkNames)
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
@@ -113,7 +120,10 @@ func failIn32Bits(folder, name: string): bool =
     "randomStatetest48.json",
 
     # OOM in AppVeyor, not on my machine
-    "randomStatetest36.json"
+    "randomStatetest36.json",
+
+    # from test_transaction_json
+    "RLPHeaderSizeOverflowInt32.json"
   ]
 
 func allowedFailInCurrentBuild(folder, name: string): bool =

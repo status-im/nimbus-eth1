@@ -104,7 +104,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       let success = expectedLogsHash == actualLogsHash and obtainedHash == tester.expectedHash
       tester.dumpDebugData(vmState, sender, gasUsed, success)
 
-  if not validateTransaction(vmState, tester.tx, sender):
+  if not validateTransaction(vmState, tester.tx, sender, tester.fork):
     vmState.mutateStateDB:
       # pre-EIP158 (e.g., Byzantium) should ensure currentCoinbase exists
       # in later forks, don't create at all

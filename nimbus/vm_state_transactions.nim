@@ -11,30 +11,29 @@ import
   constants, errors, transaction, vm_types, vm_state, utils,
   ./vm/[computation, interpreter], ./vm/interpreter/gas_costs
 
-proc validateTransaction*(vmState: BaseVMState, transaction: Transaction, sender: EthAddress): bool =
+proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork): bool =
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
   # XXX: lots of avoidable u256 construction
   let
     account = vmState.readOnlyStateDB.getAccount(sender)
-    gasLimit = transaction.gasLimit.u256
-    limitAndValue = gasLimit + transaction.value
-    gasCost = gasLimit * transaction.gasPrice.u256
+    gasLimit = tx.gasLimit.u256
+    limitAndValue = gasLimit + tx.value
+    gasCost = gasLimit * tx.gasPrice.u256
 
-  transaction.gasLimit >= transaction.intrinsicGas and
+  tx.gasLimit >= tx.intrinsicGas(fork) and
     #transaction.gasPrice <= (1 shl 34) and
     limitAndValue <= account.balance and
-    transaction.accountNonce == account.nonce and
+    tx.accountNonce == account.nonce and
     account.balance >= gasCost
 
 proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, fork: Fork) : BaseComputation =
-  var gas = tx.gasLimit - tx.intrinsicGas
+  var gas = tx.gasLimit - tx.intrinsicGas(fork)
 
   # TODO: refactor message to use byterange
   # instead of seq[byte]
   var data, code: seq[byte]
 
   if tx.isContractCreation:
-    gas = gas - gasFees[fork][GasTXCreate]
     data = @[]
     code = tx.payload
   else:

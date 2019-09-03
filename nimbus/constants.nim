@@ -54,6 +54,8 @@ const
   MAX_PREV_HEADER_DEPTH* =                  256.toBlockNumber
   MaxCallDepth* =                           1024
 
+  SECPK1_N* =                               Uint256.fromHex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
+
   ## Fork specific constants
 
   # See: https://github.com/ethereum/EIPs/blob/master/EIPS/eip-170.md
