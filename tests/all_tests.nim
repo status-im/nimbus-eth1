@@ -23,5 +23,6 @@ import  ./test_code_stream,
         ./test_op_misc,
         ./test_op_custom,
         ./test_state_db,
-        ./test_difficulty
+        ./test_difficulty,
+        ./test_transaction_json
 

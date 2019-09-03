@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth/[common, rlp, keys], nimcrypto, utils
+  constants, errors, eth/[common, rlp, keys], nimcrypto, utils,
+  ./vm/interpreter/[vm_forks, gas_costs], constants
 
 import eth/common/transaction as common_transaction
 export common_transaction
@@ -19,18 +20,14 @@ func intrinsicGas*(data: openarray[byte]): GasInt =
     else:
       result += 68  # GasTXDataNonZero
 
-proc intrinsicGas*(t: Transaction): GasInt =
+proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
-  result = t.payload.intrinsicGas
+  result = tx.payload.intrinsicGas
 
-proc validate*(t: Transaction) =
-  # Hook called during instantiation to ensure that all transaction
-  # parameters pass validation rules
-  if t.intrinsicGas() > t.gasLimit:
-    raise newException(ValidationError, "Insufficient gas")
-  #  self.check_signature_validity()
+  if tx.isContractCreation:
+    result = result + gasFees[fork][GasTXCreate]
 
 proc getSignature*(transaction: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
@@ -51,7 +48,7 @@ proc getSignature*(transaction: Transaction, output: var Signature): bool =
 
 proc toSignature*(transaction: Transaction): Signature =
   if not getSignature(transaction, result):
-    raise newException(Exception, "Invalid signaure")
+    raise newException(Exception, "Invalid signature")
 
 proc getSender*(transaction: Transaction, output: var EthAddress): bool =
   ## Find the address the transaction was sent from.
@@ -74,3 +71,37 @@ proc getRecipient*(tx: Transaction): EthAddress =
     result = generateAddress(sender, tx.accountNonce)
   else:
     result = tx.to
+
+proc validate*(tx: Transaction, fork: Fork) =
+  # Hook called during instantiation to ensure that all transaction
+  # parameters pass validation rules
+  if tx.intrinsicGas(fork) > tx.gasLimit:
+    raise newException(ValidationError, "Insufficient gas")
+
+  # check signature validity
+  var sender: EthAddress
+  if not tx.getSender(sender):
+    raise newException(ValidationError, "Invalid signature or failed message verification")
+
+  var
+    vMin = 27
+    vMax = 28
+
+  if tx.V.int >= EIP155_CHAIN_ID_OFFSET:
+    let chainId = (tx.V.int - EIP155_CHAIN_ID_OFFSET) div 2
+    vMin = 35 + (2 * chainId)
+    vMax = vMin + 1
+
+  var isValid = tx.R >= Uint256.one
+  isValid = isValid and tx.S >= Uint256.one
+  isValid = isValid and tx.V.int >= vMin
+  isValid = isValid and tx.V.int <= vMax
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+
+  if fork >= FkHomestead:
+    isValid = isValid and tx.S < SECPK1_N div 2
+
+  if not isValid:
+    raise newException(ValidationError, "Invalid transaction")
+
