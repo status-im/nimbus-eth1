@@ -42,13 +42,13 @@ update: | update-common
 		$(MAKE) nimbus.nims
 
 # builds the tools, wherever they are
-$(TOOLS): | build deps nat-libs
+$(TOOLS): | build deps
 	for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
 # a phony target, because teaching `make` how to do conditional recompilation of Nim projects is too complicated
-nimbus: | build deps nat-libs
+nimbus: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims
 
@@ -57,7 +57,7 @@ nimbus.nims:
 	ln -s nimbus.nimble $@
 
 # builds and runs the test suite
-test: | build deps nat-libs
+test: | build deps
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
 # primitive reproducibility test
@@ -74,24 +74,24 @@ test-reproducibility:
 clean: | clean-common
 	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*_wrapper_test}
 
-libnimbus.so: | build deps nat-libs
+libnimbus.so: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c --app:lib --noMain --nimcache:nimcache/libnimbus $(NIM_PARAMS) -o:build/$@.0 wrappers/libnimbus.nim && \
 		rm -f build/$@ && \
 		ln -s $@.0 build/$@
 
-wrappers: | build deps nat-libs libnimbus.so go-checks
+wrappers: | build deps libnimbus.so go-checks
 	echo -e $(BUILD_MSG) "build/C_wrapper_example" && \
 		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_example
 	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
 		go build -linkshared -o build/go_wrapper_example wrappers/wrapper_example.go
 
-libnimbus.a: | build deps nat-libs
+libnimbus.a: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		rm -f build/$@ && \
 		$(ENV_SCRIPT) nim c --app:staticlib --noMain --nimcache:nimcache/libnimbus $(NIM_PARAMS) -o:build/$@ wrappers/libnimbus.nim
 
-wrappers-static: | build deps nat-libs libnimbus.a go-checks
+wrappers-static: | build deps libnimbus.a go-checks
 	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
 		$(CC) wrappers/wrapper_example.c -static -pthread -Lbuild -lnimbus -lm -ldl -g -o build/C_wrapper_example_static
 	echo -e $(BUILD_MSG) "build/go_wrapper_example_static" && \
