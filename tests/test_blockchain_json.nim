@@ -11,13 +11,16 @@ import
   eth/[common, rlp], eth/trie/[db, trie_defs],
   ./test_helpers, ../premix/parser,
   ../nimbus/vm/interpreter/vm_forks,
-  ../nimbus/[vm_state, utils, vm_types],
-  ../nimbus/db/[db_chain, state_db]
+  ../nimbus/[vm_state, utils, vm_types, errors],
+  ../nimbus/db/[db_chain, state_db],
+  ../nimbus/utils/header
 
 type
   SealEngine = enum
     NoProof
     Ethash
+
+  VMConfig = array[2, tuple[blockNumber: int, fork: Fork]]
 
   PlainBlock = object
     header: BlockHeader
@@ -39,7 +42,7 @@ type
     genesisBlockHeader: BlockHeader
     blocks: seq[TesterBlock]
     sealEngine: Option[SealEngine]
-    network: string
+    vmConfig: VMConfig
     good: bool
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
@@ -182,6 +185,28 @@ proc parseBlocks(blocks: JsonNode, testStatusIMPL: var TestStatus): seq[TesterBl
 
     result.add t
 
+func vmConfiguration(network: string): VMConfig =
+  case network
+  of "EIP150": result = [(0, FkTangerine), (0, FkTangerine)]
+  of "ConstantinopleFix": result = [(0, FkConstantinople), (0, FkConstantinople)]
+  of "Homestead": result = [(0, FkHomestead), (0, FkHomestead)]
+  of "Frontier": result = [(0, FkFrontier), (0, FkFrontier)]
+  of "Byzantium": result = [(0, FkByzantium), (0, FkByzantium)]
+  of "EIP158ToByzantiumAt5": result = [(0, FkSpurious), (5, FkByzantium)]
+  of "EIP158": result = [(0, FkSpurious), (0, FkSpurious)]
+  of "HomesteadToDaoAt5": result = [(0, FkHomestead), (5, FkHomestead)]
+  of "Constantinople": result = [(0, FkConstantinople), (0, FkConstantinople)]
+  of "HomesteadToEIP150At5": result = [(0, FkHomestead), (5, FkTangerine)]
+  of "FrontierToHomesteadAt5": result = [(0, FkFrontier), (5, FkHomestead)]
+  of "ByzantiumToConstantinopleFixAt5": result = [(0, FkByzantium), (5, FkConstantinople)]
+  else:
+    raise newException(ValueError, "unsupported network")
+
+func vmConfigToFork(vmConfig: VMConfig, blockNumber: Uint256): Fork =
+  if blockNumber >= vmConfig[1].blockNumber.u256: return vmConfig[1].fork
+  if blockNumber >= vmConfig[0].blockNumber.u256: return vmConfig[0].fork
+  raise newException(ValueError, "unreachable code")
+
 proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
   result.good = true
   fixture.fromJson "lastblockhash", result.lastBlockHash
@@ -195,29 +220,36 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
 
   if "sealEngine" in fixture:
     result.sealEngine = some(parseEnum[SealEngine](fixture["sealEngine"].getStr))
-  result.network = fixture["network"].getStr
+  let network = fixture["network"].getStr
+  result.vmConfig = vmConfiguration(network)
 
   try:
     result.blocks = parseBlocks(fixture["blocks"], testStatusIMPL)
   except ValueError:
     result.good = false
 
-# apply_fixture_block_to_chain
-#
-# #var x = rlp.decode(headerRLP, PlainBlock)
-#
-# block = rlp.decode(block_fixture['rlp'], sedes=block_class)
-#
-#     mined_block, _, _ = chain.import_block(block, perform_validation=perform_validation)
-#
-#     rlp_encoded_mined_block = rlp.encode(mined_block, sedes=block_class)
-#
-#     return (block, mined_block, rlp_encoded_mined_block)
+  # TODO: we don't have these VM implementation yet, skip it
+  if network in ["Constantinople", "HomesteadToDaoAt5"]:
+    result.good = false
 
-proc runTester(t: Tester, vmState: BaseVMState, testStatusIMPL: var TestStatus) =
+proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, validation = true): PlainBlock =
+
+    let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
+    discard chainDB.persistHeaderToDb(preminedBlock.header)
+
+
+proc applyFixtureBlockToChain(tb: TesterBlock,
+  chainDB: BaseChainDB, fork: Fork, validation = true): (PlainBlock, PlainBlock, Blob) =
+  var
+    preminedBlock = rlp.decode(tb.headerRLP, PlainBlock)
+    minedBlock = chainDB.importBlock(preminedBlock, fork, validation)
+    rlpEncodedMinedBlock = rlp.encode(minedBlock)
+  result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
+
+proc runTester(tester: Tester, vmState: BaseVMState, testStatusIMPL: var TestStatus) =
   var chainDB = vmState.chainDB
-  discard chainDB.persistHeaderToDb(t.genesisBlockHeader)
-  check chainDB.getCanonicalHead().blockHash == t.genesisBlockHeader.blockHash
+  discard chainDB.persistHeaderToDb(tester.genesisBlockHeader)
+  check chainDB.getCanonicalHead().blockHash == tester.genesisBlockHeader.blockHash
 
   # 1 - mine the genesis block
   # 2 - loop over blocks:
@@ -226,30 +258,44 @@ proc runTester(t: Tester, vmState: BaseVMState, testStatusIMPL: var TestStatus) 
   # 3 - diff resulting state with expected state
   # 4 - check that all previous blocks were valid
 
-  for testerBlock in t.blocks:
-    let should_be_good_block = testerBlock.blockHeader.isSome
+  for testerBlock in tester.blocks:
+    let shouldBeGoodBlock = testerBlock.blockHeader.isSome
 
-    #if should_be_good_block:
+    if shouldBeGoodBlock:
+      let blockNumber = testerBlock.blockHeader.get().blockNumber
+      let fork = vmConfigToFork(tester.vmConfig, blockNumber)
 
-
+      let (preminedBlock, minedBlock, blockRlp) = applyFixtureBlockToChain(
+          testerBlock, chainDB, fork, validation = false)  # we manually validate below
+   #       assert_mined_block_unchanged(block, mined_block)
+   #       chain.validate_block(block)
+   #   else:
+   #       try:
+   #           apply_fixture_block_to_chain(block_fixture, chain)
+   #       except (TypeError, rlp.DecodingError, rlp.DeserializationError, ValidationError) as err:
+   #           # failure is expected on this bad block
+   #           pass
+   #       else:
+   #           raise AssertionError("Block should have caused a validation error")
+   #
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
   for fixtureName, fixture in node:
-    var t = parseTester(fixture, testStatusIMPL)
+    var tester = parseTester(fixture, testStatusIMPL)
     echo "TESTING: ", fixtureName
 
-    if not t.good: continue
+    if not tester.good: continue
 
     var vmState = newBaseVMState(emptyRlpHash,
-      t.genesisBlockHeader, newBaseChainDB(newMemoryDb()))
+      tester.genesisBlockHeader, newBaseChainDB(newMemoryDb()))
 
     vmState.mutateStateDB:
       setupStateDB(fixture["pre"], db)
 
     let obtainedHash = $(vmState.readOnlyStateDB.rootHash)
-    check obtainedHash == $(t.genesisBlockHeader.stateRoot)
+    check obtainedHash == $(tester.genesisBlockHeader.stateRoot)
 
-    t.runTester(vmState, testStatusIMPL)
+    tester.runTester(vmState, testStatusIMPL)
 
     #latest_block_hash = chain.get_canonical_block_by_number(chain.get_block().number - 1).hash
     #if latest_block_hash != fixture['lastblockhash']:
