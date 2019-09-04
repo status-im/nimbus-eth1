@@ -6,7 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 
-import eth/[common, rlp], ../constants, strformat, times, ../validation
+import
+  strformat, times, options,
+  eth/[common, rlp],
+  ../validation, ./difficulty, ../vm/interpreter/vm_forks, ../constants
 
 export BlockHeader
 
@@ -75,19 +78,25 @@ proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
   else:
       return gas_limit
 
-proc generateHeaderFromParentHeader*(
-    computeDifficultyFn: proc(parentHeader: BlockHeader, timestamp: int): int,
-    parent: BlockHeader,
-    coinbase: EthAddress,
-    timestamp: int = -1,
-    extraData: string = ""): BlockHeader =
-  # TODO: validateGt(timestamp, parent.timestamp)
+proc generateHeaderFromParentHeader*(parent: BlockHeader,
+    coinbase: EthAddress, fork: Fork, timestamp: Option[EthTime],
+    extraData: Blob): BlockHeader =
+
+  var lcTimestamp: EthTime
+  if timestamp.isNone:
+    lcTimeStamp = max(getTime(), parent.timestamp + 1.milliseconds)  # Note: Py-evm uses +1 second, not ms
+  else:
+    lcTimestamp = timestamp.get()
+
+  if lcTimestamp <= parent.timestamp:
+    raise newException(ValueError, "header.timestamp should be higher than parent.timestamp")
+
   result = BlockHeader(
-    timestamp: max(getTime(), parent.timestamp + 1.milliseconds),   # Note: Py-evm uses +1 second, not ms
+    timestamp: lcTimestamp,
     blockNumber: (parent.blockNumber + 1),
-    # TODO: difficulty: parent.computeDifficulty(parent.timestamp),
+    difficulty: calcDifficulty(lcTimestamp, parent, fork),
     gasLimit: computeGasLimit(parent, gasLimitFloor = GENESIS_GAS_LIMIT),
     stateRoot: parent.stateRoot,
     coinbase: coinbase,
-    # TODO: data: extraData,
+    extraData: extraData,
   )
