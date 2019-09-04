@@ -114,11 +114,11 @@ make update
 
 To run a command that might use binaries from the Status Nim fork:
 ```bash
-./env.sh bash # start a new interractive shell with the right env vars set
+./env.sh bash # start a new interactive shell with the right env vars set
 which nim
 nim --version
 
-# or without starting a new interractive shell:
+# or without starting a new interactive shell:
 ./env.sh which nim
 ./env.sh nim --version
 ```
