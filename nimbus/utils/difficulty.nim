@@ -149,3 +149,14 @@ func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
     result = calcDifficultyHomestead(timeStamp, parent)
   else:
     result = calcDifficultyFrontier(timeStamp, parent)
+
+func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader, fork: Fork): DifficultyInt =
+  case fork
+  of FkConstantinople:
+    result = calcDifficultyConstantinople(timeStamp, parent)
+  of FkByzantium:
+    result = calcDifficultyByzantium(timeStamp, parent)
+  of FkHomestead..FkSpurious:
+    result = calcDifficultyHomestead(timeStamp, parent)
+  else:
+    result = calcDifficultyFrontier(timeStamp, parent)
