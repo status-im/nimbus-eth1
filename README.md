@@ -26,12 +26,14 @@ _We currently do not guarantee that Nimbus will work on Windows._
 
 ### Prerequisites
 
+(On Windows, a precompiled DLL collection download is available through the `fetch-dlls` Makefile target: ([Windows instructions](#windows)).)
+
 #### Rocksdb
 
-A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/) is needed - it can usually be installed using a package manager of your choice:
+A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/) is needed - it can usually be installed using your system's package manager:
 
 ```bash
-# MacOS
+# MacOS with Homebrew
 brew install rocksdb
 
 # Fedora
@@ -44,33 +46,29 @@ sudo apt-get install librocksdb-dev
 pakku -S rocksdb
 ```
 
-On Windows, you can [download pre-compiled DLLs](#windows).
-
 You can also build and install it by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md).
 
-### PCRE
+#### PCRE
 
 If you don't already have it, you will also need PCRE to build Nimbus.
 
 ```bash
-# MacOS
+# MacOS with Homebrew
 brew install pcre
 
 # Fedora
 dnf install pcre
 
 # Debian and Ubuntu
-sudo apt-get install libpcre libpcre-dev
+sudo apt-get install libpcre3-dev
 
 # Arch (AUR)
-pakku -S pcre-static 
+pakku -S pcre-static
 ```
-
-On Windows, the aforementioned DLL download will take care of this for you ([download pre-compiled DLLs](#windows)).
 
 #### Developer tools
 
-GNU make, Bash and the usual POSIX utilities
+GNU Make, Bash and the usual POSIX utilities
 
 #### Obtaining the prerequisites through the Nix package manager
 
@@ -89,12 +87,16 @@ nix-shell default.nix
 To build Nimbus (in "build/nimbus"), just execute:
 
 ```bash
-make # the first invocation will update all Git submodules and prompt you to run "make" again
+make # The first `make` invocation will update all Git submodules and prompt you to run `make` again.
+     # It's only required once per Git clone. You'll run `make update` after each `git pull`, in the future,
+     # to keep those submodules up to date.
+
+make nimbus # build the Nimbus binary
 ```
 
-Running `./build/nimbus --help` will provide you with a list of
-the available command-line options. To start syncing with mainnet, just execute `./build/nimbus`
-without any parameters.
+Running `./build/nimbus --help` will provide you with a list of the available
+command-line options. To start syncing with mainnet, just execute
+`./build/nimbus` without any parameters.
 
 To execute all tests:
 ```bash
@@ -109,8 +111,13 @@ make update
 
 To run a command that might use binaries from the Status Nim fork:
 ```bash
-./env.sh bash
+./env.sh bash # start a new interactive shell with the right env vars set
 which nim
+nim --version
+
+# or without starting a new interactive shell:
+./env.sh which nim
+./env.sh nim --version
 ```
 
 Our Wiki provides additional helpful information for [debugging individual test cases][1]
@@ -118,7 +125,7 @@ and for [pairing Nimbus with a locally running copy of Geth][2].
 
 #### Windows
 
-_Experimental support!_
+_(Experimental support!)_
 
 Install Mingw-w64 for your architecture using the "[MinGW-W64 Online
 Installer](https://sourceforge.net/projects/mingw-w64/files/)" (first link
@@ -134,12 +141,16 @@ Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash" shell
 If you don't want to compile RocksDB and SQLite separately, you can fetch pre-compiled DLLs with:
 ```bash
 mingw32-make # this first invocation will update the Git submodules
-mingw32-make fetch-dlls
+mingw32-make fetch-dlls # this will place the right DLLs for your architecture in the "build/" directory
 ```
 
-This will place the right DLLs for your architecture in the "build/" directory.
+You can now follow those instructions in the previous section by replacing `make` with `mingw32-make` (regardless of your 32-bit or 64-bit architecture):
 
-You can now follow those instructions in the previous section by replacing `make` with `mingw32-make` (regardless of your 32-bit or 64-bit architecture).
+```bash
+mingw32-make nimbus # build the Nimbus binary
+mingw32-make test # run the test suite
+# etc.
+```
 
 #### Raspberry PI
 
