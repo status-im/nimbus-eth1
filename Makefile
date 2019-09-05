@@ -93,7 +93,7 @@ libnimbus.a: | build deps
 
 wrappers-static: | build deps libnimbus.a go-checks
 	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
-		$(CC) wrappers/wrapper_example.c -static -pthread -Lbuild -lnimbus -lm -ldl -g -o build/C_wrapper_example_static
+		$(CC) wrappers/wrapper_example.c -static -pthread -Lbuild -lnimbus -lm -ldl -lpcre -g -o build/C_wrapper_example_static
 	echo -e $(BUILD_MSG) "build/go_wrapper_example_static" && \
-		go build -ldflags "-linkmode external -extldflags '-static -ldl'" -o build/go_wrapper_example_static wrappers/wrapper_example.go
+		go build -ldflags "-linkmode external -extldflags '-static -ldl -lpcre'" -o build/go_wrapper_example_static wrappers/wrapper_example.go
 
