@@ -233,10 +233,17 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
     result.good = false
 
 proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, validation = true): PlainBlock =
+  let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
+  let baseHeaderForImport = generateHeaderFromParentHeader(parentHeader,
+      preminedBlock.header.coinbase, fork, some(preminedBlock.header.timestamp), @[])
+  
+  var vmState = newBaseVMState(parentHeader.blockHash, baseHeaderForImport, chainDB)
+      
+  #if validation:
+    #validate_imported_block_unchanged(importedBlock, preminedBlock)
+    #self.validate_block(importedBlock)
 
-    let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
-    discard chainDB.persistHeaderToDb(preminedBlock.header)
-
+  discard chainDB.persistHeaderToDb(preminedBlock.header)
 
 proc applyFixtureBlockToChain(tb: TesterBlock,
   chainDB: BaseChainDB, fork: Fork, validation = true): (PlainBlock, PlainBlock, Blob) =
@@ -246,17 +253,9 @@ proc applyFixtureBlockToChain(tb: TesterBlock,
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
 
-proc runTester(tester: Tester, vmState: BaseVMState, testStatusIMPL: var TestStatus) =
-  var chainDB = vmState.chainDB
+proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestStatus) =
   discard chainDB.persistHeaderToDb(tester.genesisBlockHeader)
   check chainDB.getCanonicalHead().blockHash == tester.genesisBlockHeader.blockHash
-
-  # 1 - mine the genesis block
-  # 2 - loop over blocks:
-  #     - apply transactions
-  #     - mine block
-  # 3 - diff resulting state with expected state
-  # 4 - check that all previous blocks were valid
 
   for testerBlock in tester.blocks:
     let shouldBeGoodBlock = testerBlock.blockHeader.isSome
@@ -267,8 +266,8 @@ proc runTester(tester: Tester, vmState: BaseVMState, testStatusIMPL: var TestSta
 
       let (preminedBlock, minedBlock, blockRlp) = applyFixtureBlockToChain(
           testerBlock, chainDB, fork, validation = false)  # we manually validate below
-   #       assert_mined_block_unchanged(block, mined_block)
-   #       chain.validate_block(block)
+   #       assert_mined_block_unchanged(preminedBlock, minedBlock)
+   #       chain.validate_block(preminedBlock)
    #   else:
    #       try:
    #           apply_fixture_block_to_chain(block_fixture, chain)
@@ -280,14 +279,22 @@ proc runTester(tester: Tester, vmState: BaseVMState, testStatusIMPL: var TestSta
    #
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
+  # 1 - mine the genesis block
+  # 2 - loop over blocks:
+  #     - apply transactions
+  #     - mine block
+  # 3 - diff resulting state with expected state
+  # 4 - check that all previous blocks were valid
+
   for fixtureName, fixture in node:
     var tester = parseTester(fixture, testStatusIMPL)
-    echo "TESTING: ", fixtureName
+    var chainDB = newBaseChainDB(newMemoryDb())
 
+    echo "TESTING: ", fixtureName
     if not tester.good: continue
 
     var vmState = newBaseVMState(emptyRlpHash,
-      tester.genesisBlockHeader, newBaseChainDB(newMemoryDb()))
+      tester.genesisBlockHeader, chainDB)
 
     vmState.mutateStateDB:
       setupStateDB(fixture["pre"], db)
@@ -295,7 +302,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     let obtainedHash = $(vmState.readOnlyStateDB.rootHash)
     check obtainedHash == $(tester.genesisBlockHeader.stateRoot)
 
-    tester.runTester(vmState, testStatusIMPL)
+    tester.runTester(chainDB, testStatusIMPL)
 
     #latest_block_hash = chain.get_canonical_block_by_number(chain.get_block().number - 1).hash
     #if latest_block_hash != fixture['lastblockhash']:
