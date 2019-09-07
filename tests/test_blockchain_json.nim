@@ -207,7 +207,7 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
   except ValueError:
     result.good = false
 
-  # TODO: we don't have these VM implementation yet, skip it
+  # TODO: implement missing VM
   if network in ["Constantinople", "HomesteadToDaoAt5"]:
     result.good = false
 
@@ -247,11 +247,11 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
   if minedBlock.header.txRoot != txRoot:
     raise newException(ValidationError, "wrong txRoot")
 
-proc processBlock(vmState: BaseVMState, preminedBlock: PlainBlock, fork: Fork) =
-  vmState.receipts = newSeq[Receipt](preminedBlock.transactions.len)
+proc processBlock(vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
+  vmState.receipts = newSeq[Receipt](minedBlock.transactions.len)
   vmState.cumulativeGasUsed = 0
 
-  for txIndex, tx in preminedBlock.transactions:
+  for txIndex, tx in minedBlock.transactions:
     var sender: EthAddress
     if tx.getSender(sender):
       let gasUsed = processTransaction(tx, sender, vmState, fork)
@@ -259,21 +259,31 @@ proc processBlock(vmState: BaseVMState, preminedBlock: PlainBlock, fork: Fork) =
       raise newException(ValidationError, "could not get sender")
     vmState.receipts[txIndex] = makeReceipt(vmState, fork)
 
-  # TODO: change this preminedBlock to minedBlock
-  assignBlockRewards(preminedBlock, vmState, fork, vmState.chainDB)
+  assignBlockRewards(minedBlock, vmState, fork, vmState.chainDB)
 
+func validateBlockUnchanged(a, b: PlainBlock): bool =
+  result = rlp.encode(a) == rlp.encode(b)
+
+func validateBlock(blck: PlainBlock): bool =
+  # TODO: implement block validation
+  result = true
 
 proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, validation = true): PlainBlock =
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
   let baseHeaderForImport = generateHeaderFromParentHeader(parentHeader,
       preminedBlock.header.coinbase, fork, some(preminedBlock.header.timestamp), @[])
 
+  deepCopy(result, preminedBlock)
   var vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB)
-  processBlock(vmState, preminedBlock, fork)
+  processBlock(vmState, result, fork)
 
-  #if validation:
-    #validate_imported_block_unchanged(importedBlock, preminedBlock)
-    #self.validate_block(importedBlock)
+  deepCopy(result.header, vmState.blockHeader)
+
+  if validation:
+    if not validateBlockUnchanged(result, preminedBlock):
+      raise newException(ValidationError, "block changed")
+    if not validateBlock(result):
+      raise newException(ValidationError, "invalid block")
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
@@ -298,17 +308,15 @@ proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestSta
 
       let (preminedBlock, minedBlock, blockRlp) = applyFixtureBlockToChain(
           testerBlock, chainDB, fork, validation = false)  # we manually validate below
-   #       assert_mined_block_unchanged(preminedBlock, minedBlock)
-   #       chain.validate_block(preminedBlock)
-   #   else:
-   #       try:
-   #           apply_fixture_block_to_chain(block_fixture, chain)
-   #       except (TypeError, rlp.DecodingError, rlp.DeserializationError, ValidationError) as err:
-   #           # failure is expected on this bad block
-   #           pass
-   #       else:
-   #           raise AssertionError("Block should have caused a validation error")
-   #
+      check validateBlock(preminedBlock) == true
+   #else:
+   #  try:
+   #    apply_fixture_block_to_chain(block_fixture, chain)
+   #  except (TypeError, rlp.DecodingError, rlp.DeserializationError, ValidationError) as err:
+   #    # failure is expected on this bad block
+   #    pass
+   #  else:
+   #    raise AssertionError("Block should have caused a validation error")
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false) =
   # 1 - mine the genesis block
