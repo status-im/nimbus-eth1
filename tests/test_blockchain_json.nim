@@ -309,14 +309,17 @@ proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestSta
       let (preminedBlock, minedBlock, blockRlp) = applyFixtureBlockToChain(
           testerBlock, chainDB, fork, validation = false)  # we manually validate below
       check validateBlock(preminedBlock) == true
-   #else:
-   #  try:
-   #    apply_fixture_block_to_chain(block_fixture, chain)
-   #  except (TypeError, rlp.DecodingError, rlp.DeserializationError, ValidationError) as err:
-   #    # failure is expected on this bad block
-   #    pass
-   #  else:
-   #    raise AssertionError("Block should have caused a validation error")
+    else:
+      var noError = true
+      try:
+        let fork = vmConfigToFork(tester.vmConfig, 1.u256)
+        let (_, _, _) = applyFixtureBlockToChain(testerBlock, chainDB, fork, validation = true)
+      except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
+        # failure is expected on this bad block
+        noError = false
+
+      # Block should have caused a validation error
+      check noError == false
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false) =
   # 1 - mine the genesis block
