@@ -9,7 +9,7 @@ import
   unittest, json, os, tables, strutils, sets, strformat,
   options,
   eth/[common, rlp], eth/trie/[db, trie_defs],
-  ./test_helpers, ../premix/parser,
+  ./test_helpers, ../premix/parser, test_config,
   ../nimbus/vm/interpreter/vm_forks,
   ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants],
   ../nimbus/db/[db_chain, state_db],
@@ -45,8 +45,9 @@ type
     sealEngine: Option[SealEngine]
     vmConfig: VMConfig
     good: bool
+    debugMode: bool
 
-proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
+proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false)
 
 #[var topLevel = initCountTable[string]()
 
@@ -67,9 +68,6 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
                 for tk, tv in tx:
                   topLevel.inc tk
 ]#
-
-suite "block chain json tests":
-  jsonTest("BlockchainTests", testFixture)
 
 func normalizeNumber(n: JsonNode): JsonNode =
   let str = n.getStr
@@ -274,6 +272,7 @@ proc processBlock(vmState: BaseVMState, preminedBlock: PlainBlock, fork: Fork) =
       raise newException(ValidationError, "could not get sender")
     vmState.receipts[txIndex] = makeReceipt(vmState, fork)
 
+  # TODO: change this preminedBlock to minedBlock
   assignBlockRewards(preminedBlock, vmState, fork, vmState.chainDB)
 
 proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, validation = true): PlainBlock =
@@ -325,7 +324,7 @@ proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestSta
    #           raise AssertionError("Block should have caused a validation error")
    #
 
-proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
+proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false) =
   # 1 - mine the genesis block
   # 2 - loop over blocks:
   #     - apply transactions
@@ -349,11 +348,43 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     let obtainedHash = $(vmState.readOnlyStateDB.rootHash)
     check obtainedHash == $(tester.genesisBlockHeader.stateRoot)
 
+    tester.debugMode = debugMode
     tester.runTester(chainDB, testStatusIMPL)
 
     #latest_block_hash = chain.get_canonical_block_by_number(chain.get_block().number - 1).hash
     #if latest_block_hash != fixture['lastblockhash']:
       #verifyStateDB(fixture["postState"], vmState.readOnlyStateDB)
+
+proc main() =
+  if paramCount() == 0:
+    # run all test fixtures
+    suite "block chain json tests":
+      jsonTest("BlockchainTests", testFixture)
+  else:
+    # execute single test in debug mode
+    let config = getConfiguration()
+    if config.testSubject.len == 0:
+      echo "missing test subject"
+      quit(QuitFailure)
+
+    let path = "tests" / "fixtures" / "BlockChainTests"
+    let n = json.parseFile(path / config.testSubject)
+    var testStatusIMPL: TestStatus
+    testFixture(n, testStatusIMPL, debugMode = true)
+
+when isMainModule:
+  var message: string
+
+  ## Processing command line arguments
+  if processArguments(message) != Success:
+    echo message
+    quit(QuitFailure)
+  else:
+    if len(message) > 0:
+      echo message
+      quit(QuitSuccess)
+
+main()
 
 # lastBlockHash -> every fixture has it, hash of a block header
 # genesisRLP -> NOT every fixture has it, rlp bytes of genesis block header
