@@ -49,26 +49,6 @@ type
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false)
 
-#[var topLevel = initCountTable[string]()
-
-suite "block chain json tests":
-  jsonTest("BlockchainTests", testFixture)
-  topLevel.sort
-  for k, v in topLevel:
-    echo k, " ", v
-
-proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
-  for name, klm in node:
-    for k, value in klm:
-      if k == "blocks":
-        for bc in value:
-          for key, val in bc:
-            if key == "transactions":
-              for tx in val:
-                for tk, tv in tx:
-                  topLevel.inc tk
-]#
-
 func normalizeNumber(n: JsonNode): JsonNode =
   let str = n.getStr
   # paranoid checks
@@ -253,8 +233,6 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
 
   let stateDb = vmState.accountDb
   if minedBlock.header.stateRoot != stateDb.rootHash:
-    #error "Wrong state root in block", blockNumber=preminedBlock.header.blockNumber,
-    #  expected=preminedBlock.header.stateRoot, actual=stateDb.rootHash, arrivedFrom=vmState.chainDB.getCanonicalHead().stateRoot
     raise newException(ValidationError, "wrong state root in block")
 
   let bloom = createBloom(vmState.receipts)
@@ -273,10 +251,7 @@ proc processBlock(vmState: BaseVMState, preminedBlock: PlainBlock, fork: Fork) =
   vmState.receipts = newSeq[Receipt](preminedBlock.transactions.len)
   vmState.cumulativeGasUsed = 0
 
-  #echo "vmstate.stateroot A ", vmState.stateRoot
-
   for txIndex, tx in preminedBlock.transactions:
-    #echo "TXINDEX: ", txIndex
     var sender: EthAddress
     if tx.getSender(sender):
       let gasUsed = processTransaction(tx, sender, vmState, fork)
@@ -294,7 +269,6 @@ proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, va
       preminedBlock.header.coinbase, fork, some(preminedBlock.header.timestamp), @[])
 
   var vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB)
-  #echo "stateRoot: ", parentHeader.stateRoot
   processBlock(vmState, preminedBlock, fork)
 
   #if validation:
@@ -320,7 +294,6 @@ proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestSta
 
     if shouldBeGoodBlock:
       let blockNumber = testerBlock.blockHeader.get().blockNumber
-      #echo "BLOCK NUMBER: ", blockNumber
       let fork = vmConfigToFork(tester.vmConfig, blockNumber)
 
       let (preminedBlock, minedBlock, blockRlp) = applyFixtureBlockToChain(
