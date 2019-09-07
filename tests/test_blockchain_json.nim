@@ -11,9 +11,10 @@ import
   eth/[common, rlp], eth/trie/[db, trie_defs],
   ./test_helpers, ../premix/parser,
   ../nimbus/vm/interpreter/vm_forks,
-  ../nimbus/[vm_state, utils, vm_types, errors],
+  ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants],
   ../nimbus/db/[db_chain, state_db],
-  ../nimbus/utils/header
+  ../nimbus/utils/header,
+  ../nimbus/p2p/executor
 
 type
   SealEngine = enum
@@ -232,13 +233,58 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
   if network in ["Constantinople", "HomesteadToDaoAt5"]:
     result.good = false
 
+proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
+  let blockReward = blockRewards[fork]
+  var mainReward = blockReward
+  if minedBlock.header.ommersHash != EMPTY_UNCLE_HASH:
+    let h = vmState.chainDB.persistUncles(minedBlock.uncles)
+    if h != minedBlock.header.ommersHash:
+      raise newException(ValidationError, "Uncle hash mismatch")
+    for uncle in minedBlock.uncles:
+      var uncleReward = uncle.blockNumber.u256 + 8.u256
+      uncleReward -= minedBlock.header.blockNumber.u256
+      uncleReward = uncleReward * blockReward
+      uncleReward = uncleReward div 8.u256
+      vmState.mutateStateDB:
+        db.addBalance(uncle.coinbase, uncleReward)
+      mainReward += blockReward div 32.u256
+
+  # Reward beneficiary
+  vmState.mutateStateDB:
+    db.addBalance(minedBlock.header.coinbase, mainReward)
+
+  let stateDb = vmState.accountDb
+  if minedBlock.header.stateRoot != stateDb.rootHash:
+    #error "Wrong state root in block", blockNumber=preminedBlock.header.blockNumber,
+    #  expected=preminedBlock.header.stateRoot, actual=stateDb.rootHash, arrivedFrom=vmState.chainDB.getCanonicalHead().stateRoot
+    raise newException(ValidationError, "wrong state root in block")
+
+proc processBlock(vmState: BaseVMState, preminedBlock: PlainBlock, fork: Fork) =
+  vmState.receipts = newSeq[Receipt](preminedBlock.transactions.len)
+  vmState.cumulativeGasUsed = 0
+
+  #echo "vmstate.stateroot A ", vmState.stateRoot
+
+  for txIndex, tx in preminedBlock.transactions:
+    #echo "TXINDEX: ", txIndex
+    var sender: EthAddress
+    if tx.getSender(sender):
+      let gasUsed = processTransaction(tx, sender, vmState, fork)
+    else:
+      raise newException(ValidationError, "could not get sender")
+    vmState.receipts[txIndex] = makeReceipt(vmState, fork)
+
+  assignBlockRewards(preminedBlock, vmState, fork, vmState.chainDB)
+
 proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, validation = true): PlainBlock =
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
   let baseHeaderForImport = generateHeaderFromParentHeader(parentHeader,
       preminedBlock.header.coinbase, fork, some(preminedBlock.header.timestamp), @[])
-  
-  var vmState = newBaseVMState(parentHeader.blockHash, baseHeaderForImport, chainDB)
-      
+
+  var vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB)
+  #echo "stateRoot: ", parentHeader.stateRoot
+  processBlock(vmState, preminedBlock, fork)
+
   #if validation:
     #validate_imported_block_unchanged(importedBlock, preminedBlock)
     #self.validate_block(importedBlock)
@@ -262,6 +308,7 @@ proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestSta
 
     if shouldBeGoodBlock:
       let blockNumber = testerBlock.blockHeader.get().blockNumber
+      #echo "BLOCK NUMBER: ", blockNumber
       let fork = vmConfigToFork(tester.vmConfig, blockNumber)
 
       let (preminedBlock, minedBlock, blockRlp) = applyFixtureBlockToChain(
@@ -288,7 +335,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
 
   for fixtureName, fixture in node:
     var tester = parseTester(fixture, testStatusIMPL)
-    var chainDB = newBaseChainDB(newMemoryDb())
+    var chainDB = newBaseChainDB(newMemoryDb(), false)
 
     echo "TESTING: ", fixtureName
     if not tester.good: continue
