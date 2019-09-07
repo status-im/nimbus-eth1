@@ -85,7 +85,7 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
     bloom.value = bloom.value or logsBloom(receipt.logs).value
   result = bloom.value.toByteArrayBE
 
-proc makeReceipt(vmState: BaseVMState, fork = FkFrontier): Receipt =
+proc makeReceipt*(vmState: BaseVMState, fork = FkFrontier): Receipt =
   if fork < FkByzantium:
     result.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
   else:
@@ -102,7 +102,7 @@ const
   eth5 = 5.eth
   eth3 = 3.eth
   eth2 = 2.eth
-  blockRewards: array[Fork, Uint256] = [
+  blockRewards*: array[Fork, Uint256] = [
     eth5, # FkFrontier
     eth5, # FkThawing
     eth5, # FkHomestead
