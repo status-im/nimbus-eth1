@@ -345,9 +345,9 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     tester.debugMode = debugMode
     tester.runTester(chainDB, testStatusIMPL)
 
-    #latest_block_hash = chain.get_canonical_block_by_number(chain.get_block().number - 1).hash
-    #if latest_block_hash != fixture['lastblockhash']:
-      #verifyStateDB(fixture["postState"], vmState.readOnlyStateDB)
+    let latestBlockHash = chainDB.getCanonicalHead().blockHash
+    if latestBlockHash != tester.lastBlockHash:
+      verifyStateDB(fixture["postState"], vmState.readOnlyStateDB)
 
 proc main() =
   if paramCount() == 0:
