@@ -8,7 +8,7 @@
 import
   unittest, json, os, tables, strutils, sets, strformat,
   options,
-  eth/[common, rlp], eth/trie/[db, trie_defs],
+  eth/[common, rlp, bloom], eth/trie/[db, trie_defs],
   ./test_helpers, ../premix/parser, test_config,
   ../nimbus/vm/interpreter/vm_forks,
   ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants],
@@ -257,6 +257,18 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
     #  expected=preminedBlock.header.stateRoot, actual=stateDb.rootHash, arrivedFrom=vmState.chainDB.getCanonicalHead().stateRoot
     raise newException(ValidationError, "wrong state root in block")
 
+  let bloom = createBloom(vmState.receipts)
+  if minedBlock.header.bloom != bloom:
+    raise newException(ValidationError, "wrong bloom")
+
+  let receiptRoot = calcReceiptRoot(vmState.receipts)
+  if minedBlock.header.receiptRoot != receiptRoot:
+    raise newException(ValidationError, "wrong receiptRoot")
+
+  let txRoot = calcTxRoot(minedBlock.transactions)
+  if minedBlock.header.txRoot != txRoot:
+    raise newException(ValidationError, "wrong txRoot")
+
 proc processBlock(vmState: BaseVMState, preminedBlock: PlainBlock, fork: Fork) =
   vmState.receipts = newSeq[Receipt](preminedBlock.transactions.len)
   vmState.cumulativeGasUsed = 0
@@ -274,6 +286,7 @@ proc processBlock(vmState: BaseVMState, preminedBlock: PlainBlock, fork: Fork) =
 
   # TODO: change this preminedBlock to minedBlock
   assignBlockRewards(preminedBlock, vmState, fork, vmState.chainDB)
+
 
 proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, validation = true): PlainBlock =
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
