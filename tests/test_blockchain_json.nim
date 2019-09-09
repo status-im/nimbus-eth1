@@ -437,8 +437,8 @@ proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, ch
   result.header.parentHash = parentHeader.hash
 
   if validation:
-    #if not validateBlockUnchanged(result, preminedBlock):
-      #raise newException(ValidationError, "block changed")
+    if not validateBlockUnchanged(result, preminedBlock):
+      raise newException(ValidationError, "block changed")
     if not validateBlock(chainDB, result, checkSeal):
       raise newException(ValidationError, "invalid block")
 
