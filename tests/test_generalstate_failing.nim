@@ -73,5 +73,28 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest623BC.json",
     "randomStatetest76BC.json",
     "randomStatetest79BC.json",
+
+    # bcForgedTest
+    "bcForkUncle.json",
+
+    # bcFrontierToHomestead
+    "HomesteadOverrideFrontier.json",
+    "blockChainFrontierWithLargerTDvsHomesteadBlockchain.json",
+    "blockChainFrontierWithLargerTDvsHomesteadBlockchain2.json",
+
+    # bcInvalidHeaderTest
+    "DifferentExtraData1025.json",
+    "DifficultyIsZero.json",
+    "ExtraData1024.json",
+    "ExtraData33.json",
+    "GasLimitHigherThan2p63m1.json",
+    "GasLimitIsZero.json",
+    "log1_wrongBlockNumber.json",
+    "wrongDifficulty.json",
+    "wrongGasLimit.json",
+    "wrongGasUsed.json",
+    "wrongMixHash.json",
+    "wrongNonce.json",
+    "wrongNumber.json",
   ]
   result = name in allowedFailingGeneralStateTests
