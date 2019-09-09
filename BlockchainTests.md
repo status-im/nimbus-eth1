@@ -36,10 +36,10 @@ OK: 3/4 Fail: 0/4 Skip: 1/4
 ## bcForgedTest
 ```diff
 + bcForkBlockTest.json                                            OK
-  bcForkUncle.json                                                Skip
++ bcForkUncle.json                                                OK
 + bcInvalidRLPTest.json                                           OK
 ```
-OK: 2/3 Fail: 0/3 Skip: 1/3
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## bcForkStressTest
 ```diff
 + AmIOnEIP150.json                                                OK
@@ -79,22 +79,22 @@ OK: 4/4 Fail: 0/4 Skip: 0/4
 OK: 1/1 Fail: 0/1 Skip: 0/1
 ## bcInvalidHeaderTest
 ```diff
-  DifferentExtraData1025.json                                     Skip
++ DifferentExtraData1025.json                                     OK
   DifficultyIsZero.json                                           Skip
-  ExtraData1024.json                                              Skip
-  ExtraData33.json                                                Skip
-  GasLimitHigherThan2p63m1.json                                   Skip
-  GasLimitIsZero.json                                             Skip
-  log1_wrongBlockNumber.json                                      Skip
++ ExtraData1024.json                                              OK
++ ExtraData33.json                                                OK
++ GasLimitHigherThan2p63m1.json                                   OK
++ GasLimitIsZero.json                                             OK
++ log1_wrongBlockNumber.json                                      OK
 + log1_wrongBloom.json                                            OK
 + timeDiff0.json                                                  OK
 + wrongCoinbase.json                                              OK
   wrongDifficulty.json                                            Skip
-  wrongGasLimit.json                                              Skip
++ wrongGasLimit.json                                              OK
   wrongGasUsed.json                                               Skip
   wrongMixHash.json                                               Skip
   wrongNonce.json                                                 Skip
-  wrongNumber.json                                                Skip
++ wrongNumber.json                                                OK
 + wrongParentHash.json                                            OK
 + wrongParentHash2.json                                           OK
 + wrongReceiptTrie.json                                           OK
@@ -103,7 +103,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + wrongTransactionsTrie.json                                      OK
 + wrongUncleHash.json                                             OK
 ```
-OK: 10/23 Fail: 0/23 Skip: 13/23
+OK: 18/23 Fail: 0/23 Skip: 5/23
 ## bcMultiChainTest
 ```diff
 + CallContractFromNotBestBlock.json                               OK
@@ -404,4 +404,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 5/5 Fail: 0/5 Skip: 0/5
 
 ---TOTAL---
-OK: 251/318 Fail: 0/318 Skip: 67/318
+OK: 260/318 Fail: 0/318 Skip: 58/318
