@@ -26,20 +26,6 @@ proc gasLimitBounds*(parent: BlockHeader): (GasInt, GasInt) =
     lowerBound = max(GAS_LIMIT_MINIMUM, parent.gasLimit - boundaryRange)
   return (lowerBound, upperBound)
 
-#[
-proc validate_gaslimit(header: BlockHeader):
-  let parent_header = getBlockHeaderByHash(header.parent_hash)
-  low_bound, high_bound = compute_gas_limit_bounds(parent_header)
-  if header.gas_limit < low_bound:
-      raise ValidationError(
-          "The gas limit on block {0} is too low: {1}. It must be at least {2}".format(
-              encode_hex(header.hash), header.gas_limit, low_bound))
-  elif header.gas_limit > high_bound:
-      raise ValidationError(
-          "The gas limit on block {0} is too high: {1}. It must be at most {2}".format(
-              encode_hex(header.hash), header.gas_limit, high_bound))
-]#
-
 proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
   #[
     For each block:

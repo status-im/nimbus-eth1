@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, json, os, tables, strutils, sets, strformat,
+  unittest, json, os, tables, strutils, sets, strformat, times,
   options,
   eth/[common, rlp, bloom], eth/trie/[db, trie_defs],
   ./test_helpers, ../premix/parser, test_config,
@@ -264,11 +264,183 @@ proc processBlock(vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
 func validateBlockUnchanged(a, b: PlainBlock): bool =
   result = rlp.encode(a) == rlp.encode(b)
 
-func validateBlock(blck: PlainBlock): bool =
-  # TODO: implement block validation
+#[
+def check_pow(block_number: int,
+              mining_hash: Hash32,
+              mix_hash: Hash32,
+              nonce: bytes,
+              difficulty: int) -> None:
+    validate_length(mix_hash, 32, title="Mix Hash")
+    validate_length(mining_hash, 32, title="Mining Hash")
+    validate_length(nonce, 8, title="POW Nonce")
+    cache = get_cache(block_number)
+    mining_output = hashimoto_light(
+        block_number, cache, mining_hash, big_endian_to_int(nonce))
+    if mining_output[b'mix digest'] != mix_hash:
+        raise newException(ValidationError,(
+            "mix hash mismatch; expected: {} != actual: {}. "
+            "Mix hash calculated from block #{}, mine hash {}, nonce {}, difficulty {}, "
+            "cache hash {}".format(
+                encode_hex(mining_output[b'mix digest']),
+                encode_hex(mix_hash),
+                block_number,
+                encode_hex(mining_hash),
+                encode_hex(nonce),
+                difficulty,
+                encode_hex(keccak(cache)),
+            )
+        )
+    result = big_endian_to_int(mining_output[b'result'])
+    validate_lte(result, 2**256 // difficulty, title="POW Difficulty")
+]#
+
+func validateSeal(header: BlockHeader) =
+    #def validate_seal(cls, header: BlockHeader) -> None:
+    #    """
+    #    Validate the seal on the given header.
+    #    """
+    #    check_pow(
+    #        header.block_number, header.mining_hash,
+    #        header.mix_hash, header.nonce, header.difficulty)
+  discard
+
+func validateGasLimit(gasLimit, parentGasLimit: GasInt) =
+  if gasLimit < GAS_LIMIT_MINIMUM:
+    raise newException(ValidationError, "Gas limit is below minimum")
+  let diff = gasLimit - parentGasLimit
+  if diff > (parentGasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR):
+    raise newException(ValidationError, "Gas limit difference to parent is too big")
+
+func validateHeader(header, parentHeader: BlockHeader, checkSeal: bool) =
+  if header.extraData.len > 32:
+    raise newException(ValidationError, "BlockHeader.extraData larger than 32 bytes")
+
+  validateGasLimit(header.gasLimit, parentHeader.gasLimit)
+
+  if header.blockNumber != parentHeader.blockNumber + 1:
+    raise newException(ValidationError, "Blocks must be numbered consecutively.")
+
+  if header.timestamp.toUnix <= parentHeader.timestamp.toUnix:
+    raise newException(ValidationError, "timestamp must be strictly later than parent")
+
+  if checkSeal:
+    validateSeal(header)
+
+func validateUncle(currBlock, uncle, uncleParent: BlockHeader) =
+  if uncle.blockNumber >= currBlock.blockNumber:
+    raise newException(ValidationError, "uncle block number larger than current block number")
+
+  if uncle.blockNumber != uncleParent.blockNumber + 1:
+    raise newException(ValidationError, "Uncle number is not one above ancestor's number")
+
+  if uncle.timestamp.toUnix < uncleParent.timestamp.toUnix:
+    raise newException(ValidationError, "Uncle timestamp is before ancestor's timestamp")
+
+  if uncle.gasUsed > uncle.gasLimit:
+    raise newException(ValidationError, "Uncle's gas usage is above the limit")
+
+proc validateGasLimit(chainDB: BaseChainDB, header: BlockHeader) =
+  let parentHeader = chainDB.getBlockHeader(header.parentHash)
+  let (lowBound, highBound) = gasLimitBounds(parentHeader)
+
+  if header.gasLimit < lowBound:
+      raise newException(ValidationError, "The gas limit is too low")
+  elif header.gasLimit > highBound:
+      raise newException(ValidationError, "The gas limit is too high")
+
+proc validateUncles(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool) =
+  let hasUncles = currBlock.uncles.len > 0
+  let shouldHaveUncles = currBlock.header.ommersHash != EMPTY_UNCLE_HASH
+
+  if not hasUncles and not shouldHaveUncles:
+    # optimization to avoid loading ancestors from DB, since the block has no uncles
+    return
+  elif hasUncles and not shouldHaveUncles:
+    raise newException(ValidationError, "Block has uncles but header suggests uncles should be empty")
+  elif shouldHaveUncles and not hasUncles:
+    raise newException(ValidationError, "Header suggests block should have uncles but block has none")
+
+  # Check for duplicates
+  var uncleSet = initSet[Hash256]()
+  for uncle in currBlock.uncles:
+    let uncleHash = uncle.hash
+    if uncleHash in uncleSet:
+      raise newException(ValidationError, "Block contains duplicate uncles")
+    else:
+      uncleSet.incl uncleHash
+
+  let recentAncestorHashes = chainDB.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, currBlock.header)
+  let recentUncleHashes = chainDB.getUncleHashes(recentAncestorHashes)
+  let blockHash =currBlock.header.hash
+
+  for uncle in currBlock.uncles:
+    let uncleHash = uncle.hash
+
+    if uncleHash == blockHash:
+      raise newException(ValidationError, "Uncle has same hash as block")
+
+    # ensure the uncle has not already been included.
+    if uncleHash in recentUncleHashes:
+      raise newException(ValidationError, "Duplicate uncle")
+
+    # ensure that the uncle is not one of the canonical chain blocks.
+    if uncleHash in recentAncestorHashes:
+      raise newException(ValidationError, "Uncle cannot be an ancestor")
+
+    # ensure that the uncle was built off of one of the canonical chain
+    # blocks.
+    if (uncle.parentHash notin recentAncestorHashes) or
+       (uncle.parentHash == currBlock.header.parentHash):
+      raise newException(ValidationError, "Uncle's parent is not an ancestor")
+
+    # Now perform VM level validation of the uncle
+    if checkSeal:
+      validateSeal(uncle)
+
+    let uncleParent = chainDB.getBlockHeader(uncle.parentHash)
+    validateUncle(currBlock.header, uncle, uncleParent)
+
+func isGenesis(currBlock: PlainBlock): bool =
+  result = currBlock.header.blockNumber == 0.u256
+
+proc validateBlock(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool): bool =
+  if currBlock.isGenesis:
+    if currBlock.header.extraData.len > 32:
+      raise newException(ValidationError, "BlockHeader.extraData larger than 32 bytes")
+  else:
+    let parentHeader = chainDB.getBlockHeader(currBlock.header.parentHash)
+    validateHeader(currBlock.header, parentHeader, checkSeal)
+
+  if currBlock.uncles.len > MAX_UNCLES:
+    raise newException(ValidationError, "Number of uncles exceed limit.")
+#[
+if not self.chaindb.exists(block.header.state_root):
+            raise newException(ValidationError,
+                "`state_root` was not found in the db.\n"
+                "- state_root: {0}".format(
+                    block.header.state_root,
+                )
+            )
+        local_uncle_hash = keccak(rlp.encode(block.uncles))
+        if local_uncle_hash != block.header.uncles_hash:
+            raise newException(ValidationError,
+                "`uncles_hash` and block `uncles` do not match.\n"
+                " - num_uncles       : {0}\n"
+                " - block uncle_hash : {1}\n"
+                " - header uncle_hash: {2}".format(
+                    len(block.uncles),
+                    local_uncle_hash,
+                    block.header.uncles_hash,
+                )
+            )
+]#
+
+  #VM_class.validate_header(block.header, parent_block.header, check_seal=True)
+  #      self.validate_uncles(block)
+  #      self.validate_gaslimit(block.header)
   result = true
 
-proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, validation = true): PlainBlock =
+proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, checkSeal: bool, validation = true): PlainBlock =
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
   let baseHeaderForImport = generateHeaderFromParentHeader(parentHeader,
       preminedBlock.header.coinbase, fork, some(preminedBlock.header.timestamp), @[])
@@ -276,28 +448,32 @@ proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, va
   deepCopy(result, preminedBlock)
   var vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB)
   processBlock(vmState, result, fork)
-
-  deepCopy(result.header, vmState.blockHeader)
+  result.header = vmState.blockHeader
+  result.header.parentHash = parentHeader.hash
 
   if validation:
-    if not validateBlockUnchanged(result, preminedBlock):
-      raise newException(ValidationError, "block changed")
-    if not validateBlock(result):
+    #if not validateBlockUnchanged(result, preminedBlock):
+      #raise newException(ValidationError, "block changed")
+    if not validateBlock(chainDB, result, checkSeal):
       raise newException(ValidationError, "invalid block")
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
 proc applyFixtureBlockToChain(tb: TesterBlock,
-  chainDB: BaseChainDB, fork: Fork, validation = true): (PlainBlock, PlainBlock, Blob) =
+  chainDB: BaseChainDB, fork: Fork, checkSeal: bool, validation = true): (PlainBlock, PlainBlock, Blob) =
   var
     preminedBlock = rlp.decode(tb.headerRLP, PlainBlock)
     minedBlock = chainDB.importBlock(preminedBlock, fork, validation)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
 
+func shouldCheckSeal(tester: Tester): bool =
+  result = false
+
 proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestStatus) =
   discard chainDB.persistHeaderToDb(tester.genesisBlockHeader)
   check chainDB.getCanonicalHead().blockHash == tester.genesisBlockHeader.blockHash
+  let checkSeal = tester.shouldCheckSeal
 
   for testerBlock in tester.blocks:
     let shouldBeGoodBlock = testerBlock.blockHeader.isSome
@@ -307,13 +483,14 @@ proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestSta
       let fork = vmConfigToFork(tester.vmConfig, blockNumber)
 
       let (preminedBlock, minedBlock, blockRlp) = applyFixtureBlockToChain(
-          testerBlock, chainDB, fork, validation = false)  # we manually validate below
-      check validateBlock(preminedBlock) == true
+          testerBlock, chainDB, fork, checkSeal, validation = false)  # we manually validate below
+      check validateBlock(chainDB, preminedBlock, checkSeal) == true
     else:
       var noError = true
       try:
         let fork = vmConfigToFork(tester.vmConfig, 1.u256)
-        let (_, _, _) = applyFixtureBlockToChain(testerBlock, chainDB, fork, validation = true)
+        let (_, _, _) = applyFixtureBlockToChain(testerBlock,
+          chainDB, fork, checkSeal, validation = true)
       except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
         # failure is expected on this bad block
         noError = false
