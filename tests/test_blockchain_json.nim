@@ -451,7 +451,7 @@ proc validateUncles(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool
     validateUncle(currBlock.header, uncle, uncleParent)
 
 func isGenesis(currBlock: PlainBlock): bool =
-  result = currBlock.header.blockNumber == 0.u256
+  result = currBlock.header.blockNumber == 0.u256 and currBlock.header.parentHash == GENESIS_PARENT_HASH
 
 proc validateBlock(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool): bool =
   if currBlock.isGenesis:
