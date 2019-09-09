@@ -259,6 +259,9 @@ proc processBlock(vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
       raise newException(ValidationError, "could not get sender")
     vmState.receipts[txIndex] = makeReceipt(vmState, fork)
 
+  if vmState.cumulativeGasUsed != minedBlock.header.gasUsed:
+    raise newException(ValidationError, "wrong gas used in header")
+
   assignBlockRewards(minedBlock, vmState, fork, vmState.chainDB)
 
 func validateBlockUnchanged(a, b: PlainBlock): bool =
