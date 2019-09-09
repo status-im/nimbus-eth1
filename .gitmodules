@@ -145,3 +145,5 @@
 [submodule "vendor/ethash"]
 	path = vendor/ethash
 	url = https://github.com/status-im/nim-ethash
+  ignore = dirty
+	branch = master
