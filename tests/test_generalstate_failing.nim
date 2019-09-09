@@ -82,7 +82,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     # bcInvalidHeaderTest
     "DifficultyIsZero.json",
     "wrongDifficulty.json",
-    "wrongGasUsed.json",
     "wrongMixHash.json",
     "wrongNonce.json",
 

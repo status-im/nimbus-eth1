@@ -91,7 +91,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + wrongCoinbase.json                                              OK
   wrongDifficulty.json                                            Skip
 + wrongGasLimit.json                                              OK
-  wrongGasUsed.json                                               Skip
++ wrongGasUsed.json                                               OK
   wrongMixHash.json                                               Skip
   wrongNonce.json                                                 Skip
 + wrongNumber.json                                                OK
@@ -103,7 +103,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + wrongTransactionsTrie.json                                      OK
 + wrongUncleHash.json                                             OK
 ```
-OK: 18/23 Fail: 0/23 Skip: 5/23
+OK: 19/23 Fail: 0/23 Skip: 4/23
 ## bcMultiChainTest
 ```diff
 + CallContractFromNotBestBlock.json                               OK
@@ -404,4 +404,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 5/5 Fail: 0/5 Skip: 0/5
 
 ---TOTAL---
-OK: 260/318 Fail: 0/318 Skip: 58/318
+OK: 261/318 Fail: 0/318 Skip: 57/318
