@@ -9,6 +9,7 @@ import
   unittest, json, os, tables, strutils, sets, strformat, times,
   options,
   eth/[common, rlp, bloom], eth/trie/[db, trie_defs],
+  ethash, stew/endians2, nimcrypto,
   ./test_helpers, ../premix/parser, test_config,
   ../nimbus/vm/interpreter/vm_forks,
   ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants],
@@ -46,6 +47,21 @@ type
     vmConfig: VMConfig
     good: bool
     debugMode: bool
+
+  MiningHeader* = object
+    parentHash*:    Hash256
+    ommersHash*:    Hash256
+    coinbase*:      EthAddress
+    stateRoot*:     Hash256
+    txRoot*:        Hash256
+    receiptRoot*:   Hash256
+    bloom*:         common.BloomFilter
+    difficulty*:    DifficultyInt
+    blockNumber*:   BlockNumber
+    gasLimit*:      GasInt
+    gasUsed*:       GasInt
+    timestamp*:     EthTime
+    extraData*:     Blob
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false)
 
@@ -267,45 +283,74 @@ proc processBlock(vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
 func validateBlockUnchanged(a, b: PlainBlock): bool =
   result = rlp.encode(a) == rlp.encode(b)
 
-#[
-def check_pow(block_number: int,
-              mining_hash: Hash32,
-              mix_hash: Hash32,
-              nonce: bytes,
-              difficulty: int) -> None:
-    validate_length(mix_hash, 32, title="Mix Hash")
-    validate_length(mining_hash, 32, title="Mining Hash")
-    validate_length(nonce, 8, title="POW Nonce")
-    cache = get_cache(block_number)
-    mining_output = hashimoto_light(
-        block_number, cache, mining_hash, big_endian_to_int(nonce))
-    if mining_output[b'mix digest'] != mix_hash:
-        raise newException(ValidationError,(
-            "mix hash mismatch; expected: {} != actual: {}. "
-            "Mix hash calculated from block #{}, mine hash {}, nonce {}, difficulty {}, "
-            "cache hash {}".format(
-                encode_hex(mining_output[b'mix digest']),
-                encode_hex(mix_hash),
-                block_number,
-                encode_hex(mining_hash),
-                encode_hex(nonce),
-                difficulty,
-                encode_hex(keccak(cache)),
-            )
-        )
-    result = big_endian_to_int(mining_output[b'result'])
-    validate_lte(result, 2**256 // difficulty, title="POW Difficulty")
-]#
+type Hash512 = MDigest[512]
+var cacheByEpoch = initOrderedTable[uint64, seq[Hash512]]()
+const CACHE_MAX_ITEMS = 10
 
-func validateSeal(header: BlockHeader) =
-    #def validate_seal(cls, header: BlockHeader) -> None:
-    #    """
-    #    Validate the seal on the given header.
-    #    """
-    #    check_pow(
-    #        header.block_number, header.mining_hash,
-    #        header.mix_hash, header.nonce, header.difficulty)
-  discard
+proc mkCacheBytes(blockNumber: uint64): seq[Hash512] =
+  mkcache(getCacheSize(blockNumber), getSeedhash(blockNumber))
+
+proc getCache(blockNumber: uint64): seq[Hash512] =
+  # TODO: this is very inefficient
+  let epochIndex = blockNumber div EPOCH_LENGTH
+
+  # Get the cache if already generated, marking it as recently used
+  if epochIndex in cacheByEpoch:
+    let c = cacheByEpoch[epochIndex]
+    cacheByEpoch.del(epochIndex)  # pop and append at end
+    cacheByEpoch[epochIndex] = c
+    return c
+
+  # Generate the cache if it was not already in memory
+  # Simulate requesting mkcache by block number: multiply index by epoch length
+  let c = mkCacheBytes(epochIndex * EPOCH_LENGTH)
+  cacheByEpoch[epochIndex] = c
+
+  # Limit memory usage for cache
+  if cacheByEpoch.len > CACHE_MAX_ITEMS:
+    cacheByEpoch.del(epochIndex)
+
+  shallowCopy(result, c)
+
+proc checkPOW(blockNumber: Uint256, miningHash, mixHash: Hash256, nonce: BlockNonce, difficulty: DifficultyInt) =
+  let blockNumber = blockNumber.truncate(uint64)
+  let cache = blockNumber.getCache()
+  let y = uint64.fromBytesBE(nonce)
+
+  when false:
+    # TODO: enable this when ethash#13 fixed
+    let miningOutput = hashimotoLight(blockNumber, cache, miningHash, uint64.fromBytesBE(nonce))
+    if miningOutput.mixDigest != mixHash:
+      raise newException(ValidationError, "mixHash mismatch")
+
+    let value = Uint256.fromBytesBE(miningOutput.value.data)
+    if value > Uint256.high div difficulty:
+      raise newException(ValidationError, "mining difficulty error")
+
+func toMiningHeader(header: BlockHeader): MiningHeader =
+  result.parentHash  = header.parentHash
+  result.ommersHash  = header.ommersHash
+  result.coinbase    = header.coinbase
+  result.stateRoot   = header.stateRoot
+  result.txRoot      = header.txRoot
+  result.receiptRoot = header.receiptRoot
+  result.bloom       = header.bloom
+  result.difficulty  = header.difficulty
+  result.blockNumber = header.blockNumber
+  result.gasLimit    = header.gasLimit
+  result.gasUsed     = header.gasUsed
+  result.timestamp   = header.timestamp
+  result.extraData   = header.extraData
+
+func hash(header: MiningHeader): Hash256 =
+  keccakHash(rlp.encode(header))
+
+proc validateSeal(header: BlockHeader) =
+  let miningHeader = header.toMiningHeader
+  let miningHash = miningHeader.hash
+
+  checkPOW(header.blockNumber, miningHash,
+           header.mixDigest, header.nonce, header.difficulty)
 
 func validateGasLimit(gasLimit, parentGasLimit: GasInt) =
   if gasLimit < GAS_LIMIT_MINIMUM:
@@ -316,7 +361,7 @@ func validateGasLimit(gasLimit, parentGasLimit: GasInt) =
   if diff > (parentGasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR):
     raise newException(ValidationError, "Gas limit difference to parent is too big")
 
-func validateHeader(header, parentHeader: BlockHeader, checkSeal: bool) =
+proc validateHeader(header, parentHeader: BlockHeader, checkSeal: bool) =
   if header.extraData.len > 32:
     raise newException(ValidationError, "BlockHeader.extraData larger than 32 bytes")
 
@@ -412,6 +457,7 @@ proc validateBlock(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool)
   if currBlock.isGenesis:
     if currBlock.header.extraData.len > 32:
       raise newException(ValidationError, "BlockHeader.extraData larger than 32 bytes")
+    return true
 
   let parentHeader = chainDB.getBlockHeader(currBlock.header.parentHash)
   validateHeader(currBlock.header, parentHeader, checkSeal)
