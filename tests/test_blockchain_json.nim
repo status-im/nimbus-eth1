@@ -307,6 +307,8 @@ func validateSeal(header: BlockHeader) =
 func validateGasLimit(gasLimit, parentGasLimit: GasInt) =
   if gasLimit < GAS_LIMIT_MINIMUM:
     raise newException(ValidationError, "Gas limit is below minimum")
+  if gasLimit > GAS_LIMIT_MAXIMUM:
+    raise newException(ValidationError, "Gas limit is above maximum")
   let diff = gasLimit - parentGasLimit
   if diff > (parentGasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR):
     raise newException(ValidationError, "Gas limit difference to parent is too big")
@@ -343,10 +345,10 @@ proc validateGasLimit(chainDB: BaseChainDB, header: BlockHeader) =
   let parentHeader = chainDB.getBlockHeader(header.parentHash)
   let (lowBound, highBound) = gasLimitBounds(parentHeader)
 
-  if header.gasLimit < lowBound:
-      raise newException(ValidationError, "The gas limit is too low")
-  elif header.gasLimit > highBound:
-      raise newException(ValidationError, "The gas limit is too high")
+  if header.gasLimit.u256 < lowBound:
+    raise newException(ValidationError, "The gas limit is too low")
+  elif header.gasLimit.u256 > highBound:
+    raise newException(ValidationError, "The gas limit is too high")
 
 proc validateUncles(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool) =
   let hasUncles = currBlock.uncles.len > 0
@@ -407,37 +409,19 @@ proc validateBlock(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool)
   if currBlock.isGenesis:
     if currBlock.header.extraData.len > 32:
       raise newException(ValidationError, "BlockHeader.extraData larger than 32 bytes")
-  else:
-    let parentHeader = chainDB.getBlockHeader(currBlock.header.parentHash)
-    validateHeader(currBlock.header, parentHeader, checkSeal)
+
+  let parentHeader = chainDB.getBlockHeader(currBlock.header.parentHash)
+  validateHeader(currBlock.header, parentHeader, checkSeal)
 
   if currBlock.uncles.len > MAX_UNCLES:
     raise newException(ValidationError, "Number of uncles exceed limit.")
-#[
-if not self.chaindb.exists(block.header.state_root):
-            raise newException(ValidationError,
-                "`state_root` was not found in the db.\n"
-                "- state_root: {0}".format(
-                    block.header.state_root,
-                )
-            )
-        local_uncle_hash = keccak(rlp.encode(block.uncles))
-        if local_uncle_hash != block.header.uncles_hash:
-            raise newException(ValidationError,
-                "`uncles_hash` and block `uncles` do not match.\n"
-                " - num_uncles       : {0}\n"
-                " - block uncle_hash : {1}\n"
-                " - header uncle_hash: {2}".format(
-                    len(block.uncles),
-                    local_uncle_hash,
-                    block.header.uncles_hash,
-                )
-            )
-]#
 
-  #VM_class.validate_header(block.header, parent_block.header, check_seal=True)
-  #      self.validate_uncles(block)
-  #      self.validate_gaslimit(block.header)
+  if not chainDB.exists(currBlock.header.stateRoot):
+    raise newException(ValidationError, "`state_root` was not found in the db.")
+
+  validateUncles(chainDB, currBlock, checkSeal)
+  validateGaslimit(chainDB, currBlock.header)
+
   result = true
 
 proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, checkSeal: bool, validation = true): PlainBlock =
@@ -447,8 +431,9 @@ proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, ch
 
   deepCopy(result, preminedBlock)
   var vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB)
+
   processBlock(vmState, result, fork)
-  result.header = vmState.blockHeader
+  result.header.stateRoot = vmState.blockHeader.stateRoot
   result.header.parentHash = parentHeader.hash
 
   if validation:
@@ -468,7 +453,8 @@ proc applyFixtureBlockToChain(tb: TesterBlock,
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
 
 func shouldCheckSeal(tester: Tester): bool =
-  result = false
+  if tester.sealEngine.isSome:
+    result = tester.sealEngine.get() != NoProof
 
 proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestStatus) =
   discard chainDB.persistHeaderToDb(tester.genesisBlockHeader)
