@@ -32,7 +32,7 @@ const
   UNCLE_DEPTH_PENALTY_FACTOR* =             8.u256
 
   MAX_UNCLE_DEPTH* =                        6.u256
-  MAX_UNCLES* =                             2.u256
+  MAX_UNCLES* =                             2
 
   EMPTY_UNCLE_HASH* =                       "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
 
