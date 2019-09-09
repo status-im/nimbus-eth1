@@ -142,3 +142,6 @@
 	url = https://github.com/status-im/nimbus-build-system.git
 	ignore = dirty
 	branch = master
+[submodule "vendor/ethash"]
+	path = vendor/ethash
+	url = https://github.com/status-im/nim-ethash
