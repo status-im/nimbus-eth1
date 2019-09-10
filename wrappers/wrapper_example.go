@@ -4,10 +4,16 @@ import (
 	"fmt"
 	"runtime"
 	"time"
+	"unsafe"
 )
 
-// #cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus -lm
-// #include "libnimbus.h"
+
+/*
+#cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus -lm
+#include "libnimbus.h"
+
+void receiveHandler_cgo(received_message * msg); // Forward declaration.
+*/
 import "C"
 
 // Arrange that main.main runs on main thread.
@@ -24,11 +30,16 @@ func poll() {
 	}
 }
 
+//export receiveHandler
+func receiveHandler(msg *C.received_message) {
+	fmt.Printf("[nim-status] received message %s\n", C.GoStringN((*C.char)(msg.decoded), (C.int)(msg.decodedLen)) )
+}
+
 func Start() {
 	C.NimMain()
 	fmt.Println("[nim-status] Start 1")
 	fmt.Println(C.nimbus_start(30306))
-	//C.nimbus_subscribe(C.CString("status-test-c"), nil)
+	C.nimbus_subscribe(C.CString("status-test-go"), (C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)))
 	fmt.Println("[nim-status] Start 2")
 
 	peer1 := "enode://2d3e27d7846564f9b964308038dfadd4076e4373ac938e020708ad8819fd4fd90e5eb8314140768f782db704cb313b60707b968f8b61108a6fecd705b041746d@192.168.0.33:30303"
@@ -51,10 +62,10 @@ func ListenAndPost() {
 		t := time.Now().UnixNano() / int64(time.Millisecond)
 		i = i + 1
 		time.Sleep(1 * time.Microsecond)
-		message := fmt.Sprintf("[\"~#c4\",[\"Message:%d\",\"text/plain\",\"~:public-group-user-message\",%d,%d,[\"^ \",\"~:chat-id\",\"status-test-c\",\"~:text\",\"Message:%d\"]]]", i, t*100, t, i)
+		message := fmt.Sprintf("[\"~#c4\",[\"Message:%d\",\"text/plain\",\"~:public-group-user-message\",%d,%d,[\"^ \",\"~:chat-id\",\"status-test-go\",\"~:text\",\"Message:%d\"]]]", i, t*100, t, i)
 		if i%1000 == 0 {
 			fmt.Println("[nim-status] posting", message)
-			C.nimbus_post(C.CString("status-test-c"), C.CString(message))
+			C.nimbus_post(C.CString("status-test-go"), C.CString(message))
 		}
 	}
 }
