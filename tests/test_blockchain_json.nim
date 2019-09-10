@@ -47,6 +47,8 @@ type
     vmConfig: VMConfig
     good: bool
     debugMode: bool
+    trace: bool
+    vmState: BaseVMState
 
   MiningHeader* = object
     parentHash*:    Hash256
@@ -63,7 +65,7 @@ type
     timestamp*:     EthTime
     extraData*:     Blob
 
-proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false)
+proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
 func normalizeNumber(n: JsonNode): JsonNode =
   let str = n.getStr
@@ -473,16 +475,19 @@ proc validateBlock(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool)
 
   result = true
 
-proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, checkSeal: bool, validation = true): PlainBlock =
+proc importBlock(tester: var Tester, chainDB: BaseChainDB,
+  preminedBlock: PlainBlock, fork: Fork, checkSeal, validation = true): PlainBlock =
+
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
   let baseHeaderForImport = generateHeaderFromParentHeader(parentHeader,
       preminedBlock.header.coinbase, fork, some(preminedBlock.header.timestamp), @[])
 
   deepCopy(result, preminedBlock)
-  var vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB)
+  let tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
+  tester.vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB, tracerFlags)
 
-  processBlock(vmState, result, fork)
-  result.header.stateRoot = vmState.blockHeader.stateRoot
+  processBlock(tester.vmState, result, fork)
+  result.header.stateRoot = tester.vmState.blockHeader.stateRoot
   result.header.parentHash = parentHeader.hash
 
   if validation:
@@ -493,11 +498,11 @@ proc importBlock(chainDB: BaseChainDB, preminedBlock: PlainBlock, fork: Fork, ch
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
-proc applyFixtureBlockToChain(tb: TesterBlock,
-  chainDB: BaseChainDB, fork: Fork, checkSeal: bool, validation = true): (PlainBlock, PlainBlock, Blob) =
+proc applyFixtureBlockToChain(tester: var Tester, tb: TesterBlock,
+  chainDB: BaseChainDB, fork: Fork, checkSeal, validation = true): (PlainBlock, PlainBlock, Blob) =
   var
     preminedBlock = rlp.decode(tb.headerRLP, PlainBlock)
-    minedBlock = chainDB.importBlock(preminedBlock, fork, validation)
+    minedBlock = tester.importBlock(chainDB, preminedBlock, fork, validation)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
 
@@ -505,7 +510,7 @@ func shouldCheckSeal(tester: Tester): bool =
   if tester.sealEngine.isSome:
     result = tester.sealEngine.get() != NoProof
 
-proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestStatus) =
+proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var TestStatus) =
   discard chainDB.persistHeaderToDb(tester.genesisBlockHeader)
   check chainDB.getCanonicalHead().blockHash == tester.genesisBlockHeader.blockHash
   let checkSeal = tester.shouldCheckSeal
@@ -517,14 +522,14 @@ proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestSta
       let blockNumber = testerBlock.blockHeader.get().blockNumber
       let fork = vmConfigToFork(tester.vmConfig, blockNumber)
 
-      let (preminedBlock, minedBlock, blockRlp) = applyFixtureBlockToChain(
+      let (preminedBlock, minedBlock, blockRlp) = tester.applyFixtureBlockToChain(
           testerBlock, chainDB, fork, checkSeal, validation = false)  # we manually validate below
       check validateBlock(chainDB, preminedBlock, checkSeal) == true
     else:
       var noError = true
       try:
         let fork = vmConfigToFork(tester.vmConfig, 1.u256)
-        let (_, _, _) = applyFixtureBlockToChain(testerBlock,
+        let (_, _, _) = tester.applyFixtureBlockToChain(testerBlock,
           chainDB, fork, checkSeal, validation = true)
       except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
         # failure is expected on this bad block
@@ -533,15 +538,51 @@ proc runTester(tester: Tester, chainDB: BaseChainDB, testStatusIMPL: var TestSta
       # Block should have caused a validation error
       check noError == false
 
-proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false) =
+proc dumpAccount(accountDb: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
+  result = %{
+    "name": %name,
+    "address": %($address),
+    "nonce": %toHex(accountDb.getNonce(address)),
+    "balance": %accountDb.getBalance(address).toHex(),
+    "codehash": %($accountDb.getCodeHash(address)),
+    "storageRoot": %($accountDb.getStorageRoot(address))
+  }
+
+proc dumpDebugData(tester: Tester, fixture: JsonNode, fixtureName: string, fixtureIndex: int, success: bool) =
+  let accountList = if fixture["postState"].kind == JObject: fixture["postState"] else: fixture["pre"]
+  let vmState = tester.vmState
+  var accounts = newJObject()
+  var i = 0
+  for ac, _ in accountList:
+    let account = ethAddressFromHex(ac)
+    accounts[$account] = dumpAccount(vmState.readOnlyStateDB, account, "acc" & $i)
+    inc i
+
+  let tracingResult = if tester.trace: vmState.getTracingResult() else: %[]
+  let debugData = %{
+    "structLogs": tracingResult,
+    "accounts": accounts
+  }
+
+  let status = if success: "_success" else: "_failed"
+  writeFile("debug_" & fixtureName & "_" & $fixtureIndex & status & ".json", debugData.pretty())
+
+proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false) =
   # 1 - mine the genesis block
   # 2 - loop over blocks:
   #     - apply transactions
   #     - mine block
   # 3 - diff resulting state with expected state
   # 4 - check that all previous blocks were valid
+  let specifyIndex = getConfiguration().index
+  var fixtureIndex = 0
+  var fixtureTested = false
 
   for fixtureName, fixture in node:
+    inc fixtureIndex
+    if specifyIndex > 0 and fixtureIndex != specifyIndex:
+      continue
+
     var tester = parseTester(fixture, testStatusIMPL)
     var chainDB = newBaseChainDB(newMemoryDb(), false)
 
@@ -558,11 +599,26 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     check obtainedHash == $(tester.genesisBlockHeader.stateRoot)
 
     tester.debugMode = debugMode
-    tester.runTester(chainDB, testStatusIMPL)
+    tester.trace = trace
 
-    let latestBlockHash = chainDB.getCanonicalHead().blockHash
-    if latestBlockHash != tester.lastBlockHash:
-      verifyStateDB(fixture["postState"], vmState.readOnlyStateDB)
+    var success = true
+    try:
+      tester.runTester(chainDB, testStatusIMPL)
+
+      let latestBlockHash = chainDB.getCanonicalHead().blockHash
+      if latestBlockHash != tester.lastBlockHash:
+        verifyStateDB(fixture["postState"], tester.vmState.readOnlyStateDB)
+    except ValidationError as E:
+      echo "ERROR: ", E.msg
+      success = false
+    finally:
+      if tester.debugMode:
+        tester.dumpDebugData(fixture, fixtureName, fixtureIndex, success)
+    fixtureTested = true
+    check success == true
+
+  if not fixtureTested:
+    echo getConfiguration().testSubject, " not tested at all, wrong index?"
 
 proc main() =
   if paramCount() == 0:
@@ -579,7 +635,7 @@ proc main() =
     let path = "tests" / "fixtures" / "BlockChainTests"
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
-    testFixture(n, testStatusIMPL, debugMode = true)
+    testFixture(n, testStatusIMPL, debugMode = true, config.trace)
 
 when isMainModule:
   var message: string
