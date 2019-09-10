@@ -3,13 +3,15 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <time.h>
+#include <string.h>
 
 #include "libnimbus.h"
 
 void NimMain();
 
 void print_msg(received_message* msg) {
-  printf("Got message! %ld\n", msg->decodedLen);
+  // Note: early null chars will terminate string early
+  printf("received message %.*s\n", (int)msg->decodedLen, msg->decoded);
 }
 
 const char* channel = "status-test-c";

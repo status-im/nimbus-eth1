@@ -86,7 +86,7 @@ wrappers: | build deps libnimbus.so go-checks
 	echo -e $(BUILD_MSG) "build/C_wrapper_example" && \
 		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_example
 	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
-		go build -linkshared -o build/go_wrapper_example wrappers/wrapper_example.go
+		go build -linkshared -o build/go_wrapper_example wrappers/wrapper_example.go wrappers/cfuncs.go
 
 libnimbus.a: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
@@ -97,5 +97,5 @@ wrappers-static: | build deps libnimbus.a go-checks
 	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
 		$(CC) wrappers/wrapper_example.c -static -pthread -Lbuild -lnimbus -lm -ldl -lpcre -g -o build/C_wrapper_example_static
 	echo -e $(BUILD_MSG) "build/go_wrapper_example_static" && \
-		go build -ldflags "-linkmode external -extldflags '-static -ldl -lpcre'" -o build/go_wrapper_example_static wrappers/wrapper_example.go
+		go build -ldflags "-linkmode external -extldflags '-static -ldl -lpcre'" -o build/go_wrapper_example_static wrappers/wrapper_example.go wrappers/cfuncs.go
 
