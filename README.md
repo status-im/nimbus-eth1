@@ -68,7 +68,7 @@ pakku -S pcre-static
 
 #### Developer tools
 
-GNU Make, Bash and the usual POSIX utilities
+GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
 
 #### Obtaining the prerequisites through the Nix package manager
 
