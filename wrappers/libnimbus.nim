@@ -74,7 +74,6 @@ let whisperKeys = newWhisperKeys()
 # TODO: Return filter ID if we ever want to unsubscribe
 proc subscribeChannel(
     channel: string, handler: proc (msg: ReceivedMessage) {.gcsafe.}) =
-  setupForeignThreadGc()
   var ctx: HMAC[sha256]
   var symKey: SymKey
   discard ctx.pbkdf2(channel, "", 65356, symKey)
@@ -87,8 +86,8 @@ proc subscribeChannel(
   info "Subscribing to channel", channel, topic, symKey
 
   discard node.subscribeFilter(newFilter(symKey = some(symKey),
-                                          topics = @[topic]),
-                              handler)
+                                         topics = @[topic]),
+                                         handler)
 
 # proc handler(msg: ReceivedMessage) {.gcsafe.} =
 #   try:
@@ -111,6 +110,7 @@ proc subscribeChannel(
 
 proc nimbus_start(port: uint16 = 30303) {.exportc.} =
   setupForeignThreadGc()
+
   let address = Address(
     udpPort: port.Port, tcpPort: port.Port, ip: parseIpAddress("0.0.0.0"))
 
@@ -135,12 +135,18 @@ proc nimbus_start(port: uint16 = 30303) {.exportc.} =
 
     asyncCheck node.peerPool.connectToNode(whisperNode)
 
+  tearDownForeignThreadGc()
+
 proc nimbus_poll() {.exportc.} =
   setupForeignThreadGc()
+
   poll()
 
-# TODO: Consider better naming to understand how it relates to public channels etc
-proc nimbus_subscribe(channel: cstring, handler: proc (msg: ptr CReceivedMessage) {.gcsafe, cdecl.}) {.exportc.} =
+  tearDownForeignThreadGc()
+
+proc nimbus_join_public_chat(channel: cstring,
+                             handler: proc (msg: ptr CReceivedMessage)
+                             {.gcsafe, cdecl.}) {.exportc.} =
   setupForeignThreadGc()
 
   if handler.isNil:
@@ -161,10 +167,13 @@ proc nimbus_subscribe(channel: cstring, handler: proc (msg: ptr CReceivedMessage
 
     subscribeChannel($channel, c_handler)
 
+  tearDownForeignThreadGc()
+
 # TODO: Add signing key as parameter
 # TODO: How would we do key management? In nimbus (like in rpc) or in status go?
-proc nimbus_post(channel: cstring, payload: cstring) {.exportc.} =
+proc nimbus_post_public(channel: cstring, payload: cstring) {.exportc.} =
   setupForeignThreadGc()
+
   let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
 
   var ctx: HMAC[sha256]
@@ -185,25 +194,38 @@ proc nimbus_post(channel: cstring, payload: cstring) {.exportc.} =
                            payload = npayload,
                            powTarget = 0.002)
 
+  tearDownForeignThreadGc()
+
 proc nimbus_add_peer(nodeId: cstring) {.exportc.} =
   setupForeignThreadGc()
+
   var whisperENode: ENode
   discard initENode($nodeId, whisperENode)
   var whisperNode = newNode(whisperENode)
 
   asyncCheck node.peerPool.connectToNode(whisperNode)
 
+  tearDownForeignThreadGc()
+
 # Whisper API (Similar to Whisper RPC API)
 # Mostly an example for now, lots of things to fix if continued like this.
 
 proc nimbus_string_to_topic(s: cstring): CTopic {.exportc.} =
+  setupForeignThreadGc()
+
   let hash = digest(keccak256, $s)
   for i in 0..<4:
     result.topic[i] = hash.data[i]
 
+  tearDownForeignThreadGc()
+
 proc nimbus_new_keypair(): cstring {.exportc.} =
+  setupForeignThreadGc()
+
   result = generateRandomID()
   whisperKeys.asymKeys.add($result, newKeyPair())
+
+  tearDownForeignThreadGc()
 
 proc nimbus_add_keypair(key: PrivateKey): cstring = discard
 proc nimbus_delete_keypair(id: cstring) = discard
