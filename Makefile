@@ -87,6 +87,8 @@ wrappers: | build deps libnimbus.so go-checks
 		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_example
 	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
 		go build -linkshared -o build/go_wrapper_example wrappers/wrapper_example.go wrappers/cfuncs.go
+	echo -e $(BUILD_MSG) "build/go_wrapper_whisper_example" && \
+		go build -linkshared -o build/go_wrapper_whisper_example wrappers/wrapper_whisper_example.go wrappers/cfuncs.go
 
 libnimbus.a: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
