@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
   NimMain();
   nimbus_start(30303);
 
-  nimbus_subscribe(channel, print_msg);
+  nimbus_join_public_chat(channel, print_msg);
 
   lastmsg = time(NULL);
 
@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
         msg, lastmsg * 1000 * 100, lastmsg * 1000, channel, msg);
 
       printf("Posting %s\n", buf);
-      nimbus_post(channel, buf);
+      nimbus_post_public(channel, buf);
     }
     nimbus_poll();
   }
