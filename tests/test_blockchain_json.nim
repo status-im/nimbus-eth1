@@ -314,20 +314,36 @@ proc getCache(blockNumber: uint64): seq[Hash512] =
 
   shallowCopy(result, c)
 
+func cacheHash(x: openArray[Hash512]): Hash256 =
+  var ctx: keccak256
+  ctx.init()
+
+  for a in x:
+    ctx.update(a.data[0].unsafeAddr, uint(a.data.len))
+
+  ctx.finish result.data
+  ctx.clear()
+
 proc checkPOW(blockNumber: Uint256, miningHash, mixHash: Hash256, nonce: BlockNonce, difficulty: DifficultyInt) =
   let blockNumber = blockNumber.truncate(uint64)
   let cache = blockNumber.getCache()
-  let y = uint64.fromBytesBE(nonce)
 
-  when false:
-    # TODO: enable this when ethash#13 fixed
-    let miningOutput = hashimotoLight(blockNumber, cache, miningHash, uint64.fromBytesBE(nonce))
-    if miningOutput.mixDigest != mixHash:
-      raise newException(ValidationError, "mixHash mismatch")
+  let size = getDataSize(blockNumber)
+  let miningOutput = hashimotoLight(size, cache, miningHash, uint64.fromBytesBE(nonce))
+  if miningOutput.mixDigest != mixHash:
+    echo "actual: ", miningOutput.mixDigest
+    echo "expected: ", mixHash
+    echo "blockNumber: ", blockNumber
+    echo "miningHash: ", miningHash
+    echo "nonce: ", nonce.toHex
+    echo "difficulty: ", difficulty
+    echo "size: ", size
+    echo "cache hash: ", cacheHash(cache)
+    raise newException(ValidationError, "mixHash mismatch")
 
-    let value = Uint256.fromBytesBE(miningOutput.value.data)
-    if value > Uint256.high div difficulty:
-      raise newException(ValidationError, "mining difficulty error")
+  let value = Uint256.fromBytesBE(miningOutput.value.data)
+  if value > Uint256.high div difficulty:
+    raise newException(ValidationError, "mining difficulty error")
 
 func toMiningHeader(header: BlockHeader): MiningHeader =
   result.parentHash  = header.parentHash
@@ -502,7 +518,7 @@ proc applyFixtureBlockToChain(tester: var Tester, tb: TesterBlock,
   chainDB: BaseChainDB, fork: Fork, checkSeal, validation = true): (PlainBlock, PlainBlock, Blob) =
   var
     preminedBlock = rlp.decode(tb.headerRLP, PlainBlock)
-    minedBlock = tester.importBlock(chainDB, preminedBlock, fork, validation)
+    minedBlock = tester.importBlock(chainDB, preminedBlock, fork, checkSeal, validation)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
 
@@ -530,7 +546,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
       try:
         let fork = vmConfigToFork(tester.vmConfig, 1.u256)
         let (_, _, _) = tester.applyFixtureBlockToChain(testerBlock,
-          chainDB, fork, checkSeal, validation = true)
+          chainDB, fork, checkSeal = false, validation = true)
       except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
         # failure is expected on this bad block
         noError = false
@@ -579,6 +595,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
   var fixtureTested = false
 
   for fixtureName, fixture in node:
+    cacheByEpoch.clear()
     inc fixtureIndex
     if specifyIndex > 0 and fixtureIndex != specifyIndex:
       continue
