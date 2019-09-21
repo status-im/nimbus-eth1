@@ -51,5 +51,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       #raise newException(ValueError, "Unknown test vector '" & $label & "'")
       echo "Unknown test vector '" & $label & "'"
 
-suite "Precompiles":
-  jsonTest("PrecompileTests", testFixture)
+proc precompilesMain*() =
+  suite "Precompiles":
+    jsonTest("PrecompileTests", testFixture)

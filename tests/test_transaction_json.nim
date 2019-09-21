@@ -8,8 +8,12 @@ const
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
-suite "Transactions tests":
-  jsonTest("TransactionTests", testFixture)
+proc transactionJsonMain*() =
+  suite "Transactions tests":
+    jsonTest("TransactionTests", testFixture)
+
+when isMainModule:
+  transactionJsonMain()
 
 proc txHash(tx: Transaction): string =
   toLowerAscii($keccakHash(rlp.encode(tx)))

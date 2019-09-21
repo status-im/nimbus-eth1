@@ -14,8 +14,9 @@ import
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
-suite "vm json tests":
-  jsonTest("VMTests", testFixture)
+proc vmJsonMain*() =
+  suite "vm json tests":
+    jsonTest("VMTests", testFixture)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode
