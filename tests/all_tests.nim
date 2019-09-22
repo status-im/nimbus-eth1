@@ -48,10 +48,13 @@ macro cliBuilder(stmtList: typed): untyped =
 # proc mytestMain*() =
 #   # put anything you want here
 # and then give it a name `test_mytest.nim`
+# the `mytest` part should match between
+# the proc name and the module name
 
 # if this executable called without any params
-# it will return the number of submodules
-# you can execute the submodules by a number start from zero.
+# it will execute each of the test by executing itself
+# repeatedly until all sub-tests are executed.
+# you can execute the sub-test by a number start from zero.
 
 cliBuilder:
   import  ./test_code_stream,
