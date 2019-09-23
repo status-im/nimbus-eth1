@@ -329,7 +329,7 @@ proc checkPOW(blockNumber: Uint256, miningHash, mixHash: Hash256, nonce: BlockNo
   let cache = blockNumber.getCache()
 
   let size = getDataSize(blockNumber)
-  let miningOutput = hashimotoLight(size, cache, miningHash, uint64.fromBytesBE(nonce))  
+  let miningOutput = hashimotoLight(size, cache, miningHash, uint64.fromBytesBE(nonce))
   if miningOutput.mixDigest != mixHash:
     echo "actual: ", miningOutput.mixDigest
     echo "expected: ", mixHash
@@ -516,9 +516,10 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
 proc applyFixtureBlockToChain(tester: var Tester, tb: TesterBlock,
-  chainDB: BaseChainDB, fork: Fork, checkSeal, validation = true): (PlainBlock, PlainBlock, Blob) =
+  chainDB: BaseChainDB, checkSeal, validation = true): (PlainBlock, PlainBlock, Blob) =
   var
     preminedBlock = rlp.decode(tb.headerRLP, PlainBlock)
+    fork = vmConfigToFork(tester.vmConfig, preminedBlock.header.blockNumber)
     minedBlock = tester.importBlock(chainDB, preminedBlock, fork, checkSeal, validation)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
@@ -532,22 +533,18 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
   check chainDB.getCanonicalHead().blockHash == tester.genesisBlockHeader.blockHash
   let checkSeal = tester.shouldCheckSeal
 
-  for testerBlock in tester.blocks:
+  for idx, testerBlock in tester.blocks:
     let shouldBeGoodBlock = testerBlock.blockHeader.isSome
 
     if shouldBeGoodBlock:
-      let blockNumber = testerBlock.blockHeader.get().blockNumber
-      let fork = vmConfigToFork(tester.vmConfig, blockNumber)
-
       let (preminedBlock, minedBlock, blockRlp) = tester.applyFixtureBlockToChain(
-          testerBlock, chainDB, fork, checkSeal, validation = false)  # we manually validate below
+          testerBlock, chainDB, checkSeal, validation = false)  # we manually validate below
       check validateBlock(chainDB, preminedBlock, checkSeal) == true
     else:
       var noError = true
       try:
-        let fork = vmConfigToFork(tester.vmConfig, 1.u256)
         let (_, _, _) = tester.applyFixtureBlockToChain(testerBlock,
-          chainDB, fork, checkSeal, validation = true)
+          chainDB, checkSeal, validation = true)
       except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
         # failure is expected on this bad block
         noError = false
