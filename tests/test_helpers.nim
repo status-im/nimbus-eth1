@@ -8,7 +8,7 @@
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
   stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p],
-  ../nimbus/[vm_state, constants, config, transaction, utils],
+  ../nimbus/[vm_state, constants, config, transaction, utils, errors],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
   ../tests/test_generalstate_failing
@@ -271,21 +271,26 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
         wantedValue = UInt256.fromHex value.getStr
 
       let (actualValue, found) = stateDB.getStorage(account, slotId)
-      doAssert found
-      doAssert actualValue == wantedValue, &"{actualValue.toHex} != {wantedValue.toHex}"
+      if not found:
+        raise newException(ValidationError, "account not found:  " & ac)
+      if actualValue != wantedValue:
+        raise newException(ValidationError, &"{actualValue.toHex} != {wantedValue.toHex}")
 
     let
       wantedCode = hexToSeqByte(accountData{"code"}.getStr).toRange
       wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
-      wantedNonce = accountData{"nonce"}.getInt.AccountNonce
+      wantedNonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
 
       actualCode = stateDB.getCode(account)
       actualBalance = stateDB.getBalance(account)
       actualNonce = stateDB.getNonce(account)
 
-    doAssert wantedCode == actualCode, &"{wantedCode} != {actualCode}"
-    doAssert wantedBalance == actualBalance, &"{wantedBalance.toHex} != {actualBalance.toHex}"
-    doAssert wantedNonce == actualNonce, &"{wantedNonce.toHex} != {actualNonce.toHex}"
+    if wantedCode != actualCode:
+      raise newException(ValidationError, &"{wantedCode} != {actualCode}")
+    if wantedBalance != actualBalance:
+      raise newException(ValidationError, &"{wantedBalance.toHex} != {actualBalance.toHex}")
+    if wantedNonce != actualNonce:
+      raise newException(ValidationError, &"{wantedNonce.toHex} != {actualNonce.toHex}")
 
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
   result.accountNonce = j["nonce"].getHexadecimalInt.AccountNonce
