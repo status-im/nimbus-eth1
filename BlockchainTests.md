@@ -50,13 +50,13 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 ```diff
 + CallContractThatCreateContractBeforeAndAfterSwitchover.json     OK
 + ContractCreationFailsOnHomestead.json                           OK
-  HomesteadOverrideFrontier.json                                  Skip
++ HomesteadOverrideFrontier.json                                  OK
 + UncleFromFrontierInHomestead.json                               OK
 + UnclePopulation.json                                            OK
-  blockChainFrontierWithLargerTDvsHomesteadBlockchain.json        Skip
-  blockChainFrontierWithLargerTDvsHomesteadBlockchain2.json       Skip
++ blockChainFrontierWithLargerTDvsHomesteadBlockchain.json        OK
++ blockChainFrontierWithLargerTDvsHomesteadBlockchain2.json       OK
 ```
-OK: 4/7 Fail: 0/7 Skip: 3/7
+OK: 7/7 Fail: 0/7 Skip: 0/7
 ## bcGasPricerTest
 ```diff
 + RPC_API_Test.json                                               OK
@@ -404,4 +404,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 5/5 Fail: 0/5 Skip: 0/5
 
 ---TOTAL---
-OK: 266/318 Fail: 0/318 Skip: 52/318
+OK: 269/318 Fail: 0/318 Skip: 49/318
