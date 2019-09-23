@@ -80,10 +80,7 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "blockChainFrontierWithLargerTDvsHomesteadBlockchain2.json",
 
     # bcInvalidHeaderTest
-    "DifficultyIsZero.json",
-    "wrongDifficulty.json",
-    "wrongMixHash.json",
-    "wrongNonce.json",
-
+    #"DifficultyIsZero.json",
+    #"wrongDifficulty.json",
   ]
   result = name in allowedFailingGeneralStateTests

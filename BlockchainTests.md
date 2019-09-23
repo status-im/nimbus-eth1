@@ -80,7 +80,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 ## bcInvalidHeaderTest
 ```diff
 + DifferentExtraData1025.json                                     OK
-  DifficultyIsZero.json                                           Skip
++ DifficultyIsZero.json                                           OK
 + ExtraData1024.json                                              OK
 + ExtraData33.json                                                OK
 + GasLimitHigherThan2p63m1.json                                   OK
@@ -89,11 +89,11 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + log1_wrongBloom.json                                            OK
 + timeDiff0.json                                                  OK
 + wrongCoinbase.json                                              OK
-  wrongDifficulty.json                                            Skip
++ wrongDifficulty.json                                            OK
 + wrongGasLimit.json                                              OK
 + wrongGasUsed.json                                               OK
-  wrongMixHash.json                                               Skip
-  wrongNonce.json                                                 Skip
++ wrongMixHash.json                                               OK
++ wrongNonce.json                                                 OK
 + wrongNumber.json                                                OK
 + wrongParentHash.json                                            OK
 + wrongParentHash2.json                                           OK
@@ -103,7 +103,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + wrongTransactionsTrie.json                                      OK
 + wrongUncleHash.json                                             OK
 ```
-OK: 19/23 Fail: 0/23 Skip: 4/23
+OK: 23/23 Fail: 0/23 Skip: 0/23
 ## bcMultiChainTest
 ```diff
 + CallContractFromNotBestBlock.json                               OK
@@ -323,11 +323,11 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 + timestampTooHigh.json                                           OK
 + timestampTooLow.json                                            OK
 + unknownUncleParentHash.json                                     OK
-  wrongMixHash.json                                               Skip
++ wrongMixHash.json                                               OK
 + wrongParentHash.json                                            OK
 + wrongStateRoot.json                                             OK
 ```
-OK: 21/22 Fail: 0/22 Skip: 1/22
+OK: 22/22 Fail: 0/22 Skip: 0/22
 ## bcUncleSpecialTests
 ```diff
 + futureUncleTimestamp2.json                                      OK
@@ -404,4 +404,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 5/5 Fail: 0/5 Skip: 0/5
 
 ---TOTAL---
-OK: 261/318 Fail: 0/318 Skip: 57/318
+OK: 266/318 Fail: 0/318 Skip: 52/318

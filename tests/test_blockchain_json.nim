@@ -329,7 +329,7 @@ proc checkPOW(blockNumber: Uint256, miningHash, mixHash: Hash256, nonce: BlockNo
   let cache = blockNumber.getCache()
 
   let size = getDataSize(blockNumber)
-  let miningOutput = hashimotoLight(size, cache, miningHash, uint64.fromBytesBE(nonce))
+  let miningOutput = hashimotoLight(size, cache, miningHash, uint64.fromBytesBE(nonce))  
   if miningOutput.mixDigest != mixHash:
     echo "actual: ", miningOutput.mixDigest
     echo "expected: ", mixHash
@@ -505,6 +505,7 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   processBlock(tester.vmState, result, fork)
   result.header.stateRoot = tester.vmState.blockHeader.stateRoot
   result.header.parentHash = parentHeader.hash
+  result.header.difficulty = baseHeaderForImport.difficulty
 
   if validation:
     if not validateBlockUnchanged(result, preminedBlock):
@@ -546,7 +547,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
       try:
         let fork = vmConfigToFork(tester.vmConfig, 1.u256)
         let (_, _, _) = tester.applyFixtureBlockToChain(testerBlock,
-          chainDB, fork, checkSeal = false, validation = true)
+          chainDB, fork, checkSeal, validation = true)
       except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
         # failure is expected on this bad block
         noError = false
@@ -595,7 +596,6 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
   var fixtureTested = false
 
   for fixtureName, fixture in node:
-    cacheByEpoch.clear()
     inc fixtureIndex
     if specifyIndex > 0 and fixtureIndex != specifyIndex:
       continue
