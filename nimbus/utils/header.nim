@@ -18,13 +18,13 @@ proc hasUncles*(header: BlockHeader): bool = header.ommersHash != EMPTY_UNCLE_HA
 proc `$`*(header: BlockHeader): string =
   result = &"BlockHeader(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.blockNumber} gasLimit: {header.gasLimit})"
 
-proc gasLimitBounds*(parent: BlockHeader): (Uint256, Uint256) =
+proc gasLimitBounds*(parent: BlockHeader): (GasInt, GasInt) =
   ## Compute the boundaries for the block gas limit based on the parent block.
   let
-    gasLimit = parent.gasLimit.u256
-    boundaryRange = (parent.gasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR).u256
-    upperBound = gasLimit + boundaryRange
-    lowerBound = max(GAS_LIMIT_MINIMUM.u256, gasLimit - boundaryRange)
+    boundaryRange = (parent.gasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR)
+    upperBound = if GAS_LIMIT_MAXIMUM - boundaryRange < parent.gasLimit:
+      GAS_LIMIT_MAXIMUM else: parent.gasLimit + boundaryRange
+    lowerBound = max(GAS_LIMIT_MINIMUM, parent.gasLimit - boundaryRange)
 
   return (lowerBound, upperBound)
 
