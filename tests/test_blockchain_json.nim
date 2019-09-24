@@ -49,6 +49,7 @@ type
     debugMode: bool
     trace: bool
     vmState: BaseVMState
+    debugData: JsonNode
 
   MiningHeader* = object
     parentHash*:    Hash256
@@ -528,10 +529,21 @@ func shouldCheckSeal(tester: Tester): bool =
   if tester.sealEngine.isSome:
     result = tester.sealEngine.get() != NoProof
 
+proc collectDebugData(tester: var Tester) =
+  let vmState = tester.vmState
+  let tracingResult = if tester.trace: vmState.getTracingResult() else: %[]
+  tester.debugData.add %{
+    "blockNumber": %($vmState.blockNumber),
+    "structLogs": tracingResult,
+  }
+
 proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var TestStatus) =
   discard chainDB.persistHeaderToDb(tester.genesisBlockHeader)
   check chainDB.getCanonicalHead().blockHash == tester.genesisBlockHeader.blockHash
   let checkSeal = tester.shouldCheckSeal
+
+  if tester.debugMode:
+    tester.debugData = newJArray()
 
   for idx, testerBlock in tester.blocks:
     let shouldBeGoodBlock = testerBlock.blockHeader.isSome
@@ -551,6 +563,9 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
 
       # Block should have caused a validation error
       check noError == false
+
+    if tester.debugMode:
+      tester.collectDebugData()
 
 proc dumpAccount(accountDb: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
   result = %{
@@ -572,9 +587,8 @@ proc dumpDebugData(tester: Tester, fixture: JsonNode, fixtureName: string, fixtu
     accounts[$account] = dumpAccount(vmState.readOnlyStateDB, account, "acc" & $i)
     inc i
 
-  let tracingResult = if tester.trace: vmState.getTracingResult() else: %[]
   let debugData = %{
-    "structLogs": tracingResult,
+    "debugData": tester.debugData,
     "accounts": accounts
   }
 
