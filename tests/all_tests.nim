@@ -12,28 +12,43 @@ proc executeMyself(numModules: int) =
   for i in 0..<numModules:
     discard execCmd appName & " " & $i
 
+proc getImportStmt(stmtList: NimNode): NimNode =
+  result = stmtList[0]
+  result.expectKind nnkImportStmt
+
+proc ofStmt(idx: int, singleModule: NimNode): NimNode =
+  # remove the "test_" prefix
+  let moduleName = normalize(singleModule.toStrLit.strVal).substr(4)
+  let moduleMain = newIdentNode(moduleName & "Main")
+
+  # construct `of` branch
+  # of idx: moduleMain()
+  result = nnkOfBranch.newTree(
+    newLit(idx),
+    newCall(moduleMain)
+  )
+
 macro cliBuilder(stmtList: typed): untyped =
-  let importStmt = stmtList[0]
-  importStmt.expectKind nnkImportStmt
+  let importStmt = stmtList.getImportStmt
   let moduleCount = importStmt.len
 
-  var caseStmt = newNimNode(nnkCaseStmt)
-  caseStmt.add quote do: paramStr(1).parseInt
+  # case paramStr(1).parseInt
+  var caseStmt = nnkCaseStmt.newTree(
+    quote do: paramStr(1).parseInt
+  )
 
+  # of 0: codeStreamMain()
+  # of 1: gasMeterMain()
+  # of 2: memoryMain()
+  # ...
   for idx, singleModule in importStmt:
-    # remove the "test_" prefix
-    let moduleName = normalize(singleModule.toStrLit.strVal).substr(4)
-    let moduleMain = newIdentNode(moduleName & "Main")
-    # construct `of` branch
-    let branchNode = newNimNode(nnkOfBranch)
-    branchNode.add newIntLitNode(idx)
-    branchNode.add newCall(moduleMain)
-    caseStmt.add branchNode
+    caseStmt.add ofStmt(idx, singleModule)
 
-  var elseBranch = newNimNode(nnkElse)
-  elseBranch.add quote do:
-    echo "invalid argument"
-  caseStmt.add elseBranch
+  # else:
+  #   echo "invalid argument"
+  caseStmt.add nnkElse.newTree(
+    quote do: echo "invalid argument"
+  )
 
   result = quote do:
     if paramCount() == 0:
