@@ -411,9 +411,9 @@ proc validateGasLimit(chainDB: BaseChainDB, header: BlockHeader) =
   let parentHeader = chainDB.getBlockHeader(header.parentHash)
   let (lowBound, highBound) = gasLimitBounds(parentHeader)
 
-  if header.gasLimit.u256 < lowBound:
+  if header.gasLimit < lowBound:
     raise newException(ValidationError, "The gas limit is too low")
-  elif header.gasLimit.u256 > highBound:
+  elif header.gasLimit > highBound:
     raise newException(ValidationError, "The gas limit is too high")
 
 proc validateUncles(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool) =
