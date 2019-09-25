@@ -23,16 +23,13 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "create2noCash.json",
 
     # bcStateTests
-    "SuicidesMixingCoinbase.json",
     "TransactionFromCoinbaseHittingBlockGasLimit1.json",
     "randomStatetest123.json",
-    "randomStatetest136.json",
     "randomStatetest160.json",
     "randomStatetest170.json",
     "randomStatetest223.json",
     "randomStatetest229.json",
     "randomStatetest241.json",
-    "randomStatetest324.json",
     "randomStatetest328.json",
     "randomStatetest375.json",
     "randomStatetest377.json",
@@ -43,8 +40,6 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "randomStatetest594.json",
     "randomStatetest619.json",
     "randomStatetest94.json",
-    "suicideCoinbase.json",
-    "suicideCoinbaseState.json",
 
     # bcRandomBlockhashTest
     "randomStatetest127BC.json",

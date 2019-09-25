@@ -17,6 +17,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
 
   var gasUsed = tx.gasLimit
+  var coinBaseSuicide = false
 
   block:
     if vmState.cumulativeGasUsed + gasUsed > vmState.blockHeader.gasLimit:
@@ -48,15 +49,15 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     if not computation.shouldBurnGas:
       gasUsed = computation.refundGas(tx, sender)
 
-    if computation.isSuicided(vmState.blockHeader.coinbase):
-      gasUsed = 0
+    coinBaseSuicide = computation.isSuicided(vmState.blockHeader.coinbase)
 
   vmState.cumulativeGasUsed += gasUsed
 
   # miner fee
-  let txFee = gasUsed.u256 * tx.gasPrice.u256
   vmState.mutateStateDB:
-    db.addBalance(vmState.blockHeader.coinbase, txFee)
+    if not coinBaseSuicide:
+      let txFee = gasUsed.u256 * tx.gasPrice.u256
+      db.addBalance(vmState.blockHeader.coinbase, txFee)
 
     # EIP158 state clearing
     for account in vmState.touchedAccounts:
