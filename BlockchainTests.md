@@ -228,7 +228,7 @@ OK: 86/96 Fail: 0/96 Skip: 10/96
 + OverflowGasRequire.json                                         OK
 + RefundOverflow.json                                             OK
 + RefundOverflow2.json                                            OK
-  SuicidesMixingCoinbase.json                                     Skip
++ SuicidesMixingCoinbase.json                                     OK
   TransactionFromCoinbaseHittingBlockGasLimit1.json               Skip
 + TransactionFromCoinbaseNotEnoughFounds.json                     OK
 + TransactionNonceCheck.json                                      OK
@@ -259,13 +259,13 @@ OK: 86/96 Fail: 0/96 Skip: 10/96
 + extCodeHashOfDeletedAccountDynamic.json                         OK
 + multimpleBalanceInstruction.json                                OK
   randomStatetest123.json                                         Skip
-  randomStatetest136.json                                         Skip
++ randomStatetest136.json                                         OK
   randomStatetest160.json                                         Skip
   randomStatetest170.json                                         Skip
   randomStatetest223.json                                         Skip
   randomStatetest229.json                                         Skip
   randomStatetest241.json                                         Skip
-  randomStatetest324.json                                         Skip
++ randomStatetest324.json                                         OK
   randomStatetest328.json                                         Skip
   randomStatetest375.json                                         Skip
   randomStatetest377.json                                         Skip
@@ -277,8 +277,8 @@ OK: 86/96 Fail: 0/96 Skip: 10/96
   randomStatetest619.json                                         Skip
   randomStatetest94.json                                          Skip
 + simpleSuicide.json                                              OK
-  suicideCoinbase.json                                            Skip
-  suicideCoinbaseState.json                                       Skip
++ suicideCoinbase.json                                            OK
++ suicideCoinbaseState.json                                       OK
 + suicideStorageCheck.json                                        OK
 + suicideStorageCheckVCreate.json                                 OK
 + suicideStorageCheckVCreate2.json                                OK
@@ -286,7 +286,7 @@ OK: 86/96 Fail: 0/96 Skip: 10/96
 + transactionFromNotExistingAccount.json                          OK
 + txCost-sec73.json                                               OK
 ```
-OK: 45/67 Fail: 0/67 Skip: 22/67
+OK: 50/67 Fail: 0/67 Skip: 17/67
 ## bcTotalDifficultyTest
 ```diff
 + lotsOfBranchesOverrideAtTheEnd.json                             OK
@@ -404,4 +404,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 5/5 Fail: 0/5 Skip: 0/5
 
 ---TOTAL---
-OK: 285/318 Fail: 0/318 Skip: 33/318
+OK: 290/318 Fail: 0/318 Skip: 28/318

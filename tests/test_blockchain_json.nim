@@ -549,9 +549,13 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
     let shouldBeGoodBlock = testerBlock.blockHeader.isSome
 
     if shouldBeGoodBlock:
-      let (preminedBlock, minedBlock, blockRlp) = tester.applyFixtureBlockToChain(
-          testerBlock, chainDB, checkSeal, validation = false)  # we manually validate below
-      check validateBlock(chainDB, preminedBlock, checkSeal) == true
+      try:
+        let (preminedBlock, minedBlock, blockRlp) = tester.applyFixtureBlockToChain(
+            testerBlock, chainDB, checkSeal, validation = false)  # we manually validate below
+        check validateBlock(chainDB, preminedBlock, checkSeal) == true
+      except:
+        debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
+
     else:
       var noError = true
       try:
@@ -639,9 +643,10 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     except ValidationError as E:
       echo "ERROR: ", E.msg
       success = false
-    finally:
-      if tester.debugMode:
-        tester.dumpDebugData(fixture, fixtureName, fixtureIndex, success)
+
+    if tester.debugMode:
+      tester.dumpDebugData(fixture, fixtureName, fixtureIndex, success)
+
     fixtureTested = true
     check success == true
 
