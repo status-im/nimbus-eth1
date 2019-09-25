@@ -13,8 +13,9 @@ import
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
-suite "persist block json tests":
-  jsonTest("PersistBlockTests", testFixture)
+proc persistBlockJsonMain*() =
+  suite "persist block json tests":
+    jsonTest("PersistBlockTests", testFixture)
 
 # use tracerTestGen.nim to generate additional test data
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =

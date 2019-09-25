@@ -53,9 +53,10 @@ template runTests(name: string, hex: bool, calculator: typed) =
     test title:
       check diff == t.currentDifficulty
 
-suite "DifficultyTest":
-  runTests("Byzantium", true, calcDifficultyByzantium)
-  runTests("Constantinople", true, calcDifficultyConstantinople)
-  runTests("Homestead", true, calcDifficultyHomestead)
-  runTests("Frontier", true, calcDifficultyFrontier)
-  runTests("", false, calcDifficulty)
+proc difficultyMain*() =
+  suite "DifficultyTest":
+    runTests("Byzantium", true, calcDifficultyByzantium)
+    runTests("Constantinople", true, calcDifficultyConstantinople)
+    runTests("Homestead", true, calcDifficultyHomestead)
+    runTests("Frontier", true, calcDifficultyFrontier)
+    runTests("", false, calcDifficulty)

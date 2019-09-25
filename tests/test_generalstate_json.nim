@@ -172,8 +172,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
   if not testedInFork:
     echo "test subject '", tester.name, "' not tested in any forks"
 
-proc main() =
-  if paramCount() == 0:
+proc generalStateJsonMain*(debugMode = false) =
+  if paramCount() == 0 or not debugMode:
     # run all test fixtures
     suite "generalstate json tests":
       jsonTest("GeneralStateTests", testFixture)
@@ -202,5 +202,4 @@ when isMainModule:
     if len(message) > 0:
       echo message
       quit(QuitSuccess)
-
-main()
+  generalStateJsonMain(true)
