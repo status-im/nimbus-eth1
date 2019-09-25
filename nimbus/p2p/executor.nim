@@ -58,6 +58,8 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     if not coinBaseSuicide:
       let txFee = gasUsed.u256 * tx.gasPrice.u256
       db.addBalance(vmState.blockHeader.coinbase, txFee)
+    else:
+      db.addBalance(vmState.blockHeader.coinbase, 0.u256)
 
     # EIP158 state clearing
     for account in vmState.touchedAccounts:
