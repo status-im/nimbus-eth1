@@ -497,7 +497,12 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
 
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
   let baseHeaderForImport = generateHeaderFromParentHeader(parentHeader,
-      preminedBlock.header.coinbase, fork, some(preminedBlock.header.timestamp), @[])
+      preminedBlock.header.coinbase,
+      fork,
+      some(preminedBlock.header.timestamp),
+      some(preminedBlock.header.gasLimit),
+      @[]
+  )
 
   deepCopy(result, preminedBlock)
   let tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}

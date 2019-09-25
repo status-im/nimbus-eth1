@@ -274,7 +274,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       if not found:
         raise newException(ValidationError, "account not found:  " & ac)
       if actualValue != wantedValue:
-        raise newException(ValidationError, &"{actualValue.toHex} != {wantedValue.toHex}")
+        raise newException(ValidationError, &"{ac} storageDiff: [{slot}] {actualValue.toHex} != {wantedValue.toHex}")
 
     let
       wantedCode = hexToSeqByte(accountData{"code"}.getStr).toRange
@@ -286,11 +286,11 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       actualNonce = stateDB.getNonce(account)
 
     if wantedCode != actualCode:
-      raise newException(ValidationError, &"{wantedCode} != {actualCode}")
+      raise newException(ValidationError, &"{ac} codeDiff {wantedCode} != {actualCode}")
     if wantedBalance != actualBalance:
-      raise newException(ValidationError, &"{wantedBalance.toHex} != {actualBalance.toHex}")
+      raise newException(ValidationError, &"{ac} balanceDiff {wantedBalance.toHex} != {actualBalance.toHex}")
     if wantedNonce != actualNonce:
-      raise newException(ValidationError, &"{wantedNonce.toHex} != {actualNonce.toHex}")
+      raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
 
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
   result.accountNonce = j["nonce"].getHexadecimalInt.AccountNonce
