@@ -119,7 +119,7 @@ OK: 8/8 Fail: 0/8 Skip: 0/8
 ## bcRandomBlockhashTest
 ```diff
 + randomStatetest109BC.json                                       OK
-  randomStatetest113BC.json                                       Skip
++ randomStatetest113BC.json                                       OK
   randomStatetest127BC.json                                       Skip
 + randomStatetest128BC.json                                       OK
 + randomStatetest132BC.json                                       OK
@@ -127,19 +127,19 @@ OK: 8/8 Fail: 0/8 Skip: 0/8
   randomStatetest141BC.json                                       Skip
 + randomStatetest152BC.json                                       OK
   randomStatetest165BC.json                                       Skip
-  randomStatetest168BC.json                                       Skip
++ randomStatetest168BC.json                                       OK
 + randomStatetest181BC.json                                       OK
-  randomStatetest182BC.json                                       Skip
++ randomStatetest182BC.json                                       OK
 + randomStatetest186BC.json                                       OK
-  randomStatetest193BC.json                                       Skip
++ randomStatetest193BC.json                                       OK
 + randomStatetest203BC.json                                       OK
 + randomStatetest213BC.json                                       OK
-  randomStatetest218BC.json                                       Skip
++ randomStatetest218BC.json                                       OK
 + randomStatetest21BC.json                                        OK
 + randomStatetest224BC.json                                       OK
 + randomStatetest234BC.json                                       OK
 + randomStatetest235BC.json                                       OK
-  randomStatetest239BC.json                                       Skip
++ randomStatetest239BC.json                                       OK
 + randomStatetest240BC.json                                       OK
 + randomStatetest253BC.json                                       OK
 + randomStatetest255BC.json                                       OK
@@ -148,24 +148,24 @@ OK: 8/8 Fail: 0/8 Skip: 0/8
 + randomStatetest262BC.json                                       OK
   randomStatetest272BC.json                                       Skip
 + randomStatetest277BC.json                                       OK
-  randomStatetest284BC.json                                       Skip
++ randomStatetest284BC.json                                       OK
 + randomStatetest289BC.json                                       OK
 + randomStatetest314BC.json                                       OK
 + randomStatetest317BC.json                                       OK
 + randomStatetest319BC.json                                       OK
-  randomStatetest330BC.json                                       Skip
++ randomStatetest330BC.json                                       OK
 + randomStatetest331BC.json                                       OK
 + randomStatetest344BC.json                                       OK
 + randomStatetest34BC.json                                        OK
   randomStatetest35BC.json                                        Skip
 + randomStatetest373BC.json                                       OK
 + randomStatetest374BC.json                                       OK
-  randomStatetest390BC.json                                       Skip
++ randomStatetest390BC.json                                       OK
 + randomStatetest392BC.json                                       OK
 + randomStatetest394BC.json                                       OK
-  randomStatetest400BC.json                                       Skip
++ randomStatetest400BC.json                                       OK
 + randomStatetest403BC.json                                       OK
-  randomStatetest40BC.json                                        Skip
++ randomStatetest40BC.json                                        OK
 + randomStatetest427BC.json                                       OK
 + randomStatetest431BC.json                                       OK
 + randomStatetest432BC.json                                       OK
@@ -199,7 +199,7 @@ OK: 8/8 Fail: 0/8 Skip: 0/8
 + randomStatetest614BC.json                                       OK
 + randomStatetest617BC.json                                       OK
 + randomStatetest61BC.json                                        OK
-  randomStatetest622BC.json                                       Skip
++ randomStatetest622BC.json                                       OK
   randomStatetest623BC.json                                       Skip
 + randomStatetest631BC.json                                       OK
 + randomStatetest634BC.json                                       OK
@@ -207,18 +207,18 @@ OK: 8/8 Fail: 0/8 Skip: 0/8
 + randomStatetest68BC.json                                        OK
 + randomStatetest70BC.json                                        OK
 + randomStatetest71BC.json                                        OK
-  randomStatetest76BC.json                                        Skip
-  randomStatetest79BC.json                                        Skip
++ randomStatetest76BC.json                                        OK
++ randomStatetest79BC.json                                        OK
 + randomStatetest86BC.json                                        OK
 + randomStatetest8BC.json                                         OK
 + randomStatetest91BC.json                                        OK
 + randomStatetest93BC.json                                        OK
 + randomStatetest99BC.json                                        OK
 ```
-OK: 72/96 Fail: 0/96 Skip: 24/96
+OK: 86/96 Fail: 0/96 Skip: 10/96
 ## bcStateTests
 ```diff
-  BLOCKHASH_Bounds.json                                           Skip
++ BLOCKHASH_Bounds.json                                           OK
 + BadStateRootTxBC.json                                           OK
 + CreateTransactionReverted.json                                  OK
 + EmptyTransaction.json                                           OK
@@ -247,7 +247,7 @@ OK: 72/96 Fail: 0/96 Skip: 24/96
 + ZeroValue_TransactionCALLwithData_ToNonZeroBalance_OOGRevert.jsonOK
 + ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jsonOK
 + blockhashNonConstArg.json                                       OK
-  blockhashTests.json                                             Skip
++ blockhashTests.json                                             OK
 + callcodeOutput1.json                                            OK
 + callcodeOutput2.json                                            OK
 + callcodeOutput3partial.json                                     OK
@@ -286,7 +286,7 @@ OK: 72/96 Fail: 0/96 Skip: 24/96
 + transactionFromNotExistingAccount.json                          OK
 + txCost-sec73.json                                               OK
 ```
-OK: 43/67 Fail: 0/67 Skip: 24/67
+OK: 45/67 Fail: 0/67 Skip: 22/67
 ## bcTotalDifficultyTest
 ```diff
 + lotsOfBranchesOverrideAtTheEnd.json                             OK
@@ -404,4 +404,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 5/5 Fail: 0/5 Skip: 0/5
 
 ---TOTAL---
-OK: 269/318 Fail: 0/318 Skip: 49/318
+OK: 285/318 Fail: 0/318 Skip: 33/318
