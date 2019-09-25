@@ -56,19 +56,19 @@ proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
 
   let gasLimit = max(
       GAS_LIMIT_MINIMUM,
-      parent.gasLimit - decay + usage_increase
+      parent.gasLimit - decay + usageIncrease
   )
 
-  if gas_limit < GAS_LIMIT_MINIMUM:
-      return GAS_LIMIT_MINIMUM
-  elif gas_limit < gasLimitFloor:
-      return parent.gas_limit + decay
+  if gasLimit < GAS_LIMIT_MINIMUM:
+    return GAS_LIMIT_MINIMUM
+  elif gasLimit < gasLimitFloor:
+    return parent.gasLimit + decay
   else:
-      return gas_limit
+    return gasLimit
 
 proc generateHeaderFromParentHeader*(parent: BlockHeader,
     coinbase: EthAddress, fork: Fork, timestamp: Option[EthTime],
-    extraData: Blob): BlockHeader =
+    gasLimit: Option[GasInt], extraData: Blob): BlockHeader =
 
   var lcTimestamp: EthTime
   if timestamp.isNone:
@@ -83,7 +83,7 @@ proc generateHeaderFromParentHeader*(parent: BlockHeader,
     timestamp: lcTimestamp,
     blockNumber: (parent.blockNumber + 1),
     difficulty: calcDifficulty(lcTimestamp, parent, fork),
-    gasLimit: computeGasLimit(parent, gasLimitFloor = GENESIS_GAS_LIMIT),
+    gasLimit: if gasLimit.isSome: gasLimit.get() else: computeGasLimit(parent, gasLimitFloor = GENESIS_GAS_LIMIT),
     stateRoot: parent.stateRoot,
     coinbase: coinbase,
     extraData: extraData,
