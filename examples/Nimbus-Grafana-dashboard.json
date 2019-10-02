@@ -182,6 +182,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 100
               }
             ]
           },
@@ -225,6 +229,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 2147483648
               }
             ],
             "unit": "bytes"
@@ -269,6 +277,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 200
               }
             ],
             "unit": "percent"
@@ -321,5 +333,5 @@
   "timezone": "",
   "title": "Nimbus",
   "uid": "mmSk-ShZk",
-  "version": 23
+  "version": 30
 }
