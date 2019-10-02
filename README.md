@@ -339,6 +339,8 @@ graph legend.
 To see a single metric, click on its name in the legend. Click it again to go back
 to the combined view. To edit a panel, click on its title and select "Edit".
 
+[Obligatory screenshot.](https://i.imgur.com/AdtavDA.png)
+
 ### Troubleshooting
 
 Report any errors you encounter, please, if not [already documented](https://github.com/status-im/nimbus/issues)!
