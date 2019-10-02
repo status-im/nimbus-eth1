@@ -303,6 +303,42 @@ cd vendor/nim-rocksdb
 ../../env.sh nimble test
 ```
 
+### Metric visualisation
+
+Install Prometheus and Grafana. On Gentoo, it's `emerge prometheus grafana-bin`.
+
+```bash
+# build Nimbus with support for the HTTP endpoint
+make NIMFLAGS="-d:insecure" nimbus
+# the Prometheus daemon will create its data dir in the current dir, so give it its own directory
+mkdir ../my_metrics
+# copy the basic config file over there
+cp -a examples/prometheus.yml ../my_metrics/
+# start Prometheus in a separate terminal
+cd ../my_metrics
+prometheus # loads ./prometheus.yml, writes metric data to ./data
+# start a fresh Nimbus sync and export metrics
+rm -rf ~/.cache/nimbus/db; ./build/nimbus --prune:archive --metricsServer
+```
+
+Start the Grafana server. On Gentoo it's `/etc/init.d/grafana start`. Go to
+http://localhost:3000, log in with admin:admin and change the password.
+
+Add Prometheus as a data source. The default address of http://localhost:9090
+is OK, but Grafana 6.3.5 will not apply that semitransparent default you see in
+the form field, unless you click on it.
+
+Create a new dashboard. Click on its default title in the upper left corner
+("New Dashboard"). In the new page, click "Import dashboard" in the right
+column and upload "examples/Nimbus-Grafana-dashboard.json".
+
+In the main panel, there's a hidden button used to assign metrics to the left
+or right Y-axis - it's the coloured line on the left of the metric name, in the
+graph legend.
+
+To see a single metric, click on its name in the legend. Click it again to go back
+to the combined view. To edit a panel, click on its title and select "Edit".
+
 ### Troubleshooting
 
 Report any errors you encounter, please, if not [already documented](https://github.com/status-im/nimbus/issues)!
