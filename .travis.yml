@@ -15,9 +15,16 @@ git:
 matrix:
   include:
     - os: linux
+      arch: amd64
       sudo: required
       before_install:
         - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
+    - os: linux
+      arch: arm64
+      sudo: required
+      before_install:
+        - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
+        - sudo apt-get install -y libpcre3-dev
     - os: osx
       before_install:
         - launchctl setenv LIBRARY_PATH /usr/local/lib # for RocksDB
