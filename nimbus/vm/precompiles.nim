@@ -179,8 +179,8 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
     #       we should return a 256-bit big-endian byte array
 
     # Force static evaluation
-    func zero(): static array[T.bits div 8, byte] = discard
-    func one(): static array[T.bits div 8, byte] =
+    func zero(): array[T.bits div 8, byte] {.compileTime.} = discard
+    func one(): array[T.bits div 8, byte] {.compileTime.} =
       when cpuEndian == bigEndian:
         result[0] = 1
       else:
