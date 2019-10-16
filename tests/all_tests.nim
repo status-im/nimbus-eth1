@@ -7,10 +7,10 @@
 
 import macros, strutils, os, unittest, osproc
 
-proc executeMyself(numModules: int) =
+proc executeMyself(numModules: int): int =
   let appName = getAppFilename()
   for i in 0..<numModules:
-    discard execCmd appName & " " & $i
+    result = result or execCmd(appName & " " & $i)
 
 proc getImportStmt(stmtList: NimNode): NimNode =
   result = stmtList[0]
@@ -52,7 +52,7 @@ macro cliBuilder(stmtList: typed): untyped =
 
   result = quote do:
     if paramCount() == 0:
-      executeMyself `moduleCount`
+      quit(executeMyself(`moduleCount`))
     else:
       disableParamFiltering()
       `caseStmt`
