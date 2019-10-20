@@ -22,8 +22,8 @@ platform:
 clone_depth: 10
 
 init:
-  # disable cache saving outside the master and devel branches
-  - ps: IF ("$env:APPVEYOR_REPO_BRANCH" -ne "master" -and "$env:APPVEYOR_REPO_BRANCH" -ne "devel") { $env:APPVEYOR_CACHE_SKIP_SAVE = "true" }
+  # disable cache saving outside the master branch
+  - ps: IF ("$env:APPVEYOR_REPO_BRANCH" -ne "master") { $env:APPVEYOR_CACHE_SKIP_SAVE = "true" }
 
 install:
   - git submodule update --init --recursive
