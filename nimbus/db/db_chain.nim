@@ -7,8 +7,8 @@
 
 import
   tables, sequtils, algorithm,
-  ranges, state_db, eth/trie/[hexary, db],
-  eth/[common, rlp], byteutils, chronicles,
+  stew/[byteutils, ranges], state_db, eth/trie/[hexary, db],
+  eth/[common, rlp], chronicles,
   ../errors,  ../constants, ./storage_types,
   ../utils, ../config
 
@@ -34,6 +34,9 @@ proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true, id: PublicNetw
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
+
+proc exists*(self: BaseChainDB, hash: Hash256): bool =
+  self.db.contains(hash.data)
 
 proc getBlockHeader*(self: BaseChainDB; blockHash: Hash256, output: var BlockHeader): bool =
   let data = self.db.get(genericHashKey(blockHash).toOpenArray).toRange
@@ -83,6 +86,16 @@ proc getBlockHeader*(self: BaseChainDB; n: BlockNumber): BlockHeader =
 
 proc getScore*(self: BaseChainDB; blockHash: Hash256): Uint256 =
   rlp.decode(self.db.get(blockHashToScoreKey(blockHash).toOpenArray).toRange, Uint256)
+
+proc getAncestorsHashes*(self: BaseChainDB, limit: Uint256, header: BlockHeader): seq[Hash256] =
+  var ancestorCount = min(header.blockNumber, limit).truncate(int)
+  var h = header
+
+  result = newSeq[Hash256](ancestorCount)
+  while ancestorCount > 0:
+    h = self.getBlockHeader(h.parentHash)
+    result[ancestorCount - 1] = h.hash
+    dec ancestorCount
 
 iterator findNewAncestors(self: BaseChainDB; header: BlockHeader): BlockHeader =
   ##         Returns the chain leading up from the given header until the first ancestor it has in
@@ -150,6 +163,12 @@ proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody)
 proc getBlockBody*(self: BaseChainDB, hash: Hash256): BlockBody =
   if not self.getBlockBody(hash, result):
     raise newException(ValueError, "Error when retrieving block body")
+
+proc getUncleHashes*(self: BaseChainDB, blockHashes: openArray[Hash256]): seq[Hash256] =
+  for blockHash in blockHashes:
+    var blockBody = self.getBlockBody(blockHash)
+    for uncle in blockBody.uncles:
+      result.add uncle.hash
 
 proc getTransactionKey*(self: BaseChainDB, transactionHash: Hash256): tuple[blockNumber: BlockNumber, index: int] {.inline.} =
   let

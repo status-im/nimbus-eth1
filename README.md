@@ -26,12 +26,14 @@ _We currently do not guarantee that Nimbus will work on Windows._
 
 ### Prerequisites
 
+(On Windows, a precompiled DLL collection download is available through the `fetch-dlls` Makefile target: ([Windows instructions](#windows)).)
+
 #### Rocksdb
 
-A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/) is needed - it can usually be installed using a package manager of your choice:
+A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/) is needed - it can usually be installed using your system's package manager:
 
 ```bash
-# MacOS
+# MacOS with Homebrew
 brew install rocksdb
 
 # Fedora
@@ -44,13 +46,29 @@ sudo apt-get install librocksdb-dev
 pakku -S rocksdb
 ```
 
-On Windows, you can [download pre-compiled DLLs](#windows).
-
 You can also build and install it by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md).
+
+#### PCRE
+
+If you don't already have it, you will also need PCRE to build Nimbus.
+
+```bash
+# MacOS with Homebrew
+brew install pcre
+
+# Fedora
+dnf install pcre
+
+# Debian and Ubuntu
+sudo apt-get install libpcre3-dev
+
+# Arch (AUR)
+pakku -S pcre-static
+```
 
 #### Developer tools
 
-GNU make, Bash and the usual POSIX utilities
+GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
 
 #### Obtaining the prerequisites through the Nix package manager
 
@@ -69,12 +87,16 @@ nix-shell default.nix
 To build Nimbus (in "build/nimbus"), just execute:
 
 ```bash
-make
+make # The first `make` invocation will update all Git submodules and prompt you to run `make` again.
+     # It's only required once per Git clone. You'll run `make update` after each `git pull`, in the future,
+     # to keep those submodules up to date.
+
+make nimbus # build the Nimbus binary
 ```
 
-Running `./build/nimbus --help` will provide you with a list of
-the available command-line options. To start syncing with mainnet, just execute `./build/nimbus`
-without any parameters.
+Running `./build/nimbus --help` will provide you with a list of the available
+command-line options. To start syncing with mainnet, just execute
+`./build/nimbus` without any parameters.
 
 To execute all tests:
 ```bash
@@ -89,8 +111,13 @@ make update
 
 To run a command that might use binaries from the Status Nim fork:
 ```bash
-./env.sh bash
+./env.sh bash # start a new interactive shell with the right env vars set
 which nim
+nim --version
+
+# or without starting a new interactive shell:
+./env.sh which nim
+./env.sh nim --version
 ```
 
 Our Wiki provides additional helpful information for [debugging individual test cases][1]
@@ -98,7 +125,7 @@ and for [pairing Nimbus with a locally running copy of Geth][2].
 
 #### Windows
 
-_Experimental support!_
+_(Experimental support!)_
 
 Install Mingw-w64 for your architecture using the "[MinGW-W64 Online
 Installer](https://sourceforge.net/projects/mingw-w64/files/)" (first link
@@ -113,12 +140,17 @@ Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash" shell
 
 If you don't want to compile RocksDB and SQLite separately, you can fetch pre-compiled DLLs with:
 ```bash
-mingw32-make fetch-dlls
+mingw32-make # this first invocation will update the Git submodules
+mingw32-make fetch-dlls # this will place the right DLLs for your architecture in the "build/" directory
 ```
 
-This will place the right DLLs for your architecture in the "build/" directory.
+You can now follow those instructions in the previous section by replacing `make` with `mingw32-make` (regardless of your 32-bit or 64-bit architecture):
 
-You can now follow those instructions in the previous section by replacing `make` with `mingw32-make` (regardless of your 32-bit or 64-bit architecture).
+```bash
+mingw32-make nimbus # build the Nimbus binary
+mingw32-make test # run the test suite
+# etc.
+```
 
 #### Raspberry PI
 
@@ -189,10 +221,17 @@ make LOG_LEVEL=TRACE nimbus # log everything
 make NIMFLAGS="-d:release"
 ```
 
-- if you want to use SSH keys with GitHub:
+- if you want to use SSH keys with GitHub (also handles submodules):
 
 ```bash
 make github-ssh
+```
+
+- force a Nim compiler rebuild:
+
+```bash
+rm vendor/Nim/bin/nim
+make -j8 build-nim
 ```
 
 #### Git submodule workflow
@@ -231,7 +270,11 @@ latest commits when they are not ready to be used in the superproject.
 Adding the submodule "https://github.com/status-im/foo" to "vendor/foo":
 
 ```bash
-./add_submodule.sh status-im/foo
+vendor/nimbus-build-system/scripts/add_submodule.sh status-im/foo
+# or
+./env.sh add_submodule status-im/foo
+# want to place it in "vendor/bar" instead?
+./env.sh add_submodule status-im/foo vendor/bar
 ```
 
 Removing the submodule "vendor/bar":
@@ -254,9 +297,49 @@ convinced not to run a dependency check, thus clashing with our jury-rigged
 "vendor/.nimble/pkgs"):
 
 ```bash
-cd vendor/nim-blscurve
-../../nimble.sh test
+cd vendor/nim-rocksdb
+../nimbus-build-system/scripts/nimble.sh test
+# or
+../../env.sh nimble test
 ```
+
+### Metric visualisation
+
+Install Prometheus and Grafana. On Gentoo, it's `emerge prometheus grafana-bin`.
+
+```bash
+# build Nimbus with support for the HTTP endpoint
+make NIMFLAGS="-d:insecure" nimbus
+# the Prometheus daemon will create its data dir in the current dir, so give it its own directory
+mkdir ../my_metrics
+# copy the basic config file over there
+cp -a examples/prometheus.yml ../my_metrics/
+# start Prometheus in a separate terminal
+cd ../my_metrics
+prometheus # loads ./prometheus.yml, writes metric data to ./data
+# start a fresh Nimbus sync and export metrics
+rm -rf ~/.cache/nimbus/db; ./build/nimbus --prune:archive --metricsServer
+```
+
+Start the Grafana server. On Gentoo it's `/etc/init.d/grafana start`. Go to
+http://localhost:3000, log in with admin:admin and change the password.
+
+Add Prometheus as a data source. The default address of http://localhost:9090
+is OK, but Grafana 6.3.5 will not apply that semitransparent default you see in
+the form field, unless you click on it.
+
+Create a new dashboard. Click on its default title in the upper left corner
+("New Dashboard"). In the new page, click "Import dashboard" in the right
+column and upload "examples/Nimbus-Grafana-dashboard.json".
+
+In the main panel, there's a hidden button used to assign metrics to the left
+or right Y-axis - it's the coloured line on the left of the metric name, in the
+graph legend.
+
+To see a single metric, click on its name in the legend. Click it again to go back
+to the combined view. To edit a panel, click on its title and select "Edit".
+
+[Obligatory screenshot.](https://i.imgur.com/AdtavDA.png)
 
 ### Troubleshooting
 

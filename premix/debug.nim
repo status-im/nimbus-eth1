@@ -1,5 +1,5 @@
 import
-  json, os, stint, eth/trie/db, byteutils, eth/common,
+  json, os, stint, eth/trie/db, stew/byteutils, eth/common,
   ../nimbus/db/[db_chain], chronicles, ../nimbus/vm_state,
   ../nimbus/p2p/executor, premixcore, prestate, ../nimbus/tracer
 

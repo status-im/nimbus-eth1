@@ -17,7 +17,7 @@ requires "nim >= 0.19",
          "chronos",
          "bncurve",
          "eth",
-         "std_shims"
+         "stew"
 
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   if not dirExists "build":
@@ -26,10 +26,11 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   var extra_params = params
   for i in 2..<paramCount():
     extra_params &= " " & paramStr(i)
-  exec "nim " & lang & " --out:./build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
+  exec "nim " & lang & " --out:build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
-  buildBinary name, "tests/", "-r -d:release -d:chronicles_log_level=ERROR"
+  buildBinary name, "tests/", "-d:release -d:chronicles_log_level=ERROR"
+  exec "build/" & name
 
 task test, "Run tests":
   test "all_tests"

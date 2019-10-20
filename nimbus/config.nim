@@ -10,7 +10,7 @@
 import
   parseopt, strutils, macros, os, times,
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
-  eth/p2p/rlpx_protocols/whisper_protocol,
+  eth/p2p/bootnodes, eth/p2p/rlpx_protocols/whisper_protocol,
   ./db/select_backend,
   ./vm/interpreter/vm_forks
 
@@ -41,44 +41,6 @@ let
                   " [" & hostOS & ": " & hostCPU & ", " & nimbus_db_backend & "]\r\n" &
                   NimbusCopyright
   ## is the header which printed, when nimbus binary got executed
-
-const
-  MainnetBootnodes = [
-    "enode://a979fb575495b8d6db44f750317d0f4622bf4c2aa3365d6af7c284339968eef29b69ad0dce72a4d8db5ebb4968de0e3bec910127f134779fbcb0cb6d3331163c@52.16.188.185:30303" , # IE
-    "enode://3f1d12044546b76342d59d4a05532c14b85aa669704bfe1f864fe079415aa2c02d743e03218e57a33fb94523adb54032871a6c51b2cc5514cb7c7e35b3ed0a99@13.93.211.84:30303",   # US-WEST
-    "enode://78de8a0916848093c73790ead81d1928bec737d565119932b98c6b100d944b7a95e94f847f689fc723399d2e31129d182f7ef3863f2b4c820abbf3ab2722344d@191.235.84.50:30303",  # BR
-    "enode://158f8aab45f6d19c6cbf4a089c2670541a8da11978a2f90dbf6a502a4a3bab80d288afdbeb7ec0ef6d92de563767f3b1ea9e8e334ca711e9f8e2df5a0385e8e6@13.75.154.138:30303",  # AU
-    "enode://1118980bf48b0a3640bdba04e0fe78b1add18e1cd99bf22d53daac1fd9972ad650df52176e7c7d89d1114cfef2bc23a2959aa54998a46afcf7d91809f0855082@52.74.57.123:30303",   # SG
-    "enode://979b7fa28feeb35a4741660a16076f1943202cb72b6af70d327f053e248bab9ba81760f39d0701ef1d8f89cc1fbd2cacba0710a12cd5314d5e0c9021aa3637f9@5.1.83.226:30303"      # DE
-  ]
-
-  RopstenBootnodes = [
-    "enode://30b7ab30a01c124a6cceca36863ece12c4f5fa68e3ba9b0b51407ccc002eeed3b3102d20a88f1c1d3c3154e2449317b8ef95090e77b312d5cc39354f86d5d606@52.176.7.10:30303",    # US-Azure geth
-    "enode://865a63255b3bb68023b6bffd5095118fcc13e79dcf014fe4e47e065c350c7cc72af2e53eff895f11ba1bbb6a2b33271c1116ee870f266618eadfc2e78aa7349c@52.176.100.77:30303",  # US-Azure parity
-    "enode://6332792c4a00e3e4ee0926ed89e0d27ef985424d97b6a45bf0f23e51f0dcb5e66b875777506458aea7af6f9e4ffb69f43f3778ee73c81ed9d34c51c4b16b0b0f@52.232.243.152:30303", # Parity
-    "enode://94c15d1b9e2fe7ce56e458b9a3b672ef11894ddedd0c6f247e0f1d3487f52b66208fb4aeb8179fce6e3a749ea93ed147c37976d67af557508d199d9594c35f09@192.81.208.223:30303"  # @gpip
-  ]
-
-  RinkebyBootnodes = [
-    "enode://a24ac7c5484ef4ed0c5eb2d36620ba4e4aa13b8c84684e1b4aab0cebea2ae45cb4d375b77eab56516d34bfbd3c1a833fc51296ff084b770b94fb9028c4d25ccf@52.169.42.101:30303", # IE
-    "enode://343149e4feefa15d882d9fe4ac7d88f885bd05ebb735e547f12e12080a9fa07c8014ca6fd7f373123488102fe5e34111f8509cf0b7de3f5b44339c9f25e87cb8@52.3.158.184:30303",  # INFURA
-    "enode://b6b28890b006743680c52e64e0d16db57f28124885595fa03a562be1d2bf0f3a1da297d56b13da25fb992888fd556d4c1a27b1f39d531bde7de1921c90061cc6@159.89.28.211:30303", # AKASHA
-  ]
-
-  DiscoveryV5Bootnodes = [
-    "enode://06051a5573c81934c9554ef2898eb13b33a34b94cf36b202b69fde139ca17a85051979867720d4bdae4323d4943ddf9aeeb6643633aa656e0be843659795007a@35.177.226.168:30303",
-    "enode://0cc5f5ffb5d9098c8b8c62325f3797f56509bff942704687b6530992ac706e2cb946b90a34f1f19548cd3c7baccbcaea354531e5983c7d1bc0dee16ce4b6440b@40.118.3.223:30304",
-    "enode://1c7a64d76c0334b0418c004af2f67c50e36a3be60b5e4790bdac0439d21603469a85fad36f2473c9a80eb043ae60936df905fa28f1ff614c3e5dc34f15dcd2dc@40.118.3.223:30306",
-    "enode://85c85d7143ae8bb96924f2b54f1b3e70d8c4d367af305325d30a61385a432f247d2c75c45c6b4a60335060d072d7f5b35dd1d4c45f76941f62a4f83b6e75daaf@40.118.3.223:30307"
-  ]
-
-  KovanBootnodes = [
-    "enode://56abaf065581a5985b8c5f4f88bd202526482761ba10be9bfdcd14846dd01f652ec33fde0f8c0fd1db19b59a4c04465681fcef50e11380ca88d25996191c52de@40.71.221.215:30303",
-    "enode://d07827483dc47b368eaf88454fb04b41b7452cf454e194e2bd4c14f98a3278fed5d819dbecd0d010407fc7688d941ee1e58d4f9c6354d3da3be92f55c17d7ce3@52.166.117.77:30303",
-    "enode://8fa162563a8e5a05eef3e1cd5abc5828c71344f7277bb788a395cce4a0e30baf2b34b92fe0b2dbbba2313ee40236bae2aab3c9811941b9f5a7e8e90aaa27ecba@52.165.239.18:30303",
-    "enode://7e2e7f00784f516939f94e22bdc6cf96153603ca2b5df1c7cc0f90a38e7a2f218ffb1c05b156835e8b49086d11fdd1b3e2965be16baa55204167aa9bf536a4d9@52.243.47.56:30303",
-    "enode://0518a3d35d4a7b3e8c433e7ffd2355d84a1304ceb5ef349787b556197f0c87fad09daed760635b97d52179d645d3e6d16a37d2cc0a9945c2ddf585684beb39ac@40.68.248.100:30303"
-  ]
 
 type
   ConfigStatus* = enum
@@ -135,6 +97,8 @@ type
     staticNodes*: seq[ENode]      ## List of static nodes to connect to
     bindPort*: uint16             ## Main TCP bind port
     discPort*: uint16             ## Discovery UDP bind port
+    metricsServer*: bool           ## Enable metrics server
+    metricsServerPort*: uint16    ## metrics HTTP server port
     maxPeers*: int                ## Maximum allowed number of peers
     maxPendingPeers*: int         ## Maximum allowed pending peers
     networkId*: uint              ## Network ID as integer
@@ -149,6 +113,8 @@ type
     flags*: set[DebugFlags]       ## Debug flags
     logLevel*: LogLevel           ## Log level
     logFile*: string              ## Log file
+    logMetrics*: bool             ## Enable metrics logging
+    logMetricsInterval*: int      ## Metrics logging interval
 
   PruneMode* {.pure.} = enum
     Full
@@ -184,6 +150,7 @@ const
   defaultRpcApi = {RpcFlags.Eth, RpcFlags.Shh}
   defaultProtocols = {ProtocolFlags.Eth, ProtocolFlags.Shh}
   defaultLogLevel = LogLevel.WARN
+  defaultNetwork = MainNet
 
 var nimbusConfig {.threadvar.}: NimbusConfiguration
 
@@ -206,24 +173,24 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
   of RopstenNet:
     ChainConfig(
       chainId:        RopstenNet.uint,
-      homesteadBlock: 0.u256,
+      homesteadBlock: 0.toBlockNumber,
       daoForkSupport: true,
-      eip150Block:    0.u256,
+      eip150Block:    0.toBlockNumber,
       eip150Hash:     toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
-      eip155Block:    10.u256,
-      eip158Block:    10.u256,
-      byzantiumBlock: 1700000.u256
+      eip155Block:    10.toBlockNumber,
+      eip158Block:    10.toBlockNumber,
+      byzantiumBlock: 1700000.toBlockNumber
     )
   of RinkebyNet:
     ChainConfig(
       chainId:        RinkebyNet.uint,
-      homesteadBlock: 1.u256,
+      homesteadBlock: 1.toBlockNumber,
       daoForkSupport: true,
-      eip150Block:    2.u256,
+      eip150Block:    2.toBlockNumber,
       eip150Hash:     toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
-      eip155Block:    3.u256,
-      eip158Block:    3.u256,
-      byzantiumBlock: 1035301.u256
+      eip155Block:    3.toBlockNumber,
+      eip158Block:    3.toBlockNumber,
+      byzantiumBlock: 1035301.toBlockNumber
     )
   else:
     error "No chain config for public network", networkId = id
@@ -469,8 +436,6 @@ proc processNetArguments(key, value: string): ConfigStatus =
     config.net.setNetwork(RopstenNet)
   elif skey == "rinkeby":
     config.net.setNetwork(RinkebyNet)
-  elif skey == "morden":
-    config.net.setNetwork(MordenNet)
   elif skey == "kovan":
     config.net.setNetwork(KovanNet)
   elif skey == "networkid":
@@ -493,6 +458,13 @@ proc processNetArguments(key, value: string): ConfigStatus =
     result = processInteger(value, res)
     if result == Success:
       config.net.discPort = uint16(res and 0xFFFF)
+  elif skey == "metricsserver" and defined(insecure):
+    config.net.metricsServer = true
+  elif skey == "metricsserverport" and defined(insecure):
+    var res = 0
+    result = processInteger(value, res)
+    if result == Success:
+      config.net.metricsServerPort = uint16(res and 0xFFFF)
   elif skey == "maxpeers":
     var res = 0
     result = processInteger(value, res)
@@ -584,6 +556,15 @@ proc processDebugArguments(key, value: string): ConfigStatus =
       result = ErrorIncorrectOption
     else:
       config.debug.logFile = value
+  elif skey == "logmetrics":
+    config.debug.logMetrics = true
+  elif skey == "logmetricsinterval":
+    var res = 0
+    result = processInteger(value, res)
+    if result == Success:
+      config.debug.logMetricsInterval = res
+  else:
+    result = EmptyOption
 
 proc dumpConfiguration*(): string =
   ## Dumps current configuration as string
@@ -621,11 +602,13 @@ proc initConfiguration(): NimbusConfiguration =
   result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
 
   ## Network defaults
-  result.net.setNetwork(MainNet)
+  result.net.setNetwork(defaultNetwork)
   result.net.maxPeers = 25
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16
   result.net.discPort = 30303'u16
+  result.net.metricsServer = false
+  result.net.metricsServerPort = 9093'u16
   result.net.ident = NimbusIdent
   result.net.nat = NatAny
   result.net.protocols = defaultProtocols
@@ -644,6 +627,8 @@ proc initConfiguration(): NimbusConfiguration =
   ## Debug defaults
   result.debug.flags = {}
   result.debug.logLevel = defaultLogLevel
+  result.debug.logMetrics = false
+  result.debug.logMetricsInterval = 10
 
 proc getConfiguration*(): NimbusConfiguration =
   ## Retreive current configuration object `NimbusConfiguration`.
@@ -657,6 +642,14 @@ proc getHelpString*(): string =
     if level < enabledLogLevel:
       continue
     logLevels.add($level)
+
+  when defined(insecure):
+    let metricsServerHelp = """
+
+  --metricsServer         Enable the metrics HTTP server
+  --metricsServerPort:<value> Metrics HTTP server port on localhost (default: 9093)"""
+  else:
+    let metricsServerHelp = ""
 
   result = """
 
@@ -674,19 +667,17 @@ NETWORKING OPTIONS:
   --bootnodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
   --staticnodes:<value>   Comma separated enode URLs to connect with
   --port:<value>          Network listening TCP port (default: 30303)
-  --discport:<value>      Network listening UDP port (defaults to --port argument)
+  --discport:<value>      Network listening UDP port (defaults to --port argument)$7
   --maxpeers:<value>      Maximum number of network peers (default: 25)
   --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
   --nat:<value>           NAT port mapping mechanism (any|none|upnp|pmp|<external IP>) (default: "any")
   --nodiscover            Disables the peer discovery mechanism (manual peer addition)
   --v5discover            Enables the experimental RLPx V5 (Topic Discovery) mechanism
   --nodekey:<value>       P2P node private key (as hexadecimal string)
-  --testnet               Use Ethereum Ropsten Test Network (default)
+  --networkid:<value>     Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby) (default: $8)
+  --testnet               Use Ethereum Default Test Network (Ropsten)
+  --ropsten               Use Ethereum Ropsten Test Network
   --rinkeby               Use Ethereum Rinkeby Test Network
-  --ropsten               Use Ethereum Test Network (Ropsten Network)
-  --mainnet               Use Ethereum Main Network
-  --morden                Use Ethereum Morden Test Network
-  --networkid:<value>     Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby) (default: 3)
   --ident:<value>         Client identifier (default is '$1')
   --protocols:<value>     Enable specific set of protocols (default: $4)
 
@@ -703,6 +694,8 @@ API AND CONSOLE OPTIONS:
 LOGGING AND DEBUGGING OPTIONS:
   --log-level:<value>     One of: $2 (default: $3)
   --log-file:<value>      Optional log file, replacing stdout
+  --logMetrics            Enable metrics logging
+  --logMetricsInterval:<value> Interval at which to log metrics, in seconds (default: 10)
   --debug                 Enable debug mode
   --test:<value>          Perform specified test
 """ % [
@@ -711,62 +704,66 @@ LOGGING AND DEBUGGING OPTIONS:
     $defaultLogLevel,
     strip($defaultProtocols, chars = {'{','}'}),
     $defaultMaxMsgSize,
-    $defaultMinPow
+    $defaultMinPow,
+    metricsServerHelp,
+    $ord(defaultNetwork)
   ]
 
-proc processArguments*(msg: var string): ConfigStatus =
-  ## Process command line argument and update `NimbusConfiguration`.
-  let config = getConfiguration()
+when declared(os.paramCount): # not available with `--app:lib`
+  proc processArguments*(msg: var string): ConfigStatus =
+    ## Process command line argument and update `NimbusConfiguration`.
+    let config = getConfiguration()
 
-  # At this point `config.net.bootnodes` is likely populated with network default
-  # bootnodes. We want to override those if at least one custom bootnode is
-  # specified on the command line. We temporarily set `config.net.bootNodes`
-  # to empty seq, and in the end restore it if no bootnodes were spricified on
-  # the command line.
-  # TODO: This is pretty hacky and it's better to refactor it to make a clear
-  # distinction between default and custom bootnodes.
-  var tempBootNodes: seq[ENode]
-  swap(tempBootNodes, config.net.bootNodes)
-
-  # The same trick is done to discPort
-  config.net.discPort = 0
-
-  var opt = initOptParser()
-  var length = 0
-  for kind, key, value in opt.getopt():
-    result = Error
-    case kind
-    of cmdArgument:
-      discard
-    of cmdLongOption, cmdShortOption:
-      inc(length)
-      case key.toLowerAscii()
-        of "help", "h":
-          msg = getHelpString()
-          result = Success
-          break
-        of "version", "ver", "v":
-          msg = NimbusVersion
-          result = Success
-          break
-        else:
-          processArgument processEthArguments, key, value, msg
-          processArgument processRpcArguments, key, value, msg
-          processArgument processNetArguments, key, value, msg
-          processArgument processShhArguments, key, value, msg
-          processArgument processDebugArguments, key, value, msg
-          if result != Success:
-            msg = "Unknown option: '" & key & "'."
-    of cmdEnd:
-      doAssert(false) # we're never getting this kind here
-
-  if config.net.bootNodes.len == 0:
-    # No custom bootnodes were specified on the command line, restore to
-    # previous values
+    # At this point `config.net.bootnodes` is likely populated with network default
+    # bootnodes. We want to override those if at least one custom bootnode is
+    # specified on the command line. We temporarily set `config.net.bootNodes`
+    # to empty seq, and in the end restore it if no bootnodes were spricified on
+    # the command line.
+    # TODO: This is pretty hacky and it's better to refactor it to make a clear
+    # distinction between default and custom bootnodes.
+    var tempBootNodes: seq[ENode]
     swap(tempBootNodes, config.net.bootNodes)
 
-  if config.net.discPort == 0:
-    config.net.discPort = config.net.bindPort
+    # The same trick is done to discPort
+    config.net.discPort = 0
+
+    var opt = initOptParser()
+    var length = 0
+    for kind, key, value in opt.getopt():
+      result = Error
+      case kind
+      of cmdArgument:
+        discard
+      of cmdLongOption, cmdShortOption:
+        inc(length)
+        case key.toLowerAscii()
+          of "help", "h":
+            msg = getHelpString()
+            result = Success
+            break
+          of "version", "ver", "v":
+            msg = NimbusVersion
+            result = Success
+            break
+          else:
+            processArgument processEthArguments, key, value, msg
+            processArgument processRpcArguments, key, value, msg
+            processArgument processNetArguments, key, value, msg
+            processArgument processShhArguments, key, value, msg
+            processArgument processDebugArguments, key, value, msg
+            if result != Success:
+              msg = "Unknown option: '" & key & "'."
+              break
+      of cmdEnd:
+        doAssert(false) # we're never getting this kind here
+
+    if config.net.bootNodes.len == 0:
+      # No custom bootnodes were specified on the command line, restore to
+      # previous values
+      swap(tempBootNodes, config.net.bootNodes)
+
+    if config.net.discPort == 0:
+      config.net.discPort = config.net.bindPort
 
 proc processConfiguration*(pathname: string): ConfigStatus =
   ## Process configuration file `pathname` and update `NimbusConfiguration`.

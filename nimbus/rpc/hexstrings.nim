@@ -28,7 +28,7 @@
 ]#
 
 import
-  stint, byteutils, eth/[keys, rlp], eth/common/eth_types,
+  stint, stew/byteutils, eth/[keys, rlp], eth/common/eth_types,
   eth/p2p/rlpx_protocols/whisper_protocol
 
 type
@@ -187,7 +187,7 @@ proc `%`*(value: Hash256): JsonNode =
   result = %("0x" & value.data.toHex)
 
 proc `%`*(value: UInt256): JsonNode =
-  result = %("0x" & value.toString)
+  result = %("0x" & value.toString(16))
 
 proc `%`*(value: ref BloomFilter): JsonNode =
   result = %("0x" & toHex[256](value[]))
@@ -264,7 +264,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var Identifier) =
 proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
-  if hexStr.len <= 66 and hexStr.isValidHexData:
+  if not (hexStr.len <= 66 and hexStr.isValidHexQuantity):
     raise newException(ValueError, invalidMsg(argName) & " as a UInt256 \"" & hexStr & "\"")
   result = readUintBE[256](hexToPaddedByteArray[32](hexStr))
 

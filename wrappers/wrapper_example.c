@@ -1,0 +1,44 @@
+#include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <time.h>
+
+#include "libnimbus.h"
+
+void NimMain();
+
+void print_msg(received_message* msg) {
+  printf("Got message! %ld\n", msg->decodedLen);
+}
+
+const char* channel = "status-test-c";
+
+const char* msg = "testing message";
+
+int main(int argc, char* argv[]) {
+  time_t lastmsg;
+
+  NimMain();
+  nimbus_start(30303);
+
+  nimbus_subscribe(channel, print_msg);
+
+  lastmsg = time(NULL);
+
+  while(1) {
+    usleep(1);
+
+    if (lastmsg + 1 <= time(NULL)) {
+      lastmsg = time(NULL);
+      char buf[4096];
+      snprintf(buf, 4095,
+        "[\"~#c4\",[\"%s\",\"text/plain\",\"~:public-group-user-message\",%ld,%ld,[\"^ \",\"~:chat-id\",\"%s\",\"~:text\",\"%s\"]]]",
+        msg, lastmsg * 1000 * 100, lastmsg * 1000, channel, msg);
+
+      printf("Posting %s\n", buf);
+      nimbus_post(channel, buf);
+    }
+    nimbus_poll();
+  }
+}

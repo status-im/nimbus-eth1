@@ -7,11 +7,16 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, ospaths, tables,
-  byteutils, ranges/typedranges, net, eth/[common, keys, rlp, p2p],
-  ../nimbus/[vm_state, constants, config, transaction, utils],
+  stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p],
+  ../nimbus/[vm_state, constants, config, transaction, utils, errors],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm/interpreter/[gas_costs, vm_forks],
   ../tests/test_generalstate_failing
+
+func revmap(x: Table[Fork, string]): Table[string, Fork] =
+  result = initTable[string, Fork]()
+  for k, v in x:
+    result[v] = k
 
 const
   # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
@@ -25,6 +30,8 @@ const
   }.toTable
 
   supportedForks* = {FkFrontier, FkHomestead, FkTangerine, FkSpurious, FkByzantium, FkConstantinople}
+
+  nameToFork* = revmap(forkNames)
 
 type
   Status* {.pure.} = enum OK, Fail, Skip
@@ -100,69 +107,27 @@ func slowTest*(folder: string, name: string): bool =
               "callcodecallcallcode_ABCB_RECURSIVE.json",
               "callcodecallcodecall_ABCB_RECURSIVE.json",
               "callcodecallcodecallcode_ABCB_RECURSIVE.json",
-              "callcallcallcode_ABCB_RECURSIVE.json"]
+              "callcallcallcode_ABCB_RECURSIVE.json",
+
+              # BlockChain slow tests
+              "SuicideIssue.json"
+              ]
 
 func failIn32Bits(folder, name: string): bool =
   return name in @[
-    "Call10.json",
-    "randomStatetest94.json",
-    "calldatacopy_dejavu.json",
-    "calldatacopy_dejavu2.json",
-    "codecopy_dejavu.json",
-    "codecopy_dejavu2.json",
-    "extcodecopy_dejavu.json",
-    "log1_dejavu.json",
-    "log2_dejavu.json",
-    "log3_dejavu.json",
-    "log4_dejavu.json",
-    "mload_dejavu.json",
-    "mstore_dejavu.json",
-    "mstroe8_dejavu.json",
-    "sha3_dejavu.json",
-    "HighGasLimit.json",
-    "OverflowGasRequire2.json",
-    "RevertInCreateInInit.json",
-    "FailedCreateRevertsDeletion.json",
-    "Callcode1024BalanceTooLow.json",
     "sha3_bigSize.json", # from vm_test
 
-    # TODO: obvious theme; check returndatasize/returndatacopy
-    "call_ecrec_success_empty_then_returndatasize.json",
-    "call_then_call_value_fail_then_returndatasize.json",
-    "returndatacopy_after_failing_callcode.json",
-    "returndatacopy_after_failing_delegatecall.json",
-    "returndatacopy_after_failing_staticcall.json",
-    "returndatacopy_after_revert_in_staticcall.json",
-    "returndatacopy_after_successful_callcode.json",
-    "returndatacopy_after_successful_delegatecall.json",
-    "returndatacopy_after_successful_staticcall.json",
-    "returndatacopy_following_call.json",
-    "returndatacopy_following_failing_call.json",
-    "returndatacopy_following_revert.json",
-    "returndatacopy_following_too_big_transfer.json",
-    "returndatacopy_initial.json",
-    "returndatacopy_initial_256.json",
-    "returndatacopy_initial_big_sum.json",
-    "returndatacopy_overrun.json",
-    "returndatasize_after_failing_callcode.json",
-    "returndatasize_after_failing_staticcall.json",
-    "returndatasize_after_oog_after_deeper.json",
-    "returndatasize_after_successful_callcode.json",
-    "returndatasize_after_successful_delegatecall.json",
-    "returndatasize_after_successful_staticcall.json",
-    "returndatasize_bug.json",
-    "returndatasize_initial.json",
-    "returndatasize_initial_zero_read.json",
-    "call_then_create_successful_then_returndatasize.json",
-    "call_outsize_then_create_successful_then_returndatasize.json",
+    # crash with OOM
+    "static_Return50000_2.json",
+    "randomStatetest185.json",
+    "randomStatetest159.json",
+    "randomStatetest48.json",
 
-    "returndatacopy_following_create.json",
-    "returndatacopy_following_revert_in_create.json",
-    "returndatacopy_following_successful_create.json",
-    "RevertOpcodeInCreateReturns.json",
-    "create_callprecompile_returndatasize.json",
-    "returndatacopy_0_0_following_successful_create.json",
-    "returndatasize_following_successful_create.json"
+    # OOM in AppVeyor, not on my machine
+    "randomStatetest36.json",
+
+    # from test_transaction_json
+    "RLPHeaderSizeOverflowInt32.json"
   ]
 
 func allowedFailInCurrentBuild(folder, name: string): bool =
@@ -277,13 +242,19 @@ func safeHexToSeqByte*(hexStr: string): seq[byte] =
   else:
     hexStr.hexToSeqByte
 
+func getHexadecimalInt*(j: JsonNode): int64 =
+  # parseutils.parseHex works with int which will overflow in 32 bit
+  var data: StUInt[64]
+  data = fromHex(StUInt[64], j.getStr)
+  result = cast[int64](data)
+
 proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:
       stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
 
-    let nonce = accountData{"nonce"}.getStr.parseHexInt.AccountNonce
+    let nonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
     let code = accountData{"code"}.getStr.safeHexToSeqByte.toRange
     let balance = UInt256.fromHex accountData{"balance"}.getStr
 
@@ -300,32 +271,31 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
         wantedValue = UInt256.fromHex value.getStr
 
       let (actualValue, found) = stateDB.getStorage(account, slotId)
-      doAssert found
-      doAssert actualValue == wantedValue, &"{actualValue.toHex} != {wantedValue.toHex}"
+      if not found:
+        raise newException(ValidationError, "account not found:  " & ac)
+      if actualValue != wantedValue:
+        raise newException(ValidationError, &"{ac} storageDiff: [{slot}] {actualValue.toHex} != {wantedValue.toHex}")
 
     let
       wantedCode = hexToSeqByte(accountData{"code"}.getStr).toRange
       wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
-      wantedNonce = accountData{"nonce"}.getInt.AccountNonce
+      wantedNonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
 
       actualCode = stateDB.getCode(account)
       actualBalance = stateDB.getBalance(account)
       actualNonce = stateDB.getNonce(account)
 
-    doAssert wantedCode == actualCode, &"{wantedCode} != {actualCode}"
-    doAssert wantedBalance == actualBalance, &"{wantedBalance.toHex} != {actualBalance.toHex}"
-    doAssert wantedNonce == actualNonce, &"{wantedNonce.toHex} != {actualNonce.toHex}"
-
-func getHexadecimalInt*(j: JsonNode): int64 =
-  # parseutils.parseHex works with int which will overflow in 32 bit
-  var data: StUInt[64]
-  data = fromHex(StUInt[64], j.getStr)
-  result = cast[int64](data)
+    if wantedCode != actualCode:
+      raise newException(ValidationError, &"{ac} codeDiff {wantedCode} != {actualCode}")
+    if wantedBalance != actualBalance:
+      raise newException(ValidationError, &"{ac} balanceDiff {wantedBalance.toHex} != {actualBalance.toHex}")
+    if wantedNonce != actualNonce:
+      raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
 
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
-  result.accountNonce = j["nonce"].getStr.parseHexInt.AccountNonce
-  result.gasPrice = j["gasPrice"].getStr.parseHexInt
-  result.gasLimit = j["gasLimit"][gasIndex].getStr.parseHexInt
+  result.accountNonce = j["nonce"].getHexadecimalInt.AccountNonce
+  result.gasPrice = j["gasPrice"].getHexadecimalInt
+  result.gasLimit = j["gasLimit"][gasIndex].getHexadecimalInt
 
   # TODO: there are a couple fixtures which appear to distinguish between
   # empty and 0 transaction.to; check/verify whether correct conditions.

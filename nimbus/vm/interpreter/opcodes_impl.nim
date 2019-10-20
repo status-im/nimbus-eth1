@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times, ranges, sequtils, options,
-  chronicles, stint, nimcrypto, ranges/typedranges, eth/common,
+  strformat, times, stew/ranges, sequtils, options,
+  chronicles, stint, nimcrypto, stew/ranges/typedranges, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
@@ -49,17 +49,13 @@ op sdiv, inline = true, lhs, rhs:
   ## 0x05, Signed division
   var r: UInt256
   if rhs != 0:
-    const min = (1.u256 shl 255) - 1.u256
     var a = lhs
     var b = rhs
     var signA, signB: bool
     extractSign(a, signA)
     extractSign(b, signB)
-    if a == min and b == not zero(UInt256):
-      r = min
-    else:
-      r = a div b
-      setSign(r, signA xor signB)
+    r = a div b
+    setSign(r, signA xor signB)
   push(r)
 
 op modulo, inline = true, lhs, rhs:
@@ -257,26 +253,19 @@ op callValue, inline = true:
 
 op callDataLoad, inline = false, startPos:
   ## 0x35, Get input data of current environment
-  let dataPos = startPos.cleanMemRef
-  if dataPos >= computation.msg.data.len:
+  let start = startPos.cleanMemRef
+  if start >= computation.msg.data.len:
     push: 0
     return
 
-  let dataEndPosition = dataPos + 31
+  # If the data does not take 32 bytes, pad with zeros
+  let endRange = min(computation.msg.data.len - 1, start + 31)
+  let presentBytes = endRange - start
+  # We rely on value being initialized with 0 by default
+  var value: array[32, byte]
+  value[0 .. presentBytes] = computation.msg.data.toOpenArray(start, endRange)
 
-  if dataEndPosition < computation.msg.data.len:
-    computation.stack.push(computation.msg.data[dataPos .. dataEndPosition])
-  else:
-    var bytes: array[32, byte]
-    var presentBytes = min(computation.msg.data.len - dataPos, 32)
-
-    if presentBytes > 0:
-      copyMem(addr bytes[0], addr computation.msg.data[dataPos], presentBytes)
-    else:
-      presentBytes = 0
-
-    for i in presentBytes ..< 32: bytes[i] = 0
-    computation.stack.push(bytes)
+  push: value
 
 op callDataSize, inline = true:
   ## 0x36, Get size of input data in current environment.
@@ -361,7 +350,7 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
 
 op blockhash, inline = true, blockNumber:
   ## 0x40, Get the hash of one of the 256 most recent complete blocks.
-  push: computation.vmState.getAncestorHash(blockNumber)
+  push: computation.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
 
 op coinbase, inline = true:
   ## 0x41, Get the block's beneficiary address.
@@ -373,7 +362,7 @@ op timestamp, inline = true:
 
 op blocknumber, inline = true:
   ## 0x43, Get the block's number.
-  push: computation.vmState.blockNumber
+  push: computation.vmState.blockNumber.blockNumberToVmWord
 
 op difficulty, inline = true:
   ## 0x44, Get the block's difficulty
@@ -596,14 +585,14 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
     some(computation.getFork))
 
 template genCreate(callName: untyped, opCode: Op): untyped =
-  op callName, inline = false, value, startPosition, size:
+  op callName, inline = false, val, startPosition, size:
     ## 0xf0, Create a new account with associated code.
     let (memPos, len) = (startPosition.safeInt, size.safeInt)
-    if not computation.canTransfer(memPos, len, value, opCode):
+    if not computation.canTransfer(memPos, len, val, opCode):
       push: 0
       return
 
-    var childComp = setupCreate(computation, memPos, len, value, opCode)
+    var childComp = setupCreate(computation, memPos, len, val, opCode)
     if childComp.isNil: return
 
     continuation(childComp):
@@ -902,6 +891,7 @@ op shrOp, inline = true, shift, num:
   if shiftLen >= 256:
     push: 0
   else:
+    # uint version of `shr`
     push: num shr shiftLen
 
 op sarOp, inline = true:
@@ -913,7 +903,9 @@ op sarOp, inline = true:
     else:
       push: 0
   else:
-    push: cast[Uint256](ashr(num, shiftLen))
+    # int version of `shr` then force the result
+    # into uint256
+    push: cast[Uint256](num shr shiftLen)
 
 op extCodeHash, inline = true:
   let address = computation.stack.popAddress()

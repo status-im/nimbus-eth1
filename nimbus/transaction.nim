@@ -6,20 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth/[common, rlp, keys], nimcrypto, utils
+  constants, errors, eth/[common, rlp, keys], nimcrypto, utils,
+  ./vm/interpreter/[vm_forks, gas_costs], constants
 
-proc initTransaction*(nonce: AccountNonce, gasPrice, gasLimit: GasInt, to: EthAddress,
-  value: UInt256, payload: Blob, V: byte, R, S: UInt256, isContractCreation = false): Transaction =
-  result.accountNonce = nonce
-  result.gasPrice = gasPrice
-  result.gasLimit = gasLimit
-  result.to = to
-  result.value = value
-  result.payload = payload
-  result.V = V
-  result.R = R
-  result.S = S
-  result.isContractCreation = isContractCreation
+import eth/common/transaction as common_transaction
+export common_transaction
 
 func intrinsicGas*(data: openarray[byte]): GasInt =
   result = 21_000   # GasTransaction
@@ -29,75 +20,14 @@ func intrinsicGas*(data: openarray[byte]): GasInt =
     else:
       result += 68  # GasTXDataNonZero
 
-proc intrinsicGas*(t: Transaction): GasInt =
+proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
-  result = t.payload.intrinsicGas
+  result = tx.payload.intrinsicGas
 
-proc validate*(t: Transaction) =
-  # Hook called during instantiation to ensure that all transaction
-  # parameters pass validation rules
-  if t.intrinsicGas() > t.gasLimit:
-    raise newException(ValidationError, "Insufficient gas")
-  #  self.check_signature_validity()
-
-type
-  TransHashObj = object
-    accountNonce:  AccountNonce
-    gasPrice:      GasInt
-    gasLimit:      GasInt
-    to {.rlpCustomSerialization.}: EthAddress
-    value:         UInt256
-    payload:       Blob
-    mIsContractCreation {.rlpIgnore.}: bool
-
-proc read(rlp: var Rlp, t: var TransHashObj, _: type EthAddress): EthAddress {.inline.} =
-  if rlp.blobLen != 0:
-    result = rlp.read(EthAddress)
-  else:
-    t.mIsContractCreation = true
-
-proc append(rlpWriter: var RlpWriter, t: TransHashObj, a: EthAddress) {.inline.} =
-  if t.mIsContractCreation:
-    rlpWriter.append("")
-  else:
-    rlpWriter.append(a)
-
-const
-  EIP155_CHAIN_ID_OFFSET = 35
-
-func rlpEncode*(transaction: Transaction): auto =
-  # Encode transaction without signature
-  return rlp.encode(TransHashObj(
-    accountNonce: transaction.accountNonce,
-    gasPrice: transaction.gasPrice,
-    gasLimit: transaction.gasLimit,
-    to: transaction.to,
-    value: transaction.value,
-    payload: transaction.payload,
-    mIsContractCreation: transaction.isContractCreation
-    ))
-
-func rlpEncodeEIP155*(tx: Transaction): auto =
-  let V = (tx.V.int - EIP155_CHAIN_ID_OFFSET) div 2
-  # Encode transaction without signature
-  return rlp.encode(Transaction(
-    accountNonce: tx.accountNonce,
-    gasPrice: tx.gasPrice,
-    gasLimit: tx.gasLimit,
-    to: tx.to,
-    value: tx.value,
-    payload: tx.payload,
-    isContractCreation: tx.isContractCreation,
-    V: V.byte,
-    R: 0.u256,
-    S: 0.u256
-    ))
-
-func txHashNoSignature*(tx: Transaction): Hash256 =
-  # Hash transaction without signature
-  return keccak256.digest(if tx.V.int >= EIP155_CHAIN_ID_OFFSET: tx.rlpEncodeEIP155 else: tx.rlpEncode)
+  if tx.isContractCreation:
+    result = result + gasFees[fork][GasTXCreate]
 
 proc getSignature*(transaction: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
@@ -118,7 +48,7 @@ proc getSignature*(transaction: Transaction, output: var Signature): bool =
 
 proc toSignature*(transaction: Transaction): Signature =
   if not getSignature(transaction, result):
-    raise newException(Exception, "Invalid signaure")
+    raise newException(Exception, "Invalid signature")
 
 proc getSender*(transaction: Transaction, output: var EthAddress): bool =
   ## Find the address the transaction was sent from.
@@ -141,3 +71,37 @@ proc getRecipient*(tx: Transaction): EthAddress =
     result = generateAddress(sender, tx.accountNonce)
   else:
     result = tx.to
+
+proc validate*(tx: Transaction, fork: Fork) =
+  # Hook called during instantiation to ensure that all transaction
+  # parameters pass validation rules
+  if tx.intrinsicGas(fork) > tx.gasLimit:
+    raise newException(ValidationError, "Insufficient gas")
+
+  # check signature validity
+  var sender: EthAddress
+  if not tx.getSender(sender):
+    raise newException(ValidationError, "Invalid signature or failed message verification")
+
+  var
+    vMin = 27
+    vMax = 28
+
+  if tx.V.int >= EIP155_CHAIN_ID_OFFSET:
+    let chainId = (tx.V.int - EIP155_CHAIN_ID_OFFSET) div 2
+    vMin = 35 + (2 * chainId)
+    vMax = vMin + 1
+
+  var isValid = tx.R >= Uint256.one
+  isValid = isValid and tx.S >= Uint256.one
+  isValid = isValid and tx.V.int >= vMin
+  isValid = isValid and tx.V.int <= vMax
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+
+  if fork >= FkHomestead:
+    isValid = isValid and tx.S < SECPK1_N div 2
+
+  if not isValid:
+    raise newException(ValidationError, "Invalid transaction")
+

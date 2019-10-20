@@ -3,7 +3,7 @@ import
   eth/[common, rlp, keys, p2p], eth/p2p/rlpx_protocols/whisper_protocol,
   nimcrypto/[sysrand, hmac, sha2, pbkdf2]
 
-from byteutils import hexToSeqByte, hexToByteArray
+from stew/byteutils import hexToSeqByte, hexToByteArray
 
 # Whisper RPC implemented mostly as in
 # https://github.com/ethereum/go-ethereum/wiki/Whisper-v6-RPC-API

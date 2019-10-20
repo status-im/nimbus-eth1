@@ -1,5 +1,5 @@
 import
-  json, downloader, stint, eth/trie/db, byteutils,
+  json, downloader, stint, eth/trie/db, stew/byteutils,
   ../nimbus/db/[db_chain, storage_types], eth/[rlp, common],
   ../nimbus/p2p/chain, ../nimbus/tracer
 

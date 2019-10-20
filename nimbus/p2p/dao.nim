@@ -1,4 +1,4 @@
-import eth/common, byteutils, ../db/state_db
+import eth/common, stew/byteutils, ../db/state_db
 
 const
   # DAOForkBlockExtra is the block header extra-data field to set for the DAO fork

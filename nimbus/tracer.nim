@@ -1,7 +1,7 @@
 import
   db/[db_chain, state_db, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
-  eth/trie/db, nimcrypto, strutils, ranges,
+  eth/trie/db, nimcrypto, strutils, stew/ranges,
   chronicles, rpc/hexstrings, launcher,
   vm/interpreter/vm_forks
 

@@ -1,9 +1,9 @@
 import
-  json, downloader, stint, strutils, byteutils, parser, 
+  json, downloader, stint, strutils, stew/byteutils, parser,
   chronicles, ../nimbus/[tracer, vm_state, utils], eth/trie/[trie_defs, db],
   ../nimbus/db/[db_chain, state_db], ../nimbus/p2p/executor, premixcore,
   eth/common, configuration, tables, ../nimbus/vm_types, hashes
-  
+
 const
   emptyCodeHash = blankStringHash
   emptyStorageHash = emptyRlpHash

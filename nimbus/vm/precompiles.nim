@@ -16,34 +16,37 @@ type
     paEcMul,
     paPairing = 8
 
-proc getSignature*(computation: BaseComputation): (array[32, byte], Signature) =
+proc getSignature(computation: BaseComputation): (array[32, byte], Signature) =
   # input is Hash, V, R, S
   template data: untyped = computation.msg.data
-  var bytes: array[65, byte]
+  var bytes: array[65, byte] # will hold R[32], S[32], V[1], in that order
   let maxPos = min(data.high, 127)
-  if maxPos >= 31:
-    # extract message hash
-    result[0][0..31] = data[0..31]
-    if maxPos >= 127:
+
+  # if we don't have at minimum 64 bytes, there can be no valid V
+  if maxPos >= 63:
+    let v = data[63]
+    # check if V[32] is 27 or 28
+    if not (v.int in 27..28):
+      raise newException(ValidationError, "Invalid V in getSignature")
+    for x in 32..<63:
+      if data[x] != 0:
+        raise newException(ValidationError, "Invalid V in getSignature")
+
+    bytes[64] = v - 27
+
+    # if there is more data for R and S, copy it. Else, defaulted zeroes are
+    # used for R and S
+    if maxPos >= 64:
       # Copy message data to buffer
-      # Note that we need to rearrange to R, S, V
-      bytes[0..63] = data[64..127]
-    elif maxPos >= 64:
       bytes[0..(maxPos-64)] = data[64..maxPos]
+
+    if recoverSignature(bytes, result[1]) != EthKeysStatus.Success:
+      raise newException(ValidationError, "Could not recover signature computation")
+
+    # extract message hash, only need to copy when there is a valid signature
+    result[0][0..31] = data[0..31]
   else:
-    result[0][0..maxPos] = data[0..maxPos]
-
-  var VOK = true
-  let v = data[63]
-  for x in 32..<63:
-    if data[x] != 0: VOK = false
-  VOK = VOK and v.int in 27..28
-  if not VOK:
     raise newException(ValidationError, "Invalid V in getSignature")
-  bytes[64] = v - 27
-
-  if recoverSignature(bytes, result[1]) != EthKeysStatus.Success:
-    raise newException(ValidationError, "Could not recover signature computation")
 
 proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
   when T is G1:
@@ -230,7 +233,7 @@ proc modExp*(computation: BaseComputation) =
   elif maxBytes <= 1024:
     computation.modExpInternal(base_len, exp_len, mod_len, StUint[8192])
   else:
-    raise newException(ValueError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
+    raise newException(EVMError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
 proc bn256ecAdd*(computation: BaseComputation) =
   computation.gasMeter.consumeGas(GasECAdd, reason = "ecAdd Precompile")
@@ -332,7 +335,7 @@ proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.}
       let msg = getCurrentExceptionMsg()
       # cannot use setError here, cyclic dependency
       computation.error = Error(info: msg, burnsGas: true)
-    except:
+    except CatchableError:
       let msg = getCurrentExceptionMsg()
       if fork >= FKByzantium and precompile > paIdentity:
         computation.error = Error(info: msg, burnsGas: true)

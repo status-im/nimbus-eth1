@@ -1,5 +1,5 @@
 import
-  eth/[common, rlp], stint, byteutils,
+  eth/[common, rlp], stint, stew/byteutils,
   nimcrypto, chronicles, configuration,
   eth/trie/[hexary, db, trie_defs]
 

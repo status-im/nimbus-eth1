@@ -6,7 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 
-import eth/[common, rlp], ../constants, strformat, times, ../validation
+import
+  strformat, times, options,
+  eth/[common, rlp],
+  ../validation, ./difficulty, ../vm/interpreter/vm_forks, ../constants
 
 export BlockHeader
 
@@ -18,24 +21,12 @@ proc `$`*(header: BlockHeader): string =
 proc gasLimitBounds*(parent: BlockHeader): (GasInt, GasInt) =
   ## Compute the boundaries for the block gas limit based on the parent block.
   let
-    boundaryRange = parent.gasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR
-    upperBound = parent.gasLimit + boundaryRange
+    boundaryRange = (parent.gasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR)
+    upperBound = if GAS_LIMIT_MAXIMUM - boundaryRange < parent.gasLimit:
+      GAS_LIMIT_MAXIMUM else: parent.gasLimit + boundaryRange
     lowerBound = max(GAS_LIMIT_MINIMUM, parent.gasLimit - boundaryRange)
-  return (lowerBound, upperBound)
 
-#[
-proc validate_gaslimit(header: BlockHeader):
-  let parent_header = getBlockHeaderByHash(header.parent_hash)
-  low_bound, high_bound = compute_gas_limit_bounds(parent_header)
-  if header.gas_limit < low_bound:
-      raise ValidationError(
-          "The gas limit on block {0} is too low: {1}. It must be at least {2}".format(
-              encode_hex(header.hash), header.gas_limit, low_bound))
-  elif header.gas_limit > high_bound:
-      raise ValidationError(
-          "The gas limit on block {0} is too high: {1}. It must be at most {2}".format(
-              encode_hex(header.hash), header.gas_limit, high_bound))
-]#
+  return (lowerBound, upperBound)
 
 proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
   #[
@@ -65,29 +56,35 @@ proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
 
   let gasLimit = max(
       GAS_LIMIT_MINIMUM,
-      parent.gasLimit - decay + usage_increase
+      parent.gasLimit - decay + usageIncrease
   )
 
-  if gas_limit < GAS_LIMIT_MINIMUM:
-      return GAS_LIMIT_MINIMUM
-  elif gas_limit < gasLimitFloor:
-      return parent.gas_limit + decay
+  if gasLimit < GAS_LIMIT_MINIMUM:
+    return GAS_LIMIT_MINIMUM
+  elif gasLimit < gasLimitFloor:
+    return parent.gasLimit + decay
   else:
-      return gas_limit
+    return gasLimit
 
-proc generateHeaderFromParentHeader*(
-    computeDifficultyFn: proc(parentHeader: BlockHeader, timestamp: int): int,
-    parent: BlockHeader,
-    coinbase: EthAddress,
-    timestamp: int = -1,
-    extraData: string = ""): BlockHeader =
-  # TODO: validateGt(timestamp, parent.timestamp)
+proc generateHeaderFromParentHeader*(parent: BlockHeader,
+    coinbase: EthAddress, fork: Fork, timestamp: Option[EthTime],
+    gasLimit: Option[GasInt], extraData: Blob): BlockHeader =
+
+  var lcTimestamp: EthTime
+  if timestamp.isNone:
+    lcTimeStamp = max(getTime(), parent.timestamp + 1.milliseconds)  # Note: Py-evm uses +1 second, not ms
+  else:
+    lcTimestamp = timestamp.get()
+
+  if lcTimestamp <= parent.timestamp:
+    raise newException(ValueError, "header.timestamp should be higher than parent.timestamp")
+
   result = BlockHeader(
-    timestamp: max(getTime(), parent.timestamp + 1.milliseconds),   # Note: Py-evm uses +1 second, not ms
+    timestamp: lcTimestamp,
     blockNumber: (parent.blockNumber + 1),
-    # TODO: difficulty: parent.computeDifficulty(parent.timestamp),
-    gasLimit: computeGasLimit(parent, gasLimitFloor = GENESIS_GAS_LIMIT),
+    difficulty: calcDifficulty(lcTimestamp, parent, fork),
+    gasLimit: if gasLimit.isSome: gasLimit.get() else: computeGasLimit(parent, gasLimitFloor = GENESIS_GAS_LIMIT),
     stateRoot: parent.stateRoot,
     coinbase: coinbase,
-    # TODO: data: extraData,
+    extraData: extraData,
   )

@@ -7,15 +7,16 @@
 
 import
   unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
-  byteutils, ranges/typedranges, eth/[rlp, common], eth/trie/db,
+  stew/byteutils, stew/ranges/typedranges, eth/[rlp, common], eth/trie/db,
   ./test_helpers, ../nimbus/vm/interpreter,
   ../nimbus/[constants, errors, vm_state, vm_types, utils],
   ../nimbus/db/[db_chain, state_db]
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
-suite "vm json tests":
-  jsonTest("VMTests", testFixture)
+proc vmJsonMain*() =
+  suite "vm json tests":
+    jsonTest("VMTests", testFixture)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode
@@ -81,10 +82,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt
     let actualGasRemaining = gasMeter.gasRemaining
     checkpoint(&"Remaining: {actualGasRemaining} - Expected: {expectedGasRemaining}")
-    check(actualGasRemaining == expectedGasRemaining or
-          computation.code.hasSStore() and
-            (actualGasRemaining > expectedGasRemaining and (actualGasRemaining - expectedGasRemaining) mod 15_000 == 0 or
-             expectedGasRemaining > actualGasRemaining and (expectedGasRemaining - actualGasRemaining) mod 15_000 == 0))
+    check(actualGasRemaining == expectedGasRemaining)
 
     if not fixture{"post"}.isNil:
       verifyStateDb(fixture{"post"}, computation.vmState.readOnlyStateDB)

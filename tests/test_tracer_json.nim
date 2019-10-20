@@ -7,13 +7,14 @@
 
 import
   unittest, json, os, tables, strformat, strutils,
-  eth/common, byteutils, eth/trie/db,
+  eth/common, stew/byteutils, eth/trie/db,
   ./test_helpers, ../nimbus/db/db_chain, ../nimbus/[tracer, vm_types]
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
-suite "tracer json tests":
-  jsonTest("TracerTests", testFixture)
+proc tracerJsonMain*() =
+  suite "tracer json tests":
+    jsonTest("TracerTests", testFixture)
 
 # use tracerTestGen.nim to generate additional test data
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =

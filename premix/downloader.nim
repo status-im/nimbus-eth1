@@ -27,7 +27,7 @@ proc request*(methodName: string, params: JsonNode): JsonNode =
     result = newJNull()
   else:
     result = r.result
-  client.transp.close()
+  waitFor client.close()
 
 proc requestBlockBody(n: JsonNode, blockNumber: BlockNumber): BlockBody =
   let txs = n["transactions"]

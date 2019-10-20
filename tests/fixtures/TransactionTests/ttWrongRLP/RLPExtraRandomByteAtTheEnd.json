@@ -1,0 +1,26 @@
+{
+    "RLPExtraRandomByteAtTheEnd" : {
+        "Byzantium" : {
+        },
+        "Constantinople" : {
+        },
+        "ConstantinopleFix" : {
+        },
+        "EIP150" : {
+        },
+        "EIP158" : {
+        },
+        "Frontier" : {
+        },
+        "Homestead" : {
+        },
+        "_info" : {
+            "comment" : "",
+            "filledwith" : "testeth 1.6.0-alpha.0-14+commit.80ca102e",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttWrongRLP/RLPExtraRandomByteAtTheEndCopier.json",
+            "sourceHash" : "2e2cf6deb2a60903273e2f617d7c46fdfd988f8b3f84c84f54c0eb709127f12b"
+        },
+        "rlp" : "0xf85280018207d0870b9331677e6ebf0a801ca098ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4aa08887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a33ac4"
+    }
+}

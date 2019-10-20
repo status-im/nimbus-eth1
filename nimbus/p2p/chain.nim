@@ -1,4 +1,4 @@
-import ../db/[db_chain, state_db], eth/common, chronicles, ../vm_state, ../vm_types, ../transaction, ranges,
+import ../db/[db_chain, state_db], eth/common, chronicles, ../vm_state, ../vm_types, ../transaction, stew/ranges,
   ../vm/[computation, message], ../constants, stint, nimcrypto,
   ../vm_state_transactions, sugar, ../utils, eth/trie/db, ../tracer, ./executor
 
@@ -23,9 +23,15 @@ method getBlockHeader*(c: Chain, b: HashOrNum, output: var BlockHeader): bool {.
 method getBestBlockHeader*(c: Chain): BlockHeader {.gcsafe.} =
   c.db.getCanonicalHead()
 
-method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader): bool {.gcsafe.} =
-  let n = h.blockNumber + 1
-  c.db.getBlockHeader(n, output)
+method getSuccessorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.gcsafe.} =
+  let offset = 1 + skip.toBlockNumber
+  if h.blockNumber <= (not 0.toBlockNumber) - offset:
+    result = c.db.getBlockHeader(h.blockNumber + offset, output)
+
+method getAncestorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, skip = 0'u): bool {.gcsafe.} =
+  let offset = 1 + skip.toBlockNumber
+  if h.blockNumber >= offset:
+    result = c.db.getBlockHeader(h.blockNumber - offset, output)
 
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
@@ -46,9 +52,10 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     let validationResult = processBlock(c.db, headers[i], bodies[i], vmState)
 
     when not defined(release):
-      if validationResult == ValidationResult.Error:
+      if validationResult == ValidationResult.Error and
+          bodies[i].transactions.calcTxRoot == headers[i].txRoot:
         dumpDebuggingMetaData(c.db, headers[i], bodies[i], vmState)
-        raise newException(Exception, "Validation error. Debugging metadata dumped.")
+        warn "Validation error. Debugging metadata dumped."
 
     if validationResult != ValidationResult.OK:
       return validationResult

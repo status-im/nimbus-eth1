@@ -68,7 +68,9 @@ method gasLimit*(vmState: BaseVMState): GasInt {.base, gcsafe.} =
 
 method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base, gcsafe.} =
   var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1
-  if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH or ancestorDepth < 0:
+  if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
+    return
+  if blockNumber >= vmState.blockHeader.blockNumber:
     return
 
   result = vmState.chainDB.getBlockHash(blockNumber)

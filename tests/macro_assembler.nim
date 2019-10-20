@@ -1,8 +1,8 @@
 import
-  macros, macrocache, strutils, unittest,
-  byteutils, chronicles, ranges, eth/common,
+  macrocache, strutils, unittest,
+  stew/byteutils, chronicles, stew/ranges, eth/common,
   ../nimbus/vm/interpreter/opcode_values,
-  std_shims/macros_shim
+  stew/shims/macros
 
 import
   options, json, os, eth/trie/[db, hexary],

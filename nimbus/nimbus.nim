@@ -15,7 +15,7 @@ import
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
-  eth/trie/db
+  eth/trie/db, metrics, metrics/chronicles_support
 
 ## TODO:
 ## * No IPv6 support
@@ -37,15 +37,37 @@ type
     ethNode*: EthereumNode
     state*: NimbusState
 
-proc start(): NimbusObject =
-  var nimbus = NimbusObject()
+var nimbus: NimbusObject
+
+proc start() =
   var conf = getConfiguration()
+
+  nimbus = NimbusObject()
+  nimbus.state = Starting
+
+  ## Ctrl+C handling
+  proc controlCHandler() {.noconv.} =
+    when defined(windows):
+      # workaround for https://github.com/nim-lang/Nim/issues/4057
+      setupForeignThreadGc()
+    nimbus.state = Stopping
+    echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
+  setControlCHook(controlCHandler)
 
   ## logging
   setLogLevel(conf.debug.logLevel)
   if len(conf.debug.logFile) != 0:
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(conf.debug.logFile, fmAppend)
+
+  # metrics logging
+  if conf.debug.logMetrics:
+    proc logMetrics(udata: pointer) {.closure, gcsafe.} =
+      {.gcsafe.}:
+        let registry = defaultRegistry
+      info "metrics", registry
+      addTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
+    addTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
 
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:
@@ -94,7 +116,8 @@ proc start(): NimbusObject =
 
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId,
-                                   addAllCapabilities = false)
+                                   addAllCapabilities = false,
+                                   minPeers = conf.net.maxPeers)
   # Add protocol capabilities based on protocol flags
   if ProtocolFlags.Eth in conf.net.protocols:
     nimbus.ethNode.addCapability eth
@@ -116,12 +139,19 @@ proc start(): NimbusObject =
     setupDebugRpc(chainDB, nimbus.rpcServer)
 
   ## Starting servers
-  nimbus.state = Starting
   if RpcFlags.Enabled in conf.rpc.flags:
     nimbus.rpcServer.rpc("admin_quit") do() -> string:
-      nimbus.state = Stopping
+      {.gcsafe.}:
+        nimbus.state = Stopping
       result = "EXITING"
     nimbus.rpcServer.start()
+
+  # metrics server
+  when defined(insecure):
+    if conf.net.metricsServer:
+      let metricsAddress = "127.0.0.1"
+      info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsServerPort
+      metrics.startHttpServer(metricsAddress, Port(conf.net.metricsServerPort))
 
   # Connect directly to the static nodes
   for enode in conf.net.staticNodes:
@@ -137,22 +167,18 @@ proc start(): NimbusObject =
     if status != syncSuccess:
       debug "Block sync failed: ", status
 
-  nimbus.state = Running
-  result = nimbus
+  if nimbus.state == Starting:
+    # it might have been set to "Stopping" with Ctrl+C
+    nimbus.state = Running
 
-proc stop*(nimbus: NimbusObject) {.async.} =
+proc stop*() {.async.} =
   trace "Graceful shutdown"
-  nimbus.rpcServer.stop()
+  var conf = getConfiguration()
+  if RpcFlags.Enabled in conf.rpc.flags:
+    nimbus.rpcServer.stop()
 
-proc process*(nimbus: NimbusObject) =
+proc process*() =
   if nimbus.state == Running:
-    when not defined(windows):
-      proc signalBreak(udata: pointer) =
-        nimbus.state = Stopping
-      # Adding SIGINT, SIGTERM handlers
-      # discard addSignal(SIGINT, signalBreak)
-      # discard addSignal(SIGTERM, signalBreak)
-
     # Main loop
     while nimbus.state == Running:
       try:
@@ -162,16 +188,16 @@ proc process*(nimbus: NimbusObject) =
           exc = getCurrentException().name,
           err = getCurrentExceptionMsg()
 
-    # Stop loop
-    waitFor nimbus.stop()
+  # Stop loop
+  waitFor stop()
 
 when isMainModule:
   var message: string
 
-  ## Pring Nimbus header
+  ## Print Nimbus header
   echo NimbusHeader
 
-  ## show logs on stdout until we get the user's logging choice
+  ## Show logs on stdout until we get the user's logging choice
   discard defaultChroniclesStream.output.open(stdout)
 
   ## Processing command line arguments
@@ -183,5 +209,6 @@ when isMainModule:
       echo message
       quit(QuitSuccess)
 
-  var nimbus = start()
-  nimbus.process()
+  start()
+  process()
+

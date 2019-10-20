@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import hexstrings, nimcrypto, eth/common, byteutils,
+import hexstrings, nimcrypto, eth/common, stew/byteutils,
   ../db/[db_chain, state_db, storage_types], strutils,
   ../constants, stint
 
@@ -31,4 +31,4 @@ proc headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
     # Raises are trapped and wrapped in JSON when returned to the user.
     tag.validateHexQuantity
     let blockNum = stint.fromHex(UInt256, tag)
-    result = chain.getBlockHeader(blockNum)
+    result = chain.getBlockHeader(blockNum.toBlockNumber)

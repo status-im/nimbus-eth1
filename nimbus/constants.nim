@@ -32,11 +32,11 @@ const
   UNCLE_DEPTH_PENALTY_FACTOR* =             8.u256
 
   MAX_UNCLE_DEPTH* =                        6.u256
-  MAX_UNCLES* =                             2.u256
+  MAX_UNCLES* =                             2
 
   EMPTY_UNCLE_HASH* =                       "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".toDigest
 
-  GENESIS_BLOCK_NUMBER* =                   0.u256
+  GENESIS_BLOCK_NUMBER* =                   0.toBlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
   GENESIS_GAS_LIMIT* =                      3_141_592
   GENESIS_PARENT_HASH* =                    ZERO_HASH32
@@ -45,6 +45,7 @@ const
   GENESIS_MIX_HASH* =                       ZERO_HASH32
   GENESIS_EXTRA_DATA* =                     ""
   GAS_LIMIT_MINIMUM* =                      5000
+  GAS_LIMIT_MAXIMUM* =                      high(GasInt)
 
   BLANK_ROOT_HASH* =                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
   EMPTY_SHA3* =                             "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest
@@ -53,6 +54,8 @@ const
 
   MAX_PREV_HEADER_DEPTH* =                  256.toBlockNumber
   MaxCallDepth* =                           1024
+
+  SECPK1_N* =                               Uint256.fromHex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
 
   ## Fork specific constants
 

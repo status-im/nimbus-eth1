@@ -1,0 +1,40 @@
+{
+    "DataTestEnoughGAS" : {
+        "Byzantium" : {
+            "hash" : "ba6950e1a9e03da3dc5a43587cb3eb538ed53f15acc9f5a3876417fe10935be6",
+            "sender" : "1e42dc399dc122b1172fa3c3d9a9a0adabf7d026"
+        },
+        "Constantinople" : {
+            "hash" : "ba6950e1a9e03da3dc5a43587cb3eb538ed53f15acc9f5a3876417fe10935be6",
+            "sender" : "1e42dc399dc122b1172fa3c3d9a9a0adabf7d026"
+        },
+        "ConstantinopleFix" : {
+            "hash" : "ba6950e1a9e03da3dc5a43587cb3eb538ed53f15acc9f5a3876417fe10935be6",
+            "sender" : "1e42dc399dc122b1172fa3c3d9a9a0adabf7d026"
+        },
+        "EIP150" : {
+            "hash" : "ba6950e1a9e03da3dc5a43587cb3eb538ed53f15acc9f5a3876417fe10935be6",
+            "sender" : "1e42dc399dc122b1172fa3c3d9a9a0adabf7d026"
+        },
+        "EIP158" : {
+            "hash" : "ba6950e1a9e03da3dc5a43587cb3eb538ed53f15acc9f5a3876417fe10935be6",
+            "sender" : "1e42dc399dc122b1172fa3c3d9a9a0adabf7d026"
+        },
+        "Frontier" : {
+            "hash" : "ba6950e1a9e03da3dc5a43587cb3eb538ed53f15acc9f5a3876417fe10935be6",
+            "sender" : "1e42dc399dc122b1172fa3c3d9a9a0adabf7d026"
+        },
+        "Homestead" : {
+            "hash" : "ba6950e1a9e03da3dc5a43587cb3eb538ed53f15acc9f5a3876417fe10935be6",
+            "sender" : "1e42dc399dc122b1172fa3c3d9a9a0adabf7d026"
+        },
+        "_info" : {
+            "comment" : "",
+            "filledwith" : "testeth 1.6.0-alpha.0-14+commit.80ca102e",
+            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttData/DataTestEnoughGASFiller.json",
+            "sourceHash" : "76afd22c6a93d0e668c04b86affad4dbf6f373b31ca5289b51985d0860525d47"
+        },
+        "rlp" : "0xf86d80018259d894095e7baea6a6c7c4c2dfeb977efac326af552d870a8e0358ac39584bc98a7c979f984b031ba048b55bfa915ac795c431978d8a6a992b628d557da5ff759b307d495a36649353a01fffd310ac743f371de3b9f7f9cb56c0b28ad43601b4ab949f53faa07bd2c804"
+    }
+}

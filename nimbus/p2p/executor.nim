@@ -1,5 +1,5 @@
 import options, sets,
-  eth/[common, bloom], ranges, chronicles, nimcrypto,
+  eth/[common, bloom], stew/ranges, chronicles, nimcrypto,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
@@ -17,6 +17,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
 
   var gasUsed = tx.gasLimit
+  var coinBaseSuicide = false
 
   block:
     if vmState.cumulativeGasUsed + gasUsed > vmState.blockHeader.gasLimit:
@@ -48,15 +49,17 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     if not computation.shouldBurnGas:
       gasUsed = computation.refundGas(tx, sender)
 
-    if computation.isSuicided(vmState.blockHeader.coinbase):
-      gasUsed = 0
+    coinBaseSuicide = computation.isSuicided(vmState.blockHeader.coinbase)
 
   vmState.cumulativeGasUsed += gasUsed
 
   # miner fee
-  let txFee = gasUsed.u256 * tx.gasPrice.u256
   vmState.mutateStateDB:
-    db.addBalance(vmState.blockHeader.coinbase, txFee)
+    if not coinBaseSuicide:
+      let txFee = gasUsed.u256 * tx.gasPrice.u256
+      db.addBalance(vmState.blockHeader.coinbase, txFee)
+    else:
+      db.addBalance(vmState.blockHeader.coinbase, 0.u256)
 
     # EIP158 state clearing
     for account in vmState.touchedAccounts:
@@ -85,7 +88,7 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
     bloom.value = bloom.value or logsBloom(receipt.logs).value
   result = bloom.value.toByteArrayBE
 
-proc makeReceipt(vmState: BaseVMState, fork = FkFrontier): Receipt =
+proc makeReceipt*(vmState: BaseVMState, fork = FkFrontier): Receipt =
   if fork < FkByzantium:
     result.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
   else:
@@ -102,7 +105,7 @@ const
   eth5 = 5.eth
   eth3 = 3.eth
   eth2 = 2.eth
-  blockRewards: array[Fork, Uint256] = [
+  blockRewards*: array[Fork, Uint256] = [
     eth5, # FkFrontier
     eth5, # FkThawing
     eth5, # FkHomestead
@@ -150,8 +153,8 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
       debug "Uncle hash mismatch"
       return ValidationResult.Error
     for uncle in body.uncles:
-      var uncleReward = uncle.blockNumber + 8.u256
-      uncleReward -= header.blockNumber
+      var uncleReward = uncle.blockNumber.u256 + 8.u256
+      uncleReward -= header.blockNumber.u256
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
       vmState.mutateStateDB:

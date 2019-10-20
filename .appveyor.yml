@@ -3,6 +3,13 @@ version: '{build}'
 # use an image with recent Mingw-w64 versions available on both architectures: https://www.appveyor.com/docs/windows-images-software/#mingw-msys-cygwin
 image: Visual Studio 2015
 
+environment:
+  # disable LFS file downloading during regular cloning
+  GIT_LFS_SKIP_SMUDGE: 1
+
+cache:
+  - NimBinaries
+
 matrix:
   # We always want 32-bit and 64-bit compilation
   fast_finish: false
@@ -14,14 +21,19 @@ platform:
 # when multiple CI builds are queued, the tested commit needs to be in the last X commits cloned with "--depth X"
 clone_depth: 10
 
+init:
+  # disable cache saving outside the master and devel branches
+  - ps: IF ("$env:APPVEYOR_REPO_BRANCH" -ne "master" -and "$env:APPVEYOR_REPO_BRANCH" -ne "devel") { $env:APPVEYOR_CACHE_SKIP_SAVE = "true" }
+
 install:
+  - git submodule update --init --recursive
   # use the newest versions documented here: https://www.appveyor.com/docs/windows-images-software/#mingw-msys-cygwin
   - IF "%PLATFORM%" == "x86" SET PATH=C:\mingw-w64\i686-6.3.0-posix-dwarf-rt_v5-rev1\mingw32\bin;%PATH%
   - IF "%PLATFORM%" == "x64" SET PATH=C:\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0\mingw64\bin;%PATH%
 
 build_script:
-  - cd C:\projects\%APPVEYOR_PROJECT_SLUG%
   # the 32-bit build is done on a 64-bit image, so we need to override the architecture
+  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% CI_CACHE=NimBinaries update
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% fetch-dlls
   - dir C:\mingw-w64
 
@@ -30,7 +42,6 @@ test_script:
   - build\nimbus.exe --help
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% test
   - IF "%PLATFORM%" == "x64" mingw32-make -j2 test-reproducibility
-  - mingw32-make -C vendor/nim-beacon-chain -j2 test
 
 deploy: off
 

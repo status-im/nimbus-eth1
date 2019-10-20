@@ -1,7 +1,7 @@
 # Constants containing the genesis allocation of built-in genesis blocks.
 # Their content is an RLP-encoded list of (address, balance) tuples.
 
-import byteutils, strutils
+import stew/byteutils, strutils
 
 proc toData(s: string): seq[byte] {.compileTime.} = s.strip().hexToSeqByte()
 

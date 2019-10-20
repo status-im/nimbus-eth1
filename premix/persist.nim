@@ -1,7 +1,7 @@
 # use this module to quickly populate db with data from geth/parity
 
 import
-  eth/[common, rlp], stint, byteutils, nimcrypto,
+  eth/[common, rlp], stint, stew/byteutils, nimcrypto,
   chronicles, downloader, configuration,
   ../nimbus/errors
 
@@ -62,13 +62,13 @@ proc main() =
   var numBlocks = 0
   var counter = 0
 
-  while true:    
+  while true:
     var thisBlock = requestBlock(blockNumber)
 
     headers.add thisBlock.header
     bodies.add thisBlock.body
     info "REQUEST HEADER", blockNumber=blockNumber, txs=thisBlock.body.transactions.len
-    
+
     inc numBlocks
     blockNumber += one
 

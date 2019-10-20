@@ -7,7 +7,7 @@
 
 import
   unittest, strformat, strutils, tables, json, ospaths, times, os,
-  byteutils, ranges/typedranges, nimcrypto, options,
+  stew/byteutils, stew/ranges/typedranges, nimcrypto, options,
   eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
   ./test_helpers, ../nimbus/p2p/executor, test_config,
   ../nimbus/[constants, errors, transaction],
@@ -25,6 +25,7 @@ type
     expectedLogs: string
     fork: Fork
     debugMode: bool
+    trace: bool
     index: int
 
   GST_VMState = ref object of BaseVMState
@@ -74,16 +75,17 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
       accounts[$account] = dumpAccount(vmState.readOnlyStateDB, account, "pre" & $i)
       inc i
 
+  let tracingResult = if tester.trace: vmState.getTracingResult() else: %[]
   let debugData = %{
     "gasUsed": %gasUsed,
-    "structLogs": vmState.getTracingResult(),
+    "structLogs": tracingResult,
     "accounts": accounts
   }
   let status = if success: "_success" else: "_failed"
   writeFile("debug_" & tester.name & "_" & $tester.index & status & ".json", debugData.pretty())
 
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
-  var tracerFlags: set[TracerFlags] = if tester.debugMode: {TracerFlags.EnableTracing} else : {}
+  var tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
   var vmState = newGST_VMState(emptyRlpHash, tester.header, newBaseChainDB(newMemoryDb()), tracerFlags)
   var gasUsed: GasInt
   let sender = tester.tx.getSender()
@@ -102,7 +104,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       let success = expectedLogsHash == actualLogsHash and obtainedHash == tester.expectedHash
       tester.dumpDebugData(vmState, sender, gasUsed, success)
 
-  if not validateTransaction(vmState, tester.tx, sender):
+  if not validateTransaction(vmState, tester.tx, sender, tester.fork):
     vmState.mutateStateDB:
       # pre-EIP158 (e.g., Byzantium) should ensure currentCoinbase exists
       # in later forks, don't create at all
@@ -125,7 +127,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   gasUsed = tester.tx.processTransaction(sender, vmState, tester.fork)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
-                 debugMode = false, supportedForks: set[Fork] = supportedForks) =
+                 trace = false, debugMode = false, supportedForks: set[Fork] = supportedForks) =
   var tester: Tester
   var fixture: JsonNode
   for label, child in fixtures:
@@ -144,6 +146,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
     )
 
   let specifyIndex = getConfiguration().index
+  tester.trace = trace
   tester.debugMode = debugMode
   let ftrans = fixture["transaction"]
   var testedInFork = false
@@ -169,8 +172,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
   if not testedInFork:
     echo "test subject '", tester.name, "' not tested in any forks"
 
-proc main() =
-  if paramCount() == 0:
+proc generalStateJsonMain*(debugMode = false) =
+  if paramCount() == 0 or not debugMode:
     # run all test fixtures
     suite "generalstate json tests":
       jsonTest("GeneralStateTests", testFixture)
@@ -186,7 +189,7 @@ proc main() =
     var testStatusIMPL: TestStatus
     var forks: set[Fork] = {}
     forks.incl config.fork
-    testFixture(n, testStatusIMPL, true, forks)
+    testFixture(n, testStatusIMPL, config.trace, true, forks)
 
 when isMainModule:
   var message: string
@@ -199,5 +202,4 @@ when isMainModule:
     if len(message) > 0:
       echo message
       quit(QuitSuccess)
-
-  main()
+  generalStateJsonMain(true)
