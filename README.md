@@ -26,7 +26,6 @@ _We currently do not guarantee that Nimbus will work on Windows._
 
 * [RocksDB](https://github.com/facebook/rocksdb/)
 * PCRE
-* Go 1.12 (for compiling libp2p daemon - being phased out)
 * GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
 
 On Windows, a precompiled DLL collection download is available through the `fetch-dlls` Makefile target: ([Windows instructions](#windows)).
