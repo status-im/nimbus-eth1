@@ -316,7 +316,7 @@ mkdir ../my_metrics
 cp -a examples/prometheus.yml ../my_metrics/
 # start Prometheus in a separate terminal
 cd ../my_metrics
-prometheus # loads ./prometheus.yml, writes metric data to ./data
+prometheus --config.file=prometheus.yml # loads ./prometheus.yml, writes metric data to ./data
 # start a fresh Nimbus sync and export metrics
 rm -rf ~/.cache/nimbus/db; ./build/nimbus --prune:archive --metricsServer
 ```
