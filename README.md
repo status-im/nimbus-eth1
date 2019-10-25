@@ -6,11 +6,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 
-Join the Status community chats:
+Join the Nimbus community chats (mirrored):
+[![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus%2Fnimbus-orange.svg)](https://discord.gg/XRxWahP)
 [![Gitter: #status-im/nimbus](https://img.shields.io/badge/gitter-status--im%2Fnimbus-orange.svg)](https://gitter.im/status-im/nimbus)
-[![Riot: #nimbus](https://img.shields.io/badge/riot-%23nimbus%3Astatus.im-orange.svg)](https://chat.status.im/#/room/#nimbus:status.im)
-[![Riot: #dev-status](https://img.shields.io/badge/riot-%23dev--status%3Astatus.im-orange.svg)](https://chat.status.im/#/room/#dev-status:status.im)
-
+[![Status: #nimbus-general](https://img.shields.io/badge/status-nimbus--general%2Fnimbus-orange.svg)](https://get.status.im/chat/public/nimbus-general)
 
 ## Rationale
 
@@ -26,49 +25,28 @@ _We currently do not guarantee that Nimbus will work on Windows._
 
 ### Prerequisites
 
-(On Windows, a precompiled DLL collection download is available through the `fetch-dlls` Makefile target: ([Windows instructions](#windows)).)
+* [RocksDB](https://github.com/facebook/rocksdb/)
+* PCRE
+* Go 1.12 (for compiling libp2p daemon - being phased out)
+* GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
 
-#### Rocksdb
-
-A recent version of Facebook's [RocksDB](https://github.com/facebook/rocksdb/) is needed - it can usually be installed using your system's package manager:
-
-```bash
-# MacOS with Homebrew
-brew install rocksdb
-
-# Fedora
-dnf install rocksdb-devel
-
-# Debian and Ubuntu
-sudo apt-get install librocksdb-dev
-
-# Arch (AUR)
-pakku -S rocksdb
-```
-
-You can also build and install it by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md).
-
-#### PCRE
-
-If you don't already have it, you will also need PCRE to build Nimbus.
+On Windows, a precompiled DLL collection download is available through the `fetch-dlls` Makefile target: ([Windows instructions](#windows)).
 
 ```bash
 # MacOS with Homebrew
-brew install pcre
+brew install rocksdb pcre
 
 # Fedora
-dnf install pcre
+dnf install rocksdb-devel pcre
 
 # Debian and Ubuntu
-sudo apt-get install libpcre3-dev
+sudo apt-get install librocksdb-dev libpcre3-dev
 
 # Arch (AUR)
-pakku -S pcre-static
+pakku -S rocksdb pcre-static
 ```
 
-#### Developer tools
-
-GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
+`rocksdb` can also be installed by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md).
 
 #### Obtaining the prerequisites through the Nix package manager
 
@@ -84,27 +62,23 @@ nix-shell default.nix
 
 #### POSIX-compatible OS
 
-To build Nimbus (in "build/nimbus"), just execute:
-
 ```bash
 make # The first `make` invocation will update all Git submodules and prompt you to run `make` again.
      # It's only required once per Git clone. You'll run `make update` after each `git pull`, in the future,
      # to keep those submodules up to date.
 
-make nimbus # build the Nimbus binary
-```
-
-Running `./build/nimbus --help` will provide you with a list of the available
-command-line options. To start syncing with mainnet, just execute
-`./build/nimbus` without any parameters.
-
-To execute all tests:
-```bash
+# Run tests
 make test
-```
 
-To pull the latest changes in all the Git repositories involved:
-```bash
+make nimbus # build the Nimbus binary
+
+# See available command line options
+build/nimbus -- help
+
+# Start syncing with mainnet
+build/nimbus
+
+# Update to latest version
 git pull
 make update
 ```
