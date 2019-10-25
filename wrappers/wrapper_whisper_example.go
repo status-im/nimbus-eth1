@@ -58,7 +58,7 @@ func StatusListenAndPost(channel string) {
 		(C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)))
 
 	postMessage := C.post_message{symKeyID: C.CString(symKeyId),
-		sig: C.CString(asymKeyId),
+		sourceID: C.CString(asymKeyId),
 		ttl: 20,
 		topic: C.nimbus_string_to_topic(C.CString(channel)).topic,
 		powTarget: 0.002,

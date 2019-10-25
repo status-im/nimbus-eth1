@@ -12,6 +12,7 @@ typedef struct {
   int8_t* decoded;
   size_t decodedLen;
   uint8_t source[64];
+  uint8_t recipientPublicKey[64];
   uint32_t timestamp;
   uint32_t ttl;
   uint8_t topic[4];
@@ -22,19 +23,20 @@ typedef struct {
 typedef struct {
   const char* symKeyID;
   const char* privateKeyID;
-  uint8_t sig[64];
+  uint8_t* source; // 64 bytes public key
   double minPow;
   uint8_t topic[4];
+  int allowP2P;
 } filter_options;
 
 typedef struct {
   const char* symKeyID;
-  uint8_t pubKey[64];
-  const char* sig;
+  uint8_t* pubKey; // 64 bytes public key
+  const char* sourceID;
   uint32_t ttl;
-  uint8_t topic[4];
-  char* payload;
-  char* padding;
+  uint8_t topic[4]; // default 0 is OK
+  const char* payload; // could also provide uint8_t* + size_t
+  const char* padding; // could also provide uint8_t* + size_t
   double powTime;
   double powTarget;
 } post_message;
@@ -85,10 +87,11 @@ int nimbus_get_symkey(const char* id, uint8_t* symkey);
 /* Whisper message posting and receiving API */
 
 /* Subscribe to given filter */
-void nimbus_subscribe_filter(filter_options* filter_options,
+const char* nimbus_subscribe_filter(filter_options* filter_options,
   received_msg_handler msg);
+int nimbus_unsubscribe_filter(const char* id);
 /* Post Whisper message */
-void nimbus_post(post_message* msg);
+int nimbus_post(post_message* msg);
 
 #ifdef __cplusplus
 }
