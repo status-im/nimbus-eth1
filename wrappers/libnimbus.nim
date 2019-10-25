@@ -35,6 +35,7 @@ type
     decoded*: ptr byte
     decodedLen*: csize
     source*: PublicKey
+    recipientPublicKey*: PublicKey
     timestamp*: uint32
     ttl*: uint32
     topic*: Topic
@@ -44,14 +45,15 @@ type
   CFilterOptions* = object
     symKeyID*: cstring
     privateKeyID*: cstring
-    sig*: PublicKey
+    source*: ptr PublicKey
     minPow*: float64
     topic*: Topic # lets go with one topic for now
+    allowP2P*: bool
 
   CPostMessage* = object
     symKeyID*: cstring
-    pubKey*: PublicKey
-    sig*: cstring
+    pubKey*: ptr PublicKey
+    sourceID*: cstring
     ttl*: uint32
     topic*: Topic
     payload*: cstring
@@ -291,9 +293,10 @@ proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
 
 # Whisper message posting and receiving API
 
-proc nimbus_post(message: ptr CPostMessage) {.exportc.} =
-  setupForeignThreadGc()
-
+proc nimbus_post(message: ptr CPostMessage): bool {.exportc,foreignThreadGc.} =
+  ## Encryption is not mandatory.
+  ## A symKey, an asymKey, or nothing can be provided. asymKey has precedence.
+  ## Providing a payload is mandatory.
   var
     sigPrivKey: Option[PrivateKey]
     asymKey: Option[PublicKey]
@@ -301,83 +304,81 @@ proc nimbus_post(message: ptr CPostMessage) {.exportc.} =
     padding: Option[Bytes]
     payload: Bytes
 
-  # TODO:
-  # - check if there is a asymKey and/or pubKey or do we not care?
-  # - fail if payload is nil?
-  # - error handling on key access
+  if not message.pubKey.isNil():
+    asymKey = some(message.pubKey[])
 
-  # TODO: How to arrange optional pubkey?
-  # - Ptr with check on Nil? (or just cstring?)
-  # - Convert also Options?
-  # - Or just add different API calls?
-  # asymKey = some(message.pubKey)
-  asymKey = none(PublicKey)
+  try:
+    if not message.symKeyID.isNil():
+      symKey = some(whisperKeys.symKeys[$message.symKeyID])
+    if not message.sourceID.isNil():
+      sigPrivKey = some(whisperKeys.asymKeys[$message.sourceID].seckey)
+  except KeyError:
+    return false
 
-  if not message.symKeyID.isNil():
-    symKey = some(whisperKeys.symKeys[$message.symKeyID])
-  if not message.sig.isNil():
-    sigPrivKey = some(whisperKeys.asymKeys[$message.sig].seckey)
   if not message.payload.isNil():
     # TODO: Is this cast OK?
     payload = cast[Bytes]($message.payload)
-    # payload = cast[Bytes](@($message.payload))
+  else:
+    return false
+
   if not message.padding.isNil():
     padding = some(cast[Bytes]($message.padding))
 
-  # TODO: Handle error case
-  discard node.postMessage(asymKey,
-                           symKey,
-                           sigPrivKey,
-                           ttl = message.ttl,
-                           topic = message.topic,
-                           payload = payload,
-                           padding = padding,
-                           powTime = message.powTime,
-                           powTarget = message.powTarget)
-
-  tearDownForeignThreadGc()
+  result = node.postMessage(asymKey,
+                            symKey,
+                            sigPrivKey,
+                            ttl = message.ttl,
+                            topic = message.topic,
+                            payload = payload,
+                            padding = padding,
+                            powTime = message.powTime,
+                            powTarget = message.powTarget)
 
 proc nimbus_subscribe_filter(options: ptr CFilterOptions,
-                              handler: proc (msg: ptr CReceivedMessage)
-                              {.gcsafe, cdecl.}) {.exportc.} =
-  setupForeignThreadGc()
-
-  # TODO: same remarks as in nimbus_whisper_post()
-
+    handler: proc (msg: ptr CReceivedMessage) {.gcsafe, cdecl.}):
+    cstring {.exportc, foreignThreadGc.} =
+  ## In case of a passed handler, the received msg needs to be copied before the
+  ## handler ends.
+  ## TODO: provide some user context passing here else this is rather useless?
   var filter: Filter
-  filter.src = none(PublicKey)
-  if not options.symKeyID.isNil():
-  # if options.symKeyID.len() > 0:
-    filter.symKey= some(whisperKeys.symKeys[$options.symKeyID])
-  if not options.privateKeyID.isNil():
-    filter.privateKey= some(whisperKeys.asymKeys[$options.privateKeyID].seckey)
+  if not options.source.isNil():
+    filter.src = some(options.source[])
+
+  try:
+    if not options.symKeyID.isNil():
+      filter.symKey= some(whisperKeys.symKeys[$options.symKeyID])
+    if not options.privateKeyID.isNil():
+      filter.privateKey= some(whisperKeys.asymKeys[$options.privateKeyID].seckey)
+  except KeyError:
+    return nil
+
   filter.powReq = options.minPow
   filter.topics = @[options.topic]
-  filter.allowP2P = false
+  filter.allowP2P = options.allowP2P
 
   if handler.isNil:
-    discard node.subscribeFilter(filter, nil)
-    return
+    result = node.subscribeFilter(filter, nil)
+  else:
+    proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
+      var cmsg = CReceivedMessage(
+        decoded: unsafeAddr msg.decoded.payload[0],
+        decodedLen: csize msg.decoded.payload.len(),
+        timestamp: msg.timestamp,
+        ttl: msg.ttl,
+        topic: msg.topic,
+        pow: msg.pow,
+        hash: msg.hash
+      )
 
-  proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
-    var cmsg = CReceivedMessage(
-      decoded: unsafeAddr msg.decoded.payload[0],
-      decodedLen: csize msg.decoded.payload.len(),
-      timestamp: msg.timestamp,
-      ttl: msg.ttl,
-      topic: msg.topic,
-      pow: msg.pow,
-      hash: msg.hash
-    )
+      # TODO: change this to ptr, so that C/go code can check on nil?
+      if msg.decoded.src.isSome():
+        cmsg.source = msg.decoded.src.get()
+      if msg.dst.isSome():
+        cmsg.recipientPublicKey = msg.decoded.src.get()
 
-    if msg.decoded.src.isSome():
-      cmsg.source = msg.decoded.src.get()
+      handler(addr cmsg)
 
-    handler(addr cmsg)
-
-  discard node.subscribeFilter(filter, c_handler)
-
-  tearDownForeignThreadGc()
+    result = node.subscribeFilter(filter, c_handler)
 
 proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc.} =
-  result  = node.unsubscribeFilter($id)
+  result = node.unsubscribeFilter($id)
