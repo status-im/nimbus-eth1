@@ -54,7 +54,7 @@ func StatusListenAndPost(channel string) {
 	options := C.filter_options{symKeyID: C.CString(symKeyId),
 		minPow: 0.002,
 		topic: C.nimbus_string_to_topic(C.CString(channel)).topic}
-	C.nimbus_whisper_subscribe(&options,
+	C.nimbus_subscribe_filter(&options,
 		(C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)))
 
 	postMessage := C.post_message{symKeyID: C.CString(symKeyId),
@@ -74,7 +74,7 @@ func StatusListenAndPost(channel string) {
 		if i%1000 == 0 {
 			fmt.Println("[nim-status] posting", message)
 			postMessage.payload = (C.CString(message))
-			C.nimbus_whisper_post(&postMessage)
+			C.nimbus_post(&postMessage)
 		}
 	}
 }

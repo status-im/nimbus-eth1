@@ -62,6 +62,11 @@ type
   CTopic* = object
     topic*: Topic
 
+template foreignThreadGc*(body: untyped) =
+  setupForeignThreadGc()
+  `body`
+  tearDownForeignThreadGc()
+
 proc `$`*(digest: SymKey): string =
   for c in digest: result &= hexChar(c.byte)
 
@@ -219,35 +224,74 @@ proc nimbus_string_to_topic(s: cstring): CTopic {.exportc.} =
 
   tearDownForeignThreadGc()
 
-proc nimbus_new_keypair(): cstring {.exportc.} =
-  setupForeignThreadGc()
+# Asymmetric Keys API
 
+proc nimbus_new_keypair(): cstring {.exportc,foreignThreadGc.} =
+  ## It is important that the caller makes a copy of the returned cstring before
+  ## doing any other API calls.
   result = generateRandomID()
   whisperKeys.asymKeys.add($result, newKeyPair())
 
-  tearDownForeignThreadGc()
+proc nimbus_add_keypair(key: ptr PrivateKey):
+    cstring {.exportc,foreignThreadGc.} =
+  ## It is important that the caller makes a copy of the returned cstring before
+  ## doing any other API calls.
+  result = generateRandomID()
 
-proc nimbus_add_keypair(key: PrivateKey): cstring = discard
-proc nimbus_delete_keypair(id: cstring) = discard
-proc nimbus_add_symkey(key: SymKey): cstring = discard
+  # Creating a KeyPair here does a copy of the key and so does the add
+  whisperKeys.asymKeys.add($result, KeyPair(seckey: key[],
+    pubkey: key[].getPublicKey()))
 
-proc nimbus_add_symkey_from_password(password: cstring): cstring {.exportc.} =
-  setupForeignThreadGc()
+proc nimbus_delete_keypair(id: cstring): bool {.exportc,foreignThreadGc.} =
+  var unneeded: KeyPair
+  result = whisperKeys.asymKeys.take($id, unneeded)
 
+proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
+    bool {.exportc,foreignThreadGc.} =
+  try:
+    privateKey[] = whisperKeys.asymkeys[$id].seckey
+    result = true
+  except KeyError:
+    result = false
+
+# Symmetric Keys API
+
+proc nimbus_add_symkey(key: ptr SymKey): cstring {.exportc,foreignThreadGc.} =
+  ## It is important that the caller makes a copy of the returned cstring before
+  ## doing any other API calls.
+  result = generateRandomID().cstring
+
+  # Copy of key happens at add
+  whisperKeys.symKeys.add($result, key[])
+
+proc nimbus_add_symkey_from_password(password: cstring):
+    cstring {.exportc,foreignThreadGc.} =
+  ## It is important that the caller makes a copy of the returned cstring before
+  ## doing any other API calls.
   var ctx: HMAC[sha256]
   var symKey: SymKey
   if pbkdf2(ctx, $password, "", 65356, symKey) != sizeof(SymKey):
-    raise newException(KeyGenerationError, "Failed generating key")
+    return nil # TODO: Something else than nil? And, can this practically occur?
 
   result = generateRandomID()
 
   whisperKeys.symKeys.add($result, symKey)
 
-  tearDownForeignThreadGc()
+proc nimbus_delete_symkey(id: cstring): bool {.exportc,foreignThreadGc.} =
+  var unneeded: SymKey
+  result = whisperKeys.symKeys.take($id, unneeded)
 
-proc nimbus_delete_symkey(id: cstring) = discard
+proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
+    bool {.exportc,foreignThreadGc.} =
+  try:
+    symKey[] = whisperKeys.symkeys[$id]
+    result = true
+  except KeyError:
+    result = false
 
-proc nimbus_whisper_post(message: ptr CPostMessage) {.exportc.} =
+# Whisper message posting and receiving API
+
+proc nimbus_post(message: ptr CPostMessage) {.exportc.} =
   setupForeignThreadGc()
 
   var
@@ -293,7 +337,7 @@ proc nimbus_whisper_post(message: ptr CPostMessage) {.exportc.} =
 
   tearDownForeignThreadGc()
 
-proc nimbus_whisper_subscribe(options: ptr CFilterOptions,
+proc nimbus_subscribe_filter(options: ptr CFilterOptions,
                               handler: proc (msg: ptr CReceivedMessage)
                               {.gcsafe, cdecl.}) {.exportc.} =
   setupForeignThreadGc()
@@ -335,4 +379,5 @@ proc nimbus_whisper_subscribe(options: ptr CFilterOptions,
 
   tearDownForeignThreadGc()
 
-proc nimbus_whisper_unsubscribe(id: cstring) = discard
+proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc.} =
+  result  = node.unsubscribeFilter($id)
