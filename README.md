@@ -6,11 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 
-## Chat with us
-
-[![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus%2Fnimbus-orange.svg)](https://discord.gg/XRxWahP)
+[![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus-orange.svg)](https://discord.gg/XRxWahP)
 [![Gitter: #status-im/nimbus](https://img.shields.io/badge/gitter-status--im%2Fnimbus-orange.svg)](https://gitter.im/status-im/nimbus)
-[![Status: #nimbus-general](https://img.shields.io/badge/status-nimbus--general%2Fnimbus-orange.svg)](https://get.status.im/chat/public/nimbus-general)
+[![Status: #nimbus-general](https://img.shields.io/badge/status-nimbus--general-orange.svg)](https://get.status.im/chat/public/nimbus-general)
 
 ## Rationale
 
