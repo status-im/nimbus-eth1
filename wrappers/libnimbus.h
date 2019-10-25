@@ -65,20 +65,33 @@ void nimbus_join_public_chat(const char* channel, received_msg_handler msg);
 
 /* Whisper API */
 
+/* Helper, can be removed */
 topic nimbus_string_to_topic(const char* s);
-/* Generate asymmetric keypair */
+
+/* Asymmetric Keys API */
+
 const char* nimbus_new_keypair();
-/* Generate symmetric key from password */
+const char* nimbus_add_keypair(const uint8_t* privkey);
+int nimbus_delete_keypair(const char* id);
+int nimbus_get_private_key(const char* id, uint8_t* privkey);
+
+/* Symmetric Keys API */
+
+const char* nimbus_add_symkey(const uint8_t* symkey);
 const char* nimbus_add_symkey_from_password(const char* password);
+int nimbus_delete_symkey(const char* id);
+int nimbus_get_symkey(const char* id, uint8_t* symkey);
+
+/* Whisper message posting and receiving API */
+
 /* Subscribe to given filter */
-void nimbus_whisper_subscribe(filter_options* filter_options,
+void nimbus_subscribe_filter(filter_options* filter_options,
   received_msg_handler msg);
 /* Post Whisper message */
-void nimbus_whisper_post(post_message* msg);
+void nimbus_post(post_message* msg);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif //__LIBNIMBUS_H__
-
