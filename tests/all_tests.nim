@@ -10,7 +10,10 @@ import macros, strutils, os, unittest, osproc
 proc executeMyself(numModules: int): int =
   let appName = getAppFilename()
   for i in 0..<numModules:
-    result = result or execCmd(appName & " " & $i)
+    let execResult = execCmd(appName & " " & $i)
+    if execResult != 0:
+      stderr.writeLine("subtest no: " & $i & " failed")
+    result = result or execResult
 
 proc getImportStmt(stmtList: NimNode): NimNode =
   result = stmtList[0]
