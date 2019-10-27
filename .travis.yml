@@ -17,15 +17,22 @@ matrix:
     - os: linux
       arch: amd64
       sudo: required
+      env:
+        - NPROC=2
       before_install:
         - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
     - os: linux
       arch: arm64
       sudo: required
+      env:
+        - NPROC=6 # Worth trying more than 2 parallel jobs: https://travis-ci.community/t/no-cache-support-on-arm64/5416/8
+        # (also used to get a different cache key than the amd64 one)
       before_install:
         - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
         - sudo apt-get install -y libpcre3-dev
     - os: osx
+      env:
+        - NPROC=2
       before_install:
         - launchctl setenv LIBRARY_PATH /usr/local/lib # for RocksDB
 
@@ -35,7 +42,7 @@ install:
 
 script:
   - set -e # fail fast
-  - make -j2
+  - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}"
   - build/nimbus --help
-  - make -j2 test test-reproducibility
+  - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility
 
