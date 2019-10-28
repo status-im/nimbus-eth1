@@ -9,7 +9,7 @@
 
 import
   chronos, chronicles, nimcrypto/[utils, hmac, pbkdf2, hash], tables,
-  eth/[keys, rlp, p2p], eth/p2p/rlpx_protocols/whisper_protocol,
+  eth/[keys, rlp, p2p, async_utils], eth/p2p/rlpx_protocols/whisper_protocol,
   eth/p2p/[discovery, enode, peer_pool, bootnodes, whispernodes]
 
 from stew/byteutils import hexToSeqByte, hexToByteArray
@@ -126,6 +126,9 @@ proc nimbus_start(port: uint16 = 30303) {.exportc.} =
   node.addCapability Whisper
 
   node.protocolState(Whisper).config.powRequirement = 0.000001
+  # TODO: should we start the node with an empty bloomfilter?
+  # var bloom: Bloom
+  # node.protocolState(Whisper).config.bloom = bloom
 
   var bootnodes: seq[ENode] = @[]
   for nodeId in MainnetBootnodes:
@@ -379,6 +382,10 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
       handler(addr cmsg)
 
     result = node.subscribeFilter(filter, c_handler)
+
+  # Bloom filter has to follow only the subscribed topics
+  # TODO: better to have an "adding" proc here
+  traceAsyncErrors node.setBloomFilter(node.filtersToBloom())
 
 proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc, foreignThreadGc.} =
   result = node.unsubscribeFilter($id)
