@@ -42,6 +42,7 @@ install:
 
 script:
   - set -e # fail fast
+  - make -j2 update # allow detecting and building a new Nim compiler
   - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}"
   - build/nimbus --help
   - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility
