@@ -93,6 +93,10 @@ int nimbus_unsubscribe_filter(const char* id);
 /* Post Whisper message */
 int nimbus_post(post_message* msg);
 
+// TODO: why are these getters needed?
+double nimbus_get_min_pow();
+void nimbus_get_bloom_filter(uint8_t* bloomfilter);
+
 #ifdef __cplusplus
 }
 #endif

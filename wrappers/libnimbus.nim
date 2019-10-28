@@ -380,5 +380,11 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
 
     result = node.subscribeFilter(filter, c_handler)
 
-proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc.} =
+proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc, foreignThreadGc.} =
   result = node.unsubscribeFilter($id)
+
+proc nimbus_get_min_pow(): float64 {.exportc, foreignThreadGc.} =
+  result = node.protocolState(Whisper).config.powRequirement
+
+proc nimbus_get_bloom_filter(bloom: ptr Bloom) {.exportc, foreignThreadGc.} =
+  bloom[] = node.protocolState(Whisper).config.bloom
