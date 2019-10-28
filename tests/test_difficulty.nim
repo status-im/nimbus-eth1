@@ -50,7 +50,7 @@ template runTests(name: string, hex: bool, calculator: typed) =
       ommersHash: t.parentUncles)
 
     let diff = calculator(times.fromUnix(t.currentTimeStamp), p)
-    test title:
+    test name & " " & title:
       check diff == t.currentDifficulty
 
 proc difficultyMain*() =
@@ -60,3 +60,6 @@ proc difficultyMain*() =
     runTests("Homestead", true, calcDifficultyHomestead)
     runTests("Frontier", true, calcDifficultyFrontier)
     runTests("", false, calcDifficulty)
+
+when isMainModule:
+  difficultyMain()

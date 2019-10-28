@@ -247,7 +247,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     let
       source = send.source.toAddress
       destination = send.to.toAddress
-      data = send.data.string.fromHex
+      data = nimcrypto.utils.fromHex(send.data.string)
       contractCreation = false  # TODO: Check if has code
       v = 0.byte # TODO
       r = 0.u256
@@ -322,7 +322,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       # if no wallets, remains as ZERO_ADDRESS
       # TODO: Wallets
       destination = if call.to.isSome: call.to.get.toAddress else: ZERO_ADDRESS
-      data = if call.data.isSome: call.data.get.string.fromHex else: @[]
+      data = if call.data.isSome: nimcrypto.utils.fromHex(call.data.get.string) else: @[]
       value = if call.value.isSome: call.value.get else: 0.u256
       comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice, call.to.isNone)
 

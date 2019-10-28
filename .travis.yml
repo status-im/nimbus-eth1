@@ -1,5 +1,7 @@
 language: c
 
+dist: bionic
+
 # https://docs.travis-ci.com/user/caching/
 cache:
   directories:
@@ -29,6 +31,7 @@ matrix:
         # (also used to get a different cache key than the amd64 one)
       before_install:
         - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
+        - sudo apt-get -q update
         - sudo apt-get install -y libpcre3-dev
     - os: osx
       env:
@@ -42,6 +45,7 @@ install:
 
 script:
   - set -e # fail fast
+  - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" update # to allow a newer Nim version to be detected
   - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}"
   - build/nimbus --help
   - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility

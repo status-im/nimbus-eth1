@@ -69,13 +69,13 @@ type
       c_isNewAccount*: bool
       c_gasBalance*: GasInt
       c_contractGas*: Uint256
-      c_currentMemSize*: Natural
-      c_memOffset*: Natural
-      c_memLength*: Natural
+      c_currentMemSize*: GasNatural
+      c_memOffset*: GasNatural
+      c_memLength*: GasNatural
     of Create:
-      cr_currentMemSize*: Natural
-      cr_memOffset*: Natural
-      cr_memLength*: Natural
+      cr_currentMemSize*: GasNatural
+      cr_memOffset*: GasNatural
+      cr_memLength*: GasNatural
     of SelfDestruct:
       sd_condition*: bool
     else:
@@ -99,7 +99,7 @@ type
     of GckDynamic:
       d_handler*: proc(value: Uint256): GasInt {.nimcall, gcsafe.}
     of GckMemExpansion:
-      m_handler*: proc(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall, gcsafe.}
+      m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall, gcsafe.}
     of GckComplex:
       c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}
       # We use gasCost/gasRefund for:
@@ -118,7 +118,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   # ############### Helper functions ##############################
 
-  func `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength: Natural): GasInt {.inline.} =
+  func `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.inline.} =
     # Input: size (in bytes)
 
     # Yellow Paper:
@@ -185,23 +185,23 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
                           gasParams.cr_memOffset,
                           gasParams.cr_memLength)
 
-  func `prefix gasSha3`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasSha3`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
 
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
     result += static(FeeSchedule[GasSha3]) +
       static(FeeSchedule[GasSha3Word]) * (memLength).wordCount
 
-  func `prefix gasCopy`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasCopy`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = static(FeeSchedule[GasVeryLow]) +
       static(FeeSchedule[GasCopy]) * memLength.wordCount
     result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-  func `prefix gasExtCodeCopy`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasExtCodeCopy`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = static(FeeSchedule[GasExtCode]) +
       static(FeeSchedule[GasCopy]) * memLength.wordCount
     result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
-  func `prefix gasLoadStore`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasLoadStore`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = static(FeeSchedule[GasVeryLow])
     result += `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
@@ -223,34 +223,34 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     if value.isZero and not gasParams.s_isStorageEmpty:
       result.gasRefund = static(FeeSchedule[RefundSclear])
 
-  func `prefix gasLog0`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
     result += static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength
 
-  func `prefix gasLog1`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasLog1`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
     result += static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
       static(FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog2`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasLog2`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
     result += static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
       static(2 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog3`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasLog3`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
     result += static(FeeSchedule[GasLog]) +
       static(FeeSchedule[GasLogData]) * memLength +
       static(3 * FeeSchedule[GasLogTopic])
 
-  func `prefix gasLog4`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasLog4`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
     result += static(FeeSchedule[GasLog]) +
@@ -343,7 +343,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     if not value.isZero and gasParams.kind in {Call, CallCode}:
       result.gasRefund += static(FeeSchedule[GasCallStipend])
 
-  func `prefix gasHalt`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasHalt`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
 
   func `prefix gasSelfDestruct`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
@@ -352,13 +352,13 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
       if gasParams.sd_condition:
         result.gasCost += static(FeeSchedule[GasNewAccount])
 
-  func `prefix gasCreate2`(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall.} =
+  func `prefix gasCreate2`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = static(FeeSchedule[GasSha3Word]) * (memLength).wordCount
 
   # ###################################################################################################
 
   # TODO - change this `let` into `const` - pending: https://github.com/nim-lang/Nim/issues/8015
-  let `ResultGasCostsName`*{.inject.}: GasCosts = block:
+  let `ResultGasCostsName`*{.inject, compileTime.}: GasCosts = block:
     # We use a block expression to avoid name redefinition conflicts
     # with "fixed" and "dynamic"
 
@@ -369,7 +369,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     func dynamic(handler: proc(value: Uint256): GasInt {.nimcall, gcsafe.}): GasCost =
       GasCost(kind: GckDynamic, d_handler: handler)
 
-    func memExpansion(handler: proc(currentMemSize, memOffset, memLength: Natural): GasInt {.nimcall, gcsafe.}): GasCost =
+    func memExpansion(handler: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall, gcsafe.}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
     func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}): GasCost =
