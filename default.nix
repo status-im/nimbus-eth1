@@ -52,9 +52,9 @@ let
 
   mapAttrs = nixpkgs.lib.attrsets.mapAttrs;
   crossPackages = mapAttrs (target: conf: nixpkgsFn { crossSystem = conf; }) targets;
-  crossBulds = mapAttrs (target: packages: nimbus packages) crossPackages;
+  crossBuilds = mapAttrs (target: packages: nimbus packages) crossPackages;
 
 in
 
-(nimbus nixpkgs) // crossBulds
+(nimbus nixpkgs) // crossBuilds
 

@@ -1,4 +1,4 @@
-{ stdenv, callPackage, sqlite, clang, rocksdb }:
+{ stdenv, callPackage, sqlite, clang, pcre, rocksdb }:
 
 let
   nim = callPackage ./nim.nix {};
@@ -18,7 +18,7 @@ stdenv.mkDerivation rec {
   };
 
   src = ./.;
-  buildInputs = [clang nim rocksdb sqlite];
+  buildInputs = [clang nim rocksdb pcre sqlite];
   LD_LIBRARY_PATH = "${makeLibraryPath buildInputs}";
 }
 
