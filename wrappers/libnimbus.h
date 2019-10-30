@@ -45,7 +45,7 @@ typedef struct {
   uint8_t topic[4];
 } topic;
 
-typedef void (*received_msg_handler)(received_message* msg);
+typedef void (*received_msg_handler)(received_message* msg, void* udata);
 
 /** Initialize Nim and the status library */
 void NimMain();
@@ -88,7 +88,7 @@ int nimbus_get_symkey(const char* id, uint8_t* symkey);
 
 /* Subscribe to given filter */
 const char* nimbus_subscribe_filter(filter_options* filter_options,
-  received_msg_handler msg);
+  received_msg_handler msg, void* udata);
 int nimbus_unsubscribe_filter(const char* id);
 /* Post Whisper message */
 int nimbus_post(post_message* msg);
