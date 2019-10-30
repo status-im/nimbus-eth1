@@ -342,22 +342,24 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     udata: pointer = nil): cstring {.exportc, foreignThreadGc.} =
   ## In case of a passed handler, the received msg needs to be copied before the
   ## handler ends.
-  ## TODO: provide some user context passing here else this is rather useless?
-  var filter: Filter
+  var
+    src: Option[PublicKey]
+    symKey: Option[SymKey]
+    privateKey: Option[PrivateKey]
+
   if not options.source.isNil():
-    filter.src = some(options.source[])
+    src = some(options.source[])
 
   try:
     if not options.symKeyID.isNil():
-      filter.symKey= some(whisperKeys.symKeys[$options.symKeyID])
+      symKey = some(whisperKeys.symKeys[$options.symKeyID])
     if not options.privateKeyID.isNil():
-      filter.privateKey= some(whisperKeys.asymKeys[$options.privateKeyID].seckey)
+      privateKey = some(whisperKeys.asymKeys[$options.privateKeyID].seckey)
   except KeyError:
     return nil
 
-  filter.powReq = options.minPow
-  filter.topics = @[options.topic]
-  filter.allowP2P = options.allowP2P
+  let filter = newFilter(src, privateKey, symKey, @[options.topic],
+    options.minPow, options.allowP2P)
 
   if handler.isNil:
     result = node.subscribeFilter(filter, nil)
