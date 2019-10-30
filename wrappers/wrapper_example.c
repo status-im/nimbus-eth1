@@ -9,7 +9,7 @@
 
 void NimMain();
 
-void print_msg(received_message* msg) {
+void print_msg(received_message* msg, void* udata) {
   // Note: early null chars will terminate string early
   printf("received message %.*s\n", (int)msg->decodedLen, msg->decoded);
 }

@@ -338,8 +338,8 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc,foreignThreadGc.} =
                             powTarget = message.powTarget)
 
 proc nimbus_subscribe_filter(options: ptr CFilterOptions,
-    handler: proc (msg: ptr CReceivedMessage) {.gcsafe, cdecl.}):
-    cstring {.exportc, foreignThreadGc.} =
+    handler: proc (msg: ptr CReceivedMessage, udata: pointer) {.gcsafe, cdecl.},
+    udata: pointer = nil): cstring {.exportc, foreignThreadGc.} =
   ## In case of a passed handler, the received msg needs to be copied before the
   ## handler ends.
   ## TODO: provide some user context passing here else this is rather useless?
@@ -379,7 +379,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
       if msg.dst.isSome():
         cmsg.recipientPublicKey = msg.decoded.src.get()
 
-      handler(addr cmsg)
+      handler(addr cmsg, udata)
 
     result = node.subscribeFilter(filter, c_handler)
 
