@@ -64,11 +64,6 @@ type
   CTopic* = object
     topic*: Topic
 
-template foreignThreadGc*(body: untyped) =
-  setupForeignThreadGc()
-  `body`
-  tearDownForeignThreadGc()
-
 proc `$`*(digest: SymKey): string =
   for c in digest: result &= hexChar(c.byte)
 
@@ -231,48 +226,70 @@ proc nimbus_string_to_topic(s: cstring): CTopic {.exportc.} =
 
 # Asymmetric Keys API
 
-proc nimbus_new_keypair(): cstring {.exportc,foreignThreadGc.} =
+proc nimbus_new_keypair(): cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls.
+  setupForeignThreadGc()
+
   result = generateRandomID()
   whisperKeys.asymKeys.add($result, newKeyPair())
 
+  tearDownForeignThreadGc()
+
 proc nimbus_add_keypair(key: ptr PrivateKey):
-    cstring {.exportc,foreignThreadGc.} =
+    cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls.
+  setupForeignThreadGc()
+
   result = generateRandomID()
 
   # Creating a KeyPair here does a copy of the key and so does the add
   whisperKeys.asymKeys.add($result, KeyPair(seckey: key[],
     pubkey: key[].getPublicKey()))
 
-proc nimbus_delete_keypair(id: cstring): bool {.exportc,foreignThreadGc.} =
+  tearDownForeignThreadGc()
+
+proc nimbus_delete_keypair(id: cstring): bool {.exportc.} =
+  setupForeignThreadGc()
+
   var unneeded: KeyPair
   result = whisperKeys.asymKeys.take($id, unneeded)
 
+  tearDownForeignThreadGc()
+
 proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
-    bool {.exportc,foreignThreadGc.} =
+    bool {.exportc.} =
+  setupForeignThreadGc()
+
   try:
     privateKey[] = whisperKeys.asymkeys[$id].seckey
     result = true
   except KeyError:
     result = false
 
+  tearDownForeignThreadGc()
+
 # Symmetric Keys API
 
-proc nimbus_add_symkey(key: ptr SymKey): cstring {.exportc,foreignThreadGc.} =
+proc nimbus_add_symkey(key: ptr SymKey): cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls.
+  setupForeignThreadGc()
+
   result = generateRandomID().cstring
 
   # Copy of key happens at add
   whisperKeys.symKeys.add($result, key[])
 
+  tearDownForeignThreadGc()
+
 proc nimbus_add_symkey_from_password(password: cstring):
-    cstring {.exportc,foreignThreadGc.} =
+    cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls.
+  setupForeignThreadGc()
+
   var ctx: HMAC[sha256]
   var symKey: SymKey
   if pbkdf2(ctx, $password, "", 65356, symKey) != sizeof(SymKey):
@@ -282,24 +299,36 @@ proc nimbus_add_symkey_from_password(password: cstring):
 
   whisperKeys.symKeys.add($result, symKey)
 
-proc nimbus_delete_symkey(id: cstring): bool {.exportc,foreignThreadGc.} =
+  tearDownForeignThreadGc()
+
+proc nimbus_delete_symkey(id: cstring): bool {.exportc.} =
+  setupForeignThreadGc()
+
   var unneeded: SymKey
   result = whisperKeys.symKeys.take($id, unneeded)
 
+  tearDownForeignThreadGc()
+
 proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
-    bool {.exportc,foreignThreadGc.} =
+    bool {.exportc.} =
+  setupForeignThreadGc()
+
   try:
     symKey[] = whisperKeys.symkeys[$id]
     result = true
   except KeyError:
     result = false
 
+  tearDownForeignThreadGc()
+
 # Whisper message posting and receiving API
 
-proc nimbus_post(message: ptr CPostMessage): bool {.exportc,foreignThreadGc.} =
+proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
   ## Encryption is not mandatory.
   ## A symKey, an asymKey, or nothing can be provided. asymKey has precedence.
   ## Providing a payload is mandatory.
+  setupForeignThreadGc()
+
   var
     sigPrivKey: Option[PrivateKey]
     asymKey: Option[PublicKey]
@@ -337,11 +366,15 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc,foreignThreadGc.} =
                             powTime = message.powTime,
                             powTarget = message.powTarget)
 
+  tearDownForeignThreadGc()
+
 proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     handler: proc (msg: ptr CReceivedMessage, udata: pointer) {.gcsafe, cdecl.},
-    udata: pointer = nil): cstring {.exportc, foreignThreadGc.} =
+    udata: pointer = nil): cstring {.exportc.} =
   ## In case of a passed handler, the received msg needs to be copied before the
   ## handler ends.
+  setupForeignThreadGc()
+
   var
     src: Option[PublicKey]
     symKey: Option[SymKey]
@@ -389,11 +422,25 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   # TODO: better to have an "adding" proc here
   traceAsyncErrors node.setBloomFilter(node.filtersToBloom())
 
-proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc, foreignThreadGc.} =
+  tearDownForeignThreadGc()
+
+proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc.} =
+  setupForeignThreadGc()
+
   result = node.unsubscribeFilter($id)
 
-proc nimbus_get_min_pow(): float64 {.exportc, foreignThreadGc.} =
+  tearDownForeignThreadGc()
+
+proc nimbus_get_min_pow(): float64 {.exportc.} =
+  setupForeignThreadGc()
+
   result = node.protocolState(Whisper).config.powRequirement
 
-proc nimbus_get_bloom_filter(bloom: ptr Bloom) {.exportc, foreignThreadGc.} =
+  tearDownForeignThreadGc()
+
+proc nimbus_get_bloom_filter(bloom: ptr Bloom) {.exportc.} =
+  setupForeignThreadGc()
+
   bloom[] = node.protocolState(Whisper).config.bloom
+
+  tearDownForeignThreadGc()
