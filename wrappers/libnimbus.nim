@@ -204,14 +204,14 @@ proc nimbus_string_to_topic(s: cstring): CTopic {.exportc.} =
 
 proc nimbus_new_keypair(): cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
-  ## doing any other API calls.
+  ## doing any other API calls. This might not hold for all types of GC.
   result = generateRandomID()
   whisperKeys.asymKeys.add($result, newKeyPair())
 
 proc nimbus_add_keypair(key: ptr PrivateKey):
     cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
-  ## doing any other API calls.
+  ## doing any other API calls. This might not hold for all types of GC.
   result = generateRandomID()
 
   # Creating a KeyPair here does a copy of the key and so does the add
@@ -234,7 +234,7 @@ proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
 
 proc nimbus_add_symkey(key: ptr SymKey): cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
-  ## doing any other API calls.
+  ## doing any other API calls. This might not hold for all types of GC.
   result = generateRandomID().cstring
 
   # Copy of key happens at add
@@ -243,7 +243,7 @@ proc nimbus_add_symkey(key: ptr SymKey): cstring {.exportc.} =
 proc nimbus_add_symkey_from_password(password: cstring):
     cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
-  ## doing any other API calls.
+  ## doing any other API calls. This might not hold for all types of GC.
   var ctx: HMAC[sha256]
   var symKey: SymKey
   if pbkdf2(ctx, $password, "", 65356, symKey) != sizeof(SymKey):
