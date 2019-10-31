@@ -47,10 +47,15 @@ typedef struct {
 
 typedef void (*received_msg_handler)(received_message* msg, void* udata);
 
-/** Initialize Nim and the status library */
+/** Initialize Nim and the Status library. Must be called before anything else
+ * of the API. Also, all following calls must come from the same thread as from
+ * which this call was done.
+ */
 void NimMain();
 
-/** Start nimbus event loop, connect to bootnodes etc */
+/** Start Ethereum node with Whisper capability, start discovery and
+ * connect to Status fleet.
+ */
 void nimbus_start(uint16_t port);
 
 /** Add peers to connect to - must be called after nimbus_start */
@@ -62,40 +67,51 @@ void nimbus_add_peer(const char* nodeId);
  */
 void nimbus_poll();
 
-void nimbus_post_public(const char* channel, const char* payload);
-void nimbus_join_public_chat(const char* channel, received_msg_handler msg);
+/** Asymmetric Keys API */
 
-/* Whisper API */
-
-/* Helper, can be removed */
-topic nimbus_string_to_topic(const char* s);
-
-/* Asymmetric Keys API */
-
+/** It is important that caller makes a copy of the returned strings before
+ * doing any other API calls. */
 const char* nimbus_new_keypair();
 const char* nimbus_add_keypair(const uint8_t* privkey);
 int nimbus_delete_keypair(const char* id);
 int nimbus_get_private_key(const char* id, uint8_t* privkey);
 
-/* Symmetric Keys API */
+/** Symmetric Keys API */
 
+/** It is important that caller makes a copy of the returned strings before
+ * doing any other API calls. */
 const char* nimbus_add_symkey(const uint8_t* symkey);
 const char* nimbus_add_symkey_from_password(const char* password);
 int nimbus_delete_symkey(const char* id);
 int nimbus_get_symkey(const char* id, uint8_t* symkey);
 
-/* Whisper message posting and receiving API */
+/** Whisper message posting and receiving API */
 
-/* Subscribe to given filter */
+/** Subscribe to given filter. The void pointer udata will be passed to the
+ * received_msg_handler callback.
+ */
 const char* nimbus_subscribe_filter(filter_options* filter_options,
   received_msg_handler msg, void* udata);
 int nimbus_unsubscribe_filter(const char* id);
-/* Post Whisper message */
+/* Post Whisper message to the queue */
 int nimbus_post(post_message* msg);
 
-// TODO: why are these getters needed?
+/** TODO: why are following two getters needed? */
+
+/** Get the minimum required PoW of this node */
 double nimbus_get_min_pow();
+
+/** Get the currently set bloom filter of this node. This will automatically
+ *update for each filter subsribed to.
+ */
 void nimbus_get_bloom_filter(uint8_t* bloomfilter);
+
+/** Example helper, can be removed */
+topic nimbus_string_to_topic(const char* s);
+
+/** Very limited Status chat API */
+void nimbus_post_public(const char* channel, const char* payload);
+void nimbus_join_public_chat(const char* channel, received_msg_handler msg);
 
 #ifdef __cplusplus
 }
