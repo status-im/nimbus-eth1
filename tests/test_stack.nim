@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest,
+  unittest2,
   eth/common/eth_types,
   ../nimbus/[constants, errors, vm/interpreter]
 

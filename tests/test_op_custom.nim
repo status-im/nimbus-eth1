@@ -1,11 +1,12 @@
 import
-  macro_assembler, unittest, macros, strutils,
+  macro_assembler, unittest2, macros, strutils,
   stew/byteutils, eth/common, ../nimbus/db/state_db,
   ../nimbus/db/db_chain, stew/ranges
 
 proc opCustomMain*() =
   suite "Custom Opcodes Test":
-    let (blockNumber, chainDB) = initDatabase()
+    setup:
+      let (blockNumber, chainDB) = initDatabase()
 
     assembler: # CALLDATASIZE OP
       title: "CALLDATASIZE_1"

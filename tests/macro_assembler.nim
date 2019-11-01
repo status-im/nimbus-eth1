@@ -1,5 +1,5 @@
 import
-  macrocache, strutils, unittest,
+  macrocache, strutils, unittest2,
   stew/byteutils, chronicles, stew/ranges, eth/common,
   ../nimbus/vm/interpreter/opcode_values,
   stew/shims/macros
@@ -185,7 +185,8 @@ proc generateVMProxy(boa: Assembler): NimNode =
       proc `vmProxy`(): bool =
         let boa = `body`
         runVM(`blockNumber`, `chainDB`, boa)
-      check `vmProxy`()
+      {.gcsafe.}:
+        check `vmProxy`()
 
   when defined(macro_assembler_debug):
     echo result.toStrLit.strVal

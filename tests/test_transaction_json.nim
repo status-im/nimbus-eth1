@@ -1,5 +1,5 @@
 import
-  unittest, json, os, tables, strformat, strutils,
+  unittest2, json, os, tables, strformat, strutils,
   eth/[common, rlp],
   ./test_helpers, ../nimbus/[transaction, utils, errors]
 

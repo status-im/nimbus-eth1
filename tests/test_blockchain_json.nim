@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, json, os, tables, strutils, sets, strformat, times,
+  unittest2, json, os, tables, strutils, sets, strformat, times,
   options,
   eth/[common, rlp, bloom], eth/trie/[db, trie_defs],
   ethash, stew/endians2, nimcrypto,

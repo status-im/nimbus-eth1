@@ -1,8 +1,9 @@
-import macro_assembler, unittest, macros, strutils
+import macro_assembler, unittest2, macros, strutils
 
 proc opMemoryMain*() =
   suite "Memory Opcodes":
-    let (blockNumber, chainDB) = initDatabase()
+    setup:
+      let (blockNumber, chainDB) = initDatabase()
 
     assembler: # PUSH1 OP
       title: "PUSH1"

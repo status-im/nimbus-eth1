@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, strformat, strutils, sequtils, tables, json, ospaths, times,
+  unittest2, strformat, strutils, sequtils, tables, json, ospaths, times,
   stew/byteutils, stew/ranges/typedranges, eth/[rlp, common], eth/trie/db,
   ./test_helpers, ../nimbus/vm/interpreter,
   ../nimbus/[constants, errors, vm_state, vm_types, utils],
