@@ -32,13 +32,14 @@ func poll() {
 
 //export receiveHandler
 func receiveHandler(msg *C.received_message) {
-	fmt.Printf("[nim-status] received message %s\n", C.GoStringN((*C.char)(msg.decoded), (C.int)(msg.decodedLen)) )
+	receivedMsg := C.GoBytes(unsafe.Pointer(msg.decoded), C.int(msg.decodedLen))
+	fmt.Printf("[nim-status] received message %s\n", string(receivedMsg))
 }
 
 func Start() {
 	C.NimMain()
 	fmt.Println("[nim-status] Start Nimbus")
-	C.nimbus_start(30306)
+	C.nimbus_start(30306, false, false, 0.002)
 
 	peer1 := "enode://2d3e27d7846564f9b964308038dfadd4076e4373ac938e020708ad8819fd4fd90e5eb8314140768f782db704cb313b60707b968f8b61108a6fecd705b041746d@192.168.0.33:30303"
 	peer2 := "enode://4ea35352702027984a13274f241a56a47854a7fd4b3ba674a596cff917d3c825506431cf149f9f2312a293bb7c2b1cca55db742027090916d01529fe0729643b@206.189.243.178:443"

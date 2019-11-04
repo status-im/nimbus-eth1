@@ -56,10 +56,11 @@ typedef void (*received_msg_handler)(received_message* msg, void* udata);
  */
 void NimMain();
 
-/** Start Ethereum node with Whisper capability, start discovery and
+/** Start Ethereum node with Whisper capability, optionally start discovery and
  * connect to Status fleet.
  */
-void nimbus_start(uint16_t port);
+void nimbus_start(uint16_t port, bool startListening, bool enableDiscovery,
+  double minPow);
 
 /** Add peers to connect to - must be called after nimbus_start */
 void nimbus_add_peer(const char* nodeId);
