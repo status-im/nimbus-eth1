@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"time"
 	"unsafe"
+	"encoding/hex"
 )
 
 /*
@@ -45,7 +46,18 @@ func receiveHandler(msg *C.received_message, udata unsafe.Pointer) {
 func Start() {
 	C.NimMain()
 	fmt.Println("[nim-status] Start Nimbus")
-	C.nimbus_start(30306, false, false, 0.002)
+
+	privKeyHex := "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617"
+	data, err := hex.DecodeString(privKeyHex)
+	if err != nil {
+		panic(err)
+	}
+	privKey := (*C.uint8_t)(C.CBytes(data))
+	defer C.free(unsafe.Pointer(privKey))
+
+	if C.nimbus_start(30306, true, false, 0.002, privKey) == false {
+		panic("Can't start nimbus")
+	}
 }
 
 func StatusListenAndPost(channel string) {

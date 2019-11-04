@@ -56,11 +56,13 @@ typedef void (*received_msg_handler)(received_message* msg, void* udata);
  */
 void NimMain();
 
-/** Start Ethereum node with Whisper capability, optionally start discovery and
- * connect to Status fleet.
+/** Start Ethereum node with Whisper capability and connect to Status fleet.
+ * Optionally start discovery and listen for incoming connections.
+ * The minPow value is the minimum required PoW that this node will allow.
+ * When privkey is null, a new keypair will be generated.
  */
-void nimbus_start(uint16_t port, bool startListening, bool enableDiscovery,
-  double minPow);
+bool nimbus_start(uint16_t port, bool startListening, bool enableDiscovery,
+  double minPow, uint8_t* privkey);
 
 /** Add peers to connect to - must be called after nimbus_start */
 void nimbus_add_peer(const char* nodeId);
