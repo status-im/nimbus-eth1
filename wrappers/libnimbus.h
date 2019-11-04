@@ -2,6 +2,7 @@
 #define __LIBNIMBUS_H__
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -9,10 +10,10 @@ extern "C" {
 #endif
 
 typedef struct {
-  int8_t* decoded;
+  uint8_t* decoded;
   size_t decodedLen;
-  uint8_t source[64];
-  uint8_t recipientPublicKey[64];
+  uint8_t source[64]; /* TODO: change to ptr so they can be checked on nil? */
+  uint8_t recipientPublicKey[64]; /* TODO: change to ptr so they can be checked on nil? */
   uint32_t timestamp;
   uint32_t ttl;
   uint8_t topic[4];
@@ -23,20 +24,22 @@ typedef struct {
 typedef struct {
   const char* symKeyID;
   const char* privateKeyID;
-  uint8_t* source; // 64 bytes public key
+  uint8_t* source; /* 64 bytes public key */
   double minPow;
   uint8_t topic[4];
   int allowP2P;
 } filter_options;
 
 typedef struct {
-  const char* symKeyID;
-  uint8_t* pubKey; // 64 bytes public key
-  const char* sourceID;
+  const char* symKeyID; /* Identifier for symmetric key, set to nil if none */
+  uint8_t* pubKey; /* 64 bytes public key, set to nil if none */
+  const char* sourceID; /* Identifier for asymmetric key, set to nil if none */
   uint32_t ttl;
-  uint8_t topic[4]; // default 0 is OK
-  const char* payload; // could also provide uint8_t* + size_t
-  const char* padding; // could also provide uint8_t* + size_t
+  uint8_t topic[4]; /* default of 0 is OK */
+  uint8_t* payload; /* payload to be send, can be len=0 but can not be nil */
+  size_t payloadLen;
+  uint8_t* padding; /* custom padding, can be set to nil */
+  size_t paddingLen;
   double powTime;
   double powTarget;
 } post_message;
@@ -73,8 +76,8 @@ void nimbus_poll();
  * doing any other API calls. */
 const char* nimbus_new_keypair();
 const char* nimbus_add_keypair(const uint8_t* privkey);
-int nimbus_delete_keypair(const char* id);
-int nimbus_get_private_key(const char* id, uint8_t* privkey);
+bool nimbus_delete_keypair(const char* id);
+bool nimbus_get_private_key(const char* id, uint8_t* privkey);
 
 /** Symmetric Keys API */
 
@@ -82,8 +85,8 @@ int nimbus_get_private_key(const char* id, uint8_t* privkey);
  * doing any other API calls. */
 const char* nimbus_add_symkey(const uint8_t* symkey);
 const char* nimbus_add_symkey_from_password(const char* password);
-int nimbus_delete_symkey(const char* id);
-int nimbus_get_symkey(const char* id, uint8_t* symkey);
+bool nimbus_delete_symkey(const char* id);
+bool nimbus_get_symkey(const char* id, uint8_t* symkey);
 
 /** Whisper message posting and receiving API */
 
@@ -92,9 +95,9 @@ int nimbus_get_symkey(const char* id, uint8_t* symkey);
  */
 const char* nimbus_subscribe_filter(filter_options* filter_options,
   received_msg_handler msg, void* udata);
-int nimbus_unsubscribe_filter(const char* id);
+bool nimbus_unsubscribe_filter(const char* id);
 /* Post Whisper message to the queue */
-int nimbus_post(post_message* msg);
+bool nimbus_post(post_message* msg);
 
 /** TODO: why are following two getters needed? */
 
@@ -107,7 +110,7 @@ double nimbus_get_min_pow();
 void nimbus_get_bloom_filter(uint8_t* bloomfilter);
 
 /** Example helper, can be removed */
-topic nimbus_string_to_topic(const char* s);
+topic nimbus_channel_to_topic(const char* channel);
 
 /** Very limited Status chat API */
 void nimbus_post_public(const char* channel, const char* payload);

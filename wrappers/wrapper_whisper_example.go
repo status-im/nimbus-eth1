@@ -8,6 +8,9 @@ import (
 )
 
 /*
+#include <stdlib.h>
+#include <stdbool.h>
+
 #cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus -lm
 #include "libnimbus.h"
 
@@ -31,8 +34,8 @@ func poll() {
 
 //export receiveHandler
 func receiveHandler(msg *C.received_message, udata unsafe.Pointer) {
-	fmt.Printf("[nim-status] received message %s\n",
-		C.GoStringN((*C.char)(msg.decoded), (C.int)(msg.decodedLen)) )
+	receivedMsg := C.GoBytes(unsafe.Pointer(msg.decoded), C.int(msg.decodedLen))
+	fmt.Printf("[nim-status] received message %s\n", string(receivedMsg))
 	fmt.Printf("[nim-status] source public key %x\n", msg.source)
 	msgCount := (*int)(udata)
 	*msgCount += 1
@@ -48,25 +51,31 @@ func Start() {
 func StatusListenAndPost(channel string) {
 	fmt.Println("[nim-status] Status Public ListenAndPost")
 
-	// TODO: free the CStrings?
-	// TODO: Is this doing a copy or not? If not, shouldn't we see issues when the
-	// nim GC kicks in?
-	symKeyId := C.GoString(C.nimbus_add_symkey_from_password(C.CString(channel)))
+	channelC := C.CString(channel)
+	defer C.free(unsafe.Pointer(channelC))
+
+	symKeyId := C.GoString(C.nimbus_add_symkey_from_password(channelC))
 	asymKeyId := C.GoString(C.nimbus_new_keypair())
 
-	msgCount := 0
+	var msgCount int = 0
+
 	options := C.filter_options{symKeyID: C.CString(symKeyId),
 		minPow: 0.002,
-		topic: C.nimbus_string_to_topic(C.CString(channel)).topic}
+		topic: C.nimbus_channel_to_topic(channelC).topic}
 	filterId := C.GoString(C.nimbus_subscribe_filter(&options,
 		(C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)),
 		unsafe.Pointer(&msgCount)))
 	fmt.Printf("[nim-status] filter subscribed, id: %s\n", filterId)
 
-	postMessage := C.post_message{symKeyID: C.CString(symKeyId),
-		sourceID: C.CString(asymKeyId),
+	symKeyIdC := C.CString(symKeyId)
+	defer C.free(unsafe.Pointer(symKeyIdC))
+	asymKeyIdC := C.CString(asymKeyId)
+	defer C.free(unsafe.Pointer(asymKeyIdC))
+
+	postMessage := C.post_message{symKeyID: symKeyIdC,
+		sourceID: asymKeyIdC,
 		ttl: 20,
-		topic: C.nimbus_string_to_topic(C.CString(channel)).topic,
+		topic: C.nimbus_channel_to_topic(channelC).topic,
 		powTarget: 0.002,
 		powTime: 1.0}
 
@@ -78,9 +87,13 @@ func StatusListenAndPost(channel string) {
 		time.Sleep(1 * time.Microsecond)
 		message := fmt.Sprintf("[\"~#c4\",[\"Message:%d\",\"text/plain\",\"~:public-group-user-message\",%d,%d,[\"^ \",\"~:chat-id\",\"%s\",\"~:text\",\"Message:%d\"]]]", i, t*100, t, channel, i)
 		if i%1000 == 0 {
-			fmt.Println("[nim-status] posting", message)
-			postMessage.payload = (C.CString(message))
-			C.nimbus_post(&postMessage)
+			fmt.Printf("[nim-status] posting msg number %d: %s\n", msgCount, message)
+			postMessage.payload = (*C.uint8_t)(C.CBytes([]byte(message)))
+			postMessage.payloadLen = (C.size_t)(len([]byte(message)))
+			defer C.free(unsafe.Pointer(postMessage.payload))
+			if C.nimbus_post(&postMessage) == false {
+				fmt.Println("[nim-status] message could not be added to queue")
+			}
 		}
 	}
 }
