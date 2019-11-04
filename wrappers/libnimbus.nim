@@ -9,10 +9,9 @@
 
 import
   chronos, chronicles, nimcrypto/[utils, hmac, pbkdf2, hash], tables,
-  eth/[keys, rlp, p2p, async_utils], eth/p2p/rlpx_protocols/whisper_protocol,
-  eth/p2p/[discovery, enode, peer_pool, bootnodes, whispernodes]
-
-from stew/byteutils import hexToSeqByte, hexToByteArray
+  stew/ranges/ptr_arith, eth/[keys, rlp, p2p, async_utils],
+  eth/p2p/rlpx_protocols/whisper_protocol,
+  eth/p2p/[enode, peer_pool, bootnodes, whispernodes]
 
 # TODO: If we really want/need this type of API for the keys, put it somewhere
 # seperate as it is the same code for Whisper RPC
@@ -20,8 +19,6 @@ type
   WhisperKeys* = ref object
     asymKeys*: Table[string, KeyPair]
     symKeys*: Table[string, SymKey]
-
-  KeyGenerationError = object of CatchableError
 
 proc newWhisperKeys*(): WhisperKeys =
   new(result)
@@ -56,8 +53,10 @@ type
     sourceID*: cstring
     ttl*: uint32
     topic*: Topic
-    payload*: cstring
-    padding*: cstring
+    payload*: ptr byte
+    payloadLen*: csize
+    padding*: ptr byte
+    paddingLen*: csize
     powTime*: float64
     powTarget*: float64
 
@@ -195,8 +194,8 @@ proc nimbus_add_peer(nodeId: cstring) {.exportc.} =
 # Whisper API (Similar to Whisper RPC API)
 # Mostly an example for now, lots of things to fix if continued like this.
 
-proc nimbus_string_to_topic(s: cstring): CTopic {.exportc.} =
-  let hash = digest(keccak256, $s)
+proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc.} =
+  let hash = digest(keccak256, $channel)
   for i in 0..<4:
     result.topic[i] = hash.data[i]
 
@@ -268,15 +267,23 @@ proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
 # Whisper message posting and receiving API
 
 proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
-  ## Encryption is not mandatory.
-  ## A symKey, an asymKey, or nothing can be provided. asymKey has precedence.
-  ## Providing a payload is mandatory.
+  ## Encryption is mandatory.
+  ## A symmetric key or an asymmetric key can be provided. Both is not allowed.
+  ## Providing a payload is mandatory, it cannot be nil, but can be of length 0.
   var
     sigPrivKey: Option[PrivateKey]
     asymKey: Option[PublicKey]
     symKey: Option[SymKey]
     padding: Option[Bytes]
     payload: Bytes
+
+  if not message.pubKey.isNil() and not message.symKeyID.isNil():
+    warn "Both symmetric and asymmetric keys are provided, choose one."
+    return false
+
+  if message.pubKey.isNil() and message.symKeyID.isNil():
+    warn "Both symmetric and asymmetric keys are nil, provide one."
+    return false
 
   if not message.pubKey.isNil():
     asymKey = some(message.pubKey[])
@@ -287,16 +294,19 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
     if not message.sourceID.isNil():
       sigPrivKey = some(whisperKeys.asymKeys[$message.sourceID].seckey)
   except KeyError:
+    warn "No key found with provided key ID."
     return false
 
   if not message.payload.isNil():
-    # TODO: Is this cast OK?
-    payload = cast[Bytes]($message.payload)
+    # This will make a copy
+    payload = @(makeOpenArray(message.payload, message.payloadLen))
   else:
+    warn "Message payload was nil, post aborted."
     return false
 
   if not message.padding.isNil():
-    padding = some(cast[Bytes]($message.padding))
+    # This will make a copy
+    padding = some(@(makeOpenArray(message.padding, message.paddingLen)))
 
   result = node.postMessage(asymKey,
                             symKey,
@@ -350,7 +360,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
       if msg.decoded.src.isSome():
         cmsg.source = msg.decoded.src.get()
       if msg.dst.isSome():
-        cmsg.recipientPublicKey = msg.decoded.src.get()
+        cmsg.recipientPublicKey = msg.dst.get()
 
       handler(addr cmsg, udata)
 
