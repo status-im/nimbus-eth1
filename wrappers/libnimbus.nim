@@ -109,7 +109,9 @@ proc subscribeChannel(
 #   except:
 #     notice "no luck parsing", message=getCurrentExceptionMsg()
 
-proc nimbus_start(port: uint16 = 30303) {.exportc.} =
+proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
+  minPow: float64)
+    {.exportc.} =
   let address = Address(
     udpPort: port.Port, tcpPort: port.Port, ip: parseIpAddress("0.0.0.0"))
 
@@ -117,7 +119,7 @@ proc nimbus_start(port: uint16 = 30303) {.exportc.} =
   node = newEthereumNode(keys, address, 1, nil, addAllCapabilities = false)
   node.addCapability Whisper
 
-  node.protocolState(Whisper).config.powRequirement = 0.000001
+  node.protocolState(Whisper).config.powRequirement = minPow
   # TODO: should we start the node with an empty bloomfilter?
   # var bloom: Bloom
   # node.protocolState(Whisper).config.bloom = bloom
@@ -128,14 +130,14 @@ proc nimbus_start(port: uint16 = 30303) {.exportc.} =
     discard initENode(nodeId, bootnode)
     bootnodes.add(bootnode)
 
-  asyncCheck node.connectToNetwork(bootnodes, true, true)
+  traceAsyncErrors node.connectToNetwork(bootnodes, startListening, enableDiscovery)
   # main network has mostly non SHH nodes, so we connect directly to SHH nodes
   for nodeId in WhisperNodes:
     var whisperENode: ENode
     discard initENode(nodeId, whisperENode)
     var whisperNode = newNode(whisperENode)
 
-    asyncCheck node.peerPool.connectToNode(whisperNode)
+    traceAsyncErrors node.peerPool.connectToNode(whisperNode)
 
 proc nimbus_poll() {.exportc.} =
   poll()
@@ -189,7 +191,7 @@ proc nimbus_add_peer(nodeId: cstring) {.exportc.} =
   discard initENode($nodeId, whisperENode)
   var whisperNode = newNode(whisperENode)
 
-  asyncCheck node.peerPool.connectToNode(whisperNode)
+  traceAsyncErrors node.peerPool.connectToNode(whisperNode)
 
 # Whisper API (Similar to Whisper RPC API)
 # Mostly an example for now, lots of things to fix if continued like this.

@@ -45,7 +45,7 @@ func receiveHandler(msg *C.received_message, udata unsafe.Pointer) {
 func Start() {
 	C.NimMain()
 	fmt.Println("[nim-status] Start Nimbus")
-	C.nimbus_start(30306)
+	C.nimbus_start(30306, false, false, 0.002)
 }
 
 func StatusListenAndPost(channel string) {
