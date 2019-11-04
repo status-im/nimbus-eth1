@@ -42,14 +42,14 @@ type
   CFilterOptions* = object
     symKeyID*: cstring
     privateKeyID*: cstring
-    source*: ptr PublicKey
+    source*: ptr byte
     minPow*: float64
     topic*: Topic # lets go with one topic for now
     allowP2P*: bool
 
   CPostMessage* = object
     symKeyID*: cstring
-    pubKey*: ptr PublicKey
+    pubKey*: ptr byte
     sourceID*: cstring
     ttl*: uint32
     topic*: Topic
@@ -208,6 +208,8 @@ proc nimbus_add_peer(nodeId: cstring) {.exportc.} =
 # Mostly an example for now, lots of things to fix if continued like this.
 
 proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc.} =
+  doAssert(not channel.isNil, "channel cannot be nil")
+
   let hash = digest(keccak256, $channel)
   for i in 0..<4:
     result.topic[i] = hash.data[i]
@@ -239,11 +241,14 @@ proc nimbus_add_keypair(privateKey: ptr byte):
     pubkey: privKey.getPublicKey()))
 
 proc nimbus_delete_keypair(id: cstring): bool {.exportc.} =
+  doAssert(not id.isNil, "Key id cannot be nil")
+
   var unneeded: KeyPair
   result = whisperKeys.asymKeys.take($id, unneeded)
 
 proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
     bool {.exportc.} =
+  doAssert(not id.isNil, "Key id cannot be nil")
   doAssert(not privateKey.isNil, "Passed a null pointer as privateKey")
 
   try:
@@ -269,6 +274,8 @@ proc nimbus_add_symkey_from_password(password: cstring):
     cstring {.exportc.} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
+  doAssert(not password.isNil, "password can not be nil")
+
   var ctx: HMAC[sha256]
   var symKey: SymKey
   if pbkdf2(ctx, $password, "", 65356, symKey) != sizeof(SymKey):
@@ -279,11 +286,14 @@ proc nimbus_add_symkey_from_password(password: cstring):
   whisperKeys.symKeys.add($result, symKey)
 
 proc nimbus_delete_symkey(id: cstring): bool {.exportc.} =
+  doAssert(not id.isNil, "Key id cannot be nil")
+
   var unneeded: SymKey
   result = whisperKeys.symKeys.take($id, unneeded)
 
 proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
     bool {.exportc.} =
+  doAssert(not id.isNil, "Key id cannot be nil")
   doAssert(not symKey.isNil, "Passed a null pointer as symKey")
 
   try:
@@ -298,6 +308,8 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
   ## Encryption is mandatory.
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
   ## Providing a payload is mandatory, it cannot be nil, but can be of length 0.
+  doAssert(not message.isNil, "Message pointer cannot be nil")
+
   var
     sigPrivKey: Option[PrivateKey]
     asymKey: Option[PublicKey]
@@ -314,7 +326,11 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
     return false
 
   if not message.pubKey.isNil():
-    asymKey = some(message.pubKey[])
+    try:
+      asymKey = some(initPublicKey(makeOpenArray(message.pubKey, 64)))
+    except EthKeysException:
+      error "Passed an invalid public key for encryption"
+      return false
 
   try:
     if not message.symKeyID.isNil():
@@ -353,6 +369,8 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
   ## In case of a passed handler, the received msg needs to be copied before the
   ## handler ends.
+  doAssert(not options.isNil, "Options pointer cannot be nil")
+
   var
     src: Option[PublicKey]
     symKey: Option[SymKey]
@@ -367,7 +385,11 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     return ""
 
   if not options.source.isNil():
-    src = some(options.source[])
+    try:
+      src = some(initPublicKey(makeOpenArray(options.source, 64)))
+    except EthKeysException:
+      error "Passed an invalid public key as source"
+      return ""
 
   try:
     if not options.symKeyID.isNil():
@@ -409,10 +431,14 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   traceAsyncErrors node.setBloomFilter(node.filtersToBloom())
 
 proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc.} =
+  doAssert(not id.isNil, "Filter id cannot be nil")
+
   result = node.unsubscribeFilter($id)
 
 proc nimbus_get_min_pow(): float64 {.exportc.} =
   result = node.protocolState(Whisper).config.powRequirement
 
 proc nimbus_get_bloom_filter(bloom: ptr Bloom) {.exportc.} =
+  doAssert(not bloom.isNil, "Bloom pointer cannot be nil")
+
   bloom[] = node.protocolState(Whisper).config.bloom
