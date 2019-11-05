@@ -37,7 +37,10 @@ func poll() {
 func receiveHandler(msg *C.received_message, udata unsafe.Pointer) {
 	receivedMsg := C.GoBytes(unsafe.Pointer(msg.decoded), C.int(msg.decodedLen))
 	fmt.Printf("[nim-status] received message %s\n", string(receivedMsg))
-	fmt.Printf("[nim-status] source public key %x\n", msg.source)
+	if msg.source != nil {
+		source := C.GoBytes(unsafe.Pointer(msg.source), 64)
+		fmt.Printf("[nim-status] source public key %x\n", string(source))
+	}
 	msgCount := (*int)(udata)
 	*msgCount += 1
 	fmt.Printf("[nim-status] message count %d\n", *msgCount)

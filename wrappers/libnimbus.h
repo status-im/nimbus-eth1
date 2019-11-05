@@ -12,8 +12,8 @@ extern "C" {
 typedef struct {
   uint8_t* decoded;
   size_t decodedLen;
-  uint8_t source[64]; /* TODO: change to ptr so they can be checked on nil? */
-  uint8_t recipientPublicKey[64]; /* TODO: change to ptr so they can be checked on nil? */
+  uint8_t* source; /* 64 bytes public key, can be nil */
+  uint8_t* recipientPublicKey; /* 64 bytes public key, can be nil */
   uint32_t timestamp;
   uint32_t ttl;
   uint8_t topic[4];
@@ -22,11 +22,11 @@ typedef struct {
 } received_message;
 
 typedef struct {
-  const char* symKeyID;
-  const char* privateKeyID;
-  uint8_t* source; /* 64 bytes public key */
+  const char* symKeyID; /* Identifier for symmetric key, set to nil if none */
+  const char* privateKeyID; /* Identifier for asymmetric key, set to nil if none */
+  uint8_t* source; /* 64 bytes public key, set to nil if none */
   double minPow;
-  uint8_t topic[4];
+  uint8_t topic[4]; /* Will default to 0x00000000 if not provided */
   int allowP2P;
 } filter_options;
 
@@ -35,10 +35,10 @@ typedef struct {
   uint8_t* pubKey; /* 64 bytes public key, set to nil if none */
   const char* sourceID; /* Identifier for asymmetric key, set to nil if none */
   uint32_t ttl;
-  uint8_t topic[4]; /* default of 0 is OK */
-  uint8_t* payload; /* payload to be send, can be len=0 but can not be nil */
+  uint8_t topic[4]; /* Will default to 0x00000000 if not provided */
+  uint8_t* payload; /* Payload to be send, can be len=0 but can not be nil */
   size_t payloadLen;
-  uint8_t* padding; /* custom padding, can be set to nil */
+  uint8_t* padding; /* Custom padding, can be set to nil */
   size_t paddingLen;
   double powTime;
   double powTarget;
