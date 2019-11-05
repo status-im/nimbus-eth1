@@ -247,7 +247,7 @@ proc nimbus_new_keypair(): cstring {.exportc, raises: [].} =
     result = ""
 
 proc nimbus_add_keypair(privateKey: ptr byte):
-    cstring {.exportc, raises: [OSError, IOError].} =
+    cstring {.exportc, raises: [OSError, IOError, ValueError].} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
   doAssert(not privateKey.isNil, "Passed a null pointer as privateKey")
@@ -270,7 +270,7 @@ proc nimbus_delete_keypair(id: cstring): bool {.exportc, raises: [].} =
   result = whisperKeys.asymKeys.take($id, unneeded)
 
 proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
-    bool {.exportc, raises: [OSError, IOError].} =
+    bool {.exportc, raises: [OSError, IOError, ValueError].} =
   doAssert(not id.isNil, "Key id cannot be nil")
   doAssert(not privateKey.isNil, "Passed a null pointer as privateKey")
 
