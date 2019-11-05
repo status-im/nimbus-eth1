@@ -58,7 +58,7 @@ func Start() {
 	privKey := (*C.uint8_t)(C.CBytes(data))
 	defer C.free(unsafe.Pointer(privKey))
 
-	if C.nimbus_start(30306, true, false, 0.002, privKey) == false {
+	if C.nimbus_start(30306, true, false, 0.002, privKey, false) == false {
 		panic("Can't start nimbus")
 	}
 }

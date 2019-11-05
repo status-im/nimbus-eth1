@@ -109,8 +109,24 @@ proc subscribeChannel(
 #   except:
 #     notice "no luck parsing", message=getCurrentExceptionMsg()
 
+proc setBootNodes(nodes: openArray[string]): seq[ENode] =
+  var bootnode: ENode
+  result = newSeqOfCap[ENode](nodes.len)
+  for nodeId in nodes:
+    # For now we can just do assert as we only pass our own const arrays.
+    doAssert(initENode(nodeId, bootnode) == ENodeStatus.Success)
+    result.add(bootnode)
+
+proc connectToNodes(nodes: openArray[string]) =
+  for nodeId in nodes:
+    var whisperENode: ENode
+    # For now we can just do assert as we only pass our own const arrays.
+    doAssert(initENode(nodeId, whisperENode) == ENodeStatus.Success)
+
+    traceAsyncErrors node.peerPool.connectToNode(newNode(whisperENode))
+
 proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
-  minPow: float64, privateKey: ptr byte): bool {.exportc.} =
+  minPow: float64, privateKey: ptr byte, staging: bool): bool {.exportc.} =
   # TODO: any async calls can still create `Exception`, why?
   let address = Address(
     udpPort: port.Port, tcpPort: port.Port, ip: parseIpAddress("0.0.0.0"))
@@ -134,20 +150,15 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
   # var bloom: Bloom
   # node.protocolState(Whisper).config.bloom = bloom
 
-  var bootnodes: seq[ENode] = @[]
-  for nodeId in MainnetBootnodes:
-    var bootnode: ENode
-    discard initENode(nodeId, bootnode)
-    bootnodes.add(bootnode)
+  let bootnodes = if staging: setBootNodes(StatusBootNodesStaging)
+                  else: setBootNodes(StatusBootNodes)
 
-  traceAsyncErrors node.connectToNetwork(bootnodes, startListening, enableDiscovery)
-  # main network has mostly non SHH nodes, so we connect directly to SHH nodes
-  for nodeId in WhisperNodes:
-    var whisperENode: ENode
-    discard initENode(nodeId, whisperENode)
-    var whisperNode = newNode(whisperENode)
+  traceAsyncErrors node.connectToNetwork(bootnodes, startListening,
+    enableDiscovery)
 
-    traceAsyncErrors node.peerPool.connectToNode(whisperNode)
+  # Connect to known Status Whisper fleet directly
+  if staging: connectToNodes(WhisperNodesStaging)
+  else: connectToNodes(WhisperNodes)
 
   result = true
 

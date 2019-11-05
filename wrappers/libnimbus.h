@@ -62,7 +62,7 @@ void NimMain();
  * When privkey is null, a new keypair will be generated.
  */
 bool nimbus_start(uint16_t port, bool startListening, bool enableDiscovery,
-  double minPow, uint8_t* privkey);
+  double minPow, uint8_t* privkey, bool staging);
 
 /** Add peers to connect to - must be called after nimbus_start */
 bool nimbus_add_peer(const char* nodeId);
