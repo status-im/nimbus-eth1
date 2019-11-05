@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
   time_t lastmsg;
 
   NimMain();
-  nimbus_start(30303, true, false, 0.002, NULL);
+  nimbus_start(30303, true, false, 0.002, NULL, false);
 
   nimbus_join_public_chat(channel, print_msg);
 
