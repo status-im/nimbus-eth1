@@ -111,6 +111,7 @@ proc subscribeChannel(
 
 proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
   minPow: float64, privateKey: ptr byte): bool {.exportc.} =
+  # TODO: any async calls can still create `Exception`, why?
   let address = Address(
     udpPort: port.Port, tcpPort: port.Port, ip: parseIpAddress("0.0.0.0"))
 
@@ -197,17 +198,24 @@ proc nimbus_post_public(channel: cstring, payload: cstring) {.exportc.} =
                            payload = npayload,
                            powTarget = 0.002)
 
-proc nimbus_add_peer(nodeId: cstring) {.exportc.} =
-  var whisperENode: ENode
+proc nimbus_add_peer(nodeId: cstring): bool {.exportc.} =
+  var
+    whisperENode: ENode
+    whisperNode: Node
   discard initENode($nodeId, whisperENode)
-  var whisperNode = newNode(whisperENode)
+  try:
+    whisperNode = newNode(whisperENode)
+  except Secp256k1Exception:
+    return false
 
+  # TODO: call can create `Exception`, why?
   traceAsyncErrors node.peerPool.connectToNode(whisperNode)
+  result = true
 
 # Whisper API (Similar to Whisper RPC API)
 # Mostly an example for now, lots of things to fix if continued like this.
 
-proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc.} =
+proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc, raises: [].} =
   doAssert(not channel.isNil, "channel cannot be nil")
 
   let hash = digest(keccak256, $channel)
@@ -216,38 +224,42 @@ proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc.} =
 
 # Asymmetric Keys API
 
-proc nimbus_new_keypair(): cstring {.exportc.} =
+proc nimbus_new_keypair(): cstring {.exportc, raises: [].} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
   result = generateRandomID()
-  whisperKeys.asymKeys.add($result, newKeyPair())
+  try:
+    whisperKeys.asymKeys.add($result, newKeyPair())
+  except Secp256k1Exception:
+    # Don't think this can actually happen, comes from the `getPublicKey` part
+    # in `newKeyPair`
+    result = ""
 
 proc nimbus_add_keypair(privateKey: ptr byte):
-    cstring {.exportc.} =
+    cstring {.exportc, raises: [OSError, IOError].} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
   doAssert(not privateKey.isNil, "Passed a null pointer as privateKey")
 
-  var privKey: PrivateKey
+  var keypair: KeyPair
   try:
-    privKey = initPrivateKey(makeOpenArray(privateKey, 32))
-  except EthKeysException:
+    keypair = KeyPair(seckey: initPrivateKey(makeOpenArray(privateKey, 32)),
+      pubkey: keypair.seckey.getPublicKey())
+  except EthKeysException, Secp256k1Exception:
     error "Passed an invalid privateKey"
     return ""
 
   result = generateRandomID()
-  # Creating a KeyPair here does a copy of the key and so does the add
-  whisperKeys.asymKeys.add($result, KeyPair(seckey: privKey,
-    pubkey: privKey.getPublicKey()))
+  whisperKeys.asymKeys.add($result, keypair)
 
-proc nimbus_delete_keypair(id: cstring): bool {.exportc.} =
+proc nimbus_delete_keypair(id: cstring): bool {.exportc, raises: [].} =
   doAssert(not id.isNil, "Key id cannot be nil")
 
   var unneeded: KeyPair
   result = whisperKeys.asymKeys.take($id, unneeded)
 
 proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
-    bool {.exportc.} =
+    bool {.exportc, raises: [OSError, IOError].} =
   doAssert(not id.isNil, "Key id cannot be nil")
   doAssert(not privateKey.isNil, "Passed a null pointer as privateKey")
 
@@ -260,7 +272,7 @@ proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
 
 # Symmetric Keys API
 
-proc nimbus_add_symkey(symKey: ptr SymKey): cstring {.exportc.} =
+proc nimbus_add_symkey(symKey: ptr SymKey): cstring {.exportc, raises: [].} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
   doAssert(not symKey.isNil, "Passed a null pointer as symKey")
@@ -271,7 +283,7 @@ proc nimbus_add_symkey(symKey: ptr SymKey): cstring {.exportc.} =
   whisperKeys.symKeys.add($result, symKey[])
 
 proc nimbus_add_symkey_from_password(password: cstring):
-    cstring {.exportc.} =
+    cstring {.exportc, raises: [].} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
   doAssert(not password.isNil, "password can not be nil")
@@ -285,14 +297,14 @@ proc nimbus_add_symkey_from_password(password: cstring):
 
   whisperKeys.symKeys.add($result, symKey)
 
-proc nimbus_delete_symkey(id: cstring): bool {.exportc.} =
+proc nimbus_delete_symkey(id: cstring): bool {.exportc, raises: [].} =
   doAssert(not id.isNil, "Key id cannot be nil")
 
   var unneeded: SymKey
   result = whisperKeys.symKeys.take($id, unneeded)
 
 proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
-    bool {.exportc.} =
+    bool {.exportc, raises: [].} =
   doAssert(not id.isNil, "Key id cannot be nil")
   doAssert(not symKey.isNil, "Passed a null pointer as symKey")
 
@@ -352,6 +364,7 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
     # This will make a copy
     padding = some(@(makeOpenArray(message.padding, message.paddingLen)))
 
+  # TODO: call can create `Exception`, why?
   result = node.postMessage(asymKey,
                             symKey,
                             sigPrivKey,
@@ -403,6 +416,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     options.minPow, options.allowP2P)
 
   if handler.isNil:
+    # TODO: call can create `Exception`, why?
     result = node.subscribeFilter(filter, nil)
   else:
     proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
@@ -424,21 +438,23 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
 
       handler(addr cmsg, udata)
 
+    # TODO: call can create `Exception`, why?
     result = node.subscribeFilter(filter, c_handler)
 
   # Bloom filter has to follow only the subscribed topics
   # TODO: better to have an "adding" proc here
+  # TODO: call can create `Exception`, why?
   traceAsyncErrors node.setBloomFilter(node.filtersToBloom())
 
-proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc.} =
+proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc, raises: [].} =
   doAssert(not id.isNil, "Filter id cannot be nil")
 
   result = node.unsubscribeFilter($id)
 
-proc nimbus_get_min_pow(): float64 {.exportc.} =
+proc nimbus_get_min_pow(): float64 {.exportc, raises: [].} =
   result = node.protocolState(Whisper).config.powRequirement
 
-proc nimbus_get_bloom_filter(bloom: ptr Bloom) {.exportc.} =
+proc nimbus_get_bloom_filter(bloom: ptr Bloom) {.exportc, raises: [].} =
   doAssert(not bloom.isNil, "Bloom pointer cannot be nil")
 
   bloom[] = node.protocolState(Whisper).config.bloom
