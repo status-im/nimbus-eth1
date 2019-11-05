@@ -65,7 +65,7 @@ bool nimbus_start(uint16_t port, bool startListening, bool enableDiscovery,
   double minPow, uint8_t* privkey);
 
 /** Add peers to connect to - must be called after nimbus_start */
-void nimbus_add_peer(const char* nodeId);
+bool nimbus_add_peer(const char* nodeId);
 
 /**
  * Should be called in regularly - for example in a busy loop (beautiful!) on
