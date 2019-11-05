@@ -31,8 +31,8 @@ type
   CReceivedMessage* = object
     decoded*: ptr byte
     decodedLen*: csize
-    source*: PublicKey
-    recipientPublicKey*: PublicKey
+    source*: ref PublicKey
+    recipientPublicKey*: ref PublicKey
     timestamp*: uint32
     ttl*: uint32
     topic*: Topic
@@ -430,11 +430,18 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
         hash: msg.hash
       )
 
-      # TODO: change this to ptr, so that C/go code can check on nil?
+      # Should be GCed when handler goes out of scope
+      var
+        source: ref PublicKey
+        recipientPublicKey: ref PublicKey
       if msg.decoded.src.isSome():
-        cmsg.source = msg.decoded.src.get()
+        new(source)
+        source[] = msg.decoded.src.get()
+        cmsg.source = source
       if msg.dst.isSome():
-        cmsg.recipientPublicKey = msg.dst.get()
+        new(recipientPublicKey)
+        recipientPublicKey[] = msg.dst.get()
+        cmsg.recipientPublicKey = recipientPublicKey
 
       handler(addr cmsg, udata)
 
