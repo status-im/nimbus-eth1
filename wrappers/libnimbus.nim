@@ -254,8 +254,8 @@ proc nimbus_add_keypair(privateKey: ptr byte):
 
   var keypair: KeyPair
   try:
-    keypair = KeyPair(seckey: initPrivateKey(makeOpenArray(privateKey, 32)),
-      pubkey: keypair.seckey.getPublicKey())
+    keypair.seckey = initPrivateKey(makeOpenArray(privateKey, 32))
+    keypair.pubkey = keypair.seckey.getPublicKey()
   except EthKeysException, Secp256k1Exception:
     error "Passed an invalid privateKey"
     return ""
