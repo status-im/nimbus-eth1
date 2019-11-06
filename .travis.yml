@@ -23,6 +23,8 @@ matrix:
         - NPROC=2
       before_install:
         - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
+        - sudo apt-get -q update
+        - sudo apt-get install -y librocksdb-dev
     - os: linux
       arch: arm64
       sudo: required
@@ -32,16 +34,14 @@ matrix:
       before_install:
         - export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
         - sudo apt-get -q update
-        - sudo apt-get install -y libpcre3-dev
+        - sudo apt-get install -y libpcre3-dev librocksdb-dev
     - os: osx
       env:
         - NPROC=2
       before_install:
         - launchctl setenv LIBRARY_PATH /usr/local/lib # for RocksDB
-
-install:
-  # build our own rocksdb to test with a fixed version that we think works
-  - vendor/nimbus-build-system/scripts/build_rocksdb.sh rocksdbCache
+        # build our own rocksdb to test with a fixed version that we think works
+        - vendor/nimbus-build-system/scripts/build_rocksdb.sh rocksdbCache
 
 script:
   - set -e # fail fast
