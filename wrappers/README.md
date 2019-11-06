@@ -49,3 +49,17 @@ See also: https://golang.org/cmd/cgo/#hdr-Passing_pointers
 This can be resolved by refering to it indirectly, e.g. using a map in Go
 containing the pointers. See here for an example solution:
 https://github.com/mattn/go-pointer/blob/master/pointer.go
+
+# Caveat
+Two items to take into consideration:
+1. For several API calls a cstring gets returned. This will be allocated by the
+Nim GC and could thus in theory be removed at any time. According to Nim
+[documentation](https://nim-lang.org/docs/backends.html#memory-management-strings-and-c-strings)
+this should not occur before the next API call. So there is time to copy over
+the string.
+This is however GC implementation specific and will most likely change when a different GC is selected. If this causes problems, the API can be changed to
+either allocate this string (it is of fixed size) on the caller side, or to have some sort of release call to deallocate the string (propably not preferred).
+2. For most of the API calls it is assumed that when passing a pointer as
+parameter, that the data that this pointer refers to remains valid during the
+duration of the call. If this is not the case, issues might occur as copying
+might happen to late.
