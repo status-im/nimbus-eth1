@@ -31,8 +31,8 @@ type
   CReceivedMessage* = object
     decoded*: ptr byte
     decodedLen*: csize
-    source*: ref PublicKey
-    recipientPublicKey*: ref PublicKey
+    source*: ptr byte
+    recipientPublicKey*: ptr byte
     timestamp*: uint32
     ttl*: uint32
     topic*: Topic
@@ -441,18 +441,19 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
         hash: msg.hash
       )
 
-      # Should be GCed when handler goes out of scope
+      # Could also allocate here, but this should stay in scope until handler
+      # finishes so it should be fine.
       var
-        source: ref PublicKey
-        recipientPublicKey: ref PublicKey
+        source: array[RawPublicKeySize, byte]
+        recipientPublicKey: array[RawPublicKeySize, byte]
       if msg.decoded.src.isSome():
-        new(source)
-        source[] = msg.decoded.src.get()
-        cmsg.source = source
+        # Need to pass the serialized form
+        source = msg.decoded.src.get().getRaw()
+        cmsg.source = addr source[0]
       if msg.dst.isSome():
-        new(recipientPublicKey)
-        recipientPublicKey[] = msg.dst.get()
-        cmsg.recipientPublicKey = recipientPublicKey
+        # Need to pass the serialized form
+        recipientPublicKey = msg.decoded.src.get().getRaw()
+        cmsg.recipientPublicKey = addr recipientPublicKey[0]
 
       handler(addr cmsg, udata)
 
