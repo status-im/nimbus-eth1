@@ -1,7 +1,7 @@
 let
   nixpkgsFn = import (fetchTarball {
-    url = https://github.com/NixOS/nixpkgs/archive/642499faefb17c3d36e074cf35b189f75ba43ee2.tar.gz;
-    sha256 = "16j7gl3gg839fy54z5v4aap8lgf1ffih5swmfk62zskk30nwzfbi";
+    url = https://github.com/NixOS/nixpkgs/archive/85f3d86bea70fe0d76a7e3520966c58604f8e5e9.tar.gz;
+    sha256 = "1iacnd7ym6c5s9vizyiff0lmxjrlgh5gpya88mlavgvdppkcaiyn";
   });
 
   # nixcrpkgs = import (fetchTarball {
@@ -50,11 +50,13 @@ let
 
   nimbus = pkgs: pkgs.callPackage ./nix/nimbus.nix {};
 
-  mapAttrs = nixpkgs.lib.attrsets.mapAttrs;
+  inherit (nixpkgs.lib.attrsets) mapAttrs;
   crossPackages = mapAttrs (target: conf: nixpkgsFn { crossSystem = conf; }) targets;
   crossBuilds = mapAttrs (target: packages: nimbus packages) crossPackages;
 
 in
-
-(nimbus nixpkgs) // crossBuilds
-
+  (nimbus nixpkgs) //
+  crossBuilds //
+  { 
+    wrappers = nixpkgs.callPackage ./nix/nimbus-wrappers.nix {};
+  }

@@ -1,4 +1,7 @@
-{ stdenv, lib, makeWrapper, git, clang, nodejs, openssl, pcre, readline, sqlite }:
+# based on https://github.com/nim-lang/Nim/blob/v0.18.0/.travis.yml
+
+{ stdenv, lib, makeWrapper, git, clang, nodejs, openssl, pcre, readline,
+  boehmgc, sfml, sqlite }:
 
 let
   csources = fetchTarball {
@@ -45,9 +48,13 @@ in stdenv.mkDerivation rec {
   #    used for bootstrapping, but koch insists on moving the nim compiler around
   #    as part of building it, so it cannot be read-only
 
+  nativeBuildInputs = [
+    makeWrapper
+  ];
+
   buildInputs = [
-    makeWrapper nodejs
-    clang openssl pcre readline sqlite git
+    nodejs git
+    clang openssl pcre readline boehmgc sfml sqlite
   ];
 
   buildPhase = ''
