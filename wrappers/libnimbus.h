@@ -10,38 +10,38 @@ extern "C" {
 #endif
 
 typedef struct {
-  uint8_t* decoded;
-  size_t decodedLen;
-  uint8_t* source; /* 64 bytes public key, can be nil */
-  uint8_t* recipientPublicKey; /* 64 bytes public key, can be nil */
-  uint32_t timestamp;
-  uint32_t ttl;
-  uint8_t topic[4];
-  double pow;
-  uint8_t hash[32];
+  const uint8_t* decoded; /* Decoded payload */
+  size_t decodedLen;  /* Decoded payload length */
+  const uint8_t* source; /* 64 bytes public key, can be nil */
+  const uint8_t* recipientPublicKey; /* 64 bytes public key, can be nil */
+  uint32_t timestamp; /* Timestamp of creation message, expiry - ttl  */
+  uint32_t ttl; /* TTL of message */
+  uint8_t topic[4]; /* Topic of message */
+  double pow; /* PoW value of received message */
+  uint8_t hash[32]; /* Hash of message */
 } received_message;
 
 typedef struct {
   const char* symKeyID; /* Identifier for symmetric key, set to nil if none */
   const char* privateKeyID; /* Identifier for asymmetric key, set to nil if none */
-  uint8_t* source; /* 64 bytes public key, set to nil if none */
-  double minPow;
+  const uint8_t* source; /* 64 bytes public key, set to nil if none */
+  double minPow; /* Minimum PoW that message must have */
   uint8_t topic[4]; /* Will default to 0x00000000 if not provided */
   int allowP2P;
 } filter_options;
 
 typedef struct {
   const char* symKeyID; /* Identifier for symmetric key, set to nil if none */
-  uint8_t* pubKey; /* 64 bytes public key, set to nil if none */
+  const uint8_t* pubKey; /* 64 bytes public key, set to nil if none */
   const char* sourceID; /* Identifier for asymmetric key, set to nil if none */
-  uint32_t ttl;
+  uint32_t ttl; /* TTL of message */
   uint8_t topic[4]; /* Will default to 0x00000000 if not provided */
   uint8_t* payload; /* Payload to be send, can be len=0 but can not be nil */
-  size_t payloadLen;
+  size_t payloadLen; /* Payload length */
   uint8_t* padding; /* Custom padding, can be set to nil */
-  size_t paddingLen;
-  double powTime;
-  double powTarget;
+  size_t paddingLen; /* Padding length */
+  double powTime; /* Maximum time to calculate PoW */
+  double powTarget; /* Minimum PoW target to reach before stopping */
 } post_message;
 
 typedef struct {
@@ -102,8 +102,6 @@ bool nimbus_unsubscribe_filter(const char* id);
 /* Post Whisper message to the queue */
 bool nimbus_post(post_message* msg);
 
-/** TODO: why are following two getters needed? */
-
 /** Get the minimum required PoW of this node */
 double nimbus_get_min_pow();
 
@@ -116,6 +114,7 @@ void nimbus_get_bloom_filter(uint8_t* bloomfilter);
 topic nimbus_channel_to_topic(const char* channel);
 
 /** Very limited Status chat API */
+
 void nimbus_post_public(const char* channel, const char* payload);
 void nimbus_join_public_chat(const char* channel, received_msg_handler msg);
 

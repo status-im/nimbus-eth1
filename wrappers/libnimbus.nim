@@ -1,6 +1,6 @@
 #
 #                 Nimbus
-#              (c) Copyright 2018
+#              (c) Copyright 2019
 #       Status Research & Development GmbH
 #
 #            Licensed under either of
@@ -11,7 +11,7 @@ import
   chronos, chronicles, nimcrypto/[utils, hmac, pbkdf2, hash], tables,
   stew/ranges/ptr_arith, eth/[keys, rlp, p2p, async_utils],
   eth/p2p/rlpx_protocols/whisper_protocol,
-  eth/p2p/[enode, peer_pool, bootnodes, whispernodes]
+  eth/p2p/[peer_pool, bootnodes, whispernodes]
 
 # TODO: If we really want/need this type of API for the keys, put it somewhere
 # seperate as it is the same code for Whisper RPC
@@ -25,8 +25,9 @@ proc newWhisperKeys*(): WhisperKeys =
   result.asymKeys = initTable[string, KeyPair]()
   result.symKeys = initTable[string, SymKey]()
 
-# TODO: again, lots of overlap with Nimbus whisper RPC here, however not all
-# the same due to type conversion (no use of Option and such)
+# TODO: again, lots of overlap with Nimbus Whisper RPC here, however not all
+# the same due to type conversion (no use of Option and such). Perhaps some
+# parts can be refactored in sharing some of the code.
 type
   CReceivedMessage* = object
     decoded*: ptr byte
@@ -44,7 +45,7 @@ type
     privateKeyID*: cstring
     source*: ptr byte
     minPow*: float64
-    topic*: Topic # lets go with one topic for now
+    topic*: Topic # lets go with one topic for now unless more are required
     allowP2P*: bool
 
   CPostMessage* = object
@@ -63,51 +64,11 @@ type
   CTopic* = object
     topic*: Topic
 
-proc `$`*(digest: SymKey): string =
-  for c in digest: result &= hexChar(c.byte)
-
 # Don't do this at home, you'll never get rid of ugly globals like this!
 var
   node: EthereumNode
 # You will only add more instead!
 let whisperKeys = newWhisperKeys()
-
-# TODO: Return filter ID if we ever want to unsubscribe
-proc subscribeChannel(
-    channel: string, handler: proc (msg: ReceivedMessage) {.gcsafe.}) =
-  var ctx: HMAC[sha256]
-  var symKey: SymKey
-  discard ctx.pbkdf2(channel, "", 65356, symKey)
-
-  let channelHash = digest(keccak256, channel)
-  var topic: array[4, byte]
-  for i in 0..<4:
-    topic[i] = channelHash.data[i]
-
-  info "Subscribing to channel", channel, topic, symKey
-
-  discard node.subscribeFilter(newFilter(symKey = some(symKey),
-                                         topics = @[topic]),
-                                         handler)
-
-# proc handler(msg: ReceivedMessage) {.gcsafe.} =
-#   try:
-#     # ["~#c4",["dcasdc","text/plain","~:public-group-user-message",
-#     #          154604971756901,1546049717568,[
-#     #             "^ ","~:chat-id","nimbus-test","~:text","dcasdc"]]]
-#     let
-#       src =
-#         if msg.decoded.src.isSome(): $msg.decoded.src.get()
-#         else: ""
-#       payload = cast[string](msg.decoded.payload)
-#       data = parseJson(cast[string](msg.decoded.payload))
-#       channel = data.elems[1].elems[5].elems[2].str
-#       time = $fromUnix(data.elems[1].elems[4].num div 1000)
-#       message = data.elems[1].elems[0].str
-
-#     info "adding", full=(cast[string](msg.decoded.payload))
-#   except:
-#     notice "no luck parsing", message=getCurrentExceptionMsg()
 
 proc setBootNodes(nodes: openArray[string]): seq[ENode] =
   var bootnode: ENode
@@ -125,6 +86,8 @@ proc connectToNodes(nodes: openArray[string]) =
 
     traceAsyncErrors node.peerPool.connectToNode(newNode(whisperENode))
 
+# Setting up the node
+
 proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
   minPow: float64, privateKey: ptr byte, staging: bool): bool {.exportc.} =
   # TODO: any async calls can still create `Exception`, why?
@@ -139,7 +102,7 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
       let privKey = initPrivateKey(makeOpenArray(privateKey, 32))
       keypair = KeyPair(seckey: privKey, pubkey: privKey.getPublicKey())
     except EthKeysException:
-      error "Passed an invalid privateKey"
+      error "Passed an invalid private key."
       return false
 
   node = newEthereumNode(keypair, address, 1, nil, addAllCapabilities = false)
@@ -165,50 +128,6 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
 proc nimbus_poll() {.exportc.} =
   poll()
 
-proc nimbus_join_public_chat(channel: cstring,
-                             handler: proc (msg: ptr CReceivedMessage)
-                             {.gcsafe, cdecl.}) {.exportc.} =
-  if handler.isNil:
-    subscribeChannel($channel, nil)
-  else:
-    proc c_handler(msg: ReceivedMessage) =
-      var cmsg = CReceivedMessage(
-        decoded: unsafeAddr msg.decoded.payload[0],
-        decodedLen: csize msg.decoded.payload.len(),
-        timestamp: msg.timestamp,
-        ttl: msg.ttl,
-        topic: msg.topic,
-        pow: msg.pow,
-        hash: msg.hash
-      )
-
-      handler(addr cmsg)
-
-    subscribeChannel($channel, c_handler)
-
-# TODO: Add signing key as parameter
-# TODO: How would we do key management? In nimbus (like in rpc) or in status go?
-proc nimbus_post_public(channel: cstring, payload: cstring) {.exportc.} =
-  let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
-
-  var ctx: HMAC[sha256]
-  var symKey: SymKey
-  var npayload = cast[Bytes]($payload)
-  discard ctx.pbkdf2($channel, "", 65356, symKey)
-
-  let channelHash = digest(keccak256, $channel)
-  var topic: array[4, byte]
-  for i in 0..<4:
-    topic[i] = channelHash.data[i]
-
-  # TODO: Handle error case
-  discard node.postMessage(symKey = some(symKey),
-                           src = some(encPrivateKey),
-                           ttl = 20,
-                           topic = topic,
-                           payload = npayload,
-                           powTarget = 0.002)
-
 proc nimbus_add_peer(nodeId: cstring): bool {.exportc.} =
   var
     whisperENode: ENode
@@ -223,17 +142,17 @@ proc nimbus_add_peer(nodeId: cstring): bool {.exportc.} =
   traceAsyncErrors node.peerPool.connectToNode(whisperNode)
   result = true
 
-# Whisper API (Similar to Whisper RPC API)
-# Mostly an example for now, lots of things to fix if continued like this.
+# Whisper API (Similar to Whisper JSON-RPC API)
 
 proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc, raises: [].} =
-  doAssert(not channel.isNil, "channel cannot be nil")
+  # Only used for the example, to conveniently convert channel to topic.
+  doAssert(not channel.isNil, "Channel cannot be nil.")
 
   let hash = digest(keccak256, $channel)
   for i in 0..<4:
     result.topic[i] = hash.data[i]
 
-# Asymmetric Keys API
+# Asymmetric Keys
 
 proc nimbus_new_keypair(): cstring {.exportc, raises: [].} =
   ## It is important that the caller makes a copy of the returned cstring before
@@ -250,43 +169,43 @@ proc nimbus_add_keypair(privateKey: ptr byte):
     cstring {.exportc, raises: [OSError, IOError, ValueError].} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
-  doAssert(not privateKey.isNil, "Passed a null pointer as privateKey")
+  doAssert(not privateKey.isNil, "Private key cannot be nil.")
 
   var keypair: KeyPair
   try:
     keypair.seckey = initPrivateKey(makeOpenArray(privateKey, 32))
     keypair.pubkey = keypair.seckey.getPublicKey()
   except EthKeysException, Secp256k1Exception:
-    error "Passed an invalid privateKey"
+    error "Passed an invalid private key."
     return ""
 
   result = generateRandomID()
   whisperKeys.asymKeys.add($result, keypair)
 
 proc nimbus_delete_keypair(id: cstring): bool {.exportc, raises: [].} =
-  doAssert(not id.isNil, "Key id cannot be nil")
+  doAssert(not id.isNil, "Key id cannot be nil.")
 
   var unneeded: KeyPair
   result = whisperKeys.asymKeys.take($id, unneeded)
 
 proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
     bool {.exportc, raises: [OSError, IOError, ValueError].} =
-  doAssert(not id.isNil, "Key id cannot be nil")
-  doAssert(not privateKey.isNil, "Passed a null pointer as privateKey")
+  doAssert(not id.isNil, "Key id cannot be nil.")
+  doAssert(not privateKey.isNil, "Private key cannot be nil.")
 
   try:
     privateKey[] = whisperKeys.asymkeys[$id].seckey
     result = true
   except KeyError:
-    error "Private key not found"
+    error "Private key not found."
     result = false
 
-# Symmetric Keys API
+# Symmetric Keys
 
 proc nimbus_add_symkey(symKey: ptr SymKey): cstring {.exportc, raises: [].} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
-  doAssert(not symKey.isNil, "Passed a null pointer as symKey")
+  doAssert(not symKey.isNil, "Symmetric key cannot be nil.")
 
   result = generateRandomID().cstring
 
@@ -297,27 +216,27 @@ proc nimbus_add_symkey_from_password(password: cstring):
     cstring {.exportc, raises: [].} =
   ## It is important that the caller makes a copy of the returned cstring before
   ## doing any other API calls. This might not hold for all types of GC.
-  doAssert(not password.isNil, "password can not be nil")
+  doAssert(not password.isNil, "Password cannot be nil.")
 
   var ctx: HMAC[sha256]
   var symKey: SymKey
   if pbkdf2(ctx, $password, "", 65356, symKey) != sizeof(SymKey):
-    return nil # TODO: Something else than nil? And, can this practically occur?
+    return ""
 
   result = generateRandomID()
 
   whisperKeys.symKeys.add($result, symKey)
 
 proc nimbus_delete_symkey(id: cstring): bool {.exportc, raises: [].} =
-  doAssert(not id.isNil, "Key id cannot be nil")
+  doAssert(not id.isNil, "Key id cannot be nil.")
 
   var unneeded: SymKey
   result = whisperKeys.symKeys.take($id, unneeded)
 
 proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
     bool {.exportc, raises: [].} =
-  doAssert(not id.isNil, "Key id cannot be nil")
-  doAssert(not symKey.isNil, "Passed a null pointer as symKey")
+  doAssert(not id.isNil, "Key id cannot be nil.")
+  doAssert(not symKey.isNil, "Symmetric key cannot be nil.")
 
   try:
     symKey[] = whisperKeys.symkeys[$id]
@@ -325,13 +244,13 @@ proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
   except KeyError:
     result = false
 
-# Whisper message posting and receiving API
+# Whisper message posting and receiving
 
 proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
   ## Encryption is mandatory.
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
   ## Providing a payload is mandatory, it cannot be nil, but can be of length 0.
-  doAssert(not message.isNil, "Message pointer cannot be nil")
+  doAssert(not message.isNil, "Message pointer cannot be nil.")
 
   var
     sigPrivKey: Option[PrivateKey]
@@ -352,7 +271,7 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
     try:
       asymKey = some(initPublicKey(makeOpenArray(message.pubKey, 64)))
     except EthKeysException:
-      error "Passed an invalid public key for encryption"
+      error "Passed an invalid public key for encryption."
       return false
 
   try:
@@ -361,7 +280,7 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
     if not message.sourceID.isNil():
       sigPrivKey = some(whisperKeys.asymKeys[$message.sourceID].seckey)
   except KeyError:
-    warn "No key found with provided key ID."
+    warn "No key found with provided key id."
     return false
 
   if not message.payload.isNil():
@@ -393,7 +312,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
   ## In case of a passed handler, the received msg needs to be copied before the
   ## handler ends.
-  doAssert(not options.isNil, "Options pointer cannot be nil")
+  doAssert(not options.isNil, "Filter options pointer cannot be nil.")
 
   var
     src: Option[PublicKey]
@@ -412,7 +331,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     try:
       src = some(initPublicKey(makeOpenArray(options.source, 64)))
     except EthKeysException:
-      error "Passed an invalid public key as source"
+      error "Passed an invalid public key as source."
       return ""
 
   try:
@@ -466,7 +385,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   traceAsyncErrors node.setBloomFilter(node.filtersToBloom())
 
 proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc, raises: [].} =
-  doAssert(not id.isNil, "Filter id cannot be nil")
+  doAssert(not id.isNil, "Filter id cannot be nil.")
 
   result = node.unsubscribeFilter($id)
 
@@ -474,6 +393,70 @@ proc nimbus_get_min_pow(): float64 {.exportc, raises: [].} =
   result = node.protocolState(Whisper).config.powRequirement
 
 proc nimbus_get_bloom_filter(bloom: ptr Bloom) {.exportc, raises: [].} =
-  doAssert(not bloom.isNil, "Bloom pointer cannot be nil")
+  doAssert(not bloom.isNil, "Bloom pointer cannot be nil.")
 
   bloom[] = node.protocolState(Whisper).config.bloom
+
+# Nimbus limited Status chat API
+
+# TODO: Return filter ID if we ever want to unsubscribe
+proc subscribeChannel(
+    channel: string, handler: proc (msg: ReceivedMessage) {.gcsafe.}) =
+  var ctx: HMAC[sha256]
+  var symKey: SymKey
+  discard ctx.pbkdf2(channel, "", 65356, symKey)
+
+  let channelHash = digest(keccak256, channel)
+  var topic: array[4, byte]
+  for i in 0..<4:
+    topic[i] = channelHash.data[i]
+
+  info "Subscribing to channel", channel, topic, symKey
+
+  discard node.subscribeFilter(newFilter(symKey = some(symKey),
+                                         topics = @[topic]),
+                                         handler)
+
+proc nimbus_join_public_chat(channel: cstring,
+                             handler: proc (msg: ptr CReceivedMessage)
+                             {.gcsafe, cdecl.}) {.exportc.} =
+  if handler.isNil:
+    subscribeChannel($channel, nil)
+  else:
+    proc c_handler(msg: ReceivedMessage) =
+      var cmsg = CReceivedMessage(
+        decoded: unsafeAddr msg.decoded.payload[0],
+        decodedLen: csize msg.decoded.payload.len(),
+        timestamp: msg.timestamp,
+        ttl: msg.ttl,
+        topic: msg.topic,
+        pow: msg.pow,
+        hash: msg.hash
+      )
+
+      handler(addr cmsg)
+
+    subscribeChannel($channel, c_handler)
+
+# TODO: Add signing key as parameter
+# TODO: How would we do key management? In nimbus (like in rpc) or in status go?
+proc nimbus_post_public(channel: cstring, payload: cstring) {.exportc.} =
+  let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
+
+  var ctx: HMAC[sha256]
+  var symKey: SymKey
+  var npayload = cast[Bytes]($payload)
+  discard ctx.pbkdf2($channel, "", 65356, symKey)
+
+  let channelHash = digest(keccak256, $channel)
+  var topic: array[4, byte]
+  for i in 0..<4:
+    topic[i] = channelHash.data[i]
+
+  # TODO: Handle error case
+  discard node.postMessage(symKey = some(symKey),
+                           src = some(encPrivateKey),
+                           ttl = 20,
+                           topic = topic,
+                           payload = npayload,
+                           powTarget = 0.002)

@@ -24,15 +24,6 @@ func init() {
 	runtime.LockOSThread()
 }
 
-func poll() {
-
-	for {
-		fmt.Println("POLLING")
-		time.Sleep(1 * time.Microsecond)
-		C.nimbus_poll()
-	}
-}
-
 //export receiveHandler
 func receiveHandler(msg *C.received_message, udata unsafe.Pointer) {
 	receivedMsg := C.GoBytes(unsafe.Pointer(msg.decoded), C.int(msg.decodedLen))
