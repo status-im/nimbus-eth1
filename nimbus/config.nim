@@ -38,7 +38,7 @@ let
   ## copyright string
 
   NimbusHeader* = NimbusName & " Version " & NimbusVersion &
-                  " [" & hostOS & ": " & hostCPU & ", " & nimbus_db_backend & "]\r\n" &
+                  " [" & hostOS & ": " & hostCPU & ", " & nimbus_db_backend & "]\p" &
                   NimbusCopyright
   ## is the header which printed, when nimbus binary got executed
 
