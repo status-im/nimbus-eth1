@@ -33,14 +33,12 @@ const
   NimbusIdent* = "$1/$2 ($3/$4)" % [NimbusName, NimbusVersion, hostCPU, hostOS]
   ## project ident name for networking services
 
-let
-  NimbusCopyright* = "Copyright (C) 2018-" & $(now().utc.year) & " Status Research & Development GmbH"
-  ## copyright string
+  gitRevision = staticExec("git rev-parse --short HEAD")
 
-  NimbusHeader* = NimbusName & " Version " & NimbusVersion &
-                  " [" & hostOS & ": " & hostCPU & ", " & nimbus_db_backend & "]\p" &
-                  NimbusCopyright
-  ## is the header which printed, when nimbus binary got executed
+let
+  NimbusCopyright* = "Copyright (c) 2018-" & $(now().utc.year) & " Status Research & Development GmbH"
+  NimbusHeader* = "$# Version $# [$#: $#, $#, $#]\p$#" %
+    [NimbusName, NimbusVersion, hostOS, hostCPU, nimbus_db_backend, gitRevision, NimbusCopyright]
 
 type
   ConfigStatus* = enum
