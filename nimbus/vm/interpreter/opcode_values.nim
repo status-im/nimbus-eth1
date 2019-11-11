@@ -80,6 +80,7 @@ fill_enum_holes:
       GasLimit =       0x45, # Get the block's gas limit.
 
       ChainID =        0x46, # Get current chain’s EIP-155 unique identifier.
+      SelfBalance =    0x47, # Get current contract's balance.
 
       # 50s: Stack, Memory, Storage and Flow Operations
       Pop =            0x50, # Remove item from stack.
