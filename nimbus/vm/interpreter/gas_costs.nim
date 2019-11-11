@@ -609,7 +609,7 @@ func istanbulGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
   result[GasSload]        = 800
   result[GasExtCodeHash]  = 700
   result[GasBalance]      = 700
-
+  result[GasTXDataNonZero]= 16
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees
   TangerineGasFees = HomesteadGasFees.tangerineGasFees
