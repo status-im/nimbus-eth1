@@ -16,7 +16,8 @@ type
     FkTangerine,
     FkSpurious,
     FkByzantium,
-    FkConstantinople
+    FkConstantinople,
+    FkIstanbul
 
 const
   forkBlocks*: array[Fork, BlockNumber] = [
@@ -27,7 +28,8 @@ const
     FkTangerine:      2_463_000.toBlockNumber, # 18/10/2016 17:19:31
     FkSpurious:       2_675_000.toBlockNumber, # 22/11/2016 18:15:44
     FkByzantium:      4_370_000.toBlockNumber, # 16/10/2017 09:22:11
-    FkConstantinople: 7_280_000.toBlockNumber  # 28/02/2019 07:52:04
+    FkConstantinople: 7_280_000.toBlockNumber, # 28/02/2019 07:52:04
+    FkIstanbul:       9_069_000.toBlockNumber
   ]
 
 proc toFork*(blockNumber: BlockNumber): Fork =
@@ -47,7 +49,8 @@ proc toFork*(blockNumber: BlockNumber): Fork =
   elif blockNumber < forkBlocks[FkSpurious]:  FkTangerine
   elif blockNumber < forkBlocks[FkByzantium]: FkSpurious
   elif blockNumber < forkBlocks[FkConstantinople]: FkByzantium
-  else: FkConstantinople
+  elif blockNumber < forkBlocks[FkIstanbul]: FkConstantinople
+  else: FkIstanbul
 
 proc `$`*(fork: Fork): string =
   case fork
@@ -59,4 +62,4 @@ proc `$`*(fork: Fork): string =
   of FkSpurious: result = "Spurious Dragon"
   of FkByzantium: result = "Byzantium"
   of FkConstantinople: result = "Constantinople"
-
+  of FkIstanbul: result = "Istanbul"
