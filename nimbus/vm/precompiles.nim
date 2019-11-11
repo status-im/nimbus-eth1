@@ -1,7 +1,7 @@
 import
   ../vm_types, interpreter/[gas_meter, gas_costs, utils/utils_numeric, vm_forks],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
-  message, math, nimcrypto, bncurve/[fields, groups]
+  message, math, nimcrypto, bncurve/[fields, groups], blake2b_f
 
 type
   PrecompileAddresses* = enum
@@ -10,11 +10,13 @@ type
     paSha256,
     paRipeMd160,
     paIdentity,
-    # Byzantium onward
+    # Byzantium and Constantinople
     paModExp,
     paEcAdd,
     paEcMul,
-    paPairing = 8
+    paPairing
+    # Istanbul
+    paBlake2bf = 9
 
 proc getSignature(computation: BaseComputation): (array[32, byte], Signature) =
   # input is Hash, V, R, S
@@ -311,12 +313,31 @@ proc bn256ecPairing*(computation: BaseComputation) =
 
   computation.rawOutput = @output
 
+proc blake2bf*(computation: BaseComputation) =
+  template input(): untyped =
+    computation.msg.data
+
+  if len(input) == blake2FInputLength:
+    let gasFee = GasInt(beLoad32(input, 0))
+    computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
+
+  var output: array[64, byte]
+  if not blake2b_F(input, output):
+    raise newException(ValidationError, "Blake2b F function invalid input")
+  else:
+    computation.rawOutput = @output
+
+proc getMaxPrecompileAddr(fork: Fork): PrecompileAddresses =
+  if fork < FkByzantium: paIdentity
+  elif fork < FkIstanbul: paPairing
+  else: PrecompileAddresses.high
+
 proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.} =
   for i in 0..18:
     if computation.msg.codeAddress[i] != 0: return
 
   let lb = computation.msg.codeAddress[19]
-  let maxPrecompileAddr = if fork < FkByzantium: paIdentity else: PrecompileAddresses.high
+  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
   if lb in PrecompileAddresses.low.byte .. maxPrecompileAddr.byte:
     result = true
     let precompile = PrecompileAddresses(lb)
@@ -331,6 +352,7 @@ proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.}
       of paEcAdd: bn256ecAdd(computation)
       of paEcMul: bn256ecMul(computation)
       of paPairing: bn256ecPairing(computation)
+      of paBlake2bf: blake2bf(computation)
     except OutOfGas:
       let msg = getCurrentExceptionMsg()
       # cannot use setError here, cyclic dependency
