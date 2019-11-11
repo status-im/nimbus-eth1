@@ -377,6 +377,11 @@ op chainID, inline = true:
   # TODO: this is a stub
   push: 0
 
+op selfBalance, inline = true:
+  ## 0x47, Get current contract's balance.
+  # TODO: this is a stub
+  push: 0
+
 # ##########################################
 # 50s: Stack, Memory, Storage and Flow Operations
 
