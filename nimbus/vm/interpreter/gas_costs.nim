@@ -616,7 +616,8 @@ const
     FkTangerine: TangerineGasFees,
     FkSpurious: SpuriousGasFees,
     FkByzantium: SpuriousGasFees,
-    FkConstantinople: SpuriousGasFees
+    FkConstantinople: SpuriousGasFees,
+    FkIstanbul: SpuriousGasFees
   ]
 
 
