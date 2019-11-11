@@ -436,6 +436,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           Number:          fixed GasBase,
           Difficulty:      fixed GasBase,
           GasLimit:        fixed GasBase,
+          ChainID:         fixed GasBase,
 
           # 50s: Stack, Memory, Storage and Flow Operations
           Pop:            fixed GasBase,

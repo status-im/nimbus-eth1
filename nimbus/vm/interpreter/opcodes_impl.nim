@@ -372,6 +372,11 @@ op gasLimit, inline = true:
   ## 0x45, Get the block's gas limit
   push: computation.vmState.gasLimit
 
+op chainID, inline = true:
+  ## 0x46, Get current chain’s EIP-155 unique identifier.
+  # TODO: this is a stub
+  push: 0
+
 # ##########################################
 # 50s: Stack, Memory, Storage and Flow Operations
 
