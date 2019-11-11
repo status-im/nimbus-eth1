@@ -12,19 +12,19 @@ import
 import eth/common/transaction as common_transaction
 export common_transaction
 
-func intrinsicGas*(data: openarray[byte]): GasInt =
-  result = 21_000   # GasTransaction
+func intrinsicGas*(data: openarray[byte], fork: Fork): GasInt =
+  result = gasFees[fork][GasTransaction]
   for i in data:
     if i == 0:
-      result += 4   # GasTXDataZero
+      result += gasFees[fork][GasTXDataZero]
     else:
-      result += 68  # GasTXDataNonZero
+      result += gasFees[fork][GasTXDataNonZero]
 
 proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
-  result = tx.payload.intrinsicGas
+  result = tx.payload.intrinsicGas(fork)
 
   if tx.isContractCreation:
     result = result + gasFees[fork][GasTXCreate]
