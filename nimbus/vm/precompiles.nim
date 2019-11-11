@@ -237,8 +237,9 @@ proc modExp*(computation: BaseComputation) =
   else:
     raise newException(EVMError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
-proc bn256ecAdd*(computation: BaseComputation) =
-  computation.gasMeter.consumeGas(GasECAdd, reason = "ecAdd Precompile")
+proc bn256ecAdd*(computation: BaseComputation, fork: Fork = FkByzantium) =
+  let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
+  computation.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
   var
     input: array[128, byte]
@@ -257,8 +258,9 @@ proc bn256ecAdd*(computation: BaseComputation) =
 
   computation.rawOutput = @output
 
-proc bn256ecMul*(computation: BaseComputation) =
-  computation.gasMeter.consumeGas(GasECMul, reason="ecMul Precompile")
+proc bn256ecMul*(computation: BaseComputation, fork: Fork = FkByzantium) =
+  let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
+  computation.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
 
   var
     input: array[96, byte]
@@ -279,13 +281,16 @@ proc bn256ecMul*(computation: BaseComputation) =
 
   computation.rawOutput = @output
 
-proc bn256ecPairing*(computation: BaseComputation) =
+proc bn256ecPairing*(computation: BaseComputation, fork: Fork = FkByzantium) =
   let msglen = len(computation.msg.data)
   if msglen mod 192 != 0:
     raise newException(ValidationError, "Invalid input length")
 
   let numPoints = msglen div 192
-  let gasFee = GasECPairingBase + numPoints * GasECPairingPerPoint
+  let gasFee = if fork < FkIstanbul:
+                 GasECPairingBase + numPoints * GasECPairingPerPoint
+               else:
+                 GasECPairingBaseIstanbul + numPoints * GasECPairingPerPointIstanbul
   computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
 
   var output: array[32, byte]
@@ -349,9 +354,9 @@ proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.}
       of paRipeMd160: ripeMd160(computation)
       of paIdentity: identity(computation)
       of paModExp: modExp(computation)
-      of paEcAdd: bn256ecAdd(computation)
-      of paEcMul: bn256ecMul(computation)
-      of paPairing: bn256ecPairing(computation)
+      of paEcAdd: bn256ecAdd(computation, fork)
+      of paEcMul: bn256ecMul(computation, fork)
+      of paPairing: bn256ecPairing(computation, fork)
       of paBlake2bf: blake2bf(computation)
     except OutOfGas:
       let msg = getCurrentExceptionMsg()

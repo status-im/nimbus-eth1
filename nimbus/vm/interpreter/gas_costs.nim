@@ -646,10 +646,14 @@ const
   GasIdentityWord* =      3
   GasECRecover* =         3000
   GasECAdd* =             500
+  GasECAddIstanbul* =     150
   GasECMul* =             40000
+  GasECMulIstanbul* =     6000
   GasECPairingBase* =     100000
+  GasECPairingBaseIstanbul* = 45000
   GasECPairingPerPoint* = 80000
+  GasECPairingPerPointIstanbul* = 34000
   # The Yellow Paper is special casing the GasQuadDivisor.
   # It is defined in Appendix G with the other GasFeeKind constants
   # instead of Appendix E for precompiled contracts
-  GasQuadDivisor*       = 20
+  GasQuadDivisor*       = 100
