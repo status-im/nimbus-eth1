@@ -79,6 +79,8 @@ fill_enum_holes:
       Difficulty =     0x44, # Get the block's difficulty.
       GasLimit =       0x45, # Get the block's gas limit.
 
+      ChainID =        0x46, # Get current chain’s EIP-155 unique identifier.
+
       # 50s: Stack, Memory, Storage and Flow Operations
       Pop =            0x50, # Remove item from stack.
       Mload =          0x51, # Load word from memory.
