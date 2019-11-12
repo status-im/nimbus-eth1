@@ -65,6 +65,8 @@ type
     case kind*: Op
     of Sstore:
       s_isStorageEmpty*: bool
+      s_currentValue*: Uint256
+      s_originalValue*: Uint256
     of Call, CallCode, DelegateCall, StaticCall:
       c_isNewAccount*: bool
       c_gasBalance*: GasInt
@@ -247,6 +249,34 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
         ClearRefundEIP2200 = FeeSchedule[RefundSclear]# clearing an originally existing storage slot
 
       # Gas sentry honoured, do the actual gas calculation based on the stored value
+      if gasParams.s_currentValue == value: # noop (1)
+        result.gasCost = NoopGasEIP2200
+        return
+
+      if gasParams.s_originalValue == gasParams.s_currentValue:
+        if gasParams.s_originalValue.isZero: # create slot (2.1.1)
+          result.gasCost = InitGasEIP2200
+          return
+
+        if value.isZero: # delete slot (2.1.2b)
+          result.gasRefund = ClearRefundEIP2200
+
+        result.gasCost = CleanGasEIP2200 # write existing slot (2.1.2)
+        return
+
+      if not gasParams.s_originalValue.isZero:
+        if gasParams.s_currentValue.isZero: # recreate slot (2.2.1.1)
+          result.gasRefund -= ClearRefundEIP2200
+        if value.isZero: # delete slot (2.2.1.2)
+          result.gasRefund += ClearRefundEIP2200
+
+      if gasParams.s_originalValue == value:
+        if gasParams.s_originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
+          result.gasRefund = InitRefundEIP2200
+        else: # reset to original existing slot (2.2.2.2)
+          result.gasRefund = CleanRefundEIP2200
+
+      result.gasCost = DirtyGasEIP2200 # dirty update (2.2)
 
   func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
