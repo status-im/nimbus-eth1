@@ -379,8 +379,8 @@ op chainID, inline = true:
 
 op selfBalance, inline = true:
   ## 0x47, Get current contract's balance.
-  # TODO: this is a stub
-  push: 0
+  let stateDb = computation.vmState.readOnlyStateDb
+  push: stateDb.getBalance(computation.msg.storageAddress)
 
 # ##########################################
 # 50s: Stack, Memory, Storage and Flow Operations
