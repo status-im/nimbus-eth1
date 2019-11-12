@@ -664,4 +664,4 @@ const
   # The Yellow Paper is special casing the GasQuadDivisor.
   # It is defined in Appendix G with the other GasFeeKind constants
   # instead of Appendix E for precompiled contracts
-  GasQuadDivisor*       = 100
+  GasQuadDivisor*       = 20

@@ -14,7 +14,7 @@ type
     paModExp,
     paEcAdd,
     paEcMul,
-    paPairing
+    paPairing,
     # Istanbul
     paBlake2bf = 9
 
