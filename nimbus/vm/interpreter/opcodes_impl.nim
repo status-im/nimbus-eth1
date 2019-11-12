@@ -933,4 +933,26 @@ op extCodeHash, inline = true:
 
 op sstoreEIP2200, inline = false, slot, value:
   checkInStaticContext(computation)
-  # TODO: stub
+  const SentryGasEIP2200   = 2300  # Minimum gas required to be present for an SSTORE call, not consumed
+
+  if computation.gasMeter.gasRemaining < SentryGasEIP2200:
+    raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
+
+  let stateDB = computation.vmState.readOnlyStateDB
+  let (currentValue, existing) = stateDB.getStorage(computation.msg.storageAddress, slot)
+
+  let
+    gasParam = GasParams(kind: Op.Sstore,
+      s_isStorageEmpty: currentValue.isZero,
+      s_currentValue: currentValue,
+      s_originalValue: stateDB.getCommittedStorage(computation.msg.storageAddress, slot)
+    )
+    (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(value, gasParam)
+
+  computation.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
+
+  if gasRefund > 0:
+    computation.gasMeter.refundGas(gasRefund)
+
+  computation.vmState.mutateStateDB:
+    db.setStorage(computation.msg.storageAddress, slot, value)
