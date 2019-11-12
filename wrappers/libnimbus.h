@@ -62,7 +62,7 @@ void NimMain();
  * When privkey is null, a new keypair will be generated.
  */
 bool nimbus_start(uint16_t port, bool startListening, bool enableDiscovery,
-  double minPow, uint8_t* privkey, bool staging);
+  double minPow, const uint8_t privkey[32], bool staging);
 
 /** Add peers to connect to - must be called after nimbus_start */
 bool nimbus_add_peer(const char* nodeId);
@@ -78,18 +78,18 @@ void nimbus_poll();
 /** It is important that caller makes a copy of the returned strings before
  * doing any other API calls. */
 const char* nimbus_new_keypair();
-const char* nimbus_add_keypair(const uint8_t* privkey);
+const char* nimbus_add_keypair(const uint8_t privkey[32]);
 bool nimbus_delete_keypair(const char* id);
-bool nimbus_get_private_key(const char* id, uint8_t* privkey);
+bool nimbus_get_private_key(const char* id, uint8_t privkey[32]);
 
 /** Symmetric Keys API */
 
 /** It is important that caller makes a copy of the returned strings before
  * doing any other API calls. */
-const char* nimbus_add_symkey(const uint8_t* symkey);
+const char* nimbus_add_symkey(const uint8_t symkey[32]);
 const char* nimbus_add_symkey_from_password(const char* password);
 bool nimbus_delete_symkey(const char* id);
-bool nimbus_get_symkey(const char* id, uint8_t* symkey);
+bool nimbus_get_symkey(const char* id, uint8_t symkey[32]);
 
 /** Whisper message posting and receiving API */
 
@@ -108,7 +108,7 @@ double nimbus_get_min_pow();
 /** Get the currently set bloom filter of this node. This will automatically
  *update for each filter subsribed to.
  */
-void nimbus_get_bloom_filter(uint8_t* bloomfilter);
+void nimbus_get_bloom_filter(uint8_t bloomfilter[64]);
 
 /** Example helper, can be removed */
 topic nimbus_channel_to_topic(const char* channel);
