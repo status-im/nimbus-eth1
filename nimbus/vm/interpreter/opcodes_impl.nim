@@ -930,3 +930,7 @@ op extCodeHash, inline = true:
     push: 0
   else:
     push: computation.vmState.readOnlyStateDB.getCodeHash(address)
+
+op sstoreEIP2200, inline = false, slot, value:
+  checkInStaticContext(computation)
+  # TODO: stub

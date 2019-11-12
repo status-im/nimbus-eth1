@@ -219,6 +219,7 @@ proc genIstanbulJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compile
   result = ops
   result[ChainId] = newIdentNode "chainId"
   result[SelfBalance] = newIdentNode "selfBalance"
+  result[SStore] = newIdentNode "sstoreEIP2200"
 
 let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTable(ConstantinopleOpDispatch)
 
