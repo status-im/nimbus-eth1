@@ -65,6 +65,8 @@ type
     case kind*: Op
     of Sstore:
       s_isStorageEmpty*: bool
+      s_currentValue*: Uint256
+      s_originalValue*: Uint256
     of Call, CallCode, DelegateCall, StaticCall:
       c_isNewAccount*: bool
       c_gasBalance*: GasInt
@@ -208,20 +210,73 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
   func `prefix gasSstore`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
     ## Value is word to save
 
-    # workaround for static evaluation not working for if expression
-    const
-      gSet = FeeSchedule[GasSset]
-      gSreset = FeeSchedule[GasSreset]
+    when fork < FkIstanbul:
+      # workaround for static evaluation not working for if expression
+      const
+        gSet = FeeSchedule[GasSset]
+        gSreset = FeeSchedule[GasSreset]
 
-    # Gas cost - literal translation of Yellow Paper
-    result.gasCost = if value.isZero.not and gasParams.s_isStorageEmpty:
-                       gSet
-                     else:
-                       gSreset
+      # Gas cost - literal translation of Yellow Paper
+      result.gasCost = if value.isZero.not and gasParams.s_isStorageEmpty:
+                        gSet
+                      else:
+                        gSreset
 
-    # Refund
-    if value.isZero and not gasParams.s_isStorageEmpty:
-      result.gasRefund = static(FeeSchedule[RefundSclear])
+      # Refund
+      if value.isZero and not gasParams.s_isStorageEmpty:
+        result.gasRefund = static(FeeSchedule[RefundSclear])
+    else:
+      # 0. If *gasleft* is less than or equal to 2300, fail the current call.
+      # 1. If current value equals new value (this is a no-op), SSTORE_NOOP_GAS gas is deducted.
+      # 2. If current value does not equal new value:
+      #   2.1. If original value equals current value (this storage slot has not been changed by the current execution context):
+      #     2.1.1. If original value is 0, SSTORE_INIT_GAS gas is deducted.
+      #     2.1.2. Otherwise, SSTORE_CLEAN_GAS gas is deducted. If new value is 0, add SSTORE_CLEAR_REFUND to refund counter.
+      #   2.2. If original value does not equal current value (this storage slot is dirty), SSTORE_DIRTY_GAS gas is deducted. Apply both of the following clauses:
+      #     2.2.1. If original value is not 0:
+      #       2.2.1.1. If current value is 0 (also means that new value is not 0), subtract SSTORE_CLEAR_REFUND gas from refund counter. We can prove that refund counter will never go below 0.
+      #       2.2.1.2. If new value is 0 (also means that current value is not 0), add SSTORE_CLEAR_REFUND gas to refund counter.
+      #     2.2.2. If original value equals new value (this storage slot is reset):
+      #       2.2.2.1. If original value is 0, add SSTORE_INIT_REFUND to refund counter.
+      #       2.2.2.2. Otherwise, add SSTORE_CLEAN_REFUND gas to refund counter.
+      const
+        NoopGasEIP2200     = FeeSchedule[GasSload] # if the value doesn't change.
+        DirtyGasEIP2200    = FeeSchedule[GasSload] # if a dirty value is changed.
+        InitGasEIP2200     = FeeSchedule[GasSset]  # from clean zero to non-zero
+        InitRefundEIP2200  = FeeSchedule[GasSset] - FeeSchedule[GasSload] # resetting to the original zero value
+        CleanGasEIP2200    = FeeSchedule[GasSreset]# from clean non-zero to something else
+        CleanRefundEIP2200 = FeeSchedule[GasSreset] - FeeSchedule[GasSload] # resetting to the original non-zero value
+        ClearRefundEIP2200 = FeeSchedule[RefundSclear]# clearing an originally existing storage slot
+
+      # Gas sentry honoured, do the actual gas calculation based on the stored value
+      if gasParams.s_currentValue == value: # noop (1)
+        result.gasCost = NoopGasEIP2200
+        return
+
+      if gasParams.s_originalValue == gasParams.s_currentValue:
+        if gasParams.s_originalValue.isZero: # create slot (2.1.1)
+          result.gasCost = InitGasEIP2200
+          return
+
+        if value.isZero: # delete slot (2.1.2b)
+          result.gasRefund = ClearRefundEIP2200
+
+        result.gasCost = CleanGasEIP2200 # write existing slot (2.1.2)
+        return
+
+      if not gasParams.s_originalValue.isZero:
+        if gasParams.s_currentValue.isZero: # recreate slot (2.2.1.1)
+          result.gasRefund -= ClearRefundEIP2200
+        if value.isZero: # delete slot (2.2.1.2)
+          result.gasRefund += ClearRefundEIP2200
+
+      if gasParams.s_originalValue == value:
+        if gasParams.s_originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
+          result.gasRefund = InitRefundEIP2200
+        else: # reset to original existing slot (2.2.2.2)
+          result.gasRefund = CleanRefundEIP2200
+
+      result.gasCost = DirtyGasEIP2200 # dirty update (2.2)
 
   func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
@@ -436,6 +491,8 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           Number:          fixed GasBase,
           Difficulty:      fixed GasBase,
           GasLimit:        fixed GasBase,
+          ChainID:         fixed GasBase,
+          SelfBalance:     fixed GasLow,
 
           # 50s: Stack, Memory, Storage and Flow Operations
           Pop:            fixed GasBase,
@@ -603,10 +660,18 @@ func spuriousGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
   result = previous_fees
   result[GasExpByte]      = 50
 
+func istanbulGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
+  # https://eips.ethereum.org/EIPS/eip-1884
+  result[GasSload]        = 800
+  result[GasExtCodeHash]  = 700
+  result[GasBalance]      = 700
+  result[GasTXDataNonZero]= 16
+
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees
   TangerineGasFees = HomesteadGasFees.tangerineGasFees
   SpuriousGasFees = TangerineGasFees.spuriousGasFees
+  IstanbulGasFees = SpuriousGasFees.istanbulGasFees
 
   gasFees*: array[Fork, GasFeeSchedule] = [
     FkFrontier: BaseGasFees,
@@ -616,7 +681,8 @@ const
     FkTangerine: TangerineGasFees,
     FkSpurious: SpuriousGasFees,
     FkByzantium: SpuriousGasFees,
-    FkConstantinople: SpuriousGasFees
+    FkConstantinople: SpuriousGasFees,
+    FkIstanbul: IstanbulGasFees
   ]
 
 
@@ -645,9 +711,13 @@ const
   GasIdentityWord* =      3
   GasECRecover* =         3000
   GasECAdd* =             500
+  GasECAddIstanbul* =     150
   GasECMul* =             40000
+  GasECMulIstanbul* =     6000
   GasECPairingBase* =     100000
+  GasECPairingBaseIstanbul* = 45000
   GasECPairingPerPoint* = 80000
+  GasECPairingPerPointIstanbul* = 34000
   # The Yellow Paper is special casing the GasQuadDivisor.
   # It is defined in Appendix G with the other GasFeeKind constants
   # instead of Appendix E for precompiled contracts

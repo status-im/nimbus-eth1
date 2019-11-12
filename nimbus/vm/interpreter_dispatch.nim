@@ -215,6 +215,14 @@ proc genConstantinopleJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.c
 
 let ConstantinopleOpDispatch {.compileTime.}: array[Op, NimNode] = genConstantinopleJumpTable(ByzantiumOpDispatch)
 
+proc genIstanbulJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  result[ChainId] = newIdentNode "chainId"
+  result[SelfBalance] = newIdentNode "selfBalance"
+  result[SStore] = newIdentNode "sstoreEIP2200"
+
+let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTable(ConstantinopleOpDispatch)
+
 proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNode =
 
   let instr = quote do: `computation`.instr
@@ -288,6 +296,9 @@ macro genByzantiumDispatch(computation: BaseComputation): untyped =
 macro genConstantinopleDispatch(computation: BaseComputation): untyped =
   result = opTableToCaseStmt(ConstantinopleOpDispatch, computation)
 
+macro genIstanbulDispatch(computation: BaseComputation): untyped =
+  result = opTableToCaseStmt(IstanbulOpDispatch, computation)
+
 proc frontierVM(computation: BaseComputation) =
   genFrontierDispatch(computation)
 
@@ -306,6 +317,9 @@ proc byzantiumVM(computation: BaseComputation) {.gcsafe.} =
 proc constantinopleVM(computation: BaseComputation) {.gcsafe.} =
   genConstantinopleDispatch(computation)
 
+proc istanbulVM(computation: BaseComputation) {.gcsafe.} =
+  genIstanbulDispatch(computation)
+
 proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
@@ -317,10 +331,12 @@ proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
     computation.tangerineVM()
   of FkSpurious:
     computation.spuriousVM()
-  of FKByzantium:
+  of FkByzantium:
     computation.byzantiumVM()
-  else:
+  of FkConstantinople:
     computation.constantinopleVM()
+  else:
+    computation.istanbulVM()
 
 proc executeOpcodes(computation: BaseComputation) =
   let fork = computation.getFork
