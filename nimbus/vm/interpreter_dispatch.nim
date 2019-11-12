@@ -217,7 +217,7 @@ let ConstantinopleOpDispatch {.compileTime.}: array[Op, NimNode] = genConstantin
 
 proc genIstanbulJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
   result = ops
-  result[ChainID] = newIdentNode "chainID"
+  result[ChainId] = newIdentNode "chainId"
   result[SelfBalance] = newIdentNode "selfBalance"
 
 let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTable(ConstantinopleOpDispatch)
