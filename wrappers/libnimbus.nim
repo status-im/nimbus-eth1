@@ -200,13 +200,13 @@ proc nimbus_delete_keypair(id: Identifier): bool {.exportc, raises: [].} =
   var unneeded: KeyPair
   result = whisperKeys.asymKeys.take(id.toHex(), unneeded)
 
-proc nimbus_get_private_key(id: Identifier, privateKey: ptr PrivateKey):
+proc nimbus_get_private_key(id: Identifier, privateKey: var PrivateKey):
     bool {.exportc, raises: [OSError, IOError, ValueError].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
-  doAssert(not privateKey.isNil, "Private key cannot be nil.")
+  doAssert(not (unsafeAddr privateKey).isNil, "Private key cannot be nil.")
 
   try:
-    privateKey[] = whisperKeys.asymkeys[id.toHex()].seckey
+    privateKey = whisperKeys.asymkeys[id.toHex()].seckey
     result = true
   except KeyError:
     error "Private key not found."
@@ -247,13 +247,13 @@ proc nimbus_delete_symkey(id: Identifier): bool {.exportc, raises: [].} =
   var unneeded: SymKey
   result = whisperKeys.symKeys.take(id.toHex(), unneeded)
 
-proc nimbus_get_symkey(id: Identifier, symKey: ptr SymKey):
+proc nimbus_get_symkey(id: Identifier, symKey: var SymKey):
     bool {.exportc, raises: [OSError, IOError, ValueError].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
-  doAssert(not symKey.isNil, "Symmetric key cannot be nil.")
+  doAssert(not (unsafeAddr symKey).isNil, "Symmetric key cannot be nil.")
 
   try:
-    symKey[] = whisperKeys.symkeys[id.toHex()]
+    symKey = whisperKeys.symkeys[id.toHex()]
     result = true
   except KeyError:
     error "Symmetric key not found."
@@ -414,10 +414,10 @@ proc nimbus_unsubscribe_filter(id: Identifier): bool {.exportc, raises: [].} =
 proc nimbus_get_min_pow(): float64 {.exportc, raises: [].} =
   result = node.protocolState(Whisper).config.powRequirement
 
-proc nimbus_get_bloom_filter(bloom: ptr Bloom) {.exportc, raises: [].} =
-  doAssert(not bloom.isNil, "Bloom pointer cannot be nil.")
+proc nimbus_get_bloom_filter(bloom: var Bloom) {.exportc, raises: [].} =
+  doAssert(not (unsafeAddr bloom).isNil, "Bloom pointer cannot be nil.")
 
-  bloom[] = node.protocolState(Whisper).config.bloom
+  bloom = node.protocolState(Whisper).config.bloom
 
 # Nimbus limited Status chat API
 
