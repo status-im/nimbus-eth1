@@ -22,8 +22,8 @@ typedef struct {
 } received_message;
 
 typedef struct {
-  const char* symKeyID; /* Identifier for symmetric key, set to nil if none */
-  const char* privateKeyID; /* Identifier for asymmetric key, set to nil if none */
+  const uint8_t* symKeyID; /* 32 bytes identifier for symmetric key, set to nil if none */
+  const uint8_t* privateKeyID; /* 32 bytes identifier for asymmetric key, set to nil if none */
   const uint8_t* source; /* 64 bytes public key, set to nil if none */
   double minPow; /* Minimum PoW that message must have */
   uint8_t topic[4]; /* Will default to 0x00000000 if not provided */
@@ -31,9 +31,9 @@ typedef struct {
 } filter_options;
 
 typedef struct {
-  const char* symKeyID; /* Identifier for symmetric key, set to nil if none */
+  const uint8_t* symKeyID; /* 32 bytes identifier for symmetric key, set to nil if none */
   const uint8_t* pubKey; /* 64 bytes public key, set to nil if none */
-  const char* sourceID; /* Identifier for asymmetric key, set to nil if none */
+  const uint8_t* sourceID; /* 32 bytes identifier for asymmetric key, set to nil if none */
   uint32_t ttl; /* TTL of message */
   uint8_t topic[4]; /* Will default to 0x00000000 if not provided */
   uint8_t* payload; /* Payload to be send, can be len=0 but can not be nil */
@@ -62,7 +62,7 @@ void NimMain();
  * When privkey is null, a new keypair will be generated.
  */
 bool nimbus_start(uint16_t port, bool startListening, bool enableDiscovery,
-  double minPow, const uint8_t privkey[32], bool staging);
+  double minPow, const uint8_t* privkey, bool staging);
 
 /** Add peers to connect to - must be called after nimbus_start */
 bool nimbus_add_peer(const char* nodeId);
@@ -75,32 +75,32 @@ void nimbus_poll();
 
 /** Asymmetric Keys API */
 
-/** It is important that caller makes a copy of the returned strings before
- * doing any other API calls. */
-const char* nimbus_new_keypair();
-const char* nimbus_add_keypair(const uint8_t privkey[32]);
-bool nimbus_delete_keypair(const char* id);
-bool nimbus_get_private_key(const char* id, uint8_t privkey[32]);
+/** Raw 32 byte arrays are passed as IDs. The caller needs to provide a pointer
+ * to 32 bytes allocation for this. */
+bool nimbus_new_keypair(uint8_t id[32]);
+bool nimbus_add_keypair(uint8_t id[32], const uint8_t privkey[32]);
+bool nimbus_delete_keypair(const uint8_t id[32]);
+bool nimbus_get_private_key(const uint8_t id[32], uint8_t privkey[32]);
 
 /** Symmetric Keys API */
 
-/** It is important that caller makes a copy of the returned strings before
- * doing any other API calls. */
-const char* nimbus_add_symkey(const uint8_t symkey[32]);
-const char* nimbus_add_symkey_from_password(const char* password);
-bool nimbus_delete_symkey(const char* id);
-bool nimbus_get_symkey(const char* id, uint8_t symkey[32]);
+/** Raw 32 byte arrays are passed as IDs. The caller needs to provide a pointer
+ * to 32 bytes allocation for this. */
+bool nimbus_add_symkey(uint8_t id[32], const uint8_t symkey[32]);
+bool nimbus_add_symkey_from_password(uint8_t id[32], const char* password);
+bool nimbus_delete_symkey(const uint8_t id[32]);
+bool nimbus_get_symkey(const uint8_t id[32], uint8_t symkey[32]);
 
 /** Whisper message posting and receiving API */
 
+/* Post Whisper message to the queue */
+bool nimbus_post(post_message* msg);
 /** Subscribe to given filter. The void pointer udata will be passed to the
  * received_msg_handler callback.
  */
-const char* nimbus_subscribe_filter(filter_options* filter_options,
+bool nimbus_subscribe_filter(uint8_t id[32], filter_options* filter_options,
   received_msg_handler msg, void* udata);
-bool nimbus_unsubscribe_filter(const char* id);
-/* Post Whisper message to the queue */
-bool nimbus_post(post_message* msg);
+bool nimbus_unsubscribe_filter(const uint8_t id[32]);
 
 /** Get the minimum required PoW of this node */
 double nimbus_get_min_pow();

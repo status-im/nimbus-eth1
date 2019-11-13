@@ -8,10 +8,12 @@
 #            MIT license (LICENSE-MIT)
 
 import
-  chronos, chronicles, nimcrypto/[utils, hmac, pbkdf2, hash], tables,
+  chronos, chronicles, nimcrypto/[utils, hmac, pbkdf2, hash, sysrand], tables,
   stew/ranges/ptr_arith, eth/[keys, rlp, p2p, async_utils],
   eth/p2p/rlpx_protocols/whisper_protocol,
   eth/p2p/[peer_pool, bootnodes, whispernodes]
+
+const idLen = 32
 
 # TODO: If we really want/need this type of API for the keys, put it somewhere
 # seperate as it is the same code for Whisper RPC
@@ -20,10 +22,17 @@ type
     asymKeys*: Table[string, KeyPair]
     symKeys*: Table[string, SymKey]
 
-proc newWhisperKeys*(): WhisperKeys =
+  Identifier = array[idLen, byte]
+
+proc newWhisperKeys(): WhisperKeys =
   new(result)
   result.asymKeys = initTable[string, KeyPair]()
   result.symKeys = initTable[string, SymKey]()
+
+proc generateRandomID(): Identifier =
+  while true: # TODO: error instead of looping?
+    if randomBytes(result) == idLen:
+      break
 
 # TODO: again, lots of overlap with Nimbus Whisper RPC here, however not all
 # the same due to type conversion (no use of Option and such). Perhaps some
@@ -41,17 +50,17 @@ type
     hash*: Hash
 
   CFilterOptions* = object
-    symKeyID*: cstring
-    privateKeyID*: cstring
+    symKeyID*: ptr byte
+    privateKeyID*: ptr byte
     source*: ptr byte
     minPow*: float64
     topic*: Topic # lets go with one topic for now unless more are required
     allowP2P*: bool
 
   CPostMessage* = object
-    symKeyID*: cstring
+    symKeyID*: ptr byte
     pubKey*: ptr byte
-    sourceID*: cstring
+    sourceID*: ptr byte
     ttl*: uint32
     topic*: Topic
     payload*: ptr byte
@@ -154,21 +163,23 @@ proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc, raises: [].} =
 
 # Asymmetric Keys
 
-proc nimbus_new_keypair(): cstring {.exportc, raises: [].} =
-  ## It is important that the caller makes a copy of the returned cstring before
-  ## doing any other API calls. This might not hold for all types of GC.
-  result = generateRandomID()
+proc nimbus_new_keypair(id: var Identifier): bool {.exportc, raises: [].} =
+  ## Caller needs to provide as id a pointer to 32 bytes allocation.
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
+
+  id = generateRandomID()
   try:
-    whisperKeys.asymKeys.add($result, newKeyPair())
+    whisperKeys.asymKeys.add(id.toHex(), newKeyPair())
+    result = true
   except Secp256k1Exception:
     # Don't think this can actually happen, comes from the `getPublicKey` part
     # in `newKeyPair`
-    result = ""
+    discard
 
-proc nimbus_add_keypair(privateKey: ptr byte):
-    cstring {.exportc, raises: [OSError, IOError, ValueError].} =
-  ## It is important that the caller makes a copy of the returned cstring before
-  ## doing any other API calls. This might not hold for all types of GC.
+proc nimbus_add_keypair(id: var Identifier, privateKey: ptr byte):
+    bool {.exportc, raises: [OSError, IOError, ValueError].} =
+  ## Caller needs to provide as id a pointer to 32 bytes allocation.
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not privateKey.isNil, "Private key cannot be nil.")
 
   var keypair: KeyPair
@@ -177,72 +188,75 @@ proc nimbus_add_keypair(privateKey: ptr byte):
     keypair.pubkey = keypair.seckey.getPublicKey()
   except EthKeysException, Secp256k1Exception:
     error "Passed an invalid private key."
-    return ""
+    return false
 
-  result = generateRandomID()
-  whisperKeys.asymKeys.add($result, keypair)
+  result = true
+  id = generateRandomID()
+  whisperKeys.asymKeys.add(id.toHex(), keypair)
 
-proc nimbus_delete_keypair(id: cstring): bool {.exportc, raises: [].} =
-  doAssert(not id.isNil, "Key id cannot be nil.")
+proc nimbus_delete_keypair(id: Identifier): bool {.exportc, raises: [].} =
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
 
   var unneeded: KeyPair
-  result = whisperKeys.asymKeys.take($id, unneeded)
+  result = whisperKeys.asymKeys.take(id.toHex(), unneeded)
 
-proc nimbus_get_private_key(id: cstring, privateKey: ptr PrivateKey):
+proc nimbus_get_private_key(id: Identifier, privateKey: ptr PrivateKey):
     bool {.exportc, raises: [OSError, IOError, ValueError].} =
-  doAssert(not id.isNil, "Key id cannot be nil.")
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not privateKey.isNil, "Private key cannot be nil.")
 
   try:
-    privateKey[] = whisperKeys.asymkeys[$id].seckey
+    privateKey[] = whisperKeys.asymkeys[id.toHex()].seckey
     result = true
   except KeyError:
     error "Private key not found."
-    result = false
 
 # Symmetric Keys
 
-proc nimbus_add_symkey(symKey: ptr SymKey): cstring {.exportc, raises: [].} =
-  ## It is important that the caller makes a copy of the returned cstring before
-  ## doing any other API calls. This might not hold for all types of GC.
+proc nimbus_add_symkey(id: var Identifier, symKey: ptr SymKey): bool
+    {.exportc, raises: [].} =
+  ## Caller needs to provide as id a pointer to 32 bytes allocation.
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not symKey.isNil, "Symmetric key cannot be nil.")
 
-  result = generateRandomID().cstring
+  id = generateRandomID()
+  result = true
 
   # Copy of key happens at add
-  whisperKeys.symKeys.add($result, symKey[])
+  whisperKeys.symKeys.add(id.toHex, symKey[])
 
-proc nimbus_add_symkey_from_password(password: cstring):
-    cstring {.exportc, raises: [].} =
-  ## It is important that the caller makes a copy of the returned cstring before
-  ## doing any other API calls. This might not hold for all types of GC.
+proc nimbus_add_symkey_from_password(id: var Identifier, password: cstring):
+    bool {.exportc, raises: [].} =
+  ## Caller needs to provide as id a pointer to 32 bytes allocation.
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not password.isNil, "Password cannot be nil.")
 
   var ctx: HMAC[sha256]
   var symKey: SymKey
   if pbkdf2(ctx, $password, "", 65356, symKey) != sizeof(SymKey):
-    return ""
+    return false
 
-  result = generateRandomID()
+  id = generateRandomID()
+  result = true
 
-  whisperKeys.symKeys.add($result, symKey)
+  whisperKeys.symKeys.add(id.toHex(), symKey)
 
-proc nimbus_delete_symkey(id: cstring): bool {.exportc, raises: [].} =
-  doAssert(not id.isNil, "Key id cannot be nil.")
+proc nimbus_delete_symkey(id: Identifier): bool {.exportc, raises: [].} =
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
 
   var unneeded: SymKey
-  result = whisperKeys.symKeys.take($id, unneeded)
+  result = whisperKeys.symKeys.take(id.toHex(), unneeded)
 
-proc nimbus_get_symkey(id: cstring, symKey: ptr SymKey):
-    bool {.exportc, raises: [].} =
-  doAssert(not id.isNil, "Key id cannot be nil.")
+proc nimbus_get_symkey(id: Identifier, symKey: ptr SymKey):
+    bool {.exportc, raises: [OSError, IOError, ValueError].} =
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not symKey.isNil, "Symmetric key cannot be nil.")
 
   try:
-    symKey[] = whisperKeys.symkeys[$id]
+    symKey[] = whisperKeys.symkeys[id.toHex()]
     result = true
   except KeyError:
-    result = false
+    error "Symmetric key not found."
 
 # Whisper message posting and receiving
 
@@ -276,9 +290,11 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
 
   try:
     if not message.symKeyID.isNil():
-      symKey = some(whisperKeys.symKeys[$message.symKeyID])
+      let symKeyId = makeOpenArray(message.symKeyID, idLen).toHex()
+      symKey = some(whisperKeys.symKeys[symKeyId])
     if not message.sourceID.isNil():
-      sigPrivKey = some(whisperKeys.asymKeys[$message.sourceID].seckey)
+      let sourceId = makeOpenArray(message.sourceID, idLen).toHex()
+      sigPrivKey = some(whisperKeys.asymKeys[sourceId].seckey)
   except KeyError:
     warn "No key found with provided key id."
     return false
@@ -305,13 +321,14 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
                             powTime = message.powTime,
                             powTarget = message.powTarget)
 
-proc nimbus_subscribe_filter(options: ptr CFilterOptions,
+proc nimbus_subscribe_filter(id: var Identifier, options: ptr CFilterOptions,
     handler: proc (msg: ptr CReceivedMessage, udata: pointer) {.gcsafe, cdecl.},
-    udata: pointer = nil): cstring {.exportc.} =
+    udata: pointer = nil): bool {.exportc.} =
   ## Encryption is mandatory.
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
   ## In case of a passed handler, the received msg needs to be copied before the
   ## handler ends.
+  doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not options.isNil, "Filter options pointer cannot be nil.")
 
   var
@@ -321,33 +338,35 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
 
   if not options.privateKeyID.isNil() and not options.symKeyID.isNil():
     warn "Both symmetric and asymmetric keys are provided, choose one."
-    return ""
+    return false
 
   if options.privateKeyID.isNil() and options.symKeyID.isNil():
     warn "Both symmetric and asymmetric keys are nil, provide one."
-    return ""
+    return false
 
   if not options.source.isNil():
     try:
       src = some(initPublicKey(makeOpenArray(options.source, 64)))
     except EthKeysException:
       error "Passed an invalid public key as source."
-      return ""
+      return false
 
   try:
     if not options.symKeyID.isNil():
-      symKey = some(whisperKeys.symKeys[$options.symKeyID])
+      let symKeyId = makeOpenArray(options.symKeyID, idLen).toHex()
+      symKey = some(whisperKeys.symKeys[symKeyId])
     if not options.privateKeyID.isNil():
-      privateKey = some(whisperKeys.asymKeys[$options.privateKeyID].seckey)
+      let privKeyId = makeOpenArray(options.privateKeyID, idLen).toHex()
+      privateKey = some(whisperKeys.asymKeys[privKeyId].seckey)
   except KeyError:
-    return ""
+    return false
 
   let filter = newFilter(src, privateKey, symKey, @[options.topic],
     options.minPow, options.allowP2P)
 
   if handler.isNil:
     # TODO: call can create `Exception`, why?
-    result = node.subscribeFilter(filter, nil)
+    hexToBytes(node.subscribeFilter(filter, nil), id)
   else:
     proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
       var cmsg = CReceivedMessage(
@@ -377,17 +396,20 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
       handler(addr cmsg, udata)
 
     # TODO: call can create `Exception`, why?
-    result = node.subscribeFilter(filter, c_handler)
+    # TODO: if we decide to internally also work with other IDs, we don't need
+    # to do this hex conversion back and forth.
+    hexToBytes(node.subscribeFilter(filter, c_handler), id)
 
   # Bloom filter has to follow only the subscribed topics
   # TODO: better to have an "adding" proc here
   # TODO: call can create `Exception`, why?
   traceAsyncErrors node.setBloomFilter(node.filtersToBloom())
+  result = true
 
-proc nimbus_unsubscribe_filter(id: cstring): bool {.exportc, raises: [].} =
-  doAssert(not id.isNil, "Filter id cannot be nil.")
+proc nimbus_unsubscribe_filter(id: Identifier): bool {.exportc, raises: [].} =
+  doAssert(not(unsafeAddr id).isNil, "Filter id cannot be nil.")
 
-  result = node.unsubscribeFilter($id)
+  result = node.unsubscribeFilter(id.toHex())
 
 proc nimbus_get_min_pow(): float64 {.exportc, raises: [].} =
   result = node.protocolState(Whisper).config.powRequirement
