@@ -53,4 +53,10 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     #"randomStatetest613BC.json",
     #"randomStatetest623BC.json",
   ]
+  # let allowedFailingPersistBlockTests = [
+    # # stack overflow
+    # "block1431916.json",
+  # ]
+  # result = name in allowedFailingGeneralStateTests or name in allowedFailingPersistBlockTests
   result = name in allowedFailingGeneralStateTests
+
