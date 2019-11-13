@@ -1,0 +1,79 @@
+{
+    "dynamicAccountOverwriteEmpty" : {
+        "_info" : {
+            "comment" : "EXTCODEHASH of empty account, then CREATE or CREATE2 over it, EXTCODEHASH again. This should check that code hash cache is correctly updated during the transaction.",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stExtCodeHash/dynamicAccountOverwriteEmptyFiller.yml",
+            "sourceHash" : "35e31479052e5dd454574261e64bc9b23f97bd533d2ce97b01f5d32c55b316ed"
+        },
+        "env" : {
+            "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "currentDifficulty" : "0x020000",
+            "currentGasLimit" : "0x0f4240",
+            "currentNumber" : "0x01",
+            "currentTimestamp" : "0x03e8",
+            "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "post" : {
+            "Istanbul" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x817a5be8e408dbb7e32f1dc4b6483cb3bc11aed7be7eb50021bce5388317b846",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
+        },
+        "pre" : {
+            "0x095e7baea6a6c7c4c2dfeb977efac326af552d87" : {
+                "balance" : "0x0de0b6b3a7640000",
+                "code" : "0x73e713449c212d891357cc2966816b1d528cfb59e03f60005573e713449c212d891357cc2966816b1d528cfb59e03b60015560206000600073e713449c212d891357cc2966816b1d528cfb59e03c6000516002556000600060006000600073e713449c212d891357cc2966816b1d528cfb59e061c350f26003556000603d8061010860003960006000f55073e713449c212d891357cc2966816b1d528cfb59e03f60045573e713449c212d891357cc2966816b1d528cfb59e03b60055560206000600073e713449c212d891357cc2966816b1d528cfb59e03c6000516006556000600060006000600073e713449c212d891357cc2966816b1d528cfb59e061c350f26007550000fe73dddddddd000000000000000000000000000000003b6000526000516000602073dddddddd000000000000000000000000000000003c6000516020f300",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x0de0b6b3a7640000",
+                "code" : "0x00",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xdddddddd00000000000000000000000000000000" : {
+                "balance" : "0x0de0b6b3a7640000",
+                "code" : "0x600b60505500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xe713449c212d891357cc2966816b1d528cfb59e0" : {
+                "balance" : "0x00",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                    "0x01" : "0x01"
+                }
+            }
+        },
+        "transaction" : {
+            "data" : [
+                "0x"
+            ],
+            "gasLimit" : [
+                "0x061a80"
+            ],
+            "gasPrice" : "0x01",
+            "nonce" : "0x00",
+            "secretKey" : "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+            "to" : "0x095e7baea6a6c7c4c2dfeb977efac326af552d87",
+            "value" : [
+                "0x01"
+            ]
+        }
+    }
+}

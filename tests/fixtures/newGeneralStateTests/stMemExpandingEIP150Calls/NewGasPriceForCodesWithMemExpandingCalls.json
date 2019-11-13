@@ -1,0 +1,79 @@
+{
+    "NewGasPriceForCodesWithMemExpandingCalls" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stMemExpandingEIP150Calls/NewGasPriceForCodesWithMemExpandingCallsFiller.json",
+            "sourceHash" : "30af43fa3dd8691609604327903372e501a6c829ea3007811dfc95ff77dc1cdb"
+        },
+        "env" : {
+            "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "currentDifficulty" : "0x020000",
+            "currentGasLimit" : "0x989680",
+            "currentNumber" : "0x01",
+            "currentTimestamp" : "0x03e8",
+            "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "post" : {
+            "Istanbul" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0xc440ff579d3342c7019050dcd49d19a94fa77775752adc7c63eb2eca1bcf6e1a",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
+        },
+        "pre" : {
+            "0x1000000000000000000000000000000000000010" : {
+                "balance" : "0x6f",
+                "code" : "0x1122334455667788991011121314151617181920212223242526272829303132",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x1000000000000000000000000000000000000011" : {
+                "balance" : "0x00",
+                "code" : "0x6011606455",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0xe8d4a51000",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x00",
+                "code" : "0x7310000000000000000000000000000000000000103b6001556014600060007310000000000000000000000000000000000000103c60005160025560005460045560ff60ff60ff60ff6001731000000000000000000000000000000000000011617530f160055560ff60ff60ff60ff6001731000000000000000000000000000000000000011617530f260065560ff60ff60ff60ff731000000000000000000000000000000000000011617530f460075560ff60ff60ff60ff6000731000000000000000000000000000000000000013617530f160085573a94f5374fce5edbc8e2a8697c15331677e6ebf0b316003555a600a55",
+                "nonce" : "0x00",
+                "storage" : {
+                    "0x00" : "0x12"
+                }
+            }
+        },
+        "transaction" : {
+            "data" : [
+                "0x"
+            ],
+            "gasLimit" : [
+                "0x0927c0"
+            ],
+            "gasPrice" : "0x01",
+            "nonce" : "0x00",
+            "secretKey" : "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+            "to" : "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b",
+            "value" : [
+                "0x00"
+            ]
+        }
+    }
+}
