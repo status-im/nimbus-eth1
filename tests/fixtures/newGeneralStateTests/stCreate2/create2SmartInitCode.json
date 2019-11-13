@@ -1,0 +1,88 @@
+{
+    "create2SmartInitCode" : {
+        "_info" : {
+            "comment" : "create2SmartInitCode. create2 works different each time you call it",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stCreate2/create2SmartInitCodeFiller.json",
+            "sourceHash" : "7a72a1236e34517c9569dce63163ce37368654bcd2e57ddbdb1ac95dc325ca2a"
+        },
+        "env" : {
+            "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "currentDifficulty" : "0x020000",
+            "currentGasLimit" : "0x0b00000000",
+            "currentNumber" : "0x01",
+            "currentTimestamp" : "0x03e8",
+            "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "post" : {
+            "Istanbul" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x5b9ea214e21eff2396b6f233b8ab60847825256886496aa2db09bc103811acf7",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x090d3ff4b3c5865057eab452884646196e27c496a316180fc7ff4f4e3cb38ccb",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
+        },
+        "pre" : {
+            "0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6" : {
+                "balance" : "0x64",
+                "code" : "0x7a600060015414601157600a6000f3601a565b60016001556001ff5b6000526000601b60056001f56001556000601b60056001f560025500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x1f572e5295c57f15886f9b263e2f6d2d6c7b5ec6" : {
+                "balance" : "0x64",
+                "code" : "0x7c600060015414601157600a6000f3601c565b6001600155600a6000f35b6000526000601d60036001f56001556000601b60056001f560025500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x6400000000",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x6400000000",
+                "code" : "0x600060006000600060006000355af100",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "transaction" : {
+            "data" : [
+                "0x0000000000000000000000000f572e5295c57f15886f9b263e2f6d2d6c7b5ec6",
+                "0x0000000000000000000000001f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
+            ],
+            "gasLimit" : [
+                "0x0a00000000"
+            ],
+            "gasPrice" : "0x01",
+            "nonce" : "0x00",
+            "secretKey" : "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+            "to" : "0xb94f5374fce5edbc8e2a8697c15331677e6ebf0b",
+            "value" : [
+                "0x00"
+            ]
+        }
+    }
+}

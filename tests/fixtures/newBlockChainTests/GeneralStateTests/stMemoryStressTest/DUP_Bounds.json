@@ -1,0 +1,323 @@
+{
+    "DUP_Bounds_d0g0v0_Istanbul" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stMemoryStressTest/DUP_BoundsFiller.json",
+            "sourceHash" : "60c95970787daeaac88a9b2818b3b3ad34df50041028c7011ba47b67aba66b76"
+        },
+        "genesisBlockHeader" : {
+            "bloom" : "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "coinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "difficulty" : "0x20000",
+            "extraData" : "0x00",
+            "gasLimit" : "0x7fffffffffffffff",
+            "gasUsed" : "0x0",
+            "hash" : "0x0f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61",
+            "mixHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "nonce" : "0x0000000000000000",
+            "number" : "0x0",
+            "parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "receiptTrie" : "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "stateRoot" : "0xb1eb34c4f3e548ce68381073e61517913691fd13969a98209b85364252bbf2b8",
+            "timestamp" : "0x0",
+            "transactionsTrie" : "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "uncleHash" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+        },
+        "pre" : {
+            "0x1000000000000000000000000000000000000000" : {
+                "balance" : "0x00",
+                "code" : "0x600080505063ffffffff80505067ffffffffffffffff8050506fffffffffffffffffffffffffffffffff8050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff805050600060008150505063ffffffff63ffffffff8150505067ffffffffffffffff67ffffffffffffffff815050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff815050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff81505050600060006000825050505063ffffffff63ffffffff63ffffffff825050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff82505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff82505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8250505050600060006000600083505050505063ffffffff63ffffffff63ffffffff63ffffffff83505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8350505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8350505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff835050505050600060006000600060008450505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8450505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff845050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff845050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff84505050505050600060006000600060006000855050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff855050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff85505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff85505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8550505050505050600060006000600060006000600086505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff86505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8650505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8650505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff865050505050505050600060006000600060006000600060008750505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8750505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff875050505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff875050505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff87",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x7fffffffffffffff",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "postState" : {
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "code" : "0x",
+                "nonce" : "0x01",
+                "balance" : "0x7fffffffffffa9bc",
+                "storage" : {
+                }
+            },
+            "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba" : {
+                "code" : "0x",
+                "nonce" : "0x00",
+                "balance" : "0x1bc16d674ec85642",
+                "storage" : {
+                }
+            },
+            "0x1000000000000000000000000000000000000000" : {
+                "code" : "0x600080505063ffffffff80505067ffffffffffffffff8050506fffffffffffffffffffffffffffffffff8050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff805050600060008150505063ffffffff63ffffffff8150505067ffffffffffffffff67ffffffffffffffff815050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff815050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff81505050600060006000825050505063ffffffff63ffffffff63ffffffff825050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff82505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff82505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8250505050600060006000600083505050505063ffffffff63ffffffff63ffffffff63ffffffff83505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8350505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8350505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff835050505050600060006000600060008450505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8450505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff845050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff845050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff84505050505050600060006000600060006000855050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff855050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff85505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff85505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8550505050505050600060006000600060006000600086505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff86505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8650505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8650505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff865050505050505050600060006000600060006000600060008750505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8750505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff875050505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff875050505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff87",
+                "nonce" : "0x00",
+                "balance" : "0x01",
+                "storage" : {
+                }
+            }
+        },
+        "network" : "Istanbul",
+        "sealEngine" : "NoProof",
+        "lastblockhash" : "0xcdf236183e18653e8a9f99a373397c96eabb7d63bf342b5b1d224e7e5de3172b",
+        "genesisRLP" : "0xf901fdf901f8a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa0b1eb34c4f3e548ce68381073e61517913691fd13969a98209b85364252bbf2b8a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008302000080887fffffffffffffff808000a00000000000000000000000000000000000000000000000000000000000000000880000000000000000c0c0",
+        "blocks" : [
+            {
+                "rlp" : "0xf90264f901fca00f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa045f69c2b4436c71bd71cac34e6894a4482ede7702fd6dc5ebb01992a8076f17aa020ba9b55d8fc4eca7a8962efa4eaa263e5b5d9e0bb537692518fd1649965ac04a0b7495ecae6c2eb2a41ffc3d5b7f723143f2c3e3bced7f09d1ea19568592e3121b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008302000001887fffffffffffffff8256428203e800a00000000000000000000000000000000000000000000000000000000000000000880000000000000000f862f8608001830249f094100000000000000000000000000000000000000001801ba0a8d69db5cc7b988975447a2e77fa471a04e8738915df60767b3104a95bf95c1aa030d6d7f9cd259c5937c46412312a382eabaf62794a7f6d6183891f864057feecc0",
+                "blockHeader" : {
+                    "bloom" : "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                    "coinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+                    "difficulty" : "0x20000",
+                    "extraData" : "0x00",
+                    "gasLimit" : "0x7fffffffffffffff",
+                    "gasUsed" : "0x5642",
+                    "hash" : "0xcdf236183e18653e8a9f99a373397c96eabb7d63bf342b5b1d224e7e5de3172b",
+                    "mixHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "nonce" : "0x0000000000000000",
+                    "number" : "0x1",
+                    "parentHash" : "0x0f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61",
+                    "receiptTrie" : "0xb7495ecae6c2eb2a41ffc3d5b7f723143f2c3e3bced7f09d1ea19568592e3121",
+                    "stateRoot" : "0x45f69c2b4436c71bd71cac34e6894a4482ede7702fd6dc5ebb01992a8076f17a",
+                    "timestamp" : "0x3e8",
+                    "transactionsTrie" : "0x20ba9b55d8fc4eca7a8962efa4eaa263e5b5d9e0bb537692518fd1649965ac04",
+                    "uncleHash" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                "transactions" : [
+                    {
+                        "data" : "0x",
+                        "gasLimit" : "0x0249f0",
+                        "gasPrice" : "0x01",
+                        "nonce" : "0x00",
+                        "to" : "0x1000000000000000000000000000000000000000",
+                        "value" : "0x01",
+                        "v" : "0x1b",
+                        "r" : "0xa8d69db5cc7b988975447a2e77fa471a04e8738915df60767b3104a95bf95c1a",
+                        "s" : "0x30d6d7f9cd259c5937c46412312a382eabaf62794a7f6d6183891f864057feec"
+                    }
+                ]
+            }
+        ]
+    },
+    "DUP_Bounds_d0g1v0_Istanbul" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stMemoryStressTest/DUP_BoundsFiller.json",
+            "sourceHash" : "60c95970787daeaac88a9b2818b3b3ad34df50041028c7011ba47b67aba66b76"
+        },
+        "genesisBlockHeader" : {
+            "bloom" : "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "coinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "difficulty" : "0x20000",
+            "extraData" : "0x00",
+            "gasLimit" : "0x7fffffffffffffff",
+            "gasUsed" : "0x0",
+            "hash" : "0x0f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61",
+            "mixHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "nonce" : "0x0000000000000000",
+            "number" : "0x0",
+            "parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "receiptTrie" : "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "stateRoot" : "0xb1eb34c4f3e548ce68381073e61517913691fd13969a98209b85364252bbf2b8",
+            "timestamp" : "0x0",
+            "transactionsTrie" : "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "uncleHash" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+        },
+        "pre" : {
+            "0x1000000000000000000000000000000000000000" : {
+                "balance" : "0x00",
+                "code" : "0x600080505063ffffffff80505067ffffffffffffffff8050506fffffffffffffffffffffffffffffffff8050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff805050600060008150505063ffffffff63ffffffff8150505067ffffffffffffffff67ffffffffffffffff815050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff815050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff81505050600060006000825050505063ffffffff63ffffffff63ffffffff825050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff82505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff82505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8250505050600060006000600083505050505063ffffffff63ffffffff63ffffffff63ffffffff83505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8350505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8350505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff835050505050600060006000600060008450505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8450505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff845050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff845050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff84505050505050600060006000600060006000855050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff855050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff85505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff85505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8550505050505050600060006000600060006000600086505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff86505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8650505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8650505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff865050505050505050600060006000600060006000600060008750505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8750505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff875050505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff875050505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff87",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x7fffffffffffffff",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "postState" : {
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "code" : "0x",
+                "nonce" : "0x01",
+                "balance" : "0x7fffffffffffa9bc",
+                "storage" : {
+                }
+            },
+            "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba" : {
+                "code" : "0x",
+                "nonce" : "0x00",
+                "balance" : "0x1bc16d674ec85642",
+                "storage" : {
+                }
+            },
+            "0x1000000000000000000000000000000000000000" : {
+                "code" : "0x600080505063ffffffff80505067ffffffffffffffff8050506fffffffffffffffffffffffffffffffff8050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff805050600060008150505063ffffffff63ffffffff8150505067ffffffffffffffff67ffffffffffffffff815050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff815050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff81505050600060006000825050505063ffffffff63ffffffff63ffffffff825050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff82505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff82505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8250505050600060006000600083505050505063ffffffff63ffffffff63ffffffff63ffffffff83505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8350505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8350505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff835050505050600060006000600060008450505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8450505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff845050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff845050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff84505050505050600060006000600060006000855050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff855050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff85505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff85505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8550505050505050600060006000600060006000600086505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff86505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8650505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8650505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff865050505050505050600060006000600060006000600060008750505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8750505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff875050505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff875050505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff87",
+                "nonce" : "0x00",
+                "balance" : "0x01",
+                "storage" : {
+                }
+            }
+        },
+        "network" : "Istanbul",
+        "sealEngine" : "NoProof",
+        "lastblockhash" : "0x81d12fbeb35373a5ccf3dcba1bfe1c9a712316c49dc6bffa77009137c90f4bfc",
+        "genesisRLP" : "0xf901fdf901f8a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa0b1eb34c4f3e548ce68381073e61517913691fd13969a98209b85364252bbf2b8a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008302000080887fffffffffffffff808000a00000000000000000000000000000000000000000000000000000000000000000880000000000000000c0c0",
+        "blocks" : [
+            {
+                "rlp" : "0xf90264f901fca00f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa045f69c2b4436c71bd71cac34e6894a4482ede7702fd6dc5ebb01992a8076f17aa0759a1418771df14e6cb03736844d6e890e175a325c7c1c27f85f230b2d2e5b58a0b7495ecae6c2eb2a41ffc3d5b7f723143f2c3e3bced7f09d1ea19568592e3121b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008302000001887fffffffffffffff8256428203e800a00000000000000000000000000000000000000000000000000000000000000000880000000000000000f862f8608001830f424094100000000000000000000000000000000000000001801ba03e25058b9043ef9130f5423b04831a80989f086dacf5ff8468da47b0790086d7a04115beb874eee5f516fd60c91471249bde75186e260632ebf3567b7f05b3ea40c0",
+                "blockHeader" : {
+                    "bloom" : "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                    "coinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+                    "difficulty" : "0x20000",
+                    "extraData" : "0x00",
+                    "gasLimit" : "0x7fffffffffffffff",
+                    "gasUsed" : "0x5642",
+                    "hash" : "0x81d12fbeb35373a5ccf3dcba1bfe1c9a712316c49dc6bffa77009137c90f4bfc",
+                    "mixHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "nonce" : "0x0000000000000000",
+                    "number" : "0x1",
+                    "parentHash" : "0x0f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61",
+                    "receiptTrie" : "0xb7495ecae6c2eb2a41ffc3d5b7f723143f2c3e3bced7f09d1ea19568592e3121",
+                    "stateRoot" : "0x45f69c2b4436c71bd71cac34e6894a4482ede7702fd6dc5ebb01992a8076f17a",
+                    "timestamp" : "0x3e8",
+                    "transactionsTrie" : "0x759a1418771df14e6cb03736844d6e890e175a325c7c1c27f85f230b2d2e5b58",
+                    "uncleHash" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                "transactions" : [
+                    {
+                        "data" : "0x",
+                        "gasLimit" : "0x0f4240",
+                        "gasPrice" : "0x01",
+                        "nonce" : "0x00",
+                        "to" : "0x1000000000000000000000000000000000000000",
+                        "value" : "0x01",
+                        "v" : "0x1b",
+                        "r" : "0x3e25058b9043ef9130f5423b04831a80989f086dacf5ff8468da47b0790086d7",
+                        "s" : "0x4115beb874eee5f516fd60c91471249bde75186e260632ebf3567b7f05b3ea40"
+                    }
+                ]
+            }
+        ]
+    },
+    "DUP_Bounds_d0g2v0_Istanbul" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stMemoryStressTest/DUP_BoundsFiller.json",
+            "sourceHash" : "60c95970787daeaac88a9b2818b3b3ad34df50041028c7011ba47b67aba66b76"
+        },
+        "genesisBlockHeader" : {
+            "bloom" : "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "coinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "difficulty" : "0x20000",
+            "extraData" : "0x00",
+            "gasLimit" : "0x7fffffffffffffff",
+            "gasUsed" : "0x0",
+            "hash" : "0x0f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61",
+            "mixHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "nonce" : "0x0000000000000000",
+            "number" : "0x0",
+            "parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "receiptTrie" : "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "stateRoot" : "0xb1eb34c4f3e548ce68381073e61517913691fd13969a98209b85364252bbf2b8",
+            "timestamp" : "0x0",
+            "transactionsTrie" : "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+            "uncleHash" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+        },
+        "pre" : {
+            "0x1000000000000000000000000000000000000000" : {
+                "balance" : "0x00",
+                "code" : "0x600080505063ffffffff80505067ffffffffffffffff8050506fffffffffffffffffffffffffffffffff8050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff805050600060008150505063ffffffff63ffffffff8150505067ffffffffffffffff67ffffffffffffffff815050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff815050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff81505050600060006000825050505063ffffffff63ffffffff63ffffffff825050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff82505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff82505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8250505050600060006000600083505050505063ffffffff63ffffffff63ffffffff63ffffffff83505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8350505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8350505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff835050505050600060006000600060008450505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8450505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff845050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff845050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff84505050505050600060006000600060006000855050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff855050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff85505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff85505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8550505050505050600060006000600060006000600086505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff86505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8650505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8650505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff865050505050505050600060006000600060006000600060008750505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8750505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff875050505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff875050505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff87",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x7fffffffffffffff",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "postState" : {
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "code" : "0x",
+                "nonce" : "0x01",
+                "balance" : "0x7fffffffffffa9bc",
+                "storage" : {
+                }
+            },
+            "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba" : {
+                "code" : "0x",
+                "nonce" : "0x00",
+                "balance" : "0x1bc16d674ec85642",
+                "storage" : {
+                }
+            },
+            "0x1000000000000000000000000000000000000000" : {
+                "code" : "0x600080505063ffffffff80505067ffffffffffffffff8050506fffffffffffffffffffffffffffffffff8050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff805050600060008150505063ffffffff63ffffffff8150505067ffffffffffffffff67ffffffffffffffff815050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff815050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff81505050600060006000825050505063ffffffff63ffffffff63ffffffff825050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff82505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff82505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8250505050600060006000600083505050505063ffffffff63ffffffff63ffffffff63ffffffff83505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8350505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8350505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff835050505050600060006000600060008450505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8450505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff845050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff845050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff84505050505050600060006000600060006000855050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff855050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff85505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff85505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8550505050505050600060006000600060006000600086505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff86505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff8650505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff8650505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff865050505050505050600060006000600060006000600060008750505050505050505063ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff63ffffffff8750505050505050505067ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff67ffffffffffffffff875050505050505050506fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff6fffffffffffffffffffffffffffffffff875050505050505050507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff87",
+                "nonce" : "0x00",
+                "balance" : "0x01",
+                "storage" : {
+                }
+            }
+        },
+        "network" : "Istanbul",
+        "sealEngine" : "NoProof",
+        "lastblockhash" : "0x57e1b3538f2d8017741786d52e65b1ad766ba42ee828caa337475e4c1b840eac",
+        "genesisRLP" : "0xf901fdf901f8a00000000000000000000000000000000000000000000000000000000000000000a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa0b1eb34c4f3e548ce68381073e61517913691fd13969a98209b85364252bbf2b8a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008302000080887fffffffffffffff808000a00000000000000000000000000000000000000000000000000000000000000000880000000000000000c0c0",
+        "blocks" : [
+            {
+                "rlp" : "0xf90265f901fca00f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347942adc25665018aa1fe0e6bc666dac8fc2697ff9baa045f69c2b4436c71bd71cac34e6894a4482ede7702fd6dc5ebb01992a8076f17aa0169424331d5695b5f35e4f996370b73c523ae5fa8b48771e7a84a5157d0ee5f8a0b7495ecae6c2eb2a41ffc3d5b7f723143f2c3e3bced7f09d1ea19568592e3121b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008302000001887fffffffffffffff8256428203e800a00000000000000000000000000000000000000000000000000000000000000000880000000000000000f863f8618001840ee6b28094100000000000000000000000000000000000000001801ca0b4d82d934cb8d0b959b87a51e42cd51d560d24a71047b2127e78830404837662a00e7c42d2e4ce666564a232a4705cf6e43a2bcf29ecbd7db39a21484d01383e75c0",
+                "blockHeader" : {
+                    "bloom" : "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                    "coinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+                    "difficulty" : "0x20000",
+                    "extraData" : "0x00",
+                    "gasLimit" : "0x7fffffffffffffff",
+                    "gasUsed" : "0x5642",
+                    "hash" : "0x57e1b3538f2d8017741786d52e65b1ad766ba42ee828caa337475e4c1b840eac",
+                    "mixHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "nonce" : "0x0000000000000000",
+                    "number" : "0x1",
+                    "parentHash" : "0x0f2fde467397c6c1d1bdaa2ee24c28085b02a4380a60745feae212a580b0fd61",
+                    "receiptTrie" : "0xb7495ecae6c2eb2a41ffc3d5b7f723143f2c3e3bced7f09d1ea19568592e3121",
+                    "stateRoot" : "0x45f69c2b4436c71bd71cac34e6894a4482ede7702fd6dc5ebb01992a8076f17a",
+                    "timestamp" : "0x3e8",
+                    "transactionsTrie" : "0x169424331d5695b5f35e4f996370b73c523ae5fa8b48771e7a84a5157d0ee5f8",
+                    "uncleHash" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                "transactions" : [
+                    {
+                        "data" : "0x",
+                        "gasLimit" : "0x0ee6b280",
+                        "gasPrice" : "0x01",
+                        "nonce" : "0x00",
+                        "to" : "0x1000000000000000000000000000000000000000",
+                        "value" : "0x01",
+                        "v" : "0x1c",
+                        "r" : "0xb4d82d934cb8d0b959b87a51e42cd51d560d24a71047b2127e78830404837662",
+                        "s" : "0x0e7c42d2e4ce666564a232a4705cf6e43a2bcf29ecbd7db39a21484d01383e75"
+                    }
+                ]
+            }
+        ]
+    }
+}

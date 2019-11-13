@@ -1,0 +1,81 @@
+{
+    "create2collisionSelfdestructed2" : {
+        "_info" : {
+            "comment" : "A contract which performs SUICIDE, and is then attempted to be recreated (different code, same init-code) during the same transaction. This ought to fail, since the code is not cleaned out until after the transaction is ended.",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stCreate2/create2collisionSelfdestructed2Filler.json",
+            "sourceHash" : "fd31942086bbac075dd7f0d643cd69070a935537c7809d149629fbe77f1ce258"
+        },
+        "env" : {
+            "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "currentDifficulty" : "0x020000",
+            "currentGasLimit" : "0x0f4240",
+            "currentNumber" : "0x01",
+            "currentTimestamp" : "0x03e8",
+            "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "post" : {
+            "Istanbul" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0xb178dbc5cab39c7c202b89b5436004f3b1d853c804a3946cb3b6eb0297ca21b1",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x44994c82de03af2d296ce187d710cd1d65ad25853f3dba474e188eb832e5f557",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
+        },
+        "pre" : {
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x0de0b6b3a7640000",
+                "code" : "0x626010ff6000526003601df300",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xcff64f4c5df8f436c4f2c1af4b2e3f9e3004c779" : {
+                "balance" : "0x01",
+                "code" : "0x6010ff",
+                "nonce" : "0x01",
+                "storage" : {
+                }
+            },
+            "0xfce41d047b4a1d4450382dcc29ec7e5fedc5f9a3" : {
+                "balance" : "0x01",
+                "code" : "0x6010ff00",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "transaction" : {
+            "data" : [
+                "0x6000600060006000600073fce41d047b4a1d4450382dcc29ec7e5fedc5f9a361c350f1506b620102036000526003601df36000526000600c60146000f500",
+                "0x6000600060006000600073cff64f4c5df8f436c4f2c1af4b2e3f9e3004c77961c350f1506b626010ff6000526003601df36000526000600c60146000f500"
+            ],
+            "gasLimit" : [
+                "0x061a80"
+            ],
+            "gasPrice" : "0x01",
+            "nonce" : "0x00",
+            "secretKey" : "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+            "to" : "",
+            "value" : [
+                "0x00"
+            ]
+        }
+    }
+}

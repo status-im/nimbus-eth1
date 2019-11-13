@@ -1,0 +1,130 @@
+{
+    "callToSuicideThenExtcodehash" : {
+        "_info" : {
+            "comment" : "https://github.com/ethereum/tests/issues/652",
+            "filling-rpc-server" : "Geth-1.9.7-unstable-b566cfdf-20191104",
+            "filling-tool-version" : "retesteth-0.0.1+commit.47c32403.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stExtCodeHash/callToSuicideThenExtcodehashFiller.json",
+            "sourceHash" : "d64787bab2322f058261a98c1482ecf5cfa5917bec267d236d521fcff3eebfa6"
+        },
+        "env" : {
+            "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "currentDifficulty" : "0x020000",
+            "currentGasLimit" : "0xb2d05e00",
+            "currentNumber" : "0x01",
+            "currentTimestamp" : "0x03e8",
+            "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "post" : {
+            "Istanbul" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x960c2f3305f265d75ba955561850066a6577d4566b7d860c5215f0da24503802",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0xff4c92f000cc4140633449baf60521975258142c7f10bcf24a15716efcd03fed",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "indexes" : {
+                        "data" : 2,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0xbecd46dccd39877b66a926e3fd54d5bf403b92288b592cfc6e80fbcec8b67bbb",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "indexes" : {
+                        "data" : 3,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x28fbd57084f1ea5a04f79d2544ec3781a4e8003c6b80cd6a49b2e5bdc1aecfe3",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
+        },
+        "pre" : {
+            "0x1000000000000000000000000000000000000000" : {
+                "balance" : "0x00",
+                "code" : "0x604060006040600060006000355af200",
+                "nonce" : "0x00",
+                "storage" : {
+                    "0x01" : "0x1122"
+                }
+            },
+            "0x1000000000000000000000000000000000000001" : {
+                "balance" : "0x00",
+                "code" : "0x6000600060006000600073dead00000000000000000000000000000000000162028488f160005573dead0000000000000000000000000000000000013f60015500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x2000000000000000000000000000000000000001" : {
+                "balance" : "0x00",
+                "code" : "0x6000600060006000600073dead00000000000000000000000000000000000162028488f260005573dead0000000000000000000000000000000000013f60015500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x3000000000000000000000000000000000000001" : {
+                "balance" : "0x00",
+                "code" : "0x600060006000600073dead00000000000000000000000000000000000162028488f460005573dead0000000000000000000000000000000000013f60015500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x4000000000000000000000000000000000000001" : {
+                "balance" : "0x00",
+                "code" : "0x600060006000600073dead00000000000000000000000000000000000162028488fa60005573dead0000000000000000000000000000000000013f60015500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x0de0b6b3a7640000",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xdead000000000000000000000000000000000001" : {
+                "balance" : "0x014b230ce3",
+                "code" : "0x6025ff00",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "transaction" : {
+            "data" : [
+                "0x0000000000000000000000001000000000000000000000000000000000000001",
+                "0x0000000000000000000000002000000000000000000000000000000000000001",
+                "0x0000000000000000000000003000000000000000000000000000000000000001",
+                "0x0000000000000000000000004000000000000000000000000000000000000001"
+            ],
+            "gasLimit" : [
+                "0x0493e0"
+            ],
+            "gasPrice" : "0x01",
+            "nonce" : "0x00",
+            "secretKey" : "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+            "to" : "0x1000000000000000000000000000000000000000",
+            "value" : [
+                "0x01"
+            ]
+        }
+    }
+}

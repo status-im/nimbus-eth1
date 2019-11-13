@@ -1,0 +1,81 @@
+{
+    "DELEGATECALL_Bounds" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
+            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "source" : "src/GeneralStateTestsFiller/stMemoryStressTest/DELEGATECALL_BoundsFiller.json",
+            "sourceHash" : "f8bbdca727b7a7e7e340f74f957d755482fe85535789978b643ab9d37fd30d2f"
+        },
+        "env" : {
+            "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "currentDifficulty" : "0x020000",
+            "currentGasLimit" : "0x7fffffffffffffff",
+            "currentNumber" : "0x01",
+            "currentTimestamp" : "0x03e8",
+            "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "post" : {
+            "Istanbul" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0xe9bd1f9c178cdd9d8ee8aa0ed5b2490df7d3a7a7135e814efa1bcbf3861bd6d5",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 1,
+                        "value" : 0
+                    },
+                    "hash" : "0x82d8c0066af54be6eafa6b810f0925ddcd5f5af096eee4b5a5da5a0838247c4b",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
+        },
+        "pre" : {
+            "0x1000000000000000000000000000000000000000" : {
+                "balance" : "0x00",
+                "code" : "0x60006000600060007310000000000000000000000000000000000000016707fffffffffffffff450630fffffff6000630fffffff60007310000000000000000000000000000000000000016707fffffffffffffff45063ffffffff600063ffffffff60007310000000000000000000000000000000000000016707fffffffffffffff4506000630fffffff6000630fffffff7310000000000000000000000000000000000000016707fffffffffffffff450600063ffffffff600063ffffffff7310000000000000000000000000000000000000016707fffffffffffffff450600067ffffffffffffffff600067ffffffffffffffff7310000000000000000000000000000000000000016707fffffffffffffff45060006fffffffffffffffffffffffffffffffff60006fffffffffffffffffffffffffffffffff7310000000000000000000000000000000000000016707fffffffffffffff45060007fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff60007fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7310000000000000000000000000000000000000016707fffffffffffffff450630fffffff630fffffff630fffffff630fffffff7310000000000000000000000000000000000000016707fffffffffffffff400",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x1000000000000000000000000000000000000001" : {
+                "balance" : "0x00",
+                "code" : "0x60005460010160005500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "transaction" : {
+            "data" : [
+                "0x"
+            ],
+            "gasLimit" : [
+                "0x0249f0",
+                "0x0ee6b280"
+            ],
+            "gasPrice" : "0x01",
+            "nonce" : "0x00",
+            "secretKey" : "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+            "to" : "0x1000000000000000000000000000000000000000",
+            "value" : [
+                "0x01"
+            ]
+        }
+    }
+}
