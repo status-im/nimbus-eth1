@@ -60,23 +60,45 @@ func StatusListenAndPost(channel string) {
 	channelC := C.CString(channel)
 	defer C.free(unsafe.Pointer(channelC))
 
-	symKeyId := C.GoString(C.nimbus_add_symkey_from_password(channelC))
-	asymKeyId := C.GoString(C.nimbus_new_keypair())
+	tmp := C.malloc(C.size_t(32))
+	if C.nimbus_add_symkey_from_password((*C.uint8_t)(tmp), channelC) == false {
+		panic("Cannot create symmetric key")
+	}
+	// No need to do this back and forth GO <-> C, just showing how it might work
+	// in implementations (when wrapped in calls passing Go Bytes or Strings).
+	symKeyId := C.GoBytes(tmp, 32)
+	C.free(unsafe.Pointer(tmp))
+	symKeyIdC := (*C.uint8_t)(C.CBytes(symKeyId))
+	defer C.free(unsafe.Pointer(symKeyIdC))
+
+
+	tmp = C.malloc(C.size_t(32))
+	if C.nimbus_new_keypair((*C.uint8_t)(tmp)) == false {
+		panic("Cannot create asymmetric keypair")
+	}
+	// No need to do this back and forth GO <-> C, just showing how it might work
+	// in implementations (when wrapped in calls passing Go Bytes or Strings).
+	asymKeyId := C.GoBytes(tmp, 32)
+	C.free(unsafe.Pointer(tmp))
+	asymKeyIdC := (*C.uint8_t)(C.CBytes(asymKeyId))
+	defer C.free(unsafe.Pointer(asymKeyIdC))
 
 	var msgCount int = 0
 
-	options := C.filter_options{symKeyID: C.CString(symKeyId),
+	options := C.filter_options{symKeyID: symKeyIdC,
 		minPow: 0.002,
 		topic: C.nimbus_channel_to_topic(channelC).topic}
-	filterId := C.GoString(C.nimbus_subscribe_filter(&options,
-		(C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)),
-		unsafe.Pointer(&msgCount)))
-	fmt.Printf("[nim-status] filter subscribed, id: %s\n", filterId)
 
-	symKeyIdC := C.CString(symKeyId)
-	defer C.free(unsafe.Pointer(symKeyIdC))
-	asymKeyIdC := C.CString(asymKeyId)
-	defer C.free(unsafe.Pointer(asymKeyIdC))
+	tmp = C.malloc(C.size_t(32))
+	if C.nimbus_subscribe_filter((*C.uint8_t)(tmp), &options,
+			(C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)),
+			unsafe.Pointer(&msgCount)) == false {
+		panic("Cannot subscribe filter")
+	}
+	filterId := C.GoBytes(tmp, 32)
+	C.free(unsafe.Pointer(tmp))
+	fmt.Printf("[nim-status] filter subscribed, id: %s\n",
+		hex.EncodeToString(filterId))
 
 	postMessage := C.post_message{symKeyID: symKeyIdC,
 		sourceID: asymKeyIdC,
