@@ -158,15 +158,16 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     # TODO: add logging
     result = max(newCost - prevCost, 0)
 
-  func `prefix all_but_one_64th`(gas: GasInt): GasInt {.inline.} =
-    ## Computes all but 1/64th
-    ## L(n) ≡ n − ⌊n/64⌋ - (floored(n/64))
-    # Introduced in EIP-150 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
+  when fork >= FkTangerine:
+    func `prefix all_but_one_64th`(gas: GasInt): GasInt {.inline.} =
+      ## Computes all but 1/64th
+      ## L(n) ≡ n − ⌊n/64⌋ - (floored(n/64))
+      # Introduced in EIP-150 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
 
-    # Note: The all-but-one-64th calculation should occur after the memory expansion fee is taken
-    # https://github.com/ethereum/yellowpaper/pull/442
+      # Note: The all-but-one-64th calculation should occur after the memory expansion fee is taken
+      # https://github.com/ethereum/yellowpaper/pull/442
 
-    result = gas - (gas shr 6)
+      result = gas - (gas shr 6)
 
   # ############### Opcode gas functions ##############################
 

@@ -6,7 +6,6 @@ type
     PersistDel
 
   DB = TrieDatabaseRef
-  BytesRange = Range[byte]
 
   CaptureDB* = ref object of RootObj
     srcDb: DB

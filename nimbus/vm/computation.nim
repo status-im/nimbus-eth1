@@ -6,9 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, strformat, strutils, sequtils, macros, terminal, math, tables, options,
+  chronicles, strformat, strutils, sequtils, macros, math, tables, options,
   sets, eth/[common, keys], eth/trie/db as triedb,
-  ../constants, ../errors, ../validation, ../vm_state, ../vm_types,
+  ../constants, ../errors, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
   ../utils/header, stew/[byteutils, ranges], precompiles,
@@ -254,7 +254,7 @@ proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
 # in order to test some existing code
 iterator accountsForDeletion*(c: BaseComputation): EthAddress =
   var stack = @[c]
-  var deletedAccounts = initSet[EthAddress]()
+  var deletedAccounts = initHashSet[EthAddress]()
   while stack.len > 0:
     let comp = stack.pop()
     if comp.isError: continue

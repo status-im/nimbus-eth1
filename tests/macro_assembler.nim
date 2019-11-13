@@ -6,10 +6,10 @@ import
 
 import
   options, json, os, eth/trie/[db, hexary],
-  ../nimbus/[vm_state, tracer, vm_types, transaction, utils],
+  ../nimbus/[vm_state, vm_types, transaction, utils],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm_state_transactions,
-  ../nimbus/vm/interpreter/[vm_forks, gas_costs],
+  ../nimbus/vm/interpreter/vm_forks,
   ../nimbus/vm/[message, computation, memory]
 
 export opcode_values, byteutils
@@ -246,6 +246,7 @@ proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: 
 proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   var computation = initComputation(blockNumber, chainDB, boa.code, boa.data, boa.fork)
 
+  # TODO: support gas comsumption validation
   let gas = computation.gasMeter.gasRemaining
   execComputation(computation)
   let gasUsed = gas - computation.gasMeter.gasRemaining

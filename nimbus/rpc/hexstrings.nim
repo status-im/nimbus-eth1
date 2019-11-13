@@ -304,11 +304,11 @@ proc fromJson*(n: JsonNode, argName: string, result: var Bytes) =
   let hexStr = n.getStr()
   if not hexStr.isValidHexData:
     raise newException(ValueError, invalidMsg(argName) & " as a hex data \"" & hexStr & "\"")
-  result = hexToSeqByte(hexStr.string)
+  result = hexToSeqByte(hexStr)
 
 proc fromJson*(n: JsonNode, argName: string, result: var Hash256) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidHash256:
     raise newException(ValueError, invalidMsg(argName) & " as a Hash256 \"" & hexStr & "\"")
-  hexToByteArray(hexStr.string, result.data)
+  hexToByteArray(hexStr, result.data)

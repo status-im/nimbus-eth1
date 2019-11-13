@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import  unittest2, strutils, sequtils,
+import  unittest2, sequtils,
         ../nimbus/vm/interpreter
 
 proc codeStreamMain*() =

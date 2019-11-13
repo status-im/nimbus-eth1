@@ -38,7 +38,7 @@ proc stackMain*() =
 
     test "push does not allow stack to exceed 1024":
       var stack = newStack()
-      for z in 0 .. < 1024:
+      for z in 0 ..< 1024:
         stack.push(z.uint)
       check(stack.len == 1024)
       expect(FullStack):

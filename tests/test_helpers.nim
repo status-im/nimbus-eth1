@@ -6,11 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  os, macros, json, strformat, strutils, parseutils, ospaths, tables,
+  os, macros, json, strformat, strutils, parseutils, os, tables,
   stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p], unittest2,
-  ../nimbus/[vm_state, constants, config, transaction, utils, errors],
+  ../nimbus/[vm_state, config, transaction, utils, errors],
   ../nimbus/db/[db_chain, state_db],
-  ../nimbus/vm/interpreter/[gas_costs, vm_forks],
+  ../nimbus/vm/interpreter/vm_forks,
   ../tests/test_generalstate_failing
 
 func revmap(x: Table[Fork, string]): Table[string, Fork] =

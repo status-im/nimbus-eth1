@@ -1,7 +1,6 @@
 import
-  macro_assembler, unittest2, macros, strutils,
-  stew/byteutils, eth/common, ../nimbus/db/state_db,
-  ../nimbus/db/db_chain, stew/ranges
+  macro_assembler, unittest2, macros,
+  stew/byteutils, eth/common, stew/ranges
 
 proc opMiscMain*() =
   suite "Misc Opcodes":

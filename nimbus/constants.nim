@@ -1,5 +1,5 @@
 import
-  math, strutils, eth/common, nimcrypto/hash
+  eth/common, nimcrypto/hash
 
 proc default(t: typedesc): t = discard
 

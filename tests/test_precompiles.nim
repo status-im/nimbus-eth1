@@ -6,9 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, ../nimbus/vm/precompiles, json, stew/byteutils, test_helpers, ospaths, tables,
-  strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/[db_chain, state_db],
-  ../nimbus/[constants, vm_types, vm_state], ../nimbus/vm/[computation, message], macros,
+  unittest2, ../nimbus/vm/precompiles, json, stew/byteutils, test_helpers, os, tables,
+  strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain,
+  ../nimbus/[vm_types, vm_state], ../nimbus/vm/[computation, message], macros,
   ../nimbus/vm/blake2b_f
 
 proc initAddress(i: byte): EthAddress = result[19] = i

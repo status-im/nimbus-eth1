@@ -6,10 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  sequtils, strformat, tables,
+  strformat,
   chronicles, eth/[common, rlp], eth/trie/[hexary, db],
-  ../constants, ../errors, ../validation, ../utils,
-  storage_types
+  ../constants, ../utils, storage_types
 
 logScope:
   topics = "state_db"

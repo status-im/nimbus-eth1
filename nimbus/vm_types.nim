@@ -7,7 +7,7 @@
 
 import
   tables, eth/common, eth/trie/db,
-  options, ./constants, json, sets,
+  options, json, sets,
   ./vm/[memory, stack, code_stream],
   ./vm/interpreter/[gas_costs, opcode_values, vm_forks], # TODO - will be hidden at a lower layer
   ./db/[db_chain, state_db]
@@ -73,7 +73,7 @@ type
     # continuation helpers
     nextProc*:              proc() {.gcsafe.}
     memOutLen*:             int
-    memOutPos*:             int    
+    memOutPos*:             int
 
   Error* = ref object
     info*:                  string

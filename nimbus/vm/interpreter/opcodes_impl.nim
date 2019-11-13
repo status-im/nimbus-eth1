@@ -118,7 +118,7 @@ op signExtend, inline = false, bits, value:
   if bits <= 31.u256:
     let
       one = 1.u256
-      testBit = bits.toInt * 8 + 7
+      testBit = bits.truncate(int) * 8 + 7
       bitPos = one shl testBit
       mask = bitPos - one
     if not isZero(value and bitPos):
@@ -176,7 +176,7 @@ op notOp, inline = true, value:
 op byteOp, inline = true, position, value:
   ## 0x20, Retrieve single byte from word.
 
-  let pos = position.toInt
+  let pos = position.truncate(int)
 
   push:
     if pos >= 32 or pos < 0: zero(Uint256)
@@ -453,7 +453,7 @@ proc jumpImpl(computation: BaseComputation, jumpTarget: UInt256) =
   if jumpTarget >= computation.code.len.u256:
     raise newException(InvalidJumpDestination, "Invalid Jump Destination")
 
-  let jt = jumpTarget.toInt
+  let jt = jumpTarget.truncate(int)
   computation.code.pc = jt
 
   let nextOpcode = computation.code.peek

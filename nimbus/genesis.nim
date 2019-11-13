@@ -1,6 +1,6 @@
 import
-  times, tables,
-  eth/[common, rlp, trie], stint, stew/[byteutils, ranges], block_types, nimcrypto,
+  tables,
+  eth/[common, rlp, trie], stint, stew/[byteutils, ranges],
   chronicles, eth/trie/db,
   db/[db_chain, state_db], genesis_alloc, config, constants
 

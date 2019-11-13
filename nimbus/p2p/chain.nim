@@ -1,6 +1,6 @@
-import ../db/[db_chain, state_db], eth/common, chronicles, ../vm_state, ../vm_types, ../transaction, stew/ranges,
-  ../vm/[computation, message], ../constants, stint, nimcrypto,
-  ../vm_state_transactions, sugar, ../utils, eth/trie/db, ../tracer, ./executor
+import ../db/db_chain, eth/common, chronicles, ../vm_state, ../vm_types, stew/ranges,
+  ../vm/[computation, message], stint, nimcrypto,
+  ../utils, eth/trie/db, ../tracer, ./executor
 
 type
   Chain* = ref object of AbstractChainDB

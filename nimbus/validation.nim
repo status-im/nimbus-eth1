@@ -7,7 +7,7 @@
 
 import
   strformat,
-  errors, constants, eth/common
+  errors, eth/common
 
 proc validateGte*(value: Int256 | int, minimum: int, title: string = "Value") =
   if value.i256 < minimum.i256:
