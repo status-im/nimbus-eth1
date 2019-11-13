@@ -50,6 +50,12 @@ typedef struct {
 
 typedef void (*received_msg_handler)(received_message* msg, void* udata);
 
+/** Buffer lengths, can be used in go for convenience */
+#define ID_LEN 32
+#define SYMKEY_LEN 32
+#define PRIVKEY_LEN 32
+#define BLOOM_LEN 64
+
 /** Initialize Nim and the Status library. Must be called before anything else
  * of the API. Also, all following calls must come from the same thread as from
  * which this call was done.
@@ -77,19 +83,20 @@ void nimbus_poll();
 
 /** Raw 32 byte arrays are passed as IDs. The caller needs to provide a pointer
  * to 32 bytes allocation for this. */
-bool nimbus_new_keypair(uint8_t id[32]);
-bool nimbus_add_keypair(uint8_t id[32], const uint8_t privkey[32]);
-bool nimbus_delete_keypair(const uint8_t id[32]);
-bool nimbus_get_private_key(const uint8_t id[32], uint8_t privkey[32]);
+bool nimbus_new_keypair(uint8_t id[ID_LEN]);
+bool nimbus_add_keypair(const uint8_t privkey[PRIVKEY_LEN], uint8_t id[ID_LEN]);
+bool nimbus_delete_keypair(const uint8_t id[ID_LEN]);
+bool nimbus_get_private_key(const uint8_t id[ID_LEN],
+  uint8_t privkey[PRIVKEY_LEN]);
 
 /** Symmetric Keys API */
 
 /** Raw 32 byte arrays are passed as IDs. The caller needs to provide a pointer
  * to 32 bytes allocation for this. */
-bool nimbus_add_symkey(uint8_t id[32], const uint8_t symkey[32]);
-bool nimbus_add_symkey_from_password(uint8_t id[32], const char* password);
-bool nimbus_delete_symkey(const uint8_t id[32]);
-bool nimbus_get_symkey(const uint8_t id[32], uint8_t symkey[32]);
+bool nimbus_add_symkey(const uint8_t symkey[SYMKEY_LEN], uint8_t id[ID_LEN]);
+bool nimbus_add_symkey_from_password(const char* password, uint8_t id[ID_LEN]);
+bool nimbus_delete_symkey(const uint8_t id[ID_LEN]);
+bool nimbus_get_symkey(const uint8_t id[ID_LEN], uint8_t symkey[SYMKEY_LEN]);
 
 /** Whisper message posting and receiving API */
 
@@ -98,9 +105,9 @@ bool nimbus_post(post_message* msg);
 /** Subscribe to given filter. The void pointer udata will be passed to the
  * received_msg_handler callback.
  */
-bool nimbus_subscribe_filter(uint8_t id[32], filter_options* filter_options,
-  received_msg_handler msg, void* udata);
-bool nimbus_unsubscribe_filter(const uint8_t id[32]);
+bool nimbus_subscribe_filter(filter_options* filter_options,
+  received_msg_handler msg, void* udata, uint8_t id[ID_LEN]);
+bool nimbus_unsubscribe_filter(const uint8_t id[ID_LEN]);
 
 /** Get the minimum required PoW of this node */
 double nimbus_get_min_pow();
@@ -108,7 +115,7 @@ double nimbus_get_min_pow();
 /** Get the currently set bloom filter of this node. This will automatically
  *update for each filter subsribed to.
  */
-void nimbus_get_bloom_filter(uint8_t bloomfilter[64]);
+void nimbus_get_bloom_filter(uint8_t bloomfilter[BLOOM_LEN]);
 
 /** Example helper, can be removed */
 topic nimbus_channel_to_topic(const char* channel);

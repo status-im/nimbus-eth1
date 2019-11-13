@@ -176,7 +176,7 @@ proc nimbus_new_keypair(id: var Identifier): bool {.exportc, raises: [].} =
     # in `newKeyPair`
     discard
 
-proc nimbus_add_keypair(id: var Identifier, privateKey: ptr byte):
+proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
     bool {.exportc, raises: [OSError, IOError, ValueError].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
@@ -213,7 +213,7 @@ proc nimbus_get_private_key(id: Identifier, privateKey: var PrivateKey):
 
 # Symmetric Keys
 
-proc nimbus_add_symkey(id: var Identifier, symKey: ptr SymKey): bool
+proc nimbus_add_symkey(symKey: ptr SymKey, id: var Identifier): bool
     {.exportc, raises: [].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
@@ -225,7 +225,7 @@ proc nimbus_add_symkey(id: var Identifier, symKey: ptr SymKey): bool
   # Copy of key happens at add
   whisperKeys.symKeys.add(id.toHex, symKey[])
 
-proc nimbus_add_symkey_from_password(id: var Identifier, password: cstring):
+proc nimbus_add_symkey_from_password(password: cstring, id: var Identifier):
     bool {.exportc, raises: [].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
@@ -321,9 +321,9 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
                             powTime = message.powTime,
                             powTarget = message.powTarget)
 
-proc nimbus_subscribe_filter(id: var Identifier, options: ptr CFilterOptions,
+proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     handler: proc (msg: ptr CReceivedMessage, udata: pointer) {.gcsafe, cdecl.},
-    udata: pointer = nil): bool {.exportc.} =
+    udata: pointer = nil, id: var Identifier): bool {.exportc.} =
   ## Encryption is mandatory.
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
   ## In case of a passed handler, the received msg needs to be copied before the
