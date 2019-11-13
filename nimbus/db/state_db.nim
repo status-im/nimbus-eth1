@@ -17,6 +17,7 @@ logScope:
 type
   AccountStateDB* = ref object
     trie: SecureHexaryTrie
+    originalRoot: KeccakHash   # will be updated for every transaction
 
   ReadOnlyStateDB* = distinct AccountStateDB
 
@@ -30,6 +31,7 @@ proc newAccountStateDB*(backingStore: TrieDatabaseRef,
                         root: KeccakHash, pruneTrie: bool): AccountStateDB =
   result.new()
   result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
+  result.originalRoot = root
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
   ## XXX: The name of this proc is intentionally long, because it
@@ -209,8 +211,15 @@ proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
     result = true
 
 proc getCommittedStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): UInt256 =
-  discard
-  # TODO: stub
+  let tmpHash = db.rootHash
+  db.rootHash = db.originalRoot
+  var exists: bool
+  (result, exists) = db.getStorage(address, slot)
+  db.rootHash = tmpHash
+
+proc updateOriginalRoot*(db: AccountStateDB) =
+  ## this proc will be called for every transaction
+  db.originalRoot = db.rootHash
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getAccount*(db: ReadOnlyStateDB, address: EthAddress): Account {.borrow.}

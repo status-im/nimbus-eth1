@@ -67,6 +67,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
         debug "state clearing", account
         db.deleteAccount(account)
 
+  vmState.accountDb.updateOriginalRoot()
   result = gasUsed
 
 type
