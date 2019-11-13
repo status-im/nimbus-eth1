@@ -26,10 +26,18 @@ const
     FkTangerine: "EIP150",
     FkSpurious: "EIP158",
     FkByzantium: "Byzantium",
-    FkConstantinople: "ConstantinopleFix"
+    FkConstantinople: "ConstantinopleFix",
+    FkIstanbul: "Istanbul"
   }.toTable
 
-  supportedForks* = {FkFrontier, FkHomestead, FkTangerine, FkSpurious, FkByzantium, FkConstantinople}
+  supportedForks* = {
+    FkFrontier,
+    FkHomestead,
+    FkTangerine,
+    FkSpurious,
+    FkByzantium,
+    FkConstantinople,
+    FkIstanbul}
 
   nameToFork* = revmap(forkNames)
 

@@ -176,6 +176,8 @@ proc generalStateJsonMain*(debugMode = false) =
     # run all test fixtures
     suite "generalstate json tests":
       jsonTest("GeneralStateTests", testFixture)
+    suite "new generalstate json tests":
+      jsonTest("NewGeneralStateTests", testFixture)
   else:
     # execute single test in debug mode
     let config = getConfiguration()
