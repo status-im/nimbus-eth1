@@ -434,7 +434,7 @@ proc validateUncles(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool
     raise newException(ValidationError, "Header suggests block should have uncles but block has none")
 
   # Check for duplicates
-  var uncleSet = initSet[Hash256]()
+  var uncleSet = initHashSet[Hash256]()
   for uncle in currBlock.uncles:
     let uncleHash = uncle.hash
     if uncleHash in uncleSet:
@@ -668,7 +668,7 @@ proc main() =
     suite "block chain json tests":
       jsonTest("BlockchainTests", testFixture)
     suite "new block chain json tests":
-      jsonTest("NewBlockchainTests", testFixture)
+      jsonTest("newBlockchainTests", testFixture)
   else:
     # execute single test in debug mode
     let config = getConfiguration()
@@ -676,7 +676,7 @@ proc main() =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests" / "fixtures" / "NewBlockChainTests"
+    let path = "tests" / "fixtures" / "newBlockChainTests"
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, debugMode = true, config.trace)

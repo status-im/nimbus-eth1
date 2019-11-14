@@ -177,7 +177,7 @@ proc generalStateJsonMain*(debugMode = false) =
     suite "generalstate json tests":
       jsonTest("GeneralStateTests", testFixture)
     suite "new generalstate json tests":
-      jsonTest("NewGeneralStateTests", testFixture)
+      jsonTest("newGeneralStateTests", testFixture)
   else:
     # execute single test in debug mode
     let config = getConfiguration()
@@ -185,7 +185,7 @@ proc generalStateJsonMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests" / "fixtures" / "GeneralStateTests"
+    let path = "tests" / "fixtures" / "newGeneralStateTests"
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     var forks: set[Fork] = {}
