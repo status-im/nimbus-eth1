@@ -1,5 +1,5 @@
 import
-  macro_assembler, unittest2, macros, strutils,
+  macro_assembler, unittest2, macros,
   stew/byteutils, eth/common, ../nimbus/db/state_db,
   ../nimbus/db/db_chain, stew/ranges
 

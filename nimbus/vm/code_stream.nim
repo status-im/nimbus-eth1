@@ -8,7 +8,7 @@
 import
   chronicles, strformat, strutils, sequtils, parseutils, sets, macros,
   eth/common,
-  ../constants, ./interpreter/opcode_values
+  ./interpreter/opcode_values
 
 logScope:
   topics = "vm code_stream"
@@ -28,7 +28,7 @@ proc newCodeStream*(codeBytes: seq[byte]): CodeStream =
   new(result)
   result.bytes = codeBytes
   result.pc = 0
-  result.invalidPositions = initSet[int]()
+  result.invalidPositions = initHashSet[int]()
   result.depthProcessed = 0
   result.cached = @[]
 

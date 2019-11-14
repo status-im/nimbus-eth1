@@ -1,4 +1,4 @@
-import unittest2, strutils, tables, ospaths, json,
+import unittest2, strutils, tables, os, json,
   ../nimbus/utils/difficulty, stint, times,
   eth/common, test_helpers, stew/byteutils
 

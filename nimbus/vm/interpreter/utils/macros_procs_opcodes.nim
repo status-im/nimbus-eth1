@@ -11,7 +11,7 @@
 import
   macros, strformat, stint, eth/common,
   ../../computation, ../../stack, ../../code_stream,
-  ../../../constants, ../../../vm_types, ../../memory,
+  ../../../vm_types, ../../memory,
   ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values],
   ../../interpreter/utils/utils_numeric
 
@@ -43,7 +43,7 @@ macro op*(procname: untyped, inline: static[bool], stackParams_body: varargs[unt
 
   if len != 0:
     for params in stackParams:
-      popStackStmt.add newIdentNode(params.ident)
+      popStackStmt.add newIdentNode(params.strVal)
 
     popStackStmt.add newEmptyNode()
     popStackStmt.add quote do:

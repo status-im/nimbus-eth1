@@ -1,7 +1,7 @@
 import
   json, strutils, sets, hashes,
   chronicles, nimcrypto, eth/common, stint,
-  ../vm_types, memory, stack, ../db/[db_chain, state_db],
+  ../vm_types, memory, stack, ../db/state_db,
   eth/trie/hexary, ./message, stew/ranges/typedranges,
   ./interpreter/opcode_values
 
@@ -21,7 +21,7 @@ proc initTracer*(tracer: var TransactionTracer, flags: set[TracerFlags] = {}) =
 
   tracer.trace["structLogs"] = newJArray()
   tracer.flags = flags
-  tracer.accounts = initSet[EthAddress]()
+  tracer.accounts = initHashSet[EthAddress]()
   tracer.storageKeys = @[]
 
 proc prepare*(tracer: var TransactionTracer, compDepth: int) =
@@ -32,9 +32,9 @@ proc prepare*(tracer: var TransactionTracer, compDepth: int) =
     let prevLen = tracer.storageKeys.len
     tracer.storageKeys.setLen(compDepth + 1)
     for i in prevLen ..< tracer.storageKeys.len - 1:
-      tracer.storageKeys[i] = initSet[Uint256]()
+      tracer.storageKeys[i] = initHashSet[Uint256]()
 
-  tracer.storageKeys[compDepth] = initSet[Uint256]()
+  tracer.storageKeys[compDepth] = initHashSet[Uint256]()
 
 proc rememberStorageKey(tracer: var TransactionTracer, compDepth: int, key: Uint256) =
   tracer.storageKeys[compDepth].incl key

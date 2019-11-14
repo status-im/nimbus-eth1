@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth/[common, rlp, keys], nimcrypto, utils,
+  constants, errors, eth/[common, rlp, keys], utils,
   ./vm/interpreter/[vm_forks, gas_costs], constants
 
 import eth/common/transaction as common_transaction

@@ -6,10 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stew/ranges/typedranges, sequtils, strformat, tables, options, sets,
-  eth/common, chronicles, ./db/[db_chain, state_db],
-  constants, errors, transaction, vm_types, vm_state, utils,
-  ./vm/[computation, interpreter], ./vm/interpreter/gas_costs
+  stew/ranges/typedranges, options, sets,
+  eth/common, chronicles, ./db/state_db,
+  transaction, vm_types, vm_state,
+  ./vm/[computation, interpreter]
 
 proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork): bool =
   # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518

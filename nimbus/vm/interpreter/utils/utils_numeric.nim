@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, strutils, sequtils, endians, macros,
+  macros,
   eth/common/eth_types, eth/rlp,
   ../../../constants
 
@@ -57,7 +57,7 @@ func cleanMemRef*(x: UInt256): int {.inline.} =
   const upperBound = (high(int32) shr 2).u256
   if x > upperBound:
     return high(int32) shr 2
-  return x.toInt
+  return x.truncate(int)
 
 proc rangeToPadded*[T: StUint](x: openarray[byte], first, last: int, toLen = 0): T =
   ## Convert take a slice of a sequence of bytes interpret it as the big endian

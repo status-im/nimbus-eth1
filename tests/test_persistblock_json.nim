@@ -8,7 +8,7 @@
 import
   unittest2, json, os, tables, strformat, strutils,
   eth/[common, rlp], stew/byteutils, eth/trie/db,
-  ./test_helpers, ../nimbus/db/[db_chain, storage_types], ../nimbus/[tracer, vm_types],
+  ./test_helpers, ../nimbus/db/db_chain,
   ../nimbus/p2p/chain
 
 # use tracerTestGen.nim to generate additional test data

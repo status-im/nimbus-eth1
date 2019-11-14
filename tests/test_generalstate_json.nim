@@ -6,11 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, strformat, strutils, tables, json, ospaths, times, os,
-  stew/byteutils, stew/ranges/typedranges, nimcrypto, options,
+  unittest2, strformat, strutils, tables, json, times, os,
+  stew/ranges/typedranges, nimcrypto, options,
   eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
   ./test_helpers, ../nimbus/p2p/executor, test_config,
-  ../nimbus/[constants, errors, transaction],
+  ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types, vm_state_transactions, utils],
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
@@ -114,9 +114,8 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       # perhaps the entire validateTransaction block
       # should be moved into processTransaction
       if tester.fork >= FkSpurious:
-        let recipient = tester.tx.getRecipient()
         let miner = tester.header.coinbase
-        let touchedAccounts = [miner] # [sender, miner, recipient]
+        let touchedAccounts = [miner]
         for account in touchedAccounts:
           debug "state clearing", account
           if db.accountExists(account) and db.isEmptyAccount(account):

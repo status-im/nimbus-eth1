@@ -9,7 +9,7 @@
 import
   strformat, times, options,
   eth/[common, rlp],
-  ../validation, ./difficulty, ../vm/interpreter/vm_forks, ../constants
+  ./difficulty, ../vm/interpreter/vm_forks, ../constants
 
 export BlockHeader
 

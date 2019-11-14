@@ -7,8 +7,8 @@
 
 import
   macros, strformat, tables, sets,
-  eth/common, eth/trie/db,
-  ./constants, ./errors, ./transaction, ./db/[db_chain, state_db],
+  eth/common,
+  ./constants, ./db/[db_chain, state_db],
   ./utils, json, vm_types, vm/transaction_tracer
 
 proc newAccessLogs*: AccessLogs =
@@ -36,7 +36,7 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
   self.logEntries = @[]
   self.blockHeader.stateRoot = prevStateRoot
   self.accountDb = newAccountStateDB(chainDB.db, prevStateRoot, chainDB.pruneTrie)
-  self.touchedAccounts = initSet[EthAddress]()
+  self.touchedAccounts = initHashSet[EthAddress]()
 
 proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
                      chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =

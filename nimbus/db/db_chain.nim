@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  tables, sequtils, algorithm,
-  stew/[byteutils, ranges], state_db, eth/trie/[hexary, db],
+  sequtils, algorithm,
+  stew/[byteutils, ranges], eth/trie/[hexary, db],
   eth/[common, rlp], chronicles,
   ../errors,  ../constants, ./storage_types,
   ../utils, ../config
