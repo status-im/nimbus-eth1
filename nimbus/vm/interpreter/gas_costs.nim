@@ -273,9 +273,9 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
       if gasParams.s_originalValue == value:
         if gasParams.s_originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
-          result.gasRefund = InitRefundEIP2200
+          result.gasRefund += InitRefundEIP2200
         else: # reset to original existing slot (2.2.2.2)
-          result.gasRefund = CleanRefundEIP2200
+          result.gasRefund += CleanRefundEIP2200
 
       result.gasCost = DirtyGasEIP2200 # dirty update (2.2)
 

@@ -951,7 +951,7 @@ op sstoreEIP2200, inline = false, slot, value:
 
   computation.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
 
-  if gasRefund > 0:
+  if gasRefund != 0:
     computation.gasMeter.refundGas(gasRefund)
 
   computation.vmState.mutateStateDB:
