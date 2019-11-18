@@ -326,10 +326,10 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     udata: pointer = nil, id: var Identifier): bool {.exportc.} =
   ## Encryption is mandatory.
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
-  ## In case of a passed handler, the received msg needs to be copied before the
-  ## handler ends.
+  ## The received message needs to be copied before the passed handler ends.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not options.isNil, "Filter options pointer cannot be nil.")
+  doAssert(not handler.isNil, "Filter handler cannot be nil." )
 
   var
     src: Option[PublicKey]
@@ -364,41 +364,37 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   let filter = newFilter(src, privateKey, symKey, @[options.topic],
     options.minPow, options.allowP2P)
 
-  if handler.isNil:
-    # TODO: call can create `Exception`, why?
-    hexToBytes(node.subscribeFilter(filter, nil), id)
-  else:
-    proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
-      var cmsg = CReceivedMessage(
-        decoded: unsafeAddr msg.decoded.payload[0],
-        decodedLen: csize msg.decoded.payload.len(),
-        timestamp: msg.timestamp,
-        ttl: msg.ttl,
-        topic: msg.topic,
-        pow: msg.pow,
-        hash: msg.hash
-      )
+  proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
+    var cmsg = CReceivedMessage(
+      decoded: unsafeAddr msg.decoded.payload[0],
+      decodedLen: csize msg.decoded.payload.len(),
+      timestamp: msg.timestamp,
+      ttl: msg.ttl,
+      topic: msg.topic,
+      pow: msg.pow,
+      hash: msg.hash
+    )
 
-      # Could also allocate here, but this should stay in scope until handler
-      # finishes so it should be fine.
-      var
-        source: array[RawPublicKeySize, byte]
-        recipientPublicKey: array[RawPublicKeySize, byte]
-      if msg.decoded.src.isSome():
-        # Need to pass the serialized form
-        source = msg.decoded.src.get().getRaw()
-        cmsg.source = addr source[0]
-      if msg.dst.isSome():
-        # Need to pass the serialized form
-        recipientPublicKey = msg.decoded.src.get().getRaw()
-        cmsg.recipientPublicKey = addr recipientPublicKey[0]
+    # Could also allocate here, but this should stay in scope until handler
+    # finishes so it should be fine.
+    var
+      source: array[RawPublicKeySize, byte]
+      recipientPublicKey: array[RawPublicKeySize, byte]
+    if msg.decoded.src.isSome():
+      # Need to pass the serialized form
+      source = msg.decoded.src.get().getRaw()
+      cmsg.source = addr source[0]
+    if msg.dst.isSome():
+      # Need to pass the serialized form
+      recipientPublicKey = msg.decoded.src.get().getRaw()
+      cmsg.recipientPublicKey = addr recipientPublicKey[0]
 
-      handler(addr cmsg, udata)
+    handler(addr cmsg, udata)
 
-    # TODO: call can create `Exception`, why?
-    # TODO: if we decide to internally also work with other IDs, we don't need
-    # to do this hex conversion back and forth.
-    hexToBytes(node.subscribeFilter(filter, c_handler), id)
+  # TODO: call can create `Exception`, why?
+  # TODO: if we decide to internally also work with other IDs, we don't need
+  # to do this hex conversion back and forth.
+  hexToBytes(node.subscribeFilter(filter, c_handler), id)
 
   # Bloom filter has to follow only the subscribed topics
   # TODO: better to have an "adding" proc here
