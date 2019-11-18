@@ -22,35 +22,11 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     # static call context checker
     "create2noCash.json",
 
-    # bcStateTests
-    #"TransactionFromCoinbaseHittingBlockGasLimit1.json",
-    #"randomStatetest123.json",
-    #"randomStatetest160.json",
-    #"randomStatetest170.json",
-    #"randomStatetest223.json",
-    #"randomStatetest229.json",
-    #"randomStatetest241.json",
-    #"randomStatetest328.json",
-    #"randomStatetest375.json",
-    #"randomStatetest377.json",
-    #"randomStatetest38.json",
-    #"randomStatetest441.json",
-    #"randomStatetest46.json",
-    #"randomStatetest549.json",
-    #"randomStatetest594.json",
-    #"randomStatetest619.json",
-    #"randomStatetest94.json",
-    #
-    # # bcRandomBlockhashTest
-    #"randomStatetest127BC.json",
-    #"randomStatetest141BC.json",
-    #"randomStatetest165BC.json",
-    #"randomStatetest272BC.json",
-    #"randomStatetest35BC.json",
-    #"randomStatetest44BC.json",
-    #"randomStatetest459BC.json",
-    #"randomStatetest540BC.json",
-    #"randomStatetest613BC.json",
-    #"randomStatetest623BC.json",
+    # Istanbul bc test
+    # py-evm claims these tests are incorrect
+    # nimbus also agree
+    "RevertInCreateInInit.json",
+    "RevertInCreateInInitCreate2.json",
+    "InitCollision.json"
   ]
   result = name in allowedFailingGeneralStateTests

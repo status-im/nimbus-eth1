@@ -118,7 +118,8 @@ func slowTest*(folder: string, name: string): bool =
               "callcallcallcode_ABCB_RECURSIVE.json",
 
               # BlockChain slow tests
-              "SuicideIssue.json"
+              "SuicideIssue.json",
+              "CALLBlake2f_MaxRounds.json"
               ]
 
 func failIn32Bits(folder, name: string): bool =
