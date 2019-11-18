@@ -46,8 +46,8 @@ func Start() {
 	}
 
 	peer1 := C.CString("enode://2d3e27d7846564f9b964308038dfadd4076e4373ac938e020708ad8819fd4fd90e5eb8314140768f782db704cb313b60707b968f8b61108a6fecd705b041746d@192.168.0.33:30303")
+	defer C.free(unsafe.Pointer(peer1))
 	C.nimbus_add_peer(peer1)
-	C.free(unsafe.Pointer(peer1))
 }
 
 func StatusListenAndPost(channel string) {

@@ -62,6 +62,7 @@ func StatusListenAndPost(channel string) {
 
 	tmp := C.malloc(C.size_t(C.ID_LEN))
 	if C.nimbus_add_symkey_from_password(channelC, (*C.uint8_t)(tmp)) == false {
+		C.free(unsafe.Pointer(tmp))
 		panic("Cannot create symmetric key")
 	}
 	// No need to do this back and forth GO <-> C, just showing how it might work
@@ -73,6 +74,7 @@ func StatusListenAndPost(channel string) {
 
 	tmp = C.malloc(C.size_t(C.ID_LEN))
 	if C.nimbus_new_keypair((*C.uint8_t)(tmp)) == false {
+		C.free(unsafe.Pointer(tmp))
 		panic("Cannot create asymmetric keypair")
 	}
 	// No need to do this back and forth GO <-> C, just showing how it might work
@@ -92,6 +94,7 @@ func StatusListenAndPost(channel string) {
 	if C.nimbus_subscribe_filter(&options,
 			(C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)),
 			unsafe.Pointer(&msgCount), (*C.uint8_t)(tmp)) == false {
+		C.free(unsafe.Pointer(tmp))
 		panic("Cannot subscribe filter")
 	}
 	filterId := C.GoBytes(tmp, C.ID_LEN)
