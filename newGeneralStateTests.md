@@ -1685,11 +1685,11 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + RevertOpcodeMultipleSubCalls.json                               OK
 + RevertOpcodeReturn.json                                         OK
 + RevertOpcodeWithBigOutputInInit.json                            OK
-  RevertPrecompiledTouch.json                                     Skip
-  RevertPrecompiledTouchExactOOG.json                             Skip
++ RevertPrecompiledTouch.json                                     OK
++ RevertPrecompiledTouchExactOOG.json                             OK
 + RevertPrecompiledTouch_nonce.json                               OK
 + RevertPrecompiledTouch_noncestorage.json                        OK
-  RevertPrecompiledTouch_storage.json                             Skip
++ RevertPrecompiledTouch_storage.json                             OK
 + RevertPrefound.json                                             OK
 + RevertPrefoundCall.json                                         OK
 + RevertPrefoundCallOOG.json                                      OK
@@ -1706,7 +1706,7 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 36/45 Fail: 0/45 Skip: 9/45
+OK: 39/45 Fail: 0/45 Skip: 6/45
 ## stSLoadTest
 ```diff
 + sloadGasCost.json                                               OK
@@ -2625,4 +2625,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2300/2411 Fail: 0/2411 Skip: 111/2411
+OK: 2303/2411 Fail: 0/2411 Skip: 108/2411

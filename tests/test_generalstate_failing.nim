@@ -28,9 +28,5 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "RevertInCreateInInit.json",
     "RevertInCreateInInitCreate2.json",
     "InitCollision.json",
-
-    "RevertPrecompiledTouch.json",
-    "RevertPrecompiledTouchExactOOG.json",
-    "RevertPrecompiledTouch_storage.json",
   ]
   result = name in allowedFailingGeneralStateTests
