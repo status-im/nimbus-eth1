@@ -625,6 +625,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       continue
 
     var tester = parseTester(fixture, testStatusIMPL)
+    # TODO: implement journalDB in AccountStateDB
+    # then turn on state trie pruning
     var chainDB = newBaseChainDB(newMemoryDb(), false)
 
     echo "TESTING: ", fixtureName
