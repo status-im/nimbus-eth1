@@ -179,7 +179,7 @@ proc generalStateJsonMain*(debugMode = false) =
   if paramCount() == 0 or not debugMode:
     # run all test fixtures
     suite "generalstate json tests":
-     jsonTest("GeneralStateTests", testFixture)
+      jsonTest("GeneralStateTests", testFixture)
     suite "new generalstate json tests":
       jsonTest("newGeneralStateTests", testFixture)
   else:
