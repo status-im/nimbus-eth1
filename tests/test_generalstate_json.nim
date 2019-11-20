@@ -9,7 +9,8 @@ import
   unittest2, strformat, strutils, tables, json, times, os,
   stew/ranges/typedranges, nimcrypto, options,
   eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
-  ./test_helpers, ../nimbus/p2p/executor, test_config,
+  ./test_helpers, ./test_allowed_to_fail,
+  ../nimbus/p2p/executor, test_config,
   ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types, vm_state_transactions, utils],
   ../nimbus/vm/interpreter,
@@ -178,10 +179,10 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
 proc generalStateJsonMain*(debugMode = false) =
   if paramCount() == 0 or not debugMode:
     # run all test fixtures
-    suite "generalstate json tests":
-      jsonTest("GeneralStateTests", testFixture)
+    #suite "generalstate json tests":
+      #jsonTest("GeneralStateTests", testFixture, skipGSTTests)
     suite "new generalstate json tests":
-      jsonTest("newGeneralStateTests", testFixture)
+      jsonTest("newGeneralStateTests", testFixture, skipNewGSTTests)
   else:
     # execute single test in debug mode
     let config = getConfiguration()

@@ -387,7 +387,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + CreateMessageRevertedOOGInInit.json                             OK
 + RevertDepthCreate2OOG.json                                      OK
 + RevertDepthCreateAddressCollision.json                          OK
-  RevertInCreateInInitCreate2.json                                Skip
++ RevertInCreateInInitCreate2.json                                OK
 + RevertOpcodeCreate.json                                         OK
 + RevertOpcodeInCreateReturnsCreate2.json                         OK
 + call_outsize_then_create2_successful_then_returndatasize.json   OK
@@ -413,7 +413,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 41/44 Fail: 0/44 Skip: 3/44
+OK: 42/44 Fail: 0/44 Skip: 2/44
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -1686,7 +1686,7 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + RevertDepthCreateAddressCollision.json                          OK
 + RevertDepthCreateOOG.json                                       OK
 + RevertInCallCode.json                                           OK
-  RevertInCreateInInit.json                                       Skip
++ RevertInCreateInInit.json                                       OK
 + RevertInDelegateCall.json                                       OK
 + RevertInStaticCall.json                                         OK
 + RevertOnEmptyStack.json                                         OK
@@ -1722,10 +1722,10 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 40/46 Fail: 0/46 Skip: 6/46
+OK: 41/46 Fail: 0/46 Skip: 5/46
 ## stSStoreTest
 ```diff
-  InitCollision.json                                              Skip
++ InitCollision.json                                              OK
 + InitCollisionNonZeroNonce.json                                  OK
 + SstoreCallToSelfSubRefundBelowZero.json                         OK
 + sstore_0to0.json                                                OK
@@ -1755,7 +1755,7 @@ OK: 40/46 Fail: 0/46 Skip: 6/46
 + sstore_combinations_initial1.json                               OK
 + sstore_combinations_initial2.json                               OK
 ```
-OK: 28/29 Fail: 0/29 Skip: 1/29
+OK: 29/29 Fail: 0/29 Skip: 0/29
 ## stShift
 ```diff
 + sar00.json                                                      OK
@@ -2645,4 +2645,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2340/2447 Fail: 0/2447 Skip: 107/2447
+OK: 2343/2447 Fail: 0/2447 Skip: 104/2447
