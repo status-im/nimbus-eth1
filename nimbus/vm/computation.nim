@@ -282,18 +282,23 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
   else:
     result = c.gasMeter.gasRemaining
 
-proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]) =
+proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress], ancestorHadError: bool = false) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161:
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
   proc cmpThree(address: EthAddress): bool =
+    # looking for RIPEMD160
     for i in 0..18:
       if address[i] != 0: return
     result = address[19] == byte(3)
 
+  let isIstanbul = c.getFork >= FkIstanbul
+  let condition = if isIstanbul: c.isError or ancestorHadError
+                  else: c.isError and c.isOriginComputation
+
   for _, beneficiary in c.accountsToDelete:
-    if c.isError and c.isOriginComputation:
+    if condition:
       # Special case to account for geth+parity bug
       # https://github.com/ethereum/EIPs/issues/716
       if beneficiary.cmpThree:
@@ -303,7 +308,7 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
       output.incl beneficiary
 
   if not c.msg.isCreate:
-    if c.isError and c.isOriginComputation:
+    if condition:
       # Special case to account for geth+parity bug
       # https://github.com/ethereum/EIPs/issues/716
       if cmpThree(c.msg.storageAddress):
@@ -311,9 +316,10 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
     else:
       output.incl c.msg.storageAddress
 
-  if not c.isError:
+  if c.isSuccess or isIstanbul:
+  # recurse into nested computations (even errored ones, since looking for RIPEMD160)
     for child in c.children:
-      child.collectTouchedAccounts(output)
+      child.collectTouchedAccounts(output, c.isError or ancestorHadError)
 
 proc tracingEnabled*(c: BaseComputation): bool =
   c.vmState.tracingEnabled

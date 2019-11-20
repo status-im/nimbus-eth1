@@ -72,11 +72,14 @@ func normalizeNumber(n: JsonNode): JsonNode =
   let str = n.getStr
   # paranoid checks
   doAssert n.kind == Jstring
-  doAssert str.len > 3
   doAssert str[0] == '0' and str[1] == 'x'
   # real normalization
   # strip leading 0
-  if str == "0x00":
+  if str == "0x":
+    result = newJString("0x0")
+  elif str == "0x0":
+    result = n
+  elif str == "0x00":
     result = newJString("0x0")
   elif str[2] == '0':
     var i =  2
@@ -197,6 +200,7 @@ func vmConfiguration(network: string): VMConfig =
   of "HomesteadToEIP150At5": result = [(0, FkHomestead), (5, FkTangerine)]
   of "FrontierToHomesteadAt5": result = [(0, FkFrontier), (5, FkHomestead)]
   of "ByzantiumToConstantinopleFixAt5": result = [(0, FkByzantium), (5, FkConstantinople)]
+  of "Istanbul": result = [(0, FkIstanbul), (0, FkIstanbul)]
   else:
     raise newException(ValueError, "unsupported network")
 
@@ -279,7 +283,7 @@ proc processBlock(vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
     vmState.receipts[txIndex] = makeReceipt(vmState, fork)
 
   if vmState.cumulativeGasUsed != minedBlock.header.gasUsed:
-    raise newException(ValidationError, "wrong gas used in header")
+    raise newException(ValidationError, &"wrong gas used in header expected={minedBlock.header.gasUsed}, actual={vmState.cumulativeGasUsed}")
 
   assignBlockRewards(minedBlock, vmState, fork, vmState.chainDB)
 
@@ -430,7 +434,7 @@ proc validateUncles(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool
     raise newException(ValidationError, "Header suggests block should have uncles but block has none")
 
   # Check for duplicates
-  var uncleSet = initSet[Hash256]()
+  var uncleSet = initHashSet[Hash256]()
   for uncle in currBlock.uncles:
     let uncleHash = uncle.hash
     if uncleHash in uncleSet:
@@ -621,6 +625,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       continue
 
     var tester = parseTester(fixture, testStatusIMPL)
+    # TODO: implement journalDB in AccountStateDB
+    # then turn on state trie pruning
     var chainDB = newBaseChainDB(newMemoryDb(), false)
 
     echo "TESTING: ", fixtureName
@@ -663,6 +669,8 @@ proc main() =
     # run all test fixtures
     suite "block chain json tests":
       jsonTest("BlockchainTests", testFixture)
+    suite "new block chain json tests":
+      jsonTest("newBlockchainTests", testFixture)
   else:
     # execute single test in debug mode
     let config = getConfiguration()
@@ -670,7 +678,7 @@ proc main() =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests" / "fixtures" / "BlockChainTests"
+    let path = "tests" / "fixtures" / "newBlockChainTests"
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, debugMode = true, config.trace)

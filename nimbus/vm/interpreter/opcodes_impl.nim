@@ -935,7 +935,7 @@ op sstoreEIP2200, inline = false, slot, value:
   checkInStaticContext(computation)
   const SentryGasEIP2200   = 2300  # Minimum gas required to be present for an SSTORE call, not consumed
 
-  if computation.gasMeter.gasRemaining < SentryGasEIP2200:
+  if computation.gasMeter.gasRemaining <= SentryGasEIP2200:
     raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
   let stateDB = computation.vmState.readOnlyStateDB
@@ -951,7 +951,7 @@ op sstoreEIP2200, inline = false, slot, value:
 
   computation.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
 
-  if gasRefund > 0:
+  if gasRefund != 0:
     computation.gasMeter.refundGas(gasRefund)
 
   computation.vmState.mutateStateDB:

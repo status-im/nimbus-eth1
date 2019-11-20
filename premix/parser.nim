@@ -53,11 +53,6 @@ proc fromJson*(n: JsonNode, name: string, x: var Blob) =
 
 proc fromJson*(n: JsonNode, name: string, x: var UInt256) =
   x = UInt256.fromHex(n[name].getStr())
-  if x.prefixHex != toLowerAscii(n[name].getStr()):
-    debugEcho "name: ", name
-    debugEcho "A: ", x.prefixHex
-    debugEcho "B: ", toLowerAscii(n[name].getStr())
-    quit(1)
   doAssert(x.prefixHex == toLowerAscii(n[name].getStr()), name)
 
 proc fromJson*(n: JsonNode, name: string, x: var SomeInteger) =

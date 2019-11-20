@@ -26,10 +26,18 @@ const
     FkTangerine: "EIP150",
     FkSpurious: "EIP158",
     FkByzantium: "Byzantium",
-    FkConstantinople: "ConstantinopleFix"
+    FkConstantinople: "ConstantinopleFix",
+    FkIstanbul: "Istanbul"
   }.toTable
 
-  supportedForks* = {FkFrontier, FkHomestead, FkTangerine, FkSpurious, FkByzantium, FkConstantinople}
+  supportedForks* = {
+    FkFrontier,
+    FkHomestead,
+    FkTangerine,
+    FkSpurious,
+    FkByzantium,
+    FkConstantinople,
+    FkIstanbul}
 
   nameToFork* = revmap(forkNames)
 
@@ -110,7 +118,8 @@ func slowTest*(folder: string, name: string): bool =
               "callcallcallcode_ABCB_RECURSIVE.json",
 
               # BlockChain slow tests
-              "SuicideIssue.json"
+              "SuicideIssue.json",
+              "CALLBlake2f_MaxRounds.json"
               ]
 
 func failIn32Bits(folder, name: string): bool =

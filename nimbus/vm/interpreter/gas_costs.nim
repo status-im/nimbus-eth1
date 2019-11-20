@@ -273,9 +273,9 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
       if gasParams.s_originalValue == value:
         if gasParams.s_originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
-          result.gasRefund = InitRefundEIP2200
+          result.gasRefund += InitRefundEIP2200
         else: # reset to original existing slot (2.2.2.2)
-          result.gasRefund = CleanRefundEIP2200
+          result.gasRefund += CleanRefundEIP2200
 
       result.gasCost = DirtyGasEIP2200 # dirty update (2.2)
 
@@ -642,27 +642,28 @@ const
   ]
 
 # Create the schedule for each forks
-func homesteadGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
+func homesteadGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2.md
-  result = previous_fees
+  result = previousFees
   result[GasTXCreate] = 32000
 
-func tangerineGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
+func tangerineGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-150.md
-  result = previous_fees
+  result = previousFees
   result[GasExtCode]      = 700
   result[GasSload]        = 200
   result[GasSelfDestruct] = 5000
   result[GasBalance]      = 400
   result[GasCall]         = 700
 
-func spuriousGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
+func spuriousGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-160.md
-  result = previous_fees
+  result = previousFees
   result[GasExpByte]      = 50
 
-func istanbulGasFees(previous_fees: GasFeeSchedule): GasFeeSchedule =
+func istanbulGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   # https://eips.ethereum.org/EIPS/eip-1884
+  result = previousFees
   result[GasSload]        = 800
   result[GasExtCodeHash]  = 700
   result[GasBalance]      = 700
@@ -691,6 +692,7 @@ gasCosts(FkFrontier, base, BaseGasCosts)
 gasCosts(FkHomestead, homestead, HomesteadGasCosts)
 gasCosts(FkTangerine, tangerine, TangerineGasCosts)
 gasCosts(FkSpurious, spurious, SpuriousGasCosts)
+gasCosts(FkIstanbul, istanbul, IstanbulGasCosts)
 
 proc forkToSchedule*(fork: Fork): GasCosts =
   if fork < FkHomestead:
@@ -699,8 +701,10 @@ proc forkToSchedule*(fork: Fork): GasCosts =
     HomesteadGasCosts
   elif fork < FkSpurious:
     TangerineGasCosts
-  else:
+  elif fork < FkIstanbul:
     SpuriousGasCosts
+  else:
+    IstanbulGasCosts
 
 const
   ## Precompile costs
