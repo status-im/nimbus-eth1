@@ -14,7 +14,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
 proc tracerJsonMain*() =
   suite "tracer json tests":
-    jsonTest("TracerTests", testFixture)
+    jsonTest("TracerTests", testFixture, skipNothing)
 
 # use tracerTestGen.nim to generate additional test data
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =

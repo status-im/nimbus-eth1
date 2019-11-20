@@ -10,8 +10,7 @@ import
   stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p], unittest2,
   ../nimbus/[vm_state, config, transaction, utils, errors],
   ../nimbus/db/[db_chain, state_db],
-  ../nimbus/vm/interpreter/vm_forks,
-  ../tests/test_generalstate_failing
+  ../nimbus/vm/interpreter/vm_forks
 
 func revmap(x: Table[Fork, string]): Table[string, Fork] =
   result = initTable[string, Fork]()
@@ -44,112 +43,7 @@ const
 type
   Status* {.pure.} = enum OK, Fail, Skip
 
-func slowTest*(folder: string, name: string): bool =
-  result =
-    (folder == "vmPerformance" and "loop" in name) or
-    folder == "stQuadraticComplexityTest" or
-    name in @["randomStatetest352.json", "randomStatetest1.json",
-             "randomStatetest32.json", "randomStatetest347.json",
-             "randomStatetest393.json", "randomStatetest626.json",
-             "CALLCODE_Bounds.json", "DELEGATECALL_Bounds3.json",
-             "CALLCODE_Bounds4.json", "CALL_Bounds.json",
-             "DELEGATECALL_Bounds2.json", "CALL_Bounds3.json",
-             "CALLCODE_Bounds2.json", "CALLCODE_Bounds3.json",
-             "DELEGATECALL_Bounds.json", "CALL_Bounds2a.json",
-             "CALL_Bounds2.json",
-             "CallToNameRegistratorMemOOGAndInsufficientBalance.json",
-             "CallToNameRegistratorTooMuchMemory0.json",
-
-              # all these tests below actually pass
-              # but they are very slow
-
-              # constantinople slow tests
-              "Create2Recursive.json",
-
-              # byzantium slow tests
-              "LoopCallsDepthThenRevert3.json",
-              "LoopCallsDepthThenRevert2.json",
-              "LoopCallsDepthThenRevert.json",
-              "static_Call50000.json",
-              "static_Call50000_ecrec.json",
-              "static_Call50000_identity.json",
-              "static_Call50000_identity2.json",
-              "static_Call50000_rip160.json",
-              "static_Call50000_sha256.json",
-              "LoopCallsThenRevert.json",
-              "LoopDelegateCallsDepthThenRevert.json",
-              "recursiveCreateReturnValue.json",
-              "static_Call1024PreCalls2.json",
-              "Callcode1024BalanceTooLow.json",
-              "static_Call1024BalanceTooLow.json",
-              "static_Call1024BalanceTooLow2.json",
-              "static_Call1024OOG.json",
-              "static_Call1024PreCalls3.json",
-              "static_Call1024PreCalls.json",
-              "static_Call1MB1024Calldepth.json",
-
-              # Homestead recursives
-              "ContractCreationSpam.json",
-              "Call1024OOG.json",
-              "Call1024PreCalls.json",
-              "CallRecursiveBombPreCall.json",
-              "Delegatecall1024.json",
-              "Delegatecall1024OOG.json",
-              "JUMPDEST_Attack.json",
-              "JUMPDEST_AttackwithJump.json",
-              "ABAcalls1.json",
-              "ABAcalls2.json",
-              "CallRecursiveBomb0.json",
-              "CallRecursiveBomb0_OOG_atMaxCallDepth.json",
-              "CallRecursiveBomb1.json",
-              "CallRecursiveBomb2.json",
-              "CallRecursiveBombLog.json",
-              "CallRecursiveBombLog2.json",
-              "Call1024BalanceTooLow.json",
-
-              # Frontier recursives
-              "Callcode1024OOG.json",
-              "callcallcodecall_ABCB_RECURSIVE.json",
-              "callcallcodecallcode_ABCB_RECURSIVE.json",
-              "callcodecallcall_ABCB_RECURSIVE.json",
-              "callcodecallcallcode_ABCB_RECURSIVE.json",
-              "callcodecallcodecall_ABCB_RECURSIVE.json",
-              "callcodecallcodecallcode_ABCB_RECURSIVE.json",
-              "callcallcallcode_ABCB_RECURSIVE.json",
-
-              # BlockChain slow tests
-              "SuicideIssue.json",
-              "CALLBlake2f_MaxRounds.json"
-              ]
-
-func failIn32Bits(folder, name: string): bool =
-  return name in @[
-    "sha3_bigSize.json", # from vm_test
-
-    # crash with OOM
-    "static_Return50000_2.json",
-    "randomStatetest185.json",
-    "randomStatetest159.json",
-    "randomStatetest48.json",
-
-    # OOM in AppVeyor, not on my machine
-    "randomStatetest36.json",
-
-    # from test_transaction_json
-    "RLPHeaderSizeOverflowInt32.json"
-  ]
-
-func allowedFailInCurrentBuild(folder, name: string): bool =
-  when sizeof(int) == 4:
-    if failIn32Bits(folder, name):
-      return true
-  return allowedFailingGeneralStateTest(folder, name)
-
-func validTest*(folder: string, name: string): bool =
-  # we skip tests that are slow or expected to fail for now
-  result =
-    not slowTest(folder, name) and
-    not allowedFailInCurrentBuild(folder, name)
+func skipNothing*(folder: string, name: string): bool = false
 
 proc lacksSupportedForks*(fixtures: JsonNode): bool =
   # XXX: Until Nimbus supports all forks, some of the GeneralStateTests won't work.
@@ -171,7 +65,7 @@ proc lacksSupportedForks*(fixtures: JsonNode): bool =
 
 var status = initOrderedTable[string, OrderedTable[string, Status]]()
 
-macro jsonTest*(s: static[string], handler: untyped): untyped =
+macro jsonTest*(s: static[string], handler: untyped, skipTest: untyped): untyped =
   let
     testStatusIMPL = ident("testStatusIMPL")
     testName = ident("testName")
@@ -191,8 +85,9 @@ macro jsonTest*(s: static[string], handler: untyped): untyped =
       if not status.hasKey(last):
         status[last] = initOrderedTable[string, Status]()
       status[last][name] = Status.Skip
-      if last.validTest(name):
-        filenames.add(filename)
+      if `skipTest`(last, name):
+        continue
+      filenames.add(filename)
     for fname in filenames:
       test fname:
         {.gcsafe.}:

@@ -8,7 +8,7 @@
 import
   unittest2, strformat, strutils, tables, json, os, times,
   stew/byteutils, stew/ranges/typedranges, eth/[rlp, common], eth/trie/db,
-  ./test_helpers, ../nimbus/vm/interpreter,
+  ./test_helpers, ./test_allowed_to_fail, ../nimbus/vm/interpreter,
   ../nimbus/[constants, vm_state, vm_types, utils],
   ../nimbus/db/[db_chain, state_db]
 
@@ -16,7 +16,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
 proc vmJsonMain*() =
   suite "vm json tests":
-    jsonTest("VMTests", testFixture)
+    jsonTest("VMTests", testFixture, skipVMTests)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode

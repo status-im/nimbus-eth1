@@ -10,7 +10,8 @@ import
   options,
   eth/[common, rlp, bloom], eth/trie/[db, trie_defs],
   ethash, stew/endians2, nimcrypto,
-  ./test_helpers, ../premix/parser, test_config,
+  ./test_helpers, , ./test_allowed_to_fail,
+  ../premix/parser, test_config,
   ../nimbus/vm/interpreter/vm_forks,
   ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants],
   ../nimbus/db/[db_chain, state_db],
@@ -668,9 +669,9 @@ proc main() =
   if paramCount() == 0:
     # run all test fixtures
     suite "block chain json tests":
-      jsonTest("BlockchainTests", testFixture)
+      jsonTest("BlockchainTests", testFixture, skipBCTests)
     suite "new block chain json tests":
-      jsonTest("newBlockchainTests", testFixture)
+      jsonTest("newBlockchainTests", testFixture, skipNewBCTests)
   else:
     # execute single test in debug mode
     let config = getConfiguration()
