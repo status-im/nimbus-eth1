@@ -102,7 +102,7 @@ const blake2InputTests = [
 
 proc precompilesMain*() =
   suite "Precompiles":
-    jsonTest("PrecompileTests", testFixture, skipNothing)
+    jsonTest("PrecompileTests", testFixture)
 
   suite "blake2bf":
     var output: array[64, byte]

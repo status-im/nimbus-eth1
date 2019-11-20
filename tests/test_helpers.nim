@@ -65,7 +65,7 @@ proc lacksSupportedForks*(fixtures: JsonNode): bool =
 
 var status = initOrderedTable[string, OrderedTable[string, Status]]()
 
-macro jsonTest*(s: static[string], handler: untyped, skipTest: untyped): untyped =
+macro jsonTest*(s: static[string], handler: untyped, skipTest: untyped = skipNothing): untyped =
   let
     testStatusIMPL = ident("testStatusIMPL")
     testName = ident("testName")
