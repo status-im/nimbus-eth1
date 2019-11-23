@@ -203,7 +203,7 @@ op sha3, inline = true, startPos, length:
 
   computation.memory.extend(pos, len)
   let endRange = min(pos + len, computation.memory.len) - 1
-  if endRange == -1:
+  if endRange == -1 or pos >= computation.memory.len:
     push(EMPTY_SHA3)
   else:
     push:
