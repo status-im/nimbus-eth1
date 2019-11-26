@@ -93,8 +93,8 @@ wrappers: | build deps libnimbus.so go-checks
 libnimbus.a: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		rm -f build/$@ && \
-		$(ENV_SCRIPT) nim c --app:staticlib --noMain --nimcache:nimcache/libnimbus $(NIM_PARAMS) wrappers/libnimbus.nim && \
-		mv libnimbus build/$@ # workaround for https://github.com/nim-lang/Nim/issues/12745
+		$(ENV_SCRIPT) nim c --app:staticlib --noMain --nimcache:nimcache/libnimbus_static $(NIM_PARAMS) -o:build/$@ wrappers/libnimbus.nim && \
+		[[ -e "$@" ]] && mv "$@" build/ # workaround for https://github.com/nim-lang/Nim/issues/12745
 
 wrappers-static: | build deps libnimbus.a go-checks
 	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
