@@ -40,7 +40,7 @@ stdenv.mkDerivation rec {
   LD_LIBRARY_PATH = "${makeLibraryPath buildInputs}";
 
   buildPhase = ''
-    mkdir -p $TMPDIR/.nimcache ./build
+    mkdir -p $TMPDIR/.nimcache $TMPDIR/.nimcache_static ./build
 
     BUILD_MSG="\\e[92mBuilding:\\e[39m"
     export CC="${clang}/bin/clang"
@@ -50,13 +50,11 @@ stdenv.mkDerivation rec {
     vendorPathOpts="${concatMapStringsSep " " (dep: "--path:./vendor/${dep}") vendorDeps}"
     echo -e $BUILD_MSG "build/libnimbus.so" && \
       ${nim}/bin/nim c --app:lib --noMain --nimcache:$TMPDIR/.nimcache -d:release ''${vendorPathOpts} -o:./build/libnimbus.so wrappers/libnimbus.nim
-    # For some reason nim doesn't output anything if we pass -o option when building the static lib
-    # so we just move it from the default location after it's built
     echo -e $BUILD_MSG "build/libnimbus.a" && \
-      ${nim}/bin/nim c --app:staticlib --noMain --nimcache:$TMPDIR/.nimcache -d:release ''${vendorPathOpts} wrappers/libnimbus.nim && \
-      mv libnimbus build/libnimbus.a
+      ${nim}/bin/nim c --app:staticlib --noMain --nimcache:$TMPDIR/.nimcache_static -d:release ''${vendorPathOpts} -o:build/libnimbus.a wrappers/libnimbus.nim && \
+      [[ -e "libnimbus.a" ]] && mv "libnimbus.a" build/ # workaround for https://github.com/nim-lang/Nim/issues/12745
 
-    rm -rf $TMPDIR/.nimcache
+    rm -rf $TMPDIR/.nimcache $TMPDIR/.nimcache_static
   '' +
   optionalString buildSamples ''
     mkdir -p $TMPDIR/.home/.cache
@@ -65,9 +63,9 @@ stdenv.mkDerivation rec {
     echo -e $BUILD_MSG "build/C_wrapper_example" && \
       $CC wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' -Lbuild -lnimbus -lm -g -o build/C_wrapper_example
     echo -e $BUILD_MSG "build/go_wrapper_example" && \
-      ${go}/bin/go build -linkshared -o build/go_wrapper_example wrappers/wrapper_example.go wrappers/cfuncs.go
+      ${go}/bin/go build -o build/go_wrapper_example wrappers/wrapper_example.go wrappers/cfuncs.go
     echo -e $BUILD_MSG "build/go_wrapper_whisper_example" && \
-      ${go}/bin/go build -linkshared -o build/go_wrapper_whisper_example wrappers/wrapper_whisper_example.go wrappers/cfuncs.go
+      ${go}/bin/go build -o build/go_wrapper_whisper_example wrappers/wrapper_whisper_example.go wrappers/cfuncs.go
 
     rm -rf $TMPDIR/.home/.cache
   '';
