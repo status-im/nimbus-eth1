@@ -17,20 +17,25 @@ type
   AccountStateDB* = ref object
     trie: SecureHexaryTrie
     originalRoot: KeccakHash   # will be updated for every transaction
+    transactionID: TransactionID
 
   ReadOnlyStateDB* = distinct AccountStateDB
+
+template trieDB(stateDB: AccountStateDB): TrieDatabaseRef =
+  HexaryTrie(stateDB.trie).db
 
 proc rootHash*(db: AccountStateDB): KeccakHash =
   db.trie.rootHash
 
 proc `rootHash=`*(db: AccountStateDB, root: KeccakHash) =
-  db.trie = initSecureHexaryTrie(HexaryTrie(db.trie).db, root, db.trie.isPruning)
+  db.trie = initSecureHexaryTrie(trieDB(db), root, db.trie.isPruning)
 
 proc newAccountStateDB*(backingStore: TrieDatabaseRef,
                         root: KeccakHash, pruneTrie: bool): AccountStateDB =
   result.new()
   result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
   result.originalRoot = root
+  result.transactionID = backingStore.getTransactionID()
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
   ## XXX: The name of this proc is intentionally long, because it
@@ -80,13 +85,13 @@ template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # pad32(int_to_big_endian(slot))
   # morally equivalent to toByteRange_Unnecessary but with different types
 
-template getAccountTrie(stateDb: AccountStateDB, account: Account): auto =
+template getAccountTrie(db: AccountStateDB, account: Account): auto =
   # TODO: implement `prefix-db` to solve issue #228 permanently.
   # the `prefix-db` will automatically insert account address to the
   # underlying-db key without disturb how the trie works.
   # it will create virtual container for each account.
   # see nim-eth#9
-  initSecureHexaryTrie(HexaryTrie(stateDb.trie).db, account.storageRoot, false)
+  initSecureHexaryTrie(trieDB(db), account.storageRoot, false)
 
 # XXX: https://github.com/status-im/nimbus/issues/142#issuecomment-420583181
 proc setStorageRoot*(db: var AccountStateDB, address: EthAddress, storageRoot: Hash256) =
@@ -114,7 +119,7 @@ proc setStorage*(db: var AccountStateDB,
   # map slothash back to slot value
   # see iterator storage below
   var
-    triedb = HexaryTrie(db.trie).db
+    triedb = trieDB(db)
     # slotHash can be obtained from accountTrie.put?
     slotHash = keccakHash(slot.toByteArrayBE)
   triedb.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
@@ -125,7 +130,7 @@ proc setStorage*(db: var AccountStateDB,
 iterator storage*(db: AccountStateDB, address: EthAddress): (UInt256, UInt256) =
   let
     storageRoot = db.getStorageRoot(address)
-    triedb = HexaryTrie(db.trie).db
+    triedb = trieDB(db)
   var trie = initHexaryTrie(triedb, storageRoot)
 
   for key, value in trie:
@@ -167,7 +172,7 @@ proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
 
   let
     newCodeHash = keccakHash(code.toOpenArray)
-    triedb = HexaryTrie(db.trie).db
+    triedb = trieDB(db)
 
   if code.len != 0:
     triedb.put(contractHashKey(newCodeHash).toOpenArray, code.toOpenArray)
@@ -176,7 +181,7 @@ proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
   db.setAccount(address, account)
 
 proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
-  let triedb = HexaryTrie(db.trie).db
+  let triedb = trieDB(db)
   let data = triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
   data.toRange
 
@@ -213,12 +218,16 @@ proc getCommittedStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256
   let tmpHash = db.rootHash
   db.rootHash = db.originalRoot
   var exists: bool
-  (result, exists) = db.getStorage(address, slot)
+  shortTimeReadOnly(trieDB(db), db.transactionID):
+    (result, exists) = db.getStorage(address, slot)
   db.rootHash = tmpHash
 
 proc updateOriginalRoot*(db: AccountStateDB) =
   ## this proc will be called for every transaction
   db.originalRoot = db.rootHash
+  # no need to rollback or dispose
+  # transactionID, it will be handled elsewhere
+  db.transactionID = trieDB(db).getTransactionID()
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getAccount*(db: ReadOnlyStateDB, address: EthAddress): Account {.borrow.}

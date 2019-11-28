@@ -87,9 +87,10 @@ proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gas
 
 proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   var tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
-  # TODO: implement journalDB in AccountStateDB
-  # then turn on state trie pruning
-  var vmState = newGST_VMState(emptyRlpHash, tester.header, newBaseChainDB(newMemoryDb(), false), tracerFlags)
+
+  # TODO: do we need another test with pruneTrie = false?
+  var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = true)
+  var vmState = newGST_VMState(emptyRlpHash, tester.header, chainDB, tracerFlags)
   var gasUsed: GasInt
   let sender = tester.tx.getSender()
 
