@@ -271,7 +271,10 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
   if minedBlock.header.txRoot != txRoot:
     raise newException(ValidationError, "wrong txRoot")
 
-proc processBlock(vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
+proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
+  var dbTx = chainDB.db.beginTransaction()
+  defer: dbTx.dispose()
+
   vmState.receipts = newSeq[Receipt](minedBlock.transactions.len)
   vmState.cumulativeGasUsed = 0
 
@@ -287,6 +290,11 @@ proc processBlock(vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
     raise newException(ValidationError, &"wrong gas used in header expected={minedBlock.header.gasUsed}, actual={vmState.cumulativeGasUsed}")
 
   assignBlockRewards(minedBlock, vmState, fork, vmState.chainDB)
+
+  # `applyDeletes = false`
+  # preserve previous block stateRoot
+  # while still benefits from trie pruning
+  dbTx.commit(applyDeletes = false)
 
 func validateBlockUnchanged(a, b: PlainBlock): bool =
   result = rlp.encode(a) == rlp.encode(b)
@@ -513,7 +521,8 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   let tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
   tester.vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB, tracerFlags)
 
-  processBlock(tester.vmState, result, fork)
+  processBlock(chainDB, tester.vmState, result, fork)
+
   result.header.stateRoot = tester.vmState.blockHeader.stateRoot
   result.header.parentHash = parentHeader.hash
   result.header.difficulty = baseHeaderForImport.difficulty
@@ -626,9 +635,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       continue
 
     var tester = parseTester(fixture, testStatusIMPL)
-    # TODO: implement journalDB in AccountStateDB
-    # then turn on state trie pruning
-    var chainDB = newBaseChainDB(newMemoryDb(), false)
+    # TODO: do we need another test with pruneTrie = false?
+    var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = false)
 
     echo "TESTING: ", fixtureName
     if not tester.good: continue

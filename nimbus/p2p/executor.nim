@@ -1,5 +1,5 @@
 import options, sets,
-  eth/[common, bloom], stew/ranges, chronicles, nimcrypto,
+  eth/[common, bloom, trie/db], stew/ranges, chronicles, nimcrypto,
   ../db/[db_chain, state_db],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
@@ -119,6 +119,9 @@ const
   ]
 
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
+  var dbTx = chainDB.db.beginTransaction()
+  defer: dbTx.dispose()
+
   if chainDB.config.daoForkSupport and header.blockNumber == chainDB.config.daoForkBlock:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
@@ -183,3 +186,8 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
   if header.receiptRoot != receiptRoot:
     debug "wrong receiptRoot in block", blockNumber=header.blockNumber, actual=receiptRoot, expected=header.receiptRoot
     return ValidationResult.Error
+
+  # `applyDeletes = false`
+  # preserve previous block stateRoot
+  # while still benefits from trie pruning
+  dbTx.commit(applyDeletes = false)
