@@ -98,7 +98,8 @@ proc connectToNodes(nodes: openArray[string]) =
 # Setting up the node
 
 proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
-  minPow: float64, privateKey: ptr byte, staging: bool): bool {.exportc.} =
+  minPow: float64, privateKey: ptr byte, staging: bool): bool
+    {.exportc, dynlib.} =
   # TODO: any async calls can still create `Exception`, why?
   let address = Address(
     udpPort: port.Port, tcpPort: port.Port, ip: parseIpAddress("0.0.0.0"))
@@ -134,10 +135,10 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
 
   result = true
 
-proc nimbus_poll() {.exportc.} =
+proc nimbus_poll() {.exportc, dynlib.} =
   poll()
 
-proc nimbus_add_peer(nodeId: cstring): bool {.exportc.} =
+proc nimbus_add_peer(nodeId: cstring): bool {.exportc, dynlib.} =
   var
     whisperENode: ENode
     whisperNode: Node
@@ -153,7 +154,8 @@ proc nimbus_add_peer(nodeId: cstring): bool {.exportc.} =
 
 # Whisper API (Similar to Whisper JSON-RPC API)
 
-proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc, raises: [].} =
+proc nimbus_channel_to_topic(channel: cstring): CTopic
+    {.exportc, dynlib, raises: [].} =
   # Only used for the example, to conveniently convert channel to topic.
   doAssert(not channel.isNil, "Channel cannot be nil.")
 
@@ -163,7 +165,8 @@ proc nimbus_channel_to_topic(channel: cstring): CTopic {.exportc, raises: [].} =
 
 # Asymmetric Keys
 
-proc nimbus_new_keypair(id: var Identifier): bool {.exportc, raises: [].} =
+proc nimbus_new_keypair(id: var Identifier): bool
+    {.exportc, dynlib, raises: [].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
 
@@ -177,7 +180,7 @@ proc nimbus_new_keypair(id: var Identifier): bool {.exportc, raises: [].} =
     discard
 
 proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
-    bool {.exportc, raises: [OSError, IOError, ValueError].} =
+    bool {.exportc, dynlib, raises: [OSError, IOError, ValueError].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not privateKey.isNil, "Private key cannot be nil.")
@@ -194,14 +197,15 @@ proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
   id = generateRandomID()
   whisperKeys.asymKeys.add(id.toHex(), keypair)
 
-proc nimbus_delete_keypair(id: Identifier): bool {.exportc, raises: [].} =
+proc nimbus_delete_keypair(id: Identifier): bool
+    {.exportc, dynlib, raises: [].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
 
   var unneeded: KeyPair
   result = whisperKeys.asymKeys.take(id.toHex(), unneeded)
 
 proc nimbus_get_private_key(id: Identifier, privateKey: var PrivateKey):
-    bool {.exportc, raises: [OSError, IOError, ValueError].} =
+    bool {.exportc, dynlib, raises: [OSError, IOError, ValueError].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not (unsafeAddr privateKey).isNil, "Private key cannot be nil.")
 
@@ -214,7 +218,7 @@ proc nimbus_get_private_key(id: Identifier, privateKey: var PrivateKey):
 # Symmetric Keys
 
 proc nimbus_add_symkey(symKey: ptr SymKey, id: var Identifier): bool
-    {.exportc, raises: [].} =
+    {.exportc, dynlib, raises: [].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not symKey.isNil, "Symmetric key cannot be nil.")
@@ -226,7 +230,7 @@ proc nimbus_add_symkey(symKey: ptr SymKey, id: var Identifier): bool
   whisperKeys.symKeys.add(id.toHex, symKey[])
 
 proc nimbus_add_symkey_from_password(password: cstring, id: var Identifier):
-    bool {.exportc, raises: [].} =
+    bool {.exportc, dynlib, raises: [].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not password.isNil, "Password cannot be nil.")
@@ -241,14 +245,15 @@ proc nimbus_add_symkey_from_password(password: cstring, id: var Identifier):
 
   whisperKeys.symKeys.add(id.toHex(), symKey)
 
-proc nimbus_delete_symkey(id: Identifier): bool {.exportc, raises: [].} =
+proc nimbus_delete_symkey(id: Identifier): bool
+    {.exportc, dynlib, raises: [].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
 
   var unneeded: SymKey
   result = whisperKeys.symKeys.take(id.toHex(), unneeded)
 
 proc nimbus_get_symkey(id: Identifier, symKey: var SymKey):
-    bool {.exportc, raises: [OSError, IOError, ValueError].} =
+    bool {.exportc, dynlib, raises: [OSError, IOError, ValueError].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not (unsafeAddr symKey).isNil, "Symmetric key cannot be nil.")
 
@@ -260,7 +265,7 @@ proc nimbus_get_symkey(id: Identifier, symKey: var SymKey):
 
 # Whisper message posting and receiving
 
-proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
+proc nimbus_post(message: ptr CPostMessage): bool {.exportc, dynlib.} =
   ## Encryption is mandatory.
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
   ## Providing a payload is mandatory, it cannot be nil, but can be of length 0.
@@ -323,7 +328,7 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc.} =
 
 proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     handler: proc (msg: ptr CReceivedMessage, udata: pointer) {.gcsafe, cdecl.},
-    udata: pointer = nil, id: var Identifier): bool {.exportc.} =
+    udata: pointer = nil, id: var Identifier): bool {.exportc, dynlib.} =
   ## Encryption is mandatory.
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
   ## The received message needs to be copied before the passed handler ends.
@@ -402,15 +407,16 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   traceAsyncErrors node.setBloomFilter(node.filtersToBloom())
   result = true
 
-proc nimbus_unsubscribe_filter(id: Identifier): bool {.exportc, raises: [].} =
+proc nimbus_unsubscribe_filter(id: Identifier): bool
+    {.exportc, dynlib, raises: [].} =
   doAssert(not(unsafeAddr id).isNil, "Filter id cannot be nil.")
 
   result = node.unsubscribeFilter(id.toHex())
 
-proc nimbus_get_min_pow(): float64 {.exportc, raises: [].} =
+proc nimbus_get_min_pow(): float64 {.exportc, dynlib, raises: [].} =
   result = node.protocolState(Whisper).config.powRequirement
 
-proc nimbus_get_bloom_filter(bloom: var Bloom) {.exportc, raises: [].} =
+proc nimbus_get_bloom_filter(bloom: var Bloom) {.exportc, dynlib, raises: [].} =
   doAssert(not (unsafeAddr bloom).isNil, "Bloom pointer cannot be nil.")
 
   bloom = node.protocolState(Whisper).config.bloom
@@ -437,7 +443,7 @@ proc subscribeChannel(
 
 proc nimbus_join_public_chat(channel: cstring,
                              handler: proc (msg: ptr CReceivedMessage)
-                             {.gcsafe, cdecl.}) {.exportc.} =
+                             {.gcsafe, cdecl.}) {.exportc, dynlib.} =
   if handler.isNil:
     subscribeChannel($channel, nil)
   else:
@@ -458,7 +464,8 @@ proc nimbus_join_public_chat(channel: cstring,
 
 # TODO: Add signing key as parameter
 # TODO: How would we do key management? In nimbus (like in rpc) or in status go?
-proc nimbus_post_public(channel: cstring, payload: cstring) {.exportc.} =
+proc nimbus_post_public(channel: cstring, payload: cstring)
+    {.exportc, dynlib.} =
   let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
 
   var ctx: HMAC[sha256]
