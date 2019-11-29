@@ -26,6 +26,13 @@ To build statically linked versions:
 make wrappers-static
 ```
 
+You can also build the wrappers with the Nix build file (Need to
+[install](https://nixos.org/nix/download.html) Nix first):
+
+```bash
+nix-build -A wrappers
+```
+
 # Notes on usage
 Before any of the API calls are done, `NimMain()` needs to be run.
 

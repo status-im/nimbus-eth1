@@ -1,4 +1,4 @@
-language: c
+language: go
 
 dist: bionic
 
@@ -13,6 +13,9 @@ git:
   depth: 10
   # disable LFS file downloading during regular cloning
   lfs_skip_smudge: true
+
+go:
+  - "1.12.x"
 
 matrix:
   include:
@@ -48,5 +51,9 @@ script:
   - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" update # to allow a newer Nim version to be detected
   - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}"
   - build/nimbus --help
-  - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility
-
+  # -static option will not work for osx unless static system libraries are provided
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then
+      make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility wrappers;
+    else
+      make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility wrappers wrappers-static;
+    fi
