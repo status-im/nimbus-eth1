@@ -209,7 +209,7 @@ proc processInteger*(v: string, o: var int): ConfigStatus =
   try:
     o  = parseInt(v)
     result = Success
-  except:
+  except ValueError:
     result = ErrorParseOption
 
 proc processFloat*(v: string, o: var float): ConfigStatus =
@@ -217,7 +217,7 @@ proc processFloat*(v: string, o: var float): ConfigStatus =
   try:
     o  = parseFloat(v)
     result = Success
-  except:
+  except ValueError:
     result = ErrorParseOption
 
 proc processAddressPortsList(v: string,
@@ -230,11 +230,11 @@ proc processAddressPortsList(v: string,
     var tas6: seq[TransportAddress]
     try:
       tas4 = resolveTAddress(item, IpAddressFamily.IPv4)
-    except:
+    except CatchableError:
       discard
     try:
       tas6 = resolveTAddress(item, IpAddressFamily.IPv6)
-    except:
+    except CatchableError:
       discard
     if len(tas4) == 0 and len(tas6) == 0:
       result = ErrorParseOption
@@ -296,7 +296,7 @@ proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
   try:
     o = initPrivateKey(v)
     result = Success
-  except:
+  except CatchableError:
     result = ErrorParseOption
 
 # proc processHexBytes(v: string, o: var seq[byte]): ConfigStatus =
@@ -304,7 +304,7 @@ proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
 #   try:
 #     o = fromHex(v)
 #     result = Success
-#   except:
+#   except CatchableError:
 #     result = ErrorParseOption
 
 # proc processHexString(v: string, o: var string): ConfigStatus =
@@ -312,7 +312,7 @@ proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
 #   try:
 #     o = parseHexStr(v)
 #     result = Success
-#   except:
+#   except CatchableError:
 #     result = ErrorParseOption
 
 # proc processJson(v: string, o: var JsonNode): ConfigStatus =
@@ -320,7 +320,7 @@ proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
 #   try:
 #     o = parseJson(v)
 #     result = Success
-#   except:
+#   except CatchableError:
 #     result = ErrorParseOption
 
 proc processPruneList(v: string, flags: var PruneMode): ConfigStatus =
