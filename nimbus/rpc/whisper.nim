@@ -59,7 +59,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     # this is the general behaviour we want.
     try:
       waitFor node.setPowRequirement(pow)
-    except:
+    except CatchableError:
       trace "setPowRequirement error occured"
     result = true
 
