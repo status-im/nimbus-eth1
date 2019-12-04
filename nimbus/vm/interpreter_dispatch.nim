@@ -347,9 +347,8 @@ proc executeOpcodes(computation: BaseComputation) =
 
     try:
       computation.selectVM(fork)
-    except:
-      let msg = getCurrentExceptionMsg()
-      computation.setError(&"Opcode Dispatch Error msg={msg}, depth={computation.msg.depth}", true)
+    except CatchableError as e:
+      computation.setError(&"Opcode Dispatch Error msg={e.msg}, depth={computation.msg.depth}", true)
 
   computation.nextProc()
   if computation.isError():
