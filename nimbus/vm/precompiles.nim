@@ -358,14 +358,12 @@ proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.}
       of paEcMul: bn256ecMul(computation, fork)
       of paPairing: bn256ecPairing(computation, fork)
       of paBlake2bf: blake2bf(computation)
-    except OutOfGas:
-      let msg = getCurrentExceptionMsg()
+    except OutOfGas as e:
       # cannot use setError here, cyclic dependency
-      computation.error = Error(info: msg, burnsGas: true)
-    except CatchableError:
-      let msg = getCurrentExceptionMsg()
+      computation.error = Error(info: e.msg, burnsGas: true)
+    except CatchableError as e:
       if fork >= FKByzantium and precompile > paIdentity:
-        computation.error = Error(info: msg, burnsGas: true)
+        computation.error = Error(info: e.msg, burnsGas: true)
       else:
         # swallow any other precompiles errors
-        debug "execPrecompiles validation error", msg=msg
+        debug "execPrecompiles validation error", msg=e.msg
