@@ -28,5 +28,9 @@ func allowedFailingGeneralStateTest*(folder, name: string): bool =
     "RevertInCreateInInit.json",
     "RevertInCreateInInitCreate2.json",
     "InitCollision.json",
+
+    # Failure once spotted on Travis CI Linux AMD64:
+    # "out of memorysubtest no: 7 failed"
+    # "randomStatetest159.json",
   ]
   result = name in allowedFailingGeneralStateTests
