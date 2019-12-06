@@ -98,4 +98,6 @@ cliBuilder:
           ./test_op_custom,
           ./test_state_db,
           ./test_difficulty,
-          ./test_transaction_json
+          ./test_transaction_json,
+          ./test_blockchain_json
+

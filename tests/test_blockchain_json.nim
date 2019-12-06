@@ -673,8 +673,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
   if not fixtureTested:
     echo getConfiguration().testSubject, " not tested at all, wrong index?"
 
-proc main() =
-  if paramCount() == 0:
+proc blockchainJsonMain*(debugMode = false) =
+  if paramCount() == 0 or not debugMode:
     # run all test fixtures
     suite "block chain json tests":
       jsonTest("BlockchainTests", testFixture, skipBCTests)
@@ -704,7 +704,7 @@ when isMainModule:
       echo message
       quit(QuitSuccess)
 
-main()
+  blockchainJsonMain(true)
 
 # lastBlockHash -> every fixture has it, hash of a block header
 # genesisRLP -> NOT every fixture has it, rlp bytes of genesis block header
