@@ -222,7 +222,7 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + OverflowGasRequire.json                                         OK
 + RefundOverflow.json                                             OK
 + RefundOverflow2.json                                            OK
-+ SuicidesMixingCoinbase.json                                     OK
+  SuicidesMixingCoinbase.json                                     Skip
 + TransactionFromCoinbaseHittingBlockGasLimit1.json               OK
 + TransactionFromCoinbaseNotEnoughFounds.json                     OK
 + TransactionNonceCheck.json                                      OK
@@ -271,10 +271,10 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + randomStatetest549.json                                         OK
 + randomStatetest594.json                                         OK
 + randomStatetest619.json                                         OK
-+ randomStatetest94.json                                          OK
+  randomStatetest94.json                                          Skip
 + simpleSuicide.json                                              OK
-+ suicideCoinbase.json                                            OK
-+ suicideCoinbaseState.json                                       OK
+  suicideCoinbase.json                                            Skip
+  suicideCoinbaseState.json                                       Skip
 + suicideStorageCheck.json                                        OK
 + suicideStorageCheckVCreate.json                                 OK
 + suicideStorageCheckVCreate2.json                                OK
@@ -282,7 +282,7 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + transactionFromNotExistingAccount.json                          OK
 + txCost-sec73.json                                               OK
 ```
-OK: 69/69 Fail: 0/69 Skip: 0/69
+OK: 65/69 Fail: 0/69 Skip: 4/69
 ## bcTotalDifficultyTest
 ```diff
 + lotsOfBranchesOverrideAtTheEnd.json                             OK
@@ -2362,7 +2362,7 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + static_RETURN_Bounds.json                                       OK
 + static_RETURN_BoundsOOG.json                                    OK
 + static_RawCallGasAsk.json                                       OK
-+ static_Return50000_2.json                                       OK
+  static_Return50000_2.json                                       Skip
 + static_ReturnTest.json                                          OK
 + static_ReturnTest2.json                                         OK
 + static_RevertDepth2.json                                        OK
@@ -2536,7 +2536,7 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + static_refund_CallToSuicideNoStorage.json                       OK
 + static_refund_CallToSuicideTwice.json                           OK
 ```
-OK: 271/283 Fail: 0/283 Skip: 12/283
+OK: 270/283 Fail: 0/283 Skip: 13/283
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
@@ -3028,4 +3028,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2621/2730 Fail: 0/2730 Skip: 109/2730
+OK: 2616/2730 Fail: 0/2730 Skip: 114/2730
