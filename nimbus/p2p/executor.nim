@@ -188,6 +188,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
     return ValidationResult.Error
 
   # `applyDeletes = false`
-  # preserve previous block stateRoot
-  # while still benefits from trie pruning
+  # If the trie pruning activated, each of the block will have its own state trie keep intact,
+  # rather than destroyed by trie pruning. But the current block will still get a pruned trie.
+  # If trie pruning deactivated, `applyDeletes` have no effects.
   dbTx.commit(applyDeletes = false)
