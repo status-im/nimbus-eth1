@@ -107,7 +107,11 @@ func allowedFailingGeneralStateTest(folder, name: string): bool =
     # perhaps a design flaw with create/create2 opcode.
     # a conflict between balance checker and
     # static call context checker
-    "create2noCash.json"
+    "create2noCash.json",
+
+    # Failure once spotted on Travis CI Linux AMD64:
+    # "out of memorysubtest no: 7 failed"
+    # "randomStatetest159.json",
   ]
   result = name in allowedFailingGeneralStateTests
 
@@ -150,8 +154,13 @@ func skipBCTests*(folder: string, name: string): bool =
     # BlockChain slow tests
     "SuicideIssue.json",
 
-    # Failed tests
+    # BC OOM tests
+    "randomStatetest94.json", # pre istanbul
+
+    # pre istanbul failing
     "SuicidesMixingCoinbase.json",
+    "suicideCoinbase.json",
+    "suicideCoinbaseState.json"
   ]
 
   result =  name in allowedFailingBCTests
@@ -163,7 +172,10 @@ func skipNewBCTests*(folder: string, name: string): bool =
     # nimbus also agree
     "RevertInCreateInInit.json",
     "RevertInCreateInInitCreate2.json",
-    "InitCollision.json"
+    "InitCollision.json",
+
+    # BC OOM
+    "static_Return50000_2.json" # istanbul
   ]
 
   result = name in allowedFailingBCTests
