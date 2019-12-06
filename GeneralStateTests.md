@@ -1364,13 +1364,13 @@ OK: 0/16 Fail: 0/16 Skip: 16/16
 + randomStatetest9.json                                           OK
 + randomStatetest90.json                                          OK
 + randomStatetest92.json                                          OK
-+ randomStatetest94.json                                          OK
+  randomStatetest94.json                                          Skip
 + randomStatetest95.json                                          OK
 + randomStatetest96.json                                          OK
 + randomStatetest97.json                                          OK
 + randomStatetest98.json                                          OK
 ```
-OK: 323/327 Fail: 0/327 Skip: 4/327
+OK: 322/327 Fail: 0/327 Skip: 5/327
 ## stRandom2
 ```diff
 + 201503110226PYTHON_DUP6.json                                    OK
@@ -1963,7 +1963,7 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_RETURN_Bounds.json                                       OK
 + static_RETURN_BoundsOOG.json                                    OK
 + static_RawCallGasAsk.json                                       OK
-+ static_Return50000_2.json                                       OK
+  static_Return50000_2.json                                       Skip
 + static_ReturnTest.json                                          OK
 + static_ReturnTest2.json                                         OK
 + static_RevertDepth2.json                                        OK
@@ -2137,7 +2137,7 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_refund_CallToSuicideNoStorage.json                       OK
 + static_refund_CallToSuicideTwice.json                           OK
 ```
-OK: 271/284 Fail: 0/284 Skip: 13/284
+OK: 270/284 Fail: 0/284 Skip: 14/284
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
@@ -2201,14 +2201,14 @@ OK: 271/284 Fail: 0/284 Skip: 13/284
 + suicideCaller.json                                              OK
 + suicideCallerAddresTooBigLeft.json                              OK
 + suicideCallerAddresTooBigRight.json                             OK
-+ suicideCoinbase.json                                            OK
+  suicideCoinbase.json                                            Skip
 + suicideNotExistingAccount.json                                  OK
 + suicideOrigin.json                                              OK
 + suicideSendEtherPostDeath.json                                  OK
 + suicideSendEtherToMe.json                                       OK
 + testRandomTest.json                                             OK
 ```
-OK: 57/67 Fail: 0/67 Skip: 10/67
+OK: 56/67 Fail: 0/67 Skip: 11/67
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2239,7 +2239,7 @@ OK: 57/67 Fail: 0/67 Skip: 10/67
 + SuicidesAndInternlCallSuicidesOOG.json                          OK
 + SuicidesAndInternlCallSuicidesSuccess.json                      OK
 + SuicidesAndSendMoneyToItselfEtherDestroyed.json                 OK
-+ SuicidesMixingCoinbase.json                                     OK
+  SuicidesMixingCoinbase.json                                     Skip
 + SuicidesStopAfterSuicide.json                                   OK
 + TransactionDataCosts652.json                                    OK
 + TransactionFromCoinbaseHittingBlockGasLimit.json                OK
@@ -2256,7 +2256,7 @@ OK: 57/67 Fail: 0/67 Skip: 10/67
 + UserTransactionZeroCost.json                                    OK
 + UserTransactionZeroCostWithData.json                            OK
 ```
-OK: 44/44 Fail: 0/44 Skip: 0/44
+OK: 43/44 Fail: 0/44 Skip: 1/44
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2644,5 +2644,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 ```
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
----TOTAL---
-OK: 2343/2447 Fail: 0/2447 Skip: 104/2447
+OK: 2336/2447 Fail: 0/2447 Skip: 111/2447
