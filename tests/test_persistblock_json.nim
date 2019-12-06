@@ -41,4 +41,3 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
 proc persistBlockJsonMain*() =
   suite "persist block json tests":
     jsonTest("PersistBlockTests", testFixture)
-

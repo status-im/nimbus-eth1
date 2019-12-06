@@ -1,7 +1,8 @@
 import
   unittest2, json, os, tables, strformat, strutils,
   eth/[common, rlp],
-  ./test_helpers, ../nimbus/[transaction, utils, errors]
+  ./test_helpers, ./test_allowed_to_fail,
+  ../nimbus/[transaction, utils, errors]
 
 const
   FIXTURE_FORK_SKIPS = ["_info", "rlp", "Constantinople"]
@@ -10,7 +11,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
 proc transactionJsonMain*() =
   suite "Transactions tests":
-    jsonTest("TransactionTests", testFixture)
+    jsonTest("TransactionTests", testFixture, skipTxTests)
 
 when isMainModule:
   transactionJsonMain()
