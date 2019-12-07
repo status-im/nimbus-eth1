@@ -151,8 +151,11 @@ func skipBCTests*(folder: string, name: string): bool =
     # BlockChain slow tests
     "SuicideIssue.json",
 
-    # BC OOM tests
+    # BC OOM tests in CI
     "randomStatetest94.json", # pre istanbul
+
+    # BC huge memory consumption
+    "DelegateCallSpam.json",
 
     # pre istanbul failing
     "SuicidesMixingCoinbase.json",
@@ -171,8 +174,15 @@ func skipNewBCTests*(folder: string, name: string): bool =
     "RevertInCreateInInitCreate2.json",
     "InitCollision.json",
 
-    # BC OOM
-    "static_Return50000_2.json" # istanbul
+    # BC OOM tests in CI
+    "static_Return50000_2.json", # istanbul
+
+    # see allowedFailingGeneralStateTest
+    "modexp.json",
+    "create2noCash.json",
+
+    # BC huge memory consumption
+    "DelegateCallSpam.json"
   ]
 
   result = name in allowedFailingBCTests
@@ -180,6 +190,7 @@ func skipNewBCTests*(folder: string, name: string): bool =
 func skipTxTests*(folder: string, name: string): bool =
   # from test_transaction_json
   when sizeof(int) == 4:
+    # see nim-eth#95
     result = name == "RLPHeaderSizeOverflowInt32.json"
   else:
     false
