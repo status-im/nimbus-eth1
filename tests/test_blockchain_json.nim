@@ -10,7 +10,7 @@ import
   options,
   eth/[common, rlp, bloom], eth/trie/[db, trie_defs],
   ethash, stew/endians2, nimcrypto,
-  ./test_helpers, , ./test_allowed_to_fail,
+  ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
   ../nimbus/vm/interpreter/vm_forks,
   ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants],
