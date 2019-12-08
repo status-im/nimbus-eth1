@@ -166,6 +166,11 @@ func skipBCTests*(folder: string, name: string): bool =
   result =  name in allowedFailingBCTests
 
 func skipNewBCTests*(folder: string, name: string): bool =
+  # the new BC tests also contains these slow tests
+  # for Istanbul fork
+  if slowGSTTests(folder, name):
+    return true
+
   let allowedFailingBCTests = @[
     # Istanbul bc tests
     # py-evm claims these tests are incorrect
@@ -175,6 +180,7 @@ func skipNewBCTests*(folder: string, name: string): bool =
     "InitCollision.json",
 
     # BC OOM tests in CI
+    "randomStatetest94.json",
     "static_Return50000_2.json", # istanbul
 
     # see allowedFailingGeneralStateTest
