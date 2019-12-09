@@ -144,9 +144,6 @@ func skipNewGSTTests*(folder: string, name: string): bool =
   ]
 
 func skipVMTests*(folder: string, name: string): bool =
-  when sizeof(int) == 4:
-    if name == "sha3_bigSize.json":
-      return true
   result = (folder == "vmPerformance" and "loop" in name)
 
 func skipBCTests*(folder: string, name: string): bool =
