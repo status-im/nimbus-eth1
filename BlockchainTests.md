@@ -27,12 +27,12 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 1/1 Fail: 0/1 Skip: 0/1
 ## bcExploitTest
 ```diff
-+ DelegateCallSpam.json                                           OK
+  DelegateCallSpam.json                                           Skip
 + ShanghaiLove.json                                               OK
 + StrangeContractCreation.json                                    OK
   SuicideIssue.json                                               Skip
 ```
-OK: 3/4 Fail: 0/4 Skip: 1/4
+OK: 2/4 Fail: 0/4 Skip: 2/4
 ## bcForgedTest
 ```diff
 + bcForkBlockTest.json                                            OK
@@ -404,4 +404,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 5/5 Fail: 0/5 Skip: 0/5
 
 ---TOTAL---
-OK: 313/318 Fail: 0/318 Skip: 5/318
+OK: 312/318 Fail: 0/318 Skip: 6/318

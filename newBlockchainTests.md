@@ -22,10 +22,10 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 1/1 Fail: 0/1 Skip: 0/1
 ## bcExploitTest
 ```diff
-+ DelegateCallSpam.json                                           OK
+  DelegateCallSpam.json                                           Skip
 + ShanghaiLove.json                                               OK
 + StrangeContractCreation.json                                    OK
-  SuicideIssue.json                                               Skip
++ SuicideIssue.json                                               OK
 ```
 OK: 3/4 Fail: 0/4 Skip: 1/4
 ## bcForgedTest
@@ -222,7 +222,7 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + OverflowGasRequire.json                                         OK
 + RefundOverflow.json                                             OK
 + RefundOverflow2.json                                            OK
-  SuicidesMixingCoinbase.json                                     Skip
++ SuicidesMixingCoinbase.json                                     OK
 + TransactionFromCoinbaseHittingBlockGasLimit1.json               OK
 + TransactionFromCoinbaseNotEnoughFounds.json                     OK
 + TransactionNonceCheck.json                                      OK
@@ -273,8 +273,8 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + randomStatetest619.json                                         OK
   randomStatetest94.json                                          Skip
 + simpleSuicide.json                                              OK
-  suicideCoinbase.json                                            Skip
-  suicideCoinbaseState.json                                       Skip
++ suicideCoinbase.json                                            OK
++ suicideCoinbaseState.json                                       OK
 + suicideStorageCheck.json                                        OK
 + suicideStorageCheckVCreate.json                                 OK
 + suicideStorageCheckVCreate2.json                                OK
@@ -282,7 +282,7 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + transactionFromNotExistingAccount.json                          OK
 + txCost-sec73.json                                               OK
 ```
-OK: 65/69 Fail: 0/69 Skip: 4/69
+OK: 68/69 Fail: 0/69 Skip: 1/69
 ## bcTotalDifficultyTest
 ```diff
 + lotsOfBranchesOverrideAtTheEnd.json                             OK
@@ -3028,4 +3028,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2616/2730 Fail: 0/2730 Skip: 114/2730
+OK: 2619/2730 Fail: 0/2730 Skip: 111/2730
