@@ -83,7 +83,10 @@ func slowGSTTests(folder: string, name: string): bool =
               "callcodecallcallcode_ABCB_RECURSIVE.json",
               "callcodecallcodecall_ABCB_RECURSIVE.json",
               "callcodecallcodecallcode_ABCB_RECURSIVE.json",
-              "callcallcallcode_ABCB_RECURSIVE.json"
+              "callcallcallcode_ABCB_RECURSIVE.json",
+
+              # Istanbul slow tests
+              "CALLBlake2f_MaxRounds.json",
               ]
 
 func failIn32Bits(folder, name: string): bool =
@@ -133,9 +136,6 @@ func skipNewGSTTests*(folder: string, name: string): bool =
     return true
 
   result = name in @[
-    # skip slow tests
-    "CALLBlake2f_MaxRounds.json",
-
     # py-evm claims these tests are incorrect
     # nimbus also agree
     "RevertInCreateInInit.json",
