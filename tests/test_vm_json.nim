@@ -91,3 +91,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     check(computation.isError)
     if not fixture{"pre"}.isNil:
       verifyStateDb(fixture{"pre"}, computation.vmState.readOnlyStateDB)
+
+when isMainModule:
+  vmJsonMain()
