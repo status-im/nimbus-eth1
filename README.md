@@ -35,7 +35,7 @@ On Windows, a precompiled DLL collection download is available through the `fetc
 brew install rocksdb pcre
 
 # Fedora
-dnf install rocksdb-devel pcre
+dnf install rocksdb-devel pcre pcre-devel
 
 # Debian and Ubuntu
 sudo apt-get install librocksdb-dev libpcre3-dev
