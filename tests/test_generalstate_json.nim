@@ -180,8 +180,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
 proc generalStateJsonMain*(debugMode = false) =
   if paramCount() == 0 or not debugMode:
     # run all test fixtures
-    #suite "generalstate json tests":
-      #jsonTest("GeneralStateTests", testFixture, skipGSTTests)
+    suite "generalstate json tests":
+      jsonTest("GeneralStateTests", testFixture, skipGSTTests)
     suite "new generalstate json tests":
       jsonTest("newGeneralStateTests", testFixture, skipNewGSTTests)
   else:
