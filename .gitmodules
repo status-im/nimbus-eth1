@@ -64,10 +64,10 @@
   ignore = dirty
   branch = master
 [submodule "vendor/nim-confutils"]
-  path = vendor/nim-confutils
-  url = https://github.com/status-im/nim-confutils.git
-  ignore = dirty
-  branch = master
+	path = vendor/nim-confutils
+	url = https://github.com/status-im/nim-confutils.git
+	ignore = dirty
+	branch = master
 [submodule "vendor/nim-beacon-chain"]
   path = vendor/nim-beacon-chain
   url = https://github.com/status-im/nim-beacon-chain.git

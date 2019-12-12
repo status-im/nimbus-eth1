@@ -104,3 +104,6 @@ wrappers-static: | build deps libnimbus.a go-checks
 	echo -e $(BUILD_MSG) "build/go_wrapper_whisper_example_static" && \
 		go build -ldflags "-linkmode external -extldflags '-static -ldl -lpcre'" -o build/go_wrapper_whisper_example_static wrappers/wrapper_example.go wrappers/cfuncs.go
 
+wakunode: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim wakunode $(NIM_PARAMS) nimbus.nims
