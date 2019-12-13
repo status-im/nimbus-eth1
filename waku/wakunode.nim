@@ -37,8 +37,13 @@ proc run(config: WakuNodeConf) =
     addAllCapabilities = false)
   if not config.bootnodeOnly:
     node.addCapability Waku # Always enable Waku protocol
-    # TODO: make this configurable
-    node.protocolState(Waku).config.powRequirement = 0.002
+    let wakuConfig = WakuConfig(powRequirement: config.wakuPow,
+                                bloom: fullBloom(),
+                                isLightNode: false,
+                                maxMsgSize: waku_protocol.defaultMaxMsgSize,
+                                wakuMode: config.wakuMode,
+                                topics: @[])
+    node.configureWaku(wakuConfig)
     if config.whisper or config.whisperBridge:
       node.addCapability Whisper
       node.protocolState(Whisper).config.powRequirement = 0.002

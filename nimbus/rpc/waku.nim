@@ -270,6 +270,18 @@ proc setupWakuRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) =
 
     result = node.subscribeFilter(filter).Identifier
 
+    # TODO: Should we do this here "automatically" or separate it in another
+    # RPC call? Is there a use case for that?
+    # Same could be said about bloomfilter, except that there is a use case
+    # there to have a full node no matter what message filters.
+    let config = node.protocolState(Waku).config
+    if config.wakuMode == WakuChan:
+      try:
+        # TODO: an addTopics call would probably more useful
+        waitFor node.setTopics(config.topics.concat(filter.topics))
+      except CatchableError:
+        trace "setTopics error occured"
+
   rpcsrv.rpc("shh_deleteMessageFilter") do(id: Identifier) -> bool:
     ## Uninstall a message filter in the node.
     ##
