@@ -1,5 +1,6 @@
 import
-  confutils/defs, chronicles, eth/keys, chronos
+  confutils/defs, chronicles, chronos,
+  eth/keys, eth/p2p/rlpx_protocols/waku_protocol
 
 type
   Fleet* =  enum
@@ -77,8 +78,17 @@ type
       desc: "Enable Waku RPC server",
       name: "rpc-binds" }: seq[string]
 
+    wakuMode* {.
+      desc: "Select the Waku mode",
+      defaultValue: WakuSan
+      name: "waku-mode" }: WakuMode
+
+    wakuPow* {.
+      desc: "PoW requirement of Waku node",
+      defaultValue: 0.002
+      name: "waku-pow" }: float64
+
     # TODO:
-    # - Waku / Whisper config such as PoW, Waku Mode, bloom, etc.
     # - nat
     # - metrics
     # - discv5 + topic register
