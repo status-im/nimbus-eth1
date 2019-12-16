@@ -22,7 +22,12 @@ type
     udpPort* {.
       desc: "UDP listening port."
       defaultValue: 30303
-      name: "udp-port" }: int
+      name: "udp-port" }: uint16
+
+    portsShift* {.
+      desc: "Add a shift to all port numbers."
+      defaultValue: 0
+      name: "ports-shift" }: uint16
 
     discovery* {.
       desc: "Enable/disable discovery v4."
@@ -40,11 +45,11 @@ type
       name: "fleet" }: Fleet
 
     bootnodes* {.
-      desc: "Comma separated enode URLs for P2P discovery bootstrap"
+      desc: "Comma separated enode URLs for P2P discovery bootstrap."
       name: "bootnodes" }: seq[string]
 
     staticnodes* {.
-      desc: "Comma separated enode URLs to directly connect with"
+      desc: "Comma separated enode URLs to directly connect with."
       name: "staticnodes" }: seq[string]
 
     whisper* {.
@@ -53,38 +58,43 @@ type
       name: "whisper" }: bool
 
     whisperBridge* {.
-      desc: "Enable the Whisper protocol and bridge with Waku protocol"
+      desc: "Enable the Whisper protocol and bridge with Waku protocol."
       defaultValue: false
       name: "whisper-bridge" }: bool
 
     nodekey* {.
-      desc: "P2P node private key as hex",
+      desc: "P2P node private key as hex.",
       defaultValue: newKeyPair()
       name: "nodekey" }: KeyPair
     # TODO: Add nodekey file option
 
     bootnodeOnly* {.
-      desc: "Run only as bootnode"
+      desc: "Run only as discovery bootnode."
       defaultValue: false
       name: "bootnode-only" }: bool
 
     rpc* {.
-      desc: "Enable Waku RPC server",
+      desc: "Enable Waku RPC server.",
       defaultValue: false
       name: "rpc" }: bool
 
-    # TODO: get this validated and/or switch to TransportAddress
-    rpcBinds* {.
-      desc: "Enable Waku RPC server",
-      name: "rpc-binds" }: seq[string]
+    rpcAddress* {.
+      desc: "Listening address of the RPC server.",
+      defaultValue: parseIpAddress("127.0.0.1")
+      name: "rpc-address" }: IpAddress
+
+    rpcPort* {.
+      desc: "Listening port of the RPC server.",
+      defaultValue: 8545
+      name: "rpc-port" }: uint16
 
     wakuMode* {.
-      desc: "Select the Waku mode",
+      desc: "Select the Waku mode.",
       defaultValue: WakuSan
       name: "waku-mode" }: WakuMode
 
     wakuPow* {.
-      desc: "PoW requirement of Waku node",
+      desc: "PoW requirement of Waku node.",
       defaultValue: 0.002
       name: "waku-pow" }: float64
 
@@ -103,4 +113,13 @@ proc parseCmdArg*(T: type KeyPair, p: TaintedString): T =
     raise newException(ConfigurationError, "Invalid private key")
 
 proc completeCmdArg*(T: type KeyPair, val: TaintedString): seq[string] =
+  return @[]
+
+proc parseCmdArg*(T: type IpAddress, p: TaintedString): T =
+  try:
+    result = parseIpAddress(p)
+  except CatchableError as e:
+    raise newException(ConfigurationError, "Invalid IP address")
+
+proc completeCmdArg*(T: type IpAddress, val: TaintedString): seq[string] =
   return @[]
