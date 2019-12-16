@@ -29,8 +29,8 @@ proc run(config: WakuNodeConf) =
   var address: Address
   # TODO: make configurable
   address.ip = parseIpAddress("0.0.0.0")
-  address.tcpPort = Port(config.tcpPort)
-  address.udpPort = Port(config.udpPort)
+  address.tcpPort = Port(config.tcpPort + config.portsShift)
+  address.udpPort = Port(config.udpPort + config.portsShift)
 
   # Set-up node
   var node = newEthereumNode(config.nodekey, address, 1, nil,
@@ -66,11 +66,9 @@ proc run(config: WakuNodeConf) =
     elif config.fleet == staging: connectToNodes(node, WhisperNodesStaging)
 
   if config.rpc:
-    var rpcServer: RpcHttpServer
-    if config.rpcBinds.len == 0:
-      rpcServer = newRpcHttpServer(["localhost:8545"])
-    else:
-      rpcServer = newRpcHttpServer(config.rpcBinds)
+    let ta = initTAddress(config.rpcAddress,
+      Port(config.rpcPort + config.portsShift))
+    var rpcServer = newRpcHttpServer([ta])
     let keys = newWakuKeys()
     setupWakuRPC(node, keys, rpcServer)
     rpcServer.start()
