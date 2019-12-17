@@ -62,6 +62,16 @@ type
       defaultValue: false
       name: "whisper-bridge" }: bool
 
+    wakuMode* {.
+      desc: "Select the Waku mode.",
+      defaultValue: WakuSan
+      name: "waku-mode" }: WakuMode
+
+    wakuPow* {.
+      desc: "PoW requirement of Waku node.",
+      defaultValue: 0.002
+      name: "waku-pow" }: float64
+
     nodekey* {.
       desc: "P2P node private key as hex.",
       defaultValue: newKeyPair()
@@ -88,19 +98,23 @@ type
       defaultValue: 8545
       name: "rpc-port" }: uint16
 
-    wakuMode* {.
-      desc: "Select the Waku mode.",
-      defaultValue: WakuSan
-      name: "waku-mode" }: WakuMode
+    metricsServer* {.
+      desc: "Enable the metrics server."
+      defaultValue: false
+      name: "metrics-server" }: bool
 
-    wakuPow* {.
-      desc: "PoW requirement of Waku node.",
-      defaultValue: 0.002
-      name: "waku-pow" }: float64
+    metricsServerAddress* {.
+      desc: "Listening address of the metrics server."
+      defaultValue: parseIpAddress("127.0.0.1")
+      name: "metrics-server-address" }: IpAddress
+
+    metricsServerPort* {.
+      desc: "Listening HTTP port of the metrics server."
+      defaultValue: 8008
+      name: "metrics-server-port" }: uint16
 
     # TODO:
     # - nat
-    # - metrics
     # - discv5 + topic register
     # - mailserver functionality
 

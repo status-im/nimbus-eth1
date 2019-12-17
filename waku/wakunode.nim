@@ -1,5 +1,5 @@
 import
-  confutils, config, chronos, json_rpc/rpcserver,
+  confutils, config, chronos, json_rpc/rpcserver, metrics,
   chronicles/topics_registry, # TODO: What? Need this for setLoglevel, weird.
   eth/[keys, p2p, async_utils],
   eth/p2p/[discovery, enode, peer_pool, bootnodes, whispernodes],
@@ -72,6 +72,14 @@ proc run(config: WakuNodeConf) =
     let keys = newWakuKeys()
     setupWakuRPC(node, keys, rpcServer)
     rpcServer.start()
+
+  when defined(insecure):
+    if config.metricsServer:
+      let
+        address = config.metricsServerAddress
+        port = config.metricsServerPort + config.portsShift
+      info "Starting metrics HTTP server", address, port
+      metrics.startHttpServer($address, Port(port))
 
   runForever()
 
