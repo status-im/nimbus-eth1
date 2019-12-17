@@ -1,5 +1,5 @@
 import
-  strformat, chronicles, json_rpc/[rpcclient, rpcserver],
+  os, strformat, chronicles, json_rpc/[rpcclient, rpcserver],
   eth/common as eth_common, eth/keys, eth/p2p/rlpx_protocols/waku_protocol,
   ../nimbus/rpc/[hexstrings, rpc_types, waku],
   options as what # TODO: Huh?
@@ -30,16 +30,26 @@ let
 
 let
   symkeyID2 = waitFor bob.shh_addSymKey(symKey)
-  message = WhisperPostMessage(symKeyID: some(symkeyID2),
+
+var i = 1
+while i <= 10000:
+  var message = WhisperPostMessage(symKeyID: some(symkeyID2),
                                ttl: 30,
                                topic: some(topic),
                                payload: "0x45879632".HexDataStr,
                                powTime: 1.0,
                                powTarget: 0.002)
-discard waitFor bob.shh_post(message)
+  debug "Message", i, message
+  sleep(100)
+  discard waitFor bob.shh_post(message)
+  inc(i)
 
 var messages: seq[WhisperFilterMessage]
+debug "Messages len", length = messages.len
+
 while messages.len == 0:
   messages = waitFor alice.shh_getFilterMessages(filterID)
   waitFor sleepAsync(100.milliseconds)
 debug "Received message", payload = messages[0].payload
+
+debug "Received messages", length = messages.len
