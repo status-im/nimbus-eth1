@@ -33,3 +33,20 @@ Example of a quick test with nim-web3:
 
 ./build/quicksim
 ```
+
+# Using Metrics
+
+Metrics are available for valid envelopes and dropped envelopes.
+
+To compile in an HTTP endpoint for accessing the metrics we need to provide the
+`insecure` flag:
+```bash
+make NIMFLAGS="-d:insecure" wakunode
+./build/wakunode --metrics-server
+```
+
+For visualisation, similar steps can be used as is written down for Nimbus
+[here](https://github.com/status-im/nimbus#metric-visualisation).
+
+There is a similar example dashboard that includes visualisation of the
+envelopes available at `waku/examples/waku-grafana-dashboard.json`.
