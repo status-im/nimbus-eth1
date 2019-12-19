@@ -64,6 +64,7 @@ type
     returnData*:            seq[byte]
     error*:                 Error
     accountsToDelete*:      Table[EthAddress, EthAddress]
+    suicides*:              HashSet[EthAddress]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     forkOverride*:          Option[Fork]
     logEntries*:            seq[Log]
