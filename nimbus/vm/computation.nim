@@ -26,6 +26,7 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: BlockNumber, message
   result.gasMeter.init(message.gas)
   result.children = @[]
   result.accountsToDelete = initTable[EthAddress, EthAddress]()
+  result.suicides = initHashSet[EthAddress]()
   result.code = newCodeStream(message.code)
   # result.rawOutput = "0x"
   result.gasCosts =
@@ -234,6 +235,7 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
       computation.returnData = child.output
     computation.logEntries.add child.logEntries
     computation.gasMeter.refundGas(child.gasMeter.gasRefunded)
+    computation.suicides.incl child.suicides
 
   if not child.shouldBurnGas:
     computation.gasMeter.returnGas(child.gasMeter.gasRemaining)
@@ -245,23 +247,15 @@ proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
       "invariant:  should be impossible for an account to be " &
       "registered for deletion multiple times")
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
+  c.suicides.incl(c.msg.storageAddress)
 
 proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
   c.logEntries.add(log)
 
-# many methods are basically TODO, but they still return valid values
-# in order to test some existing code
 iterator accountsForDeletion*(c: BaseComputation): EthAddress =
-  var stack = @[c]
-  var deletedAccounts = initHashSet[EthAddress]()
-  while stack.len > 0:
-    let comp = stack.pop()
-    if comp.isError: continue
-    for account in comp.accountsToDelete.keys:
-      if account notin deletedAccounts:
-        deletedAccounts.incl account
-        yield account
-    stack.add comp.children
+  if c.isSuccess:
+    for address in c.suicides:
+      yield address
 
 proc getGasRefund*(c: BaseComputation): GasInt =
   if c.isSuccess:
