@@ -45,6 +45,15 @@ make NIMFLAGS="-d:insecure" wakunode
 ./build/wakunode --metrics-server
 ```
 
+Ensure your Prometheus config `prometheus.yml` contains the targets you care about, e.g.:
+
+```
+scrape_configs:
+  - job_name: "waku"
+    static_configs:
+      - targets: ['localhost:8008', 'localhost:8009', 'localhost:8010']
+```
+
 For visualisation, similar steps can be used as is written down for Nimbus
 [here](https://github.com/status-im/nimbus#metric-visualisation).
 
