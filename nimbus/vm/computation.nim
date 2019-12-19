@@ -223,9 +223,7 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
 
 proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
   if child.isError:
-    if child.msg.isCreate:
-      computation.returnData = child.output
-    elif child.shouldBurnGas:
+    if child.shouldBurnGas:
       computation.returnData = @[]
     else:
       computation.returnData = child.output
@@ -235,6 +233,7 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
     else:
       computation.returnData = child.output
     computation.logEntries.add child.logEntries
+    computation.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
   if not child.shouldBurnGas:
     computation.gasMeter.returnGas(child.gasMeter.gasRemaining)
@@ -265,10 +264,8 @@ iterator accountsForDeletion*(c: BaseComputation): EthAddress =
     stack.add comp.children
 
 proc getGasRefund*(c: BaseComputation): GasInt =
-  if c.isError:
-    result = 0
-  else:
-    result = c.gasMeter.gasRefunded + c.children.mapIt(it.getGasRefund()).foldl(a + b, 0'i64)
+  if c.isSuccess:
+    result = c.gasMeter.gasRefunded
 
 proc getGasUsed*(c: BaseComputation): GasInt =
   if c.shouldBurnGas:
