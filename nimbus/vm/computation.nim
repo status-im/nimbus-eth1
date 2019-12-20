@@ -246,6 +246,10 @@ proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
     raise newException(ValueError,
       "invariant:  should be impossible for an account to be " &
       "registered for deletion multiple times")
+  # TODO: collecting touched accounts should be done in state db
+  # we should remove this accountsToDelete map delegate it to state db
+  # we will only keep suicides list here in order to make
+  # evmc integration easier
   c.accountsToDelete[c.msg.storageAddress] = beneficiary
   c.suicides.incl(c.msg.storageAddress)
 
@@ -273,6 +277,7 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
   else:
     result = c.gasMeter.gasRemaining
 
+# TODO: collecting touched accounts should be done in account state db
 proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress], ancestorHadError: bool = false) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161:
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
