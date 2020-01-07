@@ -9,6 +9,7 @@ type
     IsNew
     IsDirty
     IsTouched
+    IsClone
     CodeLoaded
     CodeChanged
     StorageChanged
@@ -34,12 +35,11 @@ type
     RolledBack
 
   SavePoint* = ref object
-    ac: AccountsCache
     parentSavepoint: SavePoint
     cache: Table[EthAddress, RefAccount]
     state: TransactionState
 
-proc beginTransaction*(ac: var AccountsCache): SavePoint {.gcsafe.}
+proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
@@ -47,45 +47,43 @@ proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
   result.db = db
   result.trie = initSecureHexaryTrie(db, root, pruneTrie)
   result.unrevertablyTouched = initHashSet[EthAddress]()
-  discard result.beginTransaction
+  discard result.beginSavepoint
 
-proc beginTransaction*(ac: var AccountsCache): SavePoint =
+proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   new result
-  result.ac = ac
   result.cache = initTable[EthAddress, RefAccount]()
   result.state = Pending
   result.parentSavepoint = ac.savePoint
   ac.savePoint = result
 
-proc rollback*(sp: Savepoint) =
+proc rollback*(ac: var AccountsCache, sp: Savepoint) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
-  doAssert sp.ac.savePoint == sp and sp.state == Pending
-  sp.ac.savePoint = sp.parentSavepoint
+  doAssert ac.savePoint == sp and sp.state == Pending
+  ac.savePoint = sp.parentSavepoint
   sp.state = RolledBack
 
-proc commit*(sp: Savepoint) =
+proc commit*(ac: var AccountsCache, sp: Savepoint) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
-  doAssert sp.ac.savePoint == sp and sp.state == Pending
-  sp.ac.savePoint = sp.parentSavepoint
-  if isNil sp.parentSavepoint:
-    # cannot commit most inner savepoint
-    doAssert(false)
-  else:
-    for k, v in sp.cache:
-      sp.parentSavepoint.cache[k] = v
+  doAssert ac.savePoint == sp and sp.state == Pending
+  # cannot commit most inner savepoint
+  doAssert not sp.parentSavepoint.isNil
+
+  ac.savePoint = sp.parentSavepoint
+  for k, v in sp.cache:
+    sp.parentSavepoint.cache[k] = v
   sp.state = Committed
 
-proc dispose*(sp: Savepoint) {.inline.} =
+proc dispose*(ac: var AccountsCache, sp: Savepoint) {.inline.} =
   if sp.state == Pending:
-    sp.rollback()
+    ac.rollback(sp)
 
-proc safeDispose*(sp: Savepoint) {.inline.} =
+proc safeDispose*(ac: var AccountsCache, sp: Savepoint) {.inline.} =
   if (not isNil(sp)) and (sp.state == Pending):
-    sp.rollback()
+    ac.rollback(sp)
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
   ## XXX: The name of this proc is intentionally long, because it
@@ -124,23 +122,26 @@ proc getAccount(ac: AccountsCache, address: EthAddress): RefAccount =
 proc clone(acc: RefAccount, cloneStorage: bool): RefAccount =
   new(result)
   result.account = acc.account
-  result.flags = acc.flags
+  result.flags = acc.flags + {IsClone}
   result.code = acc.code
 
   if cloneStorage:
     result.originalStorage = acc.originalStorage
-    if acc.overlayStorage.len > 0:
-      let initialLength = tables.rightSize(acc.overlayStorage.len)
-      result.overlayStorage = initTable[UInt256, UInt256](initialLength)
-      for k, v in acc.overlayStorage:
-        result.overlayStorage[k] = v
-
-  result.flags.incl IsDirty
+    # it's ok to clone a table this way
+    result.overlayStorage = acc.overlayStorage
 
 proc isEmpty(acc: RefAccount): bool =
   result = acc.account.codeHash == EMPTY_SHA3 and
     acc.account.balance.isZero and
     acc.account.nonce == 0
+
+proc isExists(acc: RefAccount): bool =
+  if IsAlive notin acc.flags:
+    return false
+  if IsClone in acc.flags:
+    result = true
+  else:
+    result = IsNew notin acc.flags
 
 template createTrieKeyFromSlot(slot: UInt256): ByteRange =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
@@ -160,6 +161,8 @@ template getAccountTrie(db: TrieDatabaseRef, acc: RefAccount): auto =
   initSecureHexaryTrie(db, acc.account.storageRoot, false)
 
 proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 =
+  # share the same original storage between multiple
+  # versions of account
   if acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
   else:
@@ -189,7 +192,7 @@ proc storageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 
 proc kill(acc: RefAccount) =
   acc.flags.excl IsAlive
   acc.overlayStorage.clear()
-  acc.originalStorage.clear()
+  acc.originalStorage = nil
   acc.account = newAccount()
   acc.code = default(ByteRange)
 
@@ -213,6 +216,11 @@ proc persistCode(acc: RefAccount, db: TrieDatabaseRef) =
     db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code.toOpenArray)
 
 proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
+  if acc.account.storageRoot == emptyRlpHash:
+    # TODO: remove the storage too if we figure out
+    # how to create 'virtual' storage room for each account
+    return
+
   var accountTrie = getAccountTrie(db, acc)
 
   for slot, value in acc.overlayStorage:
@@ -234,7 +242,7 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
 proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): RefAccount =
   result = ac.getAccount(address)
   if address in ac.savePoint.cache:
-    # it's in latest savepoint
+    # it's already in latest savepoint
     result.flags.incl IsDirty
     return
 
@@ -279,23 +287,23 @@ proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
 
 proc accountExists*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address)
-  result = IsNew notin acc.flags
+  acc.isExists()
 
 proc isEmptyAccount*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address)
-  doAssert IsNew notin acc.flags
+  doAssert acc.isExists()
   result = acc.isEmpty()
 
 proc isDeadAccount*(ac: AccountsCache, address: EthAddress): bool =
   let acc = ac.getAccount(address)
-  if IsNew in acc.flags:
+  if not acc.isExists():
     result = true
   else:
     result = acc.isEmpty()
 
 proc setBalance*(ac: var AccountsCache, address: EthAddress, balance: UInt256) =
   let acc = ac.getAccount(address)
-  acc.flags.incl IsTouched
+  acc.flags.incl {IsTouched, IsAlive}
   if acc.account.balance != balance:
     ac.makeDirty(address).account.balance = balance
 
@@ -307,7 +315,7 @@ proc subBalance*(ac: var AccountsCache, address: EthAddress, delta: UInt256) {.i
 
 proc setNonce*(ac: var AccountsCache, address: EthAddress, nonce: AccountNonce) =
   let acc = ac.getAccount(address)
-  acc.flags.incl IsTouched
+  acc.flags.incl {IsTouched, IsAlive}
   if acc.account.nonce != nonce:
     ac.makeDirty(address).account.nonce = nonce
 
@@ -316,7 +324,7 @@ proc incNonce*(ac: var AccountsCache, address: EthAddress) {.inline.} =
 
 proc setCode*(ac: var AccountsCache, address: EthAddress, code: ByteRange) =
   let acc = ac.getAccount(address)
-  acc.flags.incl IsTouched
+  acc.flags.incl {IsTouched, IsAlive}
   let codeHash = keccakHash(code.toOpenArray)
   if acc.account.codeHash != codeHash:
     var acc = ac.makeDirty(address)
@@ -326,7 +334,7 @@ proc setCode*(ac: var AccountsCache, address: EthAddress, code: ByteRange) =
 
 proc setStorage*(ac: var AccountsCache, address: EthAddress, slot, value: UInt256) =
   let acc = ac.getAccount(address)
-  acc.flags.incl IsTouched
+  acc.flags.incl {IsTouched, IsAlive}
   let oldValue = acc.storageValue(slot, ac.db)
   if oldValue != value:
     var acc = ac.makeDirty(address)
@@ -335,16 +343,20 @@ proc setStorage*(ac: var AccountsCache, address: EthAddress, slot, value: UInt25
 
 proc clearStorage*(ac: var AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
-  acc.flags.incl IsTouched
+  acc.flags.incl {IsTouched, IsAlive}
   if acc.account.storageRoot != emptyRlpHash:
     # there is no point to clone the storage since we want to remove it
     ac.makeDirty(address, cloneStorage = false).account.storageRoot = emptyRlpHash
+
+#proc deleteAccount*(ac: var AccountsCache, address: EthAddress) =
+#  let acc = ac.getAccount(address)
+#  if IsAlive in acc.flags:
 
 proc unrevertableTouch*(ac: var AccountsCache, address: EthAddress) =
   ac.unrevertablyTouched.incl address
 
 proc removeEmptyAccounts*(ac: var AccountsCache) =
-  # make sure all savepoint already committed
+  # make sure all savepoints already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
   for _, acc in ac.savePoint.cache:
     if IsTouched in acc.flags and acc.isEmpty:
