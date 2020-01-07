@@ -103,7 +103,7 @@ type
     gasPrice*:         GasInt
     origin*:           EthAddress
     sender*:           EthAddress
-    storageAddress*:   EthAddress
+    contractAddress*:  EthAddress
     codeAddress*:      EthAddress
     value*:            UInt256
     data*:             seq[byte]

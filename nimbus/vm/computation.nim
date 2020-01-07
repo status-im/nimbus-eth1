@@ -113,7 +113,7 @@ proc writeContract*(computation: BaseComputation, fork: Fork): bool {.gcsafe.} =
     debug "Contract code size exceeds EIP170", limit=EIP170_CODE_SIZE_LIMIT, actual=contractCode.len
     return false
 
-  let storageAddr = computation.msg.storageAddress
+  let storageAddr = computation.msg.contractAddress
   if computation.isSuicided(storageAddr): return
 
   let gasParams = GasParams(kind: Create, cr_memLength: contractCode.len)
@@ -138,7 +138,7 @@ proc transferBalance(computation: BaseComputation, opCode: static[Op]) =
   when opCode in {Call, Create}:
     computation.vmState.mutateStateDb:
       db.subBalance(computation.msg.sender, computation.msg.value)
-      db.addBalance(computation.msg.storageAddress, computation.msg.value)
+      db.addBalance(computation.msg.contractAddress, computation.msg.value)
 
 template continuation*(comp: BaseComputation, body: untyped) =
   # this is a helper template to implement continuation
@@ -177,10 +177,10 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   when opCode in {Create, Create2}:
     if computation.getFork >= FkSpurious:
       computation.vmState.mutateStateDb:
-        db.incNonce(computation.msg.storageAddress)
+        db.incNonce(computation.msg.contractAddress)
         if computation.getFork >= FkByzantium:
           # RevertInCreateInInit.json
-          db.setStorageRoot(computation.msg.storageAddress, emptyRlpHash)
+          db.setStorageRoot(computation.msg.contractAddress, emptyRlpHash)
 
   when opCode in {CallCode, Call, Create}:
     computation.transferBalance(opCode)
@@ -219,7 +219,7 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
   computation.children.add(child)
 
 proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
-  if c.msg.storageAddress in c.accountsToDelete:
+  if c.msg.contractAddress in c.accountsToDelete:
     raise newException(ValueError,
       "invariant:  should be impossible for an account to be " &
       "registered for deletion multiple times")
@@ -227,8 +227,8 @@ proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
   # we should remove this accountsToDelete map delegate it to state db
   # we will only keep suicides list here in order to make
   # evmc integration easier
-  c.accountsToDelete[c.msg.storageAddress] = beneficiary
-  c.suicides.incl(c.msg.storageAddress)
+  c.accountsToDelete[c.msg.contractAddress] = beneficiary
+  c.suicides.incl(c.msg.contractAddress)
 
 proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
   c.logEntries.add(log)
@@ -284,10 +284,10 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
     if condition:
       # Special case to account for geth+parity bug
       # https://github.com/ethereum/EIPs/issues/716
-      if cmpThree(c.msg.storageAddress):
-        output.incl c.msg.storageAddress
+      if cmpThree(c.msg.contractAddress):
+        output.incl c.msg.contractAddress
     else:
-      output.incl c.msg.storageAddress
+      output.incl c.msg.contractAddress
 
   if c.isSuccess or isIstanbul:
   # recurse into nested computations (even errored ones, since looking for RIPEMD160)
