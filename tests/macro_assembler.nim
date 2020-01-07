@@ -287,7 +287,7 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
 
   var
     stateDB = computation.vmState.accountDb
-    account = stateDB.getAccount(computation.msg.storageAddress)
+    account = stateDB.getAccount(computation.msg.contractAddress)
     trie = initSecureHexaryTrie(chainDB.db, account.storageRoot)
 
   for kv in boa.storage:

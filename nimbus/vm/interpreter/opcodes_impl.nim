@@ -231,7 +231,7 @@ proc writePaddedResult(mem: var Memory,
 
 op address, inline = true:
   ## 0x30, Get address of currently executing account.
-  push: computation.msg.storageAddress
+  push: computation.msg.contractAddress
 
 op balance, inline = true:
   ## 0x31, Get balance of the given account.
@@ -380,7 +380,7 @@ op chainId, inline = true:
 op selfBalance, inline = true:
   ## 0x47, Get current contract's balance.
   let stateDb = computation.vmState.readOnlyStateDb
-  push: stateDb.getBalance(computation.msg.storageAddress)
+  push: stateDb.getBalance(computation.msg.contractAddress)
 
 # ##########################################
 # 50s: Stack, Memory, Storage and Flow Operations
@@ -428,26 +428,26 @@ op mstore8, inline = true, memStartPos, value:
 op sload, inline = true, slot:
   ## 0x54, Load word from storage.
 
-  let (value, _) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
+  let (value, _) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.contractAddress, slot)
   push(value)
 
 op sstore, inline = false, slot, value:
   ## 0x55, Save word to storage.
   checkInStaticContext(computation)
 
-  let (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.storageAddress, slot)
+  let (currentValue, existing) = computation.vmState.readOnlyStateDB.getStorage(computation.msg.contractAddress, slot)
 
   let
     gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: currentValue.isZero)
     (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(value, gasParam)
 
-  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
+  computation.gasMeter.consumeGas(gasCost, &"SSTORE: {computation.msg.contractAddress}[{slot}] -> {value} ({currentValue})")
 
   if gasRefund > 0:
     computation.gasMeter.refundGas(gasRefund)
 
   computation.vmState.mutateStateDB:
-    db.setStorage(computation.msg.storageAddress, slot, value)
+    db.setStorage(computation.msg.contractAddress, slot, value)
 
 proc jumpImpl(computation: BaseComputation, jumpTarget: UInt256) =
   if jumpTarget >= computation.code.len.u256:
@@ -522,7 +522,7 @@ proc canTransfer(computation: BaseComputation, memPos, memLen: int, value: Uint2
   # to avoid confusion
   let senderBalance =
     computation.vmState.readOnlyStateDb().
-      getBalance(computation.msg.storageAddress)
+      getBalance(computation.msg.contractAddress)
 
   if senderBalance < value:
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = computation.msg.value, balance = senderBalance
@@ -559,16 +559,16 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
     computation.vmState.mutateStateDB:
       # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
       # See: https://github.com/ethereum/EIPs/issues/684
-      let creationNonce = db.getNonce(computation.msg.storageAddress)
-      db.setNonce(computation.msg.storageAddress, creationNonce + 1)
+      let creationNonce = db.getNonce(computation.msg.contractAddress)
+      db.setNonce(computation.msg.contractAddress, creationNonce + 1)
 
-      contractAddress = generateAddress(computation.msg.storageAddress, creationNonce)
+      contractAddress = generateAddress(computation.msg.contractAddress, creationNonce)
       isCollision = db.hasCodeOrNonce(contractAddress)
   else:
     computation.vmState.mutateStateDB:
-      db.incNonce(computation.msg.storageAddress)
+      db.incNonce(computation.msg.contractAddress)
       let salt = computation.stack.popInt()
-      contractAddress = generateSafeAddress(computation.msg.storageAddress, salt, callData)
+      contractAddress = generateSafeAddress(computation.msg.contractAddress, salt, callData)
       isCollision = db.hasCodeOrNonce(contractAddress)
 
   if isCollision:
@@ -581,8 +581,8 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
     gas: createMsgGas,
     gasPrice: computation.msg.gasPrice,
     origin: computation.msg.origin,
-    sender: computation.msg.storageAddress,
-    storageAddress: contractAddress,
+    sender: computation.msg.contractAddress,
+    contractAddress: contractAddress,
     codeAddress: CREATE_CONTRACT_ADDRESS,
     value: value,
     data: @[],
@@ -613,7 +613,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
       if childComp.isError:
         push: 0
       else:
-        push: childComp.msg.storageAddress
+        push: childComp.msg.contractAddress
 
     checkInStaticContext(computation)
     childComp.applyMessage(Create)
@@ -632,7 +632,7 @@ proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, Et
   result = (gas,
     value,
     codeAddress, # contractAddress
-    computation.msg.storageAddress, # sender
+    computation.msg.contractAddress, # sender
     codeAddress,
     memoryInputStartPosition,
     memoryInputSize,
@@ -650,8 +650,8 @@ proc callCodeParams(computation: BaseComputation): (UInt256, UInt256, EthAddress
 
   result = (gas,
     value,
-    computation.msg.storageAddress, # contractAddress
-    computation.msg.storageAddress, # sender
+    computation.msg.contractAddress, # contractAddress
+    computation.msg.contractAddress, # sender
     codeAddress,
     memoryInputStartPosition,
     memoryInputSize,
@@ -668,7 +668,7 @@ proc delegateCallParams(computation: BaseComputation): (UInt256, UInt256, EthAdd
 
   result = (gas,
     computation.msg.value, # value
-    computation.msg.storageAddress, # contractAddress
+    computation.msg.contractAddress, # contractAddress
     computation.msg.sender, # sender
     codeAddress,
     memoryInputStartPosition,
@@ -687,7 +687,7 @@ proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddre
   result = (gas,
     0.u256, # value
     codeAddress, # contractAddress
-    computation.msg.storageAddress, # sender
+    computation.msg.contractAddress, # sender
     codeAddress,
     memoryInputStartPosition,
     memoryInputSize,
@@ -745,7 +745,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       gasPrice: computation.msg.gasPrice,
       origin: computation.msg.origin,
       sender: sender,
-      storageAddress: contractAddress,
+      contractAddress: contractAddress,
       codeAddress: codeAddress,
       value: value,
       data: callData,
@@ -827,7 +827,7 @@ proc selfDestructImpl(computation: BaseComputation, beneficiary: EthAddress) =
   # In particular, EIP150 and EIP161 have extra requirements.
   computation.vmState.mutateStateDB:
     let
-      localBalance = db.getBalance(computation.msg.storageAddress)
+      localBalance = db.getBalance(computation.msg.contractAddress)
       beneficiaryBalance = db.getBalance(beneficiary)
 
     # Transfer to beneficiary
@@ -836,13 +836,13 @@ proc selfDestructImpl(computation: BaseComputation, beneficiary: EthAddress) =
     # Zero the balance of the address being deleted.
     # This must come after sending to beneficiary in case the
     # contract named itself as the beneficiary.
-    db.setBalance(computation.msg.storageAddress, 0.u256)
+    db.setBalance(computation.msg.contractAddress, 0.u256)
 
     # Register the account to be deleted
     computation.registerAccountForDeletion(beneficiary)
 
     trace "SELFDESTRUCT",
-      storageAddress = computation.msg.storageAddress.toHex,
+      contractAddress = computation.msg.contractAddress.toHex,
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
 
@@ -868,7 +868,7 @@ op selfDestructEip161, inline = false:
     beneficiary = computation.stack.popAddress()
     stateDb     = computation.vmState.readOnlyStateDb
     isDead      = stateDb.isDeadAccount(beneficiary)
-    balance     = stateDb.getBalance(computation.msg.storageAddress)
+    balance     = stateDb.getBalance(computation.msg.contractAddress)
 
   let gasParams = GasParams(kind: SelfDestruct,
     sd_condition: isDead and not balance.isZero
@@ -929,20 +929,20 @@ op sstoreEIP2200, inline = false, slot, value:
     raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
   let stateDB = computation.vmState.readOnlyStateDB
-  let (currentValue, existing) = stateDB.getStorage(computation.msg.storageAddress, slot)
+  let (currentValue, existing) = stateDB.getStorage(computation.msg.contractAddress, slot)
 
   let
     gasParam = GasParams(kind: Op.Sstore,
       s_isStorageEmpty: currentValue.isZero,
       s_currentValue: currentValue,
-      s_originalValue: stateDB.getCommittedStorage(computation.msg.storageAddress, slot)
+      s_originalValue: stateDB.getCommittedStorage(computation.msg.contractAddress, slot)
     )
     (gasCost, gasRefund) = computation.gasCosts[Sstore].c_handler(value, gasParam)
 
-  computation.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {computation.msg.storageAddress}[{slot}] -> {value} ({currentValue})")
+  computation.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {computation.msg.contractAddress}[{slot}] -> {value} ({currentValue})")
 
   if gasRefund != 0:
     computation.gasMeter.refundGas(gasRefund)
 
   computation.vmState.mutateStateDB:
-    db.setStorage(computation.msg.storageAddress, slot, value)
+    db.setStorage(computation.msg.contractAddress, slot, value)

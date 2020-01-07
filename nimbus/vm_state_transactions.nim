@@ -50,7 +50,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     gasPrice: tx.gasPrice,
     origin: sender,
     sender: sender,
-    storageAddress: recipient,
+    contractAddress: recipient,
     codeAddress: tx.to,
     value: tx.value,
     data: data,

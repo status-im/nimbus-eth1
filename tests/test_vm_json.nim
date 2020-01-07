@@ -45,17 +45,19 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
   code = fexec{"code"}.getStr.hexToSeqByte
   let toAddress = fexec{"address"}.getStr.parseAddress
-  let message = newMessage(
-      to = toAddress,
-      sender = fexec{"caller"}.getStr.parseAddress,
-      value = cast[uint64](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
-      data = fexec{"data"}.getStr.hexToSeqByte,
-      code = code,
-      contractCreation = toAddress == ZERO_ADDRESS, # assume ZERO_ADDRESS is a contract creation
-      gas = fexec{"gas"}.getHexadecimalInt,
-      gasPrice = fexec{"gasPrice"}.getHexadecimalInt,
-      options = newMessageOptions(origin=fexec{"origin"}.getStr.parseAddress,
-                                  createAddress = toAddress))
+  let message = Message(
+    depth: 0,
+    gas: fexec{"gas"}.getHexadecimalInt,
+    gasPrice: fexec{"gasPrice"}.getHexadecimalInt,
+    origin: fexec{"origin"}.getStr.parseAddress,
+    sender: fexec{"caller"}.getStr.parseAddress,
+    contractAddress: toAddress,
+    codeAddress: toAddress,
+    value: cast[uint64](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
+    data: fexec{"data"}.getStr.hexToSeqByte,
+    code: code,
+    contractCreation: toAddress == ZERO_ADDRESS # assume ZERO_ADDRESS is a contract creation
+    )
 
   var computation = newBaseComputation(vmState, header.blockNumber, message)
   computation.executeOpcodes()

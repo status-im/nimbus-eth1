@@ -125,7 +125,7 @@ proc logImpl(c: BaseComputation, opcode: Op, topicCount: int) =
 
   c.memory.extend(memPos, len)
   log.data = c.memory.read(memPos, len)
-  log.address = c.msg.storageAddress
+  log.address = c.msg.contractAddress
   c.addLogEntry(log)
 
 template genLog*() =
