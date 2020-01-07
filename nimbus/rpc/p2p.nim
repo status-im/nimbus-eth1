@@ -277,21 +277,21 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       sender, destination: EthAddress,
       gasLimit, gasPrice: GasInt,
       contractCreation: bool): BaseComputation =
-    let
-      # Handle optional defaults.
-      message = newMessage(
-        gas = gasLimit,
-        gasPrice = gasPrice,
-        to = destination,
-        sender = sender,
-        value = value,
-        data = data,
-        code = vmState.readOnlyStateDB.getCode(destination).toSeq,
-        contractCreation = contractCreation,
-        options = newMessageOptions(origin = sender,
-                                    createAddress = destination))
-
-    result = newBaseComputation(vmState, blockNumber, message)
+    #let
+    #  # Handle optional defaults.
+    #  message = newMessage(
+    #    gas = gasLimit,
+    #    gasPrice = gasPrice,
+    #    to = destination,
+    #    sender = sender,
+    #    value = value,
+    #    data = data,
+    #    code = vmState.readOnlyStateDB.getCode(destination).toSeq,
+    #    contractCreation = contractCreation,
+    #    options = newMessageOptions(origin = sender,
+    #                                createAddress = destination))
+    #
+    #result = newBaseComputation(vmState, blockNumber, message)
 
   rpcsrv.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.

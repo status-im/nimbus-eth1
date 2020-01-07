@@ -44,17 +44,19 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     debug "not enough gas to perform calculation", gas=gas
     return
 
-  let msg = newMessage(
-    gas = gas,
-    gasPrice = tx.gasPrice,
-    to = tx.to,
-    sender = sender,
-    value = tx.value,
-    data = data,
-    code = code,
-    tx.isContractCreation,
-    options = newMessageOptions(origin = sender,
-                                createAddress = recipient))
+  let msg = Message(
+    depth: 0,
+    gas: gas,
+    gasPrice: tx.gasPrice,
+    origin: sender,
+    sender: sender,
+    storageAddress: recipient,
+    codeAddress: tx.to,
+    value: tx.value,
+    data: data,
+    code: code,
+    contractCreation: tx.isContractCreation
+    )
 
   result = newBaseComputation(vmState, vmState.blockNumber, msg, some(fork))
   doAssert result.isOriginComputation

@@ -76,29 +76,6 @@ proc outputHex*(c: BaseComputation): string =
 proc isSuicided*(c: BaseComputation, address: EthAddress): bool =
   result = address in c.accountsToDelete
 
-proc prepareChildMessage*(
-    c: BaseComputation,
-    gas: GasInt,
-    to: EthAddress,
-    value: UInt256,
-    data: seq[byte],
-    code: seq[byte],
-    contractCreation: bool,
-    options: MessageOptions = newMessageOptions()): Message =
-
-  var childOptions = options
-  childOptions.depth = c.msg.depth + 1
-  result = newMessage(
-    gas,
-    c.msg.gasPrice,
-    to,
-    c.msg.origin,
-    value,
-    data,
-    code,
-    contractCreation,
-    childOptions)
-
 proc snapshot*(comp: BaseComputation) =
   comp.dbsnapshot.transaction = comp.vmState.chaindb.db.beginTransaction()
   comp.dbsnapshot.intermediateRoot = comp.vmState.accountDb.rootHash
