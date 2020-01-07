@@ -576,18 +576,20 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
     push: 0
     return
 
-  let childMsg = prepareChildMessage(
-    computation,
-    gas = createMsgGas,
-    to = CREATE_CONTRACT_ADDRESS,
-    value = value,
-    data = @[],
-    code = callData,
-    contractCreation = true,
-    options = MessageOptions(createAddress: contractAddress)
+  let childMsg = Message(
+    depth: computation.msg.depth + 1,
+    gas: createMsgGas,
+    gasPrice: computation.msg.gasPrice,
+    origin: computation.msg.origin,
+    sender: computation.msg.storageAddress,
+    storageAddress: contractAddress,
+    codeAddress: CREATE_CONTRACT_ADDRESS,
+    value: value,
+    data: @[],
+    code: callData,
+    contractCreation: true
     )
 
-  childMsg.sender = computation.msg.storageAddress
   result = newBaseComputation(
     computation.vmState,
     computation.vmState.blockNumber,
@@ -627,13 +629,10 @@ proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, Et
        memoryInputStartPosition, memoryInputSize,
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(5)
 
-  let to = codeAddress
-  let sender = computation.msg.storageAddress
-
   result = (gas,
     value,
-    to,
-    sender,
+    codeAddress, # contractAddress
+    computation.msg.storageAddress, # sender
     codeAddress,
     memoryInputStartPosition,
     memoryInputSize,
@@ -643,7 +642,7 @@ proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, Et
 
 proc callCodeParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
-  let to = computation.stack.popAddress()
+  let codeAddress = computation.stack.popAddress()
 
   let (value,
        memoryInputStartPosition, memoryInputSize,
@@ -651,9 +650,9 @@ proc callCodeParams(computation: BaseComputation): (UInt256, UInt256, EthAddress
 
   result = (gas,
     value,
-    to,
-    computation.msg.storageAddress,  # sender
-    to,  # code_address
+    computation.msg.storageAddress, # contractAddress
+    computation.msg.storageAddress, # sender
+    codeAddress,
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,
@@ -667,14 +666,10 @@ proc delegateCallParams(computation: BaseComputation): (UInt256, UInt256, EthAdd
   let (memoryInputStartPosition, memoryInputSize,
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
 
-  let to = computation.msg.storageAddress
-  let sender = computation.msg.sender
-  let value = computation.msg.value
-
   result = (gas,
-    value,
-    to,
-    sender,
+    computation.msg.value, # value
+    computation.msg.storageAddress, # contractAddress
+    computation.msg.sender, # sender
     codeAddress,
     memoryInputStartPosition,
     memoryInputSize,
@@ -684,16 +679,16 @@ proc delegateCallParams(computation: BaseComputation): (UInt256, UInt256, EthAdd
 
 proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
-  let to = computation.stack.popAddress()
+  let codeAddress = computation.stack.popAddress()
 
   let (memoryInputStartPosition, memoryInputSize,
        memoryOutputStartPosition, memoryOutputSize) = computation.stack.popInt(4)
 
   result = (gas,
     0.u256, # value
-    to,
+    codeAddress, # contractAddress
     computation.msg.storageAddress, # sender
-    to, # codeAddress
+    codeAddress,
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,
@@ -702,7 +697,7 @@ proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddre
 
 template genCall(callName: untyped, opCode: Op): untyped =
   proc `callName Setup`(computation: BaseComputation, callNameStr: string): BaseComputation =
-    let (gas, value, to, sender,
+    let (gas, value, contractAddress, sender,
           codeAddress,
           memoryInputStartPosition, memoryInputSize,
           memoryOutputStartPosition, memoryOutputSize,
@@ -711,9 +706,9 @@ template genCall(callName: untyped, opCode: Op): untyped =
     let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.cleanMemRef, memoryInputSize.cleanMemRef, memoryOutputStartPosition.cleanMemRef, memoryOutputSize.cleanMemRef)
 
     let isNewAccount = if getFork(computation) >= FkSpurious:
-                         computation.vmState.readOnlyStateDb.isDeadAccount(to)
+                         computation.vmState.readOnlyStateDb.isDeadAccount(contractAddress)
                        else:
-                         not computation.vmState.readOnlyStateDb.accountExists(to)
+                         not computation.vmState.readOnlyStateDb.accountExists(contractAddress)
 
     let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
                                     (memInPos, memInLen)
@@ -744,24 +739,19 @@ template genCall(callName: untyped, opCode: Op): untyped =
       callData = computation.memory.read(memInPos, memInLen)
       code = computation.vmState.readOnlyStateDb.getCode(codeAddress)
 
-    var childMsg = prepareChildMessage(
-      computation,
-      childGasLimit,
-      to,
-      value,
-      callData,
-      code.toSeq,
-      false,
-      MessageOptions(flags: flags)
-    )
-
-    childMsg.sender = sender
-
-    when opCode == CallCode:
-      childMsg.storageAddress = computation.msg.storageAddress
-
-    when opCode == DelegateCall:
-      childMsg.codeAddress = codeAddress
+    var childMsg = Message(
+      depth: computation.msg.depth + 1,
+      gas: childGasLimit,
+      gasPrice: computation.msg.gasPrice,
+      origin: computation.msg.origin,
+      sender: sender,
+      storageAddress: contractAddress,
+      codeAddress: codeAddress,
+      value: value,
+      data: callData,
+      code: code.toSeq,
+      contractCreation: false,
+      flags: flags)
 
     var childComp = newBaseComputation(
       computation.vmState,

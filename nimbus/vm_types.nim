@@ -98,30 +98,15 @@ type
     emvcStatic   = 1
 
   Message* = ref object
-    # A message for VM computation
-    # https://github.com/ethereum/evmc/blob/master/include/evmc/evmc.h
-    destination*:             EthAddress
-    sender*:                  EthAddress
-    value*:                   UInt256
-    data*:                    seq[byte]
-    gas*:                     GasInt
-    gasPrice*:                GasInt
-    depth*:                   int
-    #kind*:                    CallKind
-    flags*:                   MsgFlags
-
-    # Not in EVMC API
-    # TODO: Done via callback function (v)table in EVMC
-    code*:                    seq[byte]
-
-    internalOrigin*:          EthAddress
-    internalCodeAddress*:     EthAddress
-    internalStorageAddress*:  EthAddress
-    contractCreation*:        bool
-
-  MessageOptions* = ref object
-    origin*:                  EthAddress
-    depth*:                   int
-    createAddress*:           EthAddress
-    codeAddress*:             EthAddress
-    flags*:                   MsgFlags
+    depth*:            int
+    gas*:              GasInt
+    gasPrice*:         GasInt
+    origin*:           EthAddress
+    sender*:           EthAddress
+    storageAddress*:   EthAddress
+    codeAddress*:      EthAddress
+    value*:            UInt256
+    data*:             seq[byte]
+    code*:             seq[byte]
+    contractCreation*: bool
+    flags*:            MsgFlags
