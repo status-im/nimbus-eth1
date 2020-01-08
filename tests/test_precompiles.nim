@@ -30,6 +30,7 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
       sender: EthAddress
       toAddress = initAddress(address)
       message = Message(
+        kind: evmcCall,
         gas: gas,
         gasPrice: gasPrice,
         origin: sender,
@@ -38,8 +39,7 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
         codeAddress: toAddress,
         value: 0.u256,
         data: data,
-        code: @[],
-        contractCreation: false
+        code: @[]
         )
       computation = newBaseComputation(vmState, header.blockNumber, message)
     echo "Running ", action.astToStr, " - ", test["name"]

@@ -13,4 +13,4 @@ proc isOrigin*(message: Message): bool =
   message.sender == message.origin
 
 proc isCreate*(message: Message): bool =
-  message.contractCreation
+  message.kind in {evmcCreate, evmcCreate2}

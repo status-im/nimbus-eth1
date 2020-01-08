@@ -556,6 +556,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
     isCollision: bool
 
   when opCode == Create:
+    const callKind = evmcCreate
     computation.vmState.mutateStateDB:
       # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
       # See: https://github.com/ethereum/EIPs/issues/684
@@ -565,6 +566,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
       contractAddress = generateAddress(computation.msg.contractAddress, creationNonce)
       isCollision = db.hasCodeOrNonce(contractAddress)
   else:
+    const callKind = evmcCreate2
     computation.vmState.mutateStateDB:
       db.incNonce(computation.msg.contractAddress)
       let salt = computation.stack.popInt()
@@ -577,6 +579,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
     return
 
   let childMsg = Message(
+    kind: callKind,
     depth: computation.msg.depth + 1,
     gas: createMsgGas,
     gasPrice: computation.msg.gasPrice,
@@ -586,8 +589,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
     codeAddress: CREATE_CONTRACT_ADDRESS,
     value: value,
     data: @[],
-    code: callData,
-    contractCreation: true
+    code: callData
     )
 
   result = newBaseComputation(
@@ -621,7 +623,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
 genCreate(create, Create)
 genCreate(create2, Create2)
 
-proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let codeAddress = computation.stack.popAddress()
 
@@ -634,13 +636,14 @@ proc callParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, Et
     codeAddress, # contractAddress
     computation.msg.contractAddress, # sender
     codeAddress,
+    evmcCall,
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,
     memoryOutputSize,
     computation.msg.flags)
 
-proc callCodeParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc callCodeParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let codeAddress = computation.stack.popAddress()
 
@@ -653,13 +656,14 @@ proc callCodeParams(computation: BaseComputation): (UInt256, UInt256, EthAddress
     computation.msg.contractAddress, # contractAddress
     computation.msg.contractAddress, # sender
     codeAddress,
+    evmcCallCode,
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,
     memoryOutputSize,
     computation.msg.flags)
 
-proc delegateCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc delegateCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let codeAddress = computation.stack.popAddress()
 
@@ -671,13 +675,14 @@ proc delegateCallParams(computation: BaseComputation): (UInt256, UInt256, EthAdd
     computation.msg.contractAddress, # contractAddress
     computation.msg.sender, # sender
     codeAddress,
+    evmcDelegateCall,
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,
     memoryOutputSize,
     computation.msg.flags)
 
-proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
   let gas = computation.stack.popInt()
   let codeAddress = computation.stack.popAddress()
 
@@ -689,6 +694,7 @@ proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddre
     codeAddress, # contractAddress
     computation.msg.contractAddress, # sender
     codeAddress,
+    evmcCall,
     memoryInputStartPosition,
     memoryInputSize,
     memoryOutputStartPosition,
@@ -698,7 +704,7 @@ proc staticCallParams(computation: BaseComputation): (UInt256, UInt256, EthAddre
 template genCall(callName: untyped, opCode: Op): untyped =
   proc `callName Setup`(computation: BaseComputation, callNameStr: string): BaseComputation =
     let (gas, value, contractAddress, sender,
-          codeAddress,
+          codeAddress, callKind,
           memoryInputStartPosition, memoryInputSize,
           memoryOutputStartPosition, memoryOutputSize,
           flags) = `callName Params`(computation)
@@ -740,6 +746,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       code = computation.vmState.readOnlyStateDb.getCode(codeAddress)
 
     var childMsg = Message(
+      kind: callKind,
       depth: computation.msg.depth + 1,
       gas: childGasLimit,
       gasPrice: computation.msg.gasPrice,
@@ -750,7 +757,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
       value: value,
       data: callData,
       code: code.toSeq,
-      contractCreation: false,
       flags: flags)
 
     var childComp = newBaseComputation(

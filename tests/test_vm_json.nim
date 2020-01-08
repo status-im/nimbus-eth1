@@ -46,6 +46,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   code = fexec{"code"}.getStr.hexToSeqByte
   let toAddress = fexec{"address"}.getStr.parseAddress
   let message = Message(
+    kind: if toAddress == ZERO_ADDRESS: evmcCreate else: evmcCall, # assume ZERO_ADDRESS is a contract creation
     depth: 0,
     gas: fexec{"gas"}.getHexadecimalInt,
     gasPrice: fexec{"gasPrice"}.getHexadecimalInt,
@@ -55,8 +56,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     codeAddress: toAddress,
     value: cast[uint64](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
     data: fexec{"data"}.getStr.hexToSeqByte,
-    code: code,
-    contractCreation: toAddress == ZERO_ADDRESS # assume ZERO_ADDRESS is a contract creation
+    code: code
     )
 
   var computation = newBaseComputation(vmState, header.blockNumber, message)
