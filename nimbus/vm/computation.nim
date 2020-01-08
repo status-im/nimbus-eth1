@@ -267,8 +267,7 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
     result = address[19] == byte(3)
 
   let isIstanbul = c.getFork >= FkIstanbul
-  let condition = if isIstanbul: c.isError or ancestorHadError
-                  else: c.isError and c.isOriginComputation
+  let condition = c.isError or ancestorHadError
 
   for _, beneficiary in c.accountsToDelete:
     if condition:
