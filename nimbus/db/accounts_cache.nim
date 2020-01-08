@@ -135,7 +135,7 @@ proc isEmpty(acc: RefAccount): bool =
     acc.account.balance.isZero and
     acc.account.nonce == 0
 
-proc isExists(acc: RefAccount): bool =
+proc exists(acc: RefAccount): bool =
   if IsAlive notin acc.flags:
     return false
   if IsClone in acc.flags:
@@ -287,16 +287,16 @@ proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
 
 proc accountExists*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address)
-  acc.isExists()
+  acc.exists()
 
 proc isEmptyAccount*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
   let acc = ac.getAccount(address)
-  doAssert acc.isExists()
+  doAssert acc.exists()
   result = acc.isEmpty()
 
 proc isDeadAccount*(ac: AccountsCache, address: EthAddress): bool =
   let acc = ac.getAccount(address)
-  if not acc.isExists():
+  if not acc.exists():
     result = true
   else:
     result = acc.isEmpty()
