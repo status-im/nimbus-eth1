@@ -79,11 +79,9 @@ proc isSuicided*(c: BaseComputation, address: EthAddress): bool =
 proc snapshot*(comp: BaseComputation) =
   comp.dbsnapshot.transaction = comp.vmState.chaindb.db.beginTransaction()
   comp.dbsnapshot.intermediateRoot = comp.vmState.accountDb.rootHash
-  comp.vmState.blockHeader.stateRoot = comp.vmState.accountDb.rootHash
 
 proc commit*(comp: BaseComputation) =
   comp.dbsnapshot.transaction.commit()
-  comp.vmState.accountDb.rootHash = comp.vmState.blockHeader.stateRoot
 
 proc dispose*(comp: BaseComputation) {.inline.} =
   comp.dbsnapshot.transaction.dispose()
@@ -91,7 +89,6 @@ proc dispose*(comp: BaseComputation) {.inline.} =
 proc rollback*(comp: BaseComputation) =
   comp.dbsnapshot.transaction.rollback()
   comp.vmState.accountDb.rootHash = comp.dbsnapshot.intermediateRoot
-  comp.vmState.blockHeader.stateRoot = comp.dbsnapshot.intermediateRoot
 
 proc setError*(comp: BaseComputation, msg: string, burnsGas = false) {.inline.} =
   comp.error = Error(info: msg, burnsGas: burnsGas)
