@@ -45,6 +45,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     return
 
   let msg = Message(
+    kind: if tx.isContractCreation: evmcCreate else: evmcCall,
     depth: 0,
     gas: gas,
     gasPrice: tx.gasPrice,
@@ -54,8 +55,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     codeAddress: tx.to,
     value: tx.value,
     data: data,
-    code: code,
-    contractCreation: tx.isContractCreation
+    code: code
     )
 
   result = newBaseComputation(vmState, vmState.blockNumber, msg, some(fork))

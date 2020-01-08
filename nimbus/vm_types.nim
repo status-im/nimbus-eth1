@@ -98,6 +98,7 @@ type
     emvcStatic   = 1
 
   Message* = ref object
+    kind*:             CallKind
     depth*:            int
     gas*:              GasInt
     gasPrice*:         GasInt
@@ -108,5 +109,4 @@ type
     value*:            UInt256
     data*:             seq[byte]
     code*:             seq[byte]
-    contractCreation*: bool
     flags*:            MsgFlags

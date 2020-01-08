@@ -207,6 +207,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
 
   let contractAddress = generateAddress(sender, tx.accountNonce)
   let msg = Message(
+      kind: evmcCall,
       depth: 0,
       gas: tx.gasLimit - gasUsed,
       gasPrice: tx.gasPrice,
@@ -216,8 +217,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
       codeAddress: tx.to,
       value: tx.value,
       data: data,
-      code: tx.payload,
-      contractCreation: false
+      code: tx.payload
       )
 
   newBaseComputation(vmState, vmState.blockNumber, msg, some(fork))
