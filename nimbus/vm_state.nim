@@ -35,7 +35,7 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
   self.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
   self.logEntries = @[]
   self.accountDb = newAccountStateDB(chainDB.db, prevStateRoot, chainDB.pruneTrie)
-  self.touchedAccounts = initHashSet[EthAddress]()
+  self.touchedAccounts = initHashSet[EthAddress]()  
 
 proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
                      chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =

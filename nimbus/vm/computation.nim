@@ -24,7 +24,6 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: BlockNumber, message
   result.memory = Memory()
   result.stack = newStack()
   result.gasMeter.init(message.gas)
-  result.children = @[]
   result.touchedAccounts = initHashSet[EthAddress]()
   result.suicides = initHashSet[EthAddress]()
   result.code = newCodeStream(message.code)
@@ -200,6 +199,11 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   executeOpcodes(computation)
 
 proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
+  if child.isError or computation.getFork == FKIstanbul:
+    if not child.msg.isCreate:
+      if child.msg.contractAddress == ripemdAddr:
+        child.vmState.touchedAccounts.incl child.msg.contractAddress
+
   if child.isError:
     if child.shouldBurnGas:
       computation.returnData = @[]
@@ -218,9 +222,9 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
 
   if not child.shouldBurnGas:
     computation.gasMeter.returnGas(child.gasMeter.gasRemaining)
-  computation.children.add(child)
 
 proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
+  c.touchedAccounts.incl beneficiary
   c.touchedAccounts.incl beneficiary
   c.suicides.incl(c.msg.contractAddress)
 
@@ -248,26 +252,21 @@ proc getGasRemaining*(c: BaseComputation): GasInt =
   else:
     result = c.gasMeter.gasRemaining
 
-# TODO: collecting touched accounts should be done in account state db
-proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress], ancestorHadError: bool = false) =
+proc collectTouchedAccounts*(c: BaseComputation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161:
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
-  let isIstanbul = c.getFork >= FkIstanbul
-  let condition = c.isError or ancestorHadError
-
-  if not c.msg.isCreate:
-    if condition:
+  if c.isSuccess:
+    if not c.msg.isCreate:
+      c.touchedAccounts.incl c.msg.contractAddress
+    c.vmState.touchedAccounts.incl c.touchedAccounts
+  else:
+    if not c.msg.isCreate:
       # Special case to account for geth+parity bug
       # https://github.com/ethereum/EIPs/issues/716
       if c.msg.contractAddress == ripemdAddr:
-        output.incl c.msg.contractAddress
-
-  if c.isSuccess or isIstanbul:
-  # recurse into nested computations (even errored ones, since looking for RIPEMD160)
-    for child in c.children:
-      child.collectTouchedAccounts(output, c.isError or ancestorHadError)
+        c.vmState.touchedAccounts.incl c.msg.contractAddress
 
 proc tracingEnabled*(c: BaseComputation): bool =
   c.vmState.tracingEnabled
