@@ -80,6 +80,8 @@ proc execComputation*(computation: var BaseComputation) =
   if computation.getFork >= FkSpurious:
     computation.collectTouchedAccounts(computation.vmState.touchedAccounts)
     if computation.isSuccess:
+      if not computation.msg.isCreate:
+        computation.touchedAccounts.incl computation.msg.contractAddress
       computation.vmState.touchedAccounts.incl computation.touchedAccounts
 
   computation.vmstate.status = computation.isSuccess

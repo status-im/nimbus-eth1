@@ -145,6 +145,9 @@ template continuation*(comp: BaseComputation, body: untyped) =
     body
     tmpNext()
 
+proc initAddress(x: int): EthAddress {.compileTime.} = result[19] = x.byte
+const ripemdAddr = initAddress(3)
+
 proc postExecuteVM(computation: BaseComputation, opCode: static[Op]) {.gcsafe.} =
   when opCode == Create:
     if computation.isSuccess:
@@ -207,6 +210,7 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
       computation.returnData = @[]
     else:
       computation.returnData = child.output
+      child.touchedAccounts.incl child.msg.contractAddress
     computation.logEntries.add child.logEntries
     computation.gasMeter.refundGas(child.gasMeter.gasRefunded)
     computation.suicides.incl child.suicides
@@ -250,12 +254,6 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
-  proc cmpThree(address: EthAddress): bool =
-    # looking for RIPEMD160
-    for i in 0..18:
-      if address[i] != 0: return
-    result = address[19] == byte(3)
-
   let isIstanbul = c.getFork >= FkIstanbul
   let condition = c.isError or ancestorHadError
 
@@ -263,10 +261,8 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
     if condition:
       # Special case to account for geth+parity bug
       # https://github.com/ethereum/EIPs/issues/716
-      if cmpThree(c.msg.contractAddress):
+      if c.msg.contractAddress == ripemdAddr:
         output.incl c.msg.contractAddress
-    else:
-      output.incl c.msg.contractAddress
 
   if c.isSuccess or isIstanbul:
   # recurse into nested computations (even errored ones, since looking for RIPEMD160)
