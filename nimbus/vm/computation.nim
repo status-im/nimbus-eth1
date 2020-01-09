@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, strformat, strutils, sequtils, macros, math, tables, options,
+  chronicles, strformat, strutils, sequtils, macros, math, options,
   sets, eth/[common, keys], eth/trie/db as triedb,
   ../constants, ../errors, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
@@ -25,7 +25,7 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: BlockNumber, message
   result.stack = newStack()
   result.gasMeter.init(message.gas)
   result.children = @[]
-  result.accountsToDelete = initTable[EthAddress, EthAddress]()
+  result.touchedAccounts = initHashSet[EthAddress]()
   result.suicides = initHashSet[EthAddress]()
   result.code = newCodeStream(message.code)
   # result.rawOutput = "0x"
@@ -74,7 +74,7 @@ proc outputHex*(c: BaseComputation): string =
   c.rawOutput.bytesToHex
 
 proc isSuicided*(c: BaseComputation, address: EthAddress): bool =
-  result = address in c.accountsToDelete
+  result = address in c.suicides
 
 proc snapshot*(comp: BaseComputation) =
   comp.dbsnapshot.transaction = comp.vmState.chaindb.db.beginTransaction()
@@ -216,15 +216,7 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
   computation.children.add(child)
 
 proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
-  if c.msg.contractAddress in c.accountsToDelete:
-    raise newException(ValueError,
-      "invariant:  should be impossible for an account to be " &
-      "registered for deletion multiple times")
-  # TODO: collecting touched accounts should be done in state db
-  # we should remove this accountsToDelete map delegate it to state db
-  # we will only keep suicides list here in order to make
-  # evmc integration easier
-  c.accountsToDelete[c.msg.contractAddress] = beneficiary
+  c.touchedAccounts.incl beneficiary
   c.suicides.incl(c.msg.contractAddress)
 
 proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
@@ -266,7 +258,7 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
   let isIstanbul = c.getFork >= FkIstanbul
   let condition = c.isError or ancestorHadError
 
-  for _, beneficiary in c.accountsToDelete:
+  for beneficiary in c.touchedAccounts:
     if condition:
       # Special case to account for geth+parity bug
       # https://github.com/ethereum/EIPs/issues/716
