@@ -13,9 +13,6 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
-  if fork >= FkSpurious:
-    vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
-
   var gasUsed = tx.gasLimit
   var coinBaseSuicide = false
 
@@ -61,11 +58,13 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     else:
       db.addBalance(vmState.blockHeader.coinbase, 0.u256)
 
-    # EIP158 state clearing
-    for account in vmState.touchedAccounts:
-      if db.accountExists(account) and db.isEmptyAccount(account):
-        debug "state clearing", account
-        db.deleteAccount(account)
+    if fork >= FkSpurious:
+      vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
+      # EIP158/161 state clearing
+      for account in vmState.touchedAccounts:
+        if db.accountExists(account) and db.isEmptyAccount(account):
+          debug "state clearing", account
+          db.deleteAccount(account)
 
   vmState.accountDb.updateOriginalRoot()
   result = gasUsed
