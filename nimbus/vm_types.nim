@@ -63,7 +63,7 @@ type
     rawOutput*:             seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
-    accountsToDelete*:      Table[EthAddress, EthAddress]
+    touchedAccounts*:       HashSet[EthAddress]
     suicides*:              HashSet[EthAddress]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     forkOverride*:          Option[Fork]
