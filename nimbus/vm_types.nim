@@ -59,11 +59,10 @@ type
     stack*:                 Stack
     gasMeter*:              GasMeter
     code*:                  CodeStream
-    children*:              seq[BaseComputation]
     rawOutput*:             seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
-    touchedAccounts*:       HashSet[EthAddress]
+    touchedAccounts*:       HashSet[EthAddress]    
     suicides*:              HashSet[EthAddress]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
     forkOverride*:          Option[Fork]
