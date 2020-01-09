@@ -210,6 +210,7 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
     computation.logEntries.add child.logEntries
     computation.gasMeter.refundGas(child.gasMeter.gasRefunded)
     computation.suicides.incl child.suicides
+    computation.touchedAccounts.incl child.touchedAccounts
 
   if not child.shouldBurnGas:
     computation.gasMeter.returnGas(child.gasMeter.gasRemaining)
@@ -257,16 +258,6 @@ proc collectTouchedAccounts*(c: BaseComputation, output: var HashSet[EthAddress]
 
   let isIstanbul = c.getFork >= FkIstanbul
   let condition = c.isError or ancestorHadError
-
-  for beneficiary in c.touchedAccounts:
-    if condition:
-      # Special case to account for geth+parity bug
-      # https://github.com/ethereum/EIPs/issues/716
-      if beneficiary.cmpThree:
-        output.incl beneficiary
-      continue
-    else:
-      output.incl beneficiary
 
   if not c.msg.isCreate:
     if condition:
