@@ -31,7 +31,7 @@ macro op*(procname: untyped, inline: static[bool], stackParams_body: varargs[unt
   # we can't have a nicer macro signature `stackParams: varargs[untyped], body: untyped`
   # see https://github.com/nim-lang/Nim/issues/5855 and are forced to "pop"
 
-  let computation = newIdentNode("computation")
+  let computation = newIdentNode("c")
   var stackParams = stackParams_body
 
   # 1. Separate stackParams and body with pop
@@ -59,12 +59,12 @@ macro op*(procname: untyped, inline: static[bool], stackParams_body: varargs[unt
   # TODO: replace by func to ensure no side effects
   if inline:
     result = quote do:
-      proc `procname`*(`computation`: BaseComputation) {.inline.} =
+      proc `procname`*(`computation`: Computation) {.inline.} =
         `popStackStmt`
         `body`
   else:
     result = quote do:
-      proc `procname`*(`computation`: BaseComputation) {.gcsafe.} =
+      proc `procname`*(`computation`: Computation) {.gcsafe.} =
         `popStackStmt`
         `body`
 
@@ -76,7 +76,7 @@ macro genPush*(): untyped =
   for size in 1 .. 32:
     let name = genName(size)
     result.add quote do:
-      func `name`*(computation: BaseComputation) {.inline.}=
+      func `name`*(computation: Computation) {.inline.}=
         ## Push `size`-byte(s) on the stack
         computation.stack.push computation.code.readVmWord(`size`)
 
@@ -87,7 +87,7 @@ macro genDup*(): untyped =
   for pos in 1 .. 16:
     let name = genName(pos)
     result.add quote do:
-      func `name`*(computation: BaseComputation) {.inline.}=
+      func `name`*(computation: Computation) {.inline.}=
         computation.stack.dup(`pos`)
 
 macro genSwap*(): untyped =
@@ -97,16 +97,16 @@ macro genSwap*(): untyped =
   for pos in 1 .. 16:
     let name = genName(pos)
     result.add quote do:
-      func `name`*(computation: BaseComputation) {.inline.}=
+      func `name`*(computation: Computation) {.inline.}=
         computation.stack.swap(`pos`)
 
-template checkInStaticContext*(comp: BaseComputation) =
+template checkInStaticContext*(comp: Computation) =
   # TODO: if possible, this check only appear
   # when fork >= FkByzantium
   if emvcStatic == comp.msg.flags:
     raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
 
-proc logImpl(c: BaseComputation, opcode: Op, topicCount: int) =
+proc logImpl(c: Computation, opcode: Op, topicCount: int) =
   doAssert(topicCount in 0 .. 4)
   checkInStaticContext(c)
   let (memStartPosition, size) = c.stack.popInt(2)
@@ -129,8 +129,8 @@ proc logImpl(c: BaseComputation, opcode: Op, topicCount: int) =
   c.addLogEntry(log)
 
 template genLog*() =
-  proc log0*(c: BaseComputation) {.inline.} = logImpl(c, Log0, 0)
-  proc log1*(c: BaseComputation) {.inline.} = logImpl(c, Log1, 1)
-  proc log2*(c: BaseComputation) {.inline.} = logImpl(c, Log2, 2)
-  proc log3*(c: BaseComputation) {.inline.} = logImpl(c, Log3, 3)
-  proc log4*(c: BaseComputation) {.inline.} = logImpl(c, Log4, 4)
+  proc log0*(c: Computation) {.inline.} = logImpl(c, Log0, 0)
+  proc log1*(c: Computation) {.inline.} = logImpl(c, Log1, 1)
+  proc log2*(c: Computation) {.inline.} = logImpl(c, Log2, 2)
+  proc log3*(c: Computation) {.inline.} = logImpl(c, Log3, 3)
+  proc log4*(c: Computation) {.inline.} = logImpl(c, Log4, 4)

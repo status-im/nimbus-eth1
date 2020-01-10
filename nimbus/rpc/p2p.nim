@@ -35,7 +35,7 @@ template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
   addressDb.getBalance(address).truncate(int64)
 
 proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
-  proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): BaseComputation =
+  proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): Computation =
     let recipient = transaction.getRecipient()
     # Note that vmState may be altered
     setupComputation(
@@ -276,7 +276,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       value: UInt256, data: seq[byte],
       sender, destination: EthAddress,
       gasLimit, gasPrice: GasInt,
-      contractCreation: bool): BaseComputation =
+      contractCreation: bool): Computation =
     let
       # Handle optional defaults.
       message = Message(
@@ -292,7 +292,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         data: data,
         code: vmState.readOnlyStateDB.getCode(destination).toSeq
       )
-    result = newBaseComputation(vmState, message)
+    result = newComputation(vmState, message)
 
   rpcsrv.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.

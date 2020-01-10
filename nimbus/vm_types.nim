@@ -51,7 +51,7 @@ type
     transaction*: DbTransaction
     intermediateRoot*: Hash256
 
-  BaseComputation* = ref object of RootObj
+  Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState
     msg*:                   Message

@@ -18,7 +18,7 @@ type
     # Istanbul
     paBlake2bf = 9
 
-proc getSignature(computation: BaseComputation): (array[32, byte], Signature) =
+proc getSignature(computation: Computation): (array[32, byte], Signature) =
   # input is Hash, V, R, S
   template data: untyped = computation.msg.data
   var bytes: array[65, byte] # will hold R[32], S[32], V[1], in that order
@@ -91,7 +91,7 @@ proc getFR(data: openarray[byte]): FR =
   if not result.fromBytes2(data):
     raise newException(ValidationError, "Could not get FR value")
 
-proc ecRecover*(computation: BaseComputation) =
+proc ecRecover*(computation: Computation) =
   computation.gasMeter.consumeGas(
     GasECRecover,
     reason="ECRecover Precompile")
@@ -107,7 +107,7 @@ proc ecRecover*(computation: BaseComputation) =
   computation.rawOutput[12..31] = pubKey.toCanonicalAddress()
   trace "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
 
-proc sha256*(computation: BaseComputation) =
+proc sha256*(computation: Computation) =
   let
     wordCount = wordCount(computation.msg.data.len)
     gasFee = GasSHA256 + wordCount * GasSHA256Word
@@ -116,7 +116,7 @@ proc sha256*(computation: BaseComputation) =
   computation.rawOutput = @(nimcrypto.sha_256.digest(computation.msg.data).data)
   trace "SHA256 precompile", output = computation.rawOutput.toHex
 
-proc ripemd160*(computation: BaseComputation) =
+proc ripemd160*(computation: Computation) =
   let
     wordCount = wordCount(computation.msg.data.len)
     gasFee = GasRIPEMD160 + wordCount * GasRIPEMD160Word
@@ -126,7 +126,7 @@ proc ripemd160*(computation: BaseComputation) =
   computation.rawOutput[12..31] = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
   trace "RIPEMD160 precompile", output = computation.rawOutput.toHex
 
-proc identity*(computation: BaseComputation) =
+proc identity*(computation: Computation) =
   let
     wordCount = wordCount(computation.msg.data.len)
     gasFee = GasIdentity + wordCount * GasIdentityWord
@@ -135,7 +135,7 @@ proc identity*(computation: BaseComputation) =
   computation.rawOutput = computation.msg.data
   trace "Identity precompile", output = computation.rawOutput.toHex
 
-proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: int, T: type StUint) =
+proc modExpInternal(computation: Computation, base_len, exp_len, mod_len: int, T: type StUint) =
   template rawMsg: untyped {.dirty.} =
     computation.msg.data
 
@@ -208,7 +208,7 @@ proc modExpInternal(computation: BaseComputation, base_len, exp_len, mod_len: in
       computation.rawOutput = newSeq[byte](mod_len)
       computation.rawOutput[^output.len..^1] = output[0..^1]
 
-proc modExp*(computation: BaseComputation) =
+proc modExp*(computation: Computation) =
   ## Modular exponentiation precompiled contract
   ## Yellow Paper Appendix E
   ## EIP-198 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md
@@ -237,7 +237,7 @@ proc modExp*(computation: BaseComputation) =
   else:
     raise newException(EVMError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
-proc bn256ecAdd*(computation: BaseComputation, fork: Fork = FkByzantium) =
+proc bn256ecAdd*(computation: Computation, fork: Fork = FkByzantium) =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
   computation.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
@@ -258,7 +258,7 @@ proc bn256ecAdd*(computation: BaseComputation, fork: Fork = FkByzantium) =
 
   computation.rawOutput = @output
 
-proc bn256ecMul*(computation: BaseComputation, fork: Fork = FkByzantium) =
+proc bn256ecMul*(computation: Computation, fork: Fork = FkByzantium) =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
   computation.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
 
@@ -281,7 +281,7 @@ proc bn256ecMul*(computation: BaseComputation, fork: Fork = FkByzantium) =
 
   computation.rawOutput = @output
 
-proc bn256ecPairing*(computation: BaseComputation, fork: Fork = FkByzantium) =
+proc bn256ecPairing*(computation: Computation, fork: Fork = FkByzantium) =
   let msglen = len(computation.msg.data)
   if msglen mod 192 != 0:
     raise newException(ValidationError, "Invalid input length")
@@ -318,7 +318,7 @@ proc bn256ecPairing*(computation: BaseComputation, fork: Fork = FkByzantium) =
 
   computation.rawOutput = @output
 
-proc blake2bf*(computation: BaseComputation) =
+proc blake2bf*(computation: Computation) =
   template input(): untyped =
     computation.msg.data
 
@@ -337,7 +337,7 @@ proc getMaxPrecompileAddr(fork: Fork): PrecompileAddresses =
   elif fork < FkIstanbul: paPairing
   else: PrecompileAddresses.high
 
-proc execPrecompiles*(computation: BaseComputation, fork: Fork): bool {.inline.} =
+proc execPrecompiles*(computation: Computation, fork: Fork): bool {.inline.} =
   for i in 0..18:
     if computation.msg.codeAddress[i] != 0: return
 

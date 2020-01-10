@@ -41,7 +41,7 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
         data: data,
         code: @[]
         )
-      computation = newBaseComputation(vmState, message)
+      computation = newComputation(vmState, message)
     echo "Running ", action.astToStr, " - ", test["name"]
     `action`(computation)
     let c = computation.rawOutput == expected

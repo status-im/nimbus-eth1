@@ -16,7 +16,7 @@ import
 logScope:
   topics = "vm opcode"
 
-func invalidInstruction*(computation: BaseComputation) {.inline.} =
+func invalidInstruction*(c: Computation) {.inline.} =
   raise newException(InvalidInstruction, "Invalid instruction, received an opcode not implemented in the current fork.")
 
 let FrontierOpDispatch {.compileTime.}: array[Op, NimNode] = block:
@@ -223,9 +223,9 @@ proc genIstanbulJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compile
 
 let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTable(ConstantinopleOpDispatch)
 
-proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNode =
+proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
 
-  let instr = quote do: `computation`.instr
+  let instr = quote do: `c`.instr
   result = nnkCaseStmt.newTree(instr)
 
   # Add a branch for each (opcode, proc) pair
@@ -236,27 +236,27 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
       if op == Stop:
         quote do:
           trace "op: Stop"
-          if not `computation`.code.atEnd() and `computation`.tracingEnabled:
+          if not `c`.code.atEnd() and `c`.tracingEnabled:
             # we only trace `REAL STOP` and ignore `FAKE STOP`
-            `computation`.opIndex = `computation`.traceOpCodeStarted(`asOp`)
-            `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
+            `c`.opIndex = `c`.traceOpCodeStarted(`asOp`)
+            `c`.traceOpCodeEnded(`asOp`, `c`.opIndex)
           break
       else:
         if BaseGasCosts[op].kind == GckFixed:
           quote do:
-            if `computation`.tracingEnabled:
-              `computation`.opIndex = `computation`.traceOpCodeStarted(`asOp`)
-            `computation`.gasMeter.consumeGas(`computation`.gasCosts[`asOp`].cost, reason = $`asOp`)
-            `opImpl`(`computation`)
-            if `computation`.tracingEnabled:
-              `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
+            if `c`.tracingEnabled:
+              `c`.opIndex = `c`.traceOpCodeStarted(`asOp`)
+            `c`.gasMeter.consumeGas(`c`.gasCosts[`asOp`].cost, reason = $`asOp`)
+            `opImpl`(`c`)
+            if `c`.tracingEnabled:
+              `c`.traceOpCodeEnded(`asOp`, `c`.opIndex)
         else:
           quote do:
-            if `computation`.tracingEnabled:
-              `computation`.opIndex = `computation`.traceOpCodeStarted(`asOp`)
-            `opImpl`(`computation`)
-            if `computation`.tracingEnabled:
-              `computation`.traceOpCodeEnded(`asOp`, `computation`.opIndex)
+            if `c`.tracingEnabled:
+              `c`.opIndex = `c`.traceOpCodeStarted(`asOp`)
+            `opImpl`(`c`)
+            if `c`.tracingEnabled:
+              `c`.traceOpCodeEnded(`asOp`, `c`.opIndex)
             when `asOp` in {Return, Revert, SelfDestruct}:
               break
 
@@ -267,90 +267,90 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], computation: NimNode): NimNo
 
   # Wrap the case statement in while true + computed goto
   result = quote do:
-    if `computation`.tracingEnabled:
-      `computation`.prepareTracer()
+    if `c`.tracingEnabled:
+      `c`.prepareTracer()
     while true:
-      `instr` = `computation`.code.next()
+      `instr` = `c`.code.next()
       #{.computedGoto.}
       # computed goto causing stack overflow, it consumes a lot of space
       # we could use manual jump table instead
       # TODO lots of macro magic here to unravel, with chronicles...
-      # `computation`.logger.log($`computation`.stack & "\n\n", fgGreen)
+      # `c`.logger.log($`c`.stack & "\n\n", fgGreen)
       `result`
 
-macro genFrontierDispatch(computation: BaseComputation): untyped =
-  result = opTableToCaseStmt(FrontierOpDispatch, computation)
+macro genFrontierDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(FrontierOpDispatch, c)
 
-macro genHomesteadDispatch(computation: BaseComputation): untyped =
-  result = opTableToCaseStmt(HomesteadOpDispatch, computation)
+macro genHomesteadDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(HomesteadOpDispatch, c)
 
-macro genTangerineDispatch(computation: BaseComputation): untyped =
-  result = opTableToCaseStmt(TangerineOpDispatch, computation)
+macro genTangerineDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(TangerineOpDispatch, c)
 
-macro genSpuriousDispatch(computation: BaseComputation): untyped =
-  result = opTableToCaseStmt(SpuriousOpDispatch, computation)
+macro genSpuriousDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(SpuriousOpDispatch, c)
 
-macro genByzantiumDispatch(computation: BaseComputation): untyped =
-  result = opTableToCaseStmt(ByzantiumOpDispatch, computation)
+macro genByzantiumDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(ByzantiumOpDispatch, c)
 
-macro genConstantinopleDispatch(computation: BaseComputation): untyped =
-  result = opTableToCaseStmt(ConstantinopleOpDispatch, computation)
+macro genConstantinopleDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(ConstantinopleOpDispatch, c)
 
-macro genIstanbulDispatch(computation: BaseComputation): untyped =
-  result = opTableToCaseStmt(IstanbulOpDispatch, computation)
+macro genIstanbulDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(IstanbulOpDispatch, c)
 
-proc frontierVM(computation: BaseComputation) =
-  genFrontierDispatch(computation)
+proc frontierVM(c: Computation) =
+  genFrontierDispatch(c)
 
-proc homesteadVM(computation: BaseComputation) =
-  genHomesteadDispatch(computation)
+proc homesteadVM(c: Computation) =
+  genHomesteadDispatch(c)
 
-proc tangerineVM(computation: BaseComputation) =
-  genTangerineDispatch(computation)
+proc tangerineVM(c: Computation) =
+  genTangerineDispatch(c)
 
-proc spuriousVM(computation: BaseComputation) {.gcsafe.} =
-  genSpuriousDispatch(computation)
+proc spuriousVM(c: Computation) {.gcsafe.} =
+  genSpuriousDispatch(c)
 
-proc byzantiumVM(computation: BaseComputation) {.gcsafe.} =
-  genByzantiumDispatch(computation)
+proc byzantiumVM(c: Computation) {.gcsafe.} =
+  genByzantiumDispatch(c)
 
-proc constantinopleVM(computation: BaseComputation) {.gcsafe.} =
-  genConstantinopleDispatch(computation)
+proc constantinopleVM(c: Computation) {.gcsafe.} =
+  genConstantinopleDispatch(c)
 
-proc istanbulVM(computation: BaseComputation) {.gcsafe.} =
-  genIstanbulDispatch(computation)
+proc istanbulVM(c: Computation) {.gcsafe.} =
+  genIstanbulDispatch(c)
 
-proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
+proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
   of FkFrontier..FkThawing:
-    computation.frontierVM()
+    c.frontierVM()
   of FkHomestead..FkDao:
-    computation.homesteadVM()
+    c.homesteadVM()
   of FkTangerine:
-    computation.tangerineVM()
+    c.tangerineVM()
   of FkSpurious:
-    computation.spuriousVM()
+    c.spuriousVM()
   of FkByzantium:
-    computation.byzantiumVM()
+    c.byzantiumVM()
   of FkConstantinople:
-    computation.constantinopleVM()
+    c.constantinopleVM()
   else:
-    computation.istanbulVM()
+    c.istanbulVM()
 
-proc executeOpcodes(computation: BaseComputation) =
-  let fork = computation.fork
+proc executeOpcodes(c: Computation) =
+  let fork = c.fork
 
   block:
-    if computation.execPrecompiles(fork):
+    if c.execPrecompiles(fork):
       break
 
     try:
-      computation.selectVM(fork)
+      c.selectVM(fork)
     except CatchableError as e:
-      computation.setError(&"Opcode Dispatch Error msg={e.msg}, depth={computation.msg.depth}", true)
+      c.setError(&"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
 
-  computation.nextProc()
-  if computation.isError():
-    if computation.tracingEnabled: computation.traceError()
-    debug "executeOpcodes error", msg=computation.error.info
+  c.nextProc()
+  if c.isError():
+    if c.tracingEnabled: c.traceError()
+    debug "executeOpcodes error", msg=c.error.info
