@@ -14,7 +14,6 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "txHash", rlpHash = tx.rlpHash
 
   var gasUsed = tx.gasLimit
-  var coinBaseSuicide = false
 
   block:
     if vmState.cumulativeGasUsed + gasUsed > vmState.blockHeader.gasLimit:
@@ -32,8 +31,8 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     let recipient = tx.getRecipient()
     let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
 
-    var computation = setupComputation(vmState, tx, sender, recipient, fork)
-    if computation.isNil: # OOG in setupComputation
+    var c = setupComputation(vmState, tx, sender, recipient, fork)
+    if c.isNil: # OOG in setupComputation
       gasUsed = 0
       break
 
@@ -42,21 +41,19 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
       db.subBalance(sender, upfrontGasCost)
 
     if tx.isContractCreation and isCollision: break
-    execComputation(computation)
-    if not computation.shouldBurnGas:
-      gasUsed = computation.refundGas(tx, sender)
-
-    coinBaseSuicide = computation.isSuicided(vmState.blockHeader.coinbase)
+    execComputation(c)
+    if not c.shouldBurnGas:
+      gasUsed = c.refundGas(tx, sender)
 
   vmState.cumulativeGasUsed += gasUsed
 
-  # miner fee
   vmState.mutateStateDB:
-    if not coinBaseSuicide:
-      let txFee = gasUsed.u256 * tx.gasPrice.u256
-      db.addBalance(vmState.blockHeader.coinbase, txFee)
-    else:
-      db.addBalance(vmState.blockHeader.coinbase, 0.u256)
+    # miner fee
+    let txFee = gasUsed.u256 * tx.gasPrice.u256
+    db.addBalance(vmState.blockHeader.coinbase, txFee)
+
+    for deletedAccount in vmState.suicides:
+      db.deleteAccount deletedAccount
 
     if fork >= FkSpurious:
       vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)

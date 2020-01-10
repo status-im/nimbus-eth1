@@ -67,19 +67,12 @@ proc execComputation*(c: Computation) =
   else:
     c.applyMessage(Call)
 
-  c.vmState.mutateStateDB:
-    var suicidedCount = 0
-    for deletedAccount in c.accountsForDeletion:
-      db.deleteAccount deletedAccount
-      inc suicidedCount
-
-    # FIXME: hook this into actual RefundSelfDestruct
-    const RefundSelfDestruct = 24_000
-    c.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
-
   if c.fork >= FkSpurious:
     c.collectTouchedAccounts()
 
+  c.refundSelfDestruct()
+  c.vmState.suicides = c.getSuicides()
+  
   c.vmstate.status = c.isSuccess
   if c.isSuccess:
     c.vmState.addLogs(c.logEntries)

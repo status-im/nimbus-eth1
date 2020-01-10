@@ -222,10 +222,9 @@ proc registerAccountForDeletion*(c: Computation, beneficiary: EthAddress) =
 proc addLogEntry*(c: Computation, log: Log) {.inline.} =
   c.logEntries.add(log)
 
-iterator accountsForDeletion*(c: Computation): EthAddress =
+proc getSuicides*(c: Computation): HashSet[EthAddress] =
   if c.isSuccess:
-    for address in c.suicides:
-      yield address
+    result = c.suicides
 
 proc getGasRefund*(c: Computation): GasInt =
   if c.isSuccess:
@@ -242,6 +241,10 @@ proc getGasRemaining*(c: Computation): GasInt =
     result = 0
   else:
     result = c.gasMeter.gasRemaining
+
+proc refundSelfDestruct*(c: Computation) =
+  let cost = gasFees[c.fork][RefundSelfDestruct]
+  c.gasMeter.refundGas(cost * c.suicides.len)
 
 proc collectTouchedAccounts*(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161:
