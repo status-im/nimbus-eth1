@@ -26,7 +26,7 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddr
     tx.accountNonce == account.nonce and
     account.balance >= gasCost
 
-proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, fork: Fork) : BaseComputation =
+proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, fork: Fork) : Computation =
   var gas = tx.gasLimit - tx.intrinsicGas(fork)
 
   # TODO: refactor message to use byterange
@@ -58,46 +58,46 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     code: code
     )
 
-  result = newBaseComputation(vmState, msg, some(fork))
+  result = newComputation(vmState, msg, some(fork))
   doAssert result.isOriginComputation
 
-proc execComputation*(computation: var BaseComputation) =
-  if computation.msg.isCreate:
-    computation.applyMessage(Create)
+proc execComputation*(c: Computation) =
+  if c.msg.isCreate:
+    c.applyMessage(Create)
   else:
-    computation.applyMessage(Call)
+    c.applyMessage(Call)
 
-  computation.vmState.mutateStateDB:
+  c.vmState.mutateStateDB:
     var suicidedCount = 0
-    for deletedAccount in computation.accountsForDeletion:
+    for deletedAccount in c.accountsForDeletion:
       db.deleteAccount deletedAccount
       inc suicidedCount
 
     # FIXME: hook this into actual RefundSelfDestruct
     const RefundSelfDestruct = 24_000
-    computation.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
+    c.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
 
-  if computation.fork >= FkSpurious:
-    computation.collectTouchedAccounts()
+  if c.fork >= FkSpurious:
+    c.collectTouchedAccounts()
 
-  computation.vmstate.status = computation.isSuccess
-  if computation.isSuccess:
-    computation.vmState.addLogs(computation.logEntries)
+  c.vmstate.status = c.isSuccess
+  if c.isSuccess:
+    c.vmState.addLogs(c.logEntries)
 
-proc refundGas*(computation: BaseComputation, tx: Transaction, sender: EthAddress): GasInt =
+proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress): GasInt =
   let
-    gasRemaining = computation.gasMeter.gasRemaining
-    gasRefunded = computation.getGasRefund()
+    gasRemaining = c.gasMeter.gasRemaining
+    gasRefunded = c.getGasRefund()
     gasUsed = tx.gasLimit - gasRemaining
     gasRefund = min(gasRefunded, gasUsed div 2)
 
-  computation.vmState.mutateStateDB:
+  c.vmState.mutateStateDB:
     db.addBalance(sender, (gasRemaining + gasRefund).u256 * tx.gasPrice.u256)
 
   result = gasUsed - gasRefund
 
 #[
-method executeTransaction(vmState: BaseVMState, transaction: Transaction): (BaseComputation, BlockHeader) {.base.}=
+method executeTransaction(vmState: BaseVMState, transaction: Transaction): (Computation, BlockHeader) {.base.}=
   # Execute the transaction in the vm
   # TODO: introduced here: https://github.com/ethereum/py-evm/commit/21c57f2d56ab91bb62723c3f9ebe291d0b132dde
   # Refactored/Removed here: https://github.com/ethereum/py-evm/commit/cc991bf
@@ -105,7 +105,7 @@ method executeTransaction(vmState: BaseVMState, transaction: Transaction): (Base
   raise newException(ValueError, "Must be implemented by subclasses")
 
 
-method addTransaction*(vmState: BaseVMState, transaction: Transaction, computation: BaseComputation, b: Block): (Block, Table[string, string]) =
+method addTransaction*(vmState: BaseVMState, transaction: Transaction, c: Computation, b: Block): (Block, Table[string, string]) =
   # Add a transaction to the given block and
   # return `trieData` to store the transaction data in chaindb in VM layer
   # Update the bloomFilter, transaction trie and receipt trie roots, bloom_filter,
@@ -138,7 +138,7 @@ method applyTransaction*(
     vmState: BaseVMState,
     transaction: Transaction,
     b: Block,
-    isStateless: bool): (BaseComputation, Block, Table[string, string]) =
+    isStateless: bool): (Computation, Block, Table[string, string]) =
   # Apply transaction to the given block
   # transaction: the transaction need to be applied
   # b: the block which the transaction applies on

@@ -44,7 +44,7 @@ iterator storage(tracer: TransactionTracer, compDepth: int): Uint256 =
   for key in tracer.storageKeys[compDepth]:
     yield key
 
-proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: Op): int =
+proc traceOpCodeStarted*(tracer: var TransactionTracer, c: Computation, op: Op): int =
   if unlikely tracer.trace.isNil:
     tracer.initTracer()
 
@@ -90,7 +90,7 @@ proc traceOpCodeStarted*(tracer: var TransactionTracer, c: BaseComputation, op: 
 
   result = tracer.trace["structLogs"].len - 1
 
-proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op, lastIndex: int) =
+proc traceOpCodeEnded*(tracer: var TransactionTracer, c: Computation, op: Op, lastIndex: int) =
   let j = tracer.trace["structLogs"].elems[lastIndex]
 
   # TODO: figure out how to get storage
@@ -114,7 +114,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: BaseComputation, op: Op
 
   trace "Op", json = j.pretty()
 
-proc traceError*(tracer: var TransactionTracer, c: BaseComputation) =
+proc traceError*(tracer: var TransactionTracer, c: Computation) =
   if tracer.trace["structLogs"].elems.len > 0:
     let j = tracer.trace["structLogs"].elems[^1]
     j["error"] = %(c.error.info)

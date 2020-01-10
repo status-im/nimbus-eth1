@@ -194,7 +194,7 @@ proc generateVMProxy(boa: Assembler): NimNode =
 const
   blockFile = "tests" / "fixtures" / "PersistBlockTests" / "block47205.json"
 
-proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, data: seq[byte], forkOverride=none(Fork)) : BaseComputation =
+proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, data: seq[byte], forkOverride=none(Fork)) : Computation =
   doAssert tx.isContractCreation
 
   let fork =
@@ -220,7 +220,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
       code: tx.payload
       )
 
-  newBaseComputation(vmState, msg, some(fork))
+  newComputation(vmState, msg, some(fork))
 
 proc initDatabase*(): (Uint256, BaseChainDB) =
   let
@@ -236,7 +236,7 @@ proc initDatabase*(): (Uint256, BaseChainDB) =
 
   result = (blockNumber, newBaseChainDB(memoryDB, false))
 
-proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: seq[byte], fork: Fork): BaseComputation =
+proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: seq[byte], fork: Fork): Computation =
   let
     parentNumber = blockNumber - 1
     parent = chainDB.getBlockHeader(parentNumber)
