@@ -544,7 +544,7 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
   var
     createMsgGas = computation.getGasRemaining()
 
-  if getFork(computation) >= FkTangerine:
+  if computation.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
 
   # Consume gas here that will be passed to child
@@ -594,9 +594,8 @@ proc setupCreate(computation: BaseComputation, memPos, len: int, value: Uint256,
 
   result = newBaseComputation(
     computation.vmState,
-    computation.vmState.blockNumber,
     childMsg,
-    some(computation.getFork))
+    some(computation.fork))
 
 template genCreate(callName: untyped, opCode: Op): untyped =
   op callName, inline = false, val, startPosition, size:
@@ -711,7 +710,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.cleanMemRef, memoryInputSize.cleanMemRef, memoryOutputStartPosition.cleanMemRef, memoryOutputSize.cleanMemRef)
 
-    let isNewAccount = if getFork(computation) >= FkSpurious:
+    let isNewAccount = if computation.fork >= FkSpurious:
                          computation.vmState.readOnlyStateDb.isDeadAccount(contractAddress)
                        else:
                          not computation.vmState.readOnlyStateDb.accountExists(contractAddress)
@@ -761,9 +760,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     var childComp = newBaseComputation(
       computation.vmState,
-      computation.vmState.blockNumber,
       childMsg,
-      some(computation.getFork))
+      some(computation.fork))
 
     computation.memOutPos = memOutPos
     computation.memOutLen = memOutLen

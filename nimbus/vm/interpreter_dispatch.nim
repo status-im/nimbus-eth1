@@ -339,7 +339,7 @@ proc selectVM(computation: BaseComputation, fork: Fork) {.gcsafe.} =
     computation.istanbulVM()
 
 proc executeOpcodes(computation: BaseComputation) =
-  let fork = computation.getFork
+  let fork = computation.fork
 
   block:
     if computation.execPrecompiles(fork):

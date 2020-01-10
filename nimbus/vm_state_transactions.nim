@@ -58,7 +58,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     code: code
     )
 
-  result = newBaseComputation(vmState, vmState.blockNumber, msg, some(fork))
+  result = newBaseComputation(vmState, msg, some(fork))
   doAssert result.isOriginComputation
 
 proc execComputation*(computation: var BaseComputation) =
@@ -77,7 +77,7 @@ proc execComputation*(computation: var BaseComputation) =
     const RefundSelfDestruct = 24_000
     computation.gasMeter.refundGas(RefundSelfDestruct * suicidedCount)
 
-  if computation.getFork >= FkSpurious:
+  if computation.fork >= FkSpurious:
     computation.collectTouchedAccounts()
 
   computation.vmstate.status = computation.isSuccess

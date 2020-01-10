@@ -62,10 +62,10 @@ type
     rawOutput*:             seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
-    touchedAccounts*:       HashSet[EthAddress]    
+    touchedAccounts*:       HashSet[EthAddress]
     suicides*:              HashSet[EthAddress]
     gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
-    forkOverride*:          Option[Fork]
+    fork*:                  Fork
     logEntries*:            seq[Log]
     dbsnapshot*:            Snapshot
     instr*:                 Op
