@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, strformat, strutils, tables, json, times, os,
+  unittest2, strformat, strutils, tables, json, times, os, sets,
   stew/ranges/typedranges, nimcrypto, options,
   eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
   ./test_helpers, ./test_allowed_to_fail,
@@ -130,6 +130,23 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
     return
 
   gasUsed = tester.tx.processTransaction(sender, vmState, tester.fork)
+
+  # This is necessary due to the manner in which the state tests are
+  # generated. State tests are generated from the BlockChainTest tests
+  # in which these transactions are included in the larger context of a
+  # block and thus, the mechanisms which would touch/create/clear the
+  # coinbase account based on the mining reward are present during test
+  # generation, but not part of the execution, thus we must artificially
+  # create the account in VMs prior to the state clearing rules,
+  # as well as conditionally cleaning up the coinbase account when left
+  # empty in VMs after the state clearing rules came into effect.
+  let miner = tester.header.coinbase
+  if miner in vmState.suicides:
+    vmState.mutateStateDB:
+      db.addBalance(miner, 0.u256)
+      if tester.fork >= FkSpurious:
+        if db.isEmptyAccount(miner):
+          db.deleteAccount(miner)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false, supportedForks: set[Fork] = supportedForks) =

@@ -155,12 +155,7 @@ func skipBCTests*(folder: string, name: string): bool =
     "randomStatetest94.json", # pre istanbul
 
     # BC huge memory consumption
-    "DelegateCallSpam.json",
-
-    # pre istanbul failing
-    "SuicidesMixingCoinbase.json",
-    "suicideCoinbase.json",
-    "suicideCoinbaseState.json"
+    "DelegateCallSpam.json"
   ]
 
   result =  name in allowedFailingBCTests

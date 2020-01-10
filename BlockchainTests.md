@@ -228,7 +228,7 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + OverflowGasRequire.json                                         OK
 + RefundOverflow.json                                             OK
 + RefundOverflow2.json                                            OK
-  SuicidesMixingCoinbase.json                                     Skip
++ SuicidesMixingCoinbase.json                                     OK
 + TransactionFromCoinbaseHittingBlockGasLimit1.json               OK
 + TransactionFromCoinbaseNotEnoughFounds.json                     OK
 + TransactionNonceCheck.json                                      OK
@@ -277,8 +277,8 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + randomStatetest619.json                                         OK
   randomStatetest94.json                                          Skip
 + simpleSuicide.json                                              OK
-  suicideCoinbase.json                                            Skip
-  suicideCoinbaseState.json                                       Skip
++ suicideCoinbase.json                                            OK
++ suicideCoinbaseState.json                                       OK
 + suicideStorageCheck.json                                        OK
 + suicideStorageCheckVCreate.json                                 OK
 + suicideStorageCheckVCreate2.json                                OK
@@ -286,7 +286,7 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + transactionFromNotExistingAccount.json                          OK
 + txCost-sec73.json                                               OK
 ```
-OK: 63/67 Fail: 0/67 Skip: 4/67
+OK: 66/67 Fail: 0/67 Skip: 1/67
 ## bcTotalDifficultyTest
 ```diff
 + lotsOfBranchesOverrideAtTheEnd.json                             OK
@@ -404,4 +404,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 5/5 Fail: 0/5 Skip: 0/5
 
 ---TOTAL---
-OK: 312/318 Fail: 0/318 Skip: 6/318
+OK: 315/318 Fail: 0/318 Skip: 3/318
