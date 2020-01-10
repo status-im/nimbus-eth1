@@ -89,18 +89,6 @@ func slowGSTTests(folder: string, name: string): bool =
               "CALLBlake2f_MaxRounds.json",
               ]
 
-func failIn32Bits(folder, name: string): bool =
-  return name in @[
-    # crash with OOM
-    "static_Return50000_2.json",
-    "randomStatetest185.json",
-    "randomStatetest159.json",
-    "randomStatetest48.json",
-
-    # OOM in AppVeyor, not on my machine
-    "randomStatetest36.json"
-  ]
-
 func allowedFailingGeneralStateTest(folder, name: string): bool =
   let allowedFailingGeneralStateTests = @[
     # conflicts between native int and big int.
@@ -111,24 +99,14 @@ func allowedFailingGeneralStateTest(folder, name: string): bool =
     # a conflict between balance checker and
     # static call context checker
     "create2noCash.json",
-
-    # Failure once spotted on Travis CI Linux AMD64:
-    # "out of memorysubtest no: 7 failed"
-    # "randomStatetest159.json",
   ]
   result = name in allowedFailingGeneralStateTests
-
-func allowedFailInCurrentBuild(folder, name: string): bool =
-  when sizeof(int) == 4:
-    if failIn32Bits(folder, name):
-      return true
-  return allowedFailingGeneralStateTest(folder, name)
 
 func skipGSTTests*(folder: string, name: string): bool =
   # we skip tests that are slow or expected to fail for now
   if slowGSTTests(folder, name):
     return true
-  result = allowedFailInCurrentBuild(folder, name)
+  result = allowedFailingGeneralStateTest(folder, name)
 
 func skipNewGSTTests*(folder: string, name: string): bool =
   # share the same slow and failing tests
@@ -151,10 +129,8 @@ func skipBCTests*(folder: string, name: string): bool =
     # BlockChain slow tests
     "SuicideIssue.json",
 
-    # BC OOM tests in CI
-    "randomStatetest94.json", # pre istanbul
-
     # BC huge memory consumption
+    "randomStatetest94.json",
     "DelegateCallSpam.json"
   ]
 
@@ -174,15 +150,12 @@ func skipNewBCTests*(folder: string, name: string): bool =
     "RevertInCreateInInitCreate2.json",
     "InitCollision.json",
 
-    # BC OOM tests in CI
-    "randomStatetest94.json",
-    "static_Return50000_2.json", # istanbul
-
     # see allowedFailingGeneralStateTest
     "modexp.json",
     "create2noCash.json",
 
     # BC huge memory consumption
+    "randomStatetest94.json",
     "DelegateCallSpam.json"
   ]
 
