@@ -272,7 +272,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     # TODO: Relies on pending pool implementation
     discard
 
-  proc setupComputation(vmState: BaseVMState, blockNumber: BlockNumber,
+  proc setupComputation(vmState: BaseVMState,
       value: UInt256, data: seq[byte],
       sender, destination: EthAddress,
       gasLimit, gasPrice: GasInt,
@@ -292,7 +292,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         data: data,
         code: vmState.readOnlyStateDB.getCode(destination).toSeq
       )
-    result = newBaseComputation(vmState, blockNumber, message)
+    result = newBaseComputation(vmState, message)
 
   rpcsrv.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.
@@ -325,7 +325,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       destination = if call.to.isSome: call.to.get.toAddress else: ZERO_ADDRESS
       data = if call.data.isSome: nimcrypto.utils.fromHex(call.data.get.string) else: @[]
       value = if call.value.isSome: call.value.get else: 0.u256
-      comp = setupComputation(vmState, header.blockNumber, value, data, sender, destination, gasLimit, gasPrice, call.to.isNone)
+      comp = setupComputation(vmState, value, data, sender, destination, gasLimit, gasPrice, call.to.isNone)
 
     comp.execComputation
     result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr

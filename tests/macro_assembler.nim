@@ -220,7 +220,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
       code: tx.payload
       )
 
-  newBaseComputation(vmState, vmState.blockNumber, msg, some(fork))
+  newBaseComputation(vmState, msg, some(fork))
 
 proc initDatabase*(): (Uint256, BaseChainDB) =
   let

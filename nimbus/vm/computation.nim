@@ -17,7 +17,7 @@ import
 logScope:
   topics = "vm computation"
 
-proc newBaseComputation*(vmState: BaseVMState, blockNumber: BlockNumber, message: Message, forkOverride=none(Fork)): BaseComputation =
+proc newBaseComputation*(vmState: BaseVMState, message: Message, forkOverride=none(Fork)): BaseComputation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -27,13 +27,12 @@ proc newBaseComputation*(vmState: BaseVMState, blockNumber: BlockNumber, message
   result.touchedAccounts = initHashSet[EthAddress]()
   result.suicides = initHashSet[EthAddress]()
   result.code = newCodeStream(message.code)
-  # result.rawOutput = "0x"
-  result.gasCosts =
+  result.fork =
     if forkOverride.isSome:
-      forkOverride.get.forkToSchedule
+      forkOverride.get
     else:
-      blockNumber.toFork.forkToSchedule
-  result.forkOverride = forkOverride
+      vmState.blockNumber.toFork
+  result.gasCosts = result.fork.forkToSchedule
   # a dummy/terminus continuation proc
   result.nextProc = proc() =
     discard
@@ -92,13 +91,6 @@ proc rollback*(comp: BaseComputation) =
 proc setError*(comp: BaseComputation, msg: string, burnsGas = false) {.inline.} =
   comp.error = Error(info: msg, burnsGas: burnsGas)
 
-proc getFork*(computation: BaseComputation): Fork =
-  result =
-    if computation.forkOverride.isSome:
-      computation.forkOverride.get
-    else:
-      computation.vmState.blockNumber.toFork
-
 proc writeContract*(computation: BaseComputation, fork: Fork): bool {.gcsafe.} =
   result = true
 
@@ -150,7 +142,7 @@ const ripemdAddr = initAddress(3)
 proc postExecuteVM(computation: BaseComputation, opCode: static[Op]) {.gcsafe.} =
   when opCode == Create:
     if computation.isSuccess:
-      let fork = computation.getFork
+      let fork = computation.fork
       let contractFailed = not computation.writeContract(fork)
       if contractFailed and fork >= FkHomestead:
         computation.setError(&"writeContract failed, depth={computation.msg.depth}", true)
@@ -174,10 +166,10 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
 
   # EIP161 nonce incrementation
   when opCode in {Create, Create2}:
-    if computation.getFork >= FkSpurious:
+    if computation.fork >= FkSpurious:
       computation.vmState.mutateStateDb:
         db.incNonce(computation.msg.contractAddress)
-        if computation.getFork >= FkByzantium:
+        if computation.fork >= FkByzantium:
           # RevertInCreateInInit.json
           db.setStorageRoot(computation.msg.contractAddress, emptyRlpHash)
 
@@ -199,7 +191,7 @@ proc applyMessage*(computation: BaseComputation, opCode: static[Op]) =
   executeOpcodes(computation)
 
 proc addChildComputation*(computation: BaseComputation, child: BaseComputation) =
-  if child.isError or computation.getFork == FKIstanbul:
+  if child.isError or computation.fork == FKIstanbul:
     if not child.msg.isCreate:
       if child.msg.contractAddress == ripemdAddr:
         child.vmState.touchedAccounts.incl child.msg.contractAddress

@@ -59,7 +59,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     code: code
     )
 
-  var computation = newBaseComputation(vmState, header.blockNumber, message)
+  var computation = newBaseComputation(vmState, message)
   computation.executeOpcodes()
 
   if not fixture{"post"}.isNil:
