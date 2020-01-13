@@ -1,5 +1,5 @@
 import
-  tables,
+  tables, json, strutils,
   eth/[common, rlp, trie], stint, stew/[byteutils, ranges],
   chronicles, eth/trie/db,
   db/[db_chain, state_db], genesis_alloc, config, constants
@@ -32,6 +32,12 @@ func decodePrealloc(data: seq[byte]): GenesisAlloc =
   for tup in rlp.decode(data.toRange, seq[(UInt256, UInt256)]):
     result[toAddress(tup[0])] = GenesisAccount(balance: tup[1])
 
+proc customNetPrealloc(genesisBlock: JsonNode): GenesisAlloc = 
+  result = newTable[EthAddress, GenesisAccount]()
+  for address, balance in genesisBlock.pairs():
+    let balance = fromHex(UInt256,balance["balance"].getStr())
+    result[parseAddress(address)] = GenesisAccount(balance: balance)
+
 proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   result = case id
   of MainNet:
@@ -58,6 +64,22 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
       difficulty: 1048576.u256,
       alloc: decodePrealloc(rinkebyAllocData)
     )
+  of CustomNet:
+    let genesis = getConfiguration().customGenesis
+    var alloc = new GenesisAlloc
+    if genesis.prealloc != parseJson("{}"):
+      alloc = customNetPrealloc(genesis.prealloc)
+    Genesis(
+      nonce: genesis.nonce,
+      extraData: genesis.extraData,
+      gasLimit: genesis.gasLimit,
+      difficulty: genesis.difficulty,
+      alloc: alloc,
+      timestamp: genesis.timestamp,
+      mixhash: genesis.mixHash,
+      coinbase: genesis.coinbase
+    )
+
   else:
     # TODO: Fill out the rest
     error "No default genesis for network", id
@@ -108,7 +130,7 @@ proc commit*(g: Genesis, db: BaseChainDB) =
 proc initializeEmptyDb*(db: BaseChainDB) =
   trace "Writing genesis to DB"
   let networkId = getConfiguration().net.networkId.toPublicNetwork()
-  if networkId == CustomNet:
-    raise newException(Exception, "Custom genesis not implemented")
-  else:
-    defaultGenesisBlockForNetwork(networkId).commit(db)
+#  if networkId == CustomNet:
+#    raise newException(Exception, "Custom genesis not implemented")
+#  else:
+  defaultGenesisBlockForNetwork(networkId).commit(db)
