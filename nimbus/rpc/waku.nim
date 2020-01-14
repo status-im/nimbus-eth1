@@ -275,7 +275,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) =
     if options.allowP2P.isSome():
       allowP2P = options.allowP2P.get()
 
-    let filter = newFilter(src, privateKey, symKey, topics, powReq, allowP2P)
+    let filter = initFilter(src, privateKey, symKey, topics, powReq, allowP2P)
     result = node.subscribeFilter(filter).Identifier
 
     # TODO: Should we do this here "automatically" or separate it in another
@@ -287,7 +287,9 @@ proc setupWakuRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) =
     if config.wakuMode == WakuChan:
       try:
         # TODO: an addTopics call would probably be more useful
-        waitFor node.setTopics(config.topics.concat(filter.topics))
+        let result = waitFor node.setTopics(config.topics.concat(filter.topics))
+        if not result:
+          raise newException(ValueError, "Too many topics")
       except CatchableError:
         trace "setTopics error occured"
     elif config.isLightNode:
