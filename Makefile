@@ -107,3 +107,7 @@ wrappers-static: | build deps libnimbus.a go-checks
 wakunode: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim wakunode $(NIM_PARAMS) nimbus.nims
+
+wakusim: | build deps wakunode
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim quicksim $(NIM_PARAMS) nimbus.nims

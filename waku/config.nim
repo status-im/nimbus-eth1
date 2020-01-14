@@ -62,6 +62,11 @@ type
       defaultValue: false
       name: "whisper-bridge" }: bool
 
+    lightNode* {.
+      desc: "Run as light node (no message relay).",
+      defaultValue: false
+      name: "light-node" }: bool
+
     wakuMode* {.
       desc: "Select the Waku mode.",
       defaultValue: WakuSan
@@ -112,6 +117,11 @@ type
       desc: "Listening HTTP port of the metrics server."
       defaultValue: 8008
       name: "metrics-server-port" }: uint16
+
+    logMetrics* {.
+      desc: "Enable metrics logging."
+      defaultValue: false
+      name: "log-metrics" }: bool
 
     # TODO:
     # - nat

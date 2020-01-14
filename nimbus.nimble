@@ -40,6 +40,8 @@ task test, "Run tests":
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
 
-task wakunode, "Build Waku":
+task wakunode, "Build Waku node":
   buildBinary "wakunode", "waku/", "-d:chronicles_log_level=TRACE"
-  buildBinary "quicksim", "waku/", "-d:chronicles_log_level=TRACE"
+
+task quicksim, "Build quicksim":
+  buildBinary "quicksim", "waku/", "-d:chronicles_log_level=INFO"
