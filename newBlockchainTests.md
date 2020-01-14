@@ -814,7 +814,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + create2collisionSelfdestructedOOG.json                          OK
 + create2collisionSelfdestructedRevert.json                       OK
 + create2collisionStorage.json                                    OK
-  create2noCash.json                                              Skip
++ create2noCash.json                                              OK
 + returndatacopy_0_0_following_successful_create.json             OK
 + returndatacopy_afterFailing_create.json                         OK
 + returndatacopy_following_create.json                            OK
@@ -822,7 +822,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 41/44 Fail: 0/44 Skip: 3/44
+OK: 42/44 Fail: 0/44 Skip: 2/44
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -3028,4 +3028,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2620/2730 Fail: 0/2730 Skip: 110/2730
+OK: 2621/2730 Fail: 0/2730 Skip: 109/2730
