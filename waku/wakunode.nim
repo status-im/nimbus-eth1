@@ -4,7 +4,7 @@ import
   eth/[keys, p2p, async_utils], eth/common/utils,
   eth/p2p/[discovery, enode, peer_pool, bootnodes, whispernodes],
   eth/p2p/rlpx_protocols/[whisper_protocol, waku_protocol, waku_bridge],
-  ../nimbus/rpc/waku
+  ../nimbus/rpc/waku, ../nimbus/rpc/wakusim
 
 proc setBootNodes(nodes: openArray[string]): seq[ENode] =
   var bootnode: ENode
@@ -71,6 +71,7 @@ proc run(config: WakuNodeConf) =
     var rpcServer = newRpcHttpServer([ta])
     let keys = newWakuKeys()
     setupWakuRPC(node, keys, rpcServer)
+    setupWakuSimRPC(node, rpcServer)
     rpcServer.start()
 
   when defined(insecure):

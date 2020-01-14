@@ -23,13 +23,11 @@ The JSON-RPC interface is currently the same as the one of Whisper. The only
 difference is the addition of broadcasting the topics interest when a filter
 with a certain set of topics is subcribed.
 
-Example of a quick test with nim-web3:
-```
-./build/wakunode --log-level:DEBUG --bootnode-only --nodekey:5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3
-
-./build/wakunode --log-level:DEBUG --bootnodes:enode://e5fd642a0f630bbb1e4cd7df629d7b8b019457a9a74f983c0484a045cebb176def86a54185b50bbba6bbf97779173695e92835d63109c23471e6da382f922fdb@0.0.0.0:30303 --rpc --ports-shift:1 --waku-mode:WakuSan
-
-./build/wakunode --log-level:DEBUG --bootnodes:enode://e5fd642a0f630bbb1e4cd7df629d7b8b019457a9a74f983c0484a045cebb176def86a54185b50bbba6bbf97779173695e92835d63109c23471e6da382f922fdb@0.0.0.0:30303 --rpc --ports-shift:2 --waku-mode:WakuChan
+Example of a quick simulation test using this approach:
+```bash
+./waku/start_network.sh
+# Or when multitail is installed
+USE_MULTITAIL="yes" ./waku/start_network.sh
 
 ./build/quicksim
 ```
