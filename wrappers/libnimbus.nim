@@ -366,7 +366,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   except KeyError:
     return false
 
-  let filter = newFilter(src, privateKey, symKey, @[options.topic],
+  let filter = initFilter(src, privateKey, symKey, @[options.topic],
     options.minPow, options.allowP2P)
 
   proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
@@ -437,7 +437,7 @@ proc subscribeChannel(
 
   info "Subscribing to channel", channel, topic, symKey
 
-  discard node.subscribeFilter(newFilter(symKey = some(symKey),
+  discard node.subscribeFilter(initFilter(symKey = some(symKey),
                                          topics = @[topic]),
                                          handler)
 

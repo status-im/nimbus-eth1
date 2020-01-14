@@ -276,7 +276,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     if options.allowP2P.isSome():
       allowP2P = options.allowP2P.get()
 
-    let filter = newFilter(src, privateKey, symKey, topics, powReq, allowP2P)
+    let filter = initFilter(src, privateKey, symKey, topics, powReq, allowP2P)
     result = node.subscribeFilter(filter).Identifier
 
   rpcsrv.rpc("shh_deleteMessageFilter") do(id: Identifier) -> bool:
