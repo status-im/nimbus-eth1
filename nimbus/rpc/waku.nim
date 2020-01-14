@@ -250,37 +250,51 @@ proc setupWakuRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) =
     # Check if there are Topics when symmetric key is used
     validateOptions(options.privateKeyID, options.symKeyID, options.topics)
 
-    var filter: Filter
+    var
+      src: Option[PublicKey]
+      privateKey: Option[PrivateKey]
+      symKey: Option[SymKey]
+      topics: seq[waku_protocol.Topic]
+      powReq: float64
+      allowP2P: bool
+
+    src = options.sig
+
     if options.privateKeyID.isSome():
-      filter.privateKey = some(keys.asymKeys[options.privateKeyID.get().string].seckey)
+      privateKey = some(keys.asymKeys[options.privateKeyID.get().string].seckey)
 
     if options.symKeyID.isSome():
-      filter.symKey= some(keys.symKeys[options.symKeyID.get().string])
-
-    filter.src = options.sig
+      symKey= some(keys.symKeys[options.symKeyID.get().string])
 
     if options.minPow.isSome():
-      filter.powReq = options.minPow.get()
+      powReq = options.minPow.get()
 
     if options.topics.isSome():
-      filter.topics = options.topics.get()
+      topics = options.topics.get()
 
     if options.allowP2P.isSome():
-      filter.allowP2P = options.allowP2P.get()
+      allowP2P = options.allowP2P.get()
 
+    let filter = newFilter(src, privateKey, symKey, topics, powReq, allowP2P)
     result = node.subscribeFilter(filter).Identifier
 
     # TODO: Should we do this here "automatically" or separate it in another
     # RPC call? Is there a use case for that?
     # Same could be said about bloomfilter, except that there is a use case
     # there to have a full node no matter what message filters.
+    # Could also be moved to waku_protocol.nim
     let config = node.protocolState(Waku).config
     if config.wakuMode == WakuChan:
       try:
-        # TODO: an addTopics call would probably more useful
+        # TODO: an addTopics call would probably be more useful
         waitFor node.setTopics(config.topics.concat(filter.topics))
       except CatchableError:
         trace "setTopics error occured"
+    elif config.isLightNode:
+      try:
+        waitFor node.setBloomFilter(node.filtersToBloom())
+      except CatchableError:
+        trace "setBloomFilter error occured"
 
   rpcsrv.rpc("shh_deleteMessageFilter") do(id: Identifier) -> bool:
     ## Uninstall a message filter in the node.
