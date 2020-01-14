@@ -1,7 +1,7 @@
 import
   confutils, config, chronos, json_rpc/rpcserver, metrics,
   chronicles/topics_registry, # TODO: What? Need this for setLoglevel, weird.
-  eth/[keys, p2p, async_utils],
+  eth/[keys, p2p, async_utils], eth/common/utils,
   eth/p2p/[discovery, enode, peer_pool, bootnodes, whispernodes],
   eth/p2p/rlpx_protocols/[whisper_protocol, waku_protocol, waku_bridge],
   ../nimbus/rpc/waku
@@ -39,7 +39,7 @@ proc run(config: WakuNodeConf) =
     node.addCapability Waku # Always enable Waku protocol
     let wakuConfig = WakuConfig(powRequirement: config.wakuPow,
                                 bloom: fullBloom(),
-                                isLightNode: false,
+                                isLightNode: config.lightNode,
                                 maxMsgSize: waku_protocol.defaultMaxMsgSize,
                                 wakuMode: config.wakuMode,
                                 topics: @[])
@@ -80,6 +80,25 @@ proc run(config: WakuNodeConf) =
         port = config.metricsServerPort + config.portsShift
       info "Starting metrics HTTP server", address, port
       metrics.startHttpServer($address, Port(port))
+
+  if config.logMetrics:
+    proc logMetrics(udata: pointer) {.closure, gcsafe.} =
+      {.gcsafe.}:
+        let
+          connectedPeers = connected_peers.value
+          validEnvelopes = waku_protocol.valid_envelopes.value
+          invalidEnvelopes = waku_protocol.dropped_expired_envelopes.value +
+            waku_protocol.dropped_from_future_envelopes.value +
+            waku_protocol.dropped_low_pow_envelopes.value +
+            waku_protocol.dropped_too_large_envelopes.value +
+            waku_protocol.dropped_bloom_filter_mismatch_envelopes.value +
+            waku_protocol.dropped_topic_mismatch_envelopes.value +
+            waku_protocol.dropped_benign_duplicate_envelopes.value +
+            waku_protocol.dropped_malicious_duplicate_envelopes.value
+
+      info "Node metrics", connectedPeers, validEnvelopes, invalidEnvelopes
+      addTimer(Moment.fromNow(2.seconds), logMetrics)
+    addTimer(Moment.fromNow(2.seconds), logMetrics)
 
   runForever()
 
