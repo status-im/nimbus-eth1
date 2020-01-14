@@ -251,24 +251,32 @@ proc setupWhisperRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) 
     # Check if there are Topics when symmetric key is used
     validateOptions(options.privateKeyID, options.symKeyID, options.topics)
 
-    var filter: Filter
+    var
+      src: Option[PublicKey]
+      privateKey: Option[PrivateKey]
+      symKey: Option[SymKey]
+      topics: seq[whisper_protocol.Topic]
+      powReq: float64
+      allowP2P: bool
+
+    src = options.sig
+
     if options.privateKeyID.isSome():
-      filter.privateKey = some(keys.asymKeys[options.privateKeyID.get().string].seckey)
+      privateKey = some(keys.asymKeys[options.privateKeyID.get().string].seckey)
 
     if options.symKeyID.isSome():
-      filter.symKey= some(keys.symKeys[options.symKeyID.get().string])
-
-    filter.src = options.sig
+      symKey= some(keys.symKeys[options.symKeyID.get().string])
 
     if options.minPow.isSome():
-      filter.powReq = options.minPow.get()
+      powReq = options.minPow.get()
 
     if options.topics.isSome():
-      filter.topics = options.topics.get()
+      topics = options.topics.get()
 
     if options.allowP2P.isSome():
-      filter.allowP2P = options.allowP2P.get()
+      allowP2P = options.allowP2P.get()
 
+    let filter = newFilter(src, privateKey, symKey, topics, powReq, allowP2P)
     result = node.subscribeFilter(filter).Identifier
 
   rpcsrv.rpc("shh_deleteMessageFilter") do(id: Identifier) -> bool:
