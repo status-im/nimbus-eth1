@@ -79,7 +79,6 @@ type
   Error* = ref object
     info*:                  string
     burnsGas*:              bool
-    erasesReturnData*:      bool
 
   GasMeter* = object
     gasRefunded*: GasInt

@@ -50,26 +50,15 @@ template isError*(c: Computation): bool =
 func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
-func shouldEraseReturnData*(c: Computation): bool =
-  c.isError and c.error.erasesReturnData
-
 func bytesToHex(x: openarray[byte]): string {.inline.} =
   ## TODO: use seq[byte] for raw data and delete this proc
   foldl(x, a & b.int.toHex(2).toLowerAscii, "0x")
 
 func output*(c: Computation): seq[byte] =
-  if c.shouldEraseReturnData:
-    @[]
-  else:
-    c.rawOutput
+  c.rawOutput
 
 func `output=`*(c: Computation, value: openarray[byte]) =
   c.rawOutput = @value
-
-proc outputHex*(c: Computation): string =
-  if c.shouldEraseReturnData:
-    return "0x"
-  c.rawOutput.bytesToHex
 
 proc isSuicided*(c: Computation, address: EthAddress): bool =
   result = address in c.suicides
