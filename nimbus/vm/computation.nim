@@ -144,11 +144,6 @@ proc postExecuteVM(c: Computation, opCode: static[Op]) {.gcsafe.} =
 proc executeOpcodes*(c: Computation) {.gcsafe.}
 
 proc applyMessage*(c: Computation, opCode: static[Op]) =
-  if c.msg.depth > MaxCallDepth:
-    c.setError(&"Stack depth limit reached depth={c.msg.depth}")
-    c.nextProc()
-    return
-
   c.snapshot()
   defer:
     c.dispose()

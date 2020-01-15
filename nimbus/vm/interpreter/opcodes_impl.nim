@@ -528,10 +528,7 @@ proc canTransfer(c: Computation, memPos, memLen: int, value: Uint256, opCode: st
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = c.msg.value, balance = senderBalance
     return false
 
-  # unlike the other MaxCallDepth comparison,
-  # this one has not been entered child computation
-  # thats why it has `+ 1`
-  if c.msg.depth + 1 > MaxCallDepth:
+  if c.msg.depth >= MaxCallDepth:
     debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = c.msg.depth
     return false
 
@@ -732,6 +729,12 @@ template genCall(callName: untyped, opCode: Op): untyped =
     if childGasFee >= 0:
       c.gasMeter.consumeGas(childGasFee, reason = $opCode)
 
+    if c.msg.depth >= MaxCallDepth:
+      debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = c.msg.depth
+      # return unused gas
+      c.gasMeter.returnGas(childGasLimit)
+      return
+
     if childGasFee < 0 and childGasLimit <= 0:
       raise newException(OutOfGas, "Gas not enough to perform calculation (" & callNameStr & ")")
 
@@ -767,7 +770,15 @@ template genCall(callName: untyped, opCode: Op): untyped =
     ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
     ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
     ## STATICCALL, 0xfa, Static message-call into an account.
+    when opCode == Call:
+      if emvcStatic == c.msg.flags and c.stack[^3, Uint256] > 0.u256:
+        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
+
     var child = `callName Setup`(c, callName.astToStr)
+
+    if child.isNil:
+      push: 0
+      return
 
     continuation(child):
       addChildComputation(c, child)
@@ -782,10 +793,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
         c.memory.write(
           c.memOutPos,
           child.output.toOpenArray(0, actualOutputSize - 1))
-
-    when opCode == Call:
-      if emvcStatic == c.msg.flags and child.msg.value > 0.u256:
-        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
 
     child.applyMessage(opCode)
 
