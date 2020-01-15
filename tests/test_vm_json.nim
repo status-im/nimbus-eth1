@@ -6,11 +6,15 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, strformat, strutils, tables, json, os, times,
+  unittest2, strformat, strutils, tables, json, os, times, sequtils,
   stew/byteutils, stew/ranges/typedranges, eth/[rlp, common], eth/trie/db,
   ./test_helpers, ./test_allowed_to_fail, ../nimbus/vm/interpreter,
   ../nimbus/[constants, vm_state, vm_types, utils],
   ../nimbus/db/[db_chain, state_db]
+
+func bytesToHex(x: openarray[byte]): string {.inline.} =
+  ## TODO: use seq[byte] for raw data and delete this proc
+  foldl(x, a & b.int.toHex(2).toLowerAscii, "0x")
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -78,7 +82,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       fail()
 
     let expectedOutput = fixture{"out"}.getStr
-    check(computation.outputHex == expectedOutput)
+    check(computation.output.bytesToHex == expectedOutput)
     let gasMeter = computation.gasMeter
 
     let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt
