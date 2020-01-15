@@ -7,7 +7,7 @@
 
 import
   strformat,
-  chronicles, eth/[common, rlp], eth/trie/[hexary, db],
+  chronicles, eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils, storage_types
 
 logScope:
@@ -93,10 +93,9 @@ template getAccountTrie(db: AccountStateDB, account: Account): auto =
   # see nim-eth#9
   initSecureHexaryTrie(trieDB(db), account.storageRoot, false)
 
-# XXX: https://github.com/status-im/nimbus/issues/142#issuecomment-420583181
-proc setStorageRoot*(db: var AccountStateDB, address: EthAddress, storageRoot: Hash256) =
+proc clearStorage*(db: var AccountStateDB, address: EthAddress) =
   var account = db.getAccount(address)
-  account.storageRoot = storageRoot
+  account.storageRoot = emptyRlpHash
   db.setAccount(address, account)
 
 proc getStorageRoot*(db: AccountStateDB, address: EthAddress): Hash256 =

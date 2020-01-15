@@ -12,7 +12,7 @@ import
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
   ../utils/header, stew/[byteutils, ranges], precompiles,
-  transaction_tracer, eth/trie/trie_defs
+  transaction_tracer
 
 logScope:
   topics = "vm computation"
@@ -49,10 +49,6 @@ template isError*(c: Computation): bool =
 
 func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
-
-func bytesToHex(x: openarray[byte]): string {.inline.} =
-  ## TODO: use seq[byte] for raw data and delete this proc
-  foldl(x, a & b.int.toHex(2).toLowerAscii, "0x")
 
 func output*(c: Computation): seq[byte] =
   c.rawOutput
@@ -148,14 +144,12 @@ proc applyMessage*(c: Computation, opCode: static[Op]) =
   defer:
     c.dispose()
 
-  # EIP161 nonce incrementation
   when opCode in {Create, Create2}:
-    if c.fork >= FkSpurious:
-      c.vmState.mutateStateDb:
+    c.vmState.mutateStateDb:
+      db.clearStorage(c.msg.contractAddress)
+      if c.fork >= FkSpurious:
+        # EIP161 nonce incrementation
         db.incNonce(c.msg.contractAddress)
-        if c.fork >= FkByzantium:
-          # RevertInCreateInInit.json
-          db.setStorageRoot(c.msg.contractAddress, emptyRlpHash)
 
   when opCode in {CallCode, Call, Create}:
     c.transferBalance(opCode)
