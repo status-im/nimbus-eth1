@@ -598,7 +598,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
   op callName, inline = false, val, startPosition, size:
     ## 0xf0, Create a new account with associated code.
     checkInStaticContext(c)
-    
+
     let (memPos, len) = (startPosition.safeInt, size.safeInt)
     if not c.canTransfer(memPos, len, val, opCode):
       push: 0
@@ -614,7 +614,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
         push: 0
       else:
         push: child.msg.contractAddress
-    
+
     child.applyMessage(Create)
 
 genCreate(create, Create)
@@ -777,8 +777,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
       else:
         push: 1
 
-      if not child.shouldEraseReturnData:
-        let actualOutputSize = min(c.memOutLen, child.output.len)
+      let actualOutputSize = min(c.memOutLen, child.output.len)
+      if actualOutputSize > 0:
         c.memory.write(
           c.memOutPos,
           child.output.toOpenArray(0, actualOutputSize - 1))
