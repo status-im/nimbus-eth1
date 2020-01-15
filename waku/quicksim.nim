@@ -1,5 +1,5 @@
 import
-  os, strformat, chronicles, json_rpc/[rpcclient, rpcserver],
+  os, strformat, chronicles, json_rpc/[rpcclient, rpcserver], nimcrypto/sysrand,
   eth/common as eth_common, eth/keys, eth/p2p/rlpx_protocols/waku_protocol,
   ../nimbus/rpc/[hexstrings, rpc_types, waku],
   options as what # TODO: Huh?
@@ -23,24 +23,31 @@ waitFor lightWakuNode.connect("localhost", Port(8546))
 waitFor lightNode.connect("localhost", Port(8547))
 waitFor trafficNode.connect("localhost", Port(8549))
 
+proc generateTopics(amount = 100): seq[waku_protocol.Topic] =
+  var topic: waku_protocol.Topic
+  for i in 0..<amount:
+    if randomBytes(topic) != 4:
+      raise newException(ValueError, "Generation of random topic failed.")
+    result.add(topic)
+
 let
   symKey = "0x0000000000000000000000000000000000000000000000000000000000000001"
-  topic = "0x01000000".toTopic()
+  topics = generateTopics()
   symKeyID = waitFor lightWakuNode.shh_addSymKey(symKey)
   options = WhisperFilterOptions(symKeyID: some(symKeyID),
-                                 topics: some(@[topic]))
+                                 topics: some(topics))
   filterID = waitFor lightWakuNode.shh_newMessageFilter(options)
 
   symKeyID2 = waitFor lightNode.shh_addSymKey(symKey)
   options2 = WhisperFilterOptions(symKeyID: some(symKeyID2),
-                                 topics: some(@[topic]))
+                                 topics: some(topics))
   filterID2 = waitFor lightNode.shh_newMessageFilter(options2)
 
   symkeyID3 = waitFor trafficNode.shh_addSymKey(symKey)
 
 var message = WhisperPostMessage(symKeyID: some(symkeyID3),
                                 ttl: 30,
-                                topic: some(topic),
+                                topic: some(topics[0]),
                                 payload: "0x45879632".HexDataStr,
                                 powTime: 1.0,
                                 powTarget: 0.002)
@@ -55,4 +62,4 @@ while messages.len == 0:
 info "Received test message", payload = messages[0].payload
 
 # Generate test traffic on node
-discard waitFor trafficNode.wakusim_generateTraffic(10_000)
+discard waitFor trafficNode.wakusim_generateRandomTraffic(10_000)
