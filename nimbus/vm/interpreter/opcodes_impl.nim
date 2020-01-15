@@ -539,8 +539,7 @@ proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: stati
     callData = c.memory.read(memPos, len)
 
   var
-    createMsgGas = c.getGasRemaining()
-
+    createMsgGas = c.gasMeter.gasRemaining
   if c.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
 
@@ -555,25 +554,16 @@ proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: stati
   when opCode == Create:
     const callKind = evmcCreate
     c.vmState.mutateStateDB:
-      # Regarding collisions, see: https://github.com/status-im/nimbus/issues/133
-      # See: https://github.com/ethereum/EIPs/issues/684
       let creationNonce = db.getNonce(c.msg.contractAddress)
       db.setNonce(c.msg.contractAddress, creationNonce + 1)
 
       contractAddress = generateAddress(c.msg.contractAddress, creationNonce)
-      isCollision = db.hasCodeOrNonce(contractAddress)
   else:
     const callKind = evmcCreate2
     c.vmState.mutateStateDB:
       db.incNonce(c.msg.contractAddress)
       let salt = c.stack.popInt()
       contractAddress = generateSafeAddress(c.msg.contractAddress, salt, callData)
-      isCollision = db.hasCodeOrNonce(contractAddress)
-
-  if isCollision:
-    debug "Address collision while creating contract", address = contractAddress.toHex
-    push: 0
-    return
 
   let childMsg = Message(
     kind: callKind,

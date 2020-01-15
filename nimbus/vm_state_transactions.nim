@@ -70,9 +70,10 @@ proc execComputation*(c: Computation) =
   if c.fork >= FkSpurious:
     c.collectTouchedAccounts()
 
-  c.refundSelfDestruct()
+  if c.isSuccess:
+    c.refundSelfDestruct()
   c.vmState.suicides = c.getSuicides()
-  
+
   c.vmstate.status = c.isSuccess
   if c.isSuccess:
     c.vmState.addLogs(c.logEntries)
