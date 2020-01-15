@@ -144,7 +144,13 @@ proc applyMessage*(c: Computation, opCode: static[Op]) =
   defer:
     c.dispose()
 
-  when opCode in {Create, Create2}:
+  when opCode == Create:
+    if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
+      c.setError("Address collision when creating contract address={c.msg.contractAddress.toHex}", true)
+      c.rollback()
+      c.nextProc()
+      return
+
     c.vmState.mutateStateDb:
       db.clearStorage(c.msg.contractAddress)
       if c.fork >= FkSpurious:

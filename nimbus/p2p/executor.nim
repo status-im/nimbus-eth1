@@ -29,7 +29,6 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     if balance < upfrontGasCost: break
 
     let recipient = tx.getRecipient()
-    let isCollision = vmState.readOnlyStateDb().hasCodeOrNonce(recipient)
 
     var c = setupComputation(vmState, tx, sender, recipient, fork)
     if c.isNil: # OOG in setupComputation
@@ -40,7 +39,6 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
       db.incNonce(sender)
       db.subBalance(sender, upfrontGasCost)
 
-    if tx.isContractCreation and isCollision: break
     execComputation(c)
     if not c.shouldBurnGas:
       gasUsed = c.refundGas(tx, sender)
