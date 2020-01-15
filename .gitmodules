@@ -153,3 +153,8 @@
   url = https://github.com/status-im/nim-ethash
   ignore = dirty
   branch = master
+[submodule "vendor/nim-evmc"]
+	path = vendor/nim-evmc
+	url = https://github.com/status-im/nim-evmc
+  ignore = dirty
+  branch = master
