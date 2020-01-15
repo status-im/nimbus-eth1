@@ -719,6 +719,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
     if childGasFee >= 0:
       c.gasMeter.consumeGas(childGasFee, reason = $opCode)
 
+    c.returnData.setLen(0)
+
     if c.msg.depth >= MaxCallDepth:
       debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = c.msg.depth
       # return unused gas
@@ -730,6 +732,14 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     c.memory.extend(memInPos, memInLen)
     c.memory.extend(memOutPos, memOutLen)
+
+    when opCode in {CallCode, Call}:
+      let senderBalance = c.vmState.readOnlyStateDb().getBalance(sender)
+      if senderBalance < value:
+        debug "Insufficient funds", available = senderBalance, needed = c.msg.value
+        # return unused gas
+        c.gasMeter.returnGas(childGasLimit)
+        return
 
     let
       callData = c.memory.read(memInPos, memInLen)
