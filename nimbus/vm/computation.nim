@@ -100,19 +100,6 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
     if fork < FkHomestead or fork >= FkByzantium: c.output = @[]
     result = false
 
-proc transferBalance(c: Computation, opCode: static[Op]) =
-  let senderBalance = c.vmState.readOnlyStateDb().
-                      getBalance(c.msg.sender)
-
-  if senderBalance < c.msg.value:
-    c.setError(&"insufficient funds available={senderBalance}, needed={c.msg.value}")
-    return
-
-  when opCode in {Call, Create}:
-    c.vmState.mutateStateDb:
-      db.subBalance(c.msg.sender, c.msg.value)
-      db.addBalance(c.msg.contractAddress, c.msg.value)
-
 template continuation*(c: Computation, body: untyped) =
   # this is a helper template to implement continuation
   # passing and convert all recursion into tail call
@@ -157,12 +144,10 @@ proc applyMessage*(c: Computation, opCode: static[Op]) =
         # EIP161 nonce incrementation
         db.incNonce(c.msg.contractAddress)
 
-  when opCode in {CallCode, Call, Create}:
-    c.transferBalance(opCode)
-    if c.isError():
-      c.rollback()
-      c.nextProc()
-      return
+  when opCode in {Call, Create}:
+    c.vmState.mutateStateDb:
+      db.subBalance(c.msg.sender, c.msg.value)
+      db.addBalance(c.msg.contractAddress, c.msg.value)
 
   if c.gasMeter.gasRemaining < 0:
     c.commit()
