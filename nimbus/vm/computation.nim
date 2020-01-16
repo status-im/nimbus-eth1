@@ -69,10 +69,9 @@ template getGasPrice*(c: Computation): GasInt =
     c.vmState.txGasPrice
 
 template getBlockHash*(c: Computation, blockNumber: Uint256): Hash256 =
-  #when evmc_enabled:
-  #  c.host.getBlockHash(blockNumber.truncate(int64))
-  #else:
-    #randomStatetest7.json
+  when evmc_enabled:
+    c.host.getBlockHash(blockNumber)
+  else:
     c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
 
 proc newComputation*(vmState: BaseVMState, message: Message): Computation =

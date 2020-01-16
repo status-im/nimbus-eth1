@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import evmc/evmc, evmc_helpers, eth/common
+import evmc/evmc, evmc_helpers, eth/common, ../constants
 
 proc nim_host_get_interface*(): ptr evmc_host_interface {.importc, cdecl.}
 proc nim_host_create_context*(vmstate: pointer, msg: ptr evmc_message): evmc_host_context {.importc, cdecl.}
@@ -28,9 +28,16 @@ proc getTxContext*(ctx: HostContext): evmc_tx_context =
   {.gcsafe.}:
     ctx.host.get_tx_context(ctx.context)
 
-proc getBlockHash*(ctx: HostContext, number: int64): Hash256 =
+proc getBlockHash*(ctx: HostContext, number: Uint256): Hash256 =
   {.gcsafe.}:
-    Hash256.fromEvmc ctx.host.get_block_hash(ctx.context, number)
+    let
+      blockNumber = ctx.getTxContext().block_number.u256
+      ancestorDepth  = blockNumber - number - 1
+    if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
+      return
+    if number >= blockNumber:
+      return
+    Hash256.fromEvmc ctx.host.get_block_hash(ctx.context, number.truncate(int64))
 
 proc accountExists*(ctx: HostContext, address: EthAddress): bool =
   var address = toEvmc(address)
