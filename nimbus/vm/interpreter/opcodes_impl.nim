@@ -695,7 +695,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
     let isNewAccount = if c.fork >= FkSpurious:
                          c.vmState.readOnlyStateDb.isDeadAccount(contractAddress)
                        else:
-                         not c.vmState.readOnlyStateDb.accountExists(contractAddress)
+                         not c.accountExists(contractAddress)
 
     let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
                                     (memInPos, memInLen)
@@ -855,7 +855,7 @@ op selfDestructEip150, inline = false:
   let beneficiary = c.stack.popAddress()
 
   let gasParams = GasParams(kind: SelfDestruct,
-    sd_condition: not c.vmState.readOnlyStateDb.accountExists(beneficiary)
+    sd_condition: not c.accountExists(beneficiary)
     )
 
   let gasCost = c.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
@@ -913,7 +913,7 @@ op extCodeHash, inline = true:
   # this is very inefficient, it calls underlying
   # database too much, we can reduce it by implementing accounts
   # cache
-  if not c.vmState.readOnlyStateDB.accountExists(address):
+  if not c.accountExists(address):
     push: 0
     return
 
