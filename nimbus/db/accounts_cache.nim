@@ -166,9 +166,8 @@ proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): 
   if acc.originalStorage.isNil:
     acc.originalStorage = newTable[UInt256, UInt256]()
   else:
-    if slot in acc.originalStorage:
-      result = acc.originalStorage[slot]
-      return
+    acc.originalStorage[].withValue(slot, val) do:
+      return val[]
 
   # Not in the original values cache - go to the DB.
   let
@@ -177,17 +176,17 @@ proc originalStorageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): 
     foundRecord = accountTrie.get(slotAsKey)
 
   result = if foundRecord.len > 0:
-             rlp.decode(foundRecord, UInt256)
-           else:
-             UInt256.zero()
+            rlp.decode(foundRecord, UInt256)
+          else:
+            UInt256.zero()
 
   acc.originalStorage[slot] = result
 
 proc storageValue(acc: RefAccount, slot: UInt256, db: TrieDatabaseRef): UInt256 =
-  if slot in acc.overlayStorage:
-    return acc.overlayStorage[slot]
-
-  acc.originalStorageValue(slot, db)
+  acc.overlayStorage.withValue(slot, val) do:
+    return val[]
+  do:
+    result = acc.originalStorageValue(slot, db)
 
 proc kill(acc: RefAccount) =
   acc.flags.excl IsAlive
