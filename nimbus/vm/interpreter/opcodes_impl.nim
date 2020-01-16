@@ -236,7 +236,7 @@ op address, inline = true:
 op balance, inline = true:
   ## 0x31, Get balance of the given account.
   let address = c.stack.popAddress()
-  push: c.vmState.readOnlyStateDB.getBalance(address)
+  push: c.getBalance(address)
 
 op origin, inline = true:
   ## 0x32, Get execution origination address.
@@ -378,8 +378,7 @@ op chainId, inline = true:
 
 op selfBalance, inline = true:
   ## 0x47, Get current contract's balance.
-  let stateDb = c.vmState.readOnlyStateDb
-  push: stateDb.getBalance(c.msg.contractAddress)
+  push: c.getBalance(c.msg.contractAddress)
 
 # ##########################################
 # 50s: Stack, Memory, Storage and Flow Operations
@@ -517,9 +516,7 @@ proc canTransfer(c: Computation, memPos, memLen: int, value: Uint256, opCode: st
   # the sender is childmsg sender, not parent msg sender
   # perhaps we need to move this code somewhere else
   # to avoid confusion
-  let senderBalance =
-    c.vmState.readOnlyStateDb().
-      getBalance(c.msg.contractAddress)
+  let senderBalance = c.getBalance(c.msg.contractAddress)
 
   if senderBalance < value:
     debug "Computation Failure", reason = "Insufficient funds available to transfer", required = c.msg.value, balance = senderBalance
@@ -729,7 +726,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
     c.memory.extend(memOutPos, memOutLen)
 
     when opCode in {CallCode, Call}:
-      let senderBalance = c.vmState.readOnlyStateDb().getBalance(sender)
+      let senderBalance = c.getBalance(sender)
       if senderBalance < value:
         debug "Insufficient funds", available = senderBalance, needed = c.msg.value
         # return unused gas
@@ -826,8 +823,8 @@ proc selfDestructImpl(c: Computation, beneficiary: EthAddress) =
   # In particular, EIP150 and EIP161 have extra requirements.
   c.vmState.mutateStateDB:
     let
-      localBalance = db.getBalance(c.msg.contractAddress)
-      beneficiaryBalance = db.getBalance(beneficiary)
+      localBalance = c.getBalance(c.msg.contractAddress)
+      beneficiaryBalance = c.getBalance(beneficiary)
 
     # Transfer to beneficiary
     db.setBalance(beneficiary, localBalance + beneficiaryBalance)
@@ -867,7 +864,7 @@ op selfDestructEip161, inline = false:
     beneficiary = c.stack.popAddress()
     stateDb     = c.vmState.readOnlyStateDb
     isDead      = stateDb.isDeadAccount(beneficiary)
-    balance     = stateDb.getBalance(c.msg.contractAddress)
+    balance     = c.getBalance(c.msg.contractAddress)
 
   let gasParams = GasParams(kind: SelfDestruct,
     sd_condition: isDead and not balance.isZero
