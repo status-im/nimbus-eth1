@@ -225,7 +225,6 @@ proc addChildComputation*(computation: BaseComputation, child: BaseComputation) 
 
 proc registerAccountForDeletion*(c: BaseComputation, beneficiary: EthAddress) =
   c.touchedAccounts.incl beneficiary
-  c.touchedAccounts.incl beneficiary
   c.suicides.incl(c.msg.contractAddress)
 
 proc addLogEntry*(c: BaseComputation, log: Log) {.inline.} =
