@@ -305,9 +305,8 @@ op gasprice, inline = true:
 
 op extCodeSize, inline = true:
   ## 0x3b, Get size of an account's code
-  let account = c.stack.popAddress()
-  let codeSize = c.vmState.readOnlyStateDB.getCode(account).len
-  push uint(codeSize)
+  let address = c.stack.popAddress()
+  push: c.getCodeSize(address)
 
 op extCodeCopy, inline = true:
   ## 0x3c, Copy an account's code to memory.

@@ -64,16 +64,17 @@ proc getBalance*(ctx: HostContext, address: EthAddress): Uint256 =
   {.gcsafe.}:
     Uint256.fromEvmc ctx.host.get_balance(ctx.context, address.addr)
 
-proc getCodeSize*(ctx: HostContext, address: EthAddress): int =
+proc getCodeSize*(ctx: HostContext, address: EthAddress): uint =
   var address = toEvmc(address)
-  ctx.host.get_code_size(ctx.context, address.addr).int
+  {.gcsafe.}:
+    ctx.host.get_code_size(ctx.context, address.addr)
 
 proc getCodeHash*(ctx: HostContext, address: EthAddress): Hash256 =
   var address = toEvmc(address)
   Hash256.fromEvmc ctx.host.get_code_hash(ctx.context, address.addr)
 
 proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[byte] =
-  let size = ctx.getCodeSize(address)
+  let size = ctx.getCodeSize(address).int
   var address = toEvmc(address)
   if size - codeOffset > 0:
     result = newSeq[byte](size - codeOffset)
