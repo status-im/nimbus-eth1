@@ -92,6 +92,12 @@ template getBalance*(c: Computation, address: EthAddress): Uint256 =
   else:
     c.vmState.readOnlyStateDB.getBalance(address)
 
+template getCodeSize*(c: Computation, address: EthAddress): uint =
+  when evmc_enabled:
+    c.host.getCodeSize(address)
+  else:
+    uint(c.vmState.readOnlyStateDB.getCode(account).len)
+
 proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   new result
   result.vmState = vmState
