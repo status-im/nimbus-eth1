@@ -426,15 +426,13 @@ op mstore8, inline = true, memStartPos, value:
 
 op sload, inline = true, slot:
   ## 0x54, Load word from storage.
-
-  let (value, _) = c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
-  push(value)
+  push: c.getStorage(slot)
 
 op sstore, inline = false, slot, value:
   ## 0x55, Save word to storage.
   checkInStaticContext(c)
 
-  let (currentValue, existing) = c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
+  let currentValue = c.getStorage(slot)
 
   let
     gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: currentValue.isZero)
@@ -930,7 +928,7 @@ op sstoreEIP2200, inline = false, slot, value:
     raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
   let stateDB = c.vmState.readOnlyStateDB
-  let (currentValue, existing) = stateDB.getStorage(c.msg.contractAddress, slot)
+  let currentValue = c.getStorage(slot)
 
   let
     gasParam = GasParams(kind: Op.Sstore,
