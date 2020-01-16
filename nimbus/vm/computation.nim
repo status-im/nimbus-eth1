@@ -17,7 +17,7 @@ import
 logScope:
   topics = "vm computation"
 
-proc newComputation*(vmState: BaseVMState, message: Message, forkOverride=none(Fork)): Computation =
+proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -27,15 +27,15 @@ proc newComputation*(vmState: BaseVMState, message: Message, forkOverride=none(F
   result.touchedAccounts = initHashSet[EthAddress]()
   result.suicides = initHashSet[EthAddress]()
   result.code = newCodeStream(message.code)
-  result.fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.blockNumber.toFork
-  result.gasCosts = result.fork.forkToSchedule
   # a dummy/terminus continuation proc
   result.nextProc = proc() =
     discard
+
+template gasCosts*(c: Computation): untyped =
+  c.vmState.gasCosts
+
+template fork*(c: Computation): untyped =
+  c.vmState.fork
 
 proc isOriginComputation*(c: Computation): bool =
   # Is this computation the computation initiated by a transaction

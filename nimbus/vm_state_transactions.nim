@@ -46,7 +46,8 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
 
   vmState.txContext(
     origin = sender,
-    gasPrice = tx.gasPrice
+    gasPrice = tx.gasPrice,
+    forkOverride = some(fork)
   )
 
   let msg = Message(
@@ -61,7 +62,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     code: code
     )
 
-  result = newComputation(vmState, msg, some(fork))
+  result = newComputation(vmState, msg)
   doAssert result.isOriginComputation
 
 proc execComputation*(c: Computation) =

@@ -283,8 +283,6 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         kind: if contractCreation: evmcCreate else: evmcCall,
         depth: 0,
         gas: gasLimit,
-        gasPrice: gasPrice,
-        origin: sender,
         sender: sender,
         contractAddress: destination,
         codeAddress: CREATE_CONTRACT_ADDRESS,
@@ -292,6 +290,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         data: data,
         code: vmState.readOnlyStateDB.getCode(destination).toSeq
       )
+
+    vmState.txContext(
+      origin = sender,
+      gasPrice = gasPrice
+      )
+
     result = newComputation(vmState, message)
 
   rpcsrv.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
