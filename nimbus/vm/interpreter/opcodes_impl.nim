@@ -577,7 +577,7 @@ proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: stati
     code: callData
     )
 
-  result = newComputation(c.vmState, childMsg, some(c.fork))
+  result = newComputation(c.vmState, childMsg)
 
 template genCreate(callName: untyped, opCode: Op): untyped =
   op callName, inline = false, val, startPosition, size:
@@ -755,7 +755,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       code: code.toSeq,
       flags: flags)
 
-    var child = newComputation(c.vmState, childMsg, some(c.fork))
+    var child = newComputation(c.vmState, childMsg)
 
     c.memOutPos = memOutPos
     c.memOutLen = memOutLen

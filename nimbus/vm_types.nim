@@ -30,6 +30,8 @@ type
     status*        : bool
     txOrigin*      : EthAddress
     txGasPrice*    : GasInt
+    gasCosts*      : GasCosts
+    fork*          : Fork
 
   AccessLogs* = ref object
     reads*: Table[string, string]
@@ -67,8 +69,6 @@ type
     error*:                 Error
     touchedAccounts*:       HashSet[EthAddress]
     suicides*:              HashSet[EthAddress]
-    gasCosts*:              GasCosts # TODO - will be hidden at a lower layer
-    fork*:                  Fork
     logEntries*:            seq[Log]
     dbsnapshot*:            Snapshot
     instr*:                 Op

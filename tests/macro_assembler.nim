@@ -207,7 +207,8 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
 
   vmState.txContext(
     origin = sender,
-    gasPrice = tx.gasPrice
+    gasPrice = tx.gasPrice,
+    forkOverride = some(fork)
   )
 
   let contractAddress = generateAddress(sender, tx.accountNonce)
@@ -223,7 +224,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
       code: tx.payload
       )
 
-  newComputation(vmState, msg, some(fork))
+  newComputation(vmState, msg)
 
 proc initDatabase*(): (Uint256, BaseChainDB) =
   let

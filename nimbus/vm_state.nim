@@ -6,8 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  macros, strformat, tables, sets,
+  macros, strformat, tables, sets, options,
   eth/common,
+  vm/interpreter/[vm_forks, gas_costs],
   ./constants, ./db/[db_chain, state_db],
   ./utils, json, vm_types, vm/transaction_tracer
 
@@ -42,11 +43,17 @@ proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
   new result
   result.init(prevStateRoot, header, chainDB, tracerFlags)
 
-proc txContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt) =
+proc txContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
   ## this proc will be called each time a new transaction
   ## is going to be executed
   vmState.txOrigin = origin
   vmState.txGasPrice = gasPrice
+  vmState.fork =
+    if forkOverride.isSome:
+      forkOverride.get
+    else:
+      vmState.blockHeader.blockNumber.toFork
+  vmState.gasCosts = vmState.fork.forkToSchedule
 
 method blockhash*(vmState: BaseVMState): Hash256 {.base, gcsafe.} =
   vmState.blockHeader.hash
