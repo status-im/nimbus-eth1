@@ -6,16 +6,51 @@ set -e
 WAKU_NODE_BIN="./build/wakunode"
 NODE_PK="5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3"
 NODE_ENODE="enode://e5fd642a0f630bbb1e4cd7df629d7b8b019457a9a74f983c0484a045cebb176def86a54185b50bbba6bbf97779173695e92835d63109c23471e6da382f922fdb@0.0.0.0:30303"
-DEFAULTS="--log-level:DEBUG --discovery:0 --log-metrics"
+DEFAULTS="--log-level:DEBUG --discovery:off --log-metrics --metrics-server"
 LIGHT_NODE="--light-node:1"
 WAKU_LIGHT_NODE="--waku-mode:WakuChan ${LIGHT_NODE}"
+METRICS_DIR="./waku/metrics"
 
 # multitail support
 MULTITAIL="${MULTITAIL:-multitail}" # to allow overriding the program name
 USE_MULTITAIL="${USE_MULTITAIL:-no}" # make it an opt-in
 type "$MULTITAIL" &>/dev/null || USE_MULTITAIL="no"
 
-# TODO: metrics configs
+# TODO: This is based on the nim-beacon-chain eth2_network_simulation but quite
+# the much worse version due to the custom nodes we need. Need to rework this
+# to be less hardcoded, but might use a Nim application for this, hence the
+# quick and dirty way for now.
+
+mkdir -p "${METRICS_DIR}"/prometheus/
+cat > "${METRICS_DIR}/prometheus/prometheus.yml" <<EOF
+global:
+  scrape_interval: 1s
+
+scrape_configs:
+  - job_name: "wakusim"
+    static_configs:
+    - targets: ['127.0.0.1:8008']
+      labels:
+        node: '0'
+    - targets: ['127.0.0.1:8009']
+      labels:
+        node: '1'
+    - targets: ['127.0.0.1:8010']
+      labels:
+        node: '2'
+    - targets: ['127.0.0.1:8011']
+      labels:
+        node: '3'
+    - targets: ['127.0.0.1:8012']
+      labels:
+        node: '4'
+EOF
+
+# use the exported Grafana dashboard for a single node to create one for all nodes
+"./build/process_dashboard" \
+  --nodes=5 \
+  --in="waku/examples/waku-grafana-dashboard.json" \
+  --out="${METRICS_DIR}/waku-sim-all-nodes-grafana-dashboard.json"
 
 if [[ "$USE_MULTITAIL" != "no" ]]; then
   SLEEP=0

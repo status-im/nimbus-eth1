@@ -15,15 +15,231 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 4,
+  "id": 1,
   "links": [],
   "panels": [
     {
       "datasource": null,
       "gridPos": {
-        "h": 5,
-        "w": 8,
+        "h": 4,
+        "w": 6,
         "x": 0,
+        "y": 0
+      },
+      "id": 16,
+      "options": {
+        "fieldOptions": {
+          "calcs": [
+            "last"
+          ],
+          "defaults": {
+            "mappings": [],
+            "max": 100,
+            "min": 0,
+            "thresholds": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "override": {},
+          "values": false
+        },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "6.4.5",
+      "targets": [
+        {
+          "expr": "connected_peers{node=\"0\"}",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Connected Peers #0",
+      "type": "gauge"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": false,
+      "colorValue": false,
+      "colors": [
+        "#299c46",
+        "rgba(237, 129, 40, 0.89)",
+        "#d44a3a"
+      ],
+      "datasource": null,
+      "format": "none",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 6,
+        "y": 0
+      },
+      "id": 22,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "sparkline": {
+        "fillColor": "rgba(31, 118, 189, 0.18)",
+        "full": false,
+        "lineColor": "rgb(31, 120, 193)",
+        "show": false,
+        "ymax": null,
+        "ymin": null
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "valid_envelopes_total{node=\"0\"}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": "",
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Valid Envelopes #0",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "cacheTimeout": null,
+      "colorBackground": false,
+      "colorValue": false,
+      "colors": [
+        "#299c46",
+        "rgba(237, 129, 40, 0.89)",
+        "#d44a3a"
+      ],
+      "datasource": null,
+      "format": "none",
+      "gauge": {
+        "maxValue": 100,
+        "minValue": 0,
+        "show": false,
+        "thresholdLabels": false,
+        "thresholdMarkers": true
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 10,
+        "y": 0
+      },
+      "id": 20,
+      "interval": null,
+      "links": [],
+      "mappingType": 1,
+      "mappingTypes": [
+        {
+          "name": "value to text",
+          "value": 1
+        },
+        {
+          "name": "range to text",
+          "value": 2
+        }
+      ],
+      "maxDataPoints": 100,
+      "nullPointMode": "connected",
+      "nullText": null,
+      "options": {},
+      "pluginVersion": "6.4.5",
+      "postfix": "",
+      "postfixFontSize": "50%",
+      "prefix": "",
+      "prefixFontSize": "50%",
+      "rangeMaps": [
+        {
+          "from": "null",
+          "text": "N/A",
+          "to": "null"
+        }
+      ],
+      "sparkline": {
+        "fillColor": "rgba(31, 118, 189, 0.18)",
+        "full": false,
+        "lineColor": "rgb(31, 120, 193)",
+        "show": false,
+        "ymax": null,
+        "ymin": null
+      },
+      "tableColumn": "",
+      "targets": [
+        {
+          "expr": "dropped_expired_envelopes_total{node=\"0\"} + dropped_from_future_envelopes_total{node=\"0\"} + dropped_low_pow_envelopes_total{node=\"0\"} + dropped_too_large_envelopes_total{node=\"0\"} + dropped_bloom_filter_mismatch_envelopes_total{node=\"0\"} + dropped_topic_mismatch_envelopes_total{node=\"0\"} +dropped_benign_duplicate_envelopes_total{node=\"0\"} + dropped_malicious_duplicate_envelopes_total{node=\"0\"}",
+          "legendFormat": "dropped envelopes",
+          "refId": "A"
+        }
+      ],
+      "thresholds": "",
+      "timeFrom": null,
+      "timeShift": null,
+      "title": "Dropped Envelopes #0",
+      "type": "singlestat",
+      "valueFontSize": "80%",
+      "valueMaps": [
+        {
+          "op": "=",
+          "text": "N/A",
+          "value": "null"
+        }
+      ],
+      "valueName": "current"
+    },
+    {
+      "datasource": null,
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 14,
         "y": 0
       },
       "id": 14,
@@ -58,70 +274,22 @@
       "pluginVersion": "6.4.5",
       "targets": [
         {
-          "expr": "rate(process_cpu_seconds_total[5s]) * 100",
+          "expr": "rate(process_cpu_seconds_total{node=\"0\"}[5s]) * 100",
           "legendFormat": "CPU Usage",
           "refId": "A"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "CPU Usage",
+      "title": "CPU Usage #0",
       "type": "gauge"
     },
     {
       "datasource": null,
       "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 8,
-        "y": 0
-      },
-      "id": 16,
-      "options": {
-        "fieldOptions": {
-          "calcs": [
-            "last"
-          ],
-          "defaults": {
-            "mappings": [],
-            "max": 100,
-            "min": 0,
-            "thresholds": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "override": {},
-          "values": false
-        },
-        "orientation": "auto",
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "pluginVersion": "6.4.5",
-      "targets": [
-        {
-          "expr": "connected_peers",
-          "refId": "A"
-        }
-      ],
-      "timeFrom": null,
-      "timeShift": null,
-      "title": "Connected Peers",
-      "type": "gauge"
-    },
-    {
-      "datasource": null,
-      "gridPos": {
-        "h": 5,
-        "w": 8,
-        "x": 16,
+        "h": 4,
+        "w": 5,
+        "x": 19,
         "y": 0
       },
       "id": 18,
@@ -156,13 +324,13 @@
       "pluginVersion": "6.4.5",
       "targets": [
         {
-          "expr": "process_resident_memory_bytes",
+          "expr": "process_resident_memory_bytes{node=\"0\"}",
           "refId": "A"
         }
       ],
       "timeFrom": null,
       "timeShift": null,
-      "title": "RSS Memory",
+      "title": "RSS Memory #0",
       "type": "gauge"
     },
     {
@@ -177,7 +345,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 5
+        "y": 4
       },
       "id": 6,
       "legend": {
@@ -206,57 +374,57 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "valid_envelopes_total",
+          "expr": "valid_envelopes_total{node=\"0\"}",
           "hide": false,
           "instant": false,
           "legendFormat": "Valid",
           "refId": "A"
         },
         {
-          "expr": "dropped_benign_duplicate_envelopes_total",
+          "expr": "dropped_benign_duplicate_envelopes_total{node=\"0\"}",
           "hide": false,
           "instant": false,
           "legendFormat": "Benign duplicate",
           "refId": "B"
         },
         {
-          "expr": "dropped_malicious_duplicate_envelopes_total",
+          "expr": "dropped_malicious_duplicate_envelopes_total{node=\"0\"}",
           "hide": false,
           "legendFormat": "Malicious duplicate",
           "refId": "C"
         },
         {
-          "expr": "dropped_expired_envelopes_total",
+          "expr": "dropped_expired_envelopes_total{node=\"0\"}",
           "hide": false,
           "legendFormat": "Expired",
           "refId": "D"
         },
         {
-          "expr": "dropped_from_future_envelopes_total",
+          "expr": "dropped_from_future_envelopes_total{node=\"0\"}",
           "hide": false,
           "legendFormat": "Future timestamped",
           "refId": "E"
         },
         {
-          "expr": "dropped_low_pow_envelopes_total",
+          "expr": "dropped_low_pow_envelopes_total{node=\"0\"}",
           "hide": false,
           "legendFormat": "Too low PoW",
           "refId": "F"
         },
         {
-          "expr": "dropped_bloom_filter_mismatch_envelopes_total",
+          "expr": "dropped_bloom_filter_mismatch_envelopes_total{node=\"0\"}",
           "hide": false,
           "legendFormat": "Bloom filter mismatch",
           "refId": "G"
         },
         {
-          "expr": "dropped_topic_mismatch_envelopes_total",
+          "expr": "dropped_topic_mismatch_envelopes_total{node=\"0\"}",
           "hide": false,
           "legendFormat": "Topic mismatch",
           "refId": "H"
         },
         {
-          "expr": "dropped_too_large_envelopes_total",
+          "expr": "dropped_too_large_envelopes_total{node=\"0\"}",
           "hide": false,
           "legendFormat": "Too Large",
           "refId": "I"
@@ -266,7 +434,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Waku Envelopes",
+      "title": "Waku Envelopes #0",
       "tooltip": {
         "shared": true,
         "sort": 1,
@@ -315,7 +483,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 5
+        "y": 4
       },
       "id": 2,
       "legend": {
@@ -348,20 +516,20 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "connected_peers",
+          "expr": "connected_peers{node=\"0\"}",
           "intervalFactor": 1,
           "legendFormat": "Connected Peers",
           "refId": "A"
         },
         {
-          "expr": "process_resident_memory_bytes",
+          "expr": "process_resident_memory_bytes{node=\"0\"}",
           "interval": "",
           "intervalFactor": 1,
           "legendFormat": "RSS Memory",
           "refId": "B"
         },
         {
-          "expr": "rate(process_cpu_seconds_total[15s]) * 100",
+          "expr": "rate(process_cpu_seconds_total{node=\"0\"}[15s]) * 100",
           "legendFormat": "CPU usage %",
           "refId": "C"
         }
@@ -370,7 +538,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Waku Node",
+      "title": "Waku Node #0",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -419,7 +587,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 13
       },
       "id": 8,
       "legend": {
@@ -447,12 +615,12 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "process_max_fds",
+          "expr": "process_max_fds{node=\"0\"}",
           "legendFormat": "Maximum file descriptors",
           "refId": "A"
         },
         {
-          "expr": "process_open_fds",
+          "expr": "process_open_fds{node=\"0\"}",
           "legendFormat": "Open file descriptors",
           "refId": "B"
         }
@@ -461,7 +629,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "File Descriptors",
+      "title": "File Descriptors #0",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -510,7 +678,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 13
       },
       "id": 4,
       "legend": {
@@ -538,22 +706,22 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "nim_gc_mem_bytes",
+          "expr": "nim_gc_mem_bytes{node=\"0\"}",
           "legendFormat": "Nim GC total memory",
           "refId": "A"
         },
         {
-          "expr": "nim_gc_mem_occupied_bytes",
+          "expr": "nim_gc_mem_occupied_bytes{node=\"0\"}",
           "legendFormat": "Nim GC used memory",
           "refId": "B"
         },
         {
-          "expr": "process_resident_memory_bytes",
+          "expr": "process_resident_memory_bytes{node=\"0\"}",
           "legendFormat": "RSS memory",
           "refId": "C"
         },
         {
-          "expr": "process_virtual_memory_bytes",
+          "expr": "process_virtual_memory_bytes{node=\"0\"}",
           "legendFormat": "Virtual memory",
           "refId": "D"
         }
@@ -562,7 +730,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Memory Usage",
+      "title": "Memory Usage #0",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -628,5 +796,5 @@
   "timezone": "",
   "title": "Waku Node",
   "uid": "K7Z6IoBZk",
-  "version": 10
+  "version": 5
 }
