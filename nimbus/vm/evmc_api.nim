@@ -71,7 +71,8 @@ proc getCodeSize*(ctx: HostContext, address: EthAddress): uint =
 
 proc getCodeHash*(ctx: HostContext, address: EthAddress): Hash256 =
   var address = toEvmc(address)
-  Hash256.fromEvmc ctx.host.get_code_hash(ctx.context, address.addr)
+  {.gcsafe.}:
+    Hash256.fromEvmc ctx.host.get_code_hash(ctx.context, address.addr)
 
 proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[byte] =
   let size = ctx.getCodeSize(address).int

@@ -904,17 +904,7 @@ op sarOp, inline = true:
 
 op extCodeHash, inline = true:
   let address = c.stack.popAddress()
-  # this is very inefficient, it calls underlying
-  # database too much, we can reduce it by implementing accounts
-  # cache
-  if not c.accountExists(address):
-    push: 0
-    return
-
-  if c.vmState.readOnlyStateDB.isEmptyAccount(address):
-    push: 0
-  else:
-    push: c.vmState.readOnlyStateDB.getCodeHash(address)
+  push: c.getCodeHash(address)
 
 op sstoreEIP2200, inline = false, slot, value:
   checkInStaticContext(c)
