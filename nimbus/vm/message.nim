@@ -9,8 +9,5 @@ import
   eth/common,
   ../constants, ../validation, ../vm_types, chronicles
 
-proc isOrigin*(message: Message): bool =
-  message.sender == message.origin
-
 proc isCreate*(message: Message): bool =
   message.kind in {evmcCreate, evmcCreate2}

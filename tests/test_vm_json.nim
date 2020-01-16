@@ -47,14 +47,17 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     let address = fexec{"address"}.getStr.parseAddress
     code = db.getCode(address).toSeq
 
+  vmState.txContext(
+    origin = fexec{"origin"}.getStr.parseAddress,
+    gasPrice = fexec{"gasPrice"}.getHexadecimalInt
+  )
+
   code = fexec{"code"}.getStr.hexToSeqByte
   let toAddress = fexec{"address"}.getStr.parseAddress
   let message = Message(
     kind: if toAddress == ZERO_ADDRESS: evmcCreate else: evmcCall, # assume ZERO_ADDRESS is a contract creation
     depth: 0,
     gas: fexec{"gas"}.getHexadecimalInt,
-    gasPrice: fexec{"gasPrice"}.getHexadecimalInt,
-    origin: fexec{"origin"}.getStr.parseAddress,
     sender: fexec{"caller"}.getStr.parseAddress,
     contractAddress: toAddress,
     codeAddress: toAddress,

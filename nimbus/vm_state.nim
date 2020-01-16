@@ -35,12 +35,18 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
   self.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
   self.logEntries = @[]
   self.accountDb = newAccountStateDB(chainDB.db, prevStateRoot, chainDB.pruneTrie)
-  self.touchedAccounts = initHashSet[EthAddress]()  
+  self.touchedAccounts = initHashSet[EthAddress]()
 
 proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
                      chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
   new result
   result.init(prevStateRoot, header, chainDB, tracerFlags)
+
+proc txContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt) =
+  ## this proc will be called each time a new transaction
+  ## is going to be executed
+  vmState.txOrigin = origin
+  vmState.txGasPrice = gasPrice
 
 method blockhash*(vmState: BaseVMState): Hash256 {.base, gcsafe.} =
   vmState.blockHeader.hash

@@ -29,11 +29,16 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
       gasPrice = 1.GasInt
       sender: EthAddress
       toAddress = initAddress(address)
+
+    vmState.txContext(
+      origin = sender,
+      gasPrice = gasPrice
+    )
+
+    var
       message = Message(
         kind: evmcCall,
         gas: gas,
-        gasPrice: gasPrice,
-        origin: sender,
         sender: sender,
         contractAddress: toAddress,
         codeAddress: toAddress,
