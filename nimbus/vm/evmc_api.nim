@@ -48,7 +48,8 @@ proc getStorage*(ctx: HostContext, address: EthAddress, key: Uint256): Uint256 =
   var
     address = toEvmc(address)
     key = toEvmc(key)
-  Uint256.fromEvmc ctx.host.get_storage(ctx.context, address.addr, key.addr)
+  {.gcsafe.}:
+    Uint256.fromEvmc ctx.host.get_storage(ctx.context, address.addr, key.addr)
 
 proc setStorage*(ctx: HostContext, address: EthAddress,
                  key, value: Uint256): evmc_storage_status =

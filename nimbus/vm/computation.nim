@@ -80,6 +80,12 @@ template accountExists*(c: Computation, address: EthAddress): bool =
   else:
     c.vmState.readOnlyStateDB.accountExists(address)
 
+template getStorage*(c: Computation, slot: Uint256): Uint256 =
+  when evmc_enabled:
+    c.host.getStorage(c.msg.contractAddress, slot)
+  else:
+    c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)[0]
+
 proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   new result
   result.vmState = vmState
