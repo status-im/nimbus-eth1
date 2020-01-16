@@ -205,13 +205,16 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
 
   let gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
 
+  vmState.txContext(
+    origin = sender,
+    gasPrice = tx.gasPrice
+  )
+
   let contractAddress = generateAddress(sender, tx.accountNonce)
   let msg = Message(
       kind: evmcCall,
       depth: 0,
       gas: tx.gasLimit - gasUsed,
-      gasPrice: tx.gasPrice,
-      origin: sender,
       sender: sender,
       contractAddress: contractAddress,
       codeAddress: tx.to,

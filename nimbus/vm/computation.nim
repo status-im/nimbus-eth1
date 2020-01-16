@@ -39,7 +39,7 @@ proc newComputation*(vmState: BaseVMState, message: Message, forkOverride=none(F
 
 proc isOriginComputation*(c: Computation): bool =
   # Is this computation the computation initiated by a transaction
-  c.msg.isOrigin
+  c.msg.sender == c.vmState.txOrigin
 
 template isSuccess*(c: Computation): bool =
   c.error.isNil

@@ -240,7 +240,7 @@ op balance, inline = true:
 
 op origin, inline = true:
   ## 0x32, Get execution origination address.
-  push: c.msg.origin
+  push: c.vmState.txOrigin
 
 op caller, inline = true:
   ## 0x33, Get caller address.
@@ -301,7 +301,7 @@ op codeCopy, inline = false, memStartPos, copyStartPos, size:
 
 op gasprice, inline = true:
   ## 0x3A, Get price of gas in current environment.
-  push: c.msg.gasPrice
+  push: c.vmState.txGasPrice
 
 op extCodeSize, inline = true:
   ## 0x3b, Get size of an account's code
@@ -569,8 +569,6 @@ proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: stati
     kind: callKind,
     depth: c.msg.depth + 1,
     gas: createMsgGas,
-    gasPrice: c.msg.gasPrice,
-    origin: c.msg.origin,
     sender: c.msg.contractAddress,
     contractAddress: contractAddress,
     codeAddress: CREATE_CONTRACT_ADDRESS,
@@ -749,8 +747,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
       kind: callKind,
       depth: c.msg.depth + 1,
       gas: childGasLimit,
-      gasPrice: c.msg.gasPrice,
-      origin: c.msg.origin,
       sender: sender,
       contractAddress: contractAddress,
       codeAddress: codeAddress,

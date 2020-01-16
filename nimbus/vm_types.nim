@@ -28,6 +28,8 @@ type
     touchedAccounts*: HashSet[EthAddress]
     suicides*      : HashSet[EthAddress]
     status*        : bool
+    txOrigin*      : EthAddress
+    txGasPrice*    : GasInt
 
   AccessLogs* = ref object
     reads*: Table[string, string]
@@ -100,8 +102,6 @@ type
     kind*:             CallKind
     depth*:            int
     gas*:              GasInt
-    gasPrice*:         GasInt
-    origin*:           EthAddress
     sender*:           EthAddress
     contractAddress*:  EthAddress
     codeAddress*:      EthAddress

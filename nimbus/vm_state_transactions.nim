@@ -44,12 +44,15 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     debug "not enough gas to perform calculation", gas=gas
     return
 
+  vmState.txContext(
+    origin = sender,
+    gasPrice = tx.gasPrice
+  )
+
   let msg = Message(
     kind: if tx.isContractCreation: evmcCreate else: evmcCall,
     depth: 0,
     gas: gas,
-    gasPrice: tx.gasPrice,
-    origin: sender,
     sender: sender,
     contractAddress: recipient,
     codeAddress: tx.to,
