@@ -17,6 +17,64 @@ import
 logScope:
   topics = "vm computation"
 
+const
+  evmc_enabled* {.booldefine.} = true
+
+template getCoinbase*(c: Computation): EthAddress =
+  when evmc_enabled:
+    fromEvmc c.host.getTxContext().block_coinbase
+  else:
+    c.vmState.coinbase
+
+template getTimestamp*(c: Computation): int64 =
+  when evmc_enabled:
+    c.host.getTxContext().block_timestamp
+  else:
+    c.vmState.timestamp.toUnix
+
+template getBlockNumber*(c: Computation): Uint256 =
+  when evmc_enabled:
+    c.host.getTxContext().block_number.u256
+  else:
+    c.vmState.blockNumber.blockNumberToVmWord
+
+template getDifficulty*(c: Computation): DifficultyInt =
+  when evmc_enabled:
+    Uint256.fromEvmc c.host.getTxContext().block_difficulty
+  else:
+    c.vmState.difficulty
+
+template getGasLimit*(c: Computation): GasInt =
+  when evmc_enabled:
+    c.host.getTxContext().block_gas_limit.GasInt
+  else:
+    c.vmState.gasLimit
+
+template getChainId*(c: Computation): uint =
+  when evmc_enabled:
+    Uint256.fromEvmc(c.host.getTxContext().chain_id).truncate(uint)
+  else:
+    c.vmState.chaindb.config.chainId
+
+template getOrigin*(c: Computation): EthAddress =
+  when evmc_enabled:
+    fromEvmc c.host.getTxContext().tx_origin
+  else:
+    c.vmState.txOrigin
+
+template getGasPrice*(c: Computation): GasInt =
+  when evmc_enabled:
+    Uint256.fromEvmc(c.host.getTxContext().tx_gas_price).truncate(GasInt)
+  else:
+    c.vmState.txGasPrice
+
+template getBlockHash*(c: Computation, blockNumber: Uint256): Hash256 =
+  #when evmc_enabled:
+  #  c.host.getBlockHash(blockNumber.truncate(int64))
+  #else:
+    #randomStatetest7.json
+    c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
+
 proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   new result
   result.vmState = vmState
@@ -27,6 +85,13 @@ proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   result.touchedAccounts = initHashSet[EthAddress]()
   result.suicides = initHashSet[EthAddress]()
   result.code = newCodeStream(message.code)
+
+  when evmc_enabled:
+    result.host.init(
+      nim_host_get_interface(),
+      cast[evmc_host_context](result)
+    )
+
   # a dummy/terminus continuation proc
   result.nextProc = proc() =
     discard

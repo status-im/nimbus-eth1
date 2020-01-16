@@ -12,7 +12,7 @@ import
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
   ../../vm_state, ../../errors, ../../constants, ../../vm_types,
-  ../../db/[db_chain, state_db], ../../utils
+  ../../db/[db_chain, state_db], ../../utils, ../evmc_api, ../evmc_helpers
 
 logScope:
   topics = "opcode impl"
@@ -240,7 +240,7 @@ op balance, inline = true:
 
 op origin, inline = true:
   ## 0x32, Get execution origination address.
-  push: c.vmState.txOrigin
+  push: c.getOrigin()
 
 op caller, inline = true:
   ## 0x33, Get caller address.
@@ -301,7 +301,7 @@ op codeCopy, inline = false, memStartPos, copyStartPos, size:
 
 op gasprice, inline = true:
   ## 0x3A, Get price of gas in current environment.
-  push: c.vmState.txGasPrice
+  push: c.getGasPrice()
 
 op extCodeSize, inline = true:
   ## 0x3b, Get size of an account's code
@@ -350,32 +350,31 @@ op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
 
 op blockhash, inline = true, blockNumber:
   ## 0x40, Get the hash of one of the 256 most recent complete blocks.
-  push: c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
+  push: c.getBlockHash(blockNumber)
 
 op coinbase, inline = true:
   ## 0x41, Get the block's beneficiary address.
-  push: c.vmState.coinbase
+  push: c.getCoinbase()
 
 op timestamp, inline = true:
   ## 0x42, Get the block's timestamp.
-  push: c.vmState.timestamp.toUnix
+  push: c.getTimestamp()
 
 op blocknumber, inline = true:
   ## 0x43, Get the block's number.
-  push: c.vmState.blockNumber.blockNumberToVmWord
+  push: c.getBlockNumber()
 
 op difficulty, inline = true:
   ## 0x44, Get the block's difficulty
-  push: c.vmState.difficulty
+  push: c.getDifficulty()
 
 op gasLimit, inline = true:
   ## 0x45, Get the block's gas limit
-  push: c.vmState.gasLimit
+  push: c.getGasLimit()
 
 op chainId, inline = true:
   ## 0x46, Get current chain’s EIP-155 unique identifier.
-  # TODO: this is a stub
-  push: c.vmState.chaindb.config.chainId
+  push: c.getChainId()
 
 op selfBalance, inline = true:
   ## 0x47, Get current contract's balance.
