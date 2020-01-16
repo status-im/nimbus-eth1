@@ -79,14 +79,17 @@ proc copyCode*(ctx: HostContext, address: EthAddress, codeOffset: int = 0): seq[
   var address = toEvmc(address)
   if size - codeOffset > 0:
     result = newSeq[byte](size - codeOffset)
-    let read = ctx.host.copy_code(ctx.context, address.addr, code_offset.uint, result[0].addr, result.len.uint).int
+    {.gcsafe.}:
+      let read = ctx.host.copy_code(ctx.context, address.addr,
+        code_offset.uint, result[0].addr, result.len.uint).int
     doAssert(read == result.len)
 
 proc selfdestruct*(ctx: HostContext, address, beneficiary: EthAddress) =
   var
     address = toEvmc(address)
     beneficiary = toEvmc(beneficiary)
-  ctx.host.selfdestruct(ctx.context, address.addr, beneficiary.addr)
+  {.gcsafe.}:
+    ctx.host.selfdestruct(ctx.context, address.addr, beneficiary.addr)
 
 proc emitLog*(ctx: HostContext, address: EthAddress, data: openArray[byte], topics: openArray[evmc_bytes32]) =
   var address = toEvmc(address)

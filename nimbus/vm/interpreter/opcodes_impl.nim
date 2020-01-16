@@ -310,7 +310,7 @@ op extCodeSize, inline = true:
 
 op extCodeCopy, inline = true:
   ## 0x3c, Copy an account's code to memory.
-  let account = c.stack.popAddress()
+  let address = c.stack.popAddress()
   let (memStartPos, codeStartPos, size) = c.stack.popInt(3)
   let (memPos, codePos, len) = (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
 
@@ -318,7 +318,7 @@ op extCodeCopy, inline = true:
     c.gasCosts[ExtCodeCopy].m_handler(c.memory.len, memPos, len),
     reason="ExtCodeCopy fee")
 
-  let codeBytes = c.vmState.readOnlyStateDB.getCode(account)
+  let codeBytes = c.getCode(address)
   c.memory.writePaddedResult(codeBytes.toOpenArray, memPos, codePos, len)
 
 op returnDataSize, inline = true:
@@ -734,7 +734,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     let
       callData = c.memory.read(memInPos, memInLen)
-      code = c.vmState.readOnlyStateDb.getCode(codeAddress)
+      code = c.getCode(codeAddress)
 
     var childMsg = Message(
       kind: callKind,
@@ -834,7 +834,7 @@ proc selfDestructImpl(c: Computation, beneficiary: EthAddress) =
     db.setBalance(c.msg.contractAddress, 0.u256)
 
     # Register the account to be deleted
-    c.registerAccountForDeletion(beneficiary)
+    c.selfDestruct(beneficiary)
 
     trace "SELFDESTRUCT",
       contractAddress = c.msg.contractAddress.toHex,

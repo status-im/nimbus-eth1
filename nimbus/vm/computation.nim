@@ -108,6 +108,18 @@ template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
     else:
       db.getCodeHash(address)
 
+template selfDestruct*(c: Computation, address: EthAddress) =
+  when evmc_enabled:
+    c.host.selfDestruct(c.msg.contractAddress, address)
+  else:
+    c.registerAccountForDeletion(address)
+
+template getCode*(c: Computation, address: EthAddress): ByteRange =
+  when evmc_enabled:
+    c.host.copyCode(address).toRange
+  else:
+    c.vmState.readOnlyStateDB.getCode(address)
+
 proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   new result
   result.vmState = vmState
