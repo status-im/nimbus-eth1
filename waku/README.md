@@ -14,24 +14,6 @@ make wakunode
 ./build/wakunode --help
 ```
 
-# Testing Waku Protocol
-One can set up several nodes, get them connected and then instruct them via the
-JSON-RPC interface. This can be done via e.g. web3.js, nim-web3 (needs to be
-updated) or simply curl your way out.
-
-The JSON-RPC interface is currently the same as the one of Whisper. The only
-difference is the addition of broadcasting the topics interest when a filter
-with a certain set of topics is subcribed.
-
-Example of a quick simulation test using this approach:
-```bash
-./waku/start_network.sh
-# Or when multitail is installed
-USE_MULTITAIL="yes" ./waku/start_network.sh
-
-./build/quicksim
-```
-
 # Using Metrics
 
 Metrics are available for valid envelopes and dropped envelopes.
@@ -57,3 +39,39 @@ For visualisation, similar steps can be used as is written down for Nimbus
 
 There is a similar example dashboard that includes visualisation of the
 envelopes available at `waku/examples/waku-grafana-dashboard.json`.
+
+# Testing Waku Protocol
+One can set up several nodes, get them connected and then instruct them via the
+JSON-RPC interface. This can be done via e.g. web3.js, nim-web3 (needs to be
+updated) or simply curl your way out.
+
+The JSON-RPC interface is currently the same as the one of Whisper. The only
+difference is the addition of broadcasting the topics interest when a filter
+with a certain set of topics is subcribed.
+
+Example of a quick simulation using this approach:
+```bash
+# Build wakunode + quicksim
+make NIMFLAGS="-d:insecure" wakusim
+
+# Start the simulation nodes
+./waku/start_network.sh
+# Or when multitail is installed
+USE_MULTITAIL="yes" ./waku/start_network.sh
+
+# In another shell
+./build/quicksim
+```
+
+The `start_network.sh` script will also provide a `prometheus.yml` with targets
+set to all simulation nodes that are started. This way you can easily start
+prometheus with this config, e.g.:
+
+```bash
+cd waku/metrics/prometheus
+prometheus
+```
+
+A Grafana dashboard containing the example dashboard for each simulation node
+is also generated and can be imported in case you have Grafana running.
+This dashboard can be found at `./waku/metrics/waku-sim-all-nodes-grafana-dashboard.json`
