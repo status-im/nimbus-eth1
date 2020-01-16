@@ -18,7 +18,7 @@ logScope:
   topics = "vm computation"
 
 const
-  evmc_enabled* {.booldefine.} = true
+  evmc_enabled* = defined(evmc_enabled)
 
 template getCoinbase*(c: Computation): EthAddress =
   when evmc_enabled:
