@@ -59,7 +59,8 @@ type
   Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState
-    host*:                  HostContext
+    when defined(evmc_enabled):
+      host*:                HostContext
     msg*:                   Message
     memory*:                Memory
     stack*:                 Stack
