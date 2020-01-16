@@ -61,7 +61,8 @@ proc setStorage*(ctx: HostContext, address: EthAddress,
 
 proc getBalance*(ctx: HostContext, address: EthAddress): Uint256 =
   var address = toEvmc(address)
-  Uint256.fromEvmc ctx.host.get_balance(ctx.context, address.addr)
+  {.gcsafe.}:
+    Uint256.fromEvmc ctx.host.get_balance(ctx.context, address.addr)
 
 proc getCodeSize*(ctx: HostContext, address: EthAddress): int =
   var address = toEvmc(address)

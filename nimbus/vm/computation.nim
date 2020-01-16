@@ -86,6 +86,12 @@ template getStorage*(c: Computation, slot: Uint256): Uint256 =
   else:
     c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)[0]
 
+template getBalance*(c: Computation, address: EthAddress): Uint256 =
+  when evmc_enabled:
+    c.host.getBalance(address)
+  else:
+    c.vmState.readOnlyStateDB.getBalance(address)
+
 proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   new result
   result.vmState = vmState
