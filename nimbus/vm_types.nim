@@ -8,7 +8,7 @@
 import
   tables, eth/common, eth/trie/db,
   options, json, sets,
-  ./vm/[memory, stack, code_stream],
+  ./vm/[memory, stack, code_stream, evmc_api],
   ./vm/interpreter/[gas_costs, opcode_values, vm_forks], # TODO - will be hidden at a lower layer
   ./db/[db_chain, state_db]
 
@@ -59,6 +59,7 @@ type
   Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState
+    host*:                  HostContext
     msg*:                   Message
     memory*:                Memory
     stack*:                 Stack

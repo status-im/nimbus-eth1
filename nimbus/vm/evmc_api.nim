@@ -7,14 +7,14 @@
 
 import evmc/evmc, evmc_helpers, eth/common
 
-proc nim_host_get_interface(): ptr evmc_host_interface {.importc, cdecl.}
-proc nim_host_create_context(vmstate: pointer, msg: ptr evmc_message): evmc_host_context {.importc, cdecl.}
-proc nim_host_destroy_context(ctx: evmc_host_context) {.importc, cdecl.}
-proc nim_create_nimbus_vm(): ptr evmc_vm {.importc, cdecl.}
+proc nim_host_get_interface*(): ptr evmc_host_interface {.importc, cdecl.}
+proc nim_host_create_context*(vmstate: pointer, msg: ptr evmc_message): evmc_host_context {.importc, cdecl.}
+proc nim_host_destroy_context*(ctx: evmc_host_context) {.importc, cdecl.}
+proc nim_create_nimbus_vm*(): ptr evmc_vm {.importc, cdecl.}
 
 type
   HostContext* = object
-    host: ptr evmc_host_interface
+    host*: ptr evmc_host_interface
     context*: evmc_host_context
 
 proc init*(x: var HostContext, host: ptr evmc_host_interface, context: evmc_host_context) =
@@ -25,10 +25,12 @@ proc init*(x: typedesc[HostContext], host: ptr evmc_host_interface, context: evm
   result.init(host, context)
 
 proc getTxContext*(ctx: HostContext): evmc_tx_context =
-  ctx.host.get_tx_context(ctx.context)
+  {.gcsafe.}:
+    ctx.host.get_tx_context(ctx.context)
 
 proc getBlockHash*(ctx: HostContext, number: int64): Hash256 =
-  Hash256.fromEvmc ctx.host.get_block_hash(ctx.context, number)
+  {.gcsafe.}:
+    Hash256.fromEvmc ctx.host.get_block_hash(ctx.context, number)
 
 proc accountExists*(ctx: HostContext, address: EthAddress): bool =
   var address = toEvmc(address)
