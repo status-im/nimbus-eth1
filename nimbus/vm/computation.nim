@@ -6,13 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, strformat, strutils, sequtils, macros, math, options,
+  chronicles, strformat, strutils, sequtils, macros, math, options, times,
   sets, eth/[common, keys], eth/trie/db as triedb,
   ../constants, ../errors, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
   ../utils/header, stew/[byteutils, ranges], precompiles,
-  transaction_tracer
+  transaction_tracer, evmc/evmc, evmc_helpers, evmc_api
 
 logScope:
   topics = "vm computation"
@@ -247,3 +247,4 @@ proc prepareTracer*(c: Computation) =
   c.vmState.tracer.prepare(c.msg.depth)
 
 include interpreter_dispatch
+include evmc_host
