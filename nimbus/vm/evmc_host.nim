@@ -80,7 +80,17 @@ proc hostGetCodeSizeImpl(ctx: Computation, address: var evmc_address): uint {.cd
   ctx.vmState.readOnlyStateDB.getCode(fromEvmc(address)).len.uint
 
 proc hostGetCodeHashImpl(ctx: Computation, address: var evmc_address): evmc_bytes32 {.cdecl.} =
-  ctx.vmstate.readOnlyStateDB.getCodeHash(fromEvmc(address)).toEvmc()
+  let
+    db = ctx.vmstate.readOnlyStateDB
+    address = fromEvmc(address)
+
+  if not db.accountExists(address):
+    return
+
+  if db.isEmptyAccount(address):
+    return
+
+  db.getCodeHash(address).toEvmc()
 
 proc hostCopyCodeImpl(ctx: Computation, address: var evmc_address,
                       codeOffset: uint, bufferData: ptr byte,

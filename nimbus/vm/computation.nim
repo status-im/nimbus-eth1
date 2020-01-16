@@ -96,7 +96,17 @@ template getCodeSize*(c: Computation, address: EthAddress): uint =
   when evmc_enabled:
     c.host.getCodeSize(address)
   else:
-    uint(c.vmState.readOnlyStateDB.getCode(account).len)
+    uint(c.vmState.readOnlyStateDB.getCode(address).len)
+
+template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
+  when evmc_enabled:
+    c.host.getCodeHash(address)
+  else:
+    let db = c.vmState.readOnlyStateDB
+    if not db.accountExists(address) or db.isEmptyAccount(address):
+      default(Hash256)
+    else:
+      db.getCodeHash(address)
 
 proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   new result
