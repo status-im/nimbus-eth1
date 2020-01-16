@@ -29,19 +29,20 @@ proc getTxContext*(ctx: HostContext): evmc_tx_context =
     ctx.host.get_tx_context(ctx.context)
 
 proc getBlockHash*(ctx: HostContext, number: Uint256): Hash256 =
+  let
+    blockNumber = ctx.getTxContext().block_number.u256
+    ancestorDepth  = blockNumber - number - 1
+  if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
+    return
+  if number >= blockNumber:
+    return
   {.gcsafe.}:
-    let
-      blockNumber = ctx.getTxContext().block_number.u256
-      ancestorDepth  = blockNumber - number - 1
-    if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return
-    if number >= blockNumber:
-      return
     Hash256.fromEvmc ctx.host.get_block_hash(ctx.context, number.truncate(int64))
 
 proc accountExists*(ctx: HostContext, address: EthAddress): bool =
   var address = toEvmc(address)
-  ctx.host.account_exists(ctx.context, address.addr).bool
+  {.gcsafe.}:
+    ctx.host.account_exists(ctx.context, address.addr).bool
 
 proc getStorage*(ctx: HostContext, address: EthAddress, key: Uint256): Uint256 =
   var

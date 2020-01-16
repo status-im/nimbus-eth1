@@ -74,6 +74,12 @@ template getBlockHash*(c: Computation, blockNumber: Uint256): Hash256 =
   else:
     c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
 
+template accountExists*(c: Computation, address: EthAddress): bool =
+  when evmc_enabled:
+    c.host.accountExists(address)
+  else:
+    c.vmState.readOnlyStateDB.accountExists(address)
+
 proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   new result
   result.vmState = vmState
