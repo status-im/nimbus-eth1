@@ -43,5 +43,6 @@ task nimbus, "Build Nimbus":
 task wakunode, "Build Waku node":
   buildBinary "wakunode", "waku/", "-d:chronicles_log_level=TRACE"
 
-task quicksim, "Build quicksim":
+task wakusim, "Build Waku simulation tools":
   buildBinary "quicksim", "waku/", "-d:chronicles_log_level=INFO"
+  buildBinary "start_network", "waku/", "-d:chronicles_log_level=DEBUG"
