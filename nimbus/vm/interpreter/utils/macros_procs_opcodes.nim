@@ -13,8 +13,10 @@ import
   ../../computation, ../../stack, ../../code_stream,
   ../../../vm_types, ../../memory,
   ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values],
-  ../../interpreter/utils/utils_numeric,
-  ../../evmc_api, evmc/evmc
+  ../../interpreter/utils/utils_numeric
+
+when defined(evmc_enabled):
+  import ../../evmc_api, evmc/evmc
 
 proc pop(tree: var NimNode): NimNode =
   ## Returns the last value of a NimNode and remove it
