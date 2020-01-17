@@ -57,7 +57,8 @@ proc setStorage*(ctx: HostContext, address: EthAddress,
     address = toEvmc(address)
     key = toEvmc(key)
     value = toEvmc(value)
-  ctx.host.set_storage(ctx.context, address.addr, key.addr, value.addr)
+  {.gcsafe.}:
+    ctx.host.set_storage(ctx.context, address.addr, key.addr, value.addr)
 
 proc getBalance*(ctx: HostContext, address: EthAddress): Uint256 =
   var address = toEvmc(address)

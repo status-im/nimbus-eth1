@@ -49,28 +49,37 @@ proc hostSetStorageImpl(ctx: Computation, address: var evmc_address,
   if newValue == currValue:
     return EVMC_STORAGE_UNCHANGED
 
-  var
-    status = EVMC_STORAGE_MODIFIED
+  let
     origValue = statedb.getCommittedStorage(storageAddr, slot)
+    InitRefundEIP2200  = gasFees[ctx.fork][GasSset] - gasFees[ctx.fork][GasSload]
+    CleanRefundEIP2200 = gasFees[ctx.fork][GasSreset] - gasFees[ctx.fork][GasSload]
+    ClearRefundEIP2200 = gasFees[ctx.fork][RefundsClear]
 
-  if origValue == currValue or ctx.fork >= FkIstanbul:
+  var
+    gasRefund = 0.GasInt
+    status = EVMC_STORAGE_MODIFIED
+
+  if origValue == currValue or ctx.fork < FkIstanbul:
     if currValue == 0:
       status = EVMC_STORAGE_ADDED
     elif newValue == 0:
       status = EVMC_STORAGE_DELETED
-      # refunds += sstoreRefundGas
+      gasRefund += ClearRefundEIP2200
   else:
     status = EVMC_STORAGE_MODIFIED_AGAIN
-    #if origValue != 0:
-    #  if currValue == 0:
-    #    refunds -= sstoreRefundGas  # Can go negative
-    #  if newValue == 0:
-    #    refunds += sstoreRefundGas
-    #if origValue == newValue:
-    #  if origValue == 0:
-    #    refunds += sstoreSetGas - sstoreUnchangedGas
-    #  else:
-    #    refunds += sstoreResetGas - sstoreUnchangedGas
+    if origValue != 0:
+      if currValue == 0:
+        gasRefund -= ClearRefundEIP2200  # Can go negative
+      if newValue == 0:
+        gasRefund += ClearRefundEIP2200
+    if origValue == newValue:
+      if origValue == 0:
+        gasRefund += InitRefundEIP2200
+      else:
+        gasRefund += CleanRefundEIP2200
+
+  if gasRefund > 0:
+    ctx.gasMeter.refundGas(gasRefund)
 
   ctx.vmState.mutateStateDB:
     db.setStorage(storageAddr, slot, newValue)
