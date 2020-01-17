@@ -298,7 +298,26 @@ proc addChildComputation*(c, child: Computation) =
     c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
 proc registerAccountForDeletion*(c: Computation, beneficiary: EthAddress) =
+  c.vmState.mutateStateDB:
+    let
+      localBalance = c.getBalance(c.msg.contractAddress)
+      beneficiaryBalance = c.getBalance(beneficiary)
+
+    # Transfer to beneficiary
+    db.setBalance(beneficiary, localBalance + beneficiaryBalance)
+
+    # Zero the balance of the address being deleted.
+    # This must come after sending to beneficiary in case the
+    # contract named itself as the beneficiary.
+    db.setBalance(c.msg.contractAddress, 0.u256)
+
+    trace "SELFDESTRUCT",
+      contractAddress = c.msg.contractAddress.toHex,
+      localBalance = localBalance.toString,
+      beneficiary = beneficiary.toHex
+
   c.touchedAccounts.incl beneficiary
+  # Register the account to be deleted
   c.suicides.incl(c.msg.contractAddress)
 
 proc addLogEntry*(c: Computation, log: Log) {.inline.} =
