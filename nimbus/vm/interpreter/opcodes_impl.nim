@@ -686,11 +686,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.cleanMemRef, memoryInputSize.cleanMemRef, memoryOutputStartPosition.cleanMemRef, memoryOutputSize.cleanMemRef)
 
-    let isNewAccount = if c.fork >= FkSpurious:
-                         c.vmState.readOnlyStateDb.isDeadAccount(contractAddress)
-                       else:
-                         not c.accountExists(contractAddress)
-
     let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
                                     (memInPos, memInLen)
                                  else:
@@ -699,7 +694,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
     let (childGasFee, childGasLimit) = c.gasCosts[opCode].c_handler(
       value,
       GasParams(kind: opCode,
-                c_isNewAccount: isNewAccount,
+                c_isNewAccount: not c.accountExists(contractAddress),
                 c_gasBalance: c.gasMeter.gasRemaining,
                 c_contractGas: gas,
                 c_currentMemSize: c.memory.len,
@@ -861,8 +856,7 @@ op selfDestructEip161, inline = false:
 
   let
     beneficiary = c.stack.popAddress()
-    stateDb     = c.vmState.readOnlyStateDb
-    isDead      = stateDb.isDeadAccount(beneficiary)
+    isDead      = not c.accountExists(beneficiary)
     balance     = c.getBalance(c.msg.contractAddress)
 
   let gasParams = GasParams(kind: SelfDestruct,

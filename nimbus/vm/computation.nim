@@ -78,7 +78,10 @@ template accountExists*(c: Computation, address: EthAddress): bool =
   when evmc_enabled:
     c.host.accountExists(address)
   else:
-    c.vmState.readOnlyStateDB.accountExists(address)
+    if c.fork >= FkSpurious:
+      not c.vmState.readOnlyStateDB.isDeadAccount(address)
+    else:
+      c.vmState.readOnlyStateDB.accountExists(address)
 
 template getStorage*(c: Computation, slot: Uint256): Uint256 =
   when evmc_enabled:

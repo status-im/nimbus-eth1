@@ -23,7 +23,11 @@ proc hostGetBlockHashImpl(ctx: Computation, number: int64): evmc_bytes32 {.cdecl
   ctx.vmState.getAncestorHash(number.u256).toEvmc()
 
 proc hostAccountExistsImpl(ctx: Computation, address: var evmc_address): c99bool {.cdecl.} =
-  ctx.vmState.readOnlyStateDB.accountExists(fromEvmc(address))
+  let db = ctx.vmState.readOnlyStateDB
+  if ctx.fork >= FkSpurious:
+    not db.isDeadAccount(fromEvmc(address))
+  else:
+    db.accountExists(fromEvmc(address))
 
 proc hostGetStorageImpl(ctx: Computation, address: var evmc_address, key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
   let storageAddr = fromEvmc(address)
