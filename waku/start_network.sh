@@ -5,7 +5,7 @@ set -e
 # TODO: improve this bin location
 WAKU_NODE_BIN="./build/wakunode"
 NODE_PK="5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3"
-NODE_ENODE="enode://e5fd642a0f630bbb1e4cd7df629d7b8b019457a9a74f983c0484a045cebb176def86a54185b50bbba6bbf97779173695e92835d63109c23471e6da382f922fdb@0.0.0.0:30303"
+NODE_ENODE="enode://e5fd642a0f630bbb1e4cd7df629d7b8b019457a9a74f983c0484a045cebb176def86a54185b50bbba6bbf97779173695e92835d63109c23471e6da382f922fdb@0.0.0.0:30305"
 DEFAULTS="--log-level:DEBUG --discovery:off --log-metrics --metrics-server"
 LIGHT_NODE="--light-node:1"
 WAKU_LIGHT_NODE="--waku-mode:WakuChan ${LIGHT_NODE}"
@@ -56,15 +56,15 @@ if [[ "$USE_MULTITAIL" != "no" ]]; then
   SLEEP=0
   # Direct connect with staticnodes, simple star topology for now
   # Master node to connect to
-  CMD="$WAKU_NODE_BIN $DEFAULTS --rpc --nodekey:${NODE_PK} --waku-mode:WakuSan"
+  CMD="$WAKU_NODE_BIN $DEFAULTS --rpc --nodekey:${NODE_PK} --ports-shift:2 --waku-mode:WakuSan"
   COMMANDS+=( " -cT ansi -t 'master node' -l 'sleep $SLEEP; $CMD; echo [node execution completed]; while true; do sleep 100; done'" )
 
   SLEEP=1
   # Node under test 1: light waku node (topics)
-  CMD="$WAKU_NODE_BIN $DEFAULTS --rpc --staticnodes:${NODE_ENODE} --ports-shift:1 ${WAKU_LIGHT_NODE}"
+  CMD="$WAKU_NODE_BIN $DEFAULTS --rpc --staticnodes:${NODE_ENODE} --ports-shift:0 ${WAKU_LIGHT_NODE}"
   COMMANDS+=( " -cT ansi -t 'light waku node' -l 'sleep $SLEEP; $CMD; echo [node execution completed]; while true; do sleep 100; done'" )
   # Node under test 2: light node (bloomfilter)
-  CMD="$WAKU_NODE_BIN $DEFAULTS --rpc --staticnodes:${NODE_ENODE} --ports-shift:2 ${LIGHT_NODE}"
+  CMD="$WAKU_NODE_BIN $DEFAULTS --rpc --staticnodes:${NODE_ENODE} --ports-shift:1 ${LIGHT_NODE}"
   COMMANDS+=( " -cT ansi -t 'light node' -l 'sleep $SLEEP; $CMD; echo [node execution completed]; while true; do sleep 100; done'" )
   # Node under test 3: full node
   CMD="$WAKU_NODE_BIN $DEFAULTS --rpc --staticnodes:${NODE_ENODE} --ports-shift:3"

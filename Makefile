@@ -110,4 +110,4 @@ wakunode: | build deps
 
 wakusim: | build deps wakunode
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim quicksim $(NIM_PARAMS) nimbus.nims
+		$(ENV_SCRIPT) nim wakusim $(NIM_PARAMS) nimbus.nims
