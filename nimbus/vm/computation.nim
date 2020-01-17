@@ -12,7 +12,10 @@ import
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
   ../utils/header, stew/[byteutils, ranges], precompiles,
-  transaction_tracer, evmc/evmc, evmc_helpers, evmc_api
+  transaction_tracer
+
+when defined(evmc_enabled):
+  import evmc/evmc, evmc_helpers, evmc_api
 
 logScope:
   topics = "vm computation"
@@ -379,4 +382,6 @@ proc prepareTracer*(c: Computation) =
   c.vmState.tracer.prepare(c.msg.depth)
 
 include interpreter_dispatch
-include evmc_host
+
+when defined(evmc_enabled):
+  include evmc_host

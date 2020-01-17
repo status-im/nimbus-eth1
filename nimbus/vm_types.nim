@@ -8,9 +8,12 @@
 import
   tables, eth/common, eth/trie/db,
   options, json, sets,
-  ./vm/[memory, stack, code_stream, evmc_api],
+  ./vm/[memory, stack, code_stream],
   ./vm/interpreter/[gas_costs, opcode_values, vm_forks], # TODO - will be hidden at a lower layer
   ./db/[db_chain, state_db]
+
+when defined(evmc_enabled):
+  import ./vm/evmc_api
 
 type
   BaseVMState* = ref object of RootObj
