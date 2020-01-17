@@ -117,15 +117,18 @@ proc hostSelfdestructImpl(ctx: Computation, address, beneficiary: var evmc_addre
   ctx.registerAccountForDeletion(fromEvmc(beneficiary))
 
 proc hostEmitLogImpl(ctx: Computation, address: var evmc_address,
-                     data: ptr byte, dataSize: uint,
-                     topics: UncheckedArray[evmc_bytes32], topicsCount: uint) {.cdecl.} =
+                     data: ptr byte, dataSize: int,
+                     topics: UncheckedArray[evmc_bytes32], topicsCount: int) {.cdecl.} =
   var log: Log
-  log.topics = newSeq[Topic](topicsCount)
-  for i in 0 ..< topicsCount:
-    log.topics[i] = topics[i].bytes
+  if topicsCount > 0:
+    log.topics = newSeq[Topic](topicsCount)
+    for i in 0 ..< topicsCount:
+      log.topics[i] = topics[i].bytes
 
-  log.data = newSeq[byte](dataSize)
-  copyMem(log.data[0].addr, data, dataSize)
+  if dataSize > 0:
+    log.data = newSeq[byte](dataSize)
+    copyMem(log.data[0].addr, data, dataSize)
+
   log.address = fromEvmc(address)
   ctx.addLogEntry(log)
 

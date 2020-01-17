@@ -91,9 +91,12 @@ proc selfdestruct*(ctx: HostContext, address, beneficiary: EthAddress) =
   {.gcsafe.}:
     ctx.host.selfdestruct(ctx.context, address.addr, beneficiary.addr)
 
-proc emitLog*(ctx: HostContext, address: EthAddress, data: openArray[byte], topics: openArray[evmc_bytes32]) =
+proc emitLog*(ctx: HostContext, address: EthAddress, data: openArray[byte],
+              topics: ptr evmc_bytes32, topicsCount: int) =
   var address = toEvmc(address)
-  ctx.host.emit_log(ctx.context, address.addr, data[0].unsafeAddr, data.len.uint, topics[0].unsafeAddr, topics.len.uint)
+  {.gcsafe.}:
+    ctx.host.emit_log(ctx.context, address.addr, if data.len > 0: data[0].unsafeAddr else: nil,
+                      data.len.uint, topics, topicsCount.uint)
 
 proc call*(ctx: HostContext, msg: evmc_message): evmc_result =
   ctx.host.call(ctx.context, msg.unsafeAddr)
