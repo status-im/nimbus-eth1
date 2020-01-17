@@ -426,23 +426,69 @@ op sload, inline = true, slot:
   ## 0x54, Load word from storage.
   push: c.getStorage(slot)
 
-op sstore, inline = false, slot, value:
-  ## 0x55, Save word to storage.
-  checkInStaticContext(c)
-
-  let currentValue = c.getStorage(slot)
+template sstoreImpl(c: Computation, slot, newValue: Uint256) =
+  let currentValue {.inject.} = c.getStorage(slot)
 
   let
     gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: currentValue.isZero)
-    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(value, gasParam)
+    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
-  c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {value} ({currentValue})")
+  c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
 
   if gasRefund > 0:
     c.gasMeter.refundGas(gasRefund)
 
   c.vmState.mutateStateDB:
-    db.setStorage(c.msg.contractAddress, slot, value)
+    db.setStorage(c.msg.contractAddress, slot, newValue)
+
+template sstoreEvmc(c: Computation, slot, newValue: Uint256) =
+  let
+    status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
+    gasParam = GasParams(kind: Op.Sstore, s_status: status)
+    gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0]
+
+  c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue}")
+
+op sstore, inline = false, slot, newValue:
+  ## 0x55, Save word to storage.
+  checkInStaticContext(c)
+
+  when evmc_enabled:
+    sstoreEvmc(c, slot, newValue)
+  else:
+    sstoreImpl(c, slot, newValue)
+
+template sstoreEIP2200Impl(c: Computation, slot, newValue: Uint256) =
+  let stateDB = c.vmState.readOnlyStateDB
+  let currentValue {.inject.} = c.getStorage(slot)
+
+  let
+    gasParam = GasParams(kind: Op.Sstore,
+      s_isStorageEmpty: currentValue.isZero,
+      s_currentValue: currentValue,
+      s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot)
+    )
+    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
+
+  c.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
+
+  if gasRefund != 0:
+    c.gasMeter.refundGas(gasRefund)
+
+  c.vmState.mutateStateDB:
+    db.setStorage(c.msg.contractAddress, slot, newValue)
+
+op sstoreEIP2200, inline = false, slot, newValue:
+  checkInStaticContext(c)
+  const SentryGasEIP2200 = 2300  # Minimum gas required to be present for an SSTORE call, not consumed
+
+  if c.gasMeter.gasRemaining <= SentryGasEIP2200:
+    raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
+
+  when evmc_enabled:
+    sstoreEvmc(c, slot, newValue)
+  else:
+    sstoreEIP2200Impl(c, slot, newValue)
 
 proc jumpImpl(c: Computation, jumpTarget: UInt256) =
   if jumpTarget >= c.code.len.u256:
@@ -874,29 +920,3 @@ op sarOp, inline = true:
 op extCodeHash, inline = true:
   let address = c.stack.popAddress()
   push: c.getCodeHash(address)
-
-op sstoreEIP2200, inline = false, slot, value:
-  checkInStaticContext(c)
-  const SentryGasEIP2200   = 2300  # Minimum gas required to be present for an SSTORE call, not consumed
-
-  if c.gasMeter.gasRemaining <= SentryGasEIP2200:
-    raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
-
-  let stateDB = c.vmState.readOnlyStateDB
-  let currentValue = c.getStorage(slot)
-
-  let
-    gasParam = GasParams(kind: Op.Sstore,
-      s_isStorageEmpty: currentValue.isZero,
-      s_currentValue: currentValue,
-      s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot)
-    )
-    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(value, gasParam)
-
-  c.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}] -> {value} ({currentValue})")
-
-  if gasRefund != 0:
-    c.gasMeter.refundGas(gasRefund)
-
-  c.vmState.mutateStateDB:
-    db.setStorage(c.msg.contractAddress, slot, value)
