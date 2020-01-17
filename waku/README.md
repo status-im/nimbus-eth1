@@ -54,16 +54,13 @@ Example of a quick simulation using this approach:
 # Build wakunode + quicksim
 make NIMFLAGS="-d:insecure" wakusim
 
-# Start the simulation nodes
-./waku/start_network.sh
-# Or when multitail is installed
-USE_MULTITAIL="yes" ./waku/start_network.sh
-
-# In another shell
+# Start the simulation nodes, this currently requires multitail to be installed
+./build/start_network --topology:FullMesh --amount:6 --test-node-peers:2
+# In another shell run
 ./build/quicksim
 ```
 
-The `start_network.sh` script will also provide a `prometheus.yml` with targets
+The `start_network` tool will also provide a `prometheus.yml` with targets
 set to all simulation nodes that are started. This way you can easily start
 prometheus with this config, e.g.:
 
