@@ -13,7 +13,8 @@ import
   ../../computation, ../../stack, ../../code_stream,
   ../../../vm_types, ../../memory,
   ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values],
-  ../../interpreter/utils/utils_numeric
+  ../../interpreter/utils/utils_numeric,
+  ../../evmc_api, evmc/evmc
 
 proc pop(tree: var NimNode): NimNode =
   ## Returns the last value of a NimNode and remove it
@@ -115,18 +116,28 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
   if memPos < 0 or len < 0:
     raise newException(OutOfBoundsRead, "Out of bounds memory access")
 
-  var log: Log
-  log.topics = newSeqOfCap[Topic](topicCount)
-  for i in 0 ..< topicCount:
-    log.topics.add(c.stack.popTopic())
   c.gasMeter.consumeGas(
     c.gasCosts[opcode].m_handler(c.memory.len, memPos, len),
     reason="Memory expansion, Log topic and data gas cost")
-
   c.memory.extend(memPos, len)
-  log.data = c.memory.read(memPos, len)
-  log.address = c.msg.contractAddress
-  c.addLogEntry(log)
+
+  when evmc_enabled:
+    var topics: array[4, evmc_bytes32]
+    for i in 0 ..< topicCount:
+      topics[i].bytes = c.stack.popTopic()
+
+    c.host.emitLog(c.msg.contractAddress,
+      c.memory.read(memPos, len),
+      topics[0].addr, topicCount)
+  else:
+    var log: Log
+    log.topics = newSeqOfCap[Topic](topicCount)
+    for i in 0 ..< topicCount:
+      log.topics.add(c.stack.popTopic())
+
+    log.data = c.memory.read(memPos, len)
+    log.address = c.msg.contractAddress
+    c.addLogEntry(log)
 
 template genLog*() =
   proc log0*(c: Computation) {.inline.} = logImpl(c, Log0, 0)
