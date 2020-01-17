@@ -810,35 +810,10 @@ op revert, inline = false, startPos, size:
   # setError(msg, false) will signal cheap revert
   c.setError("REVERT opcode executed", false)
 
-proc selfDestructImpl(c: Computation, beneficiary: EthAddress) =
-  ## 0xff Halt execution and register account for later deletion.
-  # TODO: This is the basic implementation of the self destruct op,
-  # Other forks have some extra functionality around this call.
-  # In particular, EIP150 and EIP161 have extra requirements.
-  c.vmState.mutateStateDB:
-    let
-      localBalance = c.getBalance(c.msg.contractAddress)
-      beneficiaryBalance = c.getBalance(beneficiary)
-
-    # Transfer to beneficiary
-    db.setBalance(beneficiary, localBalance + beneficiaryBalance)
-
-    # Zero the balance of the address being deleted.
-    # This must come after sending to beneficiary in case the
-    # contract named itself as the beneficiary.
-    db.setBalance(c.msg.contractAddress, 0.u256)
-
-    # Register the account to be deleted
-    c.selfDestruct(beneficiary)
-
-    trace "SELFDESTRUCT",
-      contractAddress = c.msg.contractAddress.toHex,
-      localBalance = localBalance.toString,
-      beneficiary = beneficiary.toHex
-
 op selfDestruct, inline = false:
+  ## 0xff Halt execution and register account for later deletion.
   let beneficiary = c.stack.popAddress()
-  selfDestructImpl(c, beneficiary)
+  c.selfDestruct(beneficiary)
 
 op selfDestructEip150, inline = false:
   let beneficiary = c.stack.popAddress()
@@ -849,7 +824,7 @@ op selfDestructEip150, inline = false:
 
   let gasCost = c.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
   c.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP150")
-  selfDestructImpl(c, beneficiary)
+  c.selfDestruct(beneficiary)
 
 op selfDestructEip161, inline = false:
   checkInStaticContext(c)
@@ -865,7 +840,7 @@ op selfDestructEip161, inline = false:
 
   let gasCost = c.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
   c.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP161")
-  selfDestructImpl(c, beneficiary)
+  c.selfDestruct(beneficiary)
 
 # Constantinople's new opcodes
 op shlOp, inline = true, shift, num:
