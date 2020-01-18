@@ -46,43 +46,38 @@ proc hostSetStorageImpl(ctx: Computation, address: var evmc_address,
 
   assert storageAddr == ctx.msg.contractAddress
 
-  if newValue == currValue:
-    return EVMC_STORAGE_UNCHANGED
-
-  let
-    origValue = statedb.getCommittedStorage(storageAddr, slot)
-    InitRefundEIP2200  = gasFees[ctx.fork][GasSset] - gasFees[ctx.fork][GasSload]
-    CleanRefundEIP2200 = gasFees[ctx.fork][GasSreset] - gasFees[ctx.fork][GasSload]
-    ClearRefundEIP2200 = gasFees[ctx.fork][RefundsClear]
-
   var
-    gasRefund = 0.GasInt
     status = EVMC_STORAGE_MODIFIED
+    gasRefund = 0.GasInt
+    origValue = 0.u256
 
-  if origValue == currValue or ctx.fork < FkIstanbul:
-    if currValue == 0:
-      status = EVMC_STORAGE_ADDED
-    elif newValue == 0:
-      status = EVMC_STORAGE_DELETED
-      gasRefund += ClearRefundEIP2200
-  else:
-    status = EVMC_STORAGE_MODIFIED_AGAIN
-    if origValue != 0:
+  block:
+    if newValue == currValue:
+      status = EVMC_STORAGE_UNCHANGED
+      break
+
+    origValue = statedb.getCommittedStorage(storageAddr, slot)
+
+    if origValue == currValue or ctx.fork < FkIstanbul:
       if currValue == 0:
-        gasRefund -= ClearRefundEIP2200  # Can go negative
-      if newValue == 0:
-        gasRefund += ClearRefundEIP2200
-    if origValue == newValue:
-      if origValue == 0:
-        gasRefund += InitRefundEIP2200
-      else:
-        gasRefund += CleanRefundEIP2200
+        status = EVMC_STORAGE_ADDED
+      elif newValue == 0:
+        status = EVMC_STORAGE_DELETED
+    else:
+      status = EVMC_STORAGE_MODIFIED_AGAIN
 
-  if gasRefund > 0:
+    ctx.vmState.mutateStateDB:
+      db.setStorage(storageAddr, slot, newValue)
+
+  let gasParam = GasParams(kind: Op.Sstore,
+      s_status: status,
+      s_currentValue: currValue,
+      s_originalValue: origValue
+    )
+  gasRefund = ctx.gasCosts[Sstore].c_handler(newValue, gasParam)[1]
+
+  if gasRefund != 0:
     ctx.gasMeter.refundGas(gasRefund)
-
-  ctx.vmState.mutateStateDB:
-    db.setStorage(storageAddr, slot, newValue)
 
   result = status
 
