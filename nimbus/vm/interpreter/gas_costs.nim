@@ -71,8 +71,8 @@ type
         s_status*: evmc_storage_status
       else:
         s_isStorageEmpty*: bool
-        s_currentValue*: Uint256
-        s_originalValue*: Uint256
+      s_currentValue*: Uint256
+      s_originalValue*: Uint256
     of Call, CallCode, DelegateCall, StaticCall:
       c_isNewAccount*: bool
       c_gasBalance*: GasInt
@@ -222,13 +222,31 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
         sstoreLoad = FeeSchedule[GasSload]
         sstoreSet  = FeeSchedule[GasSset]
         sstoreReset= FeeSchedule[GasSreset]
+        sstoreDirty= when fork >= FkIstanbul: sstoreLoad else: sstoreReset
+        InitRefundEIP2200  = FeeSchedule[GasSset] - FeeSchedule[GasSload]
+        CleanRefundEIP2200 = FeeSchedule[GasSreset] - FeeSchedule[GasSload]
+        ClearRefundEIP2200 = FeeSchedule[RefundsClear]
 
       case gasParams.s_status
       of EVMC_STORAGE_ADDED: result.gasCost = sstoreSet
-      of EVMC_STORAGE_MODIFIED, EVMC_STORAGE_DELETED: result.gasCost = sstoreReset
-      of EVMC_STORAGE_UNCHANGED, EVMC_STORAGE_MODIFIED_AGAIN:
-         result.gasCost = if fork >= FkIstanbul: sstoreLoad else: sstoreReset
+      of EVMC_STORAGE_MODIFIED: result.gasCost = sstoreReset
+      of EVMC_STORAGE_DELETED:
+        result.gasCost = sstoreReset
+        result.gasRefund += ClearRefundEIP2200
+      of EVMC_STORAGE_UNCHANGED: result.gasCost = sstoreDirty
+      of EVMC_STORAGE_MODIFIED_AGAIN:
+        result.gasCost = sstoreDirty
+        if not gasParams.s_originalValue.isZero:
+          if gasParams.s_currentValue.isZero:
+            result.gasRefund -= ClearRefundEIP2200
+          if value.isZero:
+            result.gasRefund += ClearRefundEIP2200
 
+        if gasParams.s_originalValue == value:
+          if gasParams.s_originalValue.isZero:
+            result.gasRefund += InitRefundEIP2200
+          else:
+            result.gasRefund += CleanRefundEIP2200
     else:
       when fork < FkIstanbul:
         # workaround for static evaluation not working for if expression
