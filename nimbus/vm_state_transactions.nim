@@ -26,7 +26,7 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddr
     tx.accountNonce == account.nonce and
     account.balance >= gasCost
 
-proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient: EthAddress, fork: Fork) : Computation =
+proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork) : Computation =
   var gas = tx.gasLimit - tx.intrinsicGas(fork)
 
   # TODO: refactor message to use byterange
@@ -55,7 +55,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender, recipient:
     depth: 0,
     gas: gas,
     sender: sender,
-    contractAddress: recipient,
+    contractAddress: tx.getRecipient(),
     codeAddress: tx.to,
     value: tx.value,
     data: data,
