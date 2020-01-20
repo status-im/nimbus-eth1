@@ -30,7 +30,7 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
       sender: EthAddress
       toAddress = initAddress(address)
 
-    vmState.txContext(
+    vmState.setupTxContext(
       origin = sender,
       gasPrice = gasPrice
     )

@@ -33,7 +33,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
     debug "not enough gas to perform calculation", gas=gas
     return
 
-  vmState.txContext(
+  vmState.setupTxContext(
     origin = sender,
     gasPrice = tx.gasPrice,
     forkOverride = some(fork)

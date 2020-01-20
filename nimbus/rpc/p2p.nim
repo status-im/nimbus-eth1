@@ -36,13 +36,11 @@ template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
 
 proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
   proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): Computation =
-    let recipient = transaction.getRecipient()
     # Note that vmState may be altered
     setupComputation(
         vmState,
         transaction,
         sender,
-        recipient,
         vmState.blockNumber.toFork)
 
   proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
@@ -287,11 +285,10 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
         contractAddress: destination,
         codeAddress: CREATE_CONTRACT_ADDRESS,
         value: value,
-        data: data,
-        code: vmState.readOnlyStateDB.getCode(destination).toSeq
+        data: data
       )
 
-    vmState.txContext(
+    vmState.setupTxContext(
       origin = sender,
       gasPrice = gasPrice
       )
