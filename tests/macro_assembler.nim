@@ -218,12 +218,14 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
       gas: tx.gasLimit - gasUsed,
       sender: sender,
       contractAddress: contractAddress,
-      codeAddress: tx.to,
+      codeAddress: contractAddress,
       value: tx.value,
-      data: data,
-      code: tx.payload
+      data: data
       )
 
+  vmState.mutateStateDb:
+    db.setCode(contractAddress, tx.payload.toRange)
+    
   newComputation(vmState, msg)
 
 proc initDatabase*(): (Uint256, BaseChainDB) =
@@ -240,7 +242,7 @@ proc initDatabase*(): (Uint256, BaseChainDB) =
 
   result = (blockNumber, newBaseChainDB(memoryDB, false))
 
-proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: seq[byte], fork: Fork): Computation =
+proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): Computation =
   let
     parentNumber = blockNumber - 1
     parent = chainDB.getBlockHeader(parentNumber)
@@ -253,7 +255,7 @@ proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, payload, data: 
     tx = body.transactions[0]
     sender = transaction.getSender(tx)
 
-  tx.payload = payload
+  tx.payload = code
   tx.gasLimit = 500000000
   initComputation(vmState, tx, sender, data, some(fork))
 

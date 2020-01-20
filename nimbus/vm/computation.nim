@@ -131,7 +131,7 @@ proc generateContractAddress(c: Computation, salt: Option[Uint256]): EthAddress 
     let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
     result = generateAddress(c.msg.sender, creationNonce)
   else:
-    result = generateSafeAddress(c.msg.sender, salt.get(), c.msg.code)
+    result = generateSafeAddress(c.msg.sender, salt.get(), c.msg.data)
 
 proc newComputation*(vmState: BaseVMState, message: Message, salt=none(Uint256)): Computation =
   new result
@@ -142,10 +142,13 @@ proc newComputation*(vmState: BaseVMState, message: Message, salt=none(Uint256))
   result.gasMeter.init(message.gas)
   result.touchedAccounts = initHashSet[EthAddress]()
   result.suicides = initHashSet[EthAddress]()
-  result.code = newCodeStream(message.code)
 
   if result.msg.isCreate():
     result.msg.contractAddress = result.generateContractAddress(salt)
+    result.code = newCodeStream(message.data)
+    message.data = @[]
+  else:
+    result.code = newCodeStream(vmState.readOnlyStateDb.getCode(message.codeAddress).toSeq)
 
   when evmc_enabled:
     result.host.init(

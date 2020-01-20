@@ -26,7 +26,7 @@ proc `$`*(b: byte): string =
 
 proc newCodeStream*(codeBytes: seq[byte]): CodeStream =
   new(result)
-  result.bytes = codeBytes
+  shallowCopy(result.bytes, codeBytes)
   result.pc = 0
   result.invalidPositions = initHashSet[int]()
   result.depthProcessed = 0

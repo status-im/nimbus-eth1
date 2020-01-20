@@ -41,18 +41,15 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
   var vmState = newBaseVMState(emptyRlpHash, header, newBaseChainDB(newMemoryDB()))
   let fexec = fixture["exec"]
-  var code: seq[byte]
   vmState.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
     let address = fexec{"address"}.getStr.parseAddress
-    code = db.getCode(address).toSeq
 
   vmState.txContext(
     origin = fexec{"origin"}.getStr.parseAddress,
     gasPrice = fexec{"gasPrice"}.getHexadecimalInt
   )
 
-  code = fexec{"code"}.getStr.hexToSeqByte
   let toAddress = fexec{"address"}.getStr.parseAddress
   let message = Message(
     kind: if toAddress == ZERO_ADDRESS: evmcCreate else: evmcCall, # assume ZERO_ADDRESS is a contract creation
@@ -62,8 +59,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     contractAddress: toAddress,
     codeAddress: toAddress,
     value: cast[uint64](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
-    data: fexec{"data"}.getStr.hexToSeqByte,
-    code: code
+    data: fexec{"data"}.getStr.hexToSeqByte
     )
 
   var computation = newComputation(vmState, message)
