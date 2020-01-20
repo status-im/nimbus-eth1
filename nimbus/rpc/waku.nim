@@ -1,25 +1,14 @@
 import
-  json_rpc/rpcserver, rpc_types, hexstrings, tables, options, sequtils,
+  json_rpc/rpcserver, tables, options, sequtils,
   eth/[common, rlp, keys, p2p], eth/p2p/rlpx_protocols/waku_protocol,
-  nimcrypto/[sysrand, hmac, sha2, pbkdf2]
+  nimcrypto/[sysrand, hmac, sha2, pbkdf2],
+  rpc_types, hexstrings, key_storage
 
 from stew/byteutils import hexToSeqByte, hexToByteArray
 
 # Blatant copy of Whisper RPC but for the Waku protocol
 
-type
-  WhisperKeys* = ref object
-    asymKeys*: Table[string, KeyPair]
-    symKeys*: Table[string, SymKey]
-
-  KeyGenerationError = object of CatchableError
-
-proc newWakuKeys*(): WhisperKeys =
-  new(result)
-  result.asymKeys = initTable[string, KeyPair]()
-  result.symKeys = initTable[string, SymKey]()
-
-proc setupWakuRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) =
+proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
 
   rpcsrv.rpc("shh_version") do() -> string:
     ## Returns string of the current whisper protocol version.

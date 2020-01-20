@@ -11,33 +11,17 @@ import
   chronos, chronicles, nimcrypto/[utils, hmac, pbkdf2, hash, sysrand], tables,
   stew/ranges/ptr_arith, eth/[keys, rlp, p2p, async_utils],
   eth/p2p/rlpx_protocols/whisper_protocol,
-  eth/p2p/[peer_pool, bootnodes, whispernodes]
+  eth/p2p/[peer_pool, bootnodes, whispernodes], ../nimbus/rpc/key_storage
+
+# TODO: lots of overlap with Nimbus Whisper RPC here, however not all
+# the same due to type conversion (no use of Option and such). Perhaps some
+# parts can be refactored in sharing some of the code.
 
 const idLen = 32
 
-# TODO: If we really want/need this type of API for the keys, put it somewhere
-# seperate as it is the same code for Whisper RPC
 type
-  WhisperKeys* = ref object
-    asymKeys*: Table[string, KeyPair]
-    symKeys*: Table[string, SymKey]
-
   Identifier = array[idLen, byte]
 
-proc newWhisperKeys(): WhisperKeys =
-  new(result)
-  result.asymKeys = initTable[string, KeyPair]()
-  result.symKeys = initTable[string, SymKey]()
-
-proc generateRandomID(): Identifier =
-  while true: # TODO: error instead of looping?
-    if randomBytes(result) == idLen:
-      break
-
-# TODO: again, lots of overlap with Nimbus Whisper RPC here, however not all
-# the same due to type conversion (no use of Option and such). Perhaps some
-# parts can be refactored in sharing some of the code.
-type
   CReceivedMessage* = object
     decoded*: ptr byte
     decodedLen*: csize
@@ -77,7 +61,12 @@ type
 var
   node: EthereumNode
 # You will only add more instead!
-let whisperKeys = newWhisperKeys()
+let whisperKeys = newKeyStorage()
+
+proc generateRandomID(): Identifier =
+  while true: # TODO: error instead of looping?
+    if randomBytes(result) == idLen:
+      break
 
 proc setBootNodes(nodes: openArray[string]): seq[ENode] =
   var bootnode: ENode
