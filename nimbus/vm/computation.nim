@@ -243,6 +243,10 @@ proc postExecuteVM(c: Computation, opCode: static[Op]) {.gcsafe.} =
 proc executeOpcodes*(c: Computation) {.gcsafe.}
 
 proc applyMessage*(c: Computation, opCode: static[Op]) =
+  when opCode == Create:
+    c.vmState.mutateStateDB:
+      db.incNonce(c.msg.sender)
+
   c.snapshot()
   defer:
     c.dispose()

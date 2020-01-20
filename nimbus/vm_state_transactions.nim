@@ -69,6 +69,8 @@ proc execComputation*(c: Computation) =
   if c.msg.isCreate:
     c.applyMessage(Create)
   else:
+    c.vmState.mutateStateDB:
+      db.incNonce(c.msg.sender)
     c.applyMessage(Call)
 
   if c.fork >= FkSpurious:
