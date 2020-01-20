@@ -12,7 +12,7 @@ import
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
   ../utils/header, stew/[byteutils, ranges], precompiles,
-  transaction_tracer
+  transaction_tracer, ../utils
 
 when defined(evmc_enabled):
   import evmc/evmc, evmc_helpers, evmc_api
@@ -126,7 +126,14 @@ template getCode*(c: Computation, address: EthAddress): ByteRange =
   else:
     c.vmState.readOnlyStateDB.getCode(address)
 
-proc newComputation*(vmState: BaseVMState, message: Message): Computation =
+proc generateContractAddress(c: Computation, salt: Option[Uint256]): EthAddress =
+  if c.msg.kind == evmcCreate:
+    let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
+    result = generateAddress(c.msg.sender, creationNonce)
+  else:
+    result = generateSafeAddress(c.msg.sender, salt.get(), c.msg.code)
+
+proc newComputation*(vmState: BaseVMState, message: Message, salt=none(Uint256)): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -136,6 +143,9 @@ proc newComputation*(vmState: BaseVMState, message: Message): Computation =
   result.touchedAccounts = initHashSet[EthAddress]()
   result.suicides = initHashSet[EthAddress]()
   result.code = newCodeStream(message.code)
+
+  if result.msg.isCreate():
+    result.msg.contractAddress = result.generateContractAddress(salt)
 
   when evmc_enabled:
     result.host.init(
