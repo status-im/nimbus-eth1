@@ -28,9 +28,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     var balance = vmState.readOnlyStateDb().getBalance(sender)
     if balance < upfrontGasCost: break
 
-    let recipient = tx.getRecipient()
-
-    var c = setupComputation(vmState, tx, sender, recipient, fork)
+    var c = setupComputation(vmState, tx, sender, fork)
     if c.isNil: # OOG in setupComputation
       gasUsed = 0
       break
