@@ -12,7 +12,7 @@ import
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
   ../../vm_state, ../../errors, ../../constants, ../../vm_types,
-  ../../db/[db_chain, state_db], ../../utils
+  ../../db/[db_chain, state_db]
 
 when defined(evmc_enabled):
   import  ../evmc_api, ../evmc_helpers
@@ -577,11 +577,7 @@ proc canTransfer(c: Computation, memPos, memLen: int, value: Uint256, opCode: st
   result = true
 
 proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: static[Op]): Computation =
-  let
-    callData = c.memory.read(memPos, len)
-
-  var
-    createMsgGas = c.gasMeter.gasRemaining
+  var createMsgGas = c.gasMeter.gasRemaining
   if c.fork >= FkTangerine:
     createMsgGas -= createMsgGas div 64
 
@@ -590,26 +586,23 @@ proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: stati
 
   when opCode == Create:
     const callKind = evmcCreate
-    let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.contractAddress)
-    let contractAddress = generateAddress(c.msg.contractAddress, creationNonce)
   else:
     const callKind = evmcCreate2
-    let salt = c.stack.popInt()
-    let contractAddress = generateSafeAddress(c.msg.contractAddress, salt, callData)
 
   let childMsg = Message(
     kind: callKind,
     depth: c.msg.depth + 1,
     gas: createMsgGas,
     sender: c.msg.contractAddress,
-    contractAddress: contractAddress,
-    codeAddress: CREATE_CONTRACT_ADDRESS,
     value: value,
     data: @[],
-    code: callData
+    code: c.memory.read(memPos, len)
     )
 
-  result = newComputation(c.vmState, childMsg)
+  when opCode == Create:
+    result = newComputation(c.vmState, childMsg)
+  else:
+    result = newComputation(c.vmState, childMsg, c.stack.popInt().some)
 
 template genCreate(callName: untyped, opCode: Op): untyped =
   op callName, inline = false, val, startPosition, size:
