@@ -205,7 +205,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
 
   let gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
 
-  vmState.txContext(
+  vmState.setupTxContext(
     origin = sender,
     gasPrice = tx.gasPrice,
     forkOverride = some(fork)

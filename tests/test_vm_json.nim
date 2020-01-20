@@ -45,7 +45,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     setupStateDB(fixture{"pre"}, db)
     let address = fexec{"address"}.getStr.parseAddress
 
-  vmState.txContext(
+  vmState.setupTxContext(
     origin = fexec{"origin"}.getStr.parseAddress,
     gasPrice = fexec{"gasPrice"}.getHexadecimalInt
   )

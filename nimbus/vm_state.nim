@@ -43,7 +43,7 @@ proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
   new result
   result.init(prevStateRoot, header, chainDB, tracerFlags)
 
-proc txContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
+proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
   ## this proc will be called each time a new transaction
   ## is going to be executed
   vmState.txOrigin = origin
