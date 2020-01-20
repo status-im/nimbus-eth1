@@ -47,6 +47,7 @@ test_script:
   # the "go-checks" target fails in AppVeyor, for some reason; easier to disable than to debug
   # - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% DISABLE_GO_CHECKS=1 libnimbus.so
   # - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% DISABLE_GO_CHECKS=1 libnimbus.a
+  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% wakusim
 
 deploy: off
 

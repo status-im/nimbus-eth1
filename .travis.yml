@@ -54,7 +54,7 @@ script:
   - build/nimbus --help
   # -static option will not work for osx unless static system libraries are provided
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then
-      make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility wrappers;
+      make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility wrappers wakusim;
     else
-      make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility wrappers wrappers-static;
+      make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility wrappers wrappers-static wakusim;
     fi
