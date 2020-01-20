@@ -14,7 +14,7 @@ import
   chronos, json_rpc/rpcserver, chronicles,
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
-  config, genesis, rpc/[common, p2p, debug, whisper], p2p/chain,
+  config, genesis, rpc/[common, p2p, debug, whisper, key_storage], p2p/chain,
   eth/trie/db, metrics, metrics/chronicles_support
 
 ## TODO:
@@ -133,7 +133,7 @@ proc start() =
   if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:
     setupEthRpc(nimbus.ethNode, chainDB, nimbus.rpcServer)
   if RpcFlags.Shh in conf.rpc.flags and ProtocolFlags.Shh in conf.net.protocols:
-    let keys = newWhisperKeys()
+    let keys = newKeyStorage()
     setupWhisperRPC(nimbus.ethNode, keys, nimbus.rpcServer)
   if RpcFlags.Debug in conf.rpc.flags:
     setupDebugRpc(chainDB, nimbus.rpcServer)

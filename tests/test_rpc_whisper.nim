@@ -1,7 +1,9 @@
 import
   unittest, strformat, options, stew/byteutils, json_rpc/[rpcserver, rpcclient],
-  eth/common as eth_common, eth/[rlp, keys], eth/p2p/rlpx_protocols/whisper_protocol,
-  ../nimbus/rpc/[common, hexstrings, rpc_types, whisper], ./test_helpers
+  eth/common as eth_common, eth/[rlp, keys],
+  eth/p2p/rlpx_protocols/whisper_protocol,
+  ../nimbus/rpc/[common, hexstrings, rpc_types, whisper, key_storage],
+  ./test_helpers
 
 from os import DirSep
 from strutils import rsplit
@@ -20,7 +22,7 @@ proc doTests {.async.} =
   var
     rpcServer = newRpcSocketServer(["localhost:" & $RPC_PORT])
     client = newRpcSocketClient()
-  let keys = newWhisperKeys()
+  let keys = newKeyStorage()
   setupWhisperRPC(ethNode, keys, rpcServer)
 
   # Begin tests
