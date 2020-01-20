@@ -34,7 +34,6 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
       break
 
     vmState.mutateStateDB:
-      db.incNonce(sender)
       db.subBalance(sender, upfrontGasCost)
 
     execComputation(c)

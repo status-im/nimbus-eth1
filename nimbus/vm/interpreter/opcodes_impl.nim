@@ -588,24 +588,14 @@ proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: stati
   # Consume gas here that will be passed to child
   c.gasMeter.consumeGas(createMsgGas, reason="CREATE")
 
-  # Generate new address and check for collisions
-  var
-    contractAddress: EthAddress
-    isCollision: bool
-
   when opCode == Create:
     const callKind = evmcCreate
-    c.vmState.mutateStateDB:
-      let creationNonce = db.getNonce(c.msg.contractAddress)
-      db.setNonce(c.msg.contractAddress, creationNonce + 1)
-
-      contractAddress = generateAddress(c.msg.contractAddress, creationNonce)
+    let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.contractAddress)
+    let contractAddress = generateAddress(c.msg.contractAddress, creationNonce)
   else:
     const callKind = evmcCreate2
-    c.vmState.mutateStateDB:
-      db.incNonce(c.msg.contractAddress)
-      let salt = c.stack.popInt()
-      contractAddress = generateSafeAddress(c.msg.contractAddress, salt, callData)
+    let salt = c.stack.popInt()
+    let contractAddress = generateSafeAddress(c.msg.contractAddress, salt, callData)
 
   let childMsg = Message(
     kind: callKind,
