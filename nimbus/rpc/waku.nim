@@ -53,13 +53,9 @@ proc setupWakuRPC*(node: EthereumNode, keys: WhisperKeys, rpcsrv: RpcServer) =
     ## pow: The new PoW requirement.
     ##
     ## Returns true on success and an error on failure.
-    # Note: If any of the `peer.powRequirement` calls fails, we do not care and
-    # don't see this as an error. Could move this to `setPowRequirement` if
-    # this is the general behaviour we want.
-    try:
-      waitFor node.setPowRequirement(pow)
-    except CatchableError:
-      trace "setPowRequirement error occured"
+    # Note: `setPowRequirement` does not raise on failures of sending the update
+    # to the peers. Hence in theory this should not causes errors.
+    waitFor node.setPowRequirement(pow)
     result = true
 
   # TODO: change string in to ENodeStr with extra checks

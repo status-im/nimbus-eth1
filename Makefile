@@ -14,7 +14,7 @@ BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
 
 # debugging tools + testing tools
-TOOLS := premix persist debug dumper hunter regress tracerTestGen persistBlockTestGen process_dashboard
+TOOLS := premix persist debug dumper hunter regress tracerTestGen persistBlockTestGen
 TOOLS_DIRS := premix tests waku
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))

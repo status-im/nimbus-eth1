@@ -45,12 +45,12 @@ type
       name: "fleet" }: Fleet
 
     bootnodes* {.
-      desc: "Comma separated enode URLs for P2P discovery bootstrap."
-      name: "bootnodes" }: seq[string]
+      desc: "Enode URL to bootstrap P2P discovery with. Argument may be repeated."
+      name: "bootnode" }: seq[string]
 
     staticnodes* {.
-      desc: "Comma separated enode URLs to directly connect with."
-      name: "staticnodes" }: seq[string]
+      desc: "Enode URL to directly connect with. Argument may be repeated."
+      name: "staticnode" }: seq[string]
 
     whisper* {.
       desc: "Enable the Whisper protocol."

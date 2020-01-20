@@ -59,12 +59,12 @@ proc initNodeCmd(nodeType: NodeType, shift: int, staticNodes: seq[string] = @[],
     result.cmd &= "--discovery:on" & " "
     if bootNodes.len > 0:
       for bootNode in bootNodes:
-        result.cmd &= "--bootnodes:" & bootNode & " "
+        result.cmd &= "--bootnode:" & bootNode & " "
   else:
     result.cmd &= "--discovery:off" & " "
   if staticNodes.len > 0:
     for staticNode in staticNodes:
-      result.cmd &= "--staticnodes:" & staticNode & " "
+      result.cmd &= "--staticnode:" & staticNode & " "
 
   result.master = master
   result.enode = $enode
