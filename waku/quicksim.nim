@@ -8,9 +8,6 @@ from os import DirSep
 from strutils import rsplit
 template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 
-# TODO: move this to rpc folder? Or just directly to nim-web3 and import that?
-const sigEthPath = &"{sourceDir}{DirSep}..{DirSep}tests{DirSep}rpcclient{DirSep}ethcallsigs.nim"
-createRpcSigs(RpcHttpClient, sigEthPath)
 const sigWakuPath = &"{sourceDir}{DirSep}rpc{DirSep}wakucallsigs.nim"
 createRpcSigs(RpcHttpClient, sigWakuPath)
 
@@ -33,17 +30,17 @@ proc generateTopics(amount = 100): seq[waku_protocol.Topic] =
 let
   symKey = "0x0000000000000000000000000000000000000000000000000000000000000001"
   topics = generateTopics()
-  symKeyID = waitFor lightWakuNode.shh_addSymKey(symKey)
+  symKeyID = waitFor lightWakuNode.waku_addSymKey(symKey)
   options = WhisperFilterOptions(symKeyID: some(symKeyID),
                                  topics: some(topics))
-  filterID = waitFor lightWakuNode.shh_newMessageFilter(options)
+  filterID = waitFor lightWakuNode.waku_newMessageFilter(options)
 
-  symKeyID2 = waitFor lightNode.shh_addSymKey(symKey)
+  symKeyID2 = waitFor lightNode.waku_addSymKey(symKey)
   options2 = WhisperFilterOptions(symKeyID: some(symKeyID2),
                                  topics: some(topics))
-  filterID2 = waitFor lightNode.shh_newMessageFilter(options2)
+  filterID2 = waitFor lightNode.waku_newMessageFilter(options2)
 
-  symkeyID3 = waitFor trafficNode.shh_addSymKey(symKey)
+  symkeyID3 = waitFor trafficNode.waku_addSymKey(symKey)
 
 var message = WhisperPostMessage(symKeyID: some(symkeyID3),
                                 ttl: 30,
@@ -51,13 +48,13 @@ var message = WhisperPostMessage(symKeyID: some(symkeyID3),
                                 payload: "0x45879632".HexDataStr,
                                 powTime: 1.0,
                                 powTarget: 0.002)
-discard waitFor trafficNode.shh_post(message)
+discard waitFor trafficNode.waku_post(message)
 
 var messages: seq[WhisperFilterMessage]
 
 # Check if the subscription for the topic works
 while messages.len == 0:
-  messages = waitFor lightWakuNode.shh_getFilterMessages(filterID)
+  messages = waitFor lightWakuNode.waku_getFilterMessages(filterID)
   waitFor sleepAsync(1000.milliseconds)
 info "Received test message", payload = messages[0].payload
 

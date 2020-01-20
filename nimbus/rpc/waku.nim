@@ -10,11 +10,11 @@ from stew/byteutils import hexToSeqByte, hexToByteArray
 
 proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
 
-  rpcsrv.rpc("shh_version") do() -> string:
+  rpcsrv.rpc("waku_version") do() -> string:
     ## Returns string of the current whisper protocol version.
     result = wakuVersionStr
 
-  rpcsrv.rpc("shh_info") do() -> WhisperInfo:
+  rpcsrv.rpc("waku_info") do() -> WhisperInfo:
     ## Returns diagnostic information about the whisper node.
     let config = node.protocolState(Waku).config
     result = WhisperInfo(minPow: config.powRequirement,
@@ -23,7 +23,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
                          messages: 0)
 
   # TODO: uint32 instead of uint64 is OK here, but needs to be added in json_rpc
-  rpcsrv.rpc("shh_setMaxMessageSize") do(size: uint64) -> bool:
+  rpcsrv.rpc("waku_setMaxMessageSize") do(size: uint64) -> bool:
     ## Sets the maximal message size allowed by this node.
     ## Incoming and outgoing messages with a larger size will be rejected.
     ## Whisper message size can never exceed the limit imposed by the underlying
@@ -36,7 +36,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     if not result:
       raise newException(ValueError, "Invalid size")
 
-  rpcsrv.rpc("shh_setMinPoW") do(pow: float) -> bool:
+  rpcsrv.rpc("waku_setMinPoW") do(pow: float) -> bool:
     ## Sets the minimal PoW required by this node.
     ##
     ## pow: The new PoW requirement.
@@ -48,7 +48,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     result = true
 
   # TODO: change string in to ENodeStr with extra checks
-  rpcsrv.rpc("shh_markTrustedPeer") do(enode: string) -> bool:
+  rpcsrv.rpc("waku_markTrustedPeer") do(enode: string) -> bool:
     ## Marks specific peer trusted, which will allow it to send historic
     ## (expired) messages.
     ## Note: This function is not adding new nodes, the node needs to exists as
@@ -64,7 +64,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     if not result:
       raise newException(ValueError, "Not a peer")
 
-  rpcsrv.rpc("shh_newKeyPair") do() -> Identifier:
+  rpcsrv.rpc("waku_newKeyPair") do() -> Identifier:
     ## Generates a new public and private key pair for message decryption and
     ## encryption.
     ##
@@ -72,7 +72,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     result = generateRandomID().Identifier
     keys.asymKeys.add(result.string, newKeyPair())
 
-  rpcsrv.rpc("shh_addPrivateKey") do(key: PrivateKey) -> Identifier:
+  rpcsrv.rpc("waku_addPrivateKey") do(key: PrivateKey) -> Identifier:
     ## Stores the key pair, and returns its ID.
     ##
     ## key: Private key as hex bytes.
@@ -83,7 +83,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     keys.asymKeys.add(result.string, KeyPair(seckey: key,
                                              pubkey: key.getPublicKey()))
 
-  rpcsrv.rpc("shh_deleteKeyPair") do(id: Identifier) -> bool:
+  rpcsrv.rpc("waku_deleteKeyPair") do(id: Identifier) -> bool:
     ## Deletes the specifies key if it exists.
     ##
     ## id: Identifier of key pair
@@ -94,7 +94,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     if not result:
       raise newException(ValueError, "Invalid key id")
 
-  rpcsrv.rpc("shh_hasKeyPair") do(id: Identifier) -> bool:
+  rpcsrv.rpc("waku_hasKeyPair") do(id: Identifier) -> bool:
     ## Checks if the whisper node has a private key of a key pair matching the
     ## given ID.
     ##
@@ -103,7 +103,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns (true or false) on success and an error on failure.
     result = keys.asymkeys.hasKey(id.string)
 
-  rpcsrv.rpc("shh_getPublicKey") do(id: Identifier) -> PublicKey:
+  rpcsrv.rpc("waku_getPublicKey") do(id: Identifier) -> PublicKey:
     ## Returns the public key for identity ID.
     ##
     ## id: Identifier of key pair
@@ -112,7 +112,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     # Note: key not found exception as error in case not existing
     result = keys.asymkeys[id.string].pubkey
 
-  rpcsrv.rpc("shh_getPrivateKey") do(id: Identifier) -> PrivateKey:
+  rpcsrv.rpc("waku_getPrivateKey") do(id: Identifier) -> PrivateKey:
     ## Returns the private key for identity ID.
     ##
     ## id: Identifier of key pair
@@ -121,7 +121,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     # Note: key not found exception as error in case not existing
     result = keys.asymkeys[id.string].seckey
 
-  rpcsrv.rpc("shh_newSymKey") do() -> Identifier:
+  rpcsrv.rpc("waku_newSymKey") do() -> Identifier:
     ## Generates a random symmetric key and stores it under an ID, which is then
     ## returned. Can be used encrypting and decrypting messages where the key is
     ## known to both parties.
@@ -135,7 +135,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     keys.symKeys.add(result.string, key)
 
 
-  rpcsrv.rpc("shh_addSymKey") do(key: SymKey) -> Identifier:
+  rpcsrv.rpc("waku_addSymKey") do(key: SymKey) -> Identifier:
     ## Stores the key, and returns its ID.
     ##
     ## key: The raw key for symmetric encryption as hex bytes.
@@ -145,7 +145,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
 
     keys.symKeys.add(result.string, key)
 
-  rpcsrv.rpc("shh_generateSymKeyFromPassword") do(password: string) -> Identifier:
+  rpcsrv.rpc("waku_generateSymKeyFromPassword") do(password: string) -> Identifier:
     ## Generates the key from password, stores it, and returns its ID.
     ##
     ## password: Password.
@@ -162,7 +162,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     result = generateRandomID().Identifier
     keys.symKeys.add(result.string, symKey)
 
-  rpcsrv.rpc("shh_hasSymKey") do(id: Identifier) -> bool:
+  rpcsrv.rpc("waku_hasSymKey") do(id: Identifier) -> bool:
     ## Returns true if there is a key associated with the name string.
     ## Otherwise, returns false.
     ##
@@ -171,7 +171,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns (true or false) on success and an error on failure.
     result = keys.symkeys.hasKey(id.string)
 
-  rpcsrv.rpc("shh_getSymKey") do(id: Identifier) -> SymKey:
+  rpcsrv.rpc("waku_getSymKey") do(id: Identifier) -> SymKey:
     ## Returns the symmetric key associated with the given ID.
     ##
     ## id: Identifier of key.
@@ -180,7 +180,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     # Note: key not found exception as error in case not existing
     result = keys.symkeys[id.string]
 
-  rpcsrv.rpc("shh_deleteSymKey") do(id: Identifier) -> bool:
+  rpcsrv.rpc("waku_deleteSymKey") do(id: Identifier) -> bool:
     ## Deletes the key associated with the name string if it exists.
     ##
     ## id: Identifier of key.
@@ -191,7 +191,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     if not result:
       raise newException(ValueError, "Invalid key id")
 
-  rpcsrv.rpc("shh_subscribe") do(id: string,
+  rpcsrv.rpc("waku_subscribe") do(id: string,
                                  options: WhisperFilterOptions) -> Identifier:
     ## Creates and registers a new subscription to receive notifications for
     ## inbound whisper messages. Returns the ID of the newly created
@@ -206,7 +206,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     # TODO: implement subscriptions, only for WS & IPC?
     discard
 
-  rpcsrv.rpc("shh_unsubscribe") do(id: Identifier) -> bool:
+  rpcsrv.rpc("waku_unsubscribe") do(id: Identifier) -> bool:
     ## Cancels and removes an existing subscription.
     ##
     ## id: Subscription identifier
@@ -223,7 +223,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     if asym.isNone() and topic.isNone():
       raise newException(ValueError, "Topic mandatory with symmetric key")
 
-  rpcsrv.rpc("shh_newMessageFilter") do(options: WhisperFilterOptions) -> Identifier:
+  rpcsrv.rpc("waku_newMessageFilter") do(options: WhisperFilterOptions) -> Identifier:
     ## Create a new filter within the node. This filter can be used to poll for
     ## new messages that match the set of criteria.
     ##
@@ -283,7 +283,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
       except CatchableError:
         trace "setBloomFilter error occured"
 
-  rpcsrv.rpc("shh_deleteMessageFilter") do(id: Identifier) -> bool:
+  rpcsrv.rpc("waku_deleteMessageFilter") do(id: Identifier) -> bool:
     ## Uninstall a message filter in the node.
     ##
     ## id: Filter identifier as returned when the filter was created.
@@ -293,11 +293,11 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     if not result:
       raise newException(ValueError, "Invalid filter id")
 
-  rpcsrv.rpc("shh_getFilterMessages") do(id: Identifier) -> seq[WhisperFilterMessage]:
+  rpcsrv.rpc("waku_getFilterMessages") do(id: Identifier) -> seq[WhisperFilterMessage]:
     ## Retrieve messages that match the filter criteria and are received between
     ## the last time this function was called and now.
     ##
-    ## id: ID of filter that was created with `shh_newMessageFilter`.
+    ## id: ID of filter that was created with `waku_newMessageFilter`.
     ##
     ## Returns array of messages on success and an error on failure.
     let messages = node.getFilterMessages(id.string)
@@ -319,7 +319,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
 
       result.add(filterMsg)
 
-  rpcsrv.rpc("shh_post") do(message: WhisperPostMessage) -> bool:
+  rpcsrv.rpc("waku_post") do(message: WhisperPostMessage) -> bool:
     ## Creates a whisper message and injects it into the network for
     ## distribution.
     ##
