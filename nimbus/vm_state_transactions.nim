@@ -78,11 +78,10 @@ proc execComputation*(c: Computation) =
 
   if c.isSuccess:
     c.refundSelfDestruct()
-  c.vmState.suicides = c.getSuicides()
+    c.vmState.suicides = c.getSuicides()
+    c.vmState.addLogs(c.logEntries)
 
   c.vmstate.status = c.isSuccess
-  if c.isSuccess:
-    c.vmState.addLogs(c.logEntries)
 
 proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress): GasInt =
   let
