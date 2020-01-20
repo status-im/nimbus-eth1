@@ -595,8 +595,7 @@ proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: stati
     gas: createMsgGas,
     sender: c.msg.contractAddress,
     value: value,
-    data: @[],
-    code: c.memory.read(memPos, len)
+    data: c.memory.read(memPos, len)
     )
 
   when opCode == Create:
@@ -759,10 +758,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
         c.gasMeter.returnGas(childGasLimit)
         return
 
-    let
-      callData = c.memory.read(memInPos, memInLen)
-      code = c.getCode(codeAddress)
-
     var childMsg = Message(
       kind: callKind,
       depth: c.msg.depth + 1,
@@ -771,8 +766,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       contractAddress: contractAddress,
       codeAddress: codeAddress,
       value: value,
-      data: callData,
-      code: code.toSeq,
+      data: c.memory.read(memInPos, memInLen),
       flags: flags)
 
     var child = newComputation(c.vmState, childMsg)

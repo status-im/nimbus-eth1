@@ -29,17 +29,6 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddr
 proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork) : Computation =
   var gas = tx.gasLimit - tx.intrinsicGas(fork)
 
-  # TODO: refactor message to use byterange
-  # instead of seq[byte]
-  var data, code: seq[byte]
-
-  if tx.isContractCreation:
-    data = @[]
-    code = tx.payload
-  else:
-    data = tx.payload
-    code = vmState.readOnlyStateDB.getCode(tx.to).toSeq
-
   if gas < 0:
     debug "not enough gas to perform calculation", gas=gas
     return
@@ -58,8 +47,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
     contractAddress: tx.getRecipient(),
     codeAddress: tx.to,
     value: tx.value,
-    data: data,
-    code: code
+    data: tx.payload
     )
 
   result = newComputation(vmState, msg)

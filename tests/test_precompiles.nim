@@ -43,8 +43,7 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
         contractAddress: toAddress,
         codeAddress: toAddress,
         value: 0.u256,
-        data: data,
-        code: @[]
+        data: data
         )
       computation = newComputation(vmState, message)
     echo "Running ", action.astToStr, " - ", test["name"]

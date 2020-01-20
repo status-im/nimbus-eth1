@@ -112,5 +112,4 @@ type
     codeAddress*:      EthAddress
     value*:            UInt256
     data*:             seq[byte]
-    code*:             seq[byte]
     flags*:            MsgFlags
