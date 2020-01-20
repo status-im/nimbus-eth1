@@ -106,14 +106,14 @@ proc start() =
 
   createDir(conf.dataDir)
   let trieDB = trieDB newChainDb(conf.dataDir)
-  let chainDB = newBaseChainDB(trieDB,
+  var chainDB = newBaseChainDB(trieDB,
     conf.prune == PruneMode.Full,
     conf.net.networkId.toPublicNetwork())
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
-
+  
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId,
                                    addAllCapabilities = false,
@@ -145,7 +145,7 @@ proc start() =
         nimbus.state = Stopping
       result = "EXITING"
     nimbus.rpcServer.start()
-
+ 
   # metrics server
   when defined(insecure):
     if conf.net.metricsServer:

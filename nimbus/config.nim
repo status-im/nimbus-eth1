@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  parseopt, strutils, macros, os, times,
+  parseopt, strutils, macros, os, times, json, stew/[byteutils, ranges],
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
   eth/p2p/bootnodes, eth/p2p/rlpx_protocols/whisper_protocol,
   ./db/select_backend,
@@ -143,6 +143,27 @@ type
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
     shh*: WhisperConfig           ## Whisper configuration
+    customGenesis*: CustomGenesisConfig  ## Custom Genesis Configuration
+
+  CustomGenesisConfig = object
+    chainId*: uint
+    homesteadBlock*: BlockNumber
+    daoForkBlock*: BlockNumber
+    daoForkSupport*: bool
+    eip150Block*: BlockNumber
+    eip150Hash*: Hash256
+    eip155Block*: BlockNumber
+    eip158Block*: BlockNumber
+    byzantiumBlock*: BlockNumber
+    constantinopleBlock*: BlockNumber
+    nonce*: BlockNonce
+    extraData*: seq[byte]
+    gasLimit*: int64
+    difficulty*: UInt256
+    prealloc*: JsonNode
+    mixHash*: Hash256
+    coinBase*: EthAddress
+    timestamp*: EthTime
 
 const
   defaultRpcApi = {RpcFlags.Eth, RpcFlags.Shh}
@@ -154,6 +175,22 @@ var nimbusConfig {.threadvar.}: NimbusConfiguration
 
 proc getConfiguration*(): NimbusConfiguration {.gcsafe.}
 
+proc privateChainConfig*(): ChainConfig =
+  let config = getConfiguration()
+  result = ChainConfig(
+    chainId:          config.customGenesis.chainId,
+    homesteadBlock:   config.customGenesis.homesteadBlock,
+    daoForkSupport:   config.customGenesis.daoForkSupport,
+    daoForkBlock:     config.customGenesis.daoForkBlock,
+    eip150Block:      config.customGenesis.eip150Block,
+    eip150Hash:       config.customGenesis.eip150Hash,
+    eip155Block:      config.customGenesis.eip155Block,
+    eip158Block:      config.customGenesis.eip158Block,
+    byzantiumBlock:   config.customGenesis.byzantiumBlock,
+    constantinopleBlock: config.customGenesis.constantinopleBlock,
+  )
+  trace "Custom genesis block configuration loaded", configuration=result
+  
 proc publicChainConfig*(id: PublicNetwork): ChainConfig =
   result = case id
   of MainNet:
@@ -190,6 +227,8 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       eip158Block:    3.toBlockNumber,
       byzantiumBlock: 1035301.toBlockNumber
     )
+  of CustomNet:
+    privateChainConfig()
   else:
     error "No chain config for public network", networkId = id
     doAssert(false, "No chain config for " & $id)
@@ -197,6 +236,124 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
 
   result.chainId = uint(id)
 
+proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
+  ## Parses Custom Genesis Block config options when customnetwork option provided
+
+  template checkForFork(chain, currentFork, previousFork: untyped) =
+  # Template to load fork blocks and validate order
+    let currentForkName = currentFork.astToStr()
+    if chain.hasKey(currentForkName):
+      if chain[currentForkName].kind == JInt:
+        currentFork = chain[currentForkName].getInt().toBlockNumber
+        if currentFork < previousFork:
+          error "Forks can't be assigned out of order"
+          quit(1)
+      else:
+        error "Invalid block value provided for", currentForkName, invalidValue=currentFork
+        quit(1)
+
+  proc parseConfig(T: type, c: JsonNode, field: string): T =
+    when T is string:
+      c[field].getStr()    
+    elif T is Uint256:
+      parseHexInt(c[field].getStr()).u256
+    elif T is bool:
+      c[field].getBool()
+    elif T is Hash256:
+      MDigest[256].fromHex(c[field].getStr())
+    elif T is uint:
+      c[field].getInt().uint
+    elif T is Blocknonce:
+      (parseHexInt(c[field].getStr()).uint64).toBlockNonce
+    elif T is EthTime:
+      fromHex[int64](c[field].getStr()).fromUnix
+    elif T is EthAddress:
+      parseAddress(c[field].getStr())
+    elif T is seq[byte]:
+      hexToSeqByte(c[field].getStr())
+    elif T is int64:
+      fromHex[int64](c[field].getStr())
+    
+
+  template validateConfigValue(chainDetails, field, jtype, T: untyped, checkError: static[bool] = true) =
+    let fieldName = field.astToStr()
+    if chainDetails.hasKey(fieldName):
+      if chainDetails[fieldName].kind == jtype:
+        field = parseConfig(T, chainDetails, fieldName)
+      else:
+        error "Invalid value provided for ", fieldName
+        quit(1)
+    else:
+      when checkError:
+        error "No value found in genesis block for", fieldName
+        quit(1)
+  
+  let config = getConfiguration() 
+  result = Success
+  var 
+    chainId = 0.uint
+    homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = 0.toBlockNumber
+    eip150Hash, mixHash : MDigest[256]
+    daoForkSupport = false
+    nonce = 66.toBlockNonce
+    extraData = hexToSeqByte("0x")
+    gasLimit = 16777216.int64
+    difficulty = 1048576.u256
+    alloc = parseJson("{}")
+    timestamp : EthTime
+    coinbase : EthAddress
+
+
+  if customGenesis.hasKey("config"):
+  # Validate all fork blocks for custom genesis
+    let forkDetails = customGenesis["config"]
+    validateConfigValue(forkDetails, chainId, JInt, uint)
+    config.net.networkId = chainId
+    checkForFork(forkDetails, homesteadBlock, 0.toBlockNumber)
+    validateConfigValue(forkDetails, daoForkSupport, JBool, bool, checkError=false)
+    if daoForkSupport == true:
+      checkForFork(forkDetails, daoForkBlock, 0.toBlockNumber)
+  
+    checkForFork(forkDetails, eip150Block, homesteadBlock)
+    validateConfigValue(forkDetails, eip150Hash, JString, Hash256)
+    checkForFork(forkDetails, eip155Block, eip150Block)
+    checkForFork(forkDetails, eip158Block, eip155Block)
+    checkForFork(forkDetails, byzantiumBlock, eip158Block)
+    checkForFork(forkDetails, constantinopleBlock, byzantiumBlock)
+  else:
+    error "No chain configuration found."
+    quit(1)
+  validateConfigValue(customGenesis, nonce, JString, BlockNonce)
+  validateConfigValue(customGenesis, extraData, JSTring, seq[byte], checkError = false)
+  validateConfigValue(customGenesis, gasLimit, JString, int64, checkError = false)
+  validateConfigValue(customGenesis, difficulty, JString, UInt256)
+  if customGenesis.hasKey("alloc"):
+    alloc = customGenesis["alloc"]
+
+  validateConfigValue(customGenesis, mixHash, JString, Hash256)
+  validateConfigValue(customGenesis, coinbase, JString, EthAddress, checkError = false)
+  validateConfigValue(customGenesis, timestamp, JString, EthTime, checkError = false)
+  
+  config.customGenesis = CustomGenesisConfig(
+    chainId:          chainId,
+    homesteadBlock:   homesteadBlock,
+    eip150Block:      eip150Block,
+    eip150Hash:       eip150Hash,
+    eip155Block:      eip155Block,
+    eip158Block:      eip158Block,
+    daoForkSupport:   daoForkSupport,
+    byzantiumBlock:   byzantiumBlock,
+    constantinopleBlock: constantinopleBlock,
+    nonce:            nonce,
+    extraData:        extraData,
+    gasLimit:         gasLimit,
+    difficulty:       difficulty,
+    prealloc:         alloc,
+    mixHash:          mixHash,
+    coinbase:         coinbase,
+    timestamp:        timestamp
+  )
+  
 proc processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.
   if len(v) > 0:
@@ -436,6 +593,24 @@ proc processNetArguments(key, value: string): ConfigStatus =
     config.net.setNetwork(RinkebyNet)
   elif skey == "kovan":
     config.net.setNetwork(KovanNet)
+  elif skey == "customnetwork":
+    if value == "":
+      error "No genesis block config provided for custom network", network=key
+      result = ErrorParseOption
+    else:
+      try:
+        result = processCustomGenesisConfig(parseFile(value))
+      except IOError:
+        error "Genesis block config file not found", invalidFileName=value
+        result = ErrorParseOption
+      except JsonParsingError:
+        error "Invalid genesis block config file format", invalidFileName=value
+        result = ErrorIncorrectOption
+      except:
+        var exceptionType = getCurrentException()
+        var msg = getCurrentExceptionMsg()
+        error "Error loading genesis block config file", invalidFileName=msg
+        result = Error
   elif skey == "networkid":
     var res = 0
     result = processInteger(value, res)
@@ -678,6 +853,7 @@ NETWORKING OPTIONS:
   --rinkeby               Use Ethereum Rinkeby Test Network
   --ident:<value>         Client identifier (default is '$1')
   --protocols:<value>     Enable specific set of protocols (default: $4)
+  --customnetwork         Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)
 
 WHISPER OPTIONS:
   --shh-maxsize:<value>   Max message size accepted (default: $5)
@@ -766,4 +942,3 @@ when declared(os.paramCount): # not available with `--app:lib`
 proc processConfiguration*(pathname: string): ConfigStatus =
   ## Process configuration file `pathname` and update `NimbusConfiguration`.
   result = Success
-
