@@ -29,6 +29,11 @@ type
       defaultValue: 0
       name: "ports-shift" }: uint16
 
+    nat* {.
+      desc: "Specify method to use for determining public address. " &
+            "Must be one of: any, none, upnp, pmp, extip:<IP>."
+      defaultValue: "any" }: string
+
     discovery* {.
       desc: "Enable/disable discovery v4."
       defaultValue: true
@@ -124,7 +129,6 @@ type
       name: "log-metrics" }: bool
 
     # TODO:
-    # - nat
     # - discv5 + topic register
     # - mailserver functionality
 

@@ -1,39 +1,78 @@
 import
-  confutils, config, chronos, json_rpc/rpcserver, metrics,
+  confutils, config, strutils, chronos, json_rpc/rpcserver, metrics,
   chronicles/topics_registry, # TODO: What? Need this for setLoglevel, weird.
-  eth/[keys, p2p, async_utils], eth/common/utils,
+  eth/[keys, p2p, async_utils], eth/common/utils, eth/net/nat,
   eth/p2p/[discovery, enode, peer_pool, bootnodes, whispernodes],
   eth/p2p/rlpx_protocols/[whisper_protocol, waku_protocol, waku_bridge],
   ../nimbus/rpc/[waku, wakusim, key_storage]
+
+const clientId = "Nimbus waku node"
+
+let globalListeningAddr = parseIpAddress("0.0.0.0")
 
 proc setBootNodes(nodes: openArray[string]): seq[ENode] =
   var bootnode: ENode
   result = newSeqOfCap[ENode](nodes.len)
   for nodeId in nodes:
-    # For now we can just do assert as we only pass our own const arrays.
+    # TODO: something more user friendly than an assert
     doAssert(initENode(nodeId, bootnode) == ENodeStatus.Success)
     result.add(bootnode)
 
 proc connectToNodes(node: EthereumNode, nodes: openArray[string]) =
   for nodeId in nodes:
     var whisperENode: ENode
-    # For now we can just do assert as we only pass our own const arrays.
+    # TODO: something more user friendly than an assert
     doAssert(initENode(nodeId, whisperENode) == ENodeStatus.Success)
 
     traceAsyncErrors node.peerPool.connectToNode(newNode(whisperENode))
+
+proc setupNat(conf: WakuNodeConf): tuple[ip: IpAddress,
+                                           tcpPort: Port,
+                                           udpPort: Port] =
+  # defaults
+  result.ip = globalListeningAddr
+  result.tcpPort = Port(conf.tcpPort + conf.portsShift)
+  result.udpPort = Port(conf.udpPort + conf.portsShift)
+
+  var nat: NatStrategy
+  case conf.nat.toLowerAscii():
+    of "any":
+      nat = NatAny
+    of "none":
+      nat = NatNone
+    of "upnp":
+      nat = NatUpnp
+    of "pmp":
+      nat = NatPmp
+    else:
+      if conf.nat.startsWith("extip:") and isIpAddress(conf.nat[6..^1]):
+        # any required port redirection is assumed to be done by hand
+        result.ip = parseIpAddress(conf.nat[6..^1])
+        nat = NatNone
+      else:
+        error "not a valid NAT mechanism, nor a valid IP address", value = conf.nat
+        quit(QuitFailure)
+
+  if nat != NatNone:
+    let extIP = getExternalIP(nat)
+    if extIP.isSome:
+      result.ip = extIP.get()
+      let extPorts = redirectPorts(tcpPort = result.tcpPort,
+                                   udpPort = result.udpPort,
+                                   description = clientId)
+      if extPorts.isSome:
+        (result.tcpPort, result.udpPort) = extPorts.get()
 
 proc run(config: WakuNodeConf) =
   if config.logLevel != LogLevel.NONE:
     setLogLevel(config.logLevel)
 
-  var address: Address
-  # TODO: make configurable
-  address.ip = parseIpAddress("0.0.0.0")
-  address.tcpPort = Port(config.tcpPort + config.portsShift)
-  address.udpPort = Port(config.udpPort + config.portsShift)
+  let
+    (ip, tcpPort, udpPort) = setupNat(config)
+    address = Address(ip: ip, tcpPort: tcpPort, udpPort: udpPort)
 
   # Set-up node
-  var node = newEthereumNode(config.nodekey, address, 1, nil,
+  var node = newEthereumNode(config.nodekey, address, 1, nil, clientId,
     addAllCapabilities = false)
   if not config.bootnodeOnly:
     node.addCapability Waku # Always enable Waku protocol
