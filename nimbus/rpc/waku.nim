@@ -44,7 +44,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns true on success and an error on failure.
     # Note: `setPowRequirement` does not raise on failures of sending the update
     # to the peers. Hence in theory this should not causes errors.
-    waitFor node.setPowRequirement(pow)
+    await node.setPowRequirement(pow)
     result = true
 
   # TODO: change string in to ENodeStr with extra checks
@@ -80,8 +80,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns key identifier on success and an error on failure.
     result = generateRandomID().Identifier
 
-    keys.asymKeys.add(result.string, KeyPair(seckey: key,
-                                             pubkey: key.getPublicKey()))
+    keys.asymKeys.add(result.string, key.toKeyPair)
 
   rpcsrv.rpc("waku_deleteKeyPair") do(id: Identifier) -> bool:
     ## Deletes the specifies key if it exists.
@@ -272,14 +271,14 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     if config.wakuMode == WakuChan:
       try:
         # TODO: an addTopics call would probably be more useful
-        let result = waitFor node.setTopics(config.topics.concat(filter.topics))
+        let result = await node.setTopics(config.topics.concat(filter.topics))
         if not result:
           raise newException(ValueError, "Too many topics")
       except CatchableError:
         trace "setTopics error occured"
     elif config.isLightNode:
       try:
-        waitFor node.setBloomFilter(node.filtersToBloom())
+        await node.setBloomFilter(node.filtersToBloom())
       except CatchableError:
         trace "setBloomFilter error occured"
 
@@ -302,22 +301,18 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns array of messages on success and an error on failure.
     let messages = node.getFilterMessages(id.string)
     for msg in messages:
-      var filterMsg: WhisperFilterMessage
-
-      filterMsg.sig = msg.decoded.src
-      filterMsg.recipientPublicKey = msg.dst
-      filterMsg.ttl = msg.ttl
-      filterMsg.topic = msg.topic
-      filterMsg.timestamp = msg.timestamp
-      filterMsg.payload = msg.decoded.payload
-      # Note: whisper_protocol padding is an Option as there is the
-      # possibility of 0 padding in case of custom padding.
-      if msg.decoded.padding.isSome():
-        filterMsg.padding = msg.decoded.padding.get()
-      filterMsg.pow = msg.pow
-      filterMsg.hash = msg.hash
-
-      result.add(filterMsg)
+      result.add WhisperFilterMessage(
+        sig: msg.decoded.src,
+        recipientPublicKey: msg.dst,
+        ttl: msg.ttl,
+        topic: msg.topic,
+        timestamp: msg.timestamp,
+        payload: msg.decoded.payload,
+        # Note: whisper_protocol padding is an Option as there is the
+        # possibility of 0 padding in case of custom padding.
+        padding: msg.decoded.padding.get(@[]),
+        pow: msg.pow,
+        hash: msg.hash)
 
   rpcsrv.rpc("waku_post") do(message: WhisperPostMessage) -> bool:
     ## Creates a whisper message and injects it into the network for

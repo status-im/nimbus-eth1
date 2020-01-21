@@ -45,7 +45,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns true on success and an error on failure.
     # Note: `setPowRequirement` does not raise on failures of sending the update
     # to the peers. Hence in theory this should not causes errors.
-    waitFor node.setPowRequirement(pow)
+    await node.setPowRequirement(pow)
     result = true
 
   # TODO: change string in to ENodeStr with extra checks
