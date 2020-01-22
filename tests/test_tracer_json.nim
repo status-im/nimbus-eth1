@@ -45,3 +45,6 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     let receipt = receipts[i]
     let stateDiff = txTraces[i]["stateDiff"]
     check receipt["root"].getStr().toLowerAscii() == stateDiff["afterRoot"].getStr().toLowerAscii()
+
+when isMainModule:
+  tracerJsonMain()
