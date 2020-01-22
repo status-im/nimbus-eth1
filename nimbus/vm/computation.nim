@@ -118,7 +118,7 @@ template selfDestruct*(c: Computation, address: EthAddress) =
   when evmc_enabled:
     c.host.selfDestruct(c.msg.contractAddress, address)
   else:
-    c.registerAccountForDeletion(address)
+    c.execSelfDestruct(address)
 
 template getCode*(c: Computation, address: EthAddress): ByteRange =
   when evmc_enabled:
@@ -317,7 +317,7 @@ proc addChildComputation*(c, child: Computation) =
   if not child.shouldBurnGas:
     c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
-proc registerAccountForDeletion*(c: Computation, beneficiary: EthAddress) =
+proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
   c.vmState.mutateStateDB:
     let
       localBalance = c.getBalance(c.msg.contractAddress)

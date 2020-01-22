@@ -118,7 +118,7 @@ proc hostCopyCodeImpl(ctx: Computation, address: var evmc_address,
 
 proc hostSelfdestructImpl(ctx: Computation, address, beneficiary: var evmc_address) {.cdecl.} =
   assert fromEvmc(address) == ctx.msg.contractAddress
-  ctx.registerAccountForDeletion(fromEvmc(beneficiary))
+  ctx.execSelfDestruct(fromEvmc(beneficiary))
 
 proc hostEmitLogImpl(ctx: Computation, address: var evmc_address,
                      data: ptr byte, dataSize: int,
