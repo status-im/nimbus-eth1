@@ -25,7 +25,7 @@ const
 
 template getCoinbase*(c: Computation): EthAddress =
   when evmc_enabled:
-    fromEvmc c.host.getTxContext().block_coinbase
+    c.host.getTxContext().block_coinbase
   else:
     c.vmState.coinbase
 
@@ -61,7 +61,7 @@ template getChainId*(c: Computation): uint =
 
 template getOrigin*(c: Computation): EthAddress =
   when evmc_enabled:
-    fromEvmc c.host.getTxContext().tx_origin
+    c.host.getTxContext().tx_origin
   else:
     c.vmState.txOrigin
 
