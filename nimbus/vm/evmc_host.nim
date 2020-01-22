@@ -8,43 +8,39 @@
 proc hostReleaseResultImpl(result: var evmc_result) {.cdecl.} =
   discard
 
-proc hostGetTxContextImpl(ctx: Computation): evmc_tx_context {.cdecl.} =
+proc hostGetTxContextImpl(ctx: Computation): nimbus_tx_context {.cdecl.} =
   let vmstate = ctx.vmState
   result.tx_gas_price = toEvmc(vmstate.txGasPrice.u256)
-  result.tx_origin = toEvmc(vmstate.txOrigin)
-  result.block_coinbase = toEvmc(vmstate.coinbase)
+  result.tx_origin = vmstate.txOrigin
+  result.block_coinbase = vmstate.coinbase
   result.block_number = vmstate.blockNumber.truncate(int64)
   result.block_timestamp = vmstate.timestamp.toUnix()
   result.block_gas_limit = int64(vmstate.blockHeader.gasLimit)
   result.block_difficulty = toEvmc(vmstate.difficulty)
   result.chain_id = toEvmc(vmstate.chaindb.config.chainId.u256)
 
-proc hostGetBlockHashImpl(ctx: Computation, number: int64): evmc_bytes32 {.cdecl.} =
-  ctx.vmState.getAncestorHash(number.u256).toEvmc()
+proc hostGetBlockHashImpl(ctx: Computation, number: int64): Hash256 {.cdecl.} =
+  ctx.vmState.getAncestorHash(number.u256)
 
-proc hostAccountExistsImpl(ctx: Computation, address: var evmc_address): c99bool {.cdecl.} =
+proc hostAccountExistsImpl(ctx: Computation, address: EthAddress): bool {.cdecl.} =
   let db = ctx.vmState.readOnlyStateDB
   if ctx.fork >= FkSpurious:
-    not db.isDeadAccount(fromEvmc(address))
+    not db.isDeadAccount(address)
   else:
-    db.accountExists(fromEvmc(address))
+    db.accountExists(address)
 
-proc hostGetStorageImpl(ctx: Computation, address: var evmc_address, key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
-  let storageAddr = fromEvmc(address)
-  assert storageAddr == ctx.msg.contractAddress
-  let (storage, _) = ctx.vmState.accountDB.getStorage(storageAddr, Uint256.fromEvmc(key))
-  storage.toEvmc()
+proc hostGetStorageImpl(ctx: Computation, address: EthAddress, key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
+  ctx.vmState.accountDB.getStorage(address, Uint256.fromEvmc(key))[0].toEvmc()
 
-proc hostSetStorageImpl(ctx: Computation, address: var evmc_address,
+proc hostSetStorageImpl(ctx: Computation, address: EthAddress,
                         key, value: var evmc_bytes32): evmc_storage_status {.cdecl.} =
   let
-    storageAddr = fromEvmc(address)
     slot = Uint256.fromEvmc(key)
     newValue = Uint256.fromEvmc(value)
     statedb = ctx.vmState.readOnlyStateDb
-    (currValue, _) = statedb.getStorage(storageAddr, slot)
+    currValue = statedb.getStorage(address, slot)[0]
 
-  assert storageAddr == ctx.msg.contractAddress
+  assert address == ctx.msg.contractAddress
 
   var
     status = EVMC_STORAGE_MODIFIED
@@ -54,7 +50,7 @@ proc hostSetStorageImpl(ctx: Computation, address: var evmc_address,
   if newValue == currValue:
     status = EVMC_STORAGE_UNCHANGED
   else:
-    origValue = statedb.getCommittedStorage(storageAddr, slot)
+    origValue = statedb.getCommittedStorage(address, slot)
     if origValue == currValue or ctx.fork < FkIstanbul:
       if currValue == 0:
         status = EVMC_STORAGE_ADDED
@@ -63,7 +59,7 @@ proc hostSetStorageImpl(ctx: Computation, address: var evmc_address,
     else:
       status = EVMC_STORAGE_MODIFIED_AGAIN
     ctx.vmState.mutateStateDB:
-      db.setStorage(storageAddr, slot, newValue)
+      db.setStorage(address, slot, newValue)
 
   let gasParam = GasParams(kind: Op.Sstore,
       s_status: status,
@@ -77,46 +73,41 @@ proc hostSetStorageImpl(ctx: Computation, address: var evmc_address,
 
   result = status
 
-proc hostGetBalanceImpl(ctx: Computation, address: var evmc_address): evmc_uint256be {.cdecl.} =
-  ctx.vmState.readOnlyStateDB.getBalance(fromEvmc(address)).toEvmc()
+proc hostGetBalanceImpl(ctx: Computation, address: EthAddress): evmc_bytes32 {.cdecl.} =
+  ctx.vmState.readOnlyStateDB.getBalance(address).toEvmc()
 
-proc hostGetCodeSizeImpl(ctx: Computation, address: var evmc_address): uint {.cdecl.} =
-  ctx.vmState.readOnlyStateDB.getCode(fromEvmc(address)).len.uint
+proc hostGetCodeSizeImpl(ctx: Computation, address: EthAddress): uint {.cdecl.} =
+  ctx.vmState.readOnlyStateDB.getCode(address).len.uint
 
-proc hostGetCodeHashImpl(ctx: Computation, address: var evmc_address): evmc_bytes32 {.cdecl.} =
-  let
-    db = ctx.vmstate.readOnlyStateDB
-    address = fromEvmc(address)
-
+proc hostGetCodeHashImpl(ctx: Computation, address: EthAddress): Hash256 {.cdecl.} =
+  let db = ctx.vmstate.readOnlyStateDB
   if not db.accountExists(address):
     return
-
   if db.isEmptyAccount(address):
     return
+  db.getCodeHash(address)
 
-  db.getCodeHash(address).toEvmc()
+proc hostCopyCodeImpl(ctx: Computation, address: EthAddress,
+                      codeOffset: int, bufferData: ptr byte,
+                      bufferSize: int): int {.cdecl.} =
 
-proc hostCopyCodeImpl(ctx: Computation, address: var evmc_address,
-                      codeOffset: uint, bufferData: ptr byte,
-                      bufferSize: uint): uint {.cdecl.} =
-
-  var code = ctx.vmState.readOnlyStateDB.getCode(fromEvmc(address))
+  var code = ctx.vmState.readOnlyStateDB.getCode(address)
 
   # Handle "big offset" edge case.
-  if codeOffset > code.len.uint:
+  if codeOffset > code.len:
     return 0
 
-  let maxToCopy = code.len - codeOffset.int
-  let numToCopy = min(maxToCopy, bufferSize.int)
+  let maxToCopy = code.len - codeOffset
+  let numToCopy = min(maxToCopy, bufferSize)
   if numToCopy > 0:
-    copyMem(bufferData, code.slice(codeOffset.int).baseAddr, numToCopy)
-  result = numToCopy.uint
+    copyMem(bufferData, code.slice(codeOffset).baseAddr, numToCopy)
+  result = numToCopy
 
-proc hostSelfdestructImpl(ctx: Computation, address, beneficiary: var evmc_address) {.cdecl.} =
-  assert fromEvmc(address) == ctx.msg.contractAddress
-  ctx.execSelfDestruct(fromEvmc(beneficiary))
+proc hostSelfdestructImpl(ctx: Computation, address, beneficiary: EthAddress) {.cdecl.} =
+  assert address == ctx.msg.contractAddress
+  ctx.execSelfDestruct(beneficiary)
 
-proc hostEmitLogImpl(ctx: Computation, address: var evmc_address,
+proc hostEmitLogImpl(ctx: Computation, address: EthAddress,
                      data: ptr byte, dataSize: int,
                      topics: UncheckedArray[evmc_bytes32], topicsCount: int) {.cdecl.} =
   var log: Log
@@ -129,7 +120,7 @@ proc hostEmitLogImpl(ctx: Computation, address: var evmc_address,
     log.data = newSeq[byte](dataSize)
     copyMem(log.data[0].addr, data, dataSize)
 
-  log.address = fromEvmc(address)
+  log.address = address
   ctx.addLogEntry(log)
 
 proc hostCallImpl(ctx: Computation, msg: var evmc_message): evmc_result {.cdecl.} =
@@ -177,8 +168,8 @@ proc init(vm: var evmc_vm) =
   vm.set_option = vmSetOptionImpl
 
 let gHost = initHostInterface()
-proc nim_host_get_interface(): ptr evmc_host_interface {.exportc, cdecl.} =
-  result = gHost.unsafeAddr
+proc nim_host_get_interface(): ptr nimbus_host_interface {.exportc, cdecl.} =
+  result = cast[ptr nimbus_host_interface](gHost.unsafeAddr)
 
 proc nim_host_create_context(vmstate: BaseVmState, msg: ptr evmc_message): Computation {.exportc, cdecl.} =
   #result = HostContext(
