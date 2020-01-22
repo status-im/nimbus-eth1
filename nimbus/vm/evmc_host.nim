@@ -51,13 +51,10 @@ proc hostSetStorageImpl(ctx: Computation, address: var evmc_address,
     gasRefund = 0.GasInt
     origValue = 0.u256
 
-  block:
-    if newValue == currValue:
-      status = EVMC_STORAGE_UNCHANGED
-      break
-
+  if newValue == currValue:
+    status = EVMC_STORAGE_UNCHANGED
+  else:
     origValue = statedb.getCommittedStorage(storageAddr, slot)
-
     if origValue == currValue or ctx.fork < FkIstanbul:
       if currValue == 0:
         status = EVMC_STORAGE_ADDED
@@ -65,7 +62,6 @@ proc hostSetStorageImpl(ctx: Computation, address: var evmc_address,
         status = EVMC_STORAGE_DELETED
     else:
       status = EVMC_STORAGE_MODIFIED_AGAIN
-
     ctx.vmState.mutateStateDB:
       db.setStorage(storageAddr, slot, newValue)
 
