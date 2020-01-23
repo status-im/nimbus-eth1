@@ -56,7 +56,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       blockBody = chainDB.getBlockBody(blockHash)
       flags = traceOptionsToFlags(options)
 
-    traceTransaction(chainDB, blockHeader, blockBody, txDetails.index, flags)
+    result = traceTransaction(chainDB, blockHeader, blockBody, txDetails.index, flags)
 
   rpcsrv.rpc("debug_dumpBlockStateByNumber") do(quantityTag: string) -> JsonNode:
     ## Retrieves the state that corresponds to the block number and returns
@@ -69,7 +69,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       blockHash = chainDB.getBlockHash(header.blockNumber)
       body = chainDB.getBlockBody(blockHash)
 
-    dumpBlockState(chainDB, header, body)
+    result = dumpBlockState(chainDB, header, body)
 
   rpcsrv.rpc("debug_dumpBlockStateByHash") do(data: EthHashStr) -> JsonNode:
     ## Retrieves the state that corresponds to the block number and returns
@@ -82,7 +82,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       blockHash = chainDB.getBlockHash(header.blockNumber)
       body = chainDB.getBlockBody(blockHash)
 
-    dumpBlockState(chainDB, header, body)
+    result = dumpBlockState(chainDB, header, body)
 
   rpcsrv.rpc("debug_traceBlockByNumber") do(quantityTag: string, options: Option[TraceOptions]) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
@@ -97,7 +97,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       body = chainDB.getBlockBody(blockHash)
       flags = traceOptionsToFlags(options)
 
-    traceBlock(chainDB, header, body, flags)
+    result = traceBlock(chainDB, header, body, flags)
 
   rpcsrv.rpc("debug_traceBlockByHash") do(data: EthHashStr, options: Option[TraceOptions]) -> JsonNode:
     ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
@@ -112,7 +112,7 @@ proc setupDebugRpc*(chainDB: BaseChainDB, rpcsrv: RpcServer) =
       body = chainDB.getBlockBody(blockHash)
       flags = traceOptionsToFlags(options)
 
-    traceBlock(chainDB, header, body, flags)
+    result = traceBlock(chainDB, header, body, flags)
 
   rpcsrv.rpc("debug_setHead") do(quantityTag: string):
     ## Sets the current head of the local chain by block number.
