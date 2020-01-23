@@ -15,7 +15,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 1,
+  "id": 8,
   "links": [],
   "panels": [
     {
@@ -214,15 +214,15 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "dropped_expired_envelopes_total{node=\"0\"} + dropped_from_future_envelopes_total{node=\"0\"} + dropped_low_pow_envelopes_total{node=\"0\"} + dropped_too_large_envelopes_total{node=\"0\"} + dropped_bloom_filter_mismatch_envelopes_total{node=\"0\"} + dropped_topic_mismatch_envelopes_total{node=\"0\"} +dropped_benign_duplicate_envelopes_total{node=\"0\"} + dropped_malicious_duplicate_envelopes_total{node=\"0\"}",
-          "legendFormat": "dropped envelopes",
+          "expr": "dropped_expired_envelopes_total{node=\"0\"} + dropped_from_future_envelopes_total{node=\"0\"} + dropped_low_pow_envelopes_total{node=\"0\"} + dropped_too_large_envelopes_total{node=\"0\"} + dropped_bloom_filter_mismatch_envelopes_total{node=\"0\"} + dropped_topic_mismatch_envelopes_total{node=\"0\"} +dropped_benign_duplicate_envelopes_total{node=\"0\"} + dropped_duplicate_envelopes_total{node=\"0\"}",
+          "legendFormat": "Invalid envelopes",
           "refId": "A"
         }
       ],
       "thresholds": "",
       "timeFrom": null,
       "timeShift": null,
-      "title": "Dropped Envelopes #0",
+      "title": "Invalid Envelopes #0",
       "type": "singlestat",
       "valueFontSize": "80%",
       "valueMaps": [
@@ -388,9 +388,9 @@
           "refId": "B"
         },
         {
-          "expr": "dropped_malicious_duplicate_envelopes_total{node=\"0\"}",
+          "expr": "dropped_duplicate_envelopes_total{node=\"0\"}",
           "hide": false,
-          "legendFormat": "Malicious duplicate",
+          "legendFormat": "Duplicate",
           "refId": "C"
         },
         {
@@ -428,6 +428,18 @@
           "hide": false,
           "legendFormat": "Too Large",
           "refId": "I"
+        },
+        {
+          "expr": "dropped_full_queue_new_envelopes_total{node=\"0\"}",
+          "hide": false,
+          "legendFormat": "Full queue new",
+          "refId": "J"
+        },
+        {
+          "expr": "dropped_full_queue_old_envelopes_total{node=\"0\"}",
+          "hide": false,
+          "legendFormat": "Full queue old",
+          "refId": "K"
         }
       ],
       "thresholds": [],
@@ -776,7 +788,7 @@
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -796,5 +808,5 @@
   "timezone": "",
   "title": "Waku Node",
   "uid": "K7Z6IoBZk",
-  "version": 5
+  "version": 2
 }

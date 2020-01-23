@@ -81,8 +81,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns key identifier on success and an error on failure.
     result = generateRandomID().Identifier
 
-    keys.asymKeys.add(result.string, KeyPair(seckey: key,
-                                             pubkey: key.getPublicKey()))
+    keys.asymKeys.add(result.string, key.toKeyPair())
 
   rpcsrv.rpc("shh_deleteKeyPair") do(id: Identifier) -> bool:
     ## Deletes the specifies key if it exists.
@@ -283,22 +282,18 @@ proc setupWhisperRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns array of messages on success and an error on failure.
     let messages = node.getFilterMessages(id.string)
     for msg in messages:
-      var filterMsg: WhisperFilterMessage
-
-      filterMsg.sig = msg.decoded.src
-      filterMsg.recipientPublicKey = msg.dst
-      filterMsg.ttl = msg.ttl
-      filterMsg.topic = msg.topic
-      filterMsg.timestamp = msg.timestamp
-      filterMsg.payload = msg.decoded.payload
-      # Note: whisper_protocol padding is an Option as there is the
-      # possibility of 0 padding in case of custom padding.
-      if msg.decoded.padding.isSome():
-        filterMsg.padding = msg.decoded.padding.get()
-      filterMsg.pow = msg.pow
-      filterMsg.hash = msg.hash
-
-      result.add(filterMsg)
+      result.add WhisperFilterMessage(
+        sig: msg.decoded.src,
+        recipientPublicKey: msg.dst,
+        ttl: msg.ttl,
+        topic: msg.topic,
+        timestamp: msg.timestamp,
+        payload: msg.decoded.payload,
+        # Note: whisper_protocol padding is an Option as there is the
+        # possibility of 0 padding in case of custom padding.
+        padding: msg.decoded.padding.get(@[]),
+        pow: msg.pow,
+        hash: msg.hash)
 
   rpcsrv.rpc("shh_post") do(message: WhisperPostMessage) -> bool:
     ## Creates a whisper message and injects it into the network for
