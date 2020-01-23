@@ -134,7 +134,7 @@ proc run(config: WakuNodeConf) =
             waku_protocol.dropped_bloom_filter_mismatch_envelopes.value +
             waku_protocol.dropped_topic_mismatch_envelopes.value +
             waku_protocol.dropped_benign_duplicate_envelopes.value +
-            waku_protocol.dropped_malicious_duplicate_envelopes.value
+            waku_protocol.dropped_duplicate_envelopes.value
 
       info "Node metrics", connectedPeers, validEnvelopes, invalidEnvelopes
       addTimer(Moment.fromNow(2.seconds), logMetrics)
