@@ -458,7 +458,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       header = chain.getBlockHeader(txDetails.blockNumber)
       blockHash = chain.getBlockHash(txDetails.blockNumber)
       transaction = getBlockBody(blockHash).transactions[txDetails.index]
-    populateTransactionObject(transaction, txDetails.index, header, blockHash)
+    result = populateTransactionObject(transaction, txDetails.index, header, blockHash)
     # TODO: if the requested transaction not in blockchain
     # try to look for pending transaction in txpool
 
@@ -472,7 +472,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       blockHash = data.toHash()
       header = chain.getBlockHeader(blockHash)
       transaction = getBlockBody(blockHash).transactions[quantity]
-    populateTransactionObject(transaction, quantity, header, blockHash)
+    result = populateTransactionObject(transaction, quantity, header, blockHash)
 
   rpcsrv.rpc("eth_getTransactionByBlockNumberAndIndex") do(quantityTag: string, quantity: int) -> TransactionObject:
     ## Returns information about a transaction by block number and transaction index position.
@@ -483,7 +483,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       header = chain.headerFromTag(quantityTag)
       blockHash = header.hash
       transaction = getBlockBody(blockHash).transactions[quantity]
-    populateTransactionObject(transaction, quantity, header, blockHash)
+    result = populateTransactionObject(transaction, quantity, header, blockHash)
 
   proc populateReceipt(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txIndex: int, blockHeader: BlockHeader): ReceiptObject =
     result.transactionHash = tx.rlpHash
