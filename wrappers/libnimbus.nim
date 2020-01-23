@@ -99,7 +99,8 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
   else:
     try:
       let privKey = initPrivateKey(makeOpenArray(privateKey, 32))
-      keypair = KeyPair(seckey: privKey, pubkey: privKey.getPublicKey())
+      keypair = privKey.toKeyPair()
+
     except EthKeysException:
       error "Passed an invalid private key."
       return false
@@ -176,8 +177,8 @@ proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
 
   var keypair: KeyPair
   try:
-    keypair.seckey = initPrivateKey(makeOpenArray(privateKey, 32))
-    keypair.pubkey = keypair.seckey.getPublicKey()
+    let privKey = initPrivateKey(makeOpenArray(privateKey, 32))
+    keypair = privKey.toKeyPair()
   except EthKeysException, Secp256k1Exception:
     error "Passed an invalid private key."
     return false
