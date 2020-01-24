@@ -12,26 +12,42 @@ import
   ./vm/[computation, interpreter]
 
 proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork): bool =
-  # XXX: https://github.com/status-im/nimbus/issues/35#issuecomment-391726518
-  # XXX: lots of avoidable u256 construction
   let
     account = vmState.readOnlyStateDB.getAccount(sender)
     gasLimit = tx.gasLimit.u256
-    limitAndValue = gasLimit + tx.value
-    gasCost = gasLimit * tx.gasPrice.u256
 
-  tx.gasLimit >= tx.intrinsicGas(fork) and
-    #transaction.gasPrice <= (1 shl 34) and
-    limitAndValue <= account.balance and
-    tx.accountNonce == account.nonce and
-    account.balance >= gasCost
+  if vmState.cumulativeGasUsed + tx.gasLimit > vmState.blockHeader.gasLimit:
+    debug "invalid tx: block header gasLimit reached",
+      maxLimit=vmState.blockHeader.gasLimit,
+      gasUsed=vmState.cumulativeGasUsed,
+      addition=tx.gasLimit
+    return
+
+  vmState.gasCost = gasLimit * tx.gasPrice.u256
+  let totalCost = vmState.gasCost + tx.value
+  if totalCost > account.balance:
+    debug "invalid tx: not enough cash",
+      available=account.balance,
+      require=totalCost
+    return
+
+  if tx.gasLimit < tx.intrinsicGas(fork):
+    debug "invalid tx: not enough gas to perform calculation",
+      available=tx.gasLimit,
+      require=tx.intrinsicGas(fork)
+    return
+
+  if tx.accountNonce != account.nonce:
+    debug "invalid tx: account nonce mismatch",
+      txNonce=tx.accountnonce,
+      accountNonce=account.nonce
+    return
+
+  result = true
 
 proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork) : Computation =
   var gas = tx.gasLimit - tx.intrinsicGas(fork)
-
-  if gas < 0:
-    debug "not enough gas to perform calculation", gas=gas
-    return
+  assert gas >= 0
 
   vmState.setupTxContext(
     origin = sender,
