@@ -13,29 +13,12 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
-  var gasUsed = tx.gasLimit
-
-  block:
-    if vmState.cumulativeGasUsed + gasUsed > vmState.blockHeader.gasLimit:
-      debug "invalid tx: block header gasLimit reached",
-        blockGasLimit=vmState.blockHeader.gasLimit,
-        gasUsed=gasUsed,
-        txGasLimit=tx.gasLimit
-      gasUsed = 0
-      break
-
-    let upfrontGasCost = tx.gasLimit.u256 * tx.gasPrice.u256
-    var balance = vmState.readOnlyStateDb().getBalance(sender)
-    if balance < upfrontGasCost: break
-
+  var gasUsed = 0.GasInt
+  if validateTransaction(vmState, tx, sender, fork):
+    gasUsed = tx.gasLimit
     var c = setupComputation(vmState, tx, sender, fork)
-    if c.isNil: # OOG in setupComputation
-      gasUsed = 0
-      break
-
     vmState.mutateStateDB:
-      db.subBalance(sender, upfrontGasCost)
-
+      db.subBalance(sender, vmState.gasCost)
     execComputation(c)
     if not c.shouldBurnGas:
       gasUsed = c.refundGas(tx, sender)

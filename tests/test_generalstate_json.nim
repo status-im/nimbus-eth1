@@ -110,25 +110,6 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       let success = expectedLogsHash == actualLogsHash and obtainedHash == tester.expectedHash
       tester.dumpDebugData(vmState, sender, gasUsed, success)
 
-  if not validateTransaction(vmState, tester.tx, sender, tester.fork):
-    vmState.mutateStateDB:
-      # pre-EIP158 (e.g., Byzantium) should ensure currentCoinbase exists
-      # in later forks, don't create at all
-      db.addBalance(tester.header.coinbase, 0.u256)
-
-      # TODO: this feels not right to be here
-      # perhaps the entire validateTransaction block
-      # should be moved into processTransaction
-      if tester.fork >= FkSpurious:
-        let miner = tester.header.coinbase
-        let touchedAccounts = [miner]
-        for account in touchedAccounts:
-          debug "state clearing", account
-          if db.accountExists(account) and db.isEmptyAccount(account):
-            db.deleteAccount(account)
-
-    return
-
   gasUsed = tester.tx.processTransaction(sender, vmState, tester.fork)
 
   # This is necessary due to the manner in which the state tests are
