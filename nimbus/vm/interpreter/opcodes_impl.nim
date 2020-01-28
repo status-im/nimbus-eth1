@@ -444,13 +444,14 @@ template sstoreImpl(c: Computation, slot, newValue: Uint256) =
   c.vmState.mutateStateDB:
     db.setStorage(c.msg.contractAddress, slot, newValue)
 
-template sstoreEvmc(c: Computation, slot, newValue: Uint256) =
-  let
-    status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
-    gasParam = GasParams(kind: Op.Sstore, s_status: status)
-    gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0]
+when evmc_enabled:
+  template sstoreEvmc(c: Computation, slot, newValue: Uint256) =
+    let
+      status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
+      gasParam = GasParams(kind: Op.Sstore, s_status: status)
+      gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0]
 
-  c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue}")
+    c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue}")
 
 op sstore, inline = false, slot, newValue:
   ## 0x55, Save word to storage.
