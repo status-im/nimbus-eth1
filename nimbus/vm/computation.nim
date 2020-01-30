@@ -179,12 +179,6 @@ template isError*(c: Computation): bool =
 func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
-func output*(c: Computation): seq[byte] =
-  c.rawOutput
-
-func `output=`*(c: Computation, value: openarray[byte]) =
-  c.rawOutput = @value
-
 proc isSuicided*(c: Computation, address: EthAddress): bool =
   result = address in c.suicides
 

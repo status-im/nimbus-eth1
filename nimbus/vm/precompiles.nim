@@ -103,8 +103,8 @@ proc ecRecover*(computation: Computation) =
   if sig.recoverSignatureKey(msgHash, pubKey) != EthKeysStatus.Success:
     raise newException(ValidationError, "Could not derive public key from computation")
 
-  computation.rawOutput.setLen(32)
-  computation.rawOutput[12..31] = pubKey.toCanonicalAddress()
+  computation.output.setLen(32)
+  computation.output[12..31] = pubKey.toCanonicalAddress()
   trace "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
 
 proc sha256*(computation: Computation) =
@@ -113,8 +113,8 @@ proc sha256*(computation: Computation) =
     gasFee = GasSHA256 + wordCount * GasSHA256Word
 
   computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  computation.rawOutput = @(nimcrypto.sha_256.digest(computation.msg.data).data)
-  trace "SHA256 precompile", output = computation.rawOutput.toHex
+  computation.output = @(nimcrypto.sha_256.digest(computation.msg.data).data)
+  trace "SHA256 precompile", output = computation.output.toHex
 
 proc ripemd160*(computation: Computation) =
   let
@@ -122,9 +122,9 @@ proc ripemd160*(computation: Computation) =
     gasFee = GasRIPEMD160 + wordCount * GasRIPEMD160Word
 
   computation.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
-  computation.rawOutput.setLen(32)
-  computation.rawOutput[12..31] = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
-  trace "RIPEMD160 precompile", output = computation.rawOutput.toHex
+  computation.output.setLen(32)
+  computation.output[12..31] = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
+  trace "RIPEMD160 precompile", output = computation.output.toHex
 
 proc identity*(computation: Computation) =
   let
@@ -132,8 +132,8 @@ proc identity*(computation: Computation) =
     gasFee = GasIdentity + wordCount * GasIdentityWord
 
   computation.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
-  computation.rawOutput = computation.msg.data
-  trace "Identity precompile", output = computation.rawOutput.toHex
+  computation.output = computation.msg.data
+  trace "Identity precompile", output = computation.output.toHex
 
 proc modExpInternal(computation: Computation, base_len, exp_len, mod_len: int, T: type StUint) =
   template rawMsg: untyped {.dirty.} =
@@ -203,10 +203,10 @@ proc modExpInternal(computation: Computation, base_len, exp_len, mod_len: int, T
     # maximum output len is the same as mod_len
     # if it less than mod_len, it will be zero padded at left
     if output.len >= mod_len:
-      computation.rawOutput = @(output[^mod_len..^1])
+      computation.output = @(output[^mod_len..^1])
     else:
-      computation.rawOutput = newSeq[byte](mod_len)
-      computation.rawOutput[^output.len..^1] = output[0..^1]
+      computation.output = newSeq[byte](mod_len)
+      computation.output[^output.len..^1] = output[0..^1]
 
 proc modExp*(computation: Computation) =
   ## Modular exponentiation precompiled contract
@@ -256,7 +256,7 @@ proc bn256ecAdd*(computation: Computation, fork: Fork = FkByzantium) =
     # we can discard here because we supply proper buffer
     discard apo.get().toBytes(output)
 
-  computation.rawOutput = @output
+  computation.output = @output
 
 proc bn256ecMul*(computation: Computation, fork: Fork = FkByzantium) =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
@@ -279,7 +279,7 @@ proc bn256ecMul*(computation: Computation, fork: Fork = FkByzantium) =
     # we can discard here because we supply buffer of proper size
     discard apo.get().toBytes(output)
 
-  computation.rawOutput = @output
+  computation.output = @output
 
 proc bn256ecPairing*(computation: Computation, fork: Fork = FkByzantium) =
   let msglen = len(computation.msg.data)
@@ -316,7 +316,7 @@ proc bn256ecPairing*(computation: Computation, fork: Fork = FkByzantium) =
       # we can discard here because we supply buffer of proper size
       discard BNU256.one().toBytes(output)
 
-  computation.rawOutput = @output
+  computation.output = @output
 
 proc blake2bf*(computation: Computation) =
   template input(): untyped =
@@ -330,7 +330,7 @@ proc blake2bf*(computation: Computation) =
   if not blake2b_F(input, output):
     raise newException(ValidationError, "Blake2b F function invalid input")
   else:
-    computation.rawOutput = @output
+    computation.output = @output
 
 proc getMaxPrecompileAddr(fork: Fork): PrecompileAddresses =
   if fork < FkByzantium: paIdentity

@@ -70,7 +70,7 @@ type
     stack*:                 Stack
     gasMeter*:              GasMeter
     code*:                  CodeStream
-    rawOutput*:             seq[byte]
+    output*:                seq[byte]
     returnData*:            seq[byte]
     error*:                 Error
     touchedAccounts*:       HashSet[EthAddress]
