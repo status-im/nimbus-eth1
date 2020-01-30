@@ -561,7 +561,8 @@ proc canTransfer(c: Computation, memPos, memLen: int, value: Uint256, opCode: st
 
   c.gasMeter.consumeGas(gasCost, reason = reason)
   c.memory.extend(memPos, memLen)
-
+  c.returnData.setLen(0)
+  
   # the sender is childmsg sender, not parent msg sender
   # perhaps we need to move this code somewhere else
   # to avoid confusion

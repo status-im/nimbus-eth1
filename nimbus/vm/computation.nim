@@ -293,14 +293,9 @@ proc addChildComputation*(c, child: Computation) =
         child.vmState.touchedAccounts.incl child.msg.contractAddress
 
   if child.isError:
-    if child.shouldBurnGas:
-      c.returnData = @[]
-    else:
-      c.returnData = child.output
+    c.returnData = child.output
   else:
-    if child.msg.isCreate:
-      c.returnData = @[]
-    else:
+    if not child.msg.isCreate:
       c.returnData = child.output
       child.touchedAccounts.incl child.msg.contractAddress
     c.logEntries.add child.logEntries
