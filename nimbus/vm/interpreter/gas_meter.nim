@@ -13,8 +13,7 @@ logScope:
   topics = "vm gas"
 
 proc init*(m: var GasMeter, startGas: GasInt) =
-  m.startGas = startGas
-  m.gasRemaining = m.startGas
+  m.gasRemaining = startGas
   m.gasRefunded = 0
 
 proc consumeGas*(gasMeter: var GasMeter; amount: GasInt; reason: string) =
@@ -31,7 +30,3 @@ proc returnGas*(gasMeter: var GasMeter; amount: GasInt) =
 proc refundGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.gasRefunded += amount
   trace "GAS REFUND", consumed = gasMeter.gasRemaining - amount, amount, refunded = gasMeter.gasRefunded
-
-proc resetGas*(gasMeter: var GasMeter) =
-  gasMeter.gasRemaining = gasMeter.startGas
-  gasMeter.gasRefunded = 0

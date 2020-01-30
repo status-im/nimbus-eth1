@@ -90,7 +90,6 @@ type
 
   GasMeter* = object
     gasRefunded*: GasInt
-    startGas*: GasInt
     gasRemaining*: GasInt
 
   CallKind* = enum
