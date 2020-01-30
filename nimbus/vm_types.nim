@@ -35,7 +35,6 @@ type
     txGasPrice*    : GasInt
     gasCosts*      : GasCosts
     fork*          : Fork
-    gasCost*       : Uint256
 
   AccessLogs* = ref object
     reads*: Table[string, string]

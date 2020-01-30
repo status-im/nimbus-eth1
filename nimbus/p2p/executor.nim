@@ -18,7 +18,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     gasUsed = tx.gasLimit
     var c = setupComputation(vmState, tx, sender, fork)
     vmState.mutateStateDB:
-      db.subBalance(sender, vmState.gasCost)
+      db.subBalance(sender, tx.gasLimit.u256 * tx.gasPrice.u256)
     execComputation(c)
     if not c.shouldBurnGas:
       gasUsed = c.refundGas(tx, sender)
