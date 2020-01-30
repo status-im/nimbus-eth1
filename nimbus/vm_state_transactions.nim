@@ -82,8 +82,8 @@ proc execComputation*(c: Computation) =
 
   if c.isSuccess:
     c.refundSelfDestruct()
-    c.vmState.suicides = c.getSuicides()
-    c.vmState.addLogs(c.logEntries)
+    shallowCopy(c.vmState.suicides, c.suicides)
+    shallowCopy(c.vmState.logEntries, c.logEntries)
 
   c.vmstate.status = c.isSuccess
 

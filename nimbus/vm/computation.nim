@@ -337,25 +337,9 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
 proc addLogEntry*(c: Computation, log: Log) {.inline.} =
   c.logEntries.add(log)
 
-proc getSuicides*(c: Computation): HashSet[EthAddress] =
-  if c.isSuccess:
-    result = c.suicides
-
 proc getGasRefund*(c: Computation): GasInt =
   if c.isSuccess:
     result = c.gasMeter.gasRefunded
-
-proc getGasUsed*(c: Computation): GasInt =
-  if c.shouldBurnGas:
-    result = c.msg.gas
-  else:
-    result = max(0, c.msg.gas - c.gasMeter.gasRemaining)
-
-proc getGasRemaining*(c: Computation): GasInt =
-  if c.shouldBurnGas:
-    result = 0
-  else:
-    result = c.gasMeter.gasRemaining
 
 proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
