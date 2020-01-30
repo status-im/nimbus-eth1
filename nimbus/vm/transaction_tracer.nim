@@ -108,7 +108,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: Computation, op: Op, la
   j["gasCost"] = %(gasRemaining - c.gasMeter.gasRemaining)
 
   if op in {Return, Revert}:
-    let returnValue = %("0x" & toHex(c.rawOutput, true))
+    let returnValue = %("0x" & toHex(c.output, true))
     j["returnValue"] = returnValue
     tracer.trace["returnValue"] = returnValue
 
