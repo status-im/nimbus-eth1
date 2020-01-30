@@ -12,9 +12,7 @@ import
   ./vm/[computation, interpreter]
 
 proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork): bool =
-  let
-    account = vmState.readOnlyStateDB.getAccount(sender)
-    gasLimit = tx.gasLimit.u256
+  let account = vmState.readOnlyStateDB.getAccount(sender)
 
   if vmState.cumulativeGasUsed + tx.gasLimit > vmState.blockHeader.gasLimit:
     debug "invalid tx: block header gasLimit reached",
@@ -23,8 +21,7 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddr
       addition=tx.gasLimit
     return
 
-  vmState.gasCost = gasLimit * tx.gasPrice.u256
-  let totalCost = vmState.gasCost + tx.value
+  let totalCost = tx.gasLimit.u256 * tx.gasPrice.u256 + tx.value
   if totalCost > account.balance:
     debug "invalid tx: not enough cash",
       available=account.balance,
