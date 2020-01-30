@@ -13,21 +13,22 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
-  var gasUsed = 0.GasInt
   if validateTransaction(vmState, tx, sender, fork):
-    gasUsed = tx.gasLimit
     var c = setupComputation(vmState, tx, sender, fork)
     vmState.mutateStateDB:
       db.subBalance(sender, tx.gasLimit.u256 * tx.gasPrice.u256)
     execComputation(c)
-    if not c.shouldBurnGas:
-      gasUsed = c.refundGas(tx, sender)
 
-  vmState.cumulativeGasUsed += gasUsed
+    result = tx.gasLimit
+    if not c.shouldBurnGas:
+      c.refundGas(tx, sender)
+      result -= c.gasMeter.gasRemaining
+
+  vmState.cumulativeGasUsed += result
 
   vmState.mutateStateDB:
     # miner fee
-    let txFee = gasUsed.u256 * tx.gasPrice.u256
+    let txFee = result.u256 * tx.gasPrice.u256
     db.addBalance(vmState.blockHeader.coinbase, txFee)
 
     for deletedAccount in vmState.suicides:
@@ -42,7 +43,6 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
           db.deleteAccount(account)
 
   vmState.accountDb.updateOriginalRoot()
-  result = gasUsed
 
 type
   # TODO: these types need to be removed

@@ -84,17 +84,11 @@ proc execComputation*(c: Computation) =
 
   c.vmstate.status = c.isSuccess
 
-proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress): GasInt =
-  let
-    gasRemaining = c.gasMeter.gasRemaining
-    gasRefunded = c.getGasRefund()
-    gasUsed = tx.gasLimit - gasRemaining
-    gasRefund = min(gasRefunded, gasUsed div 2)
-
+proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
+  let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
+  c.gasMeter.returnGas min(c.getGasRefund(), maxRefund)
   c.vmState.mutateStateDB:
-    db.addBalance(sender, (gasRemaining + gasRefund).u256 * tx.gasPrice.u256)
-
-  result = gasUsed - gasRefund
+    db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)
 
 #[
 method executeTransaction(vmState: BaseVMState, transaction: Transaction): (Computation, BlockHeader) {.base.}=
