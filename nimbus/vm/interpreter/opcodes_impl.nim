@@ -641,13 +641,10 @@ template genCreate(callName: untyped, opCode: Op): untyped =
 genCreate(create, Create)
 genCreate(create2, Create2)
 
-proc callParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc callParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
   let codeAddress = c.stack.popAddress()
-
-  let (value,
-       memoryInputStartPosition, memoryInputSize,
-       memoryOutputStartPosition, memoryOutputSize) = c.stack.popInt(5)
+  let value = c.stack.popInt()
 
   result = (gas,
     value,
@@ -655,19 +652,16 @@ proc callParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthA
     c.msg.contractAddress, # sender
     codeAddress,
     evmcCall,
-    memoryInputStartPosition,
-    memoryInputSize,
-    memoryOutputStartPosition,
-    memoryOutputSize,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
     c.msg.flags)
 
-proc callCodeParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc callCodeParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
   let codeAddress = c.stack.popAddress()
-
-  let (value,
-       memoryInputStartPosition, memoryInputSize,
-       memoryOutputStartPosition, memoryOutputSize) = c.stack.popInt(5)
+  let value = c.stack.popInt()
 
   result = (gas,
     value,
@@ -675,18 +669,15 @@ proc callCodeParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, 
     c.msg.contractAddress, # sender
     codeAddress,
     evmcCallCode,
-    memoryInputStartPosition,
-    memoryInputSize,
-    memoryOutputStartPosition,
-    memoryOutputSize,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
     c.msg.flags)
 
-proc delegateCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc delegateCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
   let codeAddress = c.stack.popAddress()
-
-  let (memoryInputStartPosition, memoryInputSize,
-       memoryOutputStartPosition, memoryOutputSize) = c.stack.popInt(4)
 
   result = (gas,
     c.msg.value, # value
@@ -694,18 +685,15 @@ proc delegateCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddre
     c.msg.sender, # sender
     codeAddress,
     evmcDelegateCall,
-    memoryInputStartPosition,
-    memoryInputSize,
-    memoryOutputStartPosition,
-    memoryOutputSize,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
     c.msg.flags)
 
-proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, UInt256, UInt256, UInt256, UInt256, MsgFlags) =
+proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
   let codeAddress = c.stack.popAddress()
-
-  let (memoryInputStartPosition, memoryInputSize,
-       memoryOutputStartPosition, memoryOutputSize) = c.stack.popInt(4)
 
   result = (gas,
     0.u256, # value
@@ -713,21 +701,19 @@ proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress
     c.msg.contractAddress, # sender
     codeAddress,
     evmcCall,
-    memoryInputStartPosition,
-    memoryInputSize,
-    memoryOutputStartPosition,
-    memoryOutputSize,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
+    c.stack.popInt().cleanMemRef,
     emvcStatic) # is_static
 
 template genCall(callName: untyped, opCode: Op): untyped =
   proc `callName Setup`(c: Computation, callNameStr: string): Computation =
     let (gas, value, contractAddress, sender,
           codeAddress, callKind,
-          memoryInputStartPosition, memoryInputSize,
-          memoryOutputStartPosition, memoryOutputSize,
+          memInPos, memInLen,
+          memOutPos, memOutLen,
           flags) = `callName Params`(c)
-
-    let (memInPos, memInLen, memOutPos, memOutLen) = (memoryInputStartPosition.cleanMemRef, memoryInputSize.cleanMemRef, memoryOutputStartPosition.cleanMemRef, memoryOutputSize.cleanMemRef)
 
     let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
                                     (memInPos, memInLen)
