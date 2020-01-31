@@ -5,8 +5,8 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-proc hostReleaseResultImpl(result: var evmc_result) {.cdecl.} =
-  discard
+proc hostReleaseResultImpl(res: var nimbus_result) {.cdecl, gcsafe.} =
+  dealloc(res.output_data)
 
 proc hostGetTxContextImpl(ctx: Computation): nimbus_tx_context {.cdecl.} =
   let vmstate = ctx.vmState
@@ -123,8 +123,45 @@ proc hostEmitLogImpl(ctx: Computation, address: EthAddress,
   log.address = address
   ctx.addLogEntry(log)
 
-proc hostCallImpl(ctx: Computation, msg: var evmc_message): evmc_result {.cdecl.} =
+template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
+  # TODO: use evmc_message to evoid copy
+  var childMsg = Message(
+    kind: CallKind(m.kind.ord),
+    depth: m.depth,
+    gas: m.gas,
+    sender: m.sender,
+    value: Uint256.fromEvmc(m.value)
+    )
+  if m.input_size.int > 0:
+    childMsg.data = newSeq[byte](m.input_size.int)
+    copyMem(childMsg.data[0].addr, m.input_data, m.input_size.int)
+
+  let child = newComputation(c.vmState, childMsg, Uint256.fromEvmc(m.create2_salt))
+  child.execCreate()
+
+  if not child.shouldBurnGas:
+    res.gas_left = child.gasMeter.gasRemaining
+
+  if child.isSuccess:
+    c.merge(child)
+    res.status_code = EVMC_SUCCESS
+    res.create_address = child.msg.contractAddress
+  else:
+    res.status_code = if child.shouldBurnGas: EVMC_FAILURE else: EVMC_REVERT
+    if child.output.len > 0:
+      res.output_size = child.output.len.uint
+      res.output_data = cast[ptr byte](alloc(child.output.len))
+      copyMem(res.output_data, child.output[0].addr, child.output.len)
+      res.release = hostReleaseResultImpl
+
+template callImpl(c: Computation, msg: nimbus_message, res: nimbus_result) =
   discard
+
+proc hostCallImpl(ctx: Computation, msg: var nimbus_message): nimbus_result {.cdecl.} =
+  if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
+    createImpl(ctx, msg, result)
+  else:
+    callImpl(ctx, msg, result)
 
 proc initHostInterface(): evmc_host_interface =
   result.account_exists = cast[evmc_account_exists_fn](hostAccountExistsImpl)

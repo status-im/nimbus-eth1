@@ -15,7 +15,7 @@ import
   ../../db/[db_chain, state_db]
 
 when defined(evmc_enabled):
-  import  ../evmc_api, ../evmc_helpers
+  import  ../evmc_api, ../evmc_helpers, evmc/evmc
 
 logScope:
   topics = "opcode impl"
@@ -546,87 +546,97 @@ genLog()
 
 # ##########################################
 # f0s: System operations.
-
-proc canTransfer(c: Computation, memPos, memLen: int, value: Uint256, opCode: static[Op]): bool =
-  let gasParams = GasParams(kind: Create,
-    cr_currentMemSize: c.memory.len,
-    cr_memOffset: memPos,
-    cr_memLength: memLen
-    )
-  var gasCost = c.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
-  let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
-
-  when opCode == Create2:
-    gasCost = gasCost + c.gasCosts[Create2].m_handler(0, 0, memLen)
-
-  c.gasMeter.consumeGas(gasCost, reason = reason)
-  c.memory.extend(memPos, memLen)
-  c.returnData.setLen(0)
-  
-  # the sender is childmsg sender, not parent msg sender
-  # perhaps we need to move this code somewhere else
-  # to avoid confusion
-  let senderBalance = c.getBalance(c.msg.contractAddress)
-
-  if senderBalance < value:
-    debug "Computation Failure", reason = "Insufficient funds available to transfer", required = c.msg.value, balance = senderBalance
-    return false
-
-  if c.msg.depth >= MaxCallDepth:
-    debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = c.msg.depth
-    return false
-
-  result = true
-
-proc setupCreate(c: Computation, memPos, len: int, value: Uint256, opCode: static[Op]): Computation =
-  var createMsgGas = c.gasMeter.gasRemaining
-  if c.fork >= FkTangerine:
-    createMsgGas -= createMsgGas div 64
-
-  # Consume gas here that will be passed to child
-  c.gasMeter.consumeGas(createMsgGas, reason="CREATE")
-
-  when opCode == Create:
-    const callKind = evmcCreate
-  else:
-    const callKind = evmcCreate2
-
-  let childMsg = Message(
-    kind: callKind,
-    depth: c.msg.depth + 1,
-    gas: createMsgGas,
-    sender: c.msg.contractAddress,
-    value: value,
-    data: c.memory.read(memPos, len)
-    )
-
-  when opCode == Create:
-    result = newComputation(c.vmState, childMsg)
-  else:
-    result = newComputation(c.vmState, childMsg, c.stack.popInt().some)
-
 template genCreate(callName: untyped, opCode: Op): untyped =
-  op callName, inline = false, val, startPosition, size:
-    ## 0xf0, Create a new account with associated code.
+  op callName, inline = false:
     checkInStaticContext(c)
+    let
+      endowment = c.stack.popInt()
+      memPos = c.stack.popInt().safeInt
 
-    let (memPos, len) = (startPosition.safeInt, size.safeInt)
-    if not c.canTransfer(memPos, len, val, opCode):
-      push: 0
+    when opCode == Create:
+      const callKind = evmcCreate
+      let memLen {.inject.} = c.stack.peekInt().safeInt
+      let salt = 0.u256
+    else:
+      const callKind = evmcCreate2
+      let memLen {.inject.} = c.stack.popInt().safeInt
+      let salt = c.stack.peekInt()
+
+    c.stack.top(0)
+
+    let gasParams = GasParams(kind: Create,
+      cr_currentMemSize: c.memory.len,
+      cr_memOffset: memPos,
+      cr_memLength: memLen
+    )
+    var gasCost = c.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
+    when opCode == Create2:
+      gasCost = gasCost + c.gasCosts[Create2].m_handler(0, 0, memLen)
+
+    let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
+    c.gasMeter.consumeGas(gasCost, reason = reason)
+    c.memory.extend(memPos, memLen)
+    c.returnData.setLen(0)
+
+    if c.msg.depth >= MaxCallDepth:
+      debug "Computation Failure", reason = "Stack too deep", maxDepth = MaxCallDepth, depth = c.msg.depth
       return
 
-    var child = setupCreate(c, memPos, len, val, opCode)
-    if child.isNil: return
+    if endowment != 0:
+      let senderBalance = c.getBalance(c.msg.contractAddress)
+      if senderBalance < endowment:
+        debug "Computation Failure", reason = "Insufficient funds available to transfer", required = endowment, balance = senderBalance
+        return
 
-    continuation(child):
-      addChildComputation(c, child)
+    var createMsgGas = c.gasMeter.gasRemaining
+    if c.fork >= FkTangerine:
+      createMsgGas -= createMsgGas div 64
+    c.gasMeter.consumeGas(createMsgGas, reason="CREATE")
 
-      if child.isError:
-        push: 0
+    when evmc_enabled:
+      let msg = nimbus_message(
+        kind: callKind.evmc_call_kind,
+        depth: (c.msg.depth + 1).int32,
+        gas: createMsgGas,
+        sender: c.msg.contractAddress,
+        input_data: c.memory.readPtr(memPos),
+        input_size: memLen.uint,
+        value: toEvmc(endowment),
+        create2_salt: toEvmc(salt)
+      )
+
+      var res = c.host.call(msg)
+      if res.output_size.int > 0:
+        c.returnData = newSeq[byte](res.output_size.int)
+        copyMem(c.returnData[0].addr, res.output_data, c.returnData.len)
+
+      c.gasMeter.returnGas(res.gas_left)
+
+      if res.status_code == EVMC_SUCCESS:
+        c.stack.top(res.create_address)
+
+      if not res.release.isNil:
+        res.release(res)
+    else:
+      let childMsg = Message(
+        kind: callKind,
+        depth: c.msg.depth + 1,
+        gas: createMsgGas,
+        sender: c.msg.contractAddress,
+        value: endowment,
+        data: c.memory.read(memPos, memLen)
+        )
+
+      var child = newComputation(c.vmState, childMsg, salt)
+      child.execCreate()
+      if not child.shouldBurnGas:
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+
+      if child.isSuccess:
+        c.merge(child)
+        c.stack.top child.msg.contractAddress
       else:
-        push: child.msg.contractAddress
-
-    child.applyMessage(Create)
+        c.returnData = child.output
 
 genCreate(create, Create)
 genCreate(create2, Create2)
