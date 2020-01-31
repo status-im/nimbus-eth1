@@ -126,3 +126,10 @@ proc `$`*(stack: Stack): string =
 proc `[]`*(stack: Stack, i: BackwardsIndex, T: typedesc): T =
   # This should be used only for tracer/test/debugging
   fromStackElement(stack.values[i], result)
+
+proc peekInt*(stack: Stack): UInt256 =
+  ensurePop(stack, 1)
+  fromStackElement(stack.values[^1], result)
+  
+proc top*(stack: Stack, value: uint | int | GasInt | UInt256 | EthAddress | Hash256) {.inline.} =
+  toStackElement(value, stack.values[^1])

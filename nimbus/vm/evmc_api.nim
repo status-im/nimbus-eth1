@@ -26,6 +26,27 @@ type
     block_difficulty*: evmc_uint256be # The block difficulty.
     chain_id*        : evmc_uint256be # The blockchain's ChainID.
 
+  nimbus_message* = object
+    kind*: evmc_call_kind
+    flags*: uint32
+    depth*: int32
+    gas*: int64
+    destination*: EthAddress
+    sender*: EthAddress
+    input_data*: ptr byte
+    input_size*: uint
+    value*: evmc_uint256be
+    create2_salt*: evmc_bytes32
+
+  nimbus_result* = object
+    status_code*: evmc_status_code
+    gas_left*: int64
+    output_data*: ptr byte
+    output_size*: uint
+    release*: proc(result: var nimbus_result) {.cdecl, gcsafe.}
+    create_address*: EthAddress
+    padding*: array[4, byte]
+
   nimbus_host_interface* = object
     account_exists*: proc(context: evmc_host_context, address: EthAddress): bool {.cdecl, gcsafe.}
     get_storage*: proc(context: evmc_host_context, address: EthAddress, key: ptr evmc_uint256be): evmc_uint256be {.cdecl, gcsafe.}
@@ -38,7 +59,7 @@ type
                      code_offset: int, buffer_data: ptr byte,
                      buffer_size: int): int {.cdecl, gcsafe.}
     selfdestruct*: proc(context: evmc_host_context, address, beneficiary: EthAddress) {.cdecl, gcsafe.}
-    call*: proc(context: evmc_host_context, msg: ptr evmc_message): evmc_result {.cdecl, gcsafe.}
+    call*: proc(context: evmc_host_context, msg: ptr nimbus_message): nimbus_result {.cdecl, gcsafe.}
     get_tx_context*: proc(context: evmc_host_context): nimbus_tx_context {.cdecl, gcsafe.}
     get_block_hash*: proc(context: evmc_host_context, number: int64): Hash256 {.cdecl, gcsafe.}
     emit_log*: proc(context: evmc_host_context, address: EthAddress,
@@ -114,7 +135,7 @@ proc emitLog*(ctx: HostContext, address: EthAddress, data: openArray[byte],
   ctx.host.emit_log(ctx.context, address, if data.len > 0: data[0].unsafeAddr else: nil,
                     data.len.uint, topics, topicsCount.uint)
 
-proc call*(ctx: HostContext, msg: evmc_message): evmc_result {.inline.} =
+proc call*(ctx: HostContext, msg: nimbus_message): nimbus_result {.inline.} =
   ctx.host.call(ctx.context, msg.unsafeAddr)
 
 #proc vmHost*(vmState: BaseVMState, gasPrice: GasInt, origin: EthAddress): HostContext =

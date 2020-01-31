@@ -126,14 +126,14 @@ template getCode*(c: Computation, address: EthAddress): ByteRange =
   else:
     c.vmState.readOnlyStateDB.getCode(address)
 
-proc generateContractAddress(c: Computation, salt: Option[Uint256]): EthAddress =
+proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
   if c.msg.kind == evmcCreate:
     let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
     result = generateAddress(c.msg.sender, creationNonce)
   else:
-    result = generateSafeAddress(c.msg.sender, salt.get(), c.msg.data)
+    result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
 
-proc newComputation*(vmState: BaseVMState, message: Message, salt=none(Uint256)): Computation =
+proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Computation =
   new result
   result.vmState = vmState
   result.msg = message
@@ -305,6 +305,46 @@ proc addChildComputation*(c, child: Computation) =
 
   if not child.shouldBurnGas:
     c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+
+proc execCreate*(c: Computation) =
+  c.vmState.mutateStateDB:
+    db.incNonce(c.msg.sender)
+
+  c.snapshot()
+  defer:
+    c.dispose()
+
+  if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
+    c.setError("Address collision when creating contract address={c.msg.contractAddress.toHex}", true)
+    c.rollback()
+    return
+
+  c.vmState.mutateStateDb:
+    db.subBalance(c.msg.sender, c.msg.value)
+    db.addBalance(c.msg.contractAddress, c.msg.value)
+    db.clearStorage(c.msg.contractAddress)
+    if c.fork >= FkSpurious:
+      # EIP161 nonce incrementation
+      db.incNonce(c.msg.contractAddress)
+
+  executeOpcodes(c)
+
+  if c.isSuccess:
+    let fork = c.fork
+    let contractFailed = not c.writeContract(fork)
+    if contractFailed and fork >= FkHomestead:
+      c.setError(&"writeContract failed, depth={c.msg.depth}", true)
+
+  if c.isSuccess:
+    c.commit()
+  else:
+    c.rollback()
+
+proc merge*(c, child: Computation) =
+  c.logEntries.add child.logEntries
+  c.gasMeter.refundGas(child.gasMeter.gasRefunded)
+  c.suicides.incl child.suicides
+  c.touchedAccounts.incl child.touchedAccounts
 
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
   c.vmState.mutateStateDB:
