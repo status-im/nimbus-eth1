@@ -306,6 +306,23 @@ proc addChildComputation*(c, child: Computation) =
   if not child.shouldBurnGas:
     c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
+proc execCall*(c: Computation) =
+  c.snapshot()
+  defer:
+    c.dispose()
+
+  if c.msg.kind == evmcCall:
+    c.vmState.mutateStateDb:
+      db.subBalance(c.msg.sender, c.msg.value)
+      db.addBalance(c.msg.contractAddress, c.msg.value)
+
+  executeOpcodes(c)
+
+  if c.isSuccess:
+    c.commit()
+  else:
+    c.rollback()
+
 proc execCreate*(c: Computation) =
   c.vmState.mutateStateDB:
     db.incNonce(c.msg.sender)
