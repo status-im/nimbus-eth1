@@ -48,8 +48,8 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
       computation = newComputation(vmState, message)
     echo "Running ", action.astToStr, " - ", test["name"]
     `action`(computation)
-    let c = computation.rawOutput == expected
-    if not c: echo "Output  : " & computation.rawOutput.toHex & "\nExpected: " & expected.toHex
+    let c = computation.output == expected
+    if not c: echo "Output  : " & computation.output.toHex & "\nExpected: " & expected.toHex
     check c
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
