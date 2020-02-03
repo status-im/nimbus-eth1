@@ -641,16 +641,15 @@ template genCreate(callName: untyped, opCode: Op): untyped =
 genCreate(create, Create)
 genCreate(create2, Create2)
 
-proc callParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
+proc callParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
-  let codeAddress = c.stack.popAddress()
+  let destination = c.stack.popAddress()
   let value = c.stack.popInt()
 
   result = (gas,
     value,
-    codeAddress, # contractAddress
+    destination,
     c.msg.contractAddress, # sender
-    codeAddress,
     evmcCall,
     c.stack.popInt().cleanMemRef,
     c.stack.popInt().cleanMemRef,
@@ -658,16 +657,15 @@ proc callParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthA
     c.stack.popInt().cleanMemRef,
     c.msg.flags)
 
-proc callCodeParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
+proc callCodeParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
-  let codeAddress = c.stack.popAddress()
+  let destination = c.stack.popAddress()
   let value = c.stack.popInt()
 
   result = (gas,
     value,
-    c.msg.contractAddress, # contractAddress
+    destination,
     c.msg.contractAddress, # sender
-    codeAddress,
     evmcCallCode,
     c.stack.popInt().cleanMemRef,
     c.stack.popInt().cleanMemRef,
@@ -675,15 +673,14 @@ proc callCodeParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, 
     c.stack.popInt().cleanMemRef,
     c.msg.flags)
 
-proc delegateCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
+proc delegateCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
-  let codeAddress = c.stack.popAddress()
+  let destination = c.stack.popAddress()
 
   result = (gas,
     c.msg.value, # value
-    c.msg.contractAddress, # contractAddress
+    destination,
     c.msg.sender, # sender
-    codeAddress,
     evmcDelegateCall,
     c.stack.popInt().cleanMemRef,
     c.stack.popInt().cleanMemRef,
@@ -691,15 +688,14 @@ proc delegateCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddre
     c.stack.popInt().cleanMemRef,
     c.msg.flags)
 
-proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
+proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
-  let codeAddress = c.stack.popAddress()
+  let destination = c.stack.popAddress()
 
   result = (gas,
     0.u256, # value
-    codeAddress, # contractAddress
+    destination,
     c.msg.contractAddress, # sender
-    codeAddress,
     evmcCall,
     c.stack.popInt().cleanMemRef,
     c.stack.popInt().cleanMemRef,
@@ -709,17 +705,16 @@ proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress
 
 template genCall(callName: untyped, opCode: Op): untyped =
   proc `callName Setup`(c: Computation, callNameStr: string): Computation =
-    let (gas, value, contractAddress, sender,
-          codeAddress, callKind,
-          memInPos, memInLen,
-          memOutPos, memOutLen,
-          flags) = `callName Params`(c)
+    let (gas, value, destination, sender, callKind,
+         memInPos, memInLen, memOutPos, memOutLen,
+         flags) = `callName Params`(c)
 
     let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
                                     (memInPos, memInLen)
                                  else:
                                     (memOutPos, memOutLen)
 
+    let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
     let (childGasFee, childGasLimit) = c.gasCosts[opCode].c_handler(
       value,
       GasParams(kind: opCode,
@@ -762,7 +757,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       gas: childGasLimit,
       sender: sender,
       contractAddress: contractAddress,
-      codeAddress: codeAddress,
+      codeAddress: destination,
       value: value,
       data: c.memory.read(memInPos, memInLen),
       flags: flags)
@@ -804,10 +799,99 @@ template genCall(callName: untyped, opCode: Op): untyped =
 
     child.applyMessage(opCode)
 
-genCall(call, Call)
-genCall(callCode, CallCode)
-genCall(delegateCall, DelegateCall)
-genCall(staticCall, StaticCall)
+template genCallEvmc(callName: untyped, opCode: Op): untyped =
+  op callName, inline = false:
+    when opCode == Call:
+      if emvcStatic == c.msg.flags and c.stack[^3, Uint256] > 0.u256:
+        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
+
+    let (gas, value, destination, sender, callKind,
+         memInPos, memInLen, memOutPos, memOutLen, flags) = `callName Params`(c)
+
+    push: 0
+
+    let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
+                                    (memInPos, memInLen)
+                                 else:
+                                    (memOutPos, memOutLen)
+
+    let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
+    let (childGasFee, childGasLimit) = c.gasCosts[opCode].c_handler(
+      value,
+      GasParams(kind: opCode,
+                c_isNewAccount: not c.accountExists(contractAddress),
+                c_gasBalance: c.gasMeter.gasRemaining,
+                c_contractGas: gas,
+                c_currentMemSize: c.memory.len,
+                c_memOffset: memOffset,
+                c_memLength: memLength
+      ))
+
+    if childGasFee >= 0:
+      c.gasMeter.consumeGas(childGasFee, reason = $opCode)
+
+    c.returnData.setLen(0)
+
+    if c.msg.depth >= MaxCallDepth:
+      debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = c.msg.depth
+      # return unused gas
+      c.gasMeter.returnGas(childGasLimit)
+      return
+
+    if childGasFee < 0 and childGasLimit <= 0:
+      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callName.astToStr & ")")
+
+    c.memory.extend(memInPos, memInLen)
+    c.memory.extend(memOutPos, memOutLen)
+
+    when opCode in {CallCode, Call}:
+      let senderBalance = c.getBalance(sender)
+      if senderBalance < value:
+        debug "Insufficient funds", available = senderBalance, needed = c.msg.value
+        # return unused gas
+        c.gasMeter.returnGas(childGasLimit)
+        return
+
+    let msg = nimbus_message(
+      kind: callKind.evmc_call_kind,
+      depth: (c.msg.depth + 1).int32,
+      gas: childGasLimit,
+      sender: sender,
+      destination: destination,
+      input_data: c.memory.readPtr(memInPos),
+      input_size: memInLen.uint,
+      value: toEvmc(value),
+      flags: flags.uint32
+    )
+
+    var res = c.host.call(msg)
+    if res.output_size.int > 0:
+      c.returnData = newSeq[byte](res.output_size.int)
+      copyMem(c.returnData[0].addr, res.output_data, c.returnData.len)
+
+    let actualOutputSize = min(memOutLen, c.returnData.len)
+    if actualOutputSize > 0:
+      c.memory.write(memOutPos,
+        c.returnData.toOpenArray(0, actualOutputSize - 1))
+
+    c.gasMeter.returnGas(res.gas_left)
+
+    if res.status_code == EVMC_SUCCESS:
+      c.stack.top(1)
+
+    if not res.release.isNil:
+      res.release(res)
+
+when evmc_enabled:
+  genCallEvmc(call, Call)
+  genCallEvmc(callCode, CallCode)
+  genCallEvmc(delegateCall, DelegateCall)
+  genCallEvmc(staticCall, StaticCall)
+else:
+  genCall(call, Call)
+  genCall(callCode, CallCode)
+  genCall(delegateCall, DelegateCall)
+  genCall(staticCall, StaticCall)
 
 op returnOp, inline = false, startPos, size:
   ## 0xf3, Halt execution returning output data.

@@ -126,7 +126,7 @@ proc hostEmitLogImpl(ctx: Computation, address: EthAddress,
 template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
   # TODO: use evmc_message to evoid copy
   var childMsg = Message(
-    kind: CallKind(m.kind.ord),
+    kind: CallKind(m.kind),
     depth: m.depth,
     gas: m.gas,
     sender: m.sender,
@@ -154,8 +154,44 @@ template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
       copyMem(res.output_data, child.output[0].addr, child.output.len)
       res.release = hostReleaseResultImpl
 
-template callImpl(c: Computation, msg: nimbus_message, res: nimbus_result) =
-  discard
+template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
+  var childMsg = Message(
+    kind: CallKind(m.kind),
+    depth: m.depth,
+    gas: m.gas,
+    sender: m.sender,
+    codeAddress: m.destination,
+    contractAddress: if m.kind == EVMC_CALL: m.destination else: c.msg.contractAddress,
+    value: Uint256.fromEvmc(m.value),
+    flags: MsgFlags(m.flags)
+    )
+
+  if m.input_size.int > 0:
+    childMsg.data = newSeq[byte](m.input_size.int)
+    copyMem(childMsg.data[0].addr, m.input_data, m.input_size.int)
+
+  let child = newComputation(c.vmState, childMsg)
+  child.execCall()
+
+  if child.isError or c.fork == FKIstanbul:
+    if child.msg.contractAddress == ripemdAddr:
+      child.vmState.touchedAccounts.incl child.msg.contractAddress
+
+  if not child.shouldBurnGas:
+    res.gas_left = child.gasMeter.gasRemaining
+
+  if child.isSuccess:
+    c.touchedAccounts.incl child.msg.contractAddress
+    c.merge(child)
+    res.status_code = EVMC_SUCCESS
+  else:
+    res.status_code = if child.shouldBurnGas: EVMC_FAILURE else: EVMC_REVERT
+
+  if child.output.len > 0:
+    res.output_size = child.output.len.uint
+    res.output_data = cast[ptr byte](alloc(child.output.len))
+    copyMem(res.output_data, child.output[0].addr, child.output.len)
+    res.release = hostReleaseResultImpl
 
 proc hostCallImpl(ctx: Computation, msg: var nimbus_message): nimbus_result {.cdecl.} =
   if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
