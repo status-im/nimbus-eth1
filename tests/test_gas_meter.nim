@@ -22,9 +22,11 @@ proc gasMeters: seq[GasMeter] =
 
 macro all(element: untyped, handler: untyped): untyped =
   let name = ident(&"{element.repr}s")
+  let StartGas = ident("StartGas")
   result = quote:
     var res = `name`()
     for `element` in res.mitems:
+      let `StartGas` = `element`.gasRemaining
       `handler`
 
 # @pytest.mark.parametrize("value", (0, 10))
@@ -78,24 +80,27 @@ proc gasMeterMain*() =
     # TODO: -0/+0
     test "consume spends":
       all(gasMeter):
-        check(gasMeter.gasRemaining == gasMeter.startGas)
-        let consume = gasMeter.startGas
+        check(gasMeter.gasRemaining == StartGas)
+        let consume = StartGas
         gasMeter.consumeGas(consume, "0")
-        check(gasMeter.gasRemaining - (gasMeter.startGas - consume) == 0)
+        check(gasMeter.gasRemaining - (StartGas - consume) == 0)
 
     test "consume errors":
       all(gasMeter):
-        check(gasMeter.gasRemaining == gasMeter.startGas)
+        check(gasMeter.gasRemaining == StartGas)
         expect(OutOfGas):
-          gasMeter.consumeGas(gasMeter.startGas + 1, "")
+          gasMeter.consumeGas(StartGas + 1, "")
 
     test "return refund works correctly":
       all(gasMeter):
-        check(gasMeter.gasRemaining == gasMeter.startGas)
+        check(gasMeter.gasRemaining == StartGas)
         check(gasMeter.gasRefunded == 0)
         gasMeter.consumeGas(5, "")
-        check(gasMeter.gasRemaining == gasMeter.startGas - 5)
+        check(gasMeter.gasRemaining == StartGas - 5)
         gasMeter.returnGas(5)
-        check(gasMeter.gasRemaining == gasMeter.startGas)
+        check(gasMeter.gasRemaining == StartGas)
         gasMeter.refundGas(5)
         check(gasMeter.gasRefunded == 5)
+
+when isMainModule:
+  gasMeterMain()
