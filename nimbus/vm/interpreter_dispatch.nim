@@ -350,7 +350,6 @@ proc executeOpcodes(c: Computation) =
     except CatchableError as e:
       c.setError(&"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
 
-  c.nextProc()
   if c.isError():
     if c.tracingEnabled: c.traceError()
     debug "executeOpcodes error", msg=c.error.info
