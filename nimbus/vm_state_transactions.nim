@@ -68,19 +68,17 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
 
 proc execComputation*(c: Computation) =
   if c.msg.isCreate:
-    c.applyMessage(Create)
+    c.execCreate()
   else:
     c.vmState.mutateStateDB:
       db.incNonce(c.msg.sender)
-    c.applyMessage(Call)
-
-  if c.fork >= FkSpurious:
-    c.collectTouchedAccounts()
+    c.execCall()
 
   if c.isSuccess:
     c.refundSelfDestruct()
     shallowCopy(c.vmState.suicides, c.suicides)
     shallowCopy(c.vmState.logEntries, c.logEntries)
+    c.vmState.touchedAccounts.incl c.touchedAccounts
 
   c.vmstate.status = c.isSuccess
 

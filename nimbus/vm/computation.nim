@@ -156,10 +156,6 @@ proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Comp
       cast[evmc_host_context](result)
     )
 
-  # a dummy/terminus continuation proc
-  result.nextProc = proc() =
-    discard
-
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
 
@@ -223,88 +219,9 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
     if fork < FkHomestead or fork >= FkByzantium: c.output = @[]
     result = false
 
-template continuation*(c: Computation, body: untyped) =
-  # this is a helper template to implement continuation
-  # passing and convert all recursion into tail call
-  var tmpNext = c.nextProc
-  c.nextProc = proc() {.gcsafe.} =
-    body
-    tmpNext()
-
 proc initAddress(x: int): EthAddress {.compileTime.} = result[19] = x.byte
-const ripemdAddr* = initAddress(3)
-
-proc postExecuteVM(c: Computation, opCode: static[Op]) {.gcsafe.} =
-  when opCode == Create:
-    if c.isSuccess:
-      let fork = c.fork
-      let contractFailed = not c.writeContract(fork)
-      if contractFailed and fork >= FkHomestead:
-        c.setError(&"writeContract failed, depth={c.msg.depth}", true)
-
-  if c.isSuccess:
-    c.commit()
-  else:
-    c.rollback()
-
+const ripemdAddr = initAddress(3)
 proc executeOpcodes*(c: Computation) {.gcsafe.}
-
-proc applyMessage*(c: Computation, opCode: static[Op]) =
-  when opCode == Create:
-    c.vmState.mutateStateDB:
-      db.incNonce(c.msg.sender)
-
-  c.snapshot()
-  defer:
-    c.dispose()
-
-  when opCode == Create:
-    if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
-      c.setError("Address collision when creating contract address={c.msg.contractAddress.toHex}", true)
-      c.rollback()
-      c.nextProc()
-      return
-
-    c.vmState.mutateStateDb:
-      db.clearStorage(c.msg.contractAddress)
-      if c.fork >= FkSpurious:
-        # EIP161 nonce incrementation
-        db.incNonce(c.msg.contractAddress)
-
-  when opCode in {Call, Create}:
-    c.vmState.mutateStateDb:
-      db.subBalance(c.msg.sender, c.msg.value)
-      db.addBalance(c.msg.contractAddress, c.msg.value)
-
-  if c.gasMeter.gasRemaining < 0:
-    c.commit()
-    c.nextProc()
-    return
-
-  continuation(c):
-    postExecuteVM(c, opCode)
-
-  executeOpcodes(c)
-
-proc addChildComputation*(c, child: Computation) =
-  if child.isError or c.fork == FKIstanbul:
-    if not child.msg.isCreate:
-      if child.msg.contractAddress == ripemdAddr:
-        child.vmState.touchedAccounts.incl child.msg.contractAddress
-
-  if child.isError:
-    c.returnData = child.output
-  else:
-    if not child.msg.isCreate:
-      c.returnData = child.output
-      child.touchedAccounts.incl child.msg.contractAddress
-    c.logEntries.add child.logEntries
-    c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-    c.suicides.incl child.suicides
-    c.touchedAccounts.incl child.touchedAccounts
-
-  if not child.shouldBurnGas:
-    c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
 proc execCall*(c: Computation) =
   c.snapshot()
@@ -318,10 +235,15 @@ proc execCall*(c: Computation) =
 
   executeOpcodes(c)
 
+  ## Collect all of the accounts that *may* need to be deleted based on EIP161
+  ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
+  ## also see: https://github.com/ethereum/EIPs/issues/716
+
   if c.isError or c.fork == FKIstanbul:
     if c.msg.contractAddress == ripemdAddr:
+      # Special case to account for geth+parity bug
       c.vmState.touchedAccounts.incl c.msg.contractAddress
-        
+
   if c.isSuccess:
     c.commit()
     c.touchedAccounts.incl c.msg.contractAddress
@@ -401,22 +323,6 @@ proc getGasRefund*(c: Computation): GasInt =
 proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
   c.gasMeter.refundGas(cost * c.suicides.len)
-
-proc collectTouchedAccounts*(c: Computation) =
-  ## Collect all of the accounts that *may* need to be deleted based on EIP161:
-  ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
-  ## also see: https://github.com/ethereum/EIPs/issues/716
-
-  if c.isSuccess:
-    if not c.msg.isCreate:
-      c.touchedAccounts.incl c.msg.contractAddress
-    c.vmState.touchedAccounts.incl c.touchedAccounts
-  else:
-    if not c.msg.isCreate:
-      # Special case to account for geth+parity bug
-      # https://github.com/ethereum/EIPs/issues/716
-      if c.msg.contractAddress == ripemdAddr:
-        c.vmState.touchedAccounts.incl c.msg.contractAddress
 
 proc tracingEnabled*(c: Computation): bool =
   c.vmState.tracingEnabled
