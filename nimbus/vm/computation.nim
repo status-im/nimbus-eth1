@@ -232,7 +232,7 @@ template continuation*(c: Computation, body: untyped) =
     tmpNext()
 
 proc initAddress(x: int): EthAddress {.compileTime.} = result[19] = x.byte
-const ripemdAddr = initAddress(3)
+const ripemdAddr* = initAddress(3)
 
 proc postExecuteVM(c: Computation, opCode: static[Op]) {.gcsafe.} =
   when opCode == Create:
@@ -318,8 +318,13 @@ proc execCall*(c: Computation) =
 
   executeOpcodes(c)
 
+  if c.isError or c.fork == FKIstanbul:
+    if c.msg.contractAddress == ripemdAddr:
+      c.vmState.touchedAccounts.incl c.msg.contractAddress
+        
   if c.isSuccess:
     c.commit()
+    c.touchedAccounts.incl c.msg.contractAddress
   else:
     c.rollback()
 
