@@ -615,6 +615,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
       if res.status_code == EVMC_SUCCESS:
         c.stack.top(res.create_address)
 
+      # TODO: a good candidate for destructor
       if not res.release.isNil:
         res.release(res)
     else:
@@ -760,126 +761,69 @@ template genCall(callName: untyped, opCode: Op): untyped =
         c.gasMeter.returnGas(childGasLimit)
         return
 
-    var childMsg = Message(
-      kind: callKind,
-      depth: c.msg.depth + 1,
-      gas: childGasLimit,
-      sender: sender,
-      contractAddress: contractAddress,
-      codeAddress: destination,
-      value: value,
-      data: c.memory.read(memInPos, memInLen),
-      flags: flags)
+    when evmc_enabled:
+      let msg = nimbus_message(
+        kind: callKind.evmc_call_kind,
+        depth: (c.msg.depth + 1).int32,
+        gas: childGasLimit,
+        sender: sender,
+        destination: destination,
+        input_data: c.memory.readPtr(memInPos),
+        input_size: memInLen.uint,
+        value: toEvmc(value),
+        flags: flags.uint32
+      )
 
-    var child = newComputation(c.vmState, childMsg)
-    child.execCall()
+      var res = c.host.call(msg)
+      if res.output_size.int > 0:
+        c.returnData = newSeq[byte](res.output_size.int)
+        copyMem(c.returnData[0].addr, res.output_data, c.returnData.len)
 
-    if not child.shouldBurnGas:
-      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      let actualOutputSize = min(memOutLen, c.returnData.len)
+      if actualOutputSize > 0:
+        c.memory.write(memOutPos,
+          c.returnData.toOpenArray(0, actualOutputSize - 1))
 
-    if child.isSuccess:
-      c.merge(child)
-      c.stack.top(1)
+      c.gasMeter.returnGas(res.gas_left)
 
-    c.returnData = child.output
-    let actualOutputSize = min(memOutLen, child.output.len)
-    if actualOutputSize > 0:
-      c.memory.write(memOutPos,
-        child.output.toOpenArray(0, actualOutputSize - 1))
+      if res.status_code == EVMC_SUCCESS:
+        c.stack.top(1)
 
-template genCallEvmc(callName: untyped, opCode: Op): untyped =
-  op callName, inline = false:
-    when opCode == Call:
-      if emvcStatic == c.msg.flags and c.stack[^3, Uint256] > 0.u256:
-        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
+      # TODO: a good candidate for destructor
+      if not res.release.isNil:
+        res.release(res)
+    else:
+      let msg = Message(
+        kind: callKind,
+        depth: c.msg.depth + 1,
+        gas: childGasLimit,
+        sender: sender,
+        contractAddress: contractAddress,
+        codeAddress: destination,
+        value: value,
+        data: c.memory.read(memInPos, memInLen),
+        flags: flags)
 
-    let (gas, value, destination, sender, callKind,
-         memInPos, memInLen, memOutPos, memOutLen, flags) = `callName Params`(c)
+      var child = newComputation(c.vmState, msg)
+      child.execCall()
 
-    push: 0
+      if not child.shouldBurnGas:
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
-    let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
-                                    (memInPos, memInLen)
-                                 else:
-                                    (memOutPos, memOutLen)
+      if child.isSuccess:
+        c.merge(child)
+        c.stack.top(1)
 
-    let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
-    let (childGasFee, childGasLimit) = c.gasCosts[opCode].c_handler(
-      value,
-      GasParams(kind: opCode,
-                c_isNewAccount: not c.accountExists(contractAddress),
-                c_gasBalance: c.gasMeter.gasRemaining,
-                c_contractGas: gas,
-                c_currentMemSize: c.memory.len,
-                c_memOffset: memOffset,
-                c_memLength: memLength
-      ))
+      c.returnData = child.output
+      let actualOutputSize = min(memOutLen, child.output.len)
+      if actualOutputSize > 0:
+        c.memory.write(memOutPos,
+          child.output.toOpenArray(0, actualOutputSize - 1))
 
-    if childGasFee >= 0:
-      c.gasMeter.consumeGas(childGasFee, reason = $opCode)
-
-    c.returnData.setLen(0)
-
-    if c.msg.depth >= MaxCallDepth:
-      debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = c.msg.depth
-      # return unused gas
-      c.gasMeter.returnGas(childGasLimit)
-      return
-
-    if childGasFee < 0 and childGasLimit <= 0:
-      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callName.astToStr & ")")
-
-    c.memory.extend(memInPos, memInLen)
-    c.memory.extend(memOutPos, memOutLen)
-
-    when opCode in {CallCode, Call}:
-      let senderBalance = c.getBalance(sender)
-      if senderBalance < value:
-        debug "Insufficient funds", available = senderBalance, needed = c.msg.value
-        # return unused gas
-        c.gasMeter.returnGas(childGasLimit)
-        return
-
-    let msg = nimbus_message(
-      kind: callKind.evmc_call_kind,
-      depth: (c.msg.depth + 1).int32,
-      gas: childGasLimit,
-      sender: sender,
-      destination: destination,
-      input_data: c.memory.readPtr(memInPos),
-      input_size: memInLen.uint,
-      value: toEvmc(value),
-      flags: flags.uint32
-    )
-
-    var res = c.host.call(msg)
-    if res.output_size.int > 0:
-      c.returnData = newSeq[byte](res.output_size.int)
-      copyMem(c.returnData[0].addr, res.output_data, c.returnData.len)
-
-    let actualOutputSize = min(memOutLen, c.returnData.len)
-    if actualOutputSize > 0:
-      c.memory.write(memOutPos,
-        c.returnData.toOpenArray(0, actualOutputSize - 1))
-
-    c.gasMeter.returnGas(res.gas_left)
-
-    if res.status_code == EVMC_SUCCESS:
-      c.stack.top(1)
-
-    if not res.release.isNil:
-      res.release(res)
-
-when evmc_enabled:
-  genCallEvmc(call, Call)
-  genCallEvmc(callCode, CallCode)
-  genCallEvmc(delegateCall, DelegateCall)
-  genCallEvmc(staticCall, StaticCall)
-else:
-  genCall(call, Call)
-  genCall(callCode, CallCode)
-  genCall(delegateCall, DelegateCall)
-  genCall(staticCall, StaticCall)
+genCall(call, Call)
+genCall(callCode, CallCode)
+genCall(delegateCall, DelegateCall)
+genCall(staticCall, StaticCall)
 
 op returnOp, inline = false, startPos, size:
   ## 0xf3, Halt execution returning output data.
