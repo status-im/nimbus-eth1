@@ -173,15 +173,10 @@ template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
   let child = newComputation(c.vmState, childMsg)
   child.execCall()
 
-  if child.isError or c.fork == FKIstanbul:
-    if child.msg.contractAddress == ripemdAddr:
-      child.vmState.touchedAccounts.incl child.msg.contractAddress
-
   if not child.shouldBurnGas:
     res.gas_left = child.gasMeter.gasRemaining
 
   if child.isSuccess:
-    c.touchedAccounts.incl child.msg.contractAddress
     c.merge(child)
     res.status_code = EVMC_SUCCESS
   else:

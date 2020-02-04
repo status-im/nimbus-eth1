@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times, stew/ranges, sequtils, options,
+  strformat, times, sets, stew/ranges, sequtils, options,
   chronicles, stint, nimcrypto, stew/ranges/typedranges, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
@@ -704,10 +704,19 @@ proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress
     emvcStatic) # is_static
 
 template genCall(callName: untyped, opCode: Op): untyped =
-  proc `callName Setup`(c: Computation, callNameStr: string): Computation =
+  op callName, inline = false:
+    ## CALL, 0xf1, Message-Call into an account
+    ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
+    ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
+    ## STATICCALL, 0xfa, Static message-call into an account.
+    when opCode == Call:
+      if emvcStatic == c.msg.flags and c.stack[^3, Uint256] > 0.u256:
+        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
+
     let (gas, value, destination, sender, callKind,
-         memInPos, memInLen, memOutPos, memOutLen,
-         flags) = `callName Params`(c)
+         memInPos, memInLen, memOutPos, memOutLen, flags) = `callName Params`(c)
+
+    push: 0
 
     let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
                                     (memInPos, memInLen)
@@ -738,7 +747,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       return
 
     if childGasFee < 0 and childGasLimit <= 0:
-      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callNameStr & ")")
+      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callName.astToStr & ")")
 
     c.memory.extend(memInPos, memInLen)
     c.memory.extend(memOutPos, memOutLen)
@@ -763,41 +772,20 @@ template genCall(callName: untyped, opCode: Op): untyped =
       flags: flags)
 
     var child = newComputation(c.vmState, childMsg)
+    child.execCall()
 
-    c.memOutPos = memOutPos
-    c.memOutLen = memOutLen
-    result = child
+    if not child.shouldBurnGas:
+      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
-  op callName, inline = false:
-    ## CALL, 0xf1, Message-Call into an account
-    ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
-    ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
-    ## STATICCALL, 0xfa, Static message-call into an account.
-    when opCode == Call:
-      if emvcStatic == c.msg.flags and c.stack[^3, Uint256] > 0.u256:
-        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
+    if child.isSuccess:
+      c.merge(child)
+      c.stack.top(1)
 
-    var child = `callName Setup`(c, callName.astToStr)
-
-    if child.isNil:
-      push: 0
-      return
-
-    continuation(child):
-      addChildComputation(c, child)
-
-      if child.isError:
-        push: 0
-      else:
-        push: 1
-
-      let actualOutputSize = min(c.memOutLen, child.output.len)
-      if actualOutputSize > 0:
-        c.memory.write(
-          c.memOutPos,
-          child.output.toOpenArray(0, actualOutputSize - 1))
-
-    child.applyMessage(opCode)
+    c.returnData = child.output
+    let actualOutputSize = min(memOutLen, child.output.len)
+    if actualOutputSize > 0:
+      c.memory.write(memOutPos,
+        child.output.toOpenArray(0, actualOutputSize - 1))
 
 template genCallEvmc(callName: untyped, opCode: Op): untyped =
   op callName, inline = false:
