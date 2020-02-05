@@ -41,7 +41,7 @@ proc stackMain*() =
       # in other file.
       when not(defined(windows) and
         defined(cpu64) and
-        (NimMajor, NimMinor, NimPatch) == (1, 0, 4)):
+        (NimMajor, NimMinor, NimPatch) >= (1, 0, 4)):
         testFailPush("yzyzyzyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".toBytes)
 
     test "push does not allow stack to exceed 1024":
