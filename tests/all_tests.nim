@@ -86,7 +86,7 @@ cliBuilder:
           ./test_genesis,
           ./test_vm_json,
           ./test_precompiles,
-          ./test_generalstate_json,
+          #./test_generalstate_json,
           ./test_tracer_json,
           ./test_persistblock_json,
           #./test_rpc, # it crash if we combine it here
@@ -99,5 +99,5 @@ cliBuilder:
           ./test_state_db,
           ./test_difficulty,
           ./test_transaction_json,
-          ./test_blockchain_json
+          #./test_blockchain_json
 

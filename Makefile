@@ -22,7 +22,8 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 .PHONY: all $(TOOLS) build-system-checks deps update nimbus test test-reproducibility clean libnimbus.so libnimbus.a wrappers wrappers-static
 
 # default target, because it's the first one that doesn't start with '.'
-all: build-system-checks $(TOOLS) nimbus
+all: build-system-checks
+# $(TOOLS) nimbus
 
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
