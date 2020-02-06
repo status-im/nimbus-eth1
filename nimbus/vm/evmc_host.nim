@@ -116,25 +116,20 @@ proc hostEmitLogImpl(ctx: Computation, address: EthAddress,
     for i in 0 ..< topicsCount:
       log.topics[i] = topics[i].bytes
 
-  if dataSize > 0:
-    log.data = newSeq[byte](dataSize)
-    copyMem(log.data[0].addr, data, dataSize)
-
+  log.data = @makeOpenArray(data, dataSize)
   log.address = address
   ctx.addLogEntry(log)
 
 template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
   # TODO: use evmc_message to evoid copy
-  var childMsg = Message(
+  let childMsg = Message(
     kind: CallKind(m.kind),
     depth: m.depth,
     gas: m.gas,
     sender: m.sender,
-    value: Uint256.fromEvmc(m.value)
+    value: Uint256.fromEvmc(m.value),
+    data: @makeOpenArray(m.inputData, m.inputSize.int)
     )
-  if m.input_size.int > 0:
-    childMsg.data = newSeq[byte](m.input_size.int)
-    copyMem(childMsg.data[0].addr, m.input_data, m.input_size.int)
 
   let child = newComputation(c.vmState, childMsg, Uint256.fromEvmc(m.create2_salt))
   child.execCreate()
@@ -149,13 +144,14 @@ template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
   else:
     res.status_code = if child.shouldBurnGas: EVMC_FAILURE else: EVMC_REVERT
     if child.output.len > 0:
+      # TODO: can we move the ownership of seq to raw pointer?
       res.output_size = child.output.len.uint
       res.output_data = cast[ptr byte](alloc(child.output.len))
       copyMem(res.output_data, child.output[0].addr, child.output.len)
       res.release = hostReleaseResultImpl
 
 template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
-  var childMsg = Message(
+  let childMsg = Message(
     kind: CallKind(m.kind),
     depth: m.depth,
     gas: m.gas,
@@ -163,12 +159,9 @@ template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     codeAddress: m.destination,
     contractAddress: if m.kind == EVMC_CALL: m.destination else: c.msg.contractAddress,
     value: Uint256.fromEvmc(m.value),
+    data: @makeOpenArray(m.inputData, m.inputSize.int)
     flags: MsgFlags(m.flags)
     )
-
-  if m.input_size.int > 0:
-    childMsg.data = newSeq[byte](m.input_size.int)
-    copyMem(childMsg.data[0].addr, m.input_data, m.input_size.int)
 
   let child = newComputation(c.vmState, childMsg)
   child.execCall()
@@ -183,6 +176,7 @@ template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     res.status_code = if child.shouldBurnGas: EVMC_FAILURE else: EVMC_REVERT
 
   if child.output.len > 0:
+    # TODO: can we move the ownership of seq to raw pointer?
     res.output_size = child.output.len.uint
     res.output_data = cast[ptr byte](alloc(child.output.len))
     copyMem(res.output_data, child.output[0].addr, child.output.len)

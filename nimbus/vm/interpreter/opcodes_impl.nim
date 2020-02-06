@@ -7,7 +7,7 @@
 
 import
   strformat, times, sets, stew/ranges, sequtils, options,
-  chronicles, stint, nimcrypto, stew/ranges/typedranges, eth/common,
+  chronicles, stint, nimcrypto, stew/ranges/[typedranges, ptr_arith], eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../message, ../stack, ../code_stream, ../computation,
@@ -606,10 +606,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
       )
 
       var res = c.host.call(msg)
-      if res.output_size.int > 0:
-        c.returnData = newSeq[byte](res.output_size.int)
-        copyMem(c.returnData[0].addr, res.output_data, c.returnData.len)
-
+      c.returnData = @makeOpenArray(res.outputData, res.outputSize.int)
       c.gasMeter.returnGas(res.gas_left)
 
       if res.status_code == EVMC_SUCCESS:
@@ -775,9 +772,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       )
 
       var res = c.host.call(msg)
-      if res.output_size.int > 0:
-        c.returnData = newSeq[byte](res.output_size.int)
-        copyMem(c.returnData[0].addr, res.output_data, c.returnData.len)
+      c.returnData = @makeOpenArray(res.outputData, res.outputSize.int)
 
       let actualOutputSize = min(memOutLen, c.returnData.len)
       if actualOutputSize > 0:

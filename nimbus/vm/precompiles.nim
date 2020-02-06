@@ -245,10 +245,8 @@ proc bn256ecAdd*(computation: Computation, fork: Fork = FkByzantium) =
     input: array[128, byte]
     output: array[64, byte]
   # Padding data
-  let msglen = len(computation.msg.data)
-  let tocopy = if msglen < 128: msglen else: 128
-  if tocopy > 0:
-    copyMem(addr input[0], addr computation.msg.data[0], tocopy)
+  let len = min(computation.msg.data.len, 128) - 1
+  input[0..len] = computation.msg.data[0..len]
   var p1 = G1.getPoint(input.toOpenArray(0, 63))
   var p2 = G1.getPoint(input.toOpenArray(64, 127))
   var apo = (p1 + p2).toAffine()
@@ -267,11 +265,8 @@ proc bn256ecMul*(computation: Computation, fork: Fork = FkByzantium) =
     output: array[64, byte]
 
   # Padding data
-  let msglen = len(computation.msg.data)
-  let tocopy = if msglen < 96: msglen else: 96
-  if tocopy > 0:
-    copyMem(addr input[0], addr computation.msg.data[0], tocopy)
-
+  let len = min(computation.msg.data.len, 96) - 1
+  input[0..len] = computation.msg.data[0..len]
   var p1 = G1.getPoint(input.toOpenArray(0, 63))
   var fr = getFR(input.toOpenArray(64, 95))
   var apo = (p1 * fr).toAffine()
