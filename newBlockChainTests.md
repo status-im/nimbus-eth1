@@ -1,4 +1,4 @@
-newBlockchainTests
+newBlockChainTests
 ===
 ## bcBlockGasLimitTest
 ```diff
@@ -398,7 +398,7 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 + walletReorganizeOwners.json                                     OK
 ```
 OK: 5/5 Fail: 0/5 Skip: 0/5
-## newBlockchainTests
+## newBlockChainTests
 ```diff
 + randomStatetest391.json                                         OK
 ```
