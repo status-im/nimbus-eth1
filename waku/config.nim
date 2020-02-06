@@ -72,10 +72,10 @@ type
       defaultValue: false
       name: "light-node" }: bool
 
-    wakuMode* {.
-      desc: "Select the Waku mode.",
-      defaultValue: WakuSan
-      name: "waku-mode" }: WakuMode
+    wakuTopicInterest* {.
+      desc: "Run as node with a topic-interest",
+      defaultValue: false
+      name: "waku-topic-interest" }: bool
 
     wakuPow* {.
       desc: "PoW requirement of Waku node.",

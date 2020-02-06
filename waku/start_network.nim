@@ -10,9 +10,8 @@ const
 
 type
   NodeType = enum
-    FullNode = "--waku-mode:WakuSan",
+    FullNode = "",
     LightNode = "--light-node:on",
-    WakuNode = "--light-node:on --waku-mode:WakuChan"
 
   Topology = enum
     Star,
@@ -43,8 +42,8 @@ type
     label: string
 
 proc initNodeCmd(nodeType: NodeType, shift: int, staticNodes: seq[string] = @[],
-    discovery = false, bootNodes: seq[string] = @[], master = false,
-    label: string): NodeInfo =
+    discovery = false, bootNodes: seq[string] = @[], topicInterest = false,
+    master = false, label: string): NodeInfo =
   let
     keypair = newKeyPair()
     address = Address(ip: parseIpAddress("127.0.0.1"),
@@ -53,6 +52,7 @@ proc initNodeCmd(nodeType: NodeType, shift: int, staticNodes: seq[string] = @[],
 
   result.cmd = wakuNodeBin & " " & defaults & " "
   result.cmd &= $nodeType & " "
+  result.cmd &= "--waku-topic-interest:" & $topicInterest & " "
   result.cmd &= "--nodekey:" & $keypair.seckey & " "
   result.cmd &= "--ports-shift:" & $shift & " "
   if discovery:
@@ -116,6 +116,8 @@ proc generatePrometheusConfig(nodes: seq[NodeInfo], outputFile: string) =
           node: '{count}'"""
     count += 1
 
+  var (path, file) = splitPath(outputFile)
+  createDir(path)
   writeFile(outputFile, config)
 
 proc proccessGrafanaDashboard(nodes: int, inputFile: string,
@@ -167,8 +169,9 @@ when isMainModule:
   for i in 0..<conf.testNodePeers:
     # TODO: could also select nodes randomly
     staticnodes.add(nodes[i].enode)
-  # Waku light node
-  nodes.add(initNodeCmd(WakuNode, 0, staticnodes, label = "light Waku node"))
+  # light node with topic interest
+  nodes.add(initNodeCmd(LightNode, 0, staticnodes, topicInterest = true,
+    label = "light node topic interest"))
   # Regular light node
   nodes.add(initNodeCmd(LightNode, 1, staticnodes, label = "light node"))
 

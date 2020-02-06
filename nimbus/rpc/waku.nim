@@ -268,10 +268,10 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     # there to have a full node no matter what message filters.
     # Could also be moved to waku_protocol.nim
     let config = node.protocolState(Waku).config
-    if config.wakuMode == WakuChan:
+    if config.topics.isSome():
       try:
         # TODO: an addTopics call would probably be more useful
-        let result = await node.setTopics(config.topics.concat(filter.topics))
+        let result = await node.setTopics(config.topics.get().concat(filter.topics))
         if not result:
           raise newException(ValueError, "Too many topics")
       except CatchableError:
