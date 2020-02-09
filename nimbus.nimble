@@ -29,7 +29,7 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   exec "nim " & lang & " --out:build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
-  buildBinary name, "tests/", "-d:release -d:chronicles_log_level=ERROR"
+  buildBinary name, "tests/", "-d:chronicles_log_level=ERROR"
   exec "build/" & name
 
 task test, "Run tests":

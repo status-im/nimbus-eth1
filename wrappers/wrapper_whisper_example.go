@@ -1,18 +1,19 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"runtime"
 	"time"
 	"unsafe"
-	"encoding/hex"
 )
 
 /*
 #include <stdlib.h>
 #include <stdbool.h>
 
-#cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus -lm
+// Passing "-lnimbus" to the Go linker through "-extldflags" is not enough. We need it in here, for some reason.
+#cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus
 #include "libnimbus.h"
 
 void receiveHandler_cgo(received_message * msg, void* udata); // Forward declaration.
@@ -88,12 +89,12 @@ func StatusListenAndPost(channel string) {
 
 	options := C.filter_options{symKeyID: symKeyIdC,
 		minPow: 0.002,
-		topic: C.nimbus_channel_to_topic(channelC).topic}
+		topic:  C.nimbus_channel_to_topic(channelC).topic}
 
 	tmp = C.malloc(C.size_t(C.ID_LEN))
 	if C.nimbus_subscribe_filter(&options,
-			(C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)),
-			unsafe.Pointer(&msgCount), (*C.uint8_t)(tmp)) == false {
+		(C.received_msg_handler)(unsafe.Pointer(C.receiveHandler_cgo)),
+		unsafe.Pointer(&msgCount), (*C.uint8_t)(tmp)) == false {
 		C.free(unsafe.Pointer(tmp))
 		panic("Cannot subscribe filter")
 	}
@@ -103,11 +104,11 @@ func StatusListenAndPost(channel string) {
 		hex.EncodeToString(filterId))
 
 	postMessage := C.post_message{symKeyID: symKeyIdC,
-		sourceID: asymKeyIdC,
-		ttl: 20,
-		topic: C.nimbus_channel_to_topic(channelC).topic,
+		sourceID:  asymKeyIdC,
+		ttl:       20,
+		topic:     C.nimbus_channel_to_topic(channelC).topic,
 		powTarget: 0.002,
-		powTime: 1.0}
+		powTime:   1.0}
 
 	i := 0
 	for {
