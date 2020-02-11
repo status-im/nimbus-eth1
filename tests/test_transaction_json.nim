@@ -11,7 +11,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
 proc transactionJsonMain*() =
   suite "Transactions tests":
-    jsonTest("TransactionTests", testFixture, skipTxTests)
+    jsonTest("TransactionTests", testFixture)
 
 when isMainModule:
   transactionJsonMain()
@@ -38,6 +38,10 @@ func noHash(fixture: JsonNode): bool =
       if forkData.len == 0: return
       if "hash" in forkData: return false
 
+# nimbus rlp cannot allow type mismatch
+# e.g. uint256 value put into int64
+# so we skip noHash check. this behavior
+# is different compared to py-evm
 const SKIP_TITLES = [
   "TransactionWithGasLimitxPriceOverflow",
   "TransactionWithHighNonce256",
@@ -63,13 +67,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
 
     try:
       tx = rlp.decode(rlpData, Transaction)
-    except RlpTypeMismatch, MalformedRlpError:
-      # TODO:
-      # nimbus rlp cannot allow type mismatch
-      # e.g. uint256 value put into int64
-      # so we skip noHash check
-      # this behavior different compared to
-      # py-evm, not sure what should we do
+    except RlpTypeMismatch, MalformedRlpError, UnsupportedRlpError:
       if title in SKIP_TITLES:
         return
       check noHash(fixture)
