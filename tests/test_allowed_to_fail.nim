@@ -89,27 +89,16 @@ func slowGSTTests(folder: string, name: string): bool =
               "CALLBlake2f_MaxRounds.json",
               ]
 
-func allowedFailingGeneralStateTest(folder, name: string): bool =
-  let allowedFailingGeneralStateTests = @[
-    # conflicts between native int and big int.
-    # gasFee calculation in modexp precompiled
-    # contracts
-    "modexp.json"
-  ]
-  result = name in allowedFailingGeneralStateTests
-
 func skipGSTTests*(folder: string, name: string): bool =
   # we skip tests that are slow or expected to fail for now
-  if slowGSTTests(folder, name):
-    return true
-  result = allowedFailingGeneralStateTest(folder, name)
+  slowGSTTests(folder, name)
 
 func skipNewGSTTests*(folder: string, name: string): bool =
   # share the same slow and failing tests
   if skipGSTTests(folder, name):
     return true
 
-  result = name in @[
+  name in @[
     # py-evm claims these tests are incorrect
     # nimbus also agree
     "RevertInCreateInInit.json",
@@ -121,7 +110,7 @@ func skipVMTests*(folder: string, name: string): bool =
   result = (folder == "vmPerformance" and "loop" in name)
 
 func skipBCTests*(folder: string, name: string): bool =
-  let allowedFailingBCTests = @[
+  name in @[
     # BlockChain slow tests
     "SuicideIssue.json",
 
@@ -130,15 +119,13 @@ func skipBCTests*(folder: string, name: string): bool =
     "DelegateCallSpam.json"
   ]
 
-  result =  name in allowedFailingBCTests
-
 func skipNewBCTests*(folder: string, name: string): bool =
   # the new BC tests also contains these slow tests
   # for Istanbul fork
   if slowGSTTests(folder, name):
     return true
 
-  let allowedFailingBCTests = @[
+  name in @[
     # Istanbul bc tests
     # py-evm claims these tests are incorrect
     # nimbus also agree
@@ -146,12 +133,7 @@ func skipNewBCTests*(folder: string, name: string): bool =
     "RevertInCreateInInitCreate2.json",
     "InitCollision.json",
 
-    # see allowedFailingGeneralStateTest
-    "modexp.json",
-
     # BC huge memory consumption
     "randomStatetest94.json",
     "DelegateCallSpam.json"
   ]
-
-  result = name in allowedFailingBCTests

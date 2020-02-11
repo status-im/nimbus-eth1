@@ -825,7 +825,7 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 ```diff
 + identity_to_bigger.json                                         OK
 + identity_to_smaller.json                                        OK
-  modexp.json                                                     Skip
++ modexp.json                                                     OK
 + modexp_0_0_0_1000000.json                                       OK
 + modexp_0_0_0_155000.json                                        OK
 + modexp_0_1_0_1000000.json                                       OK
@@ -920,7 +920,7 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + modexp_9_3711_37111_25000.json                                  OK
 + sec80.json                                                      OK
 ```
-OK: 95/96 Fail: 0/96 Skip: 1/96
+OK: 96/96 Fail: 0/96 Skip: 0/96
 ## stPreCompiledContracts2
 ```diff
 + CALLBlake2f.json                                                OK
@@ -2625,4 +2625,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2304/2411 Fail: 0/2411 Skip: 107/2411
+OK: 2305/2411 Fail: 0/2411 Skip: 106/2411

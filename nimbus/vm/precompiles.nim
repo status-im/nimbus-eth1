@@ -135,105 +135,122 @@ proc identity*(computation: Computation) =
   computation.output = computation.msg.data
   trace "Identity precompile", output = computation.output.toHex
 
-proc modExpInternal(computation: Computation, base_len, exp_len, mod_len: int, T: type StUint) =
-  template rawMsg: untyped {.dirty.} =
+proc modExpInternal(computation: Computation, baseLen, expLen, modLen: int, T: type StUint) =
+  template data: untyped {.dirty.} =
     computation.msg.data
 
-  block: # Gas cost
-    func gasModExp_f(x: Natural): int =
-      ## Estimates the difficulty of Karatsuba multiplication
-      # x: maximum length in bytes between modulo and base
-      # TODO: Deal with negative max_len
-      result = case x
-        of 0 .. 64: x * x
-        of 65 .. 1024: x * x div 4 + 96 * x - 3072
-        else: x * x div 16 + 480 * x - 199680
+  let
+    base = data.rangeToPadded[:T](96, 95 + baseLen, baseLen)
+    exp = data.rangeToPadded[:T](96 + baseLen, 95 + baseLen + expLen, expLen)
+    modulo = data.rangeToPadded[:T](96 + baseLen + expLen, 95 + baseLen + expLen + modLen, modLen)
 
-    let adj_exp_len = block:
-      # TODO deal with negative length
-      let first32 = rawMsg.rangeToPadded2[:Uint256](96 + base_len, 95 + base_len + exp_len, min(exp_len, 32))
-      if exp_len <= 32:
-        if first32.isZero(): 0
-        else: log2(first32)    # highest-bit in exponent
-      else:
-        # TODO: `modexpRandomInput.json` require Uint256 arithmetic for this code below
-        if not first32.isZero:
-          8 * (exp_len - 32) + first32.log2
-        else:
-          8 * (exp_len - 32)
+  # TODO: specs mentions that we should return in "M" format
+  #       i.e. if Base and exp are uint512 and Modulo an uint256
+  #       we should return a 256-bit big-endian byte array
 
-    let gasFee = block:
-      (
-        max(mod_len, base_len).gasModExp_f *
-          max(adj_exp_len, 1)
-      ) div GasQuadDivisor
-
-    computation.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
-
-  block: # Processing
-    let
-      base = rawMsg.rangeToPadded[:T](96, 95 + base_len, base_len)
-      exp = rawMsg.rangeToPadded[:T](96 + base_len, 95 + base_len + exp_len, exp_len)
-      modulo = rawMsg.rangeToPadded[:T](96 + base_len + exp_len, 95 + base_len + exp_len + mod_len, mod_len)
-
-    # TODO: specs mentions that we should return in "M" format
-    #       i.e. if Base and exp are uint512 and Modulo an uint256
-    #       we should return a 256-bit big-endian byte array
-
-    # Force static evaluation
-    func zero(): array[T.bits div 8, byte] {.compileTime.} = discard
-    func one(): array[T.bits div 8, byte] {.compileTime.} =
-      when cpuEndian == bigEndian:
-        result[0] = 1
-      else:
-        result[^1] = 1
-
-    # Start with EVM special cases
-    let output = if modulo <= 1:
-                    # If m == 0: EVM returns 0.
-                    # If m == 1: we can shortcut that to 0 as well
-                    zero()
-                elif exp.isZero():
-                    # If 0^0: EVM returns 1
-                    # For all x != 0, x^0 == 1 as well
-                    one()
-                else:
-                    powmod(base, exp, modulo).toByteArrayBE
-
-    # maximum output len is the same as mod_len
-    # if it less than mod_len, it will be zero padded at left
-    if output.len >= mod_len:
-      computation.output = @(output[^mod_len..^1])
+  # Force static evaluation
+  func zero(): array[T.bits div 8, byte] {.compileTime.} = discard
+  func one(): array[T.bits div 8, byte] {.compileTime.} =
+    when cpuEndian == bigEndian:
+      result[0] = 1
     else:
-      computation.output = newSeq[byte](mod_len)
-      computation.output[^output.len..^1] = output[0..^1]
+      result[^1] = 1
+
+  # Start with EVM special cases
+  let output = if modulo <= 1:
+                  # If m == 0: EVM returns 0.
+                  # If m == 1: we can shortcut that to 0 as well
+                  zero()
+              elif exp.isZero():
+                  # If 0^0: EVM returns 1
+                  # For all x != 0, x^0 == 1 as well
+                  one()
+              else:
+                  powmod(base, exp, modulo).toByteArrayBE
+
+  # maximum output len is the same as modLen
+  # if it less than modLen, it will be zero padded at left
+  if output.len >= modLen:
+    computation.output = @(output[^modLen..^1])
+  else:
+    computation.output = newSeq[byte](modLen)
+    computation.output[^output.len..^1] = output[0..^1]
+
+proc modExpFee(c: Computation, baseLen, expLen, modLen: Uint256): GasInt =
+  template data: untyped {.dirty.} =
+    c.msg.data
+
+  func gasModExp(x: Uint256): Uint256 =
+    ## Estimates the difficulty of Karatsuba multiplication
+    if x <= 64.u256: x * x
+    elif x <= 1024.u256: x * x div 4.u256 + 96.u256 * x - 3072.u256
+    else: x * x div 16.u256 + 480.u256 * x - 199680.u256
+
+  let adjExpLen = block:
+    let
+      baseL = baseLen.safeInt
+      expL = expLen.safeInt
+      first32 = if baseL.uint64 + expL.uint64 < high(int32).uint64 and baseL < data.len:
+                  data.rangeToPadded2[:Uint256](96 + baseL, 95 + baseL + expL, min(expL, 32))
+                else:
+                  0.u256
+
+    if expLen <= 32:
+      if first32.isZero(): 0.u256
+      else: first32.log2.u256    # highest-bit in exponent
+    else:
+      if not first32.isZero:
+        8.u256 * (expLen - 32.u256) + first32.log2.u256
+      else:
+        8.u256 * (expLen - 32.u256)
+
+  let gasFee = (
+    max(modLen, baseLen).gasModExp *
+    max(adjExpLen, 1.u256)
+  ) div GasQuadDivisor
+
+  if gasFee > high(GasInt).u256:
+    raise newException(OutOfGas, "modExp gas overflow")
+
+  result = gasFee.truncate(GasInt)
 
 proc modExp*(computation: Computation) =
   ## Modular exponentiation precompiled contract
   ## Yellow Paper Appendix E
   ## EIP-198 - https://github.com/ethereum/EIPs/blob/master/EIPS/eip-198.md
   # Parsing the data
-  template rawMsg: untyped {.dirty.} =
+  template data: untyped {.dirty.} =
     computation.msg.data
 
   let # lengths Base, Exponent, Modulus
-    base_len = rawMsg.rangeToPadded[:Uint256](0, 31).safeInt
-    exp_len = rawMsg.rangeToPadded[:Uint256](32, 63).safeInt
-    mod_len = rawMsg.rangeToPadded[:Uint256](64, 95).safeInt
+    baseL = data.rangeToPadded[:Uint256](0, 31)
+    expL  = data.rangeToPadded[:Uint256](32, 63)
+    modL  = data.rangeToPadded[:Uint256](64, 95)
+    baseLen = baseL.safeInt
+    expLen  = expL.safeInt
+    modLen  = modL.safeInt
 
-  let maxBytes = max(base_len, max(exp_len, mod_len))
+  let gasFee = modExpFee(computation, baseL, expL, modL)
+  computation.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+
+  if baseLen == 0 and modLen == 0:
+    # This is a special case where expLength can be very big.
+    computation.output = @[]
+    return
+
+  let maxBytes = max(baseLen, max(expLen, modLen))
   if maxBytes <= 32:
-    computation.modExpInternal(base_len, exp_len, mod_len, UInt256)
+    computation.modExpInternal(baseLen, expLen, modLen, UInt256)
   elif maxBytes <= 64:
-    computation.modExpInternal(base_len, exp_len, mod_len, StUint[512])
+    computation.modExpInternal(baseLen, expLen, modLen, StUint[512])
   elif maxBytes <= 128:
-    computation.modExpInternal(base_len, exp_len, mod_len, StUint[1024])
+    computation.modExpInternal(baseLen, expLen, modLen, StUint[1024])
   elif maxBytes <= 256:
-    computation.modExpInternal(base_len, exp_len, mod_len, StUint[2048])
+    computation.modExpInternal(baseLen, expLen, modLen, StUint[2048])
   elif maxBytes <= 512:
-    computation.modExpInternal(base_len, exp_len, mod_len, StUint[4096])
+    computation.modExpInternal(baseLen, expLen, modLen, StUint[4096])
   elif maxBytes <= 1024:
-    computation.modExpInternal(base_len, exp_len, mod_len, StUint[8192])
+    computation.modExpInternal(baseLen, expLen, modLen, StUint[8192])
   else:
     raise newException(EVMError, "The Nimbus VM doesn't support modular exponentiation with numbers larger than uint8192")
 
