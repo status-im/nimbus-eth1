@@ -155,11 +155,3 @@ func skipNewBCTests*(folder: string, name: string): bool =
   ]
 
   result = name in allowedFailingBCTests
-
-func skipTxTests*(folder: string, name: string): bool =
-  # from test_transaction_json
-  when sizeof(int) == 4:
-    # see nim-eth#95
-    result = name == "RLPHeaderSizeOverflowInt32.json"
-  else:
-    false
