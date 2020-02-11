@@ -52,7 +52,7 @@ script:
   - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" V=1 update # to allow a newer Nim version to be detected
   - make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}"
   - build/nimbus --help
-  # -static option will not work for osx unless static system libraries are provided
+  # "-static" option will not work for osx unless static system libraries are provided
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then
       make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" test test-reproducibility wrappers wakusim;
     else

@@ -158,3 +158,8 @@
 	url = https://github.com/status-im/nim-evmc
   ignore = dirty
   branch = master
+[submodule "vendor/nim-libbacktrace"]
+	path = vendor/nim-libbacktrace
+	url = https://github.com/status-im/nim-libbacktrace.git
+	ignore = dirty
+	branch = master

@@ -7,11 +7,11 @@ import (
 	"unsafe"
 )
 
-
 /*
 #include <stdlib.h>
 
-#cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus -lm
+// Passing "-lnimbus" to the Go linker through "-extldflags" is not enough. We need it in here, for some reason.
+#cgo LDFLAGS: -Wl,-rpath,'$ORIGIN' -L${SRCDIR}/../build -lnimbus
 #include "libnimbus.h"
 
 void receiveHandler_cgo(received_message * msg); // Forward declaration.

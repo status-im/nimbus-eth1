@@ -42,9 +42,9 @@ test_script:
   - build\nimbus.exe --help
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% test
   - IF "%PLATFORM%" == "x64" mingw32-make -j2 test-reproducibility
-  # disable libnimbus builds until https://github.com/nim-lang/Nim/issues/12759 is fixed
-  # wrapper builds could then also get activated instead but need some rework for Windows
-  # the "go-checks" target fails in AppVeyor, for some reason; easier to disable than to debug
+  # Disable libnimbus builds until https://github.com/nim-lang/Nim/issues/12759 is fixed.
+  # Wrapper builds could then also get activated instead but need some rework for Windows.
+  # The "go-checks" target fails in AppVeyor, for some reason; easier to disable than to debug.
   # - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% DISABLE_GO_CHECKS=1 libnimbus.so
   # - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% DISABLE_GO_CHECKS=1 libnimbus.a
   - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% wakusim

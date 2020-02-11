@@ -1,0 +1,37 @@
+if defined(release):
+  switch("nimcache", "nimcache/release/$projectName")
+else:
+  switch("nimcache", "nimcache/debug/$projectName")
+
+if defined(windows):
+  # disable timestamps in Windows PE headers - https://wiki.debian.org/ReproducibleBuilds/TimestampsInPEBinaries
+  switch("passL", "-Wl,--no-insert-timestamp")
+  # increase stack size
+  switch("passL", "-Wl,--stack,8388608")
+  # https://github.com/nim-lang/Nim/issues/4057
+  --tlsEmulation:off
+  if defined(i386):
+    # set the IMAGE_FILE_LARGE_ADDRESS_AWARE flag so we can use PAE, if enabled, and access more than 2 GiB of RAM
+    switch("passL", "-Wl,--large-address-aware")
+
+--threads:on
+--opt:speed
+--excessiveStackTrace:on
+# enable metric collection
+--define:metrics
+
+# the default open files limit is too low on macOS (512), breaking the
+# "--debugger:native" build. It can be increased with `ulimit -n 1024`.
+if not defined(macosx):
+  # add debugging symbols and original files and line numbers
+  --debugger:native
+  if not (defined(windows) and defined(i386)):
+    # light-weight stack traces using libbacktrace and libunwind
+    --define:nimStackTraceOverride
+    # "--import:libbacktrace" is added to NIM_PARAMS inside the Makefile,
+    # because it doesn't work in here ("Error: undeclared identifier: 'copyMem'", like it kicks in in some other NimScript file)
+
+--define:nimOldCaseObjects # https://github.com/status-im/nim-confutils/issues/9
+# libnimbus.so needs position-independent code
+switch("passC", "-fPIC")
+
