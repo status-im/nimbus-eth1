@@ -10,14 +10,15 @@ skipDirs      = @["tests", "examples"]
 # bin           = @["build/nimbus"]
 
 requires "nim >= 0.19",
-         "chronicles",
-         "nimcrypto",
-         "stint",
-         "json_rpc",
-         "chronos",
-         "bncurve",
-         "eth",
-         "stew"
+  "bncurve",
+  "chronicles",
+  "chronos",
+  "eth",
+  "json_rpc",
+  "libbacktrace",
+  "nimcrypto",
+  "stew",
+  "stint"
 
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   if not dirExists "build":
@@ -26,7 +27,7 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   var extra_params = params
   for i in 2..<paramCount():
     extra_params &= " " & paramStr(i)
-  exec "nim " & lang & " --out:build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
+  exec "nim " & lang & " --out:build/" & name & " -d:release --import:libbacktrace " & extra_params & " " & srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
   buildBinary name, "tests/", "-d:chronicles_log_level=ERROR"
@@ -46,3 +47,4 @@ task wakunode, "Build Waku node":
 task wakusim, "Build Waku simulation tools":
   buildBinary "quicksim", "waku/", "-d:chronicles_log_level=INFO"
   buildBinary "start_network", "waku/", "-d:chronicles_log_level=DEBUG"
+

@@ -14,15 +14,41 @@ BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
 
 # debugging tools + testing tools
-TOOLS := premix persist debug dumper hunter regress tracerTestGen persistBlockTestGen
-TOOLS_DIRS := premix tests waku
+TOOLS := \
+	premix \
+	persist \
+	debug \
+	dumper \
+	hunter \
+	regress \
+	tracerTestGen \
+	persistBlockTestGen
+TOOLS_DIRS := \
+	premix \
+	tests \
+	waku
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
+
 # "--import" can't be added to config.nims, for some reason
 # "--define:release" implies "--stacktrace:off" and it cannot be added to config.nims either
 NIM_PARAMS := $(NIM_PARAMS) -d:release --import:libbacktrace
 
-.PHONY: all $(TOOLS) build-system-checks deps update nimbus test test-reproducibility clean libnimbus.so libnimbus.a wrappers wrappers-static libbacktrace
+.PHONY: \
+	all \
+	$(TOOLS) \
+	build-system-checks \
+	deps \
+	update \
+	nimbus \
+	test \
+	test-reproducibility \
+	clean \
+	libnimbus.so \
+	libnimbus.a \
+	wrappers \
+	wrappers-static \
+	libbacktrace
 
 # default target, because it's the first one that doesn't start with '.'
 all: build-system-checks $(TOOLS) nimbus
