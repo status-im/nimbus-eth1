@@ -271,7 +271,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     if config.topics.isSome():
       try:
         # TODO: an addTopics call would probably be more useful
-        let result = await node.setTopics(config.topics.get().concat(filter.topics))
+        let result = await node.setTopicInterest(config.topics.get().concat(filter.topics))
         if not result:
           raise newException(ValueError, "Too many topics")
       except CatchableError:

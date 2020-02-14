@@ -77,15 +77,15 @@ This dashboard can be found at `./waku/metrics/waku-sim-all-nodes-grafana-dashbo
 
 *This section last updated February 14, 2020*
 
-This client of Waku is spec compliant with [Waku spec v0.3](https://specs.vac.dev/waku/waku.html) with the exception of:
-- Currently nodes with higher version don't automatically disconnect if versions are different
+This client of Waku is spec compliant with [Waku spec v0.3](https://specs.vac.dev/waku/waku.html).
 
 It doesn't yet implement the following recommended features:
 - No support for rate limiting
 - No support for DNS discovery to find Waku nodes
 - It doesn't disconnect a peer if it receives a message before a Status message
-- No support for negotiation with peer supporting multiple version
+- No support for negotiation with peer supporting multiple versions via Devp2p capabilities in `Hello` packet
 
 Additionally it makes the following choices:
 - It doesn't send message confirmations
-- It has partial support for accounting
+- It has partial support for accounting:
+  - Accounting of total resource usage and total circulated envelopes is done through metrics But no accounting is done for individual peers.
