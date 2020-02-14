@@ -77,7 +77,7 @@ This dashboard can be found at `./waku/metrics/waku-sim-all-nodes-grafana-dashbo
 
 *This section last updated February 14, 2020*
 
-This client of Waku is spec compliant with [Waku spec v0.3](https://specs.vac.dev/waku.html) with the exception of:
+This client of Waku is spec compliant with [Waku spec v0.3](https://specs.vac.dev/waku/waku.html) with the exception of:
 - Currently nodes with higher version don't automatically disconnect if versions are different
 
 It doesn't yet implement the following recommended features:
