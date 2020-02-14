@@ -14,6 +14,16 @@ if defined(windows):
     # set the IMAGE_FILE_LARGE_ADDRESS_AWARE flag so we can use PAE, if enabled, and access more than 2 GiB of RAM
     switch("passL", "-Wl,--large-address-aware")
 
+# remember to disable -march=native for reproducible builds
+if defined(disableMarchNative):
+  switch("passC", "-msse3")
+else:
+  switch("passC", "-march=native")
+  if defined(windows):
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
+    # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
+    switch("passC", "-mno-avx512vl")
+
 --threads:on
 --opt:speed
 --excessiveStackTrace:on
