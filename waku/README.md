@@ -72,3 +72,20 @@ prometheus
 A Grafana dashboard containing the example dashboard for each simulation node
 is also generated and can be imported in case you have Grafana running.
 This dashboard can be found at `./waku/metrics/waku-sim-all-nodes-grafana-dashboard.json`
+
+# Spec support
+
+*This section last updated February 14, 2020*
+
+This client of Waku is spec compliant with [Waku spec v0.3](https://specs.vac.dev/waku/waku.html) with the exception of:
+- Currently nodes with higher version don't automatically disconnect if versions are different
+
+It doesn't yet implement the following recommended features:
+- No support for rate limiting
+- No support for DNS discovery to find Waku nodes
+- It doesn't disconnect a peer if it receives a message before a Status message
+- No support for negotiation with peer supporting multiple version
+
+Additionally it makes the following choices:
+- It doesn't send message confirmations
+- It has partial support for accounting
