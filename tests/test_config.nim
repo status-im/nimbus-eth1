@@ -17,6 +17,7 @@ type
     fork*: Fork
     index*: int
     trace*: bool
+    legacy*: bool
 
 var testConfig {.threadvar.}: Configuration
 
@@ -46,6 +47,7 @@ proc processArguments*(msg: var string): ConfigStatus =
       of "fork": config.fork = parseEnum[Fork](strip(value))
       of "index": config.index = parseInt(value)
       of "trace": config.trace = parseBool(value)
+      of "legacy": config.legacy = parseBool(value)
       else:
         msg = "Unknown option " & key
         if value.len > 0: msg = msg & " : " & value

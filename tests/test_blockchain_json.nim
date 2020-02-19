@@ -672,6 +672,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
   if not fixtureTested:
     echo getConfiguration().testSubject, " not tested at all, wrong index?"
+    if specifyIndex <= 0 or specifyIndex > node.len:
+      echo "Maximum subtest available: ", node.len
 
 proc blockchainJsonMain*(debugMode = false) =
   if paramCount() == 0 or not debugMode:
@@ -687,7 +689,8 @@ proc blockchainJsonMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests" / "fixtures" / "newBlockChainTests"
+    let folder = if config.legacy: "BlockchainTests" else: "newBlockChainTests"
+    let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, debugMode = true, config.trace)

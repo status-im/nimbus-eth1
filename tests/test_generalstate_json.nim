@@ -153,8 +153,10 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
   tester.debugMode = debugMode
   let ftrans = fixture["transaction"]
   var testedInFork = false
+  var numIndex = -1
   for fork in supportedForks:
     if fixture["post"].hasKey(forkNames[fork]):
+      numIndex = fixture["post"][forkNames[fork]].len
       for expectation in fixture["post"][forkNames[fork]]:
         inc tester.index
         if specifyIndex > 0 and tester.index != specifyIndex:
@@ -173,7 +175,14 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
         testFixtureIndexes(tester, testStatusIMPL)
 
   if not testedInFork:
-    echo "test subject '", tester.name, "' not tested in any forks"
+    echo "test subject '", tester.name, "' not tested in any forks/subtests"
+    if specifyIndex <= 0 or specifyIndex > numIndex:
+      echo "Maximum subtest available: ", numIndex
+    else:
+      echo "available forks in this test:"
+      for fork in test_helpers.supportedForks:
+        if fixture["post"].hasKey(forkNames[fork]):
+          echo fork
 
 proc generalStateJsonMain*(debugMode = false) =
   if paramCount() == 0 or not debugMode:
@@ -189,7 +198,8 @@ proc generalStateJsonMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let path = "tests" / "fixtures" / "newGeneralStateTests"
+    let folder = if config.legacy: "GeneralStateTests" else: "newGeneralStateTests"
+    let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     var forks: set[Fork] = {}
