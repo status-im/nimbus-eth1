@@ -165,6 +165,33 @@ cd nimbus
 # Follow instructions above!
 ```
 
+#### Android
+
+*Experimental* Code can be compiled and run on Android devices
+
+##### Environment setup
+- Install the [Termux](https://termux.com) app from FDroid or the Google Play store
+- Install a [PRoot](https://wiki.termux.com/wiki/PRoot) of your choice following the instructions for your preferred distribution. 
+Note, the Ubuntu PRoot is known to contain all Nimbus prerequisites compiled on Arm64 architecture (common architecture for Android devices).  Depending on the distribution, it may require effort beyond the scope of this guide to get all prerequisites.
+
+*Assuming Ubuntu PRoot is used*
+```bash
+# Install prerequisites
+apt install librocksdb-dev libpcre3-dev
+
+# Clone repo and build Nimbus just like above
+git clone https://github.com/status-im/nimbus.git
+
+cd nimbus
+
+make
+
+make nimbus
+
+build/nimbus
+```
+
+
 ### Development tips
 
 - you can switch the DB backend with a Nim compiler define:
