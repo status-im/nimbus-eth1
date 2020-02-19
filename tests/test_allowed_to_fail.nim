@@ -98,14 +98,6 @@ func skipNewGSTTests*(folder: string, name: string): bool =
   if skipGSTTests(folder, name):
     return true
 
-  name in @[
-    # py-evm claims these tests are incorrect
-    # nimbus also agree
-    "RevertInCreateInInit.json",
-    "RevertInCreateInInitCreate2.json",
-    "InitCollision.json"
-  ]
-
 func skipVMTests*(folder: string, name: string): bool =
   result = (folder == "vmPerformance" and "loop" in name)
 
@@ -126,13 +118,6 @@ func skipNewBCTests*(folder: string, name: string): bool =
     return true
 
   name in @[
-    # Istanbul bc tests
-    # py-evm claims these tests are incorrect
-    # nimbus also agree
-    "RevertInCreateInInit.json",
-    "RevertInCreateInInitCreate2.json",
-    "InitCollision.json",
-
     # BC huge memory consumption
     "randomStatetest94.json",
     "DelegateCallSpam.json"

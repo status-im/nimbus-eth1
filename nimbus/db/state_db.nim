@@ -8,16 +8,49 @@
 import
   strformat,
   chronicles, eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  ../constants, ../utils, storage_types
+  ../constants, ../utils, storage_types, sets
 
 logScope:
   topics = "state_db"
+
+# aleth/geth/parity compatibility mode:
+#
+# affected test cases both in GST and BCT:
+# - stSStoreTest\InitCollision.json
+# - stRevertTest\RevertInCreateInInit.json
+# - stCreate2\RevertInCreateInInitCreate2.json
+#
+# pyEVM sided with original Nimbus EVM
+#
+# implementation difference:
+# Aleth/geth/parity using accounts cache.
+# When contract creation happened on an existing
+# but 'empty' account with non empty storage will
+# get new empty storage root.
+# Aleth cs. only clear the storage cache while both pyEVM
+# and Nimbus will modify the state trie.
+# During the next SSTORE call, aleth cs. calculate
+# gas used based on this cached 'original storage value'.
+# In other hand pyEVM and Nimbus will fetch
+# 'original storage value' from state trie.
+#
+# Both Yellow Paper and EIP2200 are not clear about this
+# situation but since aleth/geth/and parity implement this
+# behaviour, we perhaps also need to implement it.
+#
+# TODO: should this compatibility mode enabled via
+# compile time switch, runtime switch, or just hard coded
+# it?
+const
+  aleth_compat = true
 
 type
   AccountStateDB* = ref object
     trie: SecureHexaryTrie
     originalRoot: KeccakHash   # will be updated for every transaction
     transactionID: TransactionID
+    when aleth_compat:
+      cleared: HashSet[EthAddress]
 
   ReadOnlyStateDB* = distinct AccountStateDB
 
@@ -36,6 +69,8 @@ proc newAccountStateDB*(backingStore: TrieDatabaseRef,
   result.trie = initSecureHexaryTrie(backingStore, root, pruneTrie)
   result.originalRoot = root
   result.transactionID = backingStore.getTransactionID()
+  when aleth_compat:
+    result.cleared = initHashSet[EthAddress]()
 
 template createRangeFromAddress(address: EthAddress): ByteRange =
   ## XXX: The name of this proc is intentionally long, because it
@@ -97,6 +132,8 @@ proc clearStorage*(db: var AccountStateDB, address: EthAddress) =
   var account = db.getAccount(address)
   account.storageRoot = emptyRlpHash
   db.setAccount(address, account)
+  when aleth_compat:
+    db.cleared.incl address
 
 proc getStorageRoot*(db: AccountStateDB, address: EthAddress): Hash256 =
   var account = db.getAccount(address)
@@ -216,9 +253,15 @@ proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
 proc getCommittedStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): UInt256 =
   let tmpHash = db.rootHash
   db.rootHash = db.originalRoot
-  var exists: bool
   shortTimeReadOnly(trieDB(db), db.transactionID):
-    (result, exists) = db.getStorage(address, slot)
+    when aleth_compat:
+      if address in db.cleared:
+        debug "Forced contract creation on existing account detected", address
+        result = 0.u256
+      else:
+        result = db.getStorage(address, slot)[0]
+    else:
+      result = db.getStorage(address, slot)[0]
   db.rootHash = tmpHash
 
 proc updateOriginalRoot*(db: AccountStateDB) =
@@ -227,6 +270,9 @@ proc updateOriginalRoot*(db: AccountStateDB) =
   # no need to rollback or dispose
   # transactionID, it will be handled elsewhere
   db.transactionID = trieDB(db).getTransactionID()
+
+  when aleth_compat:
+    db.cleared.clear()
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getAccount*(db: ReadOnlyStateDB, address: EthAddress): Account {.borrow.}

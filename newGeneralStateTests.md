@@ -393,7 +393,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + CreateMessageRevertedOOGInInit.json                             OK
 + RevertDepthCreate2OOG.json                                      OK
 + RevertDepthCreateAddressCollision.json                          OK
-  RevertInCreateInInitCreate2.json                                Skip
++ RevertInCreateInInitCreate2.json                                OK
 + RevertOpcodeCreate.json                                         OK
 + RevertOpcodeInCreateReturnsCreate2.json                         OK
 + call_outsize_then_create2_successful_then_returndatasize.json   OK
@@ -419,7 +419,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 42/44 Fail: 0/44 Skip: 2/44
+OK: 43/44 Fail: 0/44 Skip: 1/44
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -1671,7 +1671,7 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + RevertDepthCreateAddressCollision.json                          OK
 + RevertDepthCreateOOG.json                                       OK
 + RevertInCallCode.json                                           OK
-  RevertInCreateInInit.json                                       Skip
++ RevertInCreateInInit.json                                       OK
 + RevertInDelegateCall.json                                       OK
 + RevertInStaticCall.json                                         OK
 + RevertOnEmptyStack.json                                         OK
@@ -1706,7 +1706,7 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 39/45 Fail: 0/45 Skip: 6/45
+OK: 40/45 Fail: 0/45 Skip: 5/45
 ## stSLoadTest
 ```diff
 + sloadGasCost.json                                               OK
@@ -1714,7 +1714,7 @@ OK: 39/45 Fail: 0/45 Skip: 6/45
 OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stSStoreTest
 ```diff
-  InitCollision.json                                              Skip
++ InitCollision.json                                              OK
 + InitCollisionNonZeroNonce.json                                  OK
 + SstoreCallToSelfSubRefundBelowZero.json                         OK
 + sstore_0to0.json                                                OK
@@ -1742,7 +1742,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + sstore_changeFromExternalCallInInitCode.json                    OK
 + sstore_gasLeft.json                                             OK
 ```
-OK: 26/27 Fail: 0/27 Skip: 1/27
+OK: 27/27 Fail: 0/27 Skip: 0/27
 ## stSelfBalance
 ```diff
 + selfBalance.json                                                OK
@@ -2625,4 +2625,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2305/2411 Fail: 0/2411 Skip: 106/2411
+OK: 2308/2411 Fail: 0/2411 Skip: 103/2411
