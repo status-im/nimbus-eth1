@@ -635,8 +635,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       continue
 
     var tester = parseTester(fixture, testStatusIMPL)
-    # TODO: do we need another test with pruneTrie = false?
-    var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = false)
+    var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = getConfiguration().pruning)
 
     echo "TESTING: ", fixtureName
     if not tester.good: continue

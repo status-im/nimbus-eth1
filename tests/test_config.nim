@@ -18,6 +18,7 @@ type
     index*: int
     trace*: bool
     legacy*: bool
+    pruning*: bool
 
 var testConfig {.threadvar.}: Configuration
 
@@ -26,6 +27,7 @@ proc initConfiguration(): Configuration =
   result.fork = FkFrontier
   result.index = 0
   result.trace = true
+  result.pruning = true
 
 proc getConfiguration*(): Configuration {.gcsafe.} =
   if isNil(testConfig):
@@ -48,6 +50,7 @@ proc processArguments*(msg: var string): ConfigStatus =
       of "index": config.index = parseInt(value)
       of "trace": config.trace = parseBool(value)
       of "legacy": config.legacy = parseBool(value)
+      of "pruning": config.pruning = parseBool(value)
       else:
         msg = "Unknown option " & key
         if value.len > 0: msg = msg & " : " & value
