@@ -309,11 +309,15 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 + gasLimitTooHighExactBound.json                                  OK
 + gasLimitTooLow.json                                             OK
 + gasLimitTooLowExactBound.json                                   OK
++ gasLimitTooLowExactBound2.json                                  OK
 + incorrectUncleNumber0.json                                      OK
 + incorrectUncleNumber1.json                                      OK
 + incorrectUncleNumber500.json                                    OK
 + incorrectUncleTimestamp.json                                    OK
 + incorrectUncleTimestamp2.json                                   OK
++ incorrectUncleTimestamp3.json                                   OK
++ incorrectUncleTimestamp4.json                                   OK
++ incorrectUncleTimestamp5.json                                   OK
 + nonceWrong.json                                                 OK
 + pastUncleTimestamp.json                                         OK
 + timestampTooHigh.json                                           OK
@@ -323,7 +327,7 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 + wrongParentHash.json                                            OK
 + wrongStateRoot.json                                             OK
 ```
-OK: 22/22 Fail: 0/22 Skip: 0/22
+OK: 26/26 Fail: 0/26 Skip: 0/26
 ## bcUncleSpecialTests
 ```diff
 + futureUncleTimestamp2.json                                      OK
@@ -1430,6 +1434,9 @@ OK: 99/99 Fail: 0/99 Skip: 0/99
 ## stQuadraticComplexityTest
 ```diff
   Call1MB1024Calldepth.json                                       Skip
+  Call20KbytesContract50_1.json                                   Skip
+  Call20KbytesContract50_2.json                                   Skip
+  Call20KbytesContract50_3.json                                   Skip
   Call50000.json                                                  Skip
   Call50000_ecrec.json                                            Skip
   Call50000_identity.json                                         Skip
@@ -1446,7 +1453,7 @@ OK: 99/99 Fail: 0/99 Skip: 0/99
   Return50000.json                                                Skip
   Return50000_2.json                                              Skip
 ```
-OK: 0/16 Fail: 0/16 Skip: 16/16
+OK: 0/19 Fail: 0/19 Skip: 19/19
 ## stRandom
 ```diff
 + randomStatetest0.json                                           OK
@@ -2149,11 +2156,12 @@ OK: 27/27 Fail: 0/27 Skip: 0/27
 ## stSelfBalance
 ```diff
 + selfBalance.json                                                OK
++ selfBalanceCallTypes.json                                       OK
 + selfBalanceEqualsBalance.json                                   OK
 + selfBalanceGasCost.json                                         OK
 + selfBalanceUpdate.json                                          OK
 ```
-OK: 4/4 Fail: 0/4 Skip: 0/4
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## stShift
 ```diff
 + sar00.json                                                      OK
@@ -3028,4 +3036,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2625/2730 Fail: 0/2730 Skip: 105/2730
+OK: 2630/2738 Fail: 0/2738 Skip: 108/2738

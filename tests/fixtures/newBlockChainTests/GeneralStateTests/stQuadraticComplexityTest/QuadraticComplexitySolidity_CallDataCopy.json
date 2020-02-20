@@ -2,9 +2,9 @@
     "QuadraticComplexitySolidity_CallDataCopy_d0g1v0_Istanbul" : {
         "_info" : {
             "comment" : "",
-            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
-            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
-            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.9-unstable-fc7e0fe6-20191129",
+            "filling-tool-version" : "retesteth-0.0.1+commit.64a9120f.Linux.g++",
+            "lllcversion" : "Version: 0.5.14-develop.2019.11.27+commit.8f259595.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stQuadraticComplexityTest/QuadraticComplexitySolidity_CallDataCopyFiller.json",
             "sourceHash" : "5ca4d53fe1895532fbc0b3ee40c2b5508d73df6eb98fdc2943c4738f6b566d2c"
         },
@@ -109,9 +109,9 @@
     "QuadraticComplexitySolidity_CallDataCopy_d0g0v0_Istanbul" : {
         "_info" : {
             "comment" : "",
-            "filling-rpc-server" : "Geth-1.9.6-unstable-63b18027-20190920",
-            "filling-tool-version" : "retesteth-0.0.1+commit.0ae18aef.Linux.g++",
-            "lllcversion" : "Version: 0.5.12-develop.2019.9.13+commit.2d601a4f.Linux.g++",
+            "filling-rpc-server" : "Geth-1.9.9-unstable-fc7e0fe6-20191129",
+            "filling-tool-version" : "retesteth-0.0.1+commit.64a9120f.Linux.g++",
+            "lllcversion" : "Version: 0.5.14-develop.2019.11.27+commit.8f259595.Linux.g++",
             "source" : "src/GeneralStateTestsFiller/stQuadraticComplexityTest/QuadraticComplexitySolidity_CallDataCopyFiller.json",
             "sourceHash" : "5ca4d53fe1895532fbc0b3ee40c2b5508d73df6eb98fdc2943c4738f6b566d2c"
         },
