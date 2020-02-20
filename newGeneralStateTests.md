@@ -1027,6 +1027,9 @@ OK: 99/99 Fail: 0/99 Skip: 0/99
 ## stQuadraticComplexityTest
 ```diff
   Call1MB1024Calldepth.json                                       Skip
+  Call20KbytesContract50_1.json                                   Skip
+  Call20KbytesContract50_2.json                                   Skip
+  Call20KbytesContract50_3.json                                   Skip
   Call50000.json                                                  Skip
   Call50000_ecrec.json                                            Skip
   Call50000_identity.json                                         Skip
@@ -1043,7 +1046,7 @@ OK: 99/99 Fail: 0/99 Skip: 0/99
   Return50000.json                                                Skip
   Return50000_2.json                                              Skip
 ```
-OK: 0/16 Fail: 0/16 Skip: 16/16
+OK: 0/19 Fail: 0/19 Skip: 19/19
 ## stRandom
 ```diff
 + randomStatetest0.json                                           OK
@@ -1746,11 +1749,12 @@ OK: 27/27 Fail: 0/27 Skip: 0/27
 ## stSelfBalance
 ```diff
 + selfBalance.json                                                OK
++ selfBalanceCallTypes.json                                       OK
 + selfBalanceEqualsBalance.json                                   OK
 + selfBalanceGasCost.json                                         OK
 + selfBalanceUpdate.json                                          OK
 ```
-OK: 4/4 Fail: 0/4 Skip: 0/4
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## stShift
 ```diff
 + sar00.json                                                      OK
@@ -2625,4 +2629,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2308/2411 Fail: 0/2411 Skip: 103/2411
+OK: 2309/2415 Fail: 0/2415 Skip: 106/2415

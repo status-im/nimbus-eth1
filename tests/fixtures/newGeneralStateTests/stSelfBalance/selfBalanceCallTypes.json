@@ -1,0 +1,116 @@
+{
+    "selfBalanceCallTypes" : {
+        "_info" : {
+            "comment" : "SELFBALANCE tests inside CALL, DELEGATECALL, and CALLCODE",
+            "filling-rpc-server" : "besu/v1.3.7/osx-x86_64/corretto-java-11",
+            "filling-tool-version" : "retesteth-0.0.1+commit.f19c40da.Darwin.appleclang",
+            "lllcversion" : "Version: 0.5.12-develop.2019.9.16+commit.2d601a4f.Darwin.appleclang",
+            "source" : "src/GeneralStateTestsFiller/stSelfBalance/selfBalanceCallTypesFiller.json",
+            "sourceHash" : "2093ce19cc0abdb4b5c1d3b295fff6b756b41eddcb569b592a2e4cc86324ea5d"
+        },
+        "env" : {
+            "currentCoinbase" : "0x2adc25665018aa1fe0e6bc666dac8fc2697ff9ba",
+            "currentDifficulty" : "0x020000",
+            "currentGasLimit" : "0x02540be400",
+            "currentNumber" : "0x01",
+            "currentTimestamp" : "0x03e8",
+            "previousHash" : "0x5e20a0453cecd065ea59c37ac63e079ee08998b6045136a8ce6635c7912ec0b6"
+        },
+        "post" : {
+            "Istanbul" : [
+                {
+                    "indexes" : {
+                        "data" : 0,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x2e57ba7b9a078885f8c0fcb287abb22af5c4d178d8b77b6c878caff2fb53ec11",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "indexes" : {
+                        "data" : 1,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0xde6d133ef8e1a45c269d177eb16b062d7c1f661db9046ee265ee24226fabd66c",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                },
+                {
+                    "indexes" : {
+                        "data" : 2,
+                        "gas" : 0,
+                        "value" : 0
+                    },
+                    "hash" : "0x5411f4b566b5fa9f9caff0236941898e7d99ca23fbcd109a8a33a9c22fadafe2",
+                    "logs" : "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+                }
+            ]
+        },
+        "pre" : {
+            "0x1100000000000000000000000000000000000000" : {
+                "balance" : "0x1000",
+                "code" : "0x3031471460115500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x1200000000000000000000000000000000000000" : {
+                "balance" : "0x1100",
+                "code" : "0x4760215500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x1300000000000000000000000000000000000000" : {
+                "balance" : "0x1200",
+                "code" : "0x5a475a905090036002900360315500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x1400000000000000000000000000000000000000" : {
+                "balance" : "0x1300",
+                "code" : "0x47806041556000600060006000600160006000f1504780604255900360435500",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            },
+            "0x2000000000000000000000000000000000000000" : {
+                "balance" : "0x2000",
+                "code" : "0x60006080525b608051541560755760003560011415602c57600060006000600060006080515460155a03f1505b6000356002141560495760006000600060006080515460155a03f4505b60003560031415606857600060006000600060006080515460155a03f2505b6001608051016080526005565b00",
+                "nonce" : "0x00",
+                "storage" : {
+                    "0x00" : "0x1100000000000000000000000000000000000000",
+                    "0x01" : "0x1200000000000000000000000000000000000000",
+                    "0x02" : "0x1300000000000000000000000000000000000000",
+                    "0x03" : "0x1400000000000000000000000000000000000000"
+                }
+            },
+            "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b" : {
+                "balance" : "0x3635c9adc5dea00000",
+                "code" : "0x",
+                "nonce" : "0x00",
+                "storage" : {
+                }
+            }
+        },
+        "transaction" : {
+            "data" : [
+                "0x0000000000000000000000000000000000000000000000000000000000000001",
+                "0x0000000000000000000000000000000000000000000000000000000000000002",
+                "0x0000000000000000000000000000000000000000000000000000000000000003"
+            ],
+            "gasLimit" : [
+                "0x0f4240"
+            ],
+            "gasPrice" : "0x01",
+            "nonce" : "0x00",
+            "secretKey" : "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+            "to" : "0x2000000000000000000000000000000000000000",
+            "value" : [
+                "0x00"
+            ]
+        }
+    }
+}
