@@ -89,7 +89,8 @@ const
     eth5, # FkSpurious
     eth3, # FkByzantium
     eth2, # FkConstantinople
-    eth2  # FkIstanbul
+    eth2, # FkIstanbul
+    eth2  # FkGlacierMuir
   ]
 
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
