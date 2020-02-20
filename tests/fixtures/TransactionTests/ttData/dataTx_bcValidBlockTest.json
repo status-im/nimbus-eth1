@@ -28,10 +28,14 @@
             "hash" : "335a5ff5ccb146260b0ddc9d43b7f5c4bd994829e5616092db5dbe25c490ed16",
             "sender" : "db3271a5b88f7bae59660418e25ce5d142f9b080"
         },
+        "Istanbul" : {
+            "hash" : "335a5ff5ccb146260b0ddc9d43b7f5c4bd994829e5616092db5dbe25c490ed16",
+            "sender" : "db3271a5b88f7bae59660418e25ce5d142f9b080"
+        },
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-14+commit.80ca102e",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filledwith" : "testeth 1.7.0-alpha.1-33+commit.9ec9d33e.dirty",
+            "lllcversion" : "Version: 0.5.0-develop.2019.8.22+commit.9709dfe0.Linux.g++",
             "source" : "src/TransactionTestsFiller/ttData/dataTx_bcValidBlockTestFiller.json",
             "sourceHash" : "71ac3b465e1395e5c93f883e5cc4da64684fdff5768c6f613d43756ed35370a2"
         },

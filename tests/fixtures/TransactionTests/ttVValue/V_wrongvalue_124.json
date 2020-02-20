@@ -14,10 +14,12 @@
         },
         "Homestead" : {
         },
+        "Istanbul" : {
+        },
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-14+commit.80ca102e",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filledwith" : "testeth 1.7.0-alpha.1-33+commit.9ec9d33e.dirty",
+            "lllcversion" : "Version: 0.5.0-develop.2019.8.22+commit.9709dfe0.Linux.g++",
             "source" : "src/TransactionTestsFiller/ttVValue/V_wrongvalue_124Filler.json",
             "sourceHash" : "0ce5bc6f8e4d5a48e325028830a061b9138cf5e5c3ab63b5824b03e5f86444df"
         },

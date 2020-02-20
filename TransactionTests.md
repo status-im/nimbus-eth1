@@ -20,6 +20,12 @@ OK: 4/4 Fail: 0/4 Skip: 0/4
 + dataTx_bcValidBlockTestFrontier.json                            OK
 ```
 OK: 8/8 Fail: 0/8 Skip: 0/8
+## ttEIP2028
+```diff
++ DataTestInsufficientGas2028.json                                OK
++ DataTestSufficientGas2028.json                                  OK
+```
+OK: 2/2 Fail: 0/2 Skip: 0/2
 ## ttGasLimit
 ```diff
 + NotEnoughGasLimit.json                                          OK
@@ -221,4 +227,4 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 OK: 70/70 Fail: 0/70 Skip: 0/70
 
 ---TOTAL---
-OK: 179/179 Fail: 0/179 Skip: 0/179
+OK: 181/181 Fail: 0/181 Skip: 0/181
