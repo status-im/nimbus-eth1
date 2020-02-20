@@ -28,10 +28,14 @@
             "hash" : "1cbb233404f49e96cb795d0ea74f485eca2c41a216e0ce80694cef4dd7a45b50",
             "sender" : "58d79230fc81a042315da7d243272798e27cb40c"
         },
+        "Istanbul" : {
+            "hash" : "1cbb233404f49e96cb795d0ea74f485eca2c41a216e0ce80694cef4dd7a45b50",
+            "sender" : "58d79230fc81a042315da7d243272798e27cb40c"
+        },
         "_info" : {
             "comment" : "",
-            "filledwith" : "testeth 1.6.0-alpha.0-14+commit.80ca102e",
-            "lllcversion" : "Version: 0.5.0-develop.2018.11.9+commit.9709dfe0.Linux.g++",
+            "filledwith" : "testeth 1.7.0-alpha.1-33+commit.9ec9d33e.dirty",
+            "lllcversion" : "Version: 0.5.0-develop.2019.8.22+commit.9709dfe0.Linux.g++",
             "source" : "src/TransactionTestsFiller/ttSignature/RightVRSTestFiller.json",
             "sourceHash" : "c6a8c1f6841ff332d6f5888e02ec1eba79b98c1b481df696060738cb6a659d4c"
         },
