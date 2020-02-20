@@ -1,6 +1,7 @@
 import unittest2, strutils, tables, os, json,
   ../nimbus/utils/difficulty, stint, times,
-  eth/common, test_helpers, stew/byteutils
+  eth/common, test_helpers, stew/byteutils,
+  ../nimbus/constants, ../nimbus/vm/interpreter/vm_forks
 
 type
   Tester = object
@@ -34,14 +35,19 @@ proc parseTests(name: string, hex: static[bool]): Tests =
   for title, data in fixtures:
     t.parentTimestamp = hexOrInt64(data, "parentTimestamp", hex)
     t.parentDifficulty = hexOrInt256(data, "parentDifficulty", hex)
-    hexToByteArray(data["parentUncles"].getStr, t.parentUncles.data)
+    let pu = data.fields.getOrDefault("parentUncles")
+    if pu.isNil:
+      t.parentUncles = EMPTY_UNCLE_HASH
+    else:
+      hexToByteArray(pu.getStr, t.parentUncles.data)
     t.currentTimestamp = hexOrInt64(data, "currentTimestamp", hex)
     t.currentBlockNumber = hexOrInt256(data, "currentBlockNumber", hex)
     t.currentDifficulty = hexOrInt256(data, "currentDifficulty", hex)
     result[title] = t
 
 template runTests(name: string, hex: bool, calculator: typed) =
-  test name:
+  let testTitle = if name == "": "Difficulty" else: name
+  test testTitle:
     let data = parseTests(name, hex)
     for title, t in data:
       var p = BlockHeader(
@@ -53,11 +59,18 @@ template runTests(name: string, hex: bool, calculator: typed) =
       let diff = calculator(times.fromUnix(t.currentTimeStamp), p)
       check diff == t.currentDifficulty
 
+func calcDifficultyMainNetWork(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+  calcDifficulty(timeStamp, parent, parent.blockNumber.toFork)
+  
 proc difficultyMain*() =
   suite "DifficultyTest":
+    runTests("EIP2384_random_to20M", true, calcDifficultyGlacierMuir)
+    runTests("EIP2384_random", true, calcDifficultyGlacierMuir)
+    runTests("EIP2384", true, calcDifficultyGlacierMuir)
     runTests("Byzantium", true, calcDifficultyByzantium)
     runTests("Constantinople", true, calcDifficultyConstantinople)
     runTests("Homestead", true, calcDifficultyHomestead)
+    runTests("MainNetwork", true, calcDifficultyMainNetwork)
     runTests("Frontier", true, calcDifficultyFrontier)
     runTests("", false, calcDifficulty)
 

@@ -140,9 +140,14 @@ template calcDifficultyByzantium*(timeStamp: EthTime, parent: BlockHeader): Diff
 template calcDifficultyConstantinople*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   makeDifficultyCalculator(5_000_000, timeStamp, parent)
 
+template calcDifficultyGlacierMuir*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+  makeDifficultyCalculator(9_000_000, timeStamp, parent)
+  
 func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
-  if next >= forkBlocks[FkConstantinople]:
+  if next >= forkBlocks[FkGlacierMuir]:
+    result = calcDifficultyGlacierMuir(timeStamp, parent)
+  elif next >= forkBlocks[FkConstantinople]:
     result = calcDifficultyConstantinople(timeStamp, parent)
   elif next >= forkBlocks[FkByzantium]:
     result = calcDifficultyByzantium(timeStamp, parent)
@@ -153,6 +158,8 @@ func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
 
 func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader, fork: Fork): DifficultyInt =
   case fork
+  of FkGlacierMuir:
+    result = calcDifficultyGlacierMuir(timeStamp, parent)
   of FkConstantinople:
     result = calcDifficultyConstantinople(timeStamp, parent)
   of FkByzantium:
