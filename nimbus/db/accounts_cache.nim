@@ -39,6 +39,8 @@ type
     cache: Table[EthAddress, RefAccount]
     state: TransactionState
 
+const emptyAcc = newAccount()
+
 proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
@@ -48,6 +50,13 @@ proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
   result.trie = initSecureHexaryTrie(db, root, pruneTrie)
   result.unrevertablyTouched = initHashSet[EthAddress]()
   discard result.beginSavepoint
+
+proc rootHash*(ac: AccountsCache): KeccakHash =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavePoint.isNil)
+  # make sure all cache already committed
+  doAssert(ac.savePoint.cache.len == 0)
+  ac.trie.rootHash
 
 proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   new result
@@ -92,7 +101,7 @@ template createRangeFromAddress(address: EthAddress): ByteRange =
   ## it can remain searchable in the code.
   toRange(@address)
 
-proc getAccount(ac: AccountsCache, address: EthAddress): RefAccount =
+proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): RefAccount =
   # search account from layers of cache
   var sp = ac.savePoint
   while sp != nil:
@@ -110,6 +119,8 @@ proc getAccount(ac: AccountsCache, address: EthAddress): RefAccount =
       flags: {IsAlive}
       )
   else:
+    if not shouldCreate:
+      return
     # it's a request for new account
     result = RefAccount(
       account: newAccount(),
@@ -215,7 +226,7 @@ proc persistCode(acc: RefAccount, db: TrieDatabaseRef) =
     db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code.toOpenArray)
 
 proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
-  if acc.account.storageRoot == emptyRlpHash:
+  if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
     return
@@ -251,16 +262,25 @@ proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): Ref
   ac.savePoint.cache[address] = result
 
 proc getCodeHash*(ac: AccountsCache, address: EthAddress): Hash256 {.inline.} =
-  ac.getAccount(address).account.codeHash
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.codeHash
+  else: acc.account.codeHash
 
 proc getBalance*(ac: AccountsCache, address: EthAddress): UInt256 {.inline.} =
-  ac.getAccount(address).account.balance
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.balance
+  else: acc.account.balance
 
 proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} =
-  ac.getAccount(address).account.nonce
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.nonce
+  else: acc.account.nonce
 
 proc getCode*(ac: AccountsCache, address: EthAddress): ByteRange =
-  let acc = ac.getAccount(address)
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
+
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
   else:
@@ -273,28 +293,40 @@ proc getCodeSize*(ac: AccountsCache, address: EthAddress): int {.inline.} =
   ac.getCode(address).len
 
 proc getCommittedStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
-  let acc = ac.getAccount(address)
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
   acc.originalStorageValue(slot, ac.db)
 
 proc getStorage*(ac: AccountsCache, address: EthAddress, slot: UInt256): UInt256 {.inline.} =
-  let acc = ac.getAccount(address)
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
   acc.storageValue(slot, ac.db)
 
 proc hasCodeOrNonce*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
-  let acc = ac.getAccount(address)
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
   acc.account.nonce != 0 or acc.account.codeHash != EMPTY_SHA3
 
 proc accountExists*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
-  let acc = ac.getAccount(address)
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    return
   acc.exists()
 
 proc isEmptyAccount*(ac: AccountsCache, address: EthAddress): bool {.inline.} =
-  let acc = ac.getAccount(address)
+  let acc = ac.getAccount(address, false)
+  doAssert not acc.isNil
   doAssert acc.exists()
   result = acc.isEmpty()
 
 proc isDeadAccount*(ac: AccountsCache, address: EthAddress): bool =
-  let acc = ac.getAccount(address)
+  let acc = ac.getAccount(address, false)
+  if acc.isNil:
+    result = true
+    return
   if not acc.exists():
     result = true
   else:
@@ -347,10 +379,6 @@ proc clearStorage*(ac: var AccountsCache, address: EthAddress) =
     # there is no point to clone the storage since we want to remove it
     ac.makeDirty(address, cloneStorage = false).account.storageRoot = emptyRlpHash
 
-#proc deleteAccount*(ac: var AccountsCache, address: EthAddress) =
-#  let acc = ac.getAccount(address)
-#  if IsAlive in acc.flags:
-
 proc unrevertableTouch*(ac: var AccountsCache, address: EthAddress) =
   ac.unrevertablyTouched.incl address
 
@@ -383,6 +411,7 @@ proc persist*(ac: var AccountsCache) =
       ac.trie.del createRangeFromAddress(address)
     of DoNothing:
       discard
+  ac.savePoint.cache.clear()
 
 iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
   # beware that if the account not persisted,
