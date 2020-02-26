@@ -11,16 +11,22 @@ import  unittest2, eth/trie/[hexary, db],
 
 include ../nimbus/db/accounts_cache
 
+func initAddr(z: int): EthAddress =
+  result[^1] = z.byte
+
 proc stateDBMain*() =
   suite "Account State DB":
     setup:
+      const emptyAcc = newAccount()
+
       var
         memDB = newMemoryDB()
+        acDB = newMemoryDB()
         trie = initHexaryTrie(memDB)
         stateDB = newAccountStateDB(memDB, trie.rootHash, true)
-        address: EthAddress
-
-      hexToByteArray("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6", address)
+        address = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+        code = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6").toRange
+        rootHash: KeccakHash
 
     test "accountExists and isDeadAccount":
       check stateDB.accountExists(address) == false
@@ -38,13 +44,11 @@ proc stateDBMain*() =
       stateDB.setAccount(address, acc)
       check stateDB.isDeadAccount(address) == false
 
-      var code = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
-      stateDB.setCode(address, code.toRange)
+      stateDB.setCode(address, code)
       stateDB.setNonce(address, 0)
       check stateDB.isDeadAccount(address) == false
 
-      code = @[]
-      stateDB.setCode(address, code.toRange)
+      stateDB.setCode(address, BytesRange())
       check stateDB.isDeadAccount(address) == true
       check stateDB.accountExists(address) == true
 
@@ -77,10 +81,7 @@ proc stateDBMain*() =
       check y.originalStorage.len == 3
 
     test "accounts cache":
-      func initAddr(z: int): EthAddress =
-        result[^1] = z.byte
-
-      var ac = init(AccountsCache, memDB, emptyRlpHash, true)
+      var ac = init(AccountsCache, acDB, emptyRlpHash, true)
       var addr1 = initAddr(1)
 
       check ac.isDeadAccount(addr1) == true
@@ -99,7 +100,6 @@ proc stateDBMain*() =
       ac.incNonce(addr1)
       check ac.getNonce(addr1) == 2
 
-      var code = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6").toRange
       ac.setCode(addr1, code)
       check ac.getCode(addr1) == code
 
@@ -109,6 +109,37 @@ proc stateDBMain*() =
 
       check ac.hasCodeOrNonce(addr1) == true
       check ac.getCodeSize(addr1) == code.len
-      
+
+      ac.persist()
+      rootHash = ac.rootHash
+
+      var db = newAccountStateDB(memDB, emptyRlpHash, true)
+      db.setBalance(addr1, 1100.u256)
+      db.setNonce(addr1, 2)
+      db.setCode(addr1, code)
+      db.setStorage(addr1, 1.u256, 10.u256)
+      check rootHash == db.rootHash
+
+    test "accounts cache readonly operations":
+      # use previous hash
+      var ac = init(AccountsCache, acDB, rootHash, true)
+      var addr2 = initAddr(2)
+
+      check ac.getCodeHash(addr2) == emptyAcc.codeHash
+      check ac.getBalance(addr2) == emptyAcc.balance
+      check ac.getNonce(addr2) == emptyAcc.nonce
+      check ac.getCode(addr2) == BytesRange()
+      check ac.getCodeSize(addr2) == 0
+      check ac.getCommittedStorage(addr2, 1.u256) == 0.u256
+      check ac.getStorage(addr2, 1.u256) == 0.u256
+      check ac.hasCodeOrNonce(addr2) == false
+      check ac.accountExists(addr2) == false
+      check ac.isDeadAccount(addr2) == true
+
+      ac.persist()
+      # readonly operations should not modify
+      # state trie at all
+      check ac.rootHash == rootHash
+
 when isMainModule:
   stateDBMain()
