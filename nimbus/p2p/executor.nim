@@ -89,6 +89,7 @@ const
     eth5, # FkSpurious
     eth3, # FkByzantium
     eth2, # FkConstantinople
+    eth2, # FkPetersburg
     eth2, # FkIstanbul
     eth2  # FkGlacierMuir
   ]

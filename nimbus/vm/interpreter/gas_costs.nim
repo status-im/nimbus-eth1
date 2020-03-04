@@ -248,7 +248,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           else:
             result.gasRefund += CleanRefundEIP2200
     else:
-      when fork < FkIstanbul:
+      when fork < FkConstantinople or fork == FkPetersburg:
         # workaround for static evaluation not working for if expression
         const
           gSet = FeeSchedule[GasSset]
@@ -721,6 +721,7 @@ const
     FkSpurious: SpuriousGasFees,
     FkByzantium: SpuriousGasFees,
     FkConstantinople: SpuriousGasFees,
+    FkPetersburg: SpuriousGasFees,
     FkIstanbul: IstanbulGasFees,
     FkGlacierMuir: IstanbulGasFees
   ]
@@ -730,6 +731,7 @@ gasCosts(FkFrontier, base, BaseGasCosts)
 gasCosts(FkHomestead, homestead, HomesteadGasCosts)
 gasCosts(FkTangerine, tangerine, TangerineGasCosts)
 gasCosts(FkSpurious, spurious, SpuriousGasCosts)
+gasCosts(FkConstantinople, constantinople, ConstantinopleGasCosts)
 gasCosts(FkIstanbul, istanbul, IstanbulGasCosts)
 
 proc forkToSchedule*(fork: Fork): GasCosts =
@@ -739,6 +741,8 @@ proc forkToSchedule*(fork: Fork): GasCosts =
     HomesteadGasCosts
   elif fork < FkSpurious:
     TangerineGasCosts
+  elif fork == FkConstantinople:
+    ConstantinopleGasCosts # with EIP-1283
   elif fork < FkIstanbul:
     SpuriousGasCosts
   else:

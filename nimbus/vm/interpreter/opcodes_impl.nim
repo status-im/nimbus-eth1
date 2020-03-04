@@ -462,7 +462,7 @@ op sstore, inline = false, slot, newValue:
   else:
     sstoreImpl(c, slot, newValue)
 
-template sstoreEIP2200Impl(c: Computation, slot, newValue: Uint256) =
+template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
   let stateDB = c.vmState.readOnlyStateDB
   let currentValue {.inject.} = c.getStorage(slot)
 
@@ -492,7 +492,15 @@ op sstoreEIP2200, inline = false, slot, newValue:
   when evmc_enabled:
     sstoreEvmc(c, slot, newValue)
   else:
-    sstoreEIP2200Impl(c, slot, newValue)
+    sstoreNetGasMeteringImpl(c, slot, newValue)
+
+op sstoreEIP1283, inline = false, slot, newValue:
+  checkInStaticContext(c)
+
+  when evmc_enabled:
+    sstoreEvmc(c, slot, newValue)
+  else:
+    sstoreNetGasMeteringImpl(c, slot, newValue)
 
 proc jumpImpl(c: Computation, jumpTarget: UInt256) =
   if jumpTarget >= c.code.len.u256:
