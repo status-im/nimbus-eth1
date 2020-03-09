@@ -116,7 +116,7 @@ proc hostEmitLogImpl(ctx: Computation, address: EthAddress,
     for i in 0 ..< topicsCount:
       log.topics[i] = topics[i].bytes
 
-  log.data = @makeOpenArray(data, dataSize)
+  log.data = @(makeOpenArray(data, dataSize))
   log.address = address
   ctx.addLogEntry(log)
 
@@ -128,7 +128,7 @@ template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     gas: m.gas,
     sender: m.sender,
     value: Uint256.fromEvmc(m.value),
-    data: @makeOpenArray(m.inputData, m.inputSize.int)
+    data: @(makeOpenArray(m.inputData, m.inputSize.int))
     )
 
   let child = newComputation(c.vmState, childMsg, Uint256.fromEvmc(m.create2_salt))
@@ -159,7 +159,7 @@ template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     codeAddress: m.destination,
     contractAddress: if m.kind == EVMC_CALL: m.destination else: c.msg.contractAddress,
     value: Uint256.fromEvmc(m.value),
-    data: @makeOpenArray(m.inputData, m.inputSize.int)
+    data: @(makeOpenArray(m.inputData, m.inputSize.int)),
     flags: MsgFlags(m.flags)
     )
 

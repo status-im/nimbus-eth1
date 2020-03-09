@@ -614,7 +614,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
       )
 
       var res = c.host.call(msg)
-      c.returnData = @makeOpenArray(res.outputData, res.outputSize.int)
+      c.returnData = @(makeOpenArray(res.outputData, res.outputSize.int))
       c.gasMeter.returnGas(res.gas_left)
 
       if res.status_code == EVMC_SUCCESS:
@@ -780,7 +780,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       )
 
       var res = c.host.call(msg)
-      c.returnData = @makeOpenArray(res.outputData, res.outputSize.int)
+      c.returnData = @(makeOpenArray(res.outputData, res.outputSize.int))
 
       let actualOutputSize = min(memOutLen, c.returnData.len)
       if actualOutputSize > 0:
