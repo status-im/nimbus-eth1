@@ -222,7 +222,8 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
         sstoreLoad = FeeSchedule[GasSload]
         sstoreSet  = FeeSchedule[GasSset]
         sstoreReset= FeeSchedule[GasSreset]
-        sstoreDirty= when fork >= FkIstanbul: sstoreLoad else: sstoreReset
+        sstoreDirty= when fork < FkConstantinople or fork == FkPetersburg: sstoreReset
+                     else: sstoreLoad
         InitRefundEIP2200  = FeeSchedule[GasSset] - FeeSchedule[GasSload]
         CleanRefundEIP2200 = FeeSchedule[GasSreset] - FeeSchedule[GasSload]
         ClearRefundEIP2200 = FeeSchedule[RefundsClear]
