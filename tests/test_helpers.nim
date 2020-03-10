@@ -8,6 +8,7 @@
 import
   os, macros, json, strformat, strutils, parseutils, os, tables,
   stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p], unittest2,
+  testutils/markdown_reports,
   ../nimbus/[vm_state, config, transaction, utils, errors],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/vm/interpreter/vm_forks
@@ -39,9 +40,6 @@ const
     FkIstanbul}
 
   nameToFork* = revmap(forkNames)
-
-type
-  Status* {.pure.} = enum OK, Fail, Skip
 
 func skipNothing*(folder: string, name: string): bool = false
 
@@ -112,39 +110,7 @@ macro jsonTest*(s: static[string], handler: untyped, skipTest: untyped = skipNot
       status.sort do (a: (string, OrderedTable[string, Status]),
                       b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
 
-      let `symbol`: array[Status, string] = ["+", "-", " "]
-      var raw = ""
-      var okCountTotal = 0
-      var failCountTotal = 0
-      var skipCountTotal = 0
-      raw.add(`s` & "\n")
-      raw.add("===\n")
-      for folder, statuses in status:
-        raw.add("## " & folder & "\n")
-        raw.add("```diff\n")
-        var sortedStatuses = statuses
-        sortedStatuses.sort do (a: (string, Status), b: (string, Status)) -> int:
-          cmp(a[0], b[0])
-        var okCount = 0
-        var failCount = 0
-        var skipCount = 0
-        for `name`, `final` in sortedStatuses:
-          raw.add(&`formatted`)
-          case `final`:
-            of Status.OK: okCount += 1
-            of Status.Fail: failCount += 1
-            of Status.Skip: skipCount += 1
-        raw.add("```\n")
-        let sum = okCount + failCount + skipCount
-        okCountTotal += okCount
-        failCountTotal += failCount
-        skipCountTotal += skipCount
-        raw.add("OK: " & $okCount & "/" & $sum & " Fail: " & $failCount & "/" & $sum & " Skip: " & $skipCount & "/" & $sum & "\n")
-
-      let sumTotal = okCountTotal + failCountTotal + skipCountTotal
-      raw.add("\n---TOTAL---\n")
-      raw.add("OK: $1/$4 Fail: $2/$4 Skip: $3/$4\n" % [$okCountTotal, $failCountTotal, $skipCountTotal, $sumTotal])
-      writeFile(`s` & ".md", raw)
+      generateReport(`s`, status)
       status.clear()
 
 func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
