@@ -77,11 +77,14 @@ proc run(config: WakuNodeConf) =
   if not config.bootnodeOnly:
     node.addCapability Waku # Always enable Waku protocol
     var topicInterest: Option[seq[waku_protocol.Topic]]
+    var bloom: Option[Bloom]
     if config.wakuTopicInterest:
       var topics: seq[waku_protocol.Topic]
       topicInterest = some(topics)
+    else:
+      bloom = some(fullBloom())
     let wakuConfig = WakuConfig(powRequirement: config.wakuPow,
-                                bloom: fullBloom(),
+                                bloom: bloom,
                                 isLightNode: config.lightNode,
                                 maxMsgSize: waku_protocol.defaultMaxMsgSize,
                                 topics: topicInterest)
