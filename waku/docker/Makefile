@@ -4,8 +4,8 @@ SHELL := bash # the shell used internally by "make"
 
 GIT_REVISION ?= $(shell git rev-parse HEAD)
 
-IMAGE_TAG       ?= waku_latest
-IMAGE_NAME      ?= statusteam/nimbus_waku_node:$(IMAGE_TAG)
+IMAGE_TAG       ?= latest
+IMAGE_NAME      ?= statusteam/nimbus_wakunode:$(IMAGE_TAG)
 
 build:
 	docker build \
