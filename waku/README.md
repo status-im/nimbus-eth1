@@ -9,6 +9,15 @@ an experimental Whisper - Waku bridging option.
 
 # How to Build & Run
 
+## Prerequisites
+
+* GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
+* PCRE
+
+More information on the installation of these can be found [here](https://github.com/status-im/nimbus#prerequisites).
+
+## Build & Run
+
 ```bash
 make # The first `make` invocation will update all Git submodules and prompt you to run `make` again.
      # It's only required once per Git clone. You'll run `make update` after each `git pull`, in the future,

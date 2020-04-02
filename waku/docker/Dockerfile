@@ -3,7 +3,7 @@ FROM debian:bullseye-slim AS build
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get -qq update \
- && apt-get -qq -y install build-essential make wget librocksdb-dev libpcre3-dev git &>/dev/null \
+ && apt-get -qq -y install build-essential make wget libpcre3-dev git curl &>/dev/null \
  && apt-get -qq clean
 
 ARG GIT_REVISION
@@ -24,7 +24,7 @@ FROM debian:bullseye-slim
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get -qq update \
- && apt-get -qq -y install librocksdb-dev libpcre3 &>/dev/null \
+ && apt-get -qq -y install libpcre3 &>/dev/null \
  && apt-get -qq clean \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
