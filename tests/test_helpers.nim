@@ -205,6 +205,8 @@ proc setupEthNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): Ethereu
   var
     conf = getConfiguration()
     keypair: KeyPair
+  if conf.net.nodekey.isZeroKey():
+    conf.net.nodekey = PrivateKey.random().tryGet()
   keypair.seckey = conf.net.nodekey
   keypair.pubkey = conf.net.nodekey.getPublicKey()
 
