@@ -10,6 +10,9 @@ an experimental Whisper - Waku bridging option.
 # How to Build & Run
 
 ```bash
+make # The first `make` invocation will update all Git submodules and prompt you to run `make` again.
+     # It's only required once per Git clone. You'll run `make update` after each `git pull`, in the future,
+     # to keep those submodules up to date.
 make wakunode
 ./build/wakunode --help
 ```
