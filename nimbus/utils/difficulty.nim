@@ -1,4 +1,4 @@
-import 
+import
   times,
   eth/common, stint,
   ../constants, ../vm/interpreter/vm_forks
@@ -142,7 +142,7 @@ template calcDifficultyConstantinople*(timeStamp: EthTime, parent: BlockHeader):
 
 template calcDifficultyGlacierMuir*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   makeDifficultyCalculator(9_000_000, timeStamp, parent)
-  
+
 func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
   if next >= forkBlocks[FkGlacierMuir]:
@@ -160,7 +160,7 @@ func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader, fork: Fork): Diffi
   case fork
   of FkGlacierMuir:
     result = calcDifficultyGlacierMuir(timeStamp, parent)
-  of FkConstantinople:
+  of FkConstantinople..FkPetersburg:
     result = calcDifficultyConstantinople(timeStamp, parent)
   of FkByzantium:
     result = calcDifficultyByzantium(timeStamp, parent)

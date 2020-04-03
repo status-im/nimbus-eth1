@@ -17,6 +17,7 @@ type
     FkSpurious,
     FkByzantium,
     FkConstantinople,
+    FkPetersburg,
     FkIstanbul,
     FkGlacierMuir
 
@@ -29,7 +30,8 @@ const
     FkTangerine:      2_463_000.toBlockNumber, # 18/10/2016 17:19:31
     FkSpurious:       2_675_000.toBlockNumber, # 22/11/2016 18:15:44
     FkByzantium:      4_370_000.toBlockNumber, # 16/10/2017 09:22:11
-    FkConstantinople: 7_280_000.toBlockNumber, # 28/02/2019 07:52:04
+    FkConstantinople: 7_280_000.toBlockNumber, # Never Occured in MainNet
+    FkPetersburg:     7_280_000.toBlockNumber, # 28/02/2019 07:52:04
     FkIstanbul:       9_069_000.toBlockNumber, # 08/12/2019 12:25:09
     FkGlacierMuir:    9_200_000.toBlockNumber  # 02/01/2020 08:30:49
   ]
@@ -51,7 +53,7 @@ proc toFork*(blockNumber: BlockNumber): Fork =
   elif blockNumber < forkBlocks[FkSpurious]:  FkTangerine
   elif blockNumber < forkBlocks[FkByzantium]: FkSpurious
   elif blockNumber < forkBlocks[FkConstantinople]: FkByzantium
-  elif blockNumber < forkBlocks[FkIstanbul]: FkConstantinople
+  elif blockNumber < forkBlocks[FkIstanbul]: FkPetersburg
   elif blockNumber < forkBlocks[FkGlacierMuir]: FkIstanbul
   else: FkGlacierMuir
 
@@ -65,5 +67,6 @@ proc `$`*(fork: Fork): string =
   of FkSpurious: result = "Spurious Dragon"
   of FkByzantium: result = "Byzantium"
   of FkConstantinople: result = "Constantinople"
+  of FkPetersburg: result = "Petersburg"
   of FkIstanbul: result = "Istanbul"
   of FkGlacierMuir: result = "Glacier Muir"

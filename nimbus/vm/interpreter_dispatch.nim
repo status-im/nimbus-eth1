@@ -212,8 +212,15 @@ proc genConstantinopleJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.c
   result[Sar] = newIdentNode "sarOp"
   result[ExtCodeHash] = newIdentNode "extCodeHash"
   result[Create2] = newIdentNode "create2"
+  result[SStore] = newIdentNode "sstoreEIP1283"
 
 let ConstantinopleOpDispatch {.compileTime.}: array[Op, NimNode] = genConstantinopleJumpTable(ByzantiumOpDispatch)
+
+proc genPetersburgJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  result[SStore] = newIdentNode "sstore" # disable EIP-1283
+
+let PetersburgOpDispatch {.compileTime.}: array[Op, NimNode] = genPetersburgJumpTable(ConstantinopleOpDispatch)
 
 proc genIstanbulJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
   result = ops
@@ -221,7 +228,7 @@ proc genIstanbulJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compile
   result[SelfBalance] = newIdentNode "selfBalance"
   result[SStore] = newIdentNode "sstoreEIP2200"
 
-let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTable(ConstantinopleOpDispatch)
+let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTable(PetersburgOpDispatch)
 
 proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
 
@@ -296,6 +303,9 @@ macro genByzantiumDispatch(c: Computation): untyped =
 macro genConstantinopleDispatch(c: Computation): untyped =
   result = opTableToCaseStmt(ConstantinopleOpDispatch, c)
 
+macro genPetersburgDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(PetersburgOpDispatch, c)
+
 macro genIstanbulDispatch(c: Computation): untyped =
   result = opTableToCaseStmt(IstanbulOpDispatch, c)
 
@@ -317,6 +327,9 @@ proc byzantiumVM(c: Computation) {.gcsafe.} =
 proc constantinopleVM(c: Computation) {.gcsafe.} =
   genConstantinopleDispatch(c)
 
+proc petersburgVM(c: Computation) {.gcsafe.} =
+  genPetersburgDispatch(c)
+
 proc istanbulVM(c: Computation) {.gcsafe.} =
   genIstanbulDispatch(c)
 
@@ -335,6 +348,8 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
     c.byzantiumVM()
   of FkConstantinople:
     c.constantinopleVM()
+  of FkPetersburg:
+    c.petersburgVM()
   else:
     c.istanbulVM()
 

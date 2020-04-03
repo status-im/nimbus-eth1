@@ -190,7 +190,7 @@ proc parseBlocks(blocks: JsonNode, testStatusIMPL: var TestStatus): seq[TesterBl
 func vmConfiguration(network: string): VMConfig =
   case network
   of "EIP150": result = [(0, FkTangerine), (0, FkTangerine)]
-  of "ConstantinopleFix": result = [(0, FkConstantinople), (0, FkConstantinople)]
+  of "ConstantinopleFix": result = [(0, FkPetersburg), (0, FkPetersburg)]
   of "Homestead": result = [(0, FkHomestead), (0, FkHomestead)]
   of "Frontier": result = [(0, FkFrontier), (0, FkFrontier)]
   of "Byzantium": result = [(0, FkByzantium), (0, FkByzantium)]
@@ -200,7 +200,7 @@ func vmConfiguration(network: string): VMConfig =
   of "Constantinople": result = [(0, FkConstantinople), (0, FkConstantinople)]
   of "HomesteadToEIP150At5": result = [(0, FkHomestead), (5, FkTangerine)]
   of "FrontierToHomesteadAt5": result = [(0, FkFrontier), (5, FkHomestead)]
-  of "ByzantiumToConstantinopleFixAt5": result = [(0, FkByzantium), (5, FkConstantinople)]
+  of "ByzantiumToConstantinopleFixAt5": result = [(0, FkByzantium), (5, FkPetersburg)]
   of "Istanbul": result = [(0, FkIstanbul), (0, FkIstanbul)]
   else:
     raise newException(ValueError, "unsupported network")
@@ -232,7 +232,7 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
     result.good = false
 
   # TODO: implement missing VM
-  if network in ["Constantinople", "HomesteadToDaoAt5"]:
+  if network in ["HomesteadToDaoAt5"]:
     result.good = false
 
 proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
