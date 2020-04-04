@@ -190,9 +190,9 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
 
   var secretKey = j["secretKey"].getStr
   removePrefix(secretKey, "0x")
-  let privateKey = initPrivateKey(secretKey)
-  let sig = signMessage(privateKey, result.rlpEncode)
-  let raw = sig.getRaw()
+  let privateKey = PrivateKey.fromHex(secretKey).tryGet()
+  let sig = sign(privateKey, result.rlpEncode).tryGet()
+  let raw = sig.toRaw()
 
   result.R = fromBytesBE(Uint256, raw[0..31])
   result.S = fromBytesBE(Uint256, raw[32..63])
@@ -204,17 +204,16 @@ proc hashLogEntries*(logs: seq[Log]): string =
 proc setupEthNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
   var
     conf = getConfiguration()
-    keypair: KeyPair
-  if conf.net.nodekey.isZeroKey():
+  if not conf.net.nodekey.verify():
     conf.net.nodekey = PrivateKey.random().tryGet()
-  keypair.seckey = conf.net.nodekey
-  keypair.pubkey = conf.net.nodekey.getPublicKey()
+  let keypair = conf.net.nodekey.toKeyPair().tryGet()
 
   var srvAddress: Address
   srvAddress.ip = parseIpAddress("0.0.0.0")
   srvAddress.tcpPort = Port(conf.net.bindPort)
   srvAddress.udpPort = Port(conf.net.discPort)
-  result = newEthereumNode(keypair, srvAddress, conf.net.networkId,
-                              nil, "nimbus 0.1.0", addAllCapabilities = false)
+  result = newEthereumNode(
+    keypair, srvAddress, conf.net.networkId, nil, "nimbus 0.1.0",
+    addAllCapabilities = false)
   for capability in capabilities:
     result.addCapability capability

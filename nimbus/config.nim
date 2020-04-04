@@ -190,7 +190,7 @@ proc privateChainConfig*(): ChainConfig =
     constantinopleBlock: config.customGenesis.constantinopleBlock,
   )
   trace "Custom genesis block configuration loaded", configuration=result
-  
+
 proc publicChainConfig*(id: PublicNetwork): ChainConfig =
   result = case id
   of MainNet:
@@ -254,7 +254,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
 
   proc parseConfig(T: type, c: JsonNode, field: string): T =
     when T is string:
-      c[field].getStr()    
+      c[field].getStr()
     elif T is Uint256:
       parseHexInt(c[field].getStr()).u256
     elif T is bool:
@@ -273,7 +273,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
       hexToSeqByte(c[field].getStr())
     elif T is int64:
       fromHex[int64](c[field].getStr())
-    
+
 
   template validateConfigValue(chainDetails, field, jtype, T: untyped, checkError: static[bool] = true) =
     let fieldName = field.astToStr()
@@ -287,10 +287,10 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
       when checkError:
         error "No value found in genesis block for", fieldName
         quit(1)
-  
-  let config = getConfiguration() 
+
+  let config = getConfiguration()
   result = Success
-  var 
+  var
     chainId = 0.uint
     homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = 0.toBlockNumber
     eip150Hash, mixHash : MDigest[256]
@@ -313,7 +313,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     validateConfigValue(forkDetails, daoForkSupport, JBool, bool, checkError=false)
     if daoForkSupport == true:
       checkForFork(forkDetails, daoForkBlock, 0.toBlockNumber)
-  
+
     checkForFork(forkDetails, eip150Block, homesteadBlock)
     validateConfigValue(forkDetails, eip150Hash, JString, Hash256)
     checkForFork(forkDetails, eip155Block, eip150Block)
@@ -333,7 +333,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   validateConfigValue(customGenesis, mixHash, JString, Hash256)
   validateConfigValue(customGenesis, coinbase, JString, EthAddress, checkError = false)
   validateConfigValue(customGenesis, timestamp, JString, EthTime, checkError = false)
-  
+
   config.customGenesis = CustomGenesisConfig(
     chainId:          chainId,
     homesteadBlock:   homesteadBlock,
@@ -353,7 +353,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     coinbase:         coinbase,
     timestamp:        timestamp
   )
-  
+
 proc processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.
   if len(v) > 0:
@@ -450,11 +450,12 @@ proc processENodesList(v: string, o: var seq[ENode]): ConfigStatus =
 
 proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
   ## Convert hexadecimal string to private key object.
-  try:
-    o = initPrivateKey(v)
-    result = Success
-  except CatchableError:
-    result = ErrorParseOption
+  let seckey = PrivateKey.fromHex(v)
+  if seckey.isOk():
+    o = seckey[]
+    return Success
+
+  result = ErrorParseOption
 
 # proc processHexBytes(v: string, o: var seq[byte]): ConfigStatus =
 #   ## Convert hexadecimal string to seq[byte].

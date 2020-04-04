@@ -95,15 +95,20 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
 
   var keypair: KeyPair
   if privateKey.isNil:
-    keypair = newKeyPair()
+    var kp = KeyPair.random()
+    if kp.isErr:
+      error "Can't generate keypair", err = kp.error
+      return false
+    keypair = kp[]
   else:
-    try:
-      let privKey = initPrivateKey(makeOpenArray(privateKey, 32))
-      keypair = privKey.toKeyPair()
-
-    except EthKeysException:
+    let
+      privKey = PrivateKey.fromRaw(makeOpenArray(privateKey, 32))
+      kp = privKey and privKey[].toKeyPair()
+    if kp.isErr:
       error "Passed an invalid private key."
       return false
+
+    keypair = kp[]
 
   node = newEthereumNode(keypair, address, 1, nil, addAllCapabilities = false)
   node.addCapability Whisper
@@ -176,12 +181,21 @@ proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
   doAssert(not privateKey.isNil, "Private key cannot be nil.")
 
   var keypair: KeyPair
-  try:
-    let privKey = initPrivateKey(makeOpenArray(privateKey, 32))
-    keypair = privKey.toKeyPair()
-  except EthKeysException, Secp256k1Exception:
-    error "Passed an invalid private key."
-    return false
+  if privateKey.isNil:
+    var kp = KeyPair.random()
+    if kp.isErr:
+      error "Can't generate keypair", err = kp.error
+      return false
+    keypair = kp[]
+  else:
+    let
+      privKey = PrivateKey.fromRaw(makeOpenArray(privateKey, 32))
+      kp = privKey and privKey[].toKeyPair()
+    if kp.isErr:
+      error "Passed an invalid private key."
+      return false
+
+    keypair = kp[]
 
   result = true
   id = generateRandomID()
@@ -277,11 +291,11 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc, dynlib.} =
     return false
 
   if not message.pubKey.isNil():
-    try:
-      asymKey = some(initPublicKey(makeOpenArray(message.pubKey, 64)))
-    except EthKeysException:
+    let pubkey = PublicKey.fromRaw(makeOpenArray(message.pubKey, 64))
+    if pubkey.isErr:
       error "Passed an invalid public key for encryption."
       return false
+    asymKey = some(pubkey)
 
   try:
     if not message.symKeyID.isNil():
@@ -340,11 +354,11 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     return false
 
   if not options.source.isNil():
-    try:
-      src = some(initPublicKey(makeOpenArray(options.source, 64)))
-    except EthKeysException:
+    let pubkey = PublicKey.init(makeOpenArray(options.source, 64))
+    if pubkey.isErr:
       error "Passed an invalid public key as source."
       return false
+    src = some(pubkey)
 
   try:
     if not options.symKeyID.isNil():

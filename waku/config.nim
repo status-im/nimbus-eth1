@@ -135,8 +135,8 @@ type
 proc parseCmdArg*(T: type KeyPair, p: TaintedString): T =
   try:
     # TODO: add isValidPrivateKey check from Nimbus?
-    result.seckey = initPrivateKey(p)
-    result.pubkey = result.seckey.getPublicKey()
+    result.seckey = PrivateKey.fromHex(string(p)).tryGet()
+    result.pubkey = result.seckey.toPublicKey()[]
   except CatchableError as e:
     raise newException(ConfigurationError, "Invalid private key")
 
