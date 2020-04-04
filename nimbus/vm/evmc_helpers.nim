@@ -1,4 +1,6 @@
-import eth/common, stint, evmc/evmc
+import
+  eth/common, stint, evmc/evmc,
+  interpreter/vm_forks
 
 const
   evmc_native* {.booldefine.} = false
@@ -29,8 +31,26 @@ func fromEvmc*(T: type, n: evmc_bytes32): T {.inline.} =
 func fromEvmc*(a: evmc_address): EthAddress {.inline.} =
   cast[EthAddress](a)
 
+func fromEvmc*(x: evmc_revision): Fork =
+  const nimbus_rev: array[evmc_revision, Fork] = [
+    FkFrontier, FkHomestead, FkTangerine,
+    FkSpurious, FkByzantium, FkConstantinople,
+    FkPetersburg, FkIstanbul,
+    FkIstanbul] # TODO: this one should be FkBerlin
+  result = nimbus_rev[x]
+
+func toEvmc*(x: Fork): evmc_revision =
+  const evmc_rev: array[Fork, evmc_revision] = [
+    EVMC_FRONTIER, EVMC_FRONTIER,
+    EVMC_HOMESTEAD, EVMC_HOMESTEAD,
+    EVMC_TANGERINE_WHISTLE, EVMC_SPURIOUS_DRAGON,
+    EVMC_BYZANTIUM, EVMC_CONSTANTINOPLE,
+    EVMC_PETERSBURG, EVMC_ISTANBUL,
+    EVMC_ISTANBUL]
+  result = evmc_rev[x]
+
 when isMainModule:
-  import constants
+  import ..\constants
   var a: evmc_address
   a.bytes[19] = 3.byte
   var na = fromEvmc(a)
