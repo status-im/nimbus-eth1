@@ -95,15 +95,20 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
 
   var keypair: KeyPair
   if privateKey.isNil:
-    keypair = newKeyPair()
+    var kp = KeyPair.random()
+    if kp.isErr:
+      error "Can't generate keypair", err = kp.error
+      return false
+    keypair = kp[]
   else:
-    try:
-      let privKey = initPrivateKey(makeOpenArray(privateKey, 32))
-      keypair = privKey.toKeyPair()
-
-    except EthKeysException:
+    let
+      privKey = PrivateKey.fromRaw(makeOpenArray(privateKey, 32))
+      kp = privKey and privKey[].toKeyPair()
+    if kp.isErr:
       error "Passed an invalid private key."
       return false
+
+    keypair = kp[]
 
   node = newEthereumNode(keypair, address, 1, nil, addAllCapabilities = false)
   node.addCapability Whisper
@@ -135,7 +140,7 @@ proc nimbus_add_peer(nodeId: cstring): bool {.exportc, dynlib.} =
   discard initENode($nodeId, whisperENode)
   try:
     whisperNode = newNode(whisperENode)
-  except Secp256k1Exception:
+  except CatchableError:
     return false
 
   # TODO: call can create `Exception`, why?
@@ -145,7 +150,7 @@ proc nimbus_add_peer(nodeId: cstring): bool {.exportc, dynlib.} =
 # Whisper API (Similar to Whisper JSON-RPC API)
 
 proc nimbus_channel_to_topic(channel: cstring): CTopic
-    {.exportc, dynlib, raises: [].} =
+    {.exportc, dynlib, raises: [Defect].} =
   # Only used for the example, to conveniently convert channel to topic.
   doAssert(not channel.isNil, "Channel cannot be nil.")
 
@@ -156,32 +161,41 @@ proc nimbus_channel_to_topic(channel: cstring): CTopic
 # Asymmetric Keys
 
 proc nimbus_new_keypair(id: var Identifier): bool
-    {.exportc, dynlib, raises: [].} =
+    {.exportc, dynlib, raises: [Defect].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
 
   id = generateRandomID()
   try:
-    whisperKeys.asymKeys.add(id.toHex(), newKeyPair())
+    whisperKeys.asymKeys.add(id.toHex(), KeyPair.random().tryGet())
     result = true
-  except Secp256k1Exception:
+  except CatchableError:
     # Don't think this can actually happen, comes from the `getPublicKey` part
     # in `newKeyPair`
     discard
 
 proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
-    bool {.exportc, dynlib, raises: [OSError, IOError, ValueError].} =
+    bool {.exportc, dynlib, raises: [Defect, OSError, IOError, ValueError].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not privateKey.isNil, "Private key cannot be nil.")
 
   var keypair: KeyPair
-  try:
-    let privKey = initPrivateKey(makeOpenArray(privateKey, 32))
-    keypair = privKey.toKeyPair()
-  except EthKeysException, Secp256k1Exception:
-    error "Passed an invalid private key."
-    return false
+  if privateKey.isNil:
+    var kp = KeyPair.random()
+    if kp.isErr:
+      error "Can't generate keypair", err = kp.error
+      return false
+    keypair = kp[]
+  else:
+    let
+      privKey = PrivateKey.fromRaw(makeOpenArray(privateKey, 32))
+      kp = privKey and privKey[].toKeyPair()
+    if kp.isErr:
+      error "Passed an invalid private key."
+      return false
+
+    keypair = kp[]
 
   result = true
   id = generateRandomID()
@@ -277,11 +291,11 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc, dynlib.} =
     return false
 
   if not message.pubKey.isNil():
-    try:
-      asymKey = some(initPublicKey(makeOpenArray(message.pubKey, 64)))
-    except EthKeysException:
+    let pubkey = PublicKey.fromRaw(makeOpenArray(message.pubKey, 64))
+    if pubkey.isErr:
       error "Passed an invalid public key for encryption."
       return false
+    asymKey = some(pubkey[])
 
   try:
     if not message.symKeyID.isNil():
@@ -340,11 +354,11 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
     return false
 
   if not options.source.isNil():
-    try:
-      src = some(initPublicKey(makeOpenArray(options.source, 64)))
-    except EthKeysException:
+    let pubkey = PublicKey.fromRaw(makeOpenArray(options.source, 64))
+    if pubkey.isErr:
       error "Passed an invalid public key as source."
       return false
+    src = some(pubkey[])
 
   try:
     if not options.symKeyID.isNil():
@@ -377,11 +391,11 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
       recipientPublicKey: array[RawPublicKeySize, byte]
     if msg.decoded.src.isSome():
       # Need to pass the serialized form
-      source = msg.decoded.src.get().getRaw()
+      source = msg.decoded.src.get().toRaw()
       cmsg.source = addr source[0]
     if msg.dst.isSome():
       # Need to pass the serialized form
-      recipientPublicKey = msg.decoded.src.get().getRaw()
+      recipientPublicKey = msg.decoded.src.get().toRaw()
       cmsg.recipientPublicKey = addr recipientPublicKey[0]
 
     handler(addr cmsg, udata)
@@ -456,7 +470,7 @@ proc nimbus_join_public_chat(channel: cstring,
 # TODO: How would we do key management? In nimbus (like in rpc) or in status go?
 proc nimbus_post_public(channel: cstring, payload: cstring)
     {.exportc, dynlib.} =
-  let encPrivateKey = initPrivateKey("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")
+  let encPrivateKey = PrivateKey.fromHex("5dc5381cae54ba3174dc0d46040fe11614d0cc94d41185922585198b4fcef9d3")[]
 
   var ctx: HMAC[sha256]
   var symKey: SymKey

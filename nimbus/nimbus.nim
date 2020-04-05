@@ -75,12 +75,10 @@ proc start() =
     setupCommonRpc(nimbus.rpcServer)
 
   ## Creating P2P Server
-  if conf.net.nodekey.isZeroKey():
-    conf.net.nodekey = newPrivateKey()
+  if not conf.net.nodekey.verify():
+    conf.net.nodekey = PrivateKey.random().tryGet()
 
-  var keypair: KeyPair
-  keypair.seckey = conf.net.nodekey
-  keypair.pubkey = conf.net.nodekey.getPublicKey()
+  let keypair = conf.net.nodekey.toKeyPair().tryGet()
 
   var address: Address
   address.ip = parseIpAddress("0.0.0.0")
@@ -113,7 +111,7 @@ proc start() =
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
-  
+
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId,
                                    addAllCapabilities = false,
@@ -145,7 +143,7 @@ proc start() =
         nimbus.state = Stopping
       result = "EXITING"
     nimbus.rpcServer.start()
- 
+
   # metrics server
   when defined(insecure):
     if conf.net.metricsServer:

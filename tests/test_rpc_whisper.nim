@@ -65,7 +65,7 @@ proc doTests {.async.} =
       let keyID2 = await client.shh_addPrivateKey(privkey)
       check:
         await(client.shh_getPublicKey(keyID2)) == pubkey.toPublicKey
-        await(client.shh_getPrivateKey(keyID2)) == privkey.toPrivateKey
+        await(client.shh_getPrivateKey(keyID2)).toRaw() == privkey.toPrivateKey.toRaw()
         await(client.shh_hasKeyPair(keyID2)) == true
         await(client.shh_deleteKeyPair(keyID2)) == true
         await(client.shh_hasKeyPair(keyID2)) == false

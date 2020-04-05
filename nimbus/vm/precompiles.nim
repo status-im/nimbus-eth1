@@ -42,8 +42,10 @@ proc getSignature(computation: Computation): (array[32, byte], Signature) =
       # Copy message data to buffer
       bytes[0..(maxPos-64)] = data[64..maxPos]
 
-    if recoverSignature(bytes, result[1]) != EthKeysStatus.Success:
+    let sig = Signature.fromRaw(bytes)
+    if sig.isErr:
       raise newException(ValidationError, "Could not recover signature computation")
+    result[1] = sig[]
 
     # extract message hash, only need to copy when there is a valid signature
     result[0][0..31] = data[0..31]
@@ -98,14 +100,14 @@ proc ecRecover*(computation: Computation) =
 
   var
     (msgHash, sig) = computation.getSignature()
-    pubKey: PublicKey
 
-  if sig.recoverSignatureKey(msgHash, pubKey) != EthKeysStatus.Success:
+  var pubkey = recover(sig, SkMessage(data: msgHash))
+  if pubkey.isErr:
     raise newException(ValidationError, "Could not derive public key from computation")
 
   computation.output.setLen(32)
-  computation.output[12..31] = pubKey.toCanonicalAddress()
-  trace "ECRecover precompile", derivedKey = pubKey.toCanonicalAddress()
+  computation.output[12..31] = pubkey[].toCanonicalAddress()
+  trace "ECRecover precompile", derivedKey = pubkey[].toCanonicalAddress()
 
 proc sha256*(computation: Computation) =
   let
