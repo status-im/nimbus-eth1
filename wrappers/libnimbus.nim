@@ -140,7 +140,7 @@ proc nimbus_add_peer(nodeId: cstring): bool {.exportc, dynlib.} =
   discard initENode($nodeId, whisperENode)
   try:
     whisperNode = newNode(whisperENode)
-  except Secp256k1Exception:
+  except CatchableError:
     return false
 
   # TODO: call can create `Exception`, why?
