@@ -45,7 +45,7 @@ proc initNodeCmd(nodeType: NodeType, shift: int, staticNodes: seq[string] = @[],
     discovery = false, bootNodes: seq[string] = @[], topicInterest = false,
     master = false, label: string): NodeInfo =
   let
-    keypair = newKeyPair()
+    keypair = KeyPair.random().tryGet()
     address = Address(ip: parseIpAddress("127.0.0.1"),
       udpPort: (30303 + shift).Port, tcpPort: (30303 + shift).Port)
     enode = ENode(pubkey: keypair.pubkey, address: address)
