@@ -429,8 +429,9 @@ proc processProtocolList(v: string, flags: var set[ProtocolFlags]): ConfigStatus
 
 proc processENode(v: string, o: var ENode): ConfigStatus =
   ## Convert string to ENode.
-  let res = initENode(v, o)
-  if res == ENodeStatus.Success:
+  let res = ENode.fromString(v)
+  if res.isOk:
+    o = res[]
     result = Success
   else:
     result = ErrorParseOption
