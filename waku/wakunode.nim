@@ -19,7 +19,7 @@ proc setBootNodes(nodes: openArray[string]): seq[ENode] =
 proc connectToNodes(node: EthereumNode, nodes: openArray[string]) =
   for nodeId in nodes:
     # TODO: something more user friendly than an assert
-    let whiserENode = ENode.fromString(nodeId).expect("correct node")
+    let whisperENode = ENode.fromString(nodeId).expect("correct node")
 
     traceAsyncErrors node.peerPool.connectToNode(newNode(whisperENode))
 

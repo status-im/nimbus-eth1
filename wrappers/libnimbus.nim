@@ -233,7 +233,7 @@ proc nimbus_add_symkey(symKey: ptr SymKey, id: var Identifier): bool
   whisperKeys.symKeys.add(id.toHex, symKey[])
 
 proc nimbus_add_symkey_from_password(password: cstring, id: var Identifier):
-    bool {.exportc, dynlib, raises: [].} =
+    bool {.exportc, dynlib, raises: [Defect].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not password.isNil, "Password cannot be nil.")
