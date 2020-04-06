@@ -50,7 +50,7 @@ func toEvmc*(x: Fork): evmc_revision =
   result = evmc_rev[x]
 
 when isMainModule:
-  import ..\constants
+  import ../constants
   var a: evmc_address
   a.bytes[19] = 3.byte
   var na = fromEvmc(a)
