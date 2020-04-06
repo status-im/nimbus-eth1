@@ -5,7 +5,7 @@ import
 type
   Fleet* =  enum
     none
-    beta
+    prod
     staging
 
   WakuNodeConf* = object
