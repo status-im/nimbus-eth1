@@ -87,9 +87,9 @@ This dashboard can be found at `./waku/metrics/waku-sim-all-nodes-grafana-dashbo
 
 # Spec support
 
-*This section last updated February 14, 2020*
+*This section last updated April 7, 2020*
 
-This client of Waku is spec compliant with [Waku spec v0.3](https://specs.vac.dev/waku/waku.html).
+This client of Waku is spec compliant with [Waku spec v0.4](https://specs.vac.dev/waku/waku.html).
 
 It doesn't yet implement the following recommended features:
 - No support for rate limiting

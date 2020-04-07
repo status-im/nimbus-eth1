@@ -94,7 +94,7 @@ proc run(config: WakuNodeConf) =
 
   # TODO: Status fleet bootnodes are discv5? That will not work.
   let bootnodes = if config.bootnodes.len > 0: setBootNodes(config.bootnodes)
-                  elif config.fleet == beta: setBootNodes(StatusBootNodes)
+                  elif config.fleet == prod: setBootNodes(StatusBootNodes)
                   elif config.fleet == staging: setBootNodes(StatusBootNodesStaging)
                   else: @[]
 
@@ -104,7 +104,7 @@ proc run(config: WakuNodeConf) =
   if not config.bootnodeOnly:
     # Optionally direct connect with a set of nodes
     if config.staticnodes.len > 0: connectToNodes(node, config.staticnodes)
-    elif config.fleet == beta: connectToNodes(node, WhisperNodes)
+    elif config.fleet == prod: connectToNodes(node, WhisperNodes)
     elif config.fleet == staging: connectToNodes(node, WhisperNodesStaging)
 
   if config.rpc:
