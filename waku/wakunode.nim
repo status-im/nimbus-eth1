@@ -11,18 +11,15 @@ const clientId = "Nimbus waku node"
 let globalListeningAddr = parseIpAddress("0.0.0.0")
 
 proc setBootNodes(nodes: openArray[string]): seq[ENode] =
-  var bootnode: ENode
   result = newSeqOfCap[ENode](nodes.len)
   for nodeId in nodes:
-    # TODO: something more user friendly than an assert
-    doAssert(initENode(nodeId, bootnode) == ENodeStatus.Success)
-    result.add(bootnode)
+    # TODO: something more user friendly than an expect
+    result.add(ENode.fromString(nodeId).expect("correct node"))
 
 proc connectToNodes(node: EthereumNode, nodes: openArray[string]) =
   for nodeId in nodes:
-    var whisperENode: ENode
     # TODO: something more user friendly than an assert
-    doAssert(initENode(nodeId, whisperENode) == ENodeStatus.Success)
+    let whisperENode = ENode.fromString(nodeId).expect("correct node")
 
     traceAsyncErrors node.peerPool.connectToNode(newNode(whisperENode))
 

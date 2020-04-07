@@ -69,20 +69,18 @@ proc generateRandomID(): Identifier =
       break
 
 proc setBootNodes(nodes: openArray[string]): seq[ENode] =
-  var bootnode: ENode
   result = newSeqOfCap[ENode](nodes.len)
   for nodeId in nodes:
     # For now we can just do assert as we only pass our own const arrays.
-    doAssert(initENode(nodeId, bootnode) == ENodeStatus.Success)
-    result.add(bootnode)
+    let enode = ENode.fromString(nodeId).expect("correct enode")
+    result.add(enode)
 
 proc connectToNodes(nodes: openArray[string]) =
   for nodeId in nodes:
-    var whisperENode: ENode
     # For now we can just do assert as we only pass our own const arrays.
-    doAssert(initENode(nodeId, whisperENode) == ENodeStatus.Success)
+    let enode = ENode.fromString(nodeId).expect("correct enode")
 
-    traceAsyncErrors node.peerPool.connectToNode(newNode(whisperENode))
+    traceAsyncErrors node.peerPool.connectToNode(newNode(enode))
 
 # Setting up the node
 
@@ -135,11 +133,12 @@ proc nimbus_poll() {.exportc, dynlib.} =
 
 proc nimbus_add_peer(nodeId: cstring): bool {.exportc, dynlib.} =
   var
-    whisperENode: ENode
     whisperNode: Node
-  discard initENode($nodeId, whisperENode)
+  let enode = ENode.fromString($nodeId)
+  if enode.isErr:
+    return false
   try:
-    whisperNode = newNode(whisperENode)
+    whisperNode = newNode(enode[])
   except CatchableError:
     return false
 
@@ -234,7 +233,7 @@ proc nimbus_add_symkey(symKey: ptr SymKey, id: var Identifier): bool
   whisperKeys.symKeys.add(id.toHex, symKey[])
 
 proc nimbus_add_symkey_from_password(password: cstring, id: var Identifier):
-    bool {.exportc, dynlib, raises: [].} =
+    bool {.exportc, dynlib, raises: [Defect].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not password.isNil, "Password cannot be nil.")
