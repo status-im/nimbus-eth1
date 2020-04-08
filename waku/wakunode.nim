@@ -96,6 +96,7 @@ proc run(config: WakuNodeConf) =
   let bootnodes = if config.bootnodes.len > 0: setBootNodes(config.bootnodes)
                   elif config.fleet == prod: setBootNodes(StatusBootNodes)
                   elif config.fleet == staging: setBootNodes(StatusBootNodesStaging)
+                  elif config.fleet == test : setBootNodes(StatusBootNodesTest)
                   else: @[]
 
   traceAsyncErrors node.connectToNetwork(bootnodes, not config.noListen,
@@ -106,6 +107,7 @@ proc run(config: WakuNodeConf) =
     if config.staticnodes.len > 0: connectToNodes(node, config.staticnodes)
     elif config.fleet == prod: connectToNodes(node, WhisperNodes)
     elif config.fleet == staging: connectToNodes(node, WhisperNodesStaging)
+    elif config.fleet == test: connectToNodes(node, WhisperNodesTest)
 
   if config.rpc:
     let ta = initTAddress(config.rpcAddress,
