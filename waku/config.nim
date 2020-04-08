@@ -7,6 +7,7 @@ type
     none
     prod
     staging
+    test
 
   WakuNodeConf* = object
     logLevel* {.
