@@ -11,18 +11,15 @@ const clientId = "Nimbus waku node"
 let globalListeningAddr = parseIpAddress("0.0.0.0")
 
 proc setBootNodes(nodes: openArray[string]): seq[ENode] =
-  var bootnode: ENode
   result = newSeqOfCap[ENode](nodes.len)
   for nodeId in nodes:
-    # TODO: something more user friendly than an assert
-    doAssert(initENode(nodeId, bootnode) == ENodeStatus.Success)
-    result.add(bootnode)
+    # TODO: something more user friendly than an expect
+    result.add(ENode.fromString(nodeId).expect("correct node"))
 
 proc connectToNodes(node: EthereumNode, nodes: openArray[string]) =
   for nodeId in nodes:
-    var whisperENode: ENode
     # TODO: something more user friendly than an assert
-    doAssert(initENode(nodeId, whisperENode) == ENodeStatus.Success)
+    let whisperENode = ENode.fromString(nodeId).expect("correct node")
 
     traceAsyncErrors node.peerPool.connectToNode(newNode(whisperENode))
 
@@ -97,7 +94,7 @@ proc run(config: WakuNodeConf) =
 
   # TODO: Status fleet bootnodes are discv5? That will not work.
   let bootnodes = if config.bootnodes.len > 0: setBootNodes(config.bootnodes)
-                  elif config.fleet == beta: setBootNodes(StatusBootNodes)
+                  elif config.fleet == prod: setBootNodes(StatusBootNodes)
                   elif config.fleet == staging: setBootNodes(StatusBootNodesStaging)
                   else: @[]
 
@@ -107,7 +104,7 @@ proc run(config: WakuNodeConf) =
   if not config.bootnodeOnly:
     # Optionally direct connect with a set of nodes
     if config.staticnodes.len > 0: connectToNodes(node, config.staticnodes)
-    elif config.fleet == beta: connectToNodes(node, WhisperNodes)
+    elif config.fleet == prod: connectToNodes(node, WhisperNodes)
     elif config.fleet == staging: connectToNodes(node, WhisperNodesStaging)
 
   if config.rpc:

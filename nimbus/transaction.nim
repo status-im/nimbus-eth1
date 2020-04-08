@@ -44,7 +44,11 @@ proc getSignature*(transaction: Transaction, output: var Signature): bool =
     return false
 
   bytes[64] = byte(v - 27)
-  result = recoverSignature(bytes, output) == EthKeysStatus.Success
+  let sig = Signature.fromRaw(bytes)
+  if sig.isOk:
+    output = sig[]
+    return true
+  return false
 
 proc toSignature*(transaction: Transaction): Signature =
   if not getSignature(transaction, result):
@@ -54,10 +58,10 @@ proc getSender*(transaction: Transaction, output: var EthAddress): bool =
   ## Find the address the transaction was sent from.
   var sig: Signature
   if transaction.getSignature(sig):
-    var pubKey: PublicKey
     var txHash = transaction.txHashNoSignature
-    if recoverSignatureKey(sig, txHash.data, pubKey) == EthKeysStatus.Success:
-      output = pubKey.toCanonicalAddress()
+    let pubkey = recover(sig, txHash)
+    if pubkey.isOk:
+      output = pubkey[].toCanonicalAddress()
       result = true
 
 proc getSender*(transaction: Transaction): EthAddress =

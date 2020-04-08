@@ -226,7 +226,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
   template sign(privateKey: PrivateKey, message: string): string =
     # TODO: Is message length encoded as bytes or characters?
     let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
-    $signMessage(privateKey, msgData)
+    $sign(privateKey, msgData.toBytes()).tryGet()
 
   rpcsrv.rpc("eth_sign") do(data: EthAddressStr, message: HexDataStr) -> HexDataStr:
     ## The sign method calculates an Ethereum specific signature with: sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))).

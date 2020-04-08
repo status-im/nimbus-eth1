@@ -62,12 +62,10 @@ proc start(nimbus: NimbusNode) =
     setupCommonRpc(nimbus.rpcServer)
 
   ## Creating P2P Server
-  if conf.net.nodekey.isZeroKey():
-    conf.net.nodekey = newPrivateKey()
+  if not conf.net.nodekey.verify():
+    conf.net.nodekey = PrivateKey.random().tryGet()
 
-  var keypair: KeyPair
-  keypair.seckey = conf.net.nodekey
-  keypair.pubkey = conf.net.nodekey.getPublicKey()
+  let keypair = conf.net.nodekey.toKeyPair().tryGet()
 
   var address: Address
   address.ip = parseIpAddress("0.0.0.0")

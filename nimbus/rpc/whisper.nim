@@ -71,7 +71,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ##
     ## Returns key identifier on success and an error on failure.
     result = generateRandomID().Identifier
-    keys.asymKeys.add(result.string, newKeyPair())
+    keys.asymKeys.add(result.string, KeyPair.random().tryGet())
 
   rpcsrv.rpc("shh_addPrivateKey") do(key: PrivateKey) -> Identifier:
     ## Stores the key pair, and returns its ID.
@@ -81,7 +81,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ## Returns key identifier on success and an error on failure.
     result = generateRandomID().Identifier
 
-    keys.asymKeys.add(result.string, key.toKeyPair())
+    keys.asymKeys.add(result.string, key.toKeyPair().tryGet())
 
   rpcsrv.rpc("shh_deleteKeyPair") do(id: Identifier) -> bool:
     ## Deletes the specifies key if it exists.

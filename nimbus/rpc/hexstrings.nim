@@ -211,10 +211,10 @@ proc `%`*(value: Bytes): JsonNode =
 # Helpers for the fromJson procs
 
 proc toPublicKey*(key: string): PublicKey {.inline.} =
-  result = initPublicKey(key[4 .. ^1])
+  result = PublicKey.fromHex(key[4 .. ^1]).tryGet()
 
 proc toPrivateKey*(key: string): PrivateKey {.inline.} =
-  result = initPrivateKey(key[2 .. ^1])
+  result = PrivateKey.fromHex(key[2 .. ^1]).tryGet()
 
 proc toSymKey*(key: string): SymKey {.inline.} =
   hexToByteArray(key[2 .. ^1], result)
