@@ -349,7 +349,7 @@ OK: 51/58 Fail: 0/58 Skip: 7/58
 + callcodecallcodecallcode_111_OOGMAfter_1.json                   OK
 + callcodecallcodecallcode_111_OOGMAfter_2.json                   OK
 + callcodecallcodecallcode_111_OOGMAfter_3.json                   OK
-+ contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
++ contractCreationMakeCallThatAskMoreGasThenTransactionProvided.j OK
 + createInitFail_OOGduringInit.json                               OK
 ```
 OK: 27/30 Fail: 0/30 Skip: 3/30
@@ -600,8 +600,8 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + CallContractToCreateContractNoCash.json                         OK
 + CallContractToCreateContractOOG.json                            OK
 + CallContractToCreateContractOOGBonusGas.json                    OK
-+ CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonOK
-+ CallContractToCreateContractWhichWouldCreateContractInInitCode.jsonOK
++ CallContractToCreateContractWhichWouldCreateContractIfCalled.js OK
++ CallContractToCreateContractWhichWouldCreateContractInInitCode. OK
 + CallRecursiveContract.json                                      OK
 + CallTheContractToCreateEmptyContract.json                       OK
 + NotEnoughCashContractCreation.json                              OK
@@ -668,13 +668,13 @@ OK: 18/18 Fail: 0/18 Skip: 0/18
 OK: 46/46 Fail: 0/46 Skip: 0/46
 ## stMemExpandingEIP150Calls
 ```diff
-+ CallAndCallcodeConsumeMoreGasThenTransactionHasWithMemExpandingCalls.jsonOK
-+ CallAskMoreGasOnDepth2ThenTransactionHasWithMemExpandingCalls.jsonOK
++ CallAndCallcodeConsumeMoreGasThenTransactionHasWithMemExpanding OK
++ CallAskMoreGasOnDepth2ThenTransactionHasWithMemExpandingCalls.j OK
 + CallGoesOOGOnSecondLevel2WithMemExpandingCalls.json             OK
 + CallGoesOOGOnSecondLevelWithMemExpandingCalls.json              OK
 + CreateAndGasInsideCreateWithMemExpandingCalls.json              OK
 + DelegateCallOnEIPWithMemExpandingCalls.json                     OK
-+ ExecuteCallThatAskMoreGasThenTransactionHasWithMemExpandingCalls.jsonOK
++ ExecuteCallThatAskMoreGasThenTransactionHasWithMemExpandingCall OK
 + NewGasPriceForCodesWithMemExpandingCalls.json                   OK
 ```
 OK: 8/8 Fail: 0/8 Skip: 0/8
@@ -1861,7 +1861,7 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_CALL_OneVCallSuicide.json                                OK
 + static_CALL_ZeroVCallSuicide.json                               OK
 + static_CREATE_ContractSuicideDuringInit.json                    OK
-+ static_CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.jsonOK
++ static_CREATE_ContractSuicideDuringInit_ThenStoreThenReturn.jso OK
 + static_CREATE_ContractSuicideDuringInit_WithValue.json          OK
 + static_CREATE_EmptyContractAndCallIt_0wei.json                  OK
 + static_CREATE_EmptyContractWithStorageAndCallIt_0wei.json       OK
@@ -1887,7 +1887,7 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_CallContractToCreateContractAndCallItOOG.json            OK
 + static_CallContractToCreateContractOOG.json                     OK
 + static_CallContractToCreateContractOOGBonusGas.json             OK
-+ static_CallContractToCreateContractWhichWouldCreateContractIfCalled.jsonOK
++ static_CallContractToCreateContractWhichWouldCreateContractIfCa OK
 + static_CallEcrecover0.json                                      OK
 + static_CallEcrecover0_0input.json                               OK
 + static_CallEcrecover0_Gas2999.json                              OK
@@ -2117,8 +2117,8 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 + static_callcodecallcodecallcode_111_SuicideEnd.json             OK
 + static_calldelcode_01.json                                      OK
 + static_calldelcode_01_OOGE.json                                 OK
-+ static_contractCreationMakeCallThatAskMoreGasThenTransactionProvided.jsonOK
-+ static_contractCreationOOGdontLeaveEmptyContractViaTransaction.jsonOK
++ static_contractCreationMakeCallThatAskMoreGasThenTransactionPro OK
++ static_contractCreationOOGdontLeaveEmptyContractViaTransaction. OK
 + static_log0_emptyMem.json                                       OK
 + static_log0_logMemStartTooHigh.json                             OK
 + static_log0_logMemsizeTooHigh.json                              OK
@@ -2340,8 +2340,8 @@ OK: 42/42 Fail: 0/42 Skip: 0/42
 + ZeroValue_TransactionCALL_ToOneStorageKey_OOGRevert.json        OK
 + ZeroValue_TransactionCALLwithData_OOGRevert.json                OK
 + ZeroValue_TransactionCALLwithData_ToEmpty_OOGRevert.json        OK
-+ ZeroValue_TransactionCALLwithData_ToNonZeroBalance_OOGRevert.jsonOK
-+ ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jsonOK
++ ZeroValue_TransactionCALLwithData_ToNonZeroBalance_OOGRevert.js OK
++ ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jso OK
 ```
 OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stZeroCallsTest
@@ -2376,10 +2376,10 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 ```diff
 + ecmul_1-2_2_28000_128.json                                      OK
 + ecmul_1-2_2_28000_96.json                                       OK
-+ ecmul_1-2_340282366920938463463374607431768211456_21000_128.jsonOK
++ ecmul_1-2_340282366920938463463374607431768211456_21000_128.jso OK
 + ecmul_1-2_340282366920938463463374607431768211456_21000_80.json OK
 + ecmul_1-2_340282366920938463463374607431768211456_21000_96.json OK
-+ ecmul_1-2_340282366920938463463374607431768211456_28000_128.jsonOK
++ ecmul_1-2_340282366920938463463374607431768211456_28000_128.jso OK
 + ecmul_1-2_340282366920938463463374607431768211456_28000_80.json OK
 + ecmul_1-2_340282366920938463463374607431768211456_28000_96.json OK
 + ecmul_1-2_5616_21000_128.json                                   OK
@@ -2414,10 +2414,10 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + ecmul_1-3_2_21000_96.json                                       OK
 + ecmul_1-3_2_28000_128.json                                      OK
 + ecmul_1-3_2_28000_96.json                                       OK
-+ ecmul_1-3_340282366920938463463374607431768211456_21000_128.jsonOK
++ ecmul_1-3_340282366920938463463374607431768211456_21000_128.jso OK
 + ecmul_1-3_340282366920938463463374607431768211456_21000_80.json OK
 + ecmul_1-3_340282366920938463463374607431768211456_21000_96.json OK
-+ ecmul_1-3_340282366920938463463374607431768211456_28000_128.jsonOK
++ ecmul_1-3_340282366920938463463374607431768211456_28000_128.jso OK
 + ecmul_1-3_340282366920938463463374607431768211456_28000_80.json OK
 + ecmul_1-3_340282366920938463463374607431768211456_28000_96.json OK
 + ecmul_1-3_5616_21000_128.json                                   OK
@@ -2567,10 +2567,10 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 + ecmul_0-0_2_21000_96.json                                       OK
 + ecmul_0-0_2_28000_128.json                                      OK
 + ecmul_0-0_2_28000_96.json                                       OK
-+ ecmul_0-0_340282366920938463463374607431768211456_21000_128.jsonOK
++ ecmul_0-0_340282366920938463463374607431768211456_21000_128.jso OK
 + ecmul_0-0_340282366920938463463374607431768211456_21000_80.json OK
 + ecmul_0-0_340282366920938463463374607431768211456_21000_96.json OK
-+ ecmul_0-0_340282366920938463463374607431768211456_28000_128.jsonOK
++ ecmul_0-0_340282366920938463463374607431768211456_28000_128.jso OK
 + ecmul_0-0_340282366920938463463374607431768211456_28000_80.json OK
 + ecmul_0-0_340282366920938463463374607431768211456_28000_96.json OK
 + ecmul_0-0_5616_21000_128.json                                   OK
@@ -2605,10 +2605,10 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 + ecmul_0-3_2_21000_96.json                                       OK
 + ecmul_0-3_2_28000_128.json                                      OK
 + ecmul_0-3_2_28000_96.json                                       OK
-+ ecmul_0-3_340282366920938463463374607431768211456_21000_128.jsonOK
++ ecmul_0-3_340282366920938463463374607431768211456_21000_128.jso OK
 + ecmul_0-3_340282366920938463463374607431768211456_21000_80.json OK
 + ecmul_0-3_340282366920938463463374607431768211456_21000_96.json OK
-+ ecmul_0-3_340282366920938463463374607431768211456_28000_128.jsonOK
++ ecmul_0-3_340282366920938463463374607431768211456_28000_128.jso OK
 + ecmul_0-3_340282366920938463463374607431768211456_28000_80.json OK
 + ecmul_0-3_340282366920938463463374607431768211456_28000_96.json OK
 + ecmul_0-3_5616_21000_128.json                                   OK

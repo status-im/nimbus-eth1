@@ -8,7 +8,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 ## bcBlockGasLimitTest
 ```diff
 + BlockGasLimit2p63m1.json                                        OK
-+ GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideFirst.jsonOK
++ GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideFirst.jso OK
 + GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideLast.json OK
 + SuicideTransaction.json                                         OK
 + TransactionGasHigherThanLimit2p63m1.json                        OK
@@ -244,8 +244,8 @@ OK: 96/96 Fail: 0/96 Skip: 0/96
 + ZeroValue_TransactionCALL_ToOneStorageKey_OOGRevert.json        OK
 + ZeroValue_TransactionCALLwithData_OOGRevert.json                OK
 + ZeroValue_TransactionCALLwithData_ToEmpty_OOGRevert.json        OK
-+ ZeroValue_TransactionCALLwithData_ToNonZeroBalance_OOGRevert.jsonOK
-+ ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jsonOK
++ ZeroValue_TransactionCALLwithData_ToNonZeroBalance_OOGRevert.js OK
++ ZeroValue_TransactionCALLwithData_ToOneStorageKey_OOGRevert.jso OK
 + blockhashNonConstArg.json                                       OK
 + blockhashTests.json                                             OK
 + callcodeOutput1.json                                            OK
