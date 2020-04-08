@@ -32,27 +32,14 @@ type
   NimbusState = enum
     Starting, Running, Stopping, Stopped
 
-  NimbusObject = ref object
+  NimbusNode = ref object
     rpcServer*: RpcHttpServer
     ethNode*: EthereumNode
     state*: NimbusState
 
-var nimbus: NimbusObject
-
-proc start() =
+proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
-
-  nimbus = NimbusObject()
   nimbus.state = Starting
-
-  ## Ctrl+C handling
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      setupForeignThreadGc()
-    nimbus.state = Stopping
-    echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
-  setControlCHook(controlCHandler)
 
   ## logging
   setLogLevel(conf.debug.logLevel)
@@ -169,13 +156,13 @@ proc start() =
     # it might have been set to "Stopping" with Ctrl+C
     nimbus.state = Running
 
-proc stop*() {.async.} =
+proc stop*(nimbus: NimbusNode) {.async, gcsafe.} =
   trace "Graceful shutdown"
   var conf = getConfiguration()
   if RpcFlags.Enabled in conf.rpc.flags:
     nimbus.rpcServer.stop()
 
-proc process*() =
+proc process*(nimbus: NimbusNode) =
   if nimbus.state == Running:
     # Main loop
     while nimbus.state == Running:
@@ -185,9 +172,20 @@ proc process*() =
         debug "Exception in poll()", exc = e.name, err = e.msg
 
   # Stop loop
-  waitFor stop()
+  waitFor nimbus.stop()
 
 when isMainModule:
+  var nimbus = NimbusNode()
+
+  ## Ctrl+C handling
+  proc controlCHandler() {.noconv.} =
+    when defined(windows):
+      # workaround for https://github.com/nim-lang/Nim/issues/4057
+      setupForeignThreadGc()
+    nimbus.state = Stopping
+    echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
+  setControlCHook(controlCHandler)
+
   var message: string
 
   ## Print Nimbus header
@@ -205,6 +203,6 @@ when isMainModule:
       echo message
       quit(QuitSuccess)
 
-  start()
-  process()
+  nimbus.start()
+  nimbus.process()
 
