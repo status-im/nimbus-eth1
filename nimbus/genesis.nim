@@ -1,5 +1,5 @@
 import
-  tables, json, strutils,
+  tables, json, strutils, times,
   eth/[common, rlp, trie], stint, stew/[byteutils, ranges],
   chronicles, eth/trie/db,
   db/[db_chain, state_db], genesis_alloc, config, constants
@@ -32,7 +32,7 @@ func decodePrealloc(data: seq[byte]): GenesisAlloc =
   for tup in rlp.decode(data.toRange, seq[(UInt256, UInt256)]):
     result[toAddress(tup[0])] = GenesisAccount(balance: tup[1])
 
-proc customNetPrealloc(genesisBlock: JsonNode): GenesisAlloc = 
+proc customNetPrealloc(genesisBlock: JsonNode): GenesisAlloc =
   result = newTable[EthAddress, GenesisAccount]()
   for address, balance in genesisBlock.pairs():
     let balance = fromHex(UInt256,balance["balance"].getStr())
@@ -58,11 +58,21 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
     )
   of RinkebyNet:
     Genesis(
-      nonce: 66.toBlockNonce,
-      extraData: hexToSeqByte("0x3535353535353535353535353535353535353535353535353535353535353535"),
-      gasLimit: 16777216,
-      difficulty: 1048576.u256,
+      nonce: 0.toBlockNonce,
+      timestamp: initTime(0x58ee40ba, 0),
+      extraData: hexToSeqByte("0x52657370656374206d7920617574686f7269746168207e452e436172746d616e42eb768f2244c8811c63729a21a3569731535f067ffc57839b00206d1ad20c69a1981b489f772031b279182d99e65703f0076e4812653aab85fca0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+      gasLimit: 4700000,
+      difficulty: 1.u256,
       alloc: decodePrealloc(rinkebyAllocData)
+    )
+  of GoerliNet:
+    Genesis(
+      nonce: 0.toBlockNonce,
+      timestamp: initTime(0x5c51a607, 0),
+      extraData: hexToSeqByte("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+      gasLimit: 0xa00000,
+      difficulty: 1.u256,
+      alloc: decodePrealloc(goerliAllocData)
     )
   of CustomNet:
     let genesis = getConfiguration().customGenesis
