@@ -74,6 +74,7 @@ type
     MordenNet = 2
     RopstenNet = 3
     RinkebyNet = 4
+    GoerliNet = 5
     KovanNet = 42
 
   NetworkFlags* = enum
@@ -133,6 +134,8 @@ type
 
     byzantiumBlock*: BlockNumber
     constantinopleBlock*: BlockNumber
+    petersburgBlock*: BlockNumber
+    istanbulBlock*: BlockNumber
 
   NimbusConfiguration* = ref object
     ## Main Nimbus configuration object
@@ -156,6 +159,8 @@ type
     eip158Block*: BlockNumber
     byzantiumBlock*: BlockNumber
     constantinopleBlock*: BlockNumber
+    petersburgBlock*: BlockNumber
+    istanbulBlock*: BlockNumber
     nonce*: BlockNonce
     extraData*: seq[byte]
     gasLimit*: int64
@@ -188,6 +193,8 @@ proc privateChainConfig*(): ChainConfig =
     eip158Block:      config.customGenesis.eip158Block,
     byzantiumBlock:   config.customGenesis.byzantiumBlock,
     constantinopleBlock: config.customGenesis.constantinopleBlock,
+    petersburgBlock:  config.customGenesis.petersburgBlock,
+    istanbulBlock:    config.customGenesis.istanbulBlock
   )
   trace "Custom genesis block configuration loaded", configuration=result
 
@@ -226,6 +233,18 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       eip155Block:    3.toBlockNumber,
       eip158Block:    3.toBlockNumber,
       byzantiumBlock: 1035301.toBlockNumber
+    )
+  of GoerliNet:
+    ChainConfig(
+      chainId:        GoerliNet.uint,
+      homesteadBlock: 0.toBlockNumber,
+      daoForkSupport: false,
+      eip150Block:    0.toBlockNumber,
+      eip150Hash:     toDigest("0000000000000000000000000000000000000000000000000000000000000000"),
+      eip155Block:    0.toBlockNumber,
+      eip158Block:    0.toBlockNumber,
+      byzantiumBlock: 0.toBlockNumber,
+      istanbulBlock:  1561651.toBlockNumber
     )
   of CustomNet:
     privateChainConfig()
@@ -293,6 +312,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   var
     chainId = 0.uint
     homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = 0.toBlockNumber
+    petersburgBlock, istanbulBlock = 0.toBlockNumber
     eip150Hash, mixHash : MDigest[256]
     daoForkSupport = false
     nonce = 66.toBlockNonce
@@ -320,6 +340,8 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     checkForFork(forkDetails, eip158Block, eip155Block)
     checkForFork(forkDetails, byzantiumBlock, eip158Block)
     checkForFork(forkDetails, constantinopleBlock, byzantiumBlock)
+    checkForFork(forkDetails, petersburgBlock, constantinopleBlock)
+    checkForFork(forkDetails, istanbulBlock, petersburgBlock)
   else:
     error "No chain configuration found."
     quit(1)
@@ -344,6 +366,8 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     daoForkSupport:   daoForkSupport,
     byzantiumBlock:   byzantiumBlock,
     constantinopleBlock: constantinopleBlock,
+    petersburgBlock:  petersburgBlock,
+    istanbulBlock:    istanbulBlock,
     nonce:            nonce,
     extraData:        extraData,
     gasLimit:         gasLimit,
@@ -559,6 +583,8 @@ proc setNetwork(conf: var NetConfiguration, id: PublicNetwork) =
     conf.bootNodes.setBootnodes(RopstenBootnodes)
   of RinkebyNet:
     conf.bootNodes.setBootnodes(RinkebyBootnodes)
+  of GoerliNet:
+    conf.bootNodes.setBootnodes(GoerliBootnodes)
   of KovanNet:
     conf.bootNodes.setBootnodes(KovanBootnodes)
   of CustomNet:
@@ -593,6 +619,8 @@ proc processNetArguments(key, value: string): ConfigStatus =
     config.net.setNetwork(RopstenNet)
   elif skey == "rinkeby":
     config.net.setNetwork(RinkebyNet)
+  elif skey == "goerli":
+    config.net.setNetwork(GoerliNet)
   elif skey == "kovan":
     config.net.setNetwork(KovanNet)
   elif skey == "customnetwork":
