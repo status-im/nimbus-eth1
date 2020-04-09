@@ -209,7 +209,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
     ChainConfig(
       chainId:        RopstenNet.uint,
       homesteadBlock: 0.toBlockNumber,
-      daoForkSupport: true,
+      daoForkSupport: false,
       eip150Block:    0.toBlockNumber,
       eip150Hash:     toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
       eip155Block:    10.toBlockNumber,
@@ -220,7 +220,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
     ChainConfig(
       chainId:        RinkebyNet.uint,
       homesteadBlock: 1.toBlockNumber,
-      daoForkSupport: true,
+      daoForkSupport: false,
       eip150Block:    2.toBlockNumber,
       eip150Hash:     toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
       eip155Block:    3.toBlockNumber,
