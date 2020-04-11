@@ -91,7 +91,7 @@ const
     eth2, # FkConstantinople
     eth2, # FkPetersburg
     eth2, # FkIstanbul
-    eth2  # FkGlacierMuir
+    eth2  # FkMuirGlacier
   ]
 
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =

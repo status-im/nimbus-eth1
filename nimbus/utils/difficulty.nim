@@ -145,7 +145,7 @@ template calcDifficultyGlacierMuir*(timeStamp: EthTime, parent: BlockHeader): Di
 
 func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
-  if next >= forkBlocks[FkGlacierMuir]:
+  if next >= forkBlocks[FkMuirGlacier]:
     result = calcDifficultyGlacierMuir(timeStamp, parent)
   elif next >= forkBlocks[FkConstantinople]:
     result = calcDifficultyConstantinople(timeStamp, parent)
@@ -158,7 +158,7 @@ func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
 
 func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader, fork: Fork): DifficultyInt =
   case fork
-  of FkGlacierMuir:
+  of FkMuirGlacier:
     result = calcDifficultyGlacierMuir(timeStamp, parent)
   of FkConstantinople..FkPetersburg:
     result = calcDifficultyConstantinople(timeStamp, parent)

@@ -724,7 +724,7 @@ const
     FkConstantinople: SpuriousGasFees,
     FkPetersburg: SpuriousGasFees,
     FkIstanbul: IstanbulGasFees,
-    FkGlacierMuir: IstanbulGasFees
+    FkMuirGlacier: IstanbulGasFees
   ]
 
 
