@@ -70,9 +70,9 @@ proc difficultyMain*() =
     ropstenConfig.calcDifficulty(timeStamp, parent)
 
   suite "DifficultyTest":
-    runTests("EIP2384_random_to20M", true, calcDifficultyGlacierMuir)
-    runTests("EIP2384_random", true, calcDifficultyGlacierMuir)
-    runTests("EIP2384", true, calcDifficultyGlacierMuir)
+    runTests("EIP2384_random_to20M", true, calcDifficultyMuirGlacier)
+    runTests("EIP2384_random", true, calcDifficultyMuirGlacier)
+    runTests("EIP2384", true, calcDifficultyMuirGlacier)
     runTests("Byzantium", true, calcDifficultyByzantium)
     runTests("Constantinople", true, calcDifficultyConstantinople)
     runTests("Homestead", true, calcDifficultyHomestead)

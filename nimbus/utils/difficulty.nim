@@ -141,13 +141,13 @@ template calcDifficultyByzantium*(timeStamp: EthTime, parent: BlockHeader): Diff
 template calcDifficultyConstantinople*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   makeDifficultyCalculator(5_000_000, timeStamp, parent)
 
-template calcDifficultyGlacierMuir*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+template calcDifficultyMuirGlacier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   makeDifficultyCalculator(9_000_000, timeStamp, parent)
 
 func calcDifficulty*(c: ChainConfig, timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
   if next >= c.muirGlacierBlock:
-    result = calcDifficultyGlacierMuir(timeStamp, parent)
+    result = calcDifficultyMuirGlacier(timeStamp, parent)
   elif next >= c.constantinopleBlock:
     result = calcDifficultyConstantinople(timeStamp, parent)
   elif next >= c.byzantiumBlock:
