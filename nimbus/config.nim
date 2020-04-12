@@ -138,8 +138,6 @@ type
     istanbulBlock*: BlockNumber
     muirGlacierBlock*: BlockNumber
 
-    toForkImpl*: proc(c: ChainConfig, blockNumber: BlockNumber): Fork
-
   NimbusConfiguration* = ref object
     ## Main Nimbus configuration object
     dataDir*: string
@@ -164,6 +162,7 @@ type
     constantinopleBlock*: BlockNumber
     petersburgBlock*: BlockNumber
     istanbulBlock*: BlockNumber
+    muirGlacierBlock*: BlockNumber
     nonce*: BlockNonce
     extraData*: seq[byte]
     gasLimit*: int64
@@ -183,18 +182,15 @@ var nimbusConfig {.threadvar.}: NimbusConfiguration
 
 proc getConfiguration*(): NimbusConfiguration {.gcsafe.}
 
-template toFork*(c: ChainConfig, blockNumber: BlockNumber): Fork =
-  c.toForkImpl(c, blockNumber)
-
-proc defaultToForkImpl(c: ChainConfig, blockNumber: BlockNumber): Fork =
-  if blockNumber < c.homesteadBlock: FkFrontier
-  elif blockNumber < c.eip150Block: FkHomestead
-  elif blockNumber < c.eip158Block: FkTangerine
-  elif blockNumber < c.byzantiumBlock: FkSpurious
-  elif blockNumber < c.constantinopleBlock: FkByzantium
-  elif blockNumber < c.petersburgBlock: FkConstantinople
-  elif blockNumber < c.istanbulBlock: FkPetersburg
-  else: FkIstanbul
+proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
+  if number >= c.istanbulBlock: FkIstanbul
+  elif number >= c.petersburgBlock: FkPetersburg
+  elif number >= c.constantinopleBlock: FkConstantinople
+  elif number >= c.byzantiumBlock: FkByzantium
+  elif number >= c.eip158Block: FkSpurious
+  elif number >= c.eip150Block: FkTangerine
+  elif number >= c.homesteadBlock: FkHomestead
+  else: FkFrontier
 
 proc privateChainConfig*(): ChainConfig =
   let config = getConfiguration()
@@ -211,7 +207,7 @@ proc privateChainConfig*(): ChainConfig =
     constantinopleBlock: config.customGenesis.constantinopleBlock,
     petersburgBlock:  config.customGenesis.petersburgBlock,
     istanbulBlock:    config.customGenesis.istanbulBlock,
-    toForkImpl: defaultToForkImpl
+    muirGlacierBlock: config.customGenesis.muirGlacierBlock
   )
   trace "Custom genesis block configuration loaded", configuration=result
 
@@ -231,15 +227,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       constantinopleBlock: 7_280_000.toBlockNumber, # Never Occured in MainNet
       petersburgBlock:7_280_000.toBlockNumber, # 28/02/2019 07:52:04
       istanbulBlock:  9_069_000.toBlockNumber, # 08/12/2019 12:25:09
-      muirGlacierBlock: 9_200_000.toBlockNumber, # 02/01/2020 08:30:49
-      toForkImpl: proc(c: ChainConfig, blockNumber: BlockNumber): Fork =
-        if blockNumber < c.homesteadBlock: FkFrontier
-        elif blockNumber < c.eip150Block: FkHomestead
-        elif blockNumber < c.eip158Block: FkTangerine
-        elif blockNumber < c.byzantiumBlock: FkSpurious
-        elif blockNumber < c.petersburgBlock: FkByzantium
-        elif blockNumber < c.istanbulBlock: FkPetersburg
-        else: FkIstanbul
+      muirGlacierBlock: 9_200_000.toBlockNumber # 02/01/2020 08:30:49
     )
   of RopstenNet:
     ChainConfig(
@@ -254,13 +242,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       constantinopleBlock: 4_230_000.toBlockNumber,
       petersburgBlock:4_939_394.toBlockNumber,
       istanbulBlock:  6_485_846.toBlockNumber,
-      muirGlacierBlock: 7_117_117.toBlockNumber,
-      toForkImpl: proc(c: ChainConfig, blockNumber: BlockNumber): Fork =
-        if blockNumber < c.eip158Block: FkTangerine
-        elif blockNumber < c.byzantiumBlock: FkSpurious
-        elif blockNumber < c.petersburgBlock: FkByzantium
-        elif blockNumber < c.istanbulBlock: FkPetersburg
-        else: FkIstanbul
+      muirGlacierBlock: 7_117_117.toBlockNumber
     )
   of RinkebyNet:
     ChainConfig(
@@ -275,8 +257,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       constantinopleBlock: 3_660_663.toBlockNumber,
       petersburgBlock:4_321_234.toBlockNumber,
       istanbulBlock:  5_435_345.toBlockNumber,
-      muirGlacierBlock: high(BlockNumber).toBlockNumber,
-      toForkImpl: defaultToForkImpl
+      muirGlacierBlock: high(BlockNumber).toBlockNumber
     )
   of GoerliNet:
     ChainConfig(
@@ -291,10 +272,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       constantinopleBlock: 0.toBlockNumber,
       petersburgBlock: 0.toBlockNumber,
       istanbulBlock:  1_561_651.toBlockNumber,
-      muirGlacierBlock: high(BlockNumber).toBlockNumber,
-      toForkImpl: proc(c: ChainConfig, blockNumber: BlockNumber): Fork =
-        if blockNumber < c.istanbulBlock: FkPetersburg
-        else: FkIstanbul
+      muirGlacierBlock: high(BlockNumber).toBlockNumber
     )
   of CustomNet:
     privateChainConfig()
@@ -362,7 +340,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   var
     chainId = 0.uint
     homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = 0.toBlockNumber
-    petersburgBlock, istanbulBlock = 0.toBlockNumber
+    petersburgBlock, istanbulBlock, muirGlacierBlock = 0.toBlockNumber
     eip150Hash, mixHash : MDigest[256]
     daoForkSupport = false
     nonce = 66.toBlockNonce
@@ -392,6 +370,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     checkForFork(forkDetails, constantinopleBlock, byzantiumBlock)
     checkForFork(forkDetails, petersburgBlock, constantinopleBlock)
     checkForFork(forkDetails, istanbulBlock, petersburgBlock)
+    checkForFork(forkDetails, muirGlacierBlock, istanbulBlock)
   else:
     error "No chain configuration found."
     quit(1)
@@ -418,6 +397,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     constantinopleBlock: constantinopleBlock,
     petersburgBlock:  petersburgBlock,
     istanbulBlock:    istanbulBlock,
+    muirGlacierBlock: muirGlacierBlock,
     nonce:            nonce,
     extraData:        extraData,
     gasLimit:         gasLimit,
