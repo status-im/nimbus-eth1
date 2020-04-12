@@ -715,16 +715,13 @@ const
 
   gasFees*: array[Fork, GasFeeSchedule] = [
     FkFrontier: BaseGasFees,
-    FkThawing: BaseGasFees,
     FkHomestead: HomesteadGasFees,
-    FkDao: HomesteadGasFees,
     FkTangerine: TangerineGasFees,
     FkSpurious: SpuriousGasFees,
     FkByzantium: SpuriousGasFees,
     FkConstantinople: SpuriousGasFees,
     FkPetersburg: SpuriousGasFees,
-    FkIstanbul: IstanbulGasFees,
-    FkMuirGlacier: IstanbulGasFees
+    FkIstanbul: IstanbulGasFees
   ]
 
 

@@ -5,7 +5,7 @@ import options, sets,
   ../vm_state, ../vm_types, ../vm_state_transactions,
   ../vm/[computation, message],
   ../vm/interpreter/vm_forks,
-  ./dao
+  ./dao, ../config
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
   ## Process the transaction, write the results to db.
@@ -82,16 +82,13 @@ const
   eth2 = 2.eth
   blockRewards*: array[Fork, Uint256] = [
     eth5, # FkFrontier
-    eth5, # FkThawing
     eth5, # FkHomestead
-    eth5, # FkDao
     eth5, # FkTangerine
     eth5, # FkSpurious
     eth3, # FkByzantium
     eth2, # FkConstantinople
     eth2, # FkPetersburg
-    eth2, # FkIstanbul
-    eth2  # FkMuirGlacier
+    eth2  # FkIstanbul
   ]
 
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
@@ -106,7 +103,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
     debug "Mismatched txRoot", blockNumber=header.blockNumber
     return ValidationResult.Error
 
-  let fork = vmState.blockNumber.toFork
+  let fork = chainDB.config.toFork(vmState.blockNumber)
 
   if header.txRoot != BLANK_ROOT_HASH:
     if body.transactions.len == 0:

@@ -1,7 +1,8 @@
 import
   times,
   eth/common, stint,
-  ../constants, ../vm/interpreter/vm_forks
+  ../constants, ../vm/interpreter/vm_forks,
+  ../config
 
 const
   ExpDiffPeriod           = 100000.u256
@@ -143,28 +144,15 @@ template calcDifficultyConstantinople*(timeStamp: EthTime, parent: BlockHeader):
 template calcDifficultyGlacierMuir*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   makeDifficultyCalculator(9_000_000, timeStamp, parent)
 
-func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+func calcDifficulty*(c: ChainConfig, timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
-  if next >= forkBlocks[FkMuirGlacier]:
+  if next >= c.muirGlacierBlock:
     result = calcDifficultyGlacierMuir(timeStamp, parent)
-  elif next >= forkBlocks[FkConstantinople]:
+  elif next >= c.constantinopleBlock:
     result = calcDifficultyConstantinople(timeStamp, parent)
-  elif next >= forkBlocks[FkByzantium]:
+  elif next >= c.byzantiumBlock:
     result = calcDifficultyByzantium(timeStamp, parent)
-  elif next >= forkBlocks[FkHomestead]:
-    result = calcDifficultyHomestead(timeStamp, parent)
-  else:
-    result = calcDifficultyFrontier(timeStamp, parent)
-
-func calcDifficulty*(timeStamp: EthTime, parent: BlockHeader, fork: Fork): DifficultyInt =
-  case fork
-  of FkMuirGlacier:
-    result = calcDifficultyGlacierMuir(timeStamp, parent)
-  of FkConstantinople..FkPetersburg:
-    result = calcDifficultyConstantinople(timeStamp, parent)
-  of FkByzantium:
-    result = calcDifficultyByzantium(timeStamp, parent)
-  of FkHomestead..FkSpurious:
+  elif next >= c.homesteadBlock:
     result = calcDifficultyHomestead(timeStamp, parent)
   else:
     result = calcDifficultyFrontier(timeStamp, parent)

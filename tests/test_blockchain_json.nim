@@ -509,9 +509,9 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   preminedBlock: PlainBlock, fork: Fork, checkSeal, validation = true): PlainBlock =
 
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
-  let baseHeaderForImport = generateHeaderFromParentHeader(parentHeader,
-      preminedBlock.header.coinbase,
-      fork,
+  let baseHeaderForImport = generateHeaderFromParentHeader(chainDB.config,
+      parentHeader,
+      preminedBlock.header.coinbase,  
       some(preminedBlock.header.timestamp),
       some(preminedBlock.header.gasLimit),
       @[]

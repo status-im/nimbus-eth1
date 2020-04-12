@@ -10,7 +10,8 @@ import
   eth/common,
   vm/interpreter/[vm_forks, gas_costs],
   ./constants, ./db/[db_chain, state_db],
-  ./utils, json, vm_types, vm/transaction_tracer
+  ./utils, json, vm_types, vm/transaction_tracer,
+  ./config
 
 proc newAccessLogs*: AccessLogs =
   AccessLogs(reads: initTable[string, string](), writes: initTable[string, string]())
@@ -52,7 +53,7 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
     if forkOverride.isSome:
       forkOverride.get
     else:
-      vmState.blockHeader.blockNumber.toFork
+      vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber)
   vmState.gasCosts = vmState.fork.forkToSchedule
 
 method blockhash*(vmState: BaseVMState): Hash256 {.base, gcsafe.} =

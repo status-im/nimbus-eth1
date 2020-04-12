@@ -9,7 +9,8 @@
 import
   strformat, times, options,
   eth/[common, rlp],
-  ./difficulty, ../vm/interpreter/vm_forks, ../constants
+  ./difficulty, ../vm/interpreter/vm_forks, ../constants,
+  ../config
 
 export BlockHeader
 
@@ -66,8 +67,8 @@ proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
   else:
     return gasLimit
 
-proc generateHeaderFromParentHeader*(parent: BlockHeader,
-    coinbase: EthAddress, fork: Fork, timestamp: Option[EthTime],
+proc generateHeaderFromParentHeader*(config: ChainConfig, parent: BlockHeader,
+    coinbase: EthAddress, timestamp: Option[EthTime],
     gasLimit: Option[GasInt], extraData: Blob): BlockHeader =
 
   var lcTimestamp: EthTime
@@ -82,7 +83,7 @@ proc generateHeaderFromParentHeader*(parent: BlockHeader,
   result = BlockHeader(
     timestamp: lcTimestamp,
     blockNumber: (parent.blockNumber + 1),
-    difficulty: calcDifficulty(lcTimestamp, parent, fork),
+    difficulty: config.calcDifficulty(lcTimestamp, parent),
     gasLimit: if gasLimit.isSome: gasLimit.get() else: computeGasLimit(parent, gasLimitFloor = GENESIS_GAS_LIMIT),
     stateRoot: parent.stateRoot,
     coinbase: coinbase,

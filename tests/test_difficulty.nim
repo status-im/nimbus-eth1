@@ -1,7 +1,8 @@
 import unittest2, strutils, tables, os, json,
   ../nimbus/utils/difficulty, stint, times,
   eth/common, test_helpers, stew/byteutils,
-  ../nimbus/constants, ../nimbus/vm/interpreter/vm_forks
+  ../nimbus/constants, ../nimbus/vm/interpreter/vm_forks,
+  ../nimbus/config
 
 type
   Tester = object
@@ -59,10 +60,11 @@ template runTests(name: string, hex: bool, calculator: typed) =
       let diff = calculator(times.fromUnix(t.currentTimeStamp), p)
       check diff == t.currentDifficulty
 
-func calcDifficultyMainNetWork(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
-  calcDifficulty(timeStamp, parent, parent.blockNumber.toFork)
-  
 proc difficultyMain*() =
+  let mainnetConfig = publicChainConfig(MainNet)
+  func calcDifficultyMainNetWork(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+    mainnetConfig.calcDifficulty(timeStamp, parent)
+
   suite "DifficultyTest":
     runTests("EIP2384_random_to20M", true, calcDifficultyGlacierMuir)
     runTests("EIP2384_random", true, calcDifficultyGlacierMuir)
@@ -72,7 +74,7 @@ proc difficultyMain*() =
     runTests("Homestead", true, calcDifficultyHomestead)
     runTests("MainNetwork", true, calcDifficultyMainNetwork)
     runTests("Frontier", true, calcDifficultyFrontier)
-    runTests("", false, calcDifficulty)
+    runTests("", false, calcDifficultyMainNetWork)
 
 when isMainModule:
   difficultyMain()

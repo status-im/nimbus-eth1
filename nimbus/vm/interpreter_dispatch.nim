@@ -336,9 +336,9 @@ proc istanbulVM(c: Computation) {.gcsafe.} =
 proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
-  of FkFrontier..FkThawing:
+  of FkFrontier:
     c.frontierVM()
-  of FkHomestead..FkDao:
+  of FkHomestead:
     c.homesteadVM()
   of FkTangerine:
     c.tangerineVM()
