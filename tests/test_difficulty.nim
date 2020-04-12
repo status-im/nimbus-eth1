@@ -65,6 +65,10 @@ proc difficultyMain*() =
   func calcDifficultyMainNetWork(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
     mainnetConfig.calcDifficulty(timeStamp, parent)
 
+  let ropstenConfig = publicChainConfig(RopstenNet)
+  func calcDifficultyRopsten(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+    ropstenConfig.calcDifficulty(timeStamp, parent)
+
   suite "DifficultyTest":
     runTests("EIP2384_random_to20M", true, calcDifficultyGlacierMuir)
     runTests("EIP2384_random", true, calcDifficultyGlacierMuir)
@@ -75,6 +79,7 @@ proc difficultyMain*() =
     runTests("MainNetwork", true, calcDifficultyMainNetwork)
     runTests("Frontier", true, calcDifficultyFrontier)
     runTests("", false, calcDifficultyMainNetWork)
+    runTests("Ropsten", true, calcDifficultyRopsten)
 
 when isMainModule:
   difficultyMain()
