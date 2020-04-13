@@ -43,7 +43,7 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
         vmState,
         transaction,
         sender,
-        vmState.blockNumber.toFork)
+        fork)
 
   proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
     Transaction(
