@@ -30,9 +30,12 @@ TOOLS_DIRS := \
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-# "--import" can't be added to config.nims, for some reason
-# "--define:release" implies "--stacktrace:off" and it cannot be added to config.nims either
-NIM_PARAMS := $(NIM_PARAMS) -d:release --import:libbacktrace
+# "--define:release" implies "--stacktrace:off" and it cannot be added to config.nims
+ifeq ($(USE_LIBBACKTRACE), 0)
+NIM_PARAMS := $(NIM_PARAMS) -d:debug -d:disable_libbacktrace
+else
+NIM_PARAMS := $(NIM_PARAMS) -d:release
+endif
 
 .PHONY: \
 	all \
@@ -65,12 +68,15 @@ build-system-checks:
 		exit 1; \
 		}
 
-deps: | deps-common nimbus.nims libbacktrace
+deps: | deps-common nimbus.nims
+ifneq ($(USE_LIBBACKTRACE), 0)
+deps: | libbacktrace
+endif
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 update: | update-common
 	rm -rf nimbus.nims && \
-		$(MAKE) nimbus.nims
+		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
 
 # builds the tools, wherever they are
 $(TOOLS): | build deps
@@ -89,7 +95,7 @@ nimbus.nims:
 
 # nim-libbacktrace
 libbacktrace:
-	+ $(MAKE) -C vendor/nim-libbacktrace BUILD_CXX_LIB=0
+	+ $(MAKE) -C vendor/nim-libbacktrace BUILD_CXX_LIB=0 $(HANDLE_OUTPUT)
 
 # builds and runs the test suite
 test: | build deps
@@ -108,7 +114,9 @@ test-reproducibility:
 # usual cleaning
 clean: | clean-common
 	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*_wrapper_test}
+ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
+endif
 
 libnimbus.so: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
@@ -118,7 +126,7 @@ libnimbus.so: | build deps
 
 # libraries for dynamic linking of non-Nim objects
 EXTRA_LIBS_DYNAMIC := -L"$(CURDIR)/build" -lnimbus -lm
-wrappers: | build deps libnimbus.so go-checks
+wrappers: | build deps libnimbus.so
 	echo -e $(BUILD_MSG) "build/C_wrapper_example" && \
 		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' $(EXTRA_LIBS_DYNAMIC) -g -o build/C_wrapper_example
 	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
@@ -144,7 +152,7 @@ endif # Windows
 ifeq ($(USE_VENDORED_LIBUNWIND), 1)
 EXTRA_LIBS_STATIC := $(EXTRA_LIBS_STATIC) -lunwind
 endif # USE_VENDORED_LIBUNWIND
-wrappers-static: | build deps libnimbus.a go-checks
+wrappers-static: | build deps libnimbus.a
 	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
 		$(CC) wrappers/wrapper_example.c -static -pthread $(EXTRA_LIBS_STATIC) -g -o build/C_wrapper_example_static
 	echo -e $(BUILD_MSG) "build/go_wrapper_example_static" && \
