@@ -10,7 +10,7 @@ import
   stew/byteutils, stew/ranges/typedranges, eth/[rlp, common], eth/trie/db,
   ./test_helpers, ./test_allowed_to_fail, ../nimbus/vm/interpreter,
   ../nimbus/[constants, vm_state, vm_types, utils],
-  ../nimbus/db/[db_chain, state_db]
+  ../nimbus/db/[db_chain]
 
 func bytesToHex(x: openarray[byte]): string {.inline.} =
   ## TODO: use seq[byte] for raw data and delete this proc
@@ -43,7 +43,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let fexec = fixture["exec"]
   vmState.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
-    let address = fexec{"address"}.getStr.parseAddress
 
   vmState.setupTxContext(
     origin = fexec{"origin"}.getStr.parseAddress,

@@ -10,7 +10,7 @@ import
   chronicles, stint, nimcrypto, stew/ranges/[typedranges, ptr_arith], eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
-  ../memory, ../message, ../stack, ../code_stream, ../computation,
+  ../memory, ../stack, ../code_stream, ../computation,
   ../../vm_state, ../../errors, ../../constants, ../../vm_types,
   ../../db/[db_chain, state_db]
 

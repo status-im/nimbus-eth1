@@ -8,7 +8,7 @@
 import
   unittest2, json, os, tables, strutils, sets, strformat, times,
   options,
-  eth/[common, rlp, bloom], eth/trie/[db, trie_defs],
+  eth/[common, rlp], eth/trie/[db, trie_defs],
   ethash, stew/endians2, nimcrypto,
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
@@ -330,7 +330,7 @@ proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: PlainB
   for txIndex, tx in minedBlock.transactions:
     var sender: EthAddress
     if tx.getSender(sender):
-      let gasUsed = processTransaction(tx, sender, vmState, fork)
+      discard processTransaction(tx, sender, vmState, fork)
     else:
       raise newException(ValidationError, "could not get sender")
     vmState.receipts[txIndex] = makeReceipt(vmState, fork)
@@ -622,7 +622,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
 
     if shouldBeGoodBlock:
       try:
-        let (preminedBlock, minedBlock, blockRlp) = tester.applyFixtureBlockToChain(
+        let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
             testerBlock, chainDB, checkSeal, validation = false)  # we manually validate below
         check validateBlock(chainDB, preminedBlock, checkSeal) == true
       except:

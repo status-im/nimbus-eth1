@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, json, os, tables, strformat, strutils,
+  unittest2, json, os, tables, strutils,
   eth/[common, rlp], stew/byteutils, eth/trie/db,
   ./test_helpers, ../nimbus/db/db_chain,
   ../nimbus/p2p/chain

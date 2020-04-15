@@ -263,9 +263,9 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   var computation = initComputation(blockNumber, chainDB, boa.code, boa.data, boa.fork)
 
   # TODO: support gas comsumption validation
-  let gas = computation.gasMeter.gasRemaining
+  # let gas = computation.gasMeter.gasRemaining
   execComputation(computation)
-  let gasUsed = gas - computation.gasMeter.gasRemaining
+  # let gasUsed = gas - computation.gasMeter.gasRemaining
 
   if computation.isSuccess:
     if boa.success == false:

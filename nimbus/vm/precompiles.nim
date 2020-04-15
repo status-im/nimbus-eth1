@@ -1,7 +1,7 @@
 import
   ../vm_types, interpreter/[gas_meter, gas_costs, utils/utils_numeric, vm_forks],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
-  message, math, nimcrypto, bncurve/[fields, groups], blake2b_f
+  math, nimcrypto, bncurve/[fields, groups], blake2b_f
 
 type
   PrecompileAddresses* = enum

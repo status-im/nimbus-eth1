@@ -6,13 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, strformat, strutils, tables, json, times, os, sets,
+  unittest2, strutils, tables, json, times, os, sets,
   stew/ranges/typedranges, nimcrypto, options,
   eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/p2p/executor, test_config,
   ../nimbus/transaction,
-  ../nimbus/[vm_state, vm_types, vm_state_transactions, utils],
+  ../nimbus/[vm_state, vm_types, utils],
   ../nimbus/vm/interpreter,
   ../nimbus/db/[db_chain, state_db]
 

@@ -9,9 +9,9 @@ import
   os, macros, json, strformat, strutils, parseutils, os, tables,
   stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p], unittest2,
   testutils/markdown_reports,
-  ../nimbus/[vm_state, config, transaction, utils, errors],
-  ../nimbus/db/[db_chain, state_db],
-  ../nimbus/vm/interpreter/vm_forks
+  ../nimbus/[config, transaction, utils, errors],
+  ../nimbus/vm/interpreter/vm_forks,
+  ../nimbus/db/state_db
 
 func revmap(x: Table[Fork, string]): Table[string, Fork] =
   result = initTable[string, Fork]()
@@ -70,10 +70,10 @@ macro jsonTest*(s: static[string], handler: untyped, skipTest: untyped = skipNot
     testStatusIMPL = ident("testStatusIMPL")
     testName = ident("testName")
     # workaround for strformat in quote do: https://github.com/nim-lang/Nim/issues/8220
-    symbol = newIdentNode"symbol"
-    final  = newIdentNode"final"
-    name   = newIdentNode"name"
-    formatted = newStrLitNode"{symbol[final]} {name:<64}{$final}{'\n'}"
+    symbol {.used.} = newIdentNode"symbol"
+    final  {.used.} = newIdentNode"final"
+    name   {.used.} = newIdentNode"name"
+    formatted {.used.} = newStrLitNode"{symbol[final]} {name:<64}{$final}{'\n'}"
 
   result = quote:
     var filenames: seq[string] = @[]
