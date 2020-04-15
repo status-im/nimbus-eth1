@@ -16,7 +16,8 @@ import
   ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants],
   ../nimbus/db/[db_chain, state_db],
   ../nimbus/utils/header,
-  ../nimbus/p2p/executor
+  ../nimbus/p2p/[executor, dao],
+  ../nimbus/config
 
 type
   SealEngine = enum
@@ -51,6 +52,7 @@ type
     trace: bool
     vmState: BaseVMState
     debugData: JsonNode
+    network: string
 
   MiningHeader* = object
     parentHash*:    Hash256
@@ -187,21 +189,65 @@ proc parseBlocks(blocks: JsonNode, testStatusIMPL: var TestStatus): seq[TesterBl
 
     result.add t
 
-func vmConfiguration(network: string): VMConfig =
+func vmConfiguration(network: string, c: var ChainConfig): VMConfig =
+
+  c.homesteadBlock = high(BlockNumber)
+  c.daoForkBlock = high(BlockNumber)
+  c.daoForkSupport = false
+  c.eip150Block = high(BlockNumber)
+  c.eip158Block = high(BlockNumber)
+  c.byzantiumBlock = high(BlockNumber)
+  c.constantinopleBlock = high(BlockNumber)
+  c.petersburgBlock = high(BlockNumber)
+  c.istanbulBlock = high(BlockNumber)
+  c.muirGlacierBlock = high(BlockNumber)
+
   case network
-  of "EIP150": result = [(0, FkTangerine), (0, FkTangerine)]
-  of "ConstantinopleFix": result = [(0, FkPetersburg), (0, FkPetersburg)]
-  of "Homestead": result = [(0, FkHomestead), (0, FkHomestead)]
-  of "Frontier": result = [(0, FkFrontier), (0, FkFrontier)]
-  of "Byzantium": result = [(0, FkByzantium), (0, FkByzantium)]
-  of "EIP158ToByzantiumAt5": result = [(0, FkSpurious), (5, FkByzantium)]
-  of "EIP158": result = [(0, FkSpurious), (0, FkSpurious)]
-  of "HomesteadToDaoAt5": result = [(0, FkHomestead), (5, FkHomestead)]
-  of "Constantinople": result = [(0, FkConstantinople), (0, FkConstantinople)]
-  of "HomesteadToEIP150At5": result = [(0, FkHomestead), (5, FkTangerine)]
-  of "FrontierToHomesteadAt5": result = [(0, FkFrontier), (5, FkHomestead)]
-  of "ByzantiumToConstantinopleFixAt5": result = [(0, FkByzantium), (5, FkPetersburg)]
-  of "Istanbul": result = [(0, FkIstanbul), (0, FkIstanbul)]
+  of "EIP150":
+    result = [(0, FkTangerine), (0, FkTangerine)]
+    c.eip150Block = 0.toBlockNumber
+  of "ConstantinopleFix":
+    result = [(0, FkPetersburg), (0, FkPetersburg)]
+    c.petersburgBlock = 0.toBlockNumber
+  of "Homestead":
+    result = [(0, FkHomestead), (0, FkHomestead)]
+    c.homesteadBlock = 0.toBlockNumber
+  of "Frontier":
+    result = [(0, FkFrontier), (0, FkFrontier)]
+    #c.frontierBlock = 0.toBlockNumber
+  of "Byzantium":
+    result = [(0, FkByzantium), (0, FkByzantium)]
+    c.byzantiumBlock = 0.toBlockNumber
+  of "EIP158ToByzantiumAt5":
+    result = [(0, FkSpurious), (5, FkByzantium)]
+    c.eip158Block = 0.toBlockNumber
+    c.byzantiumBlock = 5.toBlockNumber
+  of "EIP158":
+    result = [(0, FkSpurious), (0, FkSpurious)]
+    c.eip158Block = 0.toBlockNumber
+  of "HomesteadToDaoAt5":
+    result = [(0, FkHomestead), (5, FkHomestead)]
+    c.homesteadBlock = 0.toBlockNumber
+    c.daoForkBlock = 5.toBlockNumber
+    c.daoForkSupport = true
+  of "Constantinople":
+    result = [(0, FkConstantinople), (0, FkConstantinople)]
+    c.constantinopleBlock = 0.toBlockNumber
+  of "HomesteadToEIP150At5":
+    result = [(0, FkHomestead), (5, FkTangerine)]
+    c.homesteadBlock = 0.toBlockNumber
+    c.eip150Block = 5.toBlockNumber
+  of "FrontierToHomesteadAt5":
+    result = [(0, FkFrontier), (5, FkHomestead)]
+    #c.frontierBlock = 0.toBlockNumber
+    c.homesteadBlock = 5.toBlockNumber
+  of "ByzantiumToConstantinopleFixAt5":
+    result = [(0, FkByzantium), (5, FkPetersburg)]
+    c.byzantiumBlock = 0.toBlockNumber
+    c.petersburgBlock = 5.toBlockNumber
+  of "Istanbul":
+    result = [(0, FkIstanbul), (0, FkIstanbul)]
+    c.istanbulBlock = 0.toBlockNumber
   else:
     raise newException(ValueError, "unsupported network")
 
@@ -223,8 +269,7 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
 
   if "sealEngine" in fixture:
     result.sealEngine = some(parseEnum[SealEngine](fixture["sealEngine"].getStr))
-  let network = fixture["network"].getStr
-  result.vmConfig = vmConfiguration(network)
+  result.network = fixture["network"].getStr
 
   try:
     result.blocks = parseBlocks(fixture["blocks"], testStatusIMPL)
@@ -232,8 +277,8 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
     result.good = false
 
   # TODO: implement missing VM
-  if network in ["HomesteadToDaoAt5"]:
-    result.good = false
+  #if result.network in ["HomesteadToDaoAt5"]:
+    #result.good = false
 
 proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
   let blockReward = blockRewards[fork]
@@ -274,6 +319,10 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
 proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
   var dbTx = chainDB.db.beginTransaction()
   defer: dbTx.dispose()
+
+  if chainDB.config.daoForkSupport and minedBlock.header.blockNumber == chainDB.config.daoForkBlock:
+    vmState.mutateStateDB:
+      db.applyDAOHardFork()
 
   vmState.receipts = newSeq[Receipt](minedBlock.transactions.len)
   vmState.cumulativeGasUsed = 0
@@ -509,9 +558,9 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   preminedBlock: PlainBlock, fork: Fork, checkSeal, validation = true): PlainBlock =
 
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
-  let baseHeaderForImport = generateHeaderFromParentHeader(parentHeader,
+  let baseHeaderForImport = generateHeaderFromParentHeader(chainDB.config,
+      parentHeader,
       preminedBlock.header.coinbase,
-      fork,
       some(preminedBlock.header.timestamp),
       some(preminedBlock.header.gasLimit),
       @[]
@@ -537,6 +586,10 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
 
 proc applyFixtureBlockToChain(tester: var Tester, tb: TesterBlock,
   chainDB: BaseChainDB, checkSeal, validation = true): (PlainBlock, PlainBlock, Blob) =
+
+  # we hack the ChainConfig here and let it works with calcDifficulty
+  tester.vmConfig = vmConfiguration(tester.network, chainDB.config)
+
   var
     preminedBlock = rlp.decode(tb.headerRLP, PlainBlock)
     fork = vmConfigToFork(tester.vmConfig, preminedBlock.header.blockNumber)
@@ -625,7 +678,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
   #     - mine block
   # 3 - diff resulting state with expected state
   # 4 - check that all previous blocks were valid
-  let specifyIndex = getConfiguration().index
+  let specifyIndex = test_config.getConfiguration().index
   var fixtureIndex = 0
   var fixtureTested = false
 
@@ -635,7 +688,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       continue
 
     var tester = parseTester(fixture, testStatusIMPL)
-    var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = getConfiguration().pruning)
+    var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = test_config.getConfiguration().pruning)
 
     echo "TESTING: ", fixtureName
     if not tester.good: continue
@@ -670,7 +723,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     check success == true
 
   if not fixtureTested:
-    echo getConfiguration().testSubject, " not tested at all, wrong index?"
+    echo test_config.getConfiguration().testSubject, " not tested at all, wrong index?"
     if specifyIndex <= 0 or specifyIndex > node.len:
       echo "Maximum subtest available: ", node.len
 
@@ -683,7 +736,7 @@ proc blockchainJsonMain*(debugMode = false) =
       jsonTest("newBlockChainTests", testFixture, skipNewBCTests)
   else:
     # execute single test in debug mode
-    let config = getConfiguration()
+    let config = test_config.getConfiguration()
     if config.testSubject.len == 0:
       echo "missing test subject"
       quit(QuitFailure)
@@ -698,7 +751,7 @@ when isMainModule:
   var message: string
 
   ## Processing command line arguments
-  if processArguments(message) != Success:
+  if test_config.processArguments(message) != test_config.Success:
     echo message
     quit(QuitFailure)
   else:

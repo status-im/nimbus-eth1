@@ -37,11 +37,13 @@ template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
 proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
   proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): Computation =
     # Note that vmState may be altered
+    var chainDB = vmState.chainDB
+    let fork = chainDB.config.toFork(vmState.blockNumber)
     setupComputation(
         vmState,
         transaction,
         sender,
-        vmState.blockNumber.toFork)
+        fork)
 
   proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
     Transaction(
@@ -52,7 +54,8 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
       value: value
     )
   var
-    fork  = vmState.blockNumber.toFork
+    chainDB = vmState.chainDB
+    fork = chainDB.config.toFork(vmState.blockNumber)
     hiGas = vmState.gasLimit
     loGas = transaction.intrinsicGas(fork)
     gasPrice = transaction.gasPrice # TODO: Or zero?

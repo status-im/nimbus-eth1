@@ -136,6 +136,7 @@ type
     constantinopleBlock*: BlockNumber
     petersburgBlock*: BlockNumber
     istanbulBlock*: BlockNumber
+    muirGlacierBlock*: BlockNumber
 
   NimbusConfiguration* = ref object
     ## Main Nimbus configuration object
@@ -161,6 +162,7 @@ type
     constantinopleBlock*: BlockNumber
     petersburgBlock*: BlockNumber
     istanbulBlock*: BlockNumber
+    muirGlacierBlock*: BlockNumber
     nonce*: BlockNonce
     extraData*: seq[byte]
     gasLimit*: int64
@@ -180,6 +182,16 @@ var nimbusConfig {.threadvar.}: NimbusConfiguration
 
 proc getConfiguration*(): NimbusConfiguration {.gcsafe.}
 
+proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
+  if number >= c.istanbulBlock: FkIstanbul
+  elif number >= c.petersburgBlock: FkPetersburg
+  elif number >= c.constantinopleBlock: FkConstantinople
+  elif number >= c.byzantiumBlock: FkByzantium
+  elif number >= c.eip158Block: FkSpurious
+  elif number >= c.eip150Block: FkTangerine
+  elif number >= c.homesteadBlock: FkHomestead
+  else: FkFrontier
+
 proc privateChainConfig*(): ChainConfig =
   let config = getConfiguration()
   result = ChainConfig(
@@ -194,7 +206,8 @@ proc privateChainConfig*(): ChainConfig =
     byzantiumBlock:   config.customGenesis.byzantiumBlock,
     constantinopleBlock: config.customGenesis.constantinopleBlock,
     petersburgBlock:  config.customGenesis.petersburgBlock,
-    istanbulBlock:    config.customGenesis.istanbulBlock
+    istanbulBlock:    config.customGenesis.istanbulBlock,
+    muirGlacierBlock: config.customGenesis.muirGlacierBlock
   )
   trace "Custom genesis block configuration loaded", configuration=result
 
@@ -203,14 +216,18 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
   of MainNet:
     ChainConfig(
       chainId:        MainNet.uint,
-      homesteadBlock: forkBlocks[FkHomestead],
-      daoForkBlock:   forkBlocks[FkDao],
+      homesteadBlock: 1_150_000.toBlockNumber, # 14/03/2016 20:49:53
+      daoForkBlock:   1_920_000.toBlockNumber,
       daoForkSupport: true,
-      eip150Block:    forkBlocks[FkTangerine],
+      eip150Block:    2_463_000.toBlockNumber, # 18/10/2016 17:19:31
       eip150Hash:     toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
-      eip155Block:    forkBlocks[FkSpurious],
-      eip158Block:    forkBlocks[FkSpurious],
-      byzantiumBlock: forkBlocks[FkByzantium]
+      eip155Block:    2_675_000.toBlockNumber, # 22/11/2016 18:15:44
+      eip158Block:    2_675_000.toBlockNumber,
+      byzantiumBlock: 4_370_000.toBlockNumber, # 16/10/2017 09:22:11
+      constantinopleBlock: 7_280_000.toBlockNumber, # Never Occured in MainNet
+      petersburgBlock:7_280_000.toBlockNumber, # 28/02/2019 07:52:04
+      istanbulBlock:  9_069_000.toBlockNumber, # 08/12/2019 12:25:09
+      muirGlacierBlock: 9_200_000.toBlockNumber # 02/01/2020 08:30:49
     )
   of RopstenNet:
     ChainConfig(
@@ -221,7 +238,11 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       eip150Hash:     toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
       eip155Block:    10.toBlockNumber,
       eip158Block:    10.toBlockNumber,
-      byzantiumBlock: 1700000.toBlockNumber
+      byzantiumBlock: 1_700_000.toBlockNumber,
+      constantinopleBlock: 4_230_000.toBlockNumber,
+      petersburgBlock:4_939_394.toBlockNumber,
+      istanbulBlock:  6_485_846.toBlockNumber,
+      muirGlacierBlock: 7_117_117.toBlockNumber
     )
   of RinkebyNet:
     ChainConfig(
@@ -232,7 +253,11 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       eip150Hash:     toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
       eip155Block:    3.toBlockNumber,
       eip158Block:    3.toBlockNumber,
-      byzantiumBlock: 1035301.toBlockNumber
+      byzantiumBlock: 1_035_301.toBlockNumber,
+      constantinopleBlock: 3_660_663.toBlockNumber,
+      petersburgBlock:4_321_234.toBlockNumber,
+      istanbulBlock:  5_435_345.toBlockNumber,
+      muirGlacierBlock: high(BlockNumber).toBlockNumber
     )
   of GoerliNet:
     ChainConfig(
@@ -244,7 +269,10 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       eip155Block:    0.toBlockNumber,
       eip158Block:    0.toBlockNumber,
       byzantiumBlock: 0.toBlockNumber,
-      istanbulBlock:  1561651.toBlockNumber
+      constantinopleBlock: 0.toBlockNumber,
+      petersburgBlock: 0.toBlockNumber,
+      istanbulBlock:  1_561_651.toBlockNumber,
+      muirGlacierBlock: high(BlockNumber).toBlockNumber
     )
   of CustomNet:
     privateChainConfig()
@@ -312,7 +340,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   var
     chainId = 0.uint
     homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = 0.toBlockNumber
-    petersburgBlock, istanbulBlock = 0.toBlockNumber
+    petersburgBlock, istanbulBlock, muirGlacierBlock = 0.toBlockNumber
     eip150Hash, mixHash : MDigest[256]
     daoForkSupport = false
     nonce = 66.toBlockNonce
@@ -342,6 +370,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     checkForFork(forkDetails, constantinopleBlock, byzantiumBlock)
     checkForFork(forkDetails, petersburgBlock, constantinopleBlock)
     checkForFork(forkDetails, istanbulBlock, petersburgBlock)
+    checkForFork(forkDetails, muirGlacierBlock, istanbulBlock)
   else:
     error "No chain configuration found."
     quit(1)
@@ -368,6 +397,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     constantinopleBlock: constantinopleBlock,
     petersburgBlock:  petersburgBlock,
     istanbulBlock:    istanbulBlock,
+    muirGlacierBlock: muirGlacierBlock,
     nonce:            nonce,
     extraData:        extraData,
     gasLimit:         gasLimit,

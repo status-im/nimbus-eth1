@@ -3,7 +3,7 @@ import
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth/trie/db, nimcrypto, strutils, stew/ranges,
   chronicles, rpc/hexstrings, launcher,
-  vm/interpreter/vm_forks
+  vm/interpreter/vm_forks, ./config
 
 proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
   self.getBlockHeader(header.parentHash)
@@ -66,14 +66,14 @@ const
   uncleName = "uncle"
   internalTxName = "internalTx"
 
-proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
+proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
                        body: BlockBody, txIndex: int, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    parent = db.getParentHeader(header)
+    parent = chainDB.getParentHeader(header)
     # we add a memory layer between backend/lower layer db
     # and capture state db snapshot during transaction execution
     memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(db.db, memoryDB)
+    captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableAccount})
@@ -91,7 +91,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
     stateDiff = %{"before": before, "after": after}
     beforeRoot: Hash256
 
-  let fork = header.blockNumber.toFork
+  let fork = chainDB.config.toFork(header.blockNumber)
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
@@ -116,7 +116,7 @@ proc traceTransaction*(db: BaseChainDB, header: BlockHeader,
       break
 
   # internal transactions:
-  var stateBefore = newAccountStateDB(captureTrieDB, beforeRoot, db.pruneTrie)
+  var stateBefore = newAccountStateDB(captureTrieDB, beforeRoot, chainDB.pruneTrie)
   for idx, acc in tracedAccountsPairs(vmState):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
@@ -189,11 +189,11 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
   if dumpState:
     result.dumpMemoryDB(memoryDB)
 
-proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
+proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFlags: set[TracerFlags] = {}): JsonNode =
   let
-    parent = db.getParentHeader(header)
+    parent = chainDB.getParentHeader(header)
     memoryDB = newMemoryDB()
-    captureDB = newCaptureDB(db.db, memoryDB)
+    captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
     captureChainDB = newBaseChainDB(captureTrieDB, false)
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableTracing})
@@ -203,7 +203,7 @@ proc traceBlock*(db: BaseChainDB, header: BlockHeader, body: BlockBody, tracerFl
   doAssert(body.transactions.len != 0)
 
   var gasUsed = GasInt(0)
-  let fork = header.blockNumber.toFork
+  let fork = chainDB.config.toFork(header.blockNumber)
 
   for tx in body.transactions:
     let sender = tx.getSender

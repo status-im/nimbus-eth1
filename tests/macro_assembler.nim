@@ -2,7 +2,7 @@ import
   macrocache, strutils, unittest2,
   stew/byteutils, chronicles, stew/ranges, eth/common,
   ../nimbus/vm/interpreter/opcode_values,
-  stew/shims/macros
+  stew/shims/macros, ../nimbus/config
 
 import
   options, json, os, eth/trie/[db, hexary],
@@ -201,7 +201,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
     if forkOverride.isSome:
       forkOverride.get
     else:
-      vmState.blockNumber.toFork
+      vmState.chainDB.config.toFork(vmState.blockNumber)
 
   let gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
 
@@ -225,7 +225,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
 
   vmState.mutateStateDb:
     db.setCode(contractAddress, tx.payload.toRange)
-    
+
   newComputation(vmState, msg)
 
 proc initDatabase*(): (Uint256, BaseChainDB) =
