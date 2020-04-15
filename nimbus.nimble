@@ -27,7 +27,7 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   var extra_params = params
   for i in 2..<paramCount():
     extra_params &= " " & paramStr(i)
-  exec "nim " & lang & " --out:build/" & name & " -d:release --import:libbacktrace " & extra_params & " " & srcDir & name & ".nim"
+  exec "nim " & lang & " --out:build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
   buildBinary name, "tests/", "-d:chronicles_log_level=ERROR"
