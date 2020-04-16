@@ -117,7 +117,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
       for txIndex, tx in body.transactions:
         var sender: EthAddress
         if tx.getSender(sender):
-          let gasUsed = processTransaction(tx, sender, vmState, fork)
+          discard processTransaction(tx, sender, vmState, fork)
         else:
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error

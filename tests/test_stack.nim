@@ -16,7 +16,7 @@ template testPush(value: untyped, expected: untyped): untyped =
   stack.push(value)
   check(stack.values == @[expected])
 
-template testFailPush(value: untyped): untyped =
+template testFailPush(value: untyped): untyped {.used.} =
   var stack = newStack()
   expect(ValidationError):
     stack.push(value)

@@ -12,7 +12,7 @@ import
   macros, strformat, stint, eth/common,
   ../../computation, ../../stack, ../../code_stream,
   ../../../vm_types, ../../memory,
-  ../../../errors, ../../message, ../../interpreter/[gas_meter, opcode_values],
+  ../../../errors, ../../interpreter/[gas_meter, opcode_values],
   ../../interpreter/utils/utils_numeric
 
 when defined(evmc_enabled):

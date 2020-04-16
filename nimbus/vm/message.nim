@@ -5,9 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  eth/common,
-  ../constants, ../validation, ../vm_types, chronicles
+import ../vm_types
 
 proc isCreate*(message: Message): bool =
   message.kind in {evmcCreate, evmcCreate2}

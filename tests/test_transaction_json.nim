@@ -1,7 +1,7 @@
 import
-  unittest2, json, os, tables, strformat, strutils,
+  unittest2, json, os, tables, strutils,
   eth/[common, rlp],
-  ./test_helpers, ./test_allowed_to_fail,
+  ./test_helpers,
   ../nimbus/[transaction, utils, errors]
 
 const

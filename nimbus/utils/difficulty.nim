@@ -1,8 +1,7 @@
 import
   times,
   eth/common, stint,
-  ../constants, ../vm/interpreter/vm_forks,
-  ../config
+  ../constants, ../config
 
 const
   ExpDiffPeriod           = 100000.u256
