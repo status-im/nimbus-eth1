@@ -1,16 +1,16 @@
-# Copyright (c) 2018-2019 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2020 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-SHELL := bash # the shell used internally by "make"
+SHELL := bash # the shell used internally by Make
 
 # used inside the included makefiles
 BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 
-# we don't want an error here, so we can handle things later, in the build-system-checks target
+# we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
 
 # debugging tools + testing tools
@@ -30,17 +30,9 @@ TOOLS_DIRS := \
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-# "--define:release" implies "--stacktrace:off" and it cannot be added to config.nims
-ifeq ($(USE_LIBBACKTRACE), 0)
-NIM_PARAMS := $(NIM_PARAMS) -d:debug -d:disable_libbacktrace
-else
-NIM_PARAMS := $(NIM_PARAMS) -d:release
-endif
-
 .PHONY: \
 	all \
 	$(TOOLS) \
-	build-system-checks \
 	deps \
 	update \
 	nimbus \
@@ -53,20 +45,33 @@ endif
 	wrappers-static \
 	libbacktrace
 
+ifeq ($(NIM_PARAMS),)
+# "variables.mk" was not included, so we update the submodules.
+GIT_SUBMODULE_UPDATE := git submodule update --init --recursive
+.DEFAULT:
+	+@ echo -e "Git submodules not found. Running '$(GIT_SUBMODULE_UPDATE)'.\n"; \
+		$(GIT_SUBMODULE_UPDATE); \
+		echo
+# Now that the included *.mk files appeared, and are newer than this file, Make will restart itself:
+# https://www.gnu.org/software/make/manual/make.html#Remaking-Makefiles
+#
+# After restarting, it will execute its original goal, so we don't have to start a child Make here
+# with "$(MAKE) $(MAKECMDGOALS)". Isn't hidden control flow great?
+
+else # "variables.mk" was included. Business as usual until the end of this file.
+
 # default target, because it's the first one that doesn't start with '.'
-all: build-system-checks $(TOOLS) nimbus
+all: | $(TOOLS) nimbus
 
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
 
-GIT_SUBMODULE_UPDATE := git submodule update --init --recursive
-build-system-checks:
-	@[[ -e "$(BUILD_SYSTEM_DIR)/makefiles" ]] || { \
-		echo -e "'$(BUILD_SYSTEM_DIR)/makefiles' not found. Running '$(GIT_SUBMODULE_UPDATE)'.\n"; \
-		$(GIT_SUBMODULE_UPDATE); \
-		echo -e "\nYou can now run '$(MAKE)' again."; \
-		exit 1; \
-		}
+# "-d:release" implies "--stacktrace:off" and it cannot be added to config.nims
+ifeq ($(USE_LIBBACKTRACE), 0)
+NIM_PARAMS := $(NIM_PARAMS) -d:debug -d:disable_libbacktrace
+else
+NIM_PARAMS := $(NIM_PARAMS) -d:release
+endif
 
 deps: | deps-common nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
@@ -95,7 +100,7 @@ nimbus.nims:
 
 # nim-libbacktrace
 libbacktrace:
-	+ $(MAKE) -C vendor/nim-libbacktrace BUILD_CXX_LIB=0 $(HANDLE_OUTPUT)
+	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
 # builds and runs the test suite
 test: | build deps
@@ -167,3 +172,6 @@ wakunode: | build deps
 wakusim: | build deps wakunode
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim wakusim $(NIM_PARAMS) nimbus.nims
+
+endif # "variables.mk" was not included
+
