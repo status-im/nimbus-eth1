@@ -52,8 +52,11 @@ GIT_SUBMODULE_UPDATE := git submodule update --init --recursive
 	+@ echo -e "Git submodules not found. Running '$(GIT_SUBMODULE_UPDATE)'.\n"; \
 		$(GIT_SUBMODULE_UPDATE); \
 		echo
-# Now, for some mysterious reason, the first Make instance will go on executing its original goal,
-# like including files in a child Make had an effect on the parent, or something...
+# Now that the included *.mk files appeared, and are newer than this file, Make will restart itself:
+# https://www.gnu.org/software/make/manual/make.html#Remaking-Makefiles
+#
+# After restarting, it will execute its original goal, so we don't have to start a child Make here
+# with "$(MAKE) $(MAKECMDGOALS)". Isn't hidden control flow great?
 
 else # "variables.mk" was included. Business as usual until the end of this file.
 
