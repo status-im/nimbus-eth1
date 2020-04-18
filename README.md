@@ -61,14 +61,9 @@ nix-shell default.nix
 #### POSIX-compatible OS
 
 ```bash
-make # The first `make` invocation will update all Git submodules and prompt you to run `make` again.
-     # It's only required once per Git clone. You'll run `make update` after each `git pull`, in the future,
-     # to keep those submodules up to date.
-
-# Run tests
-make test
-
-make nimbus # build the Nimbus binary
+# The first `make` invocation will update all Git submodules.
+# You'll run `make update` after each `git pull`, in the future, to keep those submodules up to date.
+make nimbus
 
 # See available command line options
 build/nimbus -- help
@@ -79,6 +74,9 @@ build/nimbus
 # Update to latest version
 git pull
 make update
+
+# Run tests
+make test
 ```
 
 To run a command that might use binaries from the Status Nim fork:
@@ -112,7 +110,6 @@ Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash" shell
 
 If you don't want to compile RocksDB and SQLite separately, you can fetch pre-compiled DLLs with:
 ```bash
-mingw32-make # this first invocation will update the Git submodules
 mingw32-make fetch-dlls # this will place the right DLLs for your architecture in the "build/" directory
 ```
 
