@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stew/ranges/typedranges, options, sets,
+  options, sets,
   eth/common, chronicles, ./db/state_db,
   transaction, vm_types, vm_state,
   ./vm/[computation, interpreter]

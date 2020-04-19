@@ -1,5 +1,5 @@
 import
-  json_rpc/rpcserver, tables, options,
+  json_rpc/rpcserver, tables, options, sequtils,
   eth/[common, rlp, keys, p2p], eth/p2p/rlpx_protocols/waku_protocol,
   nimcrypto/[sysrand, hmac, sha2, pbkdf2],
   rpc_types, hexstrings, key_storage
@@ -330,7 +330,7 @@ proc setupWakuRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
       sigPrivKey: Option[PrivateKey]
       symKey: Option[SymKey]
       topic: waku_protocol.Topic
-      padding: Option[Bytes]
+      padding: Option[seq[byte]]
       targetPeer: Option[NodeId]
 
     if message.sig.isSome():

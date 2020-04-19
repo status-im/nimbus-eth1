@@ -204,7 +204,7 @@ proc `%`*(value: SymKey): JsonNode =
 proc `%`*(value: whisper_protocol.Topic): JsonNode =
   result = %("0x" & value.toHex)
 
-proc `%`*(value: Bytes): JsonNode =
+proc `%`*(value: seq[byte]): JsonNode =
   result = %("0x" & value.toHex)
 
 
@@ -299,7 +299,7 @@ proc fromJson*(n: JsonNode, argName: string, result: var whisper_protocol.Topic)
 # Following procs currently required only for testing, the `createRpcSigs` macro
 # requires it as it will convert the JSON results back to the original Nim
 # types, but it needs the `fromJson` calls for those specific Nim types to do so
-proc fromJson*(n: JsonNode, argName: string, result: var Bytes) =
+proc fromJson*(n: JsonNode, argName: string, result: var seq[byte]) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
   if not hexStr.isValidHexData:

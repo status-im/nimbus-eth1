@@ -7,8 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import hexstrings, nimcrypto, eth/common, stew/byteutils,
-  ../db/[db_chain, state_db, storage_types], strutils,
+import hexstrings, eth/common, stew/byteutils,
+  ../db/[db_chain], strutils,
   ../constants, stint
 
 func toAddress*(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)

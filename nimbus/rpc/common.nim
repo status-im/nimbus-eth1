@@ -10,7 +10,7 @@
 import
   strutils,
   nimcrypto, eth/common as eth_common, stint, json_rpc/server,
-  ../vm_state, ../db/[db_chain, state_db], ../constants, ../config, hexstrings
+  ../config, hexstrings
 
 proc setupCommonRPC*(server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:

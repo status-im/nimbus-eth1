@@ -5,7 +5,7 @@ export nimcrypto.`$`
 proc calcRootHash[T](items: openArray[T]): Hash256 =
   var tr = initHexaryTrie(newMemoryDB())
   for i, t in items:
-    tr.put(rlp.encode(i).toRange, rlp.encode(t).toRange)
+    tr.put(rlp.encode(i), rlp.encode(t))
   return tr.rootHash
 
 template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =

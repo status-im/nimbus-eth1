@@ -224,7 +224,7 @@ proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, 
       )
 
   vmState.mutateStateDb:
-    db.setCode(contractAddress, tx.payload.toRange)
+    db.setCode(contractAddress, tx.payload)
 
   newComputation(vmState, msg)
 
@@ -309,8 +309,8 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   for kv in boa.storage:
     let key = kv[0].toHex()
     let val = kv[1].toHex()
-    let keyBytes = (@(kv[0])).toRange
-    let actual = trie.get(keyBytes).toOpenArray().toHex()
+    let keyBytes = (@(kv[0]))
+    let actual = trie.get(keyBytes).toHex()
     let zerosLen = 64 - (actual.len)
     let value = repeat('0', zerosLen) & actual
     if val != value:

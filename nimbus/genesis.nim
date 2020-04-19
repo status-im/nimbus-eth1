@@ -1,6 +1,6 @@
 import
   tables, json, times,
-  eth/[common, rlp, trie], stint, stew/[byteutils, ranges],
+  eth/[common, rlp, trie], stint, stew/[byteutils],
   chronicles, eth/trie/db,
   db/[db_chain, state_db], genesis_alloc, config, constants
 
@@ -29,7 +29,7 @@ func toAddress(n: UInt256): EthAddress =
 
 func decodePrealloc(data: seq[byte]): GenesisAlloc =
   result = newTable[EthAddress, GenesisAccount]()
-  for tup in rlp.decode(data.toRange, seq[(UInt256, UInt256)]):
+  for tup in rlp.decode(data, seq[(UInt256, UInt256)]):
     result[toAddress(tup[0])] = GenesisAccount(balance: tup[1])
 
 proc customNetPrealloc(genesisBlock: JsonNode): GenesisAlloc =
@@ -105,7 +105,7 @@ proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
 
   for address, account in g.alloc:
     sdb.setAccount(address, newAccount(account.nonce, account.balance))
-    sdb.setCode(address, account.code.toRange)
+    sdb.setCode(address, account.code)
     for k, v in account.storage:
       sdb.setStorage(address, k, v)
 

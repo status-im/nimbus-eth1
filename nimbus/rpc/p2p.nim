@@ -9,11 +9,11 @@
 
 import
   strutils, times, options,
-  json_rpc/rpcserver, hexstrings, stint, stew/byteutils, stew/ranges/typedranges,
-  eth/[common, keys, rlp, p2p], eth/trie/db, nimcrypto,
+  json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
+  eth/[common, keys, rlp, p2p], nimcrypto,
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../vm_state_transactions, ../utils,
-  ../db/[db_chain, state_db, storage_types],
+  ../db/[db_chain, state_db],
   rpc_types, rpc_utils, ../vm/[message, computation],
   ../vm/interpreter/vm_forks
 
@@ -224,7 +224,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
       addrBytes = toAddress(data)
       storage = accountDb.getCode(addrBytes)
     # Easier to return the string manually here rather than expect ByteRange to be marshalled
-    result = byteutils.toHex(storage.toOpenArray).HexDataStr
+    result = byteutils.toHex(storage).HexDataStr
 
   template sign(privateKey: PrivateKey, message: string): string =
     # TODO: Is message length encoded as bytes or characters?

@@ -1,14 +1,14 @@
 # use this module to quickly populate db with data from geth/parity
 
 import
-  eth/[common, rlp], stint, stew/byteutils, nimcrypto,
+  eth/[common, rlp], stint,
   chronicles, downloader, configuration,
   ../nimbus/errors
 
 import
-  eth/trie/[hexary, db, trie_defs],
+  eth/trie/[hexary, db],
   ../nimbus/db/[storage_types, db_chain, select_backend],
-  ../nimbus/[genesis, utils],
+  ../nimbus/[genesis],
   ../nimbus/p2p/chain
 
 const
