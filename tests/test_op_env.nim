@@ -191,7 +191,7 @@ proc opEnvMain*() =
           "51602001600a5254516040016014525451606001601e52545160800160285254" &
           "60a052546016604860003960166000f26000603f556103e756600054600053602002351234")
 
-      stateDB.setCode(acc, code.toRange)
+      stateDB.setCode(acc, code)
       parent.stateRoot = stateDB.rootHash
       chainDB.setHead(parent, true)
 

@@ -11,7 +11,7 @@ import
   ../constants, ../errors, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
-  ../utils/header, stew/[byteutils, ranges, ranges/ptr_arith], precompiles,
+  ../utils/header, stew/[byteutils, ranges/ptr_arith], precompiles,
   transaction_tracer, ../utils
 
 when defined(evmc_enabled):
@@ -120,9 +120,9 @@ template selfDestruct*(c: Computation, address: EthAddress) =
   else:
     c.execSelfDestruct(address)
 
-template getCode*(c: Computation, address: EthAddress): ByteRange =
+template getCode*(c: Computation, address: EthAddress): seq[byte] =
   when evmc_enabled:
-    c.host.copyCode(address).toRange
+    c.host.copyCode(address)
   else:
     c.vmState.readOnlyStateDB.getCode(address)
 
@@ -148,7 +148,7 @@ proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Comp
     result.code = newCodeStream(message.data)
     message.data = @[]
   else:
-    result.code = newCodeStream(vmState.readOnlyStateDb.getCode(message.codeAddress).toSeq)
+    result.code = newCodeStream(vmState.readOnlyStateDb.getCode(message.codeAddress))
 
   when evmc_enabled:
     result.host.init(
@@ -213,7 +213,7 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
   if c.gasMeter.gasRemaining >= codeCost:
     c.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
     c.vmState.mutateStateDb:
-      db.setCode(storageAddr, contractCode.toRange)
+      db.setCode(storageAddr, contractCode)
     result = true
   else:
     if fork < FkHomestead or fork >= FkByzantium: c.output = @[]

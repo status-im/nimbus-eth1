@@ -278,8 +278,8 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc, dynlib.} =
     sigPrivKey: Option[PrivateKey]
     asymKey: Option[PublicKey]
     symKey: Option[SymKey]
-    padding: Option[Bytes]
-    payload: Bytes
+    padding: Option[seq[byte]]
+    payload: seq[byte]
 
   if not message.pubKey.isNil() and not message.symKeyID.isNil():
     warn "Both symmetric and asymmetric keys are provided, choose one."
@@ -473,7 +473,7 @@ proc nimbus_post_public(channel: cstring, payload: cstring)
 
   var ctx: HMAC[sha256]
   var symKey: SymKey
-  var npayload = cast[Bytes]($payload)
+  var npayload = cast[seq[byte]]($payload)
   discard ctx.pbkdf2($channel, "", 65356, symKey)
 
   let channelHash = digest(keccak256, $channel)

@@ -25,9 +25,6 @@ import
 const
   nimbusClientId = "nimbus 0.1.0"
 
-when not defined(windows):
-  from posix import SIGINT, SIGTERM
-
 type
   NimbusState = enum
     Starting, Running, Stopping, Stopped

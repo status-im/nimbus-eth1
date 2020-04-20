@@ -136,7 +136,7 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
       stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
 
     let nonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
-    let code = accountData{"code"}.getStr.safeHexToSeqByte.toRange
+    let code = accountData{"code"}.getStr.safeHexToSeqByte
     let balance = UInt256.fromHex accountData{"balance"}.getStr
 
     stateDB.setNonce(account, nonce)
@@ -158,7 +158,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
         raise newException(ValidationError, &"{ac} storageDiff: [{slot}] {actualValue.toHex} != {wantedValue.toHex}")
 
     let
-      wantedCode = hexToSeqByte(accountData{"code"}.getStr).toRange
+      wantedCode = hexToSeqByte(accountData{"code"}.getStr)
       wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
       wantedNonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
 

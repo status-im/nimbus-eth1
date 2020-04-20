@@ -72,25 +72,18 @@ proc newAccountStateDB*(backingStore: TrieDatabaseRef,
   when aleth_compat:
     result.cleared = initHashSet[EthAddress]()
 
-template createRangeFromAddress(address: EthAddress): ByteRange =
-  ## XXX: The name of this proc is intentionally long, because it
-  ## performs a memory allocation and data copying that may be eliminated
-  ## in the future. Avoid renaming it to something similar as `toRange`, so
-  ## it can remain searchable in the code.
-  toRange(@address)
-
 proc getAccount*(db: AccountStateDB, address: EthAddress): Account =
-  let recordFound = db.trie.get(createRangeFromAddress address)
+  let recordFound = db.trie.get(address)
   if recordFound.len > 0:
     result = rlp.decode(recordFound, Account)
   else:
     result = newAccount()
 
 proc setAccount*(db: AccountStateDB, address: EthAddress, account: Account) =
-  db.trie.put createRangeFromAddress(address), rlp.encode(account).toRange
+  db.trie.put(address, rlp.encode(account))
 
 proc deleteAccount*(db: AccountStateDB, address: EthAddress) =
-  db.trie.del createRangeFromAddress(address)
+  db.trie.del(address)
 
 proc getCodeHash*(db: AccountStateDB, address: EthAddress): Hash256 =
   let account = db.getAccount(address)
@@ -111,11 +104,10 @@ proc addBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
 proc subBalance*(db: var AccountStateDB, address: EthAddress, delta: UInt256) =
   db.setBalance(address, db.getBalance(address) - delta)
 
-template createTrieKeyFromSlot(slot: UInt256): ByteRange =
-  # XXX: This is too expensive. Similar to `createRangeFromAddress`
+template createTrieKeyFromSlot(slot: UInt256): auto =
   # Converts a number to hex big-endian representation including
   # prefix and leading zeros:
-  @(slot.toByteArrayBE).toRange
+  slot.toByteArrayBE
   # Original py-evm code:
   # pad32(int_to_big_endian(slot))
   # morally equivalent to toByteRange_Unnecessary but with different types
@@ -147,7 +139,7 @@ proc setStorage*(db: var AccountStateDB,
   let slotAsKey = createTrieKeyFromSlot slot
 
   if value > 0:
-    let encodedValue = rlp.encode(value).toRange
+    let encodedValue = rlp.encode(value)
     accountTrie.put(slotAsKey, encodedValue)
   else:
     accountTrie.del(slotAsKey)
@@ -171,7 +163,7 @@ iterator storage*(db: AccountStateDB, address: EthAddress): (UInt256, UInt256) =
 
   for key, value in trie:
     if key.len != 0:
-      var keyData = triedb.get(slotHashToSlotKey(key.toOpenArray).toOpenArray).toRange
+      var keyData = triedb.get(slotHashToSlotKey(key).toOpenArray)
       yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 
 proc getStorage*(db: AccountStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) =
@@ -201,25 +193,24 @@ proc getNonce*(db: AccountStateDB, address: EthAddress): AccountNonce =
 proc incNonce*(db: AccountStateDB, address: EthAddress) {.inline.} =
   db.setNonce(address, db.getNonce(address) + 1)
 
-proc setCode*(db: AccountStateDB, address: EthAddress, code: ByteRange) =
+proc setCode*(db: AccountStateDB, address: EthAddress, code: openArray[byte]) =
   var account = db.getAccount(address)
   # TODO: implement JournalDB to store code and storage
   # also use JournalDB to revert state trie
 
   let
-    newCodeHash = keccakHash(code.toOpenArray)
+    newCodeHash = keccakHash(code)
     triedb = trieDB(db)
 
   if code.len != 0:
-    triedb.put(contractHashKey(newCodeHash).toOpenArray, code.toOpenArray)
+    triedb.put(contractHashKey(newCodeHash).toOpenArray, code)
 
   account.codeHash = newCodeHash
   db.setAccount(address, account)
 
-proc getCode*(db: AccountStateDB, address: EthAddress): ByteRange =
+proc getCode*(db: AccountStateDB, address: EthAddress): seq[byte] =
   let triedb = trieDB(db)
-  let data = triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
-  data.toRange
+  triedb.get(contractHashKey(db.getCodeHash(address)).toOpenArray)
 
 proc hasCodeOrNonce*(db: AccountStateDB, address: EthAddress): bool {.inline.} =
   db.getNonce(address) != 0 or db.getCodeHash(address) != EMPTY_SHA3
@@ -229,10 +220,10 @@ proc dumpAccount*(db: AccountStateDB, addressS: string): string =
   return fmt"{addressS}: Storage: {db.getStorage(address, 0.u256)}; getAccount: {db.getAccount address}"
 
 proc accountExists*(db: AccountStateDB, address: EthAddress): bool =
-  db.trie.get(createRangeFromAddress address).len > 0
+  db.trie.get(address).len > 0
 
 proc isEmptyAccount*(db: AccountStateDB, address: EthAddress): bool =
-  let recordFound = db.trie.get(createRangeFromAddress address)
+  let recordFound = db.trie.get(address)
   assert(recordFound.len > 0)
 
   let account = rlp.decode(recordFound, Account)
@@ -241,7 +232,7 @@ proc isEmptyAccount*(db: AccountStateDB, address: EthAddress): bool =
     account.nonce == 0
 
 proc isDeadAccount*(db: AccountStateDB, address: EthAddress): bool =
-  let recordFound = db.trie.get(createRangeFromAddress address)
+  let recordFound = db.trie.get(address)
   if recordFound.len > 0:
     let account = rlp.decode(recordFound, Account)
     result = account.codeHash == EMPTY_SHA3 and
@@ -281,7 +272,7 @@ proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): (UInt256, bool) {.borrow.}
 proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
-proc getCode*(db: ReadOnlyStateDB, address: EthAddress): ByteRange {.borrow.}
+proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
 proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}

@@ -1,7 +1,7 @@
 import
   db/[db_chain, state_db, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
-  eth/trie/db, nimcrypto, strutils, stew/ranges,
+  eth/trie/db, nimcrypto, strutils,
   chronicles, rpc/hexstrings, launcher,
   vm/interpreter/vm_forks, ./config
 
@@ -43,7 +43,7 @@ proc captureAccount(n: JsonNode, db: AccountStateDB, address: EthAddress, name: 
 
   let code = db.getCode(address)
   jaccount["codeHash"] = %("0x" & ($account.codeHash).toLowerAscii)
-  jaccount["code"] = %("0x" & toHex(code.toOpenArray, true))
+  jaccount["code"] = %("0x" & toHex(code, true))
   jaccount["storageRoot"] = %("0x" & ($account.storageRoot).toLowerAscii)
 
   var storage = newJObject()

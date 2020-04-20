@@ -19,7 +19,7 @@ type
   RefAccount = ref object
     account: Account
     flags: AccountFlags
-    code: ByteRange
+    code: seq[byte]
     originalStorage: TableRef[UInt256, UInt256]
     overlayStorage: Table[UInt256, UInt256]
 
@@ -94,13 +94,6 @@ proc safeDispose*(ac: var AccountsCache, sp: Savepoint) {.inline.} =
   if (not isNil(sp)) and (sp.state == Pending):
     ac.rollback(sp)
 
-template createRangeFromAddress(address: EthAddress): ByteRange =
-  ## XXX: The name of this proc is intentionally long, because it
-  ## performs a memory allocation and data copying that may be eliminated
-  ## in the future. Avoid renaming it to something similar as `toRange`, so
-  ## it can remain searchable in the code.
-  toRange(@address)
-
 proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): RefAccount =
   # search account from layers of cache
   var sp = ac.savePoint
@@ -111,7 +104,7 @@ proc getAccount(ac: AccountsCache, address: EthAddress, shouldCreate = true): Re
     sp = sp.parentSavepoint
 
   # not found in cache, look into state trie
-  let recordFound = ac.trie.get(createRangeFromAddress address)
+  let recordFound = ac.trie.get(address)
   if recordFound.len > 0:
     # we found it
     result = RefAccount(
@@ -154,11 +147,11 @@ proc exists(acc: RefAccount): bool =
   else:
     result = IsNew notin acc.flags
 
-template createTrieKeyFromSlot(slot: UInt256): ByteRange =
+template createTrieKeyFromSlot(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
   # Converts a number to hex big-endian representation including
   # prefix and leading zeros:
-  @(slot.toByteArrayBE).toRange
+  slot.toByteArrayBE
   # Original py-evm code:
   # pad32(int_to_big_endian(slot))
   # morally equivalent to toByteRange_Unnecessary but with different types
@@ -204,7 +197,7 @@ proc kill(acc: RefAccount) =
   acc.overlayStorage.clear()
   acc.originalStorage = nil
   acc.account = newAccount()
-  acc.code = default(ByteRange)
+  acc.code = default(seq[byte])
 
 type
   PersistMode = enum
@@ -223,7 +216,7 @@ proc persistMode(acc: RefAccount): PersistMode =
 
 proc persistCode(acc: RefAccount, db: TrieDatabaseRef) =
   if acc.code.len != 0:
-    db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code.toOpenArray)
+    db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
 proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
   if acc.overlayStorage.len == 0:
@@ -237,7 +230,7 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
     let slotAsKey = createTrieKeyFromSlot slot
 
     if value > 0:
-      let encodedValue = rlp.encode(value).toRange
+      let encodedValue = rlp.encode(value)
       accountTrie.put(slotAsKey, encodedValue)
     else:
       accountTrie.del(slotAsKey)
@@ -245,7 +238,7 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
     # map slothash back to slot value
     # see iterator storage below
     # slotHash can be obtained from accountTrie.put?
-    let slotHash = keccakHash(slotAsKey.toOpenArray)
+    let slotHash = keccakHash(slotAsKey)
     db.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
   acc.account.storageRoot = accountTrie.rootHash
 
@@ -276,7 +269,7 @@ proc getNonce*(ac: AccountsCache, address: EthAddress): AccountNonce {.inline.} 
   if acc.isNil: emptyAcc.nonce
   else: acc.account.nonce
 
-proc getCode*(ac: AccountsCache, address: EthAddress): ByteRange =
+proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
@@ -285,7 +278,7 @@ proc getCode*(ac: AccountsCache, address: EthAddress): ByteRange =
     result = acc.code
   else:
     let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
-    acc.code = data.toRange
+    acc.code = data
     acc.flags.incl CodeLoaded
     result = acc.code
 
@@ -353,10 +346,10 @@ proc setNonce*(ac: var AccountsCache, address: EthAddress, nonce: AccountNonce) 
 proc incNonce*(ac: var AccountsCache, address: EthAddress) {.inline.} =
   ac.setNonce(address, ac.getNonce(address) + 1)
 
-proc setCode*(ac: var AccountsCache, address: EthAddress, code: ByteRange) =
+proc setCode*(ac: var AccountsCache, address: EthAddress, code: seq[byte]) =
   let acc = ac.getAccount(address)
   acc.flags.incl {IsTouched, IsAlive}
-  let codeHash = keccakHash(code.toOpenArray)
+  let codeHash = keccakHash(code)
   if acc.account.codeHash != codeHash:
     var acc = ac.makeDirty(address)
     acc.account.codeHash = codeHash
@@ -406,9 +399,9 @@ proc persist*(ac: var AccountsCache) =
         # storageRoot must be updated first
         # before persisting account into merkle trie
         acc.persistStorage(ac.db)
-      ac.trie.put createRangeFromAddress(address), rlp.encode(acc.account).toRange
+      ac.trie.put address, rlp.encode(acc.account)
     of Remove:
-      ac.trie.del createRangeFromAddress(address)
+      ac.trie.del address
     of DoNothing:
       discard
   ac.savePoint.cache.clear()
@@ -421,5 +414,5 @@ iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
 
   for slot, value in trie:
     if slot.len != 0:
-      var keyData = ac.db.get(slotHashToSlotKey(slot.toOpenArray).toOpenArray).toRange
+      var keyData = ac.db.get(slotHashToSlotKey(slot).toOpenArray)
       yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))

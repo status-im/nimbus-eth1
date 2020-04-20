@@ -52,24 +52,11 @@ proc contractHashKey*(h: Hash256): DbKey {.inline.} =
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-const hashHolderKinds = {genericHash, blockHashToScore, transactionHashToBlock}
-
 template toOpenArray*(k: DbKey): openarray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))
 
 proc hash*(k: DbKey): Hash =
   result = hash(k.toOpenArray)
-
-# TODO: this should be added to Nim
-proc `==`*[T](lhs, rhs: openarray[T]): bool =
-  if lhs.len != rhs.len:
-    return false
-
-  for i in 0 ..< lhs.len:
-    if lhs[i] != rhs[i]:
-      return false
-
-  return true
 
 proc `==`*(a, b: DbKey): bool {.inline.} =
   a.toOpenArray == b.toOpenArray

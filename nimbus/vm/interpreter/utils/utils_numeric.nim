@@ -7,7 +7,7 @@
 
 import
   macros,
-  eth/common/eth_types, eth/rlp,
+  eth/common/eth_types,
   ../../../constants
 
 type

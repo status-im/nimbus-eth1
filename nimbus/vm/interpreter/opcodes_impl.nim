@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times, sets, stew/ranges, sequtils, options,
-  chronicles, stint, nimcrypto, stew/ranges/[typedranges, ptr_arith], eth/common,
+  strformat, times, sets, sequtils, options,
+  chronicles, stint, nimcrypto, stew/ranges/[ptr_arith], eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../stack, ../code_stream, ../computation,
@@ -322,7 +322,7 @@ op extCodeCopy, inline = true:
     reason="ExtCodeCopy fee")
 
   let codeBytes = c.getCode(address)
-  c.memory.writePaddedResult(codeBytes.toOpenArray, memPos, codePos, len)
+  c.memory.writePaddedResult(codeBytes, memPos, codePos, len)
 
 op returnDataSize, inline = true:
   ## 0x3d, Get size of output data from the previous call from the current environment.

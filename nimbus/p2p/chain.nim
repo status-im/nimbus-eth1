@@ -1,4 +1,4 @@
-import ../db/db_chain, eth/common, chronicles, ../vm_state, ../vm_types, stew/ranges,
+import ../db/db_chain, eth/common, chronicles, ../vm_state, ../vm_types,
   ../vm/[computation, message], stint, nimcrypto,
   ../utils, eth/trie/db, ../tracer, ./executor
 

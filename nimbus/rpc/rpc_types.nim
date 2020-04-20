@@ -146,8 +146,8 @@ type
     ttl*: uint64                            # Time-to-live in seconds.
     timestamp*: uint64                      # Unix timestamp of the message generation.
     topic*: whisper_protocol.Topic          # 4 Bytes: Message topic.
-    payload*: Bytes                         # Decrypted payload.
-    padding*: Bytes                         # (Optional) Padding (byte array of arbitrary length).
+    payload*: seq[byte]                     # Decrypted payload.
+    padding*: seq[byte]                     # (Optional) Padding (byte array of arbitrary length).
     pow*: float64                           # Proof of work value.
     hash*: Hash                             # Hash of the enveloped message.
 

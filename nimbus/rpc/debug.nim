@@ -10,8 +10,8 @@
 import
   strutils, json, options,
   json_rpc/rpcserver, rpc_utils, eth/common,
-  hexstrings, ../tracer, ../vm_state, ../vm_types,
-  ../db/[db_chain, storage_types]
+  hexstrings, ../tracer, ../vm_types,
+  ../db/[db_chain]
 
 type
   TraceOptions = object

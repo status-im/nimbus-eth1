@@ -25,7 +25,7 @@ proc stateDBMain*() =
         trie = initHexaryTrie(memDB)
         stateDB = newAccountStateDB(memDB, trie.rootHash, true)
         address = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
-        code = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6").toRange
+        code = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         rootHash: KeccakHash
 
     test "accountExists and isDeadAccount":
@@ -48,7 +48,7 @@ proc stateDBMain*() =
       stateDB.setNonce(address, 0)
       check stateDB.isDeadAccount(address) == false
 
-      stateDB.setCode(address, BytesRange())
+      stateDB.setCode(address, [])
       check stateDB.isDeadAccount(address) == true
       check stateDB.accountExists(address) == true
 
@@ -128,7 +128,7 @@ proc stateDBMain*() =
       check ac.getCodeHash(addr2) == emptyAcc.codeHash
       check ac.getBalance(addr2) == emptyAcc.balance
       check ac.getNonce(addr2) == emptyAcc.nonce
-      check ac.getCode(addr2) == BytesRange()
+      check ac.getCode(addr2) == []
       check ac.getCodeSize(addr2) == 0
       check ac.getCommittedStorage(addr2, 1.u256) == 0.u256
       check ac.getStorage(addr2, 1.u256) == 0.u256
