@@ -1,4 +1,4 @@
-import faststreams/input_stream, eth/common, stint
+import faststreams/input_stream, eth/common, stint, stew/endians2
 
 type
   TrieNodeType = enum
@@ -16,6 +16,7 @@ type
 
 func constructBranchMask(b1, b2: byte): uint {.inline.} =
   uint(b1) shl 8 or uint(b2)
+  assert(result > 0)
 
 proc setBranchMaskBit(x: var uint, i: int) {.inline.} =
   assert(i >= 0 and i < 16)
@@ -29,10 +30,8 @@ template readByte(t: var TreeBuilder): byte =
   t.input.read
 
 proc readU32(t: var TreeBuilder): int =
-  result = t.input.read.int
-  result = result or (t.input.read.int shl 8)
-  result = result or (t.input.read.int shl 16)
-  result = result or (t.input.read.int shl 24)
+  # TODO: what if the value overflow int32.high?
+  result = fromBytesLE(uint32, t.input.readBytes(4)).int
 
 proc branchNode(t: var TreeBuilder, depth: int)
 proc extensionNode(t: var TreeBuilder, depth: int)
