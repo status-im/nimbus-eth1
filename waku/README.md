@@ -1,8 +1,9 @@
 # Introduction
 `wakunode` is a cli application that allows you to run a
-[Waku](https://github.com/vacp2p/specs/blob/master/waku.md) enabled node.
+[Waku](https://specs.vac.dev/waku/waku.html) enabled node.
 
-The application and Waku specification are still experimental and fully in flux.
+The Waku specification is still in draft and thus this implementation will
+change accordingly.
 
 Additionally the original Whisper (EIP-627) protocol can also be enabled as can
 an experimental Whisper - Waku bridging option.
@@ -19,11 +20,15 @@ More information on the installation of these can be found [here](https://github
 ## Build & Run
 
 ```bash
-make # The first `make` invocation will update all Git submodules and prompt you to run `make` again.
-     # It's only required once per Git clone. You'll run `make update` after each `git pull`, in the future,
-     # to keep those submodules up to date.
+# The first `make` invocation will update all Git submodules.
+# You'll run `make update` after each `git pull`, in the future, to keep those submodules up to date.
 make wakunode
+
+# See available command line options
 ./build/wakunode --help
+
+# Connect the client directly with the Status test fleet
+./build/wakunode --log-level:debug --discovery:off --fleet:test --log-metrics
 ```
 
 # Using Metrics
@@ -87,9 +92,9 @@ This dashboard can be found at `./waku/metrics/waku-sim-all-nodes-grafana-dashbo
 
 # Spec support
 
-*This section last updated April 7, 2020*
+*This section last updated April 21, 2020*
 
-This client of Waku is spec compliant with [Waku spec v0.4](https://specs.vac.dev/waku/waku.html).
+This client of Waku is spec compliant with [Waku spec v1.0](https://specs.vac.dev/waku/waku.html).
 
 It doesn't yet implement the following recommended features:
 - No support for rate limiting

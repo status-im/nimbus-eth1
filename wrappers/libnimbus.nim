@@ -174,7 +174,7 @@ proc nimbus_new_keypair(id: var Identifier): bool
     discard
 
 proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
-    bool {.exportc, dynlib, raises: [Defect, OSError, IOError, ValueError].} =
+    bool {.exportc, dynlib, raises: [Defect].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not privateKey.isNil, "Private key cannot be nil.")
@@ -221,7 +221,7 @@ proc nimbus_get_private_key(id: Identifier, privateKey: var PrivateKey):
 # Symmetric Keys
 
 proc nimbus_add_symkey(symKey: ptr SymKey, id: var Identifier): bool
-    {.exportc, dynlib, raises: [].} =
+    {.exportc, dynlib, raises: [Defect].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not symKey.isNil, "Symmetric key cannot be nil.")
@@ -249,14 +249,14 @@ proc nimbus_add_symkey_from_password(password: cstring, id: var Identifier):
   whisperKeys.symKeys.add(id.toHex(), symKey)
 
 proc nimbus_delete_symkey(id: Identifier): bool
-    {.exportc, dynlib, raises: [].} =
+    {.exportc, dynlib, raises: [Defect].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
 
   var unneeded: SymKey
   result = whisperKeys.symKeys.take(id.toHex(), unneeded)
 
 proc nimbus_get_symkey(id: Identifier, symKey: var SymKey):
-    bool {.exportc, dynlib, raises: [OSError, IOError, ValueError].} =
+    bool {.exportc, dynlib, raises: [Defect].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not (unsafeAddr symKey).isNil, "Symmetric key cannot be nil.")
 
