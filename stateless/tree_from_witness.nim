@@ -12,7 +12,7 @@ type
     ExtendedAccountType
 
   TreeBuilder = object
-    input: ByteStreamVar
+    input: InputStream
 
 func constructBranchMask(b1, b2: byte): uint {.inline.} =
   uint(b1) shl 8 or uint(b2)
@@ -26,13 +26,13 @@ func branchMaskBitIsSet(x: uint, i: int): bool {.inline.} =
   result = ((x shr i.uint) and 1'u) == 1'u
 
 template readByte(t: var TreeBuilder): byte =
-  t.input[].read
+  t.input.read
 
 proc readU32(t: var TreeBuilder): int =
-  result = t.input[].read.int
-  result = result or (t.input[].read.int shl 8)
-  result = result or (t.input[].read.int shl 16)
-  result = result or (t.input[].read.int shl 24)
+  result = t.input.read.int
+  result = result or (t.input.read.int shl 8)
+  result = result or (t.input.read.int shl 16)
+  result = result or (t.input.read.int shl 24)
 
 proc branchNode(t: var TreeBuilder, depth: int)
 proc extensionNode(t: var TreeBuilder, depth: int)
@@ -65,7 +65,7 @@ proc extensionNode(t: var TreeBuilder, depth: int) =
   assert(depth < 63)
   let nibblesLen = int(t.readByte)
   assert(nibblesLen < 65)
-  let pathNibbles = @(t.input.readBytes(nibblesLen div 2 + nibblesLen mod 2))
+  let pathNibbles = @(t.input.read(nibblesLen div 2 + nibblesLen mod 2))
 
   assert(depth + nibblesLen < 65)
   let nodeType = TrieNodeType(t.readByte)
@@ -81,14 +81,14 @@ proc accountNode(t: var TreeBuilder, depth: int) =
   assert(depth < 65)
   let nodeType = AccountType(t.readByte)
   let nibblesLen = 64 - depth
-  let pathNibbles = @(t.input.readBytes(nibblesLen div 2 + nibblesLen mod 2))
-  let address = toAddress(t.input.readBytes(20))
-  let balance = UInt256.fromBytesBE(t.input.readBytes(32), false)
+  let pathNibbles = @(t.input.read(nibblesLen div 2 + nibblesLen mod 2))
+  let address = toAddress(t.input.read(20))
+  let balance = UInt256.fromBytesBE(t.input.read(32), false)
   # TODO: why nonce must be 32 bytes, isn't 64 bit uint  enough?
-  let nonce = UInt256.fromBytesBE(t.input.readBytes(32), false)
+  let nonce = UInt256.fromBytesBE(t.input.read(32), false)
   if nodeType == ExtendedAccountType:
     let codeLen = t.readU32()
-    let code = @(t.input.readBytes(codeLen))
+    let code = @(t.input.read(codeLen))
     # switch to account storage parsing mode
     # and reset the depth
     t.treeNode(0, accountMode = true)
@@ -96,9 +96,10 @@ proc accountNode(t: var TreeBuilder, depth: int) =
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int) =
   assert(depth < 65)
   let nibblesLen = 64 - depth
-  let pathNibbles = @(t.input.readBytes(nibblesLen div 2 + nibblesLen mod 2))
-  let key = @(t.input.readBytes(32))
-  let val = @(t.input.readBytes(32))
+  let pathNibbles = @(t.input.read(nibblesLen div 2 + nibblesLen mod 2))
+  let key = @(t.input.read(32))
+  let val = @(t.input.read(32))
 
 proc hashNode(t: var TreeBuilder) =
-  let hash = @(t.input.readBytes(32))
+  let hash = @(t.input.read(32))
+
