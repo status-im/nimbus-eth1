@@ -22,17 +22,17 @@ type
     topology* {.
       desc: "Set the network topology."
       defaultValue: Star
-      name: "topology" }: Topology
+      name: "topology" .}: Topology
 
     amount* {.
       desc: "Amount of full nodes to be started."
       defaultValue: 4
-      name: "amount" }: int
+      name: "amount" .}: int
 
     testNodePeers* {.
       desc: "Amount of peers a test node should connect to."
       defaultValue: 1
-      name: "test-node-peers" }: int
+      name: "test-node-peers" .}: int
 
   NodeInfo* = object
     cmd: string
