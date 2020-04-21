@@ -65,7 +65,7 @@ proc lacksSupportedForks*(fixtures: JsonNode): bool =
 
 var status = initOrderedTable[string, OrderedTable[string, Status]]()
 
-macro jsonTest*(s: static[string], handler: untyped, skipTest: untyped = skipNothing): untyped =
+proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode): NimNode {.compileTime.} =
   let
     testStatusIMPL = ident("testStatusIMPL")
     testName = ident("testName")
@@ -77,7 +77,7 @@ macro jsonTest*(s: static[string], handler: untyped, skipTest: untyped = skipNot
 
   result = quote:
     var filenames: seq[string] = @[]
-    for filename in walkDirRec("tests" / "fixtures" / `s`):
+    for filename in walkDirRec("tests" / "fixtures" / `inputFolder`):
       if not filename.endsWith(".json"):
         continue
       var (folder, name) = filename.splitPath()
@@ -112,8 +112,14 @@ macro jsonTest*(s: static[string], handler: untyped, skipTest: untyped = skipNot
       status.sort do (a: (string, OrderedTable[string, Status]),
                       b: (string, OrderedTable[string, Status])) -> int: cmp(a[0], b[0])
 
-      generateReport(`s`, status)
+      generateReport(`outputName`, status)
       status.clear()
+
+macro jsonTest*(inputFolder, outputName: static[string], handler: untyped, skipTest: untyped = skipNothing): untyped =
+  result = jsonTestImpl(inputFolder, outputName, handler, skipTest)
+
+macro jsonTest*(inputFolder: static[string], handler: untyped, skipTest: untyped = skipNothing): untyped =
+  result = jsonTestImpl(inputFolder, inputFolder, handler, skipTest)
 
 func ethAddressFromHex*(s: string): EthAddress = hexToByteArray(s, result)
 
