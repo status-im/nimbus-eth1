@@ -2,7 +2,8 @@ import
   stew/byteutils,
   nimcrypto/[keccak, hash], eth/rlp,
   eth/trie/[trie_defs, nibbles, db],
-  faststreams/output_stream
+  faststreams/output_stream,
+  ./witness_types
 
 type
   DB = TrieDatabaseRef

@@ -1,16 +1,8 @@
-import faststreams/input_stream, eth/common, stint, stew/endians2
+import
+  faststreams/input_stream, eth/common, stint, stew/endians2,
+  ./witness_types
 
 type
-  TrieNodeType = enum
-    BranchNodeType
-    ExtensionNodeType
-    AccountNodeType
-    HashNodeType
-
-  AccountType = enum
-    SimpleAccountType
-    ExtendedAccountType
-
   TreeBuilder = object
     input: InputStream
 
