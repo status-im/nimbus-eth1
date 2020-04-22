@@ -112,24 +112,28 @@ proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool): KeccakHash =
 
   result = keccak(r.finish)
 
-func hexPrefix(x: openArray[byte], nibblesLen: int): seq[byte] =
-  result = newSeqOfCap[byte]((nibblesLen div 2) + 1)
+func hexPrefix(r: var RlpWriter, x: openArray[byte], nibblesLen: int) =
+  var bytes: array[33, byte]
   if (nibblesLen mod 2) == 0:
-    result.add 0.byte
+    bytes[0] = 0.byte
+    var i = 1
     for y in x:
-      result.add y
+      bytes[i] = y
+      inc i
   else:
-    result.add(0b0001_0000.byte or (x[0] shr 4))
+    bytes[0] = 0b0001_0000.byte or (x[0] shr 4)
     var last = nibblesLen div 2
     for i in 1..last:
-      result.add((x[i-1] shl 4) or (x[i] shr 4))
+      bytes[i] = (x[i-1] shl 4) or (x[i] shr 4)
+      
+  r.append toOpenArray(bytes, 0, nibblesLen div 2)
 
 proc extensionNode(t: var TreeBuilder, depth: int): KeccakHash =
   assert(depth < 63)
   let nibblesLen = int(t.readByte)
   assert(nibblesLen < 65)
   var r = initRlpList(2)
-  r.append hexPrefix(t.read(nibblesLen div 2 + nibblesLen mod 2), nibblesLen)
+  r.hexPrefix(t.read(nibblesLen div 2 + nibblesLen mod 2), nibblesLen)
 
   assert(depth + nibblesLen < 65)
   let nodeType = TrieNodeType(t.readByte)
