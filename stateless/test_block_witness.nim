@@ -35,7 +35,7 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
       var db = newMemoryDB()
       var tb = initTreeBuilder(witness, db)
       var root = tb.treeNode()
-      check root == rootHash
+      check root.data == rootHash.data
       #echo "ROOT: ", root.data.toHex
       #echo "rootHash: ", rootHash.data.toHex
 

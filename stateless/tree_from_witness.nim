@@ -6,6 +6,10 @@ import
 type
   DB = TrieDatabaseRef
 
+  NodeKey = object
+    usedBytes: int
+    data*: array[32, byte]
+
   TreeBuilder = object
     data: seq[byte]
     pos: int
@@ -55,19 +59,35 @@ proc readU32(t: var TreeBuilder): int =
 proc toAddress(r: var EthAddress, x: openArray[byte]) {.inline.} =
   r[0..19] = x[0..19]
 
-proc toKeccak(r: var KeccakHash, x: openArray[byte]) {.inline.} =
+proc toKeccak(r: var NodeKey, x: openArray[byte]) {.inline.} =
   r.data[0..31] = x[0..31]
+  r.usedBytes = 32
 
-proc toKeccak(x: openArray[byte]): KeccakHash {.inline.} =
+proc toKeccak(x: openArray[byte]): NodeKey {.inline.} =
   result.data[0..31] = x[0..31]
+  result.usedBytes = 32
 
-proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool = true): KeccakHash
-proc extensionNode(t: var TreeBuilder, depth: int): KeccakHash
-proc accountNode(t: var TreeBuilder, depth: int): KeccakHash
-proc accountStorageLeafNode(t: var TreeBuilder, depth: int): KeccakHash
-proc hashNode(t: var TreeBuilder): KeccakHash
+proc append(r: var RlpWriter, n: NodeKey) =
+  if n.usedBytes < 32:
+    r.append rlpFromBytes(n.data.toOpenArray(0, n.usedBytes-1))
+  else:
+    r.append n.data.toOpenArray(0, n.usedBytes-1)
 
-proc treeNode*(t: var TreeBuilder, depth: int = 0, accountMode = false): KeccakHash =
+proc toNodeKey(z: openArray[byte]): NodeKey =
+  if z.len < 32:
+    result.usedBytes = z.len
+    result.data[0..z.len-1] = z[0..z.len-1]
+  else:
+    result.data = keccak(z).data
+    result.usedBytes = 32
+
+proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool = true): NodeKey
+proc extensionNode(t: var TreeBuilder, depth: int): NodeKey
+proc accountNode(t: var TreeBuilder, depth: int): NodeKey
+proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey
+proc hashNode(t: var TreeBuilder): NodeKey
+
+proc treeNode*(t: var TreeBuilder, depth: int = 0, accountMode = false): NodeKey =
   assert(depth < 64)
   let nodeType = TrieNodeType(t.readByte)
 
@@ -83,9 +103,21 @@ proc treeNode*(t: var TreeBuilder, depth: int = 0, accountMode = false): KeccakH
       result = t.accountNode(depth)
   of HashNodeType: result = t.hashNode()
 
-proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool): KeccakHash =
+  if depth == 0 and result.usedBytes < 32:
+    result.data = keccak(result.data.toOpenArray(0, result.usedBytes-1)).data
+    result.usedBytes = 32
+
+proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool): NodeKey =
   assert(depth < 64)
   let mask = constructBranchMask(t.readByte, t.readByte)
+
+  when defined(debugDepth):
+    let readDepth = t.readByte.int
+    doAssert(readDepth == depth, "branchNode " & $readDepth & " vs. " & $depth)
+
+  when defined(debugHash):
+    let hash = toKeccak(t.read(32))
+
   var r = initRlpList(17)
 
   for i in 0 ..< 16:
@@ -110,7 +142,12 @@ proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool): KeccakHash =
     # anything else is empty
     r.append ""
 
-  result = keccak(r.finish)
+  result = toNodeKey(r.finish)
+
+  when defined(debugHash):
+    if result != hash:
+      debugEcho "DEPTH: ", depth
+      debugEcho "result: ", result.data.toHex, " vs. ", hash.data.toHex
 
 func hexPrefix(r: var RlpWriter, x: openArray[byte], nibblesLen: int) =
   var bytes: array[33, byte]
@@ -125,15 +162,22 @@ func hexPrefix(r: var RlpWriter, x: openArray[byte], nibblesLen: int) =
     var last = nibblesLen div 2
     for i in 1..last:
       bytes[i] = (x[i-1] shl 4) or (x[i] shr 4)
-      
+
   r.append toOpenArray(bytes, 0, nibblesLen div 2)
 
-proc extensionNode(t: var TreeBuilder, depth: int): KeccakHash =
+proc extensionNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 63)
   let nibblesLen = int(t.readByte)
   assert(nibblesLen < 65)
   var r = initRlpList(2)
   r.hexPrefix(t.read(nibblesLen div 2 + nibblesLen mod 2), nibblesLen)
+
+  when defined(debugDepth):
+    let readDepth = t.readByte.int
+    doAssert(readDepth == depth, "extensionNode " & $readDepth & " vs. " & $depth)
+
+  when defined(debugHash):
+    let hash = toKeccak(t.read(32))
 
   assert(depth + nibblesLen < 65)
   let nodeType = TrieNodeType(t.readByte)
@@ -144,12 +188,21 @@ proc extensionNode(t: var TreeBuilder, depth: int): KeccakHash =
   of HashNodeType: r.append t.hashNode()
   else: raise newException(ValueError, "wrong type during parsing child of extension node")
 
-  result = keccak(r.finish)
+  result = toNodeKey(r.finish)
 
-proc accountNode(t: var TreeBuilder, depth: int): KeccakHash =
+  when defined(debugHash):
+    if result != hash:
+      debugEcho "DEPTH: ", depth
+    doAssert(result == hash, "EXT HASH DIFF " & result.data.toHex & " vs. " & hash.data.toHex)
+
+proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
   let len = t.readU32()
-  t.writeNode(t.read(len))
+  result = toNodeKey(t.read(len))
+
+  when defined(debugDepth):
+    let readDepth = t.readByte.int
+    doAssert(readDepth == depth, "accountNode " & $readDepth & " vs. " & $depth)
 
   #[let nodeType = AccountType(t.readByte)
   let nibblesLen = 64 - depth
@@ -165,12 +218,12 @@ proc accountNode(t: var TreeBuilder, depth: int): KeccakHash =
     # and reset the depth
     t.treeNode(0, accountMode = true)]#
 
-proc accountStorageLeafNode(t: var TreeBuilder, depth: int): KeccakHash =
+proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
   let nibblesLen = 64 - depth
   let pathNibbles = @(t.read(nibblesLen div 2 + nibblesLen mod 2))
   let key = @(t.read(32))
   let val = @(t.read(32))
 
-proc hashNode(t: var TreeBuilder): KeccakHash =
+proc hashNode(t: var TreeBuilder): NodeKey =
   result.toKeccak(t.read(32))

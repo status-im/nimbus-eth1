@@ -29,7 +29,7 @@ proc expectHash(r: Rlp): seq[byte] =
 
 template getNode(elem: untyped): untyped =
   if elem.isList: @(elem.rawData)
-  else: get(db, elem.expectHash)
+  else: get(wb.db, elem.expectHash)
 
 proc rlpListToBitmask(r: var Rlp): uint =
   var i = 0
@@ -56,13 +56,19 @@ proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq) =
   # write nibbles
   wb.output.append(bytes.toOpenArray(0, numBytes-1))
 
-proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq) =
+proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq, depth: int, node: openArray[byte]) =
   # write type
   wb.output.append(ExtensionNodeType.byte)
   # write nibbles
   wb.writeNibbles(n)
 
-proc writeBranchNode(wb: var WitnessBuilder, mask: uint) =
+  when defined(debugDepth):
+    wb.output.append(depth.byte)
+
+  when defined(debugHash):
+    wb.output.append(keccak(node).data)
+
+proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openArray[byte]) =
   # write type
   if mask.branchMaskBitIsSet(16):
     wb.output.append(Branch17NodeType.byte)
@@ -72,18 +78,53 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint) =
   wb.output.append(((mask shr 8) and 0xFF).byte)
   wb.output.append((mask and 0xFF).byte)
 
-proc writeAccountNode(wb: var WitnessBuilder, node: openArray[byte]) =
+  when defined(debugDepth):
+    wb.output.append(depth.byte)
+
+  when defined(debugHash):
+    wb.output.append(keccak(node).data)
+
+proc writeAccountNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
   # write type
   wb.output.append(AccountNodeType.byte)
   wb.output.append(toBytesLe(node.len.uint32))
   wb.output.append(node)
+
+  when defined(debugDepth):
+    wb.output.append(depth.byte)
 
 proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
   # write type
   wb.output.append(HashNodeType.byte)
   wb.output.append(node)
 
-proc getBranchRecurseAux(wb: var WitnessBuilder; db: DB, node: openArray[byte], path: NibblesSeq) =
+proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
+  var nodeRlp = rlpFromBytes node
+  if not nodeRlp.hasData or nodeRlp.isEmpty: return
+  case nodeRlp.listLen
+  of 2:
+    let (isLeaf, k) = nodeRlp.extensionNodeKey
+    if isLeaf:
+      writeAccountNode(wb, node, depth)
+    else:
+      writeExtensionNode(wb, k, depth, node)
+  of 17:
+    let branchMask = rlpListToBitmask(nodeRlp)
+    writeBranchNode(wb, branchMask, depth, node)
+
+    for i in 0..<16:
+      if branchMask.branchMaskBitIsSet(i):
+        var branch = nodeRlp.listElem(i)
+        let nextLookup = branch.getNode
+        writeShortNode(wb, nextLookup, depth + 1)
+
+    var lastElem = nodeRlp.listElem(16)
+    if not lastElem.isEmpty:
+      writeAccountNode(wb, lastElem.toBytes, depth)
+  else:
+    raise newException(CorruptedTrieDatabase, "Bad Short Node")
+
+proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: NibblesSeq, depth: int) =
   var nodeRlp = rlpFromBytes node
   if not nodeRlp.hasData or nodeRlp.isEmpty: return
 
@@ -95,48 +136,54 @@ proc getBranchRecurseAux(wb: var WitnessBuilder; db: DB, node: openArray[byte], 
       let value = nodeRlp.listElem(1)
       if not isLeaf:
         # ExtensionNodeType
-        writeExtensionNode(wb, k)
+        writeExtensionNode(wb, k, depth, node)
         let nextLookup = value.getNode
-        getBranchRecurseAux(wb, db, nextLookup, path.slice(sharedNibbles))
+        getBranchRecurseAux(wb, nextLookup, path.slice(sharedNibbles), depth + sharedNibbles)
       else:
         # AccountNodeType
-        writeAccountNode(wb, value.toBytes)
+        writeAccountNode(wb, node, depth)
     else:
       writeHashNode(wb, keccak(node).data)
   of 17:
     let branchMask = rlpListToBitmask(nodeRlp)
-    writeBranchNode(wb, branchMask)
+    writeBranchNode(wb, branchMask, depth, node)
+
     let notLeaf = path.len != 0
     for i in 0..<16:
       if branchMask.branchMaskBitIsSet(i):
         var branch = nodeRlp.listElem(i)
         if notLeaf and i == path[0].int:
           let nextLookup = branch.getNode
-          getBranchRecurseAux(wb, db, nextLookup, path.slice(1))
+          getBranchRecurseAux(wb, nextLookup, path.slice(1), depth + 1)
         else:
-          writeHashNode(wb, branch.expectHash)
+          if branch.isList:
+            let nextLookup = branch.getNode
+            writeShortNode(wb, nextLookup, depth + 1)
+          else:
+            writeHashNode(wb, branch.expectHash)
 
     # put 17th elem
     var lastElem = nodeRlp.listElem(16)
     if not lastElem.isEmpty:
       if path.len == 0:
-        writeAccountNode(wb, lastElem.toBytes)
+        doAssert(false, "ACC NODE A?")
+        writeAccountNode(wb, lastElem.toBytes, depth)
       else:
-        writeHashNode(wb, lastElem.toBytes)
+        doAssert(false, "HASH NODE B?")
+        writeHashNode(wb, lastElem.expectHash)
   else:
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
 proc getBranchRecurse*(wb: var WitnessBuilder; key: openArray[byte]): seq[byte] =
   var node = wb.db.get(wb.root.data)
-  getBranchRecurseAux(wb, wb.db, node, initNibbleRange(key))
+  getBranchRecurseAux(wb, node, initNibbleRange(key), 0)
   shallowCopy(result, wb.output.getOutput(seq[byte]))
 
-proc getBranchStack*(self: WitnessBuilder; key: openArray[byte]): string =
+proc getBranchStack*(wb: WitnessBuilder; key: openArray[byte]): string =
   var
-    node = self.db.get(self.root.data)
+    node = wb.db.get(wb.root.data)
     stack = @[(node, initNibbleRange(key))]
-    db = self.db
 
   result.add node.toHex
   while stack.len > 0:
@@ -165,27 +212,10 @@ proc getBranchStack*(self: WitnessBuilder; key: openArray[byte]): string =
       raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-#[
-proc hexPrefixDecode*(r: openArray[byte]): tuple[isLeaf: bool, nibbles: NibblesSeq] =
-  result.nibbles = initNibbleRange(r)
-  if r.len > 0:
-    result.isLeaf = (r[0] and 0x20) != 0
-    let hasOddLen = (r[0] and 0x10) != 0
-    result.nibbles.ibegin = 2 - int(hasOddLen)
-  else:
-    result.isLeaf = false
-
-proc sharedPrefixLen*(lhs, rhs: NibblesSeq): int =
-  result = 0
-  while result < lhs.len and result < rhs.len:
-    if lhs[result] != rhs[result]: break
-    inc result
-]#
-proc getBranch*(self: WitnessBuilder; key: openArray[byte]): seq[seq[byte]] =
+proc getBranch*(wb: WitnessBuilder; key: openArray[byte]): seq[seq[byte]] =
   var
-    node = self.db.get(self.root.data)
+    node = wb.db.get(wb.root.data)
     stack = @[(node, initNibbleRange(key))]
-    db = self.db
 
   result.add node
   while stack.len > 0:
@@ -214,11 +244,10 @@ proc getBranch*(self: WitnessBuilder; key: openArray[byte]): seq[seq[byte]] =
       raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc buildWitness*(self: var WitnessBuilder; key: openArray[byte]) =
+proc buildWitness*(wb: var WitnessBuilder; key: openArray[byte]) =
   var
-    node = self.db.get(self.root.data)
+    node = wb.db.get(wb.root.data)
     stack = @[(node, initNibbleRange(key))]
-    db = self.db
 
   while stack.len > 0:
     let (node, path) = stack.pop()
@@ -243,4 +272,3 @@ proc buildWitness*(self: var WitnessBuilder; key: openArray[byte]) =
     else:
       raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
-
