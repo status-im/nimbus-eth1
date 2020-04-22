@@ -1,10 +1,10 @@
 import
   unittest2, os, json, strutils,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  stew/byteutils,
+  stew/byteutils, faststreams/input_stream,
   ../tests/test_helpers,
   ../nimbus/db/accounts_cache,
-  ../stateless/witness_from_tree
+  ../stateless/[witness_from_tree, tree_from_witness]
 
 type
   Tester = object
@@ -26,15 +26,28 @@ proc isValidBranch(branch: openArray[seq[byte]], rootHash: KeccakHash, key, valu
 
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
   var trie = initHexaryTrie(tester.memdb, rootHash)
-  var wb = initWitnessBuilder(tester.memdb, rootHash)
-  for address in tester.address:
-    var recurseBranch = wb.getBranchRecurse(address)
-    var stackBranch = wb.getBranchStack(address)
-    check recurseBranch == stackBranch
-    
-    var branch = wb.getBranch(address)
-    let account = trie.get(address)
-    check isValidBranch(branch, trie.rootHash, address, account)
+
+  try:
+    for address in tester.address:
+      var wb = initWitnessBuilder(tester.memdb, rootHash)
+      var witness = wb.getBranchRecurse(address)
+
+      var db = newMemoryDB()
+      var tb = initTreeBuilder(witness, db)
+      var root = tb.treeNode()
+      check root == rootHash
+      #echo "ROOT: ", root.data.toHex
+      #echo "rootHash: ", rootHash.data.toHex
+
+      #var stackBranch = wb.getBranchStack(address)
+      #check recurseBranch == stackBranch
+      #
+      #var branch = wb.getBranch(address)
+      #let account = trie.get(address)
+      #check isValidBranch(branch, trie.rootHash, address, account)
+  except:
+    debugEcho "MSG: ", getCurrentExceptionMsg()
+    quit(1)
 
 func parseHash256(n: JsonNode, name: string): Hash256 =
   hexToByteArray(n[name].getStr(), result.data)
