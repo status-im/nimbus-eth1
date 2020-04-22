@@ -106,20 +106,14 @@ proc getBranchRecurseAux(wb: var WitnessBuilder; db: DB, node: openArray[byte], 
   of 17:
     let branchMask = rlpListToBitmask(nodeRlp)
     writeBranchNode(wb, branchMask)
-
-    if path.len != 0:
-      for i in 0..<16:
-        if branchMask.branchMaskBitIsSet(i):
-          var branch = nodeRlp.listElem(i)
-          if i == path[0].int:
-            let nextLookup = branch.getNode
-            getBranchRecurseAux(wb, db, nextLookup, path.slice(1))
-          else:
-            writeHashNode(wb, branch.expectHash)
-    else:
-      for i in 0..<16:
-        if branchMask.branchMaskBitIsSet(i):
-          var branch = nodeRlp.listElem(i)
+    let notLeaf = path.len != 0
+    for i in 0..<16:
+      if branchMask.branchMaskBitIsSet(i):
+        var branch = nodeRlp.listElem(i)
+        if notLeaf and i == path[0].int:
+          let nextLookup = branch.getNode
+          getBranchRecurseAux(wb, db, nextLookup, path.slice(1))
+        else:
           writeHashNode(wb, branch.expectHash)
 
     # put 17th elem
