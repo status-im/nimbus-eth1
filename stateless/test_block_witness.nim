@@ -95,8 +95,8 @@ proc testFixtureGST(node: JsonNode, testStatusIMPL: var TestStatus) =
 
   fixture["pre"].testBlockWitness(emptyRlpHash, testStatusIMPL)
 
-#suite "Block Witness":
-  #jsonTest("newBlockChainTests", testFixtureBC)
+suite "Block Witness":
+  jsonTest("newBlockChainTests", "witnessBuilderBC", testFixtureBC)
 
 suite "Block Witness":
-  jsonTest("GeneralStateTests", testFixtureGST)
+  jsonTest("GeneralStateTests", "witnessBuilderGST", testFixtureGST)
