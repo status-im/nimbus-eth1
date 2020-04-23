@@ -1,6 +1,7 @@
 import
   randutils, stew/byteutils, random,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
+  faststreams/input_stream,
   ../stateless/[witness_from_tree, tree_from_witness]
 
 proc runTest(keyBytes: int, valBytes: int, numPairs: int) =
@@ -20,9 +21,10 @@ proc runTest(keyBytes: int, valBytes: int, numPairs: int) =
 
   var wb = initWitnessBuilder(memDB, rootHash)
   var witness = wb.getBranchRecurse(keys[0])
+  var input = memoryInput(witness)
 
-  var db = newMemoryDB()
-  var tb = initTreeBuilder(witness, db)
+  var db = newMemoryDB()  
+  var tb = initTreeBuilder(input, db)
   var root = tb.treeNode()
   debugEcho "root: ", root.data.toHex
   debugEcho "rootHash: ", rootHash.data.toHex

@@ -27,27 +27,29 @@ proc isValidBranch(branch: openArray[seq[byte]], rootHash: KeccakHash, key, valu
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
   var trie = initHexaryTrie(tester.memdb, rootHash)
 
-  try:
-    for address in tester.address:
-      var wb = initWitnessBuilder(tester.memdb, rootHash)
-      var witness = wb.getBranchRecurse(address)
-
-      var db = newMemoryDB()
-      var tb = initTreeBuilder(witness, db)
-      var root = tb.treeNode()
-      check root.data == rootHash.data
-      #echo "ROOT: ", root.data.toHex
-      #echo "rootHash: ", rootHash.data.toHex
-
-      #var stackBranch = wb.getBranchStack(address)
-      #check recurseBranch == stackBranch
-      #
-      #var branch = wb.getBranch(address)
-      #let account = trie.get(address)
-      #check isValidBranch(branch, trie.rootHash, address, account)
-  except:
-    debugEcho "MSG: ", getCurrentExceptionMsg()
-    quit(1)
+  #try:
+  for address in tester.address:
+    var wb = initWitnessBuilder(tester.memdb, rootHash)
+    var witness = wb.getBranchRecurse(address)
+  
+    var db = newMemoryDB()
+    var input = memoryInput(witness)
+    var tb = initTreeBuilder(input, db)
+    var root = tb.treeNode()
+    check root.data == rootHash.data
+    
+    #echo "ROOT: ", root.data.toHex
+    #echo "rootHash: ", rootHash.data.toHex
+  
+    #var stackBranch = wb.getBranchStack(address)
+    #check recurseBranch == stackBranch
+    #
+    #var branch = wb.getBranch(address)
+    #let account = trie.get(address)
+    #check isValidBranch(branch, trie.rootHash, address, account)
+  #except:
+    #debugEcho "MSG: ", getCurrentExceptionMsg()
+    #quit(1)
 
 func parseHash256(n: JsonNode, name: string): Hash256 =
   hexToByteArray(n[name].getStr(), result.data)
@@ -95,8 +97,8 @@ proc testFixtureGST(node: JsonNode, testStatusIMPL: var TestStatus) =
 
   fixture["pre"].testBlockWitness(emptyRlpHash, testStatusIMPL)
 
-suite "Block Witness":
-  jsonTest("newBlockChainTests", "witnessBuilderBC", testFixtureBC)
+#suite "Block Witness":
+  #jsonTest("newBlockChainTests", "witnessBuilderBC", testFixtureBC)
 
 suite "Block Witness":
   jsonTest("GeneralStateTests", "witnessBuilderGST", testFixtureGST)
