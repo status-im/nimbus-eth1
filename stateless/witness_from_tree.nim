@@ -109,6 +109,11 @@ proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
     if isLeaf:
       writeAccountNode(wb, node, depth)
     else:
+      # why this short extension node have no
+      # child and still valid when we reconstruct
+      # the trie on the other side?
+      # a bug in hexary trie algo?
+      # or a bug in nim hexary trie implementation?
       writeExtensionNode(wb, k, depth, node)
   of 17:
     let branchMask = rlpListToBitmask(nodeRlp)
@@ -120,6 +125,10 @@ proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
         let nextLookup = branch.getNode
         writeShortNode(wb, nextLookup, depth + 1)
 
+    # contrary to yellow paper spec,
+    # the 17th elem never exist in reality.
+    # block witness spec also omit it.
+    # probably a flaw in hexary trie design
     # 17th elem should always empty
     doAssert branchMask.branchMaskBitIsSet(16) == false
   else:
@@ -144,6 +153,7 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
         # AccountNodeType
         writeAccountNode(wb, node, depth)
     else:
+      # this is a potential branch for multiproof
       writeHashNode(wb, keccak(node).data)
   of 17:
     let branchMask = rlpListToBitmask(nodeRlp)
@@ -161,6 +171,7 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
             let nextLookup = branch.getNode
             writeShortNode(wb, nextLookup, depth + 1)
           else:
+            # this is a potential branch for multiproof
             writeHashNode(wb, branch.expectHash)
 
     # 17th elem should always empty
