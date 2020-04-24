@@ -98,11 +98,6 @@
   url = https://github.com/status-im/nim-libp2p.git
   ignore = dirty
   branch = master
-[submodule "vendor/nim-result"]
-  path = vendor/nim-result
-  url = https://github.com/arnetheduck/nim-result.git
-  ignore = dirty
-  branch = master
 [submodule "vendor/nim-nat-traversal"]
   path = vendor/nim-nat-traversal
   url = https://github.com/status-im/nim-nat-traversal.git
@@ -168,3 +163,6 @@
 	url = https://github.com/status-im/nim-testutils.git
 	ignore = dirty
 	branch = master
+[submodule "vendor/nim-sqlite3-abi"]
+	path = vendor/nim-sqlite3-abi
+	url = https://github.com/arnetheduck/nim-sqlite3-abi.git
