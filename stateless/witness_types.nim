@@ -3,7 +3,6 @@ import nimcrypto/[keccak, hash], stew/bitops2
 type
   TrieNodeType* = enum
     BranchNodeType
-    Branch17NodeType
     ExtensionNodeType
     AccountNodeType
     HashNodeType

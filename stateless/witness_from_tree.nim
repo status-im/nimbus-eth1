@@ -73,10 +73,9 @@ proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq, depth: int, node:
 
 proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openArray[byte]) =
   # write type
-  if mask.branchMaskBitIsSet(16):
-    wb.output.append(Branch17NodeType.byte)
-  else:
-    wb.output.append(BranchNodeType.byte)
+  # branch node 17th elem should always empty
+  doAssert mask.branchMaskBitIsSet(16) == false
+  wb.output.append(BranchNodeType.byte)
   # write branch mask
   wb.output.append(((mask shr 8) and 0xFF).byte)
   wb.output.append((mask and 0xFF).byte)
@@ -121,9 +120,8 @@ proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
         let nextLookup = branch.getNode
         writeShortNode(wb, nextLookup, depth + 1)
 
-    var lastElem = nodeRlp.listElem(16)
-    if not lastElem.isEmpty:
-      writeAccountNode(wb, lastElem.toBytes, depth)
+    # 17th elem should always empty
+    doAssert branchMask.branchMaskBitIsSet(16) == false
   else:
     raise newException(CorruptedTrieDatabase, "Bad Short Node")
 
@@ -165,15 +163,8 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
           else:
             writeHashNode(wb, branch.expectHash)
 
-    # put 17th elem
-    var lastElem = nodeRlp.listElem(16)
-    if not lastElem.isEmpty:
-      if path.len == 0:
-        doAssert(false, "ACC NODE A?")
-        writeAccountNode(wb, lastElem.toBytes, depth)
-      else:
-        doAssert(false, "HASH NODE B?")
-        writeHashNode(wb, lastElem.expectHash)
+    # 17th elem should always empty
+    doAssert branchMask.branchMaskBitIsSet(16) == false
   else:
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")

@@ -24,7 +24,7 @@ proc initTreeBuilder*(input: openArray[byte], db: DB): TreeBuilder =
   result.input = memoryInput(input)
   result.db = db
   result.root = emptyRlpHash
-  
+
 func rootHash*(t: TreeBuilder): KeccakHash {.inline.} =
   t.root
 
@@ -72,7 +72,7 @@ proc toNodeKey(z: openArray[byte]): NodeKey =
     result.data = keccak(z).data
     result.usedBytes = 32
 
-proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool = true): NodeKey
+proc branchNode(t: var TreeBuilder, depth: int): NodeKey
 proc extensionNode(t: var TreeBuilder, depth: int): NodeKey
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey
@@ -84,7 +84,6 @@ proc treeNode*(t: var TreeBuilder, depth: int = 0, accountMode = false): NodeKey
 
   case nodeType
   of BranchNodeType: result = t.branchNode(depth)
-  of Branch17NodeType: result = t.branchNode(depth, false)
   of ExtensionNodeType: result = t.extensionNode(depth)
   of AccountNodeType:
     if accountMode:
@@ -98,7 +97,7 @@ proc treeNode*(t: var TreeBuilder, depth: int = 0, accountMode = false): NodeKey
     result.data = keccak(result.data.toOpenArray(0, result.usedBytes-1)).data
     result.usedBytes = 32
 
-proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool): NodeKey =
+proc branchNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 64)
   let mask = constructBranchMask(t.readByte, t.readByte)
 
@@ -117,21 +116,8 @@ proc branchNode(t: var TreeBuilder, depth: int, has16Elem: bool): NodeKey =
     else:
       r.append ""
 
-  template safePeek(t: var TreeBuilder): int =
-    if t.len == 0 or has16Elem:
-      -1
-    else:
-      t.peek().int
-
-  # add the 17th elem
-  let nodeType = t.safePeek()
-  if nodeType == AccountNodeType.int:
-    r.append accountNode(t, depth+1)
-  elif nodeType == HashNodeType.int:
-    r.append hashNode(t)
-  else:
-    # anything else is empty
-    r.append ""
+  # 17th elem should always empty
+  r.append ""
 
   result = toNodeKey(r.finish)
 
@@ -175,7 +161,6 @@ proc extensionNode(t: var TreeBuilder, depth: int): NodeKey =
 
   case nodeType
   of BranchNodeType: r.append t.branchNode(depth + nibblesLen)
-  of Branch17NodeType: r.append t.branchNode(depth + nibblesLen, false)
   of HashNodeType: r.append t.hashNode()
   else: raise newException(ValueError, "wrong type during parsing child of extension node")
 
