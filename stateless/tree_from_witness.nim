@@ -65,9 +65,8 @@ template read(t: var TreeBuilder, len: int): auto =
   toOpenArray(t.data, pos, pos + len - 1)
 ]#
 
-proc readU32(t: var TreeBuilder): int =
-  # TODO: what if the value overflow int32.high?
-  result = fromBytesLE(uint32, t.read(4)).int
+proc readU32(t: var TreeBuilder): uint32 =
+  result = fromBytesBE(uint32, t.read(4))
 
 proc toAddress(r: var EthAddress, x: openArray[byte]) {.inline.} =
   r[0..19] = x[0..19]
@@ -210,7 +209,7 @@ proc extensionNode(t: var TreeBuilder, depth: int): NodeKey =
 
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
-  let len = t.readU32()
+  let len = t.readU32().int
   result = toNodeKey(t.read(len))
 
   when defined(debugDepth):

@@ -39,6 +39,9 @@ proc rlpListToBitmask(r: var Rlp): uint =
     inc i
   r.position = 0
 
+proc writeU32(wb: var WitnessBuilder, x: uint32) =
+  wb.output.append(toBytesBE(x))
+
 proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq) =
   let nibblesLen = n.len
   let numBytes = nibblesLen div 2 + nibblesLen mod 2
@@ -87,7 +90,7 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
 proc writeAccountNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
   # write type
   wb.output.append(AccountNodeType.byte)
-  wb.output.append(toBytesLe(node.len.uint32))
+  wb.writeU32(node.len.uint32)
   wb.output.append(node)
 
   when defined(debugDepth):
