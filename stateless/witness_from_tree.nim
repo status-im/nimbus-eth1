@@ -172,7 +172,7 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
 proc getBranchRecurse*(wb: var WitnessBuilder; key: openArray[byte]): seq[byte] =
   var node = wb.db.get(wb.root.data)
   getBranchRecurseAux(wb, node, initNibbleRange(key), 0)
-  shallowCopy(result, wb.output.getOutput(seq[byte]))
+  result = wb.output.getOutput(seq[byte])
 
 proc getBranchStack*(wb: WitnessBuilder; key: openArray[byte]): string =
   var
