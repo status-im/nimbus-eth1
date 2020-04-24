@@ -11,23 +11,20 @@ type
     data*: array[32, byte]
 
   TreeBuilder = object
-    #data: seq[byte]
-    #pos: int
     input: InputStream
     db: DB
     root: KeccakHash
 
-# InputStream is unstable, so we hack our own inputstream
 proc initTreeBuilder*(input: InputStream, db: DB): TreeBuilder =
   result.input = input
   result.db = db
   result.root = emptyRlpHash
 
-#proc initTreeBuilder*(input: openArray[byte], db: DB): TreeBuilder =
-#  result.data = @input
-#  result.db = db
-#  result.root = emptyRlpHash
-
+proc initTreeBuilder*(input: openArray[byte], db: DB): TreeBuilder =
+  result.input = memoryInput(input)
+  result.db = db
+  result.root = emptyRlpHash
+  
 func rootHash*(t: TreeBuilder): KeccakHash {.inline.} =
   t.root
 
@@ -46,24 +43,6 @@ template peek(t: TreeBuilder): byte =
 
 template read(t: var TreeBuilder, len: int): auto =
   t.input.read(len)
-
-#[proc readByte(t: var TreeBuilder): byte =
-  if t.pos < t.data.len:
-    result = t.data[t.pos]
-    inc t.pos
-
-template len(t: TreeBuilder): int =
-  t.data.len
-
-proc peek(t: TreeBuilder): byte =
-  if t.pos + 1 < t.data.len:
-    result = t.data[t.pos + 1]
-
-template read(t: var TreeBuilder, len: int): auto =
-  let pos = t.pos
-  inc(t.pos, len)
-  toOpenArray(t.data, pos, pos + len - 1)
-]#
 
 proc readU32(t: var TreeBuilder): uint32 =
   result = fromBytesBE(uint32, t.read(4))

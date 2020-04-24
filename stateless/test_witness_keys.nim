@@ -1,6 +1,6 @@
 import
   randutils, stew/byteutils, random,
-  eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
+  eth/[common, rlp], eth/trie/[hexary, db],
   faststreams/input_stream,
   ../stateless/[witness_from_tree, tree_from_witness]
 
@@ -23,7 +23,7 @@ proc runTest(keyBytes: int, valBytes: int, numPairs: int) =
   var witness = wb.getBranchRecurse(keys[0])
   var input = memoryInput(witness)
 
-  var db = newMemoryDB()  
+  var db = newMemoryDB()
   var tb = initTreeBuilder(input, db)
   var root = tb.treeNode()
   debugEcho "root: ", root.data.toHex
@@ -41,10 +41,10 @@ proc main() =
   runTest(11, 40, 10)
   runTest(20, 1, 15)
   runTest(25, 10, 20)
-  
+
   randomize()
   for i in 0..<30:
     runTest(rand(1..30), rand(1..50), rand(1..30))
-    
+
 
 main()
