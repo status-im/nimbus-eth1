@@ -11,19 +11,33 @@ type
     data*: array[32, byte]
 
   TreeBuilder = object
-    input: InputStream
+    when defined(useInputStream):
+      input: InputStream
+    else:
+      input: seq[byte]
+      pos: int
     db: DB
     root: KeccakHash
 
-proc initTreeBuilder*(input: InputStream, db: DB): TreeBuilder =
-  result.input = input
-  result.db = db
-  result.root = emptyRlpHash
+# the InputStream still unstable
+# when using large dataset for testing
+# or run longer
 
-proc initTreeBuilder*(input: openArray[byte], db: DB): TreeBuilder =
-  result.input = memoryInput(input)
-  result.db = db
-  result.root = emptyRlpHash
+when defined(useInputStream):
+  proc initTreeBuilder*(input: InputStream, db: DB): TreeBuilder =
+    result.input = input
+    result.db = db
+    result.root = emptyRlpHash
+
+  proc initTreeBuilder*(input: openArray[byte], db: DB): TreeBuilder =
+    result.input = memoryInput(input)
+    result.db = db
+    result.root = emptyRlpHash
+else:
+  proc initTreeBuilder*(input: openArray[byte], db: DB): TreeBuilder =
+    result.input = @input
+    result.db = db
+    result.root = emptyRlpHash
 
 func rootHash*(t: TreeBuilder): KeccakHash {.inline.} =
   t.root
@@ -32,17 +46,33 @@ proc writeNode(t: var TreeBuilder, n: openArray[byte]): KeccakHash =
   result = keccak(n)
   t.db.put(result.data, n)
 
-template readByte(t: var TreeBuilder): byte =
-  t.input.read
+when defined(useInputStream):
+  template readByte(t: var TreeBuilder): byte =
+    t.input.read
 
-template len(t: TreeBuilder): int =
-  t.input.len
+  template len(t: TreeBuilder): int =
+    t.input.len
 
-template peek(t: TreeBuilder): byte =
-  t.input.peek
+  template read(t: var TreeBuilder, len: int): auto =
+    t.input.read(len)
 
-template read(t: var TreeBuilder, len: int): auto =
-  t.input.read(len)
+else:
+  template readByte(t: var TreeBuilder): byte =
+    let pos = t.pos
+    inc t.pos
+    t.input[pos]
+
+  template len(t: TreeBuilder): int =
+    t.input.len
+
+  template peek(t: TreeBuilder): byte =
+    t.input.peek
+    t.input[t.pos]
+
+  template read(t: var TreeBuilder, len: int): auto =
+    let pos = t.pos
+    inc(t.pos, len)
+    toOpenArray(t.input, pos, pos+len-1)
 
 proc readU32(t: var TreeBuilder): uint32 =
   result = fromBytesBE(uint32, t.read(4))

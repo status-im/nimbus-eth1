@@ -33,8 +33,12 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
     var witness = wb.getBranchRecurse(address)
 
     var db = newMemoryDB()
-    var input = memoryInput(witness)
-    var tb = initTreeBuilder(input, db)
+    when defined(useInputStream):
+      var input = memoryInput(witness)
+      var tb = initTreeBuilder(input, db)
+    else:
+      var tb = initTreeBuilder(witness, db)
+      
     var root = tb.treeNode()
     check root.data == rootHash.data
 
