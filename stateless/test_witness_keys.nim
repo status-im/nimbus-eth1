@@ -1,8 +1,11 @@
 import
   randutils, stew/byteutils, random,
-  eth/[common, rlp], eth/trie/[hexary, db],
+  eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   faststreams/input_stream, nimcrypto/[utils, sysrand],
   ../stateless/[witness_from_tree, tree_from_witness]
+
+type
+   DB = TrieDatabaseRef
 
 proc randU256(): UInt256 =
   var bytes: array[32, byte]
@@ -12,56 +15,53 @@ proc randU256(): UInt256 =
 proc randNonce(): AccountNonce =
   discard randomBytes(result.addr, sizeof(result))
 
+proc randCode(db: DB): Hash256 =
+  if rand(0..1) == 0:
+    result = blankStringHash
+  else:
+    let codeLen = rand(1..150)
+    let code = randList(byte, rng(0, 255), codeLen, unique = false)
+    result = hexary.keccak(code)
+    db.put(result.data, code)
+
 proc randHash(): Hash256 =
   discard randomBytes(result.data[0].addr, sizeof(result))
 
-proc randAccount(): Account =
+proc randAccount(db: DB): Account =
   result.nonce = randNonce()
   result.balance = randU256()
-  result.codeHash = randHash()
+  result.codeHash = randCode(db)
   result.storageRoot = randHash()
 
-proc runTest(keyBytes: int, valBytes: int, numPairs: int) =
+proc runTest(numPairs: int) =
   var memDB = newMemoryDB()
-  var trie = initHexaryTrie(memDB)
-
-  var
-    keys = newSeq[Bytes](numPairs)
-    vals = newSeq[Bytes](numPairs)
+  var trie = initSecureHexaryTrie(memDB)
+  var addrs = newSeq[Bytes](numPairs)
 
   for i in 0..<numPairs:
-    keys[i] = randList(byte, rng(0, 255), keyBytes, unique = false)
-    vals[i] = randList(byte, rng(0, 255), valBytes, unique = false)
-    trie.put(keys[i], vals[i])
+    addrs[i] = randList(byte, rng(0, 255), 20, unique = false)
+    let acc = randAccount(memDB)
+    trie.put(addrs[i], rlp.encode(acc))
 
   let rootHash = trie.rootHash
 
   var wb = initWitnessBuilder(memDB, rootHash)
-  var witness = wb.getBranchRecurse(keys[0])
-  var input = memoryInput(witness)
-
+  var witness = wb.getBranchRecurse(addrs[0])
   var db = newMemoryDB()
-  var tb = initTreeBuilder(input, db)
+  when defined(useInputStream):
+    var input = memoryInput(witness)
+    var tb = initTreeBuilder(input, db)
+  else:
+    var tb = initTreeBuilder(witness, db)
   var root = tb.treeNode()
   debugEcho "root: ", root.data.toHex
   debugEcho "rootHash: ", rootHash.data.toHex
   doAssert root.data == rootHash.data
 
 proc main() =
-  runTest(7, 100, 50)
-  runTest(1, 1, 1)
-  runTest(5, 5, 1)
-  runTest(6, 7, 3)
-  runTest(7, 10, 7)
-  runTest(8, 15, 11)
-  runTest(9, 30, 13)
-  runTest(11, 40, 10)
-  runTest(20, 1, 15)
-  runTest(25, 10, 20)
-
   randomize()
-  for i in 0..<30:
-    runTest(rand(1..30), rand(1..50), rand(1..30))
 
+  for i in 0..<30:
+    runTest(rand(1..30))
 
 main()

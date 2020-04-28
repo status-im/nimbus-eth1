@@ -213,8 +213,10 @@ proc extensionNode(t: var TreeBuilder, depth: int): NodeKey =
 
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
-  let len = t.readU32().int
-  result = toNodeKey(t.read(len))
+
+  when defined(debugHash):
+    let len = t.readU32().int
+    let nodeKey = toNodeKey(t.read(len))
 
   when defined(debugDepth):
     let readDepth = t.readByte.int
@@ -246,6 +248,12 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     let storageRoot = t.treeNode(0, accountMode = true)
     doAssert(storageRoot.usedBytes == 32)
     acc.storageRoot.data = storageRoot.data
+    
+  r.append rlp.encode(acc)
+  result = toNodeKey(r.finish)    
+  
+  when defined(debugHash):
+    doAssert(result == nodeKey, "account node parsing error")
 
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)

@@ -95,8 +95,10 @@ proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
 proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
   # write type
   wb.output.append(AccountNodeType.byte)
-  wb.writeU32(node.len.uint32)
-  wb.output.append(node)
+
+  when defined(debugHash):
+    wb.writeU32(node.len.uint32)
+    wb.output.append(node)
 
   when defined(debugDepth):
     wb.output.append(depth.byte)
