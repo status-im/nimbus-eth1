@@ -24,14 +24,24 @@ proc randCode(db: DB): Hash256 =
     result = hexary.keccak(code)
     db.put(result.data, code)
 
-proc randHash(): Hash256 =
-  discard randomBytes(result.data[0].addr, sizeof(result))
+proc randStorage(db: DB): Hash256 =
+  if rand(0..1) == 0:
+    result = emptyRlpHash
+  else:
+    var trie = initSecureHexaryTrie(db)
+    let numPairs = rand(1..5)
+
+    for i in 0..<numPairs:
+      # we bypass u256 key to slot conversion
+      # discard randomBytes(key.addr, sizeof(key))
+      trie.put(i.u256.toByteArrayBE, rlp.encode(randU256()))
+    result = trie.rootHash
 
 proc randAccount(db: DB): Account =
   result.nonce = randNonce()
   result.balance = randU256()
   result.codeHash = randCode(db)
-  result.storageRoot = randHash()
+  result.storageRoot = randStorage(db)
 
 proc runTest(numPairs: int) =
   var memDB = newMemoryDB()
@@ -46,7 +56,7 @@ proc runTest(numPairs: int) =
   let rootHash = trie.rootHash
 
   var wb = initWitnessBuilder(memDB, rootHash)
-  var witness = wb.getBranchRecurse(addrs[0])
+  var witness = wb.getBranchRecurse(hexary.keccak(addrs[0]).data)
   var db = newMemoryDB()
   when defined(useInputStream):
     var input = memoryInput(witness)

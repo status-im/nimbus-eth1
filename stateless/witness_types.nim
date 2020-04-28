@@ -11,6 +11,9 @@ type
     SimpleAccountType
     ExtendedAccountType
 
+const
+  StorageLeafNodeType* = AccountNodeType
+  
 proc setBranchMaskBit*(x: var uint, i: int) {.inline.} =
   assert(i >= 0 and i < 17)
   x = x or (1 shl i).uint

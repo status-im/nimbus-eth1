@@ -106,21 +106,21 @@ proc writeCode(t: var TreeBuilder, code: openArray[byte]): Hash256 =
   result = keccak(code)
   put(t.db, result.data, code)
 
-proc branchNode(t: var TreeBuilder, depth: int): NodeKey
-proc extensionNode(t: var TreeBuilder, depth: int): NodeKey
+proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
+proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey
 proc hashNode(t: var TreeBuilder): NodeKey
 
-proc treeNode*(t: var TreeBuilder, depth: int = 0, accountMode = false): NodeKey =
+proc treeNode*(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey =
   assert(depth < 64)
   let nodeType = TrieNodeType(t.readByte)
 
   case nodeType
-  of BranchNodeType: result = t.branchNode(depth)
-  of ExtensionNodeType: result = t.extensionNode(depth)
+  of BranchNodeType: result = t.branchNode(depth, storageMode)
+  of ExtensionNodeType: result = t.extensionNode(depth, storageMode)
   of AccountNodeType:
-    if accountMode:
+    if storageMode:
       # parse account storage leaf node
       result = t.accountStorageLeafNode(depth)
     else:
@@ -131,7 +131,7 @@ proc treeNode*(t: var TreeBuilder, depth: int = 0, accountMode = false): NodeKey
     result.data = keccak(result.data.toOpenArray(0, result.usedBytes-1)).data
     result.usedBytes = 32
 
-proc branchNode(t: var TreeBuilder, depth: int): NodeKey =
+proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   assert(depth < 64)
   let mask = constructBranchMask(t.readByte, t.readByte)
 
@@ -146,7 +146,7 @@ proc branchNode(t: var TreeBuilder, depth: int): NodeKey =
 
   for i in 0 ..< 16:
     if mask.branchMaskBitIsSet(i):
-      r.append t.treeNode(depth+1)
+      r.append t.treeNode(depth+1, storageMode)
     else:
       r.append ""
 
@@ -182,7 +182,7 @@ func hexPrefix(r: var RlpWriter, x: openArray[byte], nibblesLen: int, isLeaf: st
 
   r.append toOpenArray(bytes, 0, nibblesLen div 2)
 
-proc extensionNode(t: var TreeBuilder, depth: int): NodeKey =
+proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   assert(depth < 63)
   let nibblesLen = int(t.readByte)
   assert(nibblesLen < 65)
@@ -200,7 +200,7 @@ proc extensionNode(t: var TreeBuilder, depth: int): NodeKey =
   let nodeType = TrieNodeType(t.readByte)
 
   case nodeType
-  of BranchNodeType: r.append t.branchNode(depth + nibblesLen)
+  of BranchNodeType: r.append t.branchNode(depth + nibblesLen, storageMode)
   of HashNodeType: r.append t.hashNode()
   else: raise newException(ValueError, "wrong type during parsing child of extension node")
 
@@ -227,7 +227,9 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   var r = initRlpList(2)
   r.hexPrefix(t.read(nibblesLen div 2 + nibblesLen mod 2), nibblesLen, true)
 
-  #let address = toAddress(t.read(20))
+  # TODO: parse address
+  # let address = toAddress(t.read(20))
+
   var acc = Account(
     balance: UInt256.fromBytesBE(t.read(32), false),
     # TODO: why nonce must be 32 bytes, isn't 64 bit uint  enough?
@@ -242,25 +244,30 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     if codeLen > EIP170_CODE_SIZE_LIMIT:
       raise newException(ValueError, "code len exceed EIP170 code size limit")
     acc.codeHash = t.writeCode(t.read(codeLen.int))
-    
+
     # switch to account storage parsing mode
     # and reset the depth
-    let storageRoot = t.treeNode(0, accountMode = true)
+    let storageRoot = t.treeNode(0, storageMode = true)
     doAssert(storageRoot.usedBytes == 32)
     acc.storageRoot.data = storageRoot.data
-    
+
   r.append rlp.encode(acc)
-  result = toNodeKey(r.finish)    
-  
+  result = toNodeKey(r.finish)
+
   when defined(debugHash):
     doAssert(result == nodeKey, "account node parsing error")
 
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
   let nibblesLen = 64 - depth
-  let pathNibbles = @(t.read(nibblesLen div 2 + nibblesLen mod 2))
-  let key = @(t.read(32))
-  let val = @(t.read(32))
+  var r = initRlpList(2)
+  r.hexPrefix(t.read(nibblesLen div 2 + nibblesLen mod 2), nibblesLen, true)
+  # TODO: parse key
+  # let key = @(t.read(32))
+  # UInt256 -> BytesBE -> keccak
+  let val = UInt256.fromBytesBE(t.read(32))
+  r.append rlp.encode(val)
+  result = toNodeKey(r.finish)
 
 proc hashNode(t: var TreeBuilder): NodeKey =
   result.toKeccak(t.read(32))

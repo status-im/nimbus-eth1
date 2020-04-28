@@ -43,6 +43,8 @@ proc writeU32(wb: var WitnessBuilder, x: uint32) =
   wb.output.append(toBytesBE(x))
 
 proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true) =
+  # convert the NibblesSeq into left aligned byte seq
+  # perhaps we can optimize it if the NibblesSeq already left aligned
   let nibblesLen = n.len
   let numBytes = nibblesLen div 2 + nibblesLen mod 2
   var bytes: array[32, byte]
@@ -78,6 +80,7 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
   doAssert mask.branchMaskBitIsSet(16) == false
   wb.output.append(BranchNodeType.byte)
   # write branch mask
+  # countOnes(branch mask) >= 2 and <= 16
   wb.output.append(((mask shr 8) and 0xFF).byte)
   wb.output.append((mask and 0xFF).byte)
 
@@ -91,6 +94,8 @@ proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
   # write type
   wb.output.append(HashNodeType.byte)
   wb.output.append(node)
+
+proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: NibblesSeq, depth: int, storageMode: bool)
 
 proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
   # write type
@@ -109,7 +114,10 @@ proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq,
 
   wb.output.append(accountType.byte)
   wb.writeNibbles(nibbles, false)
-  #wb.output.append(acc.address)
+  # TODO: where the address come from?
+  # single proof is easy, but multiproof will be harder
+  # concat the path and then look into LUT?
+  # wb.output.append(acc.address)
   wb.output.append(acc.balance.toBytesBE)
   wb.output.append(acc.nonce.u256.toBytesBE)
 
@@ -124,22 +132,40 @@ proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq,
       wb.writeU32(0'u32)
 
     if acc.storageRoot != emptyRlpHash:
-      wb.writeHashNode(acc.storageRoot.data)
+      # switch to account mode
+      var node = wb.db.get(acc.storageRoot.data)
+      var key = keccak(0.u256.toByteArrayBE)
+      getBranchRecurseAux(wb, node, initNibbleRange(key.data), 0, true)
     else:
       wb.writeHashNode(emptyRlpHash.data)
 
   #0x00 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32>
   #0x01 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32> bytecode:<Bytecode> storage:<Tree_Node(0,1)>
 
-proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
+proc writeAccountStorageLeafNode(wb: var WitnessBuilder, val: UInt256, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
+  wb.output.append(StorageLeafNodeType.byte)
+  doAssert(nibbles.len == 64 - depth)
+  wb.writeNibbles(nibbles, false)
+
+  # TODO: write key
+  # wb.output.append(key.toByteArrayBE)
+  wb.output.append(val.toByteArrayBE)
+
+  #<Storage_Leaf_Node(d<65)> := pathnibbles:<Nibbles(64-d))> key:<Bytes32> val:<Bytes32>
+
+proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool) =
   var nodeRlp = rlpFromBytes node
   if not nodeRlp.hasData or nodeRlp.isEmpty: return
   case nodeRlp.listLen
   of 2:
     let (isLeaf, k) = nodeRlp.extensionNodeKey
     if isLeaf:
-      let acc = nodeRlp.listElem(1).toBytes.decode(Account)
-      writeAccountNode(wb, acc, k, node, depth)
+      if storageMode:
+        let val = nodeRlp.listElem(1).toBytes.decode(UInt256)
+        writeAccountStorageLeafNode(wb, val, k, node, depth)
+      else:
+        let acc = nodeRlp.listElem(1).toBytes.decode(Account)
+        writeAccountNode(wb, acc, k, node, depth)
     else:
       # why this short extension node have no
       # child and still valid when we reconstruct
@@ -155,7 +181,7 @@ proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
       if branchMask.branchMaskBitIsSet(i):
         var branch = nodeRlp.listElem(i)
         let nextLookup = branch.getNode
-        writeShortNode(wb, nextLookup, depth + 1)
+        writeShortNode(wb, nextLookup, depth + 1, storageMode)
 
     # contrary to yellow paper spec,
     # the 17th elem never exist in reality.
@@ -166,7 +192,7 @@ proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
   else:
     raise newException(CorruptedTrieDatabase, "Bad Short Node")
 
-proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: NibblesSeq, depth: int) =
+proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: NibblesSeq, depth: int, storageMode: bool) =
   var nodeRlp = rlpFromBytes node
   if not nodeRlp.hasData or nodeRlp.isEmpty: return
 
@@ -180,10 +206,13 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
         # ExtensionNodeType
         writeExtensionNode(wb, k, depth, node)
         let nextLookup = value.getNode
-        getBranchRecurseAux(wb, nextLookup, path.slice(sharedNibbles), depth + sharedNibbles)
+        getBranchRecurseAux(wb, nextLookup, path.slice(sharedNibbles), depth + sharedNibbles, storageMode)
       else:
         # AccountNodeType
-        writeAccountNode(wb, value.toBytes.decode(Account), k, node, depth)
+        if storageMode:
+          writeAccountStorageLeafNode(wb, value.toBytes.decode(UInt256), k, node, depth)
+        else:
+          writeAccountNode(wb, value.toBytes.decode(Account), k, node, depth)
     else:
       # this is a potential branch for multiproof
       writeHashNode(wb, keccak(node).data)
@@ -197,11 +226,11 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
         var branch = nodeRlp.listElem(i)
         if notLeaf and i == path[0].int:
           let nextLookup = branch.getNode
-          getBranchRecurseAux(wb, nextLookup, path.slice(1), depth + 1)
+          getBranchRecurseAux(wb, nextLookup, path.slice(1), depth + 1, storageMode)
         else:
           if branch.isList:
             let nextLookup = branch.getNode
-            writeShortNode(wb, nextLookup, depth + 1)
+            writeShortNode(wb, nextLookup, depth + 1, storageMode)
           else:
             # this is a potential branch for multiproof
             writeHashNode(wb, branch.expectHash)
@@ -214,7 +243,7 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
 
 proc getBranchRecurse*(wb: var WitnessBuilder; key: openArray[byte]): seq[byte] =
   var node = wb.db.get(wb.root.data)
-  getBranchRecurseAux(wb, node, initNibbleRange(key), 0)
+  getBranchRecurseAux(wb, node, initNibbleRange(key), 0, false)
   result = wb.output.getOutput(seq[byte])
 
 proc getBranchStack*(wb: WitnessBuilder; key: openArray[byte]): string =
