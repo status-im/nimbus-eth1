@@ -2,7 +2,7 @@ import
   unittest2, os, json, strutils,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   stew/byteutils, faststreams/input_stream,
-  ../tests/test_helpers,
+  ../tests/[test_helpers, test_config],
   ../nimbus/db/accounts_cache,
   ../stateless/[witness_from_tree, tree_from_witness]
 
@@ -31,16 +31,16 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
   for address in tester.address:
     var wb = initWitnessBuilder(tester.memdb, rootHash)
     var witness = wb.getBranchRecurse(address)
-  
+
     var db = newMemoryDB()
     var input = memoryInput(witness)
     var tb = initTreeBuilder(input, db)
     var root = tb.treeNode()
     check root.data == rootHash.data
-    
+
     #echo "ROOT: ", root.data.toHex
     #echo "rootHash: ", rootHash.data.toHex
-  
+
     #var stackBranch = wb.getBranchStack(address)
     #check recurseBranch == stackBranch
     #
@@ -97,8 +97,38 @@ proc testFixtureGST(node: JsonNode, testStatusIMPL: var TestStatus) =
 
   fixture["pre"].testBlockWitness(emptyRlpHash, testStatusIMPL)
 
-#suite "Block Witness":
-  #jsonTest("newBlockChainTests", "witnessBuilderBC", testFixtureBC)
+proc blockWitnessMain*(debugMode = false) =
+  if paramCount() == 0 or not debugMode:
+    # run all test fixtures
+    suite "Block Witness":
+      jsonTest("newBlockChainTests", "witnessBuilderBC", testFixtureBC)
+    suite "Block Witness":
+      jsonTest("GeneralStateTests", "witnessBuilderGST", testFixtureGST)
+  else:
+    # execute single test in debug mode
+    let config = getConfiguration()
+    if config.testSubject.len == 0:
+      echo "missing test subject"
+      quit(QuitFailure)
 
-suite "Block Witness":
-  jsonTest("GeneralStateTests", "witnessBuilderGST", testFixtureGST)
+    let folder = if config.legacy: "GeneralStateTests" else: "newGeneralStateTests"
+    let path = "tests" / "fixtures" / folder
+    let n = json.parseFile(path / config.testSubject)
+    var testStatusIMPL: TestStatus
+    if config.legacy:
+      testFixtureGST(n, testStatusIMPL)
+    else:
+      testFixtureBC(n, testStatusIMPL)
+
+when isMainModule:
+  var message: string
+
+  ## Processing command line arguments
+  if processArguments(message) != Success:
+    echo message
+    quit(QuitFailure)
+  else:
+    if len(message) > 0:
+      echo message
+      quit(QuitSuccess)
+  blockWitnessMain(true)

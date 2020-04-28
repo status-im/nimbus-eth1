@@ -1,9 +1,9 @@
 import
   stew/[byteutils, endians2],
-  nimcrypto/[keccak, hash], eth/rlp,
+  nimcrypto/[keccak, hash], eth/[common, rlp],
   eth/trie/[trie_defs, nibbles, db],
   faststreams/output_stream,
-  ./witness_types
+  ./witness_types, ../nimbus/constants
 
 type
   DB = TrieDatabaseRef
@@ -42,7 +42,7 @@ proc rlpListToBitmask(r: var Rlp): uint =
 proc writeU32(wb: var WitnessBuilder, x: uint32) =
   wb.output.append(toBytesBE(x))
 
-proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq) =
+proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true) =
   let nibblesLen = n.len
   let numBytes = nibblesLen div 2 + nibblesLen mod 2
   var bytes: array[32, byte]
@@ -54,8 +54,9 @@ proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq) =
     else:
       bytes[pos div 2] = bytes[pos div 2] or (n[pos] shl 4)
 
-  # write nibblesLen
-  wb.output.append(nibblesLen.byte)
+  if withLen:
+    # write nibblesLen
+    wb.output.append(nibblesLen.byte)
   # write nibbles
   wb.output.append(bytes.toOpenArray(0, numBytes-1))
 
@@ -86,7 +87,7 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
   when defined(debugHash):
     wb.output.append(keccak(node).data)
 
-proc writeAccountNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
+proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
   # write type
   wb.output.append(AccountNodeType.byte)
   wb.writeU32(node.len.uint32)
@@ -94,6 +95,25 @@ proc writeAccountNode(wb: var WitnessBuilder, node: openArray[byte], depth: int)
 
   when defined(debugDepth):
     wb.output.append(depth.byte)
+
+  #EIP170_CODE_SIZE_LIMIT
+
+  doAssert(nibbles.len == 64 - depth)
+  let accountType = if acc.codeHash == blankStringHash or acc.storageRoot == emptyRlpHash: SimpleAccountType
+                    else: ExtendedAccountType
+
+  #wb.output.append(accountType.byte)
+  #wb.writeNibbles(nibbles, false)
+  #wb.output.append(acc.address)
+  #wb.output.append(acc.balance.toBytesBE)
+  #wb.output.append(acc.nonce.u256.toBytesBE)
+
+  #if accountType == ExtendedAccountType:
+
+  #0x00 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32>
+  #0x01 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32> bytecode:<Bytecode> storage:<Tree_Node(0,1)>
+
+  #<Bytecode> := len:<U32> b:<Byte>^len
 
 proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
   # write type
@@ -107,7 +127,8 @@ proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
   of 2:
     let (isLeaf, k) = nodeRlp.extensionNodeKey
     if isLeaf:
-      writeAccountNode(wb, node, depth)
+      let acc = nodeRlp.listElem(1).toBytes.decode(Account)      
+      writeAccountNode(wb, acc, k, node, depth)
     else:
       # why this short extension node have no
       # child and still valid when we reconstruct
@@ -151,7 +172,7 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
         getBranchRecurseAux(wb, nextLookup, path.slice(sharedNibbles), depth + sharedNibbles)
       else:
         # AccountNodeType
-        writeAccountNode(wb, node, depth)
+        writeAccountNode(wb, value.toBytes.decode(Account), k, node, depth)
     else:
       # this is a potential branch for multiproof
       writeHashNode(wb, keccak(node).data)

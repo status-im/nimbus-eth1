@@ -1,8 +1,25 @@
 import
   randutils, stew/byteutils, random,
   eth/[common, rlp], eth/trie/[hexary, db],
-  faststreams/input_stream,
+  faststreams/input_stream, nimcrypto/[utils, sysrand],
   ../stateless/[witness_from_tree, tree_from_witness]
+
+proc randU256(): UInt256 =
+  var bytes: array[32, byte]
+  discard randomBytes(bytes[0].addr, sizeof(result))
+  result = UInt256.fromBytesBE(bytes)
+
+proc randNonce(): AccountNonce =
+  discard randomBytes(result.addr, sizeof(result))
+
+proc randHash(): Hash256 =
+  discard randomBytes(result.data[0].addr, sizeof(result))
+
+proc randAccount(): Account =
+  result.nonce = randNonce()
+  result.balance = randU256()
+  result.codeHash = randHash()
+  result.storageRoot = randHash()
 
 proc runTest(keyBytes: int, valBytes: int, numPairs: int) =
   var memDB = newMemoryDB()
