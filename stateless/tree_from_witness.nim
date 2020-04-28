@@ -1,7 +1,7 @@
 import
   faststreams/input_stream, eth/[common, rlp], stint, stew/endians2,
   eth/trie/[db, trie_defs], nimcrypto/[keccak, hash],
-  ./witness_types, stew/byteutils
+  ./witness_types, stew/byteutils, ../nimbus/constants
 
 type
   DB = TrieDatabaseRef
@@ -102,6 +102,10 @@ proc toNodeKey(z: openArray[byte]): NodeKey =
     result.data = keccak(z).data
     result.usedBytes = 32
 
+proc writeCode(t: var TreeBuilder, code: openArray[byte]): Hash256 =
+  result = keccak(code)
+  put(t.db, result.data, code)
+
 proc branchNode(t: var TreeBuilder, depth: int): NodeKey
 proc extensionNode(t: var TreeBuilder, depth: int): NodeKey
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey
@@ -156,16 +160,22 @@ proc branchNode(t: var TreeBuilder, depth: int): NodeKey =
       debugEcho "DEPTH: ", depth
       debugEcho "result: ", result.data.toHex, " vs. ", hash.data.toHex
 
-func hexPrefix(r: var RlpWriter, x: openArray[byte], nibblesLen: int) =
+func hexPrefix(r: var RlpWriter, x: openArray[byte], nibblesLen: int, isLeaf: static[bool] = false) =
   var bytes: array[33, byte]
-  if (nibblesLen mod 2) == 0:
-    bytes[0] = 0.byte
+  if (nibblesLen mod 2) == 0: # even
+    when isLeaf:
+      bytes[0] = 0b0010_0000.byte
+    else:
+      bytes[0] = 0.byte
     var i = 1
     for y in x:
       bytes[i] = y
       inc i
-  else:
-    bytes[0] = 0b0001_0000.byte or (x[0] shr 4)
+  else: # odd
+    when isLeaf:
+      bytes[0] = 0b0011_0000.byte or (x[0] shr 4)
+    else:
+      bytes[0] = 0b0001_0000.byte or (x[0] shr 4)
     var last = nibblesLen div 2
     for i in 1..last:
       bytes[i] = (x[i-1] shl 4) or (x[i] shr 4)
@@ -210,19 +220,32 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     let readDepth = t.readByte.int
     doAssert(readDepth == depth, "accountNode " & $readDepth & " vs. " & $depth)
 
-  #[let nodeType = AccountType(t.readByte)
+  let accountType = AccountType(t.readByte)
   let nibblesLen = 64 - depth
-  let pathNibbles = @(t.read(nibblesLen div 2 + nibblesLen mod 2))
-  let address = toAddress(t.read(20))
-  let balance = UInt256.fromBytesBE(t.read(32), false)
-  # TODO: why nonce must be 32 bytes, isn't 64 bit uint  enough?
-  let nonce = UInt256.fromBytesBE(t.read(32), false)
-  if nodeType == ExtendedAccountType:
+  var r = initRlpList(2)
+  r.hexPrefix(t.read(nibblesLen div 2 + nibblesLen mod 2), nibblesLen, true)
+
+  #let address = toAddress(t.read(20))
+  var acc = Account(
+    balance: UInt256.fromBytesBE(t.read(32), false),
+    # TODO: why nonce must be 32 bytes, isn't 64 bit uint  enough?
+    nonce: UInt256.fromBytesBE(t.read(32), false).truncate(AccountNonce)
+  )
+
+  if accountType == SimpleAccountType:
+    acc.codeHash = blankStringHash
+    acc.storageRoot = emptyRlpHash
+  else:
     let codeLen = t.readU32()
-    let code = @(t.read(codeLen))
+    if codeLen > EIP170_CODE_SIZE_LIMIT:
+      raise newException(ValueError, "code len exceed EIP170 code size limit")
+    acc.codeHash = t.writeCode(t.read(codeLen.int))
+    
     # switch to account storage parsing mode
     # and reset the depth
-    t.treeNode(0, accountMode = true)]#
+    let storageRoot = t.treeNode(0, accountMode = true)
+    doAssert(storageRoot.usedBytes == 32)
+    acc.storageRoot.data = storageRoot.data
 
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)

@@ -87,6 +87,11 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
   when defined(debugHash):
     wb.output.append(keccak(node).data)
 
+proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
+  # write type
+  wb.output.append(HashNodeType.byte)
+  wb.output.append(node)
+
 proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
   # write type
   wb.output.append(AccountNodeType.byte)
@@ -96,29 +101,33 @@ proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq,
   when defined(debugDepth):
     wb.output.append(depth.byte)
 
-  #EIP170_CODE_SIZE_LIMIT
-
   doAssert(nibbles.len == 64 - depth)
-  let accountType = if acc.codeHash == blankStringHash or acc.storageRoot == emptyRlpHash: SimpleAccountType
+  let accountType = if acc.codeHash == blankStringHash and acc.storageRoot == emptyRlpHash: SimpleAccountType
                     else: ExtendedAccountType
 
-  #wb.output.append(accountType.byte)
-  #wb.writeNibbles(nibbles, false)
+  wb.output.append(accountType.byte)
+  wb.writeNibbles(nibbles, false)
   #wb.output.append(acc.address)
-  #wb.output.append(acc.balance.toBytesBE)
-  #wb.output.append(acc.nonce.u256.toBytesBE)
+  wb.output.append(acc.balance.toBytesBE)
+  wb.output.append(acc.nonce.u256.toBytesBE)
 
-  #if accountType == ExtendedAccountType:
+  if accountType == ExtendedAccountType:
+    if acc.codeHash != blankStringHash:
+      let code = get(wb.db, acc.codeHash.data)
+      if code.len > EIP170_CODE_SIZE_LIMIT:
+        raise newException(ValueError, "code len exceed EIP170 code size limit")
+      wb.writeU32(code.len.uint32)
+      wb.output.append(code)
+    else:
+      wb.writeU32(0'u32)
+
+    if acc.storageRoot != emptyRlpHash:
+      wb.writeHashNode(acc.storageRoot.data)
+    else:
+      wb.writeHashNode(emptyRlpHash.data)
 
   #0x00 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32>
   #0x01 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32> bytecode:<Bytecode> storage:<Tree_Node(0,1)>
-
-  #<Bytecode> := len:<U32> b:<Byte>^len
-
-proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
-  # write type
-  wb.output.append(HashNodeType.byte)
-  wb.output.append(node)
 
 proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
   var nodeRlp = rlpFromBytes node
@@ -127,7 +136,7 @@ proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int) =
   of 2:
     let (isLeaf, k) = nodeRlp.extensionNodeKey
     if isLeaf:
-      let acc = nodeRlp.listElem(1).toBytes.decode(Account)      
+      let acc = nodeRlp.listElem(1).toBytes.decode(Account)
       writeAccountNode(wb, acc, k, node, depth)
     else:
       # why this short extension node have no
