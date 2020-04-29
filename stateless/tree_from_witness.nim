@@ -1,4 +1,5 @@
 import
+  typetraits,
   faststreams/input_stream, eth/[common, rlp], stint, stew/endians2,
   eth/trie/[db, trie_defs], nimcrypto/[keccak, hash],
   ./witness_types, stew/byteutils, ../nimbus/constants
@@ -94,6 +95,18 @@ proc safeReadU32(t: var TreeBuilder): uint32 =
   else:
     raise newException(IOError, "Cannot read U32 from input stream")
 
+template safeReadEnum(t: var TreeBuilder, T: type): untyped =
+  let typ = t.safeReadByte.int
+  if typ < low(T).int or typ > high(T).int:
+    raise newException(ParsingError, "Wrong " & T.name & " value")
+  T(typ)
+
+template safeReadBytes(t: var TreeBuilder, length: int, body: untyped) =
+  if t.readable(length):
+    body
+  else:
+    raise newException(ParsingError, "Failed when try to read " & $length & " bytes")
+
 proc toKeccak(r: var NodeKey, x: openArray[byte]) {.inline.} =
   r.data[0..31] = x[0..31]
   r.usedBytes = 32
@@ -112,6 +125,12 @@ proc toNodeKey(t: var TreeBuilder, z: openArray[byte]): NodeKey =
     result.data = keccak(z).data
     result.usedBytes = 32
     t.db.put(result.data, z)
+
+proc forceSmallNodeKeyToHash(t: var TreeBuilder, r: NodeKey): NodeKey =
+  let hash = keccak(r.data.toOpenArray(0, r.usedBytes-1))
+  t.db.put(hash.data, r.data.toOpenArray(0, r.usedBytes-1))
+  result.data = hash.data
+  result.usedBytes = 32
 
 proc writeCode(t: var TreeBuilder, code: openArray[byte]): Hash256 =
   result = keccak(code)
@@ -160,11 +179,7 @@ proc buildForest*(t: var TreeBuilder): seq[KeccakHash] =
 
 proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey =
   assert(depth < 64)
-  let typ = t.safeReadByte().int
-  if typ < low(TrieNodeType).int or typ > high(TrieNodeType).int:
-    raise newException(ParsingError, "Wrong trie node type")
-
-  let nodeType = TrieNodeType(typ)
+  let nodeType = safeReadEnum(t, TrieNodeType)
   case nodeType
   of BranchNodeType: result = t.branchNode(depth, storageMode)
   of ExtensionNodeType: result = t.extensionNode(depth, storageMode)
@@ -177,11 +192,7 @@ proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey 
   of HashNodeType: result = t.hashNode()
 
   if depth == 0 and result.usedBytes < 32:
-    let hash = keccak(result.data.toOpenArray(0, result.usedBytes-1))
-    t.db.put(hash.data, result.data.toOpenArray(0, result.usedBytes-1))
-    result.data = hash.data
-    result.usedBytes = 32
-
+    result = t.forceSmallNodeKeyToHash(result)
 
 proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   assert(depth < 64)
@@ -257,11 +268,7 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
     let hash = toKeccak(t.read(32))
 
   assert(depth + nibblesLen < 65)
-  let typ = t.safeReadByte.int
-  if typ < low(TrieNodeType).int or typ > high(TrieNodeType).int:
-    raise newException(ParsingError, "Wrong trie node type")
-
-  let nodeType = TrieNodeType(typ)
+  let nodeType = safeReadEnum(t, TrieNodeType)
   case nodeType
   of BranchNodeType: r.append t.branchNode(depth + nibblesLen, storageMode)
   of HashNodeType: r.append t.hashNode()
@@ -286,52 +293,43 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     let readDepth = t.safeReadByte().int
     doAssert(readDepth == depth, "accountNode " & $readDepth & " vs. " & $depth)
 
-  let typ = t.safeReadByte.int
-  if typ < low(AccountType).int or typ > high(AccountType).int:
-    raise newException(ParsingError, "Wrong account type")
-
-  let accountType = AccountType(typ)
+  let accountType = safeReadEnum(t, AccountType)
   let nibblesLen = 64 - depth
   var r = initRlpList(2)
 
   let pathLen = nibblesLen div 2 + nibblesLen mod 2
-  if t.readable(pathLen):
+  safeReadBytes(t, pathLen):
     r.hexPrefix(t.read(pathLen), nibblesLen, true)
-  else:
-    raise newException(ParsingError, "Failed when read nibbles path")
 
   # TODO: parse address
   # let address = toAddress(t.read(20))
 
-  if not t.readable(64):
-    raise newException(ParsingError, "Not enough bytes to read account")
+  safeReadBytes(t, 64):
+    var acc = Account(
+      balance: UInt256.fromBytesBE(t.read(32), false),
+      # TODO: why nonce must be 32 bytes, isn't 64 bit uint  enough?
+      nonce: UInt256.fromBytesBE(t.read(32), false).truncate(AccountNonce)
+    )
 
-  var acc = Account(
-    balance: UInt256.fromBytesBE(t.read(32), false),
-    # TODO: why nonce must be 32 bytes, isn't 64 bit uint  enough?
-    nonce: UInt256.fromBytesBE(t.read(32), false).truncate(AccountNonce)
-  )
-
-  if accountType == SimpleAccountType:
-    acc.codeHash = blankStringHash
-    acc.storageRoot = emptyRlpHash
-  else:
-    let codeLen = t.safeReadU32()
-    if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
-      raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
-
-    if t.readable(codeLen.int):
-      acc.codeHash = t.writeCode(t.read(codeLen.int))
+    if accountType == SimpleAccountType:
+      acc.codeHash = blankStringHash
+      acc.storageRoot = emptyRlpHash
     else:
-      raise newException(ParsingError, "not enought bytes to read contract code")
+      let codeLen = t.safeReadU32()
+      if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
+        raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
 
-    # switch to account storage parsing mode
-    # and reset the depth
-    let storageRoot = t.treeNode(0, storageMode = true)
-    doAssert(storageRoot.usedBytes == 32)
-    acc.storageRoot.data = storageRoot.data
+      safeReadBytes(t, codeLen.int):
+        acc.codeHash = t.writeCode(t.read(codeLen.int))
 
-  r.append rlp.encode(acc)
+      # switch to account storage parsing mode
+      # and reset the depth
+      let storageRoot = t.treeNode(0, storageMode = true)
+      doAssert(storageRoot.usedBytes == 32)
+      acc.storageRoot.data = storageRoot.data
+
+    r.append rlp.encode(acc)
+
   let nodeRes = r.finish
   result = t.toNodeKey(nodeRes)
 
@@ -355,22 +353,18 @@ proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
   let nibblesLen = 64 - depth
   var r = initRlpList(2)
   let pathLen = nibblesLen div 2 + nibblesLen mod 2
-  if not t.readable(pathLen):
-    raise newException(ParsingError, "Enot enough bytes to read path nibbles")
+  safeReadBytes(t, pathLen):
+    r.hexPrefix(t.read(pathLen), nibblesLen, true)
 
-  r.hexPrefix(t.read(pathLen), nibblesLen, true)
   # TODO: parse key
   # let key = @(t.read(32))
   # UInt256 -> BytesBE -> keccak
 
-  if not t.readable(32):
-    raise newException(ParsingError, "Not enough bytes to read path storage value")
-
-  let val = UInt256.fromBytesBE(t.read(32))
-  r.append rlp.encode(val)
-  result = t.toNodeKey(r.finish)
+  safeReadBytes(t, 32):
+    let val = UInt256.fromBytesBE(t.read(32))
+    r.append rlp.encode(val)
+    result = t.toNodeKey(r.finish)
 
 proc hashNode(t: var TreeBuilder): NodeKey =
-  if not t.readable(32):
-    raise newException(ParsingError, "Not enough bytes to read hash node")
-  result.toKeccak(t.read(32))
+  safeReadBytes(t, 32):
+    result.toKeccak(t.read(32))
