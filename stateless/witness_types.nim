@@ -1,4 +1,4 @@
-import nimcrypto/[keccak, hash], stew/bitops2
+import nimcrypto/hash, stew/bitops2
 
 type
   TrieNodeType* = enum

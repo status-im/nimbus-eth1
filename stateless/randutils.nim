@@ -1,4 +1,4 @@
-import random, sets, nimcrypto/[utils, sysrand]
+import random, sets, nimcrypto/sysrand
 
 type
   RandGen*[T] = object
@@ -21,11 +21,11 @@ proc getVal*[T](x: RandGen[T]): T =
 proc randString*(len: int): string =
   result = newString(len)
   discard randomBytes(result[0].addr, len)
-  
+
 proc randBytes*(len: int): Bytes =
   result = newSeq[byte](len)
   discard randomBytes(result[0].addr, len)
-  
+
 proc randPrimitives*[T](val: int): T =
   type
     ByteLike = uint8 | byte | char
