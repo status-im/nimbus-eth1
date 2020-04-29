@@ -43,20 +43,23 @@ proc randAccount(db: DB): Account =
   result.codeHash = randCode(db)
   result.storageRoot = randStorage(db)
 
+proc randAddress(): EthAddress =
+  discard randomBytes(result.addr, sizeof(result))
+
 proc runTest(numPairs: int) =
   var memDB = newMemoryDB()
   var trie = initSecureHexaryTrie(memDB)
-  var addrs = newSeq[Bytes](numPairs)
+  var addrs = newSeq[EthAddress](numPairs)
 
   for i in 0..<numPairs:
-    addrs[i] = randList(byte, rng(0, 255), 20, unique = false)
+    addrs[i] = randAddress()
     let acc = randAccount(memDB)
     trie.put(addrs[i], rlp.encode(acc))
 
   let rootHash = trie.rootHash
 
   var wb = initWitnessBuilder(memDB, rootHash)
-  var witness = wb.getBranchRecurse(hexary.keccak(addrs[0]).data)
+  var witness = wb.buildWitness(addrs[0])
   var db = newMemoryDB()
   when defined(useInputStream):
     var input = memoryInput(witness)

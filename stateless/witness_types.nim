@@ -13,7 +13,8 @@ type
 
 const
   StorageLeafNodeType* = AccountNodeType
-  
+  BlockWitnessVersion* = 0x01
+
 proc setBranchMaskBit*(x: var uint, i: int) {.inline.} =
   assert(i >= 0 and i < 17)
   x = x or (1 shl i).uint

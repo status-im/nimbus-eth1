@@ -30,7 +30,7 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
   #try:
   for address in tester.address:
     var wb = initWitnessBuilder(tester.memdb, rootHash)
-    var witness = wb.getBranchRecurse(address)
+    var witness = wb.buildWitness(address)
 
     var db = newMemoryDB()
     when defined(useInputStream):
