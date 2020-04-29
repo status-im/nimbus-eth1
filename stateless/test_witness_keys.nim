@@ -2,7 +2,8 @@ import
   randutils, stew/byteutils, random,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   faststreams/input_stream, nimcrypto/[utils, sysrand],
-  ../stateless/[witness_from_tree, tree_from_witness]
+  ../stateless/[witness_from_tree, tree_from_witness],
+  ../nimbus/db/storage_types
 
 type
    DB = TrieDatabaseRef
@@ -22,7 +23,7 @@ proc randCode(db: DB): Hash256 =
     let codeLen = rand(1..150)
     let code = randList(byte, rng(0, 255), codeLen, unique = false)
     result = hexary.keccak(code)
-    db.put(result.data, code)
+    db.put(contractHashKey(result).toOpenArray, code)
 
 proc randStorage(db: DB): Hash256 =
   if rand(0..1) == 0:

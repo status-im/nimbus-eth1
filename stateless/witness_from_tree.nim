@@ -3,7 +3,8 @@ import
   nimcrypto/[keccak, hash], eth/[common, rlp],
   eth/trie/[trie_defs, nibbles, db],
   faststreams/output_stream,
-  ./witness_types, ../nimbus/constants
+  ./witness_types, ../nimbus/constants,
+  ../nimbus/db/storage_types
 
 type
   DB = TrieDatabaseRef
@@ -123,7 +124,7 @@ proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq,
 
   if accountType == ExtendedAccountType:
     if acc.codeHash != blankStringHash:
-      let code = get(wb.db, acc.codeHash.data)
+      let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
       if code.len > EIP170_CODE_SIZE_LIMIT:
         raise newException(ValueError, "code len exceed EIP170 code size limit")
       wb.writeU32(code.len.uint32)
