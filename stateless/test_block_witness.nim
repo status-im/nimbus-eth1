@@ -3,7 +3,7 @@ import
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   stew/byteutils, faststreams/input_stream,
   ../tests/[test_helpers, test_config],
-  ../nimbus/db/accounts_cache,
+  ../nimbus/db/accounts_cache, ./witness_types,
   ../stateless/[witness_from_tree, tree_from_witness]
 
 type
@@ -26,34 +26,24 @@ proc isValidBranch(branch: openArray[seq[byte]], rootHash: KeccakHash, key, valu
 
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
   var trie = initHexaryTrie(tester.memdb, rootHash)
+  let flags = {wfEIP170}
 
-  #try:
-  for address in tester.address:
-    var wb = initWitnessBuilder(tester.memdb, rootHash)
-    var witness = wb.buildWitness(address)
+  try:
+    for address in tester.address:
+      var wb = initWitnessBuilder(tester.memdb, rootHash, flags)
+      var witness = wb.buildWitness(address)
 
-    var db = newMemoryDB()
-    when defined(useInputStream):
-      var input = memoryInput(witness)
-      var tb = initTreeBuilder(input, db)
-    else:
-      var tb = initTreeBuilder(witness, db)
-      
-    var root = tb.treeNode()
-    check root.data == rootHash.data
+      var db = newMemoryDB()
+      when defined(useInputStream):
+        var input = memoryInput(witness)
+        var tb = initTreeBuilder(input, db, flags)
+      else:
+        var tb = initTreeBuilder(witness, db, flags)
 
-    #echo "ROOT: ", root.data.toHex
-    #echo "rootHash: ", rootHash.data.toHex
-
-    #var stackBranch = wb.getBranchStack(address)
-    #check recurseBranch == stackBranch
-    #
-    #var branch = wb.getBranch(address)
-    #let account = trie.get(address)
-    #check isValidBranch(branch, trie.rootHash, address, account)
-  #except:
-    #debugEcho "MSG: ", getCurrentExceptionMsg()
-    #quit(1)
+      var root = tb.treeNode()
+      check root.data == rootHash.data
+  except ContractCodeError as e:
+    debugEcho "CONTRACT CODE ERROR: ", e.msg
 
 func parseHash256(n: JsonNode, name: string): Hash256 =
   hexToByteArray(n[name].getStr(), result.data)
@@ -119,10 +109,7 @@ proc blockWitnessMain*(debugMode = false) =
     let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
-    if config.legacy:
-      testFixtureGST(n, testStatusIMPL)
-    else:
-      testFixtureBC(n, testStatusIMPL)
+    testFixtureGST(n, testStatusIMPL)
 
 when isMainModule:
   var message: string

@@ -11,6 +11,14 @@ type
     SimpleAccountType
     ExtendedAccountType
 
+  WitnessFlag* = enum
+    wfNoFlag
+    wfEIP170 # fork >= Spurious Dragon
+
+  WitnessFlags* = set[WitnessFlag]
+
+  ContractCodeError* = object of ValueError
+
 const
   StorageLeafNodeType* = AccountNodeType
   BlockWitnessVersion* = 0x01

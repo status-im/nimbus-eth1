@@ -13,11 +13,13 @@ type
     db*: DB
     root: KeccakHash
     output: OutputStream
+    flags: WitnessFlags
 
-proc initWitnessBuilder*(db: DB, rootHash: KeccakHash = emptyRlpHash): WitnessBuilder =
+proc initWitnessBuilder*(db: DB, rootHash: KeccakHash, flags: WitnessFlags = {}): WitnessBuilder =
   result.db = db
   result.root = rootHash
   result.output = memoryOutput().s
+  result.flags = flags
 
 template extensionNodeKey(r: Rlp): auto =
   hexPrefixDecode r.listElem(0).toBytes
@@ -125,8 +127,8 @@ proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq,
   if accountType == ExtendedAccountType:
     if acc.codeHash != blankStringHash:
       let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
-      if code.len > EIP170_CODE_SIZE_LIMIT:
-        raise newException(ValueError, "code len exceed EIP170 code size limit")
+      if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
+        raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
       wb.writeU32(code.len.uint32)
       wb.output.append(code)
     else:

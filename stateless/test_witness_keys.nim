@@ -3,7 +3,7 @@ import
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   faststreams/input_stream, nimcrypto/[utils, sysrand],
   ../stateless/[witness_from_tree, tree_from_witness],
-  ../nimbus/db/storage_types
+  ../nimbus/db/storage_types, ./witness_types
 
 type
    DB = TrieDatabaseRef
@@ -59,14 +59,14 @@ proc runTest(numPairs: int) =
 
   let rootHash = trie.rootHash
 
-  var wb = initWitnessBuilder(memDB, rootHash)
+  var wb = initWitnessBuilder(memDB, rootHash, {wfEIP170})
   var witness = wb.buildWitness(addrs[0])
   var db = newMemoryDB()
   when defined(useInputStream):
     var input = memoryInput(witness)
-    var tb = initTreeBuilder(input, db)
+    var tb = initTreeBuilder(input, db, {wfEIP170})
   else:
-    var tb = initTreeBuilder(witness, db)
+    var tb = initTreeBuilder(witness, db, {wfEIP170})
   var root = tb.treeNode()
   debugEcho "root: ", root.data.toHex
   debugEcho "rootHash: ", rootHash.data.toHex

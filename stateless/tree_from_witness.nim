@@ -18,26 +18,30 @@ type
       pos: int
     db: DB
     root: KeccakHash
+    flags: WitnessFlags
 
 # the InputStream still unstable
 # when using large dataset for testing
 # or run longer
 
 when defined(useInputStream):
-  proc initTreeBuilder*(input: InputStream, db: DB): TreeBuilder =
+  proc initTreeBuilder*(input: InputStream, db: DB, flags: WitnessFlags): TreeBuilder =
     result.input = input
     result.db = db
     result.root = emptyRlpHash
+    result.flags = flags
 
-  proc initTreeBuilder*(input: openArray[byte], db: DB): TreeBuilder =
+  proc initTreeBuilder*(input: openArray[byte], db: DB, flags: WitnessFlags): TreeBuilder =
     result.input = memoryInput(input)
     result.db = db
     result.root = emptyRlpHash
+    result.flags = flags
 else:
-  proc initTreeBuilder*(input: openArray[byte], db: DB): TreeBuilder =
+  proc initTreeBuilder*(input: openArray[byte], db: DB, flags: WitnessFlags): TreeBuilder =
     result.input = @input
     result.db = db
     result.root = emptyRlpHash
+    result.flags = flags
 
 func rootHash*(t: TreeBuilder): KeccakHash {.inline.} =
   t.root
@@ -216,7 +220,8 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
 
   when defined(debugHash):
     let len = t.readU32().int
-    let nodeKey = toNodeKey(t.read(len))
+    let node = @(t.read(len))
+    let nodeKey = toNodeKey(node)
 
   when defined(debugDepth):
     let readDepth = t.readByte.int
@@ -241,8 +246,8 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     acc.storageRoot = emptyRlpHash
   else:
     let codeLen = t.readU32()
-    if codeLen > EIP170_CODE_SIZE_LIMIT:
-      raise newException(ValueError, "code len exceed EIP170 code size limit")
+    if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
+      raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
     acc.codeHash = t.writeCode(t.read(codeLen.int))
 
     # switch to account storage parsing mode
@@ -252,9 +257,22 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     acc.storageRoot.data = storageRoot.data
 
   r.append rlp.encode(acc)
-  result = toNodeKey(r.finish)
+  let noderes = r.finish
+  result = toNodeKey(noderes)
 
   when defined(debugHash):
+    if result != nodeKey:
+      debugEcho "result.usedBytes: ", result.usedBytes
+      debugEcho "nodeKey.usedBytes: ", nodeKey.usedBytes
+      var rlpa = rlpFromBytes(node)
+      var rlpb = rlpFromBytes(noderes)
+      debugEcho "Expected: ", inspect(rlpa)
+      debugEcho "Actual: ", inspect(rlpb)
+      var a = rlpa.listElem(1).toBytes.decode(Account)
+      var b = rlpb.listElem(1).toBytes.decode(Account)
+      debugEcho "Expected: ", a
+      debugEcho "Actual: ", b
+
     doAssert(result == nodeKey, "account node parsing error")
 
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
