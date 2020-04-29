@@ -244,8 +244,17 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc buildWitness*(wb: var WitnessBuilder; address: EthAddress): seq[byte] =
+proc buildWitness*(wb: var WitnessBuilder; address: EthAddress, withVersion: bool = true): seq[byte] =
+  # witness version
+  wb.output.append(BlockWitnessVersion.byte)
+
+  # one or more trees
+
+  # we only output one tree
+  wb.output.append(MetadataNothing.byte)
   let key = keccak(address)
   var node = wb.db.get(wb.root.data)
   getBranchRecurseAux(wb, node, initNibbleRange(key.data), 0, false)
+
+  # result
   result = wb.output.getOutput(seq[byte])

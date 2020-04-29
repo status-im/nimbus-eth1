@@ -60,6 +60,8 @@ when defined(useInputStream):
   template read(t: var TreeBuilder, len: int): auto =
     t.input.read(len)
 
+  template readable(t: var TreeBuilder): bool =
+    t.input.readable
 else:
   template readByte(t: var TreeBuilder): byte =
     let pos = t.pos
@@ -69,9 +71,8 @@ else:
   template len(t: TreeBuilder): int =
     t.input.len
 
-  template peek(t: TreeBuilder): byte =
-    t.input.peek
-    t.input[t.pos]
+  template readable(t: var TreeBuilder): bool =
+    t.pos < t.input.len
 
   template read(t: var TreeBuilder, len: int): auto =
     let pos = t.pos
@@ -115,8 +116,43 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey
 proc hashNode(t: var TreeBuilder): NodeKey
+proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey
 
-proc treeNode*(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey =
+proc buildTree*(t: var TreeBuilder): KeccakHash =
+  let version = t.readByte().int
+  if version != BlockWitnessVersion.int:
+    raise newException(ParsingError, "Wrong block witness version")
+
+  # one or more trees
+
+  # we only parse one tree here
+  let metadataType = t.readByte().int
+  if metadataType != MetadataNothing.int:
+    raise newException(ParsingError, "This tree builder support no metadata")
+
+  var res = treeNode(t)
+  if res.usedBytes != 32:
+    raise newException(ParsingError, "Buildtree should produce hash")
+
+  result.data = res.data
+
+proc buildForest*(t: var TreeBuilder): seq[KeccakHash] =
+  let version = t.readByte().int
+  if version != BlockWitnessVersion.int:
+    raise newException(ParsingError, "Wrong block witness version")
+
+  while t.readable:
+    let metadataType = t.readByte().int
+    if metadataType != MetadataNothing.int:
+      raise newException(ParsingError, "This tree builder support no metadata")
+
+    var res = treeNode(t)
+    if res.usedBytes != 32:
+      raise newException(ParsingError, "Buildtree should produce hash")
+
+    result.add KeccakHash(data: res.data)
+
+proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey =
   assert(depth < 64)
   let nodeType = TrieNodeType(t.readByte)
 

@@ -40,7 +40,7 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
       else:
         var tb = initTreeBuilder(witness, db, flags)
 
-      var root = tb.treeNode()
+      var root = tb.buildTree()
       check root.data == rootHash.data
   except ContractCodeError as e:
     debugEcho "CONTRACT CODE ERROR: ", e.msg

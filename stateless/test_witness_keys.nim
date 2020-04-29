@@ -67,7 +67,7 @@ proc runTest(numPairs: int) =
     var tb = initTreeBuilder(input, db, {wfEIP170})
   else:
     var tb = initTreeBuilder(witness, db, {wfEIP170})
-  var root = tb.treeNode()
+  var root = tb.buildTree()
   debugEcho "root: ", root.data.toHex
   debugEcho "rootHash: ", rootHash.data.toHex
   doAssert root.data == rootHash.data
