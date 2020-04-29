@@ -203,7 +203,7 @@ proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
       r.append ""
 
   if branchMaskBitIsSet(mask, 16):
-    raise newException(ParsingError, "The 17th elem of branh node should empty")
+    raise newException(ParsingError, "The 17th elem of branch node should empty")
 
   # 17th elem should always empty
   r.append ""
@@ -265,7 +265,7 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   case nodeType
   of BranchNodeType: r.append t.branchNode(depth + nibblesLen, storageMode)
   of HashNodeType: r.append t.hashNode()
-  else: raise newException(ValueError, "wrong type during parsing child of extension node")
+  else: raise newException(ParsingError, "wrong type during parsing child of extension node")
 
   result = t.toNodeKey(r.finish)
 
