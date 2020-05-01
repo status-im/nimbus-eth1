@@ -45,11 +45,14 @@ proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
-           root: KeccakHash, pruneTrie: bool): AccountsCache =
+           root: KeccakHash, pruneTrie: bool = true): AccountsCache =
   result.db = db
   result.trie = initSecureHexaryTrie(db, root, pruneTrie)
   result.unrevertablyTouched = initHashSet[EthAddress]()
   discard result.beginSavepoint
+
+proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef, pruneTrie: bool = true): AccountsCache =
+  init(x, db, emptyRlpHash, pruneTrie)
 
 proc rootHash*(ac: AccountsCache): KeccakHash =
   # make sure all savepoint already committed

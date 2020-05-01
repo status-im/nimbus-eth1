@@ -141,5 +141,14 @@ proc stateDBMain*() =
       # state trie at all
       check ac.rootHash == rootHash
 
+    test "accounts cache code retrieval after persist called":
+      var ac = init(AccountsCache, acDB)
+      var addr2 = initAddr(2)
+      ac.setCode(addr2, code)
+      ac.persist()
+      check ac.getCode(addr2) == code      
+      let key = contractHashKey(hexary.keccak(code))      
+      check acDB.get(key.toOpenArray) == code
+            
 when isMainModule:
   stateDBMain()
