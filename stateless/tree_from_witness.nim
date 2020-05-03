@@ -146,7 +146,8 @@ proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey
 proc hashNode(t: var TreeBuilder): NodeKey
 proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey
 
-proc buildTree*(t: var TreeBuilder): KeccakHash =
+proc buildTree*(t: var TreeBuilder): KeccakHash
+  {.raises: [ContractCodeError, Defect, IOError, ParsingError, Exception].} =
   let version = t.safeReadByte().int
   if version != BlockWitnessVersion.int:
     raise newException(ParsingError, "Wrong block witness version")
@@ -164,7 +165,8 @@ proc buildTree*(t: var TreeBuilder): KeccakHash =
 
   result.data = res.data
 
-proc buildForest*(t: var TreeBuilder): seq[KeccakHash] =
+proc buildForest*(t: var TreeBuilder): seq[KeccakHash]
+  {.raises: [ContractCodeError, Defect, IOError, ParsingError, Exception].} =
   let version = t.safeReadByte().int
   if version != BlockWitnessVersion.int:
     raise newException(ParsingError, "Wrong block witness version")

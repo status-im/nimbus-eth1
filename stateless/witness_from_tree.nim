@@ -193,7 +193,8 @@ proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, s
     # 17th elem should always empty
     doAssert branchMask.branchMaskBitIsSet(16) == false
   else:
-    raise newException(CorruptedTrieDatabase, "Bad Short Node")
+    raise newException(CorruptedTrieDatabase,
+      "HexaryTrie short node with an unexpected number of children")
 
 proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: NibblesSeq, depth: int, storageMode: bool) =
   var nodeRlp = rlpFromBytes node
@@ -244,7 +245,9 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc buildWitness*(wb: var WitnessBuilder; address: EthAddress, withVersion: bool = true): seq[byte] =
+proc buildWitness*(wb: var WitnessBuilder; address: EthAddress, withVersion: bool = true): seq[byte]
+  {.raises: [ContractCodeError, IOError, WitnessError, Defect].} =
+
   # witness version
   wb.output.append(BlockWitnessVersion.byte)
 
@@ -253,8 +256,12 @@ proc buildWitness*(wb: var WitnessBuilder; address: EthAddress, withVersion: boo
   # we only output one tree
   wb.output.append(MetadataNothing.byte)
   let key = keccak(address)
-  var node = wb.db.get(wb.root.data)
-  getBranchRecurseAux(wb, node, initNibbleRange(key.data), 0, false)
+   
+  try:
+    var node = wb.db.get(wb.root.data)
+    getBranchRecurseAux(wb, node, initNibbleRange(key.data), 0, false)
+  except CorruptedTrieDatabase, RlpTypeMismatch, CatchableError, Exception:
+    raise newException(WitnessError, getCurrentExceptionMsg())
 
   # result
   result = wb.output.getOutput(seq[byte])

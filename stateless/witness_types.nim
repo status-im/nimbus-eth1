@@ -23,6 +23,7 @@ type
 
   ContractCodeError* = object of ValueError
   ParsingError* = object of ValueError
+  WitnessError* = object of ValueError
 
 const
   StorageLeafNodeType* = AccountNodeType
