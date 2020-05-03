@@ -25,11 +25,12 @@ proc isValidBranch(branch: openArray[seq[byte]], rootHash: KeccakHash, key, valu
   result = trie.get(key) == value
 
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
-  var trie = initHexaryTrie(tester.memdb, rootHash)
+  var trie = initSecureHexaryTrie(tester.memdb, rootHash)
   let flags = {wfEIP170}
 
   try:
     for address in tester.address:
+      let account = rlp.decode(trie.get(address), Account)
       var wb = initWitnessBuilder(tester.memdb, rootHash, flags)
       var witness = wb.buildWitness(address)
 
@@ -42,6 +43,15 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
 
       var root = tb.buildTree()
       check root.data == rootHash.data
+
+      let newTrie = initSecureHexaryTrie(tb.getDB(), root)
+      let recordFound = newTrie.get(address)
+      if recordFound.len > 0:
+        let acc = rlp.decode(recordFound, Account)
+        doAssert acc == account
+      else:
+        doAssert(false, "BUG IN TREE BUILDER")
+
   except ContractCodeError as e:
     debugEcho "CONTRACT CODE ERROR: ", e.msg
 

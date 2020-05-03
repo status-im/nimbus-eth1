@@ -51,31 +51,40 @@ proc runTest(numPairs: int) =
   var memDB = newMemoryDB()
   var trie = initSecureHexaryTrie(memDB)
   var addrs = newSeq[EthAddress](numPairs)
+  var accs = newSeq[Account](numPairs)
 
   for i in 0..<numPairs:
     addrs[i] = randAddress()
-    let acc = randAccount(memDB)
-    trie.put(addrs[i], rlp.encode(acc))
+    accs[i] = randAccount(memDB)
+    trie.put(addrs[i], rlp.encode(accs[i]))
 
   let rootHash = trie.rootHash
 
-  var wb = initWitnessBuilder(memDB, rootHash, {wfEIP170})
-  var witness = wb.buildWitness(addrs[0])
-  var db = newMemoryDB()
-  when defined(useInputStream):
-    var input = memoryInput(witness)
-    var tb = initTreeBuilder(input, db, {wfEIP170})
-  else:
-    var tb = initTreeBuilder(witness, db, {wfEIP170})
-  var root = tb.buildTree()
-  debugEcho "root: ", root.data.toHex
-  debugEcho "rootHash: ", rootHash.data.toHex
-  doAssert root.data == rootHash.data
+  for i in 0..<numPairs:
+    var wb = initWitnessBuilder(memDB, rootHash, {wfEIP170})
+    var witness = wb.buildWitness(addrs[i])
+    var db = newMemoryDB()
+    when defined(useInputStream):
+      var input = memoryInput(witness)
+      var tb = initTreeBuilder(input, db, {wfEIP170})
+    else:
+      var tb = initTreeBuilder(witness, db, {wfEIP170})
+    let root = tb.buildTree()
+    doAssert root.data == rootHash.data
+
+    let newTrie = initSecureHexaryTrie(tb.getDB(), root)
+    let recordFound = newTrie.get(addrs[i])
+    if recordFound.len > 0:
+      let acc = rlp.decode(recordFound, Account)
+      doAssert acc == accs[i]
+    else:
+      doAssert(false, "BUG IN TREE BUILDER")
 
 proc main() =
   randomize()
 
   for i in 0..<30:
     runTest(rand(1..30))
+  echo "OK"
 
 main()

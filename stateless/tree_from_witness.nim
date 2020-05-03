@@ -9,7 +9,7 @@ type
 
   NodeKey = object
     usedBytes: int
-    data*: array[32, byte]
+    data: array[32, byte]
 
   TreeBuilder = object
     when defined(useInputStream):
@@ -46,6 +46,9 @@ else:
 
 func rootHash*(t: TreeBuilder): KeccakHash {.inline.} =
   t.root
+
+func getDB*(t: TreeBuilder): DB {.inline.} =
+  t.db
 
 when defined(useInputStream):
   template readByte(t: var TreeBuilder): byte =
