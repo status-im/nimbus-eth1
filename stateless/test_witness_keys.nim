@@ -116,7 +116,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus, useRogueKeys: static
     for kd in mkeys.keys:
       check kd.visited == true
 
-proc main() =
+proc witnesKeysMain() =
   suite "random keys block witness roundtrip test":
     randomize()
 
@@ -132,4 +132,5 @@ proc main() =
     test "rogue address ignored":
       runTest(rand(1..30), testStatusIMPL, useRogueKeys = true)
 
-main()
+when isMainModule:
+  witnessKeysMain()
