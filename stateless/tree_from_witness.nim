@@ -13,6 +13,7 @@ type
 
   AccountAndSlots* = object
     address*: EthAddress
+    codeLen*: int
     slots*: seq[StorageSlot]
 
   TreeBuilder = object
@@ -190,7 +191,7 @@ proc buildForest*(t: var TreeBuilder): seq[KeccakHash]
 
     result.add KeccakHash(data: res.data)
 
-proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey =
+proc treeNode(t: var TreeBuilder, depth: int, storageMode = false): NodeKey =
   assert(depth < 64)
   let nodeType = safeReadEnum(t, TrieNodeType)
   case nodeType
@@ -303,6 +304,19 @@ proc readAddress(t: var TreeBuilder) =
   safeReadBytes(t, 20):
     t.keys.add AccountAndSlots(address: toAddress(t.read(20)))
 
+proc readCodeLen(t: var TreeBuilder): int =
+  let codeLen = t.safeReadU32()
+  if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
+    raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
+  t.keys[^1].codeLen = codeLen.int
+  result = codeLen.int
+
+proc readHashNode(t: var TreeBuilder): NodeKey =
+  let nodeType = safeReadEnum(t, TrieNodeType)
+  if nodeType != HashNodeType:
+    raise newException(ParsingError, "hash node expected but got " & $nodeType)
+  result = t.hashNode()
+
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
 
@@ -337,12 +351,9 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
       acc.codeHash = blankStringHash
       acc.storageRoot = emptyRlpHash
     of ExtendedAccountType:
-      let codeLen = t.safeReadU32()
-      if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
-        raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
-
-      safeReadBytes(t, codeLen.int):
-        acc.codeHash = t.writeCode(t.read(codeLen.int))
+      let codeLen = t.readCodeLen()
+      safeReadBytes(t, codeLen):
+        acc.codeHash = t.writeCode(t.read(codeLen))
 
       # switch to account storage parsing mode
       # and reset the depth
@@ -350,10 +361,11 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
       doAssert(storageRoot.usedBytes == 32)
       acc.storageRoot.data = storageRoot.data
     of CodeUntouched:
-      # TODO: should we check it is a hashNode ?
-      let codeHash = t.treeNode(depth)
+      let codeHash = t.readHashNode()
       doAssert(codeHash.usedBytes == 32)
       acc.codeHash.data = codeHash.data
+
+      discard t.readCodeLen()
 
       let storageRoot = t.treeNode(0, storageMode = true)
       doAssert(storageRoot.usedBytes == 32)
