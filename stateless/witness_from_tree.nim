@@ -49,8 +49,17 @@ proc rlpListToBitmask(r: var Rlp): uint =
     inc i
   r.position = 0
 
-proc writeU32(wb: var WitnessBuilder, x: uint32) =
-  wb.output.append(toBytesBE(x))
+template write(wb: var WitnessBuilder, x: untyped) =
+  wb.output.append(x)
+
+proc writeU32Impl(wb: var WitnessBuilder, x: uint32) =
+  wb.write(toBytesBE(x))
+
+template writeU32(wb: var WitnessBuilder, x: untyped) =
+  wb.writeU32Impl(uint32(x))
+
+template writeByte(wb: var WitnessBuilder, x: untyped) =
+  wb.write(byte(x))
 
 proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true) =
   # convert the NibblesSeq into left aligned byte seq
@@ -68,42 +77,42 @@ proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true) =
 
   if withLen:
     # write nibblesLen
-    wb.output.append(nibblesLen.byte)
+    wb.writeByte(nibblesLen)
   # write nibbles
-  wb.output.append(bytes.toOpenArray(0, numBytes-1))
+  wb.write(bytes.toOpenArray(0, numBytes-1))
 
 proc writeExtensionNode(wb: var WitnessBuilder, n: NibblesSeq, depth: int, node: openArray[byte]) =
   # write type
-  wb.output.append(ExtensionNodeType.byte)
+  wb.writeByte(ExtensionNodeType)
   # write nibbles
   wb.writeNibbles(n)
 
   when defined(debugDepth):
-    wb.output.append(depth.byte)
+    wb.writeByte(depth)
 
   when defined(debugHash):
-    wb.output.append(keccak(node).data)
+    wb.write(keccak(node).data)
 
 proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openArray[byte]) =
   # write type
   # branch node 17th elem should always empty
   doAssert mask.branchMaskBitIsSet(16) == false
-  wb.output.append(BranchNodeType.byte)
+  wb.writeByte(BranchNodeType)
   # write branch mask
   # countOnes(branch mask) >= 2 and <= 16
-  wb.output.append(((mask shr 8) and 0xFF).byte)
-  wb.output.append((mask and 0xFF).byte)
+  wb.writeByte((mask shr 8) and 0xFF)
+  wb.writeByte(mask and 0xFF)
 
   when defined(debugDepth):
-    wb.output.append(depth.byte)
+    wb.writeByte(depth)
 
   when defined(debugHash):
-    wb.output.append(keccak(node).data)
+    wb.write(keccak(node).data)
 
 proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
   # write type
-  wb.output.append(HashNodeType.byte)
-  wb.output.append(node)
+  wb.writeByte(HashNodeType)
+  wb.write(node)
 
 proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].}
 
@@ -111,14 +120,14 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
   node: openArray[byte], depth: int) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
 
   # write type
-  wb.output.append(AccountNodeType.byte)
+  wb.writeByte(AccountNodeType)
 
   when defined(debugHash):
-    wb.writeU32(node.len.uint32)
-    wb.output.append(node)
+    wb.writeU32(node.len)
+    wb.write(node)
 
   when defined(debugDepth):
-    wb.output.append(depth.byte)
+    wb.writeByte(depth)
 
   doAssert(nibbles.len == 64 - depth)
   var accountType = if acc.codeHash == blankStringHash and acc.storageRoot == emptyRlpHash: SimpleAccountType
@@ -127,11 +136,11 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
   if not kd.codeTouched:
     accountType = CodeUntouched
 
-  wb.output.append(accountType.byte)
+  wb.writeByte(accountType)
   wb.writeNibbles(nibbles, false)
-  wb.output.append(kd.address)
-  wb.output.append(acc.balance.toBytesBE)
-  wb.output.append(acc.nonce.u256.toBytesBE)
+  wb.write(kd.address)
+  wb.write(acc.balance.toBytesBE)
+  wb.write(acc.nonce.u256.toBytesBE)
 
   if accountType != SimpleAccountType:
     if not kd.codeTouched:
@@ -139,14 +148,14 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
       let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
       if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
         raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
-      wb.writeU32(code.len.uint32)
+      wb.writeU32(code.len)
       # no code here
     elif acc.codeHash != blankStringHash:
       let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
       if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
         raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
-      wb.writeU32(code.len.uint32)
-      wb.output.append(code)
+      wb.writeU32(code.len)
+      wb.write(code)
     else:
       wb.writeU32(0'u32)
 
@@ -170,20 +179,20 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
   #0x02 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32> codehash:<Bytes32> codesize:<U32> storage:<Account_Storage_Tree_Node(0)>
 
 proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], val: UInt256, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
-  wb.output.append(StorageLeafNodeType.byte)
+  wb.writeByte(StorageLeafNodeType)
 
   when defined(debugHash):
-    wb.writeU32(node.len.uint32)
-    wb.output.append(node)
+    wb.writeU32(node.len)
+    wb.write(node)
 
   when defined(debugDepth):
-    wb.output.append(depth.byte)
+    wb.writeByte(depth)
 
   doAssert(nibbles.len == 64 - depth)
   wb.writeNibbles(nibbles, false)
 
-  wb.output.append(key)
-  wb.output.append(val.toBytesBE)
+  wb.write(key)
+  wb.write(val.toBytesBE)
 
   #<Storage_Leaf_Node(d<65)> := pathnibbles:<Nibbles(64-d))> key:<Bytes32> val:<Bytes32>
 
@@ -268,12 +277,12 @@ proc buildWitness*(wb: var WitnessBuilder, keys: MultikeysRef): seq[byte]
   {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
 
   # witness version
-  wb.output.append(BlockWitnessVersion.byte)
+  wb.writeByte(BlockWitnessVersion)
 
   # one or more trees
 
   # we only output one tree
-  wb.output.append(MetadataNothing.byte)
+  wb.writeByte(MetadataNothing)
 
   var z = StackElem(
     node: @(wb.db.get(wb.root.data)),
