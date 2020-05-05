@@ -59,9 +59,6 @@ proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: var Accoun
       storageKeys.add(slot.toBytesBE)
       stateDB.setStorage(account, slot, fromHex(UInt256, value.getStr))
 
-    var sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultikeysRef(nil)
-    keys.add((account, sKeys))
-
     let nonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
     let code = accountData{"code"}.getStr.safeHexToSeqByte
     let balance = UInt256.fromHex accountData{"balance"}.getStr
@@ -69,6 +66,10 @@ proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: var Accoun
     stateDB.setNonce(account, nonce)
     stateDB.setCode(account, code)
     stateDB.setBalance(account, balance)
+
+    let sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultikeysRef(nil)
+    let codeTouched = code.len > 0
+    keys.add((account, codeTouched, sKeys))
 
   tester.keys = newMultiKeys(keys)
   stateDB.persist()

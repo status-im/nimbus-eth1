@@ -8,11 +8,12 @@ import
 type
    DB = TrieDatabaseRef
 
-   StorageKeys = tuple[hash: Hash256, keys: MultikeysRef]
+   StorageKeys = tuple[storageRoot: Hash256, keys: MultikeysRef]
 
    AccountDef = object
     storageKeys: MultiKeysRef
     account: Account
+    codeTouched: bool
 
 proc randU256(): UInt256 =
   var bytes: array[32, byte]
@@ -55,13 +56,16 @@ proc randStorage(db: DB): StorageKeys =
 proc randAccount(db: DB): AccountDef =
   result.account.nonce = randNonce()
   result.account.balance = randU256()
+  let z = randStorage(db)
   result.account.codeHash = randCode(db)
-  (result.account.storageRoot, result.storageKeys) = randStorage(db)
+  result.account.storageRoot = z.storageRoot
+  result.storageKeys = z.keys
+  result.codeTouched = rand(0..1) == 0
 
 proc randAddress(): EthAddress =
   discard randomBytes(result.addr, sizeof(result))
 
-proc runTest(numPairs: int, testStatusIMPL: var TestStatus) =
+proc runTest(numPairs: int, testStatusIMPL: var TestStatus, useRogueKeys: static[bool] = false) =
   var memDB = newMemoryDB()
   var trie = initSecureHexaryTrie(memDB)
   var addrs = newSeq[AccountKey](numPairs)
@@ -69,9 +73,14 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus) =
 
   for i in 0..<numPairs:
     let acc  = randAccount(memDB)
-    addrs[i] = (randAddress(), acc.storageKeys)
+    addrs[i] = (randAddress(), acc.codeTouched, acc.storageKeys)
     accs[i]  = acc.account
     trie.put(addrs[i].address, rlp.encode(accs[i]))
+
+  when useRogueKeys:
+    # rogueAddress should not end up in block witness
+    let rogueAddress = randAddress()
+    addrs.add((rogueAddress, false, MultikeysRef(nil)))
 
   var mkeys = newMultiKeys(addrs)
   let rootHash = trie.rootHash
@@ -94,8 +103,18 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus) =
       let acc = rlp.decode(recordFound, Account)
       check acc == accs[i]
     else:
-      debugEcho "BUG IN TREE BUILDER"
+      debugEcho "BUG IN TREE BUILDER ", i
       check false
+
+  when useRogueKeys:
+    for kd in mkeys.keys:
+      if kd.address == rogueAddress:
+        check kd.visited == false
+      else:
+        check kd.visited == true
+  else:
+    for kd in mkeys.keys:
+      check kd.visited == true
 
 proc main() =
   suite "random keys block witness roundtrip test":
@@ -109,5 +128,8 @@ proc main() =
       let acc = newAccount()
       let rlpBytes = rlp.encode(acc)
       check rlpBytes.len > 32
+
+    test "rogue address ignored":
+      runTest(rand(1..30), testStatusIMPL, useRogueKeys = true)
 
 main()

@@ -14,9 +14,10 @@ type
     of false:
       storageKeys*: MultikeysRef
       address*: EthAddress
+      codeTouched*: bool
 
   Multikeys* = object
-    keys: seq[KeyData]
+    keys*: seq[KeyData]
 
   MultikeysRef* = ref Multikeys
 
@@ -27,7 +28,7 @@ type
     mask*: uint
     groups*: array[16, Group]
 
-  AccountKey* = tuple[address: EthAddress, storageKeys: MultikeysRef]
+  AccountKey* = tuple[address: EthAddress, codeTouched: bool, storageKeys: MultikeysRef]
   MatchGroup* = tuple[match: bool, group: Group]
 
 func cmpHash(a, b: KeyHash): int =
@@ -64,6 +65,7 @@ proc newMultiKeys*(keys: openArray[AccountKey]): MultikeysRef =
       storageMode: false,
       hash: keccak(a.address).data,
       address: a.address,
+      codeTouched: a.codeTouched,
       storageKeys: a.storageKeys)
   result.keys.sort(cmpHash)
 
@@ -127,18 +129,13 @@ iterator groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group)
       haveGroup = false
       yield (matchResult, groupResult)
 
-func keyData*(m: MultikeysRef, g: Group): KeyData =
-  doAssert(g.first == g.last)
-  result = m.keys[g.first]
-
-iterator keyDatas*(m: MultikeysRef, g: Group): KeyData =
+iterator keyDatas*(m: MultikeysRef, g: Group): var KeyData =
   for i in g.first..g.last:
     yield m.keys[i]
-
-iterator addresses*(m :MultikeysRef): EthAddress =
-  for x in m.keys:
-    yield x.address
 
 iterator storageKeys*(m :MultikeysRef): MultikeysRef =
   for x in m.keys:
     yield x.storageKeys
+
+func match*(kd: KeyData, n: NibblesSeq, depth: int): bool {.inline.} =
+  compareNibbles(kd.hash, depth, n)

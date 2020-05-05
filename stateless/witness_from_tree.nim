@@ -201,13 +201,18 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, z: var StackElem) =
           )
           getBranchRecurseAux(wb, zz)
         else:
-          let kd = keyData(z.keys, mg.group)
-          if z.storageMode:
-            doAssert(kd.storageMode)
-            writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), k, z.node, z.depth)
-          else:
-            doAssert(not kd.storageMode)
-            writeAccountNode(wb, kd.storageKeys, kd.address, value.toBytes.decode(Account), k, z.node, z.depth)
+          # this should be only one match
+          # if there is more than one match
+          # it means we encounter a rogue address
+          for kd in keyDatas(z.keys, mg.group):
+            if not match(kd, k, z.depth): continue # this is the rogue address
+            kd.visited = true
+            if z.storageMode:
+              doAssert(kd.storageMode)
+              writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), k, z.node, z.depth)
+            else:
+              doAssert(not kd.storageMode)
+              writeAccountNode(wb, kd.storageKeys, kd.address, value.toBytes.decode(Account), k, z.node, z.depth)
     if not match:
       writeHashNode(wb, keccak(z.node).data)
   of 17:
