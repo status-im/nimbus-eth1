@@ -1,20 +1,19 @@
 import
-  eth/common, eth/trie/[db, nibbles], algorithm, stew/byteutils,
+  eth/common, eth/trie/[db, nibbles], algorithm,
   ./witness_types
 
 type
-  KeyHash = array[32, byte]
-  StorageSlot = array[32, byte]
+  KeyHash* = array[32, byte]
 
-  KeyData = object
-    visited: bool
-    hash: KeyHash
-    case storageMode: bool
+  KeyData* = object
+    visited*: bool
+    hash*: KeyHash
+    case storageMode*: bool
     of true:
-      storageSlot: StorageSlot
+      storageSlot*: StorageSlot
     of false:
-      storageKeys: MultikeysRef
-      address: EthAddress
+      storageKeys*: MultikeysRef
+      address*: EthAddress
 
   Multikeys* = object
     keys: seq[KeyData]
@@ -22,7 +21,7 @@ type
   MultikeysRef* = ref Multikeys
 
   Group* = object
-    first, last: int16
+    first*, last*: int16
 
   BranchGroup* = object
     mask*: uint
@@ -57,9 +56,6 @@ func compareNibbles(x: openArray[byte], start: int, n: NibblesSeq): bool =
     inc i
   result = true
 
-func `$`(x: KeyHash): string =
-  toHex(x)
-
 proc newMultiKeys*(keys: openArray[AccountKey]): MultikeysRef =
   result = new Multikeys
   result.keys = newSeq[KeyData](keys.len)
@@ -79,7 +75,8 @@ proc newMultiKeys*(keys: openArray[StorageSlot]): MultikeysRef =
   result.keys.sort(cmpHash)
 
 func initGroup*(m: MultikeysRef): Group =
-  result = Group(first: 0'i16, last: (m.keys.len - 1).int16)
+  type T = type result.last
+  result = Group(first: 0'i16, last: (m.keys.len - 1).T)
 
 func groups*(m: MultikeysRef, parentGroup: Group, depth: int): BranchGroup =
   # similar to a branch node, the product of this func
@@ -130,34 +127,18 @@ iterator groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group)
       haveGroup = false
       yield (matchResult, groupResult)
 
-when isMainModule:
-  let keys = [
-    (hexToByteArray[20]("abcdef0a0b0c0d0e0f1234567890aabbccddeeff"), MultikeysRef(nil)),
-    (hexToByteArray[20]("abc0000000000000000000000000000000000000"), MultikeysRef(nil)),
-    (hexToByteArray[20]("cde9769bbcbdef9880932852388bdceabcdeadea"), MultikeysRef(nil)),
-    (hexToByteArray[20]("bad03eaeaea69072375281381267397182bcdbef"), MultikeysRef(nil)),
-    (hexToByteArray[20]("abcdefbbbbbbdddeefffaaccee19826736134298"), MultikeysRef(nil)),
-    (hexToByteArray[20]("ba88888888dddddbbbbfffeeeccaa78128301389"), MultikeysRef(nil)),
-    (hexToByteArray[20]("ba9084097472374372327238bbbcdffecadfecf3"), MultikeysRef(nil))
-  ]
+func keyData*(m: MultikeysRef, g: Group): KeyData =
+  doAssert(g.first == g.last)
+  result = m.keys[g.first]
 
-  proc main() =
-    var m = newMultikeys(keys)
+iterator keyDatas*(m: MultikeysRef, g: Group): KeyData =
+  for i in g.first..g.last:
+    yield m.keys[i]
 
-    for x in m.keys:
-      echo x.hash
+iterator addresses*(m :MultikeysRef): EthAddress =
+  for x in m.keys:
+    yield x.address
 
-    var parentGroup = m.initGroup()
-    var depth = 3
-    var bg = m.groups(parentGroup, depth)
-
-    for i in 0..<16:
-      if branchMaskBitIsSet(bg.mask, i):
-        echo bg.groups[i]
-
-    var p = Group(first: 0, last: 2)
-    var n = hexToByteArray[1]("1F")
-    for j in groups(m, 3, initNibbleRange(n), p):
-      debugEcho j
-
-  main()
+iterator storageKeys*(m :MultikeysRef): MultikeysRef =
+  for x in m.keys:
+    yield x.storageKeys

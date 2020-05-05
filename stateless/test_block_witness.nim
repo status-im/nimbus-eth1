@@ -4,47 +4,35 @@ import
   stew/byteutils, faststreams/input_stream,
   ../tests/[test_helpers, test_config],
   ../nimbus/db/accounts_cache, ./witness_types,
-  ../stateless/[witness_from_tree, tree_from_witness]
+  ../stateless/[witness_from_tree, tree_from_witness],
+  ./multi_keys
 
 type
   Tester = object
-    address: seq[EthAddress]
+    keys: MultikeysRef
     memDB: TrieDatabaseRef
-
-proc isValidBranch(branch: openArray[seq[byte]], rootHash: KeccakHash, key, value: openArray[byte]): bool =
-  # branch must not be empty
-  doAssert(branch.len != 0)
-
-  var db = newMemoryDB()
-  for node in branch:
-    doAssert(node.len != 0)
-    let nodeHash = hexary.keccak(node)
-    db.put(nodeHash.data, node)
-
-  var trie = initHexaryTrie(db, rootHash)
-  result = trie.get(key) == value
 
 proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var TestStatus) =
   var trie = initSecureHexaryTrie(tester.memdb, rootHash)
   let flags = {wfEIP170}
 
   try:
-    for address in tester.address:
+    var wb = initWitnessBuilder(tester.memdb, rootHash, flags)
+    var witness = wb.buildWitness(tester.keys)
+
+    var db = newMemoryDB()
+    when defined(useInputStream):
+      var input = memoryInput(witness)
+      var tb = initTreeBuilder(input, db, flags)
+    else:
+      var tb = initTreeBuilder(witness, db, flags)
+
+    var root = tb.buildTree()
+    check root.data == rootHash.data
+
+    let newTrie = initSecureHexaryTrie(tb.getDB(), root)
+    for address in tester.keys.addresses:
       let account = rlp.decode(trie.get(address), Account)
-      var wb = initWitnessBuilder(tester.memdb, rootHash, flags)
-      var witness = wb.buildWitness(address)
-
-      var db = newMemoryDB()
-      when defined(useInputStream):
-        var input = memoryInput(witness)
-        var tb = initTreeBuilder(input, db, flags)
-      else:
-        var tb = initTreeBuilder(witness, db, flags)
-
-      var root = tb.buildTree()
-      check root.data == rootHash.data
-
-      let newTrie = initSecureHexaryTrie(tb.getDB(), root)
       let recordFound = newTrie.get(address)
       if recordFound.len > 0:
         let acc = rlp.decode(recordFound, Account)
@@ -59,11 +47,20 @@ func parseHash256(n: JsonNode, name: string): Hash256 =
   hexToByteArray(n[name].getStr(), result.data)
 
 proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: var AccountsCache): Hash256 =
+  var keys = newSeqOfCap[AccountKey](wantedState.len)
+
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
-    tester.address.add(account)
-    for slot, value in accountData{"storage"}:
-      stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
+    let slotVals = accountData{"storage"}
+    var storageKeys = newSeqOfCap[StorageSlot](slotVals.len)
+
+    for slotStr, value in slotVals:
+      let slot = fromHex(UInt256, slotStr)
+      storageKeys.add(slot.toBytesBE)
+      stateDB.setStorage(account, slot, fromHex(UInt256, value.getStr))
+
+    var sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultikeysRef(nil)
+    keys.add((account, sKeys))
 
     let nonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
     let code = accountData{"code"}.getStr.safeHexToSeqByte
@@ -73,6 +70,7 @@ proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: var Accoun
     stateDB.setCode(account, code)
     stateDB.setBalance(account, balance)
 
+  tester.keys = newMultiKeys(keys)
   stateDB.persist()
   result = stateDB.rootHash
 

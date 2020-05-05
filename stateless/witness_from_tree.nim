@@ -4,7 +4,7 @@ import
   eth/trie/[trie_defs, nibbles, db],
   faststreams/output_stream,
   ./witness_types, ../nimbus/constants,
-  ../nimbus/db/storage_types
+  ../nimbus/db/storage_types, ./multi_keys
 
 type
   DB = TrieDatabaseRef
@@ -14,6 +14,13 @@ type
     root: KeccakHash
     output: OutputStream
     flags: WitnessFlags
+
+  StackElem = object
+    node: seq[byte]
+    parentGroup: Group
+    keys: MultikeysRef
+    depth: int
+    storageMode: bool
 
 proc initWitnessBuilder*(db: DB, rootHash: KeccakHash, flags: WitnessFlags = {}): WitnessBuilder =
   result.db = db
@@ -32,7 +39,7 @@ proc expectHash(r: Rlp): seq[byte] =
 
 template getNode(elem: untyped): untyped =
   if elem.isList: @(elem.rawData)
-  else: get(wb.db, elem.expectHash)
+  else: @(get(wb.db, elem.expectHash))
 
 proc rlpListToBitmask(r: var Rlp): uint =
   var i = 0
@@ -98,9 +105,11 @@ proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
   wb.output.append(HashNodeType.byte)
   wb.output.append(node)
 
-proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: NibblesSeq, depth: int, storageMode: bool)
+proc getBranchRecurseAux(wb: var WitnessBuilder, z: var StackElem) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].}
 
-proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
+proc writeAccountNode(wb: var WitnessBuilder, storageKeys: MultikeysRef, address: EthAddress,
+  acc: Account, nibbles: NibblesSeq, node: openArray[byte], depth: int) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
+
   # write type
   wb.output.append(AccountNodeType.byte)
 
@@ -117,10 +126,7 @@ proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq,
 
   wb.output.append(accountType.byte)
   wb.writeNibbles(nibbles, false)
-  # TODO: where the address come from?
-  # single proof is easy, but multiproof will be harder
-  # concat the path and then look into LUT?
-  # wb.output.append(acc.address)
+  wb.output.append(address)
   wb.output.append(acc.balance.toBytesBE)
   wb.output.append(acc.nonce.u256.toBytesBE)
 
@@ -134,107 +140,97 @@ proc writeAccountNode(wb: var WitnessBuilder, acc: Account, nibbles: NibblesSeq,
     else:
       wb.writeU32(0'u32)
 
-    if acc.storageRoot != emptyRlpHash:
-      # switch to account mode
-      var node = wb.db.get(acc.storageRoot.data)
-      var key = keccak(0.u256.toByteArrayBE)
-      getBranchRecurseAux(wb, node, initNibbleRange(key.data), 0, true)
+    if storageKeys.isNil:
+      # we have storage but not touched  by EVM
+      wb.writeHashNode(acc.storageRoot.data)
+    elif acc.storageRoot != emptyRlpHash:
+      var zz = StackElem(
+        node: wb.db.get(acc.storageRoot.data),
+        parentGroup: storageKeys.initGroup(),
+        keys: storageKeys,
+        depth: 0,          # reset depth
+        storageMode: true  # switch to storage mode
+      )
+      getBranchRecurseAux(wb, zz)
     else:
       wb.writeHashNode(emptyRlpHash.data)
 
   #0x00 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32>
   #0x01 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32> bytecode:<Bytecode> storage:<Tree_Node(0,1)>
 
-proc writeAccountStorageLeafNode(wb: var WitnessBuilder, val: UInt256, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
+proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], val: UInt256, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
   wb.output.append(StorageLeafNodeType.byte)
+
+  when defined(debugHash):
+    wb.writeU32(node.len.uint32)
+    wb.output.append(node)
+
+  when defined(debugDepth):
+    wb.output.append(depth.byte)
+
   doAssert(nibbles.len == 64 - depth)
   wb.writeNibbles(nibbles, false)
 
-  # TODO: write key
-  # wb.output.append(key.toByteArrayBE)
-  wb.output.append(val.toByteArrayBE)
+  wb.output.append(key)
+  wb.output.append(val.toBytesBE)
 
   #<Storage_Leaf_Node(d<65)> := pathnibbles:<Nibbles(64-d))> key:<Bytes32> val:<Bytes32>
 
-proc writeShortNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool) =
-  var nodeRlp = rlpFromBytes node
-  if not nodeRlp.hasData or nodeRlp.isEmpty: return
-  case nodeRlp.listLen
-  of 2:
-    let (isLeaf, k) = nodeRlp.extensionNodeKey
-    if isLeaf:
-      if storageMode:
-        let val = nodeRlp.listElem(1).toBytes.decode(UInt256)
-        writeAccountStorageLeafNode(wb, val, k, node, depth)
-      else:
-        let acc = nodeRlp.listElem(1).toBytes.decode(Account)
-        writeAccountNode(wb, acc, k, node, depth)
-    else:
-      # why this short extension node have no
-      # child and still valid when we reconstruct
-      # the trie on the other side?
-      # a bug in hexary trie algo?
-      # or a bug in nim hexary trie implementation?
-      writeExtensionNode(wb, k, depth, node)
-  of 17:
-    let branchMask = rlpListToBitmask(nodeRlp)
-    writeBranchNode(wb, branchMask, depth, node)
-
-    for i in 0..<16:
-      if branchMask.branchMaskBitIsSet(i):
-        var branch = nodeRlp.listElem(i)
-        let nextLookup = branch.getNode
-        writeShortNode(wb, nextLookup, depth + 1, storageMode)
-
-    # contrary to yellow paper spec,
-    # the 17th elem never exist in reality.
-    # block witness spec also omit it.
-    # probably a flaw in hexary trie design
-    # 17th elem should always empty
-    doAssert branchMask.branchMaskBitIsSet(16) == false
-  else:
-    raise newException(CorruptedTrieDatabase,
-      "HexaryTrie short node with an unexpected number of children")
-
-proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: NibblesSeq, depth: int, storageMode: bool) =
-  var nodeRlp = rlpFromBytes node
-  if not nodeRlp.hasData or nodeRlp.isEmpty: return
+proc getBranchRecurseAux(wb: var WitnessBuilder, z: var StackElem) =
+  if z.node.len == 0: return
+  var nodeRlp = rlpFromBytes z.node
 
   case nodeRlp.listLen
   of 2:
     let (isLeaf, k) = nodeRlp.extensionNodeKey
-    let sharedNibbles = sharedPrefixLen(path, k)
-    if sharedNibbles == k.len:
-      let value = nodeRlp.listElem(1)
-      if not isLeaf:
-        # ExtensionNodeType
-        writeExtensionNode(wb, k, depth, node)
-        let nextLookup = value.getNode
-        getBranchRecurseAux(wb, nextLookup, path.slice(sharedNibbles), depth + sharedNibbles, storageMode)
-      else:
-        # AccountNodeType
-        if storageMode:
-          writeAccountStorageLeafNode(wb, value.toBytes.decode(UInt256), k, node, depth)
+    var match = false
+    for mg in groups(z.keys, z.depth, k, z.parentGroup):
+      if mg.match:
+        doAssert(match == false) # should be only one match
+        match = true
+        let value = nodeRlp.listElem(1)
+        if not isLeaf:
+          # ExtensionNodeType
+          writeExtensionNode(wb, k, z.depth, z.node)
+          var zz = StackElem(
+            node: value.getNode,
+            parentGroup: mg.group,
+            keys: z.keys,
+            depth: z.depth + k.len,
+            storageMode: z.storageMode
+          )
+          getBranchRecurseAux(wb, zz)
         else:
-          writeAccountNode(wb, value.toBytes.decode(Account), k, node, depth)
-    else:
-      # this is a potential branch for multiproof
-      writeHashNode(wb, keccak(node).data)
+          let kd = keyData(z.keys, mg.group)
+          if z.storageMode:
+            doAssert(kd.storageMode)
+            writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), k, z.node, z.depth)
+          else:
+            doAssert(not kd.storageMode)
+            writeAccountNode(wb, kd.storageKeys, kd.address, value.toBytes.decode(Account), k, z.node, z.depth)
+    if not match:
+      writeHashNode(wb, keccak(z.node).data)
   of 17:
     let branchMask = rlpListToBitmask(nodeRlp)
-    writeBranchNode(wb, branchMask, depth, node)
+    writeBranchNode(wb, branchMask, z.depth, z.node)
+    let path = groups(z.keys, z.parentGroup, z.depth)
 
-    let notLeaf = path.len != 0
+    let notLeaf = z.depth != 63 # path.len == 0
     for i in 0..<16:
       if branchMask.branchMaskBitIsSet(i):
         var branch = nodeRlp.listElem(i)
-        if notLeaf and i == path[0].int:
-          let nextLookup = branch.getNode
-          getBranchRecurseAux(wb, nextLookup, path.slice(1), depth + 1, storageMode)
+        if notLeaf and branchMaskBitIsSet(path.mask, i):
+          var zz = StackElem(
+            node: branch.getNode,
+            parentGroup: path.groups[i],
+            keys: z.keys,
+            depth: z.depth + 1,
+            storageMode: z.storageMode
+          )
+          getBranchRecurseAux(wb, zz)
         else:
           if branch.isList:
-            let nextLookup = branch.getNode
-            writeShortNode(wb, nextLookup, depth + 1, storageMode)
+            doAssert(false, "Short node should not exist in block witness")
           else:
             # this is a potential branch for multiproof
             writeHashNode(wb, branch.expectHash)
@@ -245,8 +241,8 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, node: openArray[byte], path: Ni
     raise newException(CorruptedTrieDatabase,
                        "HexaryTrie node with an unexpected number of children")
 
-proc buildWitness*(wb: var WitnessBuilder; address: EthAddress, withVersion: bool = true): seq[byte]
-  {.raises: [ContractCodeError, IOError, WitnessError, Defect].} =
+proc buildWitness*(wb: var WitnessBuilder, keys: MultikeysRef, withVersion: bool = true): seq[byte]
+  {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
 
   # witness version
   wb.output.append(BlockWitnessVersion.byte)
@@ -255,13 +251,15 @@ proc buildWitness*(wb: var WitnessBuilder; address: EthAddress, withVersion: boo
 
   # we only output one tree
   wb.output.append(MetadataNothing.byte)
-  let key = keccak(address)
-   
-  try:
-    var node = wb.db.get(wb.root.data)
-    getBranchRecurseAux(wb, node, initNibbleRange(key.data), 0, false)
-  except CorruptedTrieDatabase, RlpTypeMismatch, CatchableError, Exception:
-    raise newException(WitnessError, getCurrentExceptionMsg())
+
+  var z = StackElem(
+    node: @(wb.db.get(wb.root.data)),
+    parentGroup: keys.initGroup(),
+    keys: keys,
+    depth: 0,
+    storageMode: false
+  )
+  getBranchRecurseAux(wb, z)
 
   # result
   result = wb.output.getOutput(seq[byte])

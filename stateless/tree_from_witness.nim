@@ -11,6 +11,10 @@ type
     usedBytes: int
     data: array[32, byte]
 
+  AccountAndSlots* = object
+    address*: EthAddress
+    slots*: seq[StorageSlot]
+
   TreeBuilder = object
     when defined(useInputStream):
       input: InputStream
@@ -20,6 +24,10 @@ type
     db: DB
     root: KeccakHash
     flags: WitnessFlags
+    keys: seq[AccountAndSlots]
+
+# this TreeBuilder support short node parsing
+# but a block witness should not contains short node
 
 # the InputStream still unstable
 # when using large dataset for testing
@@ -101,7 +109,7 @@ proc safeReadU32(t: var TreeBuilder): uint32 =
 template safeReadEnum(t: var TreeBuilder, T: type): untyped =
   let typ = t.safeReadByte.int
   if typ < low(T).int or typ > high(T).int:
-    raise newException(ParsingError, "Wrong " & T.name & " value")
+    raise newException(ParsingError, "Wrong " & T.name & " value " & $typ)
   T(typ)
 
 template safeReadBytes(t: var TreeBuilder, length: int, body: untyped) =
@@ -208,7 +216,8 @@ proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
     doAssert(readDepth == depth, "branchNode " & $readDepth & " vs. " & $depth)
 
   when defined(debugHash):
-    let hash = toKeccak(t.read(32))
+    var hash: NodeKey
+    toKeccak(hash, t.read(32))
 
   var r = initRlpList(17)
 
@@ -270,7 +279,8 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
     doAssert(readDepth == depth, "extensionNode " & $readDepth & " vs. " & $depth)
 
   when defined(debugHash):
-    let hash = toKeccak(t.read(32))
+    var hash: NodeKey
+    toKeccak(hash, t.read(32))
 
   assert(depth + nibblesLen < 65)
   let nodeType = safeReadEnum(t, TrieNodeType)
@@ -285,6 +295,13 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
     if result != hash:
       debugEcho "DEPTH: ", depth
     doAssert(result == hash, "EXT HASH DIFF " & result.data.toHex & " vs. " & hash.data.toHex)
+
+func toAddress(x: openArray[byte]): EthAddress =
+  result[0..19] = result[0..19]
+
+proc readAddress(t: var TreeBuilder) =
+  safeReadBytes(t, 20):
+    t.keys.add AccountAndSlots(address: toAddress(t.read(20)))
 
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
@@ -306,8 +323,7 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   safeReadBytes(t, pathLen):
     r.hexPrefix(t.read(pathLen), nibblesLen, true)
 
-  # TODO: parse address
-  # let address = toAddress(t.read(20))
+  t.readAddress()
 
   safeReadBytes(t, 64):
     var acc = Account(
@@ -353,22 +369,40 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
 
     doAssert(result == nodeKey, "account node parsing error")
 
+func toStorageSlot(x: openArray[byte]): StorageSlot =
+  result[0..31] = result[0..31]
+
+proc readStorageSlot(t: var TreeBuilder) =
+  safeReadBytes(t, 32):
+    t.keys[^1].slots.add toStorageSlot(t.read(32))
+
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
+
+  when defined(debugHash):
+    let len = t.safeReadU32().int
+    let node = @(t.read(len))
+    let nodeKey = t.toNodeKey(node)
+
+  when defined(debugDepth):
+    let readDepth = t.safeReadByte().int
+    doAssert(readDepth == depth, "accountNode " & $readDepth & " vs. " & $depth)
+
   let nibblesLen = 64 - depth
   var r = initRlpList(2)
   let pathLen = nibblesLen div 2 + nibblesLen mod 2
   safeReadBytes(t, pathLen):
     r.hexPrefix(t.read(pathLen), nibblesLen, true)
 
-  # TODO: parse key
-  # let key = @(t.read(32))
-  # UInt256 -> BytesBE -> keccak
+  t.readStorageSlot()
 
   safeReadBytes(t, 32):
     let val = UInt256.fromBytesBE(t.read(32))
     r.append rlp.encode(val)
     result = t.toNodeKey(r.finish)
+
+  when defined(debugHash):
+    doAssert(result == nodeKey, "account storage no parsing error")
 
 proc hashNode(t: var TreeBuilder): NodeKey =
   safeReadBytes(t, 32):

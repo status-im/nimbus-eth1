@@ -23,7 +23,8 @@ type
 
   ContractCodeError* = object of ValueError
   ParsingError* = object of ValueError
-  WitnessError* = object of ValueError
+
+  StorageSlot* = array[32, byte]
 
 const
   StorageLeafNodeType* = AccountNodeType
@@ -40,4 +41,4 @@ func branchMaskBitIsSet*(x: uint, i: int): bool {.inline.} =
 func constructBranchMask*(b1, b2: byte): uint {.inline.} =
   result = uint(b1) shl 8 or uint(b2)
   if countOnes(result) < 2 or ((result and (not 0x1FFFF'u)) != 0):
-    raise newException(ParsingError, "Invalid branch mask pattern")
+    raise newException(ParsingError, "Invalid branch mask pattern " & $result)
