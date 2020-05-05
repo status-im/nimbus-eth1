@@ -332,10 +332,11 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
       nonce: UInt256.fromBytesBE(t.read(32), false).truncate(AccountNonce)
     )
 
-    if accountType == SimpleAccountType:
+    case accountType
+    of SimpleAccountType:
       acc.codeHash = blankStringHash
       acc.storageRoot = emptyRlpHash
-    else:
+    of ExtendedAccountType:
       let codeLen = t.safeReadU32()
       if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
         raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
@@ -345,6 +346,15 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
 
       # switch to account storage parsing mode
       # and reset the depth
+      let storageRoot = t.treeNode(0, storageMode = true)
+      doAssert(storageRoot.usedBytes == 32)
+      acc.storageRoot.data = storageRoot.data
+    of CodeUntouched:
+      # TODO: should we check it is a hashNode ?
+      let codeHash = t.treeNode(depth)
+      doAssert(codeHash.usedBytes == 32)
+      acc.codeHash.data = codeHash.data
+
       let storageRoot = t.treeNode(0, storageMode = true)
       doAssert(storageRoot.usedBytes == 32)
       acc.storageRoot.data = storageRoot.data

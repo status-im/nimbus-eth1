@@ -31,9 +31,9 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
     check root.data == rootHash.data
 
     let newTrie = initSecureHexaryTrie(tb.getDB(), root)
-    for address in tester.keys.addresses:
-      let account = rlp.decode(trie.get(address), Account)
-      let recordFound = newTrie.get(address)
+    for kd in tester.keys.keys:
+      let account = rlp.decode(trie.get(kd.address), Account)
+      let recordFound = newTrie.get(kd.address)
       if recordFound.len > 0:
         let acc = rlp.decode(recordFound, Account)
         doAssert acc == account

@@ -10,6 +10,7 @@ type
   AccountType* = enum
     SimpleAccountType
     ExtendedAccountType
+    CodeUntouched
 
   WitnessFlag* = enum
     wfNoFlag

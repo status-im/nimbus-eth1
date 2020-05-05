@@ -107,8 +107,8 @@ proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
 
 proc getBranchRecurseAux(wb: var WitnessBuilder, z: var StackElem) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].}
 
-proc writeAccountNode(wb: var WitnessBuilder, storageKeys: MultikeysRef, address: EthAddress,
-  acc: Account, nibbles: NibblesSeq, node: openArray[byte], depth: int) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
+proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles: NibblesSeq,
+  node: openArray[byte], depth: int) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
 
   # write type
   wb.output.append(AccountNodeType.byte)
@@ -121,17 +121,22 @@ proc writeAccountNode(wb: var WitnessBuilder, storageKeys: MultikeysRef, address
     wb.output.append(depth.byte)
 
   doAssert(nibbles.len == 64 - depth)
-  let accountType = if acc.codeHash == blankStringHash and acc.storageRoot == emptyRlpHash: SimpleAccountType
+  var accountType = if acc.codeHash == blankStringHash and acc.storageRoot == emptyRlpHash: SimpleAccountType
                     else: ExtendedAccountType
+
+  if not kd.codeTouched:
+    accountType = CodeUntouched
 
   wb.output.append(accountType.byte)
   wb.writeNibbles(nibbles, false)
-  wb.output.append(address)
+  wb.output.append(kd.address)
   wb.output.append(acc.balance.toBytesBE)
   wb.output.append(acc.nonce.u256.toBytesBE)
 
-  if accountType == ExtendedAccountType:
-    if acc.codeHash != blankStringHash:
+  if accountType != SimpleAccountType:
+    if not kd.codeTouched:
+      wb.writeHashNode(acc.codeHash.data)
+    elif acc.codeHash != blankStringHash:
       let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
       if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
         raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
@@ -140,14 +145,14 @@ proc writeAccountNode(wb: var WitnessBuilder, storageKeys: MultikeysRef, address
     else:
       wb.writeU32(0'u32)
 
-    if storageKeys.isNil:
+    if kd.storageKeys.isNil:
       # we have storage but not touched  by EVM
       wb.writeHashNode(acc.storageRoot.data)
     elif acc.storageRoot != emptyRlpHash:
       var zz = StackElem(
         node: wb.db.get(acc.storageRoot.data),
-        parentGroup: storageKeys.initGroup(),
-        keys: storageKeys,
+        parentGroup: kd.storageKeys.initGroup(),
+        keys: kd.storageKeys,
         depth: 0,          # reset depth
         storageMode: true  # switch to storage mode
       )
@@ -212,7 +217,7 @@ proc getBranchRecurseAux(wb: var WitnessBuilder, z: var StackElem) =
               writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), k, z.node, z.depth)
             else:
               doAssert(not kd.storageMode)
-              writeAccountNode(wb, kd.storageKeys, kd.address, value.toBytes.decode(Account), k, z.node, z.depth)
+              writeAccountNode(wb, kd, value.toBytes.decode(Account), k, z.node, z.depth)
     if not match:
       writeHashNode(wb, keccak(z.node).data)
   of 17:
