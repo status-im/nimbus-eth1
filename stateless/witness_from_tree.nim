@@ -227,9 +227,9 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
       else:
         # this should be only one match
         # if there is more than one match
-        # it means we encounter a rogue address
+        # it means we encounter an invalid address
         for kd in keyDatas(z.keys, mg.group):
-          if not match(kd, k, z.depth): continue # this is the rogue address
+          if not match(kd, k, z.depth): continue # skip the invalid address
           kd.visited = true
           if z.storageMode:
             doAssert(kd.storageMode)

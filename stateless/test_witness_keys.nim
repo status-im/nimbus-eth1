@@ -65,7 +65,7 @@ proc randAccount(db: DB): AccountDef =
 proc randAddress(): EthAddress =
   discard randomBytes(result.addr, sizeof(result))
 
-proc runTest(numPairs: int, testStatusIMPL: var TestStatus, useRogueKeys: static[bool] = false) =
+proc runTest(numPairs: int, testStatusIMPL: var TestStatus, addInvalidKeys: static[bool] = false) =
   var memDB = newMemoryDB()
   var trie = initSecureHexaryTrie(memDB)
   var addrs = newSeq[AccountKey](numPairs)
@@ -77,10 +77,10 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus, useRogueKeys: static
     accs[i]  = acc.account
     trie.put(addrs[i].address, rlp.encode(accs[i]))
 
-  when useRogueKeys:
-    # rogueAddress should not end up in block witness
-    let rogueAddress = randAddress()
-    addrs.add((rogueAddress, false, MultikeysRef(nil)))
+  when addInvalidKeys:
+    # invalidAddress should not end up in block witness
+    let invalidAddress = randAddress()
+    addrs.add((invalidAddress, false, MultikeysRef(nil)))
 
   var mkeys = newMultiKeys(addrs)
   let rootHash = trie.rootHash
@@ -106,9 +106,9 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus, useRogueKeys: static
       debugEcho "BUG IN TREE BUILDER ", i
       check false
 
-  when useRogueKeys:
+  when addInvalidKeys:
     for kd in mkeys.keys:
-      if kd.address == rogueAddress:
+      if kd.address == invalidAddress:
         check kd.visited == false
       else:
         check kd.visited == true
@@ -116,7 +116,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus, useRogueKeys: static
     for kd in mkeys.keys:
       check kd.visited == true
 
-proc witnesKeysMain() =
+proc witnessKeysMain() =
   suite "random keys block witness roundtrip test":
     randomize()
 
@@ -129,8 +129,8 @@ proc witnesKeysMain() =
       let rlpBytes = rlp.encode(acc)
       check rlpBytes.len > 32
 
-    test "rogue address ignored":
-      runTest(rand(1..30), testStatusIMPL, useRogueKeys = true)
+    test "invalid address ignored":
+      runTest(rand(1..30), testStatusIMPL, addInvalidKeys = true)
 
 when isMainModule:
   witnessKeysMain()

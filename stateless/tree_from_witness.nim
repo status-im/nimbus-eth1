@@ -365,6 +365,9 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
       doAssert(codeHash.usedBytes == 32)
       acc.codeHash.data = codeHash.data
 
+      # readCodeLen already save the codeLen
+      # along with recovered address
+      # we could discard it here
       discard t.readCodeLen()
 
       let storageRoot = t.treeNode(0, storageMode = true)
@@ -424,7 +427,7 @@ proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
     result = t.toNodeKey(r.finish)
 
   when defined(debugHash):
-    doAssert(result == nodeKey, "account storage no parsing error")
+    doAssert(result == nodeKey, "account storage leaf node parsing error")
 
 proc hashNode(t: var TreeBuilder): NodeKey =
   safeReadBytes(t, 32):
