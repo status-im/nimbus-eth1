@@ -116,7 +116,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus, addInvalidKeys: stat
     for kd in mkeys.keys:
       check kd.visited == true
 
-proc witnessKeysMain() =
+proc witnessKeysMain*() =
   suite "random keys block witness roundtrip test":
     randomize()
 
