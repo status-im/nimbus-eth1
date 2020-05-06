@@ -174,6 +174,8 @@ proc buildTree*(t: var TreeBuilder): KeccakHash
 
   result.data = res.data
 
+# after the block witness spec mention how to split the big tree into
+# chunks, modify this buildForest into chunked witness tree builder
 proc buildForest*(t: var TreeBuilder): seq[KeccakHash]
   {.raises: [ContractCodeError, Defect, IOError, ParsingError, Exception].} =
   let version = t.safeReadByte().int
@@ -270,10 +272,8 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   assert(nibblesLen < 65)
   var r = initRlpList(2)
   let pathLen = nibblesLen div 2 + nibblesLen mod 2
-  if t.readable(pathLen):
+  safeReadBytes(t, pathLen):
     r.hexPrefix(t.read(pathLen), nibblesLen)
-  else:
-    raise newException(ParsingError, "Failed when read nibbles path")
 
   when defined(debugDepth):
     let readDepth = t.safeReadByte().int

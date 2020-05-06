@@ -42,6 +42,8 @@ template getNode(elem: untyped): untyped =
   else: @(get(wb.db, elem.expectHash))
 
 proc rlpListToBitmask(r: var Rlp): uint =
+  # only bit 1st to 16th are valid
+  # the 1st bit is the rightmost bit
   var i = 0
   for branch in r:
     if not branch.isEmpty:
@@ -110,7 +112,10 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
     wb.write(keccak(node).data)
 
 proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
-  # write type
+  # usually a hash node means the recursion will not go deeper
+  # and the information can be represented by the hash
+  # for chunked witness, a hash node can be a root to another
+  # sub-trie in one of the chunks
   wb.writeByte(HashNodeType)
   wb.write(node)
 
@@ -144,6 +149,8 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
 
   if accountType != SimpleAccountType:
     if not kd.codeTouched:
+      # the account have code but not touched by the EVM
+      # in current block execution
       wb.writeHashNode(acc.codeHash.data)
       let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
       if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
@@ -151,18 +158,21 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
       wb.writeU32(code.len)
       # no code here
     elif acc.codeHash != blankStringHash:
+      # the account have code and the EVM use it
       let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
       if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
         raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
       wb.writeU32(code.len)
       wb.write(code)
     else:
+      # no code
       wb.writeU32(0'u32)
 
     if kd.storageKeys.isNil:
-      # we have storage but not touched  by EVM
+      # the account have storage but not touched by EVM
       wb.writeHashNode(acc.storageRoot.data)
     elif acc.storageRoot != emptyRlpHash:
+      # the account have storage and the EVM use it
       var zz = StackElem(
         node: wb.db.get(acc.storageRoot.data),
         parentGroup: kd.storageKeys.initGroup(),
@@ -172,7 +182,12 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
       )
       getBranchRecurse(wb, zz)
     else:
+      # no storage at all
       wb.writeHashNode(emptyRlpHash.data)
+
+  # rule 0x01 and 0x02 can be optimized again to save some bytes
+  # nibbles can be removed to save space, it can be constructed by the parser
+  # using depth dan hash of address with `nibblesLen = 64-depth` (right side bytes)
 
   #0x00 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32>
   #0x01 pathnibbles:<Nibbles(64-d)> address:<Address> balance:<Bytes32> nonce:<Bytes32> bytecode:<Bytecode> storage:<Tree_Node(0,1)>
@@ -189,6 +204,8 @@ proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], v
     wb.writeByte(depth)
 
   doAssert(nibbles.len == 64 - depth)
+  # nibbles can be removed to save space, it can be constructed by the parser
+  # using depth dan hash of key with `nibblesLen = 64-depth` (right side bytes)
   wb.writeNibbles(nibbles, false)
 
   wb.write(key)
@@ -262,12 +279,18 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
         getBranchRecurse(wb, zz)
       else:
         if branch.isList:
+          # short node appear in yellow paper
+          # but never in the actual ethereum state trie
+          # an rlp encoded ethereum account will have length > 32 bytes
+          # block witness spec silent about this
           doAssert(false, "Short node should not exist in block witness")
         else:
-          # this is a potential branch for multiproof
           writeHashNode(wb, branch.expectHash)
 
     # 17th elem should always empty
+    # 17th elem appear in yellow paper but never in
+    # the actual ethereum state trie
+    # the 17th elem also not included in block witness spec
     doAssert branchMask.branchMaskBitIsSet(16) == false
   else:
     raise newException(CorruptedTrieDatabase,
@@ -281,7 +304,9 @@ proc buildWitness*(wb: var WitnessBuilder, keys: MultikeysRef): seq[byte]
 
   # one or more trees
 
-  # we only output one tree
+  # we only output one big tree here
+  # the condition to split the big tree into chunks of sub-tries
+  # is not clear in the spec
   wb.writeByte(MetadataNothing)
 
   var z = StackElem(
