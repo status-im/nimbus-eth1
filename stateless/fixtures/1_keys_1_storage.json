@@ -1,0 +1,31 @@
+{
+  "version": "0x01",
+  "metadata": "0x00",
+  "rootHash": "0x2af20e6d155f062f13319df2522dc1b19706166c572fff568f7afcfe50d421f7",
+  "error": false,
+  "tree": [
+    {
+      "nodeType": "0x02",
+      "accountType": "0x01",
+      "nibblesLen": "0x40",
+      "nibbles": "0x779891bdc86c2bdf66c3f02e1739f844b59aeaaced042c9d8b11aca1efc6f990",
+      "address": "0xe1a66344fefd992aba54d642abb46043884d7d8b",
+      "balance": "0xaec8cd0040b3f805e16dc0e4340a7134f32e0186262252a190c214bc3ea970a7",
+      "nonce": "0x00000000000000000000000000000000000000000000000018a122e48d24b58e",
+      "codeLen": "0x000000000",
+      "storage": [
+        {
+          "nodeType": "0x02",
+          "nibblesLen": "0x40",
+          "nibbles": "0x038bd7229bd983fb7bc1c47da7fede25c018488803828f1b76c1bb586e87d15c",
+          "key": "0x3e4ba4c3e4e0faed0e2990176fb877b6a9552220313bd7b39f17a52b0bf9f6a6",
+          "value": "0x7cd9fb303af52a9080c1a07a4a64324e812b9d0c9dc03812933baa07083109ad",
+          "debugDepth": "0x00",
+          "debugHash": "0x87201020c1cab91a289a28afd098cdf6097050e5f32193ca404055abdb182a53"
+        }
+      ],
+      "debugDepth": "0x00",
+      "debugHash": "0x2af20e6d155f062f13319df2522dc1b19706166c572fff568f7afcfe50d421f7"
+    }
+  ]
+}

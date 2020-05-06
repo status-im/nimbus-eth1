@@ -1,0 +1,28 @@
+{
+  "version": "0x01",
+  "metadata": "0x00",
+  "rootHash": "0x3351528d9bc2a80f8a7f723c20f17149972e3f52ba016f6b4bafc999c56754f2",
+  "error": false,
+  "tree": [
+    {
+      "nodeType": "0x02",
+      "accountType": "0x02",
+      "nibblesLen": "0x40",
+      "nibbles": "0xfbd9428c5938814d24d63030b68031f1c84f54d725cd3e75fb469dd771308c0c",
+      "address": "0xecd2a78a540f09d7ea17f60fa0400b3bead91c03",
+      "balance": "0x1b20fa477e39fd4e558cc223a002babdace335d0f1678dbf6744f6172da84bf2",
+      "nonce": "0x000000000000000000000000000000000000000000000000f4871685648221cd",
+      "codeHash": {
+        "nodeType": "0x03",
+        "data": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+      },
+      "codeLen": "0x000000000",
+      "storageRoot": {
+        "nodeType": "0x03",
+        "data": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+      },
+      "debugDepth": "0x00",
+      "debugHash": "0x3351528d9bc2a80f8a7f723c20f17149972e3f52ba016f6b4bafc999c56754f2"
+    }
+  ]
+}
