@@ -101,41 +101,52 @@ func groups*(m: MultikeysRef, parentGroup: Group, depth: int): BranchGroup =
       setBranchMaskBit(result.mask, nibble.int)
       result.groups[nibble.int] = g
 
-iterator groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group): MatchGroup =
+func groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group): MatchGroup =
   # using common-prefix comparison, this iterator
-  # will produce groups, usually only one match group
-  # the rest will be not match
-  # in case of wrong path, there will be no match at all
-  var g = Group(first: parentGroup.first, last: parentGroup.first)
-  var match = compareNibbles(m.keys[g.first].hash, depth, n)
-  let last = parentGroup.last
-  var haveGroup = false
-  var groupResult: Group
-  var matchResult: bool
-  for i in parentGroup.first..parentGroup.last:
-    if compareNibbles(m.keys[i].hash, depth, n) != match:
-      g.last = i - 1
-      haveGroup = true
-      matchResult = match
-      groupResult = g
-      match = not match
-      g = Group(first: g.last, last: g.last)
-    if i == last:
-      haveGroup = true
-      g.last = last
-      groupResult = g
-      matchResult = match
-    if haveGroup:
-      haveGroup = false
-      yield (matchResult, groupResult)
+  # will produce one match group or no match at all
+  var g = Group(first: parentGroup.first)
 
-iterator keyDatas*(m: MultikeysRef, g: Group): var KeyData =
-  for i in g.first..g.last:
-    yield m.keys[i]
+  if compareNibbles(m.keys[g.first].hash, depth, n):
+    var i = g.first + 1
+    while i <= parentGroup.last:
+      if not compareNibbles(m.keys[i].hash, depth, n):
+        g.last = i - 1
+        # condition 1: match and no match
+        return (true, g)
+      inc i
 
-iterator storageKeys*(m :MultikeysRef): MultikeysRef =
-  for x in m.keys:
-    yield x.storageKeys
+    # condition 2: all is a match group
+    g.last = parentGroup.last
+    return (true, g)
 
-func match*(kd: KeyData, n: NibblesSeq, depth: int): bool {.inline.} =
-  compareNibbles(kd.hash, depth, n)
+  # no match came first, skip no match
+  # we only interested in a match group
+  var i = g.first + 1
+  while i <= parentGroup.last:
+    if compareNibbles(m.keys[i].hash, depth, n):
+      g.first = i
+      break
+    inc i
+
+  if i <= parentGroup.last:
+    while i <= parentGroup.last:
+      if not compareNibbles(m.keys[i].hash, depth, n):
+        # condition 3: no match, match, and no match
+        g.last = i - 1
+        return (true, g)
+      inc i
+
+    # condition 4: no match and match
+    g.last = parentGroup.last
+    return (true, g)
+
+  # condition 5: no match at all
+  result = (false, g)
+
+func isValidMatch(mg: MatchGroup): bool =
+  result = mg.match and mg.group.first == mg.group.last
+
+proc visitMatch*(m: var MultikeysRef, mg: MatchGroup, depth: int, k: NibblesSeq): KeyData =
+  doAssert(mg.isValidMatch)
+  m.keys[mg.group.first].visited = true
+  result = m.keys[mg.group.first]

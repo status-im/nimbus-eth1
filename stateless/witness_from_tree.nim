@@ -219,42 +219,36 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
   case nodeRlp.listLen
   of 2:
     let (isLeaf, k) = nodeRlp.extensionNodeKey
-    var match = false
-    # only zero or one group can match the path
-    # but if there is a match, it can be in any position
-    # 1st, 2nd, or max 3rd position
-    # recursion will go deeper depend on the common-prefix length nibbles
-    for mg in groups(z.keys, z.depth, k, z.parentGroup):
-      if not mg.match: continue
-      doAssert(match == false) # should be only one match
-      match = true
-      let value = nodeRlp.listElem(1)
-      if not isLeaf:
-        # ExtensionNodeType
-        writeExtensionNode(wb, k, z.depth, z.node)
-        var zz = StackElem(
-          node: value.getNode,
-          parentGroup: mg.group,
-          keys: z.keys,
-          depth: z.depth + k.len,
-          storageMode: z.storageMode
-        )
-        getBranchRecurse(wb, zz)
-      else:
-        # this should be only one match
-        # if there is more than one match
-        # it means we encounter an invalid address
-        for kd in keyDatas(z.keys, mg.group):
-          if not match(kd, k, z.depth): continue # skip the invalid address
-          kd.visited = true
-          if z.storageMode:
-            doAssert(kd.storageMode)
-            writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), k, z.node, z.depth)
-          else:
-            doAssert(not kd.storageMode)
-            writeAccountNode(wb, kd, value.toBytes.decode(Account), k, z.node, z.depth)
-    if not match:
+    let mg = groups(z.keys, z.depth, k, z.parentGroup)
+
+    if not mg.match:
+      # return immediately if there is no match
       writeHashNode(wb, keccak(z.node).data)
+      return
+
+    let value = nodeRlp.listElem(1)
+    if not isLeaf:
+      # recursion will go deeper depend on the common-prefix length nibbles
+      writeExtensionNode(wb, k, z.depth, z.node)
+      var zz = StackElem(
+        node: value.getNode,
+        parentGroup: mg.group,
+        keys: z.keys,
+        depth: z.depth + k.len,
+        storageMode: z.storageMode
+      )
+      getBranchRecurse(wb, zz)
+      return
+
+    # there should be only one match
+    let kd = z.keys.visitMatch(mg, z.depth, k)
+    if z.storageMode:
+      doAssert(kd.storageMode)
+      writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), k, z.node, z.depth)
+    else:
+      doAssert(not kd.storageMode)
+      writeAccountNode(wb, kd, value.toBytes.decode(Account), k, z.node, z.depth)
+
   of 17:
     let branchMask = rlpListToBitmask(nodeRlp)
     writeBranchNode(wb, branchMask, z.depth, z.node)

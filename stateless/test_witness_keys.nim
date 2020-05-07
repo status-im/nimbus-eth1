@@ -1,6 +1,6 @@
 import
-  randutils, random, unittest,
-  eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
+  randutils, random, unittest, stew/byteutils,
+  eth/[common, rlp], eth/trie/[hexary, db, trie_defs, nibbles],
   faststreams/input_stream, nimcrypto/sysrand,
   ../stateless/[witness_from_tree, tree_from_witness],
   ../nimbus/db/storage_types, ./witness_types, ./multi_keys
@@ -109,12 +109,20 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus, addInvalidKeys: stat
   when addInvalidKeys:
     for kd in mkeys.keys:
       if kd.address == invalidAddress:
-        check kd.visited == false
+         check kd.visited == false
       else:
         check kd.visited == true
   else:
     for kd in mkeys.keys:
       check kd.visited == true
+
+proc initMultiKeys(keys: openArray[string]): MultikeysRef =
+  result.new
+  for x in keys:
+    result.keys.add KeyData(
+      storageMode: false,
+      hash: hexToByteArray[32](x)
+    )
 
 proc witnessKeysMain*() =
   suite "random keys block witness roundtrip test":
@@ -132,5 +140,88 @@ proc witnessKeysMain*() =
     test "invalid address ignored":
       runTest(rand(1..30), testStatusIMPL, addInvalidKeys = true)
 
+    test "case 1: all keys is a match":
+      let keys = [
+        "0abc7124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
+        "0abccc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606",
+        "0abca163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6bb"
+      ]
+
+      let m  = initMultiKeys(keys)
+      let pg = m.initGroup()
+      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let mg = m.groups(0, n, pg)
+      check:
+        mg.match == true
+        mg.group.first == 0
+        mg.group.last == 2
+
+    test "case 2: all keys is not a match":
+      let keys = [
+        "01237124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
+        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606",
+        "0456a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6bb"
+      ]
+
+      let m  = initMultiKeys(keys)
+      let pg = m.initGroup()
+      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let mg = m.groups(0, n, pg)
+      check:
+        mg.match == false
+
+    test "case 3: not match and match":
+      let keys = [
+        "01237124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
+        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606",
+        "0abc6a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
+        "0abc7a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b"
+      ]
+
+      let m  = initMultiKeys(keys)
+      let pg = m.initGroup()
+      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let mg = m.groups(0, n, pg)
+      check:
+        mg.match == true
+        mg.group.first == 2
+        mg.group.last == 3
+
+    test "case 4: match and not match":
+      let keys = [
+        "0abc6a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
+        "0abc7a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
+        "01237124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
+        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606"        
+      ]
+
+      let m  = initMultiKeys(keys)
+      let pg = m.initGroup()
+      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let mg = m.groups(0, n, pg)
+      check:
+        mg.match == true
+        mg.group.first == 0
+        mg.group.last == 1
+        
+    test "case 5: not match, match and not match":
+      let keys = [
+        "01237124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
+        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606",
+        "0abc6a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
+        "0abc7a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
+        "01237124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
+        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606"        
+      ]
+
+      let m  = initMultiKeys(keys)
+      let pg = m.initGroup()
+      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let mg = m.groups(0, n, pg)
+      check:
+        mg.match == true
+        mg.group.first == 2
+        mg.group.last == 3
+        
 when isMainModule:
   witnessKeysMain()
