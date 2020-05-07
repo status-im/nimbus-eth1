@@ -36,6 +36,7 @@ Every time you request a node using a hash key, you'll get one of the 3 types of
 * In Yellow Paper, the 17th elem of the `Branch Node` can contains a value. But it always empty in a real Ethereum State trie.
   The block witness spec also ignore this 17th elem when encoding or decoding `Branch Node`.
   This can happen because in Ethereum `Secure Hexary Trie`, every keys have uniform length of 32 bytes or 64 nibbles.
+  With the absence of 17th element, a `Branch Node` will never contains leaf value.
 * When processing a `Branch Node` you need to emit the `hash to next elem` if the elem is not match for the current path nibble.
 * When processing a `Leaf Node` or an `Extension Node` and you meet no match condition, you'll also emit a hash.
 
@@ -144,7 +145,7 @@ Because the match only involve one nibble, we advance the depth only one.
 
 ### Multi keys and Leaf Node and Extension Node
 
-If you encounter a Leaf Node or Extension Node, they will have the same algorithm to generate groups.
+If you encounter a `Leaf Node` or `Extension Node`, they will have the same algorithm to generate groups.
 For example, we are at `depth: 1`, and we are processing `group 3: [3, 5]`.
 Using the prefix nibbles from `Leaf Node` or `Extension Node`, we produce two groups if our prefix nibbles is `021`:
 
@@ -164,6 +165,7 @@ At max we will have 3 groups, and every possible combinations will be:
 * not match, match, not match(3 groups): a matching group is between two non matching groups.
 
 As you can see, we will only have a single match group or no match at all during constructing these groups.
+And we only interested in this match group if it exist and ignore all other not matching groups.
 
 #### A matching group for Extension Node
 
