@@ -43,3 +43,11 @@ func constructBranchMask*(b1, b2: byte): uint {.inline.} =
   result = uint(b1) shl 8 or uint(b2)
   if countOnes(result) < 2 or ((result and (not 0x1FFFF'u)) != 0):
     raise newException(ParsingError, "Invalid branch mask pattern " & $result)
+
+iterator nonEmpty*(branchMask: uint): int =
+  for i in 0..<16:
+    if not branchMask.branchMaskBitIsSet(i):
+      # we skip an empty elem
+      continue
+    yield i
+

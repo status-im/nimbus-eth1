@@ -176,7 +176,7 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
         node: wb.db.get(acc.storageRoot.data),
         parentGroup: kd.storageKeys.initGroup(),
         keys: kd.storageKeys,
-        depth: 0,          # reset depth
+        depth: 0,          # set depth to zero
         storageMode: true  # switch to storage mode
       )
       getBranchRecurse(wb, zz)
@@ -234,7 +234,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
         node: value.getNode,
         parentGroup: mg.group,
         keys: z.keys,
-        depth: z.depth + k.len,
+        depth: z.depth + k.len, # increase the depth by k.len
         storageMode: z.storageMode
       )
       getBranchRecurse(wb, zz)
@@ -252,33 +252,36 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
   of 17:
     let branchMask = rlpListToBitmask(nodeRlp)
     writeBranchNode(wb, branchMask, z.depth, z.node)
-    let path = groups(z.keys, z.parentGroup, z.depth)
 
     # if there is a match in any branch elem
     # 1st to 16th, the recursion will go deeper
     # by one nibble
-    let notLeaf = z.depth != 63 # path.len == 0
-    for i in 0..<16:
-      if not branchMask.branchMaskBitIsSet(i): continue
-      var branch = nodeRlp.listElem(i)
-      if notLeaf and branchMaskBitIsSet(path.mask, i):
+    doAssert(z.depth != 64) # notLeaf or path.len == 0
+
+    let path = groups(z.keys, z.parentGroup, z.depth)
+    for i in nonEmpty(branchMask):
+      let branch = nodeRlp.listElem(i)
+      if branchMaskBitIsSet(path.mask, i):
+        # it is a match between multikeys and Branch Node elem
         var zz = StackElem(
           node: branch.getNode,
           parentGroup: path.groups[i],
           keys: z.keys,
-          depth: z.depth + 1,
+          depth: z.depth + 1, # increase the depth by one
           storageMode: z.storageMode
         )
         getBranchRecurse(wb, zz)
+        continue
+
+      if branch.isList:
+        # short node appear in yellow paper
+        # but never in the actual ethereum state trie
+        # an rlp encoded ethereum account will have length > 32 bytes
+        # block witness spec silent about this
+        doAssert(false, "Short node should not exist in block witness")
       else:
-        if branch.isList:
-          # short node appear in yellow paper
-          # but never in the actual ethereum state trie
-          # an rlp encoded ethereum account will have length > 32 bytes
-          # block witness spec silent about this
-          doAssert(false, "Short node should not exist in block witness")
-        else:
-          writeHashNode(wb, branch.expectHash)
+        # if branch elem not empty and not a match, emit hash
+        writeHashNode(wb, branch.expectHash)
 
     # 17th elem should always empty
     # 17th elem appear in yellow paper but never in
@@ -306,8 +309,8 @@ proc buildWitness*(wb: var WitnessBuilder, keys: MultikeysRef): seq[byte]
     node: @(wb.db.get(wb.root.data)),
     parentGroup: keys.initGroup(),
     keys: keys,
-    depth: 0,
-    storageMode: false
+    depth: 0,          # always start with a zero depth
+    storageMode: false # build account witness first
   )
   getBranchRecurse(wb, z)
 
