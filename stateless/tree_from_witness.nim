@@ -244,7 +244,7 @@ proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
       debugEcho "result: ", result.data.toHex, " vs. ", hash.data.toHex
 
 func hexPrefix(r: var RlpWriter, x: openArray[byte], nibblesLen: int, isLeaf: static[bool] = false) =
-  doAssert(nibblesLen <= 64)
+  doAssert(nibblesLen >= 1 and nibblesLen <= 64)
   var bytes: array[33, byte]
   if (nibblesLen mod 2) == 0: # even
     when isLeaf:

@@ -69,8 +69,7 @@ proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq, withLen: bool = true) =
   let nibblesLen = n.len
   let numBytes = nibblesLen div 2 + nibblesLen mod 2
   var bytes: array[32, byte]
-  doAssert(nibblesLen >= 1)
-  doAssert(numBytes >= 0  and numBytes <= 64)
+  doAssert(nibblesLen >= 1 and nibblesLen <= 64)
   for pos in 0..<n.len:
     if (pos and 1) != 0:
       bytes[pos div 2] = bytes[pos div 2] or n[pos]
