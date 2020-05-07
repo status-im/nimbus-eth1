@@ -82,7 +82,7 @@ proc runGenerator(numPairs, numSlots: int): string =
   result = wb.buildWitness(mkeys)
 
 proc writeHelp() =
-  echo "jsoin_witness_gen output --pairs:val --slots:val -s:val -p:val"
+  echo "json_witness_gen output --pairs:val --slots:val -s:val -p:val"
 
 proc main() =
   var filename: string
