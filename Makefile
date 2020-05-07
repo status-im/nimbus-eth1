@@ -25,8 +25,7 @@ TOOLS := \
 	persistBlockTestGen
 TOOLS_DIRS := \
 	premix \
-	tests \
-	waku
+	tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
@@ -164,14 +163,6 @@ wrappers-static: | build deps libnimbus.a
 		go build -ldflags "-linkmode external -extldflags '-static $(EXTRA_LIBS_STATIC)'" -o build/go_wrapper_example_static wrappers/wrapper_example.go wrappers/cfuncs.go
 	echo -e $(BUILD_MSG) "build/go_wrapper_whisper_example_static" && \
 		go build -ldflags "-linkmode external -extldflags '-static $(EXTRA_LIBS_STATIC)'" -o build/go_wrapper_whisper_example_static wrappers/wrapper_whisper_example.go wrappers/cfuncs.go
-
-wakunode: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim wakunode $(NIM_PARAMS) nimbus.nims
-
-wakusim: | build deps wakunode
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim wakusim $(NIM_PARAMS) nimbus.nims
 
 endif # "variables.mk" was not included
 
