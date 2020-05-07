@@ -62,7 +62,7 @@ jobs:
           build/nimbus.exe --help
           # fail fast
           export NIMTEST_ABORT_ON_ERROR=1
-          mingw32-make -j2 ARCH_OVERRIDE=${PLATFORM} test test-reproducibility wakusim
+          mingw32-make -j2 ARCH_OVERRIDE=${PLATFORM} test test-reproducibility
           # Disable libnimbus builds until https://github.com/nim-lang/Nim/issues/12759 is fixed.
           # Wrapper builds could then also get activated instead but need some rework for Windows.
           # mingw32-make -j2 ARCH_OVERRIDE=${PLATFORM} libnimbus.so

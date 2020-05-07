@@ -45,7 +45,6 @@ test_script:
   # Wrapper builds could then also get activated instead but need some rework for Windows.
   # - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% libnimbus.so
   # - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% libnimbus.a
-  - mingw32-make -j2 ARCH_OVERRIDE=%PLATFORM% wakusim
 
 deploy: off
 
