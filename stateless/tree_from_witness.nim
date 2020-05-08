@@ -307,7 +307,7 @@ proc readAddress(t: var TreeBuilder) =
 proc readCodeLen(t: var TreeBuilder): int =
   let codeLen = t.safeReadU32()
   if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
-    raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
+    raise newException(ContractCodeError, "code len exceed EIP170 code size limit: " & $codeLen)
   t.keys[^1].codeLen = codeLen.int
   result = codeLen.int
 

@@ -101,4 +101,6 @@ cliBuilder:
           ./test_transaction_json,
           ./test_blockchain_json,
           ../stateless/test_witness_keys,
-          ../stateless/test_block_witness
+          ../stateless/test_block_witness,
+          ../stateless/test_witness_json
+

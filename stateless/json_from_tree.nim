@@ -84,8 +84,8 @@ proc pop(wb: var WitnessBuilder) =
   wb.node = wb.jStack.pop()
 
 proc writeU32Impl(wb: var WitnessBuilder, x: uint32, name: string) =
-  let y = toBE(x)
-  wb.node[name] = newJString("0x0" & toHex(y.int, 8))
+  let y = toBytesBE(x)
+  wb.node[name] = newJString("0x" & toHex(y))
 
 template writeU32(wb: var WitnessBuilder, x: untyped, name: string) =
   wb.writeU32Impl(uint32(x), name)
@@ -176,8 +176,9 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
     else:
       wb.writeU32(0'u32, "codeLen")
 
+    wb.pushArray("storage")
     if kd.storageKeys.isNil:
-      wb.writeHashNode(acc.storageRoot.data, "storageRoot")
+      wb.writeHashNode(acc.storageRoot.data)
     elif acc.storageRoot != emptyRlpHash:
       var zz = StackElem(
         node: wb.db.get(acc.storageRoot.data),
@@ -186,11 +187,10 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles
         depth: 0,          # reset depth
         storageMode: true  # switch to storage mode
       )
-      wb.pushArray("storage")
       getBranchRecurse(wb, zz)
-      wb.pop()
     else:
-      wb.writeHashNode(emptyRlpHash.data, "storageRoot")
+      wb.writeHashNode(emptyRlpHash.data)
+    wb.pop()
 
   wb.writeByte(depth, "debugDepth")
   wb.write(keccak(node).data, "debugHash")
