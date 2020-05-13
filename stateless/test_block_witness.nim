@@ -38,7 +38,7 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
         let acc = rlp.decode(recordFound, Account)
         doAssert acc == account
       else:
-        doAssert(false, "BUG IN TREE BUILDER")
+        doAssert(false, "BUG IN WITNESS/TREE BUILDER")
 
   except ContractCodeError as e:
     debugEcho "CONTRACT CODE ERROR: ", e.msg
