@@ -1,7 +1,7 @@
 import
   randutils, random, unittest, stew/byteutils,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs, nibbles],
-  faststreams/input_stream, nimcrypto/sysrand,
+  faststreams/inputs, nimcrypto/sysrand,
   ../stateless/[witness_from_tree, tree_from_witness],
   ../nimbus/db/storage_types, ./witness_types, ./multi_keys
 
@@ -103,7 +103,7 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus, addInvalidKeys: stat
       let acc = rlp.decode(recordFound, Account)
       check acc == accs[i]
     else:
-      debugEcho "BUG IN TREE BUILDER ", i
+      debugEcho "BUG IN WITNESS/TREE BUILDER ", i
       check false
 
   when addInvalidKeys:
@@ -192,7 +192,7 @@ proc witnessKeysMain*() =
         "0abc6a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
         "0abc7a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
         "01237124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
-        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606"        
+        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606"
       ]
 
       let m  = initMultiKeys(keys)
@@ -203,7 +203,7 @@ proc witnessKeysMain*() =
         mg.match == true
         mg.group.first == 0
         mg.group.last == 1
-        
+
     test "case 5: not match, match and not match":
       let keys = [
         "01237124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
@@ -211,7 +211,7 @@ proc witnessKeysMain*() =
         "0abc6a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
         "0abc7a163140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
         "01237124bce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c3254",
-        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606"        
+        "0890cc5b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff56606"
       ]
 
       let m  = initMultiKeys(keys)
@@ -222,6 +222,6 @@ proc witnessKeysMain*() =
         mg.match == true
         mg.group.first == 2
         mg.group.last == 3
-        
+
 when isMainModule:
   witnessKeysMain()

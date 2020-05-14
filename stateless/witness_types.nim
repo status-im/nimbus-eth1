@@ -10,6 +10,9 @@ type
   AccountType* = enum
     SimpleAccountType
     ExtendedAccountType
+
+  BytecodeType* = enum
+    CodeTouched
     CodeUntouched
 
   WitnessFlag* = enum
@@ -50,4 +53,3 @@ iterator nonEmpty*(branchMask: uint): int =
       # we skip an empty elem
       continue
     yield i
-

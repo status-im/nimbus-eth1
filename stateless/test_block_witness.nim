@@ -1,7 +1,7 @@
 import
   unittest2, os, json, strutils,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  stew/byteutils, faststreams/input_stream,
+  stew/byteutils, faststreams/inputs,
   ../tests/[test_helpers, test_config],
   ../nimbus/db/accounts_cache, ./witness_types,
   ../stateless/[witness_from_tree, tree_from_witness],
@@ -38,7 +38,7 @@ proc testGetBranch(tester: Tester, rootHash: KeccakHash, testStatusIMPL: var Tes
         let acc = rlp.decode(recordFound, Account)
         doAssert acc == account
       else:
-        doAssert(false, "BUG IN TREE BUILDER")
+        doAssert(false, "BUG IN WITNESS/TREE BUILDER")
 
   except ContractCodeError as e:
     debugEcho "CONTRACT CODE ERROR: ", e.msg
