@@ -1,7 +1,7 @@
 import
   randutils, random, unittest, stew/byteutils,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs, nibbles],
-  faststreams/input_stream, nimcrypto/sysrand,
+  faststreams/inputs, nimcrypto/sysrand,
   ../stateless/[witness_from_tree, tree_from_witness],
   ../nimbus/db/storage_types, ./witness_types, ./multi_keys
 

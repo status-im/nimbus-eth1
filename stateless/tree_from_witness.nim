@@ -1,6 +1,6 @@
 import
   typetraits,
-  faststreams/input_stream, eth/[common, rlp], stint, stew/endians2,
+  faststreams/inputs, eth/[common, rlp], stint, stew/endians2,
   eth/trie/[db, trie_defs], nimcrypto/[keccak, hash],
   ./witness_types, stew/byteutils, ../nimbus/constants
 
@@ -243,26 +243,40 @@ proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
       debugEcho "DEPTH: ", depth
       debugEcho "result: ", result.data.toHex, " vs. ", hash.data.toHex
 
-func hexPrefix(r: var RlpWriter, x: openArray[byte], nibblesLen: int, isLeaf: static[bool] = false) =
+func hexPrefixExtension(r: var RlpWriter, x: openArray[byte], nibblesLen: int) =
+  # extension hexPrefix
   doAssert(nibblesLen >= 1 and nibblesLen <= 64)
   var bytes: array[33, byte]
+  let last = nibblesLen div 2
   if (nibblesLen mod 2) == 0: # even
-    when isLeaf:
-      bytes[0] = 0b0010_0000.byte
-    else:
-      bytes[0] = 0.byte
+    bytes[0] = 0.byte
     var i = 1
     for y in x:
       bytes[i] = y
       inc i
   else: # odd
-    when isLeaf:
-      bytes[0] = 0b0011_0000.byte or (x[0] shr 4)
-    else:
-      bytes[0] = 0b0001_0000.byte or (x[0] shr 4)
-    var last = nibblesLen div 2
+    bytes[0] = 0b0001_0000.byte or (x[0] shr 4)
     for i in 1..last:
       bytes[i] = (x[i-1] shl 4) or (x[i] shr 4)
+
+  r.append toOpenArray(bytes, 0, last)
+
+func hexPrefixLeaf(r: var RlpWriter, x: openArray[byte], depth: int) =
+  # leaf hexPrefix
+  doAssert(depth >= 0 and depth <= 64)
+  let nibblesLen = 64 - depth
+  var bytes: array[33, byte]
+  var start = depth div 2
+  if (nibblesLen mod 2) == 0: # even
+    bytes[0] = 0b0010_0000.byte
+  else: # odd
+    bytes[0] = 0b0011_0000.byte or (x[start] and 0x0F)
+    inc start
+
+  var i = 1
+  for z in start..31:
+    bytes[i] = x[z]
+    inc i
 
   r.append toOpenArray(bytes, 0, nibblesLen div 2)
 
@@ -273,7 +287,7 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   var r = initRlpList(2)
   let pathLen = nibblesLen div 2 + nibblesLen mod 2
   safeReadBytes(t, pathLen):
-    r.hexPrefix(t.read(pathLen), nibblesLen)
+    r.hexPrefixExtension(t.read(pathLen), nibblesLen)
 
   when defined(debugDepth):
     let readDepth = t.safeReadByte().int
@@ -298,11 +312,13 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
     doAssert(result == hash, "EXT HASH DIFF " & result.data.toHex & " vs. " & hash.data.toHex)
 
 func toAddress(x: openArray[byte]): EthAddress =
-  result[0..19] = result[0..19]
+  result[0..19] = x[0..19]
 
-proc readAddress(t: var TreeBuilder) =
+proc readAddress(t: var TreeBuilder): Hash256 =
   safeReadBytes(t, 20):
-    t.keys.add AccountAndSlots(address: toAddress(t.read(20)))
+    let address = toAddress(t.read(20))
+    result = keccak(address)
+    t.keys.add AccountAndSlots(address: address)
 
 proc readCodeLen(t: var TreeBuilder): int =
   let codeLen = t.safeReadU32()
@@ -317,6 +333,23 @@ proc readHashNode(t: var TreeBuilder): NodeKey =
     raise newException(ParsingError, "hash node expected but got " & $nodeType)
   result = t.hashNode()
 
+proc readByteCode(t: var TreeBuilder, acc: var Account) =
+  let bytecodeType = safeReadEnum(t, BytecodeType)
+  case bytecodeType
+  of CodeTouched:
+    let codeLen = t.readCodeLen()
+    safeReadBytes(t, codeLen):
+      acc.codeHash = t.writeCode(t.read(codeLen))
+  of CodeUntouched:
+    # readCodeLen already save the codeLen
+    # along with recovered address
+    # we could discard it here
+    discard t.readCodeLen()
+
+    let codeHash = t.readHashNode()
+    doAssert(codeHash.usedBytes == 32)
+    acc.codeHash.data = codeHash.data
+
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
 
@@ -330,14 +363,10 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     doAssert(readDepth == depth, "accountNode " & $readDepth & " vs. " & $depth)
 
   let accountType = safeReadEnum(t, AccountType)
-  let nibblesLen = 64 - depth
+  let addressHash = t.readAddress()
+
   var r = initRlpList(2)
-
-  let pathLen = nibblesLen div 2 + nibblesLen mod 2
-  safeReadBytes(t, pathLen):
-    r.hexPrefix(t.read(pathLen), nibblesLen, true)
-
-  t.readAddress()
+  r.hexPrefixLeaf(addressHash.data, depth)
 
   safeReadBytes(t, 64):
     var acc = Account(
@@ -351,25 +380,10 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
       acc.codeHash = blankStringHash
       acc.storageRoot = emptyRlpHash
     of ExtendedAccountType:
-      let codeLen = t.readCodeLen()
-      safeReadBytes(t, codeLen):
-        acc.codeHash = t.writeCode(t.read(codeLen))
+      t.readByteCode(acc)
 
       # switch to account storage parsing mode
       # and reset the depth
-      let storageRoot = t.treeNode(0, storageMode = true)
-      doAssert(storageRoot.usedBytes == 32)
-      acc.storageRoot.data = storageRoot.data
-    of CodeUntouched:
-      let codeHash = t.readHashNode()
-      doAssert(codeHash.usedBytes == 32)
-      acc.codeHash.data = codeHash.data
-
-      # readCodeLen already save the codeLen
-      # along with recovered address
-      # we could discard it here
-      discard t.readCodeLen()
-
       let storageRoot = t.treeNode(0, storageMode = true)
       doAssert(storageRoot.usedBytes == 32)
       acc.storageRoot.data = storageRoot.data
@@ -381,6 +395,9 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
 
   when defined(debugHash):
     if result != nodeKey:
+      debugEcho "Address: ", t.keys[^1].address.toHex
+      debugEcho "addressHash: ", addressHash.data.toHex
+      debugEcho "depth: ", depth
       debugEcho "result.usedBytes: ", result.usedBytes
       debugEcho "nodeKey.usedBytes: ", nodeKey.usedBytes
       var rlpa = rlpFromBytes(node)
@@ -395,11 +412,13 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     doAssert(result == nodeKey, "account node parsing error")
 
 func toStorageSlot(x: openArray[byte]): StorageSlot =
-  result[0..31] = result[0..31]
+  result[0..31] = x[0..31]
 
-proc readStorageSlot(t: var TreeBuilder) =
+proc readStorageSlot(t: var TreeBuilder): Hash256 =
   safeReadBytes(t, 32):
-    t.keys[^1].slots.add toStorageSlot(t.read(32))
+    let slot = toStorageSlot(t.read(32))
+    result = keccak(slot)
+    t.keys[^1].slots.add slot
 
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
   assert(depth < 65)
@@ -413,13 +432,9 @@ proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
     let readDepth = t.safeReadByte().int
     doAssert(readDepth == depth, "accountNode " & $readDepth & " vs. " & $depth)
 
-  let nibblesLen = 64 - depth
   var r = initRlpList(2)
-  let pathLen = nibblesLen div 2 + nibblesLen mod 2
-  safeReadBytes(t, pathLen):
-    r.hexPrefix(t.read(pathLen), nibblesLen, true)
-
-  t.readStorageSlot()
+  let slotHash = t.readStorageSlot()
+  r.hexPrefixLeaf(slotHash.data, depth)
 
   safeReadBytes(t, 32):
     let val = UInt256.fromBytesBE(t.read(32))

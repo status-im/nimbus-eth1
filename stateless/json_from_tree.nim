@@ -142,66 +142,75 @@ proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte], name: string) 
 
 proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem)
 
-proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
+proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
+  if not kd.codeTouched:
+    # the account have code but not touched by the EVM
+    # in current block execution
+    wb.writeByte(CodeUntouched, "codeType")
+    let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
+    if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
+      raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
+    wb.writeU32(code.len, "codeLen")
+    wb.writeHashNode(acc.codeHash.data, "codeHash")
+    # no need to write 'code' here
+    return
 
+  wb.writeByte(CodeTouched, "codeType")
+  if acc.codeHash == blankStringHash:
+    # no code
+    wb.writeU32(0'u32, "codeLen")
+    return
+
+  # the account have code and the EVM use it
+  let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
+  if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
+    raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
+  wb.writeU32(code.len, "codeLen")
+  wb.write(code, "code")
+
+proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
+  wb.pushArray("storage")
+  if kd.storageKeys.isNil:
+    # the account have storage but not touched by EVM
+    wb.writeHashNode(acc.storageRoot.data)
+  elif acc.storageRoot != emptyRlpHash:
+    # the account have storage and the EVM use it
+    var zz = StackElem(
+      node: wb.db.get(acc.storageRoot.data),
+      parentGroup: kd.storageKeys.initGroup(),
+      keys: kd.storageKeys,
+      depth: 0,          # set depth to zero
+      storageMode: true  # switch to storage mode
+    )
+    getBranchRecurse(wb, zz)
+  else:
+    # no storage at all
+    wb.writeHashNode(emptyRlpHash.data)
+  wb.pop()
+
+proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, node: openArray[byte], depth: int) =
   wb.addObject()
   wb.writeByte(AccountNodeType, "nodeType")
 
-  doAssert(nibbles.len == 64 - depth)
   var accountType = if acc.codeHash == blankStringHash and acc.storageRoot == emptyRlpHash: SimpleAccountType
                     else: ExtendedAccountType
 
-  if not kd.codeTouched:
-    accountType = CodeUntouched
-
   wb.writeByte(accountType, "accountType")
-  wb.writeNibbles(nibbles)
   wb.write(kd.address, "address")
   wb.write(acc.balance.toBytesBE, "balance")
   wb.write(acc.nonce.u256.toBytesBE, "nonce")
 
   if accountType != SimpleAccountType:
-    if not kd.codeTouched:
-      wb.writeHashNode(acc.codeHash.data, "codeHash")
-      let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
-      if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
-        raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
-      wb.writeU32(code.len, "codeLen")
-    elif acc.codeHash != blankStringHash:
-      let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
-      if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
-        raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
-      wb.writeU32(code.len, "codeLen")
-      wb.write(code, "code")
-    else:
-      wb.writeU32(0'u32, "codeLen")
-
-    wb.pushArray("storage")
-    if kd.storageKeys.isNil:
-      wb.writeHashNode(acc.storageRoot.data)
-    elif acc.storageRoot != emptyRlpHash:
-      var zz = StackElem(
-        node: wb.db.get(acc.storageRoot.data),
-        parentGroup: kd.storageKeys.initGroup(),
-        keys: kd.storageKeys,
-        depth: 0,          # reset depth
-        storageMode: true  # switch to storage mode
-      )
-      getBranchRecurse(wb, zz)
-    else:
-      wb.writeHashNode(emptyRlpHash.data)
-    wb.pop()
+    wb.writeByteCode(kd, acc)
+    wb.writeStorage(kd, acc)
 
   wb.writeByte(depth, "debugDepth")
   wb.write(keccak(node).data, "debugHash")
   wb.pop()
 
-proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], val: UInt256, nibbles: NibblesSeq, node: openArray[byte], depth: int) =
-  doAssert(nibbles.len == 64 - depth)
-
+proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], val: UInt256, node: openArray[byte], depth: int) =
   wb.addObject()
   wb.writeByte(StorageLeafNodeType, "nodeType")
-  wb.writeNibbles(nibbles)
   wb.write(key, "key")
   wb.write(val.toBytesBE, "value")
   wb.writeByte(depth, "debugDepth")
@@ -240,10 +249,10 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
     let kd = z.keys.visitMatch(mg, z.depth, k)
     if z.storageMode:
       doAssert(kd.storageMode)
-      writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), k, z.node, z.depth)
+      writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), z.node, z.depth)
     else:
       doAssert(not kd.storageMode)
-      writeAccountNode(wb, kd, value.toBytes.decode(Account), k, z.node, z.depth)
+      writeAccountNode(wb, kd, value.toBytes.decode(Account), z.node, z.depth)
 
   of 17:
     let branchMask = rlpListToBitmask(nodeRlp)

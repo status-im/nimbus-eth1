@@ -37,11 +37,25 @@ proc processStorage(t: var Tester, tree: JsonNode) =
   for x in tree:
     t.processNode(x, true)
 
+proc processByteCode(t: var Tester, x: JsonNode) =
+  let codeType = x["codeType"].getStr()
+  t.write(codeType)
+  case codeType
+  of "0x00":
+    let codeLen = x["codeLen"].getStr()
+    t.write(codeLen)
+    if codeLen != "0x00000000":
+      t.write(x["code"])
+  of "0x01":
+    t.write(x["codeLen"])
+    t.write("0x03")
+    t.processHashNode(x["codeHash"])
+  else:
+    doAssert(false, "wrong bytecode type")
+
 proc processAccountNode(t: var Tester, x: JsonNode) =
   let accountType = x["accountType"].getStr()
   t.write(accountType)
-  t.write(x["nibbles"])
-
   t.write(x["address"])
   t.write(x["balance"])
   t.write(x["nonce"])
@@ -50,21 +64,12 @@ proc processAccountNode(t: var Tester, x: JsonNode) =
   of "0x00":
     discard
   of "0x01":
-    let codeLen = x["codeLen"].getStr()
-    t.write(codeLen)
-    if codeLen != "0x00000000":
-      t.write(x["code"])
-    t.processStorage(x["storage"])
-  of "0x02":
-    t.write("0x03")
-    t.processHashNode(x["codeHash"])
-    t.write(x["codeLen"])
+    t.processByteCode(x)
     t.processStorage(x["storage"])
   else:
     doAssert(false, "wrong account type")
 
 proc processStorageLeafNode(t: var Tester, x: JsonNode) =
-  t.write(x["nibbles"])
   t.write(x["key"])
   t.write(x["value"])
 
