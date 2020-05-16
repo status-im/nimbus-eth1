@@ -44,7 +44,7 @@ proc processByteCode(t: var Tester, x: JsonNode) =
   of "0x00":
     let codeLen = x["codeLen"].getStr()
     t.write(codeLen)
-    if codeLen != "0x00000000":
+    if codeLen != "0x00":
       t.write(x["code"])
   of "0x01":
     t.write(x["codeLen"])

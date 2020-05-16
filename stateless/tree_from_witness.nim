@@ -119,6 +119,30 @@ template safeReadBytes(t: var TreeBuilder, length: int, body: untyped) =
   else:
     raise newException(ParsingError, "Failed when try to read " & $length & " bytes")
 
+proc readUVarint32(t: var TreeBuilder): uint32 =
+  # LEB128 varint encoding
+  var shift = 0
+  while true:
+    let b = t.safeReadByte()
+    result = result or ((b and 0x7F).uint32 shl shift)
+    if (0x80 and b) == 0:
+      break
+    inc(shift, 7)
+    if shift > 28:
+      raise newException(ParsingError, "Failed when try to uvarint32")
+
+proc readUVarint256(t: var TreeBuilder): UInt256 =
+  # LEB128 varint encoding
+  var shift = 0
+  while true:
+    let b = t.safeReadByte()
+    result = result or ((b and 0x7F).u256 shl shift)
+    if (0x80 and b) == 0:
+      break
+    inc(shift, 7)
+    if shift > 252:
+      raise newException(ParsingError, "Failed when try to uvarint256")
+
 proc toKeccak(r: var NodeKey, x: openArray[byte]) {.inline.} =
   r.data[0..31] = x[0..31]
   r.usedBytes = 32
@@ -321,7 +345,7 @@ proc readAddress(t: var TreeBuilder): Hash256 =
     t.keys.add AccountAndSlots(address: address)
 
 proc readCodeLen(t: var TreeBuilder): int =
-  let codeLen = t.safeReadU32()
+  let codeLen = t.readUVarint32()
   if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
     raise newException(ContractCodeError, "code len exceed EIP170 code size limit: " & $codeLen)
   t.keys[^1].codeLen = codeLen.int
@@ -368,27 +392,25 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
   var r = initRlpList(2)
   r.hexPrefixLeaf(addressHash.data, depth)
 
-  safeReadBytes(t, 64):
-    var acc = Account(
-      balance: UInt256.fromBytesBE(t.read(32), false),
-      # TODO: why nonce must be 32 bytes, isn't 64 bit uint  enough?
-      nonce: UInt256.fromBytesBE(t.read(32), false).truncate(AccountNonce)
-    )
+  var acc = Account(
+    balance: t.readUVarint256(),
+    nonce: t.readUVarint256().truncate(AccountNonce)
+  )
 
-    case accountType
-    of SimpleAccountType:
-      acc.codeHash = blankStringHash
-      acc.storageRoot = emptyRlpHash
-    of ExtendedAccountType:
-      t.readByteCode(acc)
+  case accountType
+  of SimpleAccountType:
+    acc.codeHash = blankStringHash
+    acc.storageRoot = emptyRlpHash
+  of ExtendedAccountType:
+    t.readByteCode(acc)
 
-      # switch to account storage parsing mode
-      # and reset the depth
-      let storageRoot = t.treeNode(0, storageMode = true)
-      doAssert(storageRoot.usedBytes == 32)
-      acc.storageRoot.data = storageRoot.data
+    # switch to account storage parsing mode
+    # and reset the depth
+    let storageRoot = t.treeNode(0, storageMode = true)
+    doAssert(storageRoot.usedBytes == 32)
+    acc.storageRoot.data = storageRoot.data
 
-    r.append rlp.encode(acc)
+  r.append rlp.encode(acc)
 
   let nodeRes = r.finish
   result = t.toNodeKey(nodeRes)
