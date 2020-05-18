@@ -93,6 +93,32 @@ template writeU32(wb: var WitnessBuilder, x: untyped, name: string) =
 template writeByte(wb: var WitnessBuilder, x: untyped, name: string) =
   writeByte(wb, byte(x), name)
 
+proc writeUVarint[T](wb: var WitnessBuilder, x: T, name: string) =
+  # LEB128 varint encoding
+  var data: array[50, byte]
+  var len = 0
+
+  template writeByte(x) =
+    data[len] = x.byte
+    inc len
+
+  var value = x
+  while true:
+    when T is UInt256:
+      var b = value.truncate(int) and 0x7F # low order 7 bits of value
+    else:
+      var b = value and 0x7F # low order 7 bits of value
+    value = value shr 7
+    if value != 0:         # more bytes to come
+      b = b or 0x80        # set high order bit of b
+    writeByte(b)
+    if value == 0: break
+
+  wb.write(data.toOpenArray(0, len-1), name)
+
+template writeUVarint32(wb: var WitnessBuilder, x: untyped, name: string) =
+  wb.writeUVarint(uint32(x), name)
+
 proc writeNibbles(wb: var WitnessBuilder; n: NibblesSeq) =
   # convert the NibblesSeq into left aligned byte seq
   # perhaps we can optimize it if the NibblesSeq already left aligned
@@ -150,7 +176,7 @@ proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
     let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
     if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
       raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
-    wb.writeU32(code.len, "codeLen")
+    wb.writeUVarint32(code.len, "codeLen")
     wb.writeHashNode(acc.codeHash.data, "codeHash")
     # no need to write 'code' here
     return
@@ -158,14 +184,14 @@ proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
   wb.writeByte(CodeTouched, "codeType")
   if acc.codeHash == blankStringHash:
     # no code
-    wb.writeU32(0'u32, "codeLen")
+    wb.writeUVarint32(0'u32, "codeLen")
     return
 
   # the account have code and the EVM use it
   let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
   if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
     raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
-  wb.writeU32(code.len, "codeLen")
+  wb.writeUVarint32(code.len, "codeLen")
   wb.write(code, "code")
 
 proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
@@ -197,8 +223,8 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account, node: o
 
   wb.writeByte(accountType, "accountType")
   wb.write(kd.address, "address")
-  wb.write(acc.balance.toBytesBE, "balance")
-  wb.write(acc.nonce.u256.toBytesBE, "nonce")
+  wb.writeUVarint(acc.balance, "balance")
+  wb.writeUVarint(acc.nonce, "nonce")
 
   if accountType != SimpleAccountType:
     wb.writeByteCode(kd, acc)

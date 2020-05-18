@@ -8,10 +8,10 @@
       "nodeType": "0x02",
       "accountType": "0x01",
       "address": "0x2a425b119d8bfa8fdb9852f731aaacec27ea76b1",
-      "balance": "0xc658f54abbd8739eca0f2067116e395edfc3d2961af34a4e42c261ab28776a6e",
-      "nonce": "0x000000000000000000000000000000000000000000000000d69f8b58337e75e5",
+      "balance": "0xeed4ddc3b2b598e1c29ca99aafc3a5e9c3bffbcae3adc4b3a09ea8f6b98ef6ddcaeae3b20c",
+      "nonce": "0xe5ebf99b83ebe2cfd601",
       "codeType": "0x00",
-      "codeLen": "0x00000040",
+      "codeLen": "0x40",
       "code": "0x3841c4b026645417401c750b610b3571de8fa8c219933057df4d1b890091a67b2480d3e07459bfa475156f691e0c56c2558c3d01370d15b7f5ceb6f672770899",
       "storage": [
         {
