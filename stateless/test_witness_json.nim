@@ -1,6 +1,6 @@
 import
   eth/common, eth/trie/db, json, os, unittest,
-  ../stateless/[tree_from_witness],
+  ./tree_from_witness, parseopt,
   ./witness_types, stew/byteutils
 
 type
@@ -132,7 +132,38 @@ proc runTest(filePath, fileName: string) =
       debugEcho "Error detected ", getCurrentExceptionMsg()
       check t.error == true
 
+proc writeFuzzData(filePath, fileName: string) =
+  let t = parseTester(filePath)
+  var db = newMemoryDB()
+  var tb = initTreeBuilder(t.output, db, {wfEIP170})
+  let root = tb.buildTree()
+  writeFile(filename, t.output)
+
 proc witnessJsonMain*() =
+  var filename: string
+  var numArg = 0
+
+  for kind, key, val in getopt():
+    case kind
+    of cmdArgument:
+      inc numArg
+      case numArg
+      of 1:
+        if key != "fuzz":
+          quit(1)
+      of 2:
+        filename = key
+      else:
+        discard
+    of cmdLongOption, cmdShortOption:
+      discard
+    of cmdEnd: assert(false) # cannot happen
+
+  if filename != "":
+    echo "generate fuzz data"
+    writeFuzzData(filename, "fuzz.data")
+    return
+
   for x in walkDirRec("stateless" / "fixtures"):
     let y = splitPath(x)
     runTest(x, y.tail)
