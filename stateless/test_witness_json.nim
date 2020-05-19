@@ -28,18 +28,28 @@ proc processExtensionNode(t: var Tester, x: JsonNode) =
   t.write(x["nibblesLen"])
   t.write(x["nibbles"])
 
-proc processHashNode(t: var Tester, x: JsonNode) =
-  t.write(x["data"])
-
 proc processNode(t: var Tester, x: JsonNode, storageMode: bool = false)
+
+proc writeSub(t: var Tester, x: JsonNode, name: string): string =
+  let subName = name & "Sub"
+  let nodeType = x[name].getStr()
+  if subName in x:
+    let subType = x[subName].getStr()
+    t.write(subType)
+  else:
+    t.write(nodeType)
+  result = nodeType
+
+proc processHashNode(t: var Tester, x: JsonNode) =
+  discard t.writeSub(x, "nodeType")
+  t.write(x["data"])
 
 proc processStorage(t: var Tester, tree: JsonNode) =
   for x in tree:
     t.processNode(x, true)
 
 proc processByteCode(t: var Tester, x: JsonNode) =
-  let codeType = x["codeType"].getStr()
-  t.write(codeType)
+  let codeType = t.writeSub(x, "codeType")
   case codeType
   of "0x00":
     let codeLen = x["codeLen"].getStr()
@@ -48,14 +58,12 @@ proc processByteCode(t: var Tester, x: JsonNode) =
       t.write(x["code"])
   of "0x01":
     t.write(x["codeLen"])
-    t.write("0x03")
     t.processHashNode(x["codeHash"])
   else:
-    doAssert(false, "wrong bytecode type")
+    raise newException(ParsingError, "wrong bytecode type")
 
 proc processAccountNode(t: var Tester, x: JsonNode) =
-  let accountType = x["accountType"].getStr()
-  t.write(accountType)
+  let accountType = t.writeSub(x, "accountType")
   t.write(x["address"])
   t.write(x["balance"])
   t.write(x["nonce"])
@@ -67,15 +75,14 @@ proc processAccountNode(t: var Tester, x: JsonNode) =
     t.processByteCode(x)
     t.processStorage(x["storage"])
   else:
-    doAssert(false, "wrong account type")
+    raise newException(ParsingError, "wrong account type")
 
 proc processStorageLeafNode(t: var Tester, x: JsonNode) =
   t.write(x["key"])
   t.write(x["value"])
 
 proc processNode(t: var Tester, x: JsonNode, storageMode: bool = false) =
-  let nodeType = x["nodeType"].getStr()
-  t.write(nodeType)
+  let nodeType = t.writeSub(x, "nodeType")
   case nodeType
   of "0x00": t.processBranchNode(x)
   of "0x01": t.processExtensionNode(x)
@@ -84,9 +91,10 @@ proc processNode(t: var Tester, x: JsonNode, storageMode: bool = false) =
       t.processStorageLeafNode(x)
     else:
       t.processAccountNode(x)
-  of "0x03": t.processHashNode(x)
+  of "0x03":
+    t.write(x["data"])
   else:
-    doAssert(false, "wrong node type")
+    raise newException(ParsingError, "wrong node type")
 
 proc parseRootHash(x: string): KeccakHash =
   result.data = hexToByteArray[32](x)
@@ -98,8 +106,11 @@ proc parseTester(t: var Tester, n: JsonNode) =
   t.write(n["metadata"])
 
   let tree = n["tree"]
-  for x in tree:
-    t.processNode(x)
+  try:
+    for x in tree:
+      t.processNode(x)
+  except ParsingError:
+    check t.error == true
 
 proc parseTester(filename: string): Tester =
   let n = parseFile(filename)
@@ -109,9 +120,17 @@ proc runTest(filePath, fileName: string) =
   test fileName:
     let t = parseTester(filePath)
     var db = newMemoryDB()
-    var tb = initTreeBuilder(t.output, db, {wfEIP170})
-    let root = tb.buildTree()
-    check root == t.rootHash
+    try:
+      var tb = initTreeBuilder(t.output, db, {wfEIP170})
+      let root = tb.buildTree()
+      if t.error:
+        check root != t.rootHash
+      else:
+        check root == t.rootHash
+        check t.error == false
+    except ParsingError, ContractCodeError:
+      debugEcho "Error detected ", getCurrentExceptionMsg()
+      check t.error == true
 
 proc witnessJsonMain*() =
   for x in walkDirRec("stateless" / "fixtures"):

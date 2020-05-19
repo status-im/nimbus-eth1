@@ -99,13 +99,13 @@ proc safeReadByte(t: var TreeBuilder): byte =
   if t.readable:
     result = t.readByte()
   else:
-    raise newException(IOError, "Cannot read byte from input stream")
+    raise newException(ParsingError, "Cannot read byte from input stream")
 
 proc safeReadU32(t: var TreeBuilder): uint32 =
   if t.readable(4):
     result = fromBytesBE(uint32, t.read(4))
   else:
-    raise newException(IOError, "Cannot read U32 from input stream")
+    raise newException(ParsingError, "Cannot read U32 from input stream")
 
 template safeReadEnum(t: var TreeBuilder, T: type): untyped =
   let typ = t.safeReadByte.int
