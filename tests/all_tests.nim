@@ -11,12 +11,12 @@ import threadpool
 # AppVeyor may go out of memory with the default of 4
 setMinPoolSize(2)
 
-proc executeMyself(numModules: int): int =
+proc executeMyself(numModules: int, names: openArray[string]): int =
   let appName = getAppFilename()
   for i in 0..<numModules:
     let execResult = execCmd(appName & " " & $i)
     if execResult != 0:
-      stderr.writeLine("subtest no: " & $i & " failed")
+      stderr.writeLine("subtest no: " & $i & " failed: " & names[i])
     result = result or execResult
 
 proc getImportStmt(stmtList: NimNode): NimNode =
@@ -35,9 +35,16 @@ proc ofStmt(idx: int, singleModule: NimNode): NimNode =
     newCall(moduleMain)
   )
 
+proc toModuleNames(importStmt: NimNode): NimNode =
+  result = nnkBracket.newTree
+  for singleModule in importStmt:
+    let x = normalize(singleModule.toStrLit.strVal)
+    result.add newLit(x)
+
 macro cliBuilder(stmtList: typed): untyped =
   let importStmt = stmtList.getImportStmt
   let moduleCount = importStmt.len
+  let moduleNames = importStmt.toModuleNames
 
   # case paramStr(1).parseInt
   var caseStmt = nnkCaseStmt.newTree(
@@ -59,7 +66,8 @@ macro cliBuilder(stmtList: typed): untyped =
 
   result = quote do:
     if paramCount() == 0:
-      quit(executeMyself(`moduleCount`))
+      let names = `moduleNames`
+      quit(executeMyself(`moduleCount`, names))
     else:
       disableParamFiltering()
       `caseStmt`
@@ -79,28 +87,28 @@ macro cliBuilder(stmtList: typed): untyped =
 # you can execute the sub-test by a number start from zero.
 
 cliBuilder:
-  import  ./test_code_stream,
-          ./test_gas_meter,
-          ./test_memory,
-          ./test_stack,
-          ./test_genesis,
-          ./test_vm_json,
-          ./test_precompiles,
-          ./test_generalstate_json,
-          ./test_tracer_json,
-          ./test_persistblock_json,
+  import  #./test_code_stream,
+          #./test_gas_meter,
+          #./test_memory,
+          #./test_stack,
+          #./test_genesis,
+          #./test_vm_json,
+          #./test_precompiles,
+          #./test_generalstate_json,
+          #./test_tracer_json,
+          #./test_persistblock_json,
           #./test_rpc, # it crash if we combine it here
-          ./test_op_arith,
-          ./test_op_bit,
-          ./test_op_env,
-          ./test_op_memory,
-          ./test_op_misc,
-          ./test_op_custom,
-          ./test_state_db,
-          ./test_difficulty,
-          ./test_transaction_json,
-          ./test_blockchain_json,
+          #./test_op_arith,
+          #./test_op_bit,
+          #./test_op_env,
+          #./test_op_memory,
+          #./test_op_misc,
+          #./test_op_custom,
+          #./test_state_db,
+          #./test_difficulty,
+          #./test_transaction_json,
+          #./test_blockchain_json,
           ../stateless/test_witness_keys,
-          ../stateless/test_block_witness,
+          #../stateless/test_block_witness,
           ../stateless/test_witness_json
 
