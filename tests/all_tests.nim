@@ -66,7 +66,7 @@ macro cliBuilder(stmtList: typed): untyped =
 
   result = quote do:
     if paramCount() == 0:
-      let names = `moduleNames`
+      const names = `moduleNames`
       quit(executeMyself(`moduleCount`, names))
     else:
       disableParamFiltering()
@@ -87,28 +87,28 @@ macro cliBuilder(stmtList: typed): untyped =
 # you can execute the sub-test by a number start from zero.
 
 cliBuilder:
-  import  #./test_code_stream,
-          #./test_gas_meter,
-          #./test_memory,
-          #./test_stack,
-          #./test_genesis,
-          #./test_vm_json,
-          #./test_precompiles,
-          #./test_generalstate_json,
-          #./test_tracer_json,
-          #./test_persistblock_json,
-          #./test_rpc, # it crash if we combine it here
-          #./test_op_arith,
-          #./test_op_bit,
-          #./test_op_env,
-          #./test_op_memory,
-          #./test_op_misc,
-          #./test_op_custom,
-          #./test_state_db,
-          #./test_difficulty,
-          #./test_transaction_json,
-          #./test_blockchain_json,
+  import  ./test_code_stream,
+          ./test_gas_meter,
+          ./test_memory,
+          ./test_stack,
+          ./test_genesis,
+          ./test_vm_json,
+          ./test_precompiles,
+          ./test_generalstate_json,
+          ./test_tracer_json,
+          ./test_persistblock_json,
+          ./test_rpc, # it crash if we combine it here
+          ./test_op_arith,
+          ./test_op_bit,
+          ./test_op_env,
+          ./test_op_memory,
+          ./test_op_misc,
+          ./test_op_custom,
+          ./test_state_db,
+          ./test_difficulty,
+          ./test_transaction_json,
+          ./test_blockchain_json,
           ../stateless/test_witness_keys,
-          #../stateless/test_block_witness,
+          ../stateless/test_block_witness,
           ../stateless/test_witness_json
 
