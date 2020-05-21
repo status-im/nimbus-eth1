@@ -27,7 +27,7 @@ const
 
 type
   NimbusState = enum
-    Starting, Running, Stopping, Stopped
+    Starting, Running, Stopping
 
   NimbusNode = ref object
     rpcServer*: RpcHttpServer
@@ -36,7 +36,6 @@ type
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
-  nimbus.state = Starting
 
   ## logging
   setLogLevel(conf.debug.logLevel)
@@ -160,19 +159,18 @@ proc stop*(nimbus: NimbusNode) {.async, gcsafe.} =
     nimbus.rpcServer.stop()
 
 proc process*(nimbus: NimbusNode) =
-  if nimbus.state == Running:
-    # Main loop
-    while nimbus.state == Running:
-      try:
-        poll()
-      except CatchableError as e:
-        debug "Exception in poll()", exc = e.name, err = e.msg
+  # Main event loop
+  while nimbus.state == Running:
+    try:
+      poll()
+    except CatchableError as e:
+      debug "Exception in poll()", exc = e.name, err = e.msg
 
   # Stop loop
   waitFor nimbus.stop()
 
 when isMainModule:
-  var nimbus = NimbusNode()
+  var nimbus = NimbusNode(state: Starting)
 
   ## Ctrl+C handling
   proc controlCHandler() {.noconv.} =
