@@ -1,6 +1,6 @@
 import
-  eth/common, eth/trie/db, json, os, unittest,
-  ../stateless/[tree_from_witness],
+  eth/common, eth/trie/db, json, os, unittest2,
+  ./tree_from_witness, parseopt,
   ./witness_types, stew/byteutils
 
 type
@@ -99,7 +99,7 @@ proc processNode(t: var Tester, x: JsonNode, storageMode: bool = false) =
 proc parseRootHash(x: string): KeccakHash =
   result.data = hexToByteArray[32](x)
 
-proc parseTester(t: var Tester, n: JsonNode) =
+proc parseTester(t: var Tester, n: JsonNode, testStatusIMPL: var TestStatus) =
   t.error = n["error"].getBool()
   t.rootHash = parseRootHash(n["rootHash"].getStr())
   t.write(n["version"])
@@ -112,13 +112,13 @@ proc parseTester(t: var Tester, n: JsonNode) =
   except ParsingError:
     check t.error == true
 
-proc parseTester(filename: string): Tester =
+proc parseTester(filename: string, testStatusIMPL: var TestStatus): Tester =
   let n = parseFile(filename)
-  parseTester(result, n)
+  parseTester(result, n, testStatusIMPL)
 
 proc runTest(filePath, fileName: string) =
   test fileName:
-    let t = parseTester(filePath)
+    let t = parseTester(filePath, testStatusIMPL)
     var db = newMemoryDB()
     try:
       var tb = initTreeBuilder(t.output, db, {wfEIP170})
@@ -129,13 +129,48 @@ proc runTest(filePath, fileName: string) =
         check root == t.rootHash
         check t.error == false
     except ParsingError, ContractCodeError:
-      debugEcho "Error detected ", getCurrentExceptionMsg()
+      echo "Exception detected ", getCurrentExceptionMsg()
       check t.error == true
 
+proc writeFuzzData(filePath, fileName: string) =
+  var testStatusIMPL: TestStatus
+  let t = parseTester(filePath, testStatusIMPL)
+  var db = newMemoryDB()
+  var tb = initTreeBuilder(t.output, db, {wfEIP170})
+  let root = tb.buildTree()
+  writeFile(filename, t.output)
+
+proc fuzzTool(): bool =
+  var filename: string
+  var numArg = 0
+
+  for kind, key, val in getopt():
+    case kind
+    of cmdArgument:
+      inc numArg
+      case numArg
+      of 1:
+        if key != "fuzz":
+          quit(1)
+      of 2:
+        filename = key
+      else:
+        discard
+    of cmdLongOption, cmdShortOption:
+      discard
+    of cmdEnd: assert(false) # cannot happen
+
+  if filename != "":
+    echo "generate fuzz data"
+    writeFuzzData(filename, "fuzz.data")
+    return true
+
 proc witnessJsonMain*() =
-  for x in walkDirRec("stateless" / "fixtures"):
-    let y = splitPath(x)
-    runTest(x, y.tail)
+  suite "test tree builder against json fixtures":
+    for x in walkDirRec("stateless" / "fixtures"):
+      let y = splitPath(x)
+      runTest(x, y.tail)
 
 when isMainModule:
-  witnessJsonMain()
+  if not fuzzTool():
+    witnessJsonMain()

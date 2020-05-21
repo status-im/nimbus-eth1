@@ -1,5 +1,5 @@
 import
-  randutils, random, unittest, stew/byteutils,
+  randutils, random, unittest2, stew/byteutils,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs, nibbles],
   faststreams/inputs, nimcrypto/sysrand,
   ../stateless/[witness_from_tree, tree_from_witness],
