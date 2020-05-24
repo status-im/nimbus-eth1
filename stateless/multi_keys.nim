@@ -103,7 +103,7 @@ func groups*(m: MultikeysRef, parentGroup: Group, depth: int): BranchGroup =
   result.groups[nibble.int] = g
 
 func groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group): MatchGroup =
-  # using common-prefix comparison, this iterator
+  # using common-prefix comparison, this func
   # will produce one match group or no match at all
   var g = Group(first: parentGroup.first)
 
@@ -147,7 +147,7 @@ func groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group): Ma
 func isValidMatch(mg: MatchGroup): bool {.inline.} =
   result = mg.match and mg.group.first == mg.group.last
 
-proc visitMatch*(m: var MultikeysRef, mg: MatchGroup, depth: int, k: NibblesSeq): KeyData =
+proc visitMatch*(m: var MultikeysRef, mg: MatchGroup, depth: int): KeyData =
   doAssert(mg.isValidMatch)
   m.keys[mg.group.first].visited = true
   result = m.keys[mg.group.first]
