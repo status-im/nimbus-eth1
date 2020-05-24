@@ -1,5 +1,5 @@
 import
-  randutils, random, unittest2, stew/byteutils,
+  randutils, random, unittest2, stew/byteutils, os,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs, nibbles],
   faststreams/inputs, nimcrypto/sysrand,
   ../stateless/[witness_from_tree, tree_from_witness],
@@ -124,6 +124,14 @@ proc initMultiKeys(keys: openArray[string]): MultikeysRef =
       hash: hexToByteArray[32](x)
     )
 
+proc parseInvalidInput(payload: openArray[byte]): bool =
+  var db = newMemoryDB()
+  try:
+    var tb = initTreeBuilder(payload, db, {wfEIP170})
+    discard tb.buildTree()
+  except ParsingError, ContractCodeError:
+    result = true
+
 proc witnessKeysMain*() =
   suite "random keys block witness roundtrip test":
     randomize()
@@ -222,6 +230,11 @@ proc witnessKeysMain*() =
         mg.match == true
         mg.group.first == 2
         mg.group.last == 3
+
+    test "parse invalid input":
+      for x in walkDirRec("stateless" / "invalidInput"):
+        let z = readFile(x)
+        check parseInvalidInput(z.toOpenArrayByte(0, z.len-1))
 
 when isMainModule:
   witnessKeysMain()
