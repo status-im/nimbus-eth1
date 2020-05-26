@@ -218,7 +218,9 @@ proc buildForest*(t: var TreeBuilder): seq[KeccakHash]
     result.add KeccakHash(data: res.data)
 
 proc treeNode(t: var TreeBuilder, depth: int, storageMode = false): NodeKey =
-  assert(depth < 64)
+  if depth >= 64:
+    raise newException(ParsingError, "invalid trie structure")
+
   let nodeType = safeReadEnum(t, TrieNodeType)
   case nodeType
   of BranchNodeType: result = t.branchNode(depth, storageMode)
@@ -235,7 +237,9 @@ proc treeNode(t: var TreeBuilder, depth: int, storageMode = false): NodeKey =
     result = t.forceSmallNodeKeyToHash(result)
 
 proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
-  assert(depth < 64)
+  if depth >= 64:
+    raise newException(ParsingError, "invalid trie structure")
+
   let mask = constructBranchMask(t.safeReadByte, t.safeReadByte)
 
   when defined(debugDepth):
@@ -305,9 +309,13 @@ func hexPrefixLeaf(r: var RlpWriter, x: openArray[byte], depth: int) =
   r.append toOpenArray(bytes, 0, nibblesLen div 2)
 
 proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
-  assert(depth < 63)
+  if depth >= 63:
+    raise newException(ParsingError, "invalid trie structure")
+
   let nibblesLen = t.safeReadByte().int
-  assert(nibblesLen < 65)
+  if nibblesLen > 64 or nibblesLen < 1:
+    raise newException(ParsingError, "nibblesLen should between 1..64")
+
   var r = initRlpList(2)
   let pathLen = nibblesLen div 2 + nibblesLen mod 2
   safeReadBytes(t, pathLen):
@@ -321,7 +329,9 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
     var hash: NodeKey
     toKeccak(hash, t.read(32))
 
-  assert(depth + nibblesLen < 65)
+  if nibblesLen + depth > 64 or nibblesLen + depth < 1:
+    raise newException(ParsingError, "depth should between 1..64")
+
   let nodeType = safeReadEnum(t, TrieNodeType)
   case nodeType
   of BranchNodeType: r.append t.branchNode(depth + nibblesLen, storageMode)
@@ -375,7 +385,8 @@ proc readByteCode(t: var TreeBuilder, acc: var Account) =
     acc.codeHash.data = codeHash.data
 
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
-  assert(depth < 65)
+  if depth >= 65:
+    raise newException(ParsingError, "invalid trie structure")
 
   when defined(debugHash):
     let len = t.safeReadU32().int
@@ -443,7 +454,8 @@ proc readStorageSlot(t: var TreeBuilder): Hash256 =
     t.keys[^1].slots.add slot
 
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
-  assert(depth < 65)
+  if depth >= 65:
+    raise newException(ParsingError, "invalid trie structure")
 
   when defined(debugHash):
     let len = t.safeReadU32().int

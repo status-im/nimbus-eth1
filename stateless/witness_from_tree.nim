@@ -262,7 +262,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
       return
 
     # there should be only one match
-    let kd = z.keys.visitMatch(mg, z.depth, k)
+    let kd = z.keys.visitMatch(mg, z.depth)
     if z.storageMode:
       doAssert(kd.storageMode)
       writeAccountStorageLeafNode(wb, kd.storageSlot, value.toBytes.decode(UInt256), z.node, z.depth)
