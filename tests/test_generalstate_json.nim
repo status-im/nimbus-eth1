@@ -14,7 +14,7 @@ import
   ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types, utils],
   ../nimbus/vm/interpreter,
-  ../nimbus/db/[db_chain, state_db]
+  ../nimbus/db/[db_chain, accounts_cache]
 
 type
   Tester = object
@@ -96,7 +96,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   vmState.mutateStateDB:
     setupStateDB(tester.pre, db)
 
-  vmState.accountDB.updateOriginalRoot()
+  #vmState.accountDB.updateOriginalRoot()
 
   defer:
     let obtainedHash = "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii

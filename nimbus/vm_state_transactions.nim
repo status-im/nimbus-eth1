@@ -7,12 +7,13 @@
 
 import
   options, sets,
-  eth/common, chronicles, ./db/state_db,
+  eth/common, chronicles, ./db/accounts_cache,
   transaction, vm_types, vm_state,
   ./vm/[computation, interpreter]
 
 proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork): bool =
-  let account = vmState.readOnlyStateDB.getAccount(sender)
+  let balance = vmState.readOnlyStateDB.getBalance(sender)
+  let nonce = vmState.readOnlyStateDB.getNonce(sender)
 
   if vmState.cumulativeGasUsed + tx.gasLimit > vmState.blockHeader.gasLimit:
     debug "invalid tx: block header gasLimit reached",
@@ -22,9 +23,9 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddr
     return
 
   let totalCost = tx.gasLimit.u256 * tx.gasPrice.u256 + tx.value
-  if totalCost > account.balance:
+  if totalCost > balance:
     debug "invalid tx: not enough cash",
-      available=account.balance,
+      available=balance,
       require=totalCost
     return
 
@@ -34,10 +35,10 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddr
       require=tx.intrinsicGas(fork)
     return
 
-  if tx.accountNonce != account.nonce:
+  if tx.accountNonce != nonce:
     debug "invalid tx: account nonce mismatch",
       txNonce=tx.accountnonce,
-      accountNonce=account.nonce
+      accountNonce=nonce
     return
 
   result = true

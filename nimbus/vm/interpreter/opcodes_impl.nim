@@ -12,7 +12,7 @@ import
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
   ../memory, ../stack, ../code_stream, ../computation,
   ../../vm_state, ../../errors, ../../constants, ../../vm_types,
-  ../../db/[db_chain, state_db]
+  ../../db/[db_chain, accounts_cache]
 
 when defined(evmc_enabled):
   import  ../evmc_api, ../evmc_helpers, evmc/evmc
