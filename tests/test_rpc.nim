@@ -11,7 +11,7 @@ import
   eth/[rlp, keys], eth/trie/db, eth/p2p/rlpx_protocols/eth_protocol,
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
   ../nimbus/[constants, vm_state, config, genesis],
-  ../nimbus/db/[state_db, db_chain, storage_types],
+  ../nimbus/db/[accounts_cache, db_chain, storage_types],
   ../nimbus/p2p/chain,
   ./rpcclient/test_hexstrings, ./test_helpers
 
