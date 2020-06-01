@@ -416,18 +416,22 @@ proc persist*(ac: var AccountsCache) =
 iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
   # beware that if the account not persisted,
   # the storage root will not be updated
-  let storageRoot = ac.getAccount(address).account.storageRoot
-  var trie = initHexaryTrie(ac.db, storageRoot)
+  let acc = ac.getAccount(address, false)
+  if not acc.isNil:
+    let storageRoot = acc.account.storageRoot
+    var trie = initHexaryTrie(ac.db, storageRoot)
 
-  for slot, value in trie:
-    if slot.len != 0:
-      var keyData = ac.db.get(slotHashToSlotKey(slot).toOpenArray)
-      yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
+    for slot, value in trie:
+      if slot.len != 0:
+        var keyData = ac.db.get(slotHashToSlotKey(slot).toOpenArray)
+        yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 
 proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
   # beware that if the account not persisted,
   # the storage root will not be updated
-  result = ac.getAccount(address).account.storageRoot
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.storageRoot
+  else: acc.account.storageRoot
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}

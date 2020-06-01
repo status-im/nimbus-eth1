@@ -13,7 +13,7 @@ import
   eth/[common, keys, rlp, p2p], nimcrypto,
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../vm_state_transactions, ../utils,
-  ../db/[db_chain, state_db],
+  ../db/[db_chain, accounts_cache],
   rpc_types, rpc_utils, ../vm/[message, computation],
   ../vm/interpreter/vm_forks
 
@@ -166,9 +166,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     let
       accountDb = accountDbFromTag(quantityTag)
       addrBytes = data.toAddress
-      storage = accountDb.getStorage(addrBytes, quantity.u256)
-    if storage[1]:
-      result = storage[0]
+    result = accountDb.getStorage(addrBytes, quantity.u256)
 
   rpcsrv.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> AccountNonce:
     ## Returns the number of transactions sent from an address.

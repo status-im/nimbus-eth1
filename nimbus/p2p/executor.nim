@@ -143,6 +143,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
   # Reward beneficiary
   vmState.mutateStateDB:
     db.addBalance(header.coinbase, mainReward)
+    db.persist()
 
   let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
