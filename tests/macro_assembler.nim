@@ -301,8 +301,10 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
+  var stateDB = computation.vmState.accountDb
+  stateDB.persist()
+
   var
-    stateDB = computation.vmState.accountDb
     storageRoot = stateDB.getStorageRoot(computation.msg.contractAddress)
     trie = initSecureHexaryTrie(chainDB.db, storageRoot)
 

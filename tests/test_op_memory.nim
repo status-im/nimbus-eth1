@@ -840,3 +840,6 @@ proc opMemoryMain*() =
         "0x00"
         "0x00"
         "0x0000000000000000000000000000002000000000000000000000000000000000"
+
+when isMainModule:
+  opMemoryMain()
