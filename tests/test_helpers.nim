@@ -149,6 +149,11 @@ proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountsCache) =
     stateDB.setCode(account, code)
     stateDB.setBalance(account, balance)
 
+  # this is an important step when using accounts_cache
+  # it will affect the account storage's location
+  # during the next call to `getComittedStorage`
+  stateDB.persist()
+
 proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
