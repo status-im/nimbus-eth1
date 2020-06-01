@@ -145,13 +145,8 @@ proc isEmpty(acc: RefAccount): bool =
     acc.account.balance.isZero and
     acc.account.nonce == 0
 
-proc exists(acc: RefAccount): bool =
-  if IsAlive notin acc.flags:
-    return false
-  if IsClone in acc.flags:
-    result = true
-  else:
-    result = IsNew notin acc.flags
+template exists(acc: RefAccount): bool =
+  IsAlive in acc.flags
 
 template createTrieKeyFromSlot(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
