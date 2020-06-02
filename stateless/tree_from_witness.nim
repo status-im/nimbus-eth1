@@ -129,7 +129,7 @@ proc readUVarint32(t: var TreeBuilder): uint32 =
       break
     inc(shift, 7)
     if shift > 28:
-      raise newException(ParsingError, "Failed when try to uvarint32")
+      raise newException(ParsingError, "Failed when try to parse uvarint32")
 
 proc readUVarint256(t: var TreeBuilder): UInt256 =
   # LEB128 varint encoding
@@ -141,7 +141,7 @@ proc readUVarint256(t: var TreeBuilder): UInt256 =
       break
     inc(shift, 7)
     if shift > 252:
-      raise newException(ParsingError, "Failed when try to uvarint256")
+      raise newException(ParsingError, "Failed when try to parse uvarint256")
 
 proc toKeccak(r: var NodeKey, x: openArray[byte]) {.inline.} =
   r.data[0..31] = x[0..31]
