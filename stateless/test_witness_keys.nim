@@ -65,7 +65,9 @@ proc randAccount(db: DB): AccountDef =
 proc randAddress(): EthAddress =
   discard randomBytes(result.addr, sizeof(result))
 
-proc runTest(numPairs: int, testStatusIMPL: var TestStatus, addInvalidKeys: static[bool] = false) =
+proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
+             addIdenticalKeys: bool = false, addInvalidKeys: static[bool] = false) =
+
   var memDB = newMemoryDB()
   var trie = initSecureHexaryTrie(memDB)
   var addrs = newSeq[AccountKey](numPairs)
@@ -80,6 +82,10 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus, addInvalidKeys: stat
   when addInvalidKeys:
     # invalidAddress should not end up in block witness
     let invalidAddress = randAddress()
+    addrs.add((invalidAddress, false, MultikeysRef(nil)))
+
+  if addIdenticalKeys:
+    let invalidAddress = addrs[0].address
     addrs.add((invalidAddress, false, MultikeysRef(nil)))
 
   var mkeys = newMultiKeys(addrs)
@@ -146,7 +152,11 @@ proc witnessKeysMain*() =
       check rlpBytes.len > 32
 
     test "invalid address ignored":
-      runTest(rand(1..30), testStatusIMPL, addInvalidKeys = true)
+      runTest(rand(1..30), testStatusIMPL, false, addInvalidKeys = true)
+
+    test "multiple identical addresses rejected":
+      expect AssertionError:
+        runTest(rand(5..30), testStatusIMPL, true)
 
     test "case 1: all keys is a match":
       let keys = [

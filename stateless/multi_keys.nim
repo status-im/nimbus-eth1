@@ -148,6 +148,6 @@ func isValidMatch(mg: MatchGroup): bool {.inline.} =
   result = mg.match and mg.group.first == mg.group.last
 
 proc visitMatch*(m: var MultikeysRef, mg: MatchGroup, depth: int): KeyData =
-  doAssert(mg.isValidMatch)
+  doAssert(mg.isValidMatch, "Multiple identical keys are not allowed")
   m.keys[mg.group.first].visited = true
   result = m.keys[mg.group.first]
