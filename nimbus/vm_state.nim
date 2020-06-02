@@ -9,7 +9,7 @@ import
   macros, strformat, tables, sets, options,
   eth/common,
   vm/interpreter/[vm_forks, gas_costs],
-  ./constants, ./db/[db_chain, state_db],
+  ./constants, ./db/[db_chain, accounts_cache],
   ./utils, json, vm_types, vm/transaction_tracer,
   ./config
 
@@ -36,7 +36,7 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
   self.tracer.initTracer(tracerFlags)
   self.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
   self.logEntries = @[]
-  self.accountDb = newAccountStateDB(chainDB.db, prevStateRoot, chainDB.pruneTrie)
+  self.accountDb = AccountsCache.init(chainDB.db, prevStateRoot, chainDB.pruneTrie)
   self.touchedAccounts = initHashSet[EthAddress]()
 
 proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,

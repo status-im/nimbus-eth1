@@ -1,5 +1,5 @@
 import
-  db/[db_chain, state_db, capturedb], eth/common, utils, json,
+  db/[db_chain, accounts_cache, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth/trie/db, nimcrypto, strutils,
   chronicles, rpc/hexstrings, launcher,
@@ -33,18 +33,23 @@ proc toJson*(receipts: seq[Receipt]): JsonNode =
   for receipt in receipts:
     result.add receipt.toJson
 
-proc captureAccount(n: JsonNode, db: AccountStateDB, address: EthAddress, name: string) =
+proc captureAccount(n: JsonNode, db: AccountsCache, address: EthAddress, name: string) =
   var jaccount = newJObject()
   jaccount["name"] = %name
   jaccount["address"] = %("0x" & $address)
-  let account = db.getAccount(address)
-  jaccount["nonce"] = %(encodeQuantity(account.nonce).toLowerAscii)
-  jaccount["balance"] = %("0x" & account.balance.toHex)
+
+  let nonce = db.getNonce(address)
+  let balance = db.getBalance(address)
+  let codeHash = db.getCodeHash(address)
+  let storageRoot = db.getStorageRoot(address)
+
+  jaccount["nonce"] = %(encodeQuantity(nonce).toLowerAscii)
+  jaccount["balance"] = %("0x" & balance.toHex)
 
   let code = db.getCode(address)
-  jaccount["codeHash"] = %("0x" & ($account.codeHash).toLowerAscii)
+  jaccount["codeHash"] = %("0x" & ($codeHash).toLowerAscii)
   jaccount["code"] = %("0x" & toHex(code, true))
-  jaccount["storageRoot"] = %("0x" & ($account.storageRoot).toLowerAscii)
+  jaccount["storageRoot"] = %("0x" & ($storageRoot).toLowerAscii)
 
   var storage = newJObject()
   for key, value in db.storage(address):
@@ -102,6 +107,7 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
       before.captureAccount(stateDb, sender, senderName)
       before.captureAccount(stateDb, recipient, recipientName)
       before.captureAccount(stateDb, header.coinbase, minerName)
+      stateDb.persist()
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
 
@@ -112,11 +118,12 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, header.coinbase, minerName)
       vmState.removeTracedAccounts(sender, recipient, header.coinbase)
+      stateDb.persist()
       stateDiff["afterRoot"] = %($stateDb.rootHash)
       break
 
   # internal transactions:
-  var stateBefore = newAccountStateDB(captureTrieDB, beforeRoot, chainDB.pruneTrie)
+  var stateBefore = AccountsCache.init(captureTrieDB, beforeRoot, chainDB.pruneTrie)
   for idx, acc in tracedAccountsPairs(vmState):
     before.captureAccount(stateBefore, acc, internalTxName & $idx)
 
@@ -146,7 +153,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = newAccountStateDB(captureTrieDB, parent.stateRoot, db.pruneTrie)
+    stateBefore = AccountsCache.init(captureTrieDB, parent.stateRoot, db.pruneTrie)
 
   for idx, tx in body.transactions:
     let sender = tx.getSender

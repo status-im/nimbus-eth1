@@ -1,6 +1,6 @@
 import options, sets,
   eth/[common, bloom, trie/db], chronicles, nimcrypto,
-  ../db/[db_chain, state_db],
+  ../db/[db_chain, accounts_cache],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
   ../vm/[computation, message],
@@ -42,7 +42,8 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
           debug "state clearing", account
           db.deleteAccount(account)
 
-  vmState.accountDb.updateOriginalRoot()
+  #vmState.accountDb.updateOriginalRoot()
+  vmState.accountDb.persist()
 
 type
   # TODO: these types need to be removed
@@ -142,6 +143,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
   # Reward beneficiary
   vmState.mutateStateDB:
     db.addBalance(header.coinbase, mainReward)
+    db.persist()
 
   let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:

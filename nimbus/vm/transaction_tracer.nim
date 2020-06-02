@@ -1,7 +1,7 @@
 import
   json, strutils, sets, hashes,
   chronicles, nimcrypto, eth/common, stint,
-  ../vm_types, memory, stack, ../db/state_db,
+  ../vm_types, memory, stack, ../db/accounts_cache,
   eth/trie/hexary,
   ./interpreter/opcode_values
 
@@ -100,7 +100,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: Computation, op: Op, la
     if c.msg.depth < tracer.storageKeys.len:
       var stateDB = c.vmState.accountDb
       for key in tracer.storage(c.msg.depth):
-        let (value, _) = stateDB.getStorage(c.msg.contractAddress, key)
+        let value = stateDB.getStorage(c.msg.contractAddress, key)
         storage[key.dumpHex] = %(value.dumpHex)
       j["storage"] = storage
 

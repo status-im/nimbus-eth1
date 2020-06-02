@@ -10,7 +10,7 @@ import
   options, json, sets,
   ./vm/[memory, stack, code_stream],
   ./vm/interpreter/[gas_costs, opcode_values, vm_forks], # TODO - will be hidden at a lower layer
-  ./db/[db_chain, state_db]
+  ./db/[db_chain, accounts_cache]
 
 when defined(evmc_enabled):
   import ./vm/evmc_api
@@ -26,7 +26,7 @@ type
     tracer*        : TransactionTracer
     logEntries*    : seq[Log]
     receipts*      : seq[Receipt]
-    accountDb*     : AccountStateDB
+    accountDb*     : AccountsCache
     cumulativeGasUsed*: GasInt
     touchedAccounts*: HashSet[EthAddress]
     suicides*      : HashSet[EthAddress]
@@ -55,10 +55,6 @@ type
     accounts*: HashSet[EthAddress]
     storageKeys*: seq[HashSet[Uint256]]
 
-  Snapshot* = object
-    transaction*: DbTransaction
-    intermediateRoot*: Hash256
-
   Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState
@@ -75,7 +71,7 @@ type
     touchedAccounts*:       HashSet[EthAddress]
     suicides*:              HashSet[EthAddress]
     logEntries*:            seq[Log]
-    dbsnapshot*:            Snapshot
+    savePoint*:             SavePoint
     instr*:                 Op
     opIndex*:               int
 

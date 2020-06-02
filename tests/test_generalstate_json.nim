@@ -14,7 +14,7 @@ import
   ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types, utils],
   ../nimbus/vm/interpreter,
-  ../nimbus/db/[db_chain, state_db]
+  ../nimbus/db/[db_chain, accounts_cache]
 
 type
   Tester = object
@@ -96,7 +96,10 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   vmState.mutateStateDB:
     setupStateDB(tester.pre, db)
 
-  vmState.accountDB.updateOriginalRoot()
+    # this is an important step when using accounts_cache
+    # it will affect the account storage's location
+    # during the next call to `getComittedStorage`
+    db.persist()
 
   defer:
     let obtainedHash = "0x" & `$`(vmState.readOnlyStateDB.rootHash).toLowerAscii
@@ -127,6 +130,12 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
       if tester.fork >= FkSpurious:
         if db.isEmptyAccount(miner):
           db.deleteAccount(miner)
+
+      # this is an important step when using accounts_cache
+      # it will affect the account storage's location
+      # during the next call to `getComittedStorage`
+      # and the result of rootHash
+      db.persist()
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false, supportedForks: set[Fork] = supportedForks) =

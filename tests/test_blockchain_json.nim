@@ -14,7 +14,7 @@ import
   ../premix/parser, test_config,
   ../nimbus/vm/interpreter/vm_forks,
   ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants],
-  ../nimbus/db/[db_chain, state_db],
+  ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/utils/header,
   ../nimbus/p2p/[executor, dao],
   ../nimbus/config
@@ -299,6 +299,7 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
   # Reward beneficiary
   vmState.mutateStateDB:
     db.addBalance(minedBlock.header.coinbase, mainReward)
+    db.persist()
 
   let stateDb = vmState.accountDb
   if minedBlock.header.stateRoot != stateDb.rootHash:
@@ -698,6 +699,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
     vmState.mutateStateDB:
       setupStateDB(fixture["pre"], db)
+      db.persist()
 
     let obtainedHash = $(vmState.readOnlyStateDB.rootHash)
     check obtainedHash == $(tester.genesisBlockHeader.stateRoot)

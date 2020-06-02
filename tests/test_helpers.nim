@@ -11,7 +11,7 @@ import
   testutils/markdown_reports,
   ../nimbus/[config, transaction, utils, errors],
   ../nimbus/vm/interpreter/vm_forks,
-  ../nimbus/db/state_db
+  ../nimbus/db/accounts_cache
 
 func revmap(x: Table[Fork, string]): Table[string, Fork] =
   result = initTable[string, Fork]()
@@ -135,7 +135,7 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   data = fromHex(StUInt[64], j.getStr)
   result = cast[int64](data)
 
-proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountStateDB) =
+proc setupStateDB*(wantedState: JsonNode, stateDB: var AccountsCache) =
   for ac, accountData in wantedState:
     let account = ethAddressFromHex(ac)
     for slot, value in accountData{"storage"}:
@@ -157,9 +157,9 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
         slotId = UInt256.fromHex slot
         wantedValue = UInt256.fromHex value.getStr
 
-      let (actualValue, found) = stateDB.getStorage(account, slotId)
-      if not found:
-        raise newException(ValidationError, "account not found:  " & ac)
+      let actualValue = stateDB.getStorage(account, slotId)
+      #if not found:
+      #  raise newException(ValidationError, "account not found:  " & ac)
       if actualValue != wantedValue:
         raise newException(ValidationError, &"{ac} storageDiff: [{slot}] {actualValue.toHex} != {wantedValue.toHex}")
 

@@ -23,11 +23,13 @@ type
     originalStorage: TableRef[UInt256, UInt256]
     overlayStorage: Table[UInt256, UInt256]
 
-  AccountsCache* = object
+  AccountsCache* = ref object
     db: TrieDatabaseRef
     trie: SecureHexaryTrie
     savePoint: SavePoint
     unrevertablyTouched: HashSet[EthAddress]
+
+  ReadOnlyStateDB* = distinct AccountsCache
 
   TransactionState = enum
     Pending
@@ -46,6 +48,7 @@ proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 # The AccountsCache is modeled after TrieDatabase for it's transaction style
 proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
            root: KeccakHash, pruneTrie: bool = true): AccountsCache =
+  new result
   result.db = db
   result.trie = initSecureHexaryTrie(db, root, pruneTrie)
   result.unrevertablyTouched = initHashSet[EthAddress]()
@@ -142,13 +145,8 @@ proc isEmpty(acc: RefAccount): bool =
     acc.account.balance.isZero and
     acc.account.nonce == 0
 
-proc exists(acc: RefAccount): bool =
-  if IsAlive notin acc.flags:
-    return false
-  if IsClone in acc.flags:
-    result = true
-  else:
-    result = IsNew notin acc.flags
+template exists(acc: RefAccount): bool =
+  IsAlive in acc.flags
 
 template createTrieKeyFromSlot(slot: UInt256): auto =
   # XXX: This is too expensive. Similar to `createRangeFromAddress`
@@ -390,6 +388,12 @@ proc removeEmptyAccounts*(ac: var AccountsCache) =
     if acc.isEmpty:
       acc.kill()
 
+proc deleteAccount*(ac: var AccountsCache, address: EthAddress) =
+  # make sure all savepoints already committed
+  doAssert(ac.savePoint.parentSavePoint.isNil)
+  let acc = ac.getAccount(address)
+  acc.kill()
+
 proc persist*(ac: var AccountsCache) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
@@ -412,10 +416,33 @@ proc persist*(ac: var AccountsCache) =
 iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
   # beware that if the account not persisted,
   # the storage root will not be updated
-  let storageRoot = ac.getAccount(address).account.storageRoot
-  var trie = initHexaryTrie(ac.db, storageRoot)
+  let acc = ac.getAccount(address, false)
+  if not acc.isNil:
+    let storageRoot = acc.account.storageRoot
+    var trie = initHexaryTrie(ac.db, storageRoot)
 
-  for slot, value in trie:
-    if slot.len != 0:
-      var keyData = ac.db.get(slotHashToSlotKey(slot).toOpenArray)
-      yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
+    for slot, value in trie:
+      if slot.len != 0:
+        var keyData = ac.db.get(slotHashToSlotKey(slot).toOpenArray)
+        yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
+
+proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
+  # beware that if the account not persisted,
+  # the storage root will not be updated
+  let acc = ac.getAccount(address, false)
+  if acc.isNil: emptyAcc.storageRoot
+  else: acc.account.storageRoot
+
+proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
+proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
+proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
+proc getBalance*(db: ReadOnlyStateDB, address: EthAddress): UInt256 {.borrow.}
+proc getStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
+proc getNonce*(db: ReadOnlyStateDB, address: EthAddress): AccountNonce {.borrow.}
+proc getCode*(db: ReadOnlyStateDB, address: EthAddress): seq[byte] {.borrow.}
+proc getCodeSize*(db: ReadOnlyStateDB, address: EthAddress): int {.borrow.}
+proc hasCodeOrNonce*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+proc getCommittedStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}

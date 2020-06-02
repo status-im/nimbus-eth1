@@ -7,7 +7,7 @@ import
 import
   options, json, os, eth/trie/[db, hexary],
   ../nimbus/[vm_state, vm_types, transaction, utils],
-  ../nimbus/db/[db_chain, state_db],
+  ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/vm_state_transactions,
   ../nimbus/vm/interpreter/vm_forks,
   ../nimbus/vm/[message, computation, memory]
@@ -301,10 +301,12 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
+  var stateDB = computation.vmState.accountDb
+  stateDB.persist()
+
   var
-    stateDB = computation.vmState.accountDb
-    account = stateDB.getAccount(computation.msg.contractAddress)
-    trie = initSecureHexaryTrie(chainDB.db, account.storageRoot)
+    storageRoot = stateDB.getStorageRoot(computation.msg.contractAddress)
+    trie = initSecureHexaryTrie(chainDB.db, storageRoot)
 
   for kv in boa.storage:
     let key = kv[0].toHex()

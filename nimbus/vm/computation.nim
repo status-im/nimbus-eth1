@@ -10,7 +10,7 @@ import
   sets, eth/[common, keys], eth/trie/db as triedb,
   ../constants, ../errors, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
-  ./code_stream, ./memory, ./message, ./stack, ../db/[state_db, db_chain],
+  ./code_stream, ./memory, ./message, ./stack, ../db/[accounts_cache, db_chain],
   ../utils/header, stew/[byteutils, ranges/ptr_arith], precompiles,
   transaction_tracer, ../utils
 
@@ -90,7 +90,7 @@ template getStorage*(c: Computation, slot: Uint256): Uint256 =
   when evmc_enabled:
     c.host.getStorage(c.msg.contractAddress, slot)
   else:
-    c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)[0]
+    c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: EthAddress): Uint256 =
   when evmc_enabled:
@@ -102,7 +102,7 @@ template getCodeSize*(c: Computation, address: EthAddress): uint =
   when evmc_enabled:
     c.host.getCodeSize(address)
   else:
-    uint(c.vmState.readOnlyStateDB.getCode(address).len)
+    uint(c.vmState.readOnlyStateDB.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
   when evmc_enabled:
@@ -179,18 +179,16 @@ proc isSuicided*(c: Computation, address: EthAddress): bool =
   result = address in c.suicides
 
 proc snapshot*(c: Computation) =
-  c.dbsnapshot.transaction = c.vmState.chaindb.db.beginTransaction()
-  c.dbsnapshot.intermediateRoot = c.vmState.accountDb.rootHash
+  c.savePoint = c.vmState.accountDb.beginSavePoint()
 
 proc commit*(c: Computation) =
-  c.dbsnapshot.transaction.commit()
+  c.vmState.accountDb.commit(c.savePoint)
 
 proc dispose*(c: Computation) {.inline.} =
-  c.dbsnapshot.transaction.dispose()
+  c.vmState.accountDb.dispose(c.savePoint)
 
 proc rollback*(c: Computation) =
-  c.dbsnapshot.transaction.rollback()
-  c.vmState.accountDb.rootHash = c.dbsnapshot.intermediateRoot
+  c.vmState.accountDb.rollback(c.savePoint)
 
 proc setError*(c: Computation, msg: string, burnsGas = false) {.inline.} =
   c.error = Error(info: msg, burnsGas: burnsGas)
