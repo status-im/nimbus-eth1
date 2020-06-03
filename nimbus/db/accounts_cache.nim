@@ -1,7 +1,8 @@
 import
   tables, hashes, sets,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
-  ../constants, ../utils, storage_types
+  ../constants, ../utils, storage_types,
+  ../../stateless/[witness_types, multi_keys]
 
 type
   AccountFlag = enum
@@ -23,11 +24,15 @@ type
     originalStorage: TableRef[UInt256, UInt256]
     overlayStorage: Table[UInt256, UInt256]
 
+  WitnessData* = object
+    storageKeys*: HashSet[UInt256]
+    codeTouched*: bool
+
   AccountsCache* = ref object
     db: TrieDatabaseRef
     trie: SecureHexaryTrie
     savePoint: SavePoint
-    unrevertablyTouched: HashSet[EthAddress]
+    witnessCache: Table[EthAddress, WitnessData]
 
   ReadOnlyStateDB* = distinct AccountsCache
 
@@ -51,7 +56,7 @@ proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef,
   new result
   result.db = db
   result.trie = initSecureHexaryTrie(db, root, pruneTrie)
-  result.unrevertablyTouched = initHashSet[EthAddress]()
+  result.witnessCache = initTable[EthAddress, WitnessData]()
   discard result.beginSavepoint
 
 proc init*(x: typedesc[AccountsCache], db: TrieDatabaseRef, pruneTrie: bool = true): AccountsCache =
@@ -373,21 +378,6 @@ proc clearStorage*(ac: var AccountsCache, address: EthAddress) =
     # there is no point to clone the storage since we want to remove it
     ac.makeDirty(address, cloneStorage = false).account.storageRoot = emptyRlpHash
 
-proc unrevertableTouch*(ac: var AccountsCache, address: EthAddress) =
-  ac.unrevertablyTouched.incl address
-
-proc removeEmptyAccounts*(ac: var AccountsCache) =
-  # make sure all savepoints already committed
-  doAssert(ac.savePoint.parentSavePoint.isNil)
-  for _, acc in ac.savePoint.cache:
-    if IsTouched in acc.flags and acc.isEmpty:
-      acc.kill()
-
-  for address in ac.unrevertablyTouched:
-    var acc = ac.getAccount(address)
-    if acc.isEmpty:
-      acc.kill()
-
 proc deleteAccount*(ac: var AccountsCache, address: EthAddress) =
   # make sure all savepoints already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
@@ -432,6 +422,50 @@ proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
   let acc = ac.getAccount(address, false)
   if acc.isNil: emptyAcc.storageRoot
   else: acc.account.storageRoot
+
+func update(wd: var WitnessData, acc: RefAccount) =
+  wd.codeTouched = CodeChanged in acc.flags
+
+  if not acc.originalStorage.isNil:
+    for k, v in acc.originalStorage:
+      if v == 0: continue
+      wd.storageKeys.incl k
+
+  for k, v in acc.overlayStorage:
+    if v == 0 and k notin wd.storageKeys:
+      continue
+    if v == 0 and k in wd.storageKeys:
+      wd.storageKeys.excl k
+      continue
+    wd.storageKeys.incl k
+
+func witnessData(acc: RefAccount): WitnessData =
+  result.storageKeys = initHashSet[UInt256]()
+  update(result, acc)
+
+proc collectWitnessData*(ac: var AccountsCache) =
+  # make sure all savepoint already committed
+  doAssert(ac.savePoint.parentSavePoint.isNil)
+  # usually witness data is collected before we call persist()
+  for address, acc in ac.savePoint.cache:
+    ac.witnessCache.withValue(address, val) do:
+      update(val[], acc)
+    do:
+      ac.witnessCache[address] = witnessData(acc)
+
+func multiKeys(slots: HashSet[UInt256]): MultikeysRef =
+  if slots.len == 0: return
+  new result
+  for x in slots:
+    result.add x.toBytesBE
+  result.sort()
+
+proc makeMultiKeys*(ac: AccountsCache): MultikeysRef =
+  # this proc is called after we done executing a block
+  new result
+  for k, v in ac.witnessCache:
+    result.add(k, v.codeTouched, multiKeys(v.storageKeys))
+  result.sort()
 
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
