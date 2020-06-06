@@ -17,7 +17,8 @@ import
   ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/utils/header,
   ../nimbus/p2p/[executor, dao],
-  ../nimbus/config
+  ../nimbus/config,
+  ../stateless/[multi_keys, tree_from_witness, witness_from_tree, witness_types]
 
 type
   SealEngine = enum
@@ -280,6 +281,28 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
   #if result.network in ["HomesteadToDaoAt5"]:
     #result.good = false
 
+proc blockWitness(vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
+  let rootHash = vmState.accountDb.rootHash
+  let mkeys = vmState.accountDb.makeMultiKeys()
+  let flags = if fork >= FKSpurious: {wfEIP170} else: {}
+
+  # build witness from tree
+  var wb = initWitnessBuilder(chainDB.db, rootHash, flags)
+  let witness = wb.buildWitness(mkeys)
+
+  # build tree from witness
+  var db = newMemoryDB()
+  when defined(useInputStream):
+    var input = memoryInput(witness)
+    var tb = initTreeBuilder(input, db, flags)
+  else:
+    var tb = initTreeBuilder(witness, db, flags)
+  let root = tb.buildTree()
+
+  # compare the result
+  if root != rootHash:
+    raise newException(ValidationError, "Invalid trie generated from block witness")
+
 proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
   let blockReward = blockRewards[fork]
   var mainReward = blockReward
@@ -299,6 +322,8 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
   # Reward beneficiary
   vmState.mutateStateDB:
     db.addBalance(minedBlock.header.coinbase, mainReward)
+    if vmState.generateWitness:
+      db.collectWitnessData()
     db.persist()
 
   let stateDb = vmState.accountDb
@@ -316,6 +341,9 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
   let txRoot = calcTxRoot(minedBlock.transactions)
   if minedBlock.header.txRoot != txRoot:
     raise newException(ValidationError, "wrong txRoot")
+
+  if vmState.generateWitness:
+    blockWitness(vmState, fork, chainDB)
 
 proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
   var dbTx = chainDB.db.beginTransaction()
@@ -696,6 +724,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
     var vmState = newBaseVMState(emptyRlpHash,
       tester.genesisBlockHeader, chainDB)
+
+    vmState.generateWitness = true
 
     vmState.mutateStateDB:
       setupStateDB(fixture["pre"], db)
