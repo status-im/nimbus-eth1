@@ -16,13 +16,17 @@ when defined(evmc_enabled):
   import ./vm/evmc_api
 
 type
+  VMFlag* = enum
+    ExecutionOK
+    GenerateWitness
+
   BaseVMState* = ref object of RootObj
     prevHeaders*   : seq[BlockHeader]
     chaindb*       : BaseChainDB
     accessLogs*    : AccessLogs
     blockHeader*   : BlockHeader
     name*          : string
-    tracingEnabled*: bool
+    flags*         : set[VMFlag]
     tracer*        : TransactionTracer
     logEntries*    : seq[Log]
     receipts*      : seq[Receipt]
@@ -30,7 +34,6 @@ type
     cumulativeGasUsed*: GasInt
     touchedAccounts*: HashSet[EthAddress]
     suicides*      : HashSet[EthAddress]
-    status*        : bool
     txOrigin*      : EthAddress
     txGasPrice*    : GasInt
     gasCosts*      : GasCosts
