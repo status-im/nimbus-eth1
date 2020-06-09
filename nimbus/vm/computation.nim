@@ -322,19 +322,19 @@ proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
   c.gasMeter.refundGas(cost * c.suicides.len)
 
-proc tracingEnabled*(c: Computation): bool =
-  c.vmState.tracingEnabled
+proc tracingEnabled*(c: Computation): bool {.inline.} =
+  EnableTracing in c.vmState.tracer.flags
 
-proc traceOpCodeStarted*(c: Computation, op: Op): int =
+proc traceOpCodeStarted*(c: Computation, op: Op): int {.inline.} =
   c.vmState.tracer.traceOpCodeStarted(c, op)
 
-proc traceOpCodeEnded*(c: Computation, op: Op, lastIndex: int) =
+proc traceOpCodeEnded*(c: Computation, op: Op, lastIndex: int) {.inline.} =
   c.vmState.tracer.traceOpCodeEnded(c, op, lastIndex)
 
-proc traceError*(c: Computation) =
+proc traceError*(c: Computation) {.inline.} =
   c.vmState.tracer.traceError(c)
 
-proc prepareTracer*(c: Computation) =
+proc prepareTracer*(c: Computation) {.inline.} =
   c.vmState.tracer.prepare(c.msg.depth)
 
 include interpreter_dispatch

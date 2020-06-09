@@ -42,7 +42,8 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
           debug "state clearing", account
           db.deleteAccount(account)
 
-  #vmState.accountDb.updateOriginalRoot()
+  if vmState.generateWitness:
+    vmState.accountDb.collectWitnessData()
   vmState.accountDb.persist()
 
 type
@@ -143,6 +144,8 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
   # Reward beneficiary
   vmState.mutateStateDB:
     db.addBalance(header.coinbase, mainReward)
+    if vmState.generateWitness:
+      db.collectWitnessData()
     db.persist()
 
   let stateDb = vmState.accountDb

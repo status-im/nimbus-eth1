@@ -34,7 +34,6 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
   self.blockHeader = header
   self.chaindb = chainDB
   self.tracer.initTracer(tracerFlags)
-  self.tracingEnabled = TracerFlags.EnableTracing in tracerFlags
   self.logEntries = @[]
   self.accountDb = AccountsCache.init(chainDB.db, prevStateRoot, chainDB.pruneTrie)
   self.touchedAccounts = initHashSet[EthAddress]()
@@ -103,19 +102,19 @@ template mutateStateDB*(vmState: BaseVMState, body: untyped) =
     var db {.inject.} = vmState.accountDb
     body
 
-proc getTracingResult*(vmState: BaseVMState): JsonNode =
-  doAssert(vmState.tracingEnabled)
+proc getTracingResult*(vmState: BaseVMState): JsonNode {.inline.} =
+  doAssert(EnableTracing in vmState.tracer.flags)
   vmState.tracer.trace
 
 proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
   shallowCopy(result, vmState.logEntries)
   vmState.logEntries = @[]
 
-proc enableTracing*(vmState: BaseVMState) =
-  vmState.tracingEnabled = true
+proc enableTracing*(vmState: BaseVMState) {.inline.} =
+  vmState.tracer.flags.incl EnableTracing
 
-proc disableTracing*(vmState: BaseVMState) =
-  vmState.tracingEnabled = false
+proc disableTracing*(vmState: BaseVMState) {.inline.} =
+  vmState.tracer.flags.excl EnableTracing
 
 iterator tracedAccounts*(vmState: BaseVMState): EthAddress =
   for acc in vmState.tracer.accounts:
@@ -130,3 +129,17 @@ iterator tracedAccountsPairs*(vmState: BaseVMState): (int, EthAddress) =
 proc removeTracedAccounts*(vmState: BaseVMState, accounts: varargs[EthAddress]) =
   for acc in accounts:
     vmState.tracer.accounts.excl acc
+
+proc status*(vmState: BaseVMState): bool {.inline.} =
+  ExecutionOK in vmState.flags
+
+proc `status=`*(vmState: BaseVMState, status: bool) =
+ if status: vmState.flags.incl ExecutionOK
+ else: vmState.flags.excl ExecutionOK
+
+proc generateWitness*(vmState: BaseVMState): bool {.inline.} =
+  GenerateWitness in vmState.flags
+
+proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
+ if status: vmState.flags.incl GenerateWitness
+ else: vmState.flags.excl GenerateWitness

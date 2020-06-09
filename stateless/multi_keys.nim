@@ -76,6 +76,21 @@ proc newMultiKeys*(keys: openArray[StorageSlot]): MultikeysRef =
     result.keys[i] = KeyData(storageMode: true, hash: keccak(a).data, storageSlot: a)
   result.keys.sort(cmpHash)
 
+# never mix storageMode!
+proc add*(m: MultikeysRef, address: EthAddress, codeTouched: bool, storageKeys = MultikeysRef(nil)) =
+  m.keys.add KeyData(
+    storageMode: false,
+    hash: keccak(address).data,
+    address: address,
+    codeTouched: codeTouched,
+    storageKeys: storageKeys)
+
+proc add*(m: MultikeysRef, slot: StorageSlot) =
+  m.keys.add KeyData(storageMode: true, hash: keccak(slot).data, storageSlot: slot)
+
+proc sort*(m: MultikeysRef) =
+  m.keys.sort(cmpHash)
+
 func initGroup*(m: MultikeysRef): Group =
   type T = type result.last
   result = Group(first: 0.T, last: (m.keys.len - 1).T)
