@@ -75,6 +75,9 @@ method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
 method gasLimit*(vmState: BaseVMState): GasInt {.base, gcsafe.} =
   vmState.blockHeader.gasLimit
 
+when defined(geth):
+  import db/geth_db
+
 method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base, gcsafe.} =
   var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1
   if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
@@ -82,7 +85,10 @@ method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256
   if blockNumber >= vmState.blockHeader.blockNumber:
     return
 
-  result = vmState.chainDB.getBlockHash(blockNumber)
+  when defined(geth):
+    result = vmState.chainDB.headerHash(blockNumber.truncate(uint64))
+  else:
+    result = vmState.chainDB.getBlockHash(blockNumber)
   #TODO: should we use deque here?
   # someday we may revive this code when
   # we already have working miner

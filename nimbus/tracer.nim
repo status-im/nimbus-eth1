@@ -5,8 +5,15 @@ import
   chronicles, rpc/hexstrings, launcher,
   vm/interpreter/vm_forks, ./config
 
-proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
-  self.getBlockHeader(header.parentHash)
+when defined(geth):
+  import db/geth_db
+
+  proc getParentHeader(db: BaseChainDB, header: BlockHeader): BlockHeader =
+    db.blockHeader(header.blockNumber.truncate(uint64) - 1)
+
+else:
+  proc getParentHeader(self: BaseChainDB, header: BlockHeader): BlockHeader =
+    self.getBlockHeader(header.parentHash)
 
 proc `%`(x: openArray[byte]): JsonNode =
   result = %toHex(x, false)

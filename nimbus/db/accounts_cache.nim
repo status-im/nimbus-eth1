@@ -222,7 +222,10 @@ proc persistMode(acc: RefAccount): PersistMode =
 
 proc persistCode(acc: RefAccount, db: TrieDatabaseRef) =
   if acc.code.len != 0:
-    db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+    when defined(geth):
+      db.put(acc.account.codeHash.data, acc.code)
+    else:
+      db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
 proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
   if acc.overlayStorage.len == 0:
@@ -283,7 +286,11 @@ proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
   else:
-    let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
+    when defined(geth):
+      let data = ac.db.get(acc.account.codeHash.data)
+    else:
+      let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
+
     acc.code = data
     acc.flags.incl CodeLoaded
     result = acc.code
@@ -411,10 +418,11 @@ iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
     let storageRoot = acc.account.storageRoot
     var trie = initHexaryTrie(ac.db, storageRoot)
 
-    for slot, value in trie:
-      if slot.len != 0:
-        var keyData = ac.db.get(slotHashToSlotKey(slot).toOpenArray)
-        yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
+    for slotHash, value in trie:
+      if slotHash.len == 0: continue
+      let keyData = ac.db.get(slotHashToSlotKey(slotHash).toOpenArray)
+      if keyData.len == 0: continue
+      yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 
 proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
   # beware that if the account not persisted,
