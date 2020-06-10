@@ -11,7 +11,7 @@ import
   vm/interpreter/[vm_forks, gas_costs],
   ./constants, ./db/[db_chain, accounts_cache],
   ./utils, json, vm_types, vm/transaction_tracer,
-  ./config
+  ./config, ../stateless/[multi_keys, witness_from_tree, witness_types]
 
 proc newAccessLogs*: AccessLogs =
   AccessLogs(reads: initTable[string, string](), writes: initTable[string, string]())
@@ -149,3 +149,12 @@ proc generateWitness*(vmState: BaseVMState): bool {.inline.} =
 proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
  if status: vmState.flags.incl GenerateWitness
  else: vmState.flags.excl GenerateWitness
+
+proc buildWitness*(vmState: BaseVMState): seq[byte] =
+  let rootHash = vmState.accountDb.rootHash
+  let mkeys = vmState.accountDb.makeMultiKeys()
+  let flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
+
+  # build witness from tree
+  var wb = initWitnessBuilder(vmState.chainDB.db, rootHash, flags)
+  result = wb.buildWitness(mkeys)

@@ -18,7 +18,7 @@ import
   ../nimbus/utils/header,
   ../nimbus/p2p/[executor, dao],
   ../nimbus/config,
-  ../stateless/[multi_keys, tree_from_witness, witness_from_tree, witness_types]
+  ../stateless/[tree_from_witness, witness_types]
 
 type
   SealEngine = enum
@@ -283,12 +283,8 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
 
 proc blockWitness(vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
   let rootHash = vmState.accountDb.rootHash
-  let mkeys = vmState.accountDb.makeMultiKeys()
+  let witness = vmState.buildWitness()
   let flags = if fork >= FKSpurious: {wfEIP170} else: {}
-
-  # build witness from tree
-  var wb = initWitnessBuilder(chainDB.db, rootHash, flags)
-  let witness = wb.buildWitness(mkeys)
 
   # build tree from witness
   var db = newMemoryDB()
