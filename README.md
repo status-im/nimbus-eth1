@@ -192,6 +192,8 @@ build/nimbus
 
 ### Development tips
 
+Interesting Make variables and targets are documented in the [nimbus-build-system](https://github.com/status-im/nimbus-build-system) repo.
+
 - you can switch the DB backend with a Nim compiler define:
   `-d:nimbus_db_backend=...` where the (case-insensitive) value is one of
   "rocksdb" (the default), "sqlite", "lmdb"
