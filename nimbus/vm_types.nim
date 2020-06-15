@@ -19,6 +19,7 @@ type
   VMFlag* = enum
     ExecutionOK
     GenerateWitness
+    ClearCache
 
   BaseVMState* = ref object of RootObj
     prevHeaders*   : seq[BlockHeader]

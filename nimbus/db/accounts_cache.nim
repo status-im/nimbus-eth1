@@ -33,6 +33,7 @@ type
     trie: SecureHexaryTrie
     savePoint: SavePoint
     witnessCache: Table[EthAddress, WitnessData]
+    isDirty: bool
 
   ReadOnlyStateDB* = distinct AccountsCache
 
@@ -46,7 +47,17 @@ type
     cache: Table[EthAddress, RefAccount]
     state: TransactionState
 
-const emptyAcc = newAccount()
+const
+  emptyAcc = newAccount()
+
+  resetFlags = {
+    IsDirty,
+    IsNew,
+    IsTouched,
+    IsClone,
+    CodeChanged,
+    StorageChanged
+    }
 
 proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 
@@ -66,7 +77,7 @@ proc rootHash*(ac: AccountsCache): KeccakHash =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
   # make sure all cache already committed
-  doAssert(ac.savePoint.cache.len == 0)
+  doAssert(ac.isDirty == false)
   ac.trie.rootHash
 
 proc beginSavepoint*(ac: var AccountsCache): SavePoint =
@@ -252,6 +263,7 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
   acc.account.storageRoot = accountTrie.rootHash
 
 proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): RefAccount =
+  ac.isDirty = true
   result = ac.getAccount(address)
   if address in ac.savePoint.cache:
     # it's already in latest savepoint
@@ -391,9 +403,11 @@ proc deleteAccount*(ac: var AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.kill()
 
-proc persist*(ac: var AccountsCache) =
+proc persist*(ac: var AccountsCache, clearCache: bool = true) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
+  var cleanAccounts = initHashSet[EthAddress]()
+
   for address, acc in ac.savePoint.cache:
     case acc.persistMode()
     of Update:
@@ -406,9 +420,19 @@ proc persist*(ac: var AccountsCache) =
       ac.trie.put address, rlp.encode(acc.account)
     of Remove:
       ac.trie.del address
+      if not clearCache:
+        cleanAccounts.incl address
     of DoNothing:
       discard
-  ac.savePoint.cache.clear()
+
+    acc.flags = acc.flags - resetFlags
+
+  if clearCache:
+    ac.savePoint.cache.clear()
+  else:
+    for x in cleanAccounts:
+      ac.savePoint.cache.del x
+  ac.isDirty = false
 
 iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
   # beware that if the account not persisted,

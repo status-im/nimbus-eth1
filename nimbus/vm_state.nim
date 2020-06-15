@@ -43,6 +43,12 @@ proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
   new result
   result.init(prevStateRoot, header, chainDB, tracerFlags)
 
+proc newBaseVMState*(prevStateRoot: Hash256,
+                     chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
+  new result
+  var header: BlockHeader
+  result.init(prevStateRoot, header, chainDB, tracerFlags)
+
 proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
   ## this proc will be called each time a new transaction
   ## is going to be executed
@@ -54,6 +60,15 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
     else:
       vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber)
   vmState.gasCosts = vmState.fork.forkToSchedule
+
+proc updateBlockHeader*(vmState: BaseVMState, header: BlockHeader) =
+  vmState.blockHeader = header
+  vmState.touchedAccounts.clear()
+  vmState.suicides.clear()
+  if EnableTracing in vmState.tracer.flags:
+    vmState.tracer.initTracer(vmState.tracer.flags)
+  vmState.logEntries = @[]
+  vmState.receipts = @[]
 
 method blockhash*(vmState: BaseVMState): Hash256 {.base, gcsafe.} =
   vmState.blockHeader.hash

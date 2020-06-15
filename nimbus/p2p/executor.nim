@@ -44,7 +44,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   if vmState.generateWitness:
     vmState.accountDb.collectWitnessData()
-  vmState.accountDb.persist()
+  vmState.accountDb.persist(clearCache = false)
 
 type
   # TODO: these types need to be removed
@@ -146,7 +146,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
     db.addBalance(header.coinbase, mainReward)
     if vmState.generateWitness:
       db.collectWitnessData()
-    db.persist()
+    db.persist(ClearCache in vmState.flags)
 
   let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
