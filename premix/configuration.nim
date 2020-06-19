@@ -1,5 +1,5 @@
 import stint, os, parseopt, strutils
-from ../nimbus/config import getDefaultDataDir, ConfigStatus, processInteger
+from ../nimbus/config import getDefaultDataDir, ConfigStatus, processInteger, PublicNetwork
 
 export ConfigStatus
 
@@ -9,6 +9,7 @@ type
     head*: Uint256
     maxBlocks*: int
     numCommits*: int
+    netId*: PublicNetwork
 
 var premixConfig {.threadvar.}: PremixConfiguration
 
@@ -23,6 +24,7 @@ proc initConfiguration(): PremixConfiguration =
   result.head = 0.u256
   result.maxBlocks = 0
   result.numCommits = 128
+  result.netId = MainNet
 
 proc getConfiguration*(): PremixConfiguration =
   if isNil(premixConfig):
@@ -35,6 +37,15 @@ proc processU256(val: string, o: var Uint256): ConfigStatus =
   else:
     o = parse(val, Uint256)
   result = Success
+
+proc processNetId(val: string, o: var PublicNetwork): ConfigStatus =
+  case val.toLowerAscii()
+  of "main": o = MainNet
+  of "morden": o = MordenNet
+  of "ropsten": o = RopstenNet
+  of "rinkeby": o = RinkebyNet
+  of "goerli": o = GoerliNet
+  of "kovan": o = KovanNet
 
 template checkArgument(fun, o: untyped) =
   ## Checks if arguments got processed successfully
@@ -72,6 +83,8 @@ proc processArguments*(msg: var string): ConfigStatus =
       of "numcommits":
         checkArgument processInteger, config.numCommits
         config.numCommits = max(config.numCommits, 512)
+      of "netid":
+        checkArgument processNetId, config.netId
       else:
         msg = "Unknown option " & key
         if value.len > 0: msg = msg & " : " & value
