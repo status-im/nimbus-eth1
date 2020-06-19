@@ -7,8 +7,8 @@
 
 import
   macros, strformat, tables, sets, options,
-  eth/common,
-  vm/interpreter/[vm_forks, gas_costs],
+  eth/[common, keys, rlp], nimcrypto/keccak,
+  vm/interpreter/[vm_forks, gas_costs], ./errors,
   ./constants, ./db/[db_chain, accounts_cache],
   ./utils, json, vm_types, vm/transaction_tracer,
   ./config, ../stateless/[multi_keys, witness_from_tree, witness_types]
@@ -60,6 +60,48 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
     else:
       vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber)
   vmState.gasCosts = vmState.fork.forkToSchedule
+
+proc consensusEnginePoA*(vmState: BaseVMState): bool =
+  let chainId = PublicNetwork(vmState.chainDB.config.chainId)
+  # PoA consensus engine have no reward for miner
+  result = chainId in {GoerliNet, RinkebyNet, KovanNet}
+
+proc getSignature(bytes: openArray[byte], output: var Signature): bool =
+  let sig = Signature.fromRaw(bytes)
+  if sig.isOk:
+    output = sig[]
+    return true
+  return false
+
+proc headerHashOriExtraData(vmState: BaseVMState): Hash256 =
+  var tmp = vmState.blockHeader
+  tmp.extraData.setLen(tmp.extraData.len-65)
+  result = keccak256.digest(rlp.encode(tmp))
+
+proc getPubkey(sigRaw: openArray[byte], vmState: BaseVMState, output: var EthAddress): bool =
+  var sig: Signature
+  if sigRaw.getSignature(sig):
+    let headerHash = headerHashOriExtraData(vmState)
+    let pubkey = recover(sig, headerHash)
+    if pubkey.isOk:
+      output = pubkey[].toCanonicalAddress()
+      result = true
+
+proc getMinerAddress*(vmState: BaseVMState): EthAddress =
+  if not vmState.consensusEnginePoA:
+    return vmState.blockHeader.coinbase
+
+  template data: untyped =
+    vmState.blockHeader.extraData
+
+  let len = data.len
+  doAssert(len >= 65)
+
+  var miner: EthAddress
+  if getPubkey(data.toOpenArray(len - 65, len-1), vmState, miner):
+    result = miner
+  else:
+    raise newException(ValidationError, "Could not derive miner address from header extradata")
 
 proc updateBlockHeader*(vmState: BaseVMState, header: BlockHeader) =
   vmState.blockHeader = header
