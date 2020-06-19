@@ -87,7 +87,7 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false) # prune or not prune?
+    captureChainDB = newBaseChainDB(captureTrieDB, false, PublicNetWork(chainDB.config.chainId)) # prune or not prune?
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableAccount})
 
   var stateDb = vmState.accountDb
@@ -153,7 +153,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false)
+    captureChainDB = newBaseChainDB(captureTrieDB, false, PublicNetWork(db.config.chainId))
     # we only need stack dump if we want to scan for internal transaction address
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
 
@@ -209,7 +209,7 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false)
+    captureChainDB = newBaseChainDB(captureTrieDB, false, PublicNetWork(chainDB.config.chainId))
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableTracing})
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
@@ -243,7 +243,7 @@ proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader,
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false)
+    captureChainDB = newBaseChainDB(captureTrieDB, false, PublicNetWork(chainDB.config.chainId))
     bloom = createBloom(vmState.receipts)
 
   let blockSummary = %{
