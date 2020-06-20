@@ -238,11 +238,14 @@ proc persistCode(acc: RefAccount, db: TrieDatabaseRef) =
     else:
       db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
-proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
+proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
     return
+
+  if not clearCache and acc.originalStorage.isNil:
+    acc.originalStorage = newTable[UInt256, UInt256]()
 
   var accountTrie = getAccountTrie(db, acc)
 
@@ -260,6 +263,17 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
     # slotHash can be obtained from accountTrie.put?
     let slotHash = keccakHash(slotAsKey)
     db.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
+
+  if not clearCache:
+    # if we preserve cache, move the overlayStorage
+    # to originalStorage, related to EIP2200, EIP1283
+    for slot, value in acc.overlayStorage:
+      if value > 0:
+        acc.originalStorage[slot] = value
+      else:
+        acc.originalStorage.del(slot)
+    acc.overlayStorage.clear()
+
   acc.account.storageRoot = accountTrie.rootHash
 
 proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): RefAccount =
@@ -416,11 +430,12 @@ proc persist*(ac: var AccountsCache, clearCache: bool = true) =
       if StorageChanged in acc.flags:
         # storageRoot must be updated first
         # before persisting account into merkle trie
-        acc.persistStorage(ac.db)
+        acc.persistStorage(ac.db, clearCache)
       ac.trie.put address, rlp.encode(acc.account)
     of Remove:
       ac.trie.del address
       if not clearCache:
+        #
         cleanAccounts.incl address
     of DoNothing:
       discard
