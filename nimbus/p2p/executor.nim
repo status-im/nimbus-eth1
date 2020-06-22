@@ -26,16 +26,18 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   vmState.cumulativeGasUsed += result
 
+  let miner = vmState.coinbase()
+
   vmState.mutateStateDB:
     # miner fee
     let txFee = result.u256 * tx.gasPrice.u256
-    db.addBalance(vmState.blockHeader.coinbase, txFee)
+    db.addBalance(miner, txFee)
 
     for deletedAccount in vmState.suicides:
       db.deleteAccount deletedAccount
 
     if fork >= FkSpurious:
-      vmState.touchedAccounts.incl(vmState.blockHeader.coinbase)
+      vmState.touchedAccounts.incl(miner)
       # EIP158/161 state clearing
       for account in vmState.touchedAccounts:
         if db.accountExists(account) and db.isEmptyAccount(account):
@@ -44,7 +46,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   if vmState.generateWitness:
     vmState.accountDb.collectWitnessData()
-  vmState.accountDb.persist()
+  vmState.accountDb.persist(clearCache = false)
 
 type
   # TODO: these types need to be removed
@@ -93,6 +95,25 @@ const
     eth2  # FkIstanbul
   ]
 
+proc calculateReward(fork: Fork, header: BlockHeader, body: BlockBody, vmState: BaseVMState) =
+  # PoA consensus engine have no reward for miner
+  if vmState.consensusEnginePoA: return
+
+  let blockReward = blockRewards[fork]
+  var mainReward = blockReward
+
+  for uncle in body.uncles:
+    var uncleReward = uncle.blockNumber.u256 + 8.u256
+    uncleReward -= header.blockNumber.u256
+    uncleReward = uncleReward * blockReward
+    uncleReward = uncleReward div 8.u256
+    vmState.mutateStateDB:
+      db.addBalance(uncle.coinbase, uncleReward)
+    mainReward += blockReward div 32.u256
+
+  vmState.mutateStateDB:
+    db.addBalance(header.coinbase, mainReward)
+
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
   var dbTx = chainDB.db.beginTransaction()
   defer: dbTx.dispose()
@@ -125,32 +146,26 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
           return ValidationResult.Error
         vmState.receipts[txIndex] = makeReceipt(vmState, fork)
 
-  let blockReward = blockRewards[fork]
-  var mainReward = blockReward
   if header.ommersHash != EMPTY_UNCLE_HASH:
     let h = chainDB.persistUncles(body.uncles)
     if h != header.ommersHash:
       debug "Uncle hash mismatch"
       return ValidationResult.Error
-    for uncle in body.uncles:
-      var uncleReward = uncle.blockNumber.u256 + 8.u256
-      uncleReward -= header.blockNumber.u256
-      uncleReward = uncleReward * blockReward
-      uncleReward = uncleReward div 8.u256
-      vmState.mutateStateDB:
-        db.addBalance(uncle.coinbase, uncleReward)
-      mainReward += blockReward div 32.u256
+
+  calculateReward(fork, header, body, vmState)
 
   # Reward beneficiary
   vmState.mutateStateDB:
-    db.addBalance(header.coinbase, mainReward)
     if vmState.generateWitness:
       db.collectWitnessData()
-    db.persist()
+    db.persist(ClearCache in vmState.flags)
 
   let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
-    error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
+    when defined(geth):
+      error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash
+    else:
+      error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
     # this one is a show stopper until we are confident in our VM's
     # compatibility with the main chain
     return ValidationResult.Error

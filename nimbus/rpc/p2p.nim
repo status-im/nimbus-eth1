@@ -86,11 +86,10 @@ proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender:
 
 proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
 
-  func getAccountDb(header: BlockHeader): ReadOnlyStateDB =
+  proc getAccountDb(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
-    # TODO: header.stateRoot to prevStateRoot
-    let vmState = newBaseVMState(header.stateRoot, header, chain)
-    result = vmState.readOnlyStateDB()
+    let ac = AccountsCache.init(chain.db, header.stateRoot, chain.pruneTrie)
+    result = ReadOnlyStateDB(ac)
 
   proc accountDbFromTag(tag: string, readOnly = true): ReadOnlyStateDB =
     result = getAccountDb(chain.headerFromTag(tag))

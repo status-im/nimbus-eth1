@@ -33,6 +33,7 @@ type
     trie: SecureHexaryTrie
     savePoint: SavePoint
     witnessCache: Table[EthAddress, WitnessData]
+    isDirty: bool
 
   ReadOnlyStateDB* = distinct AccountsCache
 
@@ -46,7 +47,17 @@ type
     cache: Table[EthAddress, RefAccount]
     state: TransactionState
 
-const emptyAcc = newAccount()
+const
+  emptyAcc = newAccount()
+
+  resetFlags = {
+    IsDirty,
+    IsNew,
+    IsTouched,
+    IsClone,
+    CodeChanged,
+    StorageChanged
+    }
 
 proc beginSavepoint*(ac: var AccountsCache): SavePoint {.gcsafe.}
 
@@ -66,7 +77,7 @@ proc rootHash*(ac: AccountsCache): KeccakHash =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
   # make sure all cache already committed
-  doAssert(ac.savePoint.cache.len == 0)
+  doAssert(ac.isDirty == false)
   ac.trie.rootHash
 
 proc beginSavepoint*(ac: var AccountsCache): SavePoint =
@@ -222,13 +233,19 @@ proc persistMode(acc: RefAccount): PersistMode =
 
 proc persistCode(acc: RefAccount, db: TrieDatabaseRef) =
   if acc.code.len != 0:
-    db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
+    when defined(geth):
+      db.put(acc.account.codeHash.data, acc.code)
+    else:
+      db.put(contractHashKey(acc.account.codeHash).toOpenArray, acc.code)
 
-proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
+proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
   if acc.overlayStorage.len == 0:
     # TODO: remove the storage too if we figure out
     # how to create 'virtual' storage room for each account
     return
+
+  if not clearCache and acc.originalStorage.isNil:
+    acc.originalStorage = newTable[UInt256, UInt256]()
 
   var accountTrie = getAccountTrie(db, acc)
 
@@ -246,9 +263,21 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef) =
     # slotHash can be obtained from accountTrie.put?
     let slotHash = keccakHash(slotAsKey)
     db.put(slotHashToSlotKey(slotHash.data).toOpenArray, rlp.encode(slot))
+
+  if not clearCache:
+    # if we preserve cache, move the overlayStorage
+    # to originalStorage, related to EIP2200, EIP1283
+    for slot, value in acc.overlayStorage:
+      if value > 0:
+        acc.originalStorage[slot] = value
+      else:
+        acc.originalStorage.del(slot)
+    acc.overlayStorage.clear()
+
   acc.account.storageRoot = accountTrie.rootHash
 
 proc makeDirty(ac: AccountsCache, address: EthAddress, cloneStorage = true): RefAccount =
+  ac.isDirty = true
   result = ac.getAccount(address)
   if address in ac.savePoint.cache:
     # it's already in latest savepoint
@@ -283,7 +312,11 @@ proc getCode*(ac: AccountsCache, address: EthAddress): seq[byte] =
   if CodeLoaded in acc.flags or CodeChanged in acc.flags:
     result = acc.code
   else:
-    let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
+    when defined(geth):
+      let data = ac.db.get(acc.account.codeHash.data)
+    else:
+      let data = ac.db.get(contractHashKey(acc.account.codeHash).toOpenArray)
+
     acc.code = data
     acc.flags.incl CodeLoaded
     result = acc.code
@@ -384,9 +417,11 @@ proc deleteAccount*(ac: var AccountsCache, address: EthAddress) =
   let acc = ac.getAccount(address)
   acc.kill()
 
-proc persist*(ac: var AccountsCache) =
+proc persist*(ac: var AccountsCache, clearCache: bool = true) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavePoint.isNil)
+  var cleanAccounts = initHashSet[EthAddress]()
+
   for address, acc in ac.savePoint.cache:
     case acc.persistMode()
     of Update:
@@ -395,13 +430,24 @@ proc persist*(ac: var AccountsCache) =
       if StorageChanged in acc.flags:
         # storageRoot must be updated first
         # before persisting account into merkle trie
-        acc.persistStorage(ac.db)
+        acc.persistStorage(ac.db, clearCache)
       ac.trie.put address, rlp.encode(acc.account)
     of Remove:
       ac.trie.del address
+      if not clearCache:
+        #
+        cleanAccounts.incl address
     of DoNothing:
       discard
-  ac.savePoint.cache.clear()
+
+    acc.flags = acc.flags - resetFlags
+
+  if clearCache:
+    ac.savePoint.cache.clear()
+  else:
+    for x in cleanAccounts:
+      ac.savePoint.cache.del x
+  ac.isDirty = false
 
 iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
   # beware that if the account not persisted,
@@ -411,10 +457,11 @@ iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =
     let storageRoot = acc.account.storageRoot
     var trie = initHexaryTrie(ac.db, storageRoot)
 
-    for slot, value in trie:
-      if slot.len != 0:
-        var keyData = ac.db.get(slotHashToSlotKey(slot).toOpenArray)
-        yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
+    for slotHash, value in trie:
+      if slotHash.len == 0: continue
+      let keyData = ac.db.get(slotHashToSlotKey(slotHash).toOpenArray)
+      if keyData.len == 0: continue
+      yield (rlp.decode(keyData, UInt256), rlp.decode(value, UInt256))
 
 proc getStorageRoot*(ac: AccountsCache, address: EthAddress): Hash256 =
   # beware that if the account not persisted,

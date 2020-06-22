@@ -3,7 +3,7 @@
 import
   eth/[common, rlp], stint,
   chronicles, downloader, configuration,
-  ../nimbus/errors
+  ../nimbus/[errors, config]
 
 import
   eth/trie/[hexary, db],
@@ -34,10 +34,10 @@ proc main() =
   # 52029 first block with receipts logs
   # 66407 failed transaction
 
-  let conf = getConfiguration()
+  let conf = configuration.getConfiguration()
   let db = newChainDb(conf.dataDir)
   let trieDB = trieDB db
-  let chainDB = newBaseChainDB(trieDB, false)
+  let chainDB = newBaseChainDB(trieDB, false, conf.netId)
 
   # move head to block number ...
   if conf.head != 0.u256:
@@ -93,7 +93,7 @@ when isMainModule:
   var message: string
 
   ## Processing command line arguments
-  if processArguments(message) != Success:
+  if configuration.processArguments(message) != Success:
     echo message
     quit(QuitFailure)
   else:
