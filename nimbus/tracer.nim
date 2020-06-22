@@ -103,7 +103,9 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
     stateDiff = %{"before": before, "after": after}
     beforeRoot: Hash256
 
-  let fork = chainDB.config.toFork(header.blockNumber)
+  let
+    fork = chainDB.config.toFork(header.blockNumber)
+    miner = vmState.coinbase()
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
@@ -113,7 +115,7 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
       vmState.enableTracing()
       before.captureAccount(stateDb, sender, senderName)
       before.captureAccount(stateDb, recipient, recipientName)
-      before.captureAccount(stateDb, header.coinbase, minerName)
+      before.captureAccount(stateDb, miner, minerName)
       stateDb.persist()
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
@@ -123,8 +125,8 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
     if idx == txIndex:
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
-      after.captureAccount(stateDb, header.coinbase, minerName)
-      vmState.removeTracedAccounts(sender, recipient, header.coinbase)
+      after.captureAccount(stateDb, miner, minerName)
+      vmState.removeTracedAccounts(sender, recipient, miner)
       stateDb.persist()
       stateDiff["afterRoot"] = %($stateDb.rootHash)
       break
@@ -156,6 +158,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     captureChainDB = newBaseChainDB(captureTrieDB, false, PublicNetWork(db.config.chainId))
     # we only need stack dump if we want to scan for internal transaction address
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
+    miner = vmState.coinbase()
 
   var
     before = newJArray()
@@ -168,7 +171,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     before.captureAccount(stateBefore, sender, senderName & $idx)
     before.captureAccount(stateBefore, recipient, recipientName & $idx)
 
-  before.captureAccount(stateBefore, header.coinbase, minerName)
+  before.captureAccount(stateBefore, miner, minerName)
 
   for idx, uncle in body.uncles:
     before.captureAccount(stateBefore, uncle.coinbase, uncleName & $idx)
@@ -184,8 +187,8 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     after.captureAccount(stateAfter, recipient, recipientName & $idx)
     vmState.removeTracedAccounts(sender, recipient)
 
-  after.captureAccount(stateAfter, header.coinbase, minerName)
-  vmState.removeTracedAccounts(header.coinbase)
+  after.captureAccount(stateAfter, miner, minerName)
+  vmState.removeTracedAccounts(miner)
 
   for idx, uncle in body.uncles:
     after.captureAccount(stateAfter, uncle.coinbase, uncleName & $idx)

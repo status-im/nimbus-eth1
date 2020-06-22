@@ -39,6 +39,7 @@ type
     txGasPrice*    : GasInt
     gasCosts*      : GasCosts
     fork*          : Fork
+    minerAddress*  : EthAddress
 
   AccessLogs* = ref object
     reads*: Table[string, string]

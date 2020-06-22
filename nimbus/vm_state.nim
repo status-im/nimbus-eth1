@@ -26,6 +26,8 @@ proc `$`*(vmState: BaseVMState): string =
   else:
     result = &"VMState {vmState.name}:\n  header: {vmState.blockHeader}\n  chaindb:  {vmState.chaindb}"
 
+proc getMinerAddress(vmState: BaseVMState): EthAddress
+
 proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
            chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}) =
   self.prevHeaders = @[]
@@ -37,6 +39,8 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
   self.logEntries = @[]
   self.accountDb = AccountsCache.init(chainDB.db, prevStateRoot, chainDB.pruneTrie)
   self.touchedAccounts = initHashSet[EthAddress]()
+  {.gcsafe.}:
+    self.minerAddress = self.getMinerAddress()
 
 proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
                      chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
@@ -78,7 +82,7 @@ proc headerHashOriExtraData(vmState: BaseVMState): Hash256 =
   tmp.extraData.setLen(tmp.extraData.len-65)
   result = keccak256.digest(rlp.encode(tmp))
 
-proc getPubkey(sigRaw: openArray[byte], vmState: BaseVMState, output: var EthAddress): bool =
+proc calcMinerAddress(sigRaw: openArray[byte], vmState: BaseVMState, output: var EthAddress): bool =
   var sig: Signature
   if sigRaw.getSignature(sig):
     let headerHash = headerHashOriExtraData(vmState)
@@ -87,7 +91,7 @@ proc getPubkey(sigRaw: openArray[byte], vmState: BaseVMState, output: var EthAdd
       output = pubkey[].toCanonicalAddress()
       result = true
 
-proc getMinerAddress*(vmState: BaseVMState): EthAddress =
+proc getMinerAddress(vmState: BaseVMState): EthAddress =
   if not vmState.consensusEnginePoA:
     return vmState.blockHeader.coinbase
 
@@ -98,7 +102,7 @@ proc getMinerAddress*(vmState: BaseVMState): EthAddress =
   doAssert(len >= 65)
 
   var miner: EthAddress
-  if getPubkey(data.toOpenArray(len - 65, len-1), vmState, miner):
+  if calcMinerAddress(data.toOpenArray(len - 65, len-1), vmState, miner):
     result = miner
   else:
     raise newException(ValidationError, "Could not derive miner address from header extradata")
@@ -111,12 +115,13 @@ proc updateBlockHeader*(vmState: BaseVMState, header: BlockHeader) =
     vmState.tracer.initTracer(vmState.tracer.flags)
   vmState.logEntries = @[]
   vmState.receipts = @[]
+  vmState.minerAddress = vmState.getMinerAddress()
 
 method blockhash*(vmState: BaseVMState): Hash256 {.base, gcsafe.} =
   vmState.blockHeader.hash
 
 method coinbase*(vmState: BaseVMState): EthAddress {.base, gcsafe.} =
-  vmState.blockHeader.coinbase
+  vmState.minerAddress
 
 method timestamp*(vmState: BaseVMState): EthTime {.base, gcsafe.} =
   vmState.blockHeader.timestamp

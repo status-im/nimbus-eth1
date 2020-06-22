@@ -26,7 +26,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   vmState.cumulativeGasUsed += result
 
-  let miner = vmState.getMinerAddress()
+  let miner = vmState.coinbase()
 
   vmState.mutateStateDB:
     # miner fee

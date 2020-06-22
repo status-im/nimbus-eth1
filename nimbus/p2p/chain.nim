@@ -36,7 +36,7 @@ method getAncestorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, ski
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): ValidationResult =
+method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): ValidationResult {.gcsafe.} =
   # Run the VM here
   if headers.len != bodies.len:
     debug "Number of headers not matching number of bodies"
