@@ -166,3 +166,10 @@
 [submodule "vendor/nim-sqlite3-abi"]
 	path = vendor/nim-sqlite3-abi
 	url = https://github.com/arnetheduck/nim-sqlite3-abi.git
+  ignore = dirty
+	branch = master
+[submodule "vendor/nim-bearssl"]
+	path = vendor/nim-bearssl
+	url = https://github.com/status-im/nim-bearssl
+	ignore = dirty
+	branch = master

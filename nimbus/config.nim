@@ -847,6 +847,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.ident = NimbusIdent
   result.net.nat = NatAny
   result.net.protocols = defaultProtocols
+  result.net.nodekey = PrivateKey.random().tryGet()
 
   const dataDir = getDefaultDataDir()
 

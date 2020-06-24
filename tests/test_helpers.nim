@@ -199,7 +199,7 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   var secretKey = j["secretKey"].getStr
   removePrefix(secretKey, "0x")
   let privateKey = PrivateKey.fromHex(secretKey).tryGet()
-  let sig = sign(privateKey, result.rlpEncode).tryGet()
+  let sig = sign(privateKey, result.rlpEncode)
   let raw = sig.toRaw()
 
   result.R = fromBytesBE(Uint256, raw[0..31])
@@ -210,11 +210,9 @@ proc hashLogEntries*(logs: seq[Log]): string =
   toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
 
 proc setupEthNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  var
-    conf = getConfiguration()
-  if not conf.net.nodekey.verify():
-    conf.net.nodekey = PrivateKey.random().tryGet()
-  let keypair = conf.net.nodekey.toKeyPair().tryGet()
+  var conf = getConfiguration()
+  conf.net.nodekey = PrivateKey.random().tryGet()
+  let keypair = conf.net.nodekey.toKeyPair()
 
   var srvAddress: Address
   srvAddress.ip = parseIpAddress("0.0.0.0")
