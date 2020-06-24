@@ -101,12 +101,11 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
   else:
     let
       privKey = PrivateKey.fromRaw(makeOpenArray(privateKey, 32))
-      kp = privKey and privKey[].toKeyPair()
-    if kp.isErr:
+    if privKey.isErr:
       error "Passed an invalid private key."
       return false
 
-    keypair = kp[]
+    keypair = privKey[].toKeyPair()
 
   node = newEthereumNode(keypair, address, 1, nil, addAllCapabilities = false)
   node.addCapability Whisper
@@ -174,7 +173,7 @@ proc nimbus_new_keypair(id: var Identifier): bool
     discard
 
 proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
-    bool {.exportc, dynlib, raises: [Defect].} =
+    bool {.exportc, dynlib, raises: [Defect, Exception].} =
   ## Caller needs to provide as id a pointer to 32 bytes allocation.
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not privateKey.isNil, "Private key cannot be nil.")
@@ -189,12 +188,11 @@ proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
   else:
     let
       privKey = PrivateKey.fromRaw(makeOpenArray(privateKey, 32))
-      kp = privKey and privKey[].toKeyPair()
-    if kp.isErr:
+    if privKey.isErr:
       error "Passed an invalid private key."
       return false
 
-    keypair = kp[]
+    keypair = privKey[].toKeyPair()
 
   result = true
   id = generateRandomID()
@@ -208,7 +206,7 @@ proc nimbus_delete_keypair(id: Identifier): bool
   result = whisperKeys.asymKeys.take(id.toHex(), unneeded)
 
 proc nimbus_get_private_key(id: Identifier, privateKey: var PrivateKey):
-    bool {.exportc, dynlib, raises: [OSError, IOError, ValueError].} =
+    bool {.exportc, dynlib, raises: [OSError, IOError, ValueError, Exception].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not (unsafeAddr privateKey).isNil, "Private key cannot be nil.")
 
@@ -256,7 +254,7 @@ proc nimbus_delete_symkey(id: Identifier): bool
   result = whisperKeys.symKeys.take(id.toHex(), unneeded)
 
 proc nimbus_get_symkey(id: Identifier, symKey: var SymKey):
-    bool {.exportc, dynlib, raises: [Defect].} =
+    bool {.exportc, dynlib, raises: [Defect, Exception].} =
   doAssert(not (unsafeAddr id).isNil, "Key id cannot be nil.")
   doAssert(not (unsafeAddr symKey).isNil, "Symmetric key cannot be nil.")
 
