@@ -108,6 +108,7 @@ cliBuilder:
           ./test_difficulty,
           ./test_transaction_json,
           ./test_blockchain_json,
+          ./test_forkid,
           ../stateless/test_witness_keys,
           ../stateless/test_block_witness,
           ../stateless/test_witness_json
