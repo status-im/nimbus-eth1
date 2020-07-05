@@ -38,3 +38,15 @@ func generateSafeAddress*(address: EthAddress, salt: Uint256, data: openArray[by
 
 func hash*(b: BlockHeader): Hash256 {.inline.} =
   rlpHash(b)
+
+proc crc32*(crc: uint32, buf: openArray[byte]): uint32 =
+  const kcrc32 = [ 0'u32, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190,
+    0x6b6b51f4, 0x4db26158, 0x5005713c, 0xedb88320'u32, 0xf00f9344'u32, 0xd6d6a3e8'u32,
+    0xcb61b38c'u32, 0x9b64c2b0'u32, 0x86d3d2d4'u32, 0xa00ae278'u32, 0xbdbdf21c'u32]
+
+  var crcu32 = not crc
+  for b in buf:
+    crcu32 = (crcu32 shr 4) xor kcrc32[int((crcu32 and 0xF) xor (uint32(b) and 0xF'u32))]
+    crcu32 = (crcu32 shr 4) xor kcrc32[int((crcu32 and 0xF) xor (uint32(b) shr 4'u32))]
+
+  result = not crcu32
