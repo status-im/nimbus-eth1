@@ -29,6 +29,8 @@ type
 
 # this TreeBuilder support short node parsing
 # but a block witness should not contains short node
+# for account trie. Short rlp node only appears in
+# storage trie with depth >= 9
 
 # the InputStream still unstable
 # when using large dataset for testing

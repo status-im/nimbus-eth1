@@ -31,8 +31,9 @@ Every time you request a node using a hash key, you'll get one of the 3 types of
 ### Deviation from yellow paper
 
 * In the Yellow Paper, the `hash to next node` may be replaced by the next node directly if the RLP encoded node bytes count
-  less than 32. But in a real Ethereum State trie, this never happened. An empty RLP encoded `Account` will have length of 70.
-  Combined with the Hex Prefix encoding of nibbles, it will be more than 70 bytes.
+  less than 32. But in a real Ethereum State trie, this never happened for account trie. An empty RLP encoded `Account` will have length of 70.
+  Combined with the Hex Prefix encoding of nibbles, it will be more than 70 bytes. Short Rlp node only exist in storage trie
+  with depth >= 9.
 * In Yellow Paper, the 17th elem of the `Branch Node` can contains a value. But it always empty in a real Ethereum State trie.
   The block witness spec also ignore this 17th elem when encoding or decoding `Branch Node`.
   This can happen because in Ethereum `Secure Hexary Trie`, every keys have uniform length of 32 bytes or 64 nibbles.
