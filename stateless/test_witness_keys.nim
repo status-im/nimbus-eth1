@@ -75,18 +75,18 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
 
   for i in 0..<numPairs:
     let acc  = randAccount(memDB)
-    addrs[i] = (randAddress(), acc.codeTouched, acc.storageKeys)
+    addrs[i] = AccountKey(address: randAddress(), codeTouched: acc.codeTouched, storageKeys: acc.storageKeys)
     accs[i]  = acc.account
     trie.put(addrs[i].address, rlp.encode(accs[i]))
 
   when addInvalidKeys:
     # invalidAddress should not end up in block witness
     let invalidAddress = randAddress()
-    addrs.add((invalidAddress, false, MultikeysRef(nil)))
+    addrs.add(AccountKey(address: invalidAddress))
 
   if addIdenticalKeys:
     let invalidAddress = addrs[0].address
-    addrs.add((invalidAddress, false, MultikeysRef(nil)))
+    addrs.add(AccountKey(address: invalidAddress))
 
   var mkeys = newMultiKeys(addrs)
   let rootHash = trie.rootHash
@@ -122,13 +122,20 @@ proc runTest(numPairs: int, testStatusIMPL: var TestStatus,
     for kd in mkeys.keys:
       check kd.visited == true
 
-proc initMultiKeys(keys: openArray[string]): MultikeysRef =
+proc initMultiKeys(keys: openArray[string], storageMode: bool = false): MultikeysRef =
   result.new
-  for x in keys:
-    result.keys.add KeyData(
-      storageMode: false,
-      hash: hexToByteArray[32](x)
-    )
+  if storageMode:
+    for i, x in keys:
+      result.keys.add KeyData(
+        storageMode: true,
+        hash: hexToByteArray[32](x)
+      )
+  else:
+    for x in keys:
+      result.keys.add KeyData(
+        storageMode: false,
+        hash: hexToByteArray[32](x)
+      )
 
 proc parseInvalidInput(payload: openArray[byte]): bool =
   var db = newMemoryDB()
@@ -245,6 +252,35 @@ proc witnessKeysMain*() =
       for x in walkDirRec("stateless" / "invalidInput"):
         let z = readFile(x)
         check parseInvalidInput(z.toOpenArrayByte(0, z.len-1))
+
+    test "short rlp test":
+      let keys = [
+        "01234567abce7762869be690036144c12c256bdb06ee9073ad5ecca18a47c325",
+        "01234567b491732f964182ce4bde5e2468318692ed446e008f621b26f8ff5660",
+        "01234567c140158288775c8912aed274fb9d6a3a260e9e95e03e70ba8df30f6b",
+      ]
+      let m  = initMultiKeys(keys, true)
+      var memDB = newMemoryDB()
+      var trie = initSecureHexaryTrie(memDB)
+      var acc  = randAccount(memDB)
+
+      var tt = initHexaryTrie(memDB)
+      for x in m.keys:
+        tt.put(x.hash, rlp.encode(1.u256))
+      acc.account.storageRoot = tt.rootHash
+
+      let addrs = @[AccountKey(address: randAddress(), codeTouched: acc.codeTouched, storageKeys: m)]
+
+      trie.put(addrs[0].address, rlp.encode(acc.account))
+      var mkeys = newMultiKeys(addrs)
+      let rootHash = trie.rootHash
+
+      var wb = initWitnessBuilder(memDB, rootHash, {wfEIP170})
+      var witness = wb.buildWitness(mkeys)
+      var db = newMemoryDB()
+      var tb = initTreeBuilder(witness, db, {wfEIP170})
+      let root = tb.buildTree()
+      check root.data == rootHash.data
 
 when isMainModule:
   witnessKeysMain()

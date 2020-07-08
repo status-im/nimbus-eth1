@@ -170,7 +170,8 @@ proc toNodeKey(t: var TreeBuilder, z: openArray[byte]): NodeKey =
     t.db.put(result.data, z)
 
 proc toNodeKey(z: openArray[byte]): NodeKey =
-  doAssert(z.len < 32)
+  if z.len >= 32:
+    raise newException(ParsingError, "Failed when try to convert short rlp to NodeKey")
   result.usedBytes = z.len
   result.data[0..z.len-1] = z[0..z.len-1]
 
@@ -230,7 +231,7 @@ proc buildForest*(t: var TreeBuilder): seq[KeccakHash]
     result.add KeccakHash(data: res.data)
 
 proc treeNode(t: var TreeBuilder, depth: int, storageMode = false): NodeKey =
-  if depth >= 64:
+  if depth > 64:
     raise newException(ParsingError, "invalid trie structure")
 
   let nodeType = safeReadEnum(t, TrieNodeType)
@@ -494,13 +495,13 @@ proc hashNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   if storageMode and depth >= 9:
     let z = t.safeReadByte()
     if z == ShortRlpPrefix:
-      let y = t.safeReadByte().int
-      if y == 0:
+      let rlpLen = t.safeReadByte().int
+      if rlpLen == 0:
         safeReadBytes(t, 31):
           result.toKeccak(0, t.read(31))
       else:
-        safeReadBytes(t, y):
-          result = toNodeKey(t.read(y))
+        safeReadBytes(t, rlpLen):
+          result = toNodeKey(t.read(rlpLen))
     else:
       safeReadBytes(t, 31):
         result.toKeccak(z, t.read(31))

@@ -148,7 +148,7 @@ proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, st
 
 proc writeShortRlp(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool) =
   doAssert(node.len < 32 and depth >= 9 and storageMode)
-  debugEcho "SHORT RLP ", node.len
+  wb.writeByte(HashNodeType)
   wb.writeByte(ShortRlpPrefix)
   wb.writeByte(node.len)
   wb.write(node)
