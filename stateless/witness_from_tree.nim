@@ -136,17 +136,26 @@ proc writeBranchNode(wb: var WitnessBuilder, mask: uint, depth: int, node: openA
   when defined(debugHash):
     wb.write(keccak(node).data)
 
-proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte]) =
+proc writeHashNode(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool) =
   # usually a hash node means the recursion will not go deeper
   # and the information can be represented by the hash
   # for chunked witness, a hash node can be a root to another
   # sub-trie in one of the chunks
   wb.writeByte(HashNodeType)
+  if depth >= 9 and storageMode and node[0] == 0.byte:
+    wb.writeByte(ShortRlpPrefix)
+  wb.write(node)
+
+proc writeShortRlp(wb: var WitnessBuilder, node: openArray[byte], depth: int, storageMode: bool) =
+  doAssert(node.len < 32 and depth >= 9 and storageMode)
+  debugEcho "SHORT RLP ", node.len
+  wb.writeByte(ShortRlpPrefix)
+  wb.writeByte(node.len)
   wb.write(node)
 
 proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].}
 
-proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
+proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int) =
   if not kd.codeTouched:
     # the account have code but not touched by the EVM
     # in current block execution
@@ -155,7 +164,7 @@ proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
     if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
       raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
     wb.writeUVarint32(code.len)
-    wb.writeHashNode(acc.codeHash.data)
+    wb.writeHashNode(acc.codeHash.data, depth, false)
     # no need to write 'code' here
     return
 
@@ -172,10 +181,10 @@ proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
   wb.writeUVarint32(code.len)
   wb.write(code)
 
-proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
+proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account, depth: int) =
   if kd.storageKeys.isNil:
     # the account have storage but not touched by EVM
-    wb.writeHashNode(acc.storageRoot.data)
+    wb.writeHashNode(acc.storageRoot.data, depth, true)
   elif acc.storageRoot != emptyRlpHash:
     # the account have storage and the EVM use it
     var zz = StackElem(
@@ -188,7 +197,7 @@ proc writeStorage(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
     getBranchRecurse(wb, zz)
   else:
     # no storage at all
-    wb.writeHashNode(emptyRlpHash.data)
+    wb.writeHashNode(emptyRlpHash.data, depth, true)
 
 proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account,
   node: openArray[byte], depth: int) {.raises: [ContractCodeError, IOError, Defect, CatchableError, Exception].} =
@@ -212,8 +221,8 @@ proc writeAccountNode(wb: var WitnessBuilder, kd: KeyData, acc: Account,
   wb.writeUVarint(acc.nonce)
 
   if accountType != SimpleAccountType:
-    wb.writeByteCode(kd, acc)
-    wb.writeStorage(kd, acc)
+    wb.writeByteCode(kd, acc, depth)
+    wb.writeStorage(kd, acc, depth)
 
   #0x00 address:<Address> balance:<Bytes32> nonce:<Bytes32>
   #0x01 address:<Address> balance:<Bytes32> nonce:<Bytes32> bytecode:<Bytecode> storage:<Tree_Node(0,1)>
@@ -235,6 +244,10 @@ proc writeAccountStorageLeafNode(wb: var WitnessBuilder, key: openArray[byte], v
 
 proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
   if z.node.len == 0: return
+  if z.node.len < 32:
+    writeShortRlp(wb, z.node, z.depth, z.storageMode)
+    return
+
   var nodeRlp = rlpFromBytes z.node
 
   case nodeRlp.listLen
@@ -244,7 +257,7 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
 
     if not mg.match:
       # return immediately if there is no match
-      writeHashNode(wb, keccak(z.node).data)
+      writeHashNode(wb, keccak(z.node).data, z.depth, z.storageMode)
       return
 
     let value = nodeRlp.listElem(1)
@@ -295,14 +308,10 @@ proc getBranchRecurse(wb: var WitnessBuilder, z: var StackElem) =
         continue
 
       if branch.isList:
-        # short node appear in yellow paper
-        # but never in the actual ethereum state trie
-        # an rlp encoded ethereum account will have length > 32 bytes
-        # block witness spec silent about this
-        doAssert(false, "Short node should not exist in block witness")
+        writeShortRlp(wb, branch.rawData, z.depth, z.storageMode)
       else:
         # if branch elem not empty and not a match, emit hash
-        writeHashNode(wb, branch.expectHash)
+        writeHashNode(wb, branch.expectHash, z.depth, z.storageMode)
 
     # 17th elem should always empty
     # 17th elem appear in yellow paper but never in

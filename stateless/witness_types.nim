@@ -33,6 +33,7 @@ type
 const
   StorageLeafNodeType* = AccountNodeType
   BlockWitnessVersion* = 0x01
+  ShortRlpPrefix*      = 0.byte
 
 proc setBranchMaskBit*(x: var uint, i: int) {.inline.} =
   assert(i >= 0 and i < 17)

@@ -147,6 +147,11 @@ proc toKeccak(r: var NodeKey, x: openArray[byte]) {.inline.} =
   r.data[0..31] = x[0..31]
   r.usedBytes = 32
 
+proc toKeccak(r: var NodeKey, z: byte, x: openArray[byte]) {.inline.} =
+  r.data[0] = z
+  r.data[1..31] = x[0..30]
+  r.usedBytes = 32
+
 proc append(r: var RlpWriter, n: NodeKey) =
   if n.usedBytes < 32:
     r.append rlpFromBytes(n.data.toOpenArray(0, n.usedBytes-1))
@@ -162,6 +167,11 @@ proc toNodeKey(t: var TreeBuilder, z: openArray[byte]): NodeKey =
     result.usedBytes = 32
     t.db.put(result.data, z)
 
+proc toNodeKey(z: openArray[byte]): NodeKey =
+  doAssert(z.len < 32)
+  result.usedBytes = z.len
+  result.data[0..z.len-1] = z[0..z.len-1]
+
 proc forceSmallNodeKeyToHash(t: var TreeBuilder, r: NodeKey): NodeKey =
   let hash = keccak(r.data.toOpenArray(0, r.usedBytes-1))
   t.db.put(hash.data, r.data.toOpenArray(0, r.usedBytes-1))
@@ -176,7 +186,7 @@ proc branchNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
 proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
 proc accountNode(t: var TreeBuilder, depth: int): NodeKey
 proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey
-proc hashNode(t: var TreeBuilder): NodeKey
+proc hashNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey
 proc treeNode(t: var TreeBuilder, depth: int = 0, storageMode = false): NodeKey
 
 proc buildTree*(t: var TreeBuilder): KeccakHash
@@ -231,7 +241,7 @@ proc treeNode(t: var TreeBuilder, depth: int, storageMode = false): NodeKey =
       result = t.accountStorageLeafNode(depth)
     else:
       result = t.accountNode(depth)
-  of HashNodeType: result = t.hashNode()
+  of HashNodeType: result = t.hashNode(depth, storageMode)
 
   if depth == 0 and result.usedBytes < 32:
     result = t.forceSmallNodeKeyToHash(result)
@@ -335,7 +345,7 @@ proc extensionNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   let nodeType = safeReadEnum(t, TrieNodeType)
   case nodeType
   of BranchNodeType: r.append t.branchNode(depth + nibblesLen, storageMode)
-  of HashNodeType: r.append t.hashNode()
+  of HashNodeType: r.append t.hashNode(depth, storageMode)
   else: raise newException(ParsingError, "wrong type during parsing child of extension node")
 
   result = t.toNodeKey(r.finish)
@@ -361,13 +371,13 @@ proc readCodeLen(t: var TreeBuilder): int =
   t.keys[^1].codeLen = codeLen.int
   result = codeLen.int
 
-proc readHashNode(t: var TreeBuilder): NodeKey =
+proc readHashNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
   let nodeType = safeReadEnum(t, TrieNodeType)
   if nodeType != HashNodeType:
     raise newException(ParsingError, "hash node expected but got " & $nodeType)
-  result = t.hashNode()
+  result = t.hashNode(depth, storageMode)
 
-proc readByteCode(t: var TreeBuilder, acc: var Account) =
+proc readByteCode(t: var TreeBuilder, acc: var Account, depth: int) =
   let bytecodeType = safeReadEnum(t, BytecodeType)
   case bytecodeType
   of CodeTouched:
@@ -380,7 +390,7 @@ proc readByteCode(t: var TreeBuilder, acc: var Account) =
     # we could discard it here
     discard t.readCodeLen()
 
-    let codeHash = t.readHashNode()
+    let codeHash = t.readHashNode(depth, false)
     doAssert(codeHash.usedBytes == 32)
     acc.codeHash.data = codeHash.data
 
@@ -413,7 +423,7 @@ proc accountNode(t: var TreeBuilder, depth: int): NodeKey =
     acc.codeHash = blankStringHash
     acc.storageRoot = emptyRlpHash
   of ExtendedAccountType:
-    t.readByteCode(acc)
+    t.readByteCode(acc, depth)
 
     # switch to account storage parsing mode
     # and reset the depth
@@ -478,6 +488,20 @@ proc accountStorageLeafNode(t: var TreeBuilder, depth: int): NodeKey =
   when defined(debugHash):
     doAssert(result == nodeKey, "account storage leaf node parsing error")
 
-proc hashNode(t: var TreeBuilder): NodeKey =
-  safeReadBytes(t, 32):
-    result.toKeccak(t.read(32))
+proc hashNode(t: var TreeBuilder, depth: int, storageMode: bool): NodeKey =
+  if storageMode and depth >= 9:
+    let z = t.safeReadByte()
+    if z == ShortRlpPrefix:
+      let y = t.safeReadByte().int
+      if y == 0:
+        safeReadBytes(t, 31):
+          result.toKeccak(0, t.read(31))
+      else:
+        safeReadBytes(t, y):
+          result = toNodeKey(t.read(y))
+    else:
+      safeReadBytes(t, 31):
+        result.toKeccak(z, t.read(31))
+  else:
+    safeReadBytes(t, 32):
+      result.toKeccak(t.read(32))
