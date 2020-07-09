@@ -28,8 +28,14 @@ type
     mask*: uint
     groups*: array[16, Group]
 
-  AccountKey* = tuple[address: EthAddress, codeTouched: bool, storageKeys: MultikeysRef]
-  MatchGroup* = tuple[match: bool, group: Group]
+  AccountKey* = object
+    address*: EthAddress
+    codeTouched*: bool
+    storageKeys*: MultikeysRef
+
+  MatchGroup* = object
+    match*: bool
+    group*: Group
 
 func cmpHash(a, b: KeyHash): int =
   var i = 0
@@ -128,12 +134,12 @@ func groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group): Ma
       if not compareNibbles(m.keys[i].hash, depth, n):
         g.last = i - 1
         # case 1: match and no match
-        return (true, g)
+        return MatchGroup(match: true, group: g)
       inc i
 
     # case 2: all is a match group
     g.last = parentGroup.last
-    return (true, g)
+    return MatchGroup(match: true, group: g)
 
   # no match came first, skip no match
   # we only interested in a match group
@@ -149,15 +155,15 @@ func groups*(m: MultikeysRef, depth: int, n: NibblesSeq, parentGroup: Group): Ma
       if not compareNibbles(m.keys[i].hash, depth, n):
         # case 3: no match, match, and no match
         g.last = i - 1
-        return (true, g)
+        return MatchGroup(match: true,  group: g)
       inc i
 
     # case 4: no match and match
     g.last = parentGroup.last
-    return (true, g)
+    return MatchGroup(match: true, group: g)
 
   # case 5: no match at all
-  result = (false, g)
+  result = MatchGroup(match: false, group: g)
 
 func isValidMatch(mg: MatchGroup): bool {.inline.} =
   result = mg.match and mg.group.first == mg.group.last
