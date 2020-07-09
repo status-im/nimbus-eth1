@@ -69,7 +69,7 @@ proc setupStateDB(tester: var Tester, wantedState: JsonNode, stateDB: var Accoun
 
     let sKeys = if storageKeys.len != 0: newMultiKeys(storageKeys) else: MultikeysRef(nil)
     let codeTouched = code.len > 0
-    keys.add((account, codeTouched, sKeys))
+    keys.add(AccountKey(address: account, codeTouched: codeTouched, storageKeys: sKeys))
 
   tester.keys = newMultiKeys(keys)
   stateDB.persist()
