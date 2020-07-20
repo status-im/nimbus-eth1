@@ -11,7 +11,7 @@ import
   parseopt, strutils, macros, os, times, json, stew/[byteutils],
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
   eth/p2p/bootnodes, eth/p2p/rlpx_protocols/whisper_protocol,
-  ./db/select_backend, ./random_keys,
+  ./db/select_backend, eth/keys,
   ./vm/interpreter/vm_forks
 
 const
@@ -150,6 +150,9 @@ type
     debug*: DebugConfiguration    ## Debug configuration
     shh*: WhisperConfig           ## Whisper configuration
     customGenesis*: CustomGenesisConfig  ## Custom Genesis Configuration
+    # You should only create one instance of the RNG per application / library
+    # Ref is used so that it can be shared between components
+    rng*: ref BrHmacDrbgContext
 
   CustomGenesisConfig = object
     chainId*: uint
@@ -832,6 +835,8 @@ proc getDefaultDataDir*(): string =
 proc initConfiguration(): NimbusConfiguration =
   ## Allocates and initializes `NimbusConfiguration` with default values
   result = new NimbusConfiguration
+  result.rng = newRng()
+
   ## RPC defaults
   result.rpc.flags = {}
   result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
@@ -847,7 +852,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.ident = NimbusIdent
   result.net.nat = NatAny
   result.net.protocols = defaultProtocols
-  result.net.nodekey = randomPrivateKey()
+  result.net.nodekey = random(PrivateKey, result.rng[])
 
   const dataDir = getDefaultDataDir()
 
