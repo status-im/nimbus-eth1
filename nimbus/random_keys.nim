@@ -11,7 +11,7 @@ proc getRng*(): ref BrHmacDrbgContext {.gcsafe.} =
   theRNG
 
 proc randomPrivateKey*(): PrivateKey =
-  random(PrivateKey, theRNG[])
+  random(PrivateKey, getRng()[])
 
 proc randomKeyPair*(): KeyPair =
-  random(KeyPair, theRNG[])
+  random(KeyPair, getRng()[])
