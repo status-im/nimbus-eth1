@@ -11,7 +11,7 @@ import
   parseopt, strutils, macros, os, times, json, stew/[byteutils],
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
   eth/p2p/bootnodes, eth/p2p/rlpx_protocols/whisper_protocol,
-  ./db/select_backend,
+  ./db/select_backend, ./random_keys,
   ./vm/interpreter/vm_forks
 
 const
@@ -847,7 +847,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.ident = NimbusIdent
   result.net.nat = NatAny
   result.net.protocols = defaultProtocols
-  result.net.nodekey = PrivateKey.random().tryGet()
+  result.net.nodekey = randomPrivateKey()
 
   const dataDir = getDefaultDataDir()
 

@@ -86,7 +86,7 @@ proc calcMinerAddress(sigRaw: openArray[byte], vmState: BaseVMState, output: var
   var sig: Signature
   if sigRaw.getSignature(sig):
     let headerHash = headerHashOriExtraData(vmState)
-    let pubkey = recover(sig, headerHash)
+    let pubkey = recover(sig, SKMessage(headerHash.data))
     if pubkey.isOk:
       output = pubkey[].toCanonicalAddress()
       result = true

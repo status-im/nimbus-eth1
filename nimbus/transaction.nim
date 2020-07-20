@@ -59,7 +59,7 @@ proc getSender*(transaction: Transaction, output: var EthAddress): bool =
   var sig: Signature
   if transaction.getSignature(sig):
     var txHash = transaction.txHashNoSignature
-    let pubkey = recover(sig, txHash)
+    let pubkey = recover(sig, SkMessage(txHash.data))
     if pubkey.isOk:
       output = pubkey[].toCanonicalAddress()
       result = true

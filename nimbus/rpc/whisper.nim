@@ -2,9 +2,12 @@ import
   json_rpc/rpcserver, tables, options,
   eth/[common, rlp, keys, p2p], eth/p2p/rlpx_protocols/whisper_protocol,
   nimcrypto/[sysrand, hmac, sha2, pbkdf2],
-  rpc_types, hexstrings, key_storage
+  rpc_types, hexstrings, key_storage, ../random_keys
 
 from stew/byteutils import hexToSeqByte, hexToByteArray
+
+template generateRandomID*(): string =
+  generateRandomID(getRNG()[])
 
 # Whisper RPC implemented mostly as in
 # https://github.com/ethereum/go-ethereum/wiki/Whisper-v6-RPC-API
@@ -71,7 +74,7 @@ proc setupWhisperRPC*(node: EthereumNode, keys: KeyStorage, rpcsrv: RpcServer) =
     ##
     ## Returns key identifier on success and an error on failure.
     result = generateRandomID().Identifier
-    keys.asymKeys.add(result.string, KeyPair.random().tryGet())
+    keys.asymKeys.add(result.string, randomKeyPair())
 
   rpcsrv.rpc("shh_addPrivateKey") do(key: PrivateKey) -> Identifier:
     ## Stores the key pair, and returns its ID.

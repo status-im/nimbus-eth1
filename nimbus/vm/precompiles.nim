@@ -101,7 +101,7 @@ proc ecRecover*(computation: Computation) =
   var
     (msgHash, sig) = computation.getSignature()
 
-  var pubkey = recover(sig, SkMessage(data: msgHash))
+  var pubkey = recover(sig, SkMessage(msgHash))
   if pubkey.isErr:
     raise newException(ValidationError, "Could not derive public key from computation")
 

@@ -11,7 +11,8 @@ import
   testutils/markdown_reports,
   ../nimbus/[config, transaction, utils, errors],
   ../nimbus/vm/interpreter/vm_forks,
-  ../nimbus/db/accounts_cache
+  ../nimbus/db/accounts_cache,
+  ../nimbus/random_keys
 
 func revmap(x: Table[Fork, string]): Table[string, Fork] =
   result = initTable[string, Fork]()
@@ -211,7 +212,7 @@ proc hashLogEntries*(logs: seq[Log]): string =
 
 proc setupEthNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
   var conf = getConfiguration()
-  conf.net.nodekey = PrivateKey.random().tryGet()
+  conf.net.nodekey = randomPrivateKey()
   let keypair = conf.net.nodekey.toKeyPair()
 
   var srvAddress: Address
