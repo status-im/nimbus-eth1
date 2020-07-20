@@ -11,7 +11,8 @@ import
   chronos, chronicles, nimcrypto/[utils, hmac, pbkdf2, hash, sysrand], tables,
   stew/ranges/ptr_arith, eth/[keys, rlp, p2p, async_utils],
   eth/p2p/rlpx_protocols/whisper_protocol,
-  eth/p2p/[peer_pool, bootnodes, whispernodes], ../nimbus/rpc/key_storage
+  eth/p2p/[peer_pool, bootnodes, whispernodes], ../nimbus/rpc/key_storage,
+  ../nimbus/random_keys
 
 # TODO: lots of overlap with Nimbus Whisper RPC here, however not all
 # the same due to type conversion (no use of Option and such). Perhaps some
@@ -24,7 +25,7 @@ type
 
   CReceivedMessage* = object
     decoded*: ptr byte
-    decodedLen*: csize
+    decodedLen*: int # csize_t
     source*: ptr byte
     recipientPublicKey*: ptr byte
     timestamp*: uint32
@@ -48,9 +49,9 @@ type
     ttl*: uint32
     topic*: Topic
     payload*: ptr byte
-    payloadLen*: csize
+    payloadLen*: int # csize_t
     padding*: ptr byte
-    paddingLen*: csize
+    paddingLen*: int # csize_t
     powTime*: float64
     powTarget*: float64
 
@@ -93,11 +94,12 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
 
   var keypair: KeyPair
   if privateKey.isNil:
-    var kp = KeyPair.random()
-    if kp.isErr:
-      error "Can't generate keypair", err = kp.error
-      return false
-    keypair = kp[]
+    #var kp = KeyPair.random()
+    #if kp.isErr:
+      #error "Can't generate keypair", err = kp.error
+      #return false
+    #keypair = kp[]
+    keypair = randomKeyPair()
   else:
     let
       privKey = PrivateKey.fromRaw(makeOpenArray(privateKey, 32))
@@ -165,7 +167,7 @@ proc nimbus_new_keypair(id: var Identifier): bool
 
   id = generateRandomID()
   try:
-    whisperKeys.asymKeys.add(id.toHex(), KeyPair.random().tryGet())
+    whisperKeys.asymKeys.add(id.toHex(), randomKeyPair())
     result = true
   except CatchableError:
     # Don't think this can actually happen, comes from the `getPublicKey` part
@@ -180,11 +182,12 @@ proc nimbus_add_keypair(privateKey: ptr byte, id: var Identifier):
 
   var keypair: KeyPair
   if privateKey.isNil:
-    var kp = KeyPair.random()
-    if kp.isErr:
-      error "Can't generate keypair", err = kp.error
-      return false
-    keypair = kp[]
+    #var kp = KeyPair.random()
+    #if kp.isErr:
+      #error "Can't generate keypair", err = kp.error
+      #return false
+    #keypair = kp[]
+    keypair = randomKeyPair()
   else:
     let
       privKey = PrivateKey.fromRaw(makeOpenArray(privateKey, 32))
@@ -373,7 +376,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
     var cmsg = CReceivedMessage(
       decoded: unsafeAddr msg.decoded.payload[0],
-      decodedLen: csize msg.decoded.payload.len(),
+      decodedLen: msg.decoded.payload.len(),
       timestamp: msg.timestamp,
       ttl: msg.ttl,
       topic: msg.topic,
@@ -451,7 +454,7 @@ proc nimbus_join_public_chat(channel: cstring,
     proc c_handler(msg: ReceivedMessage) =
       var cmsg = CReceivedMessage(
         decoded: unsafeAddr msg.decoded.payload[0],
-        decodedLen: csize msg.decoded.payload.len(),
+        decodedLen: msg.decoded.payload.len(),
         timestamp: msg.timestamp,
         ttl: msg.ttl,
         topic: msg.topic,
