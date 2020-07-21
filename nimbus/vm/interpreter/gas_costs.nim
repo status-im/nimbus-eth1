@@ -69,8 +69,6 @@ type
     of Sstore:
       when defined(evmc_enabled):
         s_status*: evmc_storage_status
-      else:
-        s_isStorageEmpty*: bool
       s_currentValue*: Uint256
       s_originalValue*: Uint256
     of Call, CallCode, DelegateCall, StaticCall:
@@ -216,54 +214,53 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   func `prefix gasSstore`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
     ## Value is word to save
+    const
+      NoopGas     = FeeSchedule[GasSload] # if the value doesn't change.
+      DirtyGas    = FeeSchedule[GasSload] # if a dirty value is changed.
+      InitGas     = FeeSchedule[GasSset]  # from clean zero to non-zero
+      InitRefund  = FeeSchedule[GasSset] - FeeSchedule[GasSload] # resetting to the original zero value
+      CleanGas    = FeeSchedule[GasSreset]# from clean non-zero to something else
+      CleanRefund = FeeSchedule[GasSreset] - FeeSchedule[GasSload] # resetting to the original non-zero value
+      ClearRefund = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
 
     when defined(evmc_enabled):
       const
-        sstoreLoad {.used.} = FeeSchedule[GasSload]
-        sstoreSet  = FeeSchedule[GasSset]
-        sstoreReset= FeeSchedule[GasSreset]
-        sstoreDirty= when fork < FkConstantinople or fork == FkPetersburg: sstoreReset
-                     else: sstoreLoad
-        InitRefundEIP2200  = FeeSchedule[GasSset] - FeeSchedule[GasSload]
-        CleanRefundEIP2200 = FeeSchedule[GasSreset] - FeeSchedule[GasSload]
-        ClearRefundEIP2200 = FeeSchedule[RefundsClear]
+        sstoreDirty = when fork < FkConstantinople or fork == FkPetersburg: CleanGas
+                      else: DirtyGas
 
       case gasParams.s_status
-      of EVMC_STORAGE_ADDED: result.gasCost = sstoreSet
-      of EVMC_STORAGE_MODIFIED: result.gasCost = sstoreReset
+      of EVMC_STORAGE_ADDED: result.gasCost = InitGas
+      of EVMC_STORAGE_MODIFIED: result.gasCost = CleanGas
       of EVMC_STORAGE_DELETED:
-        result.gasCost = sstoreReset
-        result.gasRefund += ClearRefundEIP2200
+        result.gasCost = CleanGas
+        result.gasRefund += ClearRefund
       of EVMC_STORAGE_UNCHANGED: result.gasCost = sstoreDirty
       of EVMC_STORAGE_MODIFIED_AGAIN:
         result.gasCost = sstoreDirty
         if not gasParams.s_originalValue.isZero:
           if gasParams.s_currentValue.isZero:
-            result.gasRefund -= ClearRefundEIP2200
+            result.gasRefund -= ClearRefund
           if value.isZero:
-            result.gasRefund += ClearRefundEIP2200
+            result.gasRefund += ClearRefund
 
         if gasParams.s_originalValue == value:
           if gasParams.s_originalValue.isZero:
-            result.gasRefund += InitRefundEIP2200
+            result.gasRefund += InitRefund
           else:
-            result.gasRefund += CleanRefundEIP2200
+            result.gasRefund += CleanRefund
     else:
       when fork < FkConstantinople or fork == FkPetersburg:
-        # workaround for static evaluation not working for if expression
-        const
-          gSet = FeeSchedule[GasSset]
-          gSreset = FeeSchedule[GasSreset]
+        let isStorageEmpty = gasParams.s_currentValue.isZero
 
         # Gas cost - literal translation of Yellow Paper
-        result.gasCost = if value.isZero.not and gasParams.s_isStorageEmpty:
-                          gSet
+        result.gasCost = if value.isZero.not and isStorageEmpty:
+                          InitGas
                         else:
-                          gSreset
+                          CleanGas
 
         # Refund
-        if value.isZero and not gasParams.s_isStorageEmpty:
-          result.gasRefund = static(FeeSchedule[RefundsClear])
+        if value.isZero and not isStorageEmpty:
+          result.gasRefund = ClearRefund
       else:
         # 0. If *gasleft* is less than or equal to 2300, fail the current call.
         # 1. If current value equals new value (this is a no-op), SSTORE_NOOP_GAS gas is deducted.
@@ -278,44 +275,36 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
         #     2.2.2. If original value equals new value (this storage slot is reset):
         #       2.2.2.1. If original value is 0, add SSTORE_INIT_REFUND to refund counter.
         #       2.2.2.2. Otherwise, add SSTORE_CLEAN_REFUND gas to refund counter.
-        const
-          NoopGasEIP2200     = FeeSchedule[GasSload] # if the value doesn't change.
-          DirtyGasEIP2200    = FeeSchedule[GasSload] # if a dirty value is changed.
-          InitGasEIP2200     = FeeSchedule[GasSset]  # from clean zero to non-zero
-          InitRefundEIP2200  = FeeSchedule[GasSset] - FeeSchedule[GasSload] # resetting to the original zero value
-          CleanGasEIP2200    = FeeSchedule[GasSreset]# from clean non-zero to something else
-          CleanRefundEIP2200 = FeeSchedule[GasSreset] - FeeSchedule[GasSload] # resetting to the original non-zero value
-          ClearRefundEIP2200 = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
 
         # Gas sentry honoured, do the actual gas calculation based on the stored value
         if gasParams.s_currentValue == value: # noop (1)
-          result.gasCost = NoopGasEIP2200
+          result.gasCost = NoopGas
           return
 
         if gasParams.s_originalValue == gasParams.s_currentValue:
           if gasParams.s_originalValue.isZero: # create slot (2.1.1)
-            result.gasCost = InitGasEIP2200
+            result.gasCost = InitGas
             return
 
           if value.isZero: # delete slot (2.1.2b)
-            result.gasRefund = ClearRefundEIP2200
+            result.gasRefund = ClearRefund
 
-          result.gasCost = CleanGasEIP2200 # write existing slot (2.1.2)
+          result.gasCost = CleanGas # write existing slot (2.1.2)
           return
 
         if not gasParams.s_originalValue.isZero:
           if gasParams.s_currentValue.isZero: # recreate slot (2.2.1.1)
-            result.gasRefund -= ClearRefundEIP2200
+            result.gasRefund -= ClearRefund
           if value.isZero: # delete slot (2.2.1.2)
-            result.gasRefund += ClearRefundEIP2200
+            result.gasRefund += ClearRefund
 
         if gasParams.s_originalValue == value:
           if gasParams.s_originalValue.isZero: # reset to original inexistent slot (2.2.2.1)
-            result.gasRefund += InitRefundEIP2200
+            result.gasRefund += InitRefund
           else: # reset to original existing slot (2.2.2.2)
-            result.gasRefund += CleanRefundEIP2200
+            result.gasRefund += CleanRefund
 
-        result.gasCost = DirtyGasEIP2200 # dirty update (2.2)
+        result.gasCost = DirtyGas # dirty update (2.2)
 
   func `prefix gasLog0`(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall.} =
     result = `prefix gasMemoryExpansion`(currentMemSize, memOffset, memLength)
