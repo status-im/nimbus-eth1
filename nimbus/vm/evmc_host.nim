@@ -32,6 +32,9 @@ proc hostAccountExistsImpl(ctx: Computation, address: EthAddress): bool {.cdecl.
 proc hostGetStorageImpl(ctx: Computation, address: EthAddress, key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
   ctx.vmState.accountDB.getStorage(address, Uint256.fromEvmc(key)).toEvmc()
 
+proc sstoreNetGasMetering(ctx: Computation): bool {.inline.} =
+  ctx.fork in {FkConstantinople, FkIstanbul}
+
 proc hostSetStorageImpl(ctx: Computation, address: EthAddress,
                         key, value: var evmc_bytes32): evmc_storage_status {.cdecl.} =
   let
@@ -51,7 +54,7 @@ proc hostSetStorageImpl(ctx: Computation, address: EthAddress,
     status = EVMC_STORAGE_UNCHANGED
   else:
     origValue = statedb.getCommittedStorage(address, slot)
-    if origValue == currValue or ctx.fork < FkIstanbul:
+    if origValue == currValue or not ctx.sstoreNetGasMetering():
       if currValue == 0:
         status = EVMC_STORAGE_ADDED
       elif newValue == 0:
