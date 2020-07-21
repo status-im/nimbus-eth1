@@ -6,7 +6,6 @@ import
 
 const
   emptyCodeHash = blankStringHash
-  emptyStorageHash = emptyRlpHash
 
 proc store(memoryDB: TrieDatabaseRef, branch: JsonNode) =
   for p in branch:
@@ -106,7 +105,7 @@ proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
 
   result = validationResult
 
-proc main() =
+proc main() {.used.} =
   let conf = getConfiguration()
 
   if conf.head == 0.u256:

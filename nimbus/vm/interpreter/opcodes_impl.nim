@@ -429,20 +429,21 @@ op sload, inline = true, slot:
   ## 0x54, Load word from storage.
   push: c.getStorage(slot)
 
-template sstoreImpl(c: Computation, slot, newValue: Uint256) =
-  let currentValue {.inject.} = c.getStorage(slot)
+when not evmc_enabled:
+  template sstoreImpl(c: Computation, slot, newValue: Uint256) =
+    let currentValue {.inject.} = c.getStorage(slot)
 
-  let
-    gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: currentValue.isZero)
-    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
+    let
+      gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: currentValue.isZero)
+      (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
-  c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
+    c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
 
-  if gasRefund > 0:
-    c.gasMeter.refundGas(gasRefund)
+    if gasRefund > 0:
+      c.gasMeter.refundGas(gasRefund)
 
-  c.vmState.mutateStateDB:
-    db.setStorage(c.msg.contractAddress, slot, newValue)
+    c.vmState.mutateStateDB:
+      db.setStorage(c.msg.contractAddress, slot, newValue)
 
 when evmc_enabled:
   template sstoreEvmc(c: Computation, slot, newValue: Uint256) =
@@ -462,25 +463,26 @@ op sstore, inline = false, slot, newValue:
   else:
     sstoreImpl(c, slot, newValue)
 
-template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
-  let stateDB = c.vmState.readOnlyStateDB
-  let currentValue {.inject.} = c.getStorage(slot)
+when not evmc_enabled:
+  template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
+    let stateDB = c.vmState.readOnlyStateDB
+    let currentValue {.inject.} = c.getStorage(slot)
 
-  let
-    gasParam = GasParams(kind: Op.Sstore,
-      s_isStorageEmpty: currentValue.isZero,
-      s_currentValue: currentValue,
-      s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot)
-    )
-    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
+    let
+      gasParam = GasParams(kind: Op.Sstore,
+        s_isStorageEmpty: currentValue.isZero,
+        s_currentValue: currentValue,
+        s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot)
+      )
+      (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
-  c.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
+    c.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
 
-  if gasRefund != 0:
-    c.gasMeter.refundGas(gasRefund)
+    if gasRefund != 0:
+      c.gasMeter.refundGas(gasRefund)
 
-  c.vmState.mutateStateDB:
-    db.setStorage(c.msg.contractAddress, slot, newValue)
+    c.vmState.mutateStateDB:
+      db.setStorage(c.msg.contractAddress, slot, newValue)
 
 op sstoreEIP2200, inline = false, slot, newValue:
   checkInStaticContext(c)

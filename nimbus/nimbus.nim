@@ -49,8 +49,8 @@ proc start(nimbus: NimbusNode) =
       {.gcsafe.}:
         let registry = defaultRegistry
       info "metrics", registry
-      addTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
-    addTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
+      discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
+    discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
 
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:
@@ -162,6 +162,7 @@ proc process*(nimbus: NimbusNode) =
       poll()
     except CatchableError as e:
       debug "Exception in poll()", exc = e.name, err = e.msg
+      discard e # silence warning when chronicles not activated
 
   # Stop loop
   waitFor nimbus.stop()

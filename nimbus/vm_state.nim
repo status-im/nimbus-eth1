@@ -11,7 +11,7 @@ import
   vm/interpreter/[vm_forks, gas_costs], ./errors,
   ./constants, ./db/[db_chain, accounts_cache],
   ./utils, json, vm_types, vm/transaction_tracer,
-  ./config, ../stateless/[multi_keys, witness_from_tree, witness_types]
+  ./config, ../stateless/[witness_from_tree, witness_types]
 
 proc newAccessLogs*: AccessLogs =
   AccessLogs(reads: initTable[string, string](), writes: initTable[string, string]())

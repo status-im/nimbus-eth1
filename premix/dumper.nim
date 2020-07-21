@@ -5,8 +5,8 @@
 
 import
   configuration, stint, eth/common,
-  ../nimbus/db/[storage_types, db_chain, select_backend, capturedb],
-  eth/trie/[hexary, db, trie_defs], ../nimbus/p2p/executor,
+  ../nimbus/db/[db_chain, select_backend, capturedb],
+  eth/trie/[hexary, db], ../nimbus/p2p/executor,
   ../nimbus/[tracer, vm_state]
 
 proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
@@ -27,12 +27,12 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB)
 
   captureChainDB.setHead(parent, true)
-  let validationResult = processBlock(captureChainDB, header, body, vmState)
+  discard processBlock(captureChainDB, header, body, vmState)
 
   transaction.rollback()
   dumpDebuggingMetaData(captureChainDB, header, body, vmState, false)
 
-proc main() =
+proc main() {.used.} =
   let conf = getConfiguration()
   let db = newChainDb(conf.dataDir)
   let trieDB = trieDB db

@@ -2,7 +2,7 @@ import
   tables, hashes, sets,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils, storage_types,
-  ../../stateless/[witness_types, multi_keys]
+  ../../stateless/multi_keys
 
 type
   AccountFlag = enum

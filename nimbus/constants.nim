@@ -1,3 +1,5 @@
+{.used.}
+
 import
   eth/common, nimcrypto/hash
 

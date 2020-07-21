@@ -7,7 +7,7 @@
 
 import
   os, macros, json, strformat, strutils, parseutils, os, tables,
-  stew/byteutils, stew/ranges/typedranges, net, eth/[common, keys, rlp, p2p], unittest2,
+  stew/byteutils, net, eth/[common, keys, rlp, p2p], unittest2,
   testutils/markdown_reports,
   ../nimbus/[config, transaction, utils, errors],
   ../nimbus/vm/interpreter/vm_forks,
@@ -103,8 +103,8 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
             status[last][name] = Status.Skip
             skip()
           else:
-            when not paralleliseTests:
-              echo filename
+            # when not paralleliseTests:
+            #   echo filename
             `handler`(fixtures, `testStatusIMPL`)
             if `testStatusIMPL` == OK:
               status[last][name] = Status.OK

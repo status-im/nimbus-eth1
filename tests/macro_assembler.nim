@@ -1,6 +1,6 @@
 import
   macrocache, strutils, unittest2,
-  stew/byteutils, chronicles, stew/ranges, eth/common,
+  stew/byteutils, chronicles, eth/common,
   ../nimbus/vm/interpreter/opcode_values,
   stew/shims/macros, ../nimbus/config
 

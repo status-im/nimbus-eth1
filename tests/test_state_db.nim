@@ -6,8 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import  unittest2, eth/trie/[hexary, db],
-        ../nimbus/db/state_db, stew/byteutils, eth/common,
-        stew/ranges
+        ../nimbus/db/state_db, stew/byteutils, eth/common
 
 include ../nimbus/db/accounts_cache
 
@@ -17,16 +16,16 @@ func initAddr(z: int): EthAddress =
 proc stateDBMain*() =
   suite "Account State DB":
     setup:
-      const emptyAcc = newAccount()
+      const emptyAcc {.used.} = newAccount()
 
       var
         memDB = newMemoryDB()
-        acDB = newMemoryDB()
+        acDB {.used.} = newMemoryDB()
         trie = initHexaryTrie(memDB)
-        stateDB = newAccountStateDB(memDB, trie.rootHash, true)
-        address = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
-        code = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
-        rootHash: KeccakHash
+        stateDB {.used.} = newAccountStateDB(memDB, trie.rootHash, true)
+        address {.used.} = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+        code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+        rootHash {.used.} : KeccakHash
 
     test "accountExists and isDeadAccount":
       check stateDB.accountExists(address) == false
@@ -146,9 +145,9 @@ proc stateDBMain*() =
       var addr2 = initAddr(2)
       ac.setCode(addr2, code)
       ac.persist()
-      check ac.getCode(addr2) == code      
-      let key = contractHashKey(hexary.keccak(code))      
+      check ac.getCode(addr2) == code
+      let key = contractHashKey(hexary.keccak(code))
       check acDB.get(key.toOpenArray) == code
-            
+
 when isMainModule:
   stateDBMain()

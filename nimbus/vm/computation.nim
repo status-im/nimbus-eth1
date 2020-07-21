@@ -7,15 +7,18 @@
 
 import
   chronicles, strformat, macros, options, times,
-  sets, eth/[common, keys], eth/trie/db as triedb,
+  sets, eth/[common, keys],
   ../constants, ../errors, ../vm_state, ../vm_types,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
   ./code_stream, ./memory, ./message, ./stack, ../db/[accounts_cache, db_chain],
-  ../utils/header, stew/[byteutils, ranges/ptr_arith], precompiles,
+  ../utils/header, precompiles,
   transaction_tracer, ../utils
 
+when defined(chronicles_log_level):
+  import stew/byteutils
+
 when defined(evmc_enabled):
-  import evmc/evmc, evmc_helpers, evmc_api
+  import evmc/evmc, evmc_helpers, evmc_api, stew/ranges/ptr_arith
 
 logScope:
   topics = "vm computation"

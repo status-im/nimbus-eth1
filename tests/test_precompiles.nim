@@ -46,7 +46,7 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
         data: data
         )
       computation = newComputation(vmState, message)
-    echo "Running ", action.astToStr, " - ", test["name"]
+    # echo "Running ", action.astToStr, " - ", test["name"]
     `action`(computation)
     let c = computation.output == expected
     if not c: echo "Output  : " & computation.output.toHex & "\nExpected: " & expected.toHex

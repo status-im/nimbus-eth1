@@ -445,11 +445,11 @@ proc processAddressPortsList(v: string,
     var tas4: seq[TransportAddress]
     var tas6: seq[TransportAddress]
     try:
-      tas4 = resolveTAddress(item, IpAddressFamily.IPv4)
+      tas4 = resolveTAddress(item, AddressFamily.IPv4)
     except CatchableError:
       discard
     try:
-      tas6 = resolveTAddress(item, IpAddressFamily.IPv6)
+      tas6 = resolveTAddress(item, AddressFamily.IPv6)
     except CatchableError:
       discard
     if len(tas4) == 0 and len(tas6) == 0:
@@ -672,7 +672,6 @@ proc processNetArguments(key, value: string): ConfigStatus =
         error "Invalid genesis block config file format", invalidFileName=value
         result = ErrorIncorrectOption
       except:
-        var exceptionType = getCurrentException()
         var msg = getCurrentExceptionMsg()
         error "Error loading genesis block config file", invalidFileName=msg
         result = Error

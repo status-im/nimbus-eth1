@@ -1,6 +1,5 @@
 import
-  times,
-  eth/common, stint,
+  times, eth/common, stint,
   ../constants, ../config
 
 const

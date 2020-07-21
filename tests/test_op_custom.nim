@@ -1,6 +1,6 @@
 import
   macro_assembler, unittest2, macros,
-  stew/byteutils, eth/common, stew/ranges
+  stew/byteutils, eth/common
 
 proc opCustomMain*() =
   suite "Custom Opcodes Test":
