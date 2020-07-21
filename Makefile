@@ -15,16 +15,8 @@ BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 
 # debugging tools + testing tools
 TOOLS := \
-	premix \
-	persist \
-	debug \
-	dumper \
-	hunter \
-	regress \
-	tracerTestGen \
-	persistBlockTestGen
+	test_tools_build
 TOOLS_DIRS := \
-	premix \
 	tests
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
