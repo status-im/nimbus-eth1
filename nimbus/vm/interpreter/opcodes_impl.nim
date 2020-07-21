@@ -434,7 +434,7 @@ when not evmc_enabled:
     let currentValue {.inject.} = c.getStorage(slot)
 
     let
-      gasParam = GasParams(kind: Op.Sstore, s_isStorageEmpty: currentValue.isZero)
+      gasParam = GasParams(kind: Op.Sstore, s_currentValue: currentValue)
       (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
 
     c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
@@ -470,7 +470,6 @@ when not evmc_enabled:
 
     let
       gasParam = GasParams(kind: Op.Sstore,
-        s_isStorageEmpty: currentValue.isZero,
         s_currentValue: currentValue,
         s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot)
       )
