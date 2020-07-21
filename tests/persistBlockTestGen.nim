@@ -1,7 +1,7 @@
 import
-  json, os, eth/common, stint, chronicles, stew/byteutils, nimcrypto, eth/rlp,
-  eth/trie/db, ../nimbus/db/[db_chain, capturedb, storage_types, select_backend],
-  ../nimbus/[tracer, vm_types, config],
+  json, eth/common, stint, chronicles, eth/rlp,
+  eth/trie/db, ../nimbus/db/[db_chain, capturedb, select_backend],
+  ../nimbus/[tracer, config],
   ../nimbus/p2p/chain
 
 proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
@@ -34,7 +34,7 @@ proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
   metaData.dumpMemoryDB(memoryDB)
   writeFile("block" & $blockNumber & ".json", metaData.pretty())
 
-proc main() =
+proc main() {.used.} =
   # 97 block with uncles
   # 46147 block with first transaction
   # 46400 block with transaction

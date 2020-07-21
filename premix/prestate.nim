@@ -1,7 +1,7 @@
 import
-  json, downloader, stint, eth/trie/db, stew/byteutils,
+  json, stint, eth/trie/db, stew/byteutils,
   ../nimbus/db/[db_chain, storage_types], eth/[rlp, common],
-  ../nimbus/p2p/chain, ../nimbus/tracer
+  ../nimbus/tracer
 
 proc generatePrestate*(nimbus, geth: JsonNode, blockNumber: Uint256, parent, header: BlockHeader, body: BlockBody) =
   let

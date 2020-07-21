@@ -30,7 +30,7 @@ proc hostAccountExistsImpl(ctx: Computation, address: EthAddress): bool {.cdecl.
     db.accountExists(address)
 
 proc hostGetStorageImpl(ctx: Computation, address: EthAddress, key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
-  ctx.vmState.accountDB.getStorage(address, Uint256.fromEvmc(key))[0].toEvmc()
+  ctx.vmState.accountDB.getStorage(address, Uint256.fromEvmc(key)).toEvmc()
 
 proc hostSetStorageImpl(ctx: Computation, address: EthAddress,
                         key, value: var evmc_bytes32): evmc_storage_status {.cdecl.} =
@@ -38,7 +38,7 @@ proc hostSetStorageImpl(ctx: Computation, address: EthAddress,
     slot = Uint256.fromEvmc(key)
     newValue = Uint256.fromEvmc(value)
     statedb = ctx.vmState.readOnlyStateDb
-    currValue = statedb.getStorage(address, slot)[0]
+    currValue = statedb.getStorage(address, slot)
 
   assert address == ctx.msg.contractAddress
 
@@ -100,7 +100,7 @@ proc hostCopyCodeImpl(ctx: Computation, address: EthAddress,
   let maxToCopy = code.len - codeOffset
   let numToCopy = min(maxToCopy, bufferSize)
   if numToCopy > 0:
-    copyMem(bufferData, code.slice(codeOffset).baseAddr, numToCopy)
+    copyMem(bufferData, code[codeOffset].addr, numToCopy)
   result = numToCopy
 
 proc hostSelfdestructImpl(ctx: Computation, address, beneficiary: EthAddress) {.cdecl.} =

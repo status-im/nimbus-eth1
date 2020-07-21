@@ -1,11 +1,11 @@
 import
-  eth/[common, rlp], stint, stew/byteutils,
-  nimcrypto, chronicles, configuration,
-  eth/trie/[hexary, db, trie_defs]
+  eth/[common, rlp], stint,
+  chronicles, configuration,
+  eth/trie/[hexary, db]
 
 import
-  ../nimbus/db/[storage_types, db_chain, select_backend],
-  ../nimbus/[utils, vm_state, errors],
+  ../nimbus/db/[db_chain, select_backend],
+  ../nimbus/vm_state,
   ../nimbus/p2p/executor
 
 const
@@ -41,7 +41,7 @@ proc validateBlock(chainDB: BaseChainDB, blockNumber: BlockNumber): BlockNumber 
   transaction.rollback()
   result = blockNumber + numBlocks.u256
 
-proc main() =
+proc main() {.used.} =
   let
     conf = getConfiguration()
     db = newChainDb(conf.dataDir)

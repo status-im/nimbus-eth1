@@ -46,7 +46,7 @@ proc memoryMain*() =
     #     var mem = memory32()
     #     mem.write(startPosition = 0.u256, size = pow(2.u256, 256), value = @[1.byte, 0.byte])
 
-    test "write rejects valyes beyond memory size":
+    test "write rejects values beyond memory size":
       expect(ValidationError):
         var mem = memory128()
         mem.write(startPos = 128, value = @[1.byte, 0.byte, 1.byte, 0.byte])

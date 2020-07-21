@@ -129,18 +129,21 @@ proc runTest(filePath, fileName: string) =
         check root == t.rootHash
         check t.error == false
     except ParsingError, ContractCodeError:
-      echo "Exception detected ", getCurrentExceptionMsg()
+      # echo "Exception detected ", getCurrentExceptionMsg()
       check t.error == true
 
 proc writeFuzzData(filePath, fileName: string) =
   var testStatusIMPL: TestStatus
   let t = parseTester(filePath, testStatusIMPL)
+
+  # this block below check the parsed json
   var db = newMemoryDB()
   var tb = initTreeBuilder(t.output, db, {wfEIP170})
-  let root = tb.buildTree()
+  discard tb.buildTree()
+
   writeFile(filename, t.output)
 
-proc fuzzTool(): bool =
+proc fuzzTool(): bool {.used.} =
   var filename: string
   var numArg = 0
 

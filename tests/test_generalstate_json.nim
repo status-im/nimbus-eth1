@@ -7,7 +7,7 @@
 
 import
   unittest2, strutils, tables, json, times, os, sets,
-  stew/ranges/typedranges, nimcrypto, options,
+  nimcrypto, options,
   eth/[rlp, common], eth/trie/[db, trie_defs], chronicles,
   ./test_helpers, ./test_allowed_to_fail,
   ../nimbus/p2p/executor, test_config,

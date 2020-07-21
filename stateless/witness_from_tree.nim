@@ -54,11 +54,12 @@ proc rlpListToBitmask(r: var Rlp): uint =
 template write(wb: var WitnessBuilder, x: untyped) =
   wb.output.write(x)
 
-proc writeU32Impl(wb: var WitnessBuilder, x: uint32) =
-  wb.write(toBytesBE(x))
+when defined(debugHash):
+  proc writeU32Impl(wb: var WitnessBuilder, x: uint32) =
+    wb.write(toBytesBE(x))
 
-template writeU32(wb: var WitnessBuilder, x: untyped) =
-  wb.writeU32Impl(uint32(x))
+  template writeU32(wb: var WitnessBuilder, x: untyped) =
+    wb.writeU32Impl(uint32(x))
 
 template writeByte(wb: var WitnessBuilder, x: untyped) =
   wb.write(byte(x))

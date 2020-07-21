@@ -715,7 +715,6 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     var tester = parseTester(fixture, testStatusIMPL)
     var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = test_config.getConfiguration().pruning)
 
-    echo "TESTING: ", fixtureName
     if not tester.good: continue
 
     var vmState = newBaseVMState(emptyRlpHash,
@@ -741,7 +740,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       if latestBlockHash != tester.lastBlockHash:
         verifyStateDB(fixture["postState"], tester.vmState.readOnlyStateDB)
     except ValidationError as E:
-      echo "ERROR: ", E.msg
+      echo fixtureName, " ERROR: ", E.msg
       success = false
 
     if tester.debugMode:

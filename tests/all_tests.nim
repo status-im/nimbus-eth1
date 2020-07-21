@@ -86,6 +86,8 @@ macro cliBuilder(stmtList: typed): untyped =
 # repeatedly until all sub-tests are executed.
 # you can execute the sub-test by a number start from zero.
 
+{. warning[UnusedImport]:off .}
+
 cliBuilder:
   import  ./test_code_stream,
           ./test_gas_meter,

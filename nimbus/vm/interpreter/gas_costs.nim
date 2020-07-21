@@ -219,7 +219,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
     when defined(evmc_enabled):
       const
-        sstoreLoad = FeeSchedule[GasSload]
+        sstoreLoad {.used.} = FeeSchedule[GasSload]
         sstoreSet  = FeeSchedule[GasSset]
         sstoreReset= FeeSchedule[GasSreset]
         sstoreDirty= when fork < FkConstantinople or fork == FkPetersburg: sstoreReset

@@ -3,7 +3,7 @@
 import
   eth/[common, rlp], stint,
   chronicles, downloader, configuration,
-  ../nimbus/[errors, config]
+  ../nimbus/errors
 
 import
   eth/trie/[hexary, db],
@@ -21,7 +21,7 @@ template persistToDb(db: ChainDB, body: untyped) =
   when manualCommit:
     if not db.txCommit(): doAssert(false)
 
-proc main() =
+proc main() {.used.} =
   # 97 block with uncles
   # 46147 block with first transaction
   # 46400 block with transaction
