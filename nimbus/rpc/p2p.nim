@@ -28,7 +28,7 @@ import
 
 # Work around for https://github.com/nim-lang/Nim/issues/8645
 proc `%`*(value: Time): JsonNode =
-  result = %value.toSeconds
+  result = %value.toUnix
 
 template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
   # TODO: Account balance u256 but GasInt is int64?
@@ -107,7 +107,6 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     # TODO: Requires PeerPool to check sync state.
     # TODO: Use variant objects
     var
-      res: JsonNode
       sync: SyncState
     if true:
       # TODO: Populate sync state, this is a placeholder
@@ -237,20 +236,19 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB, rpcsrv: RpcServer) =
     ## data: address.
     ## message: message to sign.
     ## Returns signature.
-    let accountDb = getAccountDb(chain.getCanonicalHead())
     var privateKey: PrivateKey  # TODO: Get from key store
     result = ("0x" & sign(privateKey, message.string)).HexDataStr
 
-  proc setupTransaction(send: EthSend): Transaction =
-    let
-      source = send.source.toAddress
-      destination = send.to.toAddress
-      data = nimcrypto.utils.fromHex(send.data.string)
-      contractCreation = false  # TODO: Check if has code
-      v = 0.byte # TODO
-      r = 0.u256
-      s = 0.u256
-    result = initTransaction(send.nonce, send.gasPrice, send.gas, destination, send.value, data, v, r, s, contractCreation)
+  # proc setupTransaction(send: EthSend): Transaction =
+  #   let
+  #     source = send.source.toAddress
+  #     destination = send.to.toAddress
+  #     data = nimcrypto.utils.fromHex(send.data.string)
+  #     contractCreation = false  # TODO: Check if has code
+  #     v = 0.byte # TODO
+  #     r = 0.u256
+  #     s = 0.u256
+  #   result = initTransaction(send.nonce, send.gasPrice, send.gas, destination, send.value, data, v, r, s, contractCreation)
 
   rpcsrv.rpc("eth_sendTransaction") do(obj: EthSend) -> HexDataStr:
     ## Creates new message call transaction or a contract creation, if the data field contains code.
