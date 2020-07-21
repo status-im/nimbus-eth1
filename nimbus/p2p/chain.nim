@@ -1,6 +1,6 @@
 import ../db/db_chain, eth/common, chronicles, ../vm_state, ../vm_types,
   ../vm/[computation, message], ../vm/interpreter/vm_forks, stint, nimcrypto,
-  ../utils, eth/trie/db, ../tracer, ./executor, ../config, ../genesis, ../utils,
+  ../utils, eth/trie/db, ./executor, ../config, ../genesis, ../utils,
   stew/endians2
 
 type

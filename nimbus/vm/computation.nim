@@ -14,6 +14,9 @@ import
   ../utils/header, precompiles,
   transaction_tracer, ../utils
 
+when defined(chronicles_log_level):
+  import stew/byteutils
+
 when defined(evmc_enabled):
   import evmc/evmc, evmc_helpers, evmc_api, stew/ranges/ptr_arith
 

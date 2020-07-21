@@ -162,6 +162,7 @@ proc process*(nimbus: NimbusNode) =
       poll()
     except CatchableError as e:
       debug "Exception in poll()", exc = e.name, err = e.msg
+      discard e # silence warning when chronicles not activated
 
   # Stop loop
   waitFor nimbus.stop()
