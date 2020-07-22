@@ -33,7 +33,7 @@ const
   NimbusIdent* = "$1/$2 ($3/$4)" % [NimbusName, NimbusVersion, hostCPU, hostOS]
   ## project ident name for networking services
 
-  GitRevision = staticExec("git rev-parse --short HEAD")
+  GitRevision = staticExec("git rev-parse --short HEAD").replace("\n") # remove CR
 
   NimVersion = staticExec("nim --version")
 
