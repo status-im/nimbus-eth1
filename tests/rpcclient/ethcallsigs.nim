@@ -16,20 +16,20 @@ import
 proc web3_clientVersion(): string
 proc web3_sha3(data: string): string
 proc net_version(): string
-proc net_peerCount(): int
+proc net_peerCount(): HexQuantityStr
 proc net_listening(): bool
 proc eth_protocolVersion(): string
 proc eth_syncing(): JsonNode
 proc eth_coinbase(): EthAddressStr
 proc eth_mining(): bool
-proc eth_hashrate(): int
-proc eth_gasPrice(): GasInt
+proc eth_hashrate(): HexQuantityStr
+proc eth_gasPrice(): HexQuantityStr
 proc eth_accounts(): seq[EthAddressStr]
-proc eth_blockNumber(): BlockNumber
-proc eth_getBalance(data: EthAddressStr, quantityTag: string): UInt256
-proc eth_getStorageAt(data: EthAddressStr, quantity: int, quantityTag: string): seq[byte]
-proc eth_getTransactionCount(data: EthAddressStr, quantityTag: string)
-proc eth_getBlockTransactionCountByHash(data: array[32, byte])
+proc eth_blockNumber(): HexQuantityStr
+proc eth_getBalance(data: EthAddressStr, quantityTag: string): HexQuantityStr
+proc eth_getStorageAt(data: EthAddressStr, quantity: HexQuantityStr, quantityTag: string): seq[byte]
+proc eth_getTransactionCount(data: EthAddressStr, quantityTag: string): HexQuantityStr
+proc eth_getBlockTransactionCountByHash(data: Hash256): HexQuantityStr
 proc eth_getBlockTransactionCountByNumber(quantityTag: string)
 proc eth_getUncleCountByBlockHash(data: array[32, byte])
 proc eth_getUncleCountByBlockNumber(quantityTag: string)

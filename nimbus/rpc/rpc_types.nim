@@ -16,9 +16,9 @@ import
 type
   SyncState* = object
     # Returned to user
-    startingBlock*: BlockNumber
-    currentBlock*: BlockNumber
-    highestBlock*: BlockNumber
+    startingBlock*: HexQuantityStr # BlockNumber
+    currentBlock* : HexQuantityStr # BlockNumber
+    highestBlock* : HexQuantityStr # BlockNumber
 
   EthSend* = object
     # Parameter from user

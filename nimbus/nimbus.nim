@@ -52,11 +52,6 @@ proc start(nimbus: NimbusNode) =
       discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
     discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
 
-  ## Creating RPC Server
-  if RpcFlags.Enabled in conf.rpc.flags:
-    nimbus.rpcServer = newRpcHttpServer(conf.rpc.binds)
-    setupCommonRpc(nimbus.rpcServer)
-
   ## Creating P2P Server
   let keypair = conf.net.nodekey.toKeyPair()
 
@@ -88,6 +83,8 @@ proc start(nimbus: NimbusNode) =
     conf.prune == PruneMode.Full,
     conf.net.networkId.toPublicNetwork())
 
+  chainDB.populateProgress()
+
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
@@ -106,6 +103,11 @@ proc start(nimbus: NimbusNode) =
     nimbus.ethNode.addCapability les
 
   nimbus.ethNode.chain = newChain(chainDB)
+
+  ## Creating RPC Server
+  if RpcFlags.Enabled in conf.rpc.flags:
+    nimbus.rpcServer = newRpcHttpServer(conf.rpc.binds)
+    setupCommonRpc(nimbus.ethNode, nimbus.rpcServer)
 
   # Enable RPC APIs based on RPC flags and protocol flags
   if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:

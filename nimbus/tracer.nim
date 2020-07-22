@@ -50,7 +50,7 @@ proc captureAccount(n: JsonNode, db: AccountsCache, address: EthAddress, name: s
   let codeHash = db.getCodeHash(address)
   let storageRoot = db.getStorageRoot(address)
 
-  jaccount["nonce"] = %(encodeQuantity(nonce).toLowerAscii)
+  jaccount["nonce"] = %(encodeQuantity(nonce).string.toLowerAscii)
   jaccount["balance"] = %("0x" & balance.toHex)
 
   let code = db.getCode(address)

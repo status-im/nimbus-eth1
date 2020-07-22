@@ -18,6 +18,12 @@ type
     pruneTrie*: bool
     config*   : ChainConfig
 
+    # startingBlock, currentBlock, and highestBlock
+    # are progress indicator
+    startingBlock*: BlockNumber
+    currentBlock*: BlockNumber
+    highestBlock*: BlockNumber
+
   #KeyType = enum
   #  blockNumberToHash
   #  blockHashToScore
@@ -63,6 +69,15 @@ proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
       not self.getBlockHeader(headHash, result):
     raise newException(CanonicalHeadNotFound,
                       "No canonical head set for this chain")
+
+proc populateProgress*(self: BaseChainDB) =
+  try:
+    self.startingBlock = self.getCanonicalHead().blockNumber
+  except CanonicalHeadNotFound:
+    self.startingBlock = toBlockNumber(0)
+
+  self.currentBlock = self.startingBlock
+  self.highestBlock = self.startingBlock
 
 proc getBlockHash*(self: BaseChainDB, n: BlockNumber, output: var Hash256): bool {.inline.} =
   ## Return the block hash for the given block number.
@@ -127,7 +142,7 @@ proc persistTransactions*(self: BaseChainDB, blockNumber: BlockNumber, transacti
     trie.put(rlp.encode(idx), encodedTx)
     self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(txKey))
 
-iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): seq[byte] =
+iterator getBlockTransactionData*(self: BaseChainDB, transactionRoot: Hash256): seq[byte] =
   var transactionDb = initHexaryTrie(self.db, transactionRoot)
   var transactionIdx = 0
   while true:
@@ -143,6 +158,17 @@ iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader):
   ## by the given block header.
   for encodedTx in self.getBlockTransactionData(blockHeader.txRoot):
     yield keccakHash(encodedTx)
+
+proc getTransactionCount*(chain: BaseChainDB, blockHash: Hash256): int =
+  var header: BlockHeader
+  if chain.getBlockHeader(blockHash, header):
+    var trie = initHexaryTrie(chain.db, header.txRoot)
+    var txCount = 0
+    while true:
+      let txKey = rlp.encode(txCount)
+      if txKey notin trie:
+        break
+      inc txCount
 
 proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody): bool =
   var header: BlockHeader

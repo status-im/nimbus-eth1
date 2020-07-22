@@ -7,8 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import hexstrings, eth/common, stew/byteutils,
-  ../db/[db_chain], strutils,
+import hexstrings, eth/[common, rlp], stew/byteutils,
+  ../db/[db_chain], strutils, algorithm,
   ../constants, stint
 
 func toAddress*(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
@@ -32,3 +32,20 @@ proc headerFromTag*(chain: BaseChainDB, blockTag: string): BlockHeader =
     tag.validateHexQuantity
     let blockNum = stint.fromHex(UInt256, tag)
     result = chain.getBlockHeader(blockNum.toBlockNumber)
+
+proc calculateMedianGasPrice*(chain: BaseChainDB): GasInt =
+  var prices  = newSeqOfCap[GasInt](64)
+  let header = chain.getCanonicalHead()
+  for encodedTx in chain.getBlockTransactionData(header.txRoot):
+    let tx = rlp.decode(encodedTx, Transaction)
+    prices.add(tx.gasPrice)
+
+  if prices.len > 0:
+    sort(prices)
+    let middle = prices.len div 2
+    if prices.len mod 2 == 0:
+      # prevent overflow
+      let price = prices[middle].uint64 + prices[middle - 1].uint64
+      result = (price div 2).GasInt
+    else:
+      result = prices[middle]

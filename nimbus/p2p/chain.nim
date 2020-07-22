@@ -3,6 +3,9 @@ import ../db/db_chain, eth/common, chronicles, ../vm_state, ../vm_types,
   ../utils, eth/trie/db, ./executor, ../config, ../genesis, ../utils,
   stew/endians2
 
+when not defined(release):
+  import ../tracer
+
 type
   # Chain's forks not always equals to EVM's forks
   ChainFork = enum
@@ -125,6 +128,7 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     debug "Number of headers not matching number of bodies"
     return ValidationResult.Error
 
+  c.db.highestBlock = headers[^1].blockNumber
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
 
@@ -150,6 +154,11 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
 
     c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
     c.db.persistReceipts(vmState.receipts)
+
+    # update currentBlock *after* we persist it
+    # so the rpc return consistent result
+    # between eth_blockNumber and eth_syncing
+    c.db.currentBlock = headers[i].blockNumber
 
   transaction.commit()
 
