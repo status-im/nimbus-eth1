@@ -96,15 +96,13 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
   proc accountDbFromTag(tag: string, readOnly = true): ReadOnlyStateDB =
     result = getAccountDb(chain.headerFromTag(tag))
 
-  #[proc getBlockBody(hash: KeccakHash): BlockBody =
-    if not chain.getBlockBody(hash, result):
-      raise newException(ValueError, "Cannot find hash")]#
-
   server.rpc("eth_protocolVersion") do() -> string:
     result = $eth_protocol.protocolVersion
 
   server.rpc("eth_syncing") do() -> JsonNode:
     ## Returns SyncObject or false when not syncing.
+    # TODO: make sure we are not syncing
+    # when we reach the recent block
     let numPeers = node.peerPool.connectedNodes.len
     if numPeers > 0:
       var sync = SyncState(
@@ -137,7 +135,10 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
 
   server.rpc("eth_accounts") do() -> seq[EthAddressStr]:
     ## Returns a list of addresses owned by client.
-    result = @[]
+    let conf = getConfiguration()
+    result = newSeqOfCap[EthAddressStr](conf.accounts.len)
+    for k in keys(conf.accounts):
+      result.add ethAddressStr(k)
 
   server.rpc("eth_blockNumber") do() -> HexQuantityStr:
     ## Returns integer of the current block number the client is on.
@@ -150,9 +151,9 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
     let
-      accountDb = accountDbFromTag(quantityTag)
+      accDB   = accountDbFromTag(quantityTag)
       address = data.toAddress
-      balance = accountDb.getBalance(address)
+      balance = accDB.getBalance(address)
     result = encodeQuantity(balance)
 
   server.rpc("eth_getStorageAt") do(data: EthAddressStr, quantity: HexQuantityStr, quantityTag: string) -> HexDataStr:
@@ -163,10 +164,10 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
     let
-      accountDb = accountDbFromTag(quantityTag)
+      accDB   = accountDbFromTag(quantityTag)
       address = data.toAddress
-      key = fromHex(Uint256, quantity.string)
-      value = accountDb.getStorage(address, key)[0]
+      key     = fromHex(Uint256, quantity.string)
+      value   = accDB.getStorage(address, key)[0]
     result = hexDataStr(value)
 
   server.rpc("eth_getTransactionCount") do(data: EthAddressStr, quantityTag: string) -> HexQuantityStr:
@@ -177,8 +178,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## Returns integer of the number of transactions send from this address.
     let
       address = data.toAddress
-      accountDb = accountDbFromTag(quantityTag)
-    result = encodeQuantity(accountDb.getNonce(address))
+      accDB   = accountDbFromTag(quantityTag)
+    result = encodeQuantity(accDB.getNonce(address))
 
   server.rpc("eth_getBlockTransactionCountByHash") do(data: EthHashStr) -> HexQuantityStr:
     ## Returns the number of transactions in a block from a block matching the given block hash.
@@ -186,33 +187,41 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## data: hash of a block
     ## Returns integer of the number of transactions in this block.
     let
-      hashData = data.toHash
-      txCount = chain.getTransactionCount(hashData)
+      blockHash = data.toHash
+      header    = chain.getBlockHeader(blockHash)
+      txCount   = chain.getTransactionCount(header.txRoot)
     result = encodeQuantity(txCount.uint)
-#[
-  server.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> int:
+
+  server.rpc("eth_getBlockTransactionCountByNumber") do(quantityTag: string) -> HexQuantityStr:
     ## Returns the number of transactions in a block matching the given block number.
     ##
     ## data: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## Returns integer of the number of transactions in this block.
-    let header = chain.headerFromTag(quantityTag)
-    result = getBlockBody(header.hash).transactions.len
+    let
+      header  = chain.headerFromTag(quantityTag)
+      txCount = chain.getTransactionCount(header.txRoot)
+    result = encodeQuantity(txCount.uint)
 
-  server.rpc("eth_getUncleCountByBlockHash") do(data: EthHashStr) -> int:
+  server.rpc("eth_getUncleCountByBlockHash") do(data: EthHashStr) -> HexQuantityStr:
     ## Returns the number of uncles in a block from a block matching the given block hash.
     ##
     ## data: hash of a block.
     ## Returns integer of the number of uncles in this block.
-    var hashData = data.toHash
-    result = getBlockBody(hashData).uncles.len
+    let
+      blockHash   = data.toHash
+      header      = chain.getBlockHeader(blockHash)
+      unclesCount = chain.getUnclesCount(header.ommersHash)
+    result = encodeQuantity(unclesCount.uint)
 
-  server.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string) -> int:
+  server.rpc("eth_getUncleCountByBlockNumber") do(quantityTag: string) -> HexQuantityStr:
     ## Returns the number of uncles in a block from a block matching the given block number.
     ##
     ## quantityTag: integer of a block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of uncles in this block.
-    let header = chain.headerFromTag(quantityTag)
-    result = getBlockBody(header.hash).uncles.len
+    let
+      header      = chain.headerFromTag(quantityTag)
+      unclesCount = chain.getUnclesCount(header.ommersHash)
+    result = encodeQuantity(unclesCount.uint)
 
   server.rpc("eth_getCode") do(data: EthAddressStr, quantityTag: string) -> HexDataStr:
     ## Returns code at a given address.
@@ -221,14 +230,13 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      accountDb = accountDbFromTag(quantityTag)
-      address = toAddress(data)
-      storage = accountDb.getCode(address)
-    # Easier to return the string manually here rather than expect ByteRange to be marshalled
-    result = byteutils.toHex(storage).HexDataStr
+      accDB   = accountDbFromTag(quantityTag)
+      address = data.toAddress
+      storage = accDB.getCode(address)
+    result = hexDataStr(storage)
 
   template sign(privateKey: PrivateKey, message: string): string =
-    # TODO: Is message length encoded as bytes or characters?
+    # message length encoded as ASCII representation of decimal
     let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
     $sign(privateKey, msgData.toBytes())
 
@@ -241,9 +249,16 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## data: address.
     ## message: message to sign.
     ## Returns signature.
-    var privateKey: PrivateKey  # TODO: Get from key store
-    result = ("0x" & sign(privateKey, message.string)).HexDataStr
+    let
+      address = data.toAddress
+      conf    = getConfiguration()
+      acc     = conf.getAccount(address).tryGet()
+      msg     = hexToSeqByte(message.string)
 
+    if not acc.unlocked:
+      raise newException(ValueError, "Account locked, please unlock it first")
+    result = ("0x" & sign(acc.privateKey, cast[string](msg))).HexDataStr
+#[
   # proc setupTransaction(send: EthSend): Transaction =
   #   let
   #     source = send.source.toAddress

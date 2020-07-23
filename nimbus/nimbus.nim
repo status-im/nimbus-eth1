@@ -15,7 +15,7 @@ import
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper, key_storage], p2p/chain,
-  eth/trie/db, metrics, metrics/chronicles_support
+  eth/trie/db, metrics, metrics/chronicles_support, utils
 
 ## TODO:
 ## * No IPv6 support
@@ -36,6 +36,7 @@ type
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
+  conf.loadKeystoreFiles()
 
   ## logging
   setLogLevel(conf.debug.logLevel)

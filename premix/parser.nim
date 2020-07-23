@@ -19,7 +19,7 @@ proc prefixHex*(x: Hash256): string =
   "0x" & toLowerAscii($x)
 
 proc prefixHex*(x: int64 | uint64 | byte | int): string =
-  encodeQuantity(x.uint64).toLowerAscii
+  toLowerAscii(encodeQuantity(x.uint64).string)
 
 proc prefixHex*(x: openArray[byte]): string =
   "0x" & toHex(x, true)

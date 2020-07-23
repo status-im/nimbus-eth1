@@ -159,16 +159,21 @@ iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader):
   for encodedTx in self.getBlockTransactionData(blockHeader.txRoot):
     yield keccakHash(encodedTx)
 
-proc getTransactionCount*(chain: BaseChainDB, blockHash: Hash256): int =
-  var header: BlockHeader
-  if chain.getBlockHeader(blockHash, header):
-    var trie = initHexaryTrie(chain.db, header.txRoot)
-    var txCount = 0
-    while true:
-      let txKey = rlp.encode(txCount)
-      if txKey notin trie:
-        break
-      inc txCount
+proc getTransactionCount*(chain: BaseChainDB, txRoot: Hash256): int =
+  var trie = initHexaryTrie(chain.db, txRoot)
+  var txCount = 0
+  while true:
+    let txKey = rlp.encode(txCount)
+    if txKey notin trie:
+      break
+    inc txCount
+
+proc getUnclesCount*(self: BaseChainDB, ommersHash: Hash256): int =
+  if ommersHash != EMPTY_UNCLE_HASH:
+    let encodedUncles = self.db.get(genericHashKey(ommersHash).toOpenArray)
+    if encodedUncles.len != 0:
+      let r = rlpFromBytes(encodedUncles)
+      result = r.listLen
 
 proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody): bool =
   var header: BlockHeader

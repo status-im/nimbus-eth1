@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  parseopt, strutils, macros, os, times, json, stew/[byteutils],
+  parseopt, strutils, macros, os, times, json, tables, stew/[byteutils],
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
   eth/p2p/bootnodes, eth/p2p/rlpx_protocols/whisper_protocol,
   ./db/select_backend, eth/keys,
@@ -121,6 +121,11 @@ type
     Full
     Archive
 
+  NimbusAccount* = object
+    privateKey*: PrivateKey
+    keystore*: JsonNode
+    unlocked*: bool
+
   ChainConfig* = object
     chainId*: uint
     homesteadBlock*: BlockNumber
@@ -143,7 +148,7 @@ type
   NimbusConfiguration* = ref object
     ## Main Nimbus configuration object
     dataDir*: string
-    keyFile*: string
+    keyStore*: string
     prune*: PruneMode
     rpc*: RpcConfiguration        ## JSON-RPC configuration
     net*: NetConfiguration        ## Network configuration
@@ -153,6 +158,7 @@ type
     # You should only create one instance of the RNG per application / library
     # Ref is used so that it can be shared between components
     rng*: ref BrHmacDrbgContext
+    accounts*: Table[EthAddress, NimbusAccount]
 
   CustomGenesisConfig = object
     chainId*: uint
@@ -557,11 +563,8 @@ proc processEthArguments(key, value: string): ConfigStatus =
   result = Success
   let config = getConfiguration()
   case key.toLowerAscii()
-  of "keyfile":
-    if fileExists(value):
-      config.keyFile = value
-    else:
-      result = ErrorIncorrectOption
+  of "keystore":
+    config.keyStore = value
   of "datadir":
     config.dataDir = value
   of "prune":
@@ -825,16 +828,20 @@ template processArgument(processor, key, value, msg: untyped) =
 
 proc getDefaultDataDir*(): string =
   when defined(windows):
-    "AppData" / "Roaming" / "Nimbus" / "DB"
+    "AppData" / "Roaming" / "Nimbus"
   elif defined(macosx):
-    "Library" / "Application Support" / "Nimbus" / "DB"
+    "Library" / "Application Support" / "Nimbus"
   else:
-    ".cache" / "nimbus" / "db"
+    ".cache" / "nimbus"
+
+proc getDefaultKeystoreDir*(): string =
+  getDefaultDataDir() / "keystore"
 
 proc initConfiguration(): NimbusConfiguration =
   ## Allocates and initializes `NimbusConfiguration` with default values
   result = new NimbusConfiguration
   result.rng = newRng()
+  result.accounts = initTable[EthAddress, NimbusAccount]()
 
   ## RPC defaults
   result.rpc.flags = {}
@@ -853,9 +860,12 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.protocols = defaultProtocols
   result.net.nodekey = random(PrivateKey, result.rng[])
 
-  const dataDir = getDefaultDataDir()
+  const
+    dataDir = getDefaultDataDir()
+    keystore = getDefaultKeystoreDir()
 
   result.dataDir = getHomeDir() / dataDir
+  result.keystore = getHomeDir() / keystore
   result.prune = PruneMode.Full
 
   ## Whisper defaults
@@ -897,7 +907,7 @@ USAGE:
   nimbus [options]
 
 ETHEREUM OPTIONS:
-  --keyfile:<value>       Use keyfile storage file
+  --keystore:<value>      Directory for the keystore (default = inside the datadir)
   --datadir:<value>       Base directory for all blockchain-related data
   --prune:<value>         Blockchain prune mode(full or archive)
 

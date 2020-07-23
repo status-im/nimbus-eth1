@@ -14,7 +14,7 @@ import
   ../../nimbus/rpc/hexstrings, ../../nimbus/rpc/rpc_types
 
 proc web3_clientVersion(): string
-proc web3_sha3(data: string): string
+proc web3_sha3(data: HexDataStr): string
 proc net_version(): string
 proc net_peerCount(): HexQuantityStr
 proc net_listening(): bool
@@ -30,9 +30,9 @@ proc eth_getBalance(data: EthAddressStr, quantityTag: string): HexQuantityStr
 proc eth_getStorageAt(data: EthAddressStr, quantity: HexQuantityStr, quantityTag: string): seq[byte]
 proc eth_getTransactionCount(data: EthAddressStr, quantityTag: string): HexQuantityStr
 proc eth_getBlockTransactionCountByHash(data: Hash256): HexQuantityStr
-proc eth_getBlockTransactionCountByNumber(quantityTag: string)
-proc eth_getUncleCountByBlockHash(data: array[32, byte])
-proc eth_getUncleCountByBlockNumber(quantityTag: string)
+proc eth_getBlockTransactionCountByNumber(quantityTag: string): HexQuantityStr
+proc eth_getUncleCountByBlockHash(data: Hash256): HexQuantityStr
+proc eth_getUncleCountByBlockNumber(quantityTag: string): HexQuantityStr
 proc eth_getCode(data: EthAddressStr, quantityTag: string): HexDataStr
 proc eth_sign(data:EthAddressStr, message: HexDataStr): HexDataStr
 #proc eth_sendRawTransaction(data: string, quantityTag: int): UInt256

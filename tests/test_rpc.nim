@@ -6,11 +6,12 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest, json, strformat, strutils, options, tables, nimcrypto, stew/byteutils,
+  unittest, json, strformat, strutils, options, tables, os,
+  nimcrypto, stew/byteutils,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
   eth/[rlp, keys], eth/trie/db, eth/p2p/rlpx_protocols/eth_protocol,
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
-  ../nimbus/[constants, vm_state, config, genesis],
+  ../nimbus/[constants, vm_state, config, genesis, utils],
   ../nimbus/db/[accounts_cache, db_chain, storage_types],
   ../nimbus/p2p/chain,
   ./rpcclient/test_hexstrings, ./test_helpers
@@ -29,10 +30,6 @@ template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const sigPath = &"{sourceDir}{DirSep}rpcclient{DirSep}ethcallsigs.nim"
 createRpcSigs(RpcSocketClient, sigPath)
 
-proc toEthAddressStr(address: EthAddress): EthAddressStr =
-  result = ("0x" & address.toHex).ethAddressStr
-
-
 proc doTests {.async.} =
   # TODO: Include other transports such as Http
   var ethNode = setupEthNode(eth)
@@ -47,7 +44,25 @@ proc doTests {.async.} =
   let
     balance = 100.u256
     address: EthAddress = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+
+    signer: EthAddress = hexToByteArray[20]("0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b")
+    ks2: EthAddress = hexToByteArray[20]("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
+    ks3: EthAddress = hexToByteArray[20]("0x597176e9a64aad0845d83afdaf698fbeff77703b")
+
     conf = getConfiguration()
+
+  conf.keyStore = "tests" / "keystore"
+  let res = conf.loadKeystoreFiles()
+  if res.isErr:
+    debugEcho res.error
+  doAssert(res.isOk)
+
+  let acc1 = conf.getAccount(signer).tryGet()
+  let unlock = conf.unlockAccount(signer, acc1.keystore["password"].getStr())
+  if unlock.isErr:
+    debugEcho unlock.error
+  doAssert(unlock.isOk)
+
   defaultGenesisBlockForNetwork(conf.net.networkId.toPublicNetwork()).commit(chain)
   state.mutateStateDB:
     db.setBalance(address, balance)
@@ -73,10 +88,10 @@ proc doTests {.async.} =
 
     test "web3_sha3":
       expect ValueError:
-        discard await client.web3_sha3(NimbusName)
+        discard await client.web3_sha3(NimbusName.HexDataStr)
 
       let data = "0x" & byteutils.toHex(NimbusName.toOpenArrayByte(0, NimbusName.len-1))
-      let res = await client.web3_sha3(data)
+      let res = await client.web3_sha3(data.hexDataStr)
       let rawdata = nimcrypto.fromHex(data[2 .. ^1])
       let hash = "0x" & $keccak_256.digest(rawdata)
       check hash == res
@@ -135,8 +150,9 @@ proc doTests {.async.} =
 
     test "eth_accounts":
       let res = await client.eth_accounts()
-      # we do not own any accounts, yet
-      check res.len == 0
+      check signer.ethAddressStr in res
+      check ks2.ethAddressStr in res
+      check ks3.ethAddressStr in res
 
     test "eth_blockNumber":
       let res = await client.eth_blockNumber()
@@ -163,6 +179,41 @@ proc doTests {.async.} =
       let res = await client.eth_getBlockTransactionCountByHash(hash)
       check res.string == "0x0"
 
+    test "eth_getBlockTransactionCountByNumber":
+      let res = await client.eth_getBlockTransactionCountByNumber("0x0")
+      check res.string == "0x0"
+
+    test "eth_getUncleCountByBlockHash":
+      let hash = chain.getBlockHash(0.toBlockNumber)
+      let res = await client.eth_getUncleCountByBlockHash(hash)
+      check res.string == "0x0"
+
+    test "eth_getUncleCountByBlockNumber":
+      let res = await client.eth_getUncleCountByBlockNumber("0x0")
+      check res.string == "0x0"
+
+    test "eth_getCode":
+      let res = await client.eth_getCode(ethAddressStr("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), "0x0")
+      check res.string == "0x"
+
+    test "eth_sign":
+      let msg = "hello world"
+      let msgHex = hexDataStr(msg.toOpenArrayByte(0, msg.len-1))
+
+      expect ValueError:
+        discard await client.eth_sign(ethAddressStr(ks2), msgHex)
+
+      let res = await client.eth_sign(ethAddressStr(signer), msgHex)
+      let sig = Signature.fromHex(res.string).tryGet()
+
+      # now let us try to verify signature
+      let msgData  = "\x19Ethereum Signed Message:\n" & $msg.len & msg
+      let msgDataHex = hexDataStr(msgData.toOpenArrayByte(0, msgData.len-1))
+      let sha3Data = await client.web3_sha3(msgDataHex)
+      let msgHash  = hexToByteArray[32](sha3Data)
+      let pubkey = recover(sig, SkMessage(msgHash)).tryGet()
+      let recoveredAddr = pubkey.toCanonicalAddress()
+      check recoveredAddr == signer # verified
 
     #test "eth_call":
     #  let
