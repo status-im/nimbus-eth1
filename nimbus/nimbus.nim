@@ -36,7 +36,10 @@ type
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
-  conf.loadKeystoreFiles()
+  let res = conf.loadKeystoreFiles()
+  if res.isErr:
+    echo res.error()
+    quit(QuitFailure)
 
   ## logging
   setLogLevel(conf.debug.logLevel)
