@@ -34,7 +34,8 @@ proc eth_getBlockTransactionCountByNumber(quantityTag: string): HexQuantityStr
 proc eth_getUncleCountByBlockHash(data: Hash256): HexQuantityStr
 proc eth_getUncleCountByBlockNumber(quantityTag: string): HexQuantityStr
 proc eth_getCode(data: EthAddressStr, quantityTag: string): HexDataStr
-proc eth_sign(data:EthAddressStr, message: HexDataStr): HexDataStr
+proc eth_sign(data: EthAddressStr, message: HexDataStr): HexDataStr
+proc eth_signTransaction(data: TxSend): HexDataStr
 #proc eth_sendRawTransaction(data: string, quantityTag: int): UInt256
 proc eth_call(call: EthCall, quantityTag: string): string
 proc eth_estimateGas(call: EthCall, quantityTag: string): GasInt

@@ -11,7 +11,7 @@ import
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
   eth/[rlp, keys], eth/trie/db, eth/p2p/rlpx_protocols/eth_protocol,
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
-  ../nimbus/[constants, vm_state, config, genesis, utils],
+  ../nimbus/[constants, vm_state, config, genesis, utils, transaction],
   ../nimbus/db/[accounts_cache, db_chain, storage_types],
   ../nimbus/p2p/chain,
   ./rpcclient/test_hexstrings, ./test_helpers
@@ -214,6 +214,21 @@ proc doTests {.async.} =
       let pubkey = recover(sig, SkMessage(msgHash)).tryGet()
       let recoveredAddr = pubkey.toCanonicalAddress()
       check recoveredAddr == signer # verified
+
+    test "eth_signTransaction":
+      var unsignedTx = TxSend(
+        source: ethAddressStr(signer),
+        to: ethAddressStr(ks2).some,
+        gas: encodeQuantity(100000'u).some,
+        gasPrice: none(HexQuantityStr),
+        value: encodeQuantity(100'u).some,
+        data: HexDataStr("0x"),
+        nonce: none(HexQuantityStr)
+        )
+
+      let res = await client.eth_signTransaction(unsignedTx)
+      let signedTx = rlp.decode(hexToSeqByte(res.string), Transaction)
+      check signer == signedTx.getSender() # verified
 
     #test "eth_call":
     #  let

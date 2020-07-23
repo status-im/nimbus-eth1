@@ -258,6 +258,23 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     if not acc.unlocked:
       raise newException(ValueError, "Account locked, please unlock it first")
     result = ("0x" & sign(acc.privateKey, cast[string](msg))).HexDataStr
+
+  server.rpc("eth_signTransaction") do(data: TxSend) -> HexDataStr:
+    let
+      address = data.source.toAddress
+      conf    = getConfiguration()
+      acc     = conf.getAccount(address).tryGet()
+
+    if not acc.unlocked:
+      raise newException(ValueError, "Account locked, please unlock it first")
+
+    let
+      accDB    = accountDbFromTag("latest")
+      tx       = unsignedTx(data, chain, accDB.getNonce(address) + 1)
+      signedTx = signTransaction(tx, chain, acc.privateKey)
+      rlpTx    = rlp.encode(signedTx)
+      
+    result = hexDataStr(rlpTx)
 #[
   # proc setupTransaction(send: EthSend): Transaction =
   #   let

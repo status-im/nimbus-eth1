@@ -20,15 +20,15 @@ type
     currentBlock* : HexQuantityStr # BlockNumber
     highestBlock* : HexQuantityStr # BlockNumber
 
-  EthSend* = object
+  TxSend* = object
     # Parameter from user
-    source*: EthAddressStr    # the address the transaction is send from.
-    to*: EthAddressStr        # (optional when creating new contract) the address the transaction is directed to.
-    gas*: GasInt              # (optional, default: 90000) integer of the gas provided for the transaction execution. It will return unused gas.
-    gasPrice*: GasInt         # (optional, default: To-Be-Determined) integer of the gasPrice used for each paid gas.
-    value*: UInt256           # (optional) integer of the value sent with this transaction.
-    data*: EthHashStr         # TODO: Support more data. The compiled code of a contract OR the hash of the invoked method signature and encoded parameters. For details see Ethereum Contract ABI.
-    nonce*: AccountNonce      # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
+    source*: EthAddressStr            # 20 bytes, the address the transaction is send from.
+    to*: Option[EthAddressStr]        # (optional when creating new contract) 20 bytes, the address the transaction is directed to.
+    gas*: Option[HexQuantityStr]      # (optional, default: 90000) integer of the gas provided for the transaction execution. It will return unused gas.
+    gasPrice*: Option[HexQuantityStr] # (optional, default: To-Be-Determined) integer of the gasPrice used for each paid gas.
+    value*: Option[HexQuantityStr]    # (optional) integer of the value sent with this transaction.
+    data*: HexDataStr                 # TODO: Support more data. The compiled code of a contract OR the hash of the invoked method signature and encoded parameters. For details see Ethereum Contract ABI.
+    nonce*: Option[HexQuantityStr]    # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
 
   EthCall* = object
     # Parameter from user
