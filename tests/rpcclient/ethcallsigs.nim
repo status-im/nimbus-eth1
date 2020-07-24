@@ -36,21 +36,21 @@ proc eth_getUncleCountByBlockNumber(quantityTag: string): HexQuantityStr
 proc eth_getCode(data: EthAddressStr, quantityTag: string): HexDataStr
 proc eth_sign(data: EthAddressStr, message: HexDataStr): HexDataStr
 proc eth_signTransaction(data: TxSend): HexDataStr
-#proc eth_sendRawTransaction(data: string, quantityTag: int): UInt256
-proc eth_call(call: EthCall, quantityTag: string): string
-proc eth_estimateGas(call: EthCall, quantityTag: string): GasInt
+proc eth_sendTransaction(data: TxSend): EthHashStr
+proc eth_sendRawTransaction(data: HexDataStr): EthHashStr
+proc eth_call(call: EthCall, quantityTag: string): HexDataStr
 
-# TODO: Use eth/common types
-
-#[proc eth_sendTransaction(obj: EthSend): UInt256
-proc eth_getBlockByHash(data: array[32, byte], fullTransactions: bool): BlockObject
+proc eth_estimateGas(call: EthCall, quantityTag: string): HexQuantityStr
+proc eth_getBlockByHash(data: Hash256, fullTransactions: bool): BlockObject
 proc eth_getBlockByNumber(quantityTag: string, fullTransactions: bool): BlockObject
-proc eth_getTransactionByHash(data: Uint256): TransactionObject
-proc eth_getTransactionByBlockHashAndIndex(data: UInt256, quantity: int): TransactionObject
+proc eth_getTransactionByHash(data: Hash256): TransactionObject
+proc eth_getTransactionByBlockHashAndIndex(data: Hash256, quantity: int): TransactionObject
 proc eth_getTransactionByBlockNumberAndIndex(quantityTag: string, quantity: int): TransactionObject
-proc eth_getTransactionReceipt(data: UInt256): ReceiptObject
-proc eth_getUncleByBlockHashAndIndex(data: UInt256, quantity: int64): BlockObject
+proc eth_getTransactionReceipt(data: Hash256): ReceiptObject
+proc eth_getUncleByBlockHashAndIndex(data: Hash256, quantity: int64): BlockObject
 proc eth_getUncleByBlockNumberAndIndex(quantityTag: string, quantity: int64): BlockObject
+
+#[
 proc eth_getCompilers(): seq[string]
 proc eth_compileLLL(): seq[byte]
 proc eth_compileSolidity(): seq[byte]

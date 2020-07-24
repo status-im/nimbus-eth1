@@ -215,7 +215,7 @@ proc doTests {.async.} =
       let recoveredAddr = pubkey.toCanonicalAddress()
       check recoveredAddr == signer # verified
 
-    test "eth_signTransaction":
+    test "eth_signTransaction, eth_sendTransaction, eth_sendRawTransaction":
       var unsignedTx = TxSend(
         source: ethAddressStr(signer),
         to: ethAddressStr(ks2).some,
@@ -226,23 +226,26 @@ proc doTests {.async.} =
         nonce: none(HexQuantityStr)
         )
 
-      let res = await client.eth_signTransaction(unsignedTx)
-      let signedTx = rlp.decode(hexToSeqByte(res.string), Transaction)
+      let signedTxHex = await client.eth_signTransaction(unsignedTx)
+      let signedTx = rlp.decode(hexToSeqByte(signedTxHex.string), Transaction)
       check signer == signedTx.getSender() # verified
 
-    #test "eth_call":
-    #  let
-    #    blockNum = state.blockheader.blockNumber
-    #    callParams = EthCall(value: some(100.u256))
-    #    r1 = await client.eth_call(callParams, "0x" & blockNum.toHex)
-    #  check r1 == "0x"
-    #test "eth_getBalance":
-    #  let r2 = await client.eth_getBalance(ZERO_ADDRESS.toEthAddressStr, "0x0")
-    #  check r2 == 0
-    #
-    #  let blockNum = state.blockheader.blockNumber
-    #  let r3 = await client.eth_getBalance(address.toEthAddressStr, "0x" & blockNum.toHex)
-    #  check r3 == 0
+      let hashAhex = await client.eth_sendTransaction(unsignedTx)
+      let hashBhex = await client.eth_sendRawTransaction(signedTxHex)
+      check hashAhex.string == hashBhex.string
+
+    test "eth_call":
+      var ec = EthCall(
+        source: ethAddressStr(signer).some,
+        to: ethAddressStr(ks2).some,
+        gas: encodeQuantity(100000'u).some,
+        gasPrice: none(HexQuantityStr),
+        value: encodeQuantity(100'u).some,
+        data: HexDataStr("0x").some,
+        )
+
+      let res = await client.eth_call(ec, "latest")
+
     #test "eth_estimateGas":
     #  let
     #    call = EthCall()

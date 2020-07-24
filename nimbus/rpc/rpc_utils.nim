@@ -9,7 +9,9 @@
 
 import hexstrings, eth/[common, rlp, keys], stew/byteutils, nimcrypto,
   ../db/[db_chain], strutils, algorithm, options,
-  ../constants, stint, hexstrings, rpc_types
+  ../constants, stint, hexstrings, rpc_types, ../config,
+  ../vm_state_transactions, ../vm_state, ../vm_types, ../vm/interpreter/vm_forks,
+  ../vm/computation
 
 type
   UnsignedTx* = object
@@ -20,6 +22,14 @@ type
     value   : UInt256
     payload : Blob
     contractCreation {.rlpIgnore.}: bool
+
+  CallData* = object
+    source: EthAddress
+    to: EthAddress
+    gas: GasInt
+    gasPrice: GasInt
+    value: UInt256
+    data: seq[byte]
 
 proc read(rlp: var Rlp, t: var UnsignedTx, _: type EthAddress): EthAddress {.inline.} =
   if rlp.blobLen != 0:
@@ -149,3 +159,56 @@ proc signTransaction*(tx: UnsignedTx, chain: BaseChainDB, privateKey: PrivateKey
     R: Uint256.fromBytesBE(sig[0..31]),
     S: Uint256.fromBytesBE(sig[32..63])
     )
+
+proc callData*(call: EthCall, callMode: bool = true): CallData =
+  if call.source.isSome:
+    result.source = toAddress(call.source.get)
+
+  if call.to.isSome:
+    result.to = toAddress(call.to.get)
+  else:
+    if callMode:
+      raise newException(ValueError, "call.to required for eth_call operation")
+
+  if call.gas.isSome:
+    result.gas = hexToInt(call.gas.get.string, GasInt)
+
+  if call.gasPrice.isSome:
+    result.gasPrice = hexToInt(call.gasPrice.get.string, GasInt)
+
+  if call.value.isSome:
+    result.value = UInt256.fromHex(call.value.get.string)
+
+  if call.data.isSome:
+    result.data = hexToSeqByte(call.data.get.string)
+
+proc setupComputation(vmState: BaseVMState, call: CallData, fork: Fork) : Computation =
+  vmState.setupTxContext(
+    origin = call.source,
+    gasPrice = call.gasPrice,
+    forkOverride = some(fork)
+  )
+
+  let msg = Message(
+    kind: evmcCall,
+    depth: 0,
+    gas: call.gas,
+    sender: call.source,
+    contractAddress: call.to,
+    codeAddress: call.to,
+    value: call.value,
+    data: call.data
+    )
+
+  result = newComputation(vmState, msg)
+
+proc doCall*(call: CallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
+  var
+    # we use current header stateRoot, unlike block validation
+    # which use previous block stateRoot
+    vmState = newBaseVMState(header.stateRoot, header, chain)
+    fork    = toFork(chain.config, header.blockNumber)
+    comp    = setupComputation(vmState, call, fork)
+
+  comp.execComputation()
+  result = hexDataStr(comp.returnData)

@@ -13,8 +13,7 @@ import
   eth/[common, keys, rlp, p2p], nimcrypto,
   eth/p2p/rlpx_protocols/eth_protocol,
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
-  ../vm_state_transactions, ../utils,
-  ../db/[db_chain, state_db],
+  ../utils, ../db/[db_chain, state_db],
   rpc_types, rpc_utils, ../vm/[message, computation],
   ../vm/interpreter/vm_forks
 
@@ -260,6 +259,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     result = ("0x" & sign(acc.privateKey, cast[string](msg))).HexDataStr
 
   server.rpc("eth_signTransaction") do(data: TxSend) -> HexDataStr:
+    ## Signs a transaction that can be submitted to the network at a later time using with
+    ## eth_sendRawTransaction
     let
       address = data.source.toAddress
       conf    = getConfiguration()
@@ -273,62 +274,41 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
       tx       = unsignedTx(data, chain, accDB.getNonce(address) + 1)
       signedTx = signTransaction(tx, chain, acc.privateKey)
       rlpTx    = rlp.encode(signedTx)
-      
-    result = hexDataStr(rlpTx)
-#[
-  # proc setupTransaction(send: EthSend): Transaction =
-  #   let
-  #     source = send.source.toAddress
-  #     destination = send.to.toAddress
-  #     data = nimcrypto.utils.fromHex(send.data.string)
-  #     contractCreation = false  # TODO: Check if has code
-  #     v = 0.byte # TODO
-  #     r = 0.u256
-  #     s = 0.u256
-  #   result = initTransaction(send.nonce, send.gasPrice, send.gas, destination, send.value, data, v, r, s, contractCreation)
 
-  server.rpc("eth_sendTransaction") do(obj: EthSend) -> HexDataStr:
+    result = hexDataStr(rlpTx)
+
+  server.rpc("eth_sendTransaction") do(data: TxSend) -> EthHashStr:
     ## Creates new message call transaction or a contract creation, if the data field contains code.
     ##
     ## obj: the transaction object.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     # TODO: Relies on pending pool implementation
-    discard
+    let
+      address = data.source.toAddress
+      conf    = getConfiguration()
+      acc     = conf.getAccount(address).tryGet()
 
-  server.rpc("eth_sendRawTransaction") do(data: string, quantityTag: int) -> HexDataStr:
+    if not acc.unlocked:
+      raise newException(ValueError, "Account locked, please unlock it first")
+
+    let
+      accDB    = accountDbFromTag("latest")
+      tx       = unsignedTx(data, chain, accDB.getNonce(address) + 1)
+      signedTx = signTransaction(tx, chain, acc.privateKey)
+      rlpTx    = rlp.encode(signedTx)
+
+    result = keccak_256.digest(rlpTx).ethHashStr
+
+  server.rpc("eth_sendRawTransaction") do(data: HexDataStr) -> EthHashStr:
     ## Creates new message call transaction or a contract creation for signed transactions.
     ##
     ## data: the signed transaction data.
     ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     # TODO: Relies on pending pool implementation
-    discard
-
-  proc setupComputation(vmState: BaseVMState,
-      value: UInt256, data: seq[byte],
-      sender, destination: EthAddress,
-      gasLimit, gasPrice: GasInt,
-      contractCreation: bool): Computation =
-    let
-      # Handle optional defaults.
-      message = Message(
-        kind: if contractCreation: evmcCreate else: evmcCall,
-        depth: 0,
-        gas: gasLimit,
-        sender: sender,
-        contractAddress: destination,
-        codeAddress: CREATE_CONTRACT_ADDRESS,
-        value: value,
-        data: data
-      )
-
-    vmState.setupTxContext(
-      origin = sender,
-      gasPrice = gasPrice
-      )
-
-    result = newComputation(vmState, message)
+    let rlpBytes = hexToSeqByte(data.string)
+    result = keccak_256.digest(rlpBytes).ethHashStr
 
   server.rpc("eth_call") do(call: EthCall, quantityTag: string) -> HexDataStr:
     ## Executes a new message call immediately without creating a transaction on the block chain.
@@ -336,36 +316,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## call: the transaction call object.
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the return value of executed contract.
-    let header = headerFromTag(chain, quantityTag)
-    var
-      # TODO: header.stateRoot to prevStateRoot
-      vmState = newBaseVMState(header.stateRoot, header, chain)
-      gasLimit =
-        if call.gas.isSome: call.gas.get
-        else: 0.GasInt
-      gasPrice =
-        if call.gasPrice.isSome: call.gasPrice.get
-        else: 0.GasInt
+    let 
+      header   = headerFromTag(chain, quantityTag)
+      callData = callData(call, true)
+    result = doCall(callData, header, chain)
 
-    # Set defaults for gas limit if required
-    # Price remains zero by default
-    if gaslimit == 0.GasInt:
-      gasLimit = header.gasLimit
-
-    var
-      sender = if call.source.isSome: call.source.get.toAddress else: ZERO_ADDRESS
-      # Note that destination is a required parameter for call.
-      # In geth if it's zero they use the first wallet address,
-      # if no wallets, remains as ZERO_ADDRESS
-      # TODO: Wallets
-      destination = if call.to.isSome: call.to.get.toAddress else: ZERO_ADDRESS
-      data = if call.data.isSome: nimcrypto.utils.fromHex(call.data.get.string) else: @[]
-      value = if call.value.isSome: call.value.get else: 0.u256
-      comp = setupComputation(vmState, value, data, sender, destination, gasLimit, gasPrice, call.to.isNone)
-
-    comp.execComputation
-    result = ("0x" & nimcrypto.toHex(comp.output)).HexDataStr
-
+#[
   server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> GasInt:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than

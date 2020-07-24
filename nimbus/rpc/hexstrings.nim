@@ -188,6 +188,9 @@ proc ethHashStr*(value: string): EthHashStr {.inline.} =
   value.validateHashStr
   result = value.EthHashStr
 
+func ethHashStr*(value: Hash256): EthHashStr {.inline.} =
+  result = EthHashStr("0x" & value.data.toHex)
+
 # Converters for use in RPC
 
 import json

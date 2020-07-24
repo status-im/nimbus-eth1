@@ -32,12 +32,12 @@ type
 
   EthCall* = object
     # Parameter from user
-    source*: Option[EthAddressStr]  # (optional) The address the transaction is send from.
-    to*: Option[EthAddressStr]      # (optional in eth_estimateGas, not in eth_call) The address the transaction is directed to.
-    gas*: Option[GasInt]            # (optional) Integer of the gas provided for the transaction execution. eth_call consumes zero gas, but this parameter may be needed by some executions.
-    gasPrice*: Option[GasInt]       # (optional) Integer of the gasPrice used for each paid gas.
-    value*: Option[UInt256]         # (optional) Integer of the value sent with this transaction.
-    data*: Option[EthHashStr]       # (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI.
+    source*: Option[EthAddressStr]   # (optional) The address the transaction is send from.
+    to*: Option[EthAddressStr]       # (optional in eth_estimateGas, not in eth_call) The address the transaction is directed to.
+    gas*: Option[HexQuantityStr]     # (optional) Integer of the gas provided for the transaction execution. eth_call consumes zero gas, but this parameter may be needed by some executions.
+    gasPrice*: Option[HexQuantityStr]# (optional) Integer of the gasPrice used for each paid gas.
+    value*: Option[HexQuantityStr]   # (optional) Integer of the value sent with this transaction.
+    data*: Option[HexDataStr]        # (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI.
 
   ## A block object, or null when no block was found
   ## Note that this includes slightly different information from eth/common.BlockHeader
