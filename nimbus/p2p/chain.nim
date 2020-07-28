@@ -152,8 +152,8 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
       debug "Stored block header hash doesn't match declared hash"
       return ValidationResult.Error
 
-    c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
-    c.db.persistReceipts(vmState.receipts)
+    discard c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
+    discard c.db.persistReceipts(vmState.receipts)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result

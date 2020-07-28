@@ -7,14 +7,14 @@
 
 import
   unittest, json, strformat, strutils, options, tables, os,
-  nimcrypto, stew/byteutils,
+  nimcrypto, stew/byteutils, times,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
   eth/[rlp, keys], eth/trie/db, eth/p2p/rlpx_protocols/eth_protocol,
-  ../nimbus/rpc/[common, p2p, hexstrings, rpc_types],
+  ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
   ../nimbus/[constants, vm_state, config, genesis, utils, transaction],
-  ../nimbus/db/[accounts_cache, db_chain, storage_types],
-  ../nimbus/p2p/chain,
-  ./rpcclient/test_hexstrings, ./test_helpers
+  ../nimbus/db/[accounts_cache, db_chain, storage_types, state_db],
+  ../nimbus/p2p/[chain, executor], ../nimbus/utils/difficulty,
+  ./rpcclient/test_hexstrings, ./test_helpers, ./macro_assembler
 
 from eth/p2p/rlpx_protocols/whisper_protocol import SymKey
 
@@ -30,27 +30,93 @@ template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const sigPath = &"{sourceDir}{DirSep}rpcclient{DirSep}ethcallsigs.nim"
 createRpcSigs(RpcSocketClient, sigPath)
 
+proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfiguration) =
+  var
+    parent = chain.getCanonicalHead()
+    ac = newAccountStateDB(chain.db, parent.stateRoot, chain.pruneTrie)
+    acc = conf.getAccount(signer).tryGet()
+    blockNumber = 1.toBlockNumber
+    parentHash = parent.blockHash
+    fork = chain.config.toFork(blockNumber)
+
+  const code = evmByteCode:
+    PUSH4 "0xDEADBEEF"  # PUSH
+    PUSH1 "0x00"        # MSTORE AT 0x00
+    MSTORE
+    PUSH1 "0x04"        # RETURN LEN
+    PUSH1 "0x1C"        # RETURN OFFSET at 28
+    RETURN
+
+  ac.setCode(ks2, code)
+  ac.addBalance(signer, 1_000_000.u256)
+  var vmState = newBaseVMState(ac.rootHash, BlockHeader(parentHash: parentHash), chain)
+
+  let
+    unsignedTx1 = UnsignedTx(
+      nonce   : 0,
+      gasPrice: 1_100,
+      gasLimit: 70_000,
+      value   : 1.u256,
+      contractCreation: false
+    )
+    unsignedTx2 = UnsignedTx(
+      nonce   : 0,
+      gasPrice: 1_200,
+      gasLimit: 70_000,
+      value   : 2.u256,
+      contractCreation: false
+    )
+    signedTx1 = signTransaction(unsignedTx1, chain, acc.privateKey)
+    signedTx2 = signTransaction(unsignedTx2, chain, acc.privateKey)
+    txs = [signedTx1, signedTx2]
+    txRoot = chain.persistTransactions(blockNumber, txs)
+
+  vmState.receipts = newSeq[Receipt](txs.len)
+  vmState.cumulativeGasUsed = 0
+  for txIndex, tx in txs:
+    let sender = tx.getSender()
+    discard processTransaction(tx, sender, vmState, fork)
+    vmState.receipts[txIndex] = makeReceipt(vmState, fork)
+
+  let
+    receiptRoot = chain.persistReceipts(vmState.receipts)
+    date        = initDateTime(30, mMar, 2017, 00, 00, 00, 00, utc())
+    timeStamp   = date.toTime
+    difficulty  = calcDifficulty(chain.config, timeStamp, parent)
+
+  let header = BlockHeader(
+    parentHash  : parentHash,
+    #ommersHash*:    Hash256
+    #coinbase*:      EthAddress
+    stateRoot   : vmState.accountDb.rootHash,
+    txRoot      : txRoot,
+    receiptRoot : receiptRoot,
+    bloom       : createBloom(vmState.receipts),
+    difficulty  : difficulty,
+    blockNumber : blockNumber,
+    gasLimit    : vmState.cumulativeGasUsed + 1000,
+    gasUsed     : vmState.cumulativeGasUsed,
+    timestamp   : timeStamp
+    #extraData:     Blob
+    #mixDigest:     Hash256
+    #nonce:         BlockNonce
+    )
+
+  discard chain.persistHeaderToDb(header)
+
 proc doTests {.async.} =
   # TODO: Include other transports such as Http
-  var ethNode = setupEthNode(eth)
-  let
-    emptyRlpHash = keccak256.digest(rlp.encode(""))
-    header = BlockHeader(stateRoot: emptyRlpHash)
   var
+    ethNode = setupEthNode(eth)
     chain = newBaseChainDB(newMemoryDb())
-    state = newBaseVMState(emptyRlpHash, header, chain)
-  ethNode.chain = newChain(chain)
 
   let
-    balance = 100.u256
-    address: EthAddress = hexToByteArray[20]("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
-
     signer: EthAddress = hexToByteArray[20]("0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b")
     ks2: EthAddress = hexToByteArray[20]("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
     ks3: EthAddress = hexToByteArray[20]("0x597176e9a64aad0845d83afdaf698fbeff77703b")
-
     conf = getConfiguration()
 
+  ethNode.chain = newChain(chain)
   conf.keyStore = "tests" / "keystore"
   let res = conf.loadKeystoreFiles()
   if res.isErr:
@@ -64,9 +130,8 @@ proc doTests {.async.} =
   doAssert(unlock.isOk)
 
   defaultGenesisBlockForNetwork(conf.net.networkId.toPublicNetwork()).commit(chain)
-  state.mutateStateDB:
-    db.setBalance(address, balance)
-  doAssert(canonicalHeadHashKey().toOpenArray in state.chainDb.db)
+  doAssert(canonicalHeadHashKey().toOpenArray in chain.db)
+  setupEnv(chain, signer, ks2, conf)
 
   # Create Ethereum RPCs
   let RPC_PORT = 8545
@@ -144,9 +209,7 @@ proc doTests {.async.} =
 
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
-      # genesis block doesn't have any transaction
-      # to generate meaningful prices
-      check res.string == "0x0"
+      check res.string == "0x47E"
 
     test "eth_accounts":
       let res = await client.eth_accounts()
@@ -156,7 +219,7 @@ proc doTests {.async.} =
 
     test "eth_blockNumber":
       let res = await client.eth_blockNumber()
-      check res.string == "0x0"
+      check res.string == "0x1"
 
     test "eth_getBalance":
       let a = await client.eth_getBalance(ethAddressStr("0xfff33a3bd36abdbd412707b8e310d6011454a7ae"), "0x0")
@@ -240,11 +303,11 @@ proc doTests {.async.} =
         to: ethAddressStr(ks2).some,
         gas: encodeQuantity(100000'u).some,
         gasPrice: none(HexQuantityStr),
-        value: encodeQuantity(100'u).some,
-        data: HexDataStr("0x").some,
+        value: encodeQuantity(100'u).some
         )
 
       let res = await client.eth_call(ec, "latest")
+      check hexToByteArray[4](res.string) == hexToByteArray[4]("deadbeef")
 
     #test "eth_estimateGas":
     #  let

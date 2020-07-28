@@ -15,13 +15,13 @@ import hexstrings, eth/[common, rlp, keys], stew/byteutils, nimcrypto,
 
 type
   UnsignedTx* = object
-    nonce   : AccountNonce
-    gasPrice: GasInt
-    gasLimit: GasInt
-    to {.rlpCustomSerialization.}: EthAddress
-    value   : UInt256
-    payload : Blob
-    contractCreation {.rlpIgnore.}: bool
+    nonce*   : AccountNonce
+    gasPrice*: GasInt
+    gasLimit*: GasInt
+    to* {.rlpCustomSerialization.}: EthAddress
+    value *  : UInt256
+    payload* : Blob
+    contractCreation* {.rlpIgnore.}: bool
 
   CallData* = object
     source: EthAddress
@@ -202,13 +202,17 @@ proc setupComputation(vmState: BaseVMState, call: CallData, fork: Fork) : Comput
 
   result = newComputation(vmState, msg)
 
+import json
+
 proc doCall*(call: CallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
   var
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
-    vmState = newBaseVMState(header.stateRoot, header, chain)
+    vmState = newBaseVMState(header.stateRoot, header, chain, {EnableTracing})
     fork    = toFork(chain.config, header.blockNumber)
     comp    = setupComputation(vmState, call, fork)
 
   comp.execComputation()
-  result = hexDataStr(comp.returnData)
+  result = hexDataStr(comp.output)
+  # TODO: handle revert and error
+  # TODO: handle contract ABI

@@ -132,7 +132,8 @@ proc addBlockNumberToHashLookup*(self: BaseChainDB; header: BlockHeader) =
   self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
               rlp.encode(header.hash))
 
-proc persistTransactions*(self: BaseChainDB, blockNumber: BlockNumber, transactions: openArray[Transaction]) =
+proc persistTransactions*(self: BaseChainDB, blockNumber: 
+                          BlockNumber, transactions: openArray[Transaction]): Hash256 =
   var trie = initHexaryTrie(self.db)
   for idx, tx in transactions:
     let
@@ -141,6 +142,7 @@ proc persistTransactions*(self: BaseChainDB, blockNumber: BlockNumber, transacti
       txKey: TransactionKey = (blockNumber, idx)
     trie.put(rlp.encode(idx), encodedTx)
     self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(txKey))
+  trie.rootHash    
 
 iterator getBlockTransactionData*(self: BaseChainDB, transactionRoot: Hash256): seq[byte] =
   var transactionDb = initHexaryTrie(self.db, transactionRoot)
@@ -245,10 +247,11 @@ proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
   self.db.contains(genericHashKey(blockHash).toOpenArray)
 
-proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]) =
+proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]): Hash256 =
   var trie = initHexaryTrie(self.db)
   for idx, rec in receipts:
     trie.put(rlp.encode(idx), rlp.encode(rec))
+  trie.rootHash
 
 iterator getReceipts*(self: BaseChainDB; header: BlockHeader): Receipt =
   var receiptDb = initHexaryTrie(self.db, header.receiptRoot)
