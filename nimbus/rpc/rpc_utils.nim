@@ -7,11 +7,11 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import hexstrings, eth/[common, rlp, keys], stew/byteutils, nimcrypto,
-  ../db/[db_chain], strutils, algorithm, options,
+import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
+  ../db/[db_chain, accounts_cache], strutils, algorithm, options,
   ../constants, stint, hexstrings, rpc_types, ../config,
   ../vm_state_transactions, ../vm_state, ../vm_types, ../vm/interpreter/vm_forks,
-  ../vm/computation
+  ../vm/computation, ../p2p/executor
 
 type
   UnsignedTx* = object
@@ -30,6 +30,7 @@ type
     gasPrice: GasInt
     value: UInt256
     data: seq[byte]
+    contractCreation: bool
 
 proc read(rlp: var Rlp, t: var UnsignedTx, _: type EthAddress): EthAddress {.inline.} =
   if rlp.blobLen != 0:
@@ -160,7 +161,7 @@ proc signTransaction*(tx: UnsignedTx, chain: BaseChainDB, privateKey: PrivateKey
     S: Uint256.fromBytesBE(sig[32..63])
     )
 
-proc callData*(call: EthCall, callMode: bool = true): CallData =
+proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): CallData =
   if call.source.isSome:
     result.source = toAddress(call.source.get)
 
@@ -169,12 +170,17 @@ proc callData*(call: EthCall, callMode: bool = true): CallData =
   else:
     if callMode:
       raise newException(ValueError, "call.to required for eth_call operation")
+    else:
+      result.contractCreation = true
 
   if call.gas.isSome:
     result.gas = hexToInt(call.gas.get.string, GasInt)
 
   if call.gasPrice.isSome:
     result.gasPrice = hexToInt(call.gasPrice.get.string, GasInt)
+  else:
+    if not callMode:
+      result.gasPrice = calculateMedianGasPrice(chain)
 
   if call.value.isSome:
     result.value = UInt256.fromHex(call.value.get.string)
@@ -202,13 +208,11 @@ proc setupComputation(vmState: BaseVMState, call: CallData, fork: Fork) : Comput
 
   result = newComputation(vmState, msg)
 
-import json
-
 proc doCall*(call: CallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
   var
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
-    vmState = newBaseVMState(header.stateRoot, header, chain, {EnableTracing})
+    vmState = newBaseVMState(header.stateRoot, header, chain)
     fork    = toFork(chain.config, header.blockNumber)
     comp    = setupComputation(vmState, call, fork)
 
@@ -216,3 +220,26 @@ proc doCall*(call: CallData, header: BlockHeader, chain: BaseChainDB): HexDataSt
   result = hexDataStr(comp.output)
   # TODO: handle revert and error
   # TODO: handle contract ABI
+
+proc estimateGas*(call: CallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): HexQuantityStr =
+  var
+    # we use current header stateRoot, unlike block validation
+    # which use previous block stateRoot
+    vmState = newBaseVMState(header.stateRoot, header, chain)
+    fork    = toFork(chain.config, header.blockNumber)
+    tx      = Transaction(
+      accountNonce: vmState.accountdb.getNonce(call.source),
+      gasPrice: call.gasPrice,
+      gasLimit: if haveGasLimit: call.gas else: header.gasLimit - vmState.cumulativeGasUsed,
+      to      : call.to,
+      value   : call.value,
+      payload : call.data,
+      isContractCreation:  call.contractCreation
+    )
+
+  var dbTx = chain.db.beginTransaction()
+  defer: dbTx.dispose()
+  let gasUsed = processTransaction(tx, call.source, vmState, fork)
+  result = encodeQuantity(gasUsed.uint64)
+  dbTx.dispose()
+  # TODO: handle revert and error

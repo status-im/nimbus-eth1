@@ -39,8 +39,8 @@ proc eth_signTransaction(data: TxSend): HexDataStr
 proc eth_sendTransaction(data: TxSend): EthHashStr
 proc eth_sendRawTransaction(data: HexDataStr): EthHashStr
 proc eth_call(call: EthCall, quantityTag: string): HexDataStr
-
 proc eth_estimateGas(call: EthCall, quantityTag: string): HexQuantityStr
+
 proc eth_getBlockByHash(data: Hash256, fullTransactions: bool): BlockObject
 proc eth_getBlockByNumber(quantityTag: string, fullTransactions: bool): BlockObject
 proc eth_getTransactionByHash(data: Hash256): TransactionObject

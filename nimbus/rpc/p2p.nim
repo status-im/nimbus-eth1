@@ -27,63 +27,9 @@ import
 ]#
 
 # Work around for https://github.com/nim-lang/Nim/issues/8645
-#[proc `%`*(value: Time): JsonNode =
-  result = %value.toUnix
+# proc `%`*(value: Time): JsonNode =
+#  result = %value.toUnix
 
-template balance(addressDb: ReadOnlyStateDb, address: EthAddress): GasInt =
-  # TODO: Account balance u256 but GasInt is int64?
-  addressDb.getBalance(address).truncate(int64)
-
-proc binarySearchGas(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress, gasPrice: GasInt, tolerance = 1): GasInt =
-  proc dummyComputation(vmState: var BaseVMState, transaction: Transaction, sender: EthAddress): Computation =
-    # Note that vmState may be altered
-    var chainDB = vmState.chainDB
-    let fork = chainDB.config.toFork(vmState.blockNumber)
-    setupComputation(
-        vmState,
-        transaction,
-        sender,
-        fork)
-
-  proc dummyTransaction(gasLimit, gasPrice: GasInt, destination: EthAddress, value: UInt256): Transaction =
-    Transaction(
-      accountNonce: 0.AccountNonce,
-      gasPrice: gasPrice,
-      gasLimit: gasLimit,
-      to: destination,
-      value: value
-    )
-  var
-    chainDB = vmState.chainDB
-    fork = chainDB.config.toFork(vmState.blockNumber)
-    hiGas = vmState.gasLimit
-    loGas = transaction.intrinsicGas(fork)
-    gasPrice = transaction.gasPrice # TODO: Or zero?
-
-  proc tryTransaction(vmState: var BaseVMState, gasLimit: GasInt): bool =
-    var
-      spoofTransaction = dummyTransaction(gasLimit, gasPrice, transaction.to, transaction.value)
-      computation = vmState.dummyComputation(spoofTransaction, sender)
-    computation.executeOpcodes
-    if not computation.isError:
-      return true
-
-  if vmState.tryTransaction(loGas):
-    return loGas
-  if not vmState.tryTransaction(hiGas):
-    return 0.GasInt # TODO: Reraise error from computation
-
-  var
-    minVal = vmState.gasLimit
-    maxVal = transaction.intrinsicGas(fork)
-  while loGas - hiGas > tolerance:
-    let midPoint = (loGas + hiGas) div 2
-    if vmState.tryTransaction(midPoint):
-      minVal = midPoint
-    else:
-      maxVal = midPoint
-  result = minVal
-]#
 proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
 
   proc getAccountDb(header: BlockHeader): ReadOnlyStateDB =
@@ -316,13 +262,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## call: the transaction call object.
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the return value of executed contract.
-    let 
+    let
       header   = headerFromTag(chain, quantityTag)
-      callData = callData(call, true)
+      callData = callData(call, true, chain)
     result = doCall(callData, header, chain)
 
-#[
-  server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> GasInt:
+  server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> HexQuantityStr:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
     ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
     ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -330,39 +275,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## call: the transaction call object.
     ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the amount of gas used.
-    var
-      header = chain.headerFromTag(quantityTag)
-      # TODO: header.stateRoot to prevStateRoot?
-      vmState = newBaseVMState(header.stateRoot, header, chain)
     let
-      gasLimit = if
-        call.gas.isSome and call.gas.get > 0.GasInt: call.gas.get
-        else: header.gasLimit
-      gasPrice = if
-        call.gasPrice.isSome and call.gasPrice.get > 0: call.gasPrice.get
-        else: 0.GasInt
-      sender = if
-        call.source.isSome: call.source.get.toAddress
-        else: ZERO_ADDRESS
-      destination = if
-        call.to.isSome: call.to.get.toAddress
-        else: ZERO_ADDRESS
-      curState = vmState.readOnlyStateDb()
-      nonce = curState.getNonce(sender)
-      value = if
-        call.value.isSome: call.value.get
-        else: 0.u256
+      header   = chain.headerFromTag(quantityTag)
+      callData = callData(call, false, chain)
+    result = estimateGas(callData, header, chain, call.gas.isSome)
 
-      transaction = Transaction(
-        accountNonce: nonce,
-        gasPrice: gasPrice,
-        gasLimit: gasLimit,
-        to: destination,
-        value: value,
-        payload: @[]
-      )
-    result = vmState.binarySearchGas(transaction, sender, gasPrice)
-
+#[
   func populateBlockObject(header: BlockHeader, blockBody: BlockBody): BlockObject =
     result.number = some(header.blockNumber)
     result.hash = some(header.hash)

@@ -48,7 +48,7 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
     RETURN
 
   ac.setCode(ks2, code)
-  ac.addBalance(signer, 1_000_000.u256)
+  ac.addBalance(signer, 9_000_000_000.u256)
   var vmState = newBaseVMState(ac.rootHash, BlockHeader(parentHash: parentHash), chain)
 
   let
@@ -94,7 +94,7 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
     bloom       : createBloom(vmState.receipts),
     difficulty  : difficulty,
     blockNumber : blockNumber,
-    gasLimit    : vmState.cumulativeGasUsed + 1000,
+    gasLimit    : vmState.cumulativeGasUsed + 1_000_000,
     gasUsed     : vmState.cumulativeGasUsed,
     timestamp   : timeStamp
     #extraData:     Blob
@@ -309,12 +309,17 @@ proc doTests {.async.} =
       let res = await client.eth_call(ec, "latest")
       check hexToByteArray[4](res.string) == hexToByteArray[4]("deadbeef")
 
-    #test "eth_estimateGas":
-    #  let
-    #    call = EthCall()
-    #    blockNum = state.blockheader.blockNumber
-    #    r4 = await client.eth_estimateGas(call, "0x" & blockNum.toHex)
-    #  check r4 == 21_000
+    test "eth_estimateGas":
+      var ec = EthCall(
+        source: ethAddressStr(signer).some,
+        to: ethAddressStr(ks3).some,
+        gas: encodeQuantity(42000'u).some,
+        gasPrice: encodeQuantity(100'u).some,
+        value: encodeQuantity(100'u).some
+        )
+
+      let res = await client.eth_estimateGas(ec, "latest")
+      check hexToInt(res.string, int) == 21000
 
   rpcServer.stop()
   rpcServer.close()
