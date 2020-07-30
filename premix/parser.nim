@@ -3,8 +3,8 @@ import
   eth/[rlp, common], httputils, nimcrypto, chronicles,
   stint, stew/byteutils
 
-import
-  ../nimbus/[transaction, rpc/hexstrings]
+import ../nimbus/transaction
+from ../nimbus/rpc/hexstrings import encodeQuantity
 
 func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
   var i = 0
