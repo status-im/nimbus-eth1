@@ -40,15 +40,14 @@ proc eth_sendTransaction(data: TxSend): EthHashStr
 proc eth_sendRawTransaction(data: HexDataStr): EthHashStr
 proc eth_call(call: EthCall, quantityTag: string): HexDataStr
 proc eth_estimateGas(call: EthCall, quantityTag: string): HexQuantityStr
-
-proc eth_getBlockByHash(data: Hash256, fullTransactions: bool): BlockObject
-proc eth_getBlockByNumber(quantityTag: string, fullTransactions: bool): BlockObject
-proc eth_getTransactionByHash(data: Hash256): TransactionObject
-proc eth_getTransactionByBlockHashAndIndex(data: Hash256, quantity: int): TransactionObject
-proc eth_getTransactionByBlockNumberAndIndex(quantityTag: string, quantity: int): TransactionObject
-proc eth_getTransactionReceipt(data: Hash256): ReceiptObject
-proc eth_getUncleByBlockHashAndIndex(data: Hash256, quantity: int64): BlockObject
-proc eth_getUncleByBlockNumberAndIndex(quantityTag: string, quantity: int64): BlockObject
+proc eth_getBlockByHash(data: Hash256, fullTransactions: bool): Option[BlockObject]
+proc eth_getBlockByNumber(quantityTag: string, fullTransactions: bool): Option[BlockObject]
+proc eth_getTransactionByHash(data: Hash256): Option[TransactionObject]
+proc eth_getTransactionByBlockHashAndIndex(data: Hash256, quantity: HexQuantityStr): Option[TransactionObject]
+proc eth_getTransactionByBlockNumberAndIndex(quantityTag: string, quantity: HexQuantityStr): Option[TransactionObject]
+proc eth_getTransactionReceipt(data: Hash256): Option[ReceiptObject]
+proc eth_getUncleByBlockHashAndIndex(data: Hash256, quantity: HexQuantityStr): Option[BlockObject]
+proc eth_getUncleByBlockNumberAndIndex(quantityTag: string, quantity: HexQuantityStr): Option[BlockObject]
 
 #[
 proc eth_getCompilers(): seq[string]

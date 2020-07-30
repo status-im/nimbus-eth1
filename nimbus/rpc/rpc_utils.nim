@@ -8,10 +8,10 @@
 # those terms.
 
 import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
-  ../db/[db_chain, accounts_cache], strutils, algorithm, options,
+  ../db/[db_chain, accounts_cache], strutils, algorithm, options, times, json,
   ../constants, stint, hexstrings, rpc_types, ../config,
   ../vm_state_transactions, ../vm_state, ../vm_types, ../vm/interpreter/vm_forks,
-  ../vm/computation, ../p2p/executor
+  ../vm/computation, ../p2p/executor, ../utils, ../transaction
 
 type
   UnsignedTx* = object
@@ -243,3 +243,86 @@ proc estimateGas*(call: CallData, header: BlockHeader, chain: BaseChainDB, haveG
   result = encodeQuantity(gasUsed.uint64)
   dbTx.dispose()
   # TODO: handle revert and error
+
+proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: int): TransactionObject =
+  result.blockHash = some(header.hash)
+  result.blockNumber = some(encodeQuantity(header.blockNumber))
+  result.`from` = tx.getSender()
+  result.gas = encodeQuantity(tx.gasLimit.uint64)
+  result.gasPrice = encodeQuantity(tx.gasPrice.uint64)
+  result.hash = tx.rlpHash
+  result.input = tx.payLoad
+  result.nonce = encodeQuantity(tx.accountNonce.uint64)
+  if not tx.isContractCreation:
+    result.to = some(tx.to)
+  result.transactionIndex = some(encodeQuantity(txIndex.uint64))
+  result.value = encodeQuantity(tx.value)
+  result.v = encodeQuantity(tx.V.uint)
+  result.r = encodeQuantity(tx.R)
+  result.s = encodeQuantity(tx.S)
+
+proc populateBlockObject*(header: BlockHeader, chain: BaseChainDB, fullTx: bool, isUncle = false): BlockObject =
+  let blockHash = header.blockHash
+
+  result.number = some(encodeQuantity(header.blockNumber))
+  result.hash = some(blockHash)
+  result.parentHash = header.parentHash
+  result.nonce = some(hexDataStr(header.nonce))
+  result.sha3Uncles = header.ommersHash
+  result.logsBloom = some(header.bloom)
+  result.transactionsRoot = header.txRoot
+  result.stateRoot = header.stateRoot
+  result.receiptsRoot = header.receiptRoot
+  result.miner = header.coinbase
+  result.difficulty = encodeQuantity(header.difficulty)
+  result.extraData = hexDataStr(header.extraData)
+
+  # discard sizeof(seq[byte]) of extraData and use actual length
+  let size = sizeof(BlockHeader) - sizeof(Blob) + header.extraData.len
+  result.size = encodeQuantity(size.uint)
+
+  result.gasLimit  = encodeQuantity(header.gasLimit.uint64)
+  result.gasUsed   = encodeQuantity(header.gasUsed.uint64)
+  result.timestamp = encodeQuantity(header.timeStamp.toUnix.uint64)
+
+  if not isUncle:
+    result.totalDifficulty = encodeQuantity(chain.getScore(blockHash))
+    result.uncles = chain.getUncleHashes(header)
+
+    if fullTx:
+      var i = 0
+      for tx in chain.getBlockTransactions(header):
+        result.transactions.add %(populateTransactionObject(tx, header, i))
+        inc i
+    else:
+      for x in chain.getBlockTransactionHashes(header):
+        result.transactions.add %(x)
+
+proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txIndex: int, header: BlockHeader): ReceiptObject =
+  result.transactionHash = tx.rlpHash
+  result.transactionIndex = encodeQuantity(txIndex.uint)
+  result.blockHash = header.hash
+  result.blockNumber = encodeQuantity(header.blockNumber)
+  result.`from` = tx.getSender()
+
+  if tx.isContractCreation:
+    result.to = some(tx.to)
+
+  result.cumulativeGasUsed = encodeQuantity(receipt.cumulativeGasUsed.uint64)
+  result.gasUsed = encodeQuantity(gasUsed.uint64)
+
+  if tx.isContractCreation:
+    var sender: EthAddress
+    if tx.getSender(sender):
+      let contractAddress = generateAddress(sender, tx.accountNonce)
+      result.contractAddress = some(contractAddress)
+
+  result.logs = receipt.logs
+  result.logsBloom = receipt.bloom
+
+  # post-transaction stateroot (pre Byzantium).
+  if receipt.hasStateRoot:
+    result.root = some(receipt.stateRoot)
+  else:
+    # 1 = success, 0 = failure.
+    result.status = some(receipt.status)

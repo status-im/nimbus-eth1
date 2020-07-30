@@ -231,7 +231,6 @@ proc `%`*(value: whisper_protocol.Topic): JsonNode =
 proc `%`*(value: seq[byte]): JsonNode =
   result = %("0x" & value.toHex)
 
-
 # Helpers for the fromJson procs
 
 proc toPublicKey*(key: string): PublicKey {.inline.} =
@@ -270,6 +269,13 @@ proc fromJson*(n: JsonNode, argName: string, result: var EthAddressStr) =
   if not hexStr.isValidEthAddress:
     raise newException(ValueError, invalidMsg(argName) & "\" as an Ethereum address \"" & hexStr & "\"")
   result = hexStr.EthAddressStr
+
+proc fromJson*(n: JsonNode, argName: string, result: var EthAddress) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidEthAddress:
+    raise newException(ValueError, invalidMsg(argName) & "\" as an Ethereum address \"" & hexStr & "\"")
+  hexToByteArray(hexStr, result)
 
 proc fromJson*(n: JsonNode, argName: string, result: var EthHashStr) =
   n.kind.expect(JString, argName)
@@ -336,3 +342,6 @@ proc fromJson*(n: JsonNode, argName: string, result: var Hash256) =
   if not hexStr.isValidHash256:
     raise newException(ValueError, invalidMsg(argName) & " as a Hash256 \"" & hexStr & "\"")
   hexToByteArray(hexStr, result.data)
+
+proc fromJson*(n: JsonNode, argName: string, result: var JsonNode) =
+  result = n

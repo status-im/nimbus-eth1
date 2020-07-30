@@ -30,7 +30,12 @@ template sourceDir: string = currentSourcePath.rsplit(DirSep, 1)[0]
 const sigPath = &"{sourceDir}{DirSep}rpcclient{DirSep}ethcallsigs.nim"
 createRpcSigs(RpcSocketClient, sigPath)
 
-proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfiguration) =
+type
+  TestEnv = object
+    txHash: Hash256
+    blockHash: HAsh256
+
+proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfiguration): TestEnv =
   var
     parent = chain.getCanonicalHead()
     ac = newAccountStateDB(chain.db, parent.stateRoot, chain.pruneTrie)
@@ -84,9 +89,8 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
     timeStamp   = date.toTime
     difficulty  = calcDifficulty(chain.config, timeStamp, parent)
 
-  let header = BlockHeader(
+  var header = BlockHeader(
     parentHash  : parentHash,
-    #ommersHash*:    Hash256
     #coinbase*:      EthAddress
     stateRoot   : vmState.accountDb.rootHash,
     txRoot      : txRoot,
@@ -102,7 +106,15 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
     #nonce:         BlockNonce
     )
 
+  let uncles = [header]
+  header.ommersHash = chain.persistUncles(uncles)
+
   discard chain.persistHeaderToDb(header)
+  result = TestEnv(
+    txHash: signedTx1.rlpHash,
+    blockHash: header.hash
+    )
+
 
 proc doTests {.async.} =
   # TODO: Include other transports such as Http
@@ -131,7 +143,7 @@ proc doTests {.async.} =
 
   defaultGenesisBlockForNetwork(conf.net.networkId.toPublicNetwork()).commit(chain)
   doAssert(canonicalHeadHashKey().toOpenArray in chain.db)
-  setupEnv(chain, signer, ks2, conf)
+  let env = setupEnv(chain, signer, ks2, conf)
 
   # Create Ethereum RPCs
   let RPC_PORT = 8545
@@ -320,6 +332,73 @@ proc doTests {.async.} =
 
       let res = await client.eth_estimateGas(ec, "latest")
       check hexToInt(res.string, int) == 21000
+
+    test "eth_getBlockByHash":
+      let res = await client.eth_getBlockByHash(env.blockHash, true)
+      check res.isSome
+      check res.get().hash.get() == env.blockHash
+      let res2 = await client.eth_getBlockByHash(env.txHash, true)
+      check res2.isNone
+
+    test "eth_getBlockByNumber":
+      let res = await client.eth_getBlockByNumber("latest", true)
+      check res.isSome
+      check res.get().hash.get() == env.blockHash
+      let res2 = await client.eth_getBlockByNumber($1, true)
+      check res2.isNone
+
+    test "eth_getTransactionByHash":
+      let res = await client.eth_getTransactionByHash(env.txHash)
+      check res.isSome
+      check res.get().blockNumber.get().string.hexToInt(int) == 1
+      let res2 = await client.eth_getTransactionByHash(env.blockHash)
+      check res2.isNone
+
+    test "eth_getTransactionByBlockHashAndIndex":
+      let res = await client.eth_getTransactionByBlockHashAndIndex(env.blockHash, encodeQuantity(0))
+      check res.isSome
+      check res.get().blockNumber.get().string.hexToInt(int) == 1
+
+      let res2 = await client.eth_getTransactionByBlockHashAndIndex(env.blockHash, encodeQuantity(3))
+      check res2.isNone
+
+      let res3 = await client.eth_getTransactionByBlockHashAndIndex(env.txHash, encodeQuantity(3))
+      check res3.isNone
+
+    test "eth_getTransactionByBlockNumberAndIndex":
+      let res = await client.eth_getTransactionByBlockNumberAndIndex("latest", encodeQuantity(1))
+      check res.isSome
+      check res.get().blockNumber.get().string.hexToInt(int) == 1
+
+      let res2 = await client.eth_getTransactionByBlockNumberAndIndex("latest", encodeQuantity(3))
+      check res2.isNone
+
+    test "eth_getTransactionReceipt":
+      let res = await client.eth_getTransactionReceipt(env.txHash)
+      check res.isSome
+      check res.get().blockNumber.string.hexToInt(int) == 1
+
+      let res2 = await client.eth_getTransactionReceipt(env.blockHash)
+      check res2.isNone
+      
+    test "eth_getUncleByBlockHashAndIndex":
+      let res = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, encodeQuantity(0))
+      check res.isSome
+      check res.get().number.get().string.hexToInt(int) == 1
+
+      let res2 = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, encodeQuantity(1))
+      check res2.isNone
+
+      let res3 = await client.eth_getUncleByBlockHashAndIndex(env.txHash, encodeQuantity(0))
+      check res3.isNone
+
+    test "eth_getUncleByBlockNumberAndIndex":
+      let res = await client.eth_getUncleByBlockNumberAndIndex("latest", encodeQuantity(0))
+      check res.isSome
+      check res.get().number.get().string.hexToInt(int) == 1
+
+      let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", encodeQuantity(1))
+      check res2.isNone
 
   rpcServer.stop()
   rpcServer.close()
