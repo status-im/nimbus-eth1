@@ -14,42 +14,42 @@ import
   ../../nimbus/rpc/hexstrings, ../../nimbus/rpc/rpc_types
 
 proc web3_clientVersion(): string
-proc web3_sha3(data: string): string
+proc web3_sha3(data: HexDataStr): string
 proc net_version(): string
-proc net_peerCount(): int
+proc net_peerCount(): HexQuantityStr
 proc net_listening(): bool
 proc eth_protocolVersion(): string
 proc eth_syncing(): JsonNode
 proc eth_coinbase(): EthAddressStr
 proc eth_mining(): bool
-proc eth_hashrate(): int
-proc eth_gasPrice(): GasInt
+proc eth_hashrate(): HexQuantityStr
+proc eth_gasPrice(): HexQuantityStr
 proc eth_accounts(): seq[EthAddressStr]
-proc eth_blockNumber(): BlockNumber
-proc eth_getBalance(data: EthAddressStr, quantityTag: string): UInt256
-proc eth_getStorageAt(data: EthAddressStr, quantity: int, quantityTag: string): seq[byte]
-proc eth_getTransactionCount(data: EthAddressStr, quantityTag: string)
-proc eth_getBlockTransactionCountByHash(data: array[32, byte])
-proc eth_getBlockTransactionCountByNumber(quantityTag: string)
-proc eth_getUncleCountByBlockHash(data: array[32, byte])
-proc eth_getUncleCountByBlockNumber(quantityTag: string)
+proc eth_blockNumber(): HexQuantityStr
+proc eth_getBalance(data: EthAddressStr, quantityTag: string): HexQuantityStr
+proc eth_getStorageAt(data: EthAddressStr, quantity: HexQuantityStr, quantityTag: string): seq[byte]
+proc eth_getTransactionCount(data: EthAddressStr, quantityTag: string): HexQuantityStr
+proc eth_getBlockTransactionCountByHash(data: Hash256): HexQuantityStr
+proc eth_getBlockTransactionCountByNumber(quantityTag: string): HexQuantityStr
+proc eth_getUncleCountByBlockHash(data: Hash256): HexQuantityStr
+proc eth_getUncleCountByBlockNumber(quantityTag: string): HexQuantityStr
 proc eth_getCode(data: EthAddressStr, quantityTag: string): HexDataStr
-proc eth_sign(data:EthAddressStr, message: HexDataStr): HexDataStr
-#proc eth_sendRawTransaction(data: string, quantityTag: int): UInt256
-proc eth_call(call: EthCall, quantityTag: string): string
-proc eth_estimateGas(call: EthCall, quantityTag: string): GasInt
+proc eth_sign(data: EthAddressStr, message: HexDataStr): HexDataStr
+proc eth_signTransaction(data: TxSend): HexDataStr
+proc eth_sendTransaction(data: TxSend): EthHashStr
+proc eth_sendRawTransaction(data: HexDataStr): EthHashStr
+proc eth_call(call: EthCall, quantityTag: string): HexDataStr
+proc eth_estimateGas(call: EthCall, quantityTag: string): HexQuantityStr
+proc eth_getBlockByHash(data: Hash256, fullTransactions: bool): Option[BlockObject]
+proc eth_getBlockByNumber(quantityTag: string, fullTransactions: bool): Option[BlockObject]
+proc eth_getTransactionByHash(data: Hash256): Option[TransactionObject]
+proc eth_getTransactionByBlockHashAndIndex(data: Hash256, quantity: HexQuantityStr): Option[TransactionObject]
+proc eth_getTransactionByBlockNumberAndIndex(quantityTag: string, quantity: HexQuantityStr): Option[TransactionObject]
+proc eth_getTransactionReceipt(data: Hash256): Option[ReceiptObject]
+proc eth_getUncleByBlockHashAndIndex(data: Hash256, quantity: HexQuantityStr): Option[BlockObject]
+proc eth_getUncleByBlockNumberAndIndex(quantityTag: string, quantity: HexQuantityStr): Option[BlockObject]
 
-# TODO: Use eth/common types
-
-#[proc eth_sendTransaction(obj: EthSend): UInt256
-proc eth_getBlockByHash(data: array[32, byte], fullTransactions: bool): BlockObject
-proc eth_getBlockByNumber(quantityTag: string, fullTransactions: bool): BlockObject
-proc eth_getTransactionByHash(data: Uint256): TransactionObject
-proc eth_getTransactionByBlockHashAndIndex(data: UInt256, quantity: int): TransactionObject
-proc eth_getTransactionByBlockNumberAndIndex(quantityTag: string, quantity: int): TransactionObject
-proc eth_getTransactionReceipt(data: UInt256): ReceiptObject
-proc eth_getUncleByBlockHashAndIndex(data: UInt256, quantity: int64): BlockObject
-proc eth_getUncleByBlockNumberAndIndex(quantityTag: string, quantity: int64): BlockObject
+#[
 proc eth_getCompilers(): seq[string]
 proc eth_compileLLL(): seq[byte]
 proc eth_compileSolidity(): seq[byte]

@@ -18,10 +18,12 @@ type
     pruneTrie*: bool
     config*   : ChainConfig
 
-  #KeyType = enum
-  #  blockNumberToHash
-  #  blockHashToScore
-  #
+    # startingBlock, currentBlock, and highestBlock
+    # are progress indicator
+    startingBlock*: BlockNumber
+    currentBlock*: BlockNumber
+    highestBlock*: BlockNumber
+
   TransactionKey = tuple
     blockNumber: BlockNumber
     index: int
@@ -63,6 +65,15 @@ proc getCanonicalHead*(self: BaseChainDB): BlockHeader =
       not self.getBlockHeader(headHash, result):
     raise newException(CanonicalHeadNotFound,
                       "No canonical head set for this chain")
+
+proc populateProgress*(self: BaseChainDB) =
+  try:
+    self.startingBlock = self.getCanonicalHead().blockNumber
+  except CanonicalHeadNotFound:
+    self.startingBlock = toBlockNumber(0)
+
+  self.currentBlock = self.startingBlock
+  self.highestBlock = self.startingBlock
 
 proc getBlockHash*(self: BaseChainDB, n: BlockNumber, output: var Hash256): bool {.inline.} =
   ## Return the block hash for the given block number.
@@ -117,7 +128,8 @@ proc addBlockNumberToHashLookup*(self: BaseChainDB; header: BlockHeader) =
   self.db.put(blockNumberToHashKey(header.blockNumber).toOpenArray,
               rlp.encode(header.hash))
 
-proc persistTransactions*(self: BaseChainDB, blockNumber: BlockNumber, transactions: openArray[Transaction]) =
+proc persistTransactions*(self: BaseChainDB, blockNumber:
+                          BlockNumber, transactions: openArray[Transaction]): Hash256 =
   var trie = initHexaryTrie(self.db)
   for idx, tx in transactions:
     let
@@ -126,8 +138,16 @@ proc persistTransactions*(self: BaseChainDB, blockNumber: BlockNumber, transacti
       txKey: TransactionKey = (blockNumber, idx)
     trie.put(rlp.encode(idx), encodedTx)
     self.db.put(transactionHashToBlockKey(txHash).toOpenArray, rlp.encode(txKey))
+  trie.rootHash
 
-iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): seq[byte] =
+proc getTransaction*(self: BaseChainDB, txRoot: Hash256, txIndex: int, res: var Transaction): bool =
+  var db = initHexaryTrie(self.db, txRoot)
+  let txData = db.get(rlp.encode(txIndex))
+  if txData.len > 0:
+    res = rlp.decode(txData, Transaction)
+    result = true
+
+iterator getBlockTransactionData*(self: BaseChainDB, transactionRoot: Hash256): seq[byte] =
   var transactionDb = initHexaryTrie(self.db, transactionRoot)
   var transactionIdx = 0
   while true:
@@ -138,11 +158,37 @@ iterator getBlockTransactionData(self: BaseChainDB, transactionRoot: Hash256): s
       break
     inc transactionIdx
 
-iterator getBlockTransactionHashes(self: BaseChainDB, blockHeader: BlockHeader): Hash256 =
+iterator getBlockTransactions*(self: BaseChainDB, header: BlockHeader): Transaction =
+  for encodedTx in self.getBlockTransactionData(header.txRoot):
+    yield rlp.decode(encodedTx, Transaction)
+
+iterator getBlockTransactionHashes*(self: BaseChainDB, blockHeader: BlockHeader): Hash256 =
   ## Returns an iterable of the transaction hashes from th block specified
   ## by the given block header.
   for encodedTx in self.getBlockTransactionData(blockHeader.txRoot):
     yield keccakHash(encodedTx)
+
+proc getTransactionCount*(chain: BaseChainDB, txRoot: Hash256): int =
+  var trie = initHexaryTrie(chain.db, txRoot)
+  var txCount = 0
+  while true:
+    let txKey = rlp.encode(txCount)
+    if txKey notin trie:
+      break
+    inc txCount
+
+proc getUnclesCount*(self: BaseChainDB, ommersHash: Hash256): int =
+  if ommersHash != EMPTY_UNCLE_HASH:
+    let encodedUncles = self.db.get(genericHashKey(ommersHash).toOpenArray)
+    if encodedUncles.len != 0:
+      let r = rlpFromBytes(encodedUncles)
+      result = r.listLen
+
+proc getUncles*(self: BaseChainDB, ommersHash: Hash256): seq[BlockHeader] =
+  if ommersHash != EMPTY_UNCLE_HASH:
+    let encodedUncles = self.db.get(genericHashKey(ommersHash).toOpenArray)
+    if encodedUncles.len != 0:
+      result = rlp.decode(encodedUncles, seq[BlockHeader])
 
 proc getBlockBody*(self: BaseChainDB, blockHash: Hash256, output: var BlockBody): bool =
   var header: BlockHeader
@@ -170,11 +216,22 @@ proc getUncleHashes*(self: BaseChainDB, blockHashes: openArray[Hash256]): seq[Ha
     for uncle in blockBody.uncles:
       result.add uncle.hash
 
+proc getUncleHashes*(self: BaseChainDB, header: BlockHeader): seq[Hash256] =
+  if header.ommersHash != EMPTY_UNCLE_HASH:
+    let encodedUncles = self.db.get(genericHashKey(header.ommersHash).toOpenArray)
+    if encodedUncles.len != 0:
+      let uncles = rlp.decode(encodedUncles, seq[BlockHeader])
+      for x in uncles:
+        result.add x.hash
+
 proc getTransactionKey*(self: BaseChainDB, transactionHash: Hash256): tuple[blockNumber: BlockNumber, index: int] {.inline.} =
-  let
-    tx = self.db.get(transactionHashToBlockKey(transactionHash).toOpenArray)
-    key = rlp.decode(tx, TransactionKey)
-  return (key.blockNumber, key.index)
+  let tx = self.db.get(transactionHashToBlockKey(transactionHash).toOpenArray)
+
+  if tx.len > 0:
+    let key = rlp.decode(tx, TransactionKey)
+    result = (key.blockNumber, key.index)
+  else:
+    result = (0.toBlockNumber, -1)
 
 proc removeTransactionFromCanonicalChain(self: BaseChainDB, transactionHash: Hash256) {.inline.} =
   ## Removes the transaction specified by the given hash from the canonical chain.
@@ -214,10 +271,11 @@ proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
   ## Returns True if the header with the given block hash is in our DB.
   self.db.contains(genericHashKey(blockHash).toOpenArray)
 
-proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]) =
+proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]): Hash256 =
   var trie = initHexaryTrie(self.db)
   for idx, rec in receipts:
     trie.put(rlp.encode(idx), rlp.encode(rec))
+  trie.rootHash
 
 iterator getReceipts*(self: BaseChainDB; header: BlockHeader): Receipt =
   var receiptDb = initHexaryTrie(self.db, header.receiptRoot)

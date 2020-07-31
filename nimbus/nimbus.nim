@@ -15,7 +15,7 @@ import
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper, key_storage], p2p/chain,
-  eth/trie/db, metrics, metrics/chronicles_support
+  eth/trie/db, metrics, metrics/chronicles_support, utils
 
 ## TODO:
 ## * No IPv6 support
@@ -36,6 +36,10 @@ type
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
+  let res = conf.loadKeystoreFiles()
+  if res.isErr:
+    echo res.error()
+    quit(QuitFailure)
 
   ## logging
   setLogLevel(conf.debug.logLevel)
@@ -51,11 +55,6 @@ proc start(nimbus: NimbusNode) =
       info "metrics", registry
       discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
     discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
-
-  ## Creating RPC Server
-  if RpcFlags.Enabled in conf.rpc.flags:
-    nimbus.rpcServer = newRpcHttpServer(conf.rpc.binds)
-    setupCommonRpc(nimbus.rpcServer)
 
   ## Creating P2P Server
   let keypair = conf.net.nodekey.toKeyPair()
@@ -88,6 +87,8 @@ proc start(nimbus: NimbusNode) =
     conf.prune == PruneMode.Full,
     conf.net.networkId.toPublicNetwork())
 
+  chainDB.populateProgress()
+
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
@@ -106,6 +107,11 @@ proc start(nimbus: NimbusNode) =
     nimbus.ethNode.addCapability les
 
   nimbus.ethNode.chain = newChain(chainDB)
+
+  ## Creating RPC Server
+  if RpcFlags.Enabled in conf.rpc.flags:
+    nimbus.rpcServer = newRpcHttpServer(conf.rpc.binds)
+    setupCommonRpc(nimbus.ethNode, nimbus.rpcServer)
 
   # Enable RPC APIs based on RPC flags and protocol flags
   if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:

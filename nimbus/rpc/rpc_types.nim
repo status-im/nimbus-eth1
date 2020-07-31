@@ -1,5 +1,5 @@
 import
-  hexstrings, options, eth/[common, keys, rlp],
+  hexstrings, options, eth/[common, keys, rlp], json,
   eth/p2p/rlpx_protocols/whisper_protocol
 
 #[
@@ -16,66 +16,69 @@ import
 type
   SyncState* = object
     # Returned to user
-    startingBlock*: BlockNumber
-    currentBlock*: BlockNumber
-    highestBlock*: BlockNumber
+    startingBlock*: HexQuantityStr # BlockNumber
+    currentBlock* : HexQuantityStr # BlockNumber
+    highestBlock* : HexQuantityStr # BlockNumber
 
-  EthSend* = object
+  TxSend* = object
     # Parameter from user
-    source*: EthAddressStr    # the address the transaction is send from.
-    to*: EthAddressStr        # (optional when creating new contract) the address the transaction is directed to.
-    gas*: GasInt              # (optional, default: 90000) integer of the gas provided for the transaction execution. It will return unused gas.
-    gasPrice*: GasInt         # (optional, default: To-Be-Determined) integer of the gasPrice used for each paid gas.
-    value*: UInt256           # (optional) integer of the value sent with this transaction.
-    data*: EthHashStr         # TODO: Support more data. The compiled code of a contract OR the hash of the invoked method signature and encoded parameters. For details see Ethereum Contract ABI.
-    nonce*: AccountNonce      # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
+    source*: EthAddressStr            # 20 bytes, the address the transaction is send from.
+    to*: Option[EthAddressStr]        # (optional when creating new contract) 20 bytes, the address the transaction is directed to.
+    gas*: Option[HexQuantityStr]      # (optional, default: 90000) integer of the gas provided for the transaction execution. It will return unused gas.
+    gasPrice*: Option[HexQuantityStr] # (optional, default: To-Be-Determined) integer of the gasPrice used for each paid gas.
+    value*: Option[HexQuantityStr]    # (optional) integer of the value sent with this transaction.
+    data*: HexDataStr                 # TODO: Support more data. The compiled code of a contract OR the hash of the invoked method signature and encoded parameters. For details see Ethereum Contract ABI.
+    nonce*: Option[HexQuantityStr]    # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
 
   EthCall* = object
     # Parameter from user
-    source*: Option[EthAddressStr]  # (optional) The address the transaction is send from.
-    to*: Option[EthAddressStr]      # (optional in eth_estimateGas, not in eth_call) The address the transaction is directed to.
-    gas*: Option[GasInt]            # (optional) Integer of the gas provided for the transaction execution. eth_call consumes zero gas, but this parameter may be needed by some executions.
-    gasPrice*: Option[GasInt]       # (optional) Integer of the gasPrice used for each paid gas.
-    value*: Option[UInt256]         # (optional) Integer of the value sent with this transaction.
-    data*: Option[EthHashStr]       # (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI.
+    source*: Option[EthAddressStr]   # (optional) The address the transaction is send from.
+    to*: Option[EthAddressStr]       # (optional in eth_estimateGas, not in eth_call) The address the transaction is directed to.
+    gas*: Option[HexQuantityStr]# (optional) Integer of the gas provided for the transaction execution. eth_call consumes zero gas, but this parameter may be needed by some executions.
+    gasPrice*: Option[HexQuantityStr]# (optional) Integer of the gasPrice used for each paid gas.
+    value*: Option[HexQuantityStr]   # (optional) Integer of the value sent with this transaction.
+    data*: Option[EthHashStr]        # (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI.
 
   ## A block object, or null when no block was found
   ## Note that this includes slightly different information from eth/common.BlockHeader
   BlockObject* = object
     # Returned to user
-    number*: Option[BlockNumber]    # the block number. null when its pending block.
+    number*: Option[HexQuantityStr] # the block number. null when its pending block.
     hash*: Option[Hash256]          # hash of the block. null when its pending block.
     parentHash*: Hash256            # hash of the parent block.
-    nonce*: uint64                  # hash of the generated proof-of-work. null when its pending block.
+    nonce*: Option[HexDataStr]      # hash of the generated proof-of-work. null when its pending block.
     sha3Uncles*: Hash256            # SHA3 of the uncles data in the block.
     logsBloom*: Option[BloomFilter] # the bloom filter for the logs of the block. null when its pending block.
     transactionsRoot*: Hash256      # the root of the transaction trie of the block.
     stateRoot*: Hash256             # the root of the final state trie of the block.
     receiptsRoot*: Hash256          # the root of the receipts trie of the block.
     miner*: EthAddress              # the address of the beneficiary to whom the mining rewards were given.
-    difficulty*: UInt256            # integer of the difficulty for this block.
-    totalDifficulty*: UInt256       # integer of the total difficulty of the chain until this block.
-    extraData*: Blob                # the "extra data" field of this block.
-    size*: int                      # integer the size of this block in bytes.
-    gasLimit*: GasInt               # the maximum gas allowed in this block.
-    gasUsed*: GasInt                # the total used gas by all transactions in this block.
-    timestamp*: EthTime             # the unix timestamp for when the block was collated.
-    transactions*: seq[Transaction] # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
+    difficulty*: HexQuantityStr     # integer of the difficulty for this block.
+    totalDifficulty*: HexQuantityStr# integer of the total difficulty of the chain until this block.
+    extraData*: HexDataStr          # the "extra data" field of this block.
+    size*: HexQuantityStr           # integer the size of this block in bytes.
+    gasLimit*: HexQuantityStr       # the maximum gas allowed in this block.
+    gasUsed*: HexQuantityStr        # the total used gas by all transactions in this block.
+    timestamp*: HexQuantityStr      # the unix timestamp for when the block was collated.
+    transactions*: seq[JsonNode]    # list of transaction objects, or 32 Bytes transaction hashes depending on the last given parameter.
     uncles*: seq[Hash256]           # list of uncle hashes.
 
   TransactionObject* = object       # A transaction object, or null when no transaction was found:
     # Returned to user
-    hash*: Hash256                    # hash of the transaction.
-    nonce*: AccountNonce              # the number of transactions made by the sender prior to this one.
     blockHash*: Option[Hash256]       # hash of the block where this transaction was in. null when its pending.
-    blockNumber*: Option[BlockNumber] # block number where this transaction was in. null when its pending.
-    transactionIndex*: Option[int64]  # integer of the transactions index position in the block. null when its pending.
-    source*: EthAddress               # address of the sender.
-    to*: Option[EthAddress]           # address of the receiver. null when its a contract creation transaction.
-    value*: UInt256                   # value transferred in Wei.
-    gasPrice*: GasInt                 # gas price provided by the sender in Wei.
-    gas*: GasInt                      # gas provided by the sender.
+    blockNumber*: Option[HexQuantityStr] # block number where this transaction was in. null when its pending.
+    `from`*: EthAddress               # address of the sender.
+    gas*: HexQuantityStr              # gas provided by the sender.
+    gasPrice*: HexQuantityStr         # gas price provided by the sender in Wei.
+    hash*: Hash256                    # hash of the transaction.
     input*: Blob                      # the data send along with the transaction.
+    nonce*: HexQuantityStr            # the number of transactions made by the sender prior to this one.
+    to*: Option[EthAddress]           # address of the receiver. null when its a contract creation transaction.
+    transactionIndex*: Option[HexQuantityStr] # integer of the transactions index position in the block. null when its pending.
+    value*: HexQuantityStr            # value transferred in Wei.
+    v*: HexQuantityStr                # ECDSA recovery id
+    r*: HexQuantityStr                # 32 Bytes - ECDSA signature r
+    s*: HexQuantityStr                # 32 Bytes - ECDSA signature s
 
   FilterLog* = object
     # Returned to user
@@ -94,13 +97,13 @@ type
   ReceiptObject* = object
     # A transaction receipt object, or null when no receipt was found:
     transactionHash*: Hash256             # hash of the transaction.
-    transactionIndex*: int                # integer of the transactions index position in the block.
+    transactionIndex*: HexQuantityStr     # integer of the transactions index position in the block.
     blockHash*: Hash256                   # hash of the block where this transaction was in.
-    blockNumber*: BlockNumber             # block number where this transaction was in.
-    sender*: EthAddress                   # address of the sender.
+    blockNumber*: HexQuantityStr          # block number where this transaction was in.
+    `from`*: EthAddress                   # address of the sender.
     to*: Option[EthAddress]               # address of the receiver. null when its a contract creation transaction.
-    cumulativeGasUsed*: GasInt            # the total amount of gas used when this transaction was executed in the block.
-    gasUsed*: GasInt                      # the amount of gas used by this specific transaction alone.
+    cumulativeGasUsed*: HexQuantityStr    # the total amount of gas used when this transaction was executed in the block.
+    gasUsed*: HexQuantityStr              # the amount of gas used by this specific transaction alone.
     contractAddress*: Option[EthAddress]  # the contract address created, if the transaction was a contract creation, otherwise null.
     logs*: seq[Log]                       # list of log objects which this transaction generated.
     logsBloom*: BloomFilter               # bloom filter for light clients to quickly retrieve related logs.

@@ -34,8 +34,8 @@ import
 type
   HexQuantityStr* = distinct string
   HexDataStr* = distinct string
-  EthAddressStr* = distinct string        # Same as HexDataStr but must be less <= 20 bytes
-  EthHashStr* = distinct string           # Same as HexDataStr but must be exactly 32 bytes
+  EthAddressStr* = distinct string     # Same as HexDataStr but must be less <= 20 bytes
+  EthHashStr* = distinct string        # Same as HexDataStr but must be exactly 32 bytes
   Identifier* = distinct string        # 32 bytes, no 0x prefix!
   HexStrings = HexQuantityStr | HexDataStr | EthAddressStr | EthHashStr |
                Identifier
@@ -51,9 +51,13 @@ template stripLeadingZeros(value: string): string =
     cidx.inc
   value[cidx .. ^1]
 
-func encodeQuantity*(value: SomeUnsignedInt): string {.inline.} =
+func encodeQuantity*(value: SomeUnsignedInt): HexQuantityStr  {.inline.} =
   var hValue = value.toHex.stripLeadingZeros
-  result = "0x" & hValue
+  result = HexQuantityStr("0x" & hValue)
+
+func encodeQuantity*(value: UInt256): HexQuantityStr  {.inline.} =
+  var hValue = value.toHex
+  result = HexQuantityStr("0x" & hValue)
 
 template hasHexHeader(value: string): bool =
   if value.len >= 2 and value[0] == '0' and value[1] in {'x', 'X'}: true
@@ -64,6 +68,15 @@ template isHexChar(c: char): bool =
       c notin {'a'..'f'} and
       c notin {'A'..'F'}: false
   else: true
+
+func `==`*(a, b: HexQuantityStr): bool {.inline.} =
+  a.string == b.string
+
+func `==`*(a, b: EthAddressStr): bool {.inline.} =
+  a.string == b.string
+
+func `==`*(a, b: HexDataStr): bool {.inline.} =
+  a.string == b.string
 
 func isValidHexQuantity*(value: string): bool =
   if not value.hasHexHeader:
@@ -158,13 +171,25 @@ proc hexDataStr*(value: string): HexDataStr {.inline.} =
   value.validateHexData
   result = value.HexDataStr
 
+proc hexDataStr*(value: openArray[byte]): HexDataStr {.inline.} =
+  result = HexDataStr("0x" & value.toHex)
+
+proc hexDataStr*(value: Uint256): HexDataStr {.inline.} =
+  result = HexDataStr("0x" & toBytesBE(value).toHex)
+
 proc ethAddressStr*(value: string): EthAddressStr {.inline.} =
   value.validateHexAddressStr
   result = value.EthAddressStr
 
+func ethAddressStr*(x: EthAddress): EthAddressStr {.inline.} =
+  result = EthAddressStr("0x" & toHex(x))
+
 proc ethHashStr*(value: string): EthHashStr {.inline.} =
   value.validateHashStr
   result = value.EthHashStr
+
+func ethHashStr*(value: Hash256): EthHashStr {.inline.} =
+  result = EthHashStr("0x" & value.data.toHex)
 
 # Converters for use in RPC
 
@@ -175,7 +200,6 @@ proc `%`*(value: HexStrings): JsonNode =
   result = %(value.string)
 
 # Overloads to support expected representation of hex data
-
 proc `%`*(value: EthAddress): JsonNode =
   result = %("0x" & value.toHex)
 
@@ -206,7 +230,6 @@ proc `%`*(value: whisper_protocol.Topic): JsonNode =
 
 proc `%`*(value: seq[byte]): JsonNode =
   result = %("0x" & value.toHex)
-
 
 # Helpers for the fromJson procs
 
@@ -246,6 +269,13 @@ proc fromJson*(n: JsonNode, argName: string, result: var EthAddressStr) =
   if not hexStr.isValidEthAddress:
     raise newException(ValueError, invalidMsg(argName) & "\" as an Ethereum address \"" & hexStr & "\"")
   result = hexStr.EthAddressStr
+
+proc fromJson*(n: JsonNode, argName: string, result: var EthAddress) =
+  n.kind.expect(JString, argName)
+  let hexStr = n.getStr()
+  if not hexStr.isValidEthAddress:
+    raise newException(ValueError, invalidMsg(argName) & "\" as an Ethereum address \"" & hexStr & "\"")
+  hexToByteArray(hexStr, result)
 
 proc fromJson*(n: JsonNode, argName: string, result: var EthHashStr) =
   n.kind.expect(JString, argName)
@@ -312,3 +342,6 @@ proc fromJson*(n: JsonNode, argName: string, result: var Hash256) =
   if not hexStr.isValidHash256:
     raise newException(ValueError, invalidMsg(argName) & " as a Hash256 \"" & hexStr & "\"")
   hexToByteArray(hexStr, result.data)
+
+proc fromJson*(n: JsonNode, argName: string, result: var JsonNode) =
+  result = n

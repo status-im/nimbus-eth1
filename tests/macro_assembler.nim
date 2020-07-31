@@ -377,3 +377,8 @@ macro assembler*(list: untyped): untyped =
     of "fork": boa.fork = parseFork(body)
     else: error("unknown section '" & label & "'", callSection[0])
   result = boa.generateVMProxy()
+
+macro evmByteCode*(list: untyped): untyped =
+  list.expectKind nnkStmtList
+  var code = parseCode(list)
+  result = newLitFixed(code)

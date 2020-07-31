@@ -136,6 +136,8 @@ proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
   else:
     result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
 
+import stew/byteutils
+
 proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Computation =
   new result
   result.vmState = vmState
