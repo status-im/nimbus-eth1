@@ -170,7 +170,10 @@ proc parseCode(codes: NimNode): seq[byte] =
 
 proc parseFork(fork: NimNode): Fork =
   fork[0].expectKind({nnkIdent, nnkStrLit})
-  parseEnum[Fork](strip(fork[0].strVal))
+  when (NimMajor, NimMinor) < (1, 3):
+    parseEnum[Fork](strip(fork[0].strVal))
+  else:
+    parseEnum[Fork](strip("Fk" & fork[0].strVal))
 
 proc generateVMProxy(boa: Assembler): NimNode =
   let
