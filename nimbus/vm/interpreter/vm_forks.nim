@@ -9,22 +9,11 @@ import stint, eth/common/eth_types
 
 type
   Fork* = enum
-    FkFrontier,
-    FkHomestead,
-    FkTangerine,
-    FkSpurious,
-    FkByzantium,
-    FkConstantinople,
-    FkPetersburg,
-    FkIstanbul
-
-proc `$`*(fork: Fork): string =
-  case fork
-  of FkFrontier: result = "Frontier"
-  of FkHomestead: result = "Homestead"
-  of FkTangerine: result = "Tangerine Whistle"
-  of FkSpurious: result = "Spurious Dragon"
-  of FkByzantium: result = "Byzantium"
-  of FkConstantinople: result = "Constantinople"
-  of FkPetersburg: result = "Petersburg"
-  of FkIstanbul: result = "Istanbul"
+    FkFrontier = "frontier"
+    FkHomestead = "homestead"
+    FkTangerine = "tangerine whistle"
+    FkSpurious = "spurious dragon"
+    FkByzantium = "byzantium"
+    FkConstantinople = "constantinople"
+    FkPetersburg = "petersburg"
+    FkIstanbul = "istanbul"
