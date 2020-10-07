@@ -12,7 +12,7 @@
 
 ## Rationale
 
-[Nimbus: an Ethereum 2.0 Sharding Client](https://our.status.im/nimbus-for-newbies/). The code in this repository is currently focusing on Ethereum 1.0 feature parity, while all 2.0 research and development is happening in parallel in [nim-beacon-chain](https://github.com/status-im/nim-beacon-chain).
+[Nimbus: an Ethereum 2.0 Sharding Client](https://our.status.im/nimbus-for-newbies/). The code in this repository is currently focusing on Ethereum 1.0 feature parity, while all 2.0 research and development is happening in parallel in [nimbus-eth2](https://github.com/status-im/nimbus-eth2).
 
 ## Development Updates
 
