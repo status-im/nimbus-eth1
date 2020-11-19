@@ -113,4 +113,5 @@ cliBuilder:
           ./test_forkid,
           ../stateless/test_witness_keys,
           ../stateless/test_block_witness,
-          ../stateless/test_witness_json
+          ../stateless/test_witness_json,
+          ./test_misc

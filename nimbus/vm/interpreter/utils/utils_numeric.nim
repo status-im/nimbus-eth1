@@ -7,6 +7,7 @@
 
 import
   macros,
+  stew/endians2, stew/ranges/ptr_arith,
   eth/common/eth_types,
   ../../../constants
 
@@ -112,3 +113,9 @@ func safeInt*(x: Uint256): int {.inline.} =
   result = x.truncate(int)
   if x > high(int32).u256 or result < 0:
     result = high(int32)
+
+func toInt*(x: EthAddress): int =
+  type T = uint32
+  const len = sizeof(T)
+  fromBytesBE(T, makeOpenArray(x[x.len-len].unsafeAddr, len)).int
+  

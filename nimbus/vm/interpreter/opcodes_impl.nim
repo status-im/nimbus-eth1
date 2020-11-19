@@ -731,7 +731,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
                                     (memOutPos, memOutLen)
 
     let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
-    let (childGasFee, childGasLimit) = c.gasCosts[opCode].c_handler(
+    var (childGasFee, childGasLimit) = c.gasCosts[opCode].c_handler(
       value,
       GasParams(kind: opCode,
                 c_isNewAccount: not c.accountExists(contractAddress),
@@ -741,6 +741,13 @@ template genCall(callName: untyped, opCode: Op): untyped =
                 c_memOffset: memOffset,
                 c_memLength: memLength
       ))
+
+    # EIP 2046
+    # reduce gas fee for precompiles
+    # from 700 to 40
+    when opCode == StaticCall:
+      if c.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
+        childGasFee = childGasFee - 660.GasInt
 
     if childGasFee >= 0:
       c.gasMeter.consumeGas(childGasFee, reason = $opCode)
