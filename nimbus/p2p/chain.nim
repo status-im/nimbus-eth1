@@ -27,7 +27,8 @@ type
     blockZeroHash: KeccakHash
 
 func toChainFork(c: ChainConfig, number: BlockNumber): ChainFork =
-  if number >= c.muirGlacierBlock: MuirGlacier
+  if number >= c.berlinBlock: Berlin
+  elif number >= c.muirGlacierBlock: MuirGlacier
   elif number >= c.istanbulBlock: Istanbul
   elif number >= c.petersburgBlock: Petersburg
   elif number >= c.constantinopleBlock: Constantinople
@@ -56,6 +57,7 @@ func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
     toNextFork(c.petersburgBlock),
     toNextFork(c.istanbulBlock),
     toNextFork(c.muirGlacierBlock),
+    toNextFork(c.berlinBlock),
   ]
 
   if fork == high(ChainFork):
