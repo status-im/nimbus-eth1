@@ -74,8 +74,8 @@
   ignore = dirty
   branch = master
 [submodule "vendor/nim-blscurve"]
-  path = vendor/nim-blscurve
-  url = https://github.com/status-im/nim-blscurve
+	path = vendor/nim-blscurve
+	url = https://github.com/status-im/nim-blscurve
   ignore = dirty
   branch = master
 [submodule "vendor/nim-chronos"]
