@@ -65,4 +65,5 @@ const
   # and: https://github.com/ethereum/EIPs/issues/170
   EIP170_CODE_SIZE_LIMIT* =                 24577
 
-
+  # EIP
+  MaxPrecompilesAddr* =                     0xFFFF
