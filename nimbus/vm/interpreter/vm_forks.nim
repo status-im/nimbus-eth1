@@ -17,3 +17,4 @@ type
     FkConstantinople = "constantinople"
     FkPetersburg = "petersburg"
     FkIstanbul = "istanbul"
+    FkBerlin = "berlin"

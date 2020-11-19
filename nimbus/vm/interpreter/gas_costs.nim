@@ -710,7 +710,8 @@ const
     FkByzantium: SpuriousGasFees,
     FkConstantinople: SpuriousGasFees,
     FkPetersburg: SpuriousGasFees,
-    FkIstanbul: IstanbulGasFees
+    FkIstanbul: IstanbulGasFees,
+    FkBerlin: IstanbulGasFees
   ]
 
 
