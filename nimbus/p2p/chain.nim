@@ -18,7 +18,8 @@ type
     Constantinople,
     Petersburg,
     Istanbul,
-    MuirGlacier
+    MuirGlacier,
+    Berlin
 
   Chain* = ref object of AbstractChainDB
     db: BaseChainDB
