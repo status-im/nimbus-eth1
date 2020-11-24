@@ -9,11 +9,20 @@ import
   unittest2, ../nimbus/vm/precompiles, json, stew/byteutils, test_helpers, os, tables,
   strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain,
   ../nimbus/[vm_types, vm_state], ../nimbus/vm/[computation, message], macros,
-  ../nimbus/vm/blake2b_f
+  ../nimbus/vm/blake2b_f, ../nimbus/vm/interpreter/vm_forks
 
 proc initAddress(i: byte): EthAddress = result[19] = i
 
-template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
+const
+  eip198Fees = [13056, 13056, 204, 204, 3276, 665, 665, 10649, 1894,
+                1894, 30310, 5580, 5580, 89292, 17868, 17868, 285900]
+
+  eip2565Fees = [1360, 1360, 200, 200, 341, 200, 200, 1365, 341,
+                341, 5461, 1365, 1365, 21845, 5461, 5461, 87381]
+
+
+template doTest(fixture: JsonNode, address: byte, action: untyped, fees: openArray[int] = [], fork: untyped = 0): untyped =
+  var i = 0
   for test in fixture:
     let
       blockNum = 1.u256 # TODO: Check other forks
@@ -47,10 +56,23 @@ template doTest(fixture: JsonNode, address: byte, action: untyped): untyped =
         )
       computation = newComputation(vmState, message)
     # echo "Running ", action.astToStr, " - ", test["name"]
-    `action`(computation)
+
+    when fees.len > 0:
+      let initialGas = computation.gasMeter.gasRemaining
+
+    when fork is Fork:
+      `action`(computation, fork)
+    else:
+      `action`(computation)
     let c = computation.output == expected
     if not c: echo "Output  : " & computation.output.toHex & "\nExpected: " & expected.toHex
     check c
+
+    when fees.len > 0:
+      let gasFee = initialGas - computation.gasMeter.gasRemaining
+      check gasFee == fees[i]
+
+    inc i
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   for label, child in fixtures:
@@ -59,7 +81,9 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     of "sha256": child.doTest(paSha256.ord, sha256)
     of "ripemd": child.doTest(paRipeMd160.ord, ripemd160)
     of "identity": child.doTest(paIdentity.ord, identity)
-    of "modexp": child.doTest(paModExp.ord, modexp)
+    of "modexp":
+      child.doTest(paModExp.ord, modexp, eip198Fees)
+      child.doTest(paModExp.ord, modexp, eip2565Fees, FkBerlin)
     of "bn256add": child.doTest(paEcAdd.ord, bn256ECAdd)
     of "bn256mul": child.doTest(paEcMul.ord, bn256ECMul)
     of "ecpairing": child.doTest(paPairing.ord, bn256ecPairing)
