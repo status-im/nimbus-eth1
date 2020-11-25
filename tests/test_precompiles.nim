@@ -80,6 +80,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "blake2f"  : data.doTest(fork, paBlake2bf)
   else:
     echo "Unknown test vector '" & $label & "'"
+    testStatusIMPL = SKIPPED
 
 proc precompilesMain*() =
   suite "Precompiles":

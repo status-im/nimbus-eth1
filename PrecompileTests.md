@@ -3,6 +3,15 @@ PrecompileTests
 ## PrecompileTests
 ```diff
 + blake2F.json                                                    OK
+- blsG1Add.json                                                   Fail
+- blsG1Mul.json                                                   Fail
+- blsG1MultiExp.json                                              Fail
+- blsG2Add.json                                                   Fail
+- blsG2Mul.json                                                   Fail
+- blsG2MultiExp.json                                              Fail
+- blsMapG1.json                                                   Fail
+- blsMapG2.json                                                   Fail
+- blsPairing.json                                                 Fail
 + bn256Add.json                                                   OK
 + bn256Add_istanbul.json                                          OK
 + bn256mul.json                                                   OK
@@ -16,7 +25,7 @@ PrecompileTests
 + ripemd160.json                                                  OK
 + sha256.json                                                     OK
 ```
-OK: 13/13 Fail: 0/13 Skip: 0/13
+OK: 13/22 Fail: 9/22 Skip: 0/22
 
 ---TOTAL---
-OK: 13/13 Fail: 0/13 Skip: 0/13
+OK: 13/22 Fail: 9/22 Skip: 0/22
