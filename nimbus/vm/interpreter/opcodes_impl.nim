@@ -542,6 +542,18 @@ op jumpDest, inline = true:
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect on machine state during execution.
   discard
 
+op beginSub, inline = true:
+  ## 0x5c, Marks the entry point to a subroutine
+  discard
+
+op returnSub, inline = true:
+  ## 0x5d, Returns control to the caller of a subroutine.
+  discard
+
+op jumpSub, inline = true:
+  ## 0x5e, Transfers control to a subroutine.
+  discard
+
 # ##########################################
 # 60s & 70s: Push Operations.
 # 80s: Duplication Operations

@@ -95,6 +95,9 @@ fill_enum_holes:
       Msize =          0x59, # Get the size of active memory in bytes.
       Gas =            0x5a, # Get the amount of available gas, including the corresponding reduction for the cost of this instruction.
       JumpDest =       0x5b, # Mark a valid destination for jumps. This operation has no effect on machine state during execution.
+      BeginSub =       0x5c, # Marks the entry point to a subroutine
+      ReturnSub =      0x5d, # Returns control to the caller of a subroutine.
+      JumpSub =        0x5e, # Transfers control to a subroutine.
 
       # 60s & 70s: Push Operations.
       Push1 =          0x60, # Place 1-byte item on stack.
