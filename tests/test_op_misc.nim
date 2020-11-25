@@ -175,3 +175,102 @@ proc opMiscMain*() =
       memory:
         "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
         "0x00"
+
+    assembler:
+      title: "Simple routine"
+      code:
+        PUSH1 "0x04"
+        JUMPSUB
+        STOP
+        BEGINSUB
+        RETURNSUB
+      gasUsed: 18
+      fork: Berlin
+
+    assembler:
+      title: "Two levels of subroutines"
+      code:
+        PUSH9 "0x00000000000000000C"
+        JUMPSUB
+        STOP
+        BEGINSUB
+        PUSH1 "0x11"
+        JUMPSUB
+        RETURNSUB
+        BEGINSUB
+        RETURNSUB
+      gasUsed: 36
+      fork: Berlin
+
+    assembler:
+      title: "Failure 1: invalid jump"
+      code:
+        PUSH9 "0x01000000000000000C"
+        JUMPSUB
+        STOP
+        BEGINSUB
+        PUSH1 "0x11"
+        JUMPSUB
+        RETURNSUB
+        BEGINSUB
+        RETURNSUB
+      success: false
+      fork: Berlin
+
+    assembler:
+      title: "Failure 2: shallow return stack"
+      code:
+        RETURNSUB
+        PC
+        PC
+      success: false
+      fork: Berlin
+
+    assembler:
+      title: "Subroutine at end of code"
+      code:
+        PUSH1 "0x05"
+        JUMP
+        BEGINSUB
+        RETURNSUB
+        JUMPDEST
+        PUSH1 "0x03"
+        JUMPSUB
+      gasUsed: 30
+      fork: Berlin
+
+    assembler:
+      title: "Error on 'walk-into-subroutine'"
+      code:
+        BEGINSUB
+        RETURNSUB
+        STOP
+      success: false
+      fork: Berlin
+
+    assembler:
+      title: "sol test"
+      code:
+        PUSH1 "0x02"
+        PUSH1 "0x03"
+        PUSH1 "0x08" # jumpdest
+        JUMPSUB
+        STOP
+
+        # 0x08
+        BEGINSUB
+        PUSH1 "0x0D" # jumpdest
+        JUMPSUB
+        RETURNSUB
+
+        # 0x0D
+        BEGINSUB
+        MUL
+        RETURNSUB
+      gasUsed: 47
+      fork: Berlin
+      stack:
+        "0x06"
+
+when isMainModule:
+  opMiscMain()

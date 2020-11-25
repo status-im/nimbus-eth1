@@ -560,6 +560,7 @@ op jumpSub, inline = true, jumpTarget:
   if jumpTarget >= c.code.len.u256:
     raise newException(InvalidJumpDestination, "JumpSub destination exceeds code len")
 
+  let returnPC = c.code.pc
   let jt = jumpTarget.truncate(int)
   c.code.pc = jt
 
@@ -570,7 +571,7 @@ op jumpSub, inline = true, jumpTarget:
   if c.returnStack.len == 1023:
     raise newException(FullStack, "Out of returnStack")
 
-  push: jt + 1
+  c.returnStack.push returnPC
   inc c.code.pc
 
 # ##########################################
