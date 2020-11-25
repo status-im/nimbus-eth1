@@ -553,7 +553,7 @@ op returnSub, inline = true:
   # Other than the check that the return stack is not empty, there is no
   # need to validate the pc from 'returns', since we only ever push valid
   # values onto it via jumpsub.
-  c.code.pc = c.returnStack.popInt().safeInt
+  c.code.pc = c.returnStack.pop()
 
 op jumpSub, inline = true, jumpTarget:
   ## 0x5e, Transfers control to a subroutine.
@@ -571,7 +571,7 @@ op jumpSub, inline = true, jumpTarget:
   if c.returnStack.len == 1023:
     raise newException(FullStack, "Out of returnStack")
 
-  c.returnStack.push returnPC
+  c.returnStack.add returnPC
   inc c.code.pc
 
 # ##########################################

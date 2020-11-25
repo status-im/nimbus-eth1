@@ -144,7 +144,7 @@ proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Comp
   result.msg = message
   result.memory = Memory()
   result.stack = newStack()
-  result.returnStack = newStack()
+  result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.touchedAccounts = initHashSet[EthAddress]()
   result.suicides = initHashSet[EthAddress]()
