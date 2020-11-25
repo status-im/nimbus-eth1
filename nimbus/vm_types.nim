@@ -68,6 +68,7 @@ type
     msg*:                   Message
     memory*:                Memory
     stack*:                 Stack
+    returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
     output*:                seq[byte]

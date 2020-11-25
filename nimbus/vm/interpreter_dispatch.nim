@@ -229,6 +229,14 @@ proc genIstanbulJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compile
 
 let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTable(PetersburgOpDispatch)
 
+proc genBerlinJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  result[BeginSub] = newIdentNode "beginSub"
+  result[ReturnSub] = newIdentNode "returnSub"
+  result[JumpSub] = newIdentNode "jumpSub"
+
+let BerlinOpDispatch {.compileTime.}: array[Op, NimNode] = genBerlinJumpTable(IstanbulOpDispatch)
+
 proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
 
   let instr = quote do: `c`.instr
@@ -308,6 +316,9 @@ macro genPetersburgDispatch(c: Computation): untyped =
 macro genIstanbulDispatch(c: Computation): untyped =
   result = opTableToCaseStmt(IstanbulOpDispatch, c)
 
+macro genBerlinDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(BerlinOpDispatch, c)
+
 proc frontierVM(c: Computation) =
   genFrontierDispatch(c)
 
@@ -332,6 +343,9 @@ proc petersburgVM(c: Computation) {.gcsafe.} =
 proc istanbulVM(c: Computation) {.gcsafe.} =
   genIstanbulDispatch(c)
 
+proc berlinVM(c: Computation) {.gcsafe.} =
+  genBerlinDispatch(c)
+
 proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
@@ -349,8 +363,10 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
     c.constantinopleVM()
   of FkPetersburg:
     c.petersburgVM()
-  else:
+  of FkIstanbul:
     c.istanbulVM()
+  else:
+    c.berlinVM()
 
 proc executeOpcodes(c: Computation) =
   let fork = c.fork

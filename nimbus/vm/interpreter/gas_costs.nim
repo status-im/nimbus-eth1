@@ -535,6 +535,9 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           Msize:          fixed GasBase,
           Gas:            fixed GasBase,
           JumpDest:       fixed GasJumpDest,
+          BeginSub:       fixed GasBase,
+          ReturnSub:      fixed GasLow,
+          JumpSub:        fixed GasHigh,
 
           # 60s & 70s: Push Operations
           Push1:          fixed GasVeryLow,

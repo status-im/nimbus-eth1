@@ -542,6 +542,38 @@ op jumpDest, inline = true:
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect on machine state during execution.
   discard
 
+op beginSub, inline = true:
+  ## 0x5c, Marks the entry point to a subroutine
+  raise newException(OutOfGas, "Abort: Attempt to execute BeginSub opcode")
+
+op returnSub, inline = true:
+  ## 0x5d, Returns control to the caller of a subroutine.
+  if c.returnStack.len == 0:
+    raise newException(OutOfGas, "Abort: invalid returnStack during ReturnSub")
+  # Other than the check that the return stack is not empty, there is no
+  # need to validate the pc from 'returns', since we only ever push valid
+  # values onto it via jumpsub.
+  c.code.pc = c.returnStack.pop()
+
+op jumpSub, inline = true, jumpTarget:
+  ## 0x5e, Transfers control to a subroutine.
+  if jumpTarget >= c.code.len.u256:
+    raise newException(InvalidJumpDestination, "JumpSub destination exceeds code len")
+
+  let returnPC = c.code.pc
+  let jt = jumpTarget.truncate(int)
+  c.code.pc = jt
+
+  let nextOpcode = c.code.peek
+  if nextOpcode != BeginSub:
+    raise newException(InvalidJumpDestination, "Invalid JumpSub destination")
+
+  if c.returnStack.len == 1023:
+    raise newException(FullStack, "Out of returnStack")
+
+  c.returnStack.add returnPC
+  inc c.code.pc
+
 # ##########################################
 # 60s & 70s: Push Operations.
 # 80s: Duplication Operations

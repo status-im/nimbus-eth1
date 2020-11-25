@@ -172,6 +172,10 @@ proc parseFork(fork: NimNode): Fork =
   fork[0].expectKind({nnkIdent, nnkStrLit})
   parseEnum[Fork](strip(fork[0].strVal))
 
+proc parseGasUsed(gas: NimNode): GasInt =
+  gas[0].expectKind(nnkIntLit)
+  result = gas[0].intVal
+
 proc generateVMProxy(boa: Assembler): NimNode =
   let
     vmProxy = genSym(nskProc, "vmProxy")
@@ -262,10 +266,9 @@ proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq
 proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   var computation = initComputation(blockNumber, chainDB, boa.code, boa.data, boa.fork)
 
-  # TODO: support gas comsumption validation
-  # let gas = computation.gasMeter.gasRemaining
+  let gas = computation.gasMeter.gasRemaining
   execComputation(computation)
-  # let gasUsed = gas - computation.gasMeter.gasRemaining
+  let gasUsed = gas - computation.gasMeter.gasRemaining
 
   if computation.isSuccess:
     if boa.success == false:
@@ -274,6 +277,11 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   else:
     if boa.success == true:
       error "different success value", expected=boa.success, actual=false
+      return false
+
+  if boa.gasUsed != -1:
+    if boa.gasUsed != gasUsed:
+      error "different gasUsed", expected=boa.gasUsed, actual=gasUsed
       return false
 
   if boa.stack.len != computation.stack.values.len:
@@ -355,7 +363,7 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   result = true
 
 macro assembler*(list: untyped): untyped =
-  var boa = Assembler(success: true, fork: FkFrontier)
+  var boa = Assembler(success: true, fork: FkFrontier, gasUsed: -1)
   list.expectKind nnkStmtList
   for callSection in list:
     callSection.expectKind(nnkCall)
@@ -375,6 +383,7 @@ macro assembler*(list: untyped): untyped =
     of "data": boa.data = parseData(body)
     of "output": boa.output = parseData(body)
     of "fork": boa.fork = parseFork(body)
+    of "gasused": boa.gasUsed = parseGasUsed(body)
     else: error("unknown section '" & label & "'", callSection[0])
   result = boa.generateVMProxy()
 
