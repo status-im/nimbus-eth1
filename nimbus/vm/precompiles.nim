@@ -350,7 +350,7 @@ proc blake2bf*(computation: Computation) =
 
   if len(input) == blake2FInputLength:
     let gasFee = GasInt(beLoad32(input, 0))
-    computation.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
+    computation.gasMeter.consumeGas(gasFee, reason="blake2bf Precompile")
 
   var output: array[64, byte]
   if not blake2b_F(input, output):
