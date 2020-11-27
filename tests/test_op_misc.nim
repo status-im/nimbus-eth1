@@ -185,7 +185,7 @@ proc opMiscMain*() =
         BEGINSUB
         RETURNSUB
       gasUsed: 18
-      fork: Berlin
+      fork: berlin
 
     assembler:
       title: "Two levels of subroutines"
@@ -200,7 +200,7 @@ proc opMiscMain*() =
         BEGINSUB
         RETURNSUB
       gasUsed: 36
-      fork: Berlin
+      fork: berlin
 
     assembler:
       title: "Failure 1: invalid jump"
@@ -215,7 +215,7 @@ proc opMiscMain*() =
         BEGINSUB
         RETURNSUB
       success: false
-      fork: Berlin
+      fork: berlin
 
     assembler:
       title: "Failure 2: shallow return stack"
@@ -224,7 +224,7 @@ proc opMiscMain*() =
         PC
         PC
       success: false
-      fork: Berlin
+      fork: berlin
 
     assembler:
       title: "Subroutine at end of code"
@@ -237,7 +237,7 @@ proc opMiscMain*() =
         PUSH1 "0x03"
         JUMPSUB
       gasUsed: 30
-      fork: Berlin
+      fork: berlin
 
     assembler:
       title: "Error on 'walk-into-subroutine'"
@@ -246,7 +246,7 @@ proc opMiscMain*() =
         RETURNSUB
         STOP
       success: false
-      fork: Berlin
+      fork: berlin
 
     assembler:
       title: "sol test"
@@ -268,7 +268,7 @@ proc opMiscMain*() =
         MUL
         RETURNSUB
       gasUsed: 47
-      fork: Berlin
+      fork: berlin
       stack:
         "0x06"
 
