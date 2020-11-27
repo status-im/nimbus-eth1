@@ -18,8 +18,8 @@ template doTest(fixture: JsonNode, fork: Fork, address: PrecompileAddresses): un
     let
       blockNum = 1.u256 # TODO: Check other forks
       header = BlockHeader(blockNumber: blockNum)
-      expectedStr = test["Expected"].getStr
-      expected = if expectedStr != "error": expectedStr.hexToSeqByte else: @[]
+      expectedErr = test.hasKey("ExpectedError")
+      expected = if test.hasKey("Expected"): hexToSeqByte(test["Expected"].getStr) else: @[]
       dataStr = test["Input"].getStr
       data = if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
       vmState = newBaseVMState(header.stateRoot, header, newBaseChainDB(newMemoryDb()))
@@ -49,7 +49,7 @@ template doTest(fixture: JsonNode, fork: Fork, address: PrecompileAddresses): un
     let initialGas = comp.gasMeter.gasRemaining
     discard execPrecompiles(comp, fork)
 
-    if expectedStr == "error":
+    if expectedErr:
       check comp.isError
     else:
       let c = comp.output == expected
@@ -78,6 +78,12 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "bn256mul" : data.doTest(fork, paEcMul)
   of "ecpairing": data.doTest(fork, paPairing)
   of "blake2f"  : data.doTest(fork, paBlake2bf)
+  of "blsg1add" : data.doTest(fork, pablsG1Add)
+  of "blsg1mul" : data.doTest(fork, pablsG1Mul)
+  of "blsg1multiexp" : data.doTest(fork, pablsG1MultiExp)
+  of "blsg2add" : data.doTest(fork, pablsG2Add)
+  of "blsg2mul" : data.doTest(fork, pablsG2Mul)
+  of "blsg2multiexp" : data.doTest(fork, pablsG2MultiExp)
   else:
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
