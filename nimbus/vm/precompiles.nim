@@ -572,13 +572,91 @@ proc blsG2MultiExp*(c: Computation) =
     raise newException(ValidationError, "blsG2MuliExp encodePoint error")
 
 proc blsPairing*(c: Computation) =
-  discard
+  template input: untyped =
+    c.msg.data
+
+  const L = 384
+  if (input.len == 0) or ((input.len mod L) != 0):
+    raise newException(ValidationError, "blsG2Pairing invalid input len")
+
+  let
+    K = input.len div L
+    gas = Bls12381PairingBaseGas + K.GasInt * Bls12381PairingPerPairGas
+
+  c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
+
+  var
+    g1: BLS_G1
+    g2: BLS_G2
+    gt: BLS_GT
+
+  # Decode pairs
+  for i in 0..<K:
+    let off = L * i
+
+    # Decode G1 point
+    if not g1.decodePoint(input.toOpenArray(off, off+127)):
+      raise newException(ValidationError, "blsG2Pairing invalid G1")
+
+    # Decode G2 point
+    if not g2.decodePoint(input.toOpenArray(off+128, off+383)):
+      raise newException(ValidationError, "blsG2Pairing invalid G2")
+
+    # 'point is on curve' check already done,
+    # Here we need to apply subgroup checks.
+    if not g1.subgroupCheck:
+      raise newException(ValidationError, "blsG2Pairing invalid G1 subgroup")
+
+    if not g2.subgroupCheck:
+      raise newException(ValidationError, "blsG2Pairing invalid G2 subgroup")
+
+    # Update pairing engine with G1 and G2 points
+    if i == 0:
+      gt = millerLoop(g1, g2)
+    else:
+      gt.mul(millerLoop(g1, g2))
+
+  c.output = newSeq[byte](32)
+  if gt.check():
+    c.output[^1] = 1.byte
 
 proc blsMapG1*(c: Computation) =
-  discard
+  template input: untyped =
+    c.msg.data
+
+  if input.len != 64:
+    raise newException(ValidationError, "blsMapG1 invalid input len")
+
+  c.gasMeter.consumeGas(Bls12381MapG1Gas, reason="blsMapG1 Precompile")
+
+  var fe: BLS_FE
+  if not fe.decodeFieldElement(input):
+    raise newException(ValidationError, "blsMapG1 invalid field element")
+
+  let p = fe.mapFPToG1()
+
+  c.output = newSeq[byte](128)
+  if not encodePoint(p, c.output):
+    raise newException(ValidationError, "blsMapG1 encodePoint error")
 
 proc blsMapG2*(c: Computation) =
-  discard
+  template input: untyped =
+    c.msg.data
+
+  if input.len != 128:
+    raise newException(ValidationError, "blsMapG2 invalid input len")
+
+  c.gasMeter.consumeGas(Bls12381MapG2Gas, reason="blsMapG2 Precompile")
+
+  var fe: BLS_FE2
+  if not fe.decodeFieldElement(input):
+    raise newException(ValidationError, "blsMapG2 invalid field element")
+
+  let p = fe.mapFPToG2()
+
+  c.output = newSeq[byte](256)
+  if not encodePoint(p, c.output):
+    raise newException(ValidationError, "blsMapG2 encodePoint error")
 
 proc getMaxPrecompileAddr(fork: Fork): PrecompileAddresses =
   if fork < FkByzantium: paIdentity
