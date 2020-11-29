@@ -630,7 +630,7 @@ proc blsMapG1*(c: Computation) =
   c.gasMeter.consumeGas(Bls12381MapG1Gas, reason="blsMapG1 Precompile")
 
   var fe: BLS_FE
-  if not fe.decodeFieldElement(input):
+  if not fe.decodeFE(input):
     raise newException(ValidationError, "blsMapG1 invalid field element")
 
   let p = fe.mapFPToG1()
@@ -649,7 +649,7 @@ proc blsMapG2*(c: Computation) =
   c.gasMeter.consumeGas(Bls12381MapG2Gas, reason="blsMapG2 Precompile")
 
   var fe: BLS_FE2
-  if not fe.decodeFieldElement(input):
+  if not fe.decodeFE(input):
     raise newException(ValidationError, "blsMapG2 invalid field element")
 
   let p = fe.mapFPToG2()

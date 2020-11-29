@@ -1,4 +1,4 @@
-import blscurve/bls_backend
+import blscurve/bls_backend, stint
 
 when BLS_BACKEND == Miracl:
   import blscurve/miracl/[common, milagro, hash_to_curve, bls_signature_scheme]
@@ -15,7 +15,7 @@ when BLS_BACKEND == Miracl:
     BLS_FE2* = FP2_BLS12381
     BLS_GT* = FP12_BLS12381
 
-  proc FP12_BLS12381_mul(x: ptr FP12_BLS12381, y: ptr FP12_BLS12381) {.importc, cdecl.}
+  #proc FP12_BLS12381_mul(x: ptr FP12_BLS12381, y: ptr FP12_BLS12381) {.importc, cdecl.}
   #proc ECP_BLS12381_map2point(P: var ECP_BLS12381, h: FP_BLS12381) {.importc, cdecl.}
   #proc ECP2_BLS12381_map2point(P: var ECP2_BLS12381, h: FP2_BLS12381) {.importc, cdecl.}
   #proc ECP_BLS12381_set(p: ptr ECP_BLS12381, x, y: BIG_384): cint {.importc, cdecl.}
@@ -203,64 +203,53 @@ else:
 # returns lower 48 bytes.
 func decodeFieldElement*(res: var BLS_FP, input: openArray[byte]): bool =
   if input.len != 64:
-    debugEcho "DEF A ERR"
     return false
 
   # check top bytes
   for i in 0..<16:
     if input[i] != 0.byte:
-      debugEcho "DEF B ERR"
       return false
 
-  if not res.fromBytes input.toOpenArray(16, 63):
-    debugEcho "DEF C ERR"
-    return false
-
-  true
+  res.fromBytes input.toOpenArray(16, 63)
 
 when BLS_BACKEND == Miracl:
-  func decodeFieldElement*(res: var BLS_FE, input: openArray[byte]): bool =
+  proc decodeFE*(res: var BLS_FE, input: openArray[byte]): bool =
     var big: BLS_FP
     if not big.decodeFieldElement(input):
       return false
     res = big.nres()
-    true
+    # fieldModulus > big
+    BIG_384_comp(FIELD_Modulus, big).int == 1
 
-  func decodeFieldElement*(res: var BLS_FE2, input: openArray[byte]): bool =
+  proc decodeFE*(res: var BLS_FE2, input: openArray[byte]): bool =
     if input.len != 128:
-      debugEcho "DEF FP2 A ERR"
       return false
 
-    if not res.a.decodeFieldElement input.toOpenArray(0, 63):
-      debugEcho "DEF FP2 B ERR"
+    if not res.a.decodeFE input.toOpenArray(0, 63):
       return false
-
-    if not res.b.decodeFieldElement input.toOpenArray(64, 127):
-      debugEcho "DEF FP2 C ERR"
-      return false
-
-    true
+    res.b.decodeFE input.toOpenArray(64, 127)
 
 else:
-  func decodeFieldElement*(res: var BLS_FE2, input: openArray[byte]): bool =
+  func decodeFE*(res: var BLS_FE, input: openArray[byte]): bool =
+    const
+      fieldModulus = Stuint[512].fromHex "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
+    if not res.decodeFieldElement(input):
+      return false
+    var z: Stuint[512]
+    z.initFromBytesBE(input)
+    z < fieldModulus
+
+  func decodeFE*(res: var BLS_FE2, input: openArray[byte]): bool =
     if input.len != 128:
-      debugEcho "DEF FP2 A ERR"
       return false
 
-    if not res.fp[0].decodeFieldElement input.toOpenArray(0, 63):
-      debugEcho "DEF FP2 B ERR"
+    if not res.fp[0].decodeFE input.toOpenArray(0, 63):
       return false
-
-    if not res.fp[1].decodeFieldElement input.toOpenArray(64, 127):
-      debugEcho "DEF FP2 C ERR"
-      return false
-
-    true
+    res.fp[1].decodeFE input.toOpenArray(64, 127)
 
 # DecodePoint given encoded (x, y) coordinates in 128 bytes returns a valid G1 Point.
 func decodePoint*(g: var BLS_G1, data: openArray[byte]): bool =
   if data.len != 128:
-    debugEcho "G1 init A ERR"
     return false
 
   var x, y: BLS_FP
@@ -270,36 +259,25 @@ func decodePoint*(g: var BLS_G1, data: openArray[byte]): bool =
   if not y.decodeFieldElement data.toOpenArray(64, 127):
     return false
 
-  if not g.pack(x, y):
-    debugEcho "ECP set err"
-    return false
-
-  true
+  g.pack(x, y)
 
 # EncodePoint encodes a point into 128 bytes.
 func encodePoint*(g: BLS_G1, output: var openArray[byte]): bool =
   if output.len != 128:
-    debugEcho "encodePoint ERR"
     return false
 
   var x, y: BLS_FP
   if not g.unpack(x, y):
-    debugEcho "encodePoint get"
     return false
 
   if not x.toBytes output.toOpenArray(16, 63):
-    debugEcho "encodePoint ERR X"
     return false
 
-  if not y.toBytes output.toOpenArray(64+16, 127):
-    debugEcho "encodePoint ERR Y"
-    return false
+  y.toBytes output.toOpenArray(64+16, 127)
 
-  true
-
+# DecodePoint given encoded (x, y) coordinates in 256 bytes returns a valid G2 Point.
 func decodePoint*(g: var BLS_G2, data: openArray[byte]): bool =
   if data.len != 256:
-    debugEcho "G2 init ERR"
     return false
 
   var x0, x1, y0, y1: BLS_FP
@@ -315,36 +293,24 @@ func decodePoint*(g: var BLS_G2, data: openArray[byte]): bool =
   if not y1.decodeFieldElement data.toOpenArray(192, 255):
     return false
 
-  if not g.pack(x0, x1, y0, y1):
-    debugEcho "G2 pack err"
-    return false
+  g.pack(x0, x1, y0, y1)
 
-  true
-
+# EncodePoint encodes a point into 256 bytes.
 func encodePoint*(g: BLS_G2, output: var openArray[byte]): bool =
   if output.len != 256:
-    debugEcho "encodePoint G2 ERR"
     return false
 
   var x0, x1, y0, y1: BLS_FP
   if not g.unpack(x0, x1, y0, y1):
-    debugEcho "encodePoint G2 get"
     return false
 
   if not x0.toBytes output.toOpenArray(16, 63):
-    debugEcho "encodePoint G2 ERR X0"
     return false
 
   if not x1.toBytes output.toOpenArray(80, 127):
-    debugEcho "encodePoint G2 ERR X1"
     return false
 
   if not y0.toBytes output.toOpenArray(144, 192):
-    debugEcho "encodePoint G2 ERR Y0"
     return false
 
-  if not y1.toBytes output.toOpenArray(208, 255):
-    debugEcho "encodePoint G2 ERR Y1"
-    return false
-
-  true
+  y1.toBytes output.toOpenArray(208, 255)
