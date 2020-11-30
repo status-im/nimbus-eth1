@@ -2,6 +2,7 @@ import blscurve/bls_backend, stint
 
 when BLS_BACKEND == Miracl:
   import blscurve/miracl/[common, milagro, hash_to_curve, bls_signature_scheme]
+  import map_to_curve_g1
   export common
   export bls_signature_scheme.subgroupCheck
 
@@ -62,14 +63,13 @@ when BLS_BACKEND == Miracl:
     FP_BLS12381_redc(y1, addr y.b)
 
   func mapFPToG1*(fp: BLS_FE): BLS_G1 {.inline.} =
-    # TODO
-    discard
+    mapToCurveG1(fp)
 
   func mapFPToG2*(fp: BLS_FE2): BLS_G2 {.inline.} =
     result = mapToCurveG2(fp)
     result.clearCofactor()
 
-  func millerLoop*(g1: BLS_G1, g2: BLS_G2): BLS_GT =
+  func millerLoop*(g1: BLS_G1, g2: BLS_G2): BLS_GT {.inline.} =
     PAIR_BLS12381_ate(result.addr, g2.unsafeAddr, g1.unsafeAddr)
 
   proc mul*(a: var BLS_GT, b: BLS_GT) {.inline.} =

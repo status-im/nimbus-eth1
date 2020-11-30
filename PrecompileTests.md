@@ -9,7 +9,7 @@ PrecompileTests
 + blsG2Add.json                                                   OK
 + blsG2Mul.json                                                   OK
 + blsG2MultiExp.json                                              OK
-- blsMapG1.json                                                   Fail
++ blsMapG1.json                                                   OK
 + blsMapG2.json                                                   OK
 + blsPairing.json                                                 OK
 + bn256Add.json                                                   OK
@@ -25,7 +25,7 @@ PrecompileTests
 + ripemd160.json                                                  OK
 + sha256.json                                                     OK
 ```
-OK: 21/22 Fail: 1/22 Skip: 0/22
+OK: 22/22 Fail: 0/22 Skip: 0/22
 
 ---TOTAL---
-OK: 21/22 Fail: 1/22 Skip: 0/22
+OK: 22/22 Fail: 0/22 Skip: 0/22
