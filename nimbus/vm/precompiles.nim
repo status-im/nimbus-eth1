@@ -62,6 +62,17 @@ proc getSignature(computation: Computation): (array[32, byte], Signature) =
   else:
     raise newException(ValidationError, "Invalid V in getSignature")
 
+proc simpleDecode*(dst: var FQ2, src: openarray[byte]): bool {.noinit.} =
+  # bypassing FQ2.fromBytes
+  # because we want to check `value > modulus`
+  result = false
+  if dst.c1.fromBytes(src.toOpenArray(0, 31)) and
+     dst.c0.fromBytes(src.toOpenArray(32, 63)):
+    result = true
+
+template simpleDecode*(dst: var FQ, src: openarray[byte]): bool =
+  fromBytes(dst, src)
+
 proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
   when T is G1:
     const nextOffset = 32
@@ -69,27 +80,10 @@ proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
   else:
     const nextOffset = 64
     var px, py: FQ2
-  if not px.fromBytes2(data.toOpenArray(0, nextOffset - 1)):
+  if not px.simpleDecode(data.toOpenArray(0, nextOffset - 1)):
     raise newException(ValidationError, "Could not get point value")
-  if not py.fromBytes2(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
+  if not py.simpleDecode(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
     raise newException(ValidationError, "Could not get point value")
-
-  # "ecpairing_perturb_g2_by_field_modulus_again.json",
-  # "ecpairing_perturb_zeropoint_by_field_modulus.json",
-  # "ecpairing_perturb_g2_by_field_modulus.json",
-  # modulus comparion in FQ2.fromBytes produce different result
-  const
-    modulus = Uint256.fromHex("30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47")
-  let a = Uint256.fromBytesBE(data.toOpenArray(0, 31), false)
-  let b = Uint256.fromBytesBE(data.toOpenArray(32, 63), false)
-  when T is G2:
-    let c = Uint256.fromBytesBE(data.toOpenArray(64, 95), false)
-    let d = Uint256.fromBytesBE(data.toOpenArray(96, 127), false)
-    if a >= modulus or b >= modulus or c >= modulus or d >= modulus:
-      raise newException(ValidationError, "value greater than field modulus")
-  else:
-    if a >= modulus or b >= modulus:
-      raise newException(ValidationError, "value greater than field modulus")
 
   if px.isZero() and py.isZero():
     result = T.zero()
