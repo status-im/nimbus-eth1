@@ -759,4 +759,14 @@ const
   # The Yellow Paper is special casing the GasQuadDivisor.
   # It is defined in Appendix G with the other GasFeeKind constants
   # instead of Appendix E for precompiled contracts
-  GasQuadDivisor*       = 20
+  GasQuadDivisor*        = 20
+  GasQuadDivisorEIP2565* = 3
+  # EIP2537 BLS12 381
+  Bls12381G1AddGas*          = 600
+  Bls12381G1MulGas*          = 12000
+  Bls12381G2AddGas*          = 4500
+  Bls12381G2MulGas*          = 55000
+  Bls12381PairingBaseGas*    = 115000
+  Bls12381PairingPerPairGas* = 23000
+  Bls12381MapG1Gas*          = 5500
+  Bls12381MapG2Gas*          = 110000

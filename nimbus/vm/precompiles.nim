@@ -1,22 +1,32 @@
 import
   ../vm_types, interpreter/[gas_meter, gas_costs, utils/utils_numeric, vm_forks],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
-  math, nimcrypto, bncurve/[fields, groups], blake2b_f
+  math, nimcrypto, bncurve/[fields, groups], blake2b_f, ./blscurve
 
 type
   PrecompileAddresses* = enum
     # Frontier to Spurious Dragron
-    paEcRecover = 1,
-    paSha256,
-    paRipeMd160,
-    paIdentity,
+    paEcRecover = 1
+    paSha256
+    paRipeMd160
+    paIdentity
     # Byzantium and Constantinople
-    paModExp,
-    paEcAdd,
-    paEcMul,
-    paPairing,
+    paModExp
+    paEcAdd
+    paEcMul
+    paPairing
     # Istanbul
-    paBlake2bf = 9
+    paBlake2bf
+    # Berlin
+    paBlsG1Add
+    paBlsG1Mul
+    paBlsG1MultiExp
+    paBlsG2Add
+    paBlsG2Mul
+    paBlsG2MultiExp
+    paBlsPairing
+    paBlsMapG1
+    paBlsMapG2
 
 proc getSignature(computation: Computation): (array[32, byte], Signature) =
   # input is Hash, V, R, S
@@ -52,6 +62,17 @@ proc getSignature(computation: Computation): (array[32, byte], Signature) =
   else:
     raise newException(ValidationError, "Invalid V in getSignature")
 
+proc simpleDecode*(dst: var FQ2, src: openarray[byte]): bool {.noinit.} =
+  # bypassing FQ2.fromBytes
+  # because we want to check `value > modulus`
+  result = false
+  if dst.c1.fromBytes(src.toOpenArray(0, 31)) and
+     dst.c0.fromBytes(src.toOpenArray(32, 63)):
+    result = true
+
+template simpleDecode*(dst: var FQ, src: openarray[byte]): bool =
+  fromBytes(dst, src)
+
 proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
   when T is G1:
     const nextOffset = 32
@@ -59,27 +80,10 @@ proc getPoint[T: G1|G2](t: typedesc[T], data: openarray[byte]): Point[T] =
   else:
     const nextOffset = 64
     var px, py: FQ2
-  if not px.fromBytes2(data.toOpenArray(0, nextOffset - 1)):
+  if not px.simpleDecode(data.toOpenArray(0, nextOffset - 1)):
     raise newException(ValidationError, "Could not get point value")
-  if not py.fromBytes2(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
+  if not py.simpleDecode(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
     raise newException(ValidationError, "Could not get point value")
-
-  # "ecpairing_perturb_g2_by_field_modulus_again.json",
-  # "ecpairing_perturb_zeropoint_by_field_modulus.json",
-  # "ecpairing_perturb_g2_by_field_modulus.json",
-  # modulus comparion in FQ2.fromBytes produce different result
-  const
-    modulus = Uint256.fromHex("30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47")
-  let a = Uint256.fromBytesBE(data.toOpenArray(0, 31), false)
-  let b = Uint256.fromBytesBE(data.toOpenArray(32, 63), false)
-  when T is G2:
-    let c = Uint256.fromBytesBE(data.toOpenArray(64, 95), false)
-    let d = Uint256.fromBytesBE(data.toOpenArray(96, 127), false)
-    if a >= modulus or b >= modulus or c >= modulus or d >= modulus:
-      raise newException(ValidationError, "value greater than field modulus")
-  else:
-    if a >= modulus or b >= modulus:
-      raise newException(ValidationError, "value greater than field modulus")
 
   if px.isZero() and py.isZero():
     result = T.zero()
@@ -218,7 +222,7 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: Uint256, fork: Fork): Ga
       max(adjExpLen, 1.u256)
     ) div divisor
 
-  let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, 3)
+  let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
                else: gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
@@ -344,23 +348,314 @@ proc bn256ecPairing*(computation: Computation, fork: Fork = FkByzantium) =
 
   computation.output = @output
 
-proc blake2bf*(computation: Computation) =
-  template input(): untyped =
-    computation.msg.data
+proc blake2bf*(c: Computation) =
+  template input: untyped =
+    c.msg.data
 
   if len(input) == blake2FInputLength:
     let gasFee = GasInt(beLoad32(input, 0))
-    computation.gasMeter.consumeGas(gasFee, reason="blake2bf Precompile")
+    c.gasMeter.consumeGas(gasFee, reason="blake2bf Precompile")
 
   var output: array[64, byte]
   if not blake2b_F(input, output):
     raise newException(ValidationError, "Blake2b F function invalid input")
   else:
-    computation.output = @output
+    c.output = @output
+
+proc blsG1Add*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  if input.len != 256:
+    raise newException(ValidationError, "blsG1Add invalid input len")
+
+  c.gasMeter.consumeGas(Bls12381G1AddGas, reason="blsG1Add Precompile")
+
+  var a, b: BLS_G1
+  if not a.decodePoint(input.toOpenArray(0, 127)):
+    raise newException(ValidationError, "blsG1Add invalid input A")
+
+  if not b.decodePoint(input.toOpenArray(128, 255)):
+    raise newException(ValidationError, "blsG1Add invalid input B")
+
+  a.add b
+
+  c.output = newSeq[byte](128)
+  if not encodePoint(a, c.output):
+    raise newException(ValidationError, "blsG1Add encodePoint error")
+
+proc blsG1Mul*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  if input.len != 160:
+    raise newException(ValidationError, "blsG1Mul invalid input len")
+
+  c.gasMeter.consumeGas(Bls12381G1MulGas, reason="blsG1Mul Precompile")
+
+  var a: BLS_G1
+  if not a.decodePoint(input.toOpenArray(0, 127)):
+    raise newException(ValidationError, "blsG1Mul invalid input A")
+
+  var scalar: BLS_SCALAR
+  if not scalar.fromBytes(input.toOpenArray(128, 159)):
+    raise newException(ValidationError, "blsG1Mul invalid scalar")
+
+  a.mul(scalar)
+
+  c.output = newSeq[byte](128)
+  if not encodePoint(a, c.output):
+    raise newException(ValidationError, "blsG1Mul encodePoint error")
+
+const
+  Bls12381MultiExpDiscountTable = [
+    1200, 888, 764, 641, 594, 547, 500, 453, 438, 423,
+    408, 394, 379, 364, 349, 334, 330, 326, 322, 318,
+    314, 310, 306, 302, 298, 294, 289, 285, 281, 277,
+    273, 269, 268, 266, 265, 263, 262, 260, 259, 257,
+    256, 254, 253, 251, 250, 248, 247, 245, 244, 242,
+    241, 239, 238, 236, 235, 233, 232, 231, 229, 228,
+    226, 225, 223, 222, 221, 220, 219, 219, 218, 217,
+    216, 216, 215, 214, 213, 213, 212, 211, 211, 210,
+    209, 208, 208, 207, 206, 205, 205, 204, 203, 202,
+    202, 201, 200, 199, 199, 198, 197, 196, 196, 195,
+    194, 193, 193, 192, 191, 191, 190, 189, 188, 188,
+    187, 186, 185, 185, 184, 183, 182, 182, 181, 180,
+    179, 179, 178, 177, 176, 176, 175, 174
+  ]
+
+func calcBlsMultiExpGas(K: int, gasCost: GasInt): GasInt =
+  # Calculate G1 point, scalar value pair length
+  if K == 0:
+    # Return 0 gas for small input length
+    return 0.GasInt
+
+  const dLen = Bls12381MultiExpDiscountTable.len
+  # Lookup discount value for G1 point, scalar value pair length
+  let discount = if K < dLen: Bls12381MultiExpDiscountTable[K-1]
+                 else: Bls12381MultiExpDiscountTable[dLen-1]
+
+  # Calculate gas and return the result
+  result = (K * gasCost * discount) div 1000
+
+proc blsG1MultiExp*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  const L = 160
+  if (input.len == 0) or ((input.len mod L) != 0):
+    raise newException(ValidationError, "blsG1MultiExp invalid input len")
+
+  let
+    K = input.len div L
+    gas = K.calcBlsMultiExpGas(Bls12381G1MulGas)
+
+  c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
+
+  var
+    p: BLS_G1
+    s: BLS_SCALAR
+    acc: BLS_G1
+
+  # Decode point scalar pairs
+  for i in 0..<K:
+    let off = L * i
+
+    # Decode G1 point
+    if not p.decodePoint(input.toOpenArray(off, off+127)):
+      raise newException(ValidationError, "blsG1MultiExp invalid input P")
+
+    # Decode scalar value
+    if not s.fromBytes(input.toOpenArray(off+128, off+159)):
+      raise newException(ValidationError, "blsG1MultiExp invalid scalar")
+
+    p.mul(s)
+    if i == 0:
+      acc = p
+    else:
+      acc.add(p)
+
+  c.output = newSeq[byte](128)
+  if not encodePoint(acc, c.output):
+    raise newException(ValidationError, "blsG1MuliExp encodePoint error")
+
+proc blsG2Add*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  if input.len != 512:
+    raise newException(ValidationError, "blsG2Add invalid input len")
+
+  c.gasMeter.consumeGas(Bls12381G2AddGas, reason="blsG2Add Precompile")
+
+  var a, b: BLS_G2
+  if not a.decodePoint(input.toOpenArray(0, 255)):
+    raise newException(ValidationError, "blsG2Add invalid input A")
+
+  if not b.decodePoint(input.toOpenArray(256, 511)):
+    raise newException(ValidationError, "blsG2Add invalid input B")
+
+  a.add b
+
+  c.output = newSeq[byte](256)
+  if not encodePoint(a, c.output):
+    raise newException(ValidationError, "blsG2Add encodePoint error")
+
+proc blsG2Mul*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  if input.len != 288:
+    raise newException(ValidationError, "blsG2Mul invalid input len")
+
+  c.gasMeter.consumeGas(Bls12381G2MulGas, reason="blsG2Mul Precompile")
+
+  var a: BLS_G2
+  if not a.decodePoint(input.toOpenArray(0, 255)):
+    raise newException(ValidationError, "blsG2Mul invalid input A")
+
+  var scalar: BLS_SCALAR
+  if not scalar.fromBytes(input.toOpenArray(256, 287)):
+    raise newException(ValidationError, "blsG2Mul invalid scalar")
+
+  a.mul(scalar)
+
+  c.output = newSeq[byte](256)
+  if not encodePoint(a, c.output):
+    raise newException(ValidationError, "blsG2Mul encodePoint error")
+
+proc blsG2MultiExp*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  const L = 288
+  if (input.len == 0) or ((input.len mod L) != 0):
+    raise newException(ValidationError, "blsG2MultiExp invalid input len")
+
+  let
+    K = input.len div L
+    gas = K.calcBlsMultiExpGas(Bls12381G2MulGas)
+
+  c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
+
+  var
+    p: BLS_G2
+    s: BLS_SCALAR
+    acc: BLS_G2
+
+  # Decode point scalar pairs
+  for i in 0..<K:
+    let off = L * i
+
+    # Decode G1 point
+    if not p.decodePoint(input.toOpenArray(off, off+255)):
+      raise newException(ValidationError, "blsG2MultiExp invalid input P")
+
+    # Decode scalar value
+    if not s.fromBytes(input.toOpenArray(off+256, off+287)):
+      raise newException(ValidationError, "blsG2MultiExp invalid scalar")
+
+    p.mul(s)
+    if i == 0:
+      acc = p
+    else:
+      acc.add(p)
+
+  c.output = newSeq[byte](256)
+  if not encodePoint(acc, c.output):
+    raise newException(ValidationError, "blsG2MuliExp encodePoint error")
+
+proc blsPairing*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  const L = 384
+  if (input.len == 0) or ((input.len mod L) != 0):
+    raise newException(ValidationError, "blsG2Pairing invalid input len")
+
+  let
+    K = input.len div L
+    gas = Bls12381PairingBaseGas + K.GasInt * Bls12381PairingPerPairGas
+
+  c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
+
+  var
+    g1: BLS_G1P
+    g2: BLS_G2P
+    acc: BLS_ACC
+
+  # Decode pairs
+  for i in 0..<K:
+    let off = L * i
+
+    # Decode G1 point
+    if not g1.decodePoint(input.toOpenArray(off, off+127)):
+      raise newException(ValidationError, "blsG2Pairing invalid G1")
+
+    # Decode G2 point
+    if not g2.decodePoint(input.toOpenArray(off+128, off+383)):
+      raise newException(ValidationError, "blsG2Pairing invalid G2")
+
+    # 'point is on curve' check already done,
+    # Here we need to apply subgroup checks.
+    if not g1.subgroupCheck:
+      raise newException(ValidationError, "blsG2Pairing invalid G1 subgroup")
+
+    if not g2.subgroupCheck:
+      raise newException(ValidationError, "blsG2Pairing invalid G2 subgroup")
+
+    # Update pairing engine with G1 and G2 points
+    if i == 0:
+      acc = millerLoop(g1, g2)
+    else:
+      acc.mul(millerLoop(g1, g2))
+
+  c.output = newSeq[byte](32)
+  if acc.check():
+    c.output[^1] = 1.byte
+
+proc blsMapG1*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  if input.len != 64:
+    raise newException(ValidationError, "blsMapG1 invalid input len")
+
+  c.gasMeter.consumeGas(Bls12381MapG1Gas, reason="blsMapG1 Precompile")
+
+  var fe: BLS_FE
+  if not fe.decodeFE(input):
+    raise newException(ValidationError, "blsMapG1 invalid field element")
+
+  let p = fe.mapFPToG1()
+
+  c.output = newSeq[byte](128)
+  if not encodePoint(p, c.output):
+    raise newException(ValidationError, "blsMapG1 encodePoint error")
+
+proc blsMapG2*(c: Computation) =
+  template input: untyped =
+    c.msg.data
+
+  if input.len != 128:
+    raise newException(ValidationError, "blsMapG2 invalid input len")
+
+  c.gasMeter.consumeGas(Bls12381MapG2Gas, reason="blsMapG2 Precompile")
+
+  var fe: BLS_FE2
+  if not fe.decodeFE(input):
+    raise newException(ValidationError, "blsMapG2 invalid field element")
+
+  let p = fe.mapFPToG2()
+
+  c.output = newSeq[byte](256)
+  if not encodePoint(p, c.output):
+    raise newException(ValidationError, "blsMapG2 encodePoint error")
 
 proc getMaxPrecompileAddr(fork: Fork): PrecompileAddresses =
   if fork < FkByzantium: paIdentity
   elif fork < FkIstanbul: paPairing
+  elif fork < FkBerlin: paBlake2bf
   else: PrecompileAddresses.high
 
 proc execPrecompiles*(computation: Computation, fork: Fork): bool {.inline.} =
@@ -384,6 +679,15 @@ proc execPrecompiles*(computation: Computation, fork: Fork): bool {.inline.} =
       of paEcMul: bn256ecMul(computation, fork)
       of paPairing: bn256ecPairing(computation, fork)
       of paBlake2bf: blake2bf(computation)
+      of paBlsG1Add: blsG1Add(computation)
+      of paBlsG1Mul: blsG1Mul(computation)
+      of paBlsG1MultiExp: blsG1MultiExp(computation)
+      of paBlsG2Add: blsG2Add(computation)
+      of paBlsG2Mul: blsG2Mul(computation)
+      of paBlsG2MultiExp: blsG2MultiExp(computation)
+      of paBlsPairing: blsPairing(computation)
+      of paBlsMapG1: blsMapG1(computation)
+      of paBlsMapG2: blsMapG2(computation)
     except OutOfGas as e:
       # cannot use setError here, cyclic dependency
       computation.error = Error(info: e.msg, burnsGas: true)
