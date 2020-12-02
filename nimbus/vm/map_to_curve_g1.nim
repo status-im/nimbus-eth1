@@ -1,5 +1,4 @@
 import blscurve/miracl/[common, milagro]
-import stew/endians2
 
 # IETF Standard Draft: https://tools.ietf.org/html/draft-irtf-cfrg-hash-to-curve-10
 # The Hash-To-Curve v7 is binary compatible with Hash-To-Curve v9, v10
@@ -81,13 +80,6 @@ func hexToFP(hex: string): FP_BLS12381 =
 func hexToBig(hex: string): BIG_384 {.inline.} =
   discard result.fromHex(hex)
 
-{.pragma: milagro_func, importc, cdecl.}
-
-proc FP_BLS12381_mul*(x, y, z: ptr FP_BLS12381) {.milagro_func.}
-proc FP_BLS12381_add*(x, y, z: ptr FP_BLS12381) {.milagro_func.}
-proc FP_BLS12381_inv*(x, y, z: ptr FP_BLS12381) {.milagro_func.}
-proc FP_BLS12381_cmove*(x, y: ptr FP_BLS12381, s: cint) {.milagro_func.}
-
 # syntactic sugars
 proc `*=`(a: var FP_BLS12381, b: FP_BLS12381) {.inline.} =
   FP_BLS12381_mul(a.addr, a.addr, b.unsafeAddr)
@@ -128,14 +120,17 @@ func isSquare(a: FP_BLS12381): bool {.inline.} =
 proc sqrt(a: FP_BLS12381): FP_BLS12381 {.inline.} =
   FP_BLS12381_sqrt(addr result, unsafeAddr a, nil)
 
-func sign0(x: FP_BLS12381): bool =
+func sign0(x: FP_BLS12381): bool {.inline.} =
   # The sgn0 function. Section 4.1
-  const
-    sign_0 = 0
-    zero_0 = 1
-  let sign_1 = x.parity()
-  # hope the compiler can optimize this
-  bool(sign_0 or (zero_0 and sign_1))
+  when false:
+    const
+      sign_0 = 0
+      zero_0 = 1
+    let sign_1 = x.parity()
+    # hope the compiler can optimize this
+    bool(sign_0 or (zero_0 and sign_1))
+  else:
+    bool x.parity
 
 func initArray[N: static[int]](hex: array[N, string]): array[N, FP_BLS12381] =
   for i in 0..<N:
@@ -187,7 +182,7 @@ func mapToIsoCurveSSWU(u: FP_BLS12381): tuple[x, y: FP_BLS12381] =
       c1 {.global.} = neg B/A    # -B/A
       c2 {.global.} = neg inv(Z) # -1/Z
 
-    # Simplified Shallue-van de Woestijne method. Apendix F.2.
+    # Simplified Shallue-van de Woestijne-Ulas method. Apendix F.2.
     let tv1 = Z * sqr(u)
     var tv2 = sqr(tv1)
     var x1  = tv1 + tv2
@@ -214,8 +209,13 @@ func mapToIsoCurveSSWU(u: FP_BLS12381): tuple[x, y: FP_BLS12381] =
   result.y = y
 
 func mapToCurveG1*(u: FP_BLS12381): ECP_BLS12381 =
-  {.noSideEffect.}:
-    let cofactor {.global.} = hexToBig("d201000000010001")
+  when false:
+    {.noSideEffect.}:
+      let cofactor {.global.} = hexToBig("d201000000010001")
+      let p = mapToIsoCurveSSWU(u)
+      result = isogenyMapG1(p.x, p.y)
+      result.mul cofactor
+  else:
     let p = mapToIsoCurveSSWU(u)
     result = isogenyMapG1(p.x, p.y)
-    result.mul cofactor
+    ECP_BLS12381_cfp(addr result)

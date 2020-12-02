@@ -586,9 +586,9 @@ proc blsPairing*(c: Computation) =
   c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
 
   var
-    g1: BLS_G1
-    g2: BLS_G2
-    gt: BLS_GT
+    g1: BLS_G1P
+    g2: BLS_G2P
+    acc: BLS_ACC
 
   # Decode pairs
   for i in 0..<K:
@@ -612,12 +612,12 @@ proc blsPairing*(c: Computation) =
 
     # Update pairing engine with G1 and G2 points
     if i == 0:
-      gt = millerLoop(g1, g2)
+      acc = millerLoop(g1, g2)
     else:
-      gt.mul(millerLoop(g1, g2))
+      acc.mul(millerLoop(g1, g2))
 
   c.output = newSeq[byte](32)
-  if gt.check():
+  if acc.check():
     c.output[^1] = 1.byte
 
 proc blsMapG1*(c: Computation) =

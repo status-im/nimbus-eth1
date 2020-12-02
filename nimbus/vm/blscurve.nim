@@ -14,28 +14,9 @@ when BLS_BACKEND == Miracl:
     BLS_SCALAR* = BIG_384
     BLS_FE* = FP_BLS12381
     BLS_FE2* = FP2_BLS12381
-    BLS_GT* = FP12_BLS12381
-
-  #proc FP12_BLS12381_mul(x: ptr FP12_BLS12381, y: ptr FP12_BLS12381) {.importc, cdecl.}
-  #proc ECP_BLS12381_map2point(P: var ECP_BLS12381, h: FP_BLS12381) {.importc, cdecl.}
-  #proc ECP2_BLS12381_map2point(P: var ECP2_BLS12381, h: FP2_BLS12381) {.importc, cdecl.}
-  #proc ECP_BLS12381_set(p: ptr ECP_BLS12381, x, y: BIG_384): cint {.importc, cdecl.}
-  #proc FP_BLS12381_sqr(w: ptr FP_BLS12381, x: ptr FP_BLS12381) {.importc, cdecl.}
-  #
-  #proc sqr*(x: FP_BLS12381): FP_BLS12381 {.inline.} =
-  #  ## Retruns ``x ^ 2``.
-  #  FP_BLS12381_sqr(addr result, unsafeAddr x)
-  #
-  #proc rhs*(x: FP_BLS12381): FP_BLS12381 {.inline.} =
-  #  ## Returns ``x ^ 3 + b``.
-  #  ECP_BLS12381_rhs(addr result, unsafeAddr x)
-  #
-  #proc isOnCurv*(x, y: FP_BLS12381 or FP2_BLS12381): bool =
-  #  ## Returns ``true`` if point is on curve or points to infinite.
-  #  if x.iszilch() and y.iszilch():
-  #    result = true
-  #  else:
-  #    result = (sqr(y) == rhs(x))
+    BLS_ACC* = FP12_BLS12381
+    BLS_G1P* = BLS_G1
+    BLS_G2P* = BLS_G2
 
   func pack(g: var BLS_G1, x, y: BLS_FP): bool {.inline.} =
     discard ECP_BLS12381_set(g.addr, x, y)
@@ -69,13 +50,13 @@ when BLS_BACKEND == Miracl:
     result = mapToCurveG2(fp)
     result.clearCofactor()
 
-  func millerLoop*(g1: BLS_G1, g2: BLS_G2): BLS_GT {.inline.} =
+  func millerLoop*(g1: BLS_G1, g2: BLS_G2): BLS_ACC {.inline.} =
     PAIR_BLS12381_ate(result.addr, g2.unsafeAddr, g1.unsafeAddr)
 
-  proc mul*(a: var BLS_GT, b: BLS_GT) {.inline.} =
+  proc mul*(a: var BLS_ACC, b: BLS_ACC) {.inline.} =
     FP12_BLS12381_mul(a.addr, b.unsafeAddr)
 
-  func check*(x: BLS_GT): bool {.inline.} =
+  func check*(x: BLS_ACC): bool {.inline.} =
     PAIR_BLS12381_fexp(x.unsafeAddr)
     FP12_BLS12381_isunity(x.unsafeAddr).int == 1
 
@@ -90,7 +71,9 @@ else:
     BLS_SCALAR* = blst_scalar
     BLS_FE* = blst_fp
     BLS_FE2* = blst_fp2
-    BLS_GT* = blst_fp12
+    BLS_ACC* = blst_fp12
+    BLS_G1P* = blst_p1_affine
+    BLS_G2P* = blst_p2_affine
 
   func fromBytes*(ret: var BLS_SCALAR, raw: openArray[byte]): bool =
     const L = 32
@@ -176,26 +159,28 @@ else:
     let z: ptr blst_fp2 = nil
     blst_map_to_g2(result, fp, z[])
 
-  func subgroupCheck*(P: BLS_G1): bool {.inline.} =
-    blst_p1_in_g1(P).int == 1
+  func pack(g: var BLS_G1P, x, y: BLS_FP): bool =
+    g = blst_p1_affine(x: x, y: y)
+    blst_p1_affine_on_curve(g).int == 1
 
-  func subgroupCheck*(P: BLS_G2): bool {.inline.} =
-    blst_p2_in_g2(P).int == 1
+  func pack(g: var BLS_G2P, x0, x1, y0, y1: BLS_FP): bool =
+    g = blst_p2_affine(x: blst_fp2(fp: [x0, x1]), y: blst_fp2(fp: [y0, y1]))
+    blst_p2_affine_on_curve(g).int == 1
 
-  func millerLoop*(g1: BLS_G1, g2: BLS_G2): BLS_GT =
-    # TODO: avoid g1, g2 conversion to affine
-    var
-      P: blst_p1_affine
-      Q: blst_p2_affine
-    blst_p1_to_affine(P, g1)
-    blst_p2_to_affine(Q, g2)
+  func subgroupCheck*(P: BLS_G1P): bool {.inline.} =
+    blst_p1_affine_in_g1(P).int == 1
+
+  func subgroupCheck*(P: BLS_G2P): bool {.inline.} =
+    blst_p2_affine_in_g2(P).int == 1
+
+  func millerLoop*(P: BLS_G1P, Q: BLS_G2P): BLS_ACC {.inline.} =
     blst_miller_loop(result, Q, P)
 
-  proc mul*(a: var BLS_GT, b: BLS_GT) {.inline.} =
+  proc mul*(a: var BLS_ACC, b: BLS_ACC) {.inline.} =
     blst_fp12_mul(a, a, b)
 
-  func check*(x: BLS_GT): bool {.inline.} =
-    var ret: BLS_GT
+  func check*(x: BLS_ACC): bool {.inline.} =
+    var ret: BLS_ACC
     ret.blst_final_exp(x)
     ret.blst_fp12_is_one().int == 1
 
@@ -248,7 +233,7 @@ else:
     res.fp[1].decodeFE input.toOpenArray(64, 127)
 
 # DecodePoint given encoded (x, y) coordinates in 128 bytes returns a valid G1 Point.
-func decodePoint*(g: var BLS_G1, data: openArray[byte]): bool =
+func decodePoint*(g: var (BLS_G1 | BLS_G1P), data: openArray[byte]): bool =
   if data.len != 128:
     return false
 
@@ -276,7 +261,7 @@ func encodePoint*(g: BLS_G1, output: var openArray[byte]): bool =
   y.toBytes output.toOpenArray(64+16, 127)
 
 # DecodePoint given encoded (x, y) coordinates in 256 bytes returns a valid G2 Point.
-func decodePoint*(g: var BLS_G2, data: openArray[byte]): bool =
+func decodePoint*(g: var (BLS_G2 | BLS_G2P), data: openArray[byte]): bool =
   if data.len != 256:
     return false
 
