@@ -210,9 +210,9 @@ when BLS_BACKEND == Miracl:
     if input.len != 128:
       return false
 
-    if not res.a.decodeFE input.toOpenArray(0, 63):
-      return false
-    res.b.decodeFE input.toOpenArray(64, 127)
+    if res.a.decodeFE(input.toOpenArray(0, 63)) and
+       res.b.decodeFE(input.toOpenArray(64, 127)):
+       result = true
 
 else:
   func decodeFE*(res: var BLS_FE, input: openArray[byte]): bool =
@@ -228,9 +228,9 @@ else:
     if input.len != 128:
       return false
 
-    if not res.fp[0].decodeFE input.toOpenArray(0, 63):
-      return false
-    res.fp[1].decodeFE input.toOpenArray(64, 127)
+    if res.fp[0].decodeFE(input.toOpenArray(0, 63)) and
+       res.fp[1].decodeFE(input.toOpenArray(64, 127)):
+       result = true
 
 # DecodePoint given encoded (x, y) coordinates in 128 bytes returns a valid G1 Point.
 func decodePoint*(g: var (BLS_G1 | BLS_G1P), data: openArray[byte]): bool =
@@ -238,13 +238,9 @@ func decodePoint*(g: var (BLS_G1 | BLS_G1P), data: openArray[byte]): bool =
     return false
 
   var x, y: BLS_FP
-  if not x.decodeFieldElement data.toOpenArray(0, 63):
-    return false
-
-  if not y.decodeFieldElement data.toOpenArray(64, 127):
-    return false
-
-  g.pack(x, y)
+  if x.decodeFieldElement(data.toOpenArray(0, 63)) and
+     y.decodeFieldElement(data.toOpenArray(64, 127)):
+     result = g.pack(x, y)
 
 # EncodePoint encodes a point into 128 bytes.
 func encodePoint*(g: BLS_G1, output: var openArray[byte]): bool =
@@ -252,13 +248,10 @@ func encodePoint*(g: BLS_G1, output: var openArray[byte]): bool =
     return false
 
   var x, y: BLS_FP
-  if not g.unpack(x, y):
-    return false
-
-  if not x.toBytes output.toOpenArray(16, 63):
-    return false
-
-  y.toBytes output.toOpenArray(64+16, 127)
+  if g.unpack(x, y) and
+     x.toBytes(output.toOpenArray(16, 63)) and
+     y.toBytes(output.toOpenArray(64+16, 127)):
+     result = true
 
 # DecodePoint given encoded (x, y) coordinates in 256 bytes returns a valid G2 Point.
 func decodePoint*(g: var (BLS_G2 | BLS_G2P), data: openArray[byte]): bool =
@@ -266,19 +259,11 @@ func decodePoint*(g: var (BLS_G2 | BLS_G2P), data: openArray[byte]): bool =
     return false
 
   var x0, x1, y0, y1: BLS_FP
-  if not x0.decodeFieldElement data.toOpenArray(0, 63):
-    return false
-
-  if not x1.decodeFieldElement data.toOpenArray(64, 127):
-    return false
-
-  if not y0.decodeFieldElement data.toOpenArray(128, 191):
-    return false
-
-  if not y1.decodeFieldElement data.toOpenArray(192, 255):
-    return false
-
-  g.pack(x0, x1, y0, y1)
+  if x0.decodeFieldElement(data.toOpenArray(0, 63)) and
+     x1.decodeFieldElement(data.toOpenArray(64, 127)) and
+     y0.decodeFieldElement(data.toOpenArray(128, 191)) and
+     y1.decodeFieldElement(data.toOpenArray(192, 255)):
+     result = g.pack(x0, x1, y0, y1)
 
 # EncodePoint encodes a point into 256 bytes.
 func encodePoint*(g: BLS_G2, output: var openArray[byte]): bool =
@@ -286,16 +271,9 @@ func encodePoint*(g: BLS_G2, output: var openArray[byte]): bool =
     return false
 
   var x0, x1, y0, y1: BLS_FP
-  if not g.unpack(x0, x1, y0, y1):
-    return false
-
-  if not x0.toBytes output.toOpenArray(16, 63):
-    return false
-
-  if not x1.toBytes output.toOpenArray(80, 127):
-    return false
-
-  if not y0.toBytes output.toOpenArray(144, 192):
-    return false
-
-  y1.toBytes output.toOpenArray(208, 255)
+  if g.unpack(x0, x1, y0, y1) and
+     x0.toBytes(output.toOpenArray(16, 63)) and
+     x1.toBytes(output.toOpenArray(80, 127)) and
+     y0.toBytes(output.toOpenArray(144, 192)) and
+     y1.toBytes(output.toOpenArray(208, 255)):
+     result = true
