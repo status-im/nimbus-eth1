@@ -6,12 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import  unittest2, eth/trie/[hexary, db],
-        ../nimbus/db/state_db, stew/byteutils, eth/common
+        ../nimbus/db/state_db, stew/[byteutils, endians2], eth/common
 
 include ../nimbus/db/accounts_cache
 
 func initAddr(z: int): EthAddress =
-  result[^1] = z.byte
+  const L = sizeof(result)
+  result[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
 
 proc stateDBMain*() =
   suite "Account State DB":
@@ -148,6 +149,70 @@ proc stateDBMain*() =
       check ac.getCode(addr2) == code
       let key = contractHashKey(hexary.keccak(code))
       check acDB.get(key.toOpenArray) == code
+
+    test "accessList operations":
+      proc verifyAddrs(ac: AccountsCache, addrs: varargs[int]): bool =
+        for c in addrs:
+          if not ac.inAccessList(c.initAddr):
+            return false
+        true
+
+      proc verifySlots(ac: AccountsCache, address: int, slots: varargs[int]): bool =
+        let a = address.initAddr
+        if not ac.inAccessList(a):
+            return false
+
+        for c in slots:
+          if not ac.inAccessList(a, c.u256):
+            return false
+        true
+
+      proc accessList(ac: var AccountsCache, address: int) {.inline.} =
+        ac.accessList(address.initAddr)
+
+      proc accessList(ac: var AccountsCache, address, slot: int) {.inline.} =
+        ac.accessList(address.initAddr, slot.u256)
+
+      var ac = init(AccountsCache, acDB)
+
+      ac.accessList(0xaa)
+      ac.accessList(0xbb, 0x01)
+      ac.accessList(0xbb, 0x02)
+      check ac.verifyAddrs(0xaa, 0xbb)
+      check ac.verifySlots(0xbb, 0x01, 0x02)
+      check ac.verifySlots(0xaa, 0x01) == false
+      check ac.verifySlots(0xaa, 0x02) == false
+
+      var sp = ac.beginSavepoint
+      # some new ones
+      ac.accessList(0xbb, 0x03)
+      ac.accessList(0xaa, 0x01)
+      ac.accessList(0xcc, 0x01)
+      ac.accessList(0xcc)
+
+      check ac.verifyAddrs(0xaa, 0xbb, 0xcc)
+      check ac.verifySlots(0xaa, 0x01)
+      check ac.verifySlots(0xbb, 0x01, 0x02, 0x03)
+      check ac.verifySlots(0xcc, 0x01)
+
+      ac.rollback(sp)
+      check ac.verifyAddrs(0xaa, 0xbb)
+      check ac.verifyAddrs(0xcc) == false
+      check ac.verifySlots(0xcc, 0x01) == false
+
+      sp = ac.beginSavepoint
+      ac.accessList(0xbb, 0x03)
+      ac.accessList(0xaa, 0x01)
+      ac.accessList(0xcc, 0x01)
+      ac.accessList(0xcc)
+      ac.accessList(0xdd, 0x04)
+      ac.commit(sp)
+
+      check ac.verifyAddrs(0xaa, 0xbb, 0xcc)
+      check ac.verifySlots(0xaa, 0x01)
+      check ac.verifySlots(0xbb, 0x01, 0x02, 0x03)
+      check ac.verifySlots(0xcc, 0x01)
+      check ac.verifySlots(0xdd, 0x04)
 
 when isMainModule:
   stateDBMain()

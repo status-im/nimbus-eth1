@@ -2,7 +2,8 @@ import
   tables, hashes, sets,
   eth/[common, rlp], eth/trie/[hexary, db, trie_defs],
   ../constants, ../utils, storage_types,
-  ../../stateless/multi_keys
+  ../../stateless/multi_keys,
+  ./access_list
 
 type
   AccountFlag = enum
@@ -45,6 +46,7 @@ type
   SavePoint* = ref object
     parentSavepoint: SavePoint
     cache: Table[EthAddress, RefAccount]
+    accessList: access_list.AccessList
     state: TransactionState
 
 const
@@ -83,6 +85,7 @@ proc rootHash*(ac: AccountsCache): KeccakHash =
 proc beginSavepoint*(ac: var AccountsCache): SavePoint =
   new result
   result.cache = initTable[EthAddress, RefAccount]()
+  result.accessList.init()
   result.state = Pending
   result.parentSavepoint = ac.savePoint
   ac.savePoint = result
@@ -106,6 +109,8 @@ proc commit*(ac: var AccountsCache, sp: Savepoint) =
   ac.savePoint = sp.parentSavepoint
   for k, v in sp.cache:
     sp.parentSavepoint.cache[k] = v
+
+  ac.savePoint.accessList.merge(sp.accessList)
   sp.state = Committed
 
 proc dispose*(ac: var AccountsCache, sp: Savepoint) {.inline.} =
@@ -514,6 +519,28 @@ proc makeMultiKeys*(ac: AccountsCache): MultikeysRef =
     result.add(k, v.codeTouched, multiKeys(v.storageKeys))
   result.sort()
 
+proc accessList*(ac: var AccountsCache, address: EthAddress) {.inline.} =
+  ac.savePoint.accessList.add(address)
+
+proc accessList*(ac: var AccountsCache, address: EthAddress, slot: UInt256) {.inline.} =
+  ac.savePoint.accessList.add(address, slot)
+
+func inAccessList*(ac: AccountsCache, address: EthAddress): bool =
+  var sp = ac.savePoint
+  while sp != nil:
+    result = sp.accessList.contains(address)
+    if result:
+      return
+    sp = sp.parentSavepoint
+
+func inAccessList*(ac: AccountsCache, address: EthAddress, slot: UInt256): bool =
+  var sp = ac.savePoint
+  while sp != nil:
+    result = sp.accessList.contains(address, slot)
+    if result:
+      return
+    sp = sp.parentSavepoint
+
 proc rootHash*(db: ReadOnlyStateDB): KeccakHash {.borrow.}
 proc getCodeHash*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
 proc getStorageRoot*(db: ReadOnlyStateDB, address: EthAddress): Hash256 {.borrow.}
@@ -527,3 +554,5 @@ proc accountExists*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isDeadAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc isEmptyAccount*(db: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
 proc getCommittedStorage*(db: ReadOnlyStateDB, address: EthAddress, slot: UInt256): UInt256 {.borrow.}
+func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress): bool {.borrow.}
+func inAccessList*(ac: ReadOnlyStateDB, address: EthAddress, slot: UInt256): bool {.borrow.}
