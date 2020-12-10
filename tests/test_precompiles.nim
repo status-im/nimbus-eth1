@@ -65,7 +65,7 @@ template doTest(fixture: JsonNode, fork: Fork, address: PrecompileAddresses): un
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let
     label = fixtures["func"].getStr
-    fork  = parseEnum[Fork](fixtures["fork"].getStr)
+    fork  = parseEnum[Fork](fixtures["fork"].getStr.toLowerAscii)
     data  = fixtures["data"]
 
   case toLowerAscii(label)
