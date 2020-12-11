@@ -23,14 +23,14 @@ logScope:
 # ##################################
 # Syntactic sugar
 
-proc gasEip2929AccountCheck(c: Computation, address: EthAddress) =
+proc gasEip2929AccountCheck(c: Computation, address: EthAddress, prevCost = 0.GasInt) =
   c.vmState.mutateStateDB:
     let gasCost = if not db.inAccessList(address):
                     db.accessList(address)
                     ColdAccountAccessCost
                   else:
                     WarmStorageReadCost
-    c.gasMeter.consumeGas(gasCost, reason = "gasEIP2929AccountCheck")
+    c.gasMeter.consumeGas(gasCost - prevCost, reason = "gasEIP2929AccountCheck")
 
 template push(x: typed) {.dirty.} =
   ## Push an expression on the computation stack
@@ -788,11 +788,11 @@ template genCall(callName: untyped, opCode: Op): untyped =
     # from 700 to 40
     #when opCode == StaticCall:
     #  if c.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
-    #    childGasFee = childGasFee - 660.GasInt
+    #    gasCost = gasCost - 660.GasInt
 
     # EIP2929
     if c.fork >= FkBerlin:
-      c.gasEip2929AccountCheck(destination)
+      c.gasEip2929AccountCheck(destination, gasFees[c.fork][GasCall])
 
     if gasCost >= 0:
       c.gasMeter.consumeGas(gasCost, reason = $opCode)
@@ -974,18 +974,19 @@ op extCodeHash, inline = true:
 op balanceEIP2929, inline = true:
   ## 0x31, Get balance of the given account.
   let address = c.stack.popAddress()
-  c.gasEip2929AccountCheck(address)
+
+  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasBalance])
   push: c.getBalance(address)
 
 op extCodeHashEIP2929, inline = true:
   let address = c.stack.popAddress()
-  c.gasEip2929AccountCheck(address)
+  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCodeHash])
   push: c.getCodeHash(address)
 
 op extCodeSizeEIP2929, inline = true:
   ## 0x3b, Get size of an account's code
   let address = c.stack.popAddress()
-  c.gasEip2929AccountCheck(address)
+  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCode])
   push: c.getCodeSize(address)
 
 op extCodeCopyEIP2929, inline = true:
@@ -998,7 +999,7 @@ op extCodeCopyEIP2929, inline = true:
     c.gasCosts[ExtCodeCopy].m_handler(c.memory.len, memPos, len),
     reason="ExtCodeCopy fee")
 
-  c.gasEip2929AccountCheck(address)
+  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCode])
 
   let codeBytes = c.getCode(address)
   c.memory.writePaddedResult(codeBytes, memPos, codePos, len)
@@ -1030,9 +1031,9 @@ op sloadEIP2929, inline = true, slot:
   c.vmState.mutateStateDB:
     let gasCost = if not db.inAccessList(c.msg.contractAddress, slot):
                     db.accessList(c.msg.contractAddress, slot)
-                    ColdSloadCost
+                    ColdSloadCost - gasFees[c.fork][GasSLoad]
                   else:
-                    WarmStorageReadCost
+                    WarmStorageReadCost - gasFees[c.fork][GasSLoad]
     c.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
 
   push: c.getStorage(slot)
