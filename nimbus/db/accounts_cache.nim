@@ -452,6 +452,10 @@ proc persist*(ac: var AccountsCache, clearCache: bool = true) =
   else:
     for x in cleanAccounts:
       ac.savePoint.cache.del x
+
+  # EIP2929
+  ac.savePoint.accessList.clear()
+
   ac.isDirty = false
 
 iterator storage*(ac: AccountsCache, address: EthAddress): (UInt256, UInt256) =

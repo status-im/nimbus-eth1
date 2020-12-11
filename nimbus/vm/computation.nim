@@ -258,6 +258,12 @@ proc execCreate*(c: Computation) =
   c.vmState.mutateStateDB:
     db.incNonce(c.msg.sender)
 
+    # We add this to the access list _before_ taking a snapshot.
+    # Even if the creation fails, the access-list change should not be rolled back
+    # EIP2929
+    if c.fork >= FkBerlin:
+      db.accessList(c.msg.contractAddress)
+
   c.snapshot()
   defer:
     c.dispose()

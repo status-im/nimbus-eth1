@@ -39,3 +39,6 @@ proc add*(ac: var AccessList, address: EthAddress, slot: UInt256) =
     val[].incl slot
   do:
     ac.slots[address] = toHashSet([slot])
+
+proc clear*(ac: var AccessList) {.inline.} =
+  ac.slots.clear()

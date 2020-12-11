@@ -28,6 +28,12 @@ type
     paBlsMapG1
     paBlsMapG2
 
+iterator activePrecompiles*(): EthAddress =
+  var res: EthAddress
+  for c in PrecompileAddresses.low..PrecompileAddresses.high:
+    res[^1] = c.byte
+    yield res
+
 proc getSignature(computation: Computation): (array[32, byte], Signature) =
   # input is Hash, V, R, S
   template data: untyped = computation.msg.data
