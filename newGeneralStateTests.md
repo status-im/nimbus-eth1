@@ -2135,17 +2135,6 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + static_refund_CallToSuicideTwice.json                           OK
 ```
 OK: 271/283 Fail: 0/283 Skip: 12/283
-## stSubroutine
-```diff
-+ shouldErrorWhenReturnStackGrowsAbove1023.json                   OK
-- shouldSucceedWhenReturnStackGrowsUntil1023.json                 Fail
-- simpleSubroutine.json                                           Fail
-- subroutineAtEndOfCode.json                                      Fail
-+ subroutineInvalidJump.json                                      OK
-+ subroutineShallowReturnStack.json                               OK
-- twoLevelsSubroutines.json                                       Fail
-```
-OK: 3/7 Fail: 4/7 Skip: 0/7
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
@@ -2637,4 +2626,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2310/2419 Fail: 4/2419 Skip: 105/2419
+OK: 2307/2412 Fail: 0/2412 Skip: 105/2412
