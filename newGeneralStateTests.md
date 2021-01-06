@@ -1036,9 +1036,6 @@ OK: 99/99 Fail: 0/99 Skip: 0/99
   Call50000_identity2.json                                        Skip
   Call50000_rip160.json                                           Skip
   Call50000_sha256.json                                           Skip
-  Call50000bytesContract50_1.json                                 Skip
-  Call50000bytesContract50_2.json                                 Skip
-  Call50000bytesContract50_3.json                                 Skip
   Callcode50000.json                                              Skip
   Create1000.json                                                 Skip
   Create1000Byzantium.json                                        Skip
@@ -1046,7 +1043,7 @@ OK: 99/99 Fail: 0/99 Skip: 0/99
   Return50000.json                                                Skip
   Return50000_2.json                                              Skip
 ```
-OK: 0/19 Fail: 0/19 Skip: 19/19
+OK: 0/16 Fail: 0/16 Skip: 16/16
 ## stRandom
 ```diff
 + randomStatetest0.json                                           OK
@@ -1688,11 +1685,11 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + RevertOpcodeMultipleSubCalls.json                               OK
 + RevertOpcodeReturn.json                                         OK
 + RevertOpcodeWithBigOutputInInit.json                            OK
-+ RevertPrecompiledTouch.json                                     OK
+  RevertPrecompiledTouch.json                                     Skip
 + RevertPrecompiledTouchExactOOG.json                             OK
 + RevertPrecompiledTouch_nonce.json                               OK
 + RevertPrecompiledTouch_noncestorage.json                        OK
-+ RevertPrecompiledTouch_storage.json                             OK
+  RevertPrecompiledTouch_storage.json                             Skip
 + RevertPrefound.json                                             OK
 + RevertPrefoundCall.json                                         OK
 + RevertPrefoundCallOOG.json                                      OK
@@ -1709,7 +1706,7 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
 ```
-OK: 40/45 Fail: 0/45 Skip: 5/45
+OK: 38/45 Fail: 0/45 Skip: 7/45
 ## stSLoadTest
 ```diff
 + sloadGasCost.json                                               OK
@@ -2138,6 +2135,17 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + static_refund_CallToSuicideTwice.json                           OK
 ```
 OK: 271/283 Fail: 0/283 Skip: 12/283
+## stSubroutine
+```diff
++ shouldErrorWhenReturnStackGrowsAbove1023.json                   OK
+- shouldSucceedWhenReturnStackGrowsUntil1023.json                 Fail
+- simpleSubroutine.json                                           Fail
+- subroutineAtEndOfCode.json                                      Fail
++ subroutineInvalidJump.json                                      OK
++ subroutineShallowReturnStack.json                               OK
+- twoLevelsSubroutines.json                                       Fail
+```
+OK: 3/7 Fail: 4/7 Skip: 0/7
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
@@ -2629,4 +2637,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2309/2415 Fail: 0/2415 Skip: 106/2415
+OK: 2310/2419 Fail: 4/2419 Skip: 105/2419

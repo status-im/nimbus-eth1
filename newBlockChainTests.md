@@ -1,5 +1,10 @@
 newBlockChainTests
 ===
+## BlockChainTests
+```diff
++ randomStatetest391.json                                         OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## bcBlockGasLimitTest
 ```diff
 + BlockGasLimit2p63m1.json                                        OK
@@ -31,9 +36,10 @@ OK: 3/4 Fail: 0/4 Skip: 1/4
 ## bcForgedTest
 ```diff
 + bcForkBlockTest.json                                            OK
-+ bcInvalidRLPTest.json                                           OK
++ bcInvalidRLPTest_BLOCK_.json                                    OK
++ bcInvalidRLPTest_TRANSACT_.json                                 OK
 ```
-OK: 2/2 Fail: 0/2 Skip: 0/2
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## bcForkStressTest
 ```diff
 + AmIOnEIP150.json                                                OK
@@ -318,16 +324,14 @@ OK: 11/11 Fail: 0/11 Skip: 0/11
 + incorrectUncleTimestamp3.json                                   OK
 + incorrectUncleTimestamp4.json                                   OK
 + incorrectUncleTimestamp5.json                                   OK
-+ nonceWrong.json                                                 OK
 + pastUncleTimestamp.json                                         OK
 + timestampTooHigh.json                                           OK
 + timestampTooLow.json                                            OK
 + unknownUncleParentHash.json                                     OK
-+ wrongMixHash.json                                               OK
 + wrongParentHash.json                                            OK
 + wrongStateRoot.json                                             OK
 ```
-OK: 26/26 Fail: 0/26 Skip: 0/26
+OK: 24/24 Fail: 0/24 Skip: 0/24
 ## bcUncleSpecialTests
 ```diff
 + futureUncleTimestamp2.json                                      OK
@@ -363,19 +367,16 @@ OK: 9/9 Fail: 0/9 Skip: 0/9
 + twoEqualUncle.json                                              OK
 + twoUncle.json                                                   OK
 + uncleHeaderAtBlock2.json                                        OK
-+ uncleHeaderAtBlock2Byzantium.json                               OK
-+ uncleHeaderAtBlock2Constantinople.json                          OK
 + uncleHeaderWithGeneration0.json                                 OK
 + uncleWithSameBlockNumber.json                                   OK
 ```
-OK: 24/24 Fail: 0/24 Skip: 0/24
+OK: 22/22 Fail: 0/22 Skip: 0/22
 ## bcValidBlockTest
 ```diff
 + ExtraData32.json                                                OK
 + RecallSuicidedContract.json                                     OK
 + RecallSuicidedContractInOneBlock.json                           OK
 + SimpleTx.json                                                   OK
-+ SimpleTx3.json                                                  OK
 + SimpleTx3LowS.json                                              OK
 + callRevert.json                                                 OK
 + createRevert.json                                               OK
@@ -392,7 +393,7 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + txEqualValue.json                                               OK
 + txOrder.json                                                    OK
 ```
-OK: 20/20 Fail: 0/20 Skip: 0/20
+OK: 19/19 Fail: 0/19 Skip: 0/19
 ## bcWalletTest
 ```diff
 + wallet2outOf3txs.json                                           OK
@@ -402,11 +403,6 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 + walletReorganizeOwners.json                                     OK
 ```
 OK: 5/5 Fail: 0/5 Skip: 0/5
-## newBlockChainTests
-```diff
-+ randomStatetest391.json                                         OK
-```
-OK: 1/1 Fail: 0/1 Skip: 0/1
 ## stArgsZeroOneBalance
 ```diff
 + addNonConst.json                                                OK
@@ -1443,9 +1439,6 @@ OK: 99/99 Fail: 0/99 Skip: 0/99
   Call50000_identity2.json                                        Skip
   Call50000_rip160.json                                           Skip
   Call50000_sha256.json                                           Skip
-  Call50000bytesContract50_1.json                                 Skip
-  Call50000bytesContract50_2.json                                 Skip
-  Call50000bytesContract50_3.json                                 Skip
   Callcode50000.json                                              Skip
   Create1000.json                                                 Skip
   Create1000Byzantium.json                                        Skip
@@ -1453,7 +1446,7 @@ OK: 99/99 Fail: 0/99 Skip: 0/99
   Return50000.json                                                Skip
   Return50000_2.json                                              Skip
 ```
-OK: 0/19 Fail: 0/19 Skip: 19/19
+OK: 0/16 Fail: 0/16 Skip: 16/16
 ## stRandom
 ```diff
 + randomStatetest0.json                                           OK
@@ -3036,4 +3029,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2630/2738 Fail: 0/2738 Skip: 108/2738
+OK: 2626/2731 Fail: 0/2731 Skip: 105/2731
