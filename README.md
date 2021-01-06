@@ -5,6 +5,7 @@
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
+![Github action](https://github.com/status-im/nimbus-eth1/workflows/nimbus-eth1%20CI/badge.svg)
 
 [![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus-orange.svg)](https://discord.gg/XRxWahP)
 [![Gitter: #status-im/nimbus](https://img.shields.io/badge/gitter-status--im%2Fnimbus-orange.svg)](https://gitter.im/status-im/nimbus)
@@ -169,7 +170,7 @@ cd nimbus
 ##### Environment setup
 
 * Install the [Termux](https://termux.com) app from FDroid or the Google Play store
-* Install a [PRoot](https://wiki.termux.com/wiki/PRoot) of your choice following the instructions for your preferred distribution. 
+* Install a [PRoot](https://wiki.termux.com/wiki/PRoot) of your choice following the instructions for your preferred distribution.
 Note, the Ubuntu PRoot is known to contain all Nimbus prerequisites compiled on Arm64 architecture (common architecture for Android devices).  Depending on the distribution, it may require effort beyond the scope of this guide to get all prerequisites.
 
 *Assuming Ubuntu PRoot is used*
