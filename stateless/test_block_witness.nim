@@ -105,7 +105,7 @@ proc blockWitnessMain*(debugMode = false) =
     legacyGSTFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "GeneralStateTests"
     newGSTFolder = "eth_tests" / "GeneralStateTests"
     legacyBCFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "BlockchainTests"
-    newBCFolder = "eth_tests" / "BlockChainTests"
+    newBCFolder = "eth_tests" / "BlockchainTests"
 
   if paramCount() == 0 or not debugMode:
     # run all test fixtures

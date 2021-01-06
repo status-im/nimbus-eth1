@@ -764,7 +764,7 @@ proc blockchainJsonMain*(debugMode = false) =
     suite "block chain json tests":
       jsonTest(legacyFolder, "BlockchainTests", testFixture, skipBCTests)
     suite "new block chain json tests":
-      jsonTest(newFolder, "newBlockChainTests", testFixture, skipNewBCTests)
+      jsonTest(newFolder, "newBlockchainTests", testFixture, skipNewBCTests)
   else:
     # execute single test in debug mode
     let config = test_config.getConfiguration()
