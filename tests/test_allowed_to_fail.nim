@@ -91,7 +91,14 @@ func slowGSTTests(folder: string, name: string): bool =
 
 func skipGSTTests*(folder: string, name: string): bool =
   # we skip tests that are slow or expected to fail for now
-  slowGSTTests(folder, name)
+  if slowGSTTests(folder, name):
+    return true
+
+  # bugs related to ethereum/tests/b1248cd40809d219197ff01eb547170bfaaf1bf1
+  name in @[
+    "RevertPrecompiledTouch.json",
+    "RevertPrecompiledTouch_storage.json"
+  ]
 
 func skipNewGSTTests*(folder: string, name: string): bool =
   # share the same slow and failing tests
@@ -108,7 +115,13 @@ func skipBCTests*(folder: string, name: string): bool =
 
     # BC huge memory consumption
     "randomStatetest94.json",
-    "DelegateCallSpam.json"
+    "DelegateCallSpam.json",
+
+    # bugs related to ethereum/tests/b1248cd40809d219197ff01eb547170bfaaf1bf1
+    "RevertPrecompiledTouch_d0g0v0.json",
+    "RevertPrecompiledTouch_d3g0v0.json",
+    "RevertPrecompiledTouch_storage_d0g0v0.json",
+    "RevertPrecompiledTouch_storage_d3g0v0.json"
   ]
 
 func skipNewBCTests*(folder: string, name: string): bool =

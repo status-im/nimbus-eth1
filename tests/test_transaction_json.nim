@@ -11,7 +11,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
 proc transactionJsonMain*() =
   suite "Transactions tests":
-    jsonTest("TransactionTests", testFixture)
+    jsonTest("eth_tests" / "TransactionTests", "TransactionTests", testFixture)
 
 when isMainModule:
   transactionJsonMain()

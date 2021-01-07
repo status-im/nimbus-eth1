@@ -755,12 +755,16 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       echo "Maximum subtest available: ", node.len
 
 proc blockchainJsonMain*(debugMode = false) =
+  const
+    legacyFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "BlockchainTests"
+    newFolder = "eth_tests" / "BlockChainTests"
+
   if paramCount() == 0 or not debugMode:
     # run all test fixtures
     suite "block chain json tests":
-      jsonTest("BlockchainTests", testFixture, skipBCTests)
+      jsonTest(legacyFolder, "BlockchainTests", testFixture, skipBCTests)
     suite "new block chain json tests":
-      jsonTest("newBlockChainTests", testFixture, skipNewBCTests)
+      jsonTest(newFolder, "newBlockchainTests", testFixture, skipNewBCTests)
   else:
     # execute single test in debug mode
     let config = test_config.getConfiguration()
@@ -768,7 +772,7 @@ proc blockchainJsonMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let folder = if config.legacy: "BlockchainTests" else: "newBlockChainTests"
+    let folder = if config.legacy: legacyFolder else: newFolder
     let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus

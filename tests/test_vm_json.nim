@@ -20,7 +20,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus)
 
 proc vmJsonMain*() =
   suite "vm json tests":
-    jsonTest("VMTests", testFixture, skipVMTests)
+    jsonTest("eth_tests" / "VMTests", "VMTests", testFixture, skipVMTests)
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   var fixture: JsonNode

@@ -173,3 +173,8 @@
 	url = https://github.com/status-im/nim-bearssl
 	ignore = dirty
 	branch = master
+[submodule "tests/fixtures/eth_tests"]
+	path = tests/fixtures/eth_tests
+	url = https://github.com/ethereum/tests
+	ignore = dirty
+	branch = master

@@ -29,7 +29,8 @@ const
     FkByzantium: "Byzantium",
     FkConstantinople: "Constantinople",
     FkPetersburg: "ConstantinopleFix",
-    FkIstanbul: "Istanbul"
+    FkIstanbul: "Istanbul",
+    FkBerlin: "Berlin"
   }.toTable
 
   supportedForks* = {
@@ -40,7 +41,8 @@ const
     FkByzantium,
     FkConstantinople,
     FkPetersburg,
-    FkIstanbul}
+    FkIstanbul,
+    FkBerlin}
 
   nameToFork* = revmap(forkNames)
 

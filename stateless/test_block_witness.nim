@@ -101,12 +101,18 @@ proc testFixtureGST(node: JsonNode, testStatusIMPL: var TestStatus) =
   fixture["pre"].testBlockWitness(emptyRlpHash, testStatusIMPL)
 
 proc blockWitnessMain*(debugMode = false) =
+  const
+    legacyGSTFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "GeneralStateTests"
+    newGSTFolder = "eth_tests" / "GeneralStateTests"
+    legacyBCFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "BlockchainTests"
+    newBCFolder = "eth_tests" / "BlockchainTests"
+
   if paramCount() == 0 or not debugMode:
     # run all test fixtures
     suite "Block Witness":
-      jsonTest("newBlockChainTests", "witnessBuilderBC", testFixtureBC)
+      jsonTest(newBCFolder, "witnessBuilderBC", testFixtureBC)
     suite "Block Witness":
-      jsonTest("GeneralStateTests", "witnessBuilderGST", testFixtureGST)
+      jsonTest(newGSTFolder, "witnessBuilderGST", testFixtureGST)
   else:
     # execute single test in debug mode
     let config = getConfiguration()
@@ -114,7 +120,7 @@ proc blockWitnessMain*(debugMode = false) =
       echo "missing test subject"
       quit(QuitFailure)
 
-    let folder = if config.legacy: "GeneralStateTests" else: "newGeneralStateTests"
+    let folder = if config.legacy: legacyGSTFolder else: newGSTFolder
     let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
