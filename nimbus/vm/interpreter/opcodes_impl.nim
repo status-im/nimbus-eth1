@@ -777,9 +777,9 @@ template genCall(callName: untyped, opCode: Op): untyped =
     # EIP 2046
     # reduce gas fee for precompiles
     # from 700 to 40
-    when opCode == StaticCall:
-      if c.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
-        childGasFee = childGasFee - 660.GasInt
+    #when opCode == StaticCall:
+    #  if c.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
+    #    childGasFee = childGasFee - 660.GasInt
 
     if childGasFee >= 0:
       c.gasMeter.consumeGas(childGasFee, reason = $opCode)

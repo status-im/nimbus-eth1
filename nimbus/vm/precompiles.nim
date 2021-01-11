@@ -222,15 +222,17 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: Uint256, fork: Fork): Ga
       max(adjExpLen, 1.u256)
     ) div divisor
 
-  let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
-               else: gasCalc(mulComplexity, GasQuadDivisor)
+  #let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
+               #else: gasCalc(mulComplexity, GasQuadDivisor)
+
+  let gasFee = gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
     raise newException(OutOfGas, "modExp gas overflow")
 
   result = gasFee.truncate(GasInt)
-  if fork >= FkBerlin and result < 200.GasInt:
-    result = 200.GasInt
+  #if fork >= FkBerlin and result < 200.GasInt:
+  #  result = 200.GasInt
 
 proc modExp*(c: Computation, fork: Fork = FkByzantium) =
   ## Modular exponentiation precompiled contract
