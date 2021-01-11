@@ -783,7 +783,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
                 c_memLength: memLength
       ))
 
-    # EIP 2046
+    # EIP 2046: temporary disabled
     # reduce gas fee for precompiles
     # from 700 to 40
     #when opCode == StaticCall:

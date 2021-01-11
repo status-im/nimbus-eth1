@@ -9,7 +9,7 @@ import
   unittest2, ../nimbus/vm/precompiles, json, stew/byteutils, test_helpers, os, tables,
   strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain,
   ../nimbus/[vm_types, vm_state], ../nimbus/vm/computation, macros,
-  ../nimbus/vm/interpreter/vm_forks
+  ../nimbus/vm/interpreter/vm_forks, test_allowed_to_fail
 
 proc initAddress(i: byte): EthAddress = result[19] = i
 
@@ -73,7 +73,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "sha256"   : data.doTest(fork, paSha256)
   of "ripemd"   : data.doTest(fork, paRipeMd160)
   of "identity" : data.doTest(fork, paIdentity)
-  #of "modexp"   : data.doTest(fork, paModExp)
+  of "modexp"   : data.doTest(fork, paModExp)
   of "bn256add" : data.doTest(fork, paEcAdd)
   of "bn256mul" : data.doTest(fork, paEcMul)
   of "ecpairing": data.doTest(fork, paPairing)

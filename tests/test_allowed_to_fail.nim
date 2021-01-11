@@ -87,6 +87,14 @@ func slowGSTTests(folder: string, name: string): bool =
 
               # Istanbul slow tests
               "CALLBlake2f_MaxRounds.json",
+
+              # Berlin slow tests,
+              "static_LoopCallsDepthThenRevert.json",
+              "static_LoopCallsDepthThenRevert2.json",
+              "static_LoopCallsDepthThenRevert3.json",
+              "static_log_Caller.json",
+              "static_log1_MaxTopic.json",
+              "static_log1_logMemStartTooHigh.json"
               ]
 
 func skipGSTTests*(folder: string, name: string): bool =
@@ -125,7 +133,7 @@ func skipBCTests*(folder: string, name: string): bool =
   ]
 
 func skipNewBCTests*(folder: string, name: string): bool =
-  if folder == "vmPerformance":
+  if folder == "vmPerformance" or folder == "stStaticCall":
     return true
 
   # the new BC tests also contains these slow tests
@@ -136,5 +144,11 @@ func skipNewBCTests*(folder: string, name: string): bool =
   name in @[
     # BC huge memory consumption
     "randomStatetest94.json",
-    "DelegateCallSpam.json"
+    "DelegateCallSpam.json",
+
+    "InternalCallHittingGasLimit.json"
   ]
+
+func skipPrecompilesTests*(folder: string, name: string): bool =
+  # EIP2565: temporary disabled
+  name == "modexp_eip2565.json"

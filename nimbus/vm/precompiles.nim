@@ -228,6 +228,7 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: Uint256, fork: Fork): Ga
       max(adjExpLen, 1.u256)
     ) div divisor
 
+  # EIP2565: temporary disabled
   #let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
                #else: gasCalc(mulComplexity, GasQuadDivisor)
 
@@ -237,6 +238,8 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: Uint256, fork: Fork): Ga
     raise newException(OutOfGas, "modExp gas overflow")
 
   result = gasFee.truncate(GasInt)
+
+  # EIP2565: temporary disabled
   #if fork >= FkBerlin and result < 200.GasInt:
   #  result = 200.GasInt
 
