@@ -73,7 +73,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "sha256"   : data.doTest(fork, paSha256)
   of "ripemd"   : data.doTest(fork, paRipeMd160)
   of "identity" : data.doTest(fork, paIdentity)
-  of "modexp"   : data.doTest(fork, paModExp)
+  #of "modexp"   : data.doTest(fork, paModExp)
   of "bn256add" : data.doTest(fork, paEcAdd)
   of "bn256mul" : data.doTest(fork, paEcMul)
   of "ecpairing": data.doTest(fork, paPairing)
