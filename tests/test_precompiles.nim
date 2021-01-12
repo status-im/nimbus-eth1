@@ -93,7 +93,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
 proc precompilesMain*() =
   suite "Precompiles":
-    jsonTest("PrecompileTests", testFixture)
+    jsonTest("PrecompileTests", testFixture, skipPrecompilesTests)
 
 when isMainModule:
   precompilesMain()

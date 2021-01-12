@@ -88,13 +88,6 @@ func slowGSTTests(folder: string, name: string): bool =
               # Istanbul slow tests
               "CALLBlake2f_MaxRounds.json",
 
-              # Berlin slow tests,
-              "static_LoopCallsDepthThenRevert.json",
-              "static_LoopCallsDepthThenRevert2.json",
-              "static_LoopCallsDepthThenRevert3.json",
-              "static_log_Caller.json",
-              "static_log1_MaxTopic.json",
-              "static_log1_logMemStartTooHigh.json"
               ]
 
 func skipGSTTests*(folder: string, name: string): bool =
@@ -102,16 +95,21 @@ func skipGSTTests*(folder: string, name: string): bool =
   if slowGSTTests(folder, name):
     return true
 
-  # bugs related to ethereum/tests/b1248cd40809d219197ff01eb547170bfaaf1bf1
   name in @[
+    # bugs related to ethereum/tests/b1248cd40809d219197ff01eb547170bfaaf1bf1
     "RevertPrecompiledTouch.json",
-    "RevertPrecompiledTouch_storage.json"
+    "RevertPrecompiledTouch_storage.json",
   ]
 
 func skipNewGSTTests*(folder: string, name: string): bool =
   # share the same slow and failing tests
   if skipGSTTests(folder, name):
     return true
+
+  name in @[
+    # a bug in ethereum test that later fixed, skip for now
+    "shouldSucceedWhenReturnStackGrowsUntil1023.json"
+  ]
 
 func skipVMTests*(folder: string, name: string): bool =
   result = (folder == "vmPerformance" and "loop" in name)
@@ -129,7 +127,7 @@ func skipBCTests*(folder: string, name: string): bool =
     "RevertPrecompiledTouch_d0g0v0.json",
     "RevertPrecompiledTouch_d3g0v0.json",
     "RevertPrecompiledTouch_storage_d0g0v0.json",
-    "RevertPrecompiledTouch_storage_d3g0v0.json"
+    "RevertPrecompiledTouch_storage_d3g0v0.json",
   ]
 
 func skipNewBCTests*(folder: string, name: string): bool =
@@ -146,7 +144,8 @@ func skipNewBCTests*(folder: string, name: string): bool =
     "randomStatetest94.json",
     "DelegateCallSpam.json",
 
-    "InternalCallHittingGasLimit.json"
+    # a bug in ethereum test that later fixed, skip for now
+    "shouldSucceedWhenReturnStackGrowsUntil1023.json"
   ]
 
 func skipPrecompilesTests*(folder: string, name: string): bool =

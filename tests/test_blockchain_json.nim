@@ -764,8 +764,8 @@ proc blockchainJsonMain*(debugMode = false) =
 
   if paramCount() == 0 or not debugMode:
     # run all test fixtures
-    #suite "block chain json tests":
-      #jsonTest(legacyFolder, "BlockchainTests", testFixture, skipBCTests)
+    suite "block chain json tests":
+      jsonTest(legacyFolder, "BlockchainTests", testFixture, skipBCTests)
     suite "new block chain json tests":
       jsonTest(newFolder, "newBlockchainTests", testFixture, skipNewBCTests)
   else:

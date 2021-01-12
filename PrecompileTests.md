@@ -19,13 +19,13 @@ PrecompileTests
 + ecrecover.json                                                  OK
 + identity.json                                                   OK
 + modexp.json                                                     OK
-+ modexp_eip2565.json                                             OK
+  modexp_eip2565.json                                             Skip
 + pairing.json                                                    OK
 + pairing_istanbul.json                                           OK
 + ripemd160.json                                                  OK
 + sha256.json                                                     OK
 ```
-OK: 22/22 Fail: 0/22 Skip: 0/22
+OK: 21/22 Fail: 0/22 Skip: 1/22
 
 ---TOTAL---
-OK: 22/22 Fail: 0/22 Skip: 0/22
+OK: 21/22 Fail: 0/22 Skip: 1/22
