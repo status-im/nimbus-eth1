@@ -3001,10 +3001,10 @@ OK: 45/45 Fail: 0/45 Skip: 0/45
 + RevertPrecompiledTouchExactOOG_d8g1v0.json                      OK
 + RevertPrecompiledTouchExactOOG_d9g0v0.json                      OK
 + RevertPrecompiledTouchExactOOG_d9g1v0.json                      OK
-  RevertPrecompiledTouch_d0g0v0.json                              Skip
++ RevertPrecompiledTouch_d0g0v0.json                              OK
 + RevertPrecompiledTouch_d1g0v0.json                              OK
 + RevertPrecompiledTouch_d2g0v0.json                              OK
-  RevertPrecompiledTouch_d3g0v0.json                              Skip
++ RevertPrecompiledTouch_d3g0v0.json                              OK
 + RevertPrecompiledTouch_nonce_d0g0v0.json                        OK
 + RevertPrecompiledTouch_nonce_d1g0v0.json                        OK
 + RevertPrecompiledTouch_nonce_d2g0v0.json                        OK
@@ -3013,10 +3013,10 @@ OK: 45/45 Fail: 0/45 Skip: 0/45
 + RevertPrecompiledTouch_noncestorage_d1g0v0.json                 OK
 + RevertPrecompiledTouch_noncestorage_d2g0v0.json                 OK
 + RevertPrecompiledTouch_noncestorage_d3g0v0.json                 OK
-  RevertPrecompiledTouch_storage_d0g0v0.json                      Skip
++ RevertPrecompiledTouch_storage_d0g0v0.json                      OK
 + RevertPrecompiledTouch_storage_d1g0v0.json                      OK
 + RevertPrecompiledTouch_storage_d2g0v0.json                      OK
-  RevertPrecompiledTouch_storage_d3g0v0.json                      Skip
++ RevertPrecompiledTouch_storage_d3g0v0.json                      OK
 + RevertPrefoundCallOOG_d0g0v0.json                               OK
 + RevertPrefoundCall_d0g0v0.json                                  OK
 + RevertPrefoundEmptyCallOOG_d0g0v0.json                          OK
@@ -3045,7 +3045,7 @@ OK: 45/45 Fail: 0/45 Skip: 0/45
 + TouchToEmptyAccountRevert3_d0g1v0.json                          OK
 + TouchToEmptyAccountRevert_d0g0v0.json                           OK
 ```
-OK: 207/211 Fail: 0/211 Skip: 4/211
+OK: 211/211 Fail: 0/211 Skip: 0/211
 ## stSStoreTest
 ```diff
 + InitCollisionNonZeroNonce_d0g0v0.json                           OK
@@ -11169,4 +11169,4 @@ OK: 804/804 Fail: 0/804 Skip: 0/804
 OK: 519/519 Fail: 0/519 Skip: 0/519
 
 ---TOTAL---
-OK: 10900/10907 Fail: 0/10907 Skip: 7/10907
+OK: 10904/10907 Fail: 0/10907 Skip: 3/10907
