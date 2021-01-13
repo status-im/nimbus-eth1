@@ -2179,11 +2179,14 @@ OK: 56/66 Fail: 0/66 Skip: 10/66
 ## stTimeConsuming
 ```diff
 + sstore_combinations_initial0.json                               OK
++ sstore_combinations_initial0_2.json                             OK
 + sstore_combinations_initial1.json                               OK
++ sstore_combinations_initial1_2.json                             OK
 + sstore_combinations_initial2.json                               OK
++ sstore_combinations_initial2_1.json                             OK
   static_Call50000_sha256.json                                    Skip
 ```
-OK: 3/4 Fail: 0/4 Skip: 1/4
+OK: 6/7 Fail: 0/7 Skip: 1/7
 ## stTransactionTest
 ```diff
 + ContractStoreClearsOOG.json                                     OK
@@ -2593,4 +2596,4 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 OK: 130/130 Fail: 0/130 Skip: 0/130
 
 ---TOTAL---
-OK: 2289/2391 Fail: 0/2391 Skip: 102/2391
+OK: 2292/2394 Fail: 0/2394 Skip: 102/2394
