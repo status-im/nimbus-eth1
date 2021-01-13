@@ -249,8 +249,11 @@ func vmConfiguration(network: string, c: var ChainConfig): VMConfig =
   of "Istanbul":
     result = [(0, FkIstanbul), (0, FkIstanbul)]
     c.istanbulBlock = 0.toBlockNumber
+  of "Berlin":
+    result = [(0, FkBerlin), (0, FkBerlin)]
+    c.berlinBlock = 0.toBlockNumber
   else:
-    raise newException(ValueError, "unsupported network")
+    raise newException(ValueError, "unsupported network " & network)
 
 func vmConfigToFork(vmConfig: VMConfig, blockNumber: Uint256): Fork =
   if blockNumber >= vmConfig[1].blockNumber.u256: return vmConfig[1].fork

@@ -235,6 +235,14 @@ proc genBerlinJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTi
   result[ReturnSub] = newIdentNode "returnSub"
   result[JumpSub] = newIdentNode "jumpSub"
 
+  result[Balance] = newIdentNode "balanceEIP2929"
+  result[ExtCodeHash] = newIdentNode "extCodeHashEIP2929"
+  result[ExtCodeSize] = newIdentNode "extCodeSizeEIP2929"
+  result[ExtCodeCopy] = newIdentNode "extCodeCopyEIP2929"
+  result[SelfDestruct] = newIdentNode "selfDestructEIP2929"
+  result[SLoad] = newIdentNode "sloadEIP2929"
+  result[SStore] = newIdentNode "sstoreEIP2929"
+
 let BerlinOpDispatch {.compileTime.}: array[Op, NimNode] = genBerlinJumpTable(IstanbulOpDispatch)
 
 proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =

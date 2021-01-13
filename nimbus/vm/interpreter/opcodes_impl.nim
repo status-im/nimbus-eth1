@@ -23,6 +23,15 @@ logScope:
 # ##################################
 # Syntactic sugar
 
+proc gasEip2929AccountCheck(c: Computation, address: EthAddress, prevCost = 0.GasInt) =
+  c.vmState.mutateStateDB:
+    let gasCost = if not db.inAccessList(address):
+                    db.accessList(address)
+                    ColdAccountAccessCost
+                  else:
+                    WarmStorageReadCost
+    c.gasMeter.consumeGas(gasCost - prevCost, reason = "gasEIP2929AccountCheck")
+
 template push(x: typed) {.dirty.} =
   ## Push an expression on the computation stack
   c.stack.push x
@@ -763,7 +772,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
                                     (memOutPos, memOutLen)
 
     let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
-    var (childGasFee, childGasLimit) = c.gasCosts[opCode].c_handler(
+    var (gasCost, childGasLimit) = c.gasCosts[opCode].c_handler(
       value,
       GasParams(kind: opCode,
                 c_isNewAccount: not c.accountExists(contractAddress),
@@ -774,15 +783,19 @@ template genCall(callName: untyped, opCode: Op): untyped =
                 c_memLength: memLength
       ))
 
-    # EIP 2046
+    # EIP 2046: temporary disabled
     # reduce gas fee for precompiles
     # from 700 to 40
-    when opCode == StaticCall:
-      if c.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
-        childGasFee = childGasFee - 660.GasInt
+    #when opCode == StaticCall:
+    #  if c.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
+    #    gasCost = gasCost - 660.GasInt
 
-    if childGasFee >= 0:
-      c.gasMeter.consumeGas(childGasFee, reason = $opCode)
+    # EIP2929
+    if c.fork >= FkBerlin:
+      c.gasEip2929AccountCheck(destination, gasFees[c.fork][GasCall])
+
+    if gasCost >= 0:
+      c.gasMeter.consumeGas(gasCost, reason = $opCode)
 
     c.returnData.setLen(0)
 
@@ -792,7 +805,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
       c.gasMeter.returnGas(childGasLimit)
       return
 
-    if childGasFee < 0 and childGasLimit <= 0:
+    if gasCost < 0 and childGasLimit <= 0:
       raise newException(OutOfGas, "Gas not enough to perform calculation (" & callName.astToStr & ")")
 
     c.memory.extend(memInPos, memInLen)
@@ -957,3 +970,87 @@ op sarOp, inline = true:
 op extCodeHash, inline = true:
   let address = c.stack.popAddress()
   push: c.getCodeHash(address)
+
+op balanceEIP2929, inline = true:
+  ## 0x31, Get balance of the given account.
+  let address = c.stack.popAddress()
+
+  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasBalance])
+  push: c.getBalance(address)
+
+op extCodeHashEIP2929, inline = true:
+  let address = c.stack.popAddress()
+  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCodeHash])
+  push: c.getCodeHash(address)
+
+op extCodeSizeEIP2929, inline = true:
+  ## 0x3b, Get size of an account's code
+  let address = c.stack.popAddress()
+  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCode])
+  push: c.getCodeSize(address)
+
+op extCodeCopyEIP2929, inline = true:
+  ## 0x3c, Copy an account's code to memory.
+  let address = c.stack.popAddress()
+  let (memStartPos, codeStartPos, size) = c.stack.popInt(3)
+  let (memPos, codePos, len) = (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
+
+  c.gasMeter.consumeGas(
+    c.gasCosts[ExtCodeCopy].m_handler(c.memory.len, memPos, len),
+    reason="ExtCodeCopy fee")
+
+  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCode])
+
+  let codeBytes = c.getCode(address)
+  c.memory.writePaddedResult(codeBytes, memPos, codePos, len)
+
+op selfDestructEIP2929, inline = false:
+  checkInStaticContext(c)
+
+  let
+    beneficiary = c.stack.popAddress()
+    isDead      = not c.accountExists(beneficiary)
+    balance     = c.getBalance(c.msg.contractAddress)
+
+  let gasParams = GasParams(kind: SelfDestruct,
+    sd_condition: isDead and not balance.isZero
+    )
+
+  var gasCost = c.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
+
+  c.vmState.mutateStateDB:
+    if not db.inAccessList(beneficiary):
+      db.accessList(beneficiary)
+      gasCost = gasCost + ColdAccountAccessCost
+
+  c.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP161")
+  c.selfDestruct(beneficiary)
+
+op sloadEIP2929, inline = true, slot:
+  ## 0x54, Load word from storage.
+  c.vmState.mutateStateDB:
+    let gasCost = if not db.inAccessList(c.msg.contractAddress, slot):
+                    db.accessList(c.msg.contractAddress, slot)
+                    ColdSloadCost - gasFees[c.fork][GasSLoad]
+                  else:
+                    WarmStorageReadCost - gasFees[c.fork][GasSLoad]
+    c.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
+
+  push: c.getStorage(slot)
+
+op sstoreEIP2929, inline = false, slot, newValue:
+  checkInStaticContext(c)
+  const SentryGasEIP2200 = 2300  # Minimum gas required to be present for an SSTORE call, not consumed
+
+  if c.gasMeter.gasRemaining <= SentryGasEIP2200:
+    raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
+
+  c.vmState.mutateStateDB:
+    if not db.inAccessList(c.msg.contractAddress, slot):
+      db.accessList(c.msg.contractAddress, slot)
+      c.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
+
+  when evmc_enabled:
+    sstoreEvmc(c, slot, newValue)
+  else:
+    sstoreNetGasMeteringImpl(c, slot, newValue)

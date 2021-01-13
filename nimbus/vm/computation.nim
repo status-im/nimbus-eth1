@@ -243,7 +243,7 @@ proc execCall*(c: Computation) =
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
-  if c.isError or c.fork == FKIstanbul:
+  if c.isError or c.fork >= FKIstanbul:
     if c.msg.contractAddress == ripemdAddr:
       # Special case to account for geth+parity bug
       c.vmState.touchedAccounts.incl c.msg.contractAddress
@@ -257,6 +257,12 @@ proc execCall*(c: Computation) =
 proc execCreate*(c: Computation) =
   c.vmState.mutateStateDB:
     db.incNonce(c.msg.sender)
+
+    # We add this to the access list _before_ taking a snapshot.
+    # Even if the creation fails, the access-list change should not be rolled back
+    # EIP2929
+    if c.fork >= FkBerlin:
+      db.accessList(c.msg.contractAddress)
 
   c.snapshot()
   defer:

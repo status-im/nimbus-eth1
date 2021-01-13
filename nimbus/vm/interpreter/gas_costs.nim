@@ -115,6 +115,11 @@ type
 
   GasCosts* = array[Op, GasCost]
 
+const
+  ColdSloadCost*         = 2100
+  ColdAccountAccessCost* = 2600
+  WarmStorageReadCost*   = 100
+
 template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   ## Generate the gas cost for each forks and store them in a const
@@ -214,13 +219,24 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   func `prefix gasSstore`(value: Uint256, gasParams: Gasparams): GasResult {.nimcall.} =
     ## Value is word to save
+
+    when fork >= FkBerlin:
+      # EIP2929
+      const
+        SLOAD_GAS = WarmStorageReadCost
+        SSTORE_RESET_GAS = 5000 - ColdSloadCost
+    else:
+      const
+        SLOAD_GAS = FeeSchedule[GasSload]
+        SSTORE_RESET_GAS = FeeSchedule[GasSreset]
+
     const
-      NoopGas     = FeeSchedule[GasSload] # if the value doesn't change.
-      DirtyGas    = FeeSchedule[GasSload] # if a dirty value is changed.
+      NoopGas     = SLOAD_GAS # if the value doesn't change.
+      DirtyGas    = SLOAD_GAS # if a dirty value is changed.
       InitGas     = FeeSchedule[GasSset]  # from clean zero to non-zero
-      InitRefund  = FeeSchedule[GasSset] - FeeSchedule[GasSload] # resetting to the original zero value
-      CleanGas    = FeeSchedule[GasSreset]# from clean non-zero to something else
-      CleanRefund = FeeSchedule[GasSreset] - FeeSchedule[GasSload] # resetting to the original non-zero value
+      InitRefund  = FeeSchedule[GasSset] - SLOAD_GAS # resetting to the original zero value
+      CleanGas    = SSTORE_RESET_GAS # from clean non-zero to something else
+      CleanRefund = SSTORE_RESET_GAS - SLOAD_GAS # resetting to the original non-zero value
       ClearRefund = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
 
     when defined(evmc_enabled):
@@ -724,6 +740,7 @@ gasCosts(FkTangerine, tangerine, TangerineGasCosts)
 gasCosts(FkSpurious, spurious, SpuriousGasCosts)
 gasCosts(FkConstantinople, constantinople, ConstantinopleGasCosts)
 gasCosts(FkIstanbul, istanbul, IstanbulGasCosts)
+gasCosts(FkBerlin, berlin, BerlinGasCosts)
 
 proc forkToSchedule*(fork: Fork): GasCosts =
   if fork < FkHomestead:
@@ -736,8 +753,10 @@ proc forkToSchedule*(fork: Fork): GasCosts =
     ConstantinopleGasCosts # with EIP-1283
   elif fork < FkIstanbul:
     SpuriousGasCosts
-  else:
+  elif fork < FkBerlin:
     IstanbulGasCosts
+  else:
+    BerlinGasCosts
 
 const
   ## Precompile costs

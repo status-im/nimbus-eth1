@@ -28,6 +28,12 @@ type
     paBlsMapG1
     paBlsMapG2
 
+iterator activePrecompiles*(): EthAddress =
+  var res: EthAddress
+  for c in PrecompileAddresses.low..PrecompileAddresses.high:
+    res[^1] = c.byte
+    yield res
+
 proc getSignature(computation: Computation): (array[32, byte], Signature) =
   # input is Hash, V, R, S
   template data: untyped = computation.msg.data
@@ -222,15 +228,20 @@ proc modExpFee(c: Computation, baseLen, expLen, modLen: Uint256, fork: Fork): Ga
       max(adjExpLen, 1.u256)
     ) div divisor
 
-  let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
-               else: gasCalc(mulComplexity, GasQuadDivisor)
+  # EIP2565: temporary disabled
+  #let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
+               #else: gasCalc(mulComplexity, GasQuadDivisor)
+
+  let gasFee = gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
     raise newException(OutOfGas, "modExp gas overflow")
 
   result = gasFee.truncate(GasInt)
-  if fork >= FkBerlin and result < 200.GasInt:
-    result = 200.GasInt
+
+  # EIP2565: temporary disabled
+  #if fork >= FkBerlin and result < 200.GasInt:
+  #  result = 200.GasInt
 
 proc modExp*(c: Computation, fork: Fork = FkByzantium) =
   ## Modular exponentiation precompiled contract
