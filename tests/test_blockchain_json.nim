@@ -364,7 +364,8 @@ proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: PlainB
     vmState.receipts[txIndex] = makeReceipt(vmState, fork)
 
   if vmState.cumulativeGasUsed != minedBlock.header.gasUsed:
-    raise newException(ValidationError, &"wrong gas used in header expected={minedBlock.header.gasUsed}, actual={vmState.cumulativeGasUsed}")
+    let diff = vmState.cumulativeGasUsed - minedBlock.header.gasUsed
+    raise newException(ValidationError, &"wrong gas used in header expected={minedBlock.header.gasUsed}, actual={vmState.cumulativeGasUsed}, diff={diff}")
 
   assignBlockRewards(minedBlock, vmState, fork, vmState.chainDB)
 

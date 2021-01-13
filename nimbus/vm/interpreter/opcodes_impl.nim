@@ -30,6 +30,7 @@ proc gasEip2929AccountCheck(c: Computation, address: EthAddress, prevCost = 0.Ga
                     ColdAccountAccessCost
                   else:
                     WarmStorageReadCost
+
     c.gasMeter.consumeGas(gasCost - prevCost, reason = "gasEIP2929AccountCheck")
 
 template push(x: typed) {.dirty.} =
@@ -771,6 +772,17 @@ template genCall(callName: untyped, opCode: Op): untyped =
                                  else:
                                     (memOutPos, memOutLen)
 
+    # EIP2929
+    # This came before old gas calculator
+    # because it will affect `c.gasMeter.gasRemaining`
+    # and further `childGasLimit`
+    if c.fork >= FkBerlin:
+      c.vmState.mutateStateDB:
+        if not db.inAccessList(destination):
+          db.accessList(destination)
+          # The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant cost
+          c.gasMeter.consumeGas(ColdAccountAccessCost - WarmStorageReadCost, reason = "gasEIP2929Call")
+
     let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
     var (gasCost, childGasLimit) = c.gasCosts[opCode].c_handler(
       value,
@@ -789,10 +801,6 @@ template genCall(callName: untyped, opCode: Op): untyped =
     #when opCode == StaticCall:
     #  if c.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
     #    gasCost = gasCost - 660.GasInt
-
-    # EIP2929
-    if c.fork >= FkBerlin:
-      c.gasEip2929AccountCheck(destination, gasFees[c.fork][GasCall])
 
     if gasCost >= 0:
       c.gasMeter.consumeGas(gasCost, reason = $opCode)

@@ -715,11 +715,17 @@ func istanbulGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result[GasBalance]      = 700
   result[GasTXDataNonZero]= 16
 
+func berlinGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
+  # https://eips.ethereum.org/EIPS/eip-2929
+  result = previousFees
+  result[GasCall]         = WarmStorageReadCost
+
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees
   TangerineGasFees = HomesteadGasFees.tangerineGasFees
   SpuriousGasFees = TangerineGasFees.spuriousGasFees
   IstanbulGasFees = SpuriousGasFees.istanbulGasFees
+  BerlinGasFees = IstanbulGasFees.berlinGasFees
 
   gasFees*: array[Fork, GasFeeSchedule] = [
     FkFrontier: BaseGasFees,
@@ -730,7 +736,7 @@ const
     FkConstantinople: SpuriousGasFees,
     FkPetersburg: SpuriousGasFees,
     FkIstanbul: IstanbulGasFees,
-    FkBerlin: IstanbulGasFees
+    FkBerlin: BerlinGasFees
   ]
 
 

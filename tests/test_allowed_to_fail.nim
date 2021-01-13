@@ -96,6 +96,10 @@ func skipGSTTests*(folder: string, name: string): bool =
     return true
 
 func skipNewGSTTests*(folder: string, name: string): bool =
+  if folder == "stEIP2537":
+    # a bug in ethereum test that later fixed, skip for now
+    return true
+
   # share the same slow and failing tests
   if skipGSTTests(folder, name):
     return true
@@ -119,7 +123,7 @@ func skipBCTests*(folder: string, name: string): bool =
   ]
 
 func skipNewBCTests*(folder: string, name: string): bool =
-  if folder == "vmPerformance" or folder == "stStaticCall":
+  if folder in ["vmPerformance", "stStaticCall"]:
     return true
 
   # the new BC tests also contains these slow tests

@@ -176,7 +176,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       actualNonce = stateDB.getNonce(account)
 
     if wantedCode != actualCode:
-      raise newException(ValidationError, &"{ac} codeDiff {wantedCode} != {actualCode}")
+      raise newException(ValidationError, &"{ac} codeDiff {wantedCode.toHex} != {actualCode.toHex}")
     if wantedBalance != actualBalance:
       raise newException(ValidationError, &"{ac} balanceDiff {wantedBalance.toHex} != {actualBalance.toHex}")
     if wantedNonce != actualNonce:

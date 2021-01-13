@@ -53,8 +53,6 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + wrongDifficulty.json                                            OK
 + wrongGasLimit.json                                              OK
 + wrongGasUsed.json                                               OK
-+ wrongMixHash.json                                               OK
-+ wrongNonce.json                                                 OK
 + wrongNumber.json                                                OK
 + wrongParentHash.json                                            OK
 + wrongParentHash2.json                                           OK
@@ -64,7 +62,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + wrongTransactionsTrie.json                                      OK
 + wrongUncleHash.json                                             OK
 ```
-OK: 23/23 Fail: 0/23 Skip: 0/23
+OK: 21/21 Fail: 0/21 Skip: 0/21
 ## bcMultiChainTest
 ```diff
 + CallContractFromNotBestBlock.json                               OK
@@ -11169,4 +11167,4 @@ OK: 804/804 Fail: 0/804 Skip: 0/804
 OK: 519/519 Fail: 0/519 Skip: 0/519
 
 ---TOTAL---
-OK: 10904/10907 Fail: 0/10907 Skip: 3/10907
+OK: 10902/10905 Fail: 0/10905 Skip: 3/10905
