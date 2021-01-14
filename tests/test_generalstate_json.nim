@@ -197,15 +197,17 @@ proc generalStateJsonMain*(debugMode = false) =
     legacyFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "GeneralStateTests"
     newFolder = "eth_tests" / "GeneralStateTests"
 
-  if paramCount() == 0 or not debugMode:
+  let config = getConfiguration()
+  if config.testSubject == "" or not debugMode:
     # run all test fixtures
-    suite "generalstate json tests":
-      jsonTest(legacyFolder , "GeneralStateTests", testFixture, skipGSTTests)
-    suite "new generalstate json tests":
-      jsonTest(newFolder, "newGeneralStateTests", testFixture, skipNewGSTTests)
+    if config.legacy:
+      suite "generalstate json tests":
+        jsonTest(legacyFolder , "GeneralStateTests", testFixture, skipGSTTests)
+    else:
+      suite "new generalstate json tests":
+        jsonTest(newFolder, "newGeneralStateTests", testFixture, skipNewGSTTests)
   else:
     # execute single test in debug mode
-    let config = getConfiguration()
     if config.testSubject.len == 0:
       echo "missing test subject"
       quit(QuitFailure)
