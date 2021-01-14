@@ -780,8 +780,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
       c.vmState.mutateStateDB:
         if not db.inAccessList(destination):
           db.accessList(destination)
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant cost
-          c.gasMeter.consumeGas(ColdAccountAccessCost - WarmStorageReadCost, reason = "gasEIP2929Call")
+          # The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant `gasCall`
+          c.gasMeter.consumeGas(ColdAccountAccessCost - WarmStorageReadCost, reason = "EIP2929 gasCall")
 
     let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
     var (gasCost, childGasLimit) = c.gasCosts[opCode].c_handler(
@@ -1039,9 +1039,9 @@ op sloadEIP2929, inline = true, slot:
   c.vmState.mutateStateDB:
     let gasCost = if not db.inAccessList(c.msg.contractAddress, slot):
                     db.accessList(c.msg.contractAddress, slot)
-                    ColdSloadCost - gasFees[c.fork][GasSLoad]
+                    ColdSloadCost
                   else:
-                    WarmStorageReadCost - gasFees[c.fork][GasSLoad]
+                    WarmStorageReadCost
     c.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
 
   push: c.getStorage(slot)

@@ -96,18 +96,9 @@ func skipGSTTests*(folder: string, name: string): bool =
     return true
 
 func skipNewGSTTests*(folder: string, name: string): bool =
-  if folder == "stEIP2537":
-    # a bug in ethereum test that later fixed, skip for now
-    return true
-
   # share the same slow and failing tests
   if skipGSTTests(folder, name):
     return true
-
-  name in @[
-    # a bug in ethereum test that later fixed, skip for now
-    "shouldSucceedWhenReturnStackGrowsUntil1023.json"
-  ]
 
 func skipVMTests*(folder: string, name: string): bool =
   result = (folder == "vmPerformance" and "loop" in name)
@@ -123,7 +114,7 @@ func skipBCTests*(folder: string, name: string): bool =
   ]
 
 func skipNewBCTests*(folder: string, name: string): bool =
-  if folder in ["vmPerformance", "stStaticCall"]:
+  if folder in ["vmPerformance"]:
     return true
 
   # the new BC tests also contains these slow tests
@@ -135,9 +126,6 @@ func skipNewBCTests*(folder: string, name: string): bool =
     # BC huge memory consumption
     "randomStatetest94.json",
     "DelegateCallSpam.json",
-
-    # a bug in ethereum test that later fixed, skip for now
-    "shouldSucceedWhenReturnStackGrowsUntil1023.json"
   ]
 
 func skipPrecompilesTests*(folder: string, name: string): bool =
