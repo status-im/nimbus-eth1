@@ -763,15 +763,17 @@ proc blockchainJsonMain*(debugMode = false) =
     legacyFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "BlockchainTests"
     newFolder = "eth_tests" / "BlockChainTests"
 
-  if paramCount() == 0 or not debugMode:
+  let config = test_config.getConfiguration()
+  if config.testSubject == "" or not debugMode:
     # run all test fixtures
-    suite "block chain json tests":
-      jsonTest(legacyFolder, "BlockchainTests", testFixture, skipBCTests)
-    suite "new block chain json tests":
-      jsonTest(newFolder, "newBlockchainTests", testFixture, skipNewBCTests)
+    if config.legacy:
+      suite "block chain json tests":
+        jsonTest(legacyFolder, "BlockchainTests", testFixture, skipBCTests)
+    else:
+      suite "new block chain json tests":
+        jsonTest(newFolder, "newBlockchainTests", testFixture, skipNewBCTests)
   else:
     # execute single test in debug mode
-    let config = test_config.getConfiguration()
     if config.testSubject.len == 0:
       echo "missing test subject"
       quit(QuitFailure)
