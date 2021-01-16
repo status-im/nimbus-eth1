@@ -69,8 +69,8 @@ jobs:
           chmod 755 external/bin/gcc external/bin/g++
           echo '${{ github.workspace }}/external/bin' >> $GITHUB_PATH
 
-      - name: Restore rocksdb from cache (Macos)
-        if: runner.os == 'Macos'
+      - name: Restore rocksdb from cache (Macos/Linux)
+        if: runner.os != 'Windows'
         id: rocksdb-cache
         uses: actions/cache@v1
         with:
@@ -238,8 +238,10 @@ jobs:
         run: |
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
             PLATFORM=x64
+            GOARCH=amd64
           else
             PLATFORM=x86
+            GOARCH=386
           fi
           export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
           NPROC="${{ matrix.target.NPROC }}"
@@ -247,11 +249,8 @@ jobs:
           env CC=gcc make $MAKEFLAGS update
           env CC=gcc make $MAKEFLAGS
           build/nimbus --help
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            # too lazy to debug libnimbus.so and libnimbus.a 32bit build
-            # probably only setting CC env like make
-            env CC=gcc make $MAKEFLAGS test test-reproducibility wrappers wrappers-static
-          fi
+          # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
+          env CC=gcc GOARCH=$GOARCH CXX=g++ CGO_ENABLED=1 make $MAKEFLAGS test test-reproducibility wrappers wrappers-static
 
       - name: Run nimbus-eth1 tests (Macos)
         if: runner.os == 'Macos'
