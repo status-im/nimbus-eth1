@@ -64,6 +64,10 @@ else
 NIM_PARAMS := $(NIM_PARAMS) -d:release
 endif
 
+ifneq ($(USE_MIRACL), 0)
+NIM_PARAMS := $(NIM_PARAMS) -d:BLS_FORCE_BACKEND=miracl
+endif
+
 deps: | deps-common nat-libs nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
