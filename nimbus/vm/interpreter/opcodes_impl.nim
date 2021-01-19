@@ -458,11 +458,12 @@ when not evmc_enabled:
 when evmc_enabled:
   template sstoreEvmc(c: Computation, slot, newValue: Uint256) =
     let
+      currentValue {.inject.} = c.getStorage(slot)
       status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
       gasParam = GasParams(kind: Op.Sstore, s_status: status)
       gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0]
 
-    c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue}")
+    c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
 
 op sstore, inline = false, slot, newValue:
   ## 0x55, Save word to storage.
