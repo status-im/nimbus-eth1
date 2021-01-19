@@ -44,7 +44,7 @@ proc read*(memory: var Memory, startPos: Natural, size: Natural): seq[byte] =
 
 when defined(evmc_enabled):
   proc readPtr*(memory: var Memory, startPos: Natural): ptr byte =
-    if memory.bytes.len == 0 or startPos > memory.bytes.len: return
+    if memory.bytes.len == 0 or startPos >= memory.bytes.len: return
     result = memory.bytes[startPos].addr
 
 proc write*(memory: var Memory, startPos: Natural, value: openarray[byte]) =

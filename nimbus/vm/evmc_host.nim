@@ -33,7 +33,7 @@ proc hostGetStorageImpl(ctx: Computation, address: EthAddress, key: var evmc_byt
   ctx.vmState.accountDB.getStorage(address, Uint256.fromEvmc(key)).toEvmc()
 
 proc sstoreNetGasMetering(ctx: Computation): bool {.inline.} =
-  ctx.fork in {FkConstantinople, FkIstanbul}
+  ctx.fork in {FkConstantinople, FkIstanbul, FkBerlin}
 
 proc hostSetStorageImpl(ctx: Computation, address: EthAddress,
                         key, value: var evmc_bytes32): evmc_storage_status {.cdecl.} =

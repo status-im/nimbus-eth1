@@ -41,3 +41,9 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
 proc persistBlockJsonMain*() =
   suite "persist block json tests":
     jsonTest("PersistBlockTests", testFixture)
+  #var testStatusIMPL: TestStatus
+  #let n = json.parseFile("tests" / "fixtures" / "PersistBlockTests" / "block420301.json")
+  #testFixture(n, testStatusIMPL)
+
+when isMainModule:
+  persistBlockJsonMain()

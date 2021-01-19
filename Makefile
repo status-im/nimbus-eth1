@@ -57,6 +57,12 @@ all: | $(TOOLS) nimbus
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
 
+# default: use blst
+USE_MIRACL := 0
+
+# default: use nim native evm
+ENABLE_EVMC := 0
+
 # "-d:release" implies "--stacktrace:off" and it cannot be added to config.nims
 ifeq ($(USE_LIBBACKTRACE), 0)
 NIM_PARAMS := $(NIM_PARAMS) -d:debug -d:disable_libbacktrace
@@ -66,6 +72,10 @@ endif
 
 ifneq ($(USE_MIRACL), 0)
 NIM_PARAMS := $(NIM_PARAMS) -d:BLS_FORCE_BACKEND=miracl
+endif
+
+ifneq ($(ENABLE_EVMC), 0)
+NIM_PARAMS := $(NIM_PARAMS) -d:evmc_enabled
 endif
 
 deps: | deps-common nat-libs nimbus.nims

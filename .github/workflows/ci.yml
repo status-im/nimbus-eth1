@@ -13,22 +13,54 @@ jobs:
             cpu: amd64
             TEST_LANG: c
             NPROC: 2
+            evmc: nimevm
           - os: linux
             cpu: i386
             TEST_LANG: c
             NPROC: 2
+            evmc: nimevm
           - os: macos
             cpu: amd64
             TEST_LANG: c
             NPROC: 2
+            evmc: nimevm
           - os: windows
             cpu: amd64
             TEST_LANG: c
             NPROC: 2
+            evmc: nimevm
           - os: windows
             cpu: i386
             TEST_LANG: c
             NPROC: 2
+            evmc: nimevm
+          #  core dump
+          #- os: linux
+          #  cpu: amd64
+          #  TEST_LANG: c
+          #  NPROC: 2
+          #  evmc: evmc
+          - os: linux
+            cpu: i386
+            TEST_LANG: c
+            NPROC: 2
+            evmc: evmc
+          - os: macos
+            cpu: amd64
+            TEST_LANG: c
+            NPROC: 2
+            evmc: evmc
+          # mysterious failure
+          #- os: windows
+          #  cpu: amd64
+          #  TEST_LANG: c
+          #  NPROC: 2
+          #  evmc: evmc
+          - os: windows
+            cpu: i386
+            TEST_LANG: c
+            NPROC: 2
+            evmc: evmc
         include:
           - target:
               os: linux
@@ -40,7 +72,7 @@ jobs:
               os: windows
             builder: windows-2019
 
-    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ matrix.target.TEST_LANG }} (${{ matrix.branch }})'
+    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ matrix.target.TEST_LANG }}-${{ matrix.target.evmc }} (${{ matrix.branch }})'
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
@@ -209,7 +241,13 @@ jobs:
 
       - name: Setup environment
         shell: bash
-        run: echo '${{ github.workspace }}/nim/bin' >> $GITHUB_PATH
+        run: |
+          echo '${{ github.workspace }}/nim/bin' >> $GITHUB_PATH
+          if [[ '${{ matrix.target.evmc }}' == 'evmc' ]]; then
+            echo "ENABLE_EVMC=1" >> $GITHUB_ENV
+          else
+            echo "ENABLE_EVMC=0" >> $GITHUB_ENV
+          fi
 
       - name: Run nimbus-eth1 tests (Windows)
         if: runner.os == 'Windows'
@@ -224,7 +262,7 @@ jobs:
             USE_MIRACL=1
           fi
           NPROC="${{ matrix.target.NPROC }}"
-          MAKEFLAGS="-j${NPROC} USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM"
+          MAKEFLAGS="-j${NPROC} USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM ENABLE_EVMC=$ENABLE_EVMC"
           mingw32-make $MAKEFLAGS update
           mingw32-make $MAKEFLAGS
           build/nimbus.exe --help
@@ -249,7 +287,7 @@ jobs:
           fi
           export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
           NPROC="${{ matrix.target.NPROC }}"
-          MAKEFLAGS="-j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM USE_MIRACL=$USE_MIRACL"
+          MAKEFLAGS="-j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM USE_MIRACL=$USE_MIRACL ENABLE_EVMC=$ENABLE_EVMC"
           env CC=gcc make $MAKEFLAGS update
           env CC=gcc make $MAKEFLAGS
           build/nimbus --help
@@ -262,7 +300,7 @@ jobs:
         working-directory: nimbus-eth1
         run: |
           NPROC="${{ matrix.target.NPROC }}"
-          MAKEFLAGS="-j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" USE_SYSTEM_NIM=1"
+          MAKEFLAGS="-j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" USE_SYSTEM_NIM=1 ENABLE_EVMC=$ENABLE_EVMC"
           make $MAKEFLAGS update
           make $MAKEFLAGS
           build/nimbus --help
