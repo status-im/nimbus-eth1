@@ -1,10 +1,10 @@
 import blscurve/bls_backend, stint
 
 when BLS_BACKEND == Miracl:
-  import blscurve/miracl/[common, milagro, hash_to_curve, bls_signature_scheme]
+  import blscurve/miracl/[common, milagro, hash_to_curve, miracl_min_pubkey_sig_core]
   import map_to_curve_g1
   export common
-  export bls_signature_scheme.subgroupCheck
+  export miracl_min_pubkey_sig_core.subgroupCheck
 
   type
     BLS_G1* = ECP_BLS12381

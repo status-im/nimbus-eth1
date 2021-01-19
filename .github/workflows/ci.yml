@@ -218,8 +218,10 @@ jobs:
         run: |
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
             PLATFORM=x64
+            USE_MIRACL=0
           else
             PLATFORM=x86
+            USE_MIRACL=1
           fi
           NPROC="${{ matrix.target.NPROC }}"
           MAKEFLAGS="-j${NPROC} USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM"
@@ -239,13 +241,15 @@ jobs:
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
             PLATFORM=x64
             GOARCH=amd64
+            USE_MIRACL=0
           else
             PLATFORM=x86
             GOARCH=386
+            USE_MIRACL=1
           fi
           export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
           NPROC="${{ matrix.target.NPROC }}"
-          MAKEFLAGS="-j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM"
+          MAKEFLAGS="-j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM USE_MIRACL=$USE_MIRACL"
           env CC=gcc make $MAKEFLAGS update
           env CC=gcc make $MAKEFLAGS
           build/nimbus --help
