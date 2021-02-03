@@ -382,7 +382,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
       checkForFork(forkDetails, daoForkBlock, 0.toBlockNumber)
 
     checkForFork(forkDetails, eip150Block, homesteadBlock)
-    validateConfigValue(forkDetails, eip150Hash, JString, Hash256)
+    validateConfigValue(forkDetails, eip150Hash, JString, Hash256, checkError = false)
     checkForFork(forkDetails, eip155Block, eip150Block)
     checkForFork(forkDetails, eip158Block, eip155Block)
     checkForFork(forkDetails, byzantiumBlock, eip158Block)
@@ -394,14 +394,14 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   else:
     error "No chain configuration found."
     quit(1)
-  validateConfigValue(customGenesis, nonce, JString, BlockNonce)
+  validateConfigValue(customGenesis, nonce, JString, BlockNonce, checkError = false)
   validateConfigValue(customGenesis, extraData, JSTring, seq[byte], checkError = false)
   validateConfigValue(customGenesis, gasLimit, JString, int64, checkError = false)
   validateConfigValue(customGenesis, difficulty, JString, UInt256)
   if customGenesis.hasKey("alloc"):
     alloc = customGenesis["alloc"]
 
-  validateConfigValue(customGenesis, mixHash, JString, Hash256)
+  validateConfigValue(customGenesis, mixHash, JString, Hash256, checkError = false)
   validateConfigValue(customGenesis, coinbase, JString, EthAddress, checkError = false)
   validateConfigValue(customGenesis, timestamp, JString, EthTime, checkError = false)
 
