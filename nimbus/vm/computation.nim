@@ -60,7 +60,7 @@ template getChainId*(c: Computation): uint =
   when evmc_enabled:
     Uint256.fromEvmc(c.host.getTxContext().chain_id).truncate(uint)
   else:
-    c.vmState.chaindb.config.chainId
+    c.vmState.chaindb.config.chainId.uint
 
 template getOrigin*(c: Computation): EthAddress =
   when evmc_enabled:

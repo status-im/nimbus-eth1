@@ -121,7 +121,7 @@ proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): Un
 
   result.payload = hexToSeqByte(tx.data.string)
 
-func rlpEncode(tx: UnsignedTx, chainId: uint): auto =
+func rlpEncode(tx: UnsignedTx, chainId: ChainId): auto =
   rlp.encode(Transaction(
     accountNonce: tx.nonce,
     gasPrice: tx.gasPrice,
@@ -144,7 +144,7 @@ proc signTransaction*(tx: UnsignedTx, chain: BaseChainDB, privateKey: PrivateKey
 
   let sig = sign(privateKey, rlpTx).toRaw
   let v = if eip155:
-            byte(sig[64].uint + chain.config.chainId * 2'u + 35'u)
+            byte(sig[64].uint + chain.config.chainId.uint * 2'u + 35'u)
           else:
             sig[64] + 27.byte
 

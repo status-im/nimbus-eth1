@@ -98,11 +98,11 @@ type
     staticNodes*: seq[ENode]      ## List of static nodes to connect to
     bindPort*: uint16             ## Main TCP bind port
     discPort*: uint16             ## Discovery UDP bind port
-    metricsServer*: bool           ## Enable metrics server
+    metricsServer*: bool          ## Enable metrics server
     metricsServerPort*: uint16    ## metrics HTTP server port
     maxPeers*: int                ## Maximum allowed number of peers
     maxPendingPeers*: int         ## Maximum allowed pending peers
-    networkId*: uint              ## Network ID as integer
+    networkId*: NetworkId         ## Network ID as integer
     ident*: string                ## Server ident name string
     nodeKey*: PrivateKey          ## Server private key
     nat*: NatStrategy             ## NAT strategy
@@ -126,8 +126,13 @@ type
     keystore*: JsonNode
     unlocked*: bool
 
+  # beware that although in some cases
+  # chainId have identical value to networkId
+  # they are separate entity
+  ChainId* = distinct uint
+
   ChainConfig* = object
-    chainId*: uint
+    chainId*: ChainId
     homesteadBlock*: BlockNumber
     daoForkBlock*: BlockNumber
     daoForkSupport*: bool
@@ -162,7 +167,7 @@ type
     accounts*: Table[EthAddress, NimbusAccount]
 
   CustomGenesisConfig = object
-    chainId*: uint
+    chainId*: ChainId
     homesteadBlock*: BlockNumber
     daoForkBlock*: BlockNumber
     daoForkSupport*: bool
@@ -227,10 +232,12 @@ proc privateChainConfig*(): ChainConfig =
   trace "Custom genesis block configuration loaded", configuration=result
 
 proc publicChainConfig*(id: PublicNetwork): ChainConfig =
+  # For some public networks, NetworkId and ChainId value are identical
+  # but that is not always the case
   result = case id
   of MainNet:
     ChainConfig(
-      chainId:        MainNet.uint,
+      chainId:        MainNet.ChainId,
       homesteadBlock: 1_150_000.toBlockNumber, # 14/03/2016 20:49:53
       daoForkBlock:   1_920_000.toBlockNumber,
       daoForkSupport: true,
@@ -247,7 +254,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
     )
   of RopstenNet:
     ChainConfig(
-      chainId:        RopstenNet.uint,
+      chainId:        RopstenNet.ChainId,
       homesteadBlock: 0.toBlockNumber,
       daoForkSupport: false,
       eip150Block:    0.toBlockNumber,
@@ -263,7 +270,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
     )
   of RinkebyNet:
     ChainConfig(
-      chainId:        RinkebyNet.uint,
+      chainId:        RinkebyNet.ChainId,
       homesteadBlock: 1.toBlockNumber,
       daoForkSupport: false,
       eip150Block:    2.toBlockNumber,
@@ -279,7 +286,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
     )
   of GoerliNet:
     ChainConfig(
-      chainId:        GoerliNet.uint,
+      chainId:        GoerliNet.ChainId,
       homesteadBlock: 0.toBlockNumber,
       daoForkSupport: false,
       eip150Block:    0.toBlockNumber,
@@ -300,7 +307,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
     doAssert(false, "No chain config for " & $id)
     ChainConfig()
 
-  result.chainId = uint(id)
+  result.chainId = ChainId(id)
 
 proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   ## Parses Custom Genesis Block config options when customnetwork option provided
@@ -357,7 +364,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   let config = getConfiguration()
   result = Success
   var
-    chainId = 0.uint
+    chainId = 0.ChainId
     homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = 0.toBlockNumber
     petersburgBlock, istanbulBlock, muirGlacierBlock, berlinBlock = 0.toBlockNumber
     eip150Hash, mixHash : MDigest[256]
@@ -374,8 +381,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   if customGenesis.hasKey("config"):
   # Validate all fork blocks for custom genesis
     let forkDetails = customGenesis["config"]
-    validateConfigValue(forkDetails, chainId, JInt, uint)
-    config.net.networkId = chainId
+    validateConfigValue(forkDetails, chainId, JInt, ChainId)
     checkForFork(forkDetails, homesteadBlock, 0.toBlockNumber)
     validateConfigValue(forkDetails, daoForkSupport, JBool, bool, checkError=false)
     if daoForkSupport == true:
@@ -613,15 +619,15 @@ proc setBootnodes(onodes: var seq[ENode], nodeUris: openarray[string]) =
 macro availableEnumValues(T: type enum): untyped =
   let impl = getTypeImpl(T)[1].getTypeImpl()
   result = newNimNode(nnkBracket)
-  for i in 1 ..< impl.len: result.add(newCall("uint", copyNimTree(impl[i])))
+  for i in 1 ..< impl.len: result.add(newCall("NetworkId", copyNimTree(impl[i])))
 
-proc toPublicNetwork*(id: uint): PublicNetwork {.inline.} =
+proc toPublicNetwork*(id: NetworkId): PublicNetwork {.inline.} =
   if id in availableEnumValues(PublicNetwork):
     result = PublicNetwork(id)
 
 proc setNetwork(conf: var NetConfiguration, id: PublicNetwork) =
   ## Set network id and default network bootnodes
-  conf.networkId = uint(id)
+  conf.networkId = NetworkId(id)
   case id
   of MainNet:
     conf.bootNodes.setBootnodes(MainnetBootnodes)
@@ -638,7 +644,7 @@ proc setNetwork(conf: var NetConfiguration, id: PublicNetwork) =
   of CustomNet:
     discard
 
-proc setNetwork(conf: var NetConfiguration, id: uint) =
+proc setNetwork(conf: var NetConfiguration, id: NetworkId) =
   ## Set network id and default network bootnodes
   let pubNet = toPublicNetwork(id)
   if pubNet == CustomNet:
@@ -692,7 +698,7 @@ proc processNetArguments(key, value: string): ConfigStatus =
     var res = 0
     result = processInteger(value, res)
     if result == Success:
-      config.net.setNetwork(uint(result))
+      config.net.setNetwork(NetworkId(result))
   elif skey == "nodiscover":
     config.net.flags.incl(NoDiscover)
   elif skey == "v5discover":
@@ -858,7 +864,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
 
   ## Network defaults
-  result.net.setNetwork(defaultNetwork)
+  result.net.setNetwork(defaultNetwork.NetworkId)
   result.net.maxPeers = 25
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16
