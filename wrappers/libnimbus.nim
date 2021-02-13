@@ -109,7 +109,7 @@ proc nimbus_start(port: uint16, startListening: bool, enableDiscovery: bool,
 
     keypair = privKey[].toKeyPair()
 
-  node = newEthereumNode(keypair, address, 1, nil, addAllCapabilities = false)
+  node = newEthereumNode(keypair, address, 1.NetworkId, nil, addAllCapabilities = false)
   node.addCapability Whisper
 
   node.protocolState(Whisper).config.powRequirement = minPow

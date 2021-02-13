@@ -10,6 +10,7 @@ import
   nimcrypto, stew/byteutils, times,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
   eth/[rlp, keys], eth/trie/db, eth/p2p/rlpx_protocols/eth_protocol,
+  eth/p2p/private/p2p_types,
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
   ../nimbus/[constants, vm_state, config, genesis, utils, transaction],
   ../nimbus/db/[accounts_cache, db_chain, storage_types, state_db],
