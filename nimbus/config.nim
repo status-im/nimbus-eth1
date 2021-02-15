@@ -379,7 +379,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
 
 
   if customGenesis.hasKey("config"):
-  # Validate all fork blocks for custom genesis
+    # Validate all fork blocks for custom genesis
     let forkDetails = customGenesis["config"]
     validateConfigValue(forkDetails, chainId, JInt, ChainId)
     checkForFork(forkDetails, homesteadBlock, 0.toBlockNumber)
@@ -397,9 +397,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     checkForFork(forkDetails, istanbulBlock, petersburgBlock)
     checkForFork(forkDetails, muirGlacierBlock, istanbulBlock)
     checkForFork(forkDetails, istanbulBlock, berlinBlock)
-  else:
-    error "No chain configuration found."
-    quit(1)
+
   validateConfigValue(customGenesis, nonce, JString, BlockNonce, checkError = false)
   validateConfigValue(customGenesis, extraData, JSTring, seq[byte], checkError = false)
   validateConfigValue(customGenesis, gasLimit, JString, int64, checkError = false)
