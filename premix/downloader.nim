@@ -22,11 +22,7 @@ proc request*(methodName: string, params: JsonNode): JsonNode =
   var client = newRpcHttpClient()
   client.httpMethod(MethodPost)
   waitFor client.connect("localhost", Port(8545))
-  var r = waitFor client.call(methodName, params)
-  if r.error:
-    result = newJNull()
-  else:
-    result = r.result
+  result = waitFor client.call(methodName, params)  
   waitFor client.close()
 
 proc requestBlockBody(n: JsonNode, blockNumber: BlockNumber): BlockBody =
