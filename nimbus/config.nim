@@ -165,6 +165,7 @@ type
     # Ref is used so that it can be shared between components
     rng*: ref BrHmacDrbgContext
     accounts*: Table[EthAddress, NimbusAccount]
+    importFile*: string
 
   CustomGenesisConfig = object
     chainId*: ChainId
@@ -200,6 +201,9 @@ var nimbusConfig {.threadvar.}: NimbusConfiguration
 
 proc getConfiguration*(): NimbusConfiguration {.gcsafe.}
 
+proc `$`*(c: ChainId): string =
+  $(c.int)
+
 proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
   if number >= c.berlinBlock: FkBerlin
   elif number >= c.istanbulBlock: FkIstanbul
@@ -234,6 +238,7 @@ proc privateChainConfig*(): ChainConfig =
 proc publicChainConfig*(id: PublicNetwork): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
   # but that is not always the case
+
   result = case id
   of MainNet:
     ChainConfig(
@@ -307,8 +312,6 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
     doAssert(false, "No chain config for " & $id)
     ChainConfig()
 
-  result.chainId = ChainId(id)
-
 proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   ## Parses Custom Genesis Block config options when customnetwork option provided
 
@@ -329,7 +332,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     when T is string:
       c[field].getStr()
     elif T is Uint256:
-      parseHexInt(c[field].getStr()).u256
+      hexToUint[256](c[field].getStr())
     elif T is bool:
       c[field].getBool()
     elif T is Hash256:
@@ -346,7 +349,8 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
       hexToSeqByte(c[field].getStr())
     elif T is int64:
       fromHex[int64](c[field].getStr())
-
+    elif T is ChainId:
+      c[field].getInt().T
 
   template validateConfigValue(chainDetails, field, jtype, T: untyped, checkError: static[bool] = true) =
     let fieldName = field.astToStr()
@@ -432,6 +436,24 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     coinbase:         coinbase,
     timestamp:        timestamp
   )
+
+proc customGenesis(key, value: string): ConfigStatus =
+  if value == "":
+    error "No genesis block config provided for custom network", network=key
+    result = ErrorParseOption
+  else:
+    try:
+      result = processCustomGenesisConfig(parseFile(value))
+    except IOError:
+      error "Genesis block config file not found", invalidFileName=value
+      result = ErrorParseOption
+    except JsonParsingError:
+      error "Invalid genesis block config file format", invalidFileName=value
+      result = ErrorIncorrectOption
+    except:
+      var msg = getCurrentExceptionMsg()
+      error "Error loading genesis block config file", invalidFileName=msg
+      result = Error
 
 proc processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.
@@ -537,30 +559,6 @@ proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
 
   result = ErrorParseOption
 
-# proc processHexBytes(v: string, o: var seq[byte]): ConfigStatus =
-#   ## Convert hexadecimal string to seq[byte].
-#   try:
-#     o = fromHex(v)
-#     result = Success
-#   except CatchableError:
-#     result = ErrorParseOption
-
-# proc processHexString(v: string, o: var string): ConfigStatus =
-#   ## Convert hexadecimal string to string.
-#   try:
-#     o = parseHexStr(v)
-#     result = Success
-#   except CatchableError:
-#     result = ErrorParseOption
-
-# proc processJson(v: string, o: var JsonNode): ConfigStatus =
-#   ## Convert string to JSON.
-#   try:
-#     o = parseJson(v)
-#     result = Success
-#   except CatchableError:
-#     result = ErrorParseOption
-
 proc processPruneList(v: string, flags: var PruneMode): ConfigStatus =
   var list = newSeq[string]()
   processList(v, list)
@@ -583,6 +581,8 @@ proc processEthArguments(key, value: string): ConfigStatus =
     config.dataDir = value
   of "prune":
     result = processPruneList(value, config.prune)
+  of "import":
+    config.importFile = value
   else:
     result = EmptyOption
 
@@ -676,22 +676,8 @@ proc processNetArguments(key, value: string): ConfigStatus =
   elif skey == "kovan":
     config.net.setNetwork(KovanNet)
   elif skey == "customnetwork":
-    if value == "":
-      error "No genesis block config provided for custom network", network=key
-      result = ErrorParseOption
-    else:
-      try:
-        result = processCustomGenesisConfig(parseFile(value))
-      except IOError:
-        error "Genesis block config file not found", invalidFileName=value
-        result = ErrorParseOption
-      except JsonParsingError:
-        error "Invalid genesis block config file format", invalidFileName=value
-        result = ErrorIncorrectOption
-      except:
-        var msg = getCurrentExceptionMsg()
-        error "Error loading genesis block config file", invalidFileName=msg
-        result = Error
+    result = customGenesis(key, value)
+    config.net.networkId = NetworkId(CustomNet)
   elif skey == "networkid":
     var res = 0
     result = processInteger(value, res)
@@ -924,6 +910,7 @@ ETHEREUM OPTIONS:
   --keystore:<value>      Directory for the keystore (default = inside the datadir)
   --datadir:<value>       Base directory for all blockchain-related data
   --prune:<value>         Blockchain prune mode(full or archive)
+  --import:<path>         import rlp encoded block(s), validate, write to db and quit
 
 NETWORKING OPTIONS:
   --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
@@ -944,7 +931,7 @@ NETWORKING OPTIONS:
   --rinkeby               Use Ethereum Rinkeby Test Network
   --ident:<value>         Client identifier (default is '$1')
   --protocols:<value>     Enable specific set of protocols (default: $4)
-  --customnetwork         Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)
+  --customnetwork:<path>  Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)
 
 WHISPER OPTIONS:
   --shh-maxsize:<value>   Max message size accepted (default: $5)

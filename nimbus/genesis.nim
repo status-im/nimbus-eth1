@@ -1,5 +1,5 @@
 import
-  tables, json, times,
+  tables, json, times, strutils,
   eth/[common, rlp, trie], stint, stew/[byteutils],
   chronicles, eth/trie/db,
   db/[db_chain, state_db], genesis_alloc, config, constants
@@ -34,9 +34,16 @@ func decodePrealloc(data: seq[byte]): GenesisAlloc =
 
 proc customNetPrealloc(genesisBlock: JsonNode): GenesisAlloc =
   result = newTable[EthAddress, GenesisAccount]()
-  for address, balance in genesisBlock.pairs():
-    let balance = fromHex(UInt256,balance["balance"].getStr())
-    result[parseAddress(address)] = GenesisAccount(balance: balance)
+  for address, account in genesisBlock.pairs():
+    var acc = GenesisAccount(
+      balance: fromHex(UInt256, account["balance"].getStr),
+      code: hexToSeqByte(account["code"].getStr),
+      nonce: parseHexInt(account["nonce"].getStr).AccountNonce
+    )
+    let storage = account["storage"]
+    for k, v in storage:
+      acc.storage[fromHex(UInt256, k)] = fromHex(UInt256, v.getStr)
+    result[parseAddress(address)] = acc
 
 proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   result = case id
