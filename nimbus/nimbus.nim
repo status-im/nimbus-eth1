@@ -15,7 +15,7 @@ import
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper, key_storage], p2p/chain,
-  eth/trie/db, metrics, metrics/chronicles_support, utils
+  eth/trie/db, metrics, metrics/chronicles_support, utils, ./conf_utils
 
 ## TODO:
 ## * No IPv6 support
@@ -36,16 +36,32 @@ type
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
-  let res = conf.loadKeystoreFiles()
-  if res.isErr:
-    echo res.error()
-    quit(QuitFailure)
 
   ## logging
   setLogLevel(conf.debug.logLevel)
   if len(conf.debug.logFile) != 0:
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(conf.debug.logFile, fmAppend)
+
+  createDir(conf.dataDir)
+  let trieDB = trieDB newChainDb(conf.dataDir)
+  var chainDB = newBaseChainDB(trieDB,
+    conf.prune == PruneMode.Full,
+    conf.net.networkId.toPublicNetwork())
+  chainDB.populateProgress()
+
+  if canonicalHeadHashKey().toOpenArray notin trieDB:
+    initializeEmptyDb(chainDb)
+    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
+    
+  if conf.importFile.len > 0:
+    importRlpBlock(conf.importFile, chainDB)
+    quit(QuitSuccess)
+
+  let res = conf.loadKeystoreFiles()
+  if res.isErr:
+    echo res.error()
+    quit(QuitFailure)
 
   # metrics logging
   if conf.debug.logMetrics:
@@ -80,18 +96,6 @@ proc start(nimbus: NimbusNode) =
                                     description = NIMBUS_NAME & " " & NIMBUS_VERSION)
       if extPorts.isSome:
         (address.tcpPort, address.udpPort) = extPorts.get()
-
-  createDir(conf.dataDir)
-  let trieDB = trieDB newChainDb(conf.dataDir)
-  var chainDB = newBaseChainDB(trieDB,
-    conf.prune == PruneMode.Full,
-    conf.net.networkId.toPublicNetwork())
-
-  chainDB.populateProgress()
-
-  if canonicalHeadHashKey().toOpenArray notin trieDB:
-    initializeEmptyDb(chainDb)
-    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
                                    nil, nimbusClientId,
