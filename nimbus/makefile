@@ -3,6 +3,14 @@
 SAVED_PATH := $(PATH)
 PWD        := $(shell pwd)
 
+ifeq ($(MSYSTEM),MINGW32)
+# Under MinGW, the NIM doc compiler wants absolute pathname arguments
+# looking like C:\\MinGW\\msys\\1.0\\home ...
+DOC_ROOT   := `pwd -W|sed 's|/|\\\\\\\\|g'`
+else
+DOC_ROOT   := $(PWD)
+endif
+
 # Collect document names
 SFX_FILTER := sed -e 's|^\./||;/\/\./d;/^docs\//d;s/\.[a-z]*$$//'
 PNG_FILES  := $(shell find . -name '*.png' -print|$(SFX_FILTER))
@@ -13,15 +21,15 @@ EXE_FILES  := $(shell find . -name '*.nim' -print|$(SFX_FILTER))
 NIMBLE_DIR := $(dir $(PWD))/vendor/.nimble
 NIM_PATH   := $(dir $(PWD))/vendor/nimbus-build-system/vendor/Nim/bin
 
-# Support for verbosity: V=1
-ifeq ($(V),1)
+# Support for verbosity: V=1, V=2 etc.
+ifneq ($(if $V,$V,0),0)
 MUFFLE     :=
 else
 MUFFLE     := 2>/dev/null
 endif
 
 # Support for external NIM compiler unless X=0
-ifneq ($(X),0)
+ifneq ($(if $X,$X,1),0)
 # works with external nim 1.5.1 (not the local 1.2.10 one)
 PATH       := $(SAVED_PATH):$(NIM_PATH):$(NIMBLE_DIR)/bin
 else
@@ -76,8 +84,8 @@ help::
 docs/%.html : %.nim
 #	use compat option if it works with the nim compiler
 	@mkdir -p docs
-	@nim=$(NIM_EXE); \
-	(set -x; $$nim doc --outdir:docs --docRoot:$(PWD) --index:on \
+	@nim=$(NIM_EXE); doc_root="$(DOC_ROOT)"; \
+	(set -x; $$nim doc --outdir:docs --docRoot:"$$doc_root" --index:on \
 		--errorMax:0 --verbosity:0 --hints:off --warnings:off \
 		"$<" $(MUFFLE)) || true
 
@@ -169,13 +177,16 @@ clean-docs:
 	for f in $(foreach f,$(EXE_FILES),docs/$f) \
 	         $(foreach f,$(PNG_FILES),docs/ex/$f) \
 	         $(foreach f,$(MD_FILES),docs/ex/$f) \
-		 docs/nimdoc.out docs/vm/nimdoc.out docs/theindex; \
+		 docs/theindex; \
 	do \
 	  [ ! -f "$$f.html" ] || (set -x; rm -f "$$f.html"); \
 	  [ ! -f "$$f.idx"  ] || (set -x; rm -f "$$f.idx"); \
-	  [ ! -f "$$f.css"  ] || (set -x; rm -f "$$f.css"); \
 	  [ ! -f "$$f.png"  ] || (set -x; rm -f "$$f.png"); \
 	done
+	find docs -name 'nimdoc?out.css' -print 2>/dev/null | \
+	  while read f_css ; do \
+	    [ ! -f "$$f_css"  ] || (set -x; rm -f "$$f_css"); \
+	  done
 	for d in $(shell find docs -depth -type d -print $(MUFFLE)); do \
 	  (set -x; rmdir "$$d" $(MUFFLE)) || true; \
 	done
