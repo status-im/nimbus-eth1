@@ -200,7 +200,9 @@ clean-bakfiles:
 
 .SILENT: clean-nimcache
 clean-nimcache:
-	[ ! -d ./nimcache ] || (set -x; rm -rf ./nimcache)
+#       |while.. is like "|xargs -rn1 rm -rf" but with nicer log message
+	find . -name 'nimcache' -type d -print 2>/dev/null | \
+	  while read d; do (set -x; rm -rf "$$d"); done
 
 clean:: clean-exe
 clean:: clean-bakfiles
