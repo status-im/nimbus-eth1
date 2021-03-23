@@ -24,11 +24,5 @@
 nimcache
 /nimbus/docs
 
-# Ignore test reports
-VMTests.md
-/newBlock[Cc]hainTests.md
-/witnessBuilderBC.md
-/witnessBuilderGST.md
-
 /debug*.json
 /block*.json
