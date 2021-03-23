@@ -1,4 +1,4 @@
-/nimcache
+*~
 
 # Executables shall be put in an ignored build/ directory
 /build
@@ -20,6 +20,15 @@
 *.exe
 *.dll
 
+# Ignore generated C and doc files
+nimcache
+/nimbus/docs
+
+# Ignore test reports
 VMTests.md
+/newBlock[Cc]hainTests.md
+/witnessBuilderBC.md
+/witnessBuilderGST.md
+
 /debug*.json
 /block*.json
