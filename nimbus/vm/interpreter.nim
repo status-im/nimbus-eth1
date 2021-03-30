@@ -6,11 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./interpreter/[opcode_values, gas_meter],
-  ./interpreter/vm_forks
+  vm/interpreter/[opcode_values, gas_meter, vm_forks]
 
 import # Used in vm_types. Beware of recursive dependencies
-  ./code_stream, ./computation, ./stack, ./message
+  vm/[code_stream, computation, stack, message]
 
 export
   opcode_values, gas_meter,

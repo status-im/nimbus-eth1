@@ -7,7 +7,7 @@
 
 import
   chronicles, strformat, strutils, sequtils, macros, eth/common, nimcrypto,
-  ../errors, ../validation
+  errors, validation
 
 logScope:
   topics = "vm stack"
