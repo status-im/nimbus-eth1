@@ -12,7 +12,7 @@ import
   vm/interpreter/[opcode_values, gas_meter, nvm_gas_costs, nvm_forks],
   vm/[code_stream, memory, nvm_message, stack, nvm_types, nvm_state],
   db/[accounts_cache, db_chain],
-  utils/header, precompiles,
+  utils/header, nvm_precompiles,
   transaction_tracer, utils
 
 when defined(chronicles_log_level):
