@@ -50,7 +50,7 @@ nimbus=/usr/bin/nimbus
 FLAGS="--prune:archive"
 
 if [ "$HIVE_LOGLEVEL" != "" ]; then
-  FLAGS="$FLAGS --log-level:$HIVE_LOGLEVEL"
+  FLAGS="$FLAGS --log-level:DEBUG"
 fi
 
 # Configure the chain.
@@ -59,16 +59,16 @@ jq -f /mapper.jq /genesis-input.json > /genesis.json
 
 # Dump genesis
 echo "Supplied genesis state:"
-cat /genesis.json
-F-LAGS="$FLAGS --customgenesis:genesis.json"
+FLAGS="$FLAGS --customnetwork:/genesis.json"
 
+cat genesis.json
 # Don't immediately abort, some imports are meant to fail
 set +e
 
 # Load the remainder of the test chain
 echo "Loading remaining individual blocks..."
 if [ -d /blocks ]; then
-	(cd /blocks && $nimbus $FLAGS --log-level:$HIVE_LOGLEVEL  --import:`ls | sort -n`)
+	(cd /blocks && cat `ls | sort -n` > blocks.rlp && $nimbus $FLAGS --import:blocks.rlp)
 else
 	echo "Warning: blocks folder not found."
 fi
