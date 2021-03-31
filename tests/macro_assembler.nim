@@ -6,10 +6,10 @@ import
 
 import
   options, json, os, eth/trie/[db, hexary],
-  ../nimbus/[vm_state, vm_types, transaction, utils],
+  ../nimbus/[transaction, utils],
   ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/[vm_computation, vm_state_transactions, vm_forks, vm_message],
-  ../nimbus/vm/memory
+  ../nimbus/[vm_computation, vm_state_transactions, vm_forks,
+             vm_message, vm_memory, vm_state, vm_types]
 
 export opcode_values, byteutils
 {.experimental: "dynamicBindSym".}

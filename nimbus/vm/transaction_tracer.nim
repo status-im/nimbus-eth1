@@ -1,7 +1,7 @@
 import
   json, strutils, sets, hashes,
   chronicles, nimcrypto, eth/common, stint,
-  vm/nvm_types, memory, vm/stack, db/accounts_cache,
+  vm/[nvm_types, nvm_memory, stack], db/accounts_cache,
   eth/trie/hexary,
   vm/interpreter/opcode_values
 
