@@ -35,14 +35,22 @@ func decodePrealloc(data: seq[byte]): GenesisAlloc =
 proc customNetPrealloc(genesisBlock: JsonNode): GenesisAlloc =
   result = newTable[EthAddress, GenesisAccount]()
   for address, account in genesisBlock.pairs():
+    let nonce = if "nonce" in account:
+                  parseHexInt(account["nonce"].getStr).AccountNonce
+                else:
+                  AccountNonce(0)
+
     var acc = GenesisAccount(
       balance: fromHex(UInt256, account["balance"].getStr),
       code: hexToSeqByte(account["code"].getStr),
-      nonce: parseHexInt(account["nonce"].getStr).AccountNonce
+      nonce: nonce
     )
-    let storage = account["storage"]
-    for k, v in storage:
-      acc.storage[fromHex(UInt256, k)] = fromHex(UInt256, v.getStr)
+
+    if "storage" in account:
+      let storage = account["storage"]
+      for k, v in storage:
+        acc.storage[fromHex(UInt256, k)] = fromHex(UInt256, v.getStr)
+
     result[parseAddress(address)] = acc
 
 proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
