@@ -1,5 +1,5 @@
 import ../db/db_chain, eth/common, chronicles, ../vm_state, ../vm_types,
-  ../vm_computation, ../vm/message, ./vm_forks, stint, nimcrypto,
+  ../vm_computation, ../vm_message, ./vm_forks, stint, nimcrypto,
   ../utils, eth/trie/db, ./executor, ../config, ../genesis, ../utils,
   stew/endians2
 
