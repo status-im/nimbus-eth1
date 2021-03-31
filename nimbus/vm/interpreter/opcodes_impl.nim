@@ -9,7 +9,7 @@ import
   strformat, times, sets, sequtils, options,
   chronicles, stint, nimcrypto, stew/ranges/ptr_arith, eth/common,
   vm/interpreter/utils/[macros_procs_opcodes, utils_numeric],
-  vm/interpreter/[gas_meter, nvm_gas_costs, opcode_values, nvm_forks],
+  vm/interpreter/[gas_meter, nvm_gas_costs, nvm_opcode_values, nvm_forks],
   vm/[nvm_memory, stack, code_stream, nvm_computation, nvm_state, nvm_types],
   errors, constants,
   db/[db_chain, accounts_cache]

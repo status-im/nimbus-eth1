@@ -1,7 +1,7 @@
 import
   macrocache, strutils, unittest2,
   stew/byteutils, chronicles, eth/common,
-  ../nimbus/vm/interpreter/opcode_values,
+  ../nimbus/vm_opcode_values,
   stew/shims/macros, ../nimbus/config
 
 import
@@ -11,7 +11,7 @@ import
   ../nimbus/[vm_computation, vm_state_transactions, vm_forks,
              vm_message, vm_memory, vm_state, vm_types]
 
-export opcode_values, byteutils
+export vm_opcode_values, byteutils
 {.experimental: "dynamicBindSym".}
 
 # backported from Nim 0.19.9
