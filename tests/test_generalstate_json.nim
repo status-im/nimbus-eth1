@@ -13,7 +13,7 @@ import
   ../nimbus/p2p/executor, test_config,
   ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types, utils],
-  ../nimbus/vm/interpreter,
+  ../nimbus/vm_interpreter,
   ../nimbus/db/[db_chain, accounts_cache]
 
 type

@@ -8,7 +8,7 @@
 import
   unittest2,
   eth/common/eth_types,
-  ../nimbus/[constants, errors, vm/interpreter]
+  ../nimbus/[constants, errors, vm_interpreter]
 
 
 template testPush(value: untyped, expected: untyped): untyped =
