@@ -8,9 +8,10 @@
 import
   chronicles, strformat, macros, options, times,
   sets, eth/[common, keys],
-  constants, errors, vm_state, vm/nvm_types,
+  constants, errors,
   vm/interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
-  vm/code_stream, vm/memory, vm/message, vm/stack, db/[accounts_cache, db_chain],
+  vm/[code_stream, memory, message, stack, nvm_types, nvm_state],
+  db/[accounts_cache, db_chain],
   utils/header, precompiles,
   transaction_tracer, utils
 

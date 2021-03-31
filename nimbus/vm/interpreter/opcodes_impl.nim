@@ -10,8 +10,8 @@ import
   chronicles, stint, nimcrypto, stew/ranges/ptr_arith, eth/common,
   vm/interpreter/utils/[macros_procs_opcodes, utils_numeric],
   vm/interpreter/[gas_meter, gas_costs, opcode_values, vm_forks],
-  vm/[memory, stack, code_stream, computation],
-  vm_state, errors, constants, vm/nvm_types,
+  vm/[memory, stack, code_stream, computation, nvm_state, nvm_types],
+  errors, constants,
   db/[db_chain, accounts_cache]
 
 when defined(evmc_enabled):
