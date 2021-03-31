@@ -9,7 +9,7 @@ import
   options, sets,
   eth/common, chronicles, db/accounts_cache,
   transaction,
-  vm/[computation, interpreter, nvm_state, nvm_types]
+  vm/[nvm_computation, interpreter, nvm_state, nvm_types]
 
 proc validateTransaction*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork): bool =
   let balance = vmState.readOnlyStateDB.getBalance(sender)

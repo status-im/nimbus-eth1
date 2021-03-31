@@ -3,7 +3,7 @@ import options, sets,
   ../db/[db_chain, accounts_cache],
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
-  ../vm/[computation, message, precompiles],
+  ../vm_computation, vm/[message, precompiles],
   ./vm_forks,
   ./dao, ../config
 

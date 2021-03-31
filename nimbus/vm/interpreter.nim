@@ -9,11 +9,11 @@ import
   vm/interpreter/[opcode_values, gas_meter, nvm_forks]
 
 import # Used in vm_types. Beware of recursive dependencies
-  vm/[code_stream, computation, stack, message]
+  vm/[code_stream, nvm_computation, stack, message]
 
 export
   opcode_values, gas_meter,
   nvm_forks
 
 export
-  code_stream, computation, stack, message
+  code_stream, nvm_computation, stack, message

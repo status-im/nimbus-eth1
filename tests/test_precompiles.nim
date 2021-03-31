@@ -8,7 +8,7 @@
 import
   unittest2, ../nimbus/vm/precompiles, json, stew/byteutils, test_helpers, os, tables,
   strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain,
-  ../nimbus/[vm_types, vm_state, vm_forks], ../nimbus/vm/computation, macros,
+  ../nimbus/[vm_computation, vm_types, vm_state, vm_forks], macros,
   test_allowed_to_fail
 
 proc initAddress(i: byte): EthAddress = result[19] = i

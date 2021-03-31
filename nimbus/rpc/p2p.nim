@@ -14,7 +14,7 @@ import
   eth/p2p/rlpx_protocols/eth_protocol,
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../utils, ../db/[db_chain, state_db],
-  rpc_types, rpc_utils, ../vm/[message, computation],
+  rpc_types, rpc_utils, ../vm/message, ../vm_computation,
   ../vm_forks
 
 #[
