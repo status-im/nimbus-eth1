@@ -15,7 +15,7 @@ import
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../utils, ../db/[db_chain, state_db],
   rpc_types, rpc_utils, ../vm/[message, computation],
-  ../vm/interpreter/vm_forks
+  ../vm_forks
 
 #[
   Note:

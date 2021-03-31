@@ -4,7 +4,7 @@ import options, sets,
   ../utils, ../constants, ../transaction,
   ../vm_state, ../vm_types, ../vm_state_transactions,
   ../vm/[computation, message, precompiles],
-  ../vm/interpreter/vm_forks,
+  ./vm_forks,
   ./dao, ../config
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =

@@ -1,7 +1,7 @@
 import unittest2, strutils, tables, os, json,
   ../nimbus/utils/difficulty, stint, times,
   eth/common, test_helpers, stew/byteutils,
-  ../nimbus/constants, ../nimbus/vm/interpreter/vm_forks,
+  ../nimbus/constants, ../nimbus/vm_forks,
   ../nimbus/config
 
 type
