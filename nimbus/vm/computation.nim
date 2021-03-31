@@ -9,7 +9,7 @@ import
   chronicles, strformat, macros, options, times,
   sets, eth/[common, keys],
   constants, errors,
-  vm/interpreter/[opcode_values, gas_meter, gas_costs, nvm_forks],
+  vm/interpreter/[opcode_values, gas_meter, nvm_gas_costs, nvm_forks],
   vm/[code_stream, memory, message, stack, nvm_types, nvm_state],
   db/[accounts_cache, db_chain],
   utils/header, precompiles,
