@@ -8,12 +8,17 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-# At the moment, this header file interface is only used for testing, so it
-# might be worth merging it into a vm_internals.nim (or so) header file.
+# The following should really go into vm_types once the circular computation.nim
+# include/import dependency is solved. The problem is with vm_types.nim which
+# includes computation.nim.
+import
+  ./vm/interpreter/vm_forks as vmf
+export
+  vmf.Fork
+
 import
   ./vm/interpreter/opcode_values as vmo
-
 export
   vmo.Op
-
+  
 # End

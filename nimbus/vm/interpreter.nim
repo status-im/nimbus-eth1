@@ -28,6 +28,7 @@ import
 export
   vmm.isCreate
 
+# Used in vm_types. Beware of recursive dependencies
 
 # see vm_computation
 import
@@ -76,8 +77,6 @@ export
   vmc.tracingEnabled,
   vmc.writeContract
 
-
-# Used in vm_types. Beware of recursive dependencies
 
 import
   vm/interpreter/gas_meter as gmt

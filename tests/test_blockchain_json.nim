@@ -12,7 +12,7 @@ import
   ethash, stew/endians2, nimcrypto,
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
-  ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants, vm_forks],
+  ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants, vm_types2],
   ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/utils/header,
   ../nimbus/p2p/[executor, dao],

@@ -7,7 +7,7 @@
 
 import
   ./constants, ./errors, eth/[common, keys], ./utils,
-  ./vm_forks, ./vm_gas_costs
+  ./vm_types2, ./vm_gas_costs
 
 import eth/common/transaction as common_transaction
 export common_transaction

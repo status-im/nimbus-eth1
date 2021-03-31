@@ -12,7 +12,7 @@ import
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
   eth/p2p/bootnodes, eth/p2p/rlpx_protocols/whisper_protocol,
   ./db/select_backend, eth/keys,
-  ./vm_forks
+  ./vm_types2
 
 const
   NimbusName* = "Nimbus"
