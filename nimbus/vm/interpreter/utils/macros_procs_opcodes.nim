@@ -12,7 +12,7 @@ import
   macros, strformat, stint, eth/common,
   vm/[nvm_computation, stack, code_stream, nvm_memory],
   vm/nvm_types, errors, vm/interpreter/[gas_meter, nvm_opcode_values],
-  vm/interpreter/utils/utils_numeric
+  vm/interpreter/utils/nvm_utils_numeric
 
 when defined(evmc_enabled):
   import vm/evmc_api, evmc/evmc

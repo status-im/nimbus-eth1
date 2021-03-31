@@ -9,7 +9,7 @@ import
   sequtils,
   chronicles, eth/common/eth_types,
   errors, validation,
-  vm/interpreter/utils/utils_numeric
+  vm/interpreter/utils/nvm_utils_numeric
 
 logScope:
   topics = "vm memory"

@@ -1,6 +1,6 @@
 import
   vm/nvm_types,
-  vm/interpreter/[gas_meter, nvm_gas_costs, utils/utils_numeric, nvm_forks],
+  vm/interpreter/[gas_meter, nvm_gas_costs, utils/nvm_utils_numeric, nvm_forks],
   errors, stint, eth/[keys, common], chronicles, tables, macros,
   math, nimcrypto, bncurve/[fields, groups], vm/blake2b_f, vm/blscurve
 
