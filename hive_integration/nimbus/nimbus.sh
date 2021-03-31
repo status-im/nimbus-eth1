@@ -76,7 +76,7 @@ fi
 set -e
 
 # Configure RPC.
-FLAGS="$FLAGS --rpc --rpcapi:eth,debug"
+FLAGS="$FLAGS --rpc --rpcapi:eth,debug --rpcbind:0.0.0.0:8545"
 
 echo "Running nimbus with flags $FLAGS"
 $nimbus $FLAGS
