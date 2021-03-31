@@ -368,7 +368,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   let config = getConfiguration()
   result = Success
   var
-    chainId = 0.ChainId
+    chainId = 1.ChainId
     homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = 0.toBlockNumber
     petersburgBlock, istanbulBlock, muirGlacierBlock, berlinBlock = 0.toBlockNumber
     eip150Hash, mixHash : MDigest[256]
@@ -385,7 +385,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   if customGenesis.hasKey("config"):
     # Validate all fork blocks for custom genesis
     let forkDetails = customGenesis["config"]
-    validateConfigValue(forkDetails, chainId, JInt, ChainId)
+    validateConfigValue(forkDetails, chainId, JInt, ChainId, checkError=false)
     checkForFork(forkDetails, homesteadBlock, 0.toBlockNumber)
     validateConfigValue(forkDetails, daoForkSupport, JBool, bool, checkError=false)
     if daoForkSupport == true:
