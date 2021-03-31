@@ -9,7 +9,7 @@ import
   tables, macros,
   chronicles,
   vm/interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter, utils/macros_gen_opcodes],
-  vm/code_stream, vm_types, errors, precompiles, vm/stack,
+  vm/code_stream, vm/nvm_types, errors, precompiles, vm/stack,
   terminal # Those are only needed for logging
 
 logScope:

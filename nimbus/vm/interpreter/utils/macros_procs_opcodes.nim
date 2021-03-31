@@ -11,7 +11,7 @@
 import
   macros, strformat, stint, eth/common,
   vm/[computation, stack, code_stream, memory],
-  vm_types, errors, vm/interpreter/[gas_meter, opcode_values],
+  vm/nvm_types, errors, vm/interpreter/[gas_meter, opcode_values],
   vm/interpreter/utils/utils_numeric
 
 when defined(evmc_enabled):
