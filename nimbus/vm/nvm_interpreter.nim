@@ -1,19 +1,131 @@
 # Nimbus
 # Copyright (c) 2018 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+# see vm_opcode_value
+import
+  ./vm/interpreter/nvm_opcode_values as vmo
+export
+  vmo.Op
+
+
+# see vm_forks
+import
+  vm/interpreter/nvm_forks as vmf
+export
+  vmf.Fork
+
+
+# see vm_message
+import
+  ./vm/nvm_message as vmm
+export
+  vmm.isCreate
+
+
+# see vm_computation
+import
+  ./vm/nvm_computation as vmc
+export
+  vmc.accountExists,
+  vmc.addLogEntry,
+  vmc.commit,
+  vmc.dispose,
+  vmc.execCall,
+  vmc.execCreate,
+  vmc.execSelfDestruct,
+  vmc.executeOpcodes,
+  vmc.fork,
+  vmc.getBalance,
+  vmc.getBlockHash,
+  vmc.getBlockNumber,
+  vmc.getChainId,
+  vmc.getCode,
+  vmc.getCodeHash,
+  vmc.getCodeSize,
+  vmc.getCoinbase,
+  vmc.getDifficulty,
+  vmc.getGasLimit,
+  vmc.getGasPrice,
+  vmc.getGasRefund,
+  vmc.getOrigin,
+  vmc.getStorage,
+  vmc.getTimestamp,
+  vmc.isError,
+  vmc.isOriginComputation,
+  vmc.isSuccess,
+  vmc.isSuicided,
+  vmc.merge,
+  vmc.newComputation,
+  vmc.prepareTracer,
+  vmc.refundSelfDestruct,
+  vmc.rollback,
+  vmc.selfDestruct,
+  vmc.setError,
+  vmc.shouldBurnGas,
+  vmc.snapshot,
+  vmc.traceError,
+  vmc.traceOpCodeEnded,
+  vmc.traceOpCodeStarted,
+  vmc.tracingEnabled,
+  vmc.writeContract
+
+
+# Used in vm_types. Beware of recursive dependencies
 
 import
-  vm/interpreter/[nvm_opcode_values, gas_meter, nvm_forks]
-
-import # Used in vm_types. Beware of recursive dependencies
-  vm/[code_stream, nvm_computation, stack, nvm_message]
-
+  vm/interpreter/gas_meter as gmt
 export
-  nvm_opcode_values, gas_meter,
-  nvm_forks
+  gmt.consumeGas,
+  gmt.init,
+  gmt.refundGas,
+  gmt.returnGas
 
+
+import
+  vm/code_stream as cst
 export
-  code_stream, nvm_computation, stack, nvm_message
+  cst.CodeStream,
+  cst.`$`,
+  cst.newCodeStream,
+  cst.newCodeStreamFromUnescaped,
+  cst.read,
+  cst.readVmWord,
+  cst.len,
+  cst.next,
+  cst.items,
+  cst.`[]`,
+  cst.peek,
+  cst.updatePc,
+  cst.isValidOpcode,
+  cst.decompile,
+  cst.displayDecompiled,
+  cst.hasSStore,
+  cst.atEnd
+
+
+import
+  vm/stack as stk
+export
+  stk.Stack,
+  stk.`$`,
+  stk.`[]`,
+  stk.dup,
+  stk.len,
+  stk.newStack,
+  stk.peek,
+  stk.peekInt,
+  stk.popAddress,
+  stk.popInt,
+  stk.popTopic,
+  stk.push,
+  stk.swap,
+  stk.top
+
+# End
