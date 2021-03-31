@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ./vm/nvm_types as vmt
+  ./vm/types as vmt
 
 export
   vmt.AccessLogs,

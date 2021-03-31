@@ -1,9 +1,9 @@
 import
   json, strutils, sets, hashes,
   chronicles, nimcrypto, eth/common, stint,
-  vm/[nvm_types, nvm_memory, stack], db/accounts_cache,
+  vm/[types, memory, stack], db/accounts_cache,
   eth/trie/hexary,
-  vm/interpreter/nvm_opcode_values
+  vm/interpreter/opcode_values
 
 logScope:
   topics = "vm opcode"

@@ -8,8 +8,8 @@
 import
   tables, macros,
   chronicles,
-  vm/interpreter/[nvm_opcode_values, opcodes_impl, nvm_forks, nvm_gas_costs, gas_meter, utils/macros_gen_opcodes],
-  vm/code_stream, vm/nvm_types, errors, nvm_precompiles, vm/stack,
+  vm/interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter, utils/macros_gen_opcodes],
+  vm/code_stream, vm/types, errors, precompiles, vm/stack,
   terminal # Those are only needed for logging
 
 logScope:

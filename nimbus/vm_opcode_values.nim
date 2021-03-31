@@ -11,7 +11,7 @@
 # At the moment, this header file interface is only used for testing, so it
 # might be worth merging it into a vm_internals.nim (or so) header file.
 import
-  ./vm/interpreter/nvm_opcode_values as vmo
+  ./vm/interpreter/opcode_values as vmo
 
 export
   vmo.Op

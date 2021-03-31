@@ -10,7 +10,7 @@
 
 # Should be considered part of another header file (e.h. vm_misc)
 import
-  ./vm/nvm_message as vmm
+  ./vm/message as vmm
 
 export
   vmm.isCreate

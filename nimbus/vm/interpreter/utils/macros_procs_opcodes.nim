@@ -10,9 +10,9 @@
 
 import
   macros, strformat, stint, eth/common,
-  vm/[nvm_computation, stack, code_stream, nvm_memory],
-  vm/nvm_types, errors, vm/interpreter/[gas_meter, nvm_opcode_values],
-  vm/interpreter/utils/nvm_utils_numeric
+  vm/[computation, stack, code_stream, memory],
+  vm/types, errors, vm/interpreter/[gas_meter, opcode_values],
+  vm/interpreter/utils/utils_numeric
 
 when defined(evmc_enabled):
   import vm/evmc_api, evmc/evmc

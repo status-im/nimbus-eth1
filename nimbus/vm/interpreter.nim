@@ -10,28 +10,28 @@
 
 # see vm_opcode_value
 import
-  ./vm/interpreter/nvm_opcode_values as vmo
+  ./vm/interpreter/opcode_values as vmo
 export
   vmo.Op
 
 
 # see vm_forks
 import
-  vm/interpreter/nvm_forks as vmf
+  vm/interpreter/vm_forks as vmf
 export
   vmf.Fork
 
 
 # see vm_message
 import
-  ./vm/nvm_message as vmm
+  ./vm/message as vmm
 export
   vmm.isCreate
 
 
 # see vm_computation
 import
-  ./vm/nvm_computation as vmc
+  ./vm/computation as vmc
 export
   vmc.accountExists,
   vmc.addLogEntry,

@@ -11,7 +11,7 @@
 # This should really go into vm_types once the circular computation.nim
 # include/import dependency is solved
 import
-  ./vm/interpreter/nvm_forks as vmf
+  ./vm/interpreter/vm_forks as vmf
 
 export
   vmf.Fork

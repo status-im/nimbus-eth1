@@ -12,7 +12,7 @@
 # The computation module suffers from a circular include/import dependency.
 # After fixing this wrapper should be re-factored.
 import
-  ./vm/nvm_computation as vmc
+  ./vm/computation as vmc
 
 export
   vmc.accountExists,

@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ./vm/nvm_state as vms
+  ./vm/state as vms
 
 export
   vms.`$`,

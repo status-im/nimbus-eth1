@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  vm/nvm_state_transactions as vmx
+  vm/state_transactions as vmx
 
 export
   vmx.execComputation,

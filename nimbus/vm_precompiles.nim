@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ./vm/nvm_precompiles as vmp
+  ./vm/precompiles as vmp
 
 export
   vmp.PrecompileAddresses,

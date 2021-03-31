@@ -7,8 +7,8 @@
 
 import
   math, eth/common/eth_types,
-  vm/interpreter/utils/[macros_gen_opcodes, nvm_utils_numeric],
-  vm/interpreter/[nvm_opcode_values, nvm_forks], errors
+  vm/interpreter/utils/[macros_gen_opcodes, utils_numeric],
+  vm/interpreter/[opcode_values, vm_forks], errors
 
 when defined(evmc_enabled):
   import evmc/evmc

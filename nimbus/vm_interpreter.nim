@@ -13,7 +13,7 @@
 # At the moment, this header file interface is only used for testing, so it
 # might be worth merging it into a vm_internals.nim (or so) header file.
 import
-  ./vm/nvm_interpreter as vmi
+  ./vm/interpreter as vmi
 
 export
   vmi
