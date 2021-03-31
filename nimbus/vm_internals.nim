@@ -8,13 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-# Wrapper for a wrapper -- lol
+# At the moment, this header file interface is only used for testing.
 
-# At the moment, this header file interface is only used for testing, so it
-# might be worth merging it into a vm_internals.nim (or so) header file.
 import
   ./vm/memory as vmm
-
 export
   vmm.Memory,
   vmm.extend,
@@ -26,5 +23,29 @@ export
 when defined(evmc_enabled):
   export
     vmm.readPtr
+
+
+import
+  ./vm/interpreter/utils/utils_numeric as vmn
+export
+  vmn.GasNatural,
+  vmn.calcMemSize,
+  vmn.ceil32,
+  vmn.cleanMemRef,
+  vmn.log2,
+  vmn.log256,
+  vmn.rangeToPadded,
+  vmn.rangeToPadded2,
+  vmn.safeInt,
+  vmn.setSign,
+  vmn.toInt,
+  vmn.wordCount
+
+
+# Wrapping the wrapper -- lol
+import
+  ./vm/interpreter as vmi
+export
+  vmi
 
 # End

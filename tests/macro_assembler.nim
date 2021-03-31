@@ -7,8 +7,8 @@ import
   options, json, os, eth/trie/[db, hexary],
   ../nimbus/[transaction, utils],
   ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/[vm_computation, vm_state_transactions, vm_types2,
-             vm_message, vm_memory, vm_state, vm_types]
+  ../nimbus/[vm_state_transactions, vm_types2,
+             vm_message, vm_internals, vm_state, vm_types]
 
 export vm_types2, byteutils
 {.experimental: "dynamicBindSym".}

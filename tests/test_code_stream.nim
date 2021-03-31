@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import  unittest2, sequtils,
-        ../nimbus/vm_interpreter
+        ../nimbus/vm_internals
 
 proc codeStreamMain*() =
   suite "parse bytecode":
