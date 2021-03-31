@@ -8,9 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-# Should be considered part of another header file (e.g. vm_misc) once the circular
-# computation.nim include/import dependency is solved. The problem is with
-# vm_types.nim (included by message.nim) which includes computation.nim.
+# Should be considered part of another header file (e.g. vm_misc) once the
+# circular computation.nim include/import dependency is solved. The problem is
+# with vm_types.nim (included by message.nim) which includes computation.nim.
 import
   ./vm/message as vmm
 
