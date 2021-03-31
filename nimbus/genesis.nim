@@ -40,9 +40,14 @@ proc customNetPrealloc(genesisBlock: JsonNode): GenesisAlloc =
                 else:
                   AccountNonce(0)
 
+    let code = if "code" in account:
+                 hexToSeqByte(account["code"].getStr)
+               else:
+                 @[]
+
     var acc = GenesisAccount(
       balance: fromHex(UInt256, account["balance"].getStr),
-      code: hexToSeqByte(account["code"].getStr),
+      code: code,
       nonce: nonce
     )
 
