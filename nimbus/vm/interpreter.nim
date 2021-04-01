@@ -10,21 +10,21 @@
 
 # see vm_opcode_value
 import
-  ./vm/interpreter/opcode_values as vmo
+  ./interpreter/opcode_values as vmo
 export
   vmo.Op
 
 
 # see vm_forks
 import
-  vm/interpreter/vm_forks as vmf
+  ./interpreter/vm_forks as vmf
 export
   vmf.Fork
 
 
 # see vm_message
 import
-  ./vm/message as vmm
+  ./message as vmm
 export
   vmm.isCreate
 
@@ -32,7 +32,7 @@ export
 
 # see vm_computation
 import
-  ./vm/computation as vmc
+  ./computation as vmc
 export
   vmc.accountExists,
   vmc.addLogEntry,
@@ -79,7 +79,7 @@ export
 
 
 import
-  vm/interpreter/gas_meter as gmt
+  ./interpreter/gas_meter as gmt
 export
   gmt.consumeGas,
   gmt.init,
@@ -88,7 +88,7 @@ export
 
 
 import
-  vm/code_stream as cst
+  ./code_stream as cst
 export
   cst.CodeStream,
   cst.`$`,
@@ -110,7 +110,7 @@ export
 
 
 import
-  vm/stack as stk
+  ./stack as stk
 export
   stk.Stack,
   stk.`$`,

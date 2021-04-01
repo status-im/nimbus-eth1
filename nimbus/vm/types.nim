@@ -11,14 +11,14 @@
 import
   tables, eth/common,
   options, json, sets,
-  vm/[memory, stack, code_stream],
-  vm/interpreter/[gas_costs, opcode_values, vm_forks],
+  ./memory, ./stack, ./code_stream,
+  ./interpreter/[gas_costs, opcode_values, vm_forks],
   # TODO - will be hidden at a lower layer
-  db/[db_chain, accounts_cache]
+  ../db/[db_chain, accounts_cache]
 
 when defined(evmc_enabled):
   import
-    ./vm/evmc_api
+    ./evmc_api
 
 type
   VMFlag* = enum

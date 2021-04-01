@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import vm/interpreter/utils/macros_gen_opcodes
+import ./utils/macros_gen_opcodes
 
 fill_enum_holes:
   type

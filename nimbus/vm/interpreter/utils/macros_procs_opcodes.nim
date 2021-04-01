@@ -10,12 +10,12 @@
 
 import
   macros, strformat, stint, eth/common,
-  vm/[computation, stack, code_stream, memory],
-  vm/types, errors, vm/interpreter/[gas_meter, opcode_values],
-  vm/interpreter/utils/utils_numeric
+  ../../computation, ../../stack, ../../code_stream, ../../memory,
+  ../../types, ../../../errors, ../gas_meter, ../opcode_values,
+  ./utils_numeric
 
 when defined(evmc_enabled):
-  import vm/evmc_api, evmc/evmc
+  import ../../evmc_api, evmc/evmc
 
 proc pop(tree: var NimNode): NimNode =
   ## Returns the last value of a NimNode and remove it

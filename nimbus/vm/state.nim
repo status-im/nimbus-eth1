@@ -11,10 +11,10 @@
 import
   macros, strformat, tables, sets, options,
   eth/[common, keys, rlp], nimcrypto/keccak,
-  vm/interpreter/[vm_forks, gas_costs], errors,
-  constants, db/[db_chain, accounts_cache],
-  utils, json, vm/[transaction_tracer, types],
-  config, ../stateless/[witness_from_tree, witness_types]
+  ./interpreter/[vm_forks, gas_costs], ../errors,
+  ../constants, ../db/[db_chain, accounts_cache],
+  ../utils, json, ./transaction_tracer, ./types,
+  ../config, ../../stateless/[witness_from_tree, witness_types]
 
 proc newAccessLogs*: AccessLogs =
   AccessLogs(reads: initTable[string, string](), writes: initTable[string, string]())
