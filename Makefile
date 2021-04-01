@@ -57,6 +57,8 @@ all: | $(TOOLS) nimbus
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
 
+LINK_PCRE := 0
+
 # default: use blst
 USE_MIRACL := 0
 
