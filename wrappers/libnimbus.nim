@@ -331,7 +331,8 @@ proc nimbus_post(message: ptr CPostMessage): bool {.exportc, dynlib.} =
                             powTarget = message.powTarget)
 
 proc nimbus_subscribe_filter(options: ptr CFilterOptions,
-    handler: proc (msg: ptr CReceivedMessage, udata: pointer) {.gcsafe, cdecl.},
+    handler: proc (msg: ptr CReceivedMessage, udata: pointer)
+    {.gcsafe, cdecl, raises: [Defect].},
     udata: pointer = nil, id: var Identifier): bool {.exportc, dynlib.} =
   ## Encryption is mandatory.
   ## A symmetric key or an asymmetric key must be provided. Both is not allowed.
@@ -373,7 +374,7 @@ proc nimbus_subscribe_filter(options: ptr CFilterOptions,
   let filter = initFilter(src, privateKey, symKey, @[options.topic],
     options.minPow, options.allowP2P)
 
-  proc c_handler(msg: ReceivedMessage) {.gcsafe.} =
+  proc c_handler(msg: ReceivedMessage) {.gcsafe, raises: [Defect].} =
     var cmsg = CReceivedMessage(
       decoded: unsafeAddr msg.decoded.payload[0],
       decodedLen: msg.decoded.payload.len(),
@@ -429,7 +430,8 @@ proc nimbus_get_bloom_filter(bloom: var Bloom) {.exportc, dynlib, raises: [].} =
 
 # TODO: Return filter ID if we ever want to unsubscribe
 proc subscribeChannel(
-    channel: string, handler: proc (msg: ReceivedMessage) {.gcsafe.}) =
+    channel: string, handler: proc (msg: ReceivedMessage)
+    {.gcsafe, raises: [Defect].}) =
   var ctx: HMAC[sha256]
   var symKey: SymKey
   discard ctx.pbkdf2(channel, "", 65356, symKey)
@@ -446,12 +448,12 @@ proc subscribeChannel(
                                          handler)
 
 proc nimbus_join_public_chat(channel: cstring,
-                             handler: proc (msg: ptr CReceivedMessage)
-                             {.gcsafe, cdecl.}) {.exportc, dynlib.} =
+    handler: proc (msg: ptr CReceivedMessage)
+    {.gcsafe, cdecl, raises: [Defect].}) {.exportc, dynlib.} =
   if handler.isNil:
     subscribeChannel($channel, nil)
   else:
-    proc c_handler(msg: ReceivedMessage) =
+    proc c_handler(msg: ReceivedMessage) {.raises: [Defect].} =
       var cmsg = CReceivedMessage(
         decoded: unsafeAddr msg.decoded.payload[0],
         decodedLen: msg.decoded.payload.len(),

@@ -65,7 +65,9 @@ proc start(nimbus: NimbusNode) =
 
   # metrics logging
   if conf.debug.logMetrics:
-    proc logMetrics(udata: pointer) {.closure, gcsafe.} =
+    # https://github.com/nim-lang/Nim/issues/17369
+    var logMetrics: proc(udata: pointer) {.gcsafe, raises: [Defect].}
+    logMetrics = proc(udata: pointer) =
       {.gcsafe.}:
         let registry = defaultRegistry
       info "metrics", registry
