@@ -9,7 +9,7 @@ import
   macros,
   stew/endians2, stew/ranges/ptr_arith,
   eth/common/eth_types,
-  constants
+  ../../../constants
 
 type
   # cannot use range for unknown reason
