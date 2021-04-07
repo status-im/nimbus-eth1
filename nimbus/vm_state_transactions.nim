@@ -14,7 +14,6 @@ import
 export
   vmx.execComputation,
   vmx.refundGas,
-  vmx.setupComputation,
-  vmx.validateTransaction
+  vmx.setupComputation
 
 # End
