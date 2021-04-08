@@ -13,7 +13,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/interpreter/gas_costs as vmg
 else:
   import
-    ./vm2/interpreter/gas_costs as vmg
+    ./vm2/interpreter/v2gas_costs as vmg
 
 export
   vmg.Bls12381G1AddGas,

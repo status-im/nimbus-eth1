@@ -30,7 +30,7 @@ export
 
 # see vm_message
 import
-  ./message as vmm
+  ./v2message as vmm
 export
   vmm.isCreate
 
