@@ -14,7 +14,7 @@ import
   sequtils,
   chronicles, eth/common/eth_types,
   ../errors, ../validation,
-  ./interpreter/utils/utils_numeric
+  ./interpreter/utils/v2utils_numeric
 
 logScope:
   topics = "vm memory"

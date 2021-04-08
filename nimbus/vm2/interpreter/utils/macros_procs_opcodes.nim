@@ -10,9 +10,9 @@
 
 import
   macros, strformat, stint, eth/common,
-  ../../computation, ../../stack, ../../code_stream, ../../memory,
+  ../../v2computation, ../../stack, ../../code_stream, ../../v2memory,
   ../../v2types, ../../../errors, ../gas_meter, ../v2opcode_values,
-  ./utils_numeric
+  ./v2utils_numeric
 
 proc pop(tree: var NimNode): NimNode =
   ## Returns the last value of a NimNode and remove it

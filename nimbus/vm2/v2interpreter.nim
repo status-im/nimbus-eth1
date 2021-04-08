@@ -38,7 +38,7 @@ export
 
 # see vm_computation
 import
-  ./computation as vmc
+  ./v2computation as vmc
 export
   vmc.accountExists,
   vmc.addLogEntry,
