@@ -8,8 +8,12 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ./vm/types as vmt
+when defined(evmc_enabled) or not defined(vm2_enabled):
+  import
+    ./vm/types as vmt
+else:
+  import
+    ./vm2/types as vmt
 
 export
   vmt.AccessLogs,

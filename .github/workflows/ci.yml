@@ -40,6 +40,22 @@ jobs:
           - os: windows
             cpu: i386
             evmc: evmc
+          # vm2
+          - os: linux
+            cpu: amd64
+            evmc: nimvm2
+          - os: linux
+            cpu: i386
+            evmc: nimvm2
+          - os: windows
+            cpu: amd64
+            evmc: nimvm2
+          - os: windows
+            cpu: i386
+            evmc: nimvm2
+          - os: macos
+            cpu: amd64
+            evmc: nimvm2
         include:
           - target:
               os: linux
@@ -103,8 +119,13 @@ jobs:
 
           if [[ '${{ matrix.target.evmc }}' == 'evmc' ]]; then
             echo "ENABLE_EVMC=1" >> $GITHUB_ENV
+            echo "ENABLE_VM2=0" >> $GITHUB_ENV
+          elif [[ '${{ matrix.target.evmc }}' == 'nimvm2' ]]; then
+            echo "ENABLE_EVMC=0" >> $GITHUB_ENV
+            echo "ENABLE_VM2=1" >> $GITHUB_ENV
           else
             echo "ENABLE_EVMC=0" >> $GITHUB_ENV
+            echo "ENABLE_VM2=0" >> $GITHUB_ENV
           fi
 
       - name: Install build dependencies (Linux i386)

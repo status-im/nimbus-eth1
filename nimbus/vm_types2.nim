@@ -11,13 +11,23 @@
 # The following should really go into vm_types once the circular computation.nim
 # include/import dependency is solved. The problem is with vm_types.nim which
 # includes computation.nim.
-import
-  ./vm/interpreter/vm_forks as vmf
+when defined(evmc_enabled) or not defined(vm2_enabled):
+  import
+    ./vm/interpreter/vm_forks as vmf
+else:
+  import
+    ./vm2/interpreter/vm_forks as vmf
+
 export
   vmf.Fork
 
-import
-  ./vm/interpreter/opcode_values as vmo
+when defined(evmc_enabled) or not defined(vm2_enabled):
+  import
+    ./vm/interpreter/opcode_values as vmo
+else:
+  import
+    ./vm2/interpreter/opcode_values as vmo
+
 export
   vmo.Op
   

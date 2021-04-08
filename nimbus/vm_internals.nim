@@ -10,8 +10,13 @@
 
 # At the moment, this header file interface is only used for testing.
 
-import
-  ./vm/memory as vmm
+when defined(evmc_enabled) or not defined(vm2_enabled):
+  import
+    ./vm/memory as vmm
+else:
+  import
+    ./vm2/memory as vmm
+  
 export
   vmm.Memory,
   vmm.extend,
@@ -25,8 +30,14 @@ when defined(evmc_enabled):
     vmm.readPtr
 
 
-import
-  ./vm/interpreter/utils/utils_numeric as vmn
+when defined(evmc_enabled) or not defined(vm2_enabled):
+  import
+    ./vm/interpreter/utils/utils_numeric as vmn
+else:
+  import
+    ./vm2/interpreter/utils/utils_numeric as vmn
+
+  
 export
   vmn.GasNatural,
   vmn.calcMemSize,
@@ -43,8 +54,13 @@ export
 
 
 # Wrapping the wrapper -- lol
-import
-  ./vm/interpreter as vmi
+when defined(evmc_enabled) or not defined(vm2_enabled):
+  import
+    ./vm/interpreter as vmi
+else:
+  import
+    ./vm2/interpreter as vmi
+    
 export
   vmi
 

@@ -80,6 +80,11 @@ ifneq ($(ENABLE_EVMC), 0)
 NIM_PARAMS := $(NIM_PARAMS) -d:evmc_enabled
 endif
 
+# disabled by default, enable with ENABLE_VM2=1
+ifneq ($(if $(ENABLE_VM2),$(ENABLE_VM2),0),0)
+NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled
+endif
+
 deps: | deps-common nat-libs nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
