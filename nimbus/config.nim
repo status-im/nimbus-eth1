@@ -919,7 +919,7 @@ NETWORKING OPTIONS:
   --nodiscover            Disables the peer discovery mechanism (manual peer addition)
   --v5discover            Enables the experimental RLPx V5 (Topic Discovery) mechanism
   --nodekey:<value>       P2P node private key (as hexadecimal string)
-  --networkid:<value>     Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby) (default: $8)
+  --networkid:<value>     Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby) (default: $7)
   --testnet               Use Ethereum Default Test Network (Ropsten)
   --ropsten               Use Ethereum Ropsten Test Network
   --rinkeby               Use Ethereum Rinkeby Test Network
