@@ -8,8 +8,12 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  vm/state_transactions as vmx
+when defined(evmc_enabled) or not defined(vm2_enabled):
+  import
+    vm/state_transactions as vmx
+else:
+  import
+    vm2/state_transactions as vmx
 
 export
   vmx.execComputation,

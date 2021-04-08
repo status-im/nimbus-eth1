@@ -8,8 +8,12 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  ./vm/precompiles as vmp
+when defined(evmc_enabled) or not defined(vm2_enabled):
+  import
+    ./vm/precompiles as vmp
+else:
+  import
+    ./vm2/precompiles as vmp
 
 export
   vmp.PrecompileAddresses,
