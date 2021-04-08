@@ -760,7 +760,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 proc blockchainJsonMain*(debugMode = false) =
   const
     legacyFolder = "eth_tests" / "LegacyTests" / "Constantinople" / "BlockchainTests"
-    newFolder = "eth_tests" / "BlockChainTests"
+    newFolder = "eth_tests" / "BlockchainTests"
 
   let config = test_config.getConfiguration()
   if config.testSubject == "" or not debugMode:

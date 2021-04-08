@@ -91,6 +91,8 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
       if `skipTest`(last, name):
         continue
       filenames.add(filename)
+
+    doAssert(filenames.len > 0)
     for fname in filenames:
       test fname:
         {.gcsafe.}:
