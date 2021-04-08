@@ -21,10 +21,6 @@ import
   # TODO - will be hidden at a lower layer
   ../db/[db_chain, accounts_cache]
 
-when defined(evmc_enabled):
-  import
-    ./evmc_api
-
 type
   VMFlag* = enum
     ExecutionOK
@@ -73,8 +69,6 @@ type
   Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState
-    when defined(evmc_enabled):
-      host*:                HostContext
     msg*:                   Message
     memory*:                Memory
     stack*:                 Stack

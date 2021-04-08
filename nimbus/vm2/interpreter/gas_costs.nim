@@ -15,9 +15,6 @@ import
   ./utils/[macros_gen_opcodes, utils_numeric],
   ./opcode_values, ./vm_forks, ../../errors
 
-when defined(evmc_enabled):
-  import evmc/evmc
-
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf
 type
@@ -72,8 +69,6 @@ type
 
     case kind*: Op
     of Sstore:
-      when defined(evmc_enabled):
-        s_status*: evmc_storage_status
       s_currentValue*: Uint256
       s_originalValue*: Uint256
     of Call, CallCode, DelegateCall, StaticCall:
@@ -244,32 +239,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
       CleanRefund = SSTORE_RESET_GAS - SLOAD_GAS # resetting to the original non-zero value
       ClearRefund = FeeSchedule[RefundsClear]# clearing an originally existing storage slot
 
-    when defined(evmc_enabled):
-      const
-        sstoreDirty = when fork < FkConstantinople or fork == FkPetersburg: CleanGas
-                      else: DirtyGas
-
-      case gasParams.s_status
-      of EVMC_STORAGE_ADDED: result.gasCost = InitGas
-      of EVMC_STORAGE_MODIFIED: result.gasCost = CleanGas
-      of EVMC_STORAGE_DELETED:
-        result.gasCost = CleanGas
-        result.gasRefund += ClearRefund
-      of EVMC_STORAGE_UNCHANGED: result.gasCost = sstoreDirty
-      of EVMC_STORAGE_MODIFIED_AGAIN:
-        result.gasCost = sstoreDirty
-        if not gasParams.s_originalValue.isZero:
-          if gasParams.s_currentValue.isZero:
-            result.gasRefund -= ClearRefund
-          if value.isZero:
-            result.gasRefund += ClearRefund
-
-        if gasParams.s_originalValue == value:
-          if gasParams.s_originalValue.isZero:
-            result.gasRefund += InitRefund
-          else:
-            result.gasRefund += CleanRefund
-    else:
+    block:
       when fork < FkConstantinople or fork == FkPetersburg:
         let isStorageEmpty = gasParams.s_currentValue.isZero
 
