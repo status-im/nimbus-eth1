@@ -14,9 +14,6 @@ import
   ../../errors, ../../constants,
   ../../db/[db_chain, accounts_cache]
 
-when defined(evmc_enabled):
-  import ../evmc_api, ../evmc_helpers, evmc/evmc
-
 logScope:
   topics = "opcode impl"
 
@@ -439,8 +436,7 @@ op sload, inline = true, slot:
   ## 0x54, Load word from storage.
   push: c.getStorage(slot)
 
-when not evmc_enabled:
-  template sstoreImpl(c: Computation, slot, newValue: Uint256) =
+template sstoreImpl(c: Computation, slot, newValue: Uint256) =
     let currentValue {.inject.} = c.getStorage(slot)
 
     let
@@ -455,27 +451,13 @@ when not evmc_enabled:
     c.vmState.mutateStateDB:
       db.setStorage(c.msg.contractAddress, slot, newValue)
 
-when evmc_enabled:
-  template sstoreEvmc(c: Computation, slot, newValue: Uint256) =
-    let
-      currentValue {.inject.} = c.getStorage(slot)
-      status   = c.host.setStorage(c.msg.contractAddress, slot, newValue)
-      gasParam = GasParams(kind: Op.Sstore, s_status: status)
-      gasCost  = c.gasCosts[Sstore].c_handler(newValue, gasParam)[0]
-
-    c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
-
 op sstore, inline = false, slot, newValue:
   ## 0x55, Save word to storage.
   checkInStaticContext(c)
-
-  when evmc_enabled:
-    sstoreEvmc(c, slot, newValue)
-  else:
+  block:
     sstoreImpl(c, slot, newValue)
 
-when not evmc_enabled:
-  template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
+template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
     let stateDB = c.vmState.readOnlyStateDB
     let currentValue {.inject.} = c.getStorage(slot)
 
@@ -500,18 +482,12 @@ op sstoreEIP2200, inline = false, slot, newValue:
 
   if c.gasMeter.gasRemaining <= SentryGasEIP2200:
     raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
-
-  when evmc_enabled:
-    sstoreEvmc(c, slot, newValue)
-  else:
+  block:
     sstoreNetGasMeteringImpl(c, slot, newValue)
 
 op sstoreEIP1283, inline = false, slot, newValue:
   checkInStaticContext(c)
-
-  when evmc_enabled:
-    sstoreEvmc(c, slot, newValue)
-  else:
+  block:
     sstoreNetGasMeteringImpl(c, slot, newValue)
 
 proc jumpImpl(c: Computation, jumpTarget: UInt256) =
@@ -645,29 +621,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
       createMsgGas -= createMsgGas div 64
     c.gasMeter.consumeGas(createMsgGas, reason="CREATE")
 
-    when evmc_enabled:
-      let msg = nimbus_message(
-        kind: callKind.evmc_call_kind,
-        depth: (c.msg.depth + 1).int32,
-        gas: createMsgGas,
-        sender: c.msg.contractAddress,
-        input_data: c.memory.readPtr(memPos),
-        input_size: memLen.uint,
-        value: toEvmc(endowment),
-        create2_salt: toEvmc(salt)
-      )
-
-      var res = c.host.call(msg)
-      c.returnData = @(makeOpenArray(res.outputData, res.outputSize.int))
-      c.gasMeter.returnGas(res.gas_left)
-
-      if res.status_code == EVMC_SUCCESS:
-        c.stack.top(res.create_address)
-
-      # TODO: a good candidate for destructor
-      if not res.release.isNil:
-        res.release(res)
-    else:
+    block:
       let childMsg = Message(
         kind: callKind,
         depth: c.msg.depth + 1,
@@ -828,36 +782,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
         c.gasMeter.returnGas(childGasLimit)
         return
 
-    when evmc_enabled:
-      let msg = nimbus_message(
-        kind: callKind.evmc_call_kind,
-        depth: (c.msg.depth + 1).int32,
-        gas: childGasLimit,
-        sender: sender,
-        destination: destination,
-        input_data: c.memory.readPtr(memInPos),
-        input_size: memInLen.uint,
-        value: toEvmc(value),
-        flags: flags.uint32
-      )
-
-      var res = c.host.call(msg)
-      c.returnData = @(makeOpenArray(res.outputData, res.outputSize.int))
-
-      let actualOutputSize = min(memOutLen, c.returnData.len)
-      if actualOutputSize > 0:
-        c.memory.write(memOutPos,
-          c.returnData.toOpenArray(0, actualOutputSize - 1))
-
-      c.gasMeter.returnGas(res.gas_left)
-
-      if res.status_code == EVMC_SUCCESS:
-        c.stack.top(1)
-
-      # TODO: a good candidate for destructor
-      if not res.release.isNil:
-        res.release(res)
-    else:
+    block:
       let msg = Message(
         kind: callKind,
         depth: c.msg.depth + 1,
@@ -1058,7 +983,5 @@ op sstoreEIP2929, inline = false, slot, newValue:
       db.accessList(c.msg.contractAddress, slot)
       c.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
 
-  when evmc_enabled:
-    sstoreEvmc(c, slot, newValue)
-  else:
+  block:
     sstoreNetGasMeteringImpl(c, slot, newValue)

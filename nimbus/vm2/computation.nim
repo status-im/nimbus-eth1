@@ -23,100 +23,66 @@ import
 when defined(chronicles_log_level):
   import stew/byteutils
 
-when defined(evmc_enabled):
-  import evmc/evmc, evmc_helpers, evmc_api, stew/ranges/ptr_arith
-
 logScope:
   topics = "vm computation"
 
-const
-  evmc_enabled* = defined(evmc_enabled)
-
 template getCoinbase*(c: Computation): EthAddress =
-  when evmc_enabled:
-    c.host.getTxContext().block_coinbase
-  else:
+  block:
     c.vmState.coinbase
 
 template getTimestamp*(c: Computation): int64 =
-  when evmc_enabled:
-    c.host.getTxContext().block_timestamp
-  else:
+  block:
     c.vmState.timestamp.toUnix
 
 template getBlockNumber*(c: Computation): Uint256 =
-  when evmc_enabled:
-    c.host.getTxContext().block_number.u256
-  else:
+  block:
     c.vmState.blockNumber.blockNumberToVmWord
 
 template getDifficulty*(c: Computation): DifficultyInt =
-  when evmc_enabled:
-    Uint256.fromEvmc c.host.getTxContext().block_difficulty
-  else:
+  block:
     c.vmState.difficulty
 
 template getGasLimit*(c: Computation): GasInt =
-  when evmc_enabled:
-    c.host.getTxContext().block_gas_limit.GasInt
-  else:
+  block:
     c.vmState.gasLimit
 
 template getChainId*(c: Computation): uint =
-  when evmc_enabled:
-    Uint256.fromEvmc(c.host.getTxContext().chain_id).truncate(uint)
-  else:
+  block:
     c.vmState.chaindb.config.chainId.uint
 
 template getOrigin*(c: Computation): EthAddress =
-  when evmc_enabled:
-    c.host.getTxContext().tx_origin
-  else:
+  block:
     c.vmState.txOrigin
 
 template getGasPrice*(c: Computation): GasInt =
-  when evmc_enabled:
-    Uint256.fromEvmc(c.host.getTxContext().tx_gas_price).truncate(GasInt)
-  else:
+  block:
     c.vmState.txGasPrice
 
 template getBlockHash*(c: Computation, blockNumber: Uint256): Hash256 =
-  when evmc_enabled:
-    c.host.getBlockHash(blockNumber)
-  else:
+  block:
     c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
 
 template accountExists*(c: Computation, address: EthAddress): bool =
-  when evmc_enabled:
-    c.host.accountExists(address)
-  else:
+  block:
     if c.fork >= FkSpurious:
       not c.vmState.readOnlyStateDB.isDeadAccount(address)
     else:
       c.vmState.readOnlyStateDB.accountExists(address)
 
 template getStorage*(c: Computation, slot: Uint256): Uint256 =
-  when evmc_enabled:
-    c.host.getStorage(c.msg.contractAddress, slot)
-  else:
+  block:
     c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: EthAddress): Uint256 =
-  when evmc_enabled:
-    c.host.getBalance(address)
-  else:
+  block:
     c.vmState.readOnlyStateDB.getBalance(address)
 
 template getCodeSize*(c: Computation, address: EthAddress): uint =
-  when evmc_enabled:
-    c.host.getCodeSize(address)
-  else:
+  block:
     uint(c.vmState.readOnlyStateDB.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
-  when evmc_enabled:
-    c.host.getCodeHash(address)
-  else:
+  block:
     let db = c.vmState.readOnlyStateDB
     if not db.accountExists(address) or db.isEmptyAccount(address):
       default(Hash256)
@@ -124,15 +90,11 @@ template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
       db.getCodeHash(address)
 
 template selfDestruct*(c: Computation, address: EthAddress) =
-  when evmc_enabled:
-    c.host.selfDestruct(c.msg.contractAddress, address)
-  else:
+  block:
     c.execSelfDestruct(address)
 
 template getCode*(c: Computation, address: EthAddress): seq[byte] =
-  when evmc_enabled:
-    c.host.copyCode(address)
-  else:
+  block:
     c.vmState.readOnlyStateDB.getCode(address)
 
 proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
@@ -162,11 +124,6 @@ proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Comp
   else:
     result.code = newCodeStream(vmState.readOnlyStateDb.getCode(message.codeAddress))
 
-  when evmc_enabled:
-    result.host.init(
-      nim_host_get_interface(),
-      cast[evmc_host_context](result)
-    )
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
@@ -401,6 +358,3 @@ proc prepareTracer*(c: Computation) {.inline.} =
   c.vmState.tracer.prepare(c.msg.depth)
 
 include interpreter_dispatch
-
-when defined(evmc_enabled):
-  include evmc_host

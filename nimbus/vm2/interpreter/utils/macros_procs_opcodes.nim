@@ -14,9 +14,6 @@ import
   ../../types, ../../../errors, ../gas_meter, ../opcode_values,
   ./utils_numeric
 
-when defined(evmc_enabled):
-  import ../../evmc_api, evmc/evmc
-
 proc pop(tree: var NimNode): NimNode =
   ## Returns the last value of a NimNode and remove it
   result = tree[tree.len-1]
@@ -122,15 +119,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: int) =
     reason="Memory expansion, Log topic and data gas cost")
   c.memory.extend(memPos, len)
 
-  when evmc_enabled:
-    var topics: array[4, evmc_bytes32]
-    for i in 0 ..< topicCount:
-      topics[i].bytes = c.stack.popTopic()
-
-    c.host.emitLog(c.msg.contractAddress,
-      c.memory.read(memPos, len),
-      topics[0].addr, topicCount)
-  else:
+  block:
     var log: Log
     log.topics = newSeqOfCap[Topic](topicCount)
     for i in 0 ..< topicCount:
