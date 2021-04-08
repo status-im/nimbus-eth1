@@ -14,7 +14,7 @@ import
   options, sets,
   eth/common, chronicles, ../db/accounts_cache,
   ../transaction,
-  ./computation, ./interpreter, ./state, ./v2types
+  ./computation, ./interpreter, ./v2state, ./v2types
 
 proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork) : Computation =
   var gas = tx.gasLimit - tx.intrinsicGas(fork)

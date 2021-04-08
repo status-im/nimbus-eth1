@@ -15,7 +15,7 @@ import
   sets, eth/[common, keys],
   ../constants, ../errors,
   ./interpreter/[v2opcode_values, gas_meter, gas_costs, v2forks],
-  ./code_stream, ./memory, ./message, ./stack, ./v2types, ./state,
+  ./code_stream, ./memory, ./message, ./stack, ./v2types, ./v2state,
   ../db/[accounts_cache, db_chain],
   ../utils/header, ./precompiles,
   ./transaction_tracer, ../utils
