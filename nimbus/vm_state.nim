@@ -13,7 +13,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/state as vms
 else:
   import
-    ./vm2/state as vms
+    ./vm2/v2state as vms
 
 export
   vms.`$`,
