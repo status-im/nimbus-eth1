@@ -7,7 +7,7 @@
 
 import
   chronicles, strformat, eth/common, # GasInt
-  ../../errors, ../../vm_types
+  ../../errors, ../types
 
 logScope:
   topics = "vm gas"

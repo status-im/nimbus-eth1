@@ -8,7 +8,7 @@
 import
   unittest2, macros, strformat,
   eth/common/eth_types,
-  ../nimbus/[vm_types, errors, vm/interpreter]
+  ../nimbus/[vm_types, errors, vm_internals]
 
 # TODO: quicktest
 # PS: parametrize can be easily immitated, but still quicktests would be even more useful

@@ -10,7 +10,7 @@ import
   stew/byteutils, net, eth/[common, keys, rlp, p2p], unittest2,
   testutils/markdown_reports,
   ../nimbus/[config, transaction, utils, errors],
-  ../nimbus/vm/interpreter/vm_forks,
+  ../nimbus/vm_types2,
   ../nimbus/db/accounts_cache,
   ../nimbus/random_keys
 

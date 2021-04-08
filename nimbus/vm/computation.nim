@@ -8,11 +8,12 @@
 import
   chronicles, strformat, macros, options, times,
   sets, eth/[common, keys],
-  ../constants, ../errors, ../vm_state, ../vm_types,
+  ../constants, ../errors,
   ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
-  ./code_stream, ./memory, ./message, ./stack, ../db/[accounts_cache, db_chain],
-  ../utils/header, precompiles,
-  transaction_tracer, ../utils
+  ./code_stream, ./memory, ./message, ./stack, ./types, ./state,
+  ../db/[accounts_cache, db_chain],
+  ../utils/header, ./precompiles,
+  ./transaction_tracer, ../utils
 
 when defined(chronicles_log_level):
   import stew/byteutils

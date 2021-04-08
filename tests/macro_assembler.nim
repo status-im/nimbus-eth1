@@ -1,18 +1,16 @@
 import
   macrocache, strutils, unittest2,
   stew/byteutils, chronicles, eth/common,
-  ../nimbus/vm/interpreter/opcode_values,
   stew/shims/macros, ../nimbus/config
 
 import
   options, json, os, eth/trie/[db, hexary],
-  ../nimbus/[vm_state, vm_types, transaction, utils],
+  ../nimbus/[transaction, utils],
   ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/vm_state_transactions,
-  ../nimbus/vm/interpreter/vm_forks,
-  ../nimbus/vm/[message, computation, memory]
+  ../nimbus/[vm_state_transactions, vm_types2,
+             vm_message, vm_internals, vm_state, vm_types]
 
-export opcode_values, byteutils
+export vm_types2, byteutils
 {.experimental: "dynamicBindSym".}
 
 # backported from Nim 0.19.9

@@ -8,7 +8,7 @@
 import
   unittest2, strformat, strutils, tables, json, os, times, sequtils,
   stew/byteutils, eth/[rlp, common], eth/trie/db,
-  ./test_helpers, ./test_allowed_to_fail, ../nimbus/vm/interpreter,
+  ./test_helpers, ./test_allowed_to_fail, ../nimbus/vm_internals,
   ../nimbus/[constants, vm_state, vm_types, utils],
   ../nimbus/db/[db_chain]
 

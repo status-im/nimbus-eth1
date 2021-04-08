@@ -1,7 +1,8 @@
 import
-  ../vm_types, interpreter/[gas_meter, gas_costs, utils/utils_numeric, vm_forks],
+  ./types,
+  ./interpreter/[gas_meter, gas_costs, utils/utils_numeric, vm_forks],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
-  math, nimcrypto, bncurve/[fields, groups], blake2b_f, ./blscurve
+  math, nimcrypto, bncurve/[fields, groups], ./blake2b_f, ./blscurve
 
 type
   PrecompileAddresses* = enum

@@ -10,10 +10,9 @@
 
 import
   macros, strformat, stint, eth/common,
-  ../../computation, ../../stack, ../../code_stream,
-  ../../../vm_types, ../../memory,
-  ../../../errors, ../../interpreter/[gas_meter, opcode_values],
-  ../../interpreter/utils/utils_numeric
+  ../../computation, ../../stack, ../../code_stream, ../../memory,
+  ../../types, ../../../errors, ../gas_meter, ../opcode_values,
+  ./utils_numeric
 
 when defined(evmc_enabled):
   import ../../evmc_api, evmc/evmc

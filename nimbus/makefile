@@ -194,7 +194,7 @@ clean-docs:
 .SILENT: clean-bakfiles
 clean-bakfiles:
 	for f in $(shell find . -type f \
-		-name '*~' -o -name '*.bak' -print); do \
+		\( -name '*~' -o -name '*.bak' \) -print); do \
 	  (set -x; rm -f "$$f"); \
 	done
 

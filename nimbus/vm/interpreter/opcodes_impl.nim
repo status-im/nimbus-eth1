@@ -7,15 +7,15 @@
 
 import
   strformat, times, sets, sequtils, options,
-  chronicles, stint, nimcrypto, stew/ranges/[ptr_arith], eth/common,
+  chronicles, stint, nimcrypto, stew/ranges/ptr_arith, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
-  ../memory, ../stack, ../code_stream, ../computation,
-  ../../vm_state, ../../errors, ../../constants, ../../vm_types,
+  ../memory, ../stack, ../code_stream, ../computation, ../state, ../types,
+  ../../errors, ../../constants,
   ../../db/[db_chain, accounts_cache]
 
 when defined(evmc_enabled):
-  import  ../evmc_api, ../evmc_helpers, evmc/evmc
+  import ../evmc_api, ../evmc_helpers, evmc/evmc
 
 logScope:
   topics = "opcode impl"

@@ -8,12 +8,17 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+# The following should really go into vm_types once the circular computation.nim
+# include/import dependency is solved. The problem is with vm_types.nim which
+# includes computation.nim.
 import
-  vm/state_transactions as vmx
-
+  ./vm/interpreter/vm_forks as vmf
 export
-  vmx.execComputation,
-  vmx.refundGas,
-  vmx.setupComputation
+  vmf.Fork
 
+import
+  ./vm/interpreter/opcode_values as vmo
+export
+  vmo.Op
+  
 # End

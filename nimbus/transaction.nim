@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  constants, errors, eth/[common, keys], utils,
-  ./vm/interpreter/[vm_forks, gas_costs], constants
+  ./constants, ./errors, eth/[common, keys], ./utils,
+  ./vm_types2, ./vm_gas_costs
 
 import eth/common/transaction as common_transaction
 export common_transaction

@@ -5,7 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import evmc/evmc, evmc_helpers, eth/common, ../constants
+import evmc/evmc, ./evmc_helpers, eth/common, ../constants
 
 type
   # we are not using EVMC original signature here

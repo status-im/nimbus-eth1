@@ -8,7 +8,7 @@
 import
   unittest2, sequtils,
   eth/common/eth_types,
-  ../nimbus/[errors, vm/memory]
+  ../nimbus/[errors, vm_internals]
 
 proc memory32: Memory =
   result = newMemory()
