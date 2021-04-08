@@ -10,7 +10,7 @@ when not defined(vm2_enabled):
 when defined(evmc_enabled):
   {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
 
-import ./types
+import ./v2types
 
 proc isCreate*(message: Message): bool =
   message.kind in {evmcCreate, evmcCreate2}

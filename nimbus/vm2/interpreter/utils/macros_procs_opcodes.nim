@@ -11,7 +11,7 @@
 import
   macros, strformat, stint, eth/common,
   ../../computation, ../../stack, ../../code_stream, ../../memory,
-  ../../types, ../../../errors, ../gas_meter, ../opcode_values,
+  ../../v2types, ../../../errors, ../gas_meter, ../v2opcode_values,
   ./utils_numeric
 
 proc pop(tree: var NimNode): NimNode =
