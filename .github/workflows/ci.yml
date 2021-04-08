@@ -7,79 +7,105 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
-        branch: [master]
         target:
           - os: linux
             cpu: amd64
-            TEST_LANG: c
-            NPROC: 2
             evmc: nimevm
           - os: linux
             cpu: i386
-            TEST_LANG: c
-            NPROC: 2
             evmc: nimevm
           - os: macos
             cpu: amd64
-            TEST_LANG: c
-            NPROC: 2
             evmc: nimevm
           - os: windows
             cpu: amd64
-            TEST_LANG: c
-            NPROC: 2
             evmc: nimevm
           - os: windows
             cpu: i386
-            TEST_LANG: c
-            NPROC: 2
             evmc: nimevm
           #  core dump
           #- os: linux
           #  cpu: amd64
-          #  TEST_LANG: c
-          #  NPROC: 2
           #  evmc: evmc
           - os: linux
             cpu: i386
-            TEST_LANG: c
-            NPROC: 2
             evmc: evmc
           - os: macos
             cpu: amd64
-            TEST_LANG: c
-            NPROC: 2
             evmc: evmc
           # mysterious failure
           #- os: windows
           #  cpu: amd64
-          #  TEST_LANG: c
-          #  NPROC: 2
           #  evmc: evmc
           - os: windows
             cpu: i386
-            TEST_LANG: c
-            NPROC: 2
             evmc: evmc
         include:
           - target:
               os: linux
             builder: ubuntu-18.04
+            shell: bash
           - target:
               os: macos
             builder: macos-10.15
+            shell: bash
           - target:
               os: windows
-            builder: windows-2019
+            builder: windows-latest
+            shell: msys2 {0}
 
-    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ matrix.target.TEST_LANG }}-${{ matrix.target.evmc }} (${{ matrix.branch }})'
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ matrix.target.evmc }}'
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v2
-        with:
-          path: nimbus-eth1
-          submodules: false
+
+      - name: Derive environment variables
+        shell: bash
+        run: |
+          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+            PLATFORM=x64
+            GOARCH=amd64
+            USE_MIRACL=0
+          else
+            PLATFORM=x86
+            GOARCH=386
+            USE_MIRACL=1
+          fi
+          echo "PLATFORM=${PLATFORM}" >> $GITHUB_ENV
+          echo "GOARCH=${GOARCH}" >> $GITHUB_ENV
+          echo "USE_MIRACL=${USE_MIRACL}" >> $GITHUB_ENV
+
+          # libminiupnp / natpmp
+          if [[ '${{ runner.os }}' == 'Linux' && '${{ matrix.target.cpu }}' == 'i386' ]]; then
+            export CFLAGS="${CFLAGS} -m32 -mno-adx"
+            echo "CFLAGS=${CFLAGS}" >> $GITHUB_ENV
+          fi
+
+          ncpu=''
+          case '${{ runner.os }}' in
+          'Linux')
+            ncpu=$(nproc)
+            ;;
+          'macOS')
+            ncpu=$(sysctl -n hw.ncpu)
+            ;;
+          'Windows')
+            ncpu=${NUMBER_OF_PROCESSORS}
+            ;;
+          esac
+          [[ -z "$ncpu" || $ncpu -le 0 ]] && ncpu=1
+          echo "ncpu=${ncpu}" >> $GITHUB_ENV
+
+          if [[ '${{ matrix.target.evmc }}' == 'evmc' ]]; then
+            echo "ENABLE_EVMC=1" >> $GITHUB_ENV
+          else
+            echo "ENABLE_EVMC=0" >> $GITHUB_ENV
+          fi
 
       - name: Install build dependencies (Linux i386)
         if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
@@ -112,7 +138,6 @@ jobs:
       - name: Build and install rocksdb (Linux i386)
         # no librocksdb-dev:i386
         if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
-        shell: bash
         run: |
           curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
           bash build_rocksdb.sh rocks-db-cache-${{ matrix.target.cpu }}
@@ -120,27 +145,38 @@ jobs:
       - name: Install rocksdb (Linux amd64)
         # mysterious illegal instruction error if we build our own librocksdb
         if: runner.os == 'Linux' && matrix.target.cpu == 'amd64'
-        shell: bash
         run: |
          sudo apt-get -q update
          sudo apt-get install -y librocksdb-dev libpcre3-dev
 
       - name: Build and install rocksdb (Macos)
         if: runner.os == 'Macos'
-        shell: bash
         run: |
           HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
-          echo "/usr/local/opt/ccache/libexec" >> $GITHUB_PATH
+          echo "/usr/local/opt/ccache/libexec" >> ${GITHUB_PATH}
           curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_rocksdb.sh
           bash build_rocksdb.sh rocks-db-cache-${{ matrix.target.cpu }}
 
-      - name: Restore MinGW-W64 (Windows) from cache
-        if: runner.os == 'Windows'
-        id: windows-mingw-cache
-        uses: actions/cache@v2
+      - name: MSYS2 (Windows i386)
+        if: runner.os == 'Windows' && matrix.target.cpu == 'i386'
+        uses: msys2/setup-msys2@v2
         with:
-          path: external/mingw-${{ matrix.target.cpu }}
-          key: 'mingw-${{ matrix.target.cpu }}'
+          path-type: inherit
+          msystem: MINGW32
+          install: >-
+            base-devel
+            git
+            mingw-w64-i686-toolchain
+
+      - name: MSYS2 (Windows amd64)
+        if: runner.os == 'Windows' && matrix.target.cpu == 'amd64'
+        uses: msys2/setup-msys2@v2
+        with:
+          path-type: inherit
+          install: >-
+            base-devel
+            git
+            mingw-w64-x86_64-toolchain
 
       - name: Restore Nim DLLs dependencies (Windows) from cache
         if: runner.os == 'Windows'
@@ -150,29 +186,10 @@ jobs:
           path: external/dlls-${{ matrix.target.cpu }}
           key: 'dlls-${{ matrix.target.cpu }}'
 
-      - name: Install MinGW64 dependency (Windows)
-        if: >
-          steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
-          runner.os == 'Windows'
-        shell: bash
-        run: |
-          mkdir -p external
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            MINGW_URL="https://sourceforge.net/projects/mingw-w64/files/Toolchains targetting Win64/Personal Builds/mingw-builds/8.1.0/threads-posix/seh/x86_64-8.1.0-release-posix-seh-rt_v6-rev0.7z"
-            ARCH=64
-          else
-            MINGW_URL="https://sourceforge.net/projects/mingw-w64/files/Toolchains targetting Win32/Personal Builds/mingw-builds/8.1.0/threads-posix/dwarf/i686-8.1.0-release-posix-dwarf-rt_v6-rev0.7z"
-            ARCH=32
-          fi
-          curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.7z"
-          7z x -y "external/mingw-${{ matrix.target.cpu }}.7z" -oexternal/
-          mv external/mingw$ARCH external/mingw-${{ matrix.target.cpu }}
-
       - name: Install DLLs dependencies (Windows)
         if: >
           steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
           runner.os == 'Windows'
-        shell: bash
         run: |
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
             ROCKSDBSUB=x64
@@ -191,14 +208,11 @@ jobs:
       - name: Path to cached dependencies (Windows)
         if: >
           runner.os == 'Windows'
-        shell: bash
         run: |
-          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
           echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.cpu }}" >> $GITHUB_PATH
 
       - name: Get latest nimbus-build-system commit hash
         id: versions
-        shell: bash
         run: |
           getHash() {
             git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
@@ -210,99 +224,41 @@ jobs:
         id: nim-cache
         uses: actions/cache@v2
         with:
-          path: nim
+          path: NimBinaries
           key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}'
 
-      - name: Build Nim and associated tools
-        if: steps.nim-cache.outputs.cache-hit != 'true'
-        shell: bash
+      - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          curl -O -L -s -S https://raw.githubusercontent.com/status-im/nimbus-build-system/master/scripts/build_nim.sh
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            PLATFORM=x64
-          else
-            PLATFORM=x86
-          fi
-          if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
-            MAKE_CMD="mingw32-make"
-          else
-            MAKE_CMD="make"
-          fi
-          env MAKE="$MAKE_CMD -j2" ARCH_OVERRIDE=$PLATFORM CC=gcc bash build_nim.sh nim csources dist/nimble NimBinaries
-
-          # clean up to save cache space
-          cd nim
-          rm koch
-          rm -rf nimcache
-          rm -rf csources
-          rm -rf tests
-          rm -rf dist
-          rm -rf .git
-
-      - name: Setup environment
-        shell: bash
-        run: |
-          echo '${{ github.workspace }}/nim/bin' >> $GITHUB_PATH
-          if [[ '${{ matrix.target.evmc }}' == 'evmc' ]]; then
-            echo "ENABLE_EVMC=1" >> $GITHUB_ENV
-          else
-            echo "ENABLE_EVMC=0" >> $GITHUB_ENV
-          fi
+          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
 
       - name: Run nimbus-eth1 tests (Windows)
         if: runner.os == 'Windows'
-        shell: bash
-        working-directory: nimbus-eth1
         run: |
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            PLATFORM=x64
-            USE_MIRACL=0
-          else
-            PLATFORM=x86
-            USE_MIRACL=1
-          fi
-          NPROC="${{ matrix.target.NPROC }}"
-          MAKEFLAGS="-j${NPROC} USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM ENABLE_EVMC=$ENABLE_EVMC"
-          mingw32-make $MAKEFLAGS update
-          mingw32-make $MAKEFLAGS
+          gcc --version
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC}"
+          mingw32-make ${DEFAULT_MAKE_FLAGS}
           build/nimbus.exe --help
-          mingw32-make $MAKEFLAGS test
+          mingw32-make ${DEFAULT_MAKE_FLAGS} test
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            mingw32-make -j${NPROC} USE_SYSTEM_NIM=1 test-reproducibility
+            mingw32-make ${DEFAULT_MAKE_FLAGS} test-reproducibility
           fi
 
       - name: Run nimbus-eth1 tests (Linux)
         if: runner.os == 'Linux'
-        shell: bash
-        working-directory: nimbus-eth1
         run: |
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            PLATFORM=x64
-            GOARCH=amd64
-            USE_MIRACL=0
-          else
-            PLATFORM=x86
-            GOARCH=386
-            USE_MIRACL=1
-          fi
-          export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib"
-          NPROC="${{ matrix.target.NPROC }}"
-          MAKEFLAGS="-j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" USE_SYSTEM_NIM=1 ARCH_OVERRIDE=$PLATFORM USE_MIRACL=$USE_MIRACL ENABLE_EVMC=$ENABLE_EVMC"
-          env CC=gcc make $MAKEFLAGS update
-          env CC=gcc make $MAKEFLAGS
+          export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} USE_MIRACL=${USE_MIRACL} ENABLE_EVMC=${ENABLE_EVMC}"
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS}
           build/nimbus --help
           # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
-          env CC=gcc GOARCH=$GOARCH CXX=g++ CGO_ENABLED=1 make $MAKEFLAGS test test-reproducibility wrappers wrappers-static
+          env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test test-reproducibility wrappers wrappers-static
 
       - name: Run nimbus-eth1 tests (Macos)
         if: runner.os == 'Macos'
-        shell: bash
-        working-directory: nimbus-eth1
         run: |
-          NPROC="${{ matrix.target.NPROC }}"
-          MAKEFLAGS="-j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" USE_SYSTEM_NIM=1 ENABLE_EVMC=$ENABLE_EVMC"
-          make $MAKEFLAGS update
-          make $MAKEFLAGS
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC}"
+          make ${DEFAULT_MAKE_FLAGS}
           build/nimbus --help
           # "-static" option will not work for osx unless static system libraries are provided
-          make $MAKEFLAGS test test-reproducibility wrappers
+          make ${DEFAULT_MAKE_FLAGS} test test-reproducibility wrappers
+
