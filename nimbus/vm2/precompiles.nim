@@ -14,8 +14,8 @@ when defined(evmc_enabled):
   {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
 
 import
-  ./types,
-  ./interpreter/[gas_meter, gas_costs, utils/utils_numeric, vm_forks],
+  ./v2types,
+  ./interpreter/[gas_meter, gas_costs, utils/utils_numeric, v2forks],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
   math, nimcrypto, bncurve/[fields, groups], ./blake2b_f, ./blscurve
 

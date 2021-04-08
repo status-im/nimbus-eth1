@@ -16,9 +16,9 @@ when defined(evmc_enabled):
 import
   macros, strformat, tables, sets, options,
   eth/[common, keys, rlp], nimcrypto/keccak,
-  ./interpreter/[vm_forks, gas_costs], ../errors,
+  ./interpreter/[v2forks, gas_costs], ../errors,
   ../constants, ../db/[db_chain, accounts_cache],
-  ../utils, json, ./transaction_tracer, ./types,
+  ../utils, json, ./transaction_tracer, ./v2types,
   ../config, ../../stateless/[witness_from_tree, witness_types]
 
 proc newAccessLogs*: AccessLogs =

@@ -16,14 +16,14 @@ when defined(evmc_enabled):
 
 # see vm_opcode_value
 import
-  ./interpreter/opcode_values as vmo
+  ./interpreter/v2opcode_values as vmo
 export
   vmo.Op
 
 
-# see vm_forks
+# see v2forks
 import
-  ./interpreter/vm_forks as vmf
+  ./interpreter/v2forks as vmf
 export
   vmf.Fork
 

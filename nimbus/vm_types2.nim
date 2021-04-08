@@ -16,7 +16,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/interpreter/vm_forks as vmf
 else:
   import
-    ./vm2/interpreter/vm_forks as vmf
+    ./vm2/interpreter/v2forks as vmf
 
 export
   vmf.Fork
@@ -26,7 +26,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/interpreter/opcode_values as vmo
 else:
   import
-    ./vm2/interpreter/opcode_values as vmo
+    ./vm2/interpreter/v2opcode_values as vmo
 
 export
   vmo.Op
