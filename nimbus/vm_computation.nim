@@ -16,7 +16,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/computation as vmc
 else:
   import
-    ./vm2/computation as vmc
+    ./vm2/v2computation as vmc
 
 export
   vmc.accountExists,
