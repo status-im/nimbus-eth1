@@ -13,7 +13,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/precompiles as vmp
 else:
   import
-    ./vm2/precompiles as vmp
+    ./vm2/v2precompiles as vmp
 
 export
   vmp.PrecompileAddresses,

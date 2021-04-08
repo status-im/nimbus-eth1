@@ -16,7 +16,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/message as vmm
 else:
   import
-    ./vm2/message as vmm
+    ./vm2/v2message as vmm
 
 export
   vmm.isCreate
