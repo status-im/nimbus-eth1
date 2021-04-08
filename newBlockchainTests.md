@@ -1,6 +1,6 @@
 newBlockchainTests
 ===
-## BlockChainTests
+## BlockchainTests
 ```diff
 + randomStatetest391.json                                         OK
 ```
