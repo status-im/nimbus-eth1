@@ -1,14 +1,16 @@
-# Copyright (c) 2018-2020 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2021 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-SHELL := bash # the shell used internally by Make
+SHELL := bash # the shell used internally by "make"
 
 # used inside the included makefiles
 BUILD_SYSTEM_DIR := vendor/nimbus-build-system
+
+LINK_PCRE := 0
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
@@ -56,8 +58,6 @@ all: | $(TOOLS) nimbus
 
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
-
-LINK_PCRE := 0
 
 # default: use blst
 USE_MIRACL := 0

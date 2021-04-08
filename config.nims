@@ -14,21 +14,38 @@ if defined(windows):
     # set the IMAGE_FILE_LARGE_ADDRESS_AWARE flag so we can use PAE, if enabled, and access more than 2 GiB of RAM
     switch("passL", "-Wl,--large-address-aware")
 
-# remember to disable -march=native for reproducible builds
+# This helps especially for 32-bit x86, which sans SSE2 and newer instructions
+# requires quite roundabout code generation for cryptography, and other 64-bit
+# and larger arithmetic use cases, along with register starvation issues. When
+# engineering a more portable binary release, this should be tweaked but still
+# use at least -msse2 or -msse3.
 if defined(disableMarchNative):
-  switch("passC", "-msse3")
+  if defined(i386) or defined(amd64):
+    switch("passC", "-msse3")
+    switch("passL", "-msse3")
 else:
   switch("passC", "-march=native")
+  switch("passL", "-march=native")
   if defined(windows):
     # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
     # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
-    switch("passC", "-mno-avx512vl")
+    switch("passC", "-mno-avx512f")
+    switch("passL", "-mno-avx512f")
+
+# omitting frame pointers in nim breaks the GC
+# https://github.com/nim-lang/Nim/issues/10625
+switch("passC", "-fno-omit-frame-pointer")
+switch("passL", "-fno-omit-frame-pointer")
 
 --threads:on
 --opt:speed
 --excessiveStackTrace:on
 # enable metric collection
 --define:metrics
+# for heap-usage-by-instance-type metrics and object base-type strings
+--define:nimTypeNames
+
+switch("define", "withoutPCRE")
 
 # the default open files limit is too low on macOS (512), breaking the
 # "--debugger:native" build. It can be increased with `ulimit -n 1024`.

@@ -698,9 +698,9 @@ proc processNetArguments(key, value: string): ConfigStatus =
     result = processInteger(value, res)
     if result == Success:
       config.net.discPort = uint16(res and 0xFFFF)
-  elif skey == "metricsserver" and defined(insecure):
+  elif skey == "metricsserver":
     config.net.metricsServer = true
-  elif skey == "metricsserverport" and defined(insecure):
+  elif skey == "metricsserverport":
     var res = 0
     result = processInteger(value, res)
     if result == Success:
@@ -893,14 +893,6 @@ proc getHelpString*(): string =
       continue
     logLevels.add($level)
 
-  when defined(insecure):
-    let metricsServerHelp = """
-
-  --metricsServer         Enable the metrics HTTP server
-  --metricsServerPort:<value> Metrics HTTP server port on localhost (default: 9093)"""
-  else:
-    let metricsServerHelp = ""
-
   result = """
 
 USAGE:
@@ -918,7 +910,9 @@ NETWORKING OPTIONS:
   --bootnodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
   --staticnodes:<value>   Comma separated enode URLs to connect with
   --port:<value>          Network listening TCP port (default: 30303)
-  --discport:<value>      Network listening UDP port (defaults to --port argument)$7
+  --discport:<value>      Network listening UDP port (defaults to --port argument)
+  --metricsServer         Enable the metrics HTTP server
+  --metricsServerPort:<value> Metrics HTTP server port on localhost (default: 9093)
   --maxpeers:<value>      Maximum number of network peers (default: 25)
   --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
   --nat:<value>           NAT port mapping mechanism (any|none|upnp|pmp|<external IP>) (default: "any")
@@ -957,7 +951,6 @@ LOGGING AND DEBUGGING OPTIONS:
     strip($defaultProtocols, chars = {'{','}'}),
     $defaultMaxMsgSize,
     $defaultMinPow,
-    metricsServerHelp,
     $ord(defaultNetwork)
   ]
 
