@@ -308,8 +308,8 @@ cd vendor/nim-rocksdb
 Install Prometheus and Grafana. On Gentoo, it's `emerge prometheus grafana-bin`.
 
 ```bash
-# build Nimbus with support for the HTTP endpoint
-make NIMFLAGS="-d:insecure" nimbus
+# build Nimbus
+make nimbus
 # the Prometheus daemon will create its data dir in the current dir, so give it its own directory
 mkdir ../my_metrics
 # copy the basic config file over there

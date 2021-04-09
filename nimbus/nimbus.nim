@@ -15,7 +15,8 @@ import
   eth/p2p/rlpx_protocols/[eth_protocol, les_protocol, whisper_protocol],
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper, key_storage], p2p/chain,
-  eth/trie/db, metrics, metrics/chronicles_support, utils, ./conf_utils
+  eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
+  utils, ./conf_utils
 
 ## TODO:
 ## * No IPv6 support
@@ -53,7 +54,7 @@ proc start(nimbus: NimbusNode) =
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     initializeEmptyDb(chainDb)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
-    
+
   if conf.importFile.len > 0:
     importRlpBlock(conf.importFile, chainDB)
     quit(QuitSuccess)
@@ -137,11 +138,10 @@ proc start(nimbus: NimbusNode) =
     nimbus.rpcServer.start()
 
   # metrics server
-  when defined(insecure):
-    if conf.net.metricsServer:
-      let metricsAddress = "127.0.0.1"
-      info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsServerPort
-      metrics.startHttpServer(metricsAddress, Port(conf.net.metricsServerPort))
+  if conf.net.metricsServer:
+    let metricsAddress = "127.0.0.1"
+    info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsServerPort
+    startMetricsHttpServer(metricsAddress, Port(conf.net.metricsServerPort))
 
   # Connect directly to the static nodes
   for enode in conf.net.staticNodes:
