@@ -10,16 +10,7 @@ when not defined(vm2_enabled):
 when defined(evmc_enabled):
   {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
 
-import stint, eth/common/eth_types
+import forks_list
+export Fork
 
-type
-  Fork* = enum
-    FkFrontier = "frontier"
-    FkHomestead = "homestead"
-    FkTangerine = "tangerine whistle"
-    FkSpurious = "spurious dragon"
-    FkByzantium = "byzantium"
-    FkConstantinople = "constantinople"
-    FkPetersburg = "petersburg"
-    FkIstanbul = "istanbul"
-    FkBerlin = "berlin"
+# End
