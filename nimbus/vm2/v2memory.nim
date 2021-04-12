@@ -13,15 +13,14 @@ when defined(evmc_enabled):
 import
   sequtils,
   chronicles, eth/common/eth_types,
-  ../errors, ../validation,
+  ../errors, ../validation, ./memory_defs,
   ./interpreter/utils/v2utils_numeric
+
+export
+  Memory
 
 logScope:
   topics = "vm memory"
-
-type
-  Memory* = ref object
-    bytes*:  seq[byte]
 
 proc newMemory*: Memory =
   new(result)
