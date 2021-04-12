@@ -16,7 +16,7 @@ when defined(evmc_enabled):
 import
   tables, eth/common,
   options, json, sets,
-  ./v2memory, ./stack, ./code_stream,
+  ./v2memory, ./stack_defs, ./code_stream,
   ./interpreter/[v2gas_costs, v2opcode_values, v2forks],
   # TODO - will be hidden at a lower layer
   ../db/[db_chain, accounts_cache]

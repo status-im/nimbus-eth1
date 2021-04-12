@@ -116,9 +116,10 @@ export
 
 
 import
+  ./stack_defs as sdf,
   ./stack as stk
 export
-  stk.Stack,
+  sdf.Stack,
   stk.`$`,
   stk.`[]`,
   stk.dup,
