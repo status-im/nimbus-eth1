@@ -36,12 +36,11 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
   doAssert result.isOriginComputation
 
 proc execComputation*(c: Computation) =
-  if c.msg.isCreate:
-    c.execCreate()
-  else:
+  if not c.msg.isCreate:
     c.vmState.mutateStateDB:
       db.incNonce(c.msg.sender)
-    c.execCall()
+
+  c.execCallOrCreate()
 
   if c.isSuccess:
     c.refundSelfDestruct()

@@ -135,7 +135,7 @@ template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     )
 
   let child = newComputation(c.vmState, childMsg, Uint256.fromEvmc(m.create2_salt))
-  child.execCreate()
+  child.execCallOrCreate()
 
   if not child.shouldBurnGas:
     res.gas_left = child.gasMeter.gasRemaining
@@ -167,7 +167,7 @@ template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     )
 
   let child = newComputation(c.vmState, childMsg)
-  child.execCall()
+  child.execCallOrCreate()
 
   if not child.shouldBurnGas:
     res.gas_left = child.gasMeter.gasRemaining

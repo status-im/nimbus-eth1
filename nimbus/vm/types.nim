@@ -85,6 +85,8 @@ type
     savePoint*:             SavePoint
     instr*:                 Op
     opIndex*:               int
+    parent*, child*:        Computation
+    continuation*:          proc() {.gcsafe.}
 
   Error* = ref object
     info*:                  string

@@ -678,15 +678,15 @@ template genCreate(callName: untyped, opCode: Op): untyped =
         )
 
       var child = newComputation(c.vmState, childMsg, salt)
-      child.execCreate()
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+      c.chainTo(child):
+        if not child.shouldBurnGas:
+          c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
-      if child.isSuccess:
-        c.merge(child)
-        c.stack.top child.msg.contractAddress
-      else:
-        c.returnData = child.output
+        if child.isSuccess:
+          c.merge(child)
+          c.stack.top child.msg.contractAddress
+        else:
+          c.returnData = child.output
 
 genCreate(create, Create)
 genCreate(create2, Create2)
@@ -870,20 +870,19 @@ template genCall(callName: untyped, opCode: Op): untyped =
         flags: flags)
 
       var child = newComputation(c.vmState, msg)
-      child.execCall()
+      c.chainTo(child):
+        if not child.shouldBurnGas:
+          c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+        if child.isSuccess:
+          c.merge(child)
+          c.stack.top(1)
 
-      if child.isSuccess:
-        c.merge(child)
-        c.stack.top(1)
-
-      c.returnData = child.output
-      let actualOutputSize = min(memOutLen, child.output.len)
-      if actualOutputSize > 0:
-        c.memory.write(memOutPos,
-          child.output.toOpenArray(0, actualOutputSize - 1))
+        c.returnData = child.output
+        let actualOutputSize = min(memOutLen, child.output.len)
+        if actualOutputSize > 0:
+          c.memory.write(memOutPos,
+                         child.output.toOpenArray(0, actualOutputSize - 1))
 
 genCall(call, Call)
 genCall(callCode, CallCode)

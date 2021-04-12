@@ -272,6 +272,9 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
             `opImpl`(`c`)
             if `c`.tracingEnabled:
               `c`.traceOpCodeEnded(`asOp`, `c`.opIndex)
+            when `asOp` in {Create, Create2, Call, CallCode, DelegateCall, StaticCall}:
+              if not `c`.continuation.isNil:
+                return
         else:
           quote do:
             if `c`.tracingEnabled:
@@ -279,6 +282,9 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
             `opImpl`(`c`)
             if `c`.tracingEnabled:
               `c`.traceOpCodeEnded(`asOp`, `c`.opIndex)
+            when `asOp` in {Create, Create2, Call, CallCode, DelegateCall, StaticCall}:
+              if not `c`.continuation.isNil:
+                return
             when `asOp` in {Return, Revert, SelfDestruct}:
               break
 
@@ -380,7 +386,9 @@ proc executeOpcodes(c: Computation) =
   let fork = c.fork
 
   block:
-    if c.execPrecompiles(fork):
+    if not c.continuation.isNil:
+      c.continuation = nil
+    elif c.execPrecompiles(fork):
       break
 
     try:
@@ -388,6 +396,6 @@ proc executeOpcodes(c: Computation) =
     except CatchableError as e:
       c.setError(&"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
 
-  if c.isError():
+  if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
     debug "executeOpcodes error", msg=c.error.info

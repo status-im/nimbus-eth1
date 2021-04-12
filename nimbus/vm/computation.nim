@@ -192,7 +192,8 @@ proc commit*(c: Computation) =
   c.vmState.accountDb.commit(c.savePoint)
 
 proc dispose*(c: Computation) {.inline.} =
-  c.vmState.accountDb.dispose(c.savePoint)
+  c.vmState.accountDb.safeDispose(c.savePoint)
+  c.savePoint = nil
 
 proc rollback*(c: Computation) =
   c.vmState.accountDb.rollback(c.savePoint)
@@ -228,18 +229,14 @@ proc initAddress(x: int): EthAddress {.compileTime.} = result[19] = x.byte
 const ripemdAddr = initAddress(3)
 proc executeOpcodes*(c: Computation) {.gcsafe.}
 
-proc execCall*(c: Computation) =
+proc beforeExecCall(c: Computation) =
   c.snapshot()
-  defer:
-    c.dispose()
-
   if c.msg.kind == evmcCall:
     c.vmState.mutateStateDb:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
-  executeOpcodes(c)
-
+proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
@@ -255,7 +252,7 @@ proc execCall*(c: Computation) =
   else:
     c.rollback()
 
-proc execCreate*(c: Computation) =
+proc beforeExecCreate(c: Computation): bool =
   c.vmState.mutateStateDB:
     db.incNonce(c.msg.sender)
 
@@ -266,13 +263,11 @@ proc execCreate*(c: Computation) =
       db.accessList(c.msg.contractAddress)
 
   c.snapshot()
-  defer:
-    c.dispose()
 
   if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
     c.setError("Address collision when creating contract address={c.msg.contractAddress.toHex}", true)
     c.rollback()
-    return
+    return true
 
   c.vmState.mutateStateDb:
     db.subBalance(c.msg.sender, c.msg.value)
@@ -282,8 +277,9 @@ proc execCreate*(c: Computation) =
       # EIP161 nonce incrementation
       db.incNonce(c.msg.contractAddress)
 
-  executeOpcodes(c)
+  return false
 
+proc afterExecCreate(c: Computation) =
   if c.isSuccess:
     let fork = c.fork
     let contractFailed = not c.writeContract(fork)
@@ -294,6 +290,55 @@ proc execCreate*(c: Computation) =
     c.commit()
   else:
     c.rollback()
+
+proc beforeExec(c: Computation): bool =
+  if not c.msg.isCreate:
+    c.beforeExecCall()
+    false
+  else:
+    c.beforeExecCreate()
+
+proc afterExec(c: Computation) =
+  if not c.msg.isCreate:
+    c.afterExecCall()
+  else:
+    c.afterExecCreate()
+
+template chainTo*(c, toChild: Computation, after: untyped) =
+  c.child = toChild
+  c.continuation = proc() =
+    after
+
+proc execCallOrCreateAux(c: var Computation) {.noinline.} =
+  # Perform recursion with minimum-size stack per level.  The exception
+  # handling is very subtle.  Each call to `snapshot` must have a corresponding
+  # `dispose` on exception.  To minimise this proc's stackframe, `defer` is
+  # moved to the outermost proc only.  `{.noinline.}` is also used to make
+  # extra sure they stay separate.  `c` is a `var` parameter at every level of
+  # recursion, so the outermost proc sees every change to `c`, which is why `c`
+  # is updated instead of using `let`.  On exception, the outermost `defer`
+  # walks the `c.parent` chain to call `dispose` on each `c`.
+  if c.beforeExec():
+    return
+  c.executeOpcodes()
+  while not c.continuation.isNil:
+    # Parent and child refs are updated and cleared so as to avoid circular
+    # refs (like a double-linked list) or dangling refs (to finished child).
+    (c.child, c, c.parent) = (nil.Computation, c.child, c)
+    execCallOrCreateAux(c)
+    c.dispose()
+    (c.parent, c) = (nil.Computation, c.parent)
+    (c.continuation)()
+    c.executeOpcodes()
+  c.afterExec()
+
+proc execCallOrCreate*(cParam: Computation) =
+  var c = cParam
+  defer:
+    while not c.isNil:
+      c.dispose()
+      c = c.parent
+  execCallOrCreateAux(c)
 
 proc merge*(c, child: Computation) =
   c.logEntries.add child.logEntries
