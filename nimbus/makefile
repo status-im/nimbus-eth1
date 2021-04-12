@@ -39,12 +39,17 @@ endif
 # Compat version is used with external NIM compiler
 NIM_COMPAT := --useVersion:1.2
 
-# Name of NIM compiler, test for newer version on host OS
+# Name of NIMDOC compiler, test for newer version on host OS
 NIM_CMD    := nim
 NIM_TEST   := $(NIM_CMD) $(NIM_COMPAT) --help >/dev/null 2>&1
 NIM_SELECT := $(NIM_TEST) && echo "$(NIM_CMD) $(NIM_COMPAT)"|| echo "$(NIM_CMD)"
 # Note that the back ticks are needed in the following assignment
 NIM_EXE    := `$(NIM_SELECT)`
+
+# Extra nimdoc flags
+NIMDOC_FLAGS := --verbosity:0 --hints:off --warnings:off
+NIMDOC_FLAGS += -d:debug -d:disable_libbacktrace
+NIMDOC_FLAGS += $(NIMFLAGS)
 
 # Markdown compiler (test for discount tool with tables support)
 MD_CMD     := markdown
@@ -63,6 +68,7 @@ help::
 	echo
 	echo "<option>: V=1          -- verbose mode"
 	echo "          X=0          -- preferring local nim compiler (this repo)"
+	echo "          NIMFLAGS=..  -- additional flags for nim-docs generator"
 	echo
 	echo "<target>: docs         -- build NIM docs"
 	echo "          docs-update  -- process missing doc pages"
@@ -80,16 +86,17 @@ help::
 # Build indexed dox
 # ------------------------------------------------------------------------------
 
-# Automatc rule for updating single html/idx file
+# Automatic rule for updating single html/idx file
 docs/%.html : %.nim
 #	use compat option if it works with the nim compiler
 	@mkdir -p docs
 	@nim=$(NIM_EXE); doc_root="$(DOC_ROOT)"; \
+	export NIMBLE_DIR=$(NIMBLE_DIR); \
 	(set -x; $$nim doc --outdir:docs --docRoot:"$$doc_root" --index:on \
-		--errorMax:0 --verbosity:0 --hints:off --warnings:off \
+		--errorMax:0 $(NIMDOC_FLAGS) \
 		"$<" $(MUFFLE)) || true
 
-# Automatc rule for updating markdown files
+# Automatic rule for updating markdown files
 docs/ex/%.html : %.md
 	@mkdir -p $(dir $@)
 	@if $(MD_TEST); then \
@@ -98,7 +105,7 @@ docs/ex/%.html : %.md
 	  (echo "<pre>";(set -x;cat "$<");echo "</pre>"); \
 	fi > "$@"
 
-# Automatc rule for collecting raw files
+# Automatic rule for collecting raw files
 docs/ex/%.png : %.png
 	@mkdir -p $(dir $@)
 	@set -x; cp "$<" "$@"
@@ -165,8 +172,9 @@ docs:: docs-index
 .SILENT: clean-exe
 clean-exe:
 	for f in $(EXE_FILES); do \
-	  [ -f "$$f" ] || continue ;\
-	  (set -x; rm -f "$$f"); \
+	  if   [ -f "$$f"     ]; then (set -x; rm -f "$$f"); \
+	  elif [ -f "$$f.out" ]; then (set -x; rm -f "$$f.out"); \
+	  fi ; \
 	done
 
 .SILENT: clean-docs
