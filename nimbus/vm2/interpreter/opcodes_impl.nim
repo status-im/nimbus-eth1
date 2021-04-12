@@ -7,12 +7,16 @@
 
 import
   strformat, times, sets, sequtils, options,
-  chronicles, stint, nimcrypto, stew/ranges/ptr_arith, eth/common,
+  chronicles, stint, nimcrypto, eth/common,
   ./utils/[macros_procs_opcodes, v2utils_numeric],
   ./gas_meter, ./v2gas_costs, ./v2opcode_values, ./v2forks,
   ../v2memory, ../stack, ../code_stream, ../v2computation, ../v2state, ../v2types,
   ../../errors, ../../constants,
   ../../db/[db_chain, accounts_cache]
+
+# verify that experimental op table compiles
+import
+  ./op_handlers
 
 logScope:
   topics = "opcode impl"
