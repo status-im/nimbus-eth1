@@ -20,7 +20,7 @@ import
   strformat,
   ./op_codes,
   ./op_handlers/[oph_defs,
-                 oph_arithmetic, oph_hash,
+                 oph_arithmetic, oph_hash, oph_envinfo,
                  oph_sysops]
 
 # ------------------------------------------------------------------------------
@@ -47,6 +47,11 @@ const
 
       for w in vm2OpExecHash:
         if w.complain("Hash"):
+          doAssert rc[w.opCode].info == ""
+        rc[w.opCode] = w
+
+      for w in vm2OpExecEnvInfo:
+        if w.complain("EnvInfo"):
           doAssert rc[w.opCode].info == ""
         rc[w.opCode] = w
 

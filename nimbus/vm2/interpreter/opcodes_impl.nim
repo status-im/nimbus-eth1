@@ -38,6 +38,26 @@ template push(x: typed) {.dirty.} =
   ## Push an expression on the computation stack
   c.stack.push x
 
+proc writePaddedResult(mem: var Memory,
+                       data: openarray[byte],
+                       memPos, dataPos, len: Natural,
+                       paddingValue = 0.byte) =
+
+  mem.extend(memPos, len)
+  let dataEndPosition = dataPos.int64 + len - 1
+  let sourceBytes = data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
+  mem.write(memPos, sourceBytes)
+
+  # Don't duplicate zero-padding of mem.extend
+  let paddingOffset = min(memPos + sourceBytes.len, mem.len)
+  let numPaddingBytes = min(mem.len - paddingOffset, len - sourceBytes.len)
+  if numPaddingBytes > 0:
+    # TODO: avoid unnecessary memory allocation
+    mem.write(paddingOffset, repeat(paddingValue, numPaddingBytes))
+
+# ##################################
+# re-implemented OP handlers
+
 var gdbBPHook_counter = 0
 proc gdbBPHook*() =
   gdbBPHook_counter.inc
@@ -57,175 +77,44 @@ template opHandler(callName: untyped; opCode: Op) =
     desc.cpt = c
     vm2OpTabBerlin[opCode].exec.run(desc)
 
-# ##################################
-# 0s: Stop and Arithmetic Operations
-
-opHandler        add, Op.Add
-opHandler        mul, Op.Mul
-opHandler        sub, Op.Sub
-opHandler     divide, Op.Div
-opHandler       sdiv, Op.Sdiv
-opHandler     modulo, Op.Mod
-opHandler       smod, Op.Smod
-opHandler     addmod, Op.AddMod
-opHandler     mulmod, Op.MulMod
-opHandler        exp, Op.Exp
-opHandler signExtend, Op.SignExtend
-
-# ##########################################
-# 10s: Comparison & Bitwise Logic Operations
-
-opHandler         lt, Op.Lt
-opHandler         gt, Op.Gt
-opHandler        slt, Op.Slt
-opHandler        sgt, Op.Sgt
-opHandler         eq, Op.Eq
-opHandler     isZero, Op.IsZero
-opHandler      andOp, Op.And
-opHandler       orOp, Op.Or
-opHandler      xorOp, Op.Xor
-opHandler      notOp, Op.Not
-opHandler     byteOp, Op.Byte
-
-# ##########################################
-# 20s: SHA3
-
-opHandler       sha3, Op.Sha3
-
-# ##########################################
-# 30s: Environmental Information
-
-proc writePaddedResult(mem: var Memory,
-                       data: openarray[byte],
-                       memPos, dataPos, len: Natural,
-                       paddingValue = 0.byte) =
-
-  mem.extend(memPos, len)
-  let dataEndPosition = dataPos.int64 + len - 1
-  let sourceBytes = data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
-  mem.write(memPos, sourceBytes)
-
-  # Don't duplicate zero-padding of mem.extend
-  let paddingOffset = min(memPos + sourceBytes.len, mem.len)
-  let numPaddingBytes = min(mem.len - paddingOffset, len - sourceBytes.len)
-  if numPaddingBytes > 0:
-    # TODO: avoid unnecessary memory allocation
-    mem.write(paddingOffset, repeat(paddingValue, numPaddingBytes))
-
-op address, inline = true:
-  ## 0x30, Get address of currently executing account.
-  push: c.msg.contractAddress
-
-op balance, inline = true:
-  ## 0x31, Get balance of the given account.
-  let address = c.stack.popAddress()
-  push: c.getBalance(address)
-
-op origin, inline = true:
-  ## 0x32, Get execution origination address.
-  push: c.getOrigin()
-
-op caller, inline = true:
-  ## 0x33, Get caller address.
-  push: c.msg.sender
-
-op callValue, inline = true:
-  ## 0x34, Get deposited value by the instruction/transaction
-  ##       responsible for this execution
-  push: c.msg.value
-
-op callDataLoad, inline = false, startPos:
-  ## 0x35, Get input data of current environment
-  let start = startPos.cleanMemRef
-  if start >= c.msg.data.len:
-    push: 0
-    return
-
-  # If the data does not take 32 bytes, pad with zeros
-  let endRange = min(c.msg.data.len - 1, start + 31)
-  let presentBytes = endRange - start
-  # We rely on value being initialized with 0 by default
-  var value: array[32, byte]
-  value[0 .. presentBytes] = c.msg.data.toOpenArray(start, endRange)
-
-  push: value
-
-op callDataSize, inline = true:
-  ## 0x36, Get size of input data in current environment.
-  push: c.msg.data.len.u256
-
-op callDataCopy, inline = false, memStartPos, copyStartPos, size:
-  ## 0x37, Copy input data in current environment to memory.
-  # TODO tests: https://github.com/status-im/nimbus/issues/67
-
-  let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[CallDataCopy].m_handler(c.memory.len, memPos, len),
-    reason="CallDataCopy fee")
-
-  c.memory.writePaddedResult(c.msg.data, memPos, copyPos, len)
-
-op codeSize, inline = true:
-  ## 0x38, Get size of code running in current environment.
-  push: c.code.len
-
-op codeCopy, inline = false, memStartPos, copyStartPos, size:
-  ## 0x39, Copy code running in current environment to memory.
-  # TODO tests: https://github.com/status-im/nimbus/issues/67
-
-  let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[CodeCopy].m_handler(c.memory.len, memPos, len),
-    reason="CodeCopy fee")
-
-  c.memory.writePaddedResult(c.code.bytes, memPos, copyPos, len)
-
-op gasprice, inline = true:
-  ## 0x3A, Get price of gas in current environment.
-  push: c.getGasPrice()
-
-op extCodeSize, inline = true:
-  ## 0x3b, Get size of an account's code
-  let address = c.stack.popAddress()
-  push: c.getCodeSize(address)
-
-op extCodeCopy, inline = true:
-  ## 0x3c, Copy an account's code to memory.
-  let address = c.stack.popAddress()
-  let (memStartPos, codeStartPos, size) = c.stack.popInt(3)
-  let (memPos, codePos, len) = (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[ExtCodeCopy].m_handler(c.memory.len, memPos, len),
-    reason="ExtCodeCopy fee")
-
-  let codeBytes = c.getCode(address)
-  c.memory.writePaddedResult(codeBytes, memPos, codePos, len)
-
-op returnDataSize, inline = true:
-  ## 0x3d, Get size of output data from the previous call from the current environment.
-  push: c.returnData.len
-
-op returnDataCopy, inline = false,  memStartPos, copyStartPos, size:
-  ## 0x3e, Copy output data from the previous call to memory.
-  let (memPos, copyPos, len) = (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
-  let gasCost = c.gasCosts[ReturnDataCopy].m_handler(c.memory.len, memPos, len)
-  c.gasMeter.consumeGas(
-    gasCost,
-    reason="returnDataCopy fee")
-
-  if copyPos + len > c.returnData.len:
-    # TODO Geth additionally checks copyPos + len < 64
-    #      Parity uses a saturating addition
-    #      Yellow paper mentions  μs[1] + i are not subject to the 2^256 modulo.
-    raise newException(OutOfBoundsRead,
-      "Return data length is not sufficient to satisfy request.  Asked \n" &
-      &"for data from index {copyStartPos} to {copyStartPos + size}. Return data is {c.returnData.len} in \n" &
-      "length")
-
-  c.memory.writePaddedResult(c.returnData, memPos, copyPos, len)
+opHandler            add, Op.Add
+opHandler            mul, Op.Mul
+opHandler            sub, Op.Sub
+opHandler         divide, Op.Div
+opHandler           sdiv, Op.Sdiv
+opHandler         modulo, Op.Mod
+opHandler           smod, Op.Smod
+opHandler         addmod, Op.AddMod
+opHandler         mulmod, Op.MulMod
+opHandler            exp, Op.Exp
+opHandler     signExtend, Op.SignExtend
+opHandler             lt, Op.Lt
+opHandler             gt, Op.Gt
+opHandler            slt, Op.Slt
+opHandler            sgt, Op.Sgt
+opHandler             eq, Op.Eq
+opHandler         isZero, Op.IsZero
+opHandler          andOp, Op.And
+opHandler           orOp, Op.Or
+opHandler          xorOp, Op.Xor
+opHandler          notOp, Op.Not
+opHandler         byteOp, Op.Byte
+opHandler           sha3, Op.Sha3
+opHandler        address, Op.Address
+opHandler        balance, Op.Balance
+opHandler         origin, Op.Origin
+opHandler         caller, Op.Caller
+opHandler      callValue, Op.CallValue
+opHandler   callDataLoad, Op.CallDataLoad
+opHandler   callDataSize, Op.CallDataSize
+opHandler   callDataCopy, Op.CallDataCopy
+opHandler       codeSize, Op.CodeSize
+opHandler       codeCopy, Op.CodeCopy
+opHandler       gasprice, Op.GasPrice
+opHandler    extCodeSize, Op.ExtCodeSize
+opHandler    extCodeCopy, Op.ExtCodeCopy
+opHandler returnDataSize, Op.ReturnDataSize
+opHandler returnDataCopy, Op.ReturnDataCopy
 
 # ##########################################
 # 40s: Block Information
