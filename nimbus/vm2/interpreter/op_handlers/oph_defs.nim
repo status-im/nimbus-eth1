@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## EVM Opcodes, Definitons
-## =======================
+## EVM Opcodes, Definitions
+## ========================
 ##
 
 const
@@ -36,17 +36,32 @@ else:
     {.fatal: "Flag \"vm2_enabled\" must be unset "&
              "while circular dependency breaker kludge is activated".}
   type
+    GasMeter* = object
+      whatever: int
+
+    CodeStream* = ref object
+      bytes*: seq[byte]
+
+    Message* = ref object
+      contractAddress*: UInt256
+      sender*: UInt256
+      value*: UInt256
+      data*: seq[byte]
+
     Computation* = ref object
+      gasMeter*: GasMeter
       stack*: Stack
       memory*: Memory
-      code: int
+      msg*: Message
+      code*: CodeStream
+      returnData*: seq[byte]
 
 # ------------------------------------------------------------------------------
 # Kludge END
 # ------------------------------------------------------------------------------
 
 export
-  Op, Fork, Computation, Memory, Stack, UInt256
+  Op, Fork, Computation, Memory, Stack, UInt256, Message
 
 type
   Vm2Ctx* = object of RootObj
