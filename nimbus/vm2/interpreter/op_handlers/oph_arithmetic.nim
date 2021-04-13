@@ -86,6 +86,7 @@ const
     let (lhs, rhs) = k.cpt.stack.popInt(2)
     k.cpt.stack.push:
       if rhs == 0:
+        # EVM special casing of div by 0
         zero(Uint256)
       else:
         lhs div rhs

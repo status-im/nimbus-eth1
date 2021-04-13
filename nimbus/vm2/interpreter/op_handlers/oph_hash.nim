@@ -105,7 +105,7 @@ const
 const
   vm2OpExecHash*: seq[Vm2OpExec] = @[
 
-    (opCode: Add,         ## 0x20, Keccak-256
+    (opCode: Op.Sha3,     ## 0x20, Keccak-256
      forks: Vm2OpAllForks,
      info: "Compute Keccak-256 hash",
      exec: (prep: vm2OpIgnore,
