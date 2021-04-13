@@ -17,6 +17,7 @@ const
   isNoisy {.used.} = noisy > 0
 
 import
+  strformat,
   ./op_codes,
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash,
@@ -30,13 +31,28 @@ const
   allForksTable = block:
       var rc: array[Op, Vm2OpExec]
 
+      proc complain(rec: Vm2OpExec; s: string): bool =
+        var
+          op = rec.opCode
+          oInfo = rc[op].info
+          nInfo = rec.info
+        if oInfo != "":
+          echo &"*** {s}: duplicate <{op}> entry: \"{oInfo}\" vs. \"{nInfo}\""
+          return true
+
       for w in vm2OpExecArithmetic:
+        if w.complain("Arithmetic"):
+          doAssert rc[w.opCode].info == ""
         rc[w.opCode] = w
 
       for w in vm2OpExecHash:
+        if w.complain("Hash"):
+          doAssert rc[w.opCode].info == ""
         rc[w.opCode] = w
 
       for w in vm2OpExecSysOP:
+        if w.complain("SysOp"):
+          doAssert rc[w.opCode].info == ""
         rc[w.opCode] = w
 
       rc
@@ -44,7 +60,7 @@ const
 proc mkOpTable(select: Fork): array[Op, Vm2OpExec] {.compileTime.} =
   for op in Op:
     var w = allForksTable[op]
-    if FkFrontier in w.forks:
+    if select in w.forks:
       result[op] = w
     else:
       result[op] = allForksTable[Invalid]
@@ -81,8 +97,8 @@ when isMainModule and isNoisy:
     dummy.inc
 
   const
-    a = vm2OpTabFrontier
-    b = a[Stop].info
+    a = vm2OpTabBerlin
+    b = a[Shl].info
 
   gdbBPSink()
   echo ">>> ", b

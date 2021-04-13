@@ -16,7 +16,7 @@ import
 
 # verify that experimental op table compiles
 import
-  ./op_handlers
+  ./op_handlers, ./op_handlers/oph_defs
 
 logScope:
   topics = "opcode impl"
@@ -38,190 +38,59 @@ template push(x: typed) {.dirty.} =
   ## Push an expression on the computation stack
   c.stack.push x
 
+var gdbBPHook_counter = 0
+proc gdbBPHook*() =
+  gdbBPHook_counter.inc
+  stderr.write &"*** Hello {gdbBPHook_counter}\n"
+  stderr.flushFile
+
+template opHandlerX(callName: untyped; opCode: Op) =
+  proc callName*(c: Computation) =
+    gdbBPHook()
+    var desc: Vm2Ctx
+    desc.cpt = c
+    vm2OpTabBerlin[opCode].exec.run(desc)
+
+template opHandler(callName: untyped; opCode: Op) =
+  proc callName*(c: Computation) =
+    var desc: Vm2Ctx
+    desc.cpt = c
+    vm2OpTabBerlin[opCode].exec.run(desc)
+
 # ##################################
 # 0s: Stop and Arithmetic Operations
 
-op add, inline = true, lhs, rhs:
-  ## 0x01, Addition
-  push: lhs + rhs
-
-op mul, inline = true, lhs, rhs:
-  ## 0x02, Multiplication
-  push: lhs * rhs
-
-op sub, inline = true, lhs, rhs:
-  ## 0x03, Substraction
-  push: lhs - rhs
-
-op divide, inline = true, lhs, rhs:
-  ## 0x04, Division
-  push:
-    if rhs == 0: zero(Uint256) # EVM special casing of div by 0
-    else:        lhs div rhs
-
-op sdiv, inline = true, lhs, rhs:
-  ## 0x05, Signed division
-  var r: UInt256
-  if rhs != 0:
-    var a = lhs
-    var b = rhs
-    var signA, signB: bool
-    extractSign(a, signA)
-    extractSign(b, signB)
-    r = a div b
-    setSign(r, signA xor signB)
-  push(r)
-
-op modulo, inline = true, lhs, rhs:
-  ## 0x06, Modulo
-  push:
-    if rhs == 0: zero(Uint256)
-    else:        lhs mod rhs
-
-op smod, inline = true, lhs, rhs:
-  ## 0x07, Signed modulo
-  var r: UInt256
-  if rhs != 0:
-    var sign: bool
-    var v = lhs
-    var m = rhs
-    extractSign(m, sign)
-    extractSign(v, sign)
-    r = v mod m
-    setSign(r, sign)
-
-  push(r)
-
-op addmod, inline = true, lhs, rhs, modulus:
-  ## 0x08, Modulo addition
-  ## Intermediate computations do not roll over at 2^256
-  push:
-    if modulus == 0: zero(UInt256) # EVM special casing of div by 0
-    else: addmod(lhs, rhs, modulus)
-
-op mulmod, inline = true, lhs, rhs, modulus:
-  ## 0x09, Modulo multiplication
-  ## Intermediate computations do not roll over at 2^256
-  push:
-    if modulus == 0: zero(UInt256) # EVM special casing of div by 0
-    else: mulmod(lhs, rhs, modulus)
-
-op exp, inline = true, base, exponent:
-  ## 0x0A, Exponentiation
-  c.gasMeter.consumeGas(
-    c.gasCosts[Exp].d_handler(exponent),
-    reason="EXP: exponent bytes"
-    )
-  push:
-    if base.isZero:
-      if exponent.isZero:
-        # https://github.com/ethereum/yellowpaper/issues/257
-        # https://github.com/ethereum/tests/pull/460
-        # https://github.com/ewasm/evm2wasm/issues/137
-        1.u256
-      else:
-        zero(UInt256)
-    else:
-      base.pow(exponent)
-
-op signExtend, inline = false, bits, value:
-  ## 0x0B, Sign extend
-  ## Extend length of two’s complement signed integer.
-
-  var res: UInt256
-  if bits <= 31.u256:
-    let
-      one = 1.u256
-      testBit = bits.truncate(int) * 8 + 7
-      bitPos = one shl testBit
-      mask = bitPos - one
-    if not isZero(value and bitPos):
-      res = value or (not mask)
-    else:
-      res = value and mask
-  else:
-    res = value
-
-  push: res
+opHandler        add, Op.Add
+opHandler        mul, Op.Mul
+opHandler        sub, Op.Sub
+opHandler     divide, Op.Div
+opHandler       sdiv, Op.Sdiv
+opHandler     modulo, Op.Mod
+opHandler       smod, Op.Smod
+opHandler     addmod, Op.AddMod
+opHandler     mulmod, Op.MulMod
+opHandler        exp, Op.Exp
+opHandler signExtend, Op.SignExtend
 
 # ##########################################
 # 10s: Comparison & Bitwise Logic Operations
 
-op lt, inline = true, lhs, rhs:
-  ## 0x10, Less-than comparison
-  push: (lhs < rhs).uint.u256
-
-op gt, inline = true, lhs, rhs:
-  ## 0x11, Greater-than comparison
-  push: (lhs > rhs).uint.u256
-
-op slt, inline = true, lhs, rhs:
-  ## 0x12, Signed less-than comparison
-  push: (cast[Int256](lhs) < cast[Int256](rhs)).uint.u256
-
-op sgt, inline = true, lhs, rhs:
-  ## 0x13, Signed greater-than comparison
-  push: (cast[Int256](lhs) > cast[Int256](rhs)).uint.u256
-
-op eq, inline = true, lhs, rhs:
-  ## 0x14, Signed greater-than comparison
-  push: (lhs == rhs).uint.u256
-
-op isZero, inline = true, value:
-  ## 0x15, Check if zero
-  push: value.isZero.uint.u256
-
-op andOp, inline = true, lhs, rhs:
-  ## 0x16, Bitwise AND
-  push: lhs and rhs
-
-op orOp, inline = true, lhs, rhs:
-  ## 0x17, Bitwise AND
-  push: lhs or rhs
-
-op xorOp, inline = true, lhs, rhs:
-  ## 0x18, Bitwise AND
-  push: lhs xor rhs
-
-op notOp, inline = true, value:
-  ## 0x19, Check if zero
-  push: value.not
-
-op byteOp, inline = true, position, value:
-  ## 0x20, Retrieve single byte from word.
-
-  let pos = position.truncate(int)
-
-  push:
-    if pos >= 32 or pos < 0: zero(Uint256)
-    else:
-      when system.cpuEndian == bigEndian:
-        cast[array[32, byte]](value)[pos].u256
-      else:
-        cast[array[32, byte]](value)[31 - pos].u256
+opHandler         lt, Op.Lt
+opHandler         gt, Op.Gt
+opHandler        slt, Op.Slt
+opHandler        sgt, Op.Sgt
+opHandler         eq, Op.Eq
+opHandler     isZero, Op.IsZero
+opHandler      andOp, Op.And
+opHandler       orOp, Op.Or
+opHandler      xorOp, Op.Xor
+opHandler      notOp, Op.Not
+opHandler     byteOp, Op.Byte
 
 # ##########################################
 # 20s: SHA3
 
-op sha3, inline = true, startPos, length:
-  ## 0x20, Compute Keccak-256 hash.
-  let (pos, len) = (startPos.safeInt, length.safeInt)
-
-  if pos < 0 or len < 0 or pos > 2147483648:
-    raise newException(OutOfBoundsRead, "Out of bounds memory access")
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[Op.Sha3].m_handler(c.memory.len, pos, len),
-    reason="SHA3: word gas cost"
-    )
-
-  c.memory.extend(pos, len)
-  let endRange = min(pos + len, c.memory.len) - 1
-  if endRange == -1 or pos >= c.memory.len:
-    push(EMPTY_SHA3)
-  else:
-    push:
-      keccak256.digest c.memory.bytes.toOpenArray(pos, endRange)
+opHandler       sha3, Op.Sha3
 
 # ##########################################
 # 30s: Environmental Information
@@ -876,33 +745,10 @@ op selfDestructEip161, inline = false:
   c.selfDestruct(beneficiary)
 
 # Constantinople's new opcodes
-op shlOp, inline = true, shift, num:
-  let shiftLen = shift.safeInt
-  if shiftLen >= 256:
-    push: 0
-  else:
-    push: num shl shiftLen
 
-op shrOp, inline = true, shift, num:
-  let shiftLen = shift.safeInt
-  if shiftLen >= 256:
-    push: 0
-  else:
-    # uint version of `shr`
-    push: num shr shiftLen
-
-op sarOp, inline = true:
-  let shiftLen = c.stack.popInt().safeInt
-  let num = cast[Int256](c.stack.popInt())
-  if shiftLen >= 256:
-    if num.isNegative:
-      push: cast[Uint256]((-1).i256)
-    else:
-      push: 0
-  else:
-    # int version of `shr` then force the result
-    # into uint256
-    push: cast[Uint256](num shr shiftLen)
+opHandler      shlOp, Op.Shl
+opHandler      shrOp, Op.Shr
+opHandler      sarOp, Op.Sar
 
 op extCodeHash, inline = true:
   let address = c.stack.popAddress()
