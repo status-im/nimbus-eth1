@@ -36,19 +36,29 @@ else:
     {.fatal: "Flag \"vm2_enabled\" must be unset "&
              "while circular dependency breaker kludge is activated".}
   type
+    ReadOnlyStateDB* =
+      seq[byte]
+
     GasMeter* = object
-      whatever: int
+      gasRemaining*: int
 
     CodeStream* = ref object
       bytes*: seq[byte]
+      pc*: int
+
+    BaseVMState* = ref object
+      accountDb*: ReadOnlyStateDB
 
     Message* = ref object
       contractAddress*: UInt256
       sender*: UInt256
       value*: UInt256
       data*: seq[byte]
+      flags*: int
 
     Computation* = ref object
+      returnStack*: seq[int]
+      vmState*: BaseVMState
       gasMeter*: GasMeter
       stack*: Stack
       memory*: Memory

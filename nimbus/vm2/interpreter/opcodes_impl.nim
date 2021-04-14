@@ -55,6 +55,25 @@ proc writePaddedResult(mem: var Memory,
     # TODO: avoid unnecessary memory allocation
     mem.write(paddingOffset, repeat(paddingValue, numPaddingBytes))
 
+template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
+  let stateDB = c.vmState.readOnlyStateDB
+  let currentValue {.inject.} = c.getStorage(slot)
+
+  let
+    gasParam = GasParams(
+      kind: Op.Sstore,
+      s_currentValue: currentValue,
+      s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
+    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
+
+  c.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
+
+  if gasRefund != 0:
+    c.gasMeter.refundGas(gasRefund)
+
+  c.vmState.mutateStateDB:
+    db.setStorage(c.msg.contractAddress, slot, newValue)
+
 # ##################################
 # re-implemented OP handlers
 
@@ -64,18 +83,18 @@ proc gdbBPHook*() =
   stderr.write &"*** Hello {gdbBPHook_counter}\n"
   stderr.flushFile
 
-template opHandlerX(callName: untyped; opCode: Op) =
+template opHandlerX(callName: untyped; opCode: Op; fork = FkBerlin) =
   proc callName*(c: Computation) =
     gdbBPHook()
     var desc: Vm2Ctx
     desc.cpt = c
-    vm2OpTabBerlin[opCode].exec.run(desc)
+    vm2OpHandlers[fork][opCode].exec.run(desc)
 
-template opHandler(callName: untyped; opCode: Op) =
+template opHandler(callName: untyped; opCode: Op; fork = FkBerlin) =
   proc callName*(c: Computation) =
     var desc: Vm2Ctx
     desc.cpt = c
-    vm2OpTabBerlin[opCode].exec.run(desc)
+    vm2OpHandlers[fork][opCode].exec.run(desc)
 
 opHandler            add, Op.Add
 opHandler            mul, Op.Mul
@@ -123,178 +142,23 @@ opHandler     difficulty, Op.Difficulty
 opHandler       gasLimit, Op.GasLimit
 opHandler        chainId, Op.ChainId
 opHandler    selfBalance, Op.SelfBalance
-
-# ##########################################
-# 50s: Stack, Memory, Storage and Flow Operations
-
-op pop, inline = true:
-  ## 0x50, Remove item from stack.
-  discard c.stack.popInt()
-
-op mload, inline = true, memStartPos:
-  ## 0x51, Load word from memory
-  let memPos = memStartPos.cleanMemRef
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[MLoad].m_handler(c.memory.len, memPos, 32),
-    reason="MLOAD: GasVeryLow + memory expansion"
-    )
-  c.memory.extend(memPos, 32)
-
-  push: c.memory.read(memPos, 32) # TODO, should we convert to native endianness?
-
-op mstore, inline = true, memStartPos, value:
-  ## 0x52, Save word to memory
-  let memPos = memStartPos.cleanMemRef
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[MStore].m_handler(c.memory.len, memPos, 32),
-    reason="MSTORE: GasVeryLow + memory expansion"
-    )
-
-  c.memory.extend(memPos, 32)
-  c.memory.write(memPos, value.toByteArrayBE) # is big-endian correct? Parity/Geth do convert
-
-op mstore8, inline = true, memStartPos, value:
-  ## 0x53, Save byte to memory
-  let memPos = memStartPos.cleanMemRef
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[MStore].m_handler(c.memory.len, memPos, 1),
-    reason="MSTORE8: GasVeryLow + memory expansion"
-    )
-
-  c.memory.extend(memPos, 1)
-  c.memory.write(memPos, [value.toByteArrayBE[31]])
-
-op sload, inline = true, slot:
-  ## 0x54, Load word from storage.
-  push: c.getStorage(slot)
-
-template sstoreImpl(c: Computation, slot, newValue: Uint256) =
-    let currentValue {.inject.} = c.getStorage(slot)
-
-    let
-      gasParam = GasParams(kind: Op.Sstore, s_currentValue: currentValue)
-      (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
-
-    c.gasMeter.consumeGas(gasCost, &"SSTORE: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
-
-    if gasRefund > 0:
-      c.gasMeter.refundGas(gasRefund)
-
-    c.vmState.mutateStateDB:
-      db.setStorage(c.msg.contractAddress, slot, newValue)
-
-op sstore, inline = false, slot, newValue:
-  ## 0x55, Save word to storage.
-  checkInStaticContext(c)
-  block:
-    sstoreImpl(c, slot, newValue)
-
-template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
-    let stateDB = c.vmState.readOnlyStateDB
-    let currentValue {.inject.} = c.getStorage(slot)
-
-    let
-      gasParam = GasParams(kind: Op.Sstore,
-        s_currentValue: currentValue,
-        s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot)
-      )
-      (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
-
-    c.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
-
-    if gasRefund != 0:
-      c.gasMeter.refundGas(gasRefund)
-
-    c.vmState.mutateStateDB:
-      db.setStorage(c.msg.contractAddress, slot, newValue)
-
-op sstoreEIP2200, inline = false, slot, newValue:
-  checkInStaticContext(c)
-  const SentryGasEIP2200 = 2300  # Minimum gas required to be present for an SSTORE call, not consumed
-
-  if c.gasMeter.gasRemaining <= SentryGasEIP2200:
-    raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
-  block:
-    sstoreNetGasMeteringImpl(c, slot, newValue)
-
-op sstoreEIP1283, inline = false, slot, newValue:
-  checkInStaticContext(c)
-  block:
-    sstoreNetGasMeteringImpl(c, slot, newValue)
-
-proc jumpImpl(c: Computation, jumpTarget: UInt256) =
-  if jumpTarget >= c.code.len.u256:
-    raise newException(InvalidJumpDestination, "Invalid Jump Destination")
-
-  let jt = jumpTarget.truncate(int)
-  c.code.pc = jt
-
-  let nextOpcode = c.code.peek
-  if nextOpcode != JUMPDEST:
-    raise newException(InvalidJumpDestination, "Invalid Jump Destination")
-  # TODO: next check seems redundant
-  if not c.code.isValidOpcode(jt):
-    raise newException(InvalidInstruction, "Jump resulted in invalid instruction")
-
-op jump, inline = true, jumpTarget:
-  ## 0x56, Alter the program counter
-  jumpImpl(c, jumpTarget)
-
-op jumpI, inline = true, jumpTarget, testedValue:
-  ## 0x57, Conditionally alter the program counter.
-  if testedValue != 0:
-    jumpImpl(c, jumpTarget)
-
-op pc, inline = true:
-  ## 0x58, Get the value of the program counter prior to the increment corresponding to this instruction.
-  push: max(c.code.pc - 1, 0)
-
-op msize, inline = true:
-  ## 0x59, Get the size of active memory in bytes.
-  push: c.memory.len
-
-op gas, inline = true:
-  ## 0x5a, Get the amount of available gas, including the corresponding reduction for the cost of this instruction.
-  push: c.gasMeter.gasRemaining
-
-op jumpDest, inline = true:
-  ## 0x5b, Mark a valid destination for jumps. This operation has no effect on machine state during execution.
-  discard
-
-op beginSub, inline = true:
-  ## 0x5c, Marks the entry point to a subroutine
-  raise newException(OutOfGas, "Abort: Attempt to execute BeginSub opcode")
-
-op returnSub, inline = true:
-  ## 0x5d, Returns control to the caller of a subroutine.
-  if c.returnStack.len == 0:
-    raise newException(OutOfGas, "Abort: invalid returnStack during ReturnSub")
-  # Other than the check that the return stack is not empty, there is no
-  # need to validate the pc from 'returns', since we only ever push valid
-  # values onto it via jumpsub.
-  c.code.pc = c.returnStack.pop()
-
-op jumpSub, inline = true, jumpTarget:
-  ## 0x5e, Transfers control to a subroutine.
-  if jumpTarget >= c.code.len.u256:
-    raise newException(InvalidJumpDestination, "JumpSub destination exceeds code len")
-
-  let returnPC = c.code.pc
-  let jt = jumpTarget.truncate(int)
-  c.code.pc = jt
-
-  let nextOpcode = c.code.peek
-  if nextOpcode != BeginSub:
-    raise newException(InvalidJumpDestination, "Invalid JumpSub destination")
-
-  if c.returnStack.len == 1023:
-    raise newException(FullStack, "Out of returnStack")
-
-  c.returnStack.add returnPC
-  inc c.code.pc
+opHandler            pop, Op.Pop
+opHandler          mload, Op.Mload
+opHandler         mstore, Op.Mstore
+opHandler        mstore8, Op.Mstore8
+opHandler          sload, Op.Sload
+opHandler         sstore, Op.Sstore, FkFrontier
+opHandler  sstoreEIP1283, Op.Sstore, FkConstantinople
+opHandler  sstoreEIP2200, Op.Sstore
+opHandler           jump, Op.Jump
+opHandler          jumpI, Op.JumpI
+opHandler             pc, Op.Pc
+opHandler          msize, Op.Msize
+opHandler            gas, Op.Gas
+opHandler       jumpDest, Op.JumpDest
+opHandler       beginSub, Op.BeginSub
+opHandler      returnSub, Op.ReturnSub
+opHandler        jumpSub, Op.JumpSub
 
 # ##########################################
 # 60s & 70s: Push Operations.

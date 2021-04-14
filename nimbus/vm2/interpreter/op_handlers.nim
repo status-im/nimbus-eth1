@@ -21,60 +21,38 @@ import
   ./op_codes,
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
+                 oph_memory,
                  oph_sysops]
 
 # ------------------------------------------------------------------------------
 # Helper
 # ------------------------------------------------------------------------------
 
-const
-  allForksTable = block:
-      var rc: array[Op, Vm2OpExec]
+proc importList(rc: var array[Op,Vm2OpExec];
+                sel: Fork; list: seq[Vm2OpExec]; s: string) {.compileTime.} =
+  for w in list:
+    if sel notin w.forks:
+      continue
+    var oInf = rc[w.opCode].info
+    if oInf != "" or 0 < rc[w.opCode].forks.card:
+      echo &"*** {s}: duplicate <{w.opCode}> entry: \"{oInf}\" vs. \"{w.info}\""
+      doAssert rc[w.opCode].info == ""
+      doAssert rc[w.opCode].forks.card == 0
+    rc[w.opCode] = w
 
-      proc complain(rec: Vm2OpExec; s: string): bool =
-        var
-          op = rec.opCode
-          oInfo = rc[op].info
-          nInfo = rec.info
-        if oInfo != "":
-          echo &"*** {s}: duplicate <{op}> entry: \"{oInfo}\" vs. \"{nInfo}\""
-          return true
 
-      for w in vm2OpExecArithmetic:
-        if w.complain("Arithmetic"):
-          doAssert rc[w.opCode].info == ""
-        rc[w.opCode] = w
+proc mkOpTable(select: Fork): array[Op,Vm2OpExec] {.compileTime.} =
+  result.importList(select, vm2OpExecArithmetic, "Arithmetic")
+  result.importList(select, vm2OpExecHash,       "Hash")
+  result.importList(select, vm2OpExecEnvInfo,    "EnvInfo")
+  result.importList(select, vm2OpExecBlockData,  "BlockData")
+  result.importList(select, vm2OpExecMemory,     "Memory")
+  result.importList(select, vm2OpExecSysOP,      "SysOp")
 
-      for w in vm2OpExecHash:
-        if w.complain("Hash"):
-          doAssert rc[w.opCode].info == ""
-        rc[w.opCode] = w
-
-      for w in vm2OpExecEnvInfo:
-        if w.complain("EnvInfo"):
-          doAssert rc[w.opCode].info == ""
-        rc[w.opCode] = w
-
-      for w in vm2OpExecBlockData:
-        if w.complain("BlockData"):
-          doAssert rc[w.opCode].info == ""
-        rc[w.opCode] = w
-
-      for w in vm2OpExecSysOP:
-        if w.complain("SysOp"):
-          doAssert rc[w.opCode].info == ""
-        rc[w.opCode] = w
-
-      rc
-
-proc mkOpTable(select: Fork): array[Op, Vm2OpExec] {.compileTime.} =
   for op in Op:
-    var w = allForksTable[op]
-    if select in w.forks:
-      result[op] = w
-    else:
-      result[op] = allForksTable[Invalid]
-    result[op].opCode = op
+    if select notin result[op].forks:
+      result[op] = result[Invalid]
+      result[op].opCode = op
 
 # ------------------------------------------------------------------------------
 # Public handler tables
@@ -87,15 +65,15 @@ const
       rc[w] = w.mkOpTable
     rc
 
-  vm2OpTabFrontier*       = vm2OpHandlers[FkFrontier]
-  vm2OpTabHomestead*      = vm2OpHandlers[FkHomestead]
-  vm2OpTabTangerine*      = vm2OpHandlers[FkTangerine]
-  vm2OpTabSpurious*       = vm2OpHandlers[FkSpurious]
-  vm2OpTabByzantium*      = vm2OpHandlers[FkByzantium]
-  vm2OpTabConstantinople* = vm2OpHandlers[FkConstantinople]
-  vm2OpTabPetersburg*     = vm2OpHandlers[FkPetersburg]
-  vm2OpTabIstanbul*       = vm2OpHandlers[FkIstanbul]
-  vm2OpTabBerlin*         = vm2OpHandlers[FkBerlin]
+  # vm2OpTabFrontier*       = vm2OpHandlers[FkFrontier]
+  # vm2OpTabHomestead*      = vm2OpHandlers[FkHomestead]
+  # vm2OpTabTangerine*      = vm2OpHandlers[FkTangerine]
+  # vm2OpTabSpurious*       = vm2OpHandlers[FkSpurious]
+  # vm2OpTabByzantium*      = vm2OpHandlers[FkByzantium]
+  # vm2OpTabConstantinople* = vm2OpHandlers[FkConstantinople]
+  # vm2OpTabPetersburg*     = vm2OpHandlers[FkPetersburg]
+  # vm2OpTabIstanbul*       = vm2OpHandlers[FkIstanbul]
+  # vm2OpTabBerlin*         = vm2OpHandlers[FkBerlin]
 
 # ------------------------------------------------------------------------------
 # Debugging ...
@@ -106,12 +84,18 @@ when isMainModule and isNoisy:
   proc gdbBPSink() =
     dummy.inc
 
-  const
-    a = vm2OpTabBerlin
-    b = a[Shl].info
-
   gdbBPSink()
-  echo ">>> ", b
+  echo ">>> berlin[shl]:            ",
+        vm2OpHandlers[FkBerlin][Shl].info
+
+  echo ">>> frontier[sstore]:       ",
+        vm2OpHandlers[FkFrontier][Sstore].info
+
+  echo ">>> constantinople[sstore]: ",
+        vm2OpHandlers[FkConstantinople][Sstore].info
+
+  echo ">>> berlin[sstore]:         ",
+        vm2OpHandlers[FkBerlin][Sstore].info
 
 # ------------------------------------------------------------------------------
 # End
