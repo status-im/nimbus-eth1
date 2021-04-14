@@ -23,20 +23,18 @@ jobs:
           - os: windows
             cpu: i386
             evmc: nimevm
-          #  core dump
-          #- os: linux
-          #  cpu: amd64
-          #  evmc: evmc
+          - os: linux
+            cpu: amd64
+            evmc: evmc
           - os: linux
             cpu: i386
             evmc: evmc
           - os: macos
             cpu: amd64
             evmc: evmc
-          # mysterious failure
-          #- os: windows
-          #  cpu: amd64
-          #  evmc: evmc
+          - os: windows
+            cpu: amd64
+            evmc: evmc
           - os: windows
             cpu: i386
             evmc: evmc
