@@ -41,6 +41,8 @@ when not breakCircularDependency:
 else:
   import macros
 
+  var blindGasCosts: array[Op,int]
+
   # copied from stack.nim
   macro genTupleType(len: static[int], elemType: untyped): untyped =
     result = nnkTupleConstr.newNimNode()
@@ -53,10 +55,19 @@ else:
     var rc: genTupleType(n, UInt256)
     return rc
 
+  # function stubs from v2computation.nim (to satisfy compiler logic)
+  proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
+
   # function stubs from v2utils_numeric.nim
   proc extractSign(v: var UInt256, sign: var bool) = discard
   proc setSign(v: var UInt256, sign: bool) =  discard
   func safeInt(x: Uint256): int = discard
+
+  # function stubs from gas_meter.nim
+  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
+
+  # stubs from v2gas_costs.nim
+  proc d_handler(x: int; value: Uint256): int = 0
 
 # ------------------------------------------------------------------------------
 # Kludge END
@@ -166,10 +177,9 @@ const
     ## 0x0A, Exponentiation
     let (base, exponent) = k.cpt.stack.popInt(2)
 
-    when not breakCircularDependency:
-      k.cpt.gasMeter.consumeGas(
-        k.cpt.gasCosts[Exp].d_handler(exponent),
-        reason = "EXP: exponent bytes")
+    k.cpt.gasMeter.consumeGas(
+      k.cpt.gasCosts[Exp].d_handler(exponent),
+      reason = "EXP: exponent bytes")
 
     k.cpt.stack.push:
       if not base.isZero:

@@ -41,6 +41,8 @@ when not breakCircularDependency:
 else:
   import macros
 
+  var blindGasCosts: array[Op,int]
+
   # copied from stack.nim
   macro genTupleType(len: static[int], elemType: untyped): untyped =
     result = nnkTupleConstr.newNimNode()
@@ -54,11 +56,12 @@ else:
     return rc
 
   # function stubs from v2computation.nim (to satisfy compiler logic)
+  proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
   proc getBalance[T](c: Computation, address: T): Uint256 = 0.u256
-  proc getOrigin(c: Computation): Uint256 =  0.u256
-  proc getGasPrice(c: Computation): Uint256 =  0.u256
   proc getCodeSize[T](c: Computation, address: T): uint = 0
   proc getCode[T](c: Computation, address: T): seq[byte] = @[]
+  proc getGasPrice(c: Computation): Uint256 =  0.u256
+  proc getOrigin(c: Computation): Uint256 =  0.u256
 
   # function stubs from v2utils_numeric.nim
   func cleanMemRef(x: UInt256): int = 0
@@ -70,6 +73,12 @@ else:
 
   # function stubs from code_stream.nim
   proc len(c: CodeStream): int = len(c.bytes)
+
+  # function stubs from gas_meter.nim
+  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
+
+  # stubs from v2gas_costs.nim
+  proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = 0
 
 # ------------------------------------------------------------------------------
 # Kludge END
@@ -164,10 +173,9 @@ const
     let (memPos, copyPos, len) =
       (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
-    when not breakCircularDependency:
-      k.cpt.gasMeter.consumeGas(
-        k.cpt.gasCosts[CallDataCopy].m_handler(k.cpt.memory.len, memPos, len),
-        reason = "CallDataCopy fee")
+    k.cpt.gasMeter.consumeGas(
+      k.cpt.gasCosts[CallDataCopy].m_handler(k.cpt.memory.len, memPos, len),
+      reason = "CallDataCopy fee")
 
     k.cpt.memory.writePaddedResult(k.cpt.msg.data, memPos, copyPos, len)
 
@@ -186,10 +194,9 @@ const
     let (memPos, copyPos, len) =
       (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
-    when not breakCircularDependency:
-      k.cpt.gasMeter.consumeGas(
-        k.cpt.gasCosts[CodeCopy].m_handler(k.cpt.memory.len, memPos, len),
-        reason = "CodeCopy fee")
+    k.cpt.gasMeter.consumeGas(
+      k.cpt.gasCosts[CodeCopy].m_handler(k.cpt.memory.len, memPos, len),
+      reason = "CodeCopy fee")
 
     k.cpt.memory.writePaddedResult(k.cpt.code.bytes, memPos, copyPos, len)
 
@@ -214,10 +221,9 @@ const
     let (memPos, codePos, len) =
       (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
 
-    when not breakCircularDependency:
-      k.cpt.gasMeter.consumeGas(
-        k.cpt.gasCosts[ExtCodeCopy].m_handler(k.cpt.memory.len, memPos, len),
-        reason = "ExtCodeCopy fee")
+    k.cpt.gasMeter.consumeGas(
+      k.cpt.gasCosts[ExtCodeCopy].m_handler(k.cpt.memory.len, memPos, len),
+      reason = "ExtCodeCopy fee")
 
     let codeBytes = k.cpt.getCode(address)
     k.cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
@@ -237,10 +243,9 @@ const
     let (memPos, copyPos, len) =
       (memStartPos.cleanMemRef, copyStartPos.cleanMemRef, size.cleanMemRef)
 
-    when not breakCircularDependency:
-      let gasCost = k.cpt.gasCosts[ReturnDataCopy].m_handler(
-        k.cpt.memory.len, memPos, len)
-      k.cpt.gasMeter.consumeGas(gasCost, reason = "returnDataCopy fee")
+    let gasCost = k.cpt.gasCosts[ReturnDataCopy].m_handler(
+      k.cpt.memory.len, memPos, len)
+    k.cpt.gasMeter.consumeGas(gasCost, reason = "returnDataCopy fee")
 
     if copyPos + len > k.cpt.returnData.len:
       raise newException(
