@@ -34,12 +34,8 @@ else:
 
 # omitting frame pointers in nim breaks the GC
 # https://github.com/nim-lang/Nim/issues/10625
-if not defined(windows):
-  # ...except on windows where the option crashes GCC:
-  # https://sourceforge.net/p/mingw-w64/bugs/880/
-  # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=86593
-  switch("passC", "-fno-omit-frame-pointer")
-  switch("passL", "-fno-omit-frame-pointer")
+switch("passC", "-fno-omit-frame-pointer")
+switch("passL", "-fno-omit-frame-pointer")
 
 --threads:on
 --opt:speed
