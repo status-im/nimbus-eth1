@@ -115,41 +115,14 @@ opHandler    extCodeSize, Op.ExtCodeSize
 opHandler    extCodeCopy, Op.ExtCodeCopy
 opHandler returnDataSize, Op.ReturnDataSize
 opHandler returnDataCopy, Op.ReturnDataCopy
-
-# ##########################################
-# 40s: Block Information
-
-op blockhash, inline = true, blockNumber:
-  ## 0x40, Get the hash of one of the 256 most recent complete blocks.
-  push: c.getBlockHash(blockNumber)
-
-op coinbase, inline = true:
-  ## 0x41, Get the block's beneficiary address.
-  push: c.getCoinbase()
-
-op timestamp, inline = true:
-  ## 0x42, Get the block's timestamp.
-  push: c.getTimestamp()
-
-op blocknumber, inline = true:
-  ## 0x43, Get the block's number.
-  push: c.getBlockNumber()
-
-op difficulty, inline = true:
-  ## 0x44, Get the block's difficulty
-  push: c.getDifficulty()
-
-op gasLimit, inline = true:
-  ## 0x45, Get the block's gas limit
-  push: c.getGasLimit()
-
-op chainId, inline = true:
-  ## 0x46, Get current chain’s EIP-155 unique identifier.
-  push: c.getChainId()
-
-op selfBalance, inline = true:
-  ## 0x47, Get current contract's balance.
-  push: c.getBalance(c.msg.contractAddress)
+opHandler      blockhash, Op.Blockhash
+opHandler       coinbase, Op.Coinbase
+opHandler      timestamp, Op.Timestamp
+opHandler    blocknumber, Op.Number
+opHandler     difficulty, Op.Difficulty
+opHandler       gasLimit, Op.GasLimit
+opHandler        chainId, Op.ChainId
+opHandler    selfBalance, Op.SelfBalance
 
 # ##########################################
 # 50s: Stack, Memory, Storage and Flow Operations
