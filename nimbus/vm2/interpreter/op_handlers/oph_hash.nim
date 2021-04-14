@@ -17,8 +17,8 @@ const
   breakCircularDependency {.used.} = kludge > 0
 
 import
-  ./oph_defs,
   ../../../errors,
+  ./oph_defs,
   stint
 
 # ------------------------------------------------------------------------------
@@ -31,15 +31,11 @@ when not breakCircularDependency:
     ../../stack,
     ../../v2computation,
     ../../v2memory,
-    ../../v2types,
     ../gas_meter,
     ../utils/v2utils_numeric,
     ../v2gas_costs,
-    chronicles,
     eth/common,
-    nimcrypto,
-    options,
-    sets
+    nimcrypto
 
 else:
   import macros
@@ -79,6 +75,7 @@ else:
 
 const
   sha3Op: Vm2OpFn = proc (k: Vm2Ctx) =
+    ## 0x20, Compute Keccak-256 hash.
     let (startPos, length) = k.cpt.stack.popInt(2)
 
     let (pos, len) = (startPos.safeInt, length.safeInt)
