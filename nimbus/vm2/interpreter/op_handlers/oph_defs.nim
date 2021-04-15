@@ -59,6 +59,7 @@ else:
 
     Computation* = ref object
       returnStack*: seq[int]
+      output*: seq[byte]
       vmState*: BaseVMState
       gasMeter*: GasMeter
       stack*: Stack

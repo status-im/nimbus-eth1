@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times, sets, sequtils, options,
+  strformat, times, sets, options,
   chronicles, stint, nimcrypto, eth/common,
   ./utils/[macros_procs_opcodes, v2utils_numeric],
   ./gas_meter, ./v2gas_costs, ./v2opcode_values, ./v2forks,
@@ -24,55 +24,9 @@ logScope:
 # ##################################
 # Syntactic sugar
 
-proc gasEip2929AccountCheck(c: Computation, address: EthAddress, prevCost = 0.GasInt) =
-  c.vmState.mutateStateDB:
-    let gasCost = if not db.inAccessList(address):
-                    db.accessList(address)
-                    ColdAccountAccessCost
-                  else:
-                    WarmStorageReadCost
-
-    c.gasMeter.consumeGas(gasCost - prevCost, reason = "gasEIP2929AccountCheck")
-
 template push(x: typed) {.dirty.} =
   ## Push an expression on the computation stack
   c.stack.push x
-
-proc writePaddedResult(mem: var Memory,
-                       data: openarray[byte],
-                       memPos, dataPos, len: Natural,
-                       paddingValue = 0.byte) =
-
-  mem.extend(memPos, len)
-  let dataEndPosition = dataPos.int64 + len - 1
-  let sourceBytes = data[min(dataPos, data.len) .. min(data.len - 1, dataEndPosition)]
-  mem.write(memPos, sourceBytes)
-
-  # Don't duplicate zero-padding of mem.extend
-  let paddingOffset = min(memPos + sourceBytes.len, mem.len)
-  let numPaddingBytes = min(mem.len - paddingOffset, len - sourceBytes.len)
-  if numPaddingBytes > 0:
-    # TODO: avoid unnecessary memory allocation
-    mem.write(paddingOffset, repeat(paddingValue, numPaddingBytes))
-
-template sstoreNetGasMeteringImpl(c: Computation, slot, newValue: Uint256) =
-  let stateDB = c.vmState.readOnlyStateDB
-  let currentValue {.inject.} = c.getStorage(slot)
-
-  let
-    gasParam = GasParams(
-      kind: Op.Sstore,
-      s_currentValue: currentValue,
-      s_originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
-    (gasCost, gasRefund) = c.gasCosts[Sstore].c_handler(newValue, gasParam)
-
-  c.gasMeter.consumeGas(gasCost, &"SSTORE EIP2200: {c.msg.contractAddress}[{slot}] -> {newValue} ({currentValue})")
-
-  if gasRefund != 0:
-    c.gasMeter.refundGas(gasRefund)
-
-  c.vmState.mutateStateDB:
-    db.setStorage(c.msg.contractAddress, slot, newValue)
 
 # ##################################
 # re-implemented OP handlers
@@ -248,6 +202,14 @@ opHandler           log1, Op.Log1
 opHandler           log2, Op.Log2
 opHandler           log3, Op.Log3
 opHandler           log4, Op.Log4
+opHandler       returnOp, Op.Return
+opHandler         revert, Op.Revert
+opHandler      invalidOp, Op.Invalid
+
+opHandler        selfDestruct, Op.SelfDestruct, FkFrontier
+opHandler  selfDestructEIP150, Op.SelfDestruct, FkTangerine
+opHandler  selfDestructEIP161, Op.SelfDestruct, FkSpurious
+opHandler selfDestructEIP2929, Op.SelfDestruct
 
 # ##########################################
 # f0s: System operations.
@@ -490,84 +452,3 @@ genCall(call, Call)
 genCall(callCode, CallCode)
 genCall(delegateCall, DelegateCall)
 genCall(staticCall, StaticCall)
-
-op returnOp, inline = false, startPos, size:
-  ## 0xf3, Halt execution returning output data.
-  let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[Return].m_handler(c.memory.len, pos, len),
-    reason = "RETURN"
-    )
-
-  c.memory.extend(pos, len)
-  c.output = c.memory.read(pos, len)
-
-op revert, inline = false, startPos, size:
-  ## 0xfd, Halt execution reverting state changes but returning data and remaining gas.
-  let (pos, len) = (startPos.cleanMemRef, size.cleanMemRef)
-  c.gasMeter.consumeGas(
-    c.gasCosts[Revert].m_handler(c.memory.len, pos, len),
-    reason = "REVERT"
-    )
-
-  c.memory.extend(pos, len)
-  c.output = c.memory.read(pos, len)
-  # setError(msg, false) will signal cheap revert
-  c.setError("REVERT opcode executed", false)
-
-op selfDestruct, inline = false:
-  ## 0xff Halt execution and register account for later deletion.
-  let beneficiary = c.stack.popAddress()
-  c.selfDestruct(beneficiary)
-
-op selfDestructEip150, inline = false:
-  let beneficiary = c.stack.popAddress()
-
-  let gasParams = GasParams(kind: SelfDestruct,
-    sd_condition: not c.accountExists(beneficiary)
-    )
-
-  let gasCost = c.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-  c.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP150")
-  c.selfDestruct(beneficiary)
-
-op selfDestructEip161, inline = false:
-  checkInStaticContext(c)
-
-  let
-    beneficiary = c.stack.popAddress()
-    isDead      = not c.accountExists(beneficiary)
-    balance     = c.getBalance(c.msg.contractAddress)
-
-  let gasParams = GasParams(kind: SelfDestruct,
-    sd_condition: isDead and not balance.isZero
-    )
-
-  let gasCost = c.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-  c.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP161")
-  c.selfDestruct(beneficiary)
-
-# Constantinople's new opcodes
-
-op selfDestructEIP2929, inline = false:
-  checkInStaticContext(c)
-
-  let
-    beneficiary = c.stack.popAddress()
-    isDead      = not c.accountExists(beneficiary)
-    balance     = c.getBalance(c.msg.contractAddress)
-
-  let gasParams = GasParams(kind: SelfDestruct,
-    sd_condition: isDead and not balance.isZero
-    )
-
-  var gasCost = c.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-
-  c.vmState.mutateStateDB:
-    if not db.inAccessList(beneficiary):
-      db.accessList(beneficiary)
-      gasCost = gasCost + ColdAccountAccessCost
-
-  c.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP161")
-  c.selfDestruct(beneficiary)

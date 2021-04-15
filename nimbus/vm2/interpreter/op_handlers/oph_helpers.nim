@@ -47,7 +47,6 @@ else:
     emvcStatic = 1
     ColdAccountAccessCost = 2
     WarmStorageReadCost = 3
-
   type
     GasInt = int
 

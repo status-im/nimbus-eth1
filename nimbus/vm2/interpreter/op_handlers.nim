@@ -51,7 +51,9 @@ proc mkOpTable(select: Fork): array[Op,Vm2OpExec] {.compileTime.} =
   result.importList(select, vm2OpExecDup,        "Dup")
   result.importList(select, vm2OpExecSwap,       "Swap")
   result.importList(select, vm2OpExecLog,        "Log")
-  result.importList(select, vm2OpExecSysOP,      "SysOp")
+  #result.importList(select, vm2OpExecCreate,     "Create")
+  #result.importList(select, vm2OpExecCall,       "Call")
+  result.importList(select, vm2OpExecSysOp,      "SysOp")
 
   for op in Op:
     if select notin result[op].forks:
