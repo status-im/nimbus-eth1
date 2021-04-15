@@ -47,8 +47,8 @@ else:
   const
     ColdSloadCost = 42
     WarmStorageReadCost = 43
-
-  var blindGasCosts: array[Op,int]
+  var
+    blindGasCosts: array[Op,int]
 
   # copied from stack.nim
   macro genTupleType(len: static[int], elemType: untyped): untyped =
