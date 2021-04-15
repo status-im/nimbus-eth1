@@ -39,11 +39,14 @@ when not breakCircularDependency:
     ../gas_meter,
     ../utils/v2utils_numeric,
     ../v2gas_costs,
-    eth/common,
-    times
+    eth/common
 
 else:
   import macros
+
+  const
+    ColdSloadCost = 42
+    WarmStorageReadCost = 43
 
   var blindGasCosts: array[Op,int]
 
@@ -79,7 +82,10 @@ else:
 
   # function stubs from v2state.nim
   proc readOnlyStateDB(x: BaseVMState): ReadOnlyStateDB = x.accountDb
-  template mutateStateDB(vmState: BaseVMState, body: untyped) = discard
+  template mutateStateDB(vmState: BaseVMState, body: untyped) =
+    block:
+      var db {.inject.} = vmState.accountDb
+      body
 
   # function stubs from gas_meter.nim
   proc refundGas(gasMeter: var GasMeter; amount: int) = discard
@@ -98,6 +104,11 @@ else:
 
   # function stubs from state_db.nim
   proc getCommittedStorage[A,B](x: A; y: B; z: Uint256): Uint256 = 0.u256
+
+  # function stubs from accounts_cache.nim:
+  func inAccessList[A,B](ac: A; address: B; slot: UInt256): bool = false
+  proc accessList[A,B](ac: var A; address: B; slot: UInt256) = discard
+  proc setStorage[A,B](ac: var A; address: B, slot, value: UInt256) = discard
 
 # ------------------------------------------------------------------------------
 # Kludge END
@@ -195,12 +206,29 @@ const
     k.cpt.memory.extend(memPos, 1)
     k.cpt.memory.write(memPos, [value.toByteArrayBE[31]])
 
+  # -------
 
   sloadOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x54, Load word from storage.
     let (slot) = k.cpt.stack.popInt(1)
     k.cpt.stack.push:
       k.cpt.getStorage(slot)
+
+  sloadEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+    ## 0x54, EIP2929: Load word from storage for Berlin and later
+    let (slot) = k.cpt.stack.popInt(1)
+
+    k.cpt.vmState.mutateStateDB:
+      let gasCost = if not db.inAccessList(k.cpt.msg.contractAddress, slot):
+                      db.accessList(k.cpt.msg.contractAddress, slot)
+                      ColdSloadCost
+                    else:
+                      WarmStorageReadCost
+      k.cpt.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
+    k.cpt.stack.push:
+      k.cpt.getStorage(slot)
+
+  # -------
 
   sstoreOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x55, Save word to storage.
@@ -250,6 +278,26 @@ const
 
     sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
 
+
+  sstoreEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+    ## 0x55, EIP2929: sstore for Berlin and later
+    let (slot, newValue) = k.cpt.stack.popInt(2)
+    checkInStaticContext(k.cpt)
+
+    # Minimum gas required to be present for an SSTORE call, not consumed
+    const SentryGasEIP2200 = 2300
+
+    if k.cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+      raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
+
+    k.cpt.vmState.mutateStateDB:
+      if not db.inAccessList(k.cpt.msg.contractAddress, slot):
+        db.accessList(k.cpt.msg.contractAddress, slot)
+        k.cpt.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
+
+    sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
+
+  # -------
 
   jumpOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x56, Alter the program counter
@@ -360,10 +408,17 @@ const
             post: vm2OpIgnore)),
 
     (opCode: Sload,     ## 0x54, Load word from storage
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
      info: "Load word from storage",
      exec: (prep: vm2OpIgnore,
             run:  sloadOp,
+            post: vm2OpIgnore)),
+
+    (opCode: Sload,     ## 0x54, sload for Berlin and later
+     forks: Vm2OpBerlinAndLater,
+     info: "EIP2929: sload for Berlin and later",
+     exec: (prep: vm2OpIgnore,
+            run:  sloadEIP2929Op,
             post: vm2OpIgnore)),
 
     (opCode: Sstore,    ## 0x55, Save word
@@ -381,10 +436,17 @@ const
             post: vm2OpIgnore)),
 
     (opCode: Sstore,    ##  0x55, sstore for Istanbul and later
-     forks: Vm2OpIstanbulAndLater,
+     forks: Vm2OpIstanbulAndLater - Vm2OpBerlinAndLater,
      info: "EIP2200: sstore for Istanbul and later",
      exec: (prep: vm2OpIgnore,
             run:  sstoreEIP2200Op,
+            post: vm2OpIgnore)),
+
+    (opCode: Sstore,    ##  0x55, sstore for Berlin and later
+     forks: Vm2OpBerlinAndLater,
+     info: "EIP2929: sstore for Istanbul and later",
+     exec: (prep: vm2OpIgnore,
+            run:  sstoreEIP2929Op,
             post: vm2OpIgnore)),
 
     (opCode: Jump,      ## 0x56, Jump

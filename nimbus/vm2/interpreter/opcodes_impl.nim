@@ -124,8 +124,8 @@ opHandler          sarOp, Op.Sar
 opHandler           sha3, Op.Sha3
 opHandler        address, Op.Address
 
-opHandler        balance, Op.Balance, FkFrontier
-opHandler balanceEIP2929, Op.Balance
+opHandler            balance, Op.Balance, FkFrontier
+opHandler     balanceEIP2929, Op.Balance
 
 opHandler         origin, Op.Origin
 opHandler         caller, Op.Caller
@@ -145,6 +145,10 @@ opHandler extCodeCopyEIP2929, Op.ExtCodeCopy
 
 opHandler returnDataSize, Op.ReturnDataSize
 opHandler returnDataCopy, Op.ReturnDataCopy
+
+opHandler        extCodeHash, Op.ExtCodeHash, FkFrontier
+opHandler extCodeHashEIP2929, Op.ExtCodeHash
+
 opHandler      blockhash, Op.Blockhash
 opHandler       coinbase, Op.Coinbase
 opHandler      timestamp, Op.Timestamp
@@ -158,13 +162,13 @@ opHandler          mload, Op.Mload
 opHandler         mstore, Op.Mstore
 opHandler        mstore8, Op.Mstore8
 
-opHandler          sload, Op.Sload, FkFrontier
-opHandler   sloadEIP2929, Op.Sload
+opHandler              sload, Op.Sload, FkFrontier
+opHandler       sloadEIP2929, Op.Sload
 
-opHandler         sstore, Op.Sstore, FkFrontier
-opHandler  sstoreEIP1283, Op.Sstore, FkConstantinople
-opHandler  sstoreEIP2200, Op.Sstore, FkIstanbul
-opHandler  sstoreEIP2929, Op.Sstore
+opHandler             sstore, Op.Sstore, FkFrontier
+opHandler      sstoreEIP1283, Op.Sstore, FkConstantinople
+opHandler      sstoreEIP2200, Op.Sstore, FkIstanbul
+opHandler      sstoreEIP2929, Op.Sstore
 
 opHandler           jump, Op.Jump
 opHandler          jumpI, Op.JumpI
@@ -545,16 +549,6 @@ op selfDestructEip161, inline = false:
   c.selfDestruct(beneficiary)
 
 # Constantinople's new opcodes
-#################################
-
-op extCodeHash, inline = true:
-  let address = c.stack.popAddress()
-  push: c.getCodeHash(address)
-
-op extCodeHashEIP2929, inline = true:
-  let address = c.stack.popAddress()
-  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCodeHash])
-  push: c.getCodeHash(address)
 
 op selfDestructEIP2929, inline = false:
   checkInStaticContext(c)
@@ -577,60 +571,3 @@ op selfDestructEIP2929, inline = false:
 
   c.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP161")
   c.selfDestruct(beneficiary)
-
-# ---------------------------------------------------
-
-op balanceEIP2929x, inline = true:
-  ## 0x31, Get balance of the given account.
-  let address = c.stack.popAddress()
-
-  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasBalance])
-  push: c.getBalance(address)
-
-op extCodeSizeEIP2929x, inline = true:
-  ## 0x3b, Get size of an account's code
-  let address = c.stack.popAddress()
-  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCode])
-  push: c.getCodeSize(address)
-
-op extCodeCopyEIP2929x, inline = true:
-  ## 0x3c, Copy an account's code to memory.
-  let address = c.stack.popAddress()
-  let (memStartPos, codeStartPos, size) = c.stack.popInt(3)
-  let (memPos, codePos, len) = (memStartPos.cleanMemRef, codeStartPos.cleanMemRef, size.cleanMemRef)
-
-  c.gasMeter.consumeGas(
-    c.gasCosts[ExtCodeCopy].m_handler(c.memory.len, memPos, len),
-    reason="ExtCodeCopy fee")
-
-  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCode])
-
-  let codeBytes = c.getCode(address)
-  c.memory.writePaddedResult(codeBytes, memPos, codePos, len)
-
-op sloadEIP2929x, inline = true, slot:
-  ## 0x54, Load word from storage.
-  c.vmState.mutateStateDB:
-    let gasCost = if not db.inAccessList(c.msg.contractAddress, slot):
-                    db.accessList(c.msg.contractAddress, slot)
-                    ColdSloadCost
-                  else:
-                    WarmStorageReadCost
-    c.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
-
-  push: c.getStorage(slot)
-
-op sstoreEIP2929x, inline = false, slot, newValue:
-  checkInStaticContext(c)
-  const SentryGasEIP2200 = 2300  # Minimum gas required to be present for an SSTORE call, not consumed
-
-  if c.gasMeter.gasRemaining <= SentryGasEIP2200:
-    raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
-
-  c.vmState.mutateStateDB:
-    if not db.inAccessList(c.msg.contractAddress, slot):
-      db.accessList(c.msg.contractAddress, slot)
-      c.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
-
-  block:
-    sstoreNetGasMeteringImpl(c, slot, newValue)

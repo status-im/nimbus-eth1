@@ -36,7 +36,6 @@ when not breakCircularDependency:
     ../../stack,
     ../../v2computation,
     ../../v2memory,
-    ../../v2state,
     ../../v2types,
     ../gas_meter,
     ../utils/v2utils_numeric,
