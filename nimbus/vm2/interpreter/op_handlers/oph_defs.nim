@@ -66,6 +66,7 @@ else:
       msg*: Message
       code*: CodeStream
       returnData*: seq[byte]
+      fork*: Fork
 
 # ------------------------------------------------------------------------------
 # Kludge END

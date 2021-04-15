@@ -35,11 +35,34 @@ const
 
 when not breakCircularDependency:
   import
-    ../../v2types
+    ../../../db/accounts_cache,
+    ../../v2state,
+    ../../v2types,
+    ../gas_meter,
+    ../v2gas_costs,
+    eth/common
 
 else:
   const
     emvcStatic = 1
+    ColdAccountAccessCost = 2
+    WarmStorageReadCost = 3
+
+  type
+    GasInt = int
+
+  # function stubs from v2state.nim
+  template mutateStateDB(vmState: BaseVMState, body: untyped) =
+    block:
+      var db {.inject.} = vmState.accountDb
+      body
+
+  # function stubs from accounts_cache.nim:
+  func inAccessList[A,B](ac: A; address: B): bool = false
+  proc accessList[A,B](ac: var A, address: B) = discard
+
+  # function stubs from gas_meter.nim
+  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
 
 # ------------------------------------------------------------------------------
 # Kludge END
@@ -62,6 +85,20 @@ proc asText(id, name: string): NimNode {.compileTime.} =
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
+
+proc gasEip2929AccountCheck*(c: Computation;
+                             address: EthAddress, prevCost = 0.GasInt) =
+  c.vmState.mutateStateDB:
+    let gasCost = if not db.inAccessList(address):
+                    db.accessList(address)
+                    ColdAccountAccessCost
+                  else:
+                    WarmStorageReadCost
+
+    c.gasMeter.consumeGas(
+      gasCost - prevCost,
+      reason = "gasEIP2929AccountCheck")
+
 
 template checkInStaticContext*(c: Computation) =
   ## Verify static context in handler function, raise an error otherwise

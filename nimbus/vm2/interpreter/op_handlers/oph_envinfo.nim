@@ -19,6 +19,7 @@ const
 import
   ../../../errors,
   ./oph_defs,
+  ./oph_helpers,
   sequtils,
   strformat,
   stint
@@ -35,13 +36,20 @@ when not breakCircularDependency:
     ../../v2memory,
     ../../v2state,
     ../gas_meter,
+    ../v2gas_costs,
     ../utils/v2utils_numeric,
     eth/common
 
 else:
   import macros
 
-  var blindGasCosts: array[Op,int]
+  var
+    GasBalance = 0
+    GasExtCode = 42
+    GasExtCodeHash = 7
+    blindGasCosts: array[Op,int]
+    blindAddress: EthAddress
+    gasFees: array[Fork,array[0..123,int]]
 
   # copied from stack.nim
   macro genTupleType(len: static[int], elemType: untyped): untyped =
@@ -50,7 +58,7 @@ else:
 
   # function stubs from stack.nim (to satisfy compiler logic)
   proc push[T](x: Stack; n: T) = discard
-  proc popAddress(x: var Stack): UInt256 =  0.u256
+  proc popAddress(x: var Stack): EthAddress = blindAddress
   proc popInt(x: var Stack, n: static[int]): auto =
     var rc: genTupleType(n, UInt256)
     return rc
@@ -62,6 +70,7 @@ else:
   proc getCode[T](c: Computation, address: T): seq[byte] = @[]
   proc getGasPrice(c: Computation): Uint256 =  0.u256
   proc getOrigin(c: Computation): Uint256 =  0.u256
+  proc getCodeHash[T](c: Computation, address: T):  Uint256 =  0.u256
 
   # function stubs from v2utils_numeric.nim
   func cleanMemRef(x: UInt256): int = 0
@@ -117,11 +126,24 @@ const
     k.cpt.stack.push:
       k.cpt.msg.contractAddress
 
+  # ------------------
+
   balanceOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x31, Get balance of the given account.
     let address = k.cpt.stack.popAddress
     k.cpt.stack.push:
       k.cpt.getBalance(address)
+
+  balanceEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+    ## 0x31, EIP292: Get balance of the given account for Berlin and later
+    let address = k.cpt.stack.popAddress()
+
+    k.cpt.gasEip2929AccountCheck(
+      address, gasFees[k.cpt.fork][GasBalance])
+    k.cpt.stack.push:
+      k.cpt.getBalance(address)
+
+  # ------------------
 
   originOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x32, Get execution origination address.
@@ -204,7 +226,9 @@ const
   gasPriceOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x3A, Get price of gas in current environment.
     k.cpt.stack.push:
-      k.cpt.getGasPrice
+      k.cpt.getGasPrice()
+
+  # -----------
 
   extCodeSizeOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x3b, Get size of an account's code
@@ -212,6 +236,16 @@ const
     k.cpt.stack.push:
       k.cpt.getCodeSize(address)
 
+  extCodeSizeEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+    ## 0x3b, Get size of an account's code
+    let address = k.cpt.stack.popAddress()
+
+    k.cpt.gasEip2929AccountCheck(
+      address, gasFees[k.cpt.fork][GasExtCode])
+    k.cpt.stack.push:
+      k.cpt.getCodeSize(address)
+
+  # -----------
 
   extCodeCopyOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x3c, Copy an account's code to memory.
@@ -228,6 +262,25 @@ const
     let codeBytes = k.cpt.getCode(address)
     k.cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
 
+
+  extCodeCopyEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+    ## 0x3c, Copy an account's code to memory.
+    let address = k.cpt.stack.popAddress()
+
+    let (memStartPos, codeStartPos, size) = k.cpt.stack.popInt(3)
+    let (memPos, codePos, len) = (memStartPos.cleanMemRef,
+                                  codeStartPos.cleanMemRef, size.cleanMemRef)
+    k.cpt.gasMeter.consumeGas(
+      k.cpt.gasCosts[ExtCodeCopy].m_handler(k.cpt.memory.len, memPos, len),
+      reason = "ExtCodeCopy fee")
+
+    k.cpt.gasEip2929AccountCheck(
+      address, gasFees[k.cpt.fork][GasExtCode])
+
+    let codeBytes = k.cpt.getCode(address)
+    k.cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
+
+  # -----------
 
   returnDataSizeOp: Vm2OpFn = proc (k: Vm2Ctx) =
     ## 0x3d, Get size of output data from the previous call from the
@@ -256,6 +309,24 @@ const
           "length")
     k.cpt.memory.writePaddedResult(k.cpt.returnData, memPos, copyPos, len)
 
+  # ---------------
+
+  extCodeHashOp: Vm2OpFn = proc (k: Vm2Ctx) =
+    ## 0x3f, Returns the keccak256 hash of a contract’s code
+    let address = k.cpt.stack.popAddress()
+    k.cpt.stack.push:
+      k.cpt.getCodeHash(address)
+
+  extCodeHashEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+    ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
+    let address = k.cpt.stack.popAddress()
+
+    k.cpt.gasEip2929AccountCheck(
+      address, gasFees[k.cpt.fork][GasExtCodeHash])
+
+    k.cpt.stack.push:
+      k.cpt.getCodeHash(address)
+
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
@@ -271,10 +342,17 @@ const
             post: vm2OpIgnore)),
 
     (opCode: Balance,         ## 0x31, Balance
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
      info: "Get balance of the given account",
      exec: (prep: vm2OpIgnore,
             run:  balanceOp,
+            post: vm2OpIgnore)),
+
+    (opCode: Balance,         ## 0x31, Balance for Berlin and later
+     forks: Vm2OpBerlinAndLater,
+     info: "EIP2929: Get balance of the given account",
+     exec: (prep: vm2OpIgnore,
+            run:  balanceEIP2929Op,
             post: vm2OpIgnore)),
 
     (opCode: Origin,          ## 0x32, Origination address
@@ -342,17 +420,31 @@ const
             post: vm2OpIgnore)),
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
      info: "Get size of an account's code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeSizeOp,
             post: vm2OpIgnore)),
 
+    (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin and later
+     forks: Vm2OpBerlinAndLater,
+     info: "EIP2929: Get size of an account's code",
+     exec: (prep: vm2OpIgnore,
+            run:  extCodeSizeEIP2929Op,
+            post: vm2OpIgnore)),
+
     (opCode: ExtCodeCopy,    ## 0x3c, Account code copy to memory.
-     forks: Vm2OpAllForks,
+     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
      info: "Copy an account's code to memory",
      exec: (prep: vm2OpIgnore,
             run:  extCodeCopyOp,
+            post: vm2OpIgnore)),
+
+    (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin and later
+     forks: Vm2OpBerlinAndLater,
+     info: "EIP2929: Copy an account's code to memory",
+     exec: (prep: vm2OpIgnore,
+            run:  extCodeCopyEIP2929Op,
             post: vm2OpIgnore)),
 
     (opCode: ReturnDataSize, ## 0x3d, Previous call output data size
@@ -368,6 +460,20 @@ const
      info: "Copy output data from the previous call to memory",
      exec: (prep: vm2OpIgnore,
             run:  returnDataCopyOp,
+            post: vm2OpIgnore)),
+
+    (opCode: ExtCodeHash,    ## 0x3f, Contract hash
+     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     info: "Returns the keccak256 hash of a contract’s code",
+     exec: (prep: vm2OpIgnore,
+            run:  extCodeHashOp,
+            post: vm2OpIgnore)),
+
+    (opCode: ExtCodeHash,    ## 0x3f, Contract hash for berlin and later
+     forks: Vm2OpBerlinAndLater,
+     info: "EIP2929: Returns the keccak256 hash of a contract’s code",
+     exec: (prep: vm2OpIgnore,
+            run:  extCodeHashEIP2929Op,
             post: vm2OpIgnore))]
 
 # ------------------------------------------------------------------------------
