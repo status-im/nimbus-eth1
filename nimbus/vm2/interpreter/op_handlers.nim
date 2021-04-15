@@ -21,7 +21,7 @@ import
   ./op_codes,
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
-                 oph_memory,
+                 oph_memory, oph_push, oph_dup, oph_swap, oph_log,
                  oph_sysops]
 
 # ------------------------------------------------------------------------------
@@ -47,6 +47,10 @@ proc mkOpTable(select: Fork): array[Op,Vm2OpExec] {.compileTime.} =
   result.importList(select, vm2OpExecEnvInfo,    "EnvInfo")
   result.importList(select, vm2OpExecBlockData,  "BlockData")
   result.importList(select, vm2OpExecMemory,     "Memory")
+  result.importList(select, vm2OpExecPush,       "Push")
+  result.importList(select, vm2OpExecDup,        "Dup")
+  result.importList(select, vm2OpExecSwap,       "Swap")
+  result.importList(select, vm2OpExecLog,        "Log")
   result.importList(select, vm2OpExecSysOP,      "SysOp")
 
   for op in Op:
@@ -87,6 +91,18 @@ when isMainModule and isNoisy:
   gdbBPSink()
   echo ">>> berlin[shl]:            ",
         vm2OpHandlers[FkBerlin][Shl].info
+
+  echo ">>> berlin[push32]:         ",
+        vm2OpHandlers[FkBerlin][Push32].info
+
+  echo ">>> berlin[dup16]:          ",
+        vm2OpHandlers[FkBerlin][Dup16].info
+
+  echo ">>> berlin[swap16]:         ",
+        vm2OpHandlers[FkBerlin][Swap16].info
+
+  echo ">>> berlin[log4]:           ",
+        vm2OpHandlers[FkBerlin][Log4].info
 
   echo ">>> frontier[sstore]:       ",
         vm2OpHandlers[FkFrontier][Sstore].info

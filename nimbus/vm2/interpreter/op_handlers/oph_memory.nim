@@ -19,6 +19,7 @@ const
 import
   ../../../errors,
   ./oph_defs,
+  ./oph_helpers,
   strformat,
   stint
 
@@ -44,7 +45,6 @@ when not breakCircularDependency:
 else:
   import macros
 
-  const emvcStatic = 1
   var blindGasCosts: array[Op,int]
 
   # copied from stack.nim
@@ -97,7 +97,7 @@ else:
   proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = 0
 
   # function stubs from state_db.nim
-  proc getCommittedStorage(x: ReadOnlyStateDB; y,z: Uint256): Uint256 = 0.u256
+  proc getCommittedStorage[A,B](x: A; y: B; z: Uint256): Uint256 = 0.u256
 
 # ------------------------------------------------------------------------------
 # Kludge END
@@ -106,14 +106,6 @@ else:
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-template checkInStaticContext(c: Computation) =
-  # TODO: if possible, this check only appear
-  # when fork >= FkByzantium
-  if emvcStatic == c.msg.flags:
-    raise newException(
-      StaticContextError,
-      "Cannot modify state while inside of STATICCALL context")
 
 proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: Uint256) =
   let

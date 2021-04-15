@@ -20,7 +20,8 @@ import
   ../forks_list,
   ../op_codes,
   ../../memory_defs,
-  ../../stack_defs
+  ../../stack_defs,
+  eth/common/eth_types
 
 # ------------------------------------------------------------------------------
 # Kludge BEGIN
@@ -50,7 +51,7 @@ else:
       accountDb*: ReadOnlyStateDB
 
     Message* = ref object
-      contractAddress*: UInt256
+      contractAddress*: EthAddress
       sender*: UInt256
       value*: UInt256
       data*: seq[byte]
@@ -71,7 +72,7 @@ else:
 # ------------------------------------------------------------------------------
 
 export
-  Op, Fork, Computation, Memory, Stack, UInt256, Message
+  Op, Fork, Computation, Memory, Stack, UInt256, Message, EthAddress
 
 type
   Vm2Ctx* = object of RootObj
