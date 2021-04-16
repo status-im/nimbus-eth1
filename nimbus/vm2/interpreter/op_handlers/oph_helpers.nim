@@ -47,8 +47,6 @@ else:
     emvcStatic = 1
     ColdAccountAccessCost = 2
     WarmStorageReadCost = 3
-  type
-    GasInt = int
 
   # function stubs from v2state.nim
   template mutateStateDB(vmState: BaseVMState, body: untyped) =

@@ -194,8 +194,7 @@ type
                            ## alternative account's code, but persisting the
                            ## current values for sender and value.
     Create2 =        0xf5, ## Behaves identically to CREATE, except using
-                           ## keccak256( 0xff ++ address ++ salt ++
-                           ## keccak256(init_code))[12:]
+                           ## keccak256
 
     Nop0xF6, Nop0xF7, Nop0xF8, Nop0xF9,  ## ..
 

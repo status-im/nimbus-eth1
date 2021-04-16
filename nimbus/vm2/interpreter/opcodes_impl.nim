@@ -202,6 +202,8 @@ opHandler           log1, Op.Log1
 opHandler           log2, Op.Log2
 opHandler           log3, Op.Log3
 opHandler           log4, Op.Log4
+opHandler         create, Op.Create
+opHandler        create2, Op.Create2
 opHandler       returnOp, Op.Return
 opHandler         revert, Op.Revert
 opHandler      invalidOp, Op.Invalid
@@ -213,76 +215,6 @@ opHandler selfDestructEIP2929, Op.SelfDestruct
 
 # ##########################################
 # f0s: System operations.
-template genCreate(callName: untyped, opCode: Op): untyped =
-  op callName, inline = false:
-    checkInStaticContext(c)
-    let
-      endowment = c.stack.popInt()
-      memPos = c.stack.popInt().safeInt
-
-    when opCode == Create:
-      const callKind = evmcCreate
-      let memLen {.inject.} = c.stack.peekInt().safeInt
-      let salt = 0.u256
-    else:
-      const callKind = evmcCreate2
-      let memLen {.inject.} = c.stack.popInt().safeInt
-      let salt = c.stack.peekInt()
-
-    c.stack.top(0)
-
-    let gasParams = GasParams(kind: Create,
-      cr_currentMemSize: c.memory.len,
-      cr_memOffset: memPos,
-      cr_memLength: memLen
-    )
-    var gasCost = c.gasCosts[Create].c_handler(1.u256, gasParams).gasCost
-    when opCode == Create2:
-      gasCost = gasCost + c.gasCosts[Create2].m_handler(0, 0, memLen)
-
-    let reason = &"CREATE: GasCreate + {memLen} * memory expansion"
-    c.gasMeter.consumeGas(gasCost, reason = reason)
-    c.memory.extend(memPos, memLen)
-    c.returnData.setLen(0)
-
-    if c.msg.depth >= MaxCallDepth:
-      debug "Computation Failure", reason = "Stack too deep", maxDepth = MaxCallDepth, depth = c.msg.depth
-      return
-
-    if endowment != 0:
-      let senderBalance = c.getBalance(c.msg.contractAddress)
-      if senderBalance < endowment:
-        debug "Computation Failure", reason = "Insufficient funds available to transfer", required = endowment, balance = senderBalance
-        return
-
-    var createMsgGas = c.gasMeter.gasRemaining
-    if c.fork >= FkTangerine:
-      createMsgGas -= createMsgGas div 64
-    c.gasMeter.consumeGas(createMsgGas, reason="CREATE")
-
-    block:
-      let childMsg = Message(
-        kind: callKind,
-        depth: c.msg.depth + 1,
-        gas: createMsgGas,
-        sender: c.msg.contractAddress,
-        value: endowment,
-        data: c.memory.read(memPos, memLen)
-        )
-
-      var child = newComputation(c.vmState, childMsg, salt)
-      c.chainTo(child):
-        if not child.shouldBurnGas:
-          c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-        if child.isSuccess:
-          c.merge(child)
-          c.stack.top child.msg.contractAddress
-        else:
-          c.returnData = child.output
-
-genCreate(create, Create)
-genCreate(create2, Create2)
 
 proc callParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
   let gas = c.stack.popInt()
