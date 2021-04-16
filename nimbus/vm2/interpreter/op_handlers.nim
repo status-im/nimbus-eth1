@@ -22,7 +22,7 @@ import
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
                  oph_memory, oph_push, oph_dup, oph_swap, oph_log,
-                 oph_sysops]
+                 oph_create, oph_sysops]
 
 # ------------------------------------------------------------------------------
 # Helper
@@ -51,7 +51,7 @@ proc mkOpTable(select: Fork): array[Op,Vm2OpExec] {.compileTime.} =
   result.importList(select, vm2OpExecDup,        "Dup")
   result.importList(select, vm2OpExecSwap,       "Swap")
   result.importList(select, vm2OpExecLog,        "Log")
-  #result.importList(select, vm2OpExecCreate,     "Create")
+  result.importList(select, vm2OpExecCreate,     "Create")
   #result.importList(select, vm2OpExecCall,       "Call")
   result.importList(select, vm2OpExecSysOp,      "SysOp")
 

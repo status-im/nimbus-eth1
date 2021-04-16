@@ -37,6 +37,8 @@ else:
     {.fatal: "Flag \"vm2_enabled\" must be unset "&
              "while circular dependency breaker kludge is activated".}
   type
+    GasInt* = int
+
     ReadOnlyStateDB* =
       seq[byte]
 
@@ -51,8 +53,11 @@ else:
       accountDb*: ReadOnlyStateDB
 
     Message* = ref object
+      kind*: int
+      depth*: int
+      gas*: GasInt
       contractAddress*: EthAddress
-      sender*: UInt256
+      sender*: EthAddress
       value*: UInt256
       data*: seq[byte]
       flags*: int
@@ -68,6 +73,8 @@ else:
       code*: CodeStream
       returnData*: seq[byte]
       fork*: Fork
+      parent*, child*: Computation
+      continuation*: proc() {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Kludge END

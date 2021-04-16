@@ -41,8 +41,6 @@ when not breakCircularDependency:
 else:
   import macros
 
-  var blindGasCosts: array[Op,int]
-
   # copied from stack.nim
   macro genTupleType(len: static[int], elemType: untyped): untyped =
     result = nnkTupleConstr.newNimNode()
@@ -50,13 +48,13 @@ else:
 
   # function stubs from stack.nim (to satisfy compiler logic)
   proc push[T](x: Stack; n: T) = discard
-  proc popInt(x: var Stack): UInt256 = discard
+  proc popInt(x: var Stack): UInt256 = result
   proc popInt(x: var Stack, n: static[int]): auto =
     var rc: genTupleType(n, UInt256)
     return rc
 
   # function stubs from v2computation.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
+  proc gasCosts(c: Computation): array[Op,int] = result
 
   # function stubs from v2utils_numeric.nim
   proc extractSign(v: var UInt256, sign: var bool) = discard
@@ -67,7 +65,7 @@ else:
   proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
 
   # stubs from v2gas_costs.nim
-  proc d_handler(x: int; value: Uint256): int = 0
+  proc d_handler(x: int; value: Uint256): int = result
 
 # ------------------------------------------------------------------------------
 # Kludge END

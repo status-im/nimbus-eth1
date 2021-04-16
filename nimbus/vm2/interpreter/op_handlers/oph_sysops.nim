@@ -43,14 +43,9 @@ else:
   import macros
 
   type
-    GasInt = int
     GasResult = tuple[gasCost, gasRefund: GasInt]
   const
     ColdAccountAccessCost = 42
-  var
-    blindGasCosts: array[Op,int]
-    blindAddress: EthAddress
-    blindGasResult: GasResult
 
   # copied from stack.nim
   macro genTupleType(len: static[int], elemType: untyped): untyped =
@@ -58,23 +53,23 @@ else:
     for i in 0 ..< len: result.add(elemType)
 
   # function stubs from stack.nim (to satisfy compiler logic)
-  proc popAddress(x: var Stack): EthAddress = blindAddress
+  proc popAddress(x: var Stack): EthAddress = result
   proc popInt(x: var Stack, n: static[int]): auto =
     var rc: genTupleType(n, UInt256)
     return rc
 
   # function stubs from v2computation.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
+  proc gasCosts(c: Computation): array[Op,int] = result
   proc setError(c: Computation, msg: string, burnsGas = false) = discard
   proc selfDestruct(c: Computation, address: EthAddress) = discard
-  proc accountExists(c: Computation, address: EthAddress): bool = false
-  proc getBalance[T](c: Computation, address: T): Uint256 = 0.u256
+  proc accountExists(c: Computation, address: EthAddress): bool = result
+  proc getBalance[T](c: Computation, address: T): Uint256 = result
 
   # function stubs from v2utils_numeric.nim
-  func cleanMemRef(x: UInt256): int = 0
+  func cleanMemRef(x: UInt256): int = result
 
   # function stubs from v2memory.nim
-  proc len(mem: Memory): int = 0
+  proc len(mem: Memory): int = result
   proc extend(mem: var Memory; startPos: Natural; size: Natural) = discard
   proc read(mem: var Memory, startPos: Natural, size: Natural): seq[byte] = @[]
 
@@ -94,11 +89,11 @@ else:
       sd_condition: bool
     else:
       discard
-  proc c_handler(x: int; y: Uint256, z: GasParams): GasResult = blindGasResult
-  proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = 0
+  proc c_handler(x: int; y: Uint256, z: GasParams): GasResult = result
+  proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = result
 
   # function stubs from accounts_cache.nim:
-  func inAccessList[A,B](ac: A; address: B): bool = false
+  func inAccessList[A,B](ac: A; address: B): bool = result
   proc accessList[A,B](ac: var A; address: B) = discard
 
 # ------------------------------------------------------------------------------
