@@ -6,43 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  strformat, times, sets, options,
-  chronicles, stint, nimcrypto, eth/common,
-  ./utils/[macros_procs_opcodes, v2utils_numeric],
-  ./gas_meter, ./v2gas_costs, ./v2opcode_values, ./v2forks,
-  ../v2memory, ../stack, ../code_stream, ../v2computation, ../v2state, ../v2types,
-  ../../errors, ../../constants,
-  ../../db/[db_chain, accounts_cache]
-
-# verify that experimental op table compiles
-import
-  ./op_handlers, ./op_handlers/oph_defs
-
-logScope:
-  topics = "opcode impl"
-
-# ##################################
-# Syntactic sugar
-
-template push(x: typed) {.dirty.} =
-  ## Push an expression on the computation stack
-  c.stack.push x
+  ./op_handlers/oph_defs,
+  ./op_handlers
 
 # ##################################
 # re-implemented OP handlers
-
-var gdbBPHook_counter = 0
-proc gdbBPHook*() =
-  gdbBPHook_counter.inc
-  stderr.write &"*** Hello {gdbBPHook_counter}\n"
-  stderr.flushFile
-
-template opHandlerX(callName: untyped; opCode: Op; fork = FkBerlin) =
-  proc callName*(c: Computation) =
-    gdbBPHook()
-    var desc: Vm2Ctx
-    desc.cpt = c
-    vm2OpHandlers[fork][opCode].exec.run(desc)
 
 template opHandler(callName: untyped; opCode: Op; fork = FkBerlin) =
   proc callName*(c: Computation) =
@@ -203,8 +171,12 @@ opHandler           log2, Op.Log2
 opHandler           log3, Op.Log3
 opHandler           log4, Op.Log4
 opHandler         create, Op.Create
+opHandler           call, Op.Call
+opHandler       callCode, Op.CallCode
 opHandler        create2, Op.Create2
 opHandler       returnOp, Op.Return
+opHandler   delegateCall, Op.DelegateCall
+opHandler     staticCall, Op.StaticCall
 opHandler         revert, Op.Revert
 opHandler      invalidOp, Op.Invalid
 
@@ -212,175 +184,3 @@ opHandler        selfDestruct, Op.SelfDestruct, FkFrontier
 opHandler  selfDestructEIP150, Op.SelfDestruct, FkTangerine
 opHandler  selfDestructEIP161, Op.SelfDestruct, FkSpurious
 opHandler selfDestructEIP2929, Op.SelfDestruct
-
-# ##########################################
-# f0s: System operations.
-
-proc callParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
-  let gas = c.stack.popInt()
-  let destination = c.stack.popAddress()
-  let value = c.stack.popInt()
-
-  result = (gas,
-    value,
-    destination,
-    c.msg.contractAddress, # sender
-    evmcCall,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.msg.flags)
-
-proc callCodeParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
-  let gas = c.stack.popInt()
-  let destination = c.stack.popAddress()
-  let value = c.stack.popInt()
-
-  result = (gas,
-    value,
-    destination,
-    c.msg.contractAddress, # sender
-    evmcCallCode,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.msg.flags)
-
-proc delegateCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
-  let gas = c.stack.popInt()
-  let destination = c.stack.popAddress()
-
-  result = (gas,
-    c.msg.value, # value
-    destination,
-    c.msg.sender, # sender
-    evmcDelegateCall,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.msg.flags)
-
-proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress, EthAddress, CallKind, int, int, int, int, MsgFlags) =
-  let gas = c.stack.popInt()
-  let destination = c.stack.popAddress()
-
-  result = (gas,
-    0.u256, # value
-    destination,
-    c.msg.contractAddress, # sender
-    evmcCall,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    c.stack.popInt().cleanMemRef,
-    emvcStatic) # is_static
-
-template genCall(callName: untyped, opCode: Op): untyped =
-  op callName, inline = false:
-    ## CALL, 0xf1, Message-Call into an account
-    ## CALLCODE, 0xf2, Message-call into this account with an alternative account's code.
-    ## DELEGATECALL, 0xf4, Message-call into this account with an alternative account's code, but persisting the current values for sender and value.
-    ## STATICCALL, 0xfa, Static message-call into an account.
-    when opCode == Call:
-      if emvcStatic == c.msg.flags and c.stack[^3, Uint256] > 0.u256:
-        raise newException(StaticContextError, "Cannot modify state while inside of a STATICCALL context")
-
-    let (gas, value, destination, sender, callKind,
-         memInPos, memInLen, memOutPos, memOutLen, flags) = `callName Params`(c)
-
-    push: 0
-
-    let (memOffset, memLength) = if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
-                                    (memInPos, memInLen)
-                                 else:
-                                    (memOutPos, memOutLen)
-
-    # EIP2929
-    # This came before old gas calculator
-    # because it will affect `c.gasMeter.gasRemaining`
-    # and further `childGasLimit`
-    if c.fork >= FkBerlin:
-      c.vmState.mutateStateDB:
-        if not db.inAccessList(destination):
-          db.accessList(destination)
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant `gasCall`
-          c.gasMeter.consumeGas(ColdAccountAccessCost - WarmStorageReadCost, reason = "EIP2929 gasCall")
-
-    let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
-    var (gasCost, childGasLimit) = c.gasCosts[opCode].c_handler(
-      value,
-      GasParams(kind: opCode,
-                c_isNewAccount: not c.accountExists(contractAddress),
-                c_gasBalance: c.gasMeter.gasRemaining,
-                c_contractGas: gas,
-                c_currentMemSize: c.memory.len,
-                c_memOffset: memOffset,
-                c_memLength: memLength
-      ))
-
-    # EIP 2046: temporary disabled
-    # reduce gas fee for precompiles
-    # from 700 to 40
-    #when opCode == StaticCall:
-    #  if c.fork >= FkBerlin and destination.toInt <= MaxPrecompilesAddr:
-    #    gasCost = gasCost - 660.GasInt
-
-    if gasCost >= 0:
-      c.gasMeter.consumeGas(gasCost, reason = $opCode)
-
-    c.returnData.setLen(0)
-
-    if c.msg.depth >= MaxCallDepth:
-      debug "Computation Failure", reason = "Stack too deep", maximumDepth = MaxCallDepth, depth = c.msg.depth
-      # return unused gas
-      c.gasMeter.returnGas(childGasLimit)
-      return
-
-    if gasCost < 0 and childGasLimit <= 0:
-      raise newException(OutOfGas, "Gas not enough to perform calculation (" & callName.astToStr & ")")
-
-    c.memory.extend(memInPos, memInLen)
-    c.memory.extend(memOutPos, memOutLen)
-
-    when opCode in {CallCode, Call}:
-      let senderBalance = c.getBalance(sender)
-      if senderBalance < value:
-        debug "Insufficient funds", available = senderBalance, needed = c.msg.value
-        # return unused gas
-        c.gasMeter.returnGas(childGasLimit)
-        return
-
-    block:
-      let msg = Message(
-        kind: callKind,
-        depth: c.msg.depth + 1,
-        gas: childGasLimit,
-        sender: sender,
-        contractAddress: contractAddress,
-        codeAddress: destination,
-        value: value,
-        data: c.memory.read(memInPos, memInLen),
-        flags: flags)
-
-      var child = newComputation(c.vmState, msg)
-      c.chainTo(child):
-        if not child.shouldBurnGas:
-          c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-        if child.isSuccess:
-          c.merge(child)
-          c.stack.top(1)
-
-        c.returnData = child.output
-        let actualOutputSize = min(memOutLen, child.output.len)
-        if actualOutputSize > 0:
-          c.memory.write(memOutPos,
-                         child.output.toOpenArray(0, actualOutputSize - 1))
-
-genCall(call, Call)
-genCall(callCode, CallCode)
-genCall(delegateCall, DelegateCall)
-genCall(staticCall, StaticCall)
