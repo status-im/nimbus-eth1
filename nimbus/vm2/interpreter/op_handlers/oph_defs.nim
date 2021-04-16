@@ -57,6 +57,7 @@ else:
       depth*: int
       gas*: GasInt
       contractAddress*: EthAddress
+      codeAddress*: EthAddress
       sender*: EthAddress
       value*: UInt256
       data*: seq[byte]
