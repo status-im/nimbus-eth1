@@ -118,83 +118,107 @@ else:
 # Private
 # ------------------------------------------------------------------------------
 
-proc callParams(c: Computation): (UInt256, UInt256, EthAddress,
-                                  EthAddress, int, int, int,
-                                  int, MsgFlags) =
-  let gas = c.stack.popInt()
-  let destination = c.stack.popAddress()
-  let value = c.stack.popInt()
+type
+  LocalParams = tuple
+    gas:             UInt256
+    value:           UInt256
+    destination:     EthAddress
+    sender:          EthAddress
+    memInPos:        int
+    memInLen:        int
+    memOutPos:       int
+    memOutLen:       int
+    flags:           MsgFlags
+    memOffset:       int
+    memLength:       int
+    contractAddress: EthAddress
 
-  result = (gas,
-            value,
-            destination,
-            c.msg.contractAddress, # sender
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.msg.flags)
 
+proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.push(0)
 
+  let
+    outLen = calcMemSize(q.memOutPos, q.memOutLen)
+    inLen = calcMemSize(q.memInPos, q.memInLen)
 
-proc callCodeParams(c: Computation): (UInt256, UInt256, EthAddress,
-                                      EthAddress, int, int, int,
-                                      int, MsgFlags) =
-  let gas = c.stack.popInt()
-  let destination = c.stack.popAddress()
-  let value = c.stack.popInt()
+  # get the bigger one
+  if outLen < inLen:
+    q.memOffset = q.memInPos
+    q.memLength = q.memInLen
+  else:
+    q.memOffset = q.memOutPos
+    q.memLength = q.memOutLen
 
-  result = (gas,
-            value,
-            destination,
-            c.msg.contractAddress, # sender
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.msg.flags)
+  # EIP2929: This came before old gas calculator
+  #           because it will affect `c.gasMeter.gasRemaining`
+  #           and further `childGasLimit`
+  if FkBerlin <= c.fork:
+    c.vmState.mutateStateDB:
+      if not db.inAccessList(q.destination):
+        db.accessList(q.destination)
 
-  c.stack.push(0)
-
-
-
-proc delegateCallParams(c: Computation): (UInt256, UInt256, EthAddress,
-                                          EthAddress, int, int, int,
-                                          int, MsgFlags) =
-  let gas = c.stack.popInt()
-  let destination = c.stack.popAddress()
-
-  result = (gas,
-            c.msg.value, # value
-            destination,
-            c.msg.sender, # sender
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.msg.flags)
-
-  c.stack.push(0)
+        # The WarmStorageReadCostEIP2929 (100) is already deducted in
+        # the form of a constant `gasCall`
+        c.gasMeter.consumeGas(
+          ColdAccountAccessCost - WarmStorageReadCost,
+          reason = "EIP2929 gasCall")
 
 
-proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress,
-                                        EthAddress, int, int, int,
-                                        int, MsgFlags) =
-  let gas = c.stack.popInt()
-  let destination = c.stack.popAddress()
+proc callParams(c: Computation): LocalParams =
+  ## Helper for callOp()
+  result.gas             = c.stack.popInt()
+  result.destination     = c.stack.popAddress()
+  result.value           = c.stack.popInt()
+  result.memInPos        = c.stack.popInt().cleanMemRef
+  result.memInLen        = c.stack.popInt().cleanMemRef
+  result.memOutPos       = c.stack.popInt().cleanMemRef
+  result.memOutLen       = c.stack.popInt().cleanMemRef
 
-  result = (gas,
-            0.u256, # value
-            destination,
-            c.msg.contractAddress, # sender
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            c.stack.popInt().cleanMemRef,
-            emvcStatic) # is_static
+  result.sender          = c.msg.contractAddress
+  result.flags           = c.msg.flags
+  result.contractAddress = result.destination
 
-  c.stack.push(0)
+  result.updateStackAndParams(c)
+
+
+proc callCodeParams(c: Computation): LocalParams =
+  ## Helper for callCodeOp()
+  result = c.callParams
+  result.contractAddress = c.msg.contractAddress
+
+
+proc delegateCallParams(c: Computation): LocalParams =
+  ## Helper for delegateCall()
+  result.gas             = c.stack.popInt()
+  result.destination     = c.stack.popAddress()
+  result.memInPos        = c.stack.popInt().cleanMemRef
+  result.memInLen        = c.stack.popInt().cleanMemRef
+  result.memOutPos       = c.stack.popInt().cleanMemRef
+  result.memOutLen       = c.stack.popInt().cleanMemRef
+
+  result.value           = c.msg.value
+  result.sender          = c.msg.sender
+  result.flags           = c.msg.flags
+  result.contractAddress = c.msg.contractAddress
+
+  result.updateStackAndParams(c)
+
+
+proc staticCallParams(c: Computation):  LocalParams =
+  ## Helper for staticCall()
+  result.gas             = c.stack.popInt()
+  result.destination     = c.stack.popAddress()
+  result.memInPos        = c.stack.popInt().cleanMemRef
+  result.memInLen        = c.stack.popInt().cleanMemRef
+  result.memOutPos       = c.stack.popInt().cleanMemRef
+  result.memOutLen       = c.stack.popInt().cleanMemRef
+
+  result.value           = 0.u256
+  result.sender          = c.msg.contractAddress
+  result.flags           = emvcStatic
+  result.contractAddress = result.destination
+
+  result.updateStackAndParams(c)
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -203,46 +227,24 @@ proc staticCallParams(c: Computation): (UInt256, UInt256, EthAddress,
 const
   callOp: Vm2OpFn = proc(k: Vm2Ctx) =
     ## 0xf1, Message-Call into an account
+
     if emvcStatic == k.cpt.msg.flags and k.cpt.stack[^3, UInt256] > 0.u256:
       raise newException(
         StaticContextError,
         "Cannot modify state while inside of a STATICCALL context")
-
-    let (gas, value, destination, sender, memInPos, memInLen, memOutPos,
-         memOutLen, flags) = callParams(k.cpt)
-
-    let (memOffset, memLength) =
-      if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
-        (memInPos, memInLen)
-      else:
-        (memOutPos, memOutLen)
-
-    # EIP2929
-    # This came before old gas calculator
-    # because it will affect `k.cpt.gasMeter.gasRemaining`
-    # and further `childGasLimit`
-    if k.cpt.fork >= FkBerlin:
-      k.cpt.vmState.mutateStateDB:
-        if not db.inAccessList(destination):
-          db.accessList(destination)
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in
-          # the form of a constant `gasCall`
-          k.cpt.gasMeter.consumeGas(
-            ColdAccountAccessCost - WarmStorageReadCost,
-            reason = "EIP2929 gasCall")
-
-    let contractAddress = destination
+    let
+      p = k.cpt.callParams
 
     var (gasCost, childGasLimit) = k.cpt.gasCosts[Call].c_handler(
-      value,
+      p.value,
       GasParams(
         kind:             Call,
-        c_isNewAccount:   not k.cpt.accountExists(contractAddress),
+        c_isNewAccount:   not k.cpt.accountExists(p.contractAddress),
         c_gasBalance:     k.cpt.gasMeter.gasRemaining,
-        c_contractGas:    gas,
+        c_contractGas:    p.gas,
         c_currentMemSize: k.cpt.memory.len,
-        c_memOffset:      memOffset,
-        c_memLength:      memLength))
+        c_memOffset:      p.memOffset,
+        c_memLength:      p.memLength))
 
     # EIP 2046: temporary disabled
     # reduce gas fee for precompiles
@@ -264,11 +266,11 @@ const
       raise newException(
         OutOfGas, "Gas not enough to perform calculation (call)")
 
-    k.cpt.memory.extend(memInPos, memInLen)
-    k.cpt.memory.extend(memOutPos, memOutLen)
+    k.cpt.memory.extend(p.memInPos, p.memInLen)
+    k.cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    let senderBalance = k.cpt.getBalance(sender)
-    if senderBalance < value:
+    let senderBalance = k.cpt.getBalance(p.sender)
+    if senderBalance < p.value:
       debug "Insufficient funds",
         available = senderBalance,
         needed = k.cpt.msg.value
@@ -279,12 +281,12 @@ const
       kind:            evmcCall,
       depth:           k.cpt.msg.depth + 1,
       gas:             childGasLimit,
-      sender:          sender,
-      contractAddress: contractAddress,
-      codeAddress:     destination,
-      value:           value,
-      data:            k.cpt.memory.read(memInPos, memInLen),
-      flags:           flags)
+      sender:          p.sender,
+      contractAddress: p.contractAddress,
+      codeAddress:     p.destination,
+      value:           p.value,
+      data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+      flags:           p.flags)
 
     var child = newComputation(k.cpt.vmState, msg)
     k.cpt.chainTo(child):
@@ -296,50 +298,28 @@ const
         k.cpt.stack.top(1)
 
       k.cpt.returnData = child.output
-      let actualOutputSize = min(memOutLen, child.output.len)
+      let actualOutputSize = min(p.memOutLen, child.output.len)
       if actualOutputSize > 0:
-        k.cpt.memory.write(memOutPos,
+        k.cpt.memory.write(p.memOutPos,
                            child.output.toOpenArray(0, actualOutputSize - 1))
 
   # ---------------------
 
   callCodeOp: Vm2OpFn = proc(k: Vm2Ctx) =
     ## 0xf2, Message-call into this account with an alternative account's code.
-    let (gas, value, destination, sender, memInPos, memInLen, memOutPos,
-         memOutLen, flags) = callCodeParams(k.cpt)
-
-    let (memOffset, memLength) =
-      if calcMemSize(memInPos, memInLen) >  calcMemSize(memOutPos, memOutLen):
-        (memInPos, memInLen)
-      else:
-        (memOutPos, memOutLen)
-
-    # EIP2929
-    # This came before old gas calculator
-    # because it will affect `k.cpt.gasMeter.gasRemaining`
-    # and further `childGasLimit`
-    if k.cpt.fork >= FkBerlin:
-      k.cpt.vmState.mutateStateDB:
-        if not db.inAccessList(destination):
-          db.accessList(destination)
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in
-          # the form of a constant `gasCall`
-          k.cpt.gasMeter.consumeGas(
-            ColdAccountAccessCost - WarmStorageReadCost,
-            reason = "EIP2929 gasCall")
-
-    let contractAddress = k.cpt.msg.contractAddress
+    let
+      p = k.cpt.callCodeParams
 
     var (gasCost, childGasLimit) = k.cpt.gasCosts[CallCode].c_handler(
-      value,
+      p.value,
       GasParams(
         kind:             CallCode,
-        c_isNewAccount:   not k.cpt.accountExists(contractAddress),
+        c_isNewAccount:   not k.cpt.accountExists(p.contractAddress),
         c_gasBalance:     k.cpt.gasMeter.gasRemaining,
-        c_contractGas:    gas,
+        c_contractGas:    p.gas,
         c_currentMemSize: k.cpt.memory.len,
-        c_memOffset:      memOffset,
-        c_memLength:      memLength))
+        c_memOffset:      p.memOffset,
+        c_memLength:      p.memLength))
 
     # EIP 2046: temporary disabled
     # reduce gas fee for precompiles
@@ -364,11 +344,11 @@ const
       raise newException(
         OutOfGas, "Gas not enough to perform calculation (callCode)")
 
-    k.cpt.memory.extend(memInPos, memInLen)
-    k.cpt.memory.extend(memOutPos, memOutLen)
+    k.cpt.memory.extend(p.memInPos, p.memInLen)
+    k.cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    let senderBalance = k.cpt.getBalance(sender)
-    if senderBalance < value:
+    let senderBalance = k.cpt.getBalance(p.sender)
+    if senderBalance < p.value:
       debug "Insufficient funds",
         available = senderBalance,
         needed = k.cpt.msg.value
@@ -379,12 +359,12 @@ const
       kind:            evmcCallCode,
       depth:           k.cpt.msg.depth + 1,
       gas:             childGasLimit,
-      sender:          sender,
-      contractAddress: contractAddress,
-      codeAddress:     destination,
-      value:           value,
-      data:            k.cpt.memory.read(memInPos, memInLen),
-      flags:           flags)
+      sender:          p.sender,
+      contractAddress: p.contractAddress,
+      codeAddress:     p.destination,
+      value:           p.value,
+      data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+      flags:           p.flags)
 
     var child = newComputation(k.cpt.vmState, msg)
     k.cpt.chainTo(child):
@@ -396,9 +376,9 @@ const
         k.cpt.stack.top(1)
 
       k.cpt.returnData = child.output
-      let actualOutputSize = min(memOutLen, child.output.len)
+      let actualOutputSize = min(p.memOutLen, child.output.len)
       if actualOutputSize > 0:
-        k.cpt.memory.write(memOutPos,
+        k.cpt.memory.write(p.memOutPos,
                            child.output.toOpenArray(0, actualOutputSize - 1))
 
   # ---------------------
@@ -406,41 +386,19 @@ const
   delegateCallOp: Vm2OpFn = proc(k: Vm2Ctx) =
     ## 0xf4, Message-call into this account with an alternative account's
     ##       code, but persisting the current values for sender and value.
-    let (gas, value, destination, sender, memInPos, memInLen, memOutPos,
-         memOutLen, flags) = delegateCallParams(k.cpt)
-
-    let (memOffset, memLength) =
-      if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
-        (memInPos, memInLen)
-      else:
-        (memOutPos, memOutLen)
-
-    # EIP2929
-    # This came before old gas calculator
-    # because it will affect `k.cpt.gasMeter.gasRemaining`
-    # and further `childGasLimit`
-    if k.cpt.fork >= FkBerlin:
-      k.cpt.vmState.mutateStateDB:
-        if not db.inAccessList(destination):
-          db.accessList(destination)
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in
-          # the form of a constant `gasCall`
-          k.cpt.gasMeter.consumeGas(
-            ColdAccountAccessCost - WarmStorageReadCost,
-            reason = "EIP2929 gasCall")
-
-    let contractAddress = k.cpt.msg.contractAddress
+    let
+      p = k.cpt.delegateCallParams
 
     var (gasCost, childGasLimit) = k.cpt.gasCosts[DelegateCall].c_handler(
-      value,
+      p.value,
       GasParams(
         kind: DelegateCall,
-        c_isNewAccount:   not k.cpt.accountExists(contractAddress),
+        c_isNewAccount:   not k.cpt.accountExists(p.contractAddress),
         c_gasBalance:     k.cpt.gasMeter.gasRemaining,
-        c_contractGas:    gas,
+        c_contractGas:    p.gas,
         c_currentMemSize: k.cpt.memory.len,
-        c_memOffset:      memOffset,
-        c_memLength:      memLength))
+        c_memOffset:      p.memOffset,
+        c_memLength:      p.memLength))
 
     # EIP 2046: temporary disabled
     # reduce gas fee for precompiles
@@ -461,19 +419,19 @@ const
       raise newException(
         OutOfGas, "Gas not enough to perform calculation (delegateCall)")
 
-    k.cpt.memory.extend(memInPos, memInLen)
-    k.cpt.memory.extend(memOutPos, memOutLen)
+    k.cpt.memory.extend(p.memInPos, p.memInLen)
+    k.cpt.memory.extend(p.memOutPos, p.memOutLen)
 
     let msg = Message(
       kind:            evmcDelegateCall,
       depth:           k.cpt.msg.depth + 1,
       gas:             childGasLimit,
-      sender:          sender,
-      contractAddress: contractAddress,
-      codeAddress:     destination,
-      value:           value,
-      data:            k.cpt.memory.read(memInPos, memInLen),
-      flags:           flags)
+      sender:          p.sender,
+      contractAddress: p.contractAddress,
+      codeAddress:     p.destination,
+      value:           p.value,
+      data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+      flags:           p.flags)
 
     var child = newComputation(k.cpt.vmState, msg)
     k.cpt.chainTo(child):
@@ -485,51 +443,29 @@ const
         k.cpt.stack.top(1)
 
       k.cpt.returnData = child.output
-      let actualOutputSize = min(memOutLen, child.output.len)
+      let actualOutputSize = min(p.memOutLen, child.output.len)
       if actualOutputSize > 0:
-        k.cpt.memory.write(memOutPos,
+        k.cpt.memory.write(p.memOutPos,
                            child.output.toOpenArray(0, actualOutputSize - 1))
 
   # ---------------------
 
   staticCallOp: Vm2OpFn = proc(k: Vm2Ctx) =
     ## 0xfa, Static message-call into an account.
-    let (gas, value, destination, sender, memInPos, memInLen, memOutPos,
-         memOutLen, flags) = staticCallParams(k.cpt)
 
-    let (memOffset, memLength) =
-      if calcMemSize(memInPos, memInLen) > calcMemSize(memOutPos, memOutLen):
-        (memInPos, memInLen)
-      else:
-        (memOutPos, memOutLen)
-
-    # EIP2929
-    # This came before old gas calculator
-    # because it will affect `k.cpt.gasMeter.gasRemaining`
-    # and further `childGasLimit`
-    if k.cpt.fork >= FkBerlin:
-      if k.cpt.fork >= FkBerlin:
-        k.cpt.vmState.mutateStateDB:
-          if not db.inAccessList(destination):
-            db.accessList(destination)
-            # The WarmStorageReadCostEIP2929 (100) is already deducted in
-            # the form of a constant `gasCall`
-            k.cpt.gasMeter.consumeGas(
-              ColdAccountAccessCost - WarmStorageReadCost,
-              reason = "EIP2929 gasCall")
-
-    let contractAddress = destination
+    let
+      p = k.cpt.staticCallParams
 
     var (gasCost, childGasLimit) = k.cpt.gasCosts[StaticCall].c_handler(
-      value,
+      p.value,
       GasParams(
         kind: StaticCall,
-        c_isNewAccount:   not k.cpt.accountExists(contractAddress),
+        c_isNewAccount:   not k.cpt.accountExists(p.contractAddress),
         c_gasBalance:     k.cpt.gasMeter.gasRemaining,
-        c_contractGas:    gas,
+        c_contractGas:    p.gas,
         c_currentMemSize: k.cpt.memory.len,
-        c_memOffset:      memOffset,
-        c_memLength:      memLength))
+        c_memOffset:      p.memOffset,
+        c_memLength:      p.memLength))
 
     # EIP 2046: temporary disabled
     # reduce gas fee for precompiles
@@ -555,19 +491,19 @@ const
       raise newException(
         OutOfGas, "Gas not enough to perform calculation (staticCall)")
 
-    k.cpt.memory.extend(memInPos, memInLen)
-    k.cpt.memory.extend(memOutPos, memOutLen)
+    k.cpt.memory.extend(p.memInPos, p.memInLen)
+    k.cpt.memory.extend(p.memOutPos, p.memOutLen)
 
     let msg = Message(
       kind:            evmcCall,
       depth:           k.cpt.msg.depth + 1,
       gas:             childGasLimit,
-      sender:          sender,
-      contractAddress: contractAddress,
-      codeAddress:     destination,
-      value:           value,
-      data:            k.cpt.memory.read(memInPos, memInLen),
-      flags:           flags)
+      sender:          p.sender,
+      contractAddress: p.contractAddress,
+      codeAddress:     p.destination,
+      value:           p.value,
+      data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+      flags:           p.flags)
 
     var child = newComputation(k.cpt.vmState, msg)
     k.cpt.chainTo(child):
@@ -579,9 +515,9 @@ const
         k.cpt.stack.top(1)
 
       k.cpt.returnData = child.output
-      let actualOutputSize = min(memOutLen, child.output.len)
+      let actualOutputSize = min(p.memOutLen, child.output.len)
       if actualOutputSize > 0:
-        k.cpt.memory.write(memOutPos,
+        k.cpt.memory.write(p.memOutPos,
                            child.output.toOpenArray(0, actualOutputSize - 1))
 
 # ------------------------------------------------------------------------------
