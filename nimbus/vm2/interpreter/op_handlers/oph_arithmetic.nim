@@ -334,6 +334,7 @@ const
 
     (opCode: Add,         ## 0x01, Addition
      forks: Vm2OpAllForks,
+     name: "add",
      info: "Addition operation",
      exec: (prep: vm2OpIgnore,
             run:  addOp,
@@ -341,6 +342,7 @@ const
 
     (opCode: Mul,         ##  0x02, Multiplication
      forks: Vm2OpAllForks,
+     name: "mul",
      info: "Multiplication operation",
      exec: (prep: vm2OpIgnore,
             run:  mulOp,
@@ -348,6 +350,7 @@ const
 
     (opCode: Sub,         ## 0x03, Subtraction
      forks: Vm2OpAllForks,
+     name: "sub",
      info: "Subtraction operation",
      exec: (prep: vm2OpIgnore,
             run:  subOp,
@@ -355,6 +358,7 @@ const
 
     (opCode: Div,         ## 0x04, Division
      forks: Vm2OpAllForks,
+     name: "divide",
      info: "Integer division operation",
      exec: (prep: vm2OpIgnore,
             run:  divideOp,
@@ -362,6 +366,7 @@ const
 
     (opCode: Sdiv,        ## 0x05, Signed division
      forks: Vm2OpAllForks,
+     name: "sdiv",
      info: "Signed integer division operation (truncated)",
      exec: (prep: vm2OpIgnore,
             run:  sdivOp,
@@ -369,6 +374,7 @@ const
 
     (opCode: Mod,         ## 0x06, Modulo
      forks: Vm2OpAllForks,
+     name: "modulo",
      info: "Modulo remainder operation",
      exec: (prep: vm2OpIgnore,
             run:  moduloOp,
@@ -376,6 +382,7 @@ const
 
     (opCode: Smod,        ## 0x07, Signed modulo
      forks: Vm2OpAllForks,
+     name: "smod",
      info: "Signed modulo remainder operation",
      exec: (prep: vm2OpIgnore,
             run:  smodOp,
@@ -384,6 +391,7 @@ const
     (opCode: AddMod,      ## 0x08, Modulo addition, Intermediate
                           ## computations do not roll over at 2^256
      forks: Vm2OpAllForks,
+     name: "addmod",
      info: "Modulo addition operation",
      exec: (prep: vm2OpIgnore,
             run:  addmodOp,
@@ -392,6 +400,7 @@ const
     (opCode: MulMod,      ## 0x09, Modulo multiplication, Intermediate
                           ## computations do not roll over at 2^256
      forks: Vm2OpAllForks,
+     name: "mulmod",
      info: "Modulo multiplication operation",
      exec: (prep: vm2OpIgnore,
             run:  mulmodOp,
@@ -399,6 +408,7 @@ const
 
     (opCode: Exp,         ## 0x0a, Exponentiation
      forks: Vm2OpAllForks,
+     name: "exp",
      info: "Exponentiation operation",
      exec: (prep: vm2OpIgnore,
             run:  expOp,
@@ -406,6 +416,7 @@ const
 
     (opCode: SignExtend,  ## 0x0b, Extend 2's complemet length
      forks: Vm2OpAllForks,
+     name: "signExtend",
      info: "Extend length of two’s complement signed integer",
      exec: (prep: vm2OpIgnore,
             run:  signExtendOp,
@@ -413,6 +424,7 @@ const
 
     (opCode: Lt,          ## 0x10, Less-than
      forks: Vm2OpAllForks,
+     name: "lt",
      info: "Less-than comparison",
      exec: (prep: vm2OpIgnore,
             run:  ltOp,
@@ -420,6 +432,7 @@ const
 
     (opCode: Gt,          ## 0x11, Greater-than
      forks: Vm2OpAllForks,
+     name: "gt",
      info: "Greater-than comparison",
      exec: (prep: vm2OpIgnore,
             run:  gtOp,
@@ -427,6 +440,7 @@ const
 
     (opCode: Slt,         ## 0x12, Signed less-than
      forks: Vm2OpAllForks,
+     name: "slt",
      info: "Signed less-than comparison",
      exec: (prep: vm2OpIgnore,
             run:  sltOp,
@@ -434,6 +448,7 @@ const
 
     (opCode: Sgt,         ## 0x13, Signed greater-than
      forks: Vm2OpAllForks,
+     name: "sgt",
      info: "Signed greater-than comparison",
      exec: (prep: vm2OpIgnore,
             run:  sgtOp,
@@ -441,6 +456,7 @@ const
 
     (opCode: Eq,          ## 0x14, Equality
      forks: Vm2OpAllForks,
+     name: "eq",
      info: "Equality comparison",
      exec: (prep: vm2OpIgnore,
             run:  eqOp,
@@ -448,6 +464,7 @@ const
 
     (opCode: IsZero,      ## 0x15, Not operator
      forks: Vm2OpAllForks,
+     name: "isZero",
      info: "Simple not operator (Note: real Yellow Paper description)",
      exec: (prep: vm2OpIgnore,
             run:  isZeroOp,
@@ -455,6 +472,7 @@ const
 
     (opCode: And,         ## 0x16, AND
      forks: Vm2OpAllForks,
+     name: "andOp",
      info: "Bitwise AND operation",
      exec: (prep: vm2OpIgnore,
             run:  andOp,
@@ -462,6 +480,7 @@ const
 
     (opCode: Or,          ## 0x17, OR
      forks: Vm2OpAllForks,
+     name: "orOp",
      info: "Bitwise OR operation",
      exec: (prep: vm2OpIgnore,
             run:  orOp,
@@ -469,6 +488,7 @@ const
 
     (opCode: Xor,         ## 0x18, XOR
      forks: Vm2OpAllForks,
+     name: "xorOp",
      info: "Bitwise XOR operation",
      exec: (prep: vm2OpIgnore,
             run:  xorOp,
@@ -476,6 +496,7 @@ const
 
     (opCode: Not,         ## 0x19, NOT
      forks: Vm2OpAllForks,
+     name: "notOp",
      info: "Bitwise NOT operation",
      exec: (prep: vm2OpIgnore,
             run:  notOp,
@@ -483,6 +504,7 @@ const
 
     (opCode: Byte,        ## 0x1a, Retrieve byte
      forks: Vm2OpAllForks,
+     name: "byteOp",
      info: "Retrieve single byte from word",
      exec: (prep: vm2OpIgnore,
             run:  byteOp,
@@ -492,6 +514,7 @@ const
 
     (opCode: Shl,         ## 0x1b, Shift left
      forks: Vm2OpConstantinopleAndLater,
+     name: "shlOp",
      info: "Shift left",
      exec: (prep: vm2OpIgnore,
             run:  shlOp,
@@ -499,6 +522,7 @@ const
 
     (opCode: Shr,         ## 0x1c, Shift right logical
      forks: Vm2OpConstantinopleAndLater,
+     name: "shrOp",
      info: "Logical shift right",
      exec: (prep: vm2OpIgnore,
             run:  shrOp,
@@ -506,6 +530,7 @@ const
 
     (opCode: Sar,         ## 0x1d, Shift right arithmetic
      forks: Vm2OpConstantinopleAndLater,
+     name: "sarOp",
      info: "Arithmetic shift right",
      exec: (prep: vm2OpIgnore,
             run:  sarOp,

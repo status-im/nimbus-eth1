@@ -7,6 +7,7 @@
 
 import
   ./op_handlers/oph_defs,
+  ./op_handlers_verify,
   ./op_handlers
 
 # ##################################
@@ -68,7 +69,7 @@ opHandler extCodeCopyEIP2929, Op.ExtCodeCopy
 opHandler returnDataSize, Op.ReturnDataSize
 opHandler returnDataCopy, Op.ReturnDataCopy
 
-opHandler        extCodeHash, Op.ExtCodeHash, FkFrontier
+opHandler        extCodeHash, Op.ExtCodeHash, FkConstantinople
 opHandler extCodeHashEIP2929, Op.ExtCodeHash
 
 opHandler      blockhash, Op.Blockhash

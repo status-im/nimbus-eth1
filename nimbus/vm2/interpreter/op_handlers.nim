@@ -59,6 +59,8 @@ proc mkOpTable(select: Fork): array[Op,Vm2OpExec] {.compileTime.} =
     if select notin result[op].forks:
       result[op] = result[Invalid]
       result[op].opCode = op
+      if op == Stop:
+        result[op].name = "toBeReplacedByBreak"
 
 # ------------------------------------------------------------------------------
 # Public handler tables
@@ -70,16 +72,6 @@ const
     for w in Fork:
       rc[w] = w.mkOpTable
     rc
-
-  # vm2OpTabFrontier*       = vm2OpHandlers[FkFrontier]
-  # vm2OpTabHomestead*      = vm2OpHandlers[FkHomestead]
-  # vm2OpTabTangerine*      = vm2OpHandlers[FkTangerine]
-  # vm2OpTabSpurious*       = vm2OpHandlers[FkSpurious]
-  # vm2OpTabByzantium*      = vm2OpHandlers[FkByzantium]
-  # vm2OpTabConstantinople* = vm2OpHandlers[FkConstantinople]
-  # vm2OpTabPetersburg*     = vm2OpHandlers[FkPetersburg]
-  # vm2OpTabIstanbul*       = vm2OpHandlers[FkIstanbul]
-  # vm2OpTabBerlin*         = vm2OpHandlers[FkBerlin]
 
 # ------------------------------------------------------------------------------
 # Debugging ...

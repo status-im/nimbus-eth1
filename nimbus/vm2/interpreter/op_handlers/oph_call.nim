@@ -529,6 +529,7 @@ const
 
     (opCode: Call,         ## 0xf1, Message-Call into an account
      forks: Vm2OpAllForks,
+     name: "call",
      info: "Message-Call into an account",
      exec: (prep: vm2OpIgnore,
             run: callOp,
@@ -536,13 +537,15 @@ const
 
     (opCode: CallCode,     ## 0xf2, Message-Call with alternative code
      forks: Vm2OpAllForks,
+     name: "callCode",
      info: "Message-call into this account with alternative account's code",
      exec: (prep: vm2OpIgnore,
             run: callCodeOp,
             post: vm2OpIgnore)),
 
     (opCode: DelegateCall, ## 0xf4, CallCode with persisting sender and value
-     forks: Vm2OpAllForks,
+     forks: Vm2OpHomesteadAndLater,
+     name: "delegateCall",
      info: "Message-call into this account with an alternative account's " &
            "code but persisting the current values for sender and value.",
      exec: (prep: vm2OpIgnore,
@@ -550,7 +553,8 @@ const
             post: vm2OpIgnore)),
 
     (opCode: StaticCall,   ## 0xfa, Static message-call into an account
-     forks: Vm2OpAllForks,
+     forks: Vm2OpByzantiumAndLater,
+     name: "staticCall",
      info: "Static message-call into an account",
      exec: (prep: vm2OpIgnore,
             run: staticCallOp,
