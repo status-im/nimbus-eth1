@@ -336,6 +336,7 @@ const
 
     (opCode: Address,         ## 0x20, Address
      forks: Vm2OpAllForks,
+     name: "address",
      info: "Get address of currently executing account",
      exec: (prep: vm2OpIgnore,
             run:  addressOp,
@@ -343,6 +344,7 @@ const
 
     (opCode: Balance,         ## 0x31, Balance
      forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     name: "balance",
      info: "Get balance of the given account",
      exec: (prep: vm2OpIgnore,
             run:  balanceOp,
@@ -350,6 +352,7 @@ const
 
     (opCode: Balance,         ## 0x31, Balance for Berlin and later
      forks: Vm2OpBerlinAndLater,
+     name: "balanceEIP2929",
      info: "EIP2929: Get balance of the given account",
      exec: (prep: vm2OpIgnore,
             run:  balanceEIP2929Op,
@@ -357,6 +360,7 @@ const
 
     (opCode: Origin,          ## 0x32, Origination address
      forks: Vm2OpAllForks,
+     name: "origin",
      info: "Get execution origination address",
      exec: (prep: vm2OpIgnore,
             run:  originOp,
@@ -364,6 +368,7 @@ const
 
     (opCode: Caller,          ## 0x33, Caller address
      forks: Vm2OpAllForks,
+     name: "caller",
      info: "Get caller address",
      exec: (prep: vm2OpIgnore,
             run:  callerOp,
@@ -371,6 +376,7 @@ const
 
     (opCode: CallValue,       ## 0x34, Execution deposited value
      forks: Vm2OpAllForks,
+     name: "callValue",
      info: "Get deposited value by the instruction/transaction " &
            "responsible for this execution",
      exec: (prep: vm2OpIgnore,
@@ -379,6 +385,7 @@ const
 
     (opCode: CallDataLoad,    ## 0x35, Input data
      forks: Vm2OpAllForks,
+     name: "callDataLoad",
      info: "Get input data of current environment",
      exec: (prep: vm2OpIgnore,
             run:  callDataLoadOp,
@@ -386,6 +393,7 @@ const
 
     (opCode: CallDataSize,    ## 0x36, Size of input data
      forks: Vm2OpAllForks,
+     name: "callDataSize",
      info: "Get size of input data in current environment",
      exec: (prep: vm2OpIgnore,
             run:  callDataSizeOp,
@@ -393,6 +401,7 @@ const
 
     (opCode: CallDataCopy,    ## 0x37, Copy input data to memory.
      forks: Vm2OpAllForks,
+     name: "callDataCopy",
      info: "Copy input data in current environment to memory",
      exec: (prep: vm2OpIgnore,
             run:  callDataCopyOp,
@@ -400,6 +409,7 @@ const
 
     (opCode: CodeSize,       ## 0x38, Size of code
      forks: Vm2OpAllForks,
+     name: "codeSize",
      info: "Get size of code running in current environment",
      exec: (prep: vm2OpIgnore,
             run:  codeSizeOp,
@@ -407,6 +417,7 @@ const
 
     (opCode: CodeCopy,       ## 0x39, Copy code to memory.
      forks: Vm2OpAllForks,
+     name: "codeCopy",
      info: "Copy code running in current environment to memory",
      exec: (prep: vm2OpIgnore,
             run:  codeCopyOp,
@@ -414,6 +425,7 @@ const
 
     (opCode: GasPrice,       ## 0x3a, Gas price
      forks: Vm2OpAllForks,
+     name: "gasPrice",
      info: "Get price of gas in current environment",
      exec: (prep: vm2OpIgnore,
             run:  gasPriceOp,
@@ -421,6 +433,7 @@ const
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size
      forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     name: "extCodeSize",
      info: "Get size of an account's code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeSizeOp,
@@ -428,6 +441,7 @@ const
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin and later
      forks: Vm2OpBerlinAndLater,
+     name: "extCodeSizeEIP2929",
      info: "EIP2929: Get size of an account's code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeSizeEIP2929Op,
@@ -435,6 +449,7 @@ const
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account code copy to memory.
      forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     name: "extCodeCopy",
      info: "Copy an account's code to memory",
      exec: (prep: vm2OpIgnore,
             run:  extCodeCopyOp,
@@ -442,13 +457,15 @@ const
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin and later
      forks: Vm2OpBerlinAndLater,
+     name: "extCodeCopyEIP2929",
      info: "EIP2929: Copy an account's code to memory",
      exec: (prep: vm2OpIgnore,
             run:  extCodeCopyEIP2929Op,
             post: vm2OpIgnore)),
 
     (opCode: ReturnDataSize, ## 0x3d, Previous call output data size
-     forks: Vm2OpAllForks,
+     forks: Vm2OpByzantiumAndLater,
+     name: "returnDataSize",
      info: "Get size of output data from the previous call " &
            "from the current environment",
      exec: (prep: vm2OpIgnore,
@@ -456,14 +473,16 @@ const
             post: vm2OpIgnore)),
 
     (opCode: ReturnDataCopy, ## 0x3e, Previous call output data copy to memory
-     forks: Vm2OpAllForks,
+     forks: Vm2OpByzantiumAndLater,
+     name: "returnDataCopy",
      info: "Copy output data from the previous call to memory",
      exec: (prep: vm2OpIgnore,
             run:  returnDataCopyOp,
             post: vm2OpIgnore)),
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash
-     forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     forks: Vm2OpConstantinopleAndLater - Vm2OpBerlinAndLater,
+     name: "extCodeHash",
      info: "Returns the keccak256 hash of a contract’s code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeHashOp,
@@ -471,6 +490,7 @@ const
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash for berlin and later
      forks: Vm2OpBerlinAndLater,
+     name: "extCodeHashEIP2929",
      info: "EIP2929: Returns the keccak256 hash of a contract’s code",
      exec: (prep: vm2OpIgnore,
             run:  extCodeHashEIP2929Op,

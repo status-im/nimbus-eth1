@@ -87,7 +87,7 @@ else:
 # ------------------------------------------------------------------------------
 
 proc fnName(n: int): string {.compileTime.} =
-  &"Log{n}Op"
+  &"log{n}Op"
 
 proc opName(n: int): string {.compileTime.} =
   &"Log{n}"

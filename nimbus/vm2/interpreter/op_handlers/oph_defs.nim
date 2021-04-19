@@ -104,7 +104,8 @@ type
   Vm2OpExec* = tuple          ## op code handler entry
     opCode: Op                ## index back-reference
     forks: set[Fork]          ## forks applicable for this operation
-    info: string              ## pretty option name, info
+    name: string              ## handler name
+    info: string              ## handter info, explainer
     exec: Vm2OpHanders
 
 # ------------------------------------------------------------------------------

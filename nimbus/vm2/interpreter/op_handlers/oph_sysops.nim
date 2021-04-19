@@ -215,13 +215,15 @@ const
 
     (opCode: Return,       ## 0xf3, Halt execution returning output data.
      forks: Vm2OpAllForks,
+     name: "returnOp",
      info: "Halt execution returning output data",
      exec: (prep: vm2OpIgnore,
             run: returnOp,
             post: vm2OpIgnore)),
 
     (opCode: Revert,       ## 0xfd, Halt and revert state changes 
-     forks: Vm2OpAllForks,
+     forks: Vm2OpByzantiumAndLater,
+     name: "revert",
      info: "Halt execution reverting state changes but returning data " &
            "and remaining gas",
      exec: (prep: vm2OpIgnore,
@@ -230,6 +232,7 @@ const
    
     (opCode: Invalid,      ## 0xfe, invalid instruction.
      forks: Vm2OpAllForks,
+     name: "invalidInstruction",
      info: "Designated invalid instruction",
      exec: (prep: vm2OpIgnore,
             run: invalidOp,
@@ -237,6 +240,7 @@ const
 
     (opCode: SelfDestruct, ## 0xff, Halt execution, prep for later deletion
      forks: Vm2OpAllForks - Vm2OpTangerineAndLater,
+     name: "selfDestruct",
      info: "Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,
             run:  selfDestructOp,
@@ -244,6 +248,7 @@ const
 
     (opCode: SelfDestruct, ## 0xff, EIP150: self destruct, Tangerine
      forks: Vm2OpTangerineAndLater - Vm2OpSpuriousAndLater,
+     name: "selfDestructEIP150",
      info: "EIP150: Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,
             run:  selfDestructEIP150Op,
@@ -251,6 +256,7 @@ const
 
     (opCode: SelfDestruct, ## 0xff, EIP161: self destruct, Spurious and later
      forks: Vm2OpSpuriousAndLater - Vm2OpBerlinAndLater,
+     name: "selfDestructEIP161",
      info: "EIP161: Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,
             run:  selfDestructEIP161Op,
@@ -258,6 +264,7 @@ const
 
     (opCode: SelfDestruct, ## 0xff, EIP2929: self destruct, Berlin and later
      forks: Vm2OpBerlinAndLater,
+     name: "selfDestructEIP2929",
      info: "EIP2929: Halt execution and register account for later deletion",
      exec: (prep: vm2OpIgnore,
             run:  selfDestructEIP2929Op,

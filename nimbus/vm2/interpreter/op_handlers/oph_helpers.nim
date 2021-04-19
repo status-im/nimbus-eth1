@@ -20,7 +20,8 @@ import
   ../../../errors,
   ./oph_defs,
   macros,
-  stint
+  stint,
+  strutils
 
 type
   OphNumToTextFn* = proc(n: int): string
@@ -156,9 +157,11 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
   ##
   var records = nnkBracket.newTree()
   for n in inxList:
+    var handlerName = n.runHandler.multiReplace(("Op",""),("OP",""))
     records.add nnkPar.newTree(
                   "opCode".asIdent(n.opCode),
                   "forks".asIdent(recForkSet),
+                  "name".asText(handlerName),
                   "info".asText(n.handlerInfo),
                   nnkExprColonExpr.newTree(
                     newIdentNode("exec"),

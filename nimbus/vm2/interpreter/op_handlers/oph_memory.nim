@@ -381,6 +381,7 @@ const
 
     (opCode: Pop,       ## x50, Remove item from stack
      forks: Vm2OpAllForks,
+     name: "pop",
      info: "Remove item from stack",
      exec: (prep: vm2OpIgnore,
             run:  popOp,
@@ -388,6 +389,7 @@ const
 
     (opCode: Mload,     ## 0x51, Load word from memory
      forks: Vm2OpAllForks,
+     name: "mload",
      info: "Load word from memory",
      exec: (prep: vm2OpIgnore,
             run:  mloadOp,
@@ -395,6 +397,7 @@ const
 
     (opCode: Mstore,    ## 0x52, Save word to memory
      forks: Vm2OpAllForks,
+     name: "mstore",
      info: "Save word to memory",
      exec: (prep: vm2OpIgnore,
             run:  mstoreOp,
@@ -402,6 +405,7 @@ const
 
     (opCode: Mstore8,   ## 0x53, Save byte to memory
      forks: Vm2OpAllForks,
+     name: "mstore8",
      info: "Save byte to memory",
      exec: (prep: vm2OpIgnore,
             run:  mstore8Op,
@@ -409,6 +413,7 @@ const
 
     (opCode: Sload,     ## 0x54, Load word from storage
      forks: Vm2OpAllForks - Vm2OpBerlinAndLater,
+     name: "sload",
      info: "Load word from storage",
      exec: (prep: vm2OpIgnore,
             run:  sloadOp,
@@ -416,6 +421,7 @@ const
 
     (opCode: Sload,     ## 0x54, sload for Berlin and later
      forks: Vm2OpBerlinAndLater,
+     name: "sloadEIP2929",
      info: "EIP2929: sload for Berlin and later",
      exec: (prep: vm2OpIgnore,
             run:  sloadEIP2929Op,
@@ -423,20 +429,31 @@ const
 
     (opCode: Sstore,    ## 0x55, Save word
      forks: Vm2OpAllForks - Vm2OpConstantinopleAndLater,
+     name: "sstore",
      info: "Save word to storage",
      exec: (prep: vm2OpIgnore,
             run:  sstoreOp,
             post: vm2OpIgnore)),
 
     (opCode: Sstore,    ## 0x55, sstore for Constantinople and later
-     forks: Vm2OpConstantinopleAndLater - Vm2OpIstanbulAndLater,
+     forks: Vm2OpConstantinopleAndLater - Vm2OpPetersburgAndLater,
+     name: "sstoreEIP1283",
      info: "EIP1283: sstore for Constantinople and later",
      exec: (prep: vm2OpIgnore,
             run:  sstoreEIP1283Op,
             post: vm2OpIgnore)),
 
+    (opCode: Sstore,    ## 0x55, sstore for Petersburg and later
+     forks: Vm2OpPetersburgAndLater - Vm2OpIstanbulAndLater,
+     name: "sstore",
+     info: "sstore for Constantinople and later",
+     exec: (prep: vm2OpIgnore,
+            run:  sstoreOp,
+            post: vm2OpIgnore)),
+
     (opCode: Sstore,    ##  0x55, sstore for Istanbul and later
      forks: Vm2OpIstanbulAndLater - Vm2OpBerlinAndLater,
+     name: "sstoreEIP2200",
      info: "EIP2200: sstore for Istanbul and later",
      exec: (prep: vm2OpIgnore,
             run:  sstoreEIP2200Op,
@@ -444,13 +461,15 @@ const
 
     (opCode: Sstore,    ##  0x55, sstore for Berlin and later
      forks: Vm2OpBerlinAndLater,
+     name: "sstoreEIP2929",
      info: "EIP2929: sstore for Istanbul and later",
      exec: (prep: vm2OpIgnore,
             run:  sstoreEIP2929Op,
             post: vm2OpIgnore)),
 
     (opCode: Jump,      ## 0x56, Jump
-     forks: Vm2OpIstanbulAndLater,
+     forks: Vm2OpAllForks,
+     name: "jump",
      info: "Alter the program counter",
      exec: (prep: vm2OpIgnore,
             run:  jumpOp,
@@ -458,6 +477,7 @@ const
 
     (opCode: JumpI,     ## 0x57, Conditional jump
      forks: Vm2OpAllForks,
+     name: "jumpI",
      info: "Conditionally alter the program counter",
      exec: (prep: vm2OpIgnore,
             run:  jumpIOp,
@@ -465,6 +485,7 @@ const
 
     (opCode: Pc,        ## 0x58, Program counter prior to instruction
      forks: Vm2OpAllForks,
+     name: "pc",
      info: "Get the value of the program counter prior to the increment "&
            "corresponding to this instruction",
      exec: (prep: vm2OpIgnore,
@@ -473,6 +494,7 @@ const
 
     (opCode: Msize,     ## 0x59, Memory size
      forks: Vm2OpAllForks,
+     name: "msize",
      info: "Get the size of active memory in bytes",
      exec: (prep: vm2OpIgnore,
             run:  msizeOp,
@@ -480,6 +502,7 @@ const
 
     (opCode: Gas,       ##  0x5a, Get available gas
      forks: Vm2OpAllForks,
+     name: "gas",
      info: "Get the amount of available gas, including the corresponding "&
            "reduction for the cost of this instruction",
      exec: (prep: vm2OpIgnore,
@@ -489,27 +512,31 @@ const
     (opCode: JumpDest,  ## 0x5b, Mark jump target. This operation has no effect
                         ##       on machine state during execution
      forks: Vm2OpAllForks,
+     name: "jumpDest",
      info: "Mark a valid destination for jumps",
      exec: (prep: vm2OpIgnore,
             run:  jumpDestOp,
             post: vm2OpIgnore)),
 
     (opCode: BeginSub,  ## 0x5c, Begin subroutine
-     forks: Vm2OpAllForks,
+     forks: Vm2OpBerlinAndLater,
+     name: "beginSub",
      info: " Marks the entry point to a subroutine",
      exec: (prep: vm2OpIgnore,
             run:  beginSubOp,
             post: vm2OpIgnore)),
 
     (opCode: ReturnSub, ## 0x5d, Return
-     forks: Vm2OpAllForks,
+     forks: Vm2OpBerlinAndLater,
+     name: "returnSub",
      info: "Returns control to the caller of a subroutine",
      exec: (prep: vm2OpIgnore,
             run:  returnSubOp,
             post: vm2OpIgnore)),
 
     (opCode: JumpSub,   ## 0x5e, Call subroutine
-     forks: Vm2OpAllForks,
+     forks: Vm2OpBerlinAndLater,
+     name: "jumpSub",
      info: "Transfers control to a subroutine",
      exec: (prep: vm2OpIgnore,
             run:  jumpSubOp,

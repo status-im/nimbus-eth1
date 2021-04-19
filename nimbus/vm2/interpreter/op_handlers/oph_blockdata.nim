@@ -115,6 +115,7 @@ const
 
     (opCode: Blockhash,       ## 0x40, Hash of some most recent complete block
      forks: Vm2OpAllForks,
+     name: "blockhash",
      info: "Get the hash of one of the 256 most recent complete blocks",
      exec: (prep: vm2OpIgnore,
             run:  blockhashOp,
@@ -122,6 +123,7 @@ const
 
     (opCode: Coinbase,        ## 0x41, Beneficiary address
      forks: Vm2OpAllForks,
+     name: "coinbase",
      info: "Get the block's beneficiary address",
      exec: (prep: vm2OpIgnore,
             run:  coinBaseOp,
@@ -129,6 +131,7 @@ const
 
     (opCode: Timestamp,       ## 0x42, Block timestamp.
      forks: Vm2OpAllForks,
+     name: "timestamp",
      info: "Get the block's timestamp",
      exec: (prep: vm2OpIgnore,
             run:  timestampOp,
@@ -136,6 +139,7 @@ const
 
     (opCode: Number,          ## 0x43, Block number
      forks: Vm2OpAllForks,
+     name: "blockNumber",
      info: "Get the block's number",
      exec: (prep: vm2OpIgnore,
             run:  blocknumberOp,
@@ -143,6 +147,7 @@ const
 
     (opCode: Difficulty,      ## 0x44, Block difficulty
      forks: Vm2OpAllForks,
+     name: "difficulty",
      info: "Get the block's difficulty",
      exec: (prep: vm2OpIgnore,
             run:  difficultyOp,
@@ -150,20 +155,23 @@ const
 
     (opCode: GasLimit,        ## 0x45, Block gas limit
      forks: Vm2OpAllForks,
+     name: "gasLimit",
      info: "Get the block's gas limit",
      exec: (prep: vm2OpIgnore,
             run:  gasLimitOp,
             post: vm2OpIgnore)),
 
     (opCode: ChainId,         ## 0x46, EIP-155 chain identifier
-     forks: Vm2OpAllForks,
+     forks: Vm2OpIstanbulAndLater,
+     name: "chainId",
      info: "Get current chain’s EIP-155 unique identifier",
      exec: (prep: vm2OpIgnore,
             run:  chainIdOp,
             post: vm2OpIgnore)),
 
     (opCode: SelfBalance,     ## 0x47, Contract balance.
-     forks: Vm2OpAllForks,
+     forks: Vm2OpIstanbulAndLater,
+     name: "selfBalance",
      info: "Get current contract's balance",
      exec: (prep: vm2OpIgnore,
             run:  selfBalanceOp,

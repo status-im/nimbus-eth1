@@ -238,13 +238,15 @@ const
 
     (opCode: Create,    ## 0xf0, Create a new account with associated code
      forks: Vm2OpAllForks,
+     name: "create",
      info: "Create a new account with associated code",
      exec: (prep: vm2OpIgnore,
             run: createOp,
             post: vm2OpIgnore)),
 
     (opCode: Create2,   ## 0xf5, Create using keccak256
-     forks: Vm2OpAllForks,
+     forks: Vm2OpConstantinopleAndLater,
+     name: "create2",
      info: "Behaves identically to CREATE, except using keccak256",
      exec: (prep: vm2OpIgnore,
             run: create2Op,

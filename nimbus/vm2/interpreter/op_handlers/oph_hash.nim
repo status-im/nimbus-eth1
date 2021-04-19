@@ -115,6 +115,7 @@ const
 
     (opCode: Op.Sha3,     ## 0x20, Keccak-256
      forks: Vm2OpAllForks,
+     name: "sha3",
      info: "Compute Keccak-256 hash",
      exec: (prep: vm2OpIgnore,
             run:  sha3Op,
