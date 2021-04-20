@@ -31,8 +31,8 @@ when not breakCircularDependency:
   import
     ../../../db/accounts_cache,
     ../../code_stream,
+    ../../compu_helper,
     ../../stack,
-    ../../v2computation,
     ../../v2memory,
     ../../v2state,
     ../../v2types,
@@ -47,8 +47,6 @@ else:
   const
     ColdSloadCost = 42
     WarmStorageReadCost = 43
-  var
-    blindGasCosts: array[Op,int]
 
   # copied from stack.nim
   macro genTupleType(len: static[int], elemType: untyped): untyped =
@@ -62,9 +60,9 @@ else:
     var rc: genTupleType(n, UInt256)
     return rc
 
-  # function stubs from v2computation.nim (to satisfy compiler logic)
-  proc getStorage(c: Computation, slot: Uint256): Uint256 = 0.u256
-  proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
+  # function stubs from compu_helper.nim (to satisfy compiler logic)
+  proc getStorage(c: Computation, slot: Uint256): Uint256 = result
+  proc gasCosts(c: Computation): array[Op,int] = result
 
   # function stubs from v2utils_numeric.nim
   func cleanMemRef(x: UInt256): int = 0
@@ -81,7 +79,7 @@ else:
   proc isValidOpcode(c: CodeStream, position: int): bool = false
 
   # function stubs from v2state.nim
-  proc readOnlyStateDB(x: BaseVMState): ReadOnlyStateDB = x.accountDb
+  proc readOnlyStateDB(x: BaseVMState): ReadOnlyStateDB = result
   template mutateStateDB(vmState: BaseVMState, body: untyped) =
     block:
       var db {.inject.} = vmState.accountDb
@@ -99,14 +97,14 @@ else:
       s_originalValue: Uint256
     else:
       discard
-  proc c_handler(x: int; y: Uint256, z: GasParams): (int,int) = (0,0)
+  proc c_handler(x: int; y: Uint256, z: GasParams): (int,int) = result
   proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = 0
 
   # function stubs from state_db.nim
-  proc getCommittedStorage[A,B](x: A; y: B; z: Uint256): Uint256 = 0.u256
+  proc getCommittedStorage[A,B](x: A; y: B; z: Uint256): Uint256 = result
 
   # function stubs from accounts_cache.nim:
-  func inAccessList[A,B](ac: A; address: B; slot: UInt256): bool = false
+  func inAccessList[A,B](ac: A; address: B; slot: UInt256): bool = result
   proc accessList[A,B](ac: var A; address: B; slot: UInt256) = discard
   proc setStorage[A,B](ac: var A; address: B, slot, value: UInt256) = discard
 

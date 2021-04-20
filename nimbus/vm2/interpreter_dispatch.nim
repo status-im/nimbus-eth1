@@ -1,20 +1,24 @@
 # Nimbus
 # Copyright (c) 2018 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
 
 import
-  chronicles,
+  ./compu_helper,
   ./interpreter/[gas_meter, op_handlers, op_handlers/oph_defs, v2gas_costs],
-  ./code_stream, ./v2types, ./v2precompiles
+  ./code_stream,
+  ./v2types,
+  chronicles
 
 logScope:
   topics = "vm opcode"
 
-
-proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
+proc selectVM*(c: Computation, fork: Fork) {.gcsafe.} =
   var desc: Vm2Ctx
 
   if c.tracingEnabled:
@@ -51,21 +55,3 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
     else:
       discard
 
-
-proc executeOpcodes(c: Computation) =
-  let fork = c.fork
-
-  block:
-    if not c.continuation.isNil:
-      c.continuation = nil
-    elif c.execPrecompiles(fork):
-      break
-
-    try:
-      c.selectVM(fork)
-    except CatchableError as e:
-      c.setError(&"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
-
-  if c.isError() and c.continuation.isNil:
-    if c.tracingEnabled: c.traceError()
-    debug "executeOpcodes error", msg=c.error.info

@@ -31,24 +31,23 @@ import
 when not breakCircularDependency:
   import
     ../../code_stream,
+    ../../compu_helper,
     ../../stack,
-    ../../v2computation,
     ../../v2memory,
     ../../v2state,
     ../gas_meter,
-    ../v2gas_costs,
     ../utils/v2utils_numeric,
+    ../v2gas_costs,
     eth/common
 
 else:
   import macros
 
-  var
+  const
     GasBalance = 0
     GasExtCode = 42
     GasExtCodeHash = 7
-    blindGasCosts: array[Op,int]
-    blindAddress: EthAddress
+  var
     gasFees: array[Fork,array[0..123,int]]
 
   # copied from stack.nim
@@ -58,19 +57,19 @@ else:
 
   # function stubs from stack.nim (to satisfy compiler logic)
   proc push[T](x: Stack; n: T) = discard
-  proc popAddress(x: var Stack): EthAddress = blindAddress
+  proc popAddress(x: var Stack): EthAddress = result
   proc popInt(x: var Stack, n: static[int]): auto =
     var rc: genTupleType(n, UInt256)
     return rc
 
-  # function stubs from v2computation.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
-  proc getBalance[T](c: Computation, address: T): Uint256 = 0.u256
-  proc getCodeSize[T](c: Computation, address: T): uint = 0
+  # function stubs from compu_helper.nim (to satisfy compiler logic)
+  proc gasCosts(c: Computation): array[Op,int] = result
+  proc getBalance[T](c: Computation, address: T): Uint256 = result
+  proc getCodeSize[T](c: Computation, address: T): uint = result
   proc getCode[T](c: Computation, address: T): seq[byte] = @[]
-  proc getGasPrice(c: Computation): Uint256 =  0.u256
-  proc getOrigin(c: Computation): Uint256 =  0.u256
-  proc getCodeHash[T](c: Computation, address: T):  Uint256 =  0.u256
+  proc getGasPrice(c: Computation): Uint256 = result
+  proc getOrigin(c: Computation): Uint256 = result
+  proc getCodeHash[T](c: Computation, address: T): Uint256 = result
 
   # function stubs from v2utils_numeric.nim
   func cleanMemRef(x: UInt256): int = 0

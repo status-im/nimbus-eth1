@@ -26,8 +26,8 @@ import
 
 when not breakCircularDependency:
   import
+    ../../compu_helper,
     ../../stack,
-    ../../v2computation,
     ../../v2state,
     eth/common,
     times
@@ -46,7 +46,7 @@ else:
     var rc: genTupleType(n, UInt256)
     return rc
 
-  # function stubs from v2computation.nim (to satisfy compiler logic)
+  # function stubs from compu_helper.nim (to satisfy compiler logic)
   proc getBalance[T](c: Computation, address: T): Uint256 = 0.u256
   proc getBlockHash(c: Computation, blockNumber: Uint256): Uint256 = 0.u256
   proc getCoinbase(c: Computation): Uint256 = 0.u256

@@ -29,8 +29,8 @@ import
 when not breakCircularDependency:
   import
     ../../../db/accounts_cache,
+    ../../compu_helper,
     ../../stack,
-    ../../v2computation,
     ../../v2memory,
     ../../v2state,
     ../../v2types,
@@ -58,7 +58,7 @@ else:
     var rc: genTupleType(n, UInt256)
     return rc
 
-  # function stubs from v2computation.nim (to satisfy compiler logic)
+  # function stubs from compu_helper.nim (to satisfy compiler logic)
   proc gasCosts(c: Computation): array[Op,int] = result
   proc setError(c: Computation, msg: string, burnsGas = false) = discard
   proc selfDestruct(c: Computation, address: EthAddress) = discard
