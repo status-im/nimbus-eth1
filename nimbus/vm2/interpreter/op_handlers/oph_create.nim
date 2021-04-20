@@ -31,6 +31,7 @@ import
 when not breakCircularDependency:
   import
     ../../../constants,
+    ../../compu_helper,
     ../../stack,
     ../../v2computation,
     ../../v2memory,
@@ -56,9 +57,11 @@ else:
   proc peekInt(x: Stack): UInt256 = result
   proc popInt(x: var Stack): UInt256 = result
 
-  # function stubs from v2computation.nim (to satisfy compiler logic)
+  # function stubs from compu_helper.nim (to satisfy compiler logic)
   proc gasCosts(c: Computation): array[Op,int] = result
   proc getBalance[T](c: Computation, address: T): Uint256 = result
+
+  # function stubs from v2computation.nim (to satisfy compiler logic)
   proc newComputation[A,B](v:A, m:B, salt = 0.u256): Computation = new result
   func shouldBurnGas(c: Computation): bool = result
   proc isSuccess(c: Computation): bool = result

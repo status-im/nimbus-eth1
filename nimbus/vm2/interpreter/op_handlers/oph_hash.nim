@@ -28,8 +28,8 @@ import
 when not breakCircularDependency:
   import
     ../../../constants,
+    ../../compu_helper,
     ../../stack,
-    ../../v2computation,
     ../../v2memory,
     ../gas_meter,
     ../utils/v2utils_numeric,
@@ -39,8 +39,6 @@ when not breakCircularDependency:
 
 else:
   import macros
-
-  var blindGasCosts: array[Op,int]
 
   # copied from stack.nim
   macro genTupleType(len: static[int], elemType: untyped): untyped =
@@ -60,8 +58,8 @@ else:
   proc len(mem: Memory): int = 0
   proc extend(mem: var Memory; startPos: Natural; size: Natural) = discard
 
-  # function stubs from v2computation.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
+  # function stubs from compu_helper.nim (to satisfy compiler logic)
+  proc gasCosts(c: Computation): array[Op,int] = result
 
   # function stubs from gas_meter.nim
   proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard

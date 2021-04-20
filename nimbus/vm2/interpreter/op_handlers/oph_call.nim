@@ -28,8 +28,9 @@ import
 
 when not breakCircularDependency:
   import
-    ../../../db/accounts_cache,
     ../../../constants,
+    ../../../db/accounts_cache,
+    ../../compu_helper,
     ../../stack,
     ../../v2computation,
     ../../v2memory,
@@ -62,12 +63,14 @@ else:
   proc popAddress(x: var Stack): EthAddress = result
   proc popInt(x: var Stack): UInt256 = result
 
-  # function stubs from v2computation.nim (to satisfy compiler logic)
+  # function stubs from compu_helper.nim (to satisfy compiler logic)
   proc gasCosts(c: Computation): array[Op,int] = result
   proc getBalance[T](c: Computation, address: T): Uint256 = result
-  proc newComputation[A,B](v:A, m:B, salt = 0.u256): Computation = new result
-  func shouldBurnGas(c: Computation): bool = result
   proc accountExists(c: Computation, address: EthAddress): bool = result
+
+  # function stubs from v2computation.nim (to satisfy compiler logic)
+  func shouldBurnGas(c: Computation): bool = result
+  proc newComputation[A,B](v:A, m:B, salt = 0.u256): Computation = new result
   proc isSuccess(c: Computation): bool = result
   proc merge(c, child: Computation) = discard
   template chainTo(c, d: Computation, e: untyped) =

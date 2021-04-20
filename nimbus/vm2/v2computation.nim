@@ -9,91 +9,18 @@ when defined(evmc_enabled):
   {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
 
 import
-  chronicles, strformat, macros, options, times,
+  chronicles, strformat, macros, options,
   sets, eth/[common, keys],
-  ../constants, ../errors,
-  ./interpreter/[v2opcode_values, gas_meter, v2gas_costs, v2forks],
+  ../constants,
+  ./compu_helper,
+  ./interpreter/[op_codes, gas_meter, v2gas_costs, v2forks],
   ./code_stream, ./memory_defs, ./v2message, ./stack, ./v2types, ./v2state,
-  ../db/[accounts_cache, db_chain],
-  ../utils/header, ./v2precompiles,
+  ../db/accounts_cache,
+  ./v2precompiles,
   ./transaction_tracer, ../utils
-
-when defined(chronicles_log_level):
-  import stew/byteutils
 
 logScope:
   topics = "vm computation"
-
-template getCoinbase*(c: Computation): EthAddress =
-  block:
-    c.vmState.coinbase
-
-template getTimestamp*(c: Computation): int64 =
-  block:
-    c.vmState.timestamp.toUnix
-
-template getBlockNumber*(c: Computation): Uint256 =
-  block:
-    c.vmState.blockNumber.blockNumberToVmWord
-
-template getDifficulty*(c: Computation): DifficultyInt =
-  block:
-    c.vmState.difficulty
-
-template getGasLimit*(c: Computation): GasInt =
-  block:
-    c.vmState.gasLimit
-
-template getChainId*(c: Computation): uint =
-  block:
-    c.vmState.chaindb.config.chainId.uint
-
-template getOrigin*(c: Computation): EthAddress =
-  block:
-    c.vmState.txOrigin
-
-template getGasPrice*(c: Computation): GasInt =
-  block:
-    c.vmState.txGasPrice
-
-template getBlockHash*(c: Computation, blockNumber: Uint256): Hash256 =
-  block:
-    c.vmState.getAncestorHash(blockNumber.vmWordToBlockNumber)
-
-template accountExists*(c: Computation, address: EthAddress): bool =
-  block:
-    if c.fork >= FkSpurious:
-      not c.vmState.readOnlyStateDB.isDeadAccount(address)
-    else:
-      c.vmState.readOnlyStateDB.accountExists(address)
-
-template getStorage*(c: Computation, slot: Uint256): Uint256 =
-  block:
-    c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
-
-template getBalance*(c: Computation, address: EthAddress): Uint256 =
-  block:
-    c.vmState.readOnlyStateDB.getBalance(address)
-
-template getCodeSize*(c: Computation, address: EthAddress): uint =
-  block:
-    uint(c.vmState.readOnlyStateDB.getCodeSize(address))
-
-template getCodeHash*(c: Computation, address: EthAddress): Hash256 =
-  block:
-    let db = c.vmState.readOnlyStateDB
-    if not db.accountExists(address) or db.isEmptyAccount(address):
-      default(Hash256)
-    else:
-      db.getCodeHash(address)
-
-template selfDestruct*(c: Computation, address: EthAddress) =
-  block:
-    c.execSelfDestruct(address)
-
-template getCode*(c: Computation, address: EthAddress): seq[byte] =
-  block:
-    c.vmState.readOnlyStateDB.getCode(address)
 
 proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
   if c.msg.kind == evmcCreate:
@@ -102,7 +29,6 @@ proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
   else:
     result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
 
-import stew/byteutils
 
 proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Computation =
   new result
@@ -121,13 +47,6 @@ proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Comp
     message.data = @[]
   else:
     result.code = newCodeStream(vmState.readOnlyStateDb.getCode(message.codeAddress))
-
-
-template gasCosts*(c: Computation): untyped =
-  c.vmState.gasCosts
-
-template fork*(c: Computation): untyped =
-  c.vmState.fork
 
 proc isOriginComputation*(c: Computation): bool =
   # Is this computation the computation initiated by a transaction
@@ -157,9 +76,6 @@ proc dispose*(c: Computation) {.inline.} =
 
 proc rollback*(c: Computation) =
   c.vmState.accountDb.rollback(c.savePoint)
-
-proc setError*(c: Computation, msg: string, burnsGas = false) {.inline.} =
-  c.error = Error(info: msg, burnsGas: burnsGas)
 
 proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
   result = true
@@ -306,32 +222,6 @@ proc merge*(c, child: Computation) =
   c.suicides.incl child.suicides
   c.touchedAccounts.incl child.touchedAccounts
 
-proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
-  c.vmState.mutateStateDB:
-    let
-      localBalance = c.getBalance(c.msg.contractAddress)
-      beneficiaryBalance = c.getBalance(beneficiary)
-
-    # Transfer to beneficiary
-    db.setBalance(beneficiary, localBalance + beneficiaryBalance)
-
-    # Zero the balance of the address being deleted.
-    # This must come after sending to beneficiary in case the
-    # contract named itself as the beneficiary.
-    db.setBalance(c.msg.contractAddress, 0.u256)
-
-    trace "SELFDESTRUCT",
-      contractAddress = c.msg.contractAddress.toHex,
-      localBalance = localBalance.toString,
-      beneficiary = beneficiary.toHex
-
-  c.touchedAccounts.incl beneficiary
-  # Register the account to be deleted
-  c.suicides.incl(c.msg.contractAddress)
-
-proc addLogEntry*(c: Computation, log: Log) {.inline.} =
-  c.logEntries.add(log)
-
 proc getGasRefund*(c: Computation): GasInt =
   if c.isSuccess:
     result = c.gasMeter.gasRefunded
@@ -340,19 +230,28 @@ proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
   c.gasMeter.refundGas(cost * c.suicides.len)
 
-proc tracingEnabled*(c: Computation): bool {.inline.} =
-  EnableTracing in c.vmState.tracer.flags
-
-proc traceOpCodeStarted*(c: Computation, op: Op): int {.inline.} =
-  c.vmState.tracer.traceOpCodeStarted(c, op)
-
-proc traceOpCodeEnded*(c: Computation, op: Op, lastIndex: int) {.inline.} =
-  c.vmState.tracer.traceOpCodeEnded(c, op, lastIndex)
 
 proc traceError*(c: Computation) {.inline.} =
   c.vmState.tracer.traceError(c)
 
-proc prepareTracer*(c: Computation) {.inline.} =
-  c.vmState.tracer.prepare(c.msg.depth)
 
-include interpreter_dispatch
+import interpreter_dispatch
+
+proc executeOpcodes(c: Computation) =
+  let fork = c.fork
+
+  block:
+    if not c.continuation.isNil:
+      c.continuation = nil
+    elif c.execPrecompiles(fork):
+      break
+
+    try:
+      c.selectVM(fork)
+    except CatchableError as e:
+      c.setError(
+        &"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
+
+  if c.isError() and c.continuation.isNil:
+    if c.tracingEnabled: c.traceError()
+    debug "executeOpcodes error", msg=c.error.info

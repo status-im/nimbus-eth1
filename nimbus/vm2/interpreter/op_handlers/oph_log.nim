@@ -33,8 +33,8 @@ import
 when not breakCircularDependency:
   import
     ../../../constants,
+    ../../compu_helper,
     ../../stack,
-    ../../v2computation,
     ../../v2memory,
     ../../v2types,
     ../gas_meter,
@@ -60,7 +60,7 @@ else:
     var rc: genTupleType(n, UInt256)
     return rc
 
-  # function stubs from v2computation.nim (to satisfy compiler logic)
+  # function stubs from compu_helper.nim (to satisfy compiler logic)
   proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
   proc addLogEntry(c: Computation, log: Log) = discard
 
