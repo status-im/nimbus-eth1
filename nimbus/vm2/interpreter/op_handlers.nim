@@ -63,7 +63,7 @@ proc mkOpTable(select: Fork): array[Op,Vm2OpExec] {.compileTime.} =
         result[op].name = "toBeReplacedByBreak"
 
 # ------------------------------------------------------------------------------
-# Public handler tables
+# Public functions
 # ------------------------------------------------------------------------------
 
 const
@@ -73,39 +73,66 @@ const
       rc[w] = w.mkOpTable
     rc
 
+type
+  hdlRec = tuple
+    name: string
+    info: string
+    run:  Vm2OpFn
+
+const
+  # Pack handler record.
+  #
+  # Important:
+  #   As of NIM 1.2.10, this mapping to another record is crucial for
+  #
+  #      vmOpHandlers[fork][op].run
+  #
+  #   to pick right function when <op> is a variable . Using
+  #
+  #      vm2OpHandlers[fork][op].exec.run
+  #
+  #   only works when <op> is a constant. There seems to be some optimisation
+  #   that garbles the <exec> sub-structures elements <prep>, <run>, and <post>.
+  #   Moreover, <post> is seen NULL under the debugger. It is untested yet
+  #   under what circumstances the vm2OpHandlers[] matrix is set up correctly.
+  #   Linearising/flattening the index has no effect here.
+  #
+  vmOpHandlers = block:
+    var rc: array[Fork, array[Op, hdlRec]]
+    for fork in Fork:
+      var tab = fork.mkOpTable
+      for op in Op:
+        rc[fork][op].name = tab[op].name
+        rc[fork][op].info = tab[op].info
+        rc[fork][op].run  = tab[op].exec.run
+    rc
+
+proc opHandlersRun*(fork: Fork; op: Op; d: Vm2Ctx) {.inline.} =
+  ## Given a particular `fork` and an `op`-code, run the associated handler
+  vmOpHandlers[fork][op].run(d)
+
+proc opHandlersName*(fork: Fork; op: Op): string =
+  ## Get name (or ID) of op handler
+  vmOpHandlers[fork][op].name
+
+proc opHandlersInfo*(fork: Fork; op: Op): string =
+  ## Get some op handler info
+  vmOpHandlers[fork][op].info
+
 # ------------------------------------------------------------------------------
 # Debugging ...
 # ------------------------------------------------------------------------------
 
 when isMainModule and isNoisy:
-  var dummy = 0
-  proc gdbBPSink() =
-    dummy.inc
+  echo ">>> berlin[shl]:            ", FkBerlin.opHandlersInfo(Shl)
+  echo ">>> berlin[push32]:         ", FkBerlin.opHandlersInfo(Push32)
+  echo ">>> berlin[dup16]:          ", FkBerlin.opHandlersInfo(Dup16)
+  echo ">>> berlin[swap16]:         ", FkBerlin.opHandlersInfo(Swap16)
+  echo ">>> berlin[log4]:           ", FkBerlin.opHandlersInfo(Log4)
 
-  gdbBPSink()
-  echo ">>> berlin[shl]:            ",
-        vm2OpHandlers[FkBerlin][Shl].info
-
-  echo ">>> berlin[push32]:         ",
-        vm2OpHandlers[FkBerlin][Push32].info
-
-  echo ">>> berlin[dup16]:          ",
-        vm2OpHandlers[FkBerlin][Dup16].info
-
-  echo ">>> berlin[swap16]:         ",
-        vm2OpHandlers[FkBerlin][Swap16].info
-
-  echo ">>> berlin[log4]:           ",
-        vm2OpHandlers[FkBerlin][Log4].info
-
-  echo ">>> frontier[sstore]:       ",
-        vm2OpHandlers[FkFrontier][Sstore].info
-
-  echo ">>> constantinople[sstore]: ",
-        vm2OpHandlers[FkConstantinople][Sstore].info
-
-  echo ">>> berlin[sstore]:         ",
-        vm2OpHandlers[FkBerlin][Sstore].info
+  echo ">>>       frontier[sstore]: ",       FkFrontier.opHandlersInfo(Sstore)
+  echo ">>> constantinople[sstore]: ", FkConstantinople.opHandlersInfo(Sstore)
+  echo ">>>         berlin[sstore]: ",         FkBerlin.opHandlersInfo(Sstore)
 
 # ------------------------------------------------------------------------------
 # End

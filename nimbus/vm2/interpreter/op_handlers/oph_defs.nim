@@ -114,8 +114,7 @@ type
 
 const
   vm2OpIgnore*: Vm2OpFn =      ## No operation, placeholder function
-    proc(k: Vm2Ctx) {.gcsafe.} =
-      discard
+    proc(k: Vm2Ctx) = discard
 
   # similar to: toSeq(Fork).mapIt({it}).foldl(a+b)
   Vm2OpAllForks* =
