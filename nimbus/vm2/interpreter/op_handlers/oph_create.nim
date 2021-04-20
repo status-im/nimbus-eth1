@@ -97,7 +97,7 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  createOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  createOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf0, Create a new account with associated code
     checkInStaticContext(k.cpt)
 
@@ -150,20 +150,23 @@ const
       value:  endowment,
       data:   k.cpt.memory.read(memPos, memLen))
 
-    var child = newComputation(k.cpt.vmState, childMsg, salt)
-    k.cpt.chainTo(child):
+    # call -- need to un-capture k
+    var
+      c = k.cpt
+      child = newComputation(c.vmState, childMsg, salt)
+    c.chainTo(child):
       if not child.shouldBurnGas:
-        k.cpt.gasMeter.returnGas(child.gasMeter.gasRemaining)
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
-        k.cpt.merge(child)
-        k.cpt.stack.top child.msg.contractAddress
+        c.merge(child)
+        c.stack.top child.msg.contractAddress
       else:
-        k.cpt.returnData = child.output
+        c.returnData = child.output
 
   # ---------------------
 
-  create2Op: Vm2OpFn = proc(k: Vm2Ctx) =
+  create2Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf5, Behaves identically to CREATE, except using keccak256
     checkInStaticContext(k.cpt)
 
@@ -218,16 +221,19 @@ const
       value:  endowment,
       data:   k.cpt.memory.read(memPos, memLen))
 
-    var child = newComputation(k.cpt.vmState, childMsg, salt)
-    k.cpt.chainTo(child):
+    # call -- need to un-capture k
+    var
+      c = k.cpt
+      child = newComputation(c.vmState, childMsg, salt)
+    c.chainTo(child):
       if not child.shouldBurnGas:
-        k.cpt.gasMeter.returnGas(child.gasMeter.gasRemaining)
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
-        k.cpt.merge(child)
-        k.cpt.stack.top child.msg.contractAddress
+        c.merge(child)
+        c.stack.top child.msg.contractAddress
       else:
-        k.cpt.returnData = child.output
+        c.returnData = child.output
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

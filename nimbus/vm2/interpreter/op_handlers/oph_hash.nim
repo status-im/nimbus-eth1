@@ -85,7 +85,7 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  sha3Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  sha3Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x20, Compute Keccak-256 hash.
     let (startPos, length) = k.cpt.stack.popInt(2)
 

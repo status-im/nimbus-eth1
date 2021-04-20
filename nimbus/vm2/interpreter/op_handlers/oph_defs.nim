@@ -85,13 +85,13 @@ export
   Op, Fork, Computation, Memory, Stack, UInt256, Message, EthAddress
 
 type
-  Vm2Ctx* = object of RootObj
-    cpt*: Computation         ## computation text
-    rc*: int                  ## return code from op handler
+  Vm2Ctx* = tuple
+    cpt: Computation          ## computation text
+    rc: int                   ## return code from op handler
 
   Vm2OpFn* =                  ## general op handler, return codes are passed
                               ## back via argument descriptor ``k``
-    proc(k: Vm2Ctx) {.gcsafe.}
+    proc(k: var Vm2Ctx) {.gcsafe.}
 
 
   Vm2OpHanders* = tuple       ## three step op code execution, typically
@@ -114,7 +114,7 @@ type
 
 const
   vm2OpIgnore*: Vm2OpFn =      ## No operation, placeholder function
-    proc(k: Vm2Ctx) = discard
+    proc(k: var Vm2Ctx) = discard
 
   # similar to: toSeq(Fork).mapIt({it}).foldl(a+b)
   Vm2OpAllForks* =

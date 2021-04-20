@@ -105,7 +105,7 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  returnOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  returnOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf3, Halt execution returning output data.
     let (startPos, size) = k.cpt.stack.popInt(2)
 
@@ -117,7 +117,7 @@ const
     k.cpt.output = k.cpt.memory.read(pos, len)
 
 
-  revertOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  revertOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xfd, Halt execution reverting state changes but returning data
     ##       and remaining gas.
     let (startPos, size) = k.cpt.stack.popInt(2)
@@ -133,20 +133,20 @@ const
     k.cpt.setError("REVERT opcode executed", false)
 
 
-  invalidOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  invalidOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     raise newException(InvalidInstruction,
                        "Invalid instruction, received an opcode " &
                          "not implemented in the current fork.")
 
   # -----------
       
-  selfDestructOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xff, Halt execution and register account for later deletion.
     let beneficiary = k.cpt.stack.popAddress()
     k.cpt.selfDestruct(beneficiary)
 
   
-  selfDestructEIP150Op: Vm2OpFn = proc(k: Vm2Ctx) =
+  selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEip150 (auto generated comment)
     let beneficiary = k.cpt.stack.popAddress()
 
@@ -161,7 +161,7 @@ const
     k.cpt.selfDestruct(beneficiary)
 
 
-  selfDestructEip161Op: Vm2OpFn = proc(k: Vm2Ctx) =
+  selfDestructEip161Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEip161 (auto generated comment)
     checkInStaticContext(k.cpt)
 
@@ -181,7 +181,7 @@ const
     k.cpt.selfDestruct(beneficiary)
 
 
-  selfDestructEIP2929Op: Vm2OpFn = proc(k: Vm2Ctx) =
+  selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## selfDestructEIP2929 (auto generated comment)
     checkInStaticContext(k.cpt)
 

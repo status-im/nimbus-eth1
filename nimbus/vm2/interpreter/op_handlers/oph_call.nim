@@ -225,7 +225,7 @@ proc staticCallParams(c: Computation):  LocalParams =
 # ------------------------------------------------------------------------------
 
 const
-  callOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  callOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf1, Message-Call into an account
 
     if emvcStatic == k.cpt.msg.flags and k.cpt.stack[^3, UInt256] > 0.u256:
@@ -288,24 +288,27 @@ const
       data:            k.cpt.memory.read(p.memInPos, p.memInLen),
       flags:           p.flags)
 
-    var child = newComputation(k.cpt.vmState, msg)
-    k.cpt.chainTo(child):
+    # call -- need to un-capture k
+    var
+      c = k.cpt
+      child = newComputation(c.vmState, msg)
+    c.chainTo(child):
       if not child.shouldBurnGas:
-        k.cpt.gasMeter.returnGas(child.gasMeter.gasRemaining)
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
-        k.cpt.merge(child)
-        k.cpt.stack.top(1)
+        c.merge(child)
+        c.stack.top(1)
 
-      k.cpt.returnData = child.output
+      c.returnData = child.output
       let actualOutputSize = min(p.memOutLen, child.output.len)
       if actualOutputSize > 0:
-        k.cpt.memory.write(p.memOutPos,
-                           child.output.toOpenArray(0, actualOutputSize - 1))
+        c.memory.write(p.memOutPos,
+                       child.output.toOpenArray(0, actualOutputSize - 1))
 
   # ---------------------
 
-  callCodeOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  callCodeOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf2, Message-call into this account with an alternative account's code.
     let
       p = k.cpt.callCodeParams
@@ -366,24 +369,27 @@ const
       data:            k.cpt.memory.read(p.memInPos, p.memInLen),
       flags:           p.flags)
 
-    var child = newComputation(k.cpt.vmState, msg)
-    k.cpt.chainTo(child):
+    # call -- need to un-capture k
+    var
+      c = k.cpt
+      child = newComputation(c.vmState, msg)
+    c.chainTo(child):
       if not child.shouldBurnGas:
-        k.cpt.gasMeter.returnGas(child.gasMeter.gasRemaining)
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
-        k.cpt.merge(child)
-        k.cpt.stack.top(1)
+        c.merge(child)
+        c.stack.top(1)
 
-      k.cpt.returnData = child.output
+      c.returnData = child.output
       let actualOutputSize = min(p.memOutLen, child.output.len)
       if actualOutputSize > 0:
-        k.cpt.memory.write(p.memOutPos,
-                           child.output.toOpenArray(0, actualOutputSize - 1))
+        c.memory.write(p.memOutPos,
+                       child.output.toOpenArray(0, actualOutputSize - 1))
 
   # ---------------------
 
-  delegateCallOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  delegateCallOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xf4, Message-call into this account with an alternative account's
     ##       code, but persisting the current values for sender and value.
     let
@@ -433,24 +439,27 @@ const
       data:            k.cpt.memory.read(p.memInPos, p.memInLen),
       flags:           p.flags)
 
-    var child = newComputation(k.cpt.vmState, msg)
-    k.cpt.chainTo(child):
+    # call -- need to un-capture k
+    var
+      c = k.cpt
+      child = newComputation(c.vmState, msg)
+    c.chainTo(child):
       if not child.shouldBurnGas:
-        k.cpt.gasMeter.returnGas(child.gasMeter.gasRemaining)
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
-        k.cpt.merge(child)
-        k.cpt.stack.top(1)
+        c.merge(child)
+        c.stack.top(1)
 
-      k.cpt.returnData = child.output
+      c.returnData = child.output
       let actualOutputSize = min(p.memOutLen, child.output.len)
       if actualOutputSize > 0:
-        k.cpt.memory.write(p.memOutPos,
-                           child.output.toOpenArray(0, actualOutputSize - 1))
+        c.memory.write(p.memOutPos,
+                       child.output.toOpenArray(0, actualOutputSize - 1))
 
   # ---------------------
 
-  staticCallOp: Vm2OpFn = proc(k: Vm2Ctx) =
+  staticCallOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xfa, Static message-call into an account.
 
     let
@@ -505,20 +514,23 @@ const
       data:            k.cpt.memory.read(p.memInPos, p.memInLen),
       flags:           p.flags)
 
-    var child = newComputation(k.cpt.vmState, msg)
-    k.cpt.chainTo(child):
+    # call -- need to un-capture k
+    var
+      c = k.cpt
+      child = newComputation(c.vmState, msg)
+    c.chainTo(child):
       if not child.shouldBurnGas:
-        k.cpt.gasMeter.returnGas(child.gasMeter.gasRemaining)
+        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
       if child.isSuccess:
-        k.cpt.merge(child)
-        k.cpt.stack.top(1)
+        c.merge(child)
+        c.stack.top(1)
 
-      k.cpt.returnData = child.output
+      c.returnData = child.output
       let actualOutputSize = min(p.memOutLen, child.output.len)
       if actualOutputSize > 0:
-        k.cpt.memory.write(p.memOutPos,
-                           child.output.toOpenArray(0, actualOutputSize - 1))
+        c.memory.write(p.memOutPos,
+                       child.output.toOpenArray(0, actualOutputSize - 1))
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

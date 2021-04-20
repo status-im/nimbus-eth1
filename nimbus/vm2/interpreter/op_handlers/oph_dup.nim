@@ -59,7 +59,7 @@ proc fnInfo(n: int): string {.compileTime.} =
   &"Duplicate {blurb} item in the stack"
 
 
-proc dupImpl(k: Vm2Ctx; n: int) =
+proc dupImpl(k: var Vm2Ctx; n: int) =
   k.cpt.stack.dup(n)
 
 const

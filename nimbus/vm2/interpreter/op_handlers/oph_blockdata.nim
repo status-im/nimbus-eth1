@@ -65,43 +65,43 @@ else:
 # ------------------------------------------------------------------------------
 
 const
-  blockhashOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  blockhashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x40, Get the hash of one of the 256 most recent complete blocks.
     let (blockNumber) = k.cpt.stack.popInt(1)
     k.cpt.stack.push:
       k.cpt.getBlockHash(blockNumber)
 
-  coinBaseOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  coinBaseOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x41, Get the block's beneficiary address.
     k.cpt.stack.push:
       k.cpt.getCoinbase
 
-  timestampOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  timestampOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x42, Get the block's timestamp.
     k.cpt.stack.push:
       k.cpt.getTimestamp
 
-  blocknumberOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  blocknumberOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x43, Get the block's number.
     k.cpt.stack.push:
       k.cpt.getBlockNumber
 
-  difficultyOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  difficultyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x44, Get the block's difficulty
     k.cpt.stack.push:
       k.cpt.getDifficulty
 
-  gasLimitOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  gasLimitOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x45, Get the block's gas limit
     k.cpt.stack.push:
       k.cpt.getGasLimit
 
-  chainIdOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  chainIdOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x46, Get current chain’s EIP-155 unique identifier.
     k.cpt.stack.push:
       k.cpt.getChainId
 
-  selfBalanceOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  selfBalanceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x47, Get current contract's balance.
     k.cpt.stack.push:
       k.cpt.getBalance(k.cpt.msg.contractAddress)
