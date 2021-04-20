@@ -66,12 +66,12 @@ proc mkOpTable(select: Fork): array[Op,Vm2OpExec] {.compileTime.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-const
-  vm2OpHandlers* = block:
-    var rc: array[Fork, array[Op, Vm2OpExec]]
-    for w in Fork:
-      rc[w] = w.mkOpTable
-    rc
+#const
+#  vm2OpHandlers* = block:
+#    var rc: array[Fork, array[Op, Vm2OpExec]]
+#    for w in Fork:
+#      rc[w] = w.mkOpTable
+#    rc
 
 type
   hdlRec = tuple
