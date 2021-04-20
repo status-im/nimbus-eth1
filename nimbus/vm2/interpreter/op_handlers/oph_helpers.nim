@@ -25,7 +25,7 @@ import
 
 type
   OphNumToTextFn* = proc(n: int): string
-  OpHanldlerImplFn* = proc(k: Vm2Ctx; n: int)
+  OpHanldlerImplFn* = proc(k: var Vm2Ctx; n: int)
 
 const
   recForkSet = "Vm2OpAllForks"
@@ -114,7 +114,7 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
                       body: static[OpHanldlerImplFn]): untyped =
   ## Generate the equivalent of
   ## ::
-  ##  const <runHandler>: Vm2OpFn = proc (k: Vm2Ctx) =
+  ##  const <runHandler>: Vm2OpFn = proc (k: var Vm2Ctx) =
   ##    ## <itemInfo(n)>,
   ##    <body(k,n)>
   ##
@@ -127,9 +127,9 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
       fnName = ident(n.runHandler)
       comment = newCommentStmtNode(n.itemInfo)
 
-    # => push##Op: Vm2OpFn = proc (k: Vm2Ctx) = ...
+    # => push##Op: Vm2OpFn = proc (k: var Vm2Ctx) = ...
     result.add quote do:
-      const `fnName`: Vm2OpFn = proc(k: Vm2Ctx) =
+      const `fnName`: Vm2OpFn = proc(k: var Vm2Ctx) =
         `comment`
         `body`(k,`n`)
   # echo ">>>", result.repr

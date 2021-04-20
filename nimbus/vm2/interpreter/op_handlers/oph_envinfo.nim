@@ -121,20 +121,20 @@ proc writePaddedResult(mem: var Memory,
 # ------------------------------------------------------------------------------
 
 const
-  addressOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  addressOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x30, Get address of currently executing account.
     k.cpt.stack.push:
       k.cpt.msg.contractAddress
 
   # ------------------
 
-  balanceOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  balanceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x31, Get balance of the given account.
     let address = k.cpt.stack.popAddress
     k.cpt.stack.push:
       k.cpt.getBalance(address)
 
-  balanceEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  balanceEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x31, EIP292: Get balance of the given account for Berlin and later
     let address = k.cpt.stack.popAddress()
 
@@ -145,23 +145,23 @@ const
 
   # ------------------
 
-  originOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  originOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x32, Get execution origination address.
     k.cpt.stack.push:
       k.cpt.getOrigin()
 
-  callerOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  callerOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x33, Get caller address.
     k.cpt.stack.push:
       k.cpt.msg.sender
 
-  callValueOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  callValueOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x34, Get deposited value by the instruction/transaction
     ##       responsible for this execution
     k.cpt.stack.push:
       k.cpt.msg.value
 
-  callDataLoadOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  callDataLoadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x35, Get input data of current environment
     let (startPos) = k.cpt.stack.popInt(1)
     let start = startPos.cleanMemRef
@@ -181,13 +181,13 @@ const
       value
 
 
-  callDataSizeOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  callDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x36, Get size of input data in current environment.
     k.cpt.stack.push:
       k.cpt.msg.data.len.u256
 
 
-  callDataCopyOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  callDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x37, Copy input data in current environment to memory.
     let (memStartPos, copyStartPos, size) = k.cpt.stack.popInt(3)
 
@@ -202,13 +202,13 @@ const
     k.cpt.memory.writePaddedResult(k.cpt.msg.data, memPos, copyPos, len)
 
 
-  codeSizeOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  codeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x38, Get size of code running in current environment.
     k.cpt.stack.push:
       k.cpt.code.len
 
 
-  codeCopyOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  codeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x39, Copy code running in current environment to memory.
     let (memStartPos, copyStartPos, size) = k.cpt.stack.popInt(3)
 
@@ -223,20 +223,20 @@ const
     k.cpt.memory.writePaddedResult(k.cpt.code.bytes, memPos, copyPos, len)
 
 
-  gasPriceOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  gasPriceOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3A, Get price of gas in current environment.
     k.cpt.stack.push:
       k.cpt.getGasPrice()
 
   # -----------
 
-  extCodeSizeOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  extCodeSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3b, Get size of an account's code
     let address = k.cpt.stack.popAddress()
     k.cpt.stack.push:
       k.cpt.getCodeSize(address)
 
-  extCodeSizeEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  extCodeSizeEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3b, Get size of an account's code
     let address = k.cpt.stack.popAddress()
 
@@ -247,7 +247,7 @@ const
 
   # -----------
 
-  extCodeCopyOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  extCodeCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3c, Copy an account's code to memory.
     let address = k.cpt.stack.popAddress()
 
@@ -263,7 +263,7 @@ const
     k.cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
 
 
-  extCodeCopyEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  extCodeCopyEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3c, Copy an account's code to memory.
     let address = k.cpt.stack.popAddress()
 
@@ -282,14 +282,14 @@ const
 
   # -----------
 
-  returnDataSizeOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  returnDataSizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3d, Get size of output data from the previous call from the
     ##       current environment.
     k.cpt.stack.push:
       k.cpt.returnData.len
 
 
-  returnDataCopyOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  returnDataCopyOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3e, Copy output data from the previous call to memory.
     let (memStartPos, copyStartPos, size) = k.cpt.stack.popInt(3)
 
@@ -311,13 +311,13 @@ const
 
   # ---------------
 
-  extCodeHashOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  extCodeHashOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3f, Returns the keccak256 hash of a contract’s code
     let address = k.cpt.stack.popAddress()
     k.cpt.stack.push:
       k.cpt.getCodeHash(address)
 
-  extCodeHashEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  extCodeHashEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
     let address = k.cpt.stack.popAddress()
 

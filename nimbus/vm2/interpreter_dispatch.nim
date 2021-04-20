@@ -15,17 +15,14 @@ logScope:
 
 
 proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
+  var desc: Vm2Ctx
+
   if c.tracingEnabled:
     c.prepareTracer()
 
   while true:
     c.instr = c.code.next()
-
-    var
-      op = c.instr
-      desc: Vm2Ctx
-
-    desc.cpt = c
+    var op = c.instr
 
     if op == Stop:
       trace "op: Stop"
@@ -39,6 +36,7 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
     if BaseGasCosts[op].kind == GckFixed:
       c.gasMeter.consumeGas(c.gasCosts[op].cost, reason = $op)
 
+    desc.cpt = c
     opHandlersRun(fork, op, desc)
 
     if c.tracingEnabled:
@@ -47,7 +45,7 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
     case op
     of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
       if not c.continuation.isNil:
-        return
+        break
     of Return, Revert, SelfDestruct:
       break
     else:

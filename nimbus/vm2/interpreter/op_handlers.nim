@@ -107,7 +107,7 @@ const
         rc[fork][op].run  = tab[op].exec.run
     rc
 
-proc opHandlersRun*(fork: Fork; op: Op; d: Vm2Ctx) {.inline.} =
+proc opHandlersRun*(fork: Fork; op: Op; d: var Vm2Ctx) {.inline.} =
   ## Given a particular `fork` and an `op`-code, run the associated handler
   vmOpHandlers[fork][op].run(d)
 

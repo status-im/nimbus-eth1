@@ -61,7 +61,7 @@ proc fnInfo(n: int): string {.compileTime.} =
   &"Push {blurb} on the stack"
 
 
-proc pushImpl(k: Vm2Ctx; n: int) =
+proc pushImpl(k: var Vm2Ctx; n: int) =
   k.cpt.stack.push:
     k.cpt.code.readVmWord(n)
 

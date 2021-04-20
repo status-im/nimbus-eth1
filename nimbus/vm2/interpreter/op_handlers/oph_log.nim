@@ -134,7 +134,7 @@ const
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc wrapperFn(k: Vm2Ctx; n: int) =
+proc wrapperFn(k: var Vm2Ctx; n: int) =
   logImpl(k.cpt, logOpArg[n], n)
 
 genOphHandlers fnName, fnInfo, inxRange, wrapperFn

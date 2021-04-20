@@ -163,11 +163,11 @@ proc jumpImpl(c: Computation; jumpTarget: UInt256) =
 # ------------------------------------------------------------------------------
 
 const
-  popOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  popOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x50, Remove item from stack.
     discard k.cpt.stack.popInt
 
-  mloadOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  mloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x51, Load word from memory
     let (memStartPos) = k.cpt.stack.popInt(1)
 
@@ -181,7 +181,7 @@ const
       k.cpt.memory.read(memPos, 32)
 
 
-  mstoreOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  mstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x52, Save word to memory
     let (memStartPos, value) = k.cpt.stack.popInt(2)
 
@@ -194,7 +194,7 @@ const
     k.cpt.memory.write(memPos, value.toByteArrayBE)
 
 
-  mstore8Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  mstore8Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x53, Save byte to memory
     let (memStartPos, value) = k.cpt.stack.popInt(2)
 
@@ -208,13 +208,13 @@ const
 
   # -------
 
-  sloadOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  sloadOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x54, Load word from storage.
     let (slot) = k.cpt.stack.popInt(1)
     k.cpt.stack.push:
       k.cpt.getStorage(slot)
 
-  sloadEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  sloadEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x54, EIP2929: Load word from storage for Berlin and later
     let (slot) = k.cpt.stack.popInt(1)
 
@@ -230,7 +230,7 @@ const
 
   # -------
 
-  sstoreOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  sstoreOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x55, Save word to storage.
     let (slot, newValue) = k.cpt.stack.popInt(2)
 
@@ -256,7 +256,7 @@ const
       db.setStorage(k.cpt.msg.contractAddress, slot, newValue)
 
 
-  sstoreEIP1283Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x55, EIP1283: sstore for Constantinople and later
     let (slot, newValue) = k.cpt.stack.popInt(2)
 
@@ -264,7 +264,7 @@ const
     sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
 
 
-  sstoreEIP2200Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  sstoreEIP2200Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x55, EIP2200: sstore for Istanbul and later
     let (slot, newValue) = k.cpt.stack.popInt(2)
 
@@ -279,7 +279,7 @@ const
     sstoreNetGasMeteringImpl(k.cpt, slot, newValue)
 
 
-  sstoreEIP2929Op: Vm2OpFn = proc (k: Vm2Ctx) =
+  sstoreEIP2929Op: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x55, EIP2929: sstore for Berlin and later
     let (slot, newValue) = k.cpt.stack.popInt(2)
     checkInStaticContext(k.cpt)
@@ -299,47 +299,47 @@ const
 
   # -------
 
-  jumpOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  jumpOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x56, Alter the program counter
     let (jumpTarget) = k.cpt.stack.popInt(1)
     jumpImpl(k.cpt, jumpTarget)
 
-  jumpIOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  jumpIOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x57, Conditionally alter the program counter.
     let (jumpTarget, testedValue) = k.cpt.stack.popInt(2)
     if testedValue != 0:
       jumpImpl(k.cpt, jumpTarget)
 
-  pcOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  pcOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x58, Get the value of the program counter prior to the increment
     ##       corresponding to this instruction.
     k.cpt.stack.push:
       max(k.cpt.code.pc - 1, 0)
 
-  msizeOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  msizeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x59, Get the size of active memory in bytes.
     k.cpt.stack.push:
       k.cpt.memory.len
 
-  gasOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  gasOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5a, Get the amount of available gas, including the corresponding
     ##       reduction for the cost of this instruction.
     k.cpt.stack.push:
       k.cpt.gasMeter.gasRemaining
 
-  jumpDestOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  jumpDestOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5b, Mark a valid destination for jumps. This operation has no effect
     ##       on machine state during execution.
     discard
 
-  beginSubOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  beginSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5c, Marks the entry point to a subroutine
     raise newException(
       OutOfGas,
       "Abort: Attempt to execute BeginSub opcode")
 
 
-  returnSubOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  returnSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5d, Returns control to the caller of a subroutine.
     if k.cpt.returnStack.len == 0:
       raise newException(
@@ -348,7 +348,7 @@ const
     k.cpt.code.pc = k.cpt.returnStack.pop()
 
 
-  jumpSubOp: Vm2OpFn = proc (k: Vm2Ctx) =
+  jumpSubOp: Vm2OpFn = proc (k: var Vm2Ctx) =
     ## 0x5e, Transfers control to a subroutine.
     let (jumpTarget) = k.cpt.stack.popInt(1)
 
