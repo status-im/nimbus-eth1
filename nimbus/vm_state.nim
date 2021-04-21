@@ -11,9 +11,15 @@
 when defined(evmc_enabled) or not defined(vm2_enabled):
   import
     ./vm/state as vms
+  export
+    vms.setupTxContext
+
 else:
   import
+    ./vm2/v2state_transactions as vmx,
     ./vm2/v2state as vms
+  export
+    vmx.setupTxContext
 
 export
   vms.`$`,
@@ -37,7 +43,6 @@ export
   vms.newBaseVMState,
   vms.readOnlyStateDB,
   vms.removeTracedAccounts,
-  vms.setupTxContext,
   vms.status,
   vms.`status=`,
   vms.timestamp,
