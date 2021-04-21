@@ -14,7 +14,7 @@ when defined(evmc_enabled):
 import
   macros, strformat, tables, sets, options,
   eth/[common, keys, rlp], nimcrypto/keccak,
-  ./interpreter/[forks_list, gas_costs], ../errors,
+  ./interpreter/forks_list, ../errors,
   ../constants, ../db/[db_chain, accounts_cache],
   ../utils, json, ./transaction_tracer, ./v2types,
   ../config, ../../stateless/[witness_from_tree, witness_types]
@@ -58,18 +58,6 @@ proc newBaseVMState*(prevStateRoot: Hash256,
   new result
   var header: BlockHeader
   result.init(prevStateRoot, header, chainDB, tracerFlags)
-
-proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
-  ## this proc will be called each time a new transaction
-  ## is going to be executed
-  vmState.txOrigin = origin
-  vmState.txGasPrice = gasPrice
-  vmState.fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber)
-  vmState.gasCosts = vmState.fork.forkToSchedule
 
 proc consensusEnginePoA*(vmState: BaseVMState): bool =
   let chainId = PublicNetwork(vmState.chainDB.config.chainId)

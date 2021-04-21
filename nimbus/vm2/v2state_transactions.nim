@@ -11,8 +11,22 @@ when defined(evmc_enabled):
 import
   options, sets,
   eth/common, chronicles, ../db/accounts_cache,
+  ../config, ./interpreter/gas_costs,
   ../transaction,
   ./v2computation, ./v2interpreter, ./v2state, ./v2types
+
+proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
+  ## this proc will be called each time a new transaction
+  ## is going to be executed
+  vmState.txOrigin = origin
+  vmState.txGasPrice = gasPrice
+  vmState.fork =
+    if forkOverride.isSome:
+      forkOverride.get
+    else:
+      vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber)
+  vmState.gasCosts = vmState.fork.forkToSchedule
+
 
 proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork) : Computation =
   var gas = tx.gasLimit - tx.intrinsicGas(fork)
