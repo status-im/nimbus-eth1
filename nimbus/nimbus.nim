@@ -8,6 +8,9 @@
 # those terms.
 
 import
+  ../nimbus/vm_compile_info
+
+import
   os, strutils, net, options,
   eth/keys, db/[storage_types, db_chain, select_backend],
   eth/common as eth_common, eth/p2p as eth_p2p,
