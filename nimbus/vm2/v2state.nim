@@ -14,7 +14,7 @@ when defined(evmc_enabled):
 import
   macros, strformat, tables, sets, options,
   eth/[common, keys, rlp], nimcrypto/keccak,
-  ./interpreter/[v2forks, v2gas_costs], ../errors,
+  ./interpreter/[forks_list, v2gas_costs], ../errors,
   ../constants, ../db/[db_chain, accounts_cache],
   ../utils, json, ./transaction_tracer, ./v2types,
   ../config, ../../stateless/[witness_from_tree, witness_types]

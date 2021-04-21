@@ -11,7 +11,7 @@ when defined(evmc_enabled):
 import
   math, eth/common/eth_types,
   ./utils/[macros_gen_opcodes, v2utils_numeric],
-  ./v2opcode_values, ./v2forks, ../../errors
+  ./op_codes, ./forks_list, ../../errors
 
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf

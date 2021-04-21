@@ -11,22 +11,20 @@
 when defined(evmc_enabled):
   {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
 
+# see vm_internals
 
-# see vm_opcode_value
 import
-  ./interpreter/v2opcode_values as vmo
+  ./interpreter/op_codes as vmo
 export
   vmo.Op
 
 
-# see v2forks
 import
-  ./interpreter/v2forks as vmf
+  ./interpreter/forks_list as vmf
 export
   vmf.Fork
 
 
-# see vm_message
 import
   ./v2message as vmm
 export
@@ -34,7 +32,6 @@ export
 
 # Used in vm_types. Beware of recursive dependencies
 
-# see vm_computation
 import
   ./compu_helper as xmc
 export

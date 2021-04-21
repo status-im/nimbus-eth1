@@ -8,7 +8,7 @@
 import
   chronicles, strformat, strutils, sequtils, parseutils, sets, macros,
   eth/common,
-  ./interpreter/v2opcode_values
+  ./interpreter/op_codes
 
 logScope:
   topics = "vm code_stream"

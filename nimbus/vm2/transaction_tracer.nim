@@ -3,7 +3,7 @@ import
   chronicles, nimcrypto, eth/common, stint,
   ./v2types, ./v2memory, ./stack, ../db/accounts_cache,
   eth/trie/hexary,
-  ./interpreter/v2opcode_values
+  ./interpreter/op_codes
 
 logScope:
   topics = "vm opcode"
