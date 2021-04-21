@@ -36,9 +36,9 @@ when not breakCircularDependency:
     ../../v2memory,
     ../../v2state,
     ../../v2types,
+    ../gas_costs,
     ../gas_meter,
     ../utils/v2utils_numeric,
-    ../v2gas_costs,
     eth/common
 
 else:
@@ -98,7 +98,7 @@ else:
   # function stubs from v2utils_numeric.nim
   func cleanMemRef(x: UInt256): int = result
 
-  # stubs from v2gas_costs.nim
+  # stubs from gas_costs.nim
   type GasParams = object
     case kind*: Op
     of Call, CallCode, DelegateCall, StaticCall:

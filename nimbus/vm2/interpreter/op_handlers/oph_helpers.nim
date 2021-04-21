@@ -39,8 +39,8 @@ when not breakCircularDependency:
     ../../../db/accounts_cache,
     ../../v2state,
     ../../v2types,
+    ../gas_costs,
     ../gas_meter,
-    ../v2gas_costs,
     eth/common
 
 else:
