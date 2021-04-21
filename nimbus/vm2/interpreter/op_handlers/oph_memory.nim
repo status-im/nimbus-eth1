@@ -36,9 +36,9 @@ when not breakCircularDependency:
     ../../v2memory,
     ../../v2state,
     ../../v2types,
+    ../gas_costs,
     ../gas_meter,
     ../utils/v2utils_numeric,
-    ../v2gas_costs,
     eth/common
 
 else:
@@ -89,7 +89,7 @@ else:
   proc refundGas(gasMeter: var GasMeter; amount: int) = discard
   proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
 
-  # stubs from v2gas_costs.nim
+  # stubs from gas_costs.nim
   type GasParams = object
     case kind*: Op
     of Sstore:

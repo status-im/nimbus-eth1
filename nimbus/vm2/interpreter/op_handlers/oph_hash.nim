@@ -31,9 +31,9 @@ when not breakCircularDependency:
     ../../compu_helper,
     ../../stack,
     ../../v2memory,
+    ../gas_costs,
     ../gas_meter,
     ../utils/v2utils_numeric,
-    ../v2gas_costs,
     eth/common,
     nimcrypto
 
@@ -71,7 +71,7 @@ else:
   const keccak256 = 0xfeedbeef
   proc digest(dummy: int64, data: openarray[byte]): UInt256 = EMPTY_SHA3
 
-  # stubs from v2gas_costs.nim
+  # stubs from gas_costs.nim
   proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = 0
 
 # ------------------------------------------------------------------------------

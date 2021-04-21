@@ -10,7 +10,7 @@
 
 import
   ./compu_helper,
-  ./interpreter/[gas_meter, op_handlers, op_handlers/oph_defs, v2gas_costs],
+  ./interpreter/[gas_meter, op_handlers, op_handlers/oph_defs, gas_costs],
   ./code_stream,
   ./v2types,
   chronicles

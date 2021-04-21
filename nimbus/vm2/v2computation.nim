@@ -13,7 +13,7 @@ import
   sets, eth/[common, keys],
   ../constants,
   ./compu_helper,
-  ./interpreter/[op_codes, gas_meter, v2gas_costs, forks_list],
+  ./interpreter/[op_codes, gas_meter, gas_costs, forks_list],
   ./code_stream, ./memory_defs, ./v2message, ./stack, ./v2types, ./v2state,
   ../db/accounts_cache,
   ./v2precompiles,

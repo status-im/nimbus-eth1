@@ -30,9 +30,9 @@ when not breakCircularDependency:
     ../../compu_helper,
     ../../stack,
     ../../v2types,
+    ../gas_costs,
     ../gas_meter,
     ../utils/v2utils_numeric,
-    ../v2gas_costs,
     chronicles,
     eth/common,
     options,
@@ -64,7 +64,7 @@ else:
   # function stubs from gas_meter.nim
   proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
 
-  # stubs from v2gas_costs.nim
+  # stubs from gas_costs.nim
   proc d_handler(x: int; value: Uint256): int = result
 
 # ------------------------------------------------------------------------------

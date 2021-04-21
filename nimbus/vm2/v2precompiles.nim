@@ -13,7 +13,7 @@ when defined(evmc_enabled):
 
 import
   ./v2types,
-  ./interpreter/[gas_meter, v2gas_costs, utils/v2utils_numeric, forks_list],
+  ./interpreter/[gas_meter, gas_costs, utils/v2utils_numeric, forks_list],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
   math, nimcrypto, bncurve/[fields, groups], ./blake2b_f, ./blscurve
 
