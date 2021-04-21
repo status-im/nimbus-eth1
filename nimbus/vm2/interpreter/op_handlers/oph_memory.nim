@@ -12,105 +12,24 @@
 ## ===============================================================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../../db/accounts_cache,
   ../../../errors,
+  ../../code_stream,
+  ../../compu_helper,
+  ../../stack,
+  ../../v2memory,
+  ../../v2state,
+  ../../v2types,
+  ../gas_costs,
+  ../gas_meter,
+  ../op_codes,
+  ../utils/v2utils_numeric,
   ./oph_defs,
   ./oph_helpers,
-  strformat,
-  stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../../db/accounts_cache,
-    ../../code_stream,
-    ../../compu_helper,
-    ../../stack,
-    ../../v2memory,
-    ../../v2state,
-    ../../v2types,
-    ../gas_costs,
-    ../gas_meter,
-    ../utils/v2utils_numeric,
-    eth/common
-
-else:
-  import macros
-
-  const
-    ColdSloadCost = 42
-    WarmStorageReadCost = 43
-
-  # copied from stack.nim
-  macro genTupleType(len: static[int], elemType: untyped): untyped =
-    result = nnkTupleConstr.newNimNode()
-    for i in 0 ..< len: result.add(elemType)
-
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc push[T](x: Stack; n: T) = discard
-  proc popInt(x: var Stack): UInt256 = discard
-  proc popInt(x: var Stack, n: static[int]): auto =
-    var rc: genTupleType(n, UInt256)
-    return rc
-
-  # function stubs from compu_helper.nim (to satisfy compiler logic)
-  proc getStorage(c: Computation, slot: Uint256): Uint256 = result
-  proc gasCosts(c: Computation): array[Op,int] = result
-
-  # function stubs from v2utils_numeric.nim
-  func cleanMemRef(x: UInt256): int = 0
-
-  # function stubs from v2memory.nim
-  proc len(mem: Memory): int = 0
-  proc extend(mem: var Memory; startPos: Natural; size: Natural) = discard
-  proc write(mem: var Memory, startPos: Natural, val: openarray[byte]) = discard
-  proc read(mem: var Memory, startPos: Natural, size: Natural): seq[byte] = @[]
-
-  # function stubs from code_stream.nim
-  proc len(c: CodeStream): int = len(c.bytes)
-  proc peek(c: var CodeStream): Op = Stop
-  proc isValidOpcode(c: CodeStream, position: int): bool = false
-
-  # function stubs from v2state.nim
-  proc readOnlyStateDB(x: BaseVMState): ReadOnlyStateDB = result
-  template mutateStateDB(vmState: BaseVMState, body: untyped) =
-    block:
-      var db {.inject.} = vmState.accountDb
-      body
-
-  # function stubs from gas_meter.nim
-  proc refundGas(gasMeter: var GasMeter; amount: int) = discard
-  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
-
-  # stubs from gas_costs.nim
-  type GasParams = object
-    case kind*: Op
-    of Sstore:
-      s_currentValue: Uint256
-      s_originalValue: Uint256
-    else:
-      discard
-  proc c_handler(x: int; y: Uint256, z: GasParams): (int,int) = result
-  proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = 0
-
-  # function stubs from state_db.nim
-  proc getCommittedStorage[A,B](x: A; y: B; z: Uint256): Uint256 = result
-
-  # function stubs from accounts_cache.nim:
-  func inAccessList[A,B](ac: A; address: B; slot: UInt256): bool = result
-  proc accessList[A,B](ac: var A; address: B; slot: UInt256) = discard
-  proc setStorage[A,B](ac: var A; address: B, slot, value: UInt256) = discard
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
+  eth/common,
+  stint,
+  strformat
 
 # ------------------------------------------------------------------------------
 # Private helpers

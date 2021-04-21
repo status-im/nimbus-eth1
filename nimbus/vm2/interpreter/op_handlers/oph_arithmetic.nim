@@ -12,64 +12,21 @@
 ## ===================================================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../../constants,
+  ../../compu_helper,
+  ../../stack,
+  ../../v2types,
+  ../op_codes,
+  ../gas_costs,
+  ../gas_meter,
+  ../utils/v2utils_numeric,
   ./oph_defs,
+  chronicles,
+  eth/common,
+  options,
+  sets,
   stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../../constants,
-    ../../compu_helper,
-    ../../stack,
-    ../../v2types,
-    ../gas_costs,
-    ../gas_meter,
-    ../utils/v2utils_numeric,
-    chronicles,
-    eth/common,
-    options,
-    sets
-
-else:
-  import macros
-
-  # copied from stack.nim
-  macro genTupleType(len: static[int], elemType: untyped): untyped =
-    result = nnkTupleConstr.newNimNode()
-    for i in 0 ..< len: result.add(elemType)
-
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc push[T](x: Stack; n: T) = discard
-  proc popInt(x: var Stack): UInt256 = result
-  proc popInt(x: var Stack, n: static[int]): auto =
-    var rc: genTupleType(n, UInt256)
-    return rc
-
-  # function stubs from compu_helper.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = result
-
-  # function stubs from v2utils_numeric.nim
-  proc extractSign(v: var UInt256, sign: var bool) = discard
-  proc setSign(v: var UInt256, sign: bool) =  discard
-  func safeInt(x: Uint256): int = discard
-
-  # function stubs from gas_meter.nim
-  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
-
-  # stubs from gas_costs.nim
-  proc d_handler(x: int; value: Uint256): int = result
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

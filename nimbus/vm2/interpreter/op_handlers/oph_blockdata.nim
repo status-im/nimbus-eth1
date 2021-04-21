@@ -12,53 +12,15 @@
 ## ===============================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../compu_helper,
+  ../../stack,
+  ../../v2state,
+  ../op_codes,
   ./oph_defs,
-  stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../compu_helper,
-    ../../stack,
-    ../../v2state,
-    eth/common,
-    times
-
-else:
-  import macros
-
-  # copied from stack.nim
-  macro genTupleType(len: static[int], elemType: untyped): untyped =
-    result = nnkTupleConstr.newNimNode()
-    for i in 0 ..< len: result.add(elemType)
-
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc push[T](x: Stack; n: T) = discard
-  proc popInt(x: var Stack, n: static[int]): auto =
-    var rc: genTupleType(n, UInt256)
-    return rc
-
-  # function stubs from compu_helper.nim (to satisfy compiler logic)
-  proc getBalance[T](c: Computation, address: T): Uint256 = 0.u256
-  proc getBlockHash(c: Computation, blockNumber: Uint256): Uint256 = 0.u256
-  proc getCoinbase(c: Computation): Uint256 = 0.u256
-  proc getTimestamp(c: Computation): int64 = 0
-  proc getBlockNumber(c: Computation): Uint256 = 0.u256
-  proc getDifficulty(c: Computation): int = 0
-  proc getGasLimit(c: Computation): int = 0
-  proc getChainId(c: Computation): uint = 0
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
+  eth/common,
+  stint,
+  times
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

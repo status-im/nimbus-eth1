@@ -12,37 +12,15 @@
 ## ====================================
 ##
 
-
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../code_stream,
+  ../../stack,
+  ../op_codes,
   ./oph_defs,
   ./oph_helpers,
   sequtils,
-  strformat,
-  stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../code_stream,
-    ../../stack
-
-else:
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc push[T](x: Stack; n: T) = discard
-
-  # function stubs from code_stream.nim
-  proc readVmWord(c: var CodeStream, n: int): UInt256 = 0.u256
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
+  stint,
+  strformat
 
 # ------------------------------------------------------------------------------
 # Private helpers

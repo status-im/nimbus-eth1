@@ -12,77 +12,21 @@
 ## ========================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
+# Including v2types.nim needed unless included (not imported) into
+# oph_defs_kludge.nim
+#
+# Note that the nim compiler will distinguish <Vm2Ctx> tuples defined
+# here when imported and from oph_defs_kludge.nim. This is so due to the
+# duplicate/different Computation definitions.
+#
+when not declared(Computation):
+  import
+    ../../v2types
 
 import
   ../forks_list,
   ../op_codes,
-  ../../memory_defs,
-  ../../stack_defs,
   eth/common/eth_types
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../v2types
-else:
-  {.warning: "Circular dependency breaker kludge -- "&
-             "no production code".}
-  when defined(vm2_enabled):
-    {.fatal: "Flag \"vm2_enabled\" must be unset "&
-             "while circular dependency breaker kludge is activated".}
-  type
-    GasInt* = int
-
-    ReadOnlyStateDB* =
-      seq[byte]
-
-    GasMeter* = object
-      gasRemaining*: int
-
-    CodeStream* = ref object
-      bytes*: seq[byte]
-      pc*: int
-
-    BaseVMState* = ref object
-      accountDb*: ReadOnlyStateDB
-
-    Message* = ref object
-      kind*: int
-      depth*: int
-      gas*: GasInt
-      contractAddress*: EthAddress
-      codeAddress*: EthAddress
-      sender*: EthAddress
-      value*: UInt256
-      data*: seq[byte]
-      flags*: int
-
-    Computation* = ref object
-      returnStack*: seq[int]
-      output*: seq[byte]
-      vmState*: BaseVMState
-      gasMeter*: GasMeter
-      stack*: Stack
-      memory*: Memory
-      msg*: Message
-      code*: CodeStream
-      returnData*: seq[byte]
-      fork*: Fork
-      parent*, child*: Computation
-      continuation*: proc() {.gcsafe.}
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
-
-export
-  Op, Fork, Computation, Memory, Stack, UInt256, Message, EthAddress
 
 type
   Vm2Ctx* = tuple

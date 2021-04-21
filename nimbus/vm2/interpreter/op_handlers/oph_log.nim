@@ -12,75 +12,24 @@
 ## =======================================
 ##
 
-
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../../constants,
   ../../../errors,
+  ../../compu_helper,
+  ../../stack,
+  ../../v2memory,
+  ../../v2types,
+  ../gas_costs,
+  ../gas_meter,
+  ../op_codes,
+  ../utils/v2utils_numeric,
   ./oph_defs,
   ./oph_helpers,
-  sequtils,
   eth/common,
-  strformat,
-  stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../../constants,
-    ../../compu_helper,
-    ../../stack,
-    ../../v2memory,
-    ../../v2types,
-    ../gas_costs,
-    ../gas_meter,
-    ../utils/v2utils_numeric,
-    eth/common
-
-else:
-  import
-    macros
-
-  var blindGasCosts: array[Op,int]
-  var blindTopic: Topic
-
-  # copied from stack.nim
-  macro genTupleType(len: static[int], elemType: untyped): untyped =
-    result = nnkTupleConstr.newNimNode()
-    for i in 0 ..< len: result.add(elemType)
-
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc popTopic(x: var Stack): Topic = blindTopic
-  proc popInt(x: var Stack, n: static[int]): auto =
-    var rc: genTupleType(n, UInt256)
-    return rc
-
-  # function stubs from compu_helper.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = blindGasCosts
-  proc addLogEntry(c: Computation, log: Log) = discard
-
-  # function stubs from v2utils_numeric.nim
-  func cleanMemRef(x: UInt256): int = 0
-
-  # function stubs from v2memory.nim
-  proc len(mem: Memory): int = 0
-  proc extend(mem: var Memory; startPos: Natural; size: Natural) = discard
-  proc read(mem: var Memory, startPos: Natural, size: Natural): seq[byte] = @[]
-
-  # function stubs from gas_meter.nim
-  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
-
-  # stubs from gas_costs.nim
-  proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = 0
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
+  eth/common,
+  sequtils,
+  stint,
+  strformat
 
 # ------------------------------------------------------------------------------
 # Private, names & settings

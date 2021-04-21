@@ -12,33 +12,14 @@
 ## ===========================================
 ##
 
-
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../stack,
+  ../op_codes,
   ./oph_defs,
   ./oph_helpers,
   sequtils,
-  strformat,
-  stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../stack
-
-else:
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc dup(stack: var Stack, position: int | UInt256) = discard
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
+  stint,
+  strformat
 
 # ------------------------------------------------------------------------------
 # Private helpers
