@@ -12,71 +12,20 @@
 ## ===========================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../../constants,
   ../../../errors,
+  ../../compu_helper,
+  ../../stack,
+  ../../v2memory,
+  ../gas_costs,
+  ../gas_meter,
+  ../op_codes,
+  ../utils/v2utils_numeric,
   ./oph_defs,
+  eth/common,
+  nimcrypto,
   stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../../constants,
-    ../../compu_helper,
-    ../../stack,
-    ../../v2memory,
-    ../gas_costs,
-    ../gas_meter,
-    ../utils/v2utils_numeric,
-    eth/common,
-    nimcrypto
-
-else:
-  import macros
-
-  # copied from stack.nim
-  macro genTupleType(len: static[int], elemType: untyped): untyped =
-    result = nnkTupleConstr.newNimNode()
-    for i in 0 ..< len: result.add(elemType)
-
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc push[T](x: Stack; n: T) = discard
-  proc popInt(x: var Stack, n: static[int]): auto =
-    var rc: genTupleType(n, UInt256)
-    return rc
-
-  # function stubs from v2utils_numeric.nim
-  func safeInt(x: Uint256): int = discard
-
-  # function stubs from v2memory.nim
-  proc len(mem: Memory): int = 0
-  proc extend(mem: var Memory; startPos: Natural; size: Natural) = discard
-
-  # function stubs from compu_helper.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = result
-
-  # function stubs from gas_meter.nim
-  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
-
-  # dummy stubs from constants
-  const EMPTY_SHA3 = 0xdeadbeef.u256
-
-  # function stubs from nimcrypto/hash.nim and nimcrypto/keccak.nim
-  const keccak256 = 0xfeedbeef
-  proc digest(dummy: int64, data: openarray[byte]): UInt256 = EMPTY_SHA3
-
-  # stubs from gas_costs.nim
-  proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = 0
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

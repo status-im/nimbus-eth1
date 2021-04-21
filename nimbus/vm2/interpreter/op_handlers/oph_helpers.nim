@@ -12,13 +12,22 @@
 ## ==============================================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
+# Including v2types.nim and others unless included (not imported) into
+# oph_helpes_kludge.nim
+#
+when not declared(consumeGas):
+  import
+    ../../../db/accounts_cache,
+    ../../v2state,
+    ../../v2types,
+    ../gas_costs,
+    ../gas_meter,
+    ./oph_defs,
+    eth/common
 
 import
   ../../../errors,
-  ./oph_defs,
+  eth/common/eth_types,
   macros,
   stint,
   strutils
@@ -29,42 +38,6 @@ type
 
 const
   recForkSet = "Vm2OpAllForks"
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../../db/accounts_cache,
-    ../../v2state,
-    ../../v2types,
-    ../gas_costs,
-    ../gas_meter,
-    eth/common
-
-else:
-  const
-    emvcStatic = 1
-    ColdAccountAccessCost = 2
-    WarmStorageReadCost = 3
-
-  # function stubs from v2state.nim
-  template mutateStateDB(vmState: BaseVMState, body: untyped) =
-    block:
-      var db {.inject.} = vmState.accountDb
-      body
-
-  # function stubs from accounts_cache.nim:
-  func inAccessList[A,B](ac: A; address: B): bool = false
-  proc accessList[A,B](ac: var A, address: B) = discard
-
-  # function stubs from gas_meter.nim
-  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Private helpers

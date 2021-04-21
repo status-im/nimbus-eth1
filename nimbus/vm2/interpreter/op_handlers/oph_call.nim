@@ -18,8 +18,13 @@ const
 
 import
   ../../../errors,
-  ./oph_defs,
+  ../../stack,
+  ../../v2memory,
+  ../forks_list,
+  ../op_codes,
+  ../utils/v2utils_numeric,
   chronicles,
+  eth/common/eth_types,
   stint
 
 # ------------------------------------------------------------------------------
@@ -28,90 +33,21 @@ import
 
 when not breakCircularDependency:
   import
+    ./oph_defs,
     ../../../constants,
     ../../../db/accounts_cache,
     ../../compu_helper,
-    ../../stack,
     ../../v2computation,
-    ../../v2memory,
     ../../v2state,
     ../../v2types,
     ../gas_costs,
     ../gas_meter,
-    ../utils/v2utils_numeric,
     eth/common
 
 else:
-  import macros
-
-  type
-    MsgFlags = int
-    GasResult = tuple[gasCost, gasRefund: GasInt]
-  const
-    evmcCall         = 42
-    evmcDelegateCall = 43
-    evmcCallCode     = 44
-    emvcStatic       = 45
-    MaxCallDepth     = 46
-    ColdAccountAccessCost = 47
-    WarmStorageReadCost = 48
-
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc `[]`(x: Stack, i: BackwardsIndex; T: typedesc): T = result
-  proc top[T](x: Stack, value: T) = discard
-  proc push[T](x: Stack; n: T) = discard
-  proc popAddress(x: var Stack): EthAddress = result
-  proc popInt(x: var Stack): UInt256 = result
-
-  # function stubs from compu_helper.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = result
-  proc getBalance[T](c: Computation, address: T): Uint256 = result
-  proc accountExists(c: Computation, address: EthAddress): bool = result
-
-  # function stubs from v2computation.nim (to satisfy compiler logic)
-  func shouldBurnGas(c: Computation): bool = result
-  proc newComputation[A,B](v:A, m:B, salt = 0.u256): Computation = new result
-  proc isSuccess(c: Computation): bool = result
-  proc merge(c, child: Computation) = discard
-  template chainTo(c, d: Computation, e: untyped) =
-    c.child = d; c.continuation = proc() = e
-
-  # function stubs from v2utils_numeric.nim
-  func calcMemSize*(offset, length: int): int = result
-
-  # function stubs from v2memory.nim
-  proc len(mem: Memory): int = result
-  proc extend(mem: var Memory; startPos: Natural; size: Natural) = discard
-  proc read(mem: var Memory, startPos: Natural, size: Natural): seq[byte] = @[]
-  proc write(mem: var Memory, startPos: Natural, val: openarray[byte]) = discard
-
-  # function stubs from v2state.nim
-  template mutateStateDB(vmState: BaseVMState, body: untyped) =
-    block:
-      var db {.inject.} = vmState.accountDb
-      body
-
-  # function stubs from gas_meter.nim
-  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
-  proc returnGas(gasMeter: var GasMeter; amount: GasInt) = discard
-
-  # function stubs from v2utils_numeric.nim
-  func cleanMemRef(x: UInt256): int = result
-
-  # stubs from gas_costs.nim
-  type GasParams = object
-    case kind*: Op
-    of Call, CallCode, DelegateCall, StaticCall:
-      c_isNewAccount: bool
-      c_contractGas: Uint256
-      c_gasBalance, c_currentMemSize, c_memOffset, c_memLength: int64
-    else:
-      discard
-  proc c_handler(x: int; y: Uint256, z: GasParams): GasResult = result
-
-  # function stubs from accounts_cache.nim:
-  func inAccessList[A,B](ac: A; address: B): bool = result
-  proc accessList[A,B](ac: var A; address: B) = discard
+  import
+    ./oph_defs_kludge,
+    ./oph_helpers_kludge
 
 # ------------------------------------------------------------------------------
 # Kludge END

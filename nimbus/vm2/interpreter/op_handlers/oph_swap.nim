@@ -12,32 +12,13 @@
 ## ====================================
 ##
 
-
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../stack,
+  ../op_codes,
   ./oph_defs,
   ./oph_helpers,
   sequtils,
   strformat
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../stack
-
-else:
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc swap(stack: var Stack, position: int) = discard
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Private, names & settings

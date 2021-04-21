@@ -18,11 +18,15 @@ const
 
 import
   ../../../errors,
-  ./oph_defs,
-  ./oph_helpers,
+  ../../stack,
+  ../../v2memory,
+  ../forks_list,
+  ../op_codes,
+  ../utils/v2utils_numeric,
   chronicles,
-  strformat,
-  stint
+  eth/common/eth_types,
+  stint,
+  strformat
 
 # ------------------------------------------------------------------------------
 # Kludge BEGIN
@@ -32,64 +36,19 @@ when not breakCircularDependency:
   import
     ../../../constants,
     ../../compu_helper,
-    ../../stack,
     ../../v2computation,
-    ../../v2memory,
     ../../v2state,
     ../../v2types,
     ../gas_costs,
     ../gas_meter,
-    ../utils/v2utils_numeric,
+    ./oph_defs,
+    ./oph_helpers,
     eth/common
 
 else:
-  import macros
-
-  type
-    GasResult = tuple[gasCost, gasRefund: GasInt]
-  const
-    evmcCreate = 42
-    evmcCreate2 = 43
-    MaxCallDepth = 45
-
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc top[T](x: Stack, value: T) = discard
-  proc peekInt(x: Stack): UInt256 = result
-  proc popInt(x: var Stack): UInt256 = result
-
-  # function stubs from compu_helper.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = result
-  proc getBalance[T](c: Computation, address: T): Uint256 = result
-
-  # function stubs from v2computation.nim (to satisfy compiler logic)
-  proc newComputation[A,B](v:A, m:B, salt = 0.u256): Computation = new result
-  func shouldBurnGas(c: Computation): bool = result
-  proc isSuccess(c: Computation): bool = result
-  proc merge(c, child: Computation) = discard
-  template chainTo(c, d: Computation, e: untyped) =
-    c.child = d; c.continuation = proc() = e
-
-  # function stubs from v2utils_numeric.nim
-  func safeInt(x: Uint256): int = 0
-
-  # function stubs from v2memory.nim
-  proc len(mem: Memory): int = 0
-  proc extend(mem: var Memory; startPos: Natural; size: Natural) = discard
-  proc read(mem: var Memory, startPos: Natural, size: Natural): seq[byte] = @[]
-
-  # function stubs from gas_meter.nim
-  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
-  proc returnGas(gasMeter: var GasMeter; amount: GasInt) = discard
-
-  # stubs from gas_costs.nim
-  type GasParams = object
-    case kind*: Op
-    of Create:
-      cr_currentMemSize, cr_memOffset, cr_memLength: int64
-    else:
-      discard
-  proc c_handler(x: int; y: Uint256, z: GasParams): GasResult = result
-  proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = result
+  import
+    ./oph_defs_kludge,
+    ./oph_helpers_kludge
 
 # ------------------------------------------------------------------------------
 # Kludge END

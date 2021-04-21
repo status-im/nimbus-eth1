@@ -16,8 +16,12 @@ const
   noisy {.intdefine.}: int = 0
   isNoisy {.used.} = noisy > 0
 
+  kludge {.intdefine.}: int = 0
+  breakCircularDependency {.used.} = kludge > 0
+
 import
   strformat,
+  ./forks_list,
   ./op_codes,
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
@@ -25,38 +29,68 @@ import
                  oph_create, oph_call, oph_sysops]
 
 # ------------------------------------------------------------------------------
+# Kludge BEGIN
+# ------------------------------------------------------------------------------
+
+when not breakCircularDependency:
+  const
+    useExecCreate = vm2OpExecCreate
+    useExecCall = vm2OpExecCall
+
+else:
+  # note: oph_create/call are always imported to check for syntactic corretness,
+  #       at the moment, it would not match the other handler lists due to the
+  #       fake Computation object definition.
+  const
+    useExecCreate: seq[Vm2OpExec] = @[]
+    useExecCall: seq[Vm2OpExec] = @[]
+
+    ignoreVm2OpExecCreate {.used.} = vm2OpExecCreate
+    ignoreVm2OpExecCall  {.used.} = vm2OpExecCall
+  {.warning: "*** Ignoring tables from <oph_create> and <oph_call>".}
+
+# ------------------------------------------------------------------------------
+# Kludge END
+# ------------------------------------------------------------------------------
+
+const
+  allHandlersList = @[
+    (vm2OpExecArithmetic, "Arithmetic"),
+    (vm2OpExecHash,       "Hash"),
+    (vm2OpExecEnvInfo,    "EnvInfo"),
+    (vm2OpExecBlockData,  "BlockData"),
+    (vm2OpExecMemory,     "Memory"),
+    (vm2OpExecPush,       "Push"),
+    (vm2OpExecDup,        "Dup"),
+    (vm2OpExecSwap,       "Swap"),
+    (vm2OpExecLog,        "Log"),
+    (useExecCreate,       "Create"),
+    (useExecCall,         "Call"),
+    (vm2OpExecSysOp,      "SysOp")]
+
+# ------------------------------------------------------------------------------
 # Helper
 # ------------------------------------------------------------------------------
 
-proc importList(rc: var array[Op,Vm2OpExec];
-                sel: Fork; list: seq[Vm2OpExec]; s: string) {.compileTime.} =
-  for w in list:
-    if sel notin w.forks:
-      continue
-    var oInf = rc[w.opCode].info
-    if oInf != "" or 0 < rc[w.opCode].forks.card:
-      echo &"*** {s}: duplicate <{w.opCode}> entry: \"{oInf}\" vs. \"{w.info}\""
-      doAssert rc[w.opCode].info == ""
-      doAssert rc[w.opCode].forks.card == 0
-    rc[w.opCode] = w
+proc mkOpTable(selected: Fork): array[Op,Vm2OpExec] {.compileTime.} =
 
+  # Collect selected <fork> entries
+  for (subList,subName) in allHandlersList:
+    for w in subList:
+      if selected notin w.forks:
+        continue
+      # definitions must be mutually exclusive
+      var prvInfo = result[w.opCode].info
+      if prvInfo != "" or 0 < result[w.opCode].forks.card:
+        echo &"*** {subName}: duplicate <{w.opCode}> entry: ",
+              &"\"{prvInfo}\" vs. \"{w.info}\""
+        doAssert result[w.opCode].info == ""
+        doAssert result[w.opCode].forks.card == 0
+      result[w.opCode] = w
 
-proc mkOpTable(select: Fork): array[Op,Vm2OpExec] {.compileTime.} =
-  result.importList(select, vm2OpExecArithmetic, "Arithmetic")
-  result.importList(select, vm2OpExecHash,       "Hash")
-  result.importList(select, vm2OpExecEnvInfo,    "EnvInfo")
-  result.importList(select, vm2OpExecBlockData,  "BlockData")
-  result.importList(select, vm2OpExecMemory,     "Memory")
-  result.importList(select, vm2OpExecPush,       "Push")
-  result.importList(select, vm2OpExecDup,        "Dup")
-  result.importList(select, vm2OpExecSwap,       "Swap")
-  result.importList(select, vm2OpExecLog,        "Log")
-  result.importList(select, vm2OpExecCreate,     "Create")
-  result.importList(select, vm2OpExecCall,       "Call")
-  result.importList(select, vm2OpExecSysOp,      "SysOp")
-
+  # Initialise unused entries
   for op in Op:
-    if select notin result[op].forks:
+    if selected notin result[op].forks:
       result[op] = result[Invalid]
       result[op].opCode = op
       if op == Stop:

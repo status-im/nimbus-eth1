@@ -12,93 +12,23 @@
 ## ======================================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../../db/accounts_cache,
   ../../../errors,
+  ../../compu_helper,
+  ../../stack,
+  ../../v2memory,
+  ../../v2state,
+  ../../v2types,
+  ../forks_list,
+  ../gas_costs,
+  ../gas_meter,
+  ../op_codes,
+  ../utils/v2utils_numeric,
   ./oph_defs,
   ./oph_helpers,
+  eth/common,
   stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../../../db/accounts_cache,
-    ../../compu_helper,
-    ../../stack,
-    ../../v2memory,
-    ../../v2state,
-    ../../v2types,
-    ../gas_costs,
-    ../gas_meter,
-    ../utils/v2utils_numeric,
-    eth/common
-
-else:
-  import macros
-
-  type
-    GasResult = tuple[gasCost, gasRefund: GasInt]
-  const
-    ColdAccountAccessCost = 42
-
-  # copied from stack.nim
-  macro genTupleType(len: static[int], elemType: untyped): untyped =
-    result = nnkTupleConstr.newNimNode()
-    for i in 0 ..< len: result.add(elemType)
-
-  # function stubs from stack.nim (to satisfy compiler logic)
-  proc popAddress(x: var Stack): EthAddress = result
-  proc popInt(x: var Stack, n: static[int]): auto =
-    var rc: genTupleType(n, UInt256)
-    return rc
-
-  # function stubs from compu_helper.nim (to satisfy compiler logic)
-  proc gasCosts(c: Computation): array[Op,int] = result
-  proc setError(c: Computation, msg: string, burnsGas = false) = discard
-  proc selfDestruct(c: Computation, address: EthAddress) = discard
-  proc accountExists(c: Computation, address: EthAddress): bool = result
-  proc getBalance[T](c: Computation, address: T): Uint256 = result
-
-  # function stubs from v2utils_numeric.nim
-  func cleanMemRef(x: UInt256): int = result
-
-  # function stubs from v2memory.nim
-  proc len(mem: Memory): int = result
-  proc extend(mem: var Memory; startPos: Natural; size: Natural) = discard
-  proc read(mem: var Memory, startPos: Natural, size: Natural): seq[byte] = @[]
-
-  # function stubs from v2state.nim
-  template mutateStateDB(vmState: BaseVMState, body: untyped) =
-    block:
-      var db {.inject.} = vmState.accountDb
-      body
-
-  # function stubs from gas_meter.nim
-  proc consumeGas(gasMeter: var GasMeter; amount: int; reason: string) = discard
-
-  # stubs from gas_costs.nim
-  type GasParams = object
-    case kind*: Op
-    of SelfDestruct:
-      sd_condition: bool
-    else:
-      discard
-  proc c_handler(x: int; y: Uint256, z: GasParams): GasResult = result
-  proc m_handler(x: int; curMemSize, memOffset, memLen: int64): int = result
-
-  # function stubs from accounts_cache.nim:
-  func inAccessList[A,B](ac: A; address: B): bool = result
-  proc accessList[A,B](ac: var A; address: B) = discard
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Private
