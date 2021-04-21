@@ -185,36 +185,28 @@ template chainTo*(c, toChild: Computation, after: untyped) =
   c.continuation = proc() =
     after
 
-proc execCallOrCreateAux(c: var Computation) {.noinline.} =
-  # Perform recursion with minimum-size stack per level.  The exception
-  # handling is very subtle.  Each call to `snapshot` must have a corresponding
-  # `dispose` on exception.  To minimise this proc's stackframe, `defer` is
-  # moved to the outermost proc only.  `{.noinline.}` is also used to make
-  # extra sure they stay separate.  `c` is a `var` parameter at every level of
-  # recursion, so the outermost proc sees every change to `c`, which is why `c`
-  # is updated instead of using `let`.  On exception, the outermost `defer`
-  # walks the `c.parent` chain to call `dispose` on each `c`.
-  if c.beforeExec():
-    return
-  c.executeOpcodes()
-  while not c.continuation.isNil:
-    # Parent and child refs are updated and cleared so as to avoid circular
-    # refs (like a double-linked list) or dangling refs (to finished child).
-    (c.child, c, c.parent) = (nil.Computation, c.child, c)
-    execCallOrCreateAux(c)
-    c.dispose()
-    (c.parent, c) = (nil.Computation, c.parent)
-    (c.continuation)()
-    c.executeOpcodes()
-  c.afterExec()
-
 proc execCallOrCreate*(cParam: Computation) =
-  var c = cParam
+  var (c, before) = (cParam, true)
   defer:
     while not c.isNil:
       c.dispose()
       c = c.parent
-  execCallOrCreateAux(c)
+
+  # No actual recursion, but simulate recursion including before/after/dispose.
+  while true:
+    while true:
+      if before and c.beforeExec():
+        break
+      c.executeOpcodes()
+      if c.continuation.isNil:
+        c.afterExec()
+        break
+      (before, c.child, c, c.parent) = (true, nil.Computation, c.child, c)
+    if c.parent.isNil:
+      break
+    c.dispose()
+    (before, c.parent, c) = (false, nil.Computation, c.parent)
+    (c.continuation)()
 
 proc merge*(c, child: Computation) =
   c.logEntries.add child.logEntries
