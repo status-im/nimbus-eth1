@@ -1,7 +1,7 @@
 import
   json, strutils, sets, hashes,
   chronicles, nimcrypto, eth/common, stint,
-  ./v2types, ./v2memory, ./stack, ../db/accounts_cache,
+  ./types, ./memory, ./stack, ../db/accounts_cache,
   eth/trie/hexary,
   ./interpreter/op_codes
 

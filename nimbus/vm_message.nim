@@ -11,12 +11,13 @@
 # Should be considered part of another header file (e.g. vm_misc) once the
 # circular computation.nim include/import dependency is solved. The problem is
 # with vm_types.nim (included by message.nim) which includes computation.nim.
+
 when defined(evmc_enabled) or not defined(vm2_enabled):
   import
     ./vm/message as vmm
 else:
   import
-    ./vm2/v2message as vmm
+    ./vm2/message as vmm
 
 export
   vmm.isCreate

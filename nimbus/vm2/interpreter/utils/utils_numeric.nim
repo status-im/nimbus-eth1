@@ -5,11 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-when defined(evmc_enabled):
-  {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
-
 import
-  macros,
   stew/endians2, stew/ranges/ptr_arith,
   eth/common/eth_types,
   ../../../constants

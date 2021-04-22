@@ -15,7 +15,7 @@
 import
   ../../compu_helper,
   ../../stack,
-  ../../v2state,
+  ../../state,
   ../op_codes,
   ./oph_defs,
   eth/common,

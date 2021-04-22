@@ -12,14 +12,14 @@
 ## ==============================================
 ##
 
-# Including v2types.nim and others unless included (not imported) into
+# Including types.nim and others unless included (not imported) into
 # oph_helpes_kludge.nim
 #
 when not declared(consumeGas):
   import
     ../../../db/accounts_cache,
-    ../../v2state,
-    ../../v2types,
+    ../../state,
+    ../../types,
     ../gas_costs,
     ../gas_meter,
     ./oph_defs,

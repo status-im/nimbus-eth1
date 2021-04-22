@@ -13,7 +13,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/types as vmt
 else:
   import
-    ./vm2/v2types as vmt
+    ./vm2/types as vmt
 
 export
   vmt.AccessLogs,

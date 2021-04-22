@@ -14,9 +14,9 @@ import
   ../constants,
   ./compu_helper,
   ./interpreter/[op_codes, gas_meter, gas_costs, forks_list],
-  ./code_stream, ./memory_defs, ./v2message, ./stack, ./v2types, ./v2state,
+  ./code_stream, ./memory, ./message, ./stack, ./types, ./state,
   ../db/accounts_cache,
-  ./v2precompiles,
+  ./precompiles,
   ./transaction_tracer, ../utils
 
 logScope:

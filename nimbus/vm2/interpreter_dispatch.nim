@@ -14,6 +14,10 @@ const
   lowMemoryCompileTime {.used.} = lowmem > 0
 
   # debugging flag
+  noisy {.intdefine.}: int = 0
+  isNoisy {.used.} = noisy > 0
+
+  # needed for compiling locally
   kludge {.intdefine.}: int = 0
   breakCircularDependency {.used.} = kludge > 0
 
@@ -22,7 +26,7 @@ import
   ./interpreter/[forks_list, gas_costs, gas_meter,
                  op_codes, op_handlers, op_handlers/oph_defs],
   ./code_stream,
-  ./v2types,
+  ./types,
   chronicles,
   macros
 
@@ -117,7 +121,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
       newIdentNode(op.toSymbolName),
       branchStmt)
 
-  when breakCircularDependency:
+  when breakCircularDependency and isNoisy:
     echo ">>> ", result.repr
 
 

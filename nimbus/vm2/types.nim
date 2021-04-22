@@ -8,13 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled):
-  {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
-
 import
   tables, eth/common,
   options, json, sets,
-  ./stack_defs,  ./memory_defs, ./code_stream,
+  ./stack_defs,  ./memory, ./code_stream,
   ./interpreter/[gas_costs, op_codes, forks_list],
   # TODO - will be hidden at a lower layer
   ../db/[db_chain, accounts_cache]

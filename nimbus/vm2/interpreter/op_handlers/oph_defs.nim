@@ -12,7 +12,7 @@
 ## ========================
 ##
 
-# Including v2types.nim needed unless included (not imported) into
+# Including types.nim needed unless included (not imported) into
 # oph_defs_kludge.nim
 #
 # Note that the nim compiler will distinguish <Vm2Ctx> tuples defined
@@ -21,7 +21,7 @@
 #
 when not declared(Computation):
   import
-    ../../v2types
+    ../../types
 
 import
   ../forks_list,

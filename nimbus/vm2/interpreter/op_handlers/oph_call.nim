@@ -19,10 +19,10 @@ const
 import
   ../../../errors,
   ../../stack,
-  ../../v2memory,
+  ../../memory,
   ../forks_list,
   ../op_codes,
-  ../utils/v2utils_numeric,
+  ../utils/utils_numeric,
   chronicles,
   eth/common/eth_types,
   stint
@@ -37,9 +37,9 @@ when not breakCircularDependency:
     ../../../constants,
     ../../../db/accounts_cache,
     ../../compu_helper,
-    ../../v2computation,
-    ../../v2state,
-    ../../v2types,
+    ../../computation,
+    ../../state,
+    ../../types,
     ../gas_costs,
     ../gas_meter,
     eth/common

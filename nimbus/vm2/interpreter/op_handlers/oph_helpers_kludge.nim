@@ -30,7 +30,7 @@ const
   WarmStorageReadCost* = 3
   MaxCallDepth*     = 42
 
-# function stubs from v2state.nim
+# function stubs from state.nim
 template mutateStateDB*(vmState: BaseVMState, body: untyped) =
   block:
     var db {.inject.} = vmState.accountDb
@@ -41,7 +41,7 @@ proc gasCosts*(c: Computation): array[Op,int] = result
 proc getBalance*[T](c: Computation, address: T): Uint256 = result
 proc accountExists*(c: Computation, address: EthAddress): bool = result
 
-# function stubs from v2computation.nim (to satisfy compiler logic)
+# function stubs from computation.nim (to satisfy compiler logic)
 func shouldBurnGas*(c: Computation): bool = result
 proc newComputation*[A,B](v:A, m:B, salt = 0.u256): Computation = new result
 proc isSuccess*(c: Computation): bool = result
