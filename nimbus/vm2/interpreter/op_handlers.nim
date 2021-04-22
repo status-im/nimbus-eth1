@@ -108,10 +108,10 @@ proc mkOpTable(selected: Fork): array[Op,Vm2OpExec] {.compileTime.} =
 #    rc
 
 type
-  hdlRec = tuple
-    name: string
-    info: string
-    run:  Vm2OpFn
+  vmOpHandlersRec* = tuple
+    name: string    ## Name (or ID) of op handler
+    info: string    ## Some op handler info
+    run:  Vm2OpFn   ## Executable handler
 
 const
   # Pack handler record.
@@ -131,33 +131,35 @@ const
   #   under what circumstances the vm2OpHandlers[] matrix is set up correctly.
   #   Linearising/flattening the index has no effect here.
   #
-  vmOpHandlers = block:
-    var rc: array[Fork, array[Op, hdlRec]]
-    for fork in Fork:
-      var tab = fork.mkOpTable
-      for op in Op:
-        rc[fork][op].name = tab[op].name
-        rc[fork][op].info = tab[op].info
-        rc[fork][op].run  = tab[op].exec.run
-    rc
-
-proc opHandlersRun*(fork: Fork; op: Op; d: var Vm2Ctx) {.inline.} =
-  ## Given a particular `fork` and an `op`-code, run the associated handler
-  vmOpHandlers[fork][op].run(d)
-
-proc opHandlersName*(fork: Fork; op: Op): string =
-  ## Get name (or ID) of op handler
-  vmOpHandlers[fork][op].name
-
-proc opHandlersInfo*(fork: Fork; op: Op): string =
-  ## Get some op handler info
-  vmOpHandlers[fork][op].info
+  vmOpHandlers* = ## Op handler records matrix indexed `fork` x `op`
+    block:
+      var rc: array[Fork, array[Op, vmOpHandlersRec]]
+      for fork in Fork:
+        var tab = fork.mkOpTable
+        for op in Op:
+          rc[fork][op].name = tab[op].name
+          rc[fork][op].info = tab[op].info
+          rc[fork][op].run  = tab[op].exec.run
+      rc
 
 # ------------------------------------------------------------------------------
 # Debugging ...
 # ------------------------------------------------------------------------------
 
 when isMainModule and isNoisy:
+
+  proc opHandlersRun(fork: Fork; op: Op; d: var Vm2Ctx) {.used.} =
+    ## Given a particular `fork` and an `op`-code, run the associated handler
+    vmOpHandlers[fork][op].run(d)
+
+  proc opHandlersName(fork: Fork; op: Op): string {.used.} =
+    ## Get name (or ID) of op handler
+    vmOpHandlers[fork][op].name
+
+  proc opHandlersInfo(fork: Fork; op: Op): string {.used.} =
+    ## Get some op handler info
+    vmOpHandlers[fork][op].info
+
   echo ">>> berlin[shl]:            ", FkBerlin.opHandlersInfo(Shl)
   echo ">>> berlin[push32]:         ", FkBerlin.opHandlersInfo(Push32)
   echo ">>> berlin[dup16]:          ", FkBerlin.opHandlersInfo(Dup16)

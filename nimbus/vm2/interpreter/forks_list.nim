@@ -14,6 +14,14 @@
 ## See `here <../../ex/vm/interpreter/forks_list.html>`_ for an
 ## overview.
 ##
+## Assumptions on the naming of the fork list:
+##  * each symbol start with the prefix "Fk"
+##  * the the first word of the prettified text representaion is the same
+##    text as the one following the "Fk" symbol name (irrespective of
+##    character case.)
+
+import
+  strutils
 
 type
   Fork* = enum
@@ -26,5 +34,10 @@ type
     FkPetersburg = "petersburg"
     FkIstanbul = "istanbul"
     FkBerlin = "berlin"
+
+proc toSymbolName*(fork: Fork): string =
+  ## Given a `fork` argument, print the symbol name so that it can be used
+  ## im macro staements.
+  "Fk" & ($fork).split(' ')[0]
 
 # End

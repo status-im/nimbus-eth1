@@ -208,6 +208,12 @@ type
     SelfDestruct =   0xff  ## Halt execution and register account for later
                            ## deletion.
 
+
+proc toSymbolName*(op: Op): string =
+  ## Given an `op` argument, print the symbol name so that it can be used
+  ## im macro staements.
+  $op
+
 # ------------------------------------------------------------------------------
 # Verify that Op is contiguous and sym names follow some standards
 # ------------------------------------------------------------------------------
