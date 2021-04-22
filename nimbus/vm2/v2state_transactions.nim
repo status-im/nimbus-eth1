@@ -1,19 +1,48 @@
 # Nimbus
 # Copyright (c) 2018 Status Research & Development GmbH
 # Licensed under either of
-#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-# at your option. This file may not be copied, modified, or distributed except according to those terms.
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
 
-when defined(evmc_enabled):
-  {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
+const
+  # needed for compiling locally
+  kludge {.intdefine.}: int = 0
+  breakCircularDependency {.used.} = kludge > 0
 
 import
-  options, sets,
-  eth/common, chronicles, ../db/accounts_cache,
-  ../config, ./interpreter/gas_costs,
   ../transaction,
-  ./computation, ./interpreter, ./state, ./types
+  ./interpreter,
+  chronicles,
+  eth/common/eth_types,
+  options,
+  sets
+
+# ------------------------------------------------------------------------------
+# Kludge BEGIN
+# ------------------------------------------------------------------------------
+
+when not breakCircularDependency:
+  import
+    ../config,
+    ../constants,
+    ../db/accounts_cache,
+    ./computation,
+    ./state,
+    ./types,
+    ./interpreter/gas_costs,
+    eth/common
+
+else:
+  import
+    ./interpreter/op_handlers/[oph_defs_kludge, oph_helpers_kludge]
+
+# ------------------------------------------------------------------------------
+# Kludge END
+# ------------------------------------------------------------------------------
 
 proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
   ## this proc will be called each time a new transaction

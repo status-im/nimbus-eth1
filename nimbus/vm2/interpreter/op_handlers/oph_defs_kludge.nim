@@ -19,7 +19,8 @@ import
   ../op_codes,
   ../../memory,
   ../../stack_defs,
-  eth/common/eth_types
+  eth/common/eth_types,
+  sets
 
 # ------------------------------------------------------------------------------
 # Kludge BEGIN
@@ -48,8 +49,37 @@ type
     bytes*: seq[byte]
     pc*: int
 
+  ChainId* = uint # distinct uint
+
+  ChainConfig* = object
+    chainId*: ChainId
+    homesteadBlock*: BlockNumber
+    daoForkBlock*: BlockNumber
+    daoForkSupport*: bool
+
+  AccountsCache* = ref object
+    isDirty: bool
+
+  BaseChainDB* = ref object
+    pruneTrie*: bool
+    config*: ChainConfig
+
+  GasCost* = object
+    opaq: int
+
+  GasCosts* = array[Op, GasCost]
+
   BaseVMState* = ref object of RootObj
-    accountDb*: ReadOnlyStateDB
+    chaindb*       : BaseChainDB
+    blockHeader*   : BlockHeader
+    logEntries*    : seq[Log]
+    accountDb*     : AccountsCache
+    touchedAccounts*: HashSet[EthAddress]
+    suicides*      : HashSet[EthAddress]
+    txOrigin*      : EthAddress
+    txGasPrice*    : GasInt
+    gasCosts*      : GasCosts
+    fork*          : Fork
 
   Message* = ref object
     kind*: CallKind
@@ -75,6 +105,9 @@ type
     fork*: Fork
     parent*, child*: Computation
     continuation*: proc() {.gcsafe.}
+    touchedAccounts*: HashSet[EthAddress]
+    suicides*: HashSet[EthAddress]
+    logEntries*: seq[Log]
 
 # ------------------------------------------------------------------------------
 # Kludge END
