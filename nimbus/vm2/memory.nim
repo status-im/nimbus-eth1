@@ -5,17 +5,15 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-when defined(evmc_enabled):
-  {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
-
 import
   sequtils,
   chronicles, eth/common/eth_types,
-  ../errors, ../validation, ./memory_defs,
-  ./interpreter/utils/v2utils_numeric
+  ../errors, ../validation,
+  ./interpreter/utils/utils_numeric
 
-export
-  Memory
+type
+  Memory* = ref object
+    bytes*:  seq[byte]
 
 logScope:
   topics = "vm memory"

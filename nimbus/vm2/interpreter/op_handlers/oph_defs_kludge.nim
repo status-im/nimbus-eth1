@@ -17,7 +17,7 @@
 import
   ../forks_list,
   ../op_codes,
-  ../../memory_defs,
+  ../../memory,
   ../../stack_defs,
   eth/common/eth_types
 

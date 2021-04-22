@@ -8,8 +8,6 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled):
-  {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
 
 # see vm_internals
 
@@ -26,7 +24,7 @@ export
 
 
 import
-  ./v2message as vmm
+  ./message as vmm
 export
   vmm.isCreate
 
@@ -60,7 +58,7 @@ export
   xmc.tracingEnabled
 
 import
-  ./v2computation as vmc
+  ./computation as vmc
 export
   vmc.commit,
   vmc.dispose,

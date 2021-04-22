@@ -211,7 +211,7 @@ type
 
 proc toSymbolName*(op: Op): string =
   ## Given an `op` argument, print the symbol name so that it can be used
-  ## im macro staements.
+  ## in a macro statement.
   $op
 
 # ------------------------------------------------------------------------------

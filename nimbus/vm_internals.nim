@@ -15,7 +15,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/memory as vmm
 else:
   import
-    ./vm2/v2memory as vmm
+    ./vm2/memory as vmm
   
 export
   vmm.Memory,
@@ -35,7 +35,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/interpreter/utils/utils_numeric as vmn
 else:
   import
-    ./vm2/interpreter/utils/v2utils_numeric as vmn
+    ./vm2/interpreter/utils/utils_numeric as vmn
 
   
 export
@@ -59,7 +59,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     ./vm/interpreter as vmi
 else:
   import
-    ./vm2/v2interpreter as vmi
+    ./vm2/interpreter as vmi
     
 export
   vmi

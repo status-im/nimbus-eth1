@@ -7,7 +7,7 @@
 
 import
   math, eth/common/eth_types,
-  ./utils/[macros_gen_opcodes, v2utils_numeric],
+  ./utils/[macros_gen_opcodes, utils_numeric],
   ./op_codes, ./forks_list, ../../errors
 
 # Gas Fee Schedule

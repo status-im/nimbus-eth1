@@ -44,7 +44,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
 else:
   import
     ./vm2/compu_helper as xmc,
-    ./vm2/v2computation as vmc
+    ./vm2/computation as vmc
 
   export
     xmc.accountExists,

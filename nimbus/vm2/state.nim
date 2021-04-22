@@ -8,15 +8,12 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled):
-  {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
-
 import
   macros, strformat, tables, sets, options,
   eth/[common, keys, rlp], nimcrypto/keccak,
   ./interpreter/forks_list, ../errors,
   ../constants, ../db/[db_chain, accounts_cache],
-  ../utils, json, ./transaction_tracer, ./v2types,
+  ../utils, json, ./transaction_tracer, ./types,
   ../config, ../../stateless/[witness_from_tree, witness_types]
 
 proc newAccessLogs*: AccessLogs =

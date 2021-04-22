@@ -13,7 +13,7 @@ import
   eth/common, chronicles, ../db/accounts_cache,
   ../config, ./interpreter/gas_costs,
   ../transaction,
-  ./v2computation, ./v2interpreter, ./v2state, ./v2types
+  ./computation, ./interpreter, ./state, ./types
 
 proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
   ## this proc will be called each time a new transaction

@@ -8,8 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-type
-  Memory* = ref object
-    bytes*:  seq[byte]
+import ./types
 
-# End
+proc isCreate*(message: Message): bool =
+  message.kind in {evmcCreate, evmcCreate2}

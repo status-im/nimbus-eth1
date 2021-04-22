@@ -8,12 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled):
-  {.fatal: "Flags \"evmc_enabled\" and \"vm2_enabled\" are mutually exclusive"}
-
 import
-  ./v2types,
-  ./interpreter/[gas_meter, gas_costs, utils/v2utils_numeric, forks_list],
+  ./types,
+  ./interpreter/[gas_meter, gas_costs, utils/utils_numeric, forks_list],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
   math, nimcrypto, bncurve/[fields, groups], ./blake2b_f, ./blscurve
 
