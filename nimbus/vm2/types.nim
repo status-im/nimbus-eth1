@@ -11,7 +11,7 @@
 import
   tables, eth/common,
   options, json, sets,
-  ./stack_defs,  ./memory, ./code_stream,
+  ./stack,  ./memory, ./code_stream,
   ./interpreter/[gas_costs, op_codes, forks_list],
   # TODO - will be hidden at a lower layer
   ../db/[db_chain, accounts_cache]

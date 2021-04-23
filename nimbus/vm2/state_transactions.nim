@@ -31,9 +31,9 @@ when not breakCircularDependency:
     ../constants,
     ../db/accounts_cache,
     ./computation,
+    ./interpreter/gas_costs,
     ./state,
     ./types,
-    ./interpreter/gas_costs,
     eth/common
 
 else:
