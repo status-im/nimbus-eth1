@@ -67,7 +67,7 @@ nix-shell default.nix
 make nimbus
 
 # See available command line options
-build/nimbus -- help
+build/nimbus --help
 
 # Start syncing with mainnet
 build/nimbus
@@ -190,8 +190,29 @@ make nimbus
 
 build/nimbus
 ```
+### <a name="make-xvars"></a>Experimental make variables
 
-### Development tips
+Apart from standard make flags (see link in the next [chapter](#devel-tips)),
+the following make variables can be set to control which version of a virtual
+engine is compiled. The variables are listed with decreasing priority (in
+case of doubt, the lower prioritised variable is ignored when the higher on is
+available.)
+
+ * ENABLE_EVMC=1<br>
+   Enable mostly EVMC compliant wrapper around the native nim VM
+
+ * ENABLE_VM2LOWMEM=1<br>
+   Enable new re-factored version of the native nim VM. This version is not
+   optimised and coded in a way so that low memory compilers can handle it
+   (observed on 32 bit windows 7.)
+
+ * ENABLE_VM2=1<br>
+   Enable new re-factored version of the native nim VM.
+
+For these variables, using &lt;variable&gt;=0 is ignored and &lt;variable&gt;=2
+has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)
+
+### <a name="devel-tips"></a>Development tips
 
 Interesting Make variables and targets are documented in the [nimbus-build-system](https://github.com/status-im/nimbus-build-system) repo.
 

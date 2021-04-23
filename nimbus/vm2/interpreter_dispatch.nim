@@ -9,6 +9,10 @@
 # according to those terms.
 
 const
+  # help with low memory when compiling
+  lowmem {.intdefine.}: int = 0
+  lowMemoryCompileTime {.used.} = lowmem > 0
+
   # debugging flag
   kludge {.intdefine.}: int = 0
   breakCircularDependency {.used.} = kludge > 0
@@ -99,7 +103,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
       of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
         quote do:
           `forkCaseSubExpr`
-          if not c.continuation.isNil:
+          if not `k`.cpt.continuation.isNil:
             break
       of Stop, Return, Revert, SelfDestruct:
         quote do:
@@ -117,8 +121,28 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
     echo ">>> ", result.repr
 
 
-macro genDispatchMatrix(fork: Fork; op: Op; k: Vm2Ctx): untyped =
+macro genDispatchMatrix(fork: Fork; op: Op; k: Vm2Ctx): untyped {.used.} =
   result = fork.toCaseStmt(op, k)
+
+
+template genLowMemDispatcher(fork: Fork; op: Op; k: Vm2Ctx) {.used.} =
+  if op == Stop:
+    handleStopDirective(k)
+    break
+
+  if BaseGasCosts[op].kind == GckFixed:
+    handleFixedGasCostsDirective(fork, op, k)
+  else:
+    handleOtherDirective(fork, op, k)
+
+  case c.instr
+  of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
+    if not k.cpt.continuation.isNil:
+      break
+  of Return, Revert, SelfDestruct:
+    break
+  else:
+    discard
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -144,40 +168,45 @@ proc selectVM*(c: Computation, fork: Fork) {.gcsafe.} =
     #   # we could use manual jump table instead
     #   # TODO lots of macro magic here to unravel, with chronicles...
     #   # `c`.logger.log($`c`.stack & "\n\n", fgGreen)
+    when not lowMemoryCompileTime:
+      when defined(release):
+        #
+        # FIXME: OS case list below needs to be adjusted
+        #
+        when defined(windows):
+          when defined(cpu64):
+            {.warning: "*** Win64/VM2 handler switch => computedGoto".}
+            {.computedGoto, optimization: speed.}
+          else:
+            # computedGoto not compiling on github/ci (out of memory) -- jordan
+            {.warning: "*** Win32/VM2 handler switch => optimisation disabled".}
+            # {.computedGoto, optimization: speed.}
 
-    when defined(release):
-      #
-      # FIXME: OS case list below needs to be adjusted
-      #
-      when defined(windows):
-        when defined(cpu64):
-          {.warning: "*** Win64/VM2 handler switch => computedGoto".}
-          {.computedGoto, optimization: speed.}
+        elif defined(linux):
+          when defined(cpu64):
+            {.warning: "*** Linux64/VM2 handler switch => computedGoto".}
+            {.computedGoto, optimization: speed.}
+          else:
+            {.warning: "*** Linux32/VM2 handler switch => computedGoto".}
+            {.computedGoto, optimization: speed.}
+
+        elif defined(macosx):
+          when defined(cpu64):
+            {.warning: "*** MacOs64/VM2 handler switch => computedGoto".}
+            {.computedGoto, optimization: speed.}
+          else:
+            {.warning: "*** MacOs32/VM2 handler switch => computedGoto".}
+            {.computedGoto, optimization: speed.}
+
         else:
-          # computedGoto is not compiling on github/ci (out of memory) -- jordan
-          {.warning: "*** Win32/VM2 handler switch => optimisation disabled".}
-          # {.computedGoto, optimization: speed.}
+          {.warning: "*** Unsupported OS => no handler switch optimisation".}
 
-      elif defined(linux):
-        when defined(cpu64):
-          {.warning: "*** Linux64/VM2 handler switch => computedGoto".}
-          {.computedGoto, optimization: speed.}
-        else:
-          {.warning: "*** Linux32/VM2 handler switch => computedGoto".}
-          {.computedGoto, optimization: speed.}
+      genDispatchMatrix(fork, c.instr, desc)
 
-      elif defined(macosx):
-        when defined(cpu64):
-          {.warning: "*** MacOs64/VM2 handler switch => computedGoto".}
-          {.computedGoto, optimization: speed.}
-        else:
-          {.warning: "*** MacOs32/VM2 handler switch => computedGoto".}
-          {.computedGoto, optimization: speed.}
+    else:
+      {.warning: "*** low memory compiler mode => program will be slow".}
 
-      else:
-        {.warning: "*** Unsupported OS => no handler switch optimisation".}
-
-    genDispatchMatrix(fork, c.instr, desc)
+      genLowMemDispatcher(fork, c.instr, desc)
 
 # ------------------------------------------------------------------------------
 # End
