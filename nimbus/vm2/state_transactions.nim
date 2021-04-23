@@ -38,7 +38,7 @@ when not breakCircularDependency:
 
 else:
   import
-    ./interpreter/op_handlers/[oph_defs_kludge, oph_helpers_kludge]
+    ./interpreter/op_handlers/oph_kludge
 
 # ------------------------------------------------------------------------------
 # Kludge END
