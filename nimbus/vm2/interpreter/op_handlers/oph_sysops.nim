@@ -20,7 +20,6 @@ import
   ../../stack,
   ../../state,
   ../../types,
-  ../forks_list,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,

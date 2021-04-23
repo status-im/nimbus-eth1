@@ -13,13 +13,10 @@ const
   lowmem {.intdefine.}: int = 0
   lowMemoryCompileTime {.used.} = lowmem > 0
 
-  # debugging flag
+  # debugging flag, dump macro info when asked for
   noisy {.intdefine.}: int = 0
-  isNoisy {.used.} = noisy > 0
-
-  # needed for compiling locally
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
+  # isNoisy {.used.} = noisy > 0
+  isChatty {.used.} = noisy > 1
 
 import
   ./compu_helper,
@@ -121,7 +118,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
       newIdentNode(op.toSymbolName),
       branchStmt)
 
-  when breakCircularDependency and isNoisy:
+  when isChatty:
     echo ">>> ", result.repr
 
 
