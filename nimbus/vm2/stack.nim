@@ -7,10 +7,16 @@
 
 import
   chronicles, strformat, strutils, sequtils, macros, eth/common, nimcrypto,
-  ../errors, ../validation, ./stack_defs
+  ../errors, ../validation
 
 logScope:
   topics = "vm stack"
+
+type
+  Stack* = ref object of RootObj
+    values*: seq[StackElement]
+
+  StackElement = UInt256
 
 template ensureStackLimit: untyped =
   if len(stack.values) > 1023:

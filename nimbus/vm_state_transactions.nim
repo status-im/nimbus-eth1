@@ -13,7 +13,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
     vm/state_transactions as vmx
 else:
   import
-    vm2/v2state_transactions as vmx
+    vm2/state_transactions as vmx
 
 export
   vmx.execComputation,

@@ -16,7 +16,7 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
 
 else:
   import
-    ./vm2/v2state_transactions as vmx,
+    ./vm2/state_transactions as vmx,
     ./vm2/state as vms
   export
     vmx.setupTxContext
