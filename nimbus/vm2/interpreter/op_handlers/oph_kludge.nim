@@ -23,8 +23,7 @@ import
   eth/common/eth_types,
   macros,
   sets,
-  stint,
-  strutils
+  stint
 
 # ------------------------------------------------------------------------------
 # Kludge BEGIN

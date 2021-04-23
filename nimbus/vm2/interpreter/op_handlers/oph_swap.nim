@@ -16,7 +16,7 @@ import
   ../../stack,
   ../op_codes,
   ./oph_defs,
-  ./oph_helpers,
+  ./oph_gen_handlers,
   sequtils,
   strformat
 
