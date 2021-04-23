@@ -80,9 +80,14 @@ ifneq ($(ENABLE_EVMC), 0)
 NIM_PARAMS := $(NIM_PARAMS) -d:evmc_enabled
 endif
 
+# disabled by default, enable with ENABLE_VM2SLOW=1
+ifneq ($(if $(ENABLE_VM2LOWMEM),$(ENABLE_VM2LOWMEM),0),0)
+NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled -d:lowmem:1
+else
 # disabled by default, enable with ENABLE_VM2=1
 ifneq ($(if $(ENABLE_VM2),$(ENABLE_VM2),0),0)
 NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled
+endif
 endif
 
 deps: | deps-common nat-libs nimbus.nims
