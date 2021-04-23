@@ -13,9 +13,9 @@
 ##
 
 # Including types.nim and others unless included (not imported) into
-# oph_helpes_kludge.nim
+# oph_kludge.nim
 #
-when not declared(consumeGas):
+when not declared(Computation):
   import
     ../../../db/accounts_cache,
     ../../state,

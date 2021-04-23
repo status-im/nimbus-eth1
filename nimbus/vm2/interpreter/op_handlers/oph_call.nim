@@ -46,8 +46,7 @@ when not breakCircularDependency:
 
 else:
   import
-    ./oph_defs_kludge,
-    ./oph_helpers_kludge
+    ./oph_kludge
 
 # ------------------------------------------------------------------------------
 # Kludge END

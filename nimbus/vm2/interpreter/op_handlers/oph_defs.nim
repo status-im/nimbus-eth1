@@ -13,10 +13,10 @@
 ##
 
 # Including types.nim needed unless included (not imported) into
-# oph_defs_kludge.nim
+# oph_kludge.nim
 #
 # Note that the nim compiler will distinguish <Vm2Ctx> tuples defined
-# here when imported and from oph_defs_kludge.nim. This is so due to the
+# here when imported and from oph_kludge.nim. This is so due to the
 # duplicate/different Computation definitions.
 #
 when not declared(Computation):
