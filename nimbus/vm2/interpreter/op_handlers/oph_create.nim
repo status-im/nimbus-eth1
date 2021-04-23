@@ -12,46 +12,48 @@
 ## ======================================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../../constants,
   ../../../errors,
-  ../../stack,
+  ../../compu_helper,
   ../../memory,
+  ../../stack,
+  ../../state,
+  ../../types,
   ../forks_list,
+  ../gas_costs,
+  ../gas_meter,
   ../op_codes,
   ../utils/utils_numeric,
+  ./oph_defs,
+  ./oph_helpers,
   chronicles,
+  eth/common,
   eth/common/eth_types,
   stint,
   strformat
 
 # ------------------------------------------------------------------------------
-# Kludge BEGIN
+# Private helpers
 # ------------------------------------------------------------------------------
 
-when not breakCircularDependency:
-  import
-    ../../../constants,
-    ../../compu_helper,
-    ../../computation,
-    ../../state,
-    ../../types,
-    ../gas_costs,
-    ../gas_meter,
-    ./oph_defs,
-    ./oph_helpers,
-    eth/common
+proc execSubCreate(k: var Vm2Ctx; childMsg: Message; salt = 0.u256) =
+  ## Create new VM -- helper for `Create`-like operations
 
-else:
-  import
-    ./oph_kludge
+  # need to provide explicit <c> and <child> for capturing in chainTo proc()
+  var
+    c = k.cpt
+    child = newComputation(k.cpt.vmState, childMsg, salt)
 
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
+  k.cpt.chainTo(child):
+    if not child.shouldBurnGas:
+      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+
+    if child.isSuccess:
+      c.merge(child)
+      c.stack.top child.msg.contractAddress
+    else:
+      c.returnData = child.output
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -66,7 +68,6 @@ const
       endowment = k.cpt.stack.popInt()
       memPos    = k.cpt.stack.popInt().safeInt
       memLen    = k.cpt.stack.peekInt().safeInt
-      salt = 0.u256
 
     k.cpt.stack.top(0)
 
@@ -103,27 +104,14 @@ const
       createMsgGas -= createMsgGas div 64
     k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE")
 
-    let childMsg = Message(
-      kind:   evmcCreate,
-      depth:  k.cpt.msg.depth + 1,
-      gas:    createMsgGas,
-      sender: k.cpt.msg.contractAddress,
-      value:  endowment,
-      data:   k.cpt.memory.read(memPos, memLen))
-
-    # call -- need to un-capture k
-    var
-      c = k.cpt
-      child = newComputation(c.vmState, childMsg, salt)
-    c.chainTo(child):
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-      if child.isSuccess:
-        c.merge(child)
-        c.stack.top child.msg.contractAddress
-      else:
-        c.returnData = child.output
+    k.execSubCreate(
+      childMsg = Message(
+        kind:   evmcCreate,
+        depth:  k.cpt.msg.depth + 1,
+        gas:    createMsgGas,
+        sender: k.cpt.msg.contractAddress,
+        value:  endowment,
+        data:   k.cpt.memory.read(memPos, memLen)))
 
   # ---------------------
 
@@ -174,27 +162,15 @@ const
       createMsgGas -= createMsgGas div 64
     k.cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE")
 
-    let childMsg = Message(
-      kind:   evmcCreate2,
-      depth:  k.cpt.msg.depth + 1,
-      gas:    createMsgGas,
-      sender: k.cpt.msg.contractAddress,
-      value:  endowment,
-      data:   k.cpt.memory.read(memPos, memLen))
-
-    # call -- need to un-capture k
-    var
-      c = k.cpt
-      child = newComputation(c.vmState, childMsg, salt)
-    c.chainTo(child):
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-      if child.isSuccess:
-        c.merge(child)
-        c.stack.top child.msg.contractAddress
-      else:
-        c.returnData = child.output
+    k.execSubCreate(
+      salt = salt,
+      childMsg = Message(
+        kind:   evmcCreate2,
+        depth:  k.cpt.msg.depth + 1,
+        gas:    createMsgGas,
+        sender: k.cpt.msg.contractAddress,
+        value:  endowment,
+        data:   k.cpt.memory.read(memPos, memLen)))
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

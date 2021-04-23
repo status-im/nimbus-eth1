@@ -12,45 +12,25 @@
 ## ====================================
 ##
 
-const
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
-
 import
+  ../../../constants,
+  ../../../db/accounts_cache,
   ../../../errors,
-  ../../stack,
+  ../../compu_helper,
   ../../memory,
+  ../../stack,
+  ../../state,
+  ../../types,
   ../forks_list,
+  ../gas_costs,
+  ../gas_meter,
   ../op_codes,
   ../utils/utils_numeric,
+  ./oph_defs,
   chronicles,
+  eth/common,
   eth/common/eth_types,
   stint
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ./oph_defs,
-    ../../../constants,
-    ../../../db/accounts_cache,
-    ../../compu_helper,
-    ../../computation,
-    ../../state,
-    ../../types,
-    ../gas_costs,
-    ../gas_meter,
-    eth/common
-
-else:
-  import
-    ./oph_kludge
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Private
@@ -158,6 +138,29 @@ proc staticCallParams(c: Computation):  LocalParams =
 
   result.updateStackAndParams(c)
 
+
+proc execSubCall(k: var Vm2Ctx; childMsg: Message; memPos, memLen: int) =
+  ## Call new VM -- helper for `Call`-like operations
+
+  # need to provide explicit <c> and <child> for capturing in chainTo proc()
+  # <memPos> and <memLen> are provided by value and need not be captured
+  var
+    c = k.cpt
+    child = newComputation(k.cpt.vmState, childMsg)
+
+  k.cpt.chainTo(child):
+    if not child.shouldBurnGas:
+      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+
+    if child.isSuccess:
+      c.merge(child)
+      c.stack.top(1)
+
+    c.returnData = child.output
+    let actualOutputSize = min(memLen, child.output.len)
+    if actualOutputSize > 0:
+      c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
+
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
@@ -215,34 +218,19 @@ const
       k.cpt.gasMeter.returnGas(childGasLimit)
       return
 
-    let msg = Message(
-      kind:            evmcCall,
-      depth:           k.cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
-      contractAddress: p.contractAddress,
-      codeAddress:     p.destination,
-      value:           p.value,
-      data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-      flags:           p.flags)
-
-    # call -- need to un-capture k
-    var
-      c = k.cpt
-      child = newComputation(c.vmState, msg)
-    c.chainTo(child):
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-      if child.isSuccess:
-        c.merge(child)
-        c.stack.top(1)
-
-      c.returnData = child.output
-      let actualOutputSize = min(p.memOutLen, child.output.len)
-      if actualOutputSize > 0:
-        c.memory.write(p.memOutPos,
-                       child.output.toOpenArray(0, actualOutputSize - 1))
+    k.execSubCall(
+      memPos = p.memOutPos,
+      memLen = p.memOutLen,
+      childMsg = Message(
+        kind:            evmcCall,
+        depth:           k.cpt.msg.depth + 1,
+        gas:             childGasLimit,
+        sender:          p.sender,
+        contractAddress: p.contractAddress,
+        codeAddress:     p.destination,
+        value:           p.value,
+        data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+        flags:           p.flags))
 
   # ---------------------
 
@@ -296,34 +284,19 @@ const
       k.cpt.gasMeter.returnGas(childGasLimit)
       return
 
-    let msg = Message(
-      kind:            evmcCallCode,
-      depth:           k.cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
-      contractAddress: p.contractAddress,
-      codeAddress:     p.destination,
-      value:           p.value,
-      data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-      flags:           p.flags)
-
-    # call -- need to un-capture k
-    var
-      c = k.cpt
-      child = newComputation(c.vmState, msg)
-    c.chainTo(child):
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-      if child.isSuccess:
-        c.merge(child)
-        c.stack.top(1)
-
-      c.returnData = child.output
-      let actualOutputSize = min(p.memOutLen, child.output.len)
-      if actualOutputSize > 0:
-        c.memory.write(p.memOutPos,
-                       child.output.toOpenArray(0, actualOutputSize - 1))
+    k.execSubCall(
+      memPos = p.memOutPos,
+      memLen = p.memOutLen,
+      childMsg = Message(
+        kind:            evmcCallCode,
+        depth:           k.cpt.msg.depth + 1,
+        gas:             childGasLimit,
+        sender:          p.sender,
+        contractAddress: p.contractAddress,
+        codeAddress:     p.destination,
+        value:           p.value,
+        data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+        flags:           p.flags))
 
   # ---------------------
 
@@ -366,34 +339,19 @@ const
     k.cpt.memory.extend(p.memInPos, p.memInLen)
     k.cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    let msg = Message(
-      kind:            evmcDelegateCall,
-      depth:           k.cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
-      contractAddress: p.contractAddress,
-      codeAddress:     p.destination,
-      value:           p.value,
-      data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-      flags:           p.flags)
-
-    # call -- need to un-capture k
-    var
-      c = k.cpt
-      child = newComputation(c.vmState, msg)
-    c.chainTo(child):
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-      if child.isSuccess:
-        c.merge(child)
-        c.stack.top(1)
-
-      c.returnData = child.output
-      let actualOutputSize = min(p.memOutLen, child.output.len)
-      if actualOutputSize > 0:
-        c.memory.write(p.memOutPos,
-                       child.output.toOpenArray(0, actualOutputSize - 1))
+    k.execSubCall(
+      memPos = p.memOutPos,
+      memLen = p.memOutLen,
+      childMsg = Message(
+        kind:            evmcDelegateCall,
+        depth:           k.cpt.msg.depth + 1,
+        gas:             childGasLimit,
+        sender:          p.sender,
+        contractAddress: p.contractAddress,
+        codeAddress:     p.destination,
+        value:           p.value,
+        data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+        flags:           p.flags))
 
   # ---------------------
 
@@ -441,34 +399,19 @@ const
     k.cpt.memory.extend(p.memInPos, p.memInLen)
     k.cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-    let msg = Message(
-      kind:            evmcCall,
-      depth:           k.cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
-      contractAddress: p.contractAddress,
-      codeAddress:     p.destination,
-      value:           p.value,
-      data:            k.cpt.memory.read(p.memInPos, p.memInLen),
-      flags:           p.flags)
-
-    # call -- need to un-capture k
-    var
-      c = k.cpt
-      child = newComputation(c.vmState, msg)
-    c.chainTo(child):
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-      if child.isSuccess:
-        c.merge(child)
-        c.stack.top(1)
-
-      c.returnData = child.output
-      let actualOutputSize = min(p.memOutLen, child.output.len)
-      if actualOutputSize > 0:
-        c.memory.write(p.memOutPos,
-                       child.output.toOpenArray(0, actualOutputSize - 1))
+    k.execSubCall(
+      memPos = p.memOutPos,
+      memLen = p.memOutLen,
+      childMsg = Message(
+        kind:            evmcCall,
+        depth:           k.cpt.msg.depth + 1,
+        gas:             childGasLimit,
+        sender:          p.sender,
+        contractAddress: p.contractAddress,
+        codeAddress:     p.destination,
+        value:           p.value,
+        data:            k.cpt.memory.read(p.memInPos, p.memInLen),
+        flags:           p.flags))
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

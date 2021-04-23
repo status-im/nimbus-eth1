@@ -14,10 +14,8 @@
 
 const
   noisy {.intdefine.}: int = 0
-  isNoisy {.used.} = noisy > 0
-
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
+  # isNoisy {.used.} = noisy > 0
+  isChatty {.used.} = noisy > 1
 
 import
   strformat,
@@ -27,31 +25,6 @@ import
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
                  oph_memory, oph_push, oph_dup, oph_swap, oph_log,
                  oph_create, oph_call, oph_sysops]
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  const
-    useExecCreate = vm2OpExecCreate
-    useExecCall = vm2OpExecCall
-
-else:
-  # note: oph_create/call are always imported to check for syntactic corretness,
-  #       at the moment, it would not match the other handler lists due to the
-  #       fake Computation object definition.
-  const
-    useExecCreate: seq[Vm2OpExec] = @[]
-    useExecCall: seq[Vm2OpExec] = @[]
-
-    ignoreVm2OpExecCreate {.used.} = vm2OpExecCreate
-    ignoreVm2OpExecCall  {.used.} = vm2OpExecCall
-  {.warning: "*** Ignoring tables from <oph_create> and <oph_call>".}
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
 
 const
   allHandlersList = @[
@@ -64,8 +37,8 @@ const
     (vm2OpExecDup,        "Dup"),
     (vm2OpExecSwap,       "Swap"),
     (vm2OpExecLog,        "Log"),
-    (useExecCreate,       "Create"),
-    (useExecCall,         "Call"),
+    (vm2OpExecCreate,     "Create"),
+    (vm2OpExecCall,       "Call"),
     (vm2OpExecSysOp,      "SysOp")]
 
 # ------------------------------------------------------------------------------
@@ -146,7 +119,7 @@ const
 # Debugging ...
 # ------------------------------------------------------------------------------
 
-when isMainModule and isNoisy:
+when isMainModule and isChatty:
 
   proc opHandlersRun(fork: Fork; op: Op; d: var Vm2Ctx) {.used.} =
     ## Given a particular `fork` and an `op`-code, run the associated handler
