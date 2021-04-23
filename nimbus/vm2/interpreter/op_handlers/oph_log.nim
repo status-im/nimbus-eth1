@@ -24,6 +24,7 @@ import
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
+  ./oph_gen_handlers,
   ./oph_helpers,
   eth/common,
   eth/common,
