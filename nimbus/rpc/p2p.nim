@@ -365,7 +365,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
       idx = 0
       prevGasUsed = GasInt(0)
 
-    for receipt in chain.getReceipts(header):
+    for receipt in chain.getReceipts(header.receiptRoot):
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
       prevGasUsed = receipt.cumulativeGasUsed
       if idx == txDetails.index:

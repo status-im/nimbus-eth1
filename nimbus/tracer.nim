@@ -32,7 +32,7 @@ proc toJson(receipt: Receipt): JsonNode =
 
 proc dumpReceipts*(chainDB: BaseChainDB, header: BlockHeader): JsonNode =
   result = newJArray()
-  for receipt in chainDB.getReceipts(header):
+  for receipt in chainDB.getReceipts(header.receiptRoot):
     result.add receipt.toJson
 
 proc toJson*(receipts: seq[Receipt]): JsonNode =

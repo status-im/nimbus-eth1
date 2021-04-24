@@ -278,8 +278,8 @@ proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]): Hash256 
     trie.put(rlp.encode(idx), rlp.encode(rec))
   trie.rootHash
 
-iterator getReceipts*(self: BaseChainDB; header: BlockHeader): Receipt =
-  var receiptDb = initHexaryTrie(self.db, header.receiptRoot)
+iterator getReceipts*(self: BaseChainDB; receiptRoot: Hash256): Receipt =
+  var receiptDb = initHexaryTrie(self.db, receiptRoot)
   var receiptIdx = 0
   while true:
     let receiptKey = rlp.encode(receiptIdx)
