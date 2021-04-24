@@ -70,6 +70,10 @@ type
     flags*: set[RpcFlags]         ## RPC flags
     binds*: seq[TransportAddress] ## RPC bind address
 
+  GraphqlConfiguration* = object
+    enabled*: bool
+    address*: TransportAddress
+
   PublicNetwork* = enum
     CustomNet = 0
     MainNet = 1
@@ -156,6 +160,7 @@ type
     dataDir*: string
     keyStore*: string
     prune*: PruneMode
+    graphql*: GraphqlConfiguration
     rpc*: RpcConfiguration        ## JSON-RPC configuration
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
@@ -167,7 +172,7 @@ type
     accounts*: Table[EthAddress, NimbusAccount]
     importFile*: string
 
-  CustomGenesisConfig = object
+  CustomGenesisConfig* = object
     chainId*: ChainId
     homesteadBlock*: BlockNumber
     daoForkBlock*: BlockNumber
@@ -478,28 +483,24 @@ proc processFloat*(v: string, o: var float): ConfigStatus =
   except ValueError:
     result = ErrorParseOption
 
+proc processAddressPort(addrStr: string, ta: var TransportAddress): ConfigStatus =
+  try:
+    ta = initTAddress(addrStr)
+    return Success
+  except CatchableError:
+    return ErrorParseOption
+
 proc processAddressPortsList(v: string,
                              o: var seq[TransportAddress]): ConfigStatus =
   ## Convert <hostname:port>;...;<hostname:port> to list of `TransportAddress`.
   var list = newSeq[string]()
   processList(v, list)
   for item in list:
-    var tas4: seq[TransportAddress]
-    var tas6: seq[TransportAddress]
-    try:
-      tas4 = resolveTAddress(item, AddressFamily.IPv4)
-    except CatchableError:
-      discard
-    try:
-      tas6 = resolveTAddress(item, AddressFamily.IPv6)
-    except CatchableError:
-      discard
-    if len(tas4) == 0 and len(tas6) == 0:
-      result = ErrorParseOption
-      break
+    var ta: TransportAddress
+    if processAddressPort(item, ta) == Success:
+      o.add ta
     else:
-      for a in tas4: o.add(a)
-      for a in tas6: o.add(a)
+      return ErrorParseOption
   result = Success
 
 proc processRpcApiList(v: string, flags: var set[RpcFlags]): ConfigStatus =
@@ -604,6 +605,18 @@ proc processRpcArguments(key, value: string): ConfigStatus =
     else:
       config.rpc.flags.incl(RpcFlags.Enabled)
     result = processRpcApiList(value, config.rpc.flags)
+  else:
+    result = EmptyOption
+
+proc processGraphqlArguments(key, value: string): ConfigStatus =
+  ## Processes only `Graphql` related command line options
+  result = Success
+  let conf = getConfiguration()
+  case key.toLowerAscii()
+  of "graphql":
+    conf.graphql.enabled = true
+  of "graphqlbind":
+    result = processAddressPort(value, conf.graphql.address)
   else:
     result = EmptyOption
 
@@ -843,6 +856,10 @@ proc initConfiguration(): NimbusConfiguration =
   result.rng = newRng()
   result.accounts = initTable[EthAddress, NimbusAccount]()
 
+  ## Graphql defaults
+  result.graphql.enabled = false
+  result.graphql.address = initTAddress("127.0.0.1:8547")
+
   ## RPC defaults
   result.rpc.flags = {}
   result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
@@ -936,6 +953,8 @@ API AND CONSOLE OPTIONS:
   --rpc                   Enable the HTTP-RPC server
   --rpcbind:<value>       HTTP-RPC server will bind to given comma separated address:port pairs (default: 127.0.0.1:8545)
   --rpcapi:<value>        Enable specific set of rpc api from comma separated list(eth, shh, debug)
+  --graphql               Enable the HTTP-Graphql server
+  --graphqlbind:<value>   HTTP-Graphql server will bind to given address:port pair (default: 127.0.0.1:8547)
 
 LOGGING AND DEBUGGING OPTIONS:
   --log-level:<value>     One of: $2 (default: $3)
@@ -996,6 +1015,7 @@ when declared(os.paramCount): # not available with `--app:lib`
             processArgument processNetArguments, key, value, msg
             processArgument processShhArguments, key, value, msg
             processArgument processDebugArguments, key, value, msg
+            processArgument processGraphqlArguments, key, value, msg
             if result != Success:
               msg = "Unknown option: '" & key & "'."
               break
