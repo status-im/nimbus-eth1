@@ -176,6 +176,7 @@ proc getTransactionCount*(chain: BaseChainDB, txRoot: Hash256): int =
     if txKey notin trie:
       break
     inc txCount
+  txCount
 
 proc getUnclesCount*(self: BaseChainDB, ommersHash: Hash256): int =
   if ommersHash != EMPTY_UNCLE_HASH:
