@@ -16,7 +16,7 @@ import
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
   config, genesis, rpc/[common, p2p, debug, whisper, key_storage], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
-  utils, ./conf_utils
+  graphql/ethapi, utils, ./conf_utils
 
 ## TODO:
 ## * No IPv6 support
@@ -34,6 +34,7 @@ type
     rpcServer*: RpcHttpServer
     ethNode*: EthereumNode
     state*: NimbusState
+    graphqlServer*: GraphqlHttpServerRef
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
@@ -137,6 +138,10 @@ proc start(nimbus: NimbusNode) =
       result = "EXITING"
     nimbus.rpcServer.start()
 
+  if conf.graphql.enabled:
+    nimbus.graphqlServer = setupGraphqlHttpServer(conf, chainDB, nimbus.ethNode)
+    nimbus.graphqlServer.start()
+
   # metrics server
   if conf.net.metricsServer:
     let metricsAddress = "127.0.0.1"
@@ -166,6 +171,8 @@ proc stop*(nimbus: NimbusNode) {.async, gcsafe.} =
   var conf = getConfiguration()
   if RpcFlags.Enabled in conf.rpc.flags:
     nimbus.rpcServer.stop()
+  if conf.graphql.enabled:
+    await nimbus.graphqlServer.stop()
 
 proc process*(nimbus: NimbusNode) =
   # Main event loop
