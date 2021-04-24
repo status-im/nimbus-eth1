@@ -795,6 +795,7 @@ when isMainModule:
       echo message
       quit(QuitSuccess)
 
+  disableParamFiltering()
   blockchainJsonMain(true)
 
 # lastBlockHash -> every fixture has it, hash of a block header

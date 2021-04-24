@@ -231,4 +231,6 @@ when isMainModule:
     if len(message) > 0:
       echo message
       quit(QuitSuccess)
+
+  disableParamFiltering()
   generalStateJsonMain(true)
