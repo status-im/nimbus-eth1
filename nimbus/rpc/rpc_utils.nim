@@ -24,13 +24,13 @@ type
     contractCreation* {.rlpIgnore.}: bool
 
   CallData* = object
-    source: EthAddress
-    to: EthAddress
-    gas: GasInt
-    gasPrice: GasInt
-    value: UInt256
-    data: seq[byte]
-    contractCreation: bool
+    source*: EthAddress
+    to*: EthAddress
+    gas*: GasInt
+    gasPrice*: GasInt
+    value*: UInt256
+    data*: seq[byte]
+    contractCreation*: bool
 
 proc read(rlp: var Rlp, t: var UnsignedTx, _: type EthAddress): EthAddress {.inline.} =
   if rlp.blobLen != 0:
@@ -188,7 +188,7 @@ proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): CallDa
   if call.data.isSome:
     result.data = hexToSeqByte(call.data.get.string)
 
-proc setupComputation(vmState: BaseVMState, call: CallData, fork: Fork) : Computation =
+proc setupComputation*(vmState: BaseVMState, call: CallData, fork: Fork) : Computation =
   vmState.setupTxContext(
     origin = call.source,
     gasPrice = call.gasPrice,
@@ -221,7 +221,7 @@ proc doCall*(call: CallData, header: BlockHeader, chain: BaseChainDB): HexDataSt
   # TODO: handle revert and error
   # TODO: handle contract ABI
 
-proc estimateGas*(call: CallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): HexQuantityStr =
+proc estimateGas*(call: CallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): GasInt =
   var
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
@@ -239,8 +239,7 @@ proc estimateGas*(call: CallData, header: BlockHeader, chain: BaseChainDB, haveG
 
   var dbTx = chain.db.beginTransaction()
   defer: dbTx.dispose()
-  let gasUsed = processTransaction(tx, call.source, vmState, fork)
-  result = encodeQuantity(gasUsed.uint64)
+  result = processTransaction(tx, call.source, vmState, fork)
   dbTx.dispose()
   # TODO: handle revert and error
 
