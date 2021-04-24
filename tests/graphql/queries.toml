@@ -1,0 +1,502 @@
+[[units]]
+  name = "types introspection"
+  code = """
+{
+  __schema {
+    types {
+      name
+    }
+  }
+}
+"""
+  result = """
+{
+  "__schema":{
+    "types":[
+      {"name":"Log"},
+      {"name":"CallData"},
+      {"name":"SyncState"},
+      {"name":"BigInt"},
+      {"name":"Mutation"},
+      {"name":"Address"},
+      {"name":"Block"},
+      {"name":"CallResult"},
+      {"name":"Query"},
+      {"name":"FilterCriteria"},
+      {"name":"Bytes"},
+      {"name":"Bytes32"},
+      {"name":"BlockFilterCriteria"},
+      {"name":"Pending"},
+      {"name":"Transaction"},
+      {"name":"Long"},
+      {"name":"Account"}
+    ]
+  }
+}
+"""
+
+[[units]]
+  name = "query.block(number)"
+  code = """
+{
+  block(number: 3) {
+    __typename
+    number
+    hash
+    parent {
+      __typename
+      number
+    }
+    nonce
+    transactionsRoot
+    transactionCount
+    stateRoot
+    receiptsRoot
+    miner {
+      __typename
+      address
+      balance
+      transactionCount
+      code
+      storage(slot: "0x0000000000000000000000000000000000000000000000000000000000000000")
+    }
+    extraData
+    gasLimit
+    gasUsed
+    timestamp
+    logsBloom
+    mixHash
+    difficulty
+    totalDifficulty
+    ommerCount
+    ommers {
+      __typename
+      hash
+    }
+    ommerAt(index: 0) {
+      __typename
+      hash
+    }
+    nullOmmer: ommerAt(index: 1) {
+      __typename
+      hash
+    }
+    ommerHash
+    account(address:"0x095e7baea6a6c7c4c2dfeb977efac326af552d87") {
+      __typename
+      address
+      balance
+      transactionCount
+      code
+      storage(slot: "0x0000000000000000000000000000000000000000000000000000000000000000")
+    }
+    nullAccount: account(address:"0x095e7baea6a6c7c4c2dfeb977efac326af552000") {
+      __typename
+    }
+  }
+}
+"""
+  result = """
+{
+  "block":{
+    "__typename":"Block",
+    "number":3,
+    "hash":"0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c",
+    "parent":{
+      "__typename":"Block",
+      "number":2
+    },
+    "nonce":"0x0000000000000000",
+    "transactionsRoot":"0x1722b8a91bfc4f5614ce36ee77c7cce6620ab4af36d3c54baa66d7dbeb7bce1a",
+    "transactionCount":1,
+    "stateRoot":"0xdfdfd50db3c9075423f86f5ae262f2c73e6d27ade353b29e5da20439b00e3548",
+    "receiptsRoot":"0x056b23fbba480696b65fe5a59b8f2148a1299103c4f57df839233af2cf4ca2d2",
+    "miner":{
+      "__typename":"Account",
+      "address":"0x8888f1f195afa192cfee860698584c030f4c9db1",
+      "balance":"0x542253a126cf3618",
+      "transactionCount":0,
+      "code":"0x",
+      "storage":"0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "extraData":"0x42",
+    "gasLimit":3141592,
+    "gasUsed":21000,
+    "timestamp":"0x0000000054C99839",
+    "logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000",
+    "difficulty":"0x020000",
+    "totalDifficulty":"0x080000",
+    "ommerCount":1,
+    "ommers":[
+      {
+        "__typename":"Block",
+        "hash":"0x62f9a23a486f43c792befd29e22bb09da1d1ae14769ef4b3cbf6223ec34246dd"
+      }
+    ],
+    "ommerAt":{
+      "__typename":"Block",
+      "hash":"0x62f9a23a486f43c792befd29e22bb09da1d1ae14769ef4b3cbf6223ec34246dd"
+    },
+    "nullOmmer":null,
+    "ommerHash":"0xeb6fefdb008e34f3ec507d07dc05b4f4e84bc2a8f2e93a9310e9de0547725fc7",
+    "account":{
+      "__typename":"Account",
+      "address":"0x095e7baea6a6c7c4c2dfeb977efac326af552d87",
+      "balance":"0x1e",
+      "transactionCount":0,
+      "code":"0x",
+      "storage":"0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "nullAccount":null
+  }
+}
+"""
+
+[[units]]
+  name = "query.block(number) tx"
+  code = """
+{
+  block(number: 1) {
+    transactions {
+      __typename
+      hash
+      nonce
+      index
+      from {
+        __typename
+        address
+      }
+      to {
+        __typename
+        address
+      }
+      value
+      gasPrice
+      gas
+      inputData
+      block {
+        __typename
+        number
+      }
+      status
+      gasUsed
+      cumulativeGasUsed
+      createdContract {
+        __typename
+        address
+      }
+      logs {
+        __typename
+      }
+    }
+    transactionAt(index: 0) {
+      __typename
+    }
+  }
+}
+"""
+  result = """
+{
+  "block":{
+    "transactions":[
+      {
+        "__typename":"Transaction",
+        "hash":"0x4ffa559ae277813fb886d1fa8743a590ba6b699f9893de99f5d1bcea9620b278",
+        "nonce":0,
+        "index":0,
+        "from":{
+          "__typename":"Account",
+          "address":"0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
+        },
+        "to":{
+          "__typename":"Account",
+          "address":"0x095e7baea6a6c7c4c2dfeb977efac326af552d87"
+        },
+        "value":"0x0a",
+        "gasPrice":"0x0000000000000001",
+        "gas":314159,
+        "inputData":"0x",
+        "block":{
+          "__typename":"Block",
+          "number":1
+        },
+        "status":1,
+        "gasUsed":21000,
+        "cumulativeGasUsed":21000,
+        "createdContract":null,
+        "logs":[]
+      }
+    ],
+    "transactionAt":{
+      "__typename":"Transaction"
+    }
+  }
+}
+"""
+
+[[units]]
+  name = "query.block(hash)"
+  code = """
+{
+  block(hash: "0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c") {
+    __typename
+    hash
+    number
+  }
+}
+"""
+  result = """
+{
+  "block":{
+    "__typename":"Block",
+    "hash":"0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c",
+    "number":3
+  }
+}
+"""
+
+[[units]]
+  name = "query.block(empty)"
+  code = """
+{
+  block {
+    __typename
+    hash
+    number
+  }
+}
+"""
+  result = """
+{
+  "block":{
+    "__typename":"Block",
+    "hash":"0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c",
+    "number":3
+  }
+}
+"""
+
+[[units]]
+  name = "query.transaction"
+  code = """
+{
+  transaction(hash: "0x4ffa559ae277813fb886d1fa8743a590ba6b699f9893de99f5d1bcea9620b278") {
+    __typename
+    hash
+    value
+  }
+}
+"""
+  result = """
+{
+  "transaction":{
+    "__typename":"Transaction",
+    "hash":"0x4ffa559ae277813fb886d1fa8743a590ba6b699f9893de99f5d1bcea9620b278",
+    "value":"0x0a"
+  }
+}
+"""
+
+[[units]]
+  name = "query.gasPrice"
+  code = """
+{
+  gasPrice
+}
+"""
+  result = """
+{
+  "gasPrice":"0x0000000000000001"
+}
+"""
+
+[[units]]
+  name = "query.syncing"
+  code = """
+{
+  syncing {
+    __typename
+    startingBlock
+    currentBlock
+    highestBlock
+    pulledStates
+    knownStates
+  }
+}
+"""
+  result = """
+{
+  "syncing":{
+    "__typename":"SyncState",
+    "startingBlock":0,
+    "currentBlock":3,
+    "highestBlock":3,
+    "pulledStates":null,
+    "knownStates":null
+  }
+}
+"""
+
+[[units]]
+  name = "query.blocks"
+  code = """
+{
+  blocks(from: 0) {
+    __typename
+    number
+    hash
+  }
+}
+"""
+  result = """
+{
+  "blocks":[
+    {
+      "__typename":"Block",
+      "number":0,
+      "hash":"0x2b253498ad5e63a16978753398bad1fde371a3e513438297b52d65dc98e1db29"
+    },
+    {
+      "__typename":"Block",
+      "number":1,
+      "hash":"0xb2c29779b51f0d912226d7741a5c65046d897236d1254391feac424fa1e1bf31"
+    },
+    {
+      "__typename":"Block",
+      "number":2,
+      "hash":"0x02350242f009d1bc334c055d5c3f366796f0a602a32b87ee7115db84d547dec2"
+    },
+    {
+      "__typename":"Block",
+      "number":3,
+      "hash":"0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c"
+    }
+  ]
+}
+"""
+
+[[units]]
+  name = "query.block(number) estimateGas"
+  code = """
+{
+  block(number: 1) {
+    estimateGas(data: {
+      from: "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
+      to: "0x095e7baea6a6c7c4c2dfeb977efac326af552d87"
+      gas: 500000
+      gasPrice: 123
+      value: 12345
+    })
+  }
+}
+"""
+  result = """
+{
+  "block":{
+    "estimateGas":21000
+  }
+}
+"""
+
+[[units]]
+  name = "query.block(number) call"
+  code = """
+{
+  block(number: 1) {
+    call(data: {
+      from: "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
+      to: "0x095e7baea6a6c7c4c2dfeb977efac326af552d87"
+      gas: 500000
+      gasPrice: 123
+      value: 12345
+    }) {
+      __typename
+      data
+      gasUsed
+      status
+    }
+  }
+}
+"""
+  result = """
+{
+  "block":{
+    "call":{
+      "__typename":"CallResult",
+      "data":"0x",
+      "gasUsed":0,
+      "status":1
+    }
+  }
+}
+"""
+
+[[units]]
+  name = "mutation.sendRawTransaction"
+  code = """
+mutation {
+  sendRawTransaction(data: "0xf86080018304cb2f94095e7baea6a6c7c4c2dfeb977efac326af552d870a801ba077c7cd36820c71821c1aed59de46e70e701c4a8dd89c9ba508ab722210f60da8a03f29825d40c7c3f7bff3ca69267e0f3fb74b2d18b8c2c4e3c135b5d3b06e288d")
+}
+"""
+  result = """
+{
+  "sendRawTransaction":"0x4ffa559ae277813fb886d1fa8743a590ba6b699f9893de99f5d1bcea9620b278"
+}
+"""
+
+[[units]]
+  name = "query.protocolVersion"
+  code = """
+{
+  protocolVersion
+}
+"""
+  result = """
+{
+  "protocolVersion":63
+}
+"""
+
+[[units]]
+  name = "query.block(number) logs"
+  skip = true
+  code = """
+{
+  block(number: 1) {
+    logs
+  }
+}
+"""
+
+[[units]]
+  name = "query.logs"
+  skip = true
+  code = """
+{
+  logs {
+    __typename
+    index
+    account
+    topics
+    data
+    transaction
+  }
+}
+"""
+
+[[units]]
+  name = "query.pending"
+  skip = true
+  code = """
+{
+  pending {
+    __typename
+    transactionCount
+    transactions
+    account
+    call
+    estimateGas
+  }
+}
+"""

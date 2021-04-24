@@ -114,4 +114,5 @@ cliBuilder:
           ../stateless/test_witness_keys,
           ../stateless/test_block_witness,
           ../stateless/test_witness_json,
-          ./test_misc
+          ./test_misc,
+          ./test_graphql
