@@ -13,7 +13,7 @@
 ##
 
 import
-  ../../compu_helper,
+  ../../computation,
   ../../stack,
   ../../state,
   ../op_codes,

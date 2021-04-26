@@ -63,8 +63,8 @@ when defined(evmc_enabled) or not defined(vm2_enabled):
 else:
   import
     ./vm2/code_stream as aCst,
-    ./vm2/compu_helper as bChp,
-    ./vm2/computation as cVmc,
+    ./vm2/computation as bChp,
+    ./vm2/interpreter_dispatch as cVmc,
     ./vm2/interpreter/forks_list as dVmf,
     ./vm2/interpreter/gas_meter as eGmt,
     ./vm2/interpreter/op_codes as fVmo,
