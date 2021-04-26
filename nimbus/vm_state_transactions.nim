@@ -8,7 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled) or not defined(vm2_enabled):
+import
+  ./vm_compile_flags
+
+when evmc0_enabled or vm0_enabled:
   import
     vm/state_transactions as vmx
 else:

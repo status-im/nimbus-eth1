@@ -80,13 +80,20 @@ ifneq ($(ENABLE_EVMC), 0)
 NIM_PARAMS := $(NIM_PARAMS) -d:evmc_enabled
 endif
 
-# disabled by default, enable with ENABLE_VM2SLOW=1
-ifneq ($(if $(ENABLE_VM2LOWMEM),$(ENABLE_VM2LOWMEM),0),0)
-NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled -d:lowmem:1
+# VM2 flags: ENABLE_(VM|EVMC)2[LOWMEM]=0, enable with ENABLE_*=1
+ifneq ($(if $(ENABLE_EVMC2LOWMEM),$(ENABLE_EVMC2LOWMEM),0),0)
+NIM_PARAMS += -d:evmc2_enabled -d:lowmem:1
 else
-# disabled by default, enable with ENABLE_VM2=1
+ifneq ($(if $(ENABLE_EVMC2),$(ENABLE_EVMC2),0),0)
+NIM_PARAMS += -d:evmc2_enabled
+else
+ifneq ($(if $(ENABLE_VM2LOWMEM),$(ENABLE_VM2LOWMEM),0),0)
+NIM_PARAMS += -d:vm2_enabled -d:lowmem:1
+else
 ifneq ($(if $(ENABLE_VM2),$(ENABLE_VM2),0),0)
-NIM_PARAMS := $(NIM_PARAMS) -d:vm2_enabled
+NIM_PARAMS += -d:vm2_enabled
+endif
+endif
 endif
 endif
 

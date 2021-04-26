@@ -8,7 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled) or not defined(vm2_enabled):
+import
+  ./vm_compile_flags
+
+when evmc0_enabled or vm0_enabled:
   import
     ./vm/types as vmt
 else:
@@ -28,9 +31,14 @@ export
   vmt.TransactionTracer,
   vmt.VMFlag
 
-when defined(evmc_enabled):
+when evmc0_enabled:
   import
     ./vm/evmc_api as evmc
+elif evmc2_enabled:
+  import
+    ./vm2/evmc_api as evmc
+
+when evmc0_enabled or evmc2_enabled:
   export
     evmc.HostContext,
     evmc.accountExists,

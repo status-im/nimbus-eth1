@@ -8,13 +8,23 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled):
-  {.warning: "*** Compiling with EVMC enabled".}
+import
+  ./vm_compile_flags
 
-elif defined(vm2_enabled):
+when evmc2_enabled:
+  {.warning: "*** Compiling with EVMC2 enabled".}
+
+elif vm2_enabled:
   {.warning: "*** Compiling with VM2 enabled".}
 
+elif evmc0_enabled:
+  {.warning: "*** Compiling with EVMC enabled".}
+
+elif vm0_enabled:
+  {.warning: "*** Compiling with native NIM VM enabled".}
+
 else:
-  {.warning: "*** Compiling with standard NIM VM enabled".}
+  {.error: "Ooops - unsupported configuration".}
 
 {.used.}
+# End
