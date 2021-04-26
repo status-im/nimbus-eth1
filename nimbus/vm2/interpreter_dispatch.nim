@@ -13,137 +13,15 @@ const
   lowmem {.intdefine.}: int = 0
   lowMemoryCompileTime {.used.} = lowmem > 0
 
-  # debugging flag, dump macro info when asked for
-  noisy {.intdefine.}: int = 0
-  # isNoisy {.used.} = noisy > 0
-  isChatty {.used.} = noisy > 1
-
 import
-  ./compu_helper,
-  ./interpreter/[forks_list, gas_costs, gas_meter,
-                 op_codes, op_handlers, op_handlers/oph_defs],
   ./code_stream,
+  ./compu_helper,
+  ./interpreter/op_dispatcher,
   ./types,
-  chronicles,
-  macros
+  chronicles
 
 logScope:
   topics = "vm opcode"
-
-# ------------------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------------------
-
-template handleStopDirective(k: var Vm2Ctx) =
-  trace "op: Stop"
-  if not k.cpt.code.atEnd() and k.cpt.tracingEnabled:
-    # we only trace `REAL STOP` and ignore `FAKE STOP`
-    k.cpt.opIndex = k.cpt.traceOpCodeStarted(Stop)
-    k.cpt.traceOpCodeEnded(Stop, k.cpt.opIndex)
-
-
-template handleFixedGasCostsDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
-    if k.cpt.tracingEnabled:
-      k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
-
-    k.cpt.gasMeter.consumeGas(k.cpt.gasCosts[op].cost, reason = $op)
-    vmOpHandlers[fork][op].run(k)
-
-    if k.cpt.tracingEnabled:
-      k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
-
-
-template handleOtherDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
-    if k.cpt.tracingEnabled:
-      k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
-
-    vmOpHandlers[fork][op].run(k)
-
-    if k.cpt.tracingEnabled:
-      k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
-
-# ------------------------------------------------------------------------------
-# Private, big nasty doubly nested case matrix generator
-# ------------------------------------------------------------------------------
-
-# reminiscent of Mamy's opTableToCaseStmt() from original VM
-proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
-
-  # Outer case/switch => Op
-  let branchOnOp = quote do: `opArg`
-  result = nnkCaseStmt.newTree(branchOnOp)
-  for op in Op:
-
-    # Inner case/switch => Fork
-    let branchOnFork = quote do: `forkArg`
-    var forkCaseSubExpr = nnkCaseStmt.newTree(branchOnFork)
-    for fork in Fork:
-
-      let
-        asFork = quote do: Fork(`fork`)
-        asOp = quote do: Op(`op`)
-
-      let branchStmt = block:
-        if op == Stop:
-          quote do:
-            handleStopDirective(`k`)
-        elif BaseGasCosts[op].kind == GckFixed:
-          quote do:
-            handleFixedGasCostsDirective(`asFork`,`asOp`,`k`)
-        else:
-          quote do:
-            handleOtherDirective(`asFork`,`asOp`,`k`)
-
-      forkCaseSubExpr.add nnkOfBranch.newTree(
-        newIdentNode(fork.toSymbolName),
-        branchStmt)
-
-    # Wrap innner case/switch into outer case/switch
-    let branchStmt = block:
-      case op
-      of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
-        quote do:
-          `forkCaseSubExpr`
-          if not `k`.cpt.continuation.isNil:
-            break
-      of Stop, Return, Revert, SelfDestruct:
-        quote do:
-          `forkCaseSubExpr`
-          break
-      else:
-        quote do:
-          `forkCaseSubExpr`
-
-    result.add nnkOfBranch.newTree(
-      newIdentNode(op.toSymbolName),
-      branchStmt)
-
-  when isChatty:
-    echo ">>> ", result.repr
-
-
-macro genDispatchMatrix(fork: Fork; op: Op; k: Vm2Ctx): untyped {.used.} =
-  result = fork.toCaseStmt(op, k)
-
-
-template genLowMemDispatcher(fork: Fork; op: Op; k: Vm2Ctx) {.used.} =
-  if op == Stop:
-    handleStopDirective(k)
-    break
-
-  if BaseGasCosts[op].kind == GckFixed:
-    handleFixedGasCostsDirective(fork, op, k)
-  else:
-    handleOtherDirective(fork, op, k)
-
-  case c.instr
-  of Create, Create2, Call, CallCode, DelegateCall, StaticCall:
-    if not k.cpt.continuation.isNil:
-      break
-  of Return, Revert, SelfDestruct:
-    break
-  else:
-    discard
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -202,7 +80,7 @@ proc selectVM*(c: Computation, fork: Fork) {.gcsafe.} =
         else:
           {.warning: "*** Unsupported OS => no handler switch optimisation".}
 
-      genDispatchMatrix(fork, c.instr, desc)
+      genOptimisedDispatcher(fork, c.instr, desc)
 
     else:
       {.warning: "*** low memory compiler mode => program will be slow".}
