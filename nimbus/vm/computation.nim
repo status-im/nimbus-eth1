@@ -291,46 +291,61 @@ proc afterExecCreate(c: Computation) =
   else:
     c.rollback()
 
-proc beforeExec(c: Computation): bool =
+proc beforeExec(c: Computation): bool {.noinline.} =
   if not c.msg.isCreate:
     c.beforeExecCall()
     false
   else:
     c.beforeExecCreate()
 
-proc afterExec(c: Computation) =
+proc afterExec(c: Computation) {.noinline.} =
   if not c.msg.isCreate:
     c.afterExecCall()
   else:
     c.afterExecCreate()
 
-template chainTo*(c, toChild: Computation, after: untyped) =
+template chainTo*(c: Computation, toChild: typeof(c.child), after: untyped) =
   c.child = toChild
   c.continuation = proc() =
     after
 
-proc execCallOrCreate*(cParam: Computation) =
-  var (c, before) = (cParam, true)
-  defer:
-    while not c.isNil:
-      c.dispose()
-      c = c.parent
-
-  # No actual recursion, but simulate recursion including before/after/dispose.
-  while true:
-    while true:
-      if before and c.beforeExec():
-        break
+when vm_use_recursion:
+  # Recursion with tiny stack frame per level.
+  proc execCallOrCreate*(c: Computation) =
+    defer: c.dispose()
+    if c.beforeExec():
+      return
+    c.executeOpcodes()
+    while not c.continuation.isNil:
+      when evmc_enabled:
+        c.res = c.host.call(c.child[])
+      else:
+        execCallOrCreate(c.child)
+      c.child = nil
       c.executeOpcodes()
-      if c.continuation.isNil:
-        c.afterExec()
+    c.afterExec()
+
+else:
+  # No actual recursion, but simulate recursion including before/after/dispose.
+  proc execCallOrCreate*(cParam: Computation) =
+    var (c, before) = (cParam, true)
+    defer:
+      while not c.isNil:
+        c.dispose()
+        c = c.parent
+    while true:
+      while true:
+        if before and c.beforeExec():
+          break
+        c.executeOpcodes()
+        if c.continuation.isNil:
+          c.afterExec()
+          break
+        (before, c.child, c, c.parent) = (true, nil.Computation, c.child, c)
+      if c.parent.isNil:
         break
-      (before, c.child, c, c.parent) = (true, nil.Computation, c.child, c)
-    if c.parent.isNil:
-      break
-    c.dispose()
-    (before, c.parent, c) = (false, nil.Computation, c.parent)
-    (c.continuation)()
+      c.dispose()
+      (before, c.parent, c) = (false, nil.Computation, c.parent)
 
 proc merge*(c, child: Computation) =
   c.logEntries.add child.logEntries

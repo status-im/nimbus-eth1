@@ -387,6 +387,7 @@ proc executeOpcodes(c: Computation) =
 
   block:
     if not c.continuation.isNil:
+      (c.continuation)()
       c.continuation = nil
     elif c.execPrecompiles(fork):
       break

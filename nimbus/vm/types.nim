@@ -20,6 +20,11 @@ when defined(evmc_enabled):
   import
     ./evmc_api
 
+# Select between small-stack recursion and no recursion.  Both are good, fast,
+# low resource using methods.  Keep both here because true EVMC API requires
+# the small-stack method, but Chronos `async` is better without recursion.
+const vm_use_recursion* = defined(evmc_enabled)
+
 type
   VMFlag* = enum
     ExecutionOK
@@ -85,7 +90,11 @@ type
     savePoint*:             SavePoint
     instr*:                 Op
     opIndex*:               int
-    parent*, child*:        Computation
+    when defined(evmc_enabled):
+      child*:               ref nimbus_message
+      res*:                 nimbus_result
+    else:
+      parent*, child*:      Computation
     continuation*:          proc() {.gcsafe.}
 
   Error* = ref object

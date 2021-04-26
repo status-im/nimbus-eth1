@@ -31,7 +31,15 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
 
 proc test(name: string, lang = "c") =
   buildBinary name, "tests/", "-d:chronicles_log_level=ERROR"
-  exec "build/" & name
+  when not defined(windows):
+    # Verify stack usage is kept low by setting 1024k stack limit in tests.
+    exec "ulimit -s 1024 && build/" & name
+  else:
+    # Don't enforce stack limit in Windows, as we can't control it with these tools.
+    # See https://public-inbox.org/git/alpine.DEB.2.21.1.1709131448390.4132@virtualbox/
+    # When set by ulimit -s` in Bash, it's ignored.  Also, the command passed to
+    # NimScript `exec` on Windows is not a shell script.
+    exec "build/" & name
 
 task test, "Run tests":
   test "all_tests"

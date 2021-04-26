@@ -646,7 +646,8 @@ template genCreate(callName: untyped, opCode: Op): untyped =
     c.gasMeter.consumeGas(createMsgGas, reason="CREATE")
 
     when evmc_enabled:
-      let msg = nimbus_message(
+      let msg = new(nimbus_message)
+      msg[] = nimbus_message(
         kind: callKind.evmc_call_kind,
         depth: (c.msg.depth + 1).int32,
         gas: createMsgGas,
@@ -657,16 +658,15 @@ template genCreate(callName: untyped, opCode: Op): untyped =
         create2_salt: toEvmc(salt)
       )
 
-      var res = c.host.call(msg)
-      c.returnData = @(makeOpenArray(res.outputData, res.outputSize.int))
-      c.gasMeter.returnGas(res.gas_left)
+      c.chainTo(msg):
+        c.returnData = @(makeOpenArray(c.res.outputData, c.res.outputSize.int))
+        c.gasMeter.returnGas(c.res.gas_left)
 
-      if res.status_code == EVMC_SUCCESS:
-        c.stack.top(res.create_address)
+        if c.res.status_code == EVMC_SUCCESS:
+          c.stack.top(c.res.create_address)
 
-      # TODO: a good candidate for destructor
-      if not res.release.isNil:
-        res.release(res)
+        if not c.res.release.isNil:
+          c.res.release(c.res)
     else:
       let childMsg = Message(
         kind: callKind,
@@ -829,7 +829,8 @@ template genCall(callName: untyped, opCode: Op): untyped =
         return
 
     when evmc_enabled:
-      let msg = nimbus_message(
+      let msg = new(nimbus_message)
+      msg[] = nimbus_message(
         kind: callKind.evmc_call_kind,
         depth: (c.msg.depth + 1).int32,
         gas: childGasLimit,
@@ -841,22 +842,21 @@ template genCall(callName: untyped, opCode: Op): untyped =
         flags: flags.uint32
       )
 
-      var res = c.host.call(msg)
-      c.returnData = @(makeOpenArray(res.outputData, res.outputSize.int))
+      c.chainTo(msg):
+        c.returnData = @(makeOpenArray(c.res.outputData, c.res.outputSize.int))
 
-      let actualOutputSize = min(memOutLen, c.returnData.len)
-      if actualOutputSize > 0:
-        c.memory.write(memOutPos,
-          c.returnData.toOpenArray(0, actualOutputSize - 1))
+        let actualOutputSize = min(memOutLen, c.returnData.len)
+        if actualOutputSize > 0:
+          c.memory.write(memOutPos,
+            c.returnData.toOpenArray(0, actualOutputSize - 1))
 
-      c.gasMeter.returnGas(res.gas_left)
+        c.gasMeter.returnGas(c.res.gas_left)
 
-      if res.status_code == EVMC_SUCCESS:
-        c.stack.top(1)
+        if c.res.status_code == EVMC_SUCCESS:
+          c.stack.top(1)
 
-      # TODO: a good candidate for destructor
-      if not res.release.isNil:
-        res.release(res)
+        if not c.res.release.isNil:
+          c.res.release(c.res)
     else:
       let msg = Message(
         kind: callKind,

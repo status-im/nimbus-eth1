@@ -123,7 +123,7 @@ proc hostEmitLogImpl(ctx: Computation, address: EthAddress,
   log.address = address
   ctx.addLogEntry(log)
 
-template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
+proc enterCreateImpl(c: Computation, m: nimbus_message): Computation =
   # TODO: use evmc_message to evoid copy
   let childMsg = Message(
     kind: CallKind(m.kind),
@@ -133,10 +133,9 @@ template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     value: Uint256.fromEvmc(m.value),
     data: @(makeOpenArray(m.inputData, m.inputSize.int))
     )
+  return newComputation(c.vmState, childMsg, Uint256.fromEvmc(m.create2_salt))
 
-  let child = newComputation(c.vmState, childMsg, Uint256.fromEvmc(m.create2_salt))
-  child.execCallOrCreate()
-
+template leaveCreateImpl(c, child: Computation, res: nimbus_result) =
   if not child.shouldBurnGas:
     res.gas_left = child.gasMeter.gasRemaining
 
@@ -153,7 +152,7 @@ template createImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
       copyMem(res.output_data, child.output[0].addr, child.output.len)
       res.release = hostReleaseResultImpl
 
-template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
+template enterCallImpl(c: Computation, m: nimbus_message): Computation =
   let childMsg = Message(
     kind: CallKind(m.kind),
     depth: m.depth,
@@ -165,10 +164,9 @@ template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     data: @(makeOpenArray(m.inputData, m.inputSize.int)),
     flags: MsgFlags(m.flags)
     )
+  newComputation(c.vmState, childMsg)
 
-  let child = newComputation(c.vmState, childMsg)
-  child.execCallOrCreate()
-
+template leaveCallImpl(c, child: Computation, res: nimbus_result) =
   if not child.shouldBurnGas:
     res.gas_left = child.gasMeter.gasRemaining
 
@@ -185,11 +183,22 @@ template callImpl(c: Computation, m: nimbus_message, res: nimbus_result) =
     copyMem(res.output_data, child.output[0].addr, child.output.len)
     res.release = hostReleaseResultImpl
 
-proc hostCallImpl(ctx: Computation, msg: var nimbus_message): nimbus_result {.cdecl.} =
+proc enterHostCall(c: Computation, msg: var nimbus_message): Computation {.noinline.} =
   if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
-    createImpl(ctx, msg, result)
+    enterCreateImpl(c, msg)
   else:
-    callImpl(ctx, msg, result)
+    enterCallImpl(c, msg)
+
+proc leaveHostCall(c, child: Computation, kind: evmc_call_kind): nimbus_result {.noinline.} =
+  if kind == EVMC_CREATE or kind == EVMC_CREATE2:
+    leaveCreateImpl(c, child, result)
+  else:
+    leaveCallImpl(c, child, result)
+
+proc hostCallImpl(ctx: Computation, msg: var nimbus_message): nimbus_result {.cdecl.} =
+  let child = enterHostCall(ctx, msg)
+  child.execCallOrCreate()
+  leaveHostCall(ctx, child, msg.kind)
 
 proc initHostInterface(): evmc_host_interface =
   result.account_exists = cast[evmc_account_exists_fn](hostAccountExistsImpl)
