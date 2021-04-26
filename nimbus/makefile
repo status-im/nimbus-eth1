@@ -51,6 +51,12 @@ NIMDOC_FLAGS := --verbosity:0 --hints:off --warnings:off
 NIMDOC_FLAGS += -d:debug -d:disable_libbacktrace
 NIMDOC_FLAGS += $(NIMFLAGS)
 
+# Nim check flags
+NIMCHK_FLAGS := c -r --verbosity:0 --hints:off --warnings:off
+
+# Flags vor compiling VM2
+VM2ENABLED   := -d:vm2_enabled
+
 # Markdown compiler (test for discount tool with tables support)
 MD_CMD     := markdown
 MD_TEST    := $(MD_CMD) -VV 2>/dev/null|grep -q TABLES
@@ -74,6 +80,9 @@ help::
 	echo "          docs-update  -- process missing doc pages"
 	echo "          docs-index   -- index collected docs"
 	echo
+	echo "          check_vm     -- run \"nim c -r ..\" on each native VM source file"
+	echo "          check_vm2    -- run \"nim c -r ..\" on each VM2 source file"
+	echo
 	echo "          clean        -- clean up generated and backup files (not docs)"
 	echo "          clean-exe    -- clean up generated executables"
 	echo "          clean-docs   -- clean up generated docs and extra files"
@@ -83,7 +92,7 @@ help::
 	echo
 
 # ------------------------------------------------------------------------------
-# Build indexed dox
+# Build indexed docs
 # ------------------------------------------------------------------------------
 
 # Automatic rule for updating single html/idx file
@@ -91,9 +100,10 @@ docs/%.html : %.nim
 #	use compat option if it works with the nim compiler
 	@mkdir -p docs
 	@nim=$(NIM_EXE); doc_root="$(DOC_ROOT)"; \
+	unset vm2flag; case "$<" in *vm2/*)vm2flag="$(VM2ENABLED)";; esac; \
 	export NIMBLE_DIR=$(NIMBLE_DIR); \
 	(set -x; $$nim doc --outdir:docs --docRoot:"$$doc_root" --index:on \
-		--errorMax:0 $(NIMDOC_FLAGS) \
+		$$vm2flag --errorMax:0 $(NIMDOC_FLAGS) \
 		"$<" $(MUFFLE)) || true
 
 # Automatic rule for updating markdown files
@@ -162,6 +172,42 @@ docs-index:: docs-index-helper
 .SILENT: docs
 docs:: docs-update
 docs:: docs-index
+
+# ------------------------------------------------------------------------------
+# Run local compilation by source file
+# ------------------------------------------------------------------------------
+
+# Compile & run individual VM2 files. Note that the source file
+# "state_transactions.nim" needs the flag -d:vm2_enabled set in order
+# to compile.
+check_vm2:
+	@vm2exe=`echo $(EXE_FILES)|tr ' ' '\n'|sed '/vm2\//!d'`;\
+	 nim=$(NIM_EXE); \
+	 export NIMBLE_DIR=$(NIMBLE_DIR); \
+	 $$nim --version | sed q; \
+	 for path in `echo "$$vm2exe"`; do ( \
+	   dir=`dirname "$$path"`; \
+	   src=`basename "$$path"`; \
+	   unset vm2flag; case "$$src" in \
+	      state_transactions) vm2flag="$(VM2ENABLED)";\
+           esac; \
+	   cd "$$dir" ; \
+	   (set -x;$$nim $(NIMCHK_FLAGS) $$vm2flag "$$src.nim" $(MUFFLE)) || \
+	      echo "*** FAIL $$path"; \
+	); done || true
+
+check_vm:
+	@vmexe=`echo $(EXE_FILES)|tr ' ' '\n'|sed '/vm\//!d'`;\
+	 nim=$(NIM_EXE); \
+	 export NIMBLE_DIR=$(NIMBLE_DIR); \
+	 $$nim --version | sed q; \
+	 for path in `echo "$$vmexe"`; do ( \
+	   dir=`dirname "$$path"`; \
+	   src=`basename "$$path"`; \
+	   cd "$$dir" ; \
+	   (set -x;$$nim $(NIMCHK_FLAGS) "$$src.nim" $(MUFFLE)) || \
+	      echo "*** FAIL $$path"; \
+	); done || true
 
 # ------------------------------------------------------------------------------
 # Clean up etc.
