@@ -15,7 +15,7 @@
 import
   ../../../errors,
   ../../code_stream,
-  ../../compu_helper,
+  ../../computation,
   ../../memory,
   ../../stack,
   ../../state,

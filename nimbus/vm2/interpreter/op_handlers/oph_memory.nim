@@ -16,7 +16,7 @@ import
   ../../../db/accounts_cache,
   ../../../errors,
   ../../code_stream,
-  ../../compu_helper,
+  ../../computation,
   ../../memory,
   ../../stack,
   ../../state,

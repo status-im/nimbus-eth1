@@ -17,7 +17,7 @@ import
   ../constants,
   ../db/accounts_cache,
   ./code_stream,
-  ./compu_helper,
+  ./computation,
   ./interpreter/op_dispatcher,
   ./message,
   ./precompiles,

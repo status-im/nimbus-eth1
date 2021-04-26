@@ -14,7 +14,7 @@
 
 import
   ../../../constants,
-  ../../compu_helper,
+  ../../computation,
   ../../stack,
   ../../types,
   ../op_codes,

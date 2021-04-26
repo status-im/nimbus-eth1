@@ -15,7 +15,7 @@
 import
   ../../../constants,
   ../../../errors,
-  ../../compu_helper,
+  ../../computation,
   ../../memory,
   ../../stack,
   ../../state,
