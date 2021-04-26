@@ -13,93 +13,13 @@ import
   sets, eth/[common, keys],
   ../constants,
   ./compu_helper,
-  ./interpreter/[op_codes, gas_meter, gas_costs, forks_list],
-  ./code_stream, ./memory, ./message, ./stack, ./types, ./state,
+  ./interpreter/forks_list,
+  ./message, ./types, ./state,
   ../db/accounts_cache,
-  ./precompiles,
-  ./transaction_tracer, ../utils
+  ./precompiles
 
 logScope:
   topics = "vm computation"
-
-proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
-  if c.msg.kind == evmcCreate:
-    let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
-    result = generateAddress(c.msg.sender, creationNonce)
-  else:
-    result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
-
-
-proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Computation =
-  new result
-  result.vmState = vmState
-  result.msg = message
-  result.memory = Memory()
-  result.stack = newStack()
-  result.returnStack = @[]
-  result.gasMeter.init(message.gas)
-  result.touchedAccounts = initHashSet[EthAddress]()
-  result.suicides = initHashSet[EthAddress]()
-
-  if result.msg.isCreate():
-    result.msg.contractAddress = result.generateContractAddress(salt)
-    result.code = newCodeStream(message.data)
-    message.data = @[]
-  else:
-    result.code = newCodeStream(vmState.readOnlyStateDb.getCode(message.codeAddress))
-
-proc isOriginComputation*(c: Computation): bool =
-  # Is this computation the computation initiated by a transaction
-  c.msg.sender == c.vmState.txOrigin
-
-template isSuccess*(c: Computation): bool =
-  c.error.isNil
-
-template isError*(c: Computation): bool =
-  not c.isSuccess
-
-func shouldBurnGas*(c: Computation): bool =
-  c.isError and c.error.burnsGas
-
-proc isSuicided*(c: Computation, address: EthAddress): bool =
-  result = address in c.suicides
-
-proc snapshot*(c: Computation) =
-  c.savePoint = c.vmState.accountDb.beginSavePoint()
-
-proc commit*(c: Computation) =
-  c.vmState.accountDb.commit(c.savePoint)
-
-proc dispose*(c: Computation) {.inline.} =
-  c.vmState.accountDb.safeDispose(c.savePoint)
-  c.savePoint = nil
-
-proc rollback*(c: Computation) =
-  c.vmState.accountDb.rollback(c.savePoint)
-
-proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
-  result = true
-
-  let contractCode = c.output
-  if contractCode.len == 0: return
-
-  if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
-    debug "Contract code size exceeds EIP170", limit=EIP170_CODE_SIZE_LIMIT, actual=contractCode.len
-    return false
-
-  let storageAddr = c.msg.contractAddress
-  if c.isSuicided(storageAddr): return
-
-  let gasParams = GasParams(kind: Create, cr_memLength: contractCode.len)
-  let codeCost = c.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
-  if c.gasMeter.gasRemaining >= codeCost:
-    c.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
-    c.vmState.mutateStateDb:
-      db.setCode(storageAddr, contractCode)
-    result = true
-  else:
-    if fork < FkHomestead or fork >= FkByzantium: c.output = @[]
-    result = false
 
 proc initAddress(x: int): EthAddress {.compileTime.} = result[19] = x.byte
 const ripemdAddr = initAddress(3)
@@ -180,11 +100,6 @@ proc afterExec(c: Computation) =
   else:
     c.afterExecCreate()
 
-template chainTo*(c, toChild: Computation, after: untyped) =
-  c.child = toChild
-  c.continuation = proc() =
-    after
-
 proc execCallOrCreate*(cParam: Computation) =
   var (c, before) = (cParam, true)
   defer:
@@ -207,24 +122,6 @@ proc execCallOrCreate*(cParam: Computation) =
     c.dispose()
     (before, c.parent, c) = (false, nil.Computation, c.parent)
     (c.continuation)()
-
-proc merge*(c, child: Computation) =
-  c.logEntries.add child.logEntries
-  c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-  c.suicides.incl child.suicides
-  c.touchedAccounts.incl child.touchedAccounts
-
-proc getGasRefund*(c: Computation): GasInt =
-  if c.isSuccess:
-    result = c.gasMeter.gasRefunded
-
-proc refundSelfDestruct*(c: Computation) =
-  let cost = gasFees[c.fork][RefundSelfDestruct]
-  c.gasMeter.refundGas(cost * c.suicides.len)
-
-
-proc traceError*(c: Computation) {.inline.} =
-  c.vmState.tracer.traceError(c)
 
 
 import interpreter_dispatch

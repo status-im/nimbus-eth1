@@ -35,6 +35,9 @@ import
 export
   xmc.accountExists,
   xmc.addLogEntry,
+  xmc.chainTo,
+  xmc.commit,
+  xmc.dispose,
   xmc.fork,
   xmc.getBalance,
   xmc.getBlockHash,
@@ -47,37 +50,35 @@ export
   xmc.getDifficulty,
   xmc.getGasLimit,
   xmc.getGasPrice,
+  xmc.getGasRefund,
   xmc.getOrigin,
   xmc.getStorage,
   xmc.getTimestamp,
+  xmc.isError,
+  xmc.isOriginComputation,
+  xmc.isSuccess,
+  xmc.isSuicided,
+  xmc.merge,
+  xmc.newComputation,
   xmc.prepareTracer,
+  xmc.refundSelfDestruct,
+  xmc.rollback,
   xmc.selfDestruct,
   xmc.setError,
+  xmc.shouldBurnGas,
+  xmc.snapshot,
+  xmc.traceError,
   xmc.traceOpCodeEnded,
   xmc.traceOpCodeStarted,
-  xmc.tracingEnabled
+  xmc.tracingEnabled,
+  xmc.writeContract
+
 
 import
   ./computation as vmc
 export
-  vmc.commit,
-  vmc.dispose,
   vmc.execCallOrCreate,
-  vmc.chainTo,
-  vmc.executeOpcodes,
-  vmc.getGasRefund,
-  vmc.isError,
-  vmc.isOriginComputation,
-  vmc.isSuccess,
-  vmc.isSuicided,
-  vmc.merge,
-  vmc.newComputation,
-  vmc.refundSelfDestruct,
-  vmc.rollback,
-  vmc.shouldBurnGas,
-  vmc.snapshot,
-  vmc.traceError,
-  vmc.writeContract
+  vmc.executeOpcodes
 
 
 import
