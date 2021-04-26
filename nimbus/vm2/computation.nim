@@ -14,6 +14,7 @@ import
   ../constants,
   ./compu_helper,
   ./interpreter/forks_list,
+  ./interpreter_dispatch,
   ./message, ./types, ./state,
   ../db/accounts_cache,
   ./precompiles
@@ -21,9 +22,12 @@ import
 logScope:
   topics = "vm computation"
 
-proc initAddress(x: int): EthAddress {.compileTime.} = result[19] = x.byte
-const ripemdAddr = initAddress(3)
-proc executeOpcodes*(c: Computation) {.gcsafe.}
+const
+  ripemdAddr = block:
+    proc initAddress(x: int): EthAddress {.compileTime.} =
+      result[19] = x.byte
+    initAddress(3)
+
 
 proc beforeExecCall(c: Computation) =
   c.snapshot()
@@ -100,6 +104,26 @@ proc afterExec(c: Computation) =
   else:
     c.afterExecCreate()
 
+proc executeOpcodes*(c: Computation) =
+  let fork = c.fork
+
+  block:
+    if not c.continuation.isNil:
+      c.continuation = nil
+    elif c.execPrecompiles(fork):
+      break
+
+    try:
+      c.selectVM(fork)
+    except CatchableError as e:
+      c.setError(
+        &"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
+
+  if c.isError() and c.continuation.isNil:
+    if c.tracingEnabled: c.traceError()
+    debug "executeOpcodes error", msg=c.error.info
+
+
 proc execCallOrCreate*(cParam: Computation) =
   var (c, before) = (cParam, true)
   defer:
@@ -122,25 +146,3 @@ proc execCallOrCreate*(cParam: Computation) =
     c.dispose()
     (before, c.parent, c) = (false, nil.Computation, c.parent)
     (c.continuation)()
-
-
-import interpreter_dispatch
-
-proc executeOpcodes(c: Computation) =
-  let fork = c.fork
-
-  block:
-    if not c.continuation.isNil:
-      c.continuation = nil
-    elif c.execPrecompiles(fork):
-      break
-
-    try:
-      c.selectVM(fork)
-    except CatchableError as e:
-      c.setError(
-        &"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
-
-  if c.isError() and c.continuation.isNil:
-    if c.tracingEnabled: c.traceError()
-    debug "executeOpcodes error", msg=c.error.info

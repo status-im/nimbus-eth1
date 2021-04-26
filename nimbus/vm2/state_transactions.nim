@@ -8,41 +8,32 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-const
-  # needed for compiling locally
-  kludge {.intdefine.}: int = 0
-  breakCircularDependency {.used.} = kludge > 0
+# This source must have the <vm2_enabled> compiler flag set.
+#
+# why:
+#   ../config, ../transaction,  etc include ../vm_* interface files which in
+#   turn will refer to the ../vm/* definitions rather than ../vm2/* unless the
+#    <vm2_enabled> compiler flag is set.
+#
+when not defined(vm2_enabled):
+  {.error: "NIM flag must be set: -d:vm2_enabled".}
 
 import
+  ../config,
+  ../constants,
+  ../db/accounts_cache,
   ../transaction,
+  ./compu_helper,
+  ./computation,
   ./interpreter,
+  ./interpreter/[forks_list, gas_costs, gas_meter],
+  ./state,
+  ./types,
   chronicles,
+  eth/common,
   eth/common/eth_types,
   options,
   sets
-
-# ------------------------------------------------------------------------------
-# Kludge BEGIN
-# ------------------------------------------------------------------------------
-
-when not breakCircularDependency:
-  import
-    ../config,
-    ../constants,
-    ../db/accounts_cache,
-    ./computation,
-    ./interpreter/gas_costs,
-    ./state,
-    ./types,
-    eth/common
-
-else:
-  import
-    ./interpreter/op_handlers/oph_kludge
-
-# ------------------------------------------------------------------------------
-# Kludge END
-# ------------------------------------------------------------------------------
 
 proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
   ## this proc will be called each time a new transaction
@@ -81,6 +72,14 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
   result = newComputation(vmState, msg)
   doAssert result.isOriginComputation
 
+
+proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
+  let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
+  c.gasMeter.returnGas min(c.getGasRefund(), maxRefund)
+  c.vmState.mutateStateDB:
+    db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)
+
+
 proc execComputation*(c: Computation) =
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:
@@ -95,9 +94,3 @@ proc execComputation*(c: Computation) =
     c.vmState.touchedAccounts.incl c.touchedAccounts
 
   c.vmstate.status = c.isSuccess
-
-proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
-  let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
-  c.gasMeter.returnGas min(c.getGasRefund(), maxRefund)
-  c.vmState.mutateStateDB:
-    db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)

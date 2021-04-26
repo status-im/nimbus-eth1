@@ -12,20 +12,14 @@
 ## ============================================
 ##
 
-# Including types.nim and others unless included (not imported) into
-# oph_kludge.nim
-#
-when not declared(Computation):
-  import
-    ../../../db/accounts_cache,
-    ../../state,
-    ../../types,
-    ../gas_costs,
-    ../gas_meter,
-    eth/common
-
 import
+  ../../../db/accounts_cache,
   ../../../errors,
+  ../../state,
+  ../../types,
+  ../gas_costs,
+  ../gas_meter,
+  eth/common,
   eth/common/eth_types,
   macros,
   stint
