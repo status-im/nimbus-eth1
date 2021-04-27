@@ -1,9 +1,9 @@
 name: nimbus-eth1 CI
 on:
   push:
-    paths-ignore: ['doc/**', 'docs/**', '**/*.md']
+    paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
   pull_request:
-    paths-ignore: ['doc/**', 'docs/**', '**/*.md']
+    paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
 
 jobs:
   build:
