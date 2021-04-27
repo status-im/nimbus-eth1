@@ -77,7 +77,7 @@ type
   PublicNetwork* = enum
     CustomNet = 0
     MainNet = 1
-    MordenNet = 2
+    # No longer used: MordenNet = 2
     RopstenNet = 3
     RinkebyNet = 4
     GoerliNet = 5
@@ -642,8 +642,6 @@ proc setNetwork(conf: var NetConfiguration, id: PublicNetwork) =
   case id
   of MainNet:
     conf.bootNodes.setBootnodes(MainnetBootnodes)
-  of MordenNet:
-    discard
   of RopstenNet:
     conf.bootNodes.setBootnodes(RopstenBootnodes)
   of RinkebyNet:
@@ -711,9 +709,9 @@ proc processNetArguments(key, value: string): ConfigStatus =
     result = processInteger(value, res)
     if result == Success:
       config.net.discPort = uint16(res and 0xFFFF)
-  elif skey == "metricsserver":
+  elif skey == "metrics":
     config.net.metricsServer = true
-  elif skey == "metricsserverport":
+  elif skey == "metricsport":
     var res = 0
     result = processInteger(value, res)
     if result == Success:
@@ -916,10 +914,10 @@ USAGE:
   nimbus [options]
 
 ETHEREUM OPTIONS:
-  --keystore:<value>      Directory for the keystore (default = inside the datadir)
   --datadir:<value>       Base directory for all blockchain-related data
-  --prune:<value>         Blockchain prune mode(full or archive)
-  --import:<path>         import rlp encoded block(s), validate, write to db and quit
+  --keystore:<value>      Directory for the keystore (default: inside datadir)
+  --prune:<value>         Blockchain prune mode (full or archive, default: full)
+  --import:<path>         Import RLP encoded block(s), validate, write to database and quit
 
 NETWORKING OPTIONS:
   --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
@@ -928,20 +926,23 @@ NETWORKING OPTIONS:
   --staticnodes:<value>   Comma separated enode URLs to connect with
   --port:<value>          Network listening TCP port (default: 30303)
   --discport:<value>      Network listening UDP port (defaults to --port argument)
-  --metricsServer         Enable the metrics HTTP server
-  --metricsServerPort:<value> Metrics HTTP server port on localhost (default: 9093)
   --maxpeers:<value>      Maximum number of network peers (default: 25)
   --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
   --nat:<value>           NAT port mapping mechanism (any|none|upnp|pmp|<external IP>) (default: "any")
   --nodiscover            Disables the peer discovery mechanism (manual peer addition)
-  --v5discover            Enables the experimental RLPx V5 (Topic Discovery) mechanism
+  --v5discover            Enables the experimental RLPx V5 (topic discovery) mechanism
   --nodekey:<value>       P2P node private key (as hexadecimal string)
-  --networkid:<value>     Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby) (default: $7)
-  --testnet               Use Ethereum Default Test Network (Ropsten)
-  --ropsten               Use Ethereum Ropsten Test Network
-  --rinkeby               Use Ethereum Rinkeby Test Network
   --ident:<value>         Client identifier (default is '$1')
   --protocols:<value>     Enable specific set of protocols (default: $4)
+
+ETHEREUM NETWORK OPTIONS:
+  --mainnet               Use Ethereum main network (default)
+  --testnet               Use Ropsten test network
+  --ropsten               Use Ropsten test network (proof-of-work, the one most like Ethereum mainnet)
+  --goerli                Use Görli test network (proof-of-authority, works across all clients)
+  --rinkeby               Use Rinkeby test network (proof-of-authority, for those running Geth clients)
+  --kovan                 Use Kovan test network (proof-of-authority, for those running OpenEthereum clients)
+  --networkid:<value>     Network id (0=custom, 1=mainnet, 3=ropsten, 4=rinkeby, 5=goerli, 42=kovan, other...)
   --customnetwork:<path>  Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)
 
 WHISPER OPTIONS:
@@ -949,18 +950,20 @@ WHISPER OPTIONS:
   --shh-pow:<value>       Minimum POW accepted (default: $6)
   --shh-light             Run as Whisper light client (no outgoing messages)
 
-API AND CONSOLE OPTIONS:
+LOCAL SERVICE OPTIONS:
+  --metrics               Enable the metrics HTTP server
+  --metricsport:<value>   Set port (always on localhost) metrics HTTP server will bind to (default: 9093)
   --rpc                   Enable the HTTP-RPC server
-  --rpcbind:<value>       HTTP-RPC server will bind to given comma separated address:port pairs (default: 127.0.0.1:8545)
-  --rpcapi:<value>        Enable specific set of rpc api from comma separated list(eth, shh, debug)
-  --graphql               Enable the HTTP-Graphql server
-  --graphqlbind:<value>   HTTP-Graphql server will bind to given address:port pair (default: 127.0.0.1:8547)
+  --rpcbind:<value>       Set address:port pair(s) (comma-separated) HTTP-RPC server will bind to (default: localhost:8545)
+  --rpcapi:<value>        Enable specific set of RPC API from list (comma-separated) (available: eth, shh, debug)
+  --graphql               Enable the HTTP-GraphQL server
+  --graphqlbind:<value>   Set address:port pair GraphQL server will bind (default: localhost:8547)
 
 LOGGING AND DEBUGGING OPTIONS:
   --log-level:<value>     One of: $2 (default: $3)
   --log-file:<value>      Optional log file, replacing stdout
-  --logMetrics            Enable metrics logging
-  --logMetricsInterval:<value> Interval at which to log metrics, in seconds (default: 10)
+  --logmetrics            Enable metrics logging
+  --logmetricsinterval:<value> Interval at which to log metrics, in seconds (default: 10)
   --debug                 Enable debug mode
   --test:<value>          Perform specified test
 """ % [
