@@ -41,7 +41,6 @@ proc processU256(val: string, o: var Uint256): ConfigStatus =
 proc processNetId(val: string, o: var PublicNetwork): ConfigStatus =
   case val.toLowerAscii()
   of "main": o = MainNet
-  of "morden": o = MordenNet
   of "ropsten": o = RopstenNet
   of "rinkeby": o = RinkebyNet
   of "goerli": o = GoerliNet
