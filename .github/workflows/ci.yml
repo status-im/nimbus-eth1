@@ -1,5 +1,9 @@
 name: nimbus-eth1 CI
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore: ['doc/**', 'docs/**', '**/*.md']
+  pull_request:
+    paths-ignore: ['doc/**', 'docs/**', '**/*.md']
 
 jobs:
   build:
