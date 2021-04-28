@@ -65,6 +65,14 @@ cat genesis.json
 # Don't immediately abort, some imports are meant to fail
 set +e
 
+# Load the test chain if present
+echo "Loading initial blockchain..."
+if [ -f /chain.rlp ]; then
+	$nimbus $FLAGS --import:/chain.rlp
+else
+	echo "Warning: chain.rlp not found."
+fi
+
 # Load the remainder of the test chain
 echo "Loading remaining individual blocks..."
 if [ -d /blocks ]; then
@@ -76,7 +84,11 @@ fi
 set -e
 
 # Configure RPC.
-FLAGS="$FLAGS --rpc --rpcapi:eth,debug --rpcbind:0.0.0.0:8545"
+if [ "$HIVE_GRAPHQL_ENABLED" != "" ]; then
+  FLAGS="$FLAGS --graphql --graphqlbind:0.0.0.0:8545"
+else
+  FLAGS="$FLAGS --rpc --rpcapi:eth,debug --rpcbind:0.0.0.0:8545"
+fi
 
 echo "Running nimbus with flags $FLAGS"
 $nimbus $FLAGS
