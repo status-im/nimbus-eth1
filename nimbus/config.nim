@@ -374,8 +374,8 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   result = Success
   var
     chainId = 1.ChainId
-    homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = 0.toBlockNumber
-    petersburgBlock, istanbulBlock, muirGlacierBlock, berlinBlock = 0.toBlockNumber
+    homesteadBlock, daoForkblock, eip150Block, eip155Block, eip158Block, byzantiumBlock, constantinopleBlock = high(BlockNumber).toBlockNumber
+    petersburgBlock, istanbulBlock, muirGlacierBlock, berlinBlock = high(BlockNumber).toBlockNumber
     eip150Hash, mixHash : MDigest[256]
     daoForkSupport = false
     nonce = 66.toBlockNonce
