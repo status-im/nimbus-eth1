@@ -33,10 +33,14 @@ proc importRlpBlock*(importFile: string, chainDB: BasechainDB) =
   # TODO: probably we need to put it in one struct
   var headers: seq[BlockHeader]
   var bodies : seq[BlockBody]
+  let head = chainDB.getCanonicalHead()
 
   while true:
-    headers.add rlp.read(EthHeader).header
-    bodies.add rlp.readRecordType(BlockBody, false)
+    let header = rlp.read(EthHeader).header
+    let body = rlp.readRecordType(BlockBody, false)
+    if header.blockNumber > head.blockNumber:
+      headers.add header
+      bodies.add body
     if not rlp.hasData:
       break
 
