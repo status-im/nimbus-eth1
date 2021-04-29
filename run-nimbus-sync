@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Script to run Nimbus-eth1 syncing to any of the networks that Geth supports
-# by name, connecting to a single dedicated peer for that network.
+# Script to run Nimbus-eth1 on the same networks Geth supports by name,
+# with a trusted connection to a dedicated peer for that network.
 #
 # All protocols are disabled other than the minimum we need for block sync.
 #
@@ -26,8 +26,12 @@
 #
 set -e -u -o pipefail
 
-# Defaults to goerli, but other testnet or mainnet can be given.
+# First argument says which testnet, or use mainnet for that.
+# Defaults to goerli if omitted.
 testnet=${1:-goerli}
+
+# Additional arguments after the first are passed to Nimbus.
+shift || :
 
 staticnode_geth_mainnet='enode://7af995207d620d363ffbdac3216c45140c8fc31a1a30cac94dfad94713ba6b03efeb4f8dd4c0d676ec3e32a9eac2804560c3d3001c7551a2bb955c1e5ce22d17@mainnet.geth.ethereum.arxlogic.com:30303'
 staticnode_geth_goerli='enode://9a8651c02d14ffbf7e328cd6c31307d90c9411673deeec819a1b7a205eed121c7eea192146937958608eaebff25dcd232fce958f031bf82ba3d55deaac3d0715@goerli.geth.ethereum.arxlogic.com:30303';
@@ -81,13 +85,31 @@ resolve_enodes() {
 }
 resolve_enodes
 
+datadir="$HOME"/.nimbus/"$testnet"
+
+# Use a stable nodekey if we have one, to ensure the remote Geth almost always
+# accepts our connections.  The nodekey's corresponding `enode` URL must be
+# added with `admin.addTrustedPeer` to the remote Geth.  This isn't perfect.
+# Sometimes Geth is too busy even for a trusted peer.  But usually it works.
+#
+# Note, this nodekey file isn't created automatically by nimbus-eth1 at the
+# moment.  We have to have done it manually before now.
+#
+if [ -e "$datadir"/nimbus/nodekey ]; then
+    nodekey=$(cat "$datadir"/nimbus/nodekey)
+    if [ -n "$nodekey" ]; then
+       set -- --nodekey:"$nodekey"
+    fi
+fi
+
 # So the process name shows up without a path in `netstat`.
 export PATH=$HOME/Status/nimbus-eth1/build:$PATH
 
 exec nimbus \
-     --datadir:$HOME/.nimbus/"$testnet" $net_option \
+     --datadir:"$datadir" $net_option \
      --prune:full \
      --logMetrics --logMetricsInterval:5 \
      --log-level:TRACE \
      --nodiscover --nat:none --port:$port --protocols:eth \
-     --staticnodes:"$staticnodes"
+     --staticnodes:"$staticnodes" \
+     "$@"
