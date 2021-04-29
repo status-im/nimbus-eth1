@@ -977,7 +977,7 @@ LOGGING AND DEBUGGING OPTIONS:
   ]
 
 when declared(os.paramCount): # not available with `--app:lib`
-  proc processArguments*(msg: var string): ConfigStatus =
+  proc processArguments*(msg: var string, opt: var OptParser): ConfigStatus =
     ## Process command line argument and update `NimbusConfiguration`.
     let config = getConfiguration()
 
@@ -994,7 +994,6 @@ when declared(os.paramCount): # not available with `--app:lib`
     # The same trick is done to discPort
     config.net.discPort = 0
 
-    var opt = initOptParser()
     var length = 0
     for kind, key, value in opt.getopt():
       result = Error
@@ -1032,6 +1031,10 @@ when declared(os.paramCount): # not available with `--app:lib`
 
     if config.net.discPort == 0:
       config.net.discPort = config.net.bindPort
+
+  proc processArguments*(msg: var string): ConfigStatus =
+    var opt = initOptParser()
+    processArguments(msg, opt)
 
 proc processConfiguration*(pathname: string): ConfigStatus =
   ## Process configuration file `pathname` and update `NimbusConfiguration`.
