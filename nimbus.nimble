@@ -30,16 +30,20 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   exec "nim " & lang & " --out:build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
 
 proc test(name: string, lang = "c") =
-  buildBinary name, "tests/", "-d:chronicles_log_level=ERROR"
+  # Verify stack usage is kept low by setting 750k stack limit in tests.
+  const stackLimitKiB = 750
   when not defined(windows):
-    # Verify stack usage is kept low by setting 1024k stack limit in tests.
-    exec "ulimit -s 1024 && build/" & name
+    const (buildOption, runPrefix) = ("", "ulimit -s " & $stackLimitKiB & " && ")
   else:
-    # Don't enforce stack limit in Windows, as we can't control it with these tools.
+    # No `ulimit` in Windows.  `ulimit -s` in Bash is accepted but has no effect.
     # See https://public-inbox.org/git/alpine.DEB.2.21.1.1709131448390.4132@virtualbox/
-    # When set by ulimit -s` in Bash, it's ignored.  Also, the command passed to
-    # NimScript `exec` on Windows is not a shell script.
-    exec "build/" & name
+    # Also, the command passed to NimScript `exec` on Windows is not a shell script.
+    # Instead, we can set stack size at link time.
+    const (buildOption, runPrefix) =
+      (" -d:windowsNoSetStack --passL:-Wl,--stack," & $(stackLimitKiB * 1024), "")
+
+  buildBinary name, "tests/", "-d:chronicles_log_level=ERROR" & buildOption
+  exec runPrefix & "build/" & name
 
 task test, "Run tests":
   test "all_tests"
