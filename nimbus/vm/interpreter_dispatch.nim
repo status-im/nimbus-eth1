@@ -386,13 +386,13 @@ proc executeOpcodes(c: Computation) =
   let fork = c.fork
 
   block:
-    if not c.continuation.isNil:
-      (c.continuation)()
-      c.continuation = nil
-    elif c.execPrecompiles(fork):
+    if c.continuation.isNil and c.execPrecompiles(fork):
       break
 
     try:
+      if not c.continuation.isNil:
+        (c.continuation)()
+        c.continuation = nil
       c.selectVM(fork)
     except CatchableError as e:
       c.setError(&"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
