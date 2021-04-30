@@ -15,7 +15,8 @@ import
   graphql/common/types, graphql/httpserver,
   ../db/[db_chain, state_db], ../errors, ../utils,
   ../transaction, ../rpc/rpc_utils, ../vm_state, ../config,
-  ../vm_computation, ../vm_state_transactions
+  ../vm_computation, ../vm_state_transactions,
+  ../transaction/call_evm
 
 from eth/p2p import EthereumNode
 export httpserver
@@ -716,9 +717,9 @@ proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   let address = hexToByteArray[20](params[0].val.stringVal)
   ctx.accountNode(h.header, address)
 
-proc toCallData(n: Node): (CallData, bool) =
+proc toCallData(n: Node): (RpcCallData, bool) =
   # phew, probably need to use macro here :)
-  var cd: CallData
+  var cd: RpcCallData
   var gasLimit = false
   if n[0][1].kind != nkEmpty:
     cd.source = hextoByteArray[20](n[0][1].stringVal)
@@ -744,14 +745,14 @@ proc toCallData(n: Node): (CallData, bool) =
 
   (cd, gasLimit)
 
-proc makeCall(ctx: GraphqlContextRef, callData: CallData, header: BlockHeader, chainDB: BaseChainDB): RespResult =
+proc makeCall(ctx: GraphqlContextRef, callData: RpcCallData, header: BlockHeader, chainDB: BaseChainDB): RespResult =
   # TODO: handle revert
   var
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
     vmState = newBaseVMState(header.stateRoot, header, chainDB)
     fork    = toFork(chainDB.config, header.blockNumber)
-    comp    = setupComputation(vmState, callData, fork)
+    comp    = rpcSetupComputation(vmState, callData, fork)
 
   let gas = comp.gasMeter.gasRemaining
   comp.execComputation()

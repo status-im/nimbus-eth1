@@ -11,7 +11,8 @@ import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
   ../db/[db_chain, accounts_cache], strutils, algorithm, options, times, json,
   ../constants, stint, hexstrings, rpc_types, ../config,
   ../vm_state_transactions, ../vm_state, ../vm_types, ../vm_types2,
-  ../vm_computation, ../p2p/executor, ../utils, ../transaction
+  ../vm_computation, ../p2p/executor, ../utils, ../transaction,
+  ../transaction/call_evm
 
 type
   UnsignedTx* = object
@@ -22,15 +23,6 @@ type
     value *  : UInt256
     payload* : Blob
     contractCreation* {.rlpIgnore.}: bool
-
-  CallData* = object
-    source*: EthAddress
-    to*: EthAddress
-    gas*: GasInt
-    gasPrice*: GasInt
-    value*: UInt256
-    data*: seq[byte]
-    contractCreation*: bool
 
 proc read(rlp: var Rlp, t: var UnsignedTx, _: type EthAddress): EthAddress {.inline.} =
   if rlp.blobLen != 0:
@@ -161,7 +153,7 @@ proc signTransaction*(tx: UnsignedTx, chain: BaseChainDB, privateKey: PrivateKey
     S: Uint256.fromBytesBE(sig[32..63])
     )
 
-proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): CallData =
+proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): RpcCallData =
   if call.source.isSome:
     result.source = toAddress(call.source.get)
 
@@ -188,40 +180,20 @@ proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): CallDa
   if call.data.isSome:
     result.data = hexToSeqByte(call.data.get.string)
 
-proc setupComputation*(vmState: BaseVMState, call: CallData, fork: Fork) : Computation =
-  vmState.setupTxContext(
-    origin = call.source,
-    gasPrice = call.gasPrice,
-    forkOverride = some(fork)
-  )
-
-  let msg = Message(
-    kind: evmcCall,
-    depth: 0,
-    gas: call.gas,
-    sender: call.source,
-    contractAddress: call.to,
-    codeAddress: call.to,
-    value: call.value,
-    data: call.data
-    )
-
-  result = newComputation(vmState, msg)
-
-proc doCall*(call: CallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
+proc doCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
   var
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
     vmState = newBaseVMState(header.stateRoot, header, chain)
     fork    = toFork(chain.config, header.blockNumber)
-    comp    = setupComputation(vmState, call, fork)
+    comp    = rpcSetupComputation(vmState, call, fork)
 
   comp.execComputation()
   result = hexDataStr(comp.output)
   # TODO: handle revert and error
   # TODO: handle contract ABI
 
-proc estimateGas*(call: CallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): GasInt =
+proc estimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): GasInt =
   var
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
