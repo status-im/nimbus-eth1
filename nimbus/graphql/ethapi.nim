@@ -746,20 +746,11 @@ proc toCallData(n: Node): (RpcCallData, bool) =
   (cd, gasLimit)
 
 proc makeCall(ctx: GraphqlContextRef, callData: RpcCallData, header: BlockHeader, chainDB: BaseChainDB): RespResult =
-  # TODO: handle revert
-  var
-    # we use current header stateRoot, unlike block validation
-    # which use previous block stateRoot
-    vmState = newBaseVMState(header.stateRoot, header, chainDB)
-    fork    = toFork(chainDB.config, header.blockNumber)
-    comp    = rpcSetupComputation(vmState, callData, fork)
-
-  let gas = comp.gasMeter.gasRemaining
-  comp.execComputation()
+  let (outputHex, gasUsed, isError) = rpcMakeCall(callData, header, chainDB)
   var map = respMap(ctx.ids[ethCallResult])
-  map["data"]    = resp("0x" & comp.output.toHex)
-  map["gasUsed"] = longNode(gas - comp.gasMeter.gasRemaining).get()
-  map["status"]  = longNode(if comp.isError: 0 else: 1).get()
+  map["data"]    = resp("0x" & outputHex)
+  map["gasUsed"] = longNode(gasUsed).get()
+  map["status"]  = longNode(if isError: 0 else: 1).get()
   ok(map)
 
 proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =

@@ -7,7 +7,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  eth/common/eth_types, stint, options,
+  eth/common/eth_types, stint, options, stew/byteutils,
   ".."/[vm_types, vm_types2, vm_state, vm_computation],
   ".."/[db/db_chain, config, vm_state_transactions, rpc/hexstrings],
   ".."/[db/accounts_cache, p2p/executor], eth/trie/db
@@ -54,6 +54,19 @@ proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): Hex
 
   comp.execComputation()
   result = hexDataStr(comp.output)
+
+proc rpcMakeCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): (string, GasInt, bool) =
+  # TODO: handle revert
+  var
+    # we use current header stateRoot, unlike block validation
+    # which use previous block stateRoot
+    vmState = newBaseVMState(header.stateRoot, header, chain)
+    fork    = toFork(chain.config, header.blockNumber)
+    comp    = rpcSetupComputation(vmState, call, fork)
+
+  let gas = comp.gasMeter.gasRemaining
+  comp.execComputation()
+  return (comp.output.toHex, gas - comp.gasMeter.gasRemaining, comp.isError)
 
 proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): GasInt =
   # TODO: handle revert and error
