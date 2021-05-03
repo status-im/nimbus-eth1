@@ -150,7 +150,7 @@ proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB,
   let refund = min(c.getGasRefund(), maxRefund)
   return gasLimit - c.gasMeter.gasRemaining - refund
 
-proc txSetupComputation*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): Computation =
+proc txSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): Computation =
   var gas = tx.gasLimit - tx.intrinsicGas(fork)
   assert gas >= 0
 
@@ -174,9 +174,35 @@ proc txSetupComputation*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   result = newComputation(vmState, msg)
   doAssert result.isOriginComputation
 
-proc txRefundGas*(tx: Transaction, sender: EthAddress, c: Computation) =
+proc txRefundgas(tx: Transaction, sender: EthAddress, c: Computation) =
   let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
   let refund = min(c.getGasRefund(), maxRefund)
   c.gasMeter.returnGas(refund)
   c.vmState.mutateStateDB:
     db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)
+
+proc txInitialAccessListEIP2929(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork) =
+  # EIP2929 initial access list.
+  if fork >= FkBerlin:
+    vmState.mutateStateDB:
+      db.accessList(sender)
+      # For contract creations the EVM will add the contract address to the
+      # access list itself, after calculating the new contract address.
+      if not tx.isContractCreation:
+        db.accessList(tx.getRecipient())
+      for c in activePrecompiles():
+        db.accessList(c)
+
+proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
+  txInitialAccessListEIP2929(tx, sender, vmState, fork)
+
+  var c = txSetupComputation(tx, sender, vmState, fork)
+  vmState.mutateStateDB:
+    db.subBalance(sender, tx.gasLimit.u256 * tx.gasPrice.u256)
+
+  execComputation(c)
+
+  if c.shouldBurnGas:
+    return tx.gasLimit
+  txRefundGas(tx, sender, c)
+  return tx.gasLimit - c.gasMeter.gasRemaining

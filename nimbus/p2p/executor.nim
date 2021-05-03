@@ -54,26 +54,8 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
-  # EIP2929
-  if fork >= FkBerlin:
-    vmState.mutateStateDB:
-      db.accessList(sender)
-      if not tx.isContractCreation:
-        #If it's a create-tx, the destination will be added inside evm.create
-        db.accessList(tx.getRecipient)
-      for c in activePrecompiles():
-        db.accessList(c)
-
   if validateTransaction(vmState, tx, sender, fork):
-    var c = txSetupComputation(tx, sender, vmState, fork)
-    vmState.mutateStateDB:
-      db.subBalance(sender, tx.gasLimit.u256 * tx.gasPrice.u256)
-    execComputation(c)
-
-    result = tx.gasLimit
-    if not c.shouldBurnGas:
-      txRefundGas(tx, sender, c)
-      result -= c.gasMeter.gasRemaining
+    result = txCallEvm(tx, sender, vmState, fork)
 
   vmState.cumulativeGasUsed += result
 
