@@ -10,7 +10,7 @@ import
   eth/common/eth_types, stint, options, stew/byteutils,
   ".."/[vm_types, vm_types2, vm_state, vm_computation, utils],
   ".."/[db/db_chain, config, vm_state_transactions, rpc/hexstrings],
-  ".."/[db/accounts_cache, p2p/executor], eth/trie/db
+  ".."/[db/accounts_cache, transaction, vm_precompiles, vm_gas_costs], eth/trie/db
 
 type
   RpcCallData* = object
@@ -73,6 +73,38 @@ proc rpcMakeCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): (
   comp.execComputation()
   return (comp.output.toHex, gas - comp.gasMeter.gasRemaining, comp.isError)
 
+func rpcIntrinsicGas(call: RpcCallData, fork: Fork): GasInt =
+  var intrinsicGas = call.data.intrinsicGas(fork)
+  if call.contractCreation:
+    intrinsicGas = intrinsicGas + gasFees[fork][GasTXCreate]
+  return intrinsicGas
+
+func rpcValidateCall(call: RpcCallData, vmState: BaseVMState, gasLimit: GasInt,
+                     fork: Fork, intrinsicGas: var GasInt, gasCost: var UInt256): bool =
+  # This behaviour matches `validateTransaction`, used by `processTransaction`.
+  if vmState.cumulativeGasUsed + gasLimit > vmState.blockHeader.gasLimit:
+    return false
+  let balance = vmState.readOnlyStateDB.getBalance(call.source)
+  gasCost = gasLimit.u256 * call.gasPrice.u256
+  if gasCost > balance or call.value > balance - gasCost:
+    return false
+  intrinsicGas = rpcIntrinsicGas(call, fork)
+  if intrinsicGas > gasLimit:
+    return false
+  return true
+
+proc rpcInitialAccessListEIP2929(call: RpcCallData, vmState: BaseVMState, fork: Fork) =
+  # EIP2929 initial access list.
+  if fork >= FkBerlin:
+    vmState.mutateStateDB:
+      db.accessList(call.source)
+      # For contract creations the EVM will add the contract address to the
+      # access list itself, after calculating the new contract address.
+      if not call.contractCreation:
+        db.accessList(call.to)
+      for c in activePrecompiles():
+        db.accessList(c)
+
 proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): GasInt =
   # TODO: handle revert and error
   var
@@ -80,17 +112,39 @@ proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB,
     # which use previous block stateRoot
     vmState = newBaseVMState(header.stateRoot, header, chain)
     fork    = toFork(chain.config, header.blockNumber)
-    tx      = Transaction(
-      accountNonce: vmState.accountdb.getNonce(call.source),
-      gasPrice: call.gasPrice,
-      gasLimit: if haveGasLimit: call.gas else: header.gasLimit - vmState.cumulativeGasUsed,
-      to      : call.to,
-      value   : call.value,
-      payload : call.data,
-      isContractCreation:  call.contractCreation
-    )
+    gasLimit = if haveGasLimit: call.gas else: header.gasLimit - vmState.cumulativeGasUsed
+    intrinsicGas: GasInt
+    gasCost: UInt256
+
+  # Nimbus `estimateGas` has historically checked against remaining gas in the
+  # current block, balance in the sender account (even if the sender is default
+  # account 0x00), and other limits, and returned 0 as the gas estimate if any
+  # checks failed.  This behaviour came from how it used `processTransaction`
+  # which calls `validateTransaction`.  For now, keep this behaviour the same.
+  # Compare this code with `validateTransaction`.
+  #
+  # TODO: This historically differs from `rpcDoCall` and `rpcMakeCall`.  There
+  # are other differences in rpc_utils.nim `callData` too.  Are the different
+  # behaviours intended, and is 0 the correct return value to mean "not enough
+  # gas to start"?  Probably not.
+  if not rpcValidateCall(call, vmState, gasLimit, fork, intrinsicGas, gasCost):
+    return 0
 
   var dbTx = chain.db.beginTransaction()
   defer: dbTx.dispose()
-  result = processTransaction(tx, call.source, vmState, fork)
-  dbTx.dispose()
+
+  # TODO: EIP2929 setup also historically differs from `rpcDoCall` and `rpcMakeCall`.
+  rpcInitialAccessListEIP2929(call, vmState, fork)
+
+  # TODO: Deduction of `intrinsicGas` also differs from `rpcDoCall` and `rpcMakeCall`.
+  var c = rpcSetupComputation(vmState, call, fork, gasLimit - intrinsicGas)
+  vmState.mutateStateDB:
+    db.subBalance(call.source, gasCost)
+
+  execComputation(c)
+
+  if c.shouldBurnGas:
+    return gasLimit
+  let maxRefund = (gasLimit - c.gasMeter.gasRemaining) div 2
+  let refund = min(c.getGasRefund(), maxRefund)
+  return gasLimit - c.gasMeter.gasRemaining - refund
