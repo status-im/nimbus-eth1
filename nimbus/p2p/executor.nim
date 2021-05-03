@@ -19,11 +19,18 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
       addition=tx.gasLimit
     return
 
-  let totalCost = tx.gasLimit.u256 * tx.gasPrice.u256 + tx.value
-  if totalCost > balance:
-    debug "invalid tx: not enough cash",
+  let gasCost = tx.gasLimit.u256 * tx.gasPrice.u256
+  if gasCost > balance:
+    debug "invalid tx: not enough cash for gas",
       available=balance,
-      require=totalCost
+      require=gasCost
+    return
+
+  if tx.value > balance - gasCost:
+    debug "invalid tx: not enough cash to send",
+      available=balance,
+      availableMinusGas=balance-gasCost,
+      require=tx.value
     return
 
   if tx.gasLimit < tx.intrinsicGas(fork):
