@@ -241,7 +241,7 @@ proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   return newComputation(vmState, msg)
 
-proc asmSetupComputation*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): Computation =
+proc asmSetupComputation(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): Computation =
   let
     parentNumber = blockNumber - 1
     parent = chainDB.getBlockHeader(parentNumber)
@@ -257,3 +257,28 @@ proc asmSetupComputation*(blockNumber: Uint256, chainDB: BaseChainDB, code, data
   tx.payload = code
   tx.gasLimit = 500000000
   return asmSetupComputation(tx, sender, vmState, data, some(fork))
+
+type
+  AsmResult* = object
+    isSuccess*:       bool
+    gasUsed*:         GasInt
+    output*:          seq[byte]
+    stack*:           Stack
+    memory*:          Memory
+    vmState*:         BaseVMState
+    contractAddress*: EthAddress
+
+proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): AsmResult =
+  var c = asmSetupComputation(blockNumber, chainDB, code, data, fork)
+  let gas = c.gasMeter.gasRemaining
+  c.execComputation()
+
+  # Some of these are extra returned state, for testing, that a normal EVMC API
+  # computation doesn't return.  We'll have to obtain them outside EVMC.
+  result.isSuccess       = c.isSuccess
+  result.gasUsed         = gas - c.gasMeter.gasRemaining
+  result.output          = c.output
+  result.stack           = c.stack
+  result.memory          = c.memory
+  result.vmState         = c.vmState
+  result.contractAddress = c.msg.contractAddress

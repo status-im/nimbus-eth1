@@ -212,13 +212,9 @@ proc initDatabase*(): (Uint256, BaseChainDB) =
   result = (blockNumber, newBaseChainDB(memoryDB, false))
 
 proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
-  var computation = asmSetupComputation(blockNumber, chainDB, boa.code, boa.data, boa.fork)
+  var asmResult = asmCallEvm(blockNumber, chainDB, boa.code, boa.data, boa.fork)
 
-  let gas = computation.gasMeter.gasRemaining
-  execComputation(computation)
-  let gasUsed = gas - computation.gasMeter.gasRemaining
-
-  if computation.isSuccess:
+  if asmResult.isSuccess:
     if boa.success == false:
       error "different success value", expected=boa.success, actual=true
       return false
@@ -228,15 +224,15 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
       return false
 
   if boa.gasUsed != -1:
-    if boa.gasUsed != gasUsed:
-      error "different gasUsed", expected=boa.gasUsed, actual=gasUsed
+    if boa.gasUsed != asmResult.gasUsed:
+      error "different gasUsed", expected=boa.gasUsed, actual=asmResult.gasUsed
       return false
 
-  if boa.stack.len != computation.stack.values.len:
-    error "different stack len", expected=boa.stack.len, actual=computation.stack.values.len
+  if boa.stack.len != asmResult.stack.values.len:
+    error "different stack len", expected=boa.stack.len, actual=asmResult.stack.values.len
     return false
 
-  for i, v in computation.stack.values:
+  for i, v in asmResult.stack.values:
     let actual = v.dumpHex()
     let val = boa.stack[i].toHex()
     if actual != val:
@@ -244,24 +240,24 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
       return false
 
   const chunkLen = 32
-  let numChunks = computation.memory.len div chunkLen
+  let numChunks = asmResult.memory.len div chunkLen
 
   if numChunks != boa.memory.len:
     error "different memory len", expected=boa.memory.len, actual=numChunks
     return false
 
   for i in 0 ..< numChunks:
-    let actual = computation.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
+    let actual = asmResult.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
     let mem = boa.memory[i].toHex()
     if mem != actual:
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
-  var stateDB = computation.vmState.accountDb
+  var stateDB = asmResult.vmState.accountDb
   stateDB.persist()
 
   var
-    storageRoot = stateDB.getStorageRoot(computation.msg.contractAddress)
+    storageRoot = stateDB.getStorageRoot(asmResult.contractAddress)
     trie = initSecureHexaryTrie(chainDB.db, storageRoot)
 
   for kv in boa.storage:
@@ -275,7 +271,7 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
       error "storage has different value", key=key, expected=val, actual=value
       return false
 
-  let logs = computation.vmState.logEntries
+  let logs = asmResult.vmState.logEntries
   if logs.len != boa.logs.len:
     error "different logs len", expected=boa.logs.len, actual=logs.len
     return false
@@ -302,7 +298,7 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
         return false
 
   if boa.output.len > 0:
-    let actual = computation.output.toHex()
+    let actual = asmResult.output.toHex()
     let expected = boa.output.toHex()
     if expected != actual:
       error "different output detected", expected=expected, actual=actual
