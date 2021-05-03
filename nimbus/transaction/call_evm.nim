@@ -23,8 +23,8 @@ type
     data*: seq[byte]
     contractCreation*: bool
 
-proc rpcSetupComputation*(vmState: BaseVMState, call: RpcCallData,
-                          fork: Fork, gasLimit: GasInt): Computation =
+proc rpcSetupComputation(vmState: BaseVMState, call: RpcCallData,
+                         fork: Fork, gasLimit: GasInt): Computation =
   vmState.setupTxContext(
     origin = call.source,
     gasPrice = call.gasPrice,
