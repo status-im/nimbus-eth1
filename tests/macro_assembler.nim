@@ -8,7 +8,8 @@ import
   ../nimbus/[transaction, utils],
   ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/[vm_state_transactions, vm_types2,
-             vm_message, vm_internals, vm_state, vm_types]
+             vm_message, vm_internals, vm_state, vm_types],
+  ../nimbus/transaction/call_evm
 
 export vm_types2, byteutils
 {.experimental: "dynamicBindSym".}
@@ -196,40 +197,6 @@ proc generateVMProxy(boa: Assembler): NimNode =
 const
   blockFile = "tests" / "fixtures" / "PersistBlockTests" / "block47205.json"
 
-proc initComputation(vmState: BaseVMState, tx: Transaction, sender: EthAddress, data: seq[byte], forkOverride=none(Fork)) : Computation =
-  doAssert tx.isContractCreation
-
-  let fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.chainDB.config.toFork(vmState.blockNumber)
-
-  let gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
-
-  vmState.setupTxContext(
-    origin = sender,
-    gasPrice = tx.gasPrice,
-    forkOverride = some(fork)
-  )
-
-  let contractAddress = generateAddress(sender, tx.accountNonce)
-  let msg = Message(
-      kind: evmcCall,
-      depth: 0,
-      gas: tx.gasLimit - gasUsed,
-      sender: sender,
-      contractAddress: contractAddress,
-      codeAddress: contractAddress,
-      value: tx.value,
-      data: data
-      )
-
-  vmState.mutateStateDb:
-    db.setCode(contractAddress, tx.payload)
-
-  newComputation(vmState, msg)
-
 proc initDatabase*(): (Uint256, BaseChainDB) =
   let
     node = json.parseFile(blockFile)
@@ -259,7 +226,7 @@ proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq
 
   tx.payload = code
   tx.gasLimit = 500000000
-  initComputation(vmState, tx, sender, data, some(fork))
+  asmSetupComputation(tx, sender, vmState, data, some(fork))
 
 proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
   var computation = initComputation(blockNumber, chainDB, boa.code, boa.data, boa.fork)

@@ -206,3 +206,37 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
     return tx.gasLimit
   txRefundGas(tx, sender, c)
   return tx.gasLimit - c.gasMeter.gasRemaining
+
+proc asmSetupComputation*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, data: seq[byte], forkOverride=none(Fork)): Computation =
+  doAssert tx.isContractCreation
+
+  let fork =
+    if forkOverride.isSome:
+      forkOverride.get
+    else:
+      vmState.chainDB.config.toFork(vmState.blockNumber)
+
+  let gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
+
+  vmState.setupTxContext(
+    origin = sender,
+    gasPrice = tx.gasPrice,
+    forkOverride = some(fork)
+  )
+
+  let contractAddress = generateAddress(sender, tx.accountNonce)
+  let msg = Message(
+      kind: evmcCall,
+      depth: 0,
+      gas: tx.gasLimit - gasUsed,
+      sender: sender,
+      contractAddress: contractAddress,
+      codeAddress: contractAddress,
+      value: tx.value,
+      data: data
+      )
+
+  vmState.mutateStateDb:
+    db.setCode(contractAddress, tx.payload)
+
+  return newComputation(vmState, msg)
