@@ -761,7 +761,7 @@ proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
     let (callData, gasLimit) = toCallData(param)
     ctx.makeCall(callData, h.header, ctx.chainDB)
   except Exception as em:
-    err("estimateGas error: " & em.msg)
+    err("call error: " & em.msg)
 
 proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
