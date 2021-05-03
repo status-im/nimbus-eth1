@@ -180,28 +180,6 @@ proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): RpcCal
   if call.data.isSome:
     result.data = hexToSeqByte(call.data.get.string)
 
-proc estimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): GasInt =
-  var
-    # we use current header stateRoot, unlike block validation
-    # which use previous block stateRoot
-    vmState = newBaseVMState(header.stateRoot, header, chain)
-    fork    = toFork(chain.config, header.blockNumber)
-    tx      = Transaction(
-      accountNonce: vmState.accountdb.getNonce(call.source),
-      gasPrice: call.gasPrice,
-      gasLimit: if haveGasLimit: call.gas else: header.gasLimit - vmState.cumulativeGasUsed,
-      to      : call.to,
-      value   : call.value,
-      payload : call.data,
-      isContractCreation:  call.contractCreation
-    )
-
-  var dbTx = chain.db.beginTransaction()
-  defer: dbTx.dispose()
-  result = processTransaction(tx, call.source, vmState, fork)
-  dbTx.dispose()
-  # TODO: handle revert and error
-
 proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: int): TransactionObject =
   result.blockHash = some(header.hash)
   result.blockNumber = some(encodeQuantity(header.blockNumber))

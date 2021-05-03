@@ -778,7 +778,7 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
   let param = params[0].val
   try:
     let (callData, gasLimit) = toCallData(param)
-    let gasUsed = estimateGas(callData, h.header, ctx.chainDB, gasLimit)
+    let gasUsed = rpcEstimateGas(callData, h.header, ctx.chainDB, gasLimit)
     longNode(gasUsed)
   except Exception as em:
     err("estimateGas error: " & em.msg)

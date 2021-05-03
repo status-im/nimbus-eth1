@@ -275,7 +275,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     let
       header   = chain.headerFromTag(quantityTag)
       callData = callData(call, false, chain)
-      gasUsed  = estimateGas(callData, header, chain, call.gas.isSome)
+      gasUsed  = rpcEstimateGas(callData, header, chain, call.gas.isSome)
     result = encodeQuantity(gasUsed.uint64)
 
   server.rpc("eth_getBlockByHash") do(data: EthHashStr, fullTransactions: bool) -> Option[BlockObject]:

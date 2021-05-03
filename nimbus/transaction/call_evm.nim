@@ -9,7 +9,8 @@
 import
   eth/common/eth_types, stint, options,
   ".."/[vm_types, vm_types2, vm_state, vm_computation],
-  ".."/[db/db_chain, config, vm_state_transactions, rpc/hexstrings]
+  ".."/[db/db_chain, config, vm_state_transactions, rpc/hexstrings],
+  ".."/[db/accounts_cache, p2p/executor], eth/trie/db
 
 type
   RpcCallData* = object
@@ -53,3 +54,25 @@ proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): Hex
 
   comp.execComputation()
   result = hexDataStr(comp.output)
+
+proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): GasInt =
+  # TODO: handle revert and error
+  var
+    # we use current header stateRoot, unlike block validation
+    # which use previous block stateRoot
+    vmState = newBaseVMState(header.stateRoot, header, chain)
+    fork    = toFork(chain.config, header.blockNumber)
+    tx      = Transaction(
+      accountNonce: vmState.accountdb.getNonce(call.source),
+      gasPrice: call.gasPrice,
+      gasLimit: if haveGasLimit: call.gas else: header.gasLimit - vmState.cumulativeGasUsed,
+      to      : call.to,
+      value   : call.value,
+      payload : call.data,
+      isContractCreation:  call.contractCreation
+    )
+
+  var dbTx = chain.db.beginTransaction()
+  defer: dbTx.dispose()
+  result = processTransaction(tx, call.source, vmState, fork)
+  dbTx.dispose()
