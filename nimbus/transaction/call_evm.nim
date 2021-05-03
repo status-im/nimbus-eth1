@@ -8,7 +8,8 @@
 
 import
   eth/common/eth_types, stint, options,
-  ".."/[vm_types, vm_types2, vm_state, vm_computation]
+  ".."/[vm_types, vm_types2, vm_state, vm_computation],
+  ".."/[db/db_chain, config, vm_state_transactions, rpc/hexstrings]
 
 type
   RpcCallData* = object
@@ -39,3 +40,16 @@ proc rpcSetupComputation*(vmState: BaseVMState, call: RpcCallData, fork: Fork): 
     )
 
   return newComputation(vmState, msg)
+
+proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
+  # TODO: handle revert and error
+  # TODO: handle contract ABI
+  var
+    # we use current header stateRoot, unlike block validation
+    # which use previous block stateRoot
+    vmState = newBaseVMState(header.stateRoot, header, chain)
+    fork    = toFork(chain.config, header.blockNumber)
+    comp    = rpcSetupComputation(vmState, call, fork)
+
+  comp.execComputation()
+  result = hexDataStr(comp.output)

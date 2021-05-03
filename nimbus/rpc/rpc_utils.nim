@@ -180,19 +180,6 @@ proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): RpcCal
   if call.data.isSome:
     result.data = hexToSeqByte(call.data.get.string)
 
-proc doCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
-  var
-    # we use current header stateRoot, unlike block validation
-    # which use previous block stateRoot
-    vmState = newBaseVMState(header.stateRoot, header, chain)
-    fork    = toFork(chain.config, header.blockNumber)
-    comp    = rpcSetupComputation(vmState, call, fork)
-
-  comp.execComputation()
-  result = hexDataStr(comp.output)
-  # TODO: handle revert and error
-  # TODO: handle contract ABI
-
 proc estimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB, haveGasLimit: bool): GasInt =
   var
     # we use current header stateRoot, unlike block validation

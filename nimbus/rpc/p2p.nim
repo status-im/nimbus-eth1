@@ -15,7 +15,8 @@ import
   ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
   ../utils, ../db/[db_chain, state_db],
   rpc_types, rpc_utils, ../vm_message, ../vm_computation,
-  ../vm_types2
+  ../vm_types2,
+  ../transaction/call_evm
 
 #[
   Note:
@@ -261,7 +262,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     let
       header   = headerFromTag(chain, quantityTag)
       callData = callData(call, true, chain)
-    result = doCall(callData, header, chain)
+    result = rpcDoCall(callData, header, chain)
 
   server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> HexQuantityStr:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
