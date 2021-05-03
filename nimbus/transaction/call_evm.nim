@@ -8,7 +8,7 @@
 
 import
   eth/common/eth_types, stint, options, stew/byteutils,
-  ".."/[vm_types, vm_types2, vm_state, vm_computation],
+  ".."/[vm_types, vm_types2, vm_state, vm_computation, utils],
   ".."/[db/db_chain, config, vm_state_transactions, rpc/hexstrings],
   ".."/[db/accounts_cache, p2p/executor], eth/trie/db
 
@@ -22,23 +22,28 @@ type
     data*: seq[byte]
     contractCreation*: bool
 
-proc rpcSetupComputation*(vmState: BaseVMState, call: RpcCallData, fork: Fork): Computation =
+proc rpcSetupComputation*(vmState: BaseVMState, call: RpcCallData,
+                          fork: Fork, gasLimit: GasInt): Computation =
   vmState.setupTxContext(
     origin = call.source,
     gasPrice = call.gasPrice,
     forkOverride = some(fork)
   )
 
-  let msg = Message(
-    kind: evmcCall,
+  var msg = Message(
+    kind: if call.contractCreation: evmcCreate else: evmcCall,
     depth: 0,
-    gas: call.gas,
+    gas: gasLimit,
     sender: call.source,
-    contractAddress: call.to,
+    contractAddress:
+      if not call.contractCreation:
+        call.to
+      else:
+        generateAddress(call.source, vmState.readOnlyStateDB.getNonce(call.source)),
     codeAddress: call.to,
     value: call.value,
     data: call.data
-    )
+  )
 
   return newComputation(vmState, msg)
 
@@ -50,7 +55,7 @@ proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): Hex
     # which use previous block stateRoot
     vmState = newBaseVMState(header.stateRoot, header, chain)
     fork    = toFork(chain.config, header.blockNumber)
-    comp    = rpcSetupComputation(vmState, call, fork)
+    comp    = rpcSetupComputation(vmState, call, fork, call.gas)
 
   comp.execComputation()
   result = hexDataStr(comp.output)
@@ -62,7 +67,7 @@ proc rpcMakeCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): (
     # which use previous block stateRoot
     vmState = newBaseVMState(header.stateRoot, header, chain)
     fork    = toFork(chain.config, header.blockNumber)
-    comp    = rpcSetupComputation(vmState, call, fork)
+    comp    = rpcSetupComputation(vmState, call, fork, call.gas)
 
   let gas = comp.gasMeter.gasRemaining
   comp.execComputation()
