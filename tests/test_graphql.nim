@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[os, json],
+  std/[os, json, unittest],
   stew/byteutils,
   eth/[p2p, common, trie/db, rlp, trie],
   eth/p2p/rlpx_protocols/eth_protocol,
@@ -98,6 +98,7 @@ proc graphqlMain*() =
   when isMainModule:
     ctx.main(caseFolder, purgeSchema = false)
   else:
+    disableParamFiltering()
     ctx.executeCases(caseFolder, purgeSchema = false)
 
 when isMainModule:
