@@ -11,30 +11,6 @@ import
   ../transaction,
   ./computation, ./interpreter, ./state, ./types
 
-proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork) : Computation =
-  var gas = tx.gasLimit - tx.intrinsicGas(fork)
-  assert gas >= 0
-
-  vmState.setupTxContext(
-    origin = sender,
-    gasPrice = tx.gasPrice,
-    forkOverride = some(fork)
-  )
-
-  let msg = Message(
-    kind: if tx.isContractCreation: evmcCreate else: evmcCall,
-    depth: 0,
-    gas: gas,
-    sender: sender,
-    contractAddress: tx.getRecipient(),
-    codeAddress: tx.to,
-    value: tx.value,
-    data: tx.payload
-    )
-
-  result = newComputation(vmState, msg)
-  doAssert result.isOriginComputation
-
 proc execComputation*(c: Computation) =
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:

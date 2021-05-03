@@ -148,3 +148,27 @@ proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB,
   let maxRefund = (gasLimit - c.gasMeter.gasRemaining) div 2
   let refund = min(c.getGasRefund(), maxRefund)
   return gasLimit - c.gasMeter.gasRemaining - refund
+
+proc txSetupComputation*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): Computation =
+  var gas = tx.gasLimit - tx.intrinsicGas(fork)
+  assert gas >= 0
+
+  vmState.setupTxContext(
+    origin = sender,
+    gasPrice = tx.gasPrice,
+    forkOverride = some(fork)
+  )
+
+  let msg = Message(
+    kind: if tx.isContractCreation: evmcCreate else: evmcCall,
+    depth: 0,
+    gas: gas,
+    sender: sender,
+    contractAddress: tx.getRecipient(),
+    codeAddress: tx.to,
+    value: tx.value,
+    data: tx.payload
+    )
+
+  result = newComputation(vmState, msg)
+  doAssert result.isOriginComputation

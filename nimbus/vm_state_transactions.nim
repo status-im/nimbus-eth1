@@ -17,7 +17,6 @@ else:
 
 export
   vmx.execComputation,
-  vmx.refundGas,
-  vmx.setupComputation
+  vmx.refundGas
 
 # End

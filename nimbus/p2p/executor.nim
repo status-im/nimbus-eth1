@@ -5,7 +5,8 @@ import options, sets,
   ../vm_state, ../vm_types, ../vm_state_transactions,
   ../vm_computation, ../vm_message, ../vm_precompiles,
   ../vm_types2,
-  ./dao, ../config
+  ./dao, ../config,
+  ../transaction/call_evm
 
 proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
                           sender: EthAddress, fork: Fork): bool =
@@ -64,7 +65,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
         db.accessList(c)
 
   if validateTransaction(vmState, tx, sender, fork):
-    var c = setupComputation(vmState, tx, sender, fork)
+    var c = txSetupComputation(tx, sender, vmState, fork)
     vmState.mutateStateDB:
       db.subBalance(sender, tx.gasLimit.u256 * tx.gasPrice.u256)
     execComputation(c)
