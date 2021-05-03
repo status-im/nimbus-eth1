@@ -207,7 +207,7 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
   txRefundGas(tx, sender, c)
   return tx.gasLimit - c.gasMeter.gasRemaining
 
-proc asmSetupComputation*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, data: seq[byte], forkOverride=none(Fork)): Computation =
+proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMState, data: seq[byte], forkOverride=none(Fork)): Computation =
   doAssert tx.isContractCreation
 
   let fork =
@@ -240,3 +240,20 @@ proc asmSetupComputation*(tx: Transaction, sender: EthAddress, vmState: BaseVMSt
     db.setCode(contractAddress, tx.payload)
 
   return newComputation(vmState, msg)
+
+proc asmSetupComputation*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): Computation =
+  let
+    parentNumber = blockNumber - 1
+    parent = chainDB.getBlockHeader(parentNumber)
+    header = chainDB.getBlockHeader(blockNumber)
+    headerHash = header.blockHash
+    body = chainDB.getBlockBody(headerHash)
+    vmState = newBaseVMState(parent.stateRoot, header, chainDB)
+
+  var
+    tx = body.transactions[0]
+    sender = transaction.getSender(tx)
+
+  tx.payload = code
+  tx.gasLimit = 500000000
+  return asmSetupComputation(tx, sender, vmState, data, some(fork))

@@ -211,25 +211,8 @@ proc initDatabase*(): (Uint256, BaseChainDB) =
 
   result = (blockNumber, newBaseChainDB(memoryDB, false))
 
-proc initComputation(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): Computation =
-  let
-    parentNumber = blockNumber - 1
-    parent = chainDB.getBlockHeader(parentNumber)
-    header = chainDB.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    body = chainDB.getBlockBody(headerHash)
-    vmState = newBaseVMState(parent.stateRoot, header, chainDB)
-
-  var
-    tx = body.transactions[0]
-    sender = transaction.getSender(tx)
-
-  tx.payload = code
-  tx.gasLimit = 500000000
-  asmSetupComputation(tx, sender, vmState, data, some(fork))
-
 proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
-  var computation = initComputation(blockNumber, chainDB, boa.code, boa.data, boa.fork)
+  var computation = asmSetupComputation(blockNumber, chainDB, boa.code, boa.data, boa.fork)
 
   let gas = computation.gasMeter.gasRemaining
   execComputation(computation)
