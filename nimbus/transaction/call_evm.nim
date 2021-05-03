@@ -10,7 +10,8 @@ import
   eth/common/eth_types, stint, options, stew/byteutils,
   ".."/[vm_types, vm_types2, vm_state, vm_computation, utils],
   ".."/[db/db_chain, config, vm_state_transactions, rpc/hexstrings],
-  ".."/[db/accounts_cache, transaction, vm_precompiles, vm_gas_costs], eth/trie/db
+  ".."/[db/accounts_cache, transaction, vm_precompiles, vm_gas_costs], eth/trie/db,
+  ".."/vm_internals
 
 type
   RpcCallData* = object
@@ -172,3 +173,10 @@ proc txSetupComputation*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   result = newComputation(vmState, msg)
   doAssert result.isOriginComputation
+
+proc txRefundGas*(tx: Transaction, sender: EthAddress, c: Computation) =
+  let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
+  let refund = min(c.getGasRefund(), maxRefund)
+  c.gasMeter.returnGas(refund)
+  c.vmState.mutateStateDB:
+    db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)

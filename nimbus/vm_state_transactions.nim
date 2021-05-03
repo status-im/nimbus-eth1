@@ -16,7 +16,6 @@ else:
     vm2/state_transactions as vmx
 
 export
-  vmx.execComputation,
-  vmx.refundGas
+  vmx.execComputation
 
 # End

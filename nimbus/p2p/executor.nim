@@ -72,7 +72,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
     result = tx.gasLimit
     if not c.shouldBurnGas:
-      c.refundGas(tx, sender)
+      txRefundGas(tx, sender, c)
       result -= c.gasMeter.gasRemaining
 
   vmState.cumulativeGasUsed += result

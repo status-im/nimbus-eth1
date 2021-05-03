@@ -25,9 +25,3 @@ proc execComputation*(c: Computation) =
     c.vmState.touchedAccounts.incl c.touchedAccounts
 
   c.vmstate.status = c.isSuccess
-
-proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
-  let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
-  c.gasMeter.returnGas min(c.getGasRefund(), maxRefund)
-  c.vmState.mutateStateDB:
-    db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)
