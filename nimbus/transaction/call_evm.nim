@@ -24,11 +24,11 @@ type
     contractCreation*: bool
 
 proc rpcSetupComputation(vmState: BaseVMState, call: RpcCallData,
-                         fork: Fork, gasLimit: GasInt): Computation =
+                         gasLimit: GasInt, forkOverride = none(Fork)): Computation =
   vmState.setupTxContext(
     origin = call.source,
     gasPrice = call.gasPrice,
-    forkOverride = some(fork)
+    forkOverride = forkOverride,
   )
 
   var msg = Message(
@@ -55,8 +55,7 @@ proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): Hex
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
     vmState = newBaseVMState(header.stateRoot, header, chain)
-    fork    = toFork(chain.config, header.blockNumber)
-    comp    = rpcSetupComputation(vmState, call, fork, call.gas)
+    comp    = rpcSetupComputation(vmState, call, call.gas)
 
   comp.execComputation()
   result = hexDataStr(comp.output)
@@ -67,8 +66,7 @@ proc rpcMakeCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): (
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
     vmState = newBaseVMState(header.stateRoot, header, chain)
-    fork    = toFork(chain.config, header.blockNumber)
-    comp    = rpcSetupComputation(vmState, call, fork, call.gas)
+    comp    = rpcSetupComputation(vmState, call, call.gas)
 
   let gas = comp.gasMeter.gasRemaining
   comp.execComputation()
@@ -138,7 +136,7 @@ proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB,
   rpcInitialAccessListEIP2929(call, vmState, fork)
 
   # TODO: Deduction of `intrinsicGas` also differs from `rpcDoCall` and `rpcMakeCall`.
-  var c = rpcSetupComputation(vmState, call, fork, gasLimit - intrinsicGas)
+  var c = rpcSetupComputation(vmState, call, gasLimit - intrinsicGas, some(fork))
   vmState.mutateStateDB:
     db.subBalance(call.source, gasCost)
 
@@ -207,21 +205,16 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
   txRefundGas(tx, sender, c)
   return tx.gasLimit - c.gasMeter.gasRemaining
 
-proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMState, data: seq[byte], forkOverride=none(Fork)): Computation =
+proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
+                         data: seq[byte], forkOverride = none(Fork)): Computation =
   doAssert tx.isContractCreation
-
-  let fork =
-    if forkOverride.isSome:
-      forkOverride.get
-    else:
-      vmState.chainDB.config.toFork(vmState.blockNumber)
 
   let gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
 
   vmState.setupTxContext(
     origin = sender,
     gasPrice = tx.gasPrice,
-    forkOverride = some(fork)
+    forkOverride = forkOverride,
   )
 
   let contractAddress = generateAddress(sender, tx.accountNonce)
@@ -241,7 +234,8 @@ proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
 
   return newComputation(vmState, msg)
 
-proc asmSetupComputation(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): Computation =
+proc asmSetupComputation(blockNumber: Uint256, chainDB: BaseChainDB, code,
+                         data: seq[byte], forkOverride = none(Fork)): Computation =
   let
     parentNumber = blockNumber - 1
     parent = chainDB.getBlockHeader(parentNumber)
@@ -256,7 +250,7 @@ proc asmSetupComputation(blockNumber: Uint256, chainDB: BaseChainDB, code, data:
 
   tx.payload = code
   tx.gasLimit = 500000000
-  return asmSetupComputation(tx, sender, vmState, data, some(fork))
+  return asmSetupComputation(tx, sender, vmState, data, forkOverride)
 
 type
   AsmResult* = object
@@ -269,7 +263,7 @@ type
     contractAddress*: EthAddress
 
 proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): AsmResult =
-  var c = asmSetupComputation(blockNumber, chainDB, code, data, fork)
+  var c = asmSetupComputation(blockNumber, chainDB, code, data, some(fork))
   let gas = c.gasMeter.gasRemaining
   c.execComputation()
 
@@ -283,11 +277,12 @@ proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byt
   result.vmState         = c.vmState
   result.contractAddress = c.msg.contractAddress
 
-proc fixtureSetupComputation(vmState: BaseVMState, call: RpcCallData, origin: EthAddress): Computation =
+proc fixtureSetupComputation(vmState: BaseVMState, call: RpcCallData,
+                             origin: EthAddress, forkOverride = none(Fork)): Computation =
   vmState.setupTxContext(
     origin = origin,          # Differs from `rpcSetupComputation`
     gasPrice = call.gasPrice,
-    # fork is not set.
+    forkOverride = forkOverride,
   )
 
   var msg = Message(
@@ -312,8 +307,9 @@ type
     vmState*:         BaseVMState
     logEntries*:      seq[Log]
 
-proc fixtureCallEvm*(vmState: BaseVMState, call: RpcCallData, origin: EthAddress): FixtureResult =
-  var c = fixtureSetupComputation(vmState, call, origin)
+proc fixtureCallEvm*(vmState: BaseVMState, call: RpcCallData,
+                     origin: EthAddress, forkOverride = none(Fork)): FixtureResult =
+  var c = fixtureSetupComputation(vmState, call, origin, forkOverride)
 
   # Next line differs from all the other EVM calls.  With `execComputation`,
   # most "vm json tests" fail with either `balanceDiff` or `nonceDiff` errors.
