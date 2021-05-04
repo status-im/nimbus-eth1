@@ -63,10 +63,10 @@ proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): Hex
 proc rpcMakeCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): (string, GasInt, bool) =
   # TODO: handle revert
   var
-    # we use current header stateRoot, unlike block validation
-    # which use previous block stateRoot
-    vmState = newBaseVMState(header.stateRoot, header, chain)
-    comp    = rpcSetupComputation(vmState, call, call.gas)
+    parent  = chain.getBlockHeader(header.parentHash)
+    vmState = newBaseVMState(parent.stateRoot, header, chain)
+    fork    = toFork(chain.config, header.blockNumber)
+    comp    = rpcSetupComputation(vmState, call, call.gas, some(fork))
 
   let gas = comp.gasMeter.gasRemaining
   comp.execComputation()
