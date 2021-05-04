@@ -10,22 +10,27 @@
 }
 """
   result = """
-{
-  "__schema":{
+{"
+  __schema":{
     "types":[
       {"name":"Log"},
       {"name":"CallData"},
       {"name":"SyncState"},
       {"name":"BigInt"},
+      {"name":"Int"},
+      {"name":"Float"},
       {"name":"Mutation"},
       {"name":"Address"},
       {"name":"Block"},
       {"name":"CallResult"},
       {"name":"Query"},
+      {"name":"Boolean"},
       {"name":"FilterCriteria"},
       {"name":"Bytes"},
+      {"name":"String"},
       {"name":"Bytes32"},
       {"name":"BlockFilterCriteria"},
+      {"name":"ID"},
       {"name":"Pending"},
       {"name":"Transaction"},
       {"name":"Long"},
