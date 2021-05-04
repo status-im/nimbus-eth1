@@ -35,6 +35,7 @@ import
   options,
   sets
 
+
 proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt, forkOverride=none(Fork)) =
   ## this proc will be called each time a new transaction
   ## is going to be executed
@@ -46,38 +47,6 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
     else:
       vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber)
   vmState.gasCosts = vmState.fork.forkToSchedule
-
-
-proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork) : Computation =
-  var gas = tx.gasLimit - tx.intrinsicGas(fork)
-  assert gas >= 0
-
-  vmState.setupTxContext(
-    origin = sender,
-    gasPrice = tx.gasPrice,
-    forkOverride = some(fork)
-  )
-
-  let msg = Message(
-    kind: if tx.isContractCreation: evmcCreate else: evmcCall,
-    depth: 0,
-    gas: gas,
-    sender: sender,
-    contractAddress: tx.getRecipient(),
-    codeAddress: tx.to,
-    value: tx.value,
-    data: tx.payload
-    )
-
-  result = newComputation(vmState, msg)
-  doAssert result.isOriginComputation
-
-
-proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
-  let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
-  c.gasMeter.returnGas min(c.getGasRefund(), maxRefund)
-  c.vmState.mutateStateDB:
-    db.addBalance(sender, c.gasMeter.gasRemaining.u256 * tx.gasPrice.u256)
 
 
 proc execComputation*(c: Computation) =
