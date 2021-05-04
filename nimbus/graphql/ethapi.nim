@@ -141,25 +141,25 @@ proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, toBlockNumber(number))))
   except EVMError as e:
-    err("can't get block no '$1': $2" % [number.intVal, e.msg])
+    err(e.msg)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: BlockNumber): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, number)))
   except EVMError as e:
-    err("can't get block no '$1': $2" % [$number, e.msg])
+    err(e.msg)
 
 proc getBlockByHash(ctx: GraphqlContextRef, hash: Node): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, toHash(hash))))
   except EVMError as e:
-    err("can't get block with hash '$1': $2" % [hash.stringVal, e.msg])
+    err(e.msg)
 
 proc getBlockByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, hash)))
   except EVMError as e:
-    err("can't get block with hash '0x$1': $2" % [hash.data.toHex, e.msg])
+    err(e.msg)
 
 proc getLatestBlock(ctx: GraphqlContextRef): RespResult =
   try:
@@ -181,13 +181,32 @@ proc longNode(val: uint64 | int64): RespResult =
 proc longNode(val: UInt256): RespResult =
   ok(Node(kind: nkInt, intVal: val.toString, pos: Pos()))
 
-proc bigIntNode(val: UInt256): RespResult =
-  let hex = val.toHex
-  ok(Node(kind: nkString, stringVal: if hex.len mod 2 != 0: "0x0" & hex else: "0x" & hex, pos: Pos()))
+proc stripLeadingZeros(x: string): string =
+  strip(x, leading = true, trailing = false, chars = {'0'})
 
-proc bigIntNode(val: uint64 | int64): RespResult =
-  let hex = val.toHex
-  ok(Node(kind: nkString, stringVal: if hex.len mod 2 != 0: "0x0" & hex else: "0x" & hex, pos: Pos()))
+proc bigIntNode(val: UInt256): RespResult =
+  let hex = stripLeadingZeros(val.toHex)
+  ok(Node(kind: nkString, stringVal: "0x" & hex, pos: Pos()))
+
+proc bigIntNode(x: uint64 | int64): RespResult =
+  # stdlib toHex is not suitable for hive
+  const
+    HexChars = "0123456789abcdef"
+  var
+    n = cast[uint64](x)
+    r: array[2*sizeof(uint64), char]
+    i = 0
+  while n > 0:
+    r[i] = HexChars[int(n and 0xF)]
+    n = n shr 4
+    inc i
+  var hex = newString(i+2)
+  hex[0] = '0'
+  hex[1] = 'x'
+  while i > 0:
+    hex[hex.len-i] = r[i-1]
+    dec i
+  ok(Node(kind: nkString, stringVal: hex, pos: Pos()))
 
 proc byte32Node(val: UInt256): RespResult =
   ok(Node(kind: nkString, stringVal: "0x" & val.dumpHex, pos: Pos()))
@@ -317,11 +336,30 @@ proc validateHex(x: Node, minLen = 0): NodeResult =
     return err("expect hex with len '$1', got '$2'" % [$(2 * minLen + 2), $x.stringVal.len])
   if x.stringVal.len mod 2 != 0:
     return err("hex must have even number of nibbles")
-  if x.stringVal[0] != '0' or x.stringVal[1] notin {'x', 'X'}:
+  if x.stringVal[0] != '0' or x.stringVal[1] != 'x':
     return err("hex should be prefixed by '0x'")
   for i in 2..<x.stringVal.len:
     if x.stringVal[i] notin HexDigits:
       return err("invalid chars in hex")
+  ok(x)
+
+proc validateFixedLenHex(x: Node, minLen: int, kind: string): NodeResult =
+  if x.stringVal.len < 2:
+    return err(kind & " hex is too short")
+
+  var prefixLen = 0
+  if x.stringVal[0] == '0' and x.stringVal[1] == 'x':
+    prefixLen = 2
+
+  let expectedLen = minLen * 2 + prefixLen
+  if x.stringVal.len < expectedLen:
+    return err("$1 len is too short: expect $2 got $3" %
+      [kind, $expectedLen, $x.stringVal.len])
+
+  for i in prefixLen..<x.stringVal.len:
+    if x.stringVal[i] notin HexDigits:
+      return err("invalid chars in $1 hex" % [kind])
+
   ok(x)
 
 proc scalarBytes32(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, nosideEffect.} =
@@ -329,14 +367,14 @@ proc scalarBytes32(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, g
   ## represented as 0x-prefixed hexadecimal.
   if node.kind != nkString:
     return err("expect hex string, but got '$1'" % [$node.kind])
-  validateHex(node, 32)
+  validateFixedLenHex(node, 32, "Bytes32")
 
 proc scalarAddress(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, nosideEffect.} =
   ## Address is a 20 byte Ethereum address,
   ## represented as 0x-prefixed hexadecimal.
   if node.kind != nkString:
     return err("expect hex string, but got '$1'" % [$node.kind])
-  validateHex(node, 20)
+  validateFixedLenHex(node, 20, "Address")
 
 proc scalarBytes(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, nosideEffect.} =
   ## Bytes is an arbitrary length binary string,
@@ -352,36 +390,65 @@ proc scalarBigInt(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gc
   ## either a JSON number or as a string.
   ## Strings may be either decimal or 0x-prefixed hexadecimal.
   ## Output values are all 0x-prefixed hexadecimal.
-  if node.kind == nkInt:
-    # convert it into hex nkString node
-    let val = parse(node.intVal, UInt256, radix = 10)
-    validateHex(Node(kind: nkString, stringVal: "0x" & val.toHex, pos: node.pos))
-  elif node.kind == nkString:
-    if {'x', 'X'} in node.stringVal:
-      # probably a hex string
-      if node.stringVal.len > 66:
-        # 256 bits = 32 bytes = 64 hex nibbles
-        # 64 hex nibbles + '0x' prefix = 66 bytes
-        return err("Big Int should not exceed 66 bytes")
-      validateHex(node)
-    else:
+  try:
+    if node.kind == nkInt:
       # convert it into hex nkString node
-      let val = parse(node.stringVal, UInt256, radix = 10)
-      node.stringVal = "0x" & val.toHex
-      validateHex(node)
-  else:
-    return err("expect hex/dec string or int, but got '$1'" % [$node.kind])
+      let val = parse(node.intVal, UInt256, radix = 10)
+      ok(Node(kind: nkString, stringVal: "0x" & val.toHex, pos: node.pos))
+    elif node.kind == nkString:
+      if node.stringVal.len > 2 and node.stringVal[1] == 'x':
+        if node.stringVal[0] != '0':
+          return err("Big Int hex malformed")
+        if node.stringVal.len > 66:
+          # 256 bits = 32 bytes = 64 hex nibbles
+          # 64 hex nibbles + '0x' prefix = 66 bytes
+          return err("Big Int hex should not exceed 66 bytes")
+        for i in 2..<node.stringVal.len:
+          if node.stringVal[i] notin HexDigits:
+            return err("invalid chars in BigInt hex")
+        ok(node)
+      elif HexDigits in node.stringVal:
+        if node.stringVal.len > 64:
+          return err("Big Int hex should not exceed 64 bytes")
+        for i in 0..<node.stringVal.len:
+          if node.stringVal[i] notin HexDigits:
+            return err("invalid chars in BigInt hex")
+        ok(node)
+      else:
+        # convert it into hex nkString node
+        let val = parse(node.stringVal, UInt256, radix = 10)
+        node.stringVal = "0x" & val.toHex
+        ok(node)
+    else:
+      return err("expect hex/dec string or int, but got '$1'" % [$node.kind])
+  except CatchableError as e:
+    err("scalar BigInt error: " & e.msg)
 
 proc scalarLong(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, nosideEffect.} =
   ## Long is a 64 bit unsigned integer.
   const maxU64 = uint64.high.u256
-  if node.kind == nkInt:
-    let val = parse(node.intVal, UInt256, radix = 10)
-    if val > maxU64:
-      return err("long value overflow")
-    ok(node)
-  else:
-    err("expect int, but got '$1'" % [$node.kind])
+  try:
+    case node.kind
+    of nkString:
+      if node.stringVal.len > 2 and node.stringVal[1] == 'x':
+        let val = parse(node.stringVal, UInt256, radix = 16)
+        if val > maxU64:
+          return err("long value overflow")
+        ok(Node(kind: nkInt, pos: node.pos, intVal: $val))
+      else:
+        let val = parse(node.stringVal, UInt256, radix = 10)
+        if val > maxU64:
+          return err("long value overflow")
+        ok(Node(kind: nkInt, pos: node.pos, intVal: node.stringVal))
+    of nkInt:
+      let val = parse(node.intVal, UInt256, radix = 10)
+      if val > maxU64:
+        return err("long value overflow")
+      ok(node)
+    else:
+      err("expect int, but got '$1'" % [$node.kind])
+  except CatchableError as e:
+    err("scalar Long error: " & e.msg)
 
 proc accountAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -710,7 +777,8 @@ proc blockTransactionAt(ud: RootRef, params: Args, parent: Node): RespResult {.a
 proc blockLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   # TODO: stub, missing impl
-  
+  err("not implemented")
+
 proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let h = headerNode(parent)
@@ -732,6 +800,9 @@ proc toCallData(n: Node): (RpcCallData, bool) =
   if n[2][1].kind != nkEmpty:
     cd.gas = parseU64(n[2][1]).GasInt
     gasLimit = true
+  else:
+    # TODO: this is globalGasCap in geth
+    cd.gas = GasInt(high(uint64) div 2)
 
   if n[3][1].kind != nkEmpty:
     let gasPrice = parse(n[3][1].stringVal, UInt256, radix = 16)
@@ -745,7 +816,8 @@ proc toCallData(n: Node): (RpcCallData, bool) =
 
   (cd, gasLimit)
 
-proc makeCall(ctx: GraphqlContextRef, callData: RpcCallData, header: BlockHeader, chainDB: BaseChainDB): RespResult =
+proc makeCall(ctx: GraphqlContextRef, callData: RpcCallData,
+              header: BlockHeader, chainDB: BaseChainDB): RespResult =
   let (outputHex, gasUsed, isError) = rpcMakeCall(callData, header, chainDB)
   var map = respMap(ctx.ids[ethCallResult])
   map["data"]    = resp("0x" & outputHex)
@@ -798,7 +870,7 @@ const blockProcs = {
   "ommerHash": blockOmmerHash,
   "transactions": blockTransactions,
   "transactionAt": blockTransactionAt,
-  "blockLogs": blockLogs,
+  "logs": blockLogs,
   "account": blockAccount,
   "call": blockCall,
   "estimateGas": blockEstimateGas
@@ -855,23 +927,28 @@ const syncStateProcs = {
 proc pendingTransactionCount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   # TODO: stub, missing impl
+  err("not implemented")
 
 proc pendingTransactions(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   # TODO: stub, missing impl
+  err("not implemented")
 
 proc pendingAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   # TODO: stub, missing impl
-  
+  err("not implemented")
+
 proc pendingCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   # TODO: stub, missing impl
-  
+  err("not implemented")
+
 proc pendingEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   # TODO: stub, missing impl
-  
+  err("not implemented")
+
 const pendingProcs = {
   "transactionCount": pendingTransactionCount,
   "transactions": pendingTransactions,
@@ -884,7 +961,9 @@ proc queryBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma
   let ctx = GraphqlContextRef(ud)
   let number = params[0].val
   let hash = params[1].val
-  if number.kind == nkInt:
+  if number.kind != nkEmpty and hash.kind != nkEmpty:
+    err("only one param allowed, number or hash, not both")
+  elif number.kind == nkInt:
     getBlockByNumber(ctx, number)
   elif hash.kind == nkString:
     getBlockByHash(ctx, hash)
@@ -923,6 +1002,7 @@ proc queryBlocks(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
 proc queryPending(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   # TODO: stub, missing impl
+  err("not implemented")
 
 proc queryTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -932,7 +1012,8 @@ proc queryTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.api
 proc queryLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   # TODO: stub, missing impl
-  
+  err("not implemented")
+
 proc queryGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   try:
