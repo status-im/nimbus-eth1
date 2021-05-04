@@ -165,7 +165,7 @@ proc txSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMStat
     depth: 0,
     gas: gas,
     sender: sender,
-    contractAddress: tx.getRecipient(),
+    contractAddress: tx.getRecipient(sender),
     codeAddress: tx.to,
     value: tx.value,
     data: tx.payload
@@ -189,7 +189,7 @@ proc txInitialAccessListEIP2929(tx: Transaction, sender: EthAddress, vmState: Ba
       # For contract creations the EVM will add the contract address to the
       # access list itself, after calculating the new contract address.
       if not tx.isContractCreation:
-        db.accessList(tx.getRecipient())
+        db.accessList(tx.getRecipient(sender))
       for c in activePrecompiles():
         db.accessList(c)
 

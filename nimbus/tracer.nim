@@ -109,7 +109,7 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
-    let recipient = tx.getRecipient
+    let recipient = tx.getRecipient(sender)
 
     if idx == txIndex:
       vmState.enableTracing()
@@ -167,7 +167,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
-    let recipient = tx.getRecipient
+    let recipient = tx.getRecipient(sender)
     before.captureAccount(stateBefore, sender, senderName & $idx)
     before.captureAccount(stateBefore, recipient, recipientName & $idx)
 
@@ -182,7 +182,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
-    let recipient = tx.getRecipient
+    let recipient = tx.getRecipient(sender)
     after.captureAccount(stateAfter, sender, senderName & $idx)
     after.captureAccount(stateAfter, recipient, recipientName & $idx)
     vmState.removeTracedAccounts(sender, recipient)

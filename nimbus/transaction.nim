@@ -69,9 +69,8 @@ proc getSender*(transaction: Transaction): EthAddress =
   if not transaction.getSender(result):
     raise newException(ValidationError, "Could not derive sender address from transaction")
 
-proc getRecipient*(tx: Transaction): EthAddress =
+proc getRecipient*(tx: Transaction, sender: EthAddress): EthAddress =
   if tx.isContractCreation:
-    let sender = tx.getSender()
     result = generateAddress(sender, tx.accountNonce)
   else:
     result = tx.to

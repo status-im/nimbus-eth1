@@ -63,7 +63,7 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
     depth: 0,
     gas: gas,
     sender: sender,
-    contractAddress: tx.getRecipient(),
+    contractAddress: tx.getRecipient(sender),
     codeAddress: tx.to,
     value: tx.value,
     data: tx.payload
