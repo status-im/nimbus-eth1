@@ -1044,6 +1044,9 @@ const queryProcs = {
 }
 
 proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  # TODO: add tx validation and tx processing
+  # probably goes to tx pool
+  # if tx validation failed, the result will be null
   let ctx = GraphqlContextRef(ud)
   try:
     let data   = hexToSeqByte(params[0].val.stringVal)
