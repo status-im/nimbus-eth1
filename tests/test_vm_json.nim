@@ -10,7 +10,8 @@ import
   stew/byteutils, eth/[rlp, common], eth/trie/db,
   ./test_helpers, ./test_allowed_to_fail, ../nimbus/vm_internals,
   ../nimbus/[constants, vm_state, vm_types, utils],
-  ../nimbus/db/[db_chain]
+  ../nimbus/db/[db_chain],
+  ../nimbus/transaction/call_evm
 
 func bytesToHex(x: openarray[byte]): string {.inline.} =
   ## TODO: use seq[byte] for raw data and delete this proc
@@ -44,24 +45,21 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   vmState.mutateStateDB:
     setupStateDB(fixture{"pre"}, db)
 
-  vmState.setupTxContext(
-    origin = fexec{"origin"}.getStr.parseAddress,
-    gasPrice = fexec{"gasPrice"}.getHexadecimalInt
-  )
-
+  var call: RpcCallData
   let toAddress = fexec{"address"}.getStr.parseAddress
-  let message = Message(
-    kind: if toAddress == ZERO_ADDRESS: evmcCreate else: evmcCall, # assume ZERO_ADDRESS is a contract creation
-    depth: 0,
-    gas: fexec{"gas"}.getHexadecimalInt,
-    sender: fexec{"caller"}.getStr.parseAddress,
-    contractAddress: toAddress,
-    codeAddress: toAddress,
-    value: cast[uint64](fexec{"value"}.getHexadecimalInt).u256, # Cast workaround for negative value
-    data: fexec{"data"}.getStr.hexToSeqByte
-    )
+  let origin = fexec{"origin"}.getStr.parseAddress
 
-  var computation = newComputation(vmState, message)
+  call.source = fexec{"caller"}.getStr.parseAddress
+  call.to = toAddress
+  call.gas = fexec{"gas"}.getHexadecimalInt
+  call.gasPrice = fexec{"gasPrice"}.getHexadecimalInt
+  # Cast workaround for negative value
+  call.value = cast[uint64](fexec{"value"}.getHexadecimalInt).u256
+  call.data = fexec{"data"}.getStr.hexToSeqByte
+  # assume ZERO_ADDRESS is a contract creation
+  call.contractCreation = (toAddress == ZERO_ADDRESS)
+
+  var computation = fixtureSetupComputation(vmState, call, origin)
   computation.executeOpcodes()
 
   if not fixture{"post"}.isNil:

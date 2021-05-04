@@ -282,3 +282,23 @@ proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byt
   result.memory          = c.memory
   result.vmState         = c.vmState
   result.contractAddress = c.msg.contractAddress
+
+proc fixtureSetupComputation*(vmState: BaseVMState, call: RpcCallData, origin: EthAddress): Computation =
+  vmState.setupTxContext(
+    origin = origin,          # Differs from `rpcSetupComputation`
+    gasPrice = call.gasPrice,
+    # fork is not set.
+  )
+
+  var msg = Message(
+    kind: if call.contractCreation: evmcCreate else: evmcCall,
+    depth: 0,
+    gas: call.gas,            # Differs from `rpcSetupComputation`
+    sender: call.source,
+    contractAddress: call.to, # Differs from `rpcSetupComputation`
+    codeAddress: call.to,
+    value: call.value,
+    data: call.data
+  )
+
+  return newComputation(vmState, msg)
