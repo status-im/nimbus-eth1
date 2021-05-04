@@ -283,7 +283,7 @@ proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byt
   result.vmState         = c.vmState
   result.contractAddress = c.msg.contractAddress
 
-proc fixtureSetupComputation*(vmState: BaseVMState, call: RpcCallData, origin: EthAddress): Computation =
+proc fixtureSetupComputation(vmState: BaseVMState, call: RpcCallData, origin: EthAddress): Computation =
   vmState.setupTxContext(
     origin = origin,          # Differs from `rpcSetupComputation`
     gasPrice = call.gasPrice,
@@ -302,3 +302,28 @@ proc fixtureSetupComputation*(vmState: BaseVMState, call: RpcCallData, origin: E
   )
 
   return newComputation(vmState, msg)
+
+type
+  FixtureResult* = object
+    isError*:         bool
+    error*:           Error
+    gasRemaining*:    GasInt
+    output*:          seq[byte]
+    vmState*:         BaseVMState
+    logEntries*:      seq[Log]
+
+proc fixtureCallEvm*(vmState: BaseVMState, call: RpcCallData, origin: EthAddress): FixtureResult =
+  var c = fixtureSetupComputation(vmState, call, origin)
+
+  # Next line differs from all the other EVM calls.  With `execComputation`,
+  # most "vm json tests" fail with either `balanceDiff` or `nonceDiff` errors.
+  c.executeOpcodes()
+
+  # Some of these are extra returned state, for testing, that a normal EVMC API
+  # computation doesn't return.  We'll have to obtain them outside EVMC.
+  result.isError         = c.isError
+  result.error           = c.error
+  result.gasRemaining    = c.gasMeter.gasRemaining
+  result.output          = c.output
+  result.vmState         = c.vmState
+  shallowCopy(result.logEntries, c.logEntries)
