@@ -33,26 +33,22 @@ type
     ethQuery        = "Query"
     ethMutation     = "Mutation"
 
-  HeaderNode = ref object
-    node: NodeObj
+  HeaderNode = ref object of Node
     header: BlockHeader
 
-  AccountNode = ref object
-    node: NodeObj
+  AccountNode = ref object of Node
     address: EthAddress
     account: Account
     db: ReadOnlyStateDB
 
-  TxNode = ref object
-    node: NodeObj
+  TxNode = ref object of Node
     tx: Transaction
     index: int
     blockNumber: BlockNumber
     receipt: Receipt
     gasUsed: GasInt
 
-  LogNode = ref object
-    node: NodeObj
+  LogNode = ref object of Node
     log: Log
     index: int
     tx: TxNode
@@ -70,66 +66,42 @@ proc toBlockNumber(n: Node): BlockNumber =
   result = parse(n.intVal, UInt256, radix = 10)
 
 proc headerNode(ctx: GraphqlContextRef, header: BlockHeader): Node =
-  let n = HeaderNode(
-    node: NodeObj(
-      kind: nkMap,
-      typeName: ctx.ids[ethBlock],
-      pos: Pos()
-    ),
+  HeaderNode(
+    kind: nkMap,
+    typeName: ctx.ids[ethBlock],
+    pos: Pos(),
     header: header
   )
-  cast[Node](n)
-
-proc headerNode(n: Node): HeaderNode =
-  cast[HeaderNode](n)
 
 proc accountNode(ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: ReadOnlyStateDB): Node =
-  let n = AccountNode(
-    node: NodeObj(
-      kind: nkMap,
-      typeName: ctx.ids[ethAccount],
-      pos: Pos()
-    ),
+  AccountNode(
+    kind: nkMap,
+    typeName: ctx.ids[ethAccount],
+    pos: Pos(),
     account: acc,
     address: address,
     db: db
   )
-  cast[Node](n)
-
-proc accountNode(n: Node): AccountNode =
-  cast[AccountNode](n)
 
 proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: int, blockNumber: BlockNumber): Node =
-  let n = TxNode(
-    node: NodeObj(
-      kind: nkMap,
-      typeName: ctx.ids[ethTransaction],
-      pos: Pos()
-    ),
+  TxNode(
+    kind: nkMap,
+    typeName: ctx.ids[ethTransaction],
+    pos: Pos(),
     tx: tx,
     index: index,
     blockNumber: blockNumber
   )
-  cast[Node](n)
-
-proc txNode(n: Node): TxNode =
-  cast[TxNode](n)
 
 proc logNode(ctx: GraphqlContextRef, log: Log, index: int, tx: TxNode): Node =
-  let n = LogNode(
-    node: NodeObj(
-      kind: nkMap,
-      typeName: ctx.ids[ethLog],
-      pos: Pos()
-    ),
+  LogNode(
+    kind: nkMap,
+    typeName: ctx.ids[ethLog],
+    pos: Pos(),
     log: log,
     index: index,
     tx: tx
   )
-  cast[Node](n)
-
-proc logNode(n: Node): LogNode =
-  cast[LogNode](n)
 
 proc getAccountDb(chainDB: BaseChainDB, header: BlockHeader): ReadOnlyStateDB =
   ## Retrieves the account db from canonical head
@@ -269,7 +241,7 @@ proc getTxs(ctx: GraphqlContextRef, header: BlockHeader): RespResult =
     index = 0
     var prevUsed = 0.GasInt
     for r in getReceipts(ctx.chainDB, header.receiptRoot):
-      let tx = txNode(list.sons[index])
+      let tx = TxNode(list.sons[index])
       tx.receipt = r
       tx.gasUsed = r.cumulativeGasUsed - prevUsed
       prevUsed = r.cumulativeGasUsed
@@ -291,7 +263,7 @@ proc getTxAt(ctx: GraphqlContextRef, header: BlockHeader, index: int): RespResul
       var prevUsed = 0.GasInt
       for r in getReceipts(ctx.chainDB, header.receiptRoot):
         if i == index:
-          let tx = txNode(txn)
+          let tx = TxNode(txn)
           tx.receipt = r
           tx.gasUsed = r.cumulativeGasUsed - prevUsed
         prevUsed = r.cumulativeGasUsed
@@ -452,28 +424,28 @@ proc scalarLong(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsa
 
 proc accountAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let acc = accountNode(parent)
+  let acc = AccountNode(parent)
   resp(acc.address)
 
 proc accountBalance(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let acc = accountNode(parent)
+  let acc = AccountNode(parent)
   bigIntNode(acc.account.balance)
 
 proc accountTxCount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let acc = accountNode(parent)
+  let acc = AccountNode(parent)
   longNode(acc.account.nonce)
 
 proc accountCode(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let acc = accountNode(parent)
+  let acc = AccountNode(parent)
   let code = acc.db.getCode(acc.address)
   resp(code)
 
 proc accountStorage(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let acc = accountNode(parent)
+  let acc = AccountNode(parent)
   let slot = parse(params[0].val.stringVal, UInt256, radix = 16)
   let (val, _) = acc.db.getStorage(acc.address, slot)
   byte32Node(val)
@@ -488,23 +460,23 @@ const accountProcs = {
 
 proc logIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let log = logNode(parent)
+  let log = LogNode(parent)
   ok(resp(log.index))
 
 proc logAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   # TODO: with block param
   let ctx = GraphqlContextRef(ud)
-  let log = logNode(parent)
+  let log = LogNode(parent)
 
   let hres = ctx.getBlockByNumber(log.tx.blockNumber)
   if hres.isErr:
     return hres
-  let h = headerNode(hres.get())
+  let h = HeaderNode(hres.get())
   ctx.accountNode(h.header, log.log.address)
 
 proc logTopics(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let log = logNode(parent)
+  let log = LogNode(parent)
   var list = respList()
   for n in log.log.topics:
     list.add resp("0x" & n.toHex)
@@ -512,12 +484,12 @@ proc logTopics(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
 
 proc logData(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let log = logNode(parent)
+  let log = LogNode(parent)
   resp(log.log.data)
 
 proc logTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let log = logNode(parent)
+  let log = LogNode(parent)
   ok(cast[Node](log.tx))
 
 const logProcs = {
@@ -530,74 +502,74 @@ const logProcs = {
 
 proc txHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let
-    tx = txNode(parent)
+    tx = TxNode(parent)
     encodedTx = rlp.encode(tx.tx)
     txHash = keccakHash(encodedTx)
   resp(txHash)
 
 proc txNonce(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   longNode(tx.tx.accountNonce)
 
 proc txIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   ok(resp(tx.index))
 
 proc txFrom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   # TODO: with block param
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   var sender: EthAddress
   if not getSender(tx.tx, sender):
     return ok(respNull())
   let hres = ctx.getBlockByNumber(tx.blockNumber)
   if hres.isErr:
     return hres
-  let h = headerNode(hres.get())
+  let h = HeaderNode(hres.get())
   ctx.accountNode(h.header, sender)
 
 proc txTo(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   # TODO: with block param
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   if tx.tx.isContractCreation:
     return ok(respNull())
   let hres = ctx.getBlockByNumber(tx.blockNumber)
   if hres.isErr:
     return hres
-  let h = headerNode(hres.get())
+  let h = HeaderNode(hres.get())
   ctx.accountNode(h.header, tx.tx.to)
 
 proc txValue(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   bigIntNode(tx.tx.value)
 
 proc txGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   bigIntNode(tx.tx.gasPrice)
 
 proc txGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   longNode(tx.tx.gasLimit)
 
 proc txInputData(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   resp(tx.tx.payload)
 
 proc txBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   ctx.getBlockByNumber(tx.blockNumber)
 
 proc txStatus(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   if tx.receipt.hasStatus:
     longNode(tx.receipt.status().uint64)
   else:
@@ -605,17 +577,17 @@ proc txStatus(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.}
 
 proc txGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   longNode(tx.gasUsed)
 
 proc txCumulativeGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   longNode(tx.receipt.cumulativeGasUsed)
 
 proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   var sender: EthAddress
   if not getSender(tx.tx, sender):
     return ok(respNull())
@@ -623,7 +595,7 @@ proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.ap
   let hres = getBlockByNumber(ctx, tx.blockNumber)
   if hres.isErr:
     return hres
-  let h = headerNode(hres.get())
+  let h = HeaderNode(hres.get())
   let db = getAccountDb(ctx.chainDB, h.header)
   let creationNonce = db.getNonce(sender)
   let contractAddress = generateAddress(sender, creationNonce)
@@ -631,7 +603,7 @@ proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.ap
 
 proc txLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let tx = txNode(parent)
+  let tx = TxNode(parent)
   var list = respList()
   for i, n in tx.receipt.logs:
     list.add logNode(ctx, n, i, tx)
@@ -657,120 +629,120 @@ const txProcs = {
 
 proc blockNumberImpl(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   longNode(h.header.blockNumber)
 
 proc blockHashImpl(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   let hash = blockHash(h.header)
   resp(hash)
 
 proc blockParent(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   getBlockByHash(ctx, h.header.parentHash)
 
 proc blockNonce(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   ok(resp("0x" & h.header.nonce.toHex))
 
 proc blockTransactionsRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   resp(h.header.txRoot)
 
 proc blockTransactionCount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   ctx.getTxCount(h.header.txRoot)
 
 proc blockStateRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   resp(h.header.stateRoot)
 
 proc blockReceiptsRoot(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   resp(h.header.receiptRoot)
 
 proc blockMiner(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   ctx.accountNode(h.header, h.header.coinbase)
 
 proc blockExtraData(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   resp(h.header.extraData)
 
 proc blockGasLimit(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   longNode(h.header.gasLimit)
 
 proc blockGasUsed(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   longNode(h.header.gasUsed)
 
 proc blockTimestamp(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   bigIntNode(h.header.timestamp.toUnix.uint64)
 
 proc blockLogsBloom(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   resp(h.header.bloom)
 
 proc blockMixHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   resp(h.header.mixDigest)
 
 proc blockDifficulty(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   bigIntNode(h.header.difficulty)
 
 proc blockTotalDifficulty(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   let hash = blockHash(h.header)
   getTotalDifficulty(ctx, hash)
 
 proc blockOmmerCount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   getOmmerCount(ctx, h.header.ommersHash)
 
 proc blockOmmers(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   getOmmers(ctx, h.header.ommersHash)
 
 proc blockOmmerAt(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   let index = parseU64(params[0].val)
   getOmmerAt(ctx, h.header.ommersHash, index.int)
 
 proc blockOmmerHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   resp(h.header.ommersHash)
 
 proc blockTransactions(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   getTxs(ctx, h.header)
 
 proc blockTransactionAt(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   let index = parseU64(params[0].val)
   getTxAt(ctx, h.header, index.int)
 
@@ -781,7 +753,7 @@ proc blockLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
 
 proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   let address = hexToByteArray[20](params[0].val.stringVal)
   ctx.accountNode(h.header, address)
 
@@ -827,7 +799,7 @@ proc makeCall(ctx: GraphqlContextRef, callData: RpcCallData,
 
 proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   let param = params[0].val
   try:
     let (callData, gasLimit) = toCallData(param)
@@ -837,7 +809,7 @@ proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
 
 proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
-  let h = headerNode(parent)
+  let h = HeaderNode(parent)
   let param = params[0].val
   try:
     let (callData, gasLimit) = toCallData(param)
