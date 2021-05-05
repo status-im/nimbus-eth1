@@ -345,6 +345,10 @@ type Pending {
 }
 
 type Query {
+  # Account fetches an Ethereum account at the specified block number.
+  # If blockNumber is not provided, it defaults to the most recent block.
+  account(address: Address!, blockNumber: Long): Account!
+
   # Block fetches an Ethereum block by number or by hash. If neither is
   # supplied, the most recent known block is returned.
   block(number: Long, hash: Bytes32): Block

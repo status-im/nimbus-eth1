@@ -590,6 +590,9 @@ proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.ap
   let tx = TxNode(parent)
   var sender: EthAddress
   if not getSender(tx.tx, sender):
+    return err("can't calculate sender")
+
+  if not tx.tx.isContractCreation:
     return ok(respNull())
 
   let hres = getBlockByNumber(ctx, tx.blockNumber)
@@ -929,6 +932,22 @@ const pendingProcs = {
   "estimateGas": pendingEstimateGas
 }
 
+proc pickBlockNumber(ctx: GraphqlContextRef, number: Node): BlockNumber =
+  if number.kind == nkEmpty:
+    ctx.chainDB.highestBlock
+  else:
+    parseU64(number).toBlockNumber
+
+proc queryAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let ctx = GraphqlContextRef(ud)
+  let address = hexToByteArray[20](params[0].val.stringVal)
+  let blockNumber = pickBlockNumber(ctx, params[1].val)
+  let hres = getBlockByNumber(ctx, blockNumber)
+  if hres.isErr:
+    return hres
+  let h = HeaderNode(hres.get())
+  accountNode(ctx, h.header, address)
+
 proc queryBlock(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let number = params[0].val
@@ -947,10 +966,7 @@ proc queryBlocks(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragm
   let fromNumber = parseU64(params[0].val).toBlockNumber
 
   let to = params[1].val
-  let toNumber = if to.kind == nkEmpty:
-                   ctx.chainDB.highestBlock
-                 else:
-                   parseU64(to).toBlockNumber
+  let toNumber = pickBlockNumber(ctx, to)
 
   if fromNumber > toNumber:
     return err("from($1) is bigger than to($2)" % [fromNumber.toString, toNumber.toString])
@@ -1005,6 +1021,7 @@ proc querySyncing(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   ok(respMap(ctx.ids[ethSyncState]))
 
 const queryProcs = {
+  "account": queryAccount,
   "block": queryBlock,
   "blocks": queryBlocks,
   "pending": queryPending,
