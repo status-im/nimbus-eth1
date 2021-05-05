@@ -97,6 +97,9 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   of CustomNet:
     let genesis = getConfiguration().customGenesis
     var alloc = new GenesisAlloc
+
+    # note that the following parseJson() assignment implies a possible
+    # base class `Exception`
     if genesis.prealloc != parseJson("{}"):
       alloc = customNetPrealloc(genesis.prealloc)
     Genesis(
@@ -118,8 +121,11 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   result.config = publicChainConfig(id)
 
 proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
+
+  # note: newMemoryDB() assignment may throw an Exception exception
   let (tdb, pruneTrie) = if db.isNil: (newMemoryDB(), true)
                          else: (db.db, db.pruneTrie)
+  # note: initHexaryTrie() assignment may throw an Exception exception
   var trie = initHexaryTrie(tdb)
   var sdb = newAccountStateDB(tdb, trie.rootHash, pruneTrie)
 

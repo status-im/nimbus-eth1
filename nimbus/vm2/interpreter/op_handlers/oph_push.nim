@@ -13,6 +13,7 @@
 ##
 
 import
+  ../../../errors,
   ../../code_stream,
   ../../stack,
   ../op_codes,
@@ -21,6 +22,8 @@ import
   sequtils,
   stint,
   strformat
+
+{.push raises: [Defect,VMError,ValidationError,ValueError].}
 
 # ------------------------------------------------------------------------------
 # Private helpers

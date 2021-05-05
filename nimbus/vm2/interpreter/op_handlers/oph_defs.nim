@@ -11,8 +11,23 @@
 ## EVM Opcodes, Definitions
 ## ========================
 ##
+## Static exception filter strategy:
+##
+##   There is a general op handler type `Vm2OpFn` below which should throw
+##   only `Defect` and `CatchableError` exceptions. Unfortunately, for several
+##   reasons there are also `Exception` very base class exceptions. This
+##   `Exception` class exception is considered uncatchable but as it is the
+##   base class, it will be hard to filter it out without a run time delay
+##   penalty.
+##
+##   In order to have at least some compile time exception tracking support,
+##   there is a debugging mode compiler flag `-d:vm2_debug` which caused the
+##   op handlers to run selected functions in a try/catch mode relaying the
+##   `Exception` class exception to another, typically a `Defect` exception.
 
 import
+  ../../../errors,
+  ../../../vm_compile_flags,
   ../../types,
   ../forks_list,
   ../op_codes,
@@ -21,15 +36,18 @@ import
 type
   Vm2Ctx* = tuple
     cpt: Computation          ## computation text
-    rc: int                   ## return code from op handler
+    # rc: int                 ## return code from op handler
 
-  Vm2OpFn* =                  ## general op handler, return codes are passed
-                              ## back via argument descriptor ``k``
-    proc(k: var Vm2Ctx) {.gcsafe.}
+when relay_exception_base_class:
+  type
+    Vm2OpFn* = proc(k: var Vm2Ctx) {.gcsafe, raises: [Defect,CatchableError].}
+else:
+  type
+    Vm2OpFn* = proc(k: var Vm2Ctx) {.gcsafe, raises: [Exception].}
 
-
-  Vm2OpHanders* = tuple       ## three step op code execution, typically
-                              ## only the ``run`` entry is activated
+type
+  Vm2OpHanders* = tuple       ## op code execution handlers, currently
+                              ## only the ``run`` entry is executed.
     prep: Vm2OpFn
     run:  Vm2OpFn
     post: Vm2OpFn

@@ -11,6 +11,8 @@ import
   ../errors, ../validation,
   ./interpreter/utils/utils_numeric
 
+{.push raises: [Defect,ValueError,ValidationError].}
+
 type
   Memory* = ref object
     bytes*:  seq[byte]

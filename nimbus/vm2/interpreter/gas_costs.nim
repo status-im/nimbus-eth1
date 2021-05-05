@@ -10,6 +10,8 @@ import
   ./utils/[macros_gen_opcodes, utils_numeric],
   ./op_codes, ./forks_list, ../../errors
 
+{.push raises: [Defect,TypeError].}
+
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf
 type
@@ -98,11 +100,14 @@ type
     of GckFixed:
       cost*: GasInt
     of GckDynamic:
-      d_handler*: proc(value: Uint256): GasInt {.nimcall, gcsafe.}
+      d_handler*: proc(value: Uint256): GasInt
+                    {.nimcall, gcsafe, raises: [Defect,VMError].}
     of GckMemExpansion:
-      m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall, gcsafe.}
+      m_handler*: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt
+                    {.nimcall, gcsafe, raises: [Defect,VMError].}
     of GckComplex:
-      c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}
+      c_handler*: proc(value: Uint256, gasParams: GasParams): GasResult
+                    {.nimcall, gcsafe, raises: [Defect,VMError].}
       # We use gasCost/gasRefund for:
       #   - Properly log and order cost and refund (for Sstore especially)
       #   - Allow to use unsigned integer in the future
@@ -435,13 +440,17 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
     func fixed(gasFeeKind: static[GasFeeKind]): GasCost =
       GasCost(kind: GckFixed, cost: static(FeeSchedule[gasFeeKind]))
 
-    func dynamic(handler: proc(value: Uint256): GasInt {.nimcall, gcsafe.}): GasCost =
+    func dynamic(handler: proc(value: Uint256): GasInt
+        {.nimcall, gcsafe, raises: [Defect,VMError].}): GasCost =
       GasCost(kind: GckDynamic, d_handler: handler)
 
-    func memExpansion(handler: proc(currentMemSize, memOffset, memLength: GasNatural): GasInt {.nimcall, gcsafe.}): GasCost =
+    func memExpansion(handler:
+          proc(currentMemSize, memOffset, memLength: GasNatural): GasInt
+              {.nimcall, gcsafe, raises: [Defect,VMError].}): GasCost =
       GasCost(kind: GckMemExpansion, m_handler: handler)
 
-    func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult {.nimcall, gcsafe.}): GasCost =
+    func complex(handler: proc(value: Uint256, gasParams: GasParams): GasResult
+        {.nimcall, gcsafe, raises: [Defect,VMError].}): GasCost =
       GasCost(kind: GckComplex, c_handler: handler)
 
     # Returned value

@@ -9,6 +9,8 @@ import
   chronicles, strformat, eth/common, # GasInt
   ../../errors, ../types
 
+{.push raises: [Defect,ValueError,OutOfGas].}
+
 logScope:
   topics = "vm gas"
 

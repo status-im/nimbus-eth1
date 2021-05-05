@@ -8,10 +8,18 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+const
+  noisy {.intdefine.}: int = 0
+  # isNoisy {.used.} = noisy > 0
+  isChatty {.used.} = noisy > 1
+
 import
   ../constants,
   ../db/accounts_cache,
+  ../errors,
   ../utils,
+  ../utils/exception,
+  ../vm_compile_flags,
   ./code_stream,
   ./interpreter/[forks_list, gas_meter, gas_costs, op_codes],
   ./memory,
@@ -24,6 +32,10 @@ import
   eth/[common, keys],
   options,
   sets
+
+{.push raises: [Defect,ValueError,
+                FullStack,InsufficientStack,OutOfGas,ValidationError].}
+# Note that some functions below imply Exception base class
 
 logScope:
   topics = "vm computation"
@@ -160,6 +172,11 @@ proc rollback*(c: Computation) =
 proc setError*(c: Computation, msg: string, burnsGas = false) {.inline.} =
   c.error = Error(info: msg, burnsGas: burnsGas)
 
+# ------------------------------------------------------------------------------
+# pop,push => need redefine, exceptions seem to be merged when pushing
+{.pop,push raises: [Exception].}
+# ------------------------------------------------------------------------------
+
 proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
   result = true
 
@@ -187,16 +204,28 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
       c.output = @[]
     result = false
 
+# ------------------------------------------------------------------------------
+# template => no applicable raise list
+# ------------------------------------------------------------------------------
+
 template chainTo*(c, toChild: Computation, after: untyped) =
   c.child = toChild
   c.continuation = proc() =
     after
+
+# ------------------------------------------------------------------------------
+{.pop,push raises: [Defect,ValueError,OutOfGas].}
+# ------------------------------------------------------------------------------
 
 proc merge*(c, child: Computation) =
   c.logEntries.add child.logEntries
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
   c.suicides.incl child.suicides
   c.touchedAccounts.incl child.touchedAccounts
+
+# ------------------------------------------------------------------------------
+{.pop,push raises: [Exception].}
+# ------------------------------------------------------------------------------
 
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
   c.vmState.mutateStateDB:
@@ -221,6 +250,11 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
   # Register the account to be deleted
   c.suicides.incl(c.msg.contractAddress)
 
+# ------------------------------------------------------------------------------
+{.pop,push raises: [Defect,ValueError,
+                    FullStack,InsufficientStack,OutOfGas,ValidationError].}
+# ------------------------------------------------------------------------------
+
 proc addLogEntry*(c: Computation, log: Log) {.inline.} =
   c.logEntries.add(log)
 
@@ -238,14 +272,66 @@ proc tracingEnabled*(c: Computation): bool {.inline.} =
 proc traceOpCodeStarted*(c: Computation, op: Op): int {.inline.} =
   c.vmState.tracer.traceOpCodeStarted(c, op)
 
+# ------------------------------------------------------------------------------
+when relay_exception_base_class:
+  {.pop,push raises: [Defect,CatchableError].}
+else:
+  {.pop,push raises: [Exception].}
+# ------------------------------------------------------------------------------
+
 proc traceOpCodeEnded*(c: Computation, op: Op, lastIndex: int) {.inline.} =
-  c.vmState.tracer.traceOpCodeEnded(c, op, lastIndex)
+  # Exception => Defect in debug mode
+  Exception.relayAsExcept(Defect,CatchableError,relay_exception_base_class):
+    c.vmState.tracer.traceOpCodeEnded(c, op, lastIndex)
+
+# ------------------------------------------------------------------------------
+{.pop,push raises: [Defect,KeyError].}
+# ------------------------------------------------------------------------------
 
 proc traceError*(c: Computation) {.inline.} =
   c.vmState.tracer.traceError(c)
 
 proc prepareTracer*(c: Computation) {.inline.} =
   c.vmState.tracer.prepare(c.msg.depth)
+
+# ------------------------------------------------------------------------------
+# Debugging ...
+# ------------------------------------------------------------------------------
+
+when isMainModule and isChatty:
+
+  import
+    times
+
+  # chase template exceptions, produce non-executable code
+  proc chaseTemplateExceptions*()
+      {.gcsafe,raises: [Defect,ValueError,FullStack,InsufficientStack,
+                        OutOfGas,ValidationError].} =
+    var
+      a: EthAddress
+      b: Uint256
+      c: Computation
+    discard c.getCoinbase
+    discard c.getTimestamp
+    discard c.getBlockNumber
+    discard c.getDifficulty
+    discard c.getGasLimit
+    discard c.getChainId
+    discard c.getOrigin
+    discard c.getGasPrice
+    discard c.getBlockHash(b)
+    discard c.accountExists(a)
+    discard c.getStorage(b)
+    discard c.getBalance(a)
+    discard c.getCodeSize(a)
+    discard c.getCodeHash(a)
+    c.selfDestruct(a)
+    discard c.getCode(a)
+    discard c.gasCosts
+    discard c.fork
+    discard c.isSuccess
+    discard c.isError
+    c.chainTo(c): discard
 
 # ------------------------------------------------------------------------------
 # End

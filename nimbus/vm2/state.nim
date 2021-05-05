@@ -16,6 +16,15 @@ import
   ../utils, json, ./transaction_tracer, ./types,
   ../config, ../../stateless/[witness_from_tree, witness_types]
 
+{.push raises: [Defect,CatchableError].}
+# Note that functions at the end of this source imply Exception base class
+
+
+# -----------------------------------------------------------------------------
+# pop,push => need redefine, exceptions seem to be merged when pushing
+{.pop,push raises: [Defect, ValueError, ValidationError].}
+# ------------------------------------------------------------------------------
+
 proc newAccessLogs*: AccessLogs =
   AccessLogs(reads: initTable[string, string](), writes: initTable[string, string]())
 
@@ -131,6 +140,10 @@ method gasLimit*(vmState: BaseVMState): GasInt {.base, gcsafe.} =
 when defined(geth):
   import db/geth_db
 
+# ------------------------------------------------------------------------------
+{.pop,push raises: [Defect,CatchableError].}
+# -----------------------------------------------------------------------------
+
 method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base, gcsafe.} =
   var ancestorDepth = vmState.blockHeader.blockNumber - blockNumber - 1
   if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
@@ -152,6 +165,10 @@ method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256
 
     var header = vmState.prevHeaders[idx]
     result = header.hash
+
+# -----------------------------------------------------------------------------
+{.pop,push raises: [Defect].}
+# -----------------------------------------------------------------------------
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
   ReadOnlyStateDB(vmState.accountDb)
@@ -203,6 +220,10 @@ proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
  if status: vmState.flags.incl GenerateWitness
  else: vmState.flags.excl GenerateWitness
 
+# ------------------------------------------------------------------------------
+{.pop,push raises: [Exception].}
+# ------------------------------------------------------------------------------
+
 proc buildWitness*(vmState: BaseVMState): seq[byte] =
   let rootHash = vmState.accountDb.rootHash
   let mkeys = vmState.accountDb.makeMultiKeys()
@@ -210,4 +231,5 @@ proc buildWitness*(vmState: BaseVMState): seq[byte] =
 
   # build witness from tree
   var wb = initWitnessBuilder(vmState.chainDB.db, rootHash, flags)
+  # note: buildWitness() assignment may throw an Exception exception
   result = wb.buildWitness(mkeys)

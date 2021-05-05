@@ -13,6 +13,7 @@
 ##
 
 import
+  ../../../errors,
   ../../computation,
   ../../stack,
   ../../state,
@@ -21,6 +22,8 @@ import
   eth/common,
   stint,
   times
+
+{.push raises: [Defect,CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

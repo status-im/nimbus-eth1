@@ -15,6 +15,8 @@
 import
   ../../../db/accounts_cache,
   ../../../errors,
+  ../../../utils/exception,
+  ../../../vm_compile_flags,
   ../../code_stream,
   ../../computation,
   ../../memory,
@@ -30,6 +32,11 @@ import
   eth/common,
   stint,
   strformat
+
+when relay_exception_base_class:
+  {.push raises: [Defect,CatchableError].}
+else:
+  {.push raises: [Exception].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -55,7 +62,9 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: Uint256) =
     c.gasMeter.refundGas(gasRefund)
 
   c.vmState.mutateStateDB:
-    db.setStorage(c.msg.contractAddress, slot, newValue)
+    # Exception => Defect in debug mode
+    Exception.relayAsExcept(Defect,CatchableError,relay_exception_base_class):
+      db.setStorage(c.msg.contractAddress, slot, newValue)
 
 
 proc jumpImpl(c: Computation; jumpTarget: UInt256) =
@@ -170,7 +179,9 @@ const
       k.cpt.gasMeter.refundGas(gasRefund)
 
     k.cpt.vmState.mutateStateDB:
-      db.setStorage(k.cpt.msg.contractAddress, slot, newValue)
+      # Exception => Defect in debug mode
+      Exception.relayAsExcept(Defect,CatchableError,relay_exception_base_class):
+        db.setStorage(k.cpt.msg.contractAddress, slot, newValue)
 
 
   sstoreEIP1283Op: Vm2OpFn = proc (k: var Vm2Ctx) =

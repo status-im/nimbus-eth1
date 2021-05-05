@@ -29,15 +29,28 @@ const
   evmc2_enabled* = defined(evmc2_enabled)
   vm2_enabled* = defined(vm2_enabled) and not evmc2_enabled
 
-  vm2_activated = vm2_enabled or evmc2_enabled
+  vm2_activated* =              ## set if either VM2 variant is activated
+    vm2_enabled or evmc2_enabled
 
   evmc0_enabled* = defined(evmc_enabled) and not  vm2_activated
   vm0_enabled* = not evmc0_enabled and not vm2_activated
 
-  vm0_activated =  vm0_enabled or evmc0_enabled
+  vm0_activated* =              ## set if either naitve VM variant is activated
+    vm0_enabled or evmc0_enabled
 
-  # set if either evmc is activated
-  evmc_enabled* = defined(evmc_enabled) or defined(evmc2_enabled)
+
+  evmc_enabled* =               ## set if either evmc is activated
+    defined(evmc_enabled) or defined(evmc2_enabled)
+
+  relay_exception_base_class* = ## map selected Exception tyype exceptions to
+                                ## Defect to get them out of the way of
+                                ## static raise[] annotation exception
+                                ## analysis
+    defined(vm2_debug)
+
+  low_memory_compile_time* =    ## help with low memory when compiling
+                                ## interpreter_dispatch.selectVM() function
+    defined(vm2_lowmem)
 
 static:
   doAssert vm2_activated or vm0_activated

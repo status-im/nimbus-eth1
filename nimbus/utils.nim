@@ -1,10 +1,23 @@
 import
+  ./vm_compile_flags,
   os, tables, json, ./config, stew/[results, byteutils],
   eth/trie/db, eth/[trie, rlp, common, keyfile], nimcrypto
 
 export nimcrypto.`$`
 
+when vm2_activated:
+  {.push raises: [Defect,ValueError].}
+  # Note that the calc functions may throw an Exception exception
+
+
+# ------------------------------------------------------------------------------
+when vm2_activated:
+  # pop,push => need redefine, exceptions seem to be merged when pushing
+  {.pop,push raises: [Exception].}
+# ------------------------------------------------------------------------------
+
 proc calcRootHash[T](items: openArray[T]): Hash256 =
+  # note: initHexaryTrie() assignment may throw an Exception exception
   var tr = initHexaryTrie(newMemoryDB())
   for i, t in items:
     tr.put(rlp.encode(i), rlp.encode(t))
@@ -15,6 +28,11 @@ template calcTxRoot*(transactions: openArray[Transaction]): Hash256 =
 
 template calcReceiptRoot*(receipts: openArray[Receipt]): Hash256 =
   calcRootHash(receipts)
+
+# ------------------------------------------------------------------------------
+when vm2_activated:
+  {.pop,push raises: [Defect,ValueError].}
+# ------------------------------------------------------------------------------
 
 func keccakHash*(value: openarray[byte]): Hash256 {.inline.} =
   keccak256.digest value
@@ -59,17 +77,34 @@ proc loadKeystoreFiles*(conf: NimbusConfiguration): Result[void, string] =
   except OSError, IOError:
     return err("keystore: cannot create directory")
 
-  for filename in walkDirRec(conf.keyStore):
+  when vm2_activated:
+    var filename = "***"
     try:
-      var data = json.parseFile(filename)
-      let address: EthAddress = hexToByteArray[20](data["address"].getStr())
-      conf.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
+      for walkName in walkDirRec(conf.keyStore):
+        filename = walkName
+        var data = json.parseFile(filename)
+        let address: EthAddress = hexToByteArray[20](data["address"].getStr())
+        conf.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
     except JsonParsingError:
       return err("keystore: json parsing error " & filename)
     except ValueError:
       return err("keystore: data parsing error")
     except Exception: # json raises Exception
       return err("keystore: " & getCurrentExceptionMsg())
+    except OSError:
+      return err("keystore: cannot walk directory")
+  else:
+    for filename in walkDirRec(conf.keyStore):
+      try:
+        var data = json.parseFile(filename)
+        let address: EthAddress = hexToByteArray[20](data["address"].getStr())
+        conf.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
+      except JsonParsingError:
+        return err("keystore: json parsing error " & filename)
+      except ValueError:
+        return err("keystore: data parsing error")
+      except Exception: # json raises Exception
+        return err("keystore: " & getCurrentExceptionMsg())
 
   result = ok()
 
@@ -80,7 +115,8 @@ proc getAccount*(conf: NimbusConfiguration, address: EthAddress): Result[NimbusA
     result = err("getAccount: not available " & address.toHex)
 
 proc unlockAccount*(conf: NimbusConfiguration, address: EthAddress, password: string): Result[void, string] =
-  var acc = conf.getAccount(address).tryGet()
+  var acc: NimbusAccount
+  acc = conf.getAccount(address).tryGet()
   let res = decodeKeyFileJson(acc.keystore, password)
   if res.isOk:
     acc.privateKey = res.get()

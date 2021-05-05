@@ -15,6 +15,8 @@
 import
   ../../../db/accounts_cache,
   ../../../errors,
+  ../../../utils/exception,
+  ../../../vm_compile_flags,
   ../../computation,
   ../../memory,
   ../../stack,
@@ -28,6 +30,11 @@ import
   ./oph_helpers,
   eth/common,
   stint
+
+when relay_exception_base_class:
+  {.push raises: [Defect,CatchableError].}
+else:
+  {.push raises: [Exception].}
 
 # ------------------------------------------------------------------------------
 # Private
@@ -72,7 +79,10 @@ const
   selfDestructOp: Vm2OpFn = proc(k: var Vm2Ctx) =
     ## 0xff, Halt execution and register account for later deletion.
     let beneficiary = k.cpt.stack.popAddress()
-    k.cpt.selfDestruct(beneficiary)
+
+    # Exception => Defect in debug mode
+    Exception.relayAsExcept(Defect,CatchableError,relay_exception_base_class):
+      k.cpt.selfDestruct(beneficiary)
 
   
   selfDestructEIP150Op: Vm2OpFn = proc(k: var Vm2Ctx) =
@@ -87,7 +97,10 @@ const
       k.cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
     k.cpt.gasMeter.consumeGas(
       gasCost, reason = "SELFDESTRUCT EIP150")
-    k.cpt.selfDestruct(beneficiary)
+
+    # Exception => Defect in debug mode
+    Exception.relayAsExcept(Defect,CatchableError,relay_exception_base_class):
+      k.cpt.selfDestruct(beneficiary)
 
 
   selfDestructEip161Op: Vm2OpFn = proc(k: var Vm2Ctx) =
@@ -107,7 +120,10 @@ const
       k.cpt.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
     k.cpt.gasMeter.consumeGas(
       gasCost, reason = "SELFDESTRUCT EIP161")
-    k.cpt.selfDestruct(beneficiary)
+
+    # Exception => Defect in debug mode
+    Exception.relayAsExcept(Defect,CatchableError,relay_exception_base_class):
+      k.cpt.selfDestruct(beneficiary)
 
 
   selfDestructEIP2929Op: Vm2OpFn = proc(k: var Vm2Ctx) =
@@ -133,7 +149,10 @@ const
 
     k.cpt.gasMeter.consumeGas(
       gasCost, reason = "SELFDESTRUCT EIP161")
-    k.cpt.selfDestruct(beneficiary)
+
+    # Exception => Defect in debug mode
+    Exception.relayAsExcept(Defect,CatchableError,relay_exception_base_class):
+      k.cpt.selfDestruct(beneficiary)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

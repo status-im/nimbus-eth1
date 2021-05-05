@@ -13,6 +13,7 @@ const
   noisy {.intdefine.}: int = 0
   # isNoisy {.used.} = noisy > 0
   isChatty {.used.} = noisy > 1
+  isMoreChatty {.used.} = noisy > 2
 
 import
   ../code_stream,
@@ -122,7 +123,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
       newIdentNode(op.toSymbolName),
       branchStmt)
 
-  when isChatty:
+  when isMoreChatty:
     echo ">>> ", result.repr
 
 # ------------------------------------------------------------------------------
