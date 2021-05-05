@@ -140,37 +140,37 @@ proc getAccountDb(chainDB: BaseChainDB, header: BlockHeader): ReadOnlyStateDB =
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, toBlockNumber(number))))
-  except EVMError as e:
+  except CatchableError as e:
     err(e.msg)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: BlockNumber): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, number)))
-  except EVMError as e:
+  except CatchableError as e:
     err(e.msg)
 
 proc getBlockByHash(ctx: GraphqlContextRef, hash: Node): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, toHash(hash))))
-  except EVMError as e:
+  except CatchableError as e:
     err(e.msg)
 
 proc getBlockByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
   try:
     ok(headerNode(ctx, getBlockHeader(ctx.chainDB, hash)))
-  except EVMError as e:
+  except CatchableError as e:
     err(e.msg)
 
 proc getLatestBlock(ctx: GraphqlContextRef): RespResult =
   try:
     ok(headerNode(ctx, getCanonicalHead(ctx.chainDB)))
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get latest block: " & e.msg)
 
 proc getTxCount(ctx: GraphqlContextRef, txRoot: Hash256): RespResult =
   try:
     ok(resp(getTransactionCount(ctx.chainDB, txRoot)))
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get txcount: " & e.msg)
   except Exception as em:
     err("can't get txcount: " & em.msg)
@@ -220,13 +220,13 @@ proc resp(data: openArray[byte]): RespResult =
 proc getTotalDifficulty(ctx: GraphqlContextRef, blockHash: Hash256): RespResult =
   try:
     bigIntNode(getScore(ctx.chainDB, blockHash))
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get total difficulty: " & e.msg)
 
 proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: Hash256): RespResult =
   try:
     ok(resp(getUnclesCount(ctx.chainDB, ommersHash)))
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get ommers count: " & e.msg)
   except Exception as em:
     err("can't get ommers count: " & em.msg)
@@ -240,7 +240,7 @@ proc getOmmers(ctx: GraphqlContextRef, ommersHash: Hash256): RespResult =
     for n in uncles:
       list.add headerNode(ctx, n)
     ok(list)
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get ommers: " & e.msg)
 
 proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: Hash256, index: int): RespResult =
@@ -251,7 +251,7 @@ proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: Hash256, index: int): RespRe
     if index < 0 or index >= uncles.len:
       return ok(respNull())
     ok(headerNode(ctx, uncles[index]))
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get ommer: " & e.msg)
 
 proc getTxs(ctx: GraphqlContextRef, header: BlockHeader): RespResult =
@@ -276,7 +276,7 @@ proc getTxs(ctx: GraphqlContextRef, header: BlockHeader): RespResult =
       inc index
 
     ok(list)
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get transactions: " & e.msg)
   except Exception as em:
     err("can't get transactions: " & em.msg)
@@ -300,7 +300,7 @@ proc getTxAt(ctx: GraphqlContextRef, header: BlockHeader, index: int): RespResul
       ok(txn)
     else:
       ok(respNull())
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get transaction by index '$1': $2" % [$index, e.msg])
   except Exception as em:
     err("can't get transaction by index '$1': $2" % [$index, em.msg])
@@ -310,7 +310,7 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
     let (blockNumber, index) = getTransactionKey(ctx.chainDB, hash)
     let header = getBlockHeader(ctx.chainDB, blockNumber)
     getTxAt(ctx, header, index)
-  except EVMError as e:
+  except CatchableError as e:
     err("can't get transaction by hash '$1': $2" % [hash.data.toHex, e.msg])
   except Exception as em:
     err("can't get transaction by hash '$1': $2" % [hash.data.toHex, em.msg])
