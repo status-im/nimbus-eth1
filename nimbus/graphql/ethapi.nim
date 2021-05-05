@@ -315,7 +315,26 @@ proc validateHex(x: Node, minLen = 0): NodeResult =
       return err("invalid chars in hex")
   ok(x)
 
-proc validateFixedLenHex(x: Node, minLen: int, kind: string): NodeResult =
+proc padBytes(n: Node, prefixLen, minLen: int) =
+  let tmp = n.stringVal
+  if prefixLen != 0:
+    n.stringVal = newString(minLen + prefixLen)
+    for i in 0..<prefixLen:
+      n.stringVal[i] = tmp[i]
+    let zeros = minLen - tmp.len + prefixLen
+    for i in 0..<zeros:
+      n.stringVal[i + prefixLen] = '0'
+    for i in 2..<tmp.len:
+      n.stringVal[i+zeros] = tmp[i]
+  else:
+    n.stringVal = newString(minLen)
+    let zeros = minLen - tmp.len
+    for i in 0..<zeros:
+      n.stringVal[i] = '0'
+    for i in 0..<tmp.len:
+      n.stringVal[i+zeros] = tmp[i]
+
+proc validateFixedLenHex(x: Node, minLen: int, kind: string, padding = false): NodeResult =
   if x.stringVal.len < 2:
     return err(kind & " hex is too short")
 
@@ -325,8 +344,11 @@ proc validateFixedLenHex(x: Node, minLen: int, kind: string): NodeResult =
 
   let expectedLen = minLen * 2 + prefixLen
   if x.stringVal.len < expectedLen:
-    return err("$1 len is too short: expect $2 got $3" %
-      [kind, $expectedLen, $x.stringVal.len])
+    if not padding:
+      return err("$1 len is too short: expect $2 got $3" %
+        [kind, $expectedLen, $x.stringVal.len])
+    else:
+      padBytes(x, prefixLen, minLen * 2)
 
   for i in prefixLen..<x.stringVal.len:
     if x.stringVal[i] notin HexDigits:
@@ -339,7 +361,7 @@ proc scalarBytes32(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, g
   ## represented as 0x-prefixed hexadecimal.
   if node.kind != nkString:
     return err("expect hex string, but got '$1'" % [$node.kind])
-  validateFixedLenHex(node, 32, "Bytes32")
+  validateFixedLenHex(node, 32, "Bytes32", padding = true)
 
 proc scalarAddress(ctx: GraphqlRef, typeNode, node: Node): NodeResult {.cdecl, gcsafe, nosideEffect.} =
   ## Address is a 20 byte Ethereum address,
