@@ -302,7 +302,7 @@ type
   FixtureResult* = object
     isError*:         bool
     error*:           Error
-    gasRemaining*:    GasInt
+    gasUsed*:         GasInt
     output*:          seq[byte]
     vmState*:         BaseVMState
     logEntries*:      seq[Log]
@@ -310,6 +310,7 @@ type
 proc fixtureCallEvm*(vmState: BaseVMState, call: RpcCallData,
                      origin: EthAddress, forkOverride = none(Fork)): FixtureResult =
   var c = fixtureSetupComputation(vmState, call, origin, forkOverride)
+  let gas = c.gasMeter.gasRemaining
 
   # Next line differs from all the other EVM calls.  With `execComputation`,
   # most "vm json tests" fail with either `balanceDiff` or `nonceDiff` errors.
@@ -319,7 +320,7 @@ proc fixtureCallEvm*(vmState: BaseVMState, call: RpcCallData,
   # computation doesn't return.  We'll have to obtain them outside EVMC.
   result.isError         = c.isError
   result.error           = c.error
-  result.gasRemaining    = c.gasMeter.gasRemaining
+  result.gasUsed         = gas - c.gasMeter.gasRemaining
   result.output          = c.output
   result.vmState         = c.vmState
   shallowCopy(result.logEntries, c.logEntries)

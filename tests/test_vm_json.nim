@@ -80,7 +80,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     check(fixtureResult.output.bytesToHex == expectedOutput)
 
     let expectedGasRemaining = fixture{"gas"}.getHexadecimalInt
-    let actualGasRemaining = fixtureResult.gasRemaining
+    let actualGasRemaining = call.gas - fixtureResult.gasUsed
     checkpoint(&"Remaining: {actualGasRemaining} - Expected: {expectedGasRemaining}")
     check(actualGasRemaining == expectedGasRemaining)
 
