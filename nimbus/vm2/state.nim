@@ -11,6 +11,7 @@
 import
   macros, strformat, tables, sets, options,
   eth/[common, keys, rlp], nimcrypto/keccak,
+   ../vm_compile_flags,
   ./interpreter/forks_list, ../errors,
   ../constants, ../db/[db_chain, accounts_cache],
   ../utils, json, ./transaction_tracer, ./types,
@@ -141,7 +142,10 @@ when defined(geth):
   import db/geth_db
 
 # ------------------------------------------------------------------------------
-{.pop,push raises: [Defect,CatchableError].}
+when relay_exception_base_class:
+  {.pop,push raises: [Defect,CatchableError].}
+else:
+  {.pop,push raises: [Exception].}
 # -----------------------------------------------------------------------------
 
 method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256 {.base, gcsafe.} =
