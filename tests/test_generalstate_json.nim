@@ -60,7 +60,7 @@ proc dumpAccount(accountDb: ReadOnlyStateDB, address: EthAddress, name: string):
   }
 
 proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gasUsed: GasInt, success: bool) =
-  let recipient = tester.tx.getRecipient()
+  let recipient = tester.tx.getRecipient(sender)
   let miner = tester.header.coinbase
   var accounts = newJObject()
 

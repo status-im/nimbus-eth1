@@ -68,10 +68,11 @@ proc generatePremixData*(nimbus, geth: JsonNode) =
   var data = "var premixData = " & premixData.pretty & "\n"
   writeFile(getFileDir("index.html") / "premixData.js", data)
 
-proc hasInternalTx(tx: Transaction, blockNumber: Uint256): bool =
+proc hasInternalTx(tx: Transaction, blockNumber: Uint256, sender: EthAddress): bool =
   let
     number = %(blockNumber.prefixHex)
-    code = request("eth_getCode", %[%tx.getRecipient.prefixHex, number])
+    recipient = tx.getRecipient(sender)
+    code = request("eth_getCode", %[%recipient.prefixHex, number])
     recipientHasCode = code.getStr.len > 2 # "0x"
 
   if tx.isContractCreation:
@@ -146,16 +147,17 @@ proc requestPostState*(premix, n: JsonNode, blockNumber: Uint256) =
   for t in txs:
     var txKind = TxKind.Regular
     let tx = parseTransaction(t)
+    let sender = tx.getSender
     if tx.isContractCreation: txKind = TxKind.ContractCreation
-    if hasInternalTx(tx, blockNumber):
+    if hasInternalTx(tx, blockNumber, sender):
       let txTrace = requestInternalTx(t["hash"], tracer)
       for address, account in txTrace:
         updateAccount(address, account, blockNumber)
         premix.add account
       if not tx.isContractCreation: txKind = TxKind.ContractCall
-    else:
-      premix.requestAccount(blockNumber, tx.getRecipient)
-      premix.requestAccount(blockNumber, tx.getSender)
+    else:      
+      premix.requestAccount(blockNumber, tx.getRecipient(sender))
+      premix.requestAccount(blockNumber, sender)
 
     t["txKind"] = %($txKind)
 

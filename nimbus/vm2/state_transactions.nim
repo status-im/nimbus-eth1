@@ -48,7 +48,6 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
       vmState.chainDB.config.toFork(vmState.blockHeader.blockNumber)
   vmState.gasCosts = vmState.fork.forkToSchedule
 
-
 proc execComputation*(c: Computation) =
   if not c.msg.isCreate:
     c.vmState.mutateStateDB:

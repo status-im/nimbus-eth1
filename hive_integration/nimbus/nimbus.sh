@@ -47,7 +47,7 @@
 set -e
 
 nimbus=/usr/bin/nimbus
-FLAGS="--prune:archive"
+FLAGS="--prune:archive --nat:0.0.0.0"
 
 if [ "$HIVE_LOGLEVEL" != "" ]; then
   FLAGS="$FLAGS --log-level:DEBUG"

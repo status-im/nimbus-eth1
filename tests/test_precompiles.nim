@@ -9,7 +9,8 @@ import
   unittest2, ../nimbus/vm_precompiles, json, stew/byteutils, test_helpers, os, tables,
   strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain,
   ../nimbus/[vm_computation, vm_types, vm_state, vm_types2], macros,
-  test_allowed_to_fail
+  test_allowed_to_fail,
+  ../nimbus/transaction/call_evm, options
 
 proc initAddress(i: byte): EthAddress = result[19] = i
 
@@ -21,46 +22,32 @@ template doTest(fixture: JsonNode, fork: Fork, address: PrecompileAddresses): un
       expectedErr = test.hasKey("ExpectedError")
       expected = if test.hasKey("Expected"): hexToSeqByte(test["Expected"].getStr) else: @[]
       dataStr = test["Input"].getStr
-      data = if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
       vmState = newBaseVMState(header.stateRoot, header, newBaseChainDB(newMemoryDb()))
-      gas = 1_000_000_000.GasInt
-      gasPrice = 1.GasInt
-      sender = initAddress(0x00)
-      toAddress = initAddress(address.byte)
-      gasCost = if test.hasKey("Gas"): test["Gas"].getInt else: -1
+      gasExpected = if test.hasKey("Gas"): test["Gas"].getInt else: -1
 
-    vmState.setupTxContext(
-      origin = sender,
-      gasPrice = gasPrice
-    )
+    var call: RpcCallData
+    call.source = initAddress(0x00)
+    call.to = initAddress(address.byte)
+    call.gas = 1_000_000_000.GasInt
+    call.gasPrice = 1.GasInt
+    call.value = 0.u256
+    call.data = if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
+    call.contractCreation = false
 
-    var
-      message = Message(
-        kind: evmcCall,
-        gas: gas,
-        sender: sender,
-        contractAddress: toAddress,
-        codeAddress: toAddress,
-        value: 0.u256,
-        data: data
-        )
-      comp = newComputation(vmState, message)
-
-    let initialGas = comp.gasMeter.gasRemaining
-    discard execPrecompiles(comp, fork)
+    let fixtureResult = fixtureCallEvm(vmState, call, call.source, some(fork))
 
     if expectedErr:
-      check comp.isError
+      check fixtureResult.isError
     else:
-      let c = comp.output == expected
-      if not c: echo "Output  : " & comp.output.toHex & "\nExpected: " & expected.toHex
+      check not fixtureResult.isError
+      let c = fixtureResult.output == expected
+      if not c: echo "Output  : " & fixtureResult.output.toHex & "\nExpected: " & expected.toHex
       check c
 
-      if gasCost >= 0:
-        let gasFee = initialGas - comp.gasMeter.gasRemaining
-        if gasFee != gasCost:
-          debugEcho "GAS: ", gasFee, " ", gasCost
-        check gasFee == gasCost
+      if gasExpected >= 0:
+        if fixtureResult.gasUsed != gasExpected:
+          debugEcho "GAS: ", fixtureResult.gasUsed, " ", gasExpected
+        check fixtureResult.gasUsed == gasExpected
 
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let
