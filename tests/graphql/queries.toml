@@ -10,8 +10,8 @@
 }
 """
   result = """
-{"
-  __schema":{
+{
+  "__schema":{
     "types":[
       {"name":"Log"},
       {"name":"CallData"},
@@ -505,3 +505,19 @@ mutation {
   }
 }
 """
+
+[[units]]
+  name = "too complex eth api query"
+  code = """
+{ block { transactions { block { transactions { block { number }}}}}}
+"""
+  errors = ["[2, 1]: Fatal: Instrument Error: query complexity exceed max(200), got 204: @[]"]
+  result = """null"""
+
+[[units]]
+  name = "too complex introspection query"
+  code = """
+{ __schema { types { fields { type { fields { name }}}}}}
+"""
+  errors = ["[2, 1]: Fatal: Instrument Error: query complexity exceed max(200), got 204: @[]"]
+  result = """null"""

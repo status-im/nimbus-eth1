@@ -13,6 +13,7 @@ import
   eth/[common, rlp], chronos,
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
+  graphql/instruments/query_complexity,
   ../db/[db_chain, state_db], ../errors, ../utils,
   ../transaction, ../rpc/rpc_utils, ../vm_state, ../config,
   ../vm_computation, ../vm_state_transactions,
@@ -1076,6 +1077,37 @@ const mutationProcs = {
 const
   ethSchema = staticRead("ethapi.ql")
 
+type
+  QcNames = enum
+    qcType   = "__Type"
+    qcFields = "fields"
+    qcBlock  = "block"
+    qcTransaction = "Transaction"
+    
+  EthQueryComplexity = ref object of QueryComplexity
+    names: array[QcNames, Name]
+  
+proc calcQC(qc: QueryComplexity, field: FieldRef): int {.cdecl, 
+            gcsafe, raises: [Defect, CatchableError].} =
+  let qc = EthQueryComplexity(qc)
+  if field.parentType.sym.name == qc.names[qcType] and
+     field.field.name.name == qc.names[qcFields]:
+    return 100
+  elif field.parentType.sym.name == qc.names[qcTransaction] and 
+     field.field.name.name == qc.names[qcBlock]:
+    return 100
+  else:
+    return 1
+
+proc newQC(ctx: GraphqlContextRef): EthQueryComplexity =
+  const MaxQueryComplexity = 200
+  var qc = EthQueryComplexity()
+  qc.init(calcQC, MaxQueryComplexity)
+  for n in QcNames:
+    let name = ctx.createName($n)
+    qc.names[n] = name
+  qc
+  
 proc initEthApi(ctx: GraphqlContextRef) =
   ctx.customScalar("Bytes32", scalarBytes32)
   ctx.customScalar("Address", scalarAddress)
@@ -1097,6 +1129,9 @@ proc initEthApi(ctx: GraphqlContextRef) =
   ctx.addResolvers(ctx, ctx.ids[ethQuery      ], queryProcs)
   ctx.addResolvers(ctx, ctx.ids[ethMutation   ], mutationProcs)
 
+  var qc = newQC(ctx)
+  ctx.addInstrument(qc)
+    
   let res = ctx.parseSchema(ethSchema)
   if res.isErr:
     echo res.error
