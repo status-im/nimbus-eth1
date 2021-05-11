@@ -395,7 +395,6 @@ proc executeOpcodes(c: Computation) =
     try:
       if not c.continuation.isNil:
         (c.continuation)()
-        c.continuation = nil
       c.selectVM(fork)
     except CatchableError as e:
       c.setError(&"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)

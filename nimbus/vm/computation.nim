@@ -307,6 +307,7 @@ proc afterExec(c: Computation) {.noinline.} =
 template chainTo*(c: Computation, toChild: typeof(c.child), after: untyped) =
   c.child = toChild
   c.continuation = proc() =
+    c.continuation = nil
     after
 
 when vm_use_recursion:
