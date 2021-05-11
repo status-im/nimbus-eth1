@@ -44,7 +44,7 @@ type
     accountDb*     : AccountsCache
     cumulativeGasUsed*: GasInt
     touchedAccounts*: HashSet[EthAddress]
-    suicides*      : HashSet[EthAddress]
+    selfDestructs* : HashSet[EthAddress]
     txOrigin*      : EthAddress
     txGasPrice*    : GasInt
     gasCosts*      : GasCosts
@@ -85,7 +85,7 @@ type
     returnData*:            seq[byte]
     error*:                 Error
     touchedAccounts*:       HashSet[EthAddress]
-    suicides*:              HashSet[EthAddress]
+    selfDestructs*:         HashSet[EthAddress]
     logEntries*:            seq[Log]
     savePoint*:             SavePoint
     instr*:                 Op

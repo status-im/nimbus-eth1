@@ -102,7 +102,7 @@ proc getMinerAddress(vmState: BaseVMState): EthAddress =
 proc updateBlockHeader*(vmState: BaseVMState, header: BlockHeader) =
   vmState.blockHeader = header
   vmState.touchedAccounts.clear()
-  vmState.suicides.clear()
+  vmState.selfDestructs.clear()
   if EnableTracing in vmState.tracer.flags:
     vmState.tracer.initTracer(vmState.tracer.flags)
   vmState.logEntries = @[]

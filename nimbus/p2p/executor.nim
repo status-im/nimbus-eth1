@@ -26,7 +26,7 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     let txFee = result.u256 * tx.gasPrice.u256
     db.addBalance(miner, txFee)
 
-    for deletedAccount in vmState.suicides:
+    for deletedAccount in vmState.selfDestructs:
       db.deleteAccount deletedAccount
 
     if fork >= FkSpurious:

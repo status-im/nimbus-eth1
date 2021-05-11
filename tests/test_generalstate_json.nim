@@ -124,7 +124,7 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   # as well as conditionally cleaning up the coinbase account when left
   # empty in VMs after the state clearing rules came into effect.
   let miner = tester.header.coinbase
-  if miner in vmState.suicides:
+  if miner in vmState.selfDestructs:
     vmState.mutateStateDB:
       db.addBalance(miner, 0.u256)
       if tester.fork >= FkSpurious:

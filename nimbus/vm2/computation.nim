@@ -112,7 +112,7 @@ proc newComputation*(vmState: BaseVMState,
   result.returnStack = @[]
   result.gasMeter.init(message.gas)
   result.touchedAccounts = initHashSet[EthAddress]()
-  result.suicides = initHashSet[EthAddress]()
+  result.selfDestructs = initHashSet[EthAddress]()
 
   if result.msg.isCreate():
     result.msg.contractAddress = result.generateContractAddress(salt)
@@ -141,8 +141,8 @@ template isError*(c: Computation): bool =
 func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
-proc isSuicided*(c: Computation, address: EthAddress): bool =
-  result = address in c.suicides
+proc isSelfDestructed*(c: Computation, address: EthAddress): bool =
+  result = address in c.selfDestructs
 
 proc snapshot*(c: Computation) =
   c.savePoint = c.vmState.accountDb.beginSavePoint()
@@ -173,7 +173,7 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
     return false
 
   let storageAddr = c.msg.contractAddress
-  if c.isSuicided(storageAddr): return
+  if c.isSelfDestructed(storageAddr): return
 
   let gasParams = GasParams(kind: Create, cr_memLength: contractCode.len)
   let codeCost = c.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
@@ -195,7 +195,7 @@ template chainTo*(c, toChild: Computation, after: untyped) =
 proc merge*(c, child: Computation) =
   c.logEntries.add child.logEntries
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-  c.suicides.incl child.suicides
+  c.selfDestructs.incl child.selfDestructs
   c.touchedAccounts.incl child.touchedAccounts
 
 proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
@@ -219,7 +219,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: EthAddress) =
 
   c.touchedAccounts.incl beneficiary
   # Register the account to be deleted
-  c.suicides.incl(c.msg.contractAddress)
+  c.selfDestructs.incl(c.msg.contractAddress)
 
 proc addLogEntry*(c: Computation, log: Log) {.inline.} =
   c.logEntries.add(log)
@@ -230,7 +230,7 @@ proc getGasRefund*(c: Computation): GasInt =
 
 proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
-  c.gasMeter.refundGas(cost * c.suicides.len)
+  c.gasMeter.refundGas(cost * c.selfDestructs.len)
 
 proc tracingEnabled*(c: Computation): bool {.inline.} =
   TracerFlags.EnableTracing in c.vmState.tracer.flags

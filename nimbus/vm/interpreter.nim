@@ -61,7 +61,7 @@ export
   vmc.isError,
   vmc.isOriginComputation,
   vmc.isSuccess,
-  vmc.isSuicided,
+  vmc.isSelfDestructed,
   vmc.merge,
   vmc.newComputation,
   vmc.prepareTracer,

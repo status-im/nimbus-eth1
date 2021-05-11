@@ -112,7 +112,7 @@ else:
     bChp.isError,
     bChp.isOriginComputation,
     bChp.isSuccess,
-    bChp.isSuicided,
+    bChp.isSelfDestructed,
     bChp.merge,
     bChp.newComputation,
     bChp.prepareTracer,

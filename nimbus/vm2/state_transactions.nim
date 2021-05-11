@@ -89,7 +89,7 @@ proc execComputation*(c: Computation) =
 
   if c.isSuccess:
     c.refundSelfDestruct()
-    shallowCopy(c.vmState.suicides, c.suicides)
+    shallowCopy(c.vmState.selfDestructs, c.selfDestructs)
     shallowCopy(c.vmState.logEntries, c.logEntries)
     c.vmState.touchedAccounts.incl c.touchedAccounts
 
