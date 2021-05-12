@@ -521,3 +521,14 @@ mutation {
 """
   errors = ["[2, 1]: Fatal: Instrument Error: query complexity exceed max(200), got 204: @[]"]
   result = """null"""
+
+[[units]]
+  name = "hex address is too long"
+  errors = ["[2, 11]: Error: 'address' got '\"0x095e7baea6a6c7c4c2dfeb977efac326af552d8700\"': Address len is too long: expect 42 got 44"]
+  code = """
+{
+  account(address: "0x095e7baea6a6c7c4c2dfeb977efac326af552d8700") {
+    balance
+  }
+}
+"""

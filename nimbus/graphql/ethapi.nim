@@ -350,6 +350,9 @@ proc validateFixedLenHex(x: Node, minLen: int, kind: string, padding = false): N
         [kind, $expectedLen, $x.stringVal.len])
     else:
       padBytes(x, prefixLen, minLen * 2)
+  elif x.stringVal.len > expectedLen:
+    return err("$1 len is too long: expect $2 got $3" %
+      [kind, $expectedLen, $x.stringVal.len])
 
   for i in prefixLen..<x.stringVal.len:
     if x.stringVal[i] notin HexDigits:
