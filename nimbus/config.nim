@@ -260,7 +260,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       petersburgBlock:7_280_000.toBlockNumber, # 28/02/2019 07:52:04
       istanbulBlock:  9_069_000.toBlockNumber, # 08/12/2019 12:25:09
       muirGlacierBlock: 9_200_000.toBlockNumber, # 02/01/2020 08:30:49
-      berlinBlock: high(BlockNumber).toBlockNumber
+      berlinBlock:      12_244_000.toBlockNumber # 15/04/2021 10:07:03
     )
   of RopstenNet:
     ChainConfig(
@@ -276,7 +276,7 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       petersburgBlock:4_939_394.toBlockNumber,
       istanbulBlock:  6_485_846.toBlockNumber,
       muirGlacierBlock: 7_117_117.toBlockNumber,
-      berlinBlock: high(BlockNumber).toBlockNumber
+      berlinBlock:      9_812_189.toBlockNumber
     )
   of RinkebyNet:
     ChainConfig(
@@ -291,8 +291,8 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       constantinopleBlock: 3_660_663.toBlockNumber,
       petersburgBlock:4_321_234.toBlockNumber,
       istanbulBlock:  5_435_345.toBlockNumber,
-      muirGlacierBlock: high(BlockNumber).toBlockNumber,
-      berlinBlock: high(BlockNumber).toBlockNumber
+      muirGlacierBlock: 8_290_928.toBlockNumber, # never occured in rinkeby network
+      berlinBlock:      8_290_928.toBlockNumber
     )
   of GoerliNet:
     ChainConfig(
@@ -307,8 +307,8 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       constantinopleBlock: 0.toBlockNumber,
       petersburgBlock: 0.toBlockNumber,
       istanbulBlock:  1_561_651.toBlockNumber,
-      muirGlacierBlock: high(BlockNumber).toBlockNumber,
-      berlinBlock: high(BlockNumber).toBlockNumber
+      muirGlacierBlock: 4_460_644.toBlockNumber, # never occured in goerli network
+      berlinBlock:      4_460_644.toBlockNumber
     )
   of CustomNet:
     privateChainConfig()

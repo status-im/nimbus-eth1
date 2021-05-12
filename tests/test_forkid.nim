@@ -22,8 +22,10 @@ const
     (blockNumber: 9068999'u64, id: (crc: 0x668db0af'u32, nextFork: 9069000'u64)), # Last Petersburg block
     (blockNumber: 9069000'u64, id: (crc: 0x879D6E30'u32, nextFork: 9200000'u64)), # First Istanbul block
     (blockNumber: 9199999'u64, id: (crc: 0x879D6E30'u32, nextFork: 9200000'u64)), # Last Istanbul block
-    (blockNumber: 9200000'u64, id: (crc: 0xE029E991'u32, nextFork: 0'u64))      , # First MuirGlacier block
-    (blockNumber: 10000000'u64, id: (crc: 0xE029E991'u32, nextFork: 0'u64))     , # Past MuirGlacier block
+    (blockNumber: 9200000'u64, id: (crc: 0xE029E991'u32, nextFork: 12244000'u64)), # First MuirGlacier block
+    (blockNumber: 12243999'u64, id: (crc: 0xE029E991'u32, nextFork: 12244000'u64)), # Last MuirGlacier block
+    (blockNumber: 12244000'u64, id: (crc: 0x0eb440f6'u32, nextFork: 0'u64)),        # First Berlin block
+    (blockNumber: 20000000'u64, id: (crc: 0x0eb440f6'u32, nextFork: 0'u64)),        # Future Berlin block
   ]
 
   RopstenNetIDs = [
@@ -39,8 +41,10 @@ const
     (blockNumber: 6485845'u64, id: (crc: 0xd6e2149b'u32, nextFork: 6485846'u64)), # Last Petersburg block
     (blockNumber: 6485846'u64, id: (crc: 0x4bc66396'u32, nextFork: 7117117'u64)), # First Istanbul block
     (blockNumber: 7117116'u64, id: (crc: 0x4bc66396'u32, nextFork: 7117117'u64)), # Last Istanbul block
-    (blockNumber: 7117117'u64, id: (crc: 0x6727EF90'u32, nextFork: 0'u64)),       # First MuirGlacier block
-    (blockNumber: 7500000'u64, id: (crc: 0x6727EF90'u32, nextFork: 0'u64)),       # Future MuirGlacier block
+    (blockNumber: 7117117'u64, id: (crc: 0x6727EF90'u32, nextFork: 9812189'u64)), # First MuirGlacier block
+    (blockNumber: 9812188'u64, id: (crc: 0x6727EF90'u32, nextFork: 9812189'u64)), # Last MuirGlacier block
+    (blockNumber: 9812189'u64, id: (crc: 0xa157d377'u32, nextFork: 0'u64)),       # First Berlin block
+    (blockNumber: 10000000'u64, id: (crc: 0xa157d377'u32, nextFork: 0'u64)),      # Future Berlin block
   ]
 
   RinkebyNetIDs = [
@@ -55,15 +59,19 @@ const
     (blockNumber: 4321233'u64, id: (crc: 0xe49cab14'u32, nextFork: 4321234'u64)), # Last Constantinople block
     (blockNumber: 4321234'u64, id: (crc: 0xafec6b27'u32, nextFork: 5435345'u64)), # First Petersburg block
     (blockNumber: 5435344'u64, id: (crc: 0xafec6b27'u32, nextFork: 5435345'u64)), # Last Petersburg block
-    (blockNumber: 5435345'u64, id: (crc: 0xcbdb8838'u32, nextFork: 0'u64)),       # First Istanbul block
-    (blockNumber: 6000000'u64, id: (crc: 0xcbdb8838'u32, nextFork: 0'u64)),       # Future Istanbul block
+    (blockNumber: 5435345'u64, id: (crc: 0xcbdb8838'u32, nextFork: 8290928'u64)), # First Istanbul block
+    (blockNumber: 8290927'u64, id: (crc: 0xcbdb8838'u32, nextFork: 8290928'u64)), # Last Istanbul block
+    (blockNumber: 8290928'u64, id: (crc: 0x6910c8bd'u32, nextFork: 0'u64)),       # First Berlin block
+    (blockNumber: 10000000'u64, id: (crc: 0x6910c8bd'u32, nextFork: 0'u64)),      # Future Berlin block
   ]
 
   GoerliNetIDs = [
     (blockNumber: 0'u64,       id: (crc: 0xa3f5ab08'u32, nextFork: 1561651'u64)), # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople and first Petersburg block
     (blockNumber: 1561650'u64, id: (crc: 0xa3f5ab08'u32, nextFork: 1561651'u64)), # Last Petersburg block
-    (blockNumber: 1561651'u64, id: (crc: 0xc25efa5c'u32, nextFork: 0'u64)),       # First Istanbul block
-    (blockNumber: 2000000'u64, id: (crc: 0xc25efa5c'u32, nextFork: 0'u64)),       # Future Istanbul block
+    (blockNumber: 1561651'u64, id: (crc: 0xc25efa5c'u32, nextFork: 4460644'u64)), # First Istanbul block
+    (blockNumber: 4460643'u64, id: (crc: 0xc25efa5c'u32, nextFork: 4460644'u64)), # Future Istanbul block
+    (blockNumber: 4460644'u64, id: (crc: 0x757a1c47'u32, nextFork: 0'u64)),       # First Berlin block
+    (blockNumber: 5000000'u64, id: (crc: 0x757a1c47'u32, nextFork: 0'u64)),       # Future Berlin block
   ]
 
 template runTest(network: PublicNetwork) =
