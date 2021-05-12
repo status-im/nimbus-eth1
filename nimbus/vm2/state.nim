@@ -57,9 +57,9 @@ proc newBaseVMState*(prevStateRoot: Hash256,
   result.init(prevStateRoot, header, chainDB, tracerFlags)
 
 proc consensusEnginePoA*(vmState: BaseVMState): bool =
-  let chainId = PublicNetwork(vmState.chainDB.config.chainId)
+  let networkId = vmState.chainDB.networkId
   # PoA consensus engine have no reward for miner
-  result = chainId in {GoerliNet, RinkebyNet, KovanNet}
+  result = networkId in {GoerliNet, RinkebyNet, KovanNet}
 
 proc getSignature(bytes: openArray[byte], output: var Signature): bool =
   let sig = Signature.fromRaw(bytes)

@@ -17,6 +17,7 @@ type
     db*       : TrieDatabaseRef
     pruneTrie*: bool
     config*   : ChainConfig
+    networkId*: PublicNetwork
 
     # startingBlock, currentBlock, and highestBlock
     # are progress indicator
@@ -33,6 +34,7 @@ proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true, id: PublicNetw
   result.db = db
   result.pruneTrie = pruneTrie
   result.config = publicChainConfig(id)
+  result.networkId = id
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"

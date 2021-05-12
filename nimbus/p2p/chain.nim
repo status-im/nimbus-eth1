@@ -93,8 +93,7 @@ proc newChain*(db: BaseChainDB): Chain =
 
   if not db.config.daoForkSupport:
     db.config.daoForkBlock = db.config.homesteadBlock
-  let chainId = PublicNetwork(db.config.chainId)
-  let g = defaultGenesisBlockForNetwork(chainId)
+  let g = defaultGenesisBlockForNetwork(db.networkId)
   result.blockZeroHash = g.toBlock.blockHash
   let genesisCRC = crc32(0, result.blockZeroHash.data)
   result.forkIds = calculateForkIds(db.config, genesisCRC)
