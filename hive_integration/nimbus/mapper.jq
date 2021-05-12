@@ -45,6 +45,7 @@ def to_bool:
     "daoForkBlock": env.HIVE_FORK_DAO_BLOCK|to_int,
     "daoForkSupport": env.HIVE_FORK_DAO_VOTE|to_bool,
     "eip150Block": env.HIVE_FORK_TANGERINE|to_int,
+    "eip155Block": env.HIVE_FORK_SPURIOUS|to_int,
     "eip158Block": env.HIVE_FORK_SPURIOUS|to_int,
     "byzantiumBlock": env.HIVE_FORK_BYZANTIUM|to_int,
     "constantinopleBlock": env.HIVE_FORK_CONSTANTINOPLE|to_int,
