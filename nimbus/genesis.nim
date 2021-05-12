@@ -97,6 +97,7 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   of CustomNet:
     let genesis = getConfiguration().customGenesis
     var alloc = new GenesisAlloc
+    assert(genesis.prealloc.isNil.not, "genesis prealloc should not nil")
     if genesis.prealloc != parseJson("{}"):
       alloc = customNetPrealloc(genesis.prealloc)
     Genesis(

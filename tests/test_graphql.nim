@@ -13,7 +13,7 @@ import
   eth/[p2p, common, trie/db, rlp, trie],
   eth/p2p/rlpx_protocols/eth_protocol,
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
-  ../nimbus/config, ../nimbus/db/[db_chain, state_db],
+  ../nimbus/[genesis, config], ../nimbus/db/[db_chain, state_db],
   ../nimbus/p2p/chain, ../premix/parser, ./test_helpers
 
 type
@@ -38,26 +38,18 @@ proc setupChain(chainDB: BaseChainDB) =
       break
 
   let genesisBlock = jn.toBlock("genesisRLP")
-  discard chainDB.persistHeaderToDb(genesisBlock.header)
 
-  var trie = initHexaryTrie(chainDB.db)
-  var sdb = newAccountStateDB(chainDB.db, trie.rootHash, chainDB.pruneTrie)
+  let conf = getConfiguration()
+  conf.customGenesis.nonce      = genesisBlock.header.nonce
+  conf.customGenesis.extraData  = genesisBlock.header.extraData
+  conf.customGenesis.gasLimit   = genesisBlock.header.gasLimit
+  conf.customGenesis.difficulty = genesisBlock.header.difficulty
+  conf.customGenesis.mixHash    = genesisBlock.header.mixDigest
+  conf.customGenesis.coinBase   = genesisBlock.header.coinbase
+  conf.customGenesis.timestamp  = genesisBlock.header.timestamp
+  conf.customGenesis.prealloc   = jn["pre"]
+  chainDB.initializeEmptyDb()
 
-  let preState = jn["pre"]
-  for addrStr, accNode in preState:
-    let address = hexToByteArray[20](addrStr)
-    let balance = UInt256.fromHex(accNode["balance"].str)
-    let nonce   = hexToInt(accNode["nonce"].str, AccountNonce)
-    let code    = hexToSeqByte(accNode["code"].str)
-    sdb.setAccount(address, newAccount(nonce, balance))
-    sdb.setCode(address, code)
-    let storage = accNode["storage"]
-    for k, v in storage:
-      let slot = UInt256.fromHex(k)
-      let val  = UInt256.fromHex(v.str)
-      sdb.setStorage(address, slot, val)
-
-  assert(sdb.rootHash == genesisBlock.header.stateRoot)
   let blocks = jn["blocks"]
   var headers: seq[BlockHeader]
   var bodies: seq[BlockBody]
