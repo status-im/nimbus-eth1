@@ -321,7 +321,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   ## Parses Custom Genesis Block config options when customnetwork option provided
 
   template checkForFork(chain, currentFork, previousFork: untyped) =
-  # Template to load fork blocks and validate order
+    # Template to load fork blocks and validate order
     let currentForkName = currentFork.astToStr()
     if chain.hasKey(currentForkName):
       if chain[currentForkName].kind == JInt:
@@ -382,6 +382,9 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     extraData = hexToSeqByte("0x")
     gasLimit = 16777216.int64
     difficulty = 1048576.u256
+
+    # note that the following parseJson() assignment implies a possible
+    # base class `Exception`
     alloc = parseJson("{}")
     timestamp : EthTime
     coinbase : EthAddress
@@ -898,6 +901,10 @@ proc initConfiguration(): NimbusConfiguration =
 proc getConfiguration*(): NimbusConfiguration =
   ## Retreive current configuration object `NimbusConfiguration`.
   if isNil(nimbusConfig):
+    # The next assignment will throw an exception unless initConfiguration()
+    # returns a valid object reference. As of nim 1.2.10 the compiler will not
+    # process the information that initConfiguration() is always a valid
+    # reference.
     nimbusConfig = initConfiguration()
   result = nimbusConfig
 

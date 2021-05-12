@@ -8,9 +8,12 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+import
+  ./vm_compile_flags
+
 # At the moment, this header file interface is only used for testing.
 
-when defined(evmc_enabled) or not defined(vm2_enabled):
+when evmc0_enabled or vm0_enabled:
   import
     ./vm/memory as vmm
 else:
@@ -25,12 +28,11 @@ export
   vmm.read,
   vmm.write
 
-when defined(evmc_enabled):
+when evmc0_enabled or evmc2_enabled:
   export
     vmm.readPtr
 
-
-when defined(evmc_enabled) or not defined(vm2_enabled):
+when evmc0_enabled or vm0_enabled:
   import
     ./vm/interpreter/utils/utils_numeric as vmn
 else:
@@ -54,7 +56,7 @@ export
 
 
 # Wrapping the wrapper -- lol
-when defined(evmc_enabled) or not defined(vm2_enabled):
+when evmc0_enabled or vm0_enabled:
   import
     ./vm/interpreter as vmi
   export

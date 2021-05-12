@@ -12,7 +12,10 @@
 # circular computation.nim include/import dependency is solved. The problem is
 # with vm_types.nim (included by message.nim) which includes computation.nim.
 
-when defined(evmc_enabled) or not defined(vm2_enabled):
+import
+  ./vm_compile_flags
+
+when evmc0_enabled or vm0_enabled:
   import
     ./vm/message as vmm
 else:

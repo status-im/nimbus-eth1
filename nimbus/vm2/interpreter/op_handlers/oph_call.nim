@@ -14,6 +14,7 @@
 
 import
   ../../../constants,
+  ../../../errors,
   ../../../db/accounts_cache,
   ../../../errors,
   ../../computation,
@@ -31,6 +32,8 @@ import
   eth/common,
   eth/common/eth_types,
   stint
+
+{.push raises: [Defect,VMError,ValidationError,ValueError].}
 
 # ------------------------------------------------------------------------------
 # Private

@@ -13,6 +13,7 @@ const
   noisy {.intdefine.}: int = 0
   # isNoisy {.used.} = noisy > 0
   isChatty {.used.} = noisy > 1
+  isMoreChatty {.used.} = noisy > 2
 
 import
   ../code_stream,
@@ -35,7 +36,8 @@ export
 # Helpers
 # ------------------------------------------------------------------------------
 
-template handleStopDirective(k: var Vm2Ctx) =
+template handleStopDirective(kArg: var Vm2Ctx) =
+  var k = kArg
   trace "op: Stop"
   if not k.cpt.code.atEnd() and k.cpt.tracingEnabled:
     # we only trace `REAL STOP` and ignore `FAKE STOP`
@@ -43,25 +45,27 @@ template handleStopDirective(k: var Vm2Ctx) =
     k.cpt.traceOpCodeEnded(Stop, k.cpt.opIndex)
 
 
-template handleFixedGasCostsDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
-    if k.cpt.tracingEnabled:
-      k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
+template handleFixedGasCostsDirective(fork: Fork; op: Op; kArg: var Vm2Ctx) =
+  var k = kArg
+  if k.cpt.tracingEnabled:
+    k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
-    k.cpt.gasMeter.consumeGas(k.cpt.gasCosts[op].cost, reason = $op)
-    vmOpHandlers[fork][op].run(k)
+  k.cpt.gasMeter.consumeGas(k.cpt.gasCosts[op].cost, reason = $op)
+  vmOpHandlers[fork][op].run(k)
 
-    if k.cpt.tracingEnabled:
-      k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
+  if k.cpt.tracingEnabled:
+    k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
 
 
-template handleOtherDirective(fork: Fork; op: Op; k: var Vm2Ctx) =
-    if k.cpt.tracingEnabled:
-      k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
+template handleOtherDirective(fork: Fork; op: Op; kArg: var Vm2Ctx) =
+  var k = kArg
+  if k.cpt.tracingEnabled:
+    k.cpt.opIndex = k.cpt.traceOpCodeStarted(op)
 
-    vmOpHandlers[fork][op].run(k)
+  vmOpHandlers[fork][op].run(k)
 
-    if k.cpt.tracingEnabled:
-      k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
+  if k.cpt.tracingEnabled:
+    k.cpt.traceOpCodeEnded(op, k.cpt.opIndex)
 
 # ------------------------------------------------------------------------------
 # Private, big nasty doubly nested case matrix generator
@@ -119,7 +123,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
       newIdentNode(op.toSymbolName),
       branchStmt)
 
-  when isChatty:
+  when isMoreChatty:
     echo ">>> ", result.repr
 
 # ------------------------------------------------------------------------------

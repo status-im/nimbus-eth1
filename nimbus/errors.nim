@@ -65,3 +65,14 @@ type
 
   StaticContextError* = object of VMError
     ## State changes not allowed in static call context
+
+import ./vm_compile_flags
+when vm2_activated:
+
+  # additional EVMError exceptions
+  type
+    RefAssignmentError* = object of EVMError
+      ## Exception when assigning ref object
+
+    JsonInitError* = object of EVMError
+      ## Exception when initialising JSON object

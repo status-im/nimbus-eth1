@@ -8,10 +8,12 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+import
+  ./vm_compile_flags
 
 # The VM computation module suffers from a circular include/import dependency.
 # After fixing this wrapper should be re-factored.
-when defined(evmc_enabled) or not defined(vm2_enabled):
+when evmc0_enabled or vm0_enabled:
   import
     ./vm/computation as vmc
   export

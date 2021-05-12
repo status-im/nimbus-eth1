@@ -9,6 +9,8 @@ import
   chronicles, strformat, strutils, sequtils, macros, eth/common, nimcrypto,
   ../errors, ../validation
 
+{.push raises: [Defect,FullStack,InsufficientStack,ValueError,ValidationError].}
+
 logScope:
   topics = "vm stack"
 
@@ -17,6 +19,7 @@ type
     values*: seq[StackElement]
 
   StackElement = UInt256
+
 
 template ensureStackLimit: untyped =
   if len(stack.values) > 1023:

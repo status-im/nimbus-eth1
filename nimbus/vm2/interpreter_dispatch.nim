@@ -8,14 +8,12 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-const
-  # help with low memory when compiling selectVM() function
-  lowmem {.intdefine.}: int = 0
-  lowMemoryCompileTime {.used.} = lowmem > 0
-
 import
   ../constants,
   ../db/accounts_cache,
+  ../errors,
+  ../utils/exception,
+  ../vm_compile_flags,
   ./code_stream,
   ./computation,
   ./interpreter/op_dispatcher,
@@ -31,6 +29,9 @@ import
   stew/byteutils,
   strformat
 
+{.push raises: [Defect,CatchableError].}
+# note that the functions at the end of this source imply Exception base class
+
 logScope:
   topics = "vm opcode"
 
@@ -42,6 +43,12 @@ const
 
 # ------------------------------------------------------------------------------
 # Private functions
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# pop,push => need redefine, exceptions seem to be merged when pushing
+when not relay_exception_base_class:
+  {.pop,push raises: [Exception].}
 # ------------------------------------------------------------------------------
 
 proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
@@ -64,7 +71,7 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
     #   # we could use manual jump table instead
     #   # TODO lots of macro magic here to unravel, with chronicles...
     #   # `c`.logger.log($`c`.stack & "\n\n", fgGreen)
-    when not lowMemoryCompileTime:
+    when not low_memory_compile_time:
       when defined(release):
         #
         # FIXME: OS case list below needs to be adjusted
@@ -104,6 +111,9 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
 
       genLowMemDispatcher(fork, c.instr, desc)
 
+# ------------------------------------------------------------------------------
+{.pop,push raises: [Exception].}
+# ------------------------------------------------------------------------------
 
 proc beforeExecCall(c: Computation) =
   c.snapshot()
@@ -116,7 +126,6 @@ proc afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
-
   if c.isError or c.fork >= FKByzantium:
     if c.msg.contractAddress == ripemdAddr:
       # Special case to account for geth+parity bug
@@ -142,8 +151,8 @@ proc beforeExecCreate(c: Computation): bool =
   c.snapshot()
 
   if c.vmState.readOnlyStateDb().hasCodeOrNonce(c.msg.contractAddress):
-    var blurb =c.msg.contractAddress.toHex
-    c.setError("Address collision when creating contract address={blurb}", true)
+    c.setError("Address collision when creating contract "&
+               &"address={c.msg.contractAddress.toHex}", true)
     c.rollback()
     return true
 
@@ -156,6 +165,7 @@ proc beforeExecCreate(c: Computation): bool =
       db.incNonce(c.msg.contractAddress)
 
   return false
+
 
 proc afterExecCreate(c: Computation) =
   if c.isSuccess:
@@ -191,16 +201,32 @@ proc executeOpcodes*(c: Computation) =
   let fork = c.fork
 
   block:
-    if not c.continuation.isNil:
-      c.continuation = nil
-    elif c.execPrecompiles(fork):
-      break
+    var
+      eName, eMsg: string
 
     try:
+      if not c.continuation.isNil:
+        var callFn = c.continuation
+        c.continuation = nil
+        callFn()
+      elif c.execPrecompiles(fork):
+        break
+
       c.selectVM(fork)
+      break
+
+    # catch exception(s) with explicit message text(s) filtered out in test
+    # suite, see tracerTests/block46402.json
+    except OutOfGas as e:
+      eMsg = e.msg
+
+    # catch other exceptions, log also exception name ..
     except CatchableError as e:
-      c.setError(
-        &"Opcode Dispatch Error msg={e.msg}, depth={c.msg.depth}", true)
+      (eName, eMsg) = ("(" & $e.name & ")", e.msg)
+
+    # note that potential <Exception> exceptions kill this frame
+    c.setError(
+      &"Opcode Dispatch Error{eName} msg={eMsg}, depth={c.msg.depth}", true)
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
@@ -228,7 +254,6 @@ proc execCallOrCreate*(cParam: Computation) =
       break
     c.dispose()
     (before, c.parent, c) = (false, nil.Computation, c.parent)
-    (c.continuation)()
 
 # ------------------------------------------------------------------------------
 # End

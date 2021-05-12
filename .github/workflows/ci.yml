@@ -270,6 +270,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
+          gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu} USE_MIRACL=${USE_MIRACL} ENABLE_EVMC=${ENABLE_EVMC}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS}
           build/nimbus --help

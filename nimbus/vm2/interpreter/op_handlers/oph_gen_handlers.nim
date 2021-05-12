@@ -13,15 +13,19 @@
 ##
 
 import
+  ../../../errors,
   ./oph_defs,
   eth/common/eth_types,
   macros,
   stint,
   strutils
 
+{.push raises: [Defect,VMError,ValidationError,ValueError].}
+
 type
   OphNumToTextFn* = proc(n: int): string
   OpHanldlerImplFn* = proc(k: var Vm2Ctx; n: int)
+    {.gcsafe,raises: [Defect,VMError,ValidationError,ValueError].}
 
 const
   recForkSet = "Vm2OpAllForks"

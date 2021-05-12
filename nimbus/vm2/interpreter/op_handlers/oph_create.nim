@@ -33,6 +33,8 @@ import
   stint,
   strformat
 
+{.push raises: [Defect,VMError,ValidationError,ValueError].}
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------

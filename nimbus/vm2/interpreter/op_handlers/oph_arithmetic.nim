@@ -14,6 +14,7 @@
 
 import
   ../../../constants,
+  ../../../errors,
   ../../computation,
   ../../stack,
   ../../types,
@@ -27,6 +28,8 @@ import
   options,
   sets,
   stint
+
+{.push raises: [Defect,VMError,ValidationError,ValueError].}
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

@@ -13,12 +13,15 @@
 ##
 
 import
+  ../../../errors,
   ../../stack,
   ../op_codes,
   ./oph_defs,
   ./oph_gen_handlers,
   sequtils,
   strformat
+
+{.push raises: [Defect,VMError,ValidationError,ValueError].}
 
 # ------------------------------------------------------------------------------
 # Private, names & settings

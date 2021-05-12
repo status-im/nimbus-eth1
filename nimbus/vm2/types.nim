@@ -14,7 +14,7 @@ import
   ./stack,  ./memory, ./code_stream,
   ./interpreter/[gas_costs, op_codes, forks_list],
   # TODO - will be hidden at a lower layer
-  ../db/[db_chain, accounts_cache]
+  ../db/[db_chain, accounts_cache], ../errors
 
 type
   VMFlag* = enum
@@ -80,7 +80,7 @@ type
     instr*:                 Op
     opIndex*:               int
     parent*, child*:        Computation
-    continuation*:          proc() {.gcsafe.}
+    continuation*:          proc() {.gcsafe, raises: [Defect,CatchableError].}
 
   Error* = ref object
     info*:                  string
