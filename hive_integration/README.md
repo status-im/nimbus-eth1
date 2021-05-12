@@ -91,5 +91,5 @@ The number of passes and fails output at the time of writing (2021-04-26) is:
     ethereum/graphql:       36 pass,    10 fail,    46 total
     devp2p/discv4:           0 pass,    14 fail,    14 total
     devp2p/eth:              0 pass,     1 fail,     1 total
-    ethereum/rpc:            0 pass,     1 fail,     1 total
+    ethereum/rpc:            3 pass,    35 fail,    38 total
     ethereum/sync:           0 pass,     1 fail,     1 total
