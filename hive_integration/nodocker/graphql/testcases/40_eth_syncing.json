@@ -1,0 +1,11 @@
+{
+  "request":     
+    "{ syncing {startingBlock currentBlock highestBlock pulledStates knownStates } }",
+
+  "responses": [{
+    "data" : {
+      "syncing" : null
+    }
+  }],
+  "statusCode": 200
+}

@@ -1,0 +1,11 @@
+{
+  "request": "{block (number: 25) {account(address: \"0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef\") { balance } }}",
+  "responses": [{
+    "data": {
+      "account": {
+        "balance": "0x"
+      }
+    }
+  }],
+  "statusCode": 200
+}
