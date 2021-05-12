@@ -320,10 +320,10 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
 proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
   ## Parses Custom Genesis Block config options when customnetwork option provided
 
-  template checkForFork(chain, currentFork, previousFork: untyped) =
+  template checkForFork(chain, currentFork, previousFork: untyped, optional = false) =
   # Template to load fork blocks and validate order
     let currentForkName = currentFork.astToStr()
-    if chain.hasKey(currentForkName):
+    if chain.hasKey(currentForkName) and not optional:
       if chain[currentForkName].kind == JInt:
         currentFork = chain[currentForkName].getInt().toBlockNumber
         if currentFork < previousFork:
@@ -404,7 +404,7 @@ proc processCustomGenesisConfig(customGenesis: JsonNode): ConfigStatus =
     checkForFork(forkDetails, constantinopleBlock, byzantiumBlock)
     checkForFork(forkDetails, petersburgBlock, constantinopleBlock)
     checkForFork(forkDetails, istanbulBlock, petersburgBlock)
-    checkForFork(forkDetails, muirGlacierBlock, istanbulBlock)
+    checkForFork(forkDetails, muirGlacierBlock, istanbulBlock, optional = true)
     checkForFork(forkDetails, istanbulBlock, berlinBlock)
 
   validateConfigValue(customGenesis, nonce, JString, BlockNonce, checkError = false)
