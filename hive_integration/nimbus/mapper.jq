@@ -38,7 +38,18 @@ def to_bool:
 ;
 
 # Replace config in input.
-. + {
+{
+  "genesis": {
+    "coinbase"   : .coinbase,
+    "difficulty" : .difficulty,
+    "extraData"  : .extraData,
+    "gasLimit"   : .gasLimit,
+    "mixHash"    : .mixHash,
+    "nonce"      : .nonce,
+    "parentHash" : .parentHash,
+    "timestamp"  : .timestamp,
+    "alloc"      : .alloc
+  }|remove_empty,
   "config": {
     "chainId": env.HIVE_CHAIN_ID|to_int,
     "homesteadBlock": env.HIVE_FORK_HOMESTEAD|to_int,
