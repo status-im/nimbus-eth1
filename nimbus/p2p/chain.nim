@@ -1,6 +1,6 @@
 import ../db/db_chain, eth/common, chronicles, ../vm_state, ../vm_types,
   ../vm_computation, ../vm_message, ../vm_types2, stint, nimcrypto,
-  ../utils, eth/trie/db, ./executor, ../config, ../genesis, ../utils,
+  ../utils, eth/trie/db, ./executor, ../chain_config, ../genesis, ../utils,
   stew/endians2
 
 when not defined(release):

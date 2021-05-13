@@ -1,6 +1,11 @@
-import unittest2, ../nimbus/[genesis, config], eth/common, nimcrypto/hash
+import
+  std/[os],
+  unittest2, eth/common, nimcrypto/hash,
+  ../nimbus/[genesis, config, chain_config]
 
-proc genesisMain*() =
+const dataFolder = "tests" / "customgenesis"
+
+proc genesisTest() =
   suite "Genesis":
     test "Correct mainnet hash":
       let g = defaultGenesisBlockForNetwork(MainNet)
@@ -21,6 +26,18 @@ proc genesisMain*() =
       let g = defaultGenesisBlockForNetwork(GoerliNet)
       let b = g.toBlock
       check(b.blockHash == "bf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a".toDigest)
+
+proc customGenesisTest() =
+  suite "Custom Genesis":
+    test "loadCustomGenesis":
+      var cga, cgb, cgc: CustomGenesis
+      check loadCustomGenesis(dataFolder / "berlin2000.json", cga)
+      check loadCustomGenesis(dataFolder / "chainid7.json", cgb)
+      check loadCustomGenesis(dataFolder / "noconfig.json", cgc)
+
+proc genesisMain*() =
+  genesisTest()
+  customGenesisTest()
 
 when isMainModule:
   genesisMain()

@@ -13,7 +13,7 @@ import
   eth/[p2p, common, trie/db, rlp, trie],
   eth/p2p/rlpx_protocols/eth_protocol,
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
-  ../nimbus/[genesis, config], ../nimbus/db/[db_chain, state_db],
+  ../nimbus/[genesis, config, chain_config], ../nimbus/db/[db_chain, state_db],
   ../nimbus/p2p/chain, ../premix/parser, ./test_helpers
 
 type
@@ -37,17 +37,19 @@ proc setupChain(chainDB: BaseChainDB) =
       jn = v
       break
 
-  let genesisBlock = jn.toBlock("genesisRLP")
+  let genesis = jn.toBlock("genesisRLP")
 
   let conf = getConfiguration()
-  conf.customGenesis.nonce      = genesisBlock.header.nonce
-  conf.customGenesis.extraData  = genesisBlock.header.extraData
-  conf.customGenesis.gasLimit   = genesisBlock.header.gasLimit
-  conf.customGenesis.difficulty = genesisBlock.header.difficulty
-  conf.customGenesis.mixHash    = genesisBlock.header.mixDigest
-  conf.customGenesis.coinBase   = genesisBlock.header.coinbase
-  conf.customGenesis.timestamp  = genesisBlock.header.timestamp
-  conf.customGenesis.prealloc   = jn["pre"]
+  conf.customGenesis.genesis.nonce      = genesis.header.nonce
+  conf.customGenesis.genesis.extraData  = genesis.header.extraData
+  conf.customGenesis.genesis.gasLimit   = genesis.header.gasLimit
+  conf.customGenesis.genesis.difficulty = genesis.header.difficulty
+  conf.customGenesis.genesis.mixHash    = genesis.header.mixDigest
+  conf.customGenesis.genesis.coinBase   = genesis.header.coinbase
+  conf.customGenesis.genesis.timestamp  = genesis.header.timestamp
+  if not parseGenesisAlloc($(jn["pre"]), conf.customGenesis.genesis.alloc):
+    quit(QuitFailure)
+  
   chainDB.initializeEmptyDb()
 
   let blocks = jn["blocks"]
@@ -68,7 +70,7 @@ proc setupChain(chainDB: BaseChainDB) =
 proc graphqlMain*() =
   let conf = getConfiguration()
   conf.net.networkId = NetworkId(CustomNet)
-  conf.customGenesis = CustomGenesisConfig(
+  conf.customGenesis.config = ChainConfig(
     chainId             : MainNet.ChainId,
     byzantiumBlock      : 0.toBlockNumber,
     constantinopleBlock : 0.toBlockNumber,

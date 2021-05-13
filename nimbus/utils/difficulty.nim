@@ -1,6 +1,6 @@
 import
   times, eth/common, stint,
-  ../constants, ../config
+  ../constants, ../chain_config
 
 const
   ExpDiffPeriod           = 100000.u256

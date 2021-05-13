@@ -10,7 +10,7 @@ import
   strformat, times, options,
   eth/[common, rlp],
   ./difficulty, ../constants,
-  ../config
+  ../chain_config
 
 export BlockHeader
 

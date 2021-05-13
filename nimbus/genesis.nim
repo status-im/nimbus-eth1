@@ -1,62 +1,10 @@
 import
-  tables, json, times, strutils,
-  eth/[common, rlp, trie], stint, stew/[byteutils],
+  std/[json, strutils, times, tables],
+  eth/[common, rlp, trie], stew/[byteutils],
   chronicles, eth/trie/db,
-  db/[db_chain, state_db], genesis_alloc, config, constants
-
-type
-  Genesis* = object
-    config*: ChainConfig
-    nonce*: BlockNonce
-    timestamp*: EthTime
-    extraData*: seq[byte]
-    gasLimit*: GasInt
-    difficulty*: DifficultyInt
-    mixhash*: Hash256
-    coinbase*: EthAddress
-    alloc*: GenesisAlloc
-
-  GenesisAlloc = TableRef[EthAddress, GenesisAccount]
-  GenesisAccount = object
-    code*: seq[byte]
-    storage*: Table[UInt256, UInt256]
-    balance*: UInt256
-    nonce*: AccountNonce
-
-func toAddress(n: UInt256): EthAddress =
-  let a = n.toByteArrayBE()
-  result[0 .. ^1] = a.toOpenArray(12, a.high)
-
-func decodePrealloc(data: seq[byte]): GenesisAlloc =
-  result = newTable[EthAddress, GenesisAccount]()
-  for tup in rlp.decode(data, seq[(UInt256, UInt256)]):
-    result[toAddress(tup[0])] = GenesisAccount(balance: tup[1])
-
-proc customNetPrealloc(genesisBlock: JsonNode): GenesisAlloc =
-  result = newTable[EthAddress, GenesisAccount]()
-  for address, account in genesisBlock.pairs():
-    let nonce = if "nonce" in account:
-                  parseHexInt(account["nonce"].getStr).AccountNonce
-                else:
-                  AccountNonce(0)
-
-    let code = if "code" in account:
-                 hexToSeqByte(account["code"].getStr)
-               else:
-                 @[]
-
-    var acc = GenesisAccount(
-      balance: fromHex(UInt256, account["balance"].getStr),
-      code: code,
-      nonce: nonce
-    )
-
-    if "storage" in account:
-      let storage = account["storage"]
-      for k, v in storage:
-        acc.storage[fromHex(UInt256, k)] = fromHex(UInt256, v.getStr)
-
-    result[parseAddress(address)] = acc
+  ./db/[db_chain, state_db],
+  ./genesis_alloc, ./config, ./constants,
+  ./chain_config
 
 proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
   result = case id
@@ -95,28 +43,13 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
       alloc: decodePrealloc(goerliAllocData)
     )
   of CustomNet:
-    let genesis = getConfiguration().customGenesis
-    var alloc = new GenesisAlloc
-    assert(genesis.prealloc.isNil.not, "genesis prealloc should not nil")
-    if genesis.prealloc != parseJson("{}"):
-      alloc = customNetPrealloc(genesis.prealloc)
-    Genesis(
-      nonce: genesis.nonce,
-      extraData: genesis.extraData,
-      gasLimit: genesis.gasLimit,
-      difficulty: genesis.difficulty,
-      alloc: alloc,
-      timestamp: genesis.timestamp,
-      mixhash: genesis.mixHash,
-      coinbase: genesis.coinbase
-    )
-
+    let customGenesis = getConfiguration().customGenesis
+    customGenesis.genesis
   else:
     # TODO: Fill out the rest
     error "No default genesis for network", id
     doAssert(false, "No default genesis for " & $id)
     Genesis()
-  result.config = publicChainConfig(id)
 
 proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
   let (tdb, pruneTrie) = if db.isNil: (newMemoryDB(), true)
@@ -130,8 +63,6 @@ proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
     for k, v in account.storage:
       sdb.setStorage(address, k, v)
 
-  var root = sdb.rootHash
-
   result = BlockHeader(
     nonce: g.nonce,
     timestamp: g.timestamp,
@@ -140,7 +71,7 @@ proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
     difficulty: g.difficulty,
     mixDigest: g.mixhash,
     coinbase: g.coinbase,
-    stateRoot: root,
+    stateRoot: sdb.rootHash,
     parentHash: GENESIS_PARENT_HASH,
     txRoot: BLANK_ROOT_HASH,
     receiptRoot: BLANK_ROOT_HASH,
@@ -161,7 +92,4 @@ proc commit*(g: Genesis, db: BaseChainDB) =
 proc initializeEmptyDb*(db: BaseChainDB) =
   trace "Writing genesis to DB"
   let networkId = getConfiguration().net.networkId.toPublicNetwork()
-#  if networkId == CustomNet:
-#    raise newException(Exception, "Custom genesis not implemented")
-#  else:
   defaultGenesisBlockForNetwork(networkId).commit(db)

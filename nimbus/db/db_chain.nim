@@ -10,7 +10,7 @@ import
   stew/[byteutils], eth/trie/[hexary, db],
   eth/[common, rlp], chronicles,
   ../errors,  ../constants, ./storage_types,
-  ../utils, ../config
+  ../utils, ../config, ../chain_config
 
 type
   BaseChainDB* = ref object

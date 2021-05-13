@@ -16,7 +16,7 @@ import
   ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/utils/header,
   ../nimbus/p2p/[executor, dao],
-  ../nimbus/config,
+  ../nimbus/[config, chain_config],
   ../stateless/[tree_from_witness, witness_types]
 
 type

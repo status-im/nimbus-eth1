@@ -9,7 +9,7 @@
 
 import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
   ../db/[db_chain, accounts_cache], strutils, algorithm, options, times, json,
-  ../constants, stint, hexstrings, rpc_types, ../config,
+  ../constants, stint, hexstrings, rpc_types, ../chain_config,
   ../vm_state_transactions, ../vm_state, ../vm_types, ../vm_types2,
   ../vm_computation, ../p2p/executor, ../utils, ../transaction,
   ../transaction/call_evm
