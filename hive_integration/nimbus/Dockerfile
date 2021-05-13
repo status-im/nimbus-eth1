@@ -31,12 +31,9 @@ RUN apt-get update \
 COPY --from=build /usr/bin/nimbus /usr/bin/nimbus
 RUN usr/bin/nimbus -v > /version.txt
 
-# Inject the startup script
-ADD nimbus.sh /nimbus.sh
-ADD mapper.jq /mapper.jq
+# Inject the startup script and helper files
+COPY *.sh *.jq *.json /
 RUN chmod +x /nimbus.sh
-
-ADD genesis.json /genesis.json
 
 # Export the usual networking ports to allow outside access to the node
 EXPOSE 8545 8546 8547 30303 30303/udp

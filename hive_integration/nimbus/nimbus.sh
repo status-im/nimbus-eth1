@@ -53,15 +53,11 @@ if [ "$HIVE_LOGLEVEL" != "" ]; then
   FLAGS="$FLAGS --log-level:DEBUG"
 fi
 
-# Configure the chain.
-mv /genesis.json /genesis-input.json
-jq -f /mapper.jq /genesis-input.json > /genesis.json
-
-# Dump genesis
+# Configure the genesis chain and use it as start block and dump it to stdout
 echo "Supplied genesis state:"
-FLAGS="$FLAGS --customnetwork:/genesis.json"
+jq -f /mapper.jq /genesis.json | tee /genesis-start.json
+FLAGS="$FLAGS --customnetwork:/genesis-start.json"
 
-cat genesis.json
 # Don't immediately abort, some imports are meant to fail
 set +e
 
