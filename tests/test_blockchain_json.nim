@@ -24,43 +24,40 @@ type
     NoProof
     Ethash
 
-  VMConfig = array[2, tuple[blockNumber: int, fork: Fork]]
-
   EthBlock = object
-    header: BlockHeader
+    header      : BlockHeader
     transactions: seq[Transaction]
-    uncles: seq[BlockHeader]
+    uncles      : seq[BlockHeader]
 
   TestBlock = object
     goodBlock: bool
-    blockRLP: Blob
+    blockRLP : Blob
 
   Tester = object
     lastBlockHash: Hash256
     genesisHeader: BlockHeader
-    blocks: seq[TestBlock]
-    sealEngine: Option[SealEngine]
-    vmConfig: VMConfig
-    debugMode: bool
-    trace: bool
-    vmState: BaseVMState
-    debugData: JsonNode
-    network: string
+    blocks       : seq[TestBlock]
+    sealEngine   : Option[SealEngine]
+    debugMode    : bool
+    trace        : bool
+    vmState      : BaseVMState
+    debugData    : JsonNode
+    network      : string
 
   MiningHeader = object
-    parentHash:    Hash256
-    ommersHash:    Hash256
-    coinbase:      EthAddress
-    stateRoot:     Hash256
-    txRoot:        Hash256
-    receiptRoot:   Hash256
-    bloom:         common.BloomFilter
-    difficulty:    DifficultyInt
-    blockNumber:   BlockNumber
-    gasLimit:      GasInt
-    gasUsed:       GasInt
-    timestamp:     EthTime
-    extraData:     Blob
+    parentHash  : Hash256
+    ommersHash  : Hash256
+    coinbase    : EthAddress
+    stateRoot   : Hash256
+    txRoot      : Hash256
+    receiptRoot : Hash256
+    bloom       : common.BloomFilter
+    difficulty  : DifficultyInt
+    blockNumber : BlockNumber
+    gasLimit    : GasInt
+    gasUsed     : GasInt
+    timestamp   : EthTime
+    extraData   : Blob
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
@@ -123,75 +120,72 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
 
     result.add t
 
-func vmConfiguration(network: string, c: var ChainConfig): VMConfig =
+func vmConfiguration(network: string, c: var ChainConfig) =
+  const
+    H = high(BlockNumber)
+    Zero = 0.toBlockNumber
+    Five = 5.toBlockNumber
 
-  c.homesteadBlock = high(BlockNumber)
-  c.daoForkBlock = high(BlockNumber)
-  c.daoForkSupport = false
-  c.eip150Block = high(BlockNumber)
-  c.eip158Block = high(BlockNumber)
-  c.byzantiumBlock = high(BlockNumber)
-  c.constantinopleBlock = high(BlockNumber)
-  c.petersburgBlock = high(BlockNumber)
-  c.istanbulBlock = high(BlockNumber)
-  c.muirGlacierBlock = high(BlockNumber)
+  proc assignNumber(c: var ChainConfig,
+                    fork: Fork, n: BlockNumber) =
+    var number: array[Fork, BlockNumber]
+    var z = low(Fork)
+    while z < fork:
+      number[z] = Zero
+      z = z.succ
+    number[fork] = n
+    z = high(Fork)
+    while z > fork:
+      number[z] = H
+      z = z.pred
+
+    c.daoForkSupport = false
+    c.homesteadBlock      = number[FkHomestead]
+    c.daoForkBlock        = number[FkHomestead]
+    c.eip150Block         = number[FkTangerine]
+    c.eip155Block         = number[FkSpurious]
+    c.eip158Block         = number[FkSpurious]
+    c.byzantiumBlock      = number[FkByzantium]
+    c.constantinopleBlock = number[FkConstantinople]
+    c.petersburgBlock     = number[FkPetersburg]
+    c.istanbulBlock       = number[FkIstanbul]
+    c.muirGlacierBlock    = number[FkBerlin]
+    c.berlinBlock         = number[FkBerlin]
 
   case network
   of "EIP150":
-    result = [(0, FkTangerine), (0, FkTangerine)]
-    c.eip150Block = 0.toBlockNumber
+    c.assignNumber(FkTangerine, Zero)
   of "ConstantinopleFix":
-    result = [(0, FkPetersburg), (0, FkPetersburg)]
-    c.petersburgBlock = 0.toBlockNumber
+    c.assignNumber(FkPetersburg, Zero)
   of "Homestead":
-    result = [(0, FkHomestead), (0, FkHomestead)]
-    c.homesteadBlock = 0.toBlockNumber
+    c.assignNumber(FkHomestead, Zero)
   of "Frontier":
-    result = [(0, FkFrontier), (0, FkFrontier)]
-    #c.frontierBlock = 0.toBlockNumber
+    c.assignNumber(FkFrontier, Zero)
   of "Byzantium":
-    result = [(0, FkByzantium), (0, FkByzantium)]
-    c.byzantiumBlock = 0.toBlockNumber
+    c.assignNumber(FkByzantium, Zero)
   of "EIP158ToByzantiumAt5":
-    result = [(0, FkSpurious), (5, FkByzantium)]
-    c.eip158Block = 0.toBlockNumber
-    c.byzantiumBlock = 5.toBlockNumber
+    c.assignNumber(FkByzantium, Five)
   of "EIP158":
-    result = [(0, FkSpurious), (0, FkSpurious)]
-    c.eip158Block = 0.toBlockNumber
+    c.assignNumber(FkSpurious, Zero)
   of "HomesteadToDaoAt5":
-    result = [(0, FkHomestead), (5, FkHomestead)]
-    c.homesteadBlock = 0.toBlockNumber
-    c.daoForkBlock = 5.toBlockNumber
+    c.assignNumber(FkHomestead, Zero)
+    c.daoForkBlock = Five
     c.daoForkSupport = true
   of "Constantinople":
-    result = [(0, FkConstantinople), (0, FkConstantinople)]
-    c.constantinopleBlock = 0.toBlockNumber
+    c.assignNumber(FkConstantinople, Zero)
   of "HomesteadToEIP150At5":
-    result = [(0, FkHomestead), (5, FkTangerine)]
-    c.homesteadBlock = 0.toBlockNumber
-    c.eip150Block = 5.toBlockNumber
+    c.assignNumber(FkTangerine, Five)
   of "FrontierToHomesteadAt5":
-    result = [(0, FkFrontier), (5, FkHomestead)]
-    #c.frontierBlock = 0.toBlockNumber
-    c.homesteadBlock = 5.toBlockNumber
+    c.assignNumber(FkHomestead, Five)
   of "ByzantiumToConstantinopleFixAt5":
-    result = [(0, FkByzantium), (5, FkPetersburg)]
-    c.byzantiumBlock = 0.toBlockNumber
-    c.petersburgBlock = 5.toBlockNumber
+    c.assignNumber(FkPetersburg, Five)
+    c.constantinopleBlock = Five
   of "Istanbul":
-    result = [(0, FkIstanbul), (0, FkIstanbul)]
-    c.istanbulBlock = 0.toBlockNumber
+    c.assignNumber(FkIstanbul, Zero)
   of "Berlin":
-    result = [(0, FkBerlin), (0, FkBerlin)]
-    c.berlinBlock = 0.toBlockNumber
+    c.assignNumber(FkBerlin, Zero)
   else:
     raise newException(ValueError, "unsupported network " & network)
-
-func vmConfigToFork(vmConfig: VMConfig, blockNumber: Uint256): Fork =
-  if blockNumber >= vmConfig[1].blockNumber.u256: return vmConfig[1].fork
-  if blockNumber >= vmConfig[0].blockNumber.u256: return vmConfig[0].fork
-  raise newException(ValueError, "unreachable code")
 
 proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
   result.blocks = parseBlocks(fixture["blocks"])
@@ -547,11 +541,11 @@ proc applyFixtureBlockToChain(tester: var Tester, tb: TestBlock,
   chainDB: BaseChainDB, checkSeal, validation = true): (EthBlock, EthBlock, Blob) =
 
   # we hack the ChainConfig here and let it works with calcDifficulty
-  tester.vmConfig = vmConfiguration(tester.network, chainDB.config)
+  vmConfiguration(tester.network, chainDB.config)
 
   var
     preminedBlock = rlp.decode(tb.blockRLP, EthBlock)
-    fork = vmConfigToFork(tester.vmConfig, preminedBlock.header.blockNumber)
+    fork = toFork(chainDB.config, preminedBlock.header.blockNumber)
     minedBlock = tester.importBlock(chainDB, preminedBlock, fork, checkSeal, validation)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
@@ -708,7 +702,7 @@ proc blockchainJsonMain*(debugMode = false) =
     let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
-    testFixture(n, testStatusIMPL, debugMode = true, config.trace)
+    testFixture(n, testStatusIMPL, debugMode = false, config.trace)
 
 when isMainModule:
   var message: string
