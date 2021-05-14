@@ -10,11 +10,13 @@ const
   UINT_256_MAX*: UInt256 =                  high(UInt256)
   INT_256_MAX_AS_UINT256* =                 high(Uint256) shr 1
   UINT160CEILING*: UInt256 =                2.u256.pow(160)
+
+  # Transactions to ZERO_ADDRESS are legitimate transfers to that account, not
+  # contract creations.  They are used to "burn" Eth.  People also send Eth to
+  # address zero by accident, unrecoverably, due to poor user interface issues.
   ZERO_ADDRESS* =                           default(EthAddress)
-  # TODO: use Option[EthAddress]?
-  # create contract address cannot be ZERO_ADDRESS
-  # because actual zero address exists
-  CREATE_CONTRACT_ADDRESS* =                ZERO_ADDRESS
+
+  # ZERO_HASH32 is the parent hash of genesis blocks.
   ZERO_HASH32* =                            Hash256()
 
   GAS_LIMIT_EMA_DENOMINATOR* =              1_024
