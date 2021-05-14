@@ -36,11 +36,7 @@ proc rpcSetupComputation(vmState: BaseVMState, call: RpcCallData,
     depth: 0,
     gas: gasLimit,
     sender: call.source,
-    contractAddress:
-      if not call.contractCreation:
-        call.to
-      else:
-        generateAddress(call.source, vmState.readOnlyStateDB.getNonce(call.source)),
+    contractAddress: call.to,
     codeAddress: call.to,
     value: call.value,
     data: call.data
@@ -163,7 +159,7 @@ proc txSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMStat
     depth: 0,
     gas: gas,
     sender: sender,
-    contractAddress: tx.getRecipient(sender),
+    contractAddress: tx.to,
     codeAddress: tx.to,
     value: tx.value,
     data: tx.payload
@@ -297,7 +293,7 @@ proc fixtureSetupComputation(vmState: BaseVMState, call: RpcCallData,
     depth: 0,
     gas: call.gas,            # Differs from `rpcSetupComputation`
     sender: call.source,
-    contractAddress: call.to, # Differs from `rpcSetupComputation`
+    contractAddress: call.to,
     codeAddress: call.to,
     value: call.value,
     data: call.data
