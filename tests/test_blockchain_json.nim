@@ -32,6 +32,7 @@ type
   TestBlock = object
     goodBlock: bool
     blockRLP : Blob
+    hasException: bool
 
   Tester = object
     lastBlockHash: Hash256
@@ -115,8 +116,11 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
         t.goodBlock = true
       of "rlp":
         fixture.fromJson "rlp", t.blockRLP
-      else:
+      of "transactions", "uncleHeaders",
+         "blocknumber", "chainname", "chainnetwork":
         discard
+      else:
+        t.hasException = true
 
     result.add t
 
@@ -208,9 +212,10 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
     result.sealEngine = some(parseEnum[SealEngine](fixture["sealEngine"].getStr))
   result.network = fixture["network"].getStr
 
-proc blockWitness(vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
+proc blockWitness(vmState: BaseVMState, chainDB: BaseChainDB) =
   let rootHash = vmState.accountDb.rootHash
   let witness = vmState.buildWitness()
+  let fork = vmState.fork
   let flags = if fork >= FKSpurious: {wfEIP170} else: {}
 
   # build tree from witness
@@ -225,78 +230,6 @@ proc blockWitness(vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
   # compare the result
   if root != rootHash:
     raise newException(ValidationError, "Invalid trie generated from block witness")
-
-proc assignBlockRewards(minedBlock: EthBlock, vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
-  let blockReward = blockRewards[fork]
-  var mainReward = blockReward
-  if minedBlock.header.ommersHash != EMPTY_UNCLE_HASH:
-    let h = vmState.chainDB.persistUncles(minedBlock.uncles)
-    if h != minedBlock.header.ommersHash:
-      raise newException(ValidationError, "Uncle hash mismatch")
-    for uncle in minedBlock.uncles:
-      var uncleReward = uncle.blockNumber.u256 + 8.u256
-      uncleReward -= minedBlock.header.blockNumber.u256
-      uncleReward = uncleReward * blockReward
-      uncleReward = uncleReward div 8.u256
-      vmState.mutateStateDB:
-        db.addBalance(uncle.coinbase, uncleReward)
-      mainReward += blockReward div 32.u256
-
-  # Reward beneficiary
-  vmState.mutateStateDB:
-    db.addBalance(minedBlock.header.coinbase, mainReward)
-    if vmState.generateWitness:
-      db.collectWitnessData()
-    db.persist()
-
-  let stateDb = vmState.accountDb
-  if minedBlock.header.stateRoot != stateDb.rootHash:
-    raise newException(ValidationError, "wrong state root in block")
-
-  let bloom = createBloom(vmState.receipts)
-  if minedBlock.header.bloom != bloom:
-    raise newException(ValidationError, "wrong bloom")
-
-  let receiptRoot = calcReceiptRoot(vmState.receipts)
-  if minedBlock.header.receiptRoot != receiptRoot:
-    raise newException(ValidationError, "wrong receiptRoot")
-
-  let txRoot = calcTxRoot(minedBlock.transactions)
-  if minedBlock.header.txRoot != txRoot:
-    raise newException(ValidationError, "wrong txRoot")
-
-  if vmState.generateWitness:
-    blockWitness(vmState, fork, chainDB)
-
-proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: EthBlock, fork: Fork) =
-  var dbTx = chainDB.db.beginTransaction()
-  defer: dbTx.dispose()
-
-  if chainDB.config.daoForkSupport and minedBlock.header.blockNumber == chainDB.config.daoForkBlock:
-    vmState.mutateStateDB:
-      db.applyDAOHardFork()
-
-  vmState.receipts = newSeq[Receipt](minedBlock.transactions.len)
-  vmState.cumulativeGasUsed = 0
-
-  for txIndex, tx in minedBlock.transactions:
-    var sender: EthAddress
-    if tx.getSender(sender):
-      discard processTransaction(tx, sender, vmState, fork)
-    else:
-      raise newException(ValidationError, "could not get sender")
-    vmState.receipts[txIndex] = makeReceipt(vmState, fork)
-
-  if vmState.cumulativeGasUsed != minedBlock.header.gasUsed:
-    let diff = vmState.cumulativeGasUsed - minedBlock.header.gasUsed
-    raise newException(ValidationError, &"wrong gas used in header expected={minedBlock.header.gasUsed}, actual={vmState.cumulativeGasUsed}, diff={diff}")
-
-  assignBlockRewards(minedBlock, vmState, fork, vmState.chainDB)
-
-  # `applyDeletes = false`
-  # preserve previous block stateRoot
-  # while still benefits from trie pruning
-  dbTx.commit(applyDeletes = false)
 
 func validateBlockUnchanged(a, b: EthBlock): bool =
   result = rlp.encode(a) == rlp.encode(b)
@@ -508,7 +441,7 @@ proc validateBlock(chainDB: BaseChainDB, currBlock: EthBlock, checkSeal: bool): 
   result = true
 
 proc importBlock(tester: var Tester, chainDB: BaseChainDB,
-  preminedBlock: EthBlock, fork: Fork, checkSeal, validation = true): EthBlock =
+  preminedBlock: EthBlock, tb: TestBlock, checkSeal, validation: bool, testStatusIMPL: var TestStatus): EthBlock =
 
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
   let baseHeaderForImport = generateHeaderFromParentHeader(chainDB.config,
@@ -523,9 +456,18 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   let tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
   tester.vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB, tracerFlags)
 
-  processBlock(chainDB, tester.vmState, result, fork)
+  let body = BlockBody(
+    transactions: result.transactions,
+    uncles: result.uncles
+  )
+  let res = processBlock(chainDB, result.header, body, tester.vmState)
+  if res == ValidationResult.Error:
+    check (tb.hasException or (not tb.goodBlock))
+  else:
+    if tester.vmState.generateWitness():
+      blockWitness(tester.vmState, chainDB)
 
-  result.header.stateRoot = tester.vmState.blockHeader.stateRoot
+  result.header.stateRoot  = tester.vmState.blockHeader.stateRoot
   result.header.parentHash = parentHeader.hash
   result.header.difficulty = baseHeaderForImport.difficulty
 
@@ -538,15 +480,14 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
 proc applyFixtureBlockToChain(tester: var Tester, tb: TestBlock,
-  chainDB: BaseChainDB, checkSeal, validation = true): (EthBlock, EthBlock, Blob) =
+  chainDB: BaseChainDB, checkSeal, validation: bool, testStatusIMPL: var TestStatus): (EthBlock, EthBlock, Blob) =
 
   # we hack the ChainConfig here and let it works with calcDifficulty
   vmConfiguration(tester.network, chainDB.config)
 
   var
     preminedBlock = rlp.decode(tb.blockRLP, EthBlock)
-    fork = toFork(chainDB.config, preminedBlock.header.blockNumber)
-    minedBlock = tester.importBlock(chainDB, preminedBlock, fork, checkSeal, validation)
+    minedBlock = tester.importBlock(chainDB, preminedBlock, tb, checkSeal, validation, testStatusIMPL)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
   result = (preminedBlock, minedBlock, rlpEncodedMinedBlock)
 
@@ -570,11 +511,11 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
   if tester.debugMode:
     tester.debugData = newJArray()
 
-  for idx, TestBlock in tester.blocks:
-    if TestBlock.goodBlock:
+  for idx, testBlock in tester.blocks:
+    if testBlock.goodBlock:
       try:
         let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
-            TestBlock, chainDB, checkSeal, validation = false)  # we manually validate below
+            testBlock, chainDB, checkSeal, validation = false, testStatusIMPL)  # we manually validate below
         check validateBlock(chainDB, preminedBlock, checkSeal) == true
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
@@ -582,10 +523,11 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
     else:
       var noError = true
       try:
-        let (_, _, _) = tester.applyFixtureBlockToChain(TestBlock,
-          chainDB, checkSeal, validation = true)
+        let (_, _, _) = tester.applyFixtureBlockToChain(testBlock,
+          chainDB, checkSeal, validation = true, testStatusIMPL)
       except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
         # failure is expected on this bad block
+        check (testBlock.hasException or (not testBlock.goodBlock))
         noError = false
 
       # Block should have caused a validation error
@@ -702,7 +644,7 @@ proc blockchainJsonMain*(debugMode = false) =
     let path = "tests" / "fixtures" / folder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
-    testFixture(n, testStatusIMPL, debugMode = false, config.trace)
+    testFixture(n, testStatusIMPL, debugMode = true, config.trace)
 
 when isMainModule:
   var message: string
