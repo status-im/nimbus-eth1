@@ -322,6 +322,8 @@ proc fixtureCallEvm*(vmState: BaseVMState, call: RpcCallData,
   # Next line differs from all the other EVM calls.  With `execComputation`,
   # most "vm json tests" fail with either `balanceDiff` or `nonceDiff` errors.
   c.executeOpcodes()
+  doAssert c.continuation.isNil
+  doAssert c.child.isNil
 
   # Some of these are extra returned state, for testing, that a normal EVMC API
   # computation doesn't return.  We'll have to obtain them outside EVMC.
