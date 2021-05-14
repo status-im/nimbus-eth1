@@ -26,58 +26,46 @@ type
 
   VMConfig = array[2, tuple[blockNumber: int, fork: Fork]]
 
-  PlainBlock = object
+  EthBlock = object
     header: BlockHeader
     transactions: seq[Transaction]
     uncles: seq[BlockHeader]
 
-  TesterBlock = object
-    blockHeader: Option[BlockHeader]
-    transactions: seq[Transaction]
-    uncles: seq[BlockHeader]
-    blockNumber: Option[int]
-    chainName: Option[string]
-    chainNetwork: Option[Fork]
-    exceptions: seq[(string, string)]
-    headerRLP: Blob
+  TestBlock = object
+    goodBlock: bool
+    blockRLP: Blob
 
   Tester = object
     lastBlockHash: Hash256
-    genesisBlockHeader: BlockHeader
-    blocks: seq[TesterBlock]
+    genesisHeader: BlockHeader
+    blocks: seq[TestBlock]
     sealEngine: Option[SealEngine]
     vmConfig: VMConfig
-    good: bool
     debugMode: bool
     trace: bool
     vmState: BaseVMState
     debugData: JsonNode
     network: string
 
-  MiningHeader* = object
-    parentHash*:    Hash256
-    ommersHash*:    Hash256
-    coinbase*:      EthAddress
-    stateRoot*:     Hash256
-    txRoot*:        Hash256
-    receiptRoot*:   Hash256
-    bloom*:         common.BloomFilter
-    difficulty*:    DifficultyInt
-    blockNumber*:   BlockNumber
-    gasLimit*:      GasInt
-    gasUsed*:       GasInt
-    timestamp*:     EthTime
-    extraData*:     Blob
+  MiningHeader = object
+    parentHash:    Hash256
+    ommersHash:    Hash256
+    coinbase:      EthAddress
+    stateRoot:     Hash256
+    txRoot:        Hash256
+    receiptRoot:   Hash256
+    bloom:         common.BloomFilter
+    difficulty:    DifficultyInt
+    blockNumber:   BlockNumber
+    gasLimit:      GasInt
+    gasUsed:       GasInt
+    timestamp:     EthTime
+    extraData:     Blob
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
 func normalizeNumber(n: JsonNode): JsonNode =
   let str = n.getStr
-  # paranoid checks
-  doAssert n.kind == Jstring
-  doAssert str[0] == '0' and str[1] == 'x'
-  # real normalization
-  # strip leading 0
   if str == "0x":
     result = newJString("0x0")
   elif str == "0x0":
@@ -120,72 +108,18 @@ proc parseHeader(blockHeader: JsonNode, testStatusIMPL: var TestStatus): BlockHe
   blockHeader.fromJson "hash", blockHash
   check blockHash == hash(result)
 
-proc parseTx*(n: JsonNode): Transaction =
-
-  for k, v in n:
-    case k
-    of "nonce", "gasPrice", "gasLimit", "value":
-      n[k] = normalizeNumber(v)
-    of "to":
-      let str = v.getStr
-      if str.len > 2 and str[1] != 'x':
-        n[k] = newJString("0x" & str)
-    of "v", "r", "s":
-      n[k] = normalizeNumber(v)
-    else:
-      discard
-
-  n.fromJson "nonce", result.accountNonce
-  n.fromJson "gasPrice", result.gasPrice
-  n.fromJson "gasLimit", result.gasLimit
-  result.isContractCreation = n["to"].getStr == ""
-  if not result.isContractCreation:
-    n.fromJson "to", result.to
-  n.fromJson "value", result.value
-  n.fromJson "data", result.payload
-  n.fromJson "v", result.V
-  n.fromJson "r", result.R
-  n.fromJson "s", result.S
-
-proc parseBlocks(blocks: JsonNode, testStatusIMPL: var TestStatus): seq[TesterBlock] =
-  result = @[]
-
+proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
   for fixture in blocks:
-    var t: TesterBlock
+    var t: TestBlock
     for key, value in fixture:
       case key
       of "blockHeader":
-        t.blockHeader = some(parseHeader(fixture["blockHeader"], testStatusIMPL))
-      of "blocknumber":
-        let numberStr = value.getStr
-        if numberStr.len >= 2 and numberStr[1] == 'x':
-          fixture[key] = normalizeNumber(value)
-          var number: int
-          fixture.fromJson "blocknumber", number
-          t.blockNumber = some(number)
-        else:
-          t.blockNumber = some(parseInt(numberStr))
-      of "chainname":
-        t.chainName = some(value.getStr)
-      of "chainnetwork":
-        t.chainNetWork = some(parseEnum[Fork](value.getStr))
+        # header is absent in bad block
+        t.goodBlock = true
       of "rlp":
-        fixture.fromJson "rlp", t.headerRLP
-      of "transactions":
-        for tx in value:
-          t.transactions.add parseTx(tx)
-      of "uncleHeaders":
-        t.uncles = @[]
-        for uncle in value:
-          t.uncles.add parseHeader(uncle, testStatusIMPL)
+        fixture.fromJson "rlp", t.blockRLP
       else:
-        t.exceptions.add( (key, value.getStr) )
-
-    if t.blockHeader.isSome:
-      let h = t.blockHeader.get()
-      check calcTxRoot(t.transactions) == h.txRoot
-      let enc = rlp.encode(t.uncles)
-      check keccakHash(enc) == h.ommersHash
+        discard
 
     result.add t
 
@@ -260,28 +194,25 @@ func vmConfigToFork(vmConfig: VMConfig, blockNumber: Uint256): Fork =
   raise newException(ValueError, "unreachable code")
 
 proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
-  result.good = true
+  result.blocks = parseBlocks(fixture["blocks"])
+
   fixture.fromJson "lastblockhash", result.lastBlockHash
-  result.genesisBlockHeader = parseHeader(fixture["genesisBlockHeader"], testStatusIMPL)
+  result.genesisHeader = parseHeader(fixture["genesisBlockHeader"], testStatusIMPL)
 
   if "genesisRLP" in fixture:
     var genesisRLP: Blob
     fixture.fromJson "genesisRLP", genesisRLP
-    let genesisBlock = PlainBlock(header: result.genesisBlockHeader)
+    let genesisBlock = EthBlock(header: result.genesisHeader)
     check genesisRLP == rlp.encode(genesisBlock)
+  else:
+    var goodBlock = true
+    for h in result.blocks:
+      goodBlock = goodBlock and h.goodBlock
+    check goodBlock == false
 
   if "sealEngine" in fixture:
     result.sealEngine = some(parseEnum[SealEngine](fixture["sealEngine"].getStr))
   result.network = fixture["network"].getStr
-
-  try:
-    result.blocks = parseBlocks(fixture["blocks"], testStatusIMPL)
-  except ValueError:
-    result.good = false
-
-  # TODO: implement missing VM
-  #if result.network in ["HomesteadToDaoAt5"]:
-    #result.good = false
 
 proc blockWitness(vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
   let rootHash = vmState.accountDb.rootHash
@@ -301,7 +232,7 @@ proc blockWitness(vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
   if root != rootHash:
     raise newException(ValidationError, "Invalid trie generated from block witness")
 
-proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
+proc assignBlockRewards(minedBlock: EthBlock, vmState: BaseVMState, fork: Fork, chainDB: BaseChainDB) =
   let blockReward = blockRewards[fork]
   var mainReward = blockReward
   if minedBlock.header.ommersHash != EMPTY_UNCLE_HASH:
@@ -343,7 +274,7 @@ proc assignBlockRewards(minedBlock: PlainBlock, vmState: BaseVMState, fork: Fork
   if vmState.generateWitness:
     blockWitness(vmState, fork, chainDB)
 
-proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: PlainBlock, fork: Fork) =
+proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: EthBlock, fork: Fork) =
   var dbTx = chainDB.db.beginTransaction()
   defer: dbTx.dispose()
 
@@ -373,7 +304,7 @@ proc processBlock(chainDB: BaseChainDB, vmState: BaseVMState, minedBlock: PlainB
   # while still benefits from trie pruning
   dbTx.commit(applyDeletes = false)
 
-func validateBlockUnchanged(a, b: PlainBlock): bool =
+func validateBlockUnchanged(a, b: EthBlock): bool =
   result = rlp.encode(a) == rlp.encode(b)
 
 type Hash512 = MDigest[512]
@@ -507,7 +438,7 @@ proc validateGasLimit(chainDB: BaseChainDB, header: BlockHeader) =
   elif header.gasLimit > highBound:
     raise newException(ValidationError, "The gas limit is too high")
 
-proc validateUncles(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool) =
+proc validateUncles(chainDB: BaseChainDB, currBlock: EthBlock, checkSeal: bool) =
   let hasUncles = currBlock.uncles.len > 0
   let shouldHaveUncles = currBlock.header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -559,10 +490,10 @@ proc validateUncles(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool
     let uncleParent = chainDB.getBlockHeader(uncle.parentHash)
     validateUncle(currBlock.header, uncle, uncleParent)
 
-func isGenesis(currBlock: PlainBlock): bool =
+func isGenesis(currBlock: EthBlock): bool =
   result = currBlock.header.blockNumber == 0.u256 and currBlock.header.parentHash == GENESIS_PARENT_HASH
 
-proc validateBlock(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool): bool =
+proc validateBlock(chainDB: BaseChainDB, currBlock: EthBlock, checkSeal: bool): bool =
   if currBlock.isGenesis:
     if currBlock.header.extraData.len > 32:
       raise newException(ValidationError, "BlockHeader.extraData larger than 32 bytes")
@@ -583,7 +514,7 @@ proc validateBlock(chainDB: BaseChainDB, currBlock: PlainBlock, checkSeal: bool)
   result = true
 
 proc importBlock(tester: var Tester, chainDB: BaseChainDB,
-  preminedBlock: PlainBlock, fork: Fork, checkSeal, validation = true): PlainBlock =
+  preminedBlock: EthBlock, fork: Fork, checkSeal, validation = true): EthBlock =
 
   let parentHeader = chainDB.getBlockHeader(preminedBlock.header.parentHash)
   let baseHeaderForImport = generateHeaderFromParentHeader(chainDB.config,
@@ -612,14 +543,14 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
-proc applyFixtureBlockToChain(tester: var Tester, tb: TesterBlock,
-  chainDB: BaseChainDB, checkSeal, validation = true): (PlainBlock, PlainBlock, Blob) =
+proc applyFixtureBlockToChain(tester: var Tester, tb: TestBlock,
+  chainDB: BaseChainDB, checkSeal, validation = true): (EthBlock, EthBlock, Blob) =
 
   # we hack the ChainConfig here and let it works with calcDifficulty
   tester.vmConfig = vmConfiguration(tester.network, chainDB.config)
 
   var
-    preminedBlock = rlp.decode(tb.headerRLP, PlainBlock)
+    preminedBlock = rlp.decode(tb.blockRLP, EthBlock)
     fork = vmConfigToFork(tester.vmConfig, preminedBlock.header.blockNumber)
     minedBlock = tester.importBlock(chainDB, preminedBlock, fork, checkSeal, validation)
     rlpEncodedMinedBlock = rlp.encode(minedBlock)
@@ -638,20 +569,18 @@ proc collectDebugData(tester: var Tester) =
   }
 
 proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var TestStatus) =
-  discard chainDB.persistHeaderToDb(tester.genesisBlockHeader)
-  check chainDB.getCanonicalHead().blockHash == tester.genesisBlockHeader.blockHash
+  discard chainDB.persistHeaderToDb(tester.genesisHeader)
+  check chainDB.getCanonicalHead().blockHash == tester.genesisHeader.blockHash
   let checkSeal = tester.shouldCheckSeal
 
   if tester.debugMode:
     tester.debugData = newJArray()
 
-  for idx, testerBlock in tester.blocks:
-    let shouldBeGoodBlock = testerBlock.blockHeader.isSome
-
-    if shouldBeGoodBlock:
+  for idx, TestBlock in tester.blocks:
+    if TestBlock.goodBlock:
       try:
         let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
-            testerBlock, chainDB, checkSeal, validation = false)  # we manually validate below
+            TestBlock, chainDB, checkSeal, validation = false)  # we manually validate below
         check validateBlock(chainDB, preminedBlock, checkSeal) == true
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
@@ -659,7 +588,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
     else:
       var noError = true
       try:
-        let (_, _, _) = tester.applyFixtureBlockToChain(testerBlock,
+        let (_, _, _) = tester.applyFixtureBlockToChain(TestBlock,
           chainDB, checkSeal, validation = true)
       except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
         # failure is expected on this bad block
@@ -718,10 +647,8 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     var tester = parseTester(fixture, testStatusIMPL)
     var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = test_config.getConfiguration().pruning)
 
-    if not tester.good: continue
-
     var vmState = newBaseVMState(emptyRlpHash,
-      tester.genesisBlockHeader, chainDB)
+      tester.genesisHeader, chainDB)
 
     vmState.generateWitness = true
 
@@ -730,7 +657,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
       db.persist()
 
     let obtainedHash = $(vmState.readOnlyStateDB.rootHash)
-    check obtainedHash == $(tester.genesisBlockHeader.stateRoot)
+    check obtainedHash == $(tester.genesisHeader.stateRoot)
 
     tester.debugMode = debugMode
     tester.trace = trace
@@ -802,7 +729,7 @@ when isMainModule:
 # genesisRLP -> NOT every fixture has it, rlp bytes of genesis block header
 # _info -> every fixture has it, can be omitted
 # pre, postState -> every fixture has it, prestate and post state
-# genesisBlockHeader -> every fixture has it
+# genesisHeader -> every fixture has it
 # network -> every fixture has it
 #   # EIP150 247
 #   # ConstantinopleFix 286
