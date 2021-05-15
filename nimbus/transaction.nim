@@ -219,3 +219,29 @@ proc validate*(tx: LegacyTx, fork: Fork) =
 
   if not isValid:
     raise newException(ValidationError, "Invalid transaction")
+
+proc validate*(tx: AccessListTx, fork: Fork) =
+  if tx.intrinsicGas(fork) > tx.gasLimit:
+    raise newException(ValidationError, "Insufficient gas")
+
+  # check signature validity
+  var sender: EthAddress
+  if not tx.getSender(sender):
+    raise newException(ValidationError, "Invalid signature or failed message verification")
+
+  var isValid = tx.V in {0'i64, 1'i64}
+  isValid = isValid and tx.S >= Uint256.one
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+
+  # TODO: chainId need validation?
+  # TODO: accessList need validation?
+
+  if not isValid:
+    raise newException(ValidationError, "Invalid transaction")
+
+proc validate*(tx: Transaction, fork: Fork) =
+  if tx.txType == LegacyTxType:
+    validate(tx.legacyTx, fork)
+  else:
+    validate(tx.accessListTx, fork)
