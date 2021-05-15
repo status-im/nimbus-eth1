@@ -58,19 +58,19 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
   var vmState = newBaseVMState(ac.rootHash, BlockHeader(parentHash: parentHash), chain)
 
   let
-    unsignedTx1 = UnsignedTx(
+    unsignedTx1 = LegacyUnsignedTx(
       nonce   : 0,
       gasPrice: 1_100,
       gasLimit: 70_000,
       value   : 1.u256,
-      contractCreation: false
+      isContractCreation: false
     )
-    unsignedTx2 = UnsignedTx(
+    unsignedTx2 = LegacyUnsignedTx(
       nonce   : 0,
       gasPrice: 1_200,
       gasLimit: 70_000,
       value   : 2.u256,
-      contractCreation: false
+      isContractCreation: false
     )
     signedTx1 = signTransaction(unsignedTx1, chain, acc.privateKey)
     signedTx2 = signTransaction(unsignedTx2, chain, acc.privateKey)
@@ -82,7 +82,7 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
   for txIndex, tx in txs:
     let sender = tx.getSender()
     discard processTransaction(tx, sender, vmState, fork)
-    vmState.receipts[txIndex] = makeReceipt(vmState, fork)
+    vmState.receipts[txIndex] = makeReceipt(vmState, fork, tx.txType)
 
   let
     receiptRoot = chain.persistReceipts(vmState.receipts)
@@ -381,7 +381,7 @@ proc doTests {.async.} =
 
       let res2 = await client.eth_getTransactionReceipt(env.blockHash)
       check res2.isNone
-      
+
     test "eth_getUncleByBlockHashAndIndex":
       let res = await client.eth_getUncleByBlockHashAndIndex(env.blockHash, encodeQuantity(0))
       check res.isSome
