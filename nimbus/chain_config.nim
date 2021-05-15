@@ -17,11 +17,6 @@ import
   json_serialization/lexer
 
 type
-  # beware that although in some cases
-  # chainId have identical value to networkId
-  # they are separate entity
-  ChainId* = distinct uint
-
   ChainOptions = object
     chainId            : ChainId
     homesteadBlock     : Option[BlockNumber]

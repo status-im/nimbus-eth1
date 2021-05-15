@@ -525,7 +525,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
       try:
         let (_, _, _) = tester.applyFixtureBlockToChain(testBlock,
           chainDB, checkSeal, validation = true, testStatusIMPL)
-      except ValueError, ValidationError, BlockNotFound, MalformedRlpError, RlpTypeMismatch:
+      except ValueError, ValidationError, BlockNotFound, RlpError:
         # failure is expected on this bad block
         check (testBlock.hasException or (not testBlock.goodBlock))
         noError = false
@@ -601,7 +601,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
     var success = true
     try:
       tester.runTester(chainDB, testStatusIMPL)
-
+      success = testStatusIMPL == OK
       let latestBlockHash = chainDB.getCanonicalHead().blockHash
       if latestBlockHash != tester.lastBlockHash:
         verifyStateDB(fixture["postState"], tester.vmState.readOnlyStateDB)

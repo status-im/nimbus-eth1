@@ -79,7 +79,7 @@ fill_enum_holes:
       Difficulty =     0x44, # Get the block's difficulty.
       GasLimit =       0x45, # Get the block's gas limit.
 
-      ChainId =        0x46, # Get current chain’s EIP-155 unique identifier.
+      ChainIdOp =      0x46, # Get current chain’s EIP-155 unique identifier.
       SelfBalance =    0x47, # Get current contract's balance.
 
       # 50s: Stack, Memory, Storage and Flow Operations

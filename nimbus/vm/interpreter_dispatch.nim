@@ -223,7 +223,7 @@ let PetersburgOpDispatch {.compileTime.}: array[Op, NimNode] = genPetersburgJump
 
 proc genIstanbulJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
   result = ops
-  result[ChainId] = newIdentNode "chainId"
+  result[ChainIdOp] = newIdentNode "chainId"
   result[SelfBalance] = newIdentNode "selfBalance"
   result[SStore] = newIdentNode "sstoreEIP2200"
 

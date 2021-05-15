@@ -81,23 +81,25 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "nonce", result.nonce
 
 proc parseTransaction*(n: JsonNode): Transaction =
-  n.fromJson "nonce", result.accountNonce
-  n.fromJson "gasPrice", result.gasPrice
-  n.fromJson "gas", result.gasLimit
+  var tx: LegacyTx
+  n.fromJson "nonce", tx.nonce
+  n.fromJson "gasPrice", tx.gasPrice
+  n.fromJson "gas", tx.gasLimit
 
-  result.isContractCreation = n["to"].kind == JNull
-  if not result.isContractCreation:
-    n.fromJson "to", result.to
+  tx.isContractCreation = n["to"].kind == JNull
+  if not tx.isContractCreation:
+    n.fromJson "to", tx.to
 
-  n.fromJson "value", result.value
-  n.fromJson "input", result.payload
-  n.fromJson "v", result.V
-  n.fromJson "r", result.R
-  n.fromJson "s", result.S
+  n.fromJson "value", tx.value
+  n.fromJson "input", tx.payload
+  n.fromJson "v", tx.V
+  n.fromJson "r", tx.R
+  n.fromJson "s", tx.S
 
-  var sender = result.getSender()
+  var sender = tx.getSender()
   doAssert sender.prefixHex == n["from"].getStr()
-  doAssert n["hash"].getStr() == result.rlpHash().prefixHex
+  doAssert n["hash"].getStr() == tx.rlpHash().prefixHex
+  result = Transaction(txType: LegacyTxType, legacyTx: tx)
 
 proc parseLog(n: JsonNode): Log =
   n.fromJson "address", result.address
@@ -118,18 +120,20 @@ proc parseLogs(n: JsonNode): seq[Log] =
     result = @[]
 
 proc parseReceipt*(n: JsonNode): Receipt =
+  var rec: LegacyReceipt
   if n.hasKey("root"):
     var hash: Hash256
     n.fromJson "root", hash
-    result.stateRootOrStatus = hashOrStatus(hash)
+    rec.stateRootOrStatus = hashOrStatus(hash)
   else:
     var status: int
     n.fromJson "status", status
-    result.stateRootOrStatus = hashOrStatus(status == 1)
+    rec.stateRootOrStatus = hashOrStatus(status == 1)
 
-  n.fromJson "cumulativeGasUsed", result.cumulativeGasUsed
-  n.fromJson "logsBloom", result.bloom
-  result.logs = parseLogs(n["logs"])
+  n.fromJson "cumulativeGasUsed", rec.cumulativeGasUsed
+  n.fromJson "logsBloom", rec.bloom
+  rec.logs = parseLogs(n["logs"])
+  Receipt(receiptType: LegacyReceiptType, legacyReceipt: rec)
 
 proc headerHash*(n: JsonNode): Hash256 =
   n.fromJson "hash", result

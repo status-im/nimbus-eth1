@@ -217,7 +217,7 @@ proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     forkOverride = forkOverride,
   )
 
-  let contractAddress = generateAddress(sender, tx.accountNonce)
+  let contractAddress = generateAddress(sender, tx.nonce)
   let msg = Message(
       kind: evmcCall,
       depth: 0,

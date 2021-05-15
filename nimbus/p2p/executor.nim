@@ -40,9 +40,9 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
       require=tx.intrinsicGas(fork)
     return
 
-  if tx.accountNonce != nonce:
+  if tx.nonce != nonce:
     debug "invalid tx: account nonce mismatch",
-      txNonce=tx.accountnonce,
+      txNonce=tx.nonce,
       accountNonce=nonce
     return
 
@@ -96,19 +96,30 @@ func logsBloom(logs: openArray[Log]): LogsBloom =
 
 func createBloom*(receipts: openArray[Receipt]): Bloom =
   var bloom: LogsBloom
-  for receipt in receipts:
-    bloom.value = bloom.value or logsBloom(receipt.logs).value
+  for rec in receipts:
+    bloom.value = bloom.value or logsBloom(rec.logs).value
   result = bloom.value.toByteArrayBE
 
-proc makeReceipt*(vmState: BaseVMState, fork = FkFrontier): Receipt =
-  if fork < FkByzantium:
-    result.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
-  else:
-    result.stateRootOrStatus = hashOrStatus(vmState.status)
+proc makeReceipt*(vmState: BaseVMState, fork: Fork, txType: TxType): Receipt =
+  if txType == AccessListTxType:
+    var rec = AccessListReceipt(
+      status: vmState.status,
+      cumulativeGasUsed: vmState.cumulativeGasUsed,
+      logs: vmState.getAndClearLogEntries()
+    )
+    rec.bloom = logsBloom(rec.logs).value.toByteArrayBE
+    return Receipt(receiptType: AccessListReceiptType, accessListReceipt: rec)
 
-  result.cumulativeGasUsed = vmState.cumulativeGasUsed
-  result.logs = vmState.getAndClearLogEntries()
-  result.bloom = logsBloom(result.logs).value.toByteArrayBE
+  var rec: LegacyReceipt
+  if fork < FkByzantium:
+    rec.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
+  else:
+    rec.stateRootOrStatus = hashOrStatus(vmState.status)
+
+  rec.cumulativeGasUsed = vmState.cumulativeGasUsed
+  rec.logs = vmState.getAndClearLogEntries()
+  rec.bloom = logsBloom(rec.logs).value.toByteArrayBE
+  Receipt(receiptType: LegacyReceiptType, legacyReceipt: rec)
 
 func eth(n: int): Uint256 {.compileTime.} =
   n.u256 * pow(10.u256, 18)
@@ -178,7 +189,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
         else:
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error
-        vmState.receipts[txIndex] = makeReceipt(vmState, fork)
+        vmState.receipts[txIndex] = makeReceipt(vmState, fork, tx.txType)
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
     let h = chainDB.persistUncles(body.uncles)

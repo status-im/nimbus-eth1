@@ -184,32 +184,91 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
     if wantedNonce != actualNonce:
       raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
 
+proc parseAccessList(n: JsonNode): AccessList =
+  if n.kind == JNull:
+    return
+
+  for x in n:
+    var ap = AccessPair(
+      address: parseAddress(x["address"].getStr)
+    )
+    let sks = x["storageKeys"]
+    for sk in sks:
+      ap.storageKeys.add hexToByteArray[32](sk.getStr())
+    result.add ap
+
+proc signTx(tx: var LegacyTx, privateKey: PrivateKey) =
+  let sig = sign(privateKey, tx.rlpEncode)
+  let raw = sig.toRaw()
+  tx.R = fromBytesBE(Uint256, raw[0..31])
+  tx.S = fromBytesBE(Uint256, raw[32..63])
+  tx.V = raw[64].int64 + 27
+
+proc signTx(tx: var AccessListTx, privateKey: PrivateKey) =
+  let sig = sign(privateKey, tx.rlpEncode)
+  let raw = sig.toRaw()
+  tx.R = fromBytesBE(Uint256, raw[0..31])
+  tx.S = fromBytesBE(Uint256, raw[32..63])
+  tx.V = raw[64].int64
+
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
-  result.accountNonce = j["nonce"].getHexadecimalInt.AccountNonce
-  result.gasPrice = j["gasPrice"].getHexadecimalInt
-  result.gasLimit = j["gasLimit"][gasIndex].getHexadecimalInt
+  let nonce    = j["nonce"].getHexadecimalInt.AccountNonce
+  let gasPrice = j["gasPrice"].getHexadecimalInt
+  let gasLimit = j["gasLimit"][gasIndex].getHexadecimalInt
+
+  var toAddr: EthAddress
+  var contract: bool
 
   # TODO: there are a couple fixtures which appear to distinguish between
   # empty and 0 transaction.to; check/verify whether correct conditions.
   let rawTo = j["to"].getStr
   if rawTo == "":
-    result.to = "0x".parseAddress
-    result.isContractCreation = true
+    toAddr   = "0x".parseAddress
+    contract = true
   else:
-    result.to = rawTo.parseAddress
-    result.isContractCreation = false
-  result.value = fromHex(UInt256, j["value"][valueIndex].getStr)
-  result.payload = j["data"][dataIndex].getStr.safeHexToSeqByte
+    toAddr   = rawTo.parseAddress
+    contract = false
+
+  let value = fromHex(UInt256, j["value"][valueIndex].getStr)
+  let payload = j["data"][dataIndex].getStr.safeHexToSeqByte
 
   var secretKey = j["secretKey"].getStr
   removePrefix(secretKey, "0x")
   let privateKey = PrivateKey.fromHex(secretKey).tryGet()
-  let sig = sign(privateKey, result.rlpEncode)
-  let raw = sig.toRaw()
 
-  result.R = fromBytesBE(Uint256, raw[0..31])
-  result.S = fromBytesBE(Uint256, raw[32..63])
-  result.V = raw[64] + 27.byte
+  if j.hasKey("accessLists"):
+    let accList = j["accessLists"][dataIndex]
+    var tx = AccessListTx(
+      nonce: nonce,
+      gasPrice: gasPrice,
+      gasLimit: gasLimit,
+      to: toAddr,
+      isContractCreation: contract,
+      value: value,
+      payload: payload,
+      accessList: parseAccessList(accList),
+      chainId: common.ChainId(1)
+    )
+    signTx(tx, privateKey)
+    Transaction(
+      txType: AccessListTxType,
+      accessListTx: tx
+    )
+  else:
+    var tx = LegacyTx(
+      nonce: nonce,
+      gasPrice: gasPrice,
+      gasLimit: gasLimit,
+      to: toAddr,
+      isContractCreation: contract,
+      value: value,
+      payload: payload
+    )
+    signTx(tx, privateKey)
+    Transaction(
+      txType: LegacyTxType,
+      legacyTx: tx
+    )
 
 proc hashLogEntries*(logs: seq[Log]): string =
   toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
