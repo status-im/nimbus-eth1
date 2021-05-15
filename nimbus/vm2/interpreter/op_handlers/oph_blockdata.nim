@@ -123,7 +123,7 @@ const
             run:  gasLimitOp,
             post: vm2OpIgnore)),
 
-    (opCode: ChainId,         ## 0x46, EIP-155 chain identifier
+    (opCode: ChainIdOp,       ## 0x46, EIP-155 chain identifier
      forks: Vm2OpIstanbulAndLater,
      name: "chainId",
      info: "Get current chain’s EIP-155 unique identifier",
