@@ -31,6 +31,12 @@ template txFieldAsgn(field, data: untyped) =
   else:
     tx.accessListTx.field = data
 
+template recField(field: untyped): untyped =
+  if rec.receiptType == LegacyReceiptType:
+    rec.legacyReceipt.field
+  else:
+    rec.accessListReceipt.field
+
 func intrinsicGas*(data: openarray[byte], fork: Fork): GasInt =
   result = gasFees[fork][GasTransaction]
   for i in data:
@@ -135,11 +141,51 @@ proc payload*(tx: Transaction): Blob =
 proc nonce*(tx: Transaction): AccountNonce =
   txField(nonce)
 
+proc V*(tx: Transaction): int64 =
+  txField(V)
+
+proc R*(tx: Transaction): UInt256 =
+  txField(R)
+
+proc S*(tx: Transaction): UInt256 =
+  txField(S)
+
 proc `payload=`*(tx: var Transaction, data: Blob) =
   txFieldAsgn(payload, data)
 
 proc `gasLimit=`*(tx: var Transaction, data: GasInt) =
   txFieldAsgn(gasLimit, data)
+
+proc cumulativeGasUsed*(rec: Receipt): GasInt =
+  recField(cumulativeGasUsed)
+
+proc logs*(rec: Receipt): auto =
+  recField(logs)
+
+proc bloom*(rec: Receipt): auto =
+  recField(bloom)
+
+proc hasStateRoot*(rec: Receipt): bool =
+  if rec.receiptType == LegacyReceiptType:
+    rec.legacyReceipt.hasStateRoot
+  else:
+    false
+
+proc hasStatus*(rec: Receipt): bool =
+  if rec.receiptType == LegacyReceiptType:
+    rec.legacyReceipt.hasStatus
+  else:
+    true
+
+proc status*(rec: Receipt): int =
+  if rec.receiptType == LegacyReceiptType:
+    rec.legacyReceipt.status
+  else:
+    rec.accessListReceipt.status.int
+
+proc stateRoot*(rec: Receipt): Hash256 =
+  if rec.receiptType == LegacyReceiptType:
+    return rec.legacyReceipt.stateRoot
 
 proc validate*(tx: LegacyTx, fork: Fork) =
   # Hook called during instantiation to ensure that all transaction

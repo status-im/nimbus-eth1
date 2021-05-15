@@ -536,7 +536,7 @@ proc txHash(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
 proc txNonce(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
-  longNode(tx.tx.accountNonce)
+  longNode(tx.tx.nonce)
 
 proc txIndex(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)

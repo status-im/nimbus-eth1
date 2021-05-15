@@ -14,27 +14,7 @@ import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
   ../vm_computation, ../p2p/executor, ../utils, ../transaction,
   ../transaction/call_evm
 
-type
-  UnsignedTx* = object
-    nonce*   : AccountNonce
-    gasPrice*: GasInt
-    gasLimit*: GasInt
-    to* {.rlpCustomSerialization.}: EthAddress
-    value *  : UInt256
-    payload* : Blob
-    contractCreation* {.rlpIgnore.}: bool
-
-proc read(rlp: var Rlp, t: var UnsignedTx, _: type EthAddress): EthAddress {.inline.} =
-  if rlp.blobLen != 0:
-    result = rlp.read(EthAddress)
-  else:
-    t.contractCreation = true
-
-proc append(rlpWriter: var RlpWriter, t: UnsignedTx, a: EthAddress) {.inline.} =
-  if t.contractCreation:
-    rlpWriter.append("")
-  else:
-    rlpWriter.append(a)
+import eth/common/transaction as common_transaction
 
 func toAddress*(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
 
@@ -84,12 +64,12 @@ proc calculateMedianGasPrice*(chain: BaseChainDB): GasInt =
     else:
       result = prices[middle]
 
-proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): UnsignedTx =
+proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): LegacyUnsignedTx =
   if tx.to.isSome:
     result.to = toAddress(tx.to.get())
-    result.contractCreation = false
+    result.isContractCreation = false
   else:
-    result.contractCreation = true
+    result.isContractCreation = true
 
   if tx.gas.isSome:
     result.gasLimit = hexToInt(tx.gas.get().string, GasInt)
@@ -113,21 +93,21 @@ proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): Un
 
   result.payload = hexToSeqByte(tx.data.string)
 
-func rlpEncode(tx: UnsignedTx, chainId: ChainId): auto =
-  rlp.encode(Transaction(
-    accountNonce: tx.nonce,
+func rlpEncode(tx: LegacyUnsignedTx, chainId: ChainId): auto =
+  rlp.encode(LegacyTx(
+    nonce: tx.nonce,
     gasPrice: tx.gasPrice,
     gasLimit: tx.gasLimit,
     to: tx.to,
     value: tx.value,
     payload: tx.payload,
-    isContractCreation: tx.contractCreation,
-    V: chainId.byte,
+    isContractCreation: tx.isContractCreation,
+    V: chainId.int64,
     R: 0.u256,
     S: 0.u256
     ))
 
-proc signTransaction*(tx: UnsignedTx, chain: BaseChainDB, privateKey: PrivateKey): Transaction =
+proc signTransaction*(tx: LegacyUnsignedTx, chain: BaseChainDB, privateKey: PrivateKey): Transaction =
   let eip155 = chain.currentBlock >= chain.config.eip155Block
   let rlpTx = if eip155:
                 rlpEncode(tx, chain.config.chainId)
@@ -136,22 +116,23 @@ proc signTransaction*(tx: UnsignedTx, chain: BaseChainDB, privateKey: PrivateKey
 
   let sig = sign(privateKey, rlpTx).toRaw
   let v = if eip155:
-            byte(sig[64].uint + chain.config.chainId.uint * 2'u + 35'u)
+            sig[64].int64 + chain.config.chainId.int64 * 2'i64 + 35'i64
           else:
-            sig[64] + 27.byte
+            sig[64].int64 + 27'i64
 
-  result = Transaction(
-    accountNonce: tx.nonce,
+  let tx = LegacyTx(
+    nonce: tx.nonce,
     gasPrice: tx.gasPrice,
     gasLimit: tx.gasLimit,
     to: tx.to,
     value: tx.value,
     payload: tx.payload,
-    isContractCreation: tx.contractCreation,
+    isContractCreation: tx.isContractCreation,
     V: v,
     R: Uint256.fromBytesBE(sig[0..31]),
     S: Uint256.fromBytesBE(sig[32..63])
     )
+  Transaction(txType: LegacyTxType, legacyTx: tx)
 
 proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): RpcCallData =
   if call.source.isSome:
@@ -188,7 +169,7 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.gasPrice = encodeQuantity(tx.gasPrice.uint64)
   result.hash = tx.rlpHash
   result.input = tx.payLoad
-  result.nonce = encodeQuantity(tx.accountNonce.uint64)
+  result.nonce = encodeQuantity(tx.nonce.uint64)
   if not tx.isContractCreation:
     result.to = some(tx.to)
   result.transactionIndex = some(encodeQuantity(txIndex.uint64))
@@ -250,7 +231,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txInde
   if tx.isContractCreation:
     var sender: EthAddress
     if tx.getSender(sender):
-      let contractAddress = generateAddress(sender, tx.accountNonce)
+      let contractAddress = generateAddress(sender, tx.nonce)
       result.contractAddress = some(contractAddress)
 
   result.logs = receipt.logs
