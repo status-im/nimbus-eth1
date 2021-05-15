@@ -45,12 +45,31 @@ func intrinsicGas*(data: openarray[byte], fork: Fork): GasInt =
     else:
       result += gasFees[fork][GasTXDataNonZero]
 
-proc intrinsicGas*(tx: TxTypes, fork: Fork): GasInt =
+proc intrinsicGas*(tx: LegacyTx, fork: Fork): GasInt =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
   result = tx.payload.intrinsicGas(fork)
 
+  if tx.isContractCreation:
+    result = result + gasFees[fork][GasTXCreate]
+
+proc intrinsicGas*(tx: AccessListTx, fork: Fork): GasInt =
+  const
+    ADDRESS_COST     = 2400
+    STORAGE_KEY_COST = 1900
+
+  # Compute the baseline gas cost for this transaction.  This is the amount
+  # of gas needed to send this transaction (but that is not actually used
+  # for computation)
+  result = tx.payload.intrinsicGas(fork)
+
+  result = result + tx.accessList.len * ADDRESS_COST
+  var numKeys = 0
+  for n in tx.accessList:
+    inc(numKeys, n.storageKeys.len)
+
+  result = result + numKeys * STORAGE_KEY_COST
   if tx.isContractCreation:
     result = result + gasFees[fork][GasTXCreate]
 

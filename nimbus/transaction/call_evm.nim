@@ -191,6 +191,13 @@ proc txInitialAccessListEIP2929(tx: Transaction, sender: EthAddress, vmState: Ba
       for c in activePrecompiles():
         db.accessList(c)
 
+      # EIP2930 optional access list
+      if tx.txType == AccessListTxType:
+        for n in tx.accessListTx.accessList:
+          db.accessList(n.address)
+          for x in n.storageKeys:
+            db.accessList(n.address, UInt256.fromBytesBE(x))
+
 proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
   txInitialAccessListEIP2929(tx, sender, vmState, fork)
 
