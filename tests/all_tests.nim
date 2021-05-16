@@ -95,7 +95,6 @@ cliBuilder:
           ./test_memory,
           ./test_stack,
           ./test_genesis,
-          ./test_vm_json,
           ./test_precompiles,
           ./test_generalstate_json,
           ./test_tracer_json,
