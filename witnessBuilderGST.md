@@ -59,9 +59,11 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 ## stBadOpcode
 ```diff
 + badOpcodes.json                                                 OK
++ eip2315NotRemoved.json                                          OK
 + invalidAddr.json                                                OK
++ undefinedOpcodeFirstByte.json                                   OK
 ```
-OK: 2/2 Fail: 0/2 Skip: 0/2
+OK: 4/4 Fail: 0/4 Skip: 0/4
 ## stBugs
 ```diff
 + evmBytecode.json                                                OK
@@ -349,6 +351,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + CREATE2_Bounds2.json                                            OK
 + CREATE2_Bounds3.json                                            OK
 + CREATE2_ContractSuicideDuringInit_ThenStoreThenReturn.json      OK
++ CREATE2_FirstByte_loop.json                                     OK
 + CREATE2_Suicide.json                                            OK
 + Create2OOGafterInitCode.json                                    OK
 + Create2OOGafterInitCodeReturndata.json                          OK
@@ -392,7 +395,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 46/46 Fail: 0/46 Skip: 0/46
+OK: 47/47 Fail: 0/47 Skip: 0/47
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -413,6 +416,7 @@ OK: 46/46 Fail: 0/46 Skip: 0/46
 + CREATE_EmptyContractWithStorage.json                            OK
 + CREATE_EmptyContractWithStorageAndCallIt_0wei.json              OK
 + CREATE_EmptyContractWithStorageAndCallIt_1wei.json              OK
++ CREATE_FirstByte_loop.json                                      OK
 + CREATE_empty000CreateinInitCode_Transaction.json                OK
 + CodeInConstructor.json                                          OK
 + CreateCollisionResults.json                                     OK
@@ -429,7 +433,7 @@ OK: 46/46 Fail: 0/46 Skip: 0/46
 + TransactionCollisionToEmptyButCode.json                         OK
 + TransactionCollisionToEmptyButNonce.json                        OK
 ```
-OK: 33/33 Fail: 0/33 Skip: 0/33
+OK: 34/34 Fail: 0/34 Skip: 0/34
 ## stDelegatecallTestHomestead
 ```diff
 + Call1024BalanceTooLow.json                                      OK
@@ -513,6 +517,7 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 + RawExtCodeSizeGas.json                                          OK
 + eip2929-ff.json                                                 OK
 + eip2929.json                                                    OK
++ eip2929OOG.json                                                 OK
 + gasCost.json                                                    OK
 + gasCostBerlin.json                                              OK
 + gasCostExp.json                                                 OK
@@ -521,7 +526,7 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 + gasCostMemory.json                                              OK
 + gasCostReturn.json                                              OK
 ```
-OK: 39/39 Fail: 0/39 Skip: 0/39
+OK: 40/40 Fail: 0/40 Skip: 0/40
 ## stEIP158Specific
 ```diff
 + CALL_OneVCallSuicide.json                                       OK
@@ -533,11 +538,26 @@ OK: 39/39 Fail: 0/39 Skip: 0/39
 + vitalikTransactionTest.json                                     OK
 ```
 OK: 7/7 Fail: 0/7 Skip: 0/7
+## stEIP2930
+```diff
++ addressOpcodes.json                                             OK
++ manualCreate.json                                               OK
++ storageCosts.json                                               OK
++ transactionCosts.json                                           OK
++ variedContext.json                                              OK
+```
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## stExample
 ```diff
++ accessListExample.json                                          OK
 + add11.json                                                      OK
++ add11_yml.json                                                  OK
++ labelsExample.json                                              OK
++ rangesExample.json                                              OK
++ solidityExample.json                                            OK
++ yulExample.json                                                 OK
 ```
-OK: 1/1 Fail: 0/1 Skip: 0/1
+OK: 7/7 Fail: 0/7 Skip: 0/7
 ## stExtCodeHash
 ```diff
 + callToNonExistent.json                                          OK
@@ -571,8 +591,9 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + extCodeHashSelfInInit.json                                      OK
 + extCodeHashSubcallOOG.json                                      OK
 + extCodeHashSubcallSuicide.json                                  OK
++ extcodehashEmpty.json                                           OK
 ```
-OK: 31/31 Fail: 0/31 Skip: 0/31
+OK: 32/32 Fail: 0/32 Skip: 0/32
 ## stHomesteadSpecific
 ```diff
 + contractCreationOOGdontLeaveEmptyContract.json                  OK
@@ -769,6 +790,7 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + mload_dejavu.json                                               OK
 + mstore_dejavu.json                                              OK
 + mstroe8_dejavu.json                                             OK
++ oog.json                                                        OK
 + sha3_dejavu.json                                                OK
 + stackLimitGas_1023.json                                         OK
 + stackLimitGas_1024.json                                         OK
@@ -780,7 +802,7 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + stackLimitPush32_1024.json                                      OK
 + stackLimitPush32_1025.json                                      OK
 ```
-OK: 69/69 Fail: 0/69 Skip: 0/69
+OK: 70/70 Fail: 0/70 Skip: 0/70
 ## stNonZeroCallsTest
 ```diff
 + NonZeroValue_CALL.json                                          OK
@@ -811,6 +833,7 @@ OK: 69/69 Fail: 0/69 Skip: 0/69
 OK: 24/24 Fail: 0/24 Skip: 0/24
 ## stPreCompiledContracts
 ```diff
++ idPrecomps.json                                                 OK
 + identity_to_bigger.json                                         OK
 + identity_to_smaller.json                                        OK
 + modexp.json                                                     OK
@@ -906,9 +929,10 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + modexp_9_37111_37111_22000.json                                 OK
 + modexp_9_37111_37111_35000.json                                 OK
 + modexp_9_3711_37111_25000.json                                  OK
++ precompsEIP2929.json                                            OK
 + sec80.json                                                      OK
 ```
-OK: 96/96 Fail: 0/96 Skip: 0/96
+OK: 98/98 Fail: 0/98 Skip: 0/98
 ## stPreCompiledContracts2
 ```diff
 + CALLBlake2f.json                                                OK
@@ -1573,8 +1597,11 @@ OK: 313/313 Fail: 0/313 Skip: 0/313
 + randomStatetest645.json                                         OK
 + randomStatetest646.json                                         OK
 + randomStatetest647.json                                         OK
++ randomStatetest648.json                                         OK
++ randomStatetest649.json                                         OK
++ randomStatetest650.json                                         OK
 ```
-OK: 222/222 Fail: 0/222 Skip: 0/222
+OK: 225/225 Fail: 0/225 Skip: 0/225
 ## stRecursiveCreate
 ```diff
 + recursiveCreate.json                                            OK
@@ -1643,9 +1670,10 @@ OK: 19/19 Fail: 0/19 Skip: 0/19
 + returndatasize_following_successful_create.json                 OK
 + returndatasize_initial.json                                     OK
 + returndatasize_initial_zero_read.json                           OK
++ revertRetDataSize.json                                          OK
 + subcallReturnMoreThenExpected.json                              OK
 ```
-OK: 38/38 Fail: 0/38 Skip: 0/38
+OK: 39/39 Fail: 0/39 Skip: 0/39
 ## stRevertTest
 ```diff
 + LoopCallsDepthThenRevert.json                                   OK
@@ -1692,8 +1720,10 @@ OK: 38/38 Fail: 0/38 Skip: 0/38
 + TouchToEmptyAccountRevert.json                                  OK
 + TouchToEmptyAccountRevert2.json                                 OK
 + TouchToEmptyAccountRevert3.json                                 OK
++ costRevert.json                                                 OK
++ stateRevert.json                                                OK
 ```
-OK: 44/44 Fail: 0/44 Skip: 0/44
+OK: 46/46 Fail: 0/46 Skip: 0/46
 ## stSLoadTest
 ```diff
 + sloadGasCost.json                                               OK
@@ -1835,8 +1865,9 @@ OK: 14/14 Fail: 0/14 Skip: 0/14
 + stackOverflowPUSH.json                                          OK
 + stackOverflowSWAP.json                                          OK
 + stacksanitySWAP.json                                            OK
++ underflowTest.json                                              OK
 ```
-OK: 9/9 Fail: 0/9 Skip: 0/9
+OK: 10/10 Fail: 0/10 Skip: 0/10
 ## stStaticCall
 ```diff
 + StaticcallToPrecompileFromCalledContract.json                   OK
@@ -2144,21 +2175,6 @@ OK: 286/286 Fail: 0/286 Skip: 0/286
 + StaticcallForPrecompilesIssue683.json                           OK
 ```
 OK: 13/13 Fail: 0/13 Skip: 0/13
-## stSubroutine
-```diff
-+ beginSubAtEndOfCode.json                                        OK
-+ shouldErrorWhenExecuteBeginSub.json                             OK
-+ shouldErrorWhenJumpToJumpDest.json                              OK
-+ shouldErrorWhenReturnStackGrowsAbove1023.json                   OK
-+ shouldErrorWhenSubroutineEnteredViaBeginSub.json                OK
-+ shouldSucceedWhenReturnStackGrowsUntil1023.json                 OK
-+ simpleSubroutine.json                                           OK
-+ subroutineAtEndOfCode.json                                      OK
-+ subroutineInvalidJump.json                                      OK
-+ subroutineShallowReturnStack.json                               OK
-+ twoLevelsSubroutines.json                                       OK
-```
-OK: 11/11 Fail: 0/11 Skip: 0/11
 ## stSystemOperationsTest
 ```diff
 + ABAcalls0.json                                                  OK
@@ -2654,16 +2670,93 @@ OK: 133/133 Fail: 0/133 Skip: 0/133
 + ecmul_1-2_2_21000_96.json                                       OK
 ```
 OK: 130/130 Fail: 0/130 Skip: 0/130
+## vmArithmeticTest
+```diff
++ add.json                                                        OK
++ addmod.json                                                     OK
++ arith.json                                                      OK
++ div.json                                                        OK
++ divByZero.json                                                  OK
++ exp.json                                                        OK
++ expPower2.json                                                  OK
++ expPower256.json                                                OK
++ expPower256Of256.json                                           OK
++ fib.json                                                        OK
++ mod.json                                                        OK
++ mul.json                                                        OK
++ mulmod.json                                                     OK
++ not.json                                                        OK
++ sdiv.json                                                       OK
++ signextend.json                                                 OK
++ smod.json                                                       OK
++ sub.json                                                        OK
++ twoOps.json                                                     OK
+```
+OK: 19/19 Fail: 0/19 Skip: 0/19
+## vmBitwiseLogicOperation
+```diff
++ and.json                                                        OK
++ byte.json                                                       OK
++ eq.json                                                         OK
++ gt.json                                                         OK
++ iszero.json                                                     OK
++ lt.json                                                         OK
++ not.json                                                        OK
++ or.json                                                         OK
++ sgt.json                                                        OK
++ slt.json                                                        OK
++ xor.json                                                        OK
+```
+OK: 11/11 Fail: 0/11 Skip: 0/11
+## vmIOandFlowOperations
+```diff
++ codecopy.json                                                   OK
++ gas.json                                                        OK
++ jump.json                                                       OK
++ jumpi.json                                                      OK
++ loop_stacklimit.json                                            OK
++ loopsConditionals.json                                          OK
++ mload.json                                                      OK
++ msize.json                                                      OK
++ mstore.json                                                     OK
++ mstore8.json                                                    OK
++ pc.json                                                         OK
++ pop.json                                                        OK
++ return.json                                                     OK
++ sstore_sload.json                                               OK
+```
+OK: 14/14 Fail: 0/14 Skip: 0/14
+## vmLogTest
+```diff
++ log0.json                                                       OK
++ log1.json                                                       OK
++ log2.json                                                       OK
++ log3.json                                                       OK
++ log4.json                                                       OK
+```
+OK: 5/5 Fail: 0/5 Skip: 0/5
+## vmPerformance
+```diff
++ loopExp.json                                                    OK
++ loopMul.json                                                    OK
++ performanceTester.json                                          OK
+```
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## vmTests
 ```diff
 + blockInfo.json                                                  OK
 + calldatacopy.json                                               OK
 + calldataload.json                                               OK
 + calldatasize.json                                               OK
++ dup.json                                                        OK
 + envInfo.json                                                    OK
++ push.json                                                       OK
++ random.json                                                     OK
 + sha3.json                                                       OK
++ suicide.json                                                    OK
++ swap.json                                                       OK
 ```
-OK: 6/6 Fail: 0/6 Skip: 0/6
+OK: 11/11 Fail: 0/11 Skip: 0/11
 
 ---TOTAL---
-OK: 2444/2444 Fail: 0/2444 Skip: 0/2444
+OK: 2517/2517 Fail: 0/2517 Skip: 0/2517
