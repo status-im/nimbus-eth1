@@ -29,15 +29,17 @@ type
     # Istanbul
     paBlake2bf
     # Berlin
-    paBlsG1Add
-    paBlsG1Mul
-    paBlsG1MultiExp
-    paBlsG2Add
-    paBlsG2Mul
-    paBlsG2MultiExp
-    paBlsPairing
-    paBlsMapG1
-    paBlsMapG2
+    # EIP-2537: disabled
+    # reason: not included in berlin
+    # paBlsG1Add
+    # paBlsG1Mul
+    # paBlsG1MultiExp
+    # paBlsG2Add
+    # paBlsG2Mul
+    # paBlsG2MultiExp
+    # paBlsPairing
+    # paBlsMapG1
+    # paBlsMapG2
 
 iterator activePrecompiles*(): EthAddress =
   var res: EthAddress
@@ -677,7 +679,9 @@ proc blsMapG2*(c: Computation) =
 proc getMaxPrecompileAddr(fork: Fork): PrecompileAddresses =
   if fork < FkByzantium: paIdentity
   elif fork < FkIstanbul: paPairing
-  elif fork < FkBerlin: paBlake2bf
+  # EIP 2537: disabled
+  # reason: not included in berlin
+  # elif fork < FkBerlin: paBlake2bf
   else: PrecompileAddresses.high
 
 proc execPrecompiles*(computation: Computation, fork: Fork): bool {.inline.} =
@@ -701,15 +705,17 @@ proc execPrecompiles*(computation: Computation, fork: Fork): bool {.inline.} =
       of paEcMul: bn256ecMul(computation, fork)
       of paPairing: bn256ecPairing(computation, fork)
       of paBlake2bf: blake2bf(computation)
-      of paBlsG1Add: blsG1Add(computation)
-      of paBlsG1Mul: blsG1Mul(computation)
-      of paBlsG1MultiExp: blsG1MultiExp(computation)
-      of paBlsG2Add: blsG2Add(computation)
-      of paBlsG2Mul: blsG2Mul(computation)
-      of paBlsG2MultiExp: blsG2MultiExp(computation)
-      of paBlsPairing: blsPairing(computation)
-      of paBlsMapG1: blsMapG1(computation)
-      of paBlsMapG2: blsMapG2(computation)
+      # EIP 2537: disabled
+      # reason: not included in berlin
+      # of paBlsG1Add: blsG1Add(computation)
+      # of paBlsG1Mul: blsG1Mul(computation)
+      # of paBlsG1MultiExp: blsG1MultiExp(computation)
+      # of paBlsG2Add: blsG2Add(computation)
+      # of paBlsG2Mul: blsG2Mul(computation)
+      # of paBlsG2MultiExp: blsG2MultiExp(computation)
+      # of paBlsPairing: blsPairing(computation)
+      # of paBlsMapG1: blsMapG1(computation)
+      # of paBlsMapG2: blsMapG2(computation)
     except OutOfGas as e:
       # cannot use setError here, cyclic dependency
       computation.error = Error(info: e.msg, burnsGas: true)

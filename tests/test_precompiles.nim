@@ -65,15 +65,17 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "bn256mul" : data.doTest(fork, paEcMul)
   of "ecpairing": data.doTest(fork, paPairing)
   of "blake2f"  : data.doTest(fork, paBlake2bf)
-  of "blsg1add" : data.doTest(fork, paBlsG1Add)
-  of "blsg1mul" : data.doTest(fork, paBlsG1Mul)
-  of "blsg1multiexp" : data.doTest(fork, paBlsG1MultiExp)
-  of "blsg2add" : data.doTest(fork, paBlsG2Add)
-  of "blsg2mul" : data.doTest(fork, paBlsG2Mul)
-  of "blsg2multiexp": data.doTest(fork, paBlsG2MultiExp)
-  of "blspairing": data.doTest(fork, paBlsPairing)
-  of "blsmapg1": data.doTest(fork, paBlsMapG1)
-  of "blsmapg2": data.doTest(fork, paBlsMapG2)
+  # EIP 2537: disabled
+  # reason: not included in berlin
+  #of "blsg1add" : data.doTest(fork, paBlsG1Add)
+  #of "blsg1mul" : data.doTest(fork, paBlsG1Mul)
+  #of "blsg1multiexp" : data.doTest(fork, paBlsG1MultiExp)
+  #of "blsg2add" : data.doTest(fork, paBlsG2Add)
+  #of "blsg2mul" : data.doTest(fork, paBlsG2Mul)
+  #of "blsg2multiexp": data.doTest(fork, paBlsG2MultiExp)
+  #of "blspairing": data.doTest(fork, paBlsPairing)
+  #of "blsmapg1": data.doTest(fork, paBlsMapG1)
+  #of "blsmapg2": data.doTest(fork, paBlsMapG2)
   else:
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
