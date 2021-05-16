@@ -112,6 +112,8 @@ proc jsonTestImpl*(inputFolder, outputName: string, handler, skipTest: NimNode):
             `handler`(fixtures, `testStatusIMPL`)
             if `testStatusIMPL` == OK:
               status[last][name] = Status.OK
+            elif `testStatusIMPL` == SKIPPED:
+              status[last][name] = Status.Skip
 
     suiteTeardown:
       status.sort do (a: (string, OrderedTable[string, Status]),
