@@ -433,8 +433,11 @@ const
      info: "Mark a valid destination for jumps",
      exec: (prep: vm2OpIgnore,
             run:  jumpDestOp,
-            post: vm2OpIgnore)),
+            post: vm2OpIgnore))]
 
+#[   
+    EIP-2315: temporary disabled    
+    Reason  : not included in berlin hard fork
     (opCode: BeginSub,  ## 0x5c, Begin subroutine
      forks: Vm2OpBerlinAndLater,
      name: "beginSub",
@@ -458,6 +461,7 @@ const
      exec: (prep: vm2OpIgnore,
             run:  jumpSubOp,
             post: vm2OpIgnore))]
+]#
 
 # ------------------------------------------------------------------------------
 # End

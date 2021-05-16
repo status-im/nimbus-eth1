@@ -231,9 +231,12 @@ let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTabl
 
 proc genBerlinJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
   result = ops
-  result[BeginSub] = newIdentNode "beginSub"
-  result[ReturnSub] = newIdentNode "returnSub"
-  result[JumpSub] = newIdentNode "jumpSub"
+  # EIP-2315: temporary disabled    
+  # Reason  : not included in berlin hard fork
+
+  #result[BeginSub] = newIdentNode "beginSub"
+  #result[ReturnSub] = newIdentNode "returnSub"
+  #result[JumpSub] = newIdentNode "jumpSub"
 
   result[Balance] = newIdentNode "balanceEIP2929"
   result[ExtCodeHash] = newIdentNode "extCodeHashEIP2929"

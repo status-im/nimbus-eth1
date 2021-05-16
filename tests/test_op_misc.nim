@@ -175,7 +175,9 @@ proc opMiscMain*() =
       memory:
         "0xA0B0C0D0E0F0A1B1C1D1E1F1A2B2C2D2E2F2A3B3C3D3E3F3A4B4C4D4E4F4A1B1"
         "0x00"
-
+#[
+  EIP-2315: Simple Subroutines for the EVM
+  disabled reason: not included in Berlin hard fork
     assembler:
       title: "Simple routine"
       code:
@@ -271,6 +273,7 @@ proc opMiscMain*() =
       fork: berlin
       stack:
         "0x06"
+]#
 
 when isMainModule:
   opMiscMain()
