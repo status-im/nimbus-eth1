@@ -129,5 +129,7 @@ func skipNewBCTests*(folder: string, name: string): bool =
   ]
 
 func skipPrecompilesTests*(folder: string, name: string): bool =
-  # EIP2565: temporary disabled
-  name == "modexp_eip2565.json"
+  # EIP2565: modExp gas cost
+  # reason: included in berlin
+  # name == "modexp_eip2565.json"
+  return false
