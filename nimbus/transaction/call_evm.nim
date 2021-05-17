@@ -266,9 +266,14 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
 
 proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
                          data: seq[byte], forkOverride = none(Fork)): Computation =
-  doAssert tx.isContractCreation
-
   let gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
+
+  # For these tests, create the new contract like `CREATE`,
+  # but then execute it like it's `CALL`.
+  doAssert tx.isContractCreation
+  let contractAddress = generateAddress(sender, vmState.readOnlyStateDB.getNonce(sender))
+  vmState.mutateStateDB:
+    db.setCode(contractAddress, tx.payload)
 
   vmState.setupTxContext(
     origin = sender,
@@ -276,7 +281,6 @@ proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     forkOverride = forkOverride,
   )
 
-  let contractAddress = generateAddress(sender, tx.nonce)
   let msg = Message(
       kind: evmcCall,
       depth: 0,
@@ -287,9 +291,6 @@ proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
       value: tx.value,
       data: data
       )
-
-  vmState.mutateStateDb:
-    db.setCode(contractAddress, tx.payload)
 
   return newComputation(vmState, msg)
 
