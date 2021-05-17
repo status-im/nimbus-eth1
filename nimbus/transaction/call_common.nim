@@ -31,6 +31,7 @@ type
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
     noRefund*:     bool                 # Don't apply gas refund/burn rule.
+    noTransfer*:   bool                 # Don't update balances, nonces, code.
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
@@ -162,7 +163,14 @@ proc runComputation*(call: CallParams): CallResult =
     host.vmState.mutateStateDB:
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
-  execComputation(c)
+  if call.noTransfer:
+    # TODO: This isn't doing `noTransfer` properly yet, just enough for
+    # fixtures tests.
+    executeOpcodes(c)
+    doAssert c.continuation.isNil
+    doAssert c.child.isNil
+  else:
+    execComputation(c)
 
   # Calculated gas used, taking into account refund rules.
   var gasRemaining: GasInt = 0
