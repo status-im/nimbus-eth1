@@ -27,6 +27,10 @@ type
     value*:        HostValue            # Value sent from sender to recipient.
     input*:        seq[byte]            # Input data.
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
+    noIntrinsic*:  bool                 # Don't charge intrinsic gas.
+    noAccessList*: bool                 # Don't initialise EIP-2929 access list.
+    noGasCharge*:  bool                 # Don't charge sender account for gas.
+    noRefund*:     bool                 # Don't apply gas refund/burn rule.
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
@@ -114,7 +118,7 @@ proc setupCall(call: CallParams, useIntrinsic: bool): TransactionHost =
   )
 
   var intrinsicGas: GasInt = 0
-  if useIntrinsic:
+  if useIntrinsic and not call.noIntrinsic:
     intrinsicGas = intrinsicGas(call, vmState.fork)
 
   let host = TransactionHost(
@@ -150,24 +154,28 @@ proc runComputation*(call: CallParams): CallResult =
   let c = host.computation
 
   # Must come after `setupCall` for correct fork.
-  initialAccessListEIP2929(call)
+  if not call.noAccessList:
+    initialAccessListEIP2929(call)
 
   # Charge for gas.
-  host.vmState.mutateStateDB:
-    db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
+  if not call.noGasCharge:
+    host.vmState.mutateStateDB:
+      db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
   execComputation(c)
 
   # Calculated gas used, taking into account refund rules.
   var gasRemaining: GasInt = 0
-  if not c.shouldBurnGas:
+  if call.noRefund:
+    gasRemaining = c.gasMeter.gasRemaining
+  elif not c.shouldBurnGas:
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div 2
     let refund = min(c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
     gasRemaining = c.gasMeter.gasRemaining
 
   # Refund for unused gas.
-  if gasRemaining > 0:
+  if gasRemaining > 0 and not call.noGasCharge:
     host.vmState.mutateStateDB:
       db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
 
