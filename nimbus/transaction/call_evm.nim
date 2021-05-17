@@ -24,9 +24,9 @@ type
     data*: seq[byte]
     contractCreation*: bool
 
-proc rpcSetupComputation(vmState: BaseVMState, rpc: RpcCallData,
-                         gasLimit: GasInt, forkOverride = none(Fork)): Computation =
-  return setupComputation(CallParams(
+proc rpcRunComputation(vmState: BaseVMState, rpc: RpcCallData,
+                       gasLimit: GasInt, forkOverride = none(Fork)): CallResult =
+  return runComputation(CallParams(
     vmState:      vmState,
     forkOverride: forkOverride,
     gasPrice:     rpc.gasPrice,
@@ -35,32 +35,32 @@ proc rpcSetupComputation(vmState: BaseVMState, rpc: RpcCallData,
     to:           rpc.to,
     isCreate:     rpc.contractCreation,
     value:        rpc.value,
-    input:        rpc.data
+    input:        rpc.data,
+    # This matches historical behaviour.  It might be that not all these steps
+    # should be disabled for RPC/GraphQL `call`.  But until we investigate what
+    # RPC/GraphQL clients are expecting, keep the same behaviour.
+    noIntrinsic:  true,                 # Don't charge intrinsic gas.
+    noAccessList: true,                 # Don't initialise EIP-2929 access list.
+    noGasCharge:  true,                 # Don't charge sender account for gas.
+    noRefund:     true                  # Don't apply gas refund/burn rule.
   ))
 
 proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
   # TODO: handle revert and error
   # TODO: handle contract ABI
-  var
-    # we use current header stateRoot, unlike block validation
-    # which use previous block stateRoot
-    vmState = newBaseVMState(header.stateRoot, header, chain)
-    comp    = rpcSetupComputation(vmState, call, call.gas)
-
-  comp.execComputation()
-  result = hexDataStr(comp.output)
+  # we use current header stateRoot, unlike block validation
+  # which use previous block stateRoot
+  # TODO: ^ Check it's correct to use current header stateRoot, not parent
+  let vmState    = newBaseVMState(header.stateRoot, header, chain)
+  let callResult = rpcRunComputation(vmState, call, call.gas)
+  return hexDataStr(callResult.output)
 
 proc rpcMakeCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): (string, GasInt, bool) =
   # TODO: handle revert
-  var
-    parent  = chain.getBlockHeader(header.parentHash)
-    vmState = newBaseVMState(parent.stateRoot, header, chain)
-    fork    = toFork(chain.config, header.blockNumber)
-    comp    = rpcSetupComputation(vmState, call, call.gas, some(fork))
-
-  let gas = comp.gasMeter.gasRemaining
-  comp.execComputation()
-  return (comp.output.toHex, gas - comp.gasMeter.gasRemaining, comp.isError)
+  let parent     = chain.getBlockHeader(header.parentHash)
+  let vmState    = newBaseVMState(parent.stateRoot, header, chain)
+  let callResult = rpcRunComputation(vmState, call, call.gas)
+  return (callResult.output.toHex, callResult.gasUsed, callResult.isError)
 
 func rpcIntrinsicGas(call: RpcCallData, fork: Fork): GasInt =
   var intrinsicGas = call.data.intrinsicGas(fork)
