@@ -229,21 +229,6 @@ proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byt
   result.vmState         = c.vmState
   result.contractAddress = c.msg.contractAddress
 
-proc fixtureSetupComputation(vmState: BaseVMState, call: RpcCallData,
-                             origin: EthAddress, forkOverride = none(Fork)): Computation =
-  return setupComputation(CallParams(
-    vmState:      vmState,
-    forkOverride: forkOverride,
-    origin:       some(origin),
-    gasPrice:     call.gasPrice,
-    gasLimit:     call.gas,   # Differs from `rpcSetupComputation`
-    sender:       call.source,
-    to:           call.to,
-    isCreate:     call.contractCreation,
-    value:        call.value,
-    input:        call.data
-  ))
-
 type
   FixtureResult* = object
     isError*:         bool
@@ -255,20 +240,29 @@ type
 
 proc fixtureCallEvm*(vmState: BaseVMState, call: RpcCallData,
                      origin: EthAddress, forkOverride = none(Fork)): FixtureResult =
-  var c = fixtureSetupComputation(vmState, call, origin, forkOverride)
-  let gas = c.gasMeter.gasRemaining
-
-  # Next line differs from all the other EVM calls.  With `execComputation`,
-  # most "vm json tests" fail with either `balanceDiff` or `nonceDiff` errors.
-  c.executeOpcodes()
-  doAssert c.continuation.isNil
-  doAssert c.child.isNil
+  let callResult = runComputation(CallParams(
+    vmState:      vmState,
+    forkOverride: forkOverride,
+    origin:       some(origin),       # Differs from `rpcSetupComputation`.
+    gasPrice:     call.gasPrice,
+    gasLimit:     call.gas,           # Differs from `rpcSetupComputation`.
+    sender:       call.source,
+    to:           call.to,
+    isCreate:     call.contractCreation,
+    value:        call.value,
+    input:        call.data,
+    noIntrinsic:  true,               # Don't charge intrinsic gas.
+    noAccessList: true,               # Don't initialise EIP-2929 access list.
+    noGasCharge:  true,               # Don't charge sender account for gas.
+    noRefund:     true,               # Don't apply gas refund/burn rule.
+    noTransfer:   true,               # Don't update balances, nonces, code.
+  ))
 
   # Some of these are extra returned state, for testing, that a normal EVMC API
   # computation doesn't return.  We'll have to obtain them outside EVMC.
-  result.isError         = c.isError
-  result.error           = c.error
-  result.gasUsed         = gas - c.gasMeter.gasRemaining
-  result.output          = c.output
-  result.vmState         = c.vmState
-  shallowCopy(result.logEntries, c.logEntries)
+  result.isError         = callResult.isError
+  result.error           = callResult.error
+  result.gasUsed         = callResult.gasUsed
+  result.output          = callResult.output
+  result.vmState         = vmState
+  shallowCopy(result.logEntries, callResult.logEntries)
