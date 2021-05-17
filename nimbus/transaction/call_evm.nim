@@ -88,26 +88,19 @@ type
     data*: seq[byte]
     contractCreation*: bool
 
-proc rpcSetupComputation(vmState: BaseVMState, call: RpcCallData,
+proc rpcSetupComputation(vmState: BaseVMState, rpc: RpcCallData,
                          gasLimit: GasInt, forkOverride = none(Fork)): Computation =
-  vmState.setupTxContext(
-    origin = call.source,
-    gasPrice = call.gasPrice,
-    forkOverride = forkOverride,
-  )
-
-  var msg = Message(
-    kind: if call.contractCreation: evmcCreate else: evmcCall,
-    depth: 0,
-    gas: gasLimit,
-    sender: call.source,
-    contractAddress: call.to,
-    codeAddress: call.to,
-    value: call.value,
-    data: call.data
-  )
-
-  return newComputation(vmState, msg)
+  return setupComputation(CallParams(
+    vmState:      vmState,
+    forkOverride: forkOverride,
+    gasPrice:     rpc.gasPrice,
+    gasLimit:     gasLimit,
+    sender:       rpc.source,
+    to:           rpc.to,
+    isCreate:     rpc.contractCreation,
+    value:        rpc.value,
+    input:        rpc.data
+  ))
 
 proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): HexDataStr =
   # TODO: handle revert and error
