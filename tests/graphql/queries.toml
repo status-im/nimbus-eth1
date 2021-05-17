@@ -29,6 +29,7 @@
       {"name":"Bytes"},
       {"name":"String"},
       {"name":"Bytes32"},
+      {"name":"AccessTuple"},
       {"name":"BlockFilterCriteria"},
       {"name":"ID"},
       {"name":"Pending"},
@@ -194,6 +195,14 @@
       logs {
         __typename
       }
+      r
+      s
+      v
+      type
+      accessList {
+        address
+        storageKeys
+      }
     }
     transactionAt(index: 0) {
       __typename
@@ -230,7 +239,12 @@
         "gasUsed":21000,
         "cumulativeGasUsed":21000,
         "createdContract":null,
-        "logs":[]
+        "logs":[],
+        "r":"0x77c7cd36820c71821c1aed59de46e70e701c4a8dd89c9ba508ab722210f60da8",
+        "s":"0x3f29825d40c7c3f7bff3ca69267e0f3fb74b2d18b8c2c4e3c135b5d3b06e288d",
+        "v":"0x1b",
+        "type":0,
+        "accessList":null
       }
     ],
     "transactionAt":{

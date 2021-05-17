@@ -33,6 +33,7 @@ type
     ethPending      = "Pending"
     ethQuery        = "Query"
     ethMutation     = "Mutation"
+    ethAccessTuple  = "AccessTuple"
 
   HeaderNode = ref object of Node
     header: BlockHeader
@@ -53,6 +54,9 @@ type
     log: Log
     index: int
     tx: TxNode
+
+  AclNode = ref object of Node
+    acl: AccessPair
 
   GraphqlContextRef = ref GraphqlContextObj
   GraphqlContextObj = object of Graphql
@@ -102,6 +106,14 @@ proc logNode(ctx: GraphqlContextRef, log: Log, index: int, tx: TxNode): Node =
     log: log,
     index: index,
     tx: tx
+  )
+
+proc aclNode(ctx: GraphqlContextRef, accessPair: AccessPair): Node =
+  AclNode(
+    kind: nkMap,
+    typeName: ctx.ids[ethAccessTuple],
+    pos: Pos(),
+    acl: accessPair
   )
 
 proc getAccountDb(chainDB: BaseChainDB, header: BlockHeader): ReadOnlyStateDB =
@@ -638,6 +650,34 @@ proc txLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
     list.add logNode(ctx, n, i, tx)
   ok(list)
 
+proc txR(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  bigIntNode(tx.tx.R)
+
+proc txS(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  bigIntNode(tx.tx.S)
+
+proc txV(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  bigIntNode(tx.tx.V)
+
+proc txType(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  let typ = resp(ord(tx.tx.txType))
+  ok(typ)
+
+proc txAccessList(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let ctx = GraphqlContextRef(ud)
+  let tx = TxNode(parent)
+  if tx.tx.txType == LegacyTxType:
+    ok(respNull())
+  else:
+    var list = respList()
+    for x in tx.tx.accessListTx.accessList:
+      list.add aclNode(ctx, x)
+    ok(list)
+
 const txProcs = {
   "from": txFrom,
   "hash": txHash,
@@ -653,7 +693,31 @@ const txProcs = {
   "gasUsed": txGasUsed,
   "cumulativeGasUsed": txCumulativeGasUsed,
   "createdContract": txCreatedContract,
-  "logs": txLogs
+  "logs": txLogs,
+  "r": txR,
+  "s": txS,
+  "v": txV,
+  "type": txType,
+  "accessList": txAccessList
+}
+
+proc aclAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let acl = AclNode(parent)
+  resp(acl.acl.address)
+
+proc aclStorageKeys(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let acl = AclNode(parent)
+  if acl.acl.storageKeys.len == 0:
+    ok(respNull())
+  else:
+    var list = respList()
+    for n in acl.acl.storageKeys:
+      list.add resp(n).get()
+    ok(list)
+
+const aclProcs = {
+  "address": aclAddress,
+  "storageKeys": aclStorageKeys
 }
 
 proc blockNumberImpl(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1086,17 +1150,17 @@ type
     qcFields = "fields"
     qcBlock  = "block"
     qcTransaction = "Transaction"
-    
+
   EthQueryComplexity = ref object of QueryComplexity
     names: array[QcNames, Name]
-  
-proc calcQC(qc: QueryComplexity, field: FieldRef): int {.cdecl, 
+
+proc calcQC(qc: QueryComplexity, field: FieldRef): int {.cdecl,
             gcsafe, raises: [Defect, CatchableError].} =
   let qc = EthQueryComplexity(qc)
   if field.parentType.sym.name == qc.names[qcType] and
      field.field.name.name == qc.names[qcFields]:
     return 100
-  elif field.parentType.sym.name == qc.names[qcTransaction] and 
+  elif field.parentType.sym.name == qc.names[qcTransaction] and
      field.field.name.name == qc.names[qcBlock]:
     return 100
   else:
@@ -1110,7 +1174,7 @@ proc newQC(ctx: GraphqlContextRef): EthQueryComplexity =
     let name = ctx.createName($n)
     qc.names[n] = name
   qc
-  
+
 proc initEthApi(ctx: GraphqlContextRef) =
   ctx.customScalar("Bytes32", scalarBytes32)
   ctx.customScalar("Address", scalarAddress)
@@ -1131,10 +1195,11 @@ proc initEthApi(ctx: GraphqlContextRef) =
   ctx.addResolvers(ctx, ctx.ids[ethPending    ], pendingProcs)
   ctx.addResolvers(ctx, ctx.ids[ethQuery      ], queryProcs)
   ctx.addResolvers(ctx, ctx.ids[ethMutation   ], mutationProcs)
+  ctx.addResolvers(ctx, ctx.ids[ethAccessTuple], aclProcs)
 
   var qc = newQC(ctx)
   ctx.addInstrument(qc)
-    
+
   let res = ctx.parseSchema(ethSchema)
   if res.isErr:
     echo res.error

@@ -62,6 +62,15 @@ type Log {
   transaction: Transaction!
 }
 
+# EIP-2718 Access List
+type AccessTuple {
+  # access list address
+  address: Address!
+  
+  # access list storage keys, null if not present
+  storageKeys: [Bytes32!]
+}
+
 # Transaction is an Ethereum transaction.
 type Transaction {
   # Hash is the hash of this transaction.
@@ -123,6 +132,21 @@ type Transaction {
   # Logs is a list of log entries emitted by this transaction. If the
   # transaction has not yet been mined, this field will be null.
   logs: [Log!]
+
+  # signature field R
+  r: BigInt!
+
+  # signature fields S
+  s: BigInt!
+
+  # signature fields V
+  v: BigInt!
+
+  # EIP 2718: envelope transaction support
+  type: Int
+
+  # EIP 2930: optional access list, null if not present
+  accessList: [AccessTuple!]
 }
 
 # BlockFilterCriteria encapsulates log filter criteria for a filter applied
