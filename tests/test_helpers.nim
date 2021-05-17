@@ -9,7 +9,7 @@ import
   os, macros, json, strformat, strutils, parseutils, os, tables,
   stew/byteutils, net, eth/[common, keys, rlp, p2p], unittest2,
   testutils/markdown_reports,
-  ../nimbus/[config, transaction, utils, errors],
+  ../nimbus/[constants, config, transaction, utils, errors],
   ../nimbus/vm_types2,
   ../nimbus/db/accounts_cache,
   ../nimbus/random_keys
@@ -221,11 +221,18 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   var toAddr: EthAddress
   var contract: bool
 
-  # TODO: there are a couple fixtures which appear to distinguish between
-  # empty and 0 transaction.to; check/verify whether correct conditions.
+  # Fixture transactions with `"to": ""` are contract creations.
+  #
+  # Fixture transactions with `"to": "0x..."` or `"to": "..."` where `...` are
+  # 40 hex digits are call/transfer transactions.  Even if the digits are all
+  # zeros, because the all-zeros address is a legitimate account.
+  #
+  # There are no other formats.  The number of digits if present is always 40,
+  # "0x" prefix is used in some but not all fixtures, and upper case hex digits
+  # occur in a few.
   let rawTo = j["to"].getStr
   if rawTo == "":
-    toAddr   = "0x".parseAddress
+    toAddr   = ZERO_ADDRESS
     contract = true
   else:
     toAddr   = rawTo.parseAddress
