@@ -264,36 +264,6 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
   txRefundGas(tx, sender, c)
   return tx.gasLimit - c.gasMeter.gasRemaining
 
-proc asmSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMState,
-                         data: seq[byte], forkOverride = none(Fork)): Computation =
-  let gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
-
-  # For these tests, create the new contract like `CREATE`,
-  # but then execute it like it's `CALL`.
-  doAssert tx.isContractCreation
-  let contractAddress = generateAddress(sender, vmState.readOnlyStateDB.getNonce(sender))
-  vmState.mutateStateDB:
-    db.setCode(contractAddress, tx.payload)
-
-  vmState.setupTxContext(
-    origin = sender,
-    gasPrice = tx.gasPrice,
-    forkOverride = forkOverride,
-  )
-
-  let msg = Message(
-      kind: evmcCall,
-      depth: 0,
-      gas: tx.gasLimit - gasUsed,
-      sender: sender,
-      contractAddress: contractAddress,
-      codeAddress: contractAddress,
-      value: tx.value,
-      data: data
-      )
-
-  return newComputation(vmState, msg)
-
 proc asmSetupComputation(blockNumber: Uint256, chainDB: BaseChainDB, code,
                          data: seq[byte], forkOverride = none(Fork)): Computation =
   let
@@ -303,14 +273,32 @@ proc asmSetupComputation(blockNumber: Uint256, chainDB: BaseChainDB, code,
     headerHash = header.blockHash
     body = chainDB.getBlockBody(headerHash)
     vmState = newBaseVMState(parent.stateRoot, header, chainDB)
-
-  var
     tx = body.transactions[0]
     sender = transaction.getSender(tx)
+    gasLimit = 500000000
+    gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
 
-  tx.payload = code
-  tx.gasLimit = 500000000
-  return asmSetupComputation(tx, sender, vmState, data, forkOverride)
+  # This is an odd sort of test, where some fields are taken from
+  # `body.transactions[0]` but other fields (like `gasLimit`) are not.  Also it
+  # creates the new contract using `code` like `CREATE`, but then executes the
+  # contract like it's `CALL`.
+
+  doAssert tx.isContractCreation
+  let contractAddress = generateAddress(sender, vmState.readOnlyStateDB.getNonce(sender))
+  vmState.mutateStateDB:
+    db.setCode(contractAddress, code)
+
+  return setupComputation(CallParams(
+    vmState:      vmState,
+    forkOverride: forkOverride,
+    gasPrice:     tx.gasPrice,
+    gasLimit:     gasLimit - gasUsed,
+    sender:       sender,
+    to:           contractAddress,
+    isCreate:     false,
+    value:        tx.value,
+    input:        data
+  ))
 
 type
   AsmResult* = object
