@@ -110,7 +110,7 @@ proc initialAccessListEIP2929(call: CallParams) =
       for key in account.storageKeys:
         db.accessList(account.address, UInt256.fromBytesBE(key))
 
-proc setupCall(call: CallParams, useIntrinsic: bool): TransactionHost =
+proc setupHost(call: CallParams): TransactionHost =
   let vmState = call.vmState
   vmState.setupTxContext(
     origin       = call.origin.get(call.sender),
@@ -119,7 +119,7 @@ proc setupCall(call: CallParams, useIntrinsic: bool): TransactionHost =
   )
 
   var intrinsicGas: GasInt = 0
-  if useIntrinsic and not call.noIntrinsic:
+  if not call.noIntrinsic:
     intrinsicGas = intrinsicGas(call, vmState.fork)
 
   let host = TransactionHost(
@@ -147,14 +147,11 @@ proc setupCall(call: CallParams, useIntrinsic: bool): TransactionHost =
   host.computation = newComputation(vmState, cMsg)
   return host
 
-proc setupComputation*(call: CallParams): Computation =
-  return setupCall(call, false).computation
-
 proc runComputation*(call: CallParams): CallResult =
-  let host = setupCall(call, true)
+  let host = setupHost(call)
   let c = host.computation
 
-  # Must come after `setupCall` for correct fork.
+  # Must come after `setupHost` for correct fork.
   if not call.noAccessList:
     initialAccessListEIP2929(call)
 
