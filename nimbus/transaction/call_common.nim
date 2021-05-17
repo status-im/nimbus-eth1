@@ -27,6 +27,18 @@ type
     value*:        HostValue            # Value sent from sender to recipient.
     input*:        seq[byte]            # Input data.
 
+  # Standard call result.  (Some fields are beyond what EVMC can return,
+  # and must only be used from tests because they will not always be set).
+  CallResult* = object
+    isError*:         bool              # True if the call failed.
+    gasUsed*:         GasInt            # Gas used by the call.
+    contractAddress*: EthAddress        # Created account (when `isCreate`).
+    output*:          seq[byte]         # Output data.
+    logEntries*:      seq[Log]          # Output logs.
+    stack*:           Stack             # EVM stack on return (for test only).
+    memory*:          Memory            # EVM memory on return (for test only).
+    error*:           Error             # Error if `isError` (for test only).
+
 proc hostToComputationMessage(msg: EvmcMessage): Message =
   Message(
     kind:            CallKind(msg.kind),
@@ -42,7 +54,7 @@ proc hostToComputationMessage(msg: EvmcMessage): Message =
     flags:           if msg.isStatic: emvcStatic else: emvcNoFlags
   )
 
-proc setupCall(call: CallParams): TransactionHost =
+proc setupCall(call: CallParams, useIntrinsic: bool): TransactionHost =
   let vmState = call.vmState
   vmState.setupTxContext(
     origin       = call.origin.get(call.sender),
@@ -50,13 +62,19 @@ proc setupCall(call: CallParams): TransactionHost =
     forkOverride = call.forkOverride
   )
 
+  var intrinsicGas: GasInt = 0
+  if useIntrinsic:
+    intrinsicGas = intrinsicGas(call.input, vmState.fork)
+    if call.isCreate:
+      intrinsicGas += gasFees[vmState.fork][GasTXCreate]
+
   let host = TransactionHost(
     vmState:       vmState,
     msg: EvmcMessage(
       kind:        if call.isCreate: EVMC_CREATE else: EVMC_CALL,
       # Default: flags:       {},
       # Default: depth:       0,
-      gas:         call.gasLimit,
+      gas:         call.gasLimit - intrinsicGas,
       destination: call.to.toEvmc,
       sender:      call.sender.toEvmc,
       value:       call.value.toEvmc,
@@ -76,4 +94,37 @@ proc setupCall(call: CallParams): TransactionHost =
   return host
 
 proc setupComputation*(call: CallParams): Computation =
-  return setupCall(call).computation
+  return setupCall(call, false).computation
+
+proc runComputation*(call: CallParams): CallResult =
+  let host = setupCall(call, true)
+  let c = host.computation
+
+  # Charge for gas.
+  host.vmState.mutateStateDB:
+    db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
+
+  execComputation(c)
+
+  # Calculated gas used, taking into account refund rules.
+  var gasRemaining: GasInt = 0
+  if not c.shouldBurnGas:
+    let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div 2
+    let refund = min(c.getGasRefund(), maxRefund)
+    c.gasMeter.returnGas(refund)
+    gasRemaining = c.gasMeter.gasRemaining
+
+  # Refund for unused gas.
+  if gasRemaining > 0:
+    host.vmState.mutateStateDB:
+      db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
+
+  result.isError = c.isError
+  result.gasUsed = call.gasLimit - gasRemaining
+  shallowCopy(result.output, c.output)
+  result.contractAddress = if call.isCreate: c.msg.contractAddress
+                           else: default(HostAddress)
+  shallowCopy(result.logEntries, c.logEntries)
+  result.stack = c.stack
+  result.memory = c.memory
+  result.error = c.error
