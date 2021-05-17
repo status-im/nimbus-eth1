@@ -1,10 +1,19 @@
+# Nimbus
+# Copyright (c) 2021 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
 import
-  std/[os, parseopt, json, unittest], chronicles,
+  std/[os, parseopt, json],
   eth/[p2p, trie/db], ../../../nimbus/db/db_chain,
   eth/p2p/rlpx_protocols/eth_protocol,
   ../../../nimbus/[genesis, config, conf_utils],
   ../../../nimbus/graphql/ethapi, ../../../tests/test_helpers,
-  graphql
+  graphql, ../sim_utils
 
 const
   baseFolder  = "hive_integration" / "nodocker" / "graphql"
@@ -76,10 +85,8 @@ proc main() =
   importRlpBlock(blocksFile, chainDB)
   let ctx = setupGraphqlContext(chainDB, ethNode)
 
-  suite "graphql":
-    for fileName in walkDirRec(caseFolder):
-      let node = parseFile(fileName)
-      test fileName:
-        ctx.processNode(node, fileName, testStatusIMPL)
+  runTest("GraphQL", caseFolder):
+    let node = parseFile(fileName)
+    ctx.processNode(node, fileName, testStatusIMPL)
 
 main()

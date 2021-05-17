@@ -1,4 +1,5 @@
 {
+  "genesis": {
     "coinbase"   : "0x8888f1f195afa192cfee860698584c030f4c9db1",
     "difficulty" : "0x020000",
     "extraData"  : "0x42",
@@ -12,4 +13,5 @@
             "balance" : "0x09184e72a000"
         }
     }
+  }
 }

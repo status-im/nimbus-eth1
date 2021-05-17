@@ -93,3 +93,29 @@ The number of passes and fails output at the time of writing (2021-04-26) is:
     devp2p/eth:              0 pass,     1 fail,     1 total
     ethereum/rpc:            3 pass,    35 fail,    38 total
     ethereum/sync:           0 pass,     1 fail,     1 total
+
+## Nim simulators without docker
+
+We have rewrite some of the hive simulators in Nim to aid debugging.
+It is assumed you already install nimbus dependencies via nimble.
+In the future, we will provide more instructions how to run these
+simulators using local dependencies.
+
+On Windows you might need to add `-d:disable_libbacktrace` compiler switch.
+Working directory is nimbus-eth1 root directory. And you can see the result
+in a markdown file with the same name with the simulator.
+
+- ethereum/consensus
+  - first you need to run `extract_consensus_data`
+    ```nim
+    nim c -r -d:release hive_integration/nodocker/consensus/extract_consensus_data
+    ```
+  - then you can run the simulator
+    ```nim
+    nim c -r -d:release hive_integration/nodocker/consensus/consensus_sim
+    ```
+
+- ethereum/graphql
+  ```nim
+  nim c -r -d:release hive_integration/nodocker/graphql/graphql_sim
+  ```

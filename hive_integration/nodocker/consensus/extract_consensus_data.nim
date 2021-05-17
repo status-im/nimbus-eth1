@@ -1,3 +1,12 @@
+# Nimbus
+# Copyright (c) 2021 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
 import
   std/[json, os, strutils, parseopt, terminal],
   stew/byteutils
@@ -143,13 +152,18 @@ proc processNetWork(network: string): JsonNode =
   n["chainId"]             = newJInt(1)
   result = n
 
-proc extractChainData(n: JsonNode): ChainData =
+proc extractChainData(n: JsonNode, chainFile: string): ChainData =
   let gen = n["genesisBlockHeader"]
-  var ngen = newJObject()
+  var genesis = newJObject()
   for x in genFields:
-    ngen[x] = gen[x]
-  ngen["alloc"] = n["pre"]
+    genesis[x] = gen[x]
+  genesis["alloc"] = n["pre"]
+
+  var ngen = newJObject()
+  ngen["genesis"] = genesis
   ngen["config"] = processNetwork(n["network"].getStr)
+  ngen["lastblockhash"] = n["lastblockhash"]
+  ngen["chainfile"] = %chainFile
   result.genesis = ngen
 
   let blks = n["blocks"]
@@ -160,8 +174,12 @@ proc extractChainData(n: JsonNode): ChainData =
 
 proc processFile(fileName, outPath: string): int =
   let n = json.parseFile(fileName)
+  let (folder, name) = fileName.splitPath()
+  let last = folder.splitPath().tail
+
   for name, unit in n:
-    let cd = extractChainData(unit)
+    let name = last & "_" & name
+    let cd = extractChainData(unit, outPath / name & "_chain.rlp")
     writeFile(outPath / name & "_config.json", cd.genesis.pretty)
     writeFile(outPath / name & "_chain.rlp", cd.blocksRlp)
     inc result
@@ -209,4 +227,3 @@ proc main() =
   echo "\ntest data generated: ", count
 
 main()
-
