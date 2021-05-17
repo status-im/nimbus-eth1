@@ -212,26 +212,17 @@ proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB,
 proc txSetupComputation(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): Computation =
   var gas = tx.gasLimit - tx.intrinsicGas(fork)
   assert gas >= 0
-
-  vmState.setupTxContext(
-    origin = sender,
-    gasPrice = tx.gasPrice,
-    forkOverride = some(fork)
-  )
-
-  let msg = Message(
-    kind: if tx.isContractCreation: evmcCreate else: evmcCall,
-    depth: 0,
-    gas: gas,
-    sender: sender,
-    contractAddress: tx.to,
-    codeAddress: tx.to,
-    value: tx.value,
-    data: tx.payload
-    )
-
-  result = newComputation(vmState, msg)
-  doAssert result.isOriginComputation
+  return setupComputation(CallParams(
+    vmState:      vmState,
+    forkOverride: some(fork),
+    gasPrice:     tx.gasPrice,
+    gasLimit:     gas,
+    sender:       sender,
+    to:           tx.to,
+    isCreate:     tx.isContractCreation,
+    value:        tx.value,
+    input:        tx.payload
+  ))
 
 proc txRefundgas(tx: Transaction, sender: EthAddress, c: Computation) =
   let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
