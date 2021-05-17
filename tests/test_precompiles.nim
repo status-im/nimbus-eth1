@@ -7,7 +7,7 @@
 
 import
   unittest2, ../nimbus/vm_precompiles, json, stew/byteutils, test_helpers, os, tables,
-  strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain,
+  strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain, ../nimbus/constants,
   ../nimbus/[vm_computation, vm_types, vm_state, vm_types2], macros,
   test_allowed_to_fail,
   ../nimbus/transaction/call_evm, options
@@ -26,7 +26,7 @@ template doTest(fixture: JsonNode, fork: Fork, address: PrecompileAddresses): un
       gasExpected = if test.hasKey("Gas"): test["Gas"].getInt else: -1
 
     var call: RpcCallData
-    call.source = initAddress(0x00)
+    call.source = ZERO_ADDRESS
     call.to = initAddress(address.byte)
     call.gas = 1_000_000_000.GasInt
     call.gasPrice = 1.GasInt
