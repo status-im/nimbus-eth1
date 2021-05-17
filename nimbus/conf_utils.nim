@@ -19,32 +19,30 @@ type
   EthHeader = object
     header: BlockHeader
 
-proc importRlpBlock*(importFile: string, chainDB: BasechainDB) =
+proc importRlpBlock*(importFile: string, chainDB: BasechainDB): bool =
   let res = io2.readAllBytes(importFile)
   if res.isErr:
     error "failed to import", fileName = importFile
-    quit(QuitFailure)
+    return false
 
   var chain = newChain(chainDB)
   # the encoded rlp can contains one or more blocks
   var rlp = rlpFromBytes(res.get)
-
-  # separate the header and the body
-  # TODO: probably we need to put it in one struct
-  var headers: seq[BlockHeader]
-  var bodies : seq[BlockBody]
   let head = chainDB.getCanonicalHead()
 
-  while true:
-    let header = rlp.read(EthHeader).header
-    let body = rlp.readRecordType(BlockBody, false)
-    if header.blockNumber > head.blockNumber:
-      headers.add header
-      bodies.add body
-    if not rlp.hasData:
-      break
+  try:
+    while true:
+      let header = rlp.read(EthHeader).header
+      let body = rlp.readRecordType(BlockBody, false)
+      if header.blockNumber > head.blockNumber:
+        let valid = chain.persistBlocks([header], [body])
+        if valid == ValidationResult.Error:
+          error "failed to import rlp encoded blocks", fileName = importFile
+          return false
+      if not rlp.hasData:
+        break
+  except CatchableError as e:
+    error "rlp error", fileName = importFile, msg = e.msg, exception = e.name
+    return false
 
-  let valid = chain.persistBlocks(headers, bodies)
-  if valid == ValidationResult.Error:
-    error "failed to import rlp encoded blocks", fileName = importFile
-    quit(QuitFailure)
+  return true

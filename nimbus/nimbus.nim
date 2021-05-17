@@ -60,8 +60,11 @@ proc start(nimbus: NimbusNode) =
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   if conf.importFile.len > 0:
-    importRlpBlock(conf.importFile, chainDB)
-    quit(QuitSuccess)
+    # success or not, we quit after importing blocks
+    if not importRlpBlock(conf.importFile, chainDB):
+      quit(QuitFailure)
+    else:
+      quit(QuitSuccess)
 
   let res = conf.loadKeystoreFiles()
   if res.isErr:
