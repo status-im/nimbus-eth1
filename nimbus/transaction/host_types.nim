@@ -55,6 +55,7 @@ type
     computation*:     Computation
     msg*:             EvmcMessage
     input*:           seq[byte]
+    code*:            seq[byte]
     cachedTxContext*: bool
     txContext*:       EvmcTxContext
     logEntries*:      seq[Log]

@@ -90,7 +90,7 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
 # a separate library yet.
 import ./evmc_vm_glue
 
-proc evmcExecComputation*(host: TransactionHost, code: seq[byte]): EvmcResult =
+proc evmcExecComputation*(host: TransactionHost): EvmcResult =
   let vm = evmc_create_nimbus_evm()
   if vm.isNil:
     echo "Warning: No EVM"
@@ -119,5 +119,5 @@ proc evmcExecComputation*(host: TransactionHost, code: seq[byte]): EvmcResult =
   {.gcsafe.}:
     vm.execute(vm, hostInterface[].addr, hostContext,
                evmc_revision(host.vmState.fork), host.msg,
-               if code.len > 0: code[0].unsafeAddr else: nil,
-               code.len.csize_t)
+               if host.code.len > 0: host.code[0].unsafeAddr else: nil,
+               host.code.len.csize_t)

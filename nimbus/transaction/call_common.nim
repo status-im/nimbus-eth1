@@ -45,7 +45,7 @@ type
     memory*:          Memory            # EVM memory on return (for test only).
     error*:           Error             # Error if `isError` (for test only).
 
-proc hostToComputationMessage(msg: EvmcMessage): Message =
+proc hostToComputationMessage*(msg: EvmcMessage): Message =
   Message(
     kind:            CallKind(msg.kind),
     depth:           msg.depth,
@@ -162,6 +162,7 @@ proc setupHost(call: CallParams): TransactionHost =
 
     let cMsg = hostToComputationMessage(host.msg)
     host.computation = newComputation(vmState, cMsg, code)
+    shallowCopy(host.code, code)
 
   else:
     if call.input.len > 0:
@@ -176,6 +177,26 @@ proc setupHost(call: CallParams): TransactionHost =
 
   return host
 
+proc doExec(host: TransactionHost, call: CallParams) =
+  let c = host.computation
+  if call.noTransfer:
+    # TODO: This isn't doing `noTransfer` properly yet, just enough for
+    # fixtures tests.
+    executeOpcodes(c)
+    doAssert c.continuation.isNil
+    doAssert c.child.isNil
+  else:
+    execComputation(c)
+
+when defined(evmc_enabled):
+  import ./host_services
+  proc doExecEvmc(host: TransactionHost, call: CallParams) =
+    if call.noTransfer:
+      let c = host.computation
+      c.setError("Unable to perform noTransfer computations in EVMC mode", true)
+    else:
+      let callResult = evmcExecComputation(host)
+
 proc runComputation*(call: CallParams): CallResult =
   let host = setupHost(call)
   let c = host.computation
@@ -189,14 +210,10 @@ proc runComputation*(call: CallParams): CallResult =
     host.vmState.mutateStateDB:
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
-  if call.noTransfer:
-    # TODO: This isn't doing `noTransfer` properly yet, just enough for
-    # fixtures tests.
-    executeOpcodes(c)
-    doAssert c.continuation.isNil
-    doAssert c.child.isNil
+  when defined(evmc_enabled):
+    doExecEvmc(host, call)
   else:
-    execComputation(c)
+    doExec(host, call)
 
   # Calculated gas used, taking into account refund rules.
   var gasRemaining: GasInt = 0
