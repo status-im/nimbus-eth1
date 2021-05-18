@@ -9,7 +9,7 @@
 import
   eth/common/eth_types, stint, options, stew/ranges/ptr_arith,
   ".."/[vm_types, vm_types2, vm_state, vm_computation, vm_state_transactions],
-  ".."/[db/accounts_cache, vm_precompiles, vm_gas_costs],
+  ".."/[db/accounts_cache, utils, vm_precompiles, vm_gas_costs],
   ".."/vm_internals,
   ./host_types
 
@@ -136,15 +136,44 @@ proc setupHost(call: CallParams): TransactionHost =
     # All other defaults in `TransactionHost` are fine.
   )
 
-  if call.input.len > 0:
-    host.msg.input_size = call.input.len.csize_t
-    # Must copy the data so the `host.msg.input_data` pointer
-    # remains valid after the end of `call` lifetime.
-    host.input = call.input
-    host.msg.input_data = host.input[0].addr
+  # Generate new contract address, prepare code, and update message `destination`
+  # with the contract address.  This differs from the previous Nimbus EVM API.
+  # Guarded under `evmc_enabled` for now so it doesn't break vm2.
+  when defined(evmc_enabled):
+    var code: seq[byte]
+    if call.isCreate:
+      let sender = call.sender
+      let contractAddress =
+        generateAddress(sender, call.vmState.readOnlyStateDB.getNonce(sender))
+      host.msg.destination = contractAddress.toEvmc
+      host.msg.input_size = 0
+      host.msg.input_data = nil
+      code = call.input
+    else:
+      # TODO: Share the underlying data, but only after checking this does not
+      # cause problems with the database.
+      code = host.vmState.readOnlyStateDB.getCode(host.msg.destination.fromEvmc)
+      if call.input.len > 0:
+        host.msg.input_size = call.input.len.csize_t
+        # Must copy the data so the `host.msg.input_data` pointer
+        # remains valid after the end of `call` lifetime.
+        host.input = call.input
+        host.msg.input_data = host.input[0].addr
 
-  let cMsg = hostToComputationMessage(host.msg)
-  host.computation = newComputation(vmState, cMsg)
+    let cMsg = hostToComputationMessage(host.msg)
+    host.computation = newComputation(vmState, cMsg, code)
+
+  else:
+    if call.input.len > 0:
+      host.msg.input_size = call.input.len.csize_t
+      # Must copy the data so the `host.msg.input_data` pointer
+      # remains valid after the end of `call` lifetime.
+      host.input = call.input
+      host.msg.input_data = host.input[0].addr
+
+    let cMsg = hostToComputationMessage(host.msg)
+    host.computation = newComputation(vmState, cMsg)
+
   return host
 
 proc runComputation*(call: CallParams): CallResult =

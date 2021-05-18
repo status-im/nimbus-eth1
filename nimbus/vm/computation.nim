@@ -163,6 +163,24 @@ proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Comp
       cast[evmc_host_context](result)
     )
 
+proc newComputation*(vmState: BaseVMState, message: Message, code: seq[byte]): Computation =
+  new result
+  result.vmState = vmState
+  result.msg = message
+  result.memory = Memory()
+  result.stack = newStack()
+  result.returnStack = @[]
+  result.gasMeter.init(message.gas)
+  result.touchedAccounts = initHashSet[EthAddress]()
+  result.selfDestructs = initHashSet[EthAddress]()
+  result.code = newCodeStream(code)
+
+  when evmc_enabled:
+    result.host.init(
+      nim_host_get_interface(),
+      cast[evmc_host_context](result)
+    )
+
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
 
