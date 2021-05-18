@@ -128,3 +128,52 @@ in a markdown file with the same name with the simulator.
   ```nim
   nim c -r -d:release hive_integration/nodocker/graphql/graphql_sim
   ```
+## Observations when working with hive/docker
+
+### DNS problems with hive simulation container running alpine OS
+
+* Problem:<br>
+  _hive_ bails out with error when compiling docker compile because
+  it cannot resolve some domain name like _github.com_. It occured with
+  a locally running DNS resolver (as opposed to a proxy type resolver.)
+
+* Solution:<br>
+     + First solution (may be undesirable):
+       Change local nameserver entry in /etc/resolv.conf to something like
+
+	          nameserver 8.8.8.8
+
+         Note that docker always copies the host's /etc/resolv.conf to the
+		 container one before it executes a _RUN_ directive.
+
+     + Second solution (tedious):
+       In the _Dockerfile_, prefix all affected _RUN_ directives with the text:
+
+              echo nameserver 8.8.8.8 > /etc/resolv.conf;
+
+### Peek into nimbus container before it finalises
+
+* In the nimbus _Dockerfile_ before _ENTRYPOINT_, add the directive
+
+           RUN mknod /tmp/wait-for-stop p;cat /tmp/wait-for-stop
+
+* (Re-)Build the container with the command:
+
+           ./hive --docker.output ...
+
+* When the building process hangs at the
+
+            RUN mknod ...
+
+     directive, then use the _./docker-shell_ script to enter the running top
+	 docker container
+
+* Useful commands after entering the nimbus container<br>
+
+           apt udate
+           apt install iproute2 procps vim openssh-client strace
+
+* Resume hive installation & processing:<br>
+  In the nimbus container run
+
+           echo > /tmp/wait-for-stop
