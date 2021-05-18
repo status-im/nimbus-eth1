@@ -70,6 +70,9 @@ or
 - `ethereum/consensus`
 - `ethereum/rpc`
 - `ethereum/graphql`
+- `smoke/network`
+- `smoke/genesis`
+- `smoke/clique`
 
 # Current state of the tests
 
@@ -77,22 +80,28 @@ These Hive suites/simulators can be run:
 
 - `ethereum/consensus`
 - `ethereum/graphql`
+- `ethereum/rpc`
+- `smoke/network`
+- `smoke/genesis`
 
 These Hive suites/simulators don't work with `nimbus-eth1` currently:
 
 - `devp2p/discv4`
 - `devp2p/eth`
-- `ethereum/rpc`
 - `ethereum/sync`
+- `smoke/clique`
 
-The number of passes and fails output at the time of writing (2021-04-26) is:
+The number of passes and fails output at the time of writing (2021-05-18) is:
 
-    ethereum/consensus:  27353 pass,   892 fail, 28245 total
+    ethereum/consensus:  28186 pass,    59 fail, 28245 total
     ethereum/graphql:       36 pass,    10 fail,    46 total
     devp2p/discv4:           0 pass,    14 fail,    14 total
     devp2p/eth:              0 pass,     1 fail,     1 total
     ethereum/rpc:            3 pass,    35 fail,    38 total
     ethereum/sync:           0 pass,     1 fail,     1 total
+    smoke/genesis:           3 pass,     0 fail,     3 total
+    smoke/network:           1 pass,     0 fail,     1 total
+    smoke/clique:            0 pass,     1 fail,     1 total
 
 ## Nim simulators without docker
 
