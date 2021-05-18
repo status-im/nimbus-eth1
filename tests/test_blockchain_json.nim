@@ -40,6 +40,8 @@ type
     debugData    : JsonNode
     network      : string
 
+var cacheByEpoch = newCacheByEpoch()
+
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
 func normalizeNumber(n: JsonNode): JsonNode =
@@ -250,7 +252,7 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   if validation:
     if not validateBlockUnchanged(result, preminedBlock):
       raise newException(ValidationError, "block changed")
-    if not validateBlock(chainDB, result, checkSeal):
+    if not validateBlock(chainDB, result, checkSeal, cacheByEpoch):
       raise newException(ValidationError, "invalid block")
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
@@ -295,7 +297,8 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
       try:
         let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
             testBlock, chainDB, checkSeal, validation = false)  # we manually validate below
-        check validateBlock(chainDB, preminedBlock, checkSeal) == true
+        check validateBlock(
+          chainDB, preminedBlock, checkSeal, cacheByEpoch) == true
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
 
