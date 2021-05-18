@@ -54,7 +54,7 @@ def to_bool:
     "chainId": env.HIVE_CHAIN_ID|to_int,
     "homesteadBlock": env.HIVE_FORK_HOMESTEAD|to_int,
     "daoForkBlock": env.HIVE_FORK_DAO_BLOCK|to_int,
-    "daoForkSupport": env.HIVE_FORK_DAO_VOTE|to_bool,
+    "daoForkSupport": (if env.HIVE_FORK_DAO_BLOCK then env.HIVE_FORK_DAO_VOTE|to_bool else null end),
     "eip150Block": env.HIVE_FORK_TANGERINE|to_int,
     "eip155Block": env.HIVE_FORK_SPURIOUS|to_int,
     "eip158Block": env.HIVE_FORK_SPURIOUS|to_int,
