@@ -12,7 +12,7 @@
 # This script assumes the following environment variables:
 #
 #  - [ ] HIVE_BOOTNODE                enode URL of the remote bootstrap node
-#  - [ ] HIVE_NETWORK_ID              network ID number to use for the eth protocol
+#  - [x] HIVE_NETWORK_ID              network ID number to use for the eth protocol
 #  - [ ] HIVE_TESTNET                 whether testnet nonces (2^20) are needed
 #  - [ ] HIVE_NODETYPE                sync and pruning selector (archive, full, light)
 #
@@ -40,8 +40,8 @@
 #  - [ ] HIVE_MINER                   enable mining. value is coinbase address.
 #  - [ ] HIVE_MINER_EXTRA             extra-data field to set for newly minted blocks
 #  - [ ] HIVE_SKIP_POW                if set, skip PoW verification during block import
-#  - [ ] HIVE_LOGLEVEL		            client loglevel (0-5)
-#  - [ ] HIVE_GRAPHQL_ENABLED         enables graphql on port 8545
+#  - [x] HIVE_LOGLEVEL                client loglevel (0-5)
+#  - [x] HIVE_GRAPHQL_ENABLED         enables graphql on port 8545
 
 # Immediately abort the script on any error encountered
 set -e
@@ -64,17 +64,17 @@ set +e
 # Load the test chain if present
 echo "Loading initial blockchain..."
 if [ -f /chain.rlp ]; then
-	$nimbus $FLAGS --import:/chain.rlp
+  $nimbus $FLAGS --import:/chain.rlp
 else
-	echo "Warning: chain.rlp not found."
+  echo "Warning: chain.rlp not found."
 fi
 
 # Load the remainder of the test chain
 echo "Loading remaining individual blocks..."
 if [ -d /blocks ]; then
-	(cd /blocks && cat `ls | sort -n` > blocks.rlp && $nimbus $FLAGS --import:blocks.rlp)
+  (cd /blocks && cat `ls | sort -n` > blocks.rlp && $nimbus $FLAGS --import:blocks.rlp)
 else
-	echo "Warning: blocks folder not found."
+  echo "Warning: blocks folder not found."
 fi
 
 set -e
