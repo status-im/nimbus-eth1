@@ -2,51 +2,11 @@ import options, sets,
   eth/[common, bloom, trie/db], chronicles, nimcrypto,
   ../db/[db_chain, accounts_cache],
   ../utils, ../constants, ../transaction,
-  ../vm_state, ../vm_types, ../vm_state_transactions,
-  ../vm_computation, ../vm_message, ../vm_precompiles,
+  ../vm_state, ../vm_types,
   ../vm_types2,
-  ./dao, ../config,
+  ./dao, ./validate, ../config,
   ../transaction/call_evm
 
-proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
-                          sender: EthAddress, fork: Fork): bool =
-  let balance = vmState.readOnlyStateDB.getBalance(sender)
-  let nonce = vmState.readOnlyStateDB.getNonce(sender)
-
-  if vmState.cumulativeGasUsed + tx.gasLimit > vmState.blockHeader.gasLimit:
-    debug "invalid tx: block header gasLimit reached",
-      maxLimit=vmState.blockHeader.gasLimit,
-      gasUsed=vmState.cumulativeGasUsed,
-      addition=tx.gasLimit
-    return
-
-  let gasCost = tx.gasLimit.u256 * tx.gasPrice.u256
-  if gasCost > balance:
-    debug "invalid tx: not enough cash for gas",
-      available=balance,
-      require=gasCost
-    return
-
-  if tx.value > balance - gasCost:
-    debug "invalid tx: not enough cash to send",
-      available=balance,
-      availableMinusGas=balance-gasCost,
-      require=tx.value
-    return
-
-  if tx.gasLimit < tx.intrinsicGas(fork):
-    debug "invalid tx: not enough gas to perform calculation",
-      available=tx.gasLimit,
-      require=tx.intrinsicGas(fork)
-    return
-
-  if tx.nonce != nonce:
-    debug "invalid tx: account nonce mismatch",
-      txNonce=tx.nonce,
-      accountNonce=nonce
-    return
-
-  result = true
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
   ## Process the transaction, write the results to db.
