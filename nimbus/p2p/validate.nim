@@ -48,10 +48,10 @@ type
 
   Hash512 = MDigest[512]
 
+  CacheByEpoch* = OrderedTableRef[uint64, seq[Hash512]]
+
 const
   CACHE_MAX_ITEMS = 10
-
-var cacheByEpoch = initOrderedTable[uint64, seq[Hash512]]()
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -60,8 +60,14 @@ var cacheByEpoch = initOrderedTable[uint64, seq[Hash512]]()
 proc mkCacheBytes(blockNumber: uint64): seq[Hash512] =
   mkcache(getCacheSize(blockNumber), getSeedhash(blockNumber))
 
+proc findFirstIndex(tab: CacheByEpoch): uint64 =
+  # Kludge: OrderedTable[] still misses a proper API
+  for key in tab.keys:
+    result = key
+    break
 
-proc getCache(blockNumber: uint64): seq[Hash512] =
+
+proc getCache(cacheByEpoch: CacheByEpoch; blockNumber: uint64): seq[Hash512] =
   # TODO: this is very inefficient
   let epochIndex = blockNumber div EPOCH_LENGTH
 
@@ -72,16 +78,16 @@ proc getCache(blockNumber: uint64): seq[Hash512] =
     cacheByEpoch[epochIndex] = c
     return c
 
+  # Limit memory usage for cache
+  if cacheByEpoch.len >= CACHE_MAX_ITEMS:
+    cacheByEpoch.del(cacheByEpoch.findFirstIndex)
+
   # Generate the cache if it was not already in memory
   # Simulate requesting mkcache by block number: multiply index by epoch length
-  let c = mkCacheBytes(epochIndex * EPOCH_LENGTH)
+  var c = mkCacheBytes(epochIndex * EPOCH_LENGTH)
   cacheByEpoch[epochIndex] = c
 
-  # Limit memory usage for cache
-  if cacheByEpoch.len > CACHE_MAX_ITEMS:
-    cacheByEpoch.del(epochIndex)
-
-  shallowCopy(result, c)
+  result = system.move(c)
 
 
 func cacheHash(x: openArray[Hash512]): Hash256 =
@@ -95,10 +101,11 @@ func cacheHash(x: openArray[Hash512]): Hash256 =
   ctx.clear()
 
 
-proc checkPOW(blockNumber: Uint256, miningHash, mixHash: Hash256,
+proc checkPOW(cacheByEpoch: CacheByEpoch;
+              blockNumber: Uint256; miningHash, mixHash: Hash256,
               nonce: BlockNonce, difficulty: DifficultyInt) =
   let blockNumber = blockNumber.truncate(uint64)
-  let cache = blockNumber.getCache()
+  let cache = cacheByEpoch.getCache(blockNumber)
 
   let size = getDataSize(blockNumber)
   let miningOutput = hashimotoLight(
@@ -139,16 +146,20 @@ func hash(header: MiningHeader): Hash256 =
   keccakHash(rlp.encode(header))
 
 
-proc validateSeal(header: BlockHeader) =
+proc validateSeal(cacheByEpoch: CacheByEpoch; header: BlockHeader) =
   let miningHeader = header.toMiningHeader
   let miningHash = miningHeader.hash
 
-  checkPOW(header.blockNumber, miningHash,
-           header.mixDigest, header.nonce, header.difficulty)
+  cacheByEpoch.checkPOW(header.blockNumber, miningHash,
+                        header.mixDigest, header.nonce, header.difficulty)
 
 # ------------------------------------------------------------------------------
 # Puplic function, extracted from executor
 # ------------------------------------------------------------------------------
+
+proc newCacheByEpoch*(): CacheByEpoch =
+  newOrderedTable[uint64, seq[Hash512]]()
+
 
 proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
                           sender: EthAddress, fork: Fork): bool =
@@ -206,7 +217,8 @@ func validateGasLimit*(gasLimit, parentGasLimit: GasInt) =
       ValidationError, "Gas limit difference to parent is too big")
 
 
-proc validateHeader*(header, parentHeader: BlockHeader, checkSeal: bool) =
+proc validateHeader*(header, parentHeader: BlockHeader;
+                     checkSeal: bool; cacheByEpoch: CacheByEpoch) =
   if header.extraData.len > 32:
     raise newException(
       ValidationError, "BlockHeader.extraData larger than 32 bytes")
@@ -222,7 +234,7 @@ proc validateHeader*(header, parentHeader: BlockHeader, checkSeal: bool) =
       ValidationError, "timestamp must be strictly later than parent")
 
   if checkSeal:
-    validateSeal(header)
+    cacheByEpoch.validateSeal(header)
 
 
 func validateUncle*(currBlock, uncle, uncleParent: BlockHeader) =
@@ -252,8 +264,8 @@ proc validateGasLimit*(chainDB: BaseChainDB, header: BlockHeader) =
     raise newException(ValidationError, "The gas limit is too high")
 
 
-proc validateUncles*(chainDB: BaseChainDB,
-                    currBlock: EthBlock, checkSeal: bool) =
+proc validateUncles*(chainDB: BaseChainDB; currBlock: EthBlock;
+                     checkSeal: bool; cacheByEpoch: CacheByEpoch) =
   let hasUncles = currBlock.uncles.len > 0
   let shouldHaveUncles = currBlock.header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -306,7 +318,7 @@ proc validateUncles*(chainDB: BaseChainDB,
 
     # Now perform VM level validation of the uncle
     if checkSeal:
-      validateSeal(uncle)
+      cacheByEpoch.validateSeal(uncle)
 
     let uncleParent = chainDB.getBlockHeader(uncle.parentHash)
     validateUncle(currBlock.header, uncle, uncleParent)
@@ -317,8 +329,8 @@ func isGenesis*(currBlock: EthBlock): bool =
            currBlock.header.parentHash == GENESIS_PARENT_HASH
 
 
-proc validateBlock*(chainDB: BaseChainDB,
-                    currBlock: EthBlock, checkSeal: bool): bool =
+proc validateBlock*(chainDB: BaseChainDB; currBlock: EthBlock;
+                    checkSeal: bool; cacheByEpoch: CacheByEpoch): bool =
   if currBlock.isGenesis:
     if currBlock.header.extraData.len > 32:
       raise newException(
@@ -326,7 +338,7 @@ proc validateBlock*(chainDB: BaseChainDB,
     return true
 
   let parentHeader = chainDB.getBlockHeader(currBlock.header.parentHash)
-  validateHeader(currBlock.header, parentHeader, checkSeal)
+  validateHeader(currBlock.header, parentHeader, checkSeal, cacheByEpoch)
 
   if currBlock.uncles.len > MAX_UNCLES:
     raise newException(ValidationError, "Number of uncles exceed limit.")
@@ -335,7 +347,7 @@ proc validateBlock*(chainDB: BaseChainDB,
     raise newException(
       ValidationError, "`state_root` was not found in the db.")
 
-  validateUncles(chainDB, currBlock, checkSeal)
+  validateUncles(chainDB, currBlock, checkSeal, cacheByEpoch)
   validateGaslimit(chainDB, currBlock.header)
 
   result = true
