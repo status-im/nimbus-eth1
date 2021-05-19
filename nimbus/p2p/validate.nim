@@ -11,7 +11,6 @@
 import
   ../constants,
   ../db/[db_chain, accounts_cache],
-  ../errors,
   ../transaction,
   ../utils,
   ../utils/header,
@@ -19,16 +18,18 @@ import
   ../vm_types,
   ../vm_types2,
   chronicles,
-  eth/[common, rlp],
-  eth/trie/trie_defs,
+  eth/[common, rlp, trie/trie_defs],
   ethash,
   nimcrypto,
   options,
   sets,
-  stew/endians2,
+  stew/[results, endians2],
   strutils,
   tables,
   times
+
+export
+  results
 
 type
   MiningHeader = object
@@ -54,7 +55,34 @@ const
   CACHE_MAX_ITEMS = 10
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private Helpers
+# ------------------------------------------------------------------------------
+
+func toMiningHeader(header: BlockHeader): MiningHeader =
+  result.parentHash  = header.parentHash
+  result.ommersHash  = header.ommersHash
+  result.coinbase    = header.coinbase
+  result.stateRoot   = header.stateRoot
+  result.txRoot      = header.txRoot
+  result.receiptRoot = header.receiptRoot
+  result.bloom       = header.bloom
+  result.difficulty  = header.difficulty
+  result.blockNumber = header.blockNumber
+  result.gasLimit    = header.gasLimit
+  result.gasUsed     = header.gasUsed
+  result.timestamp   = header.timestamp
+  result.extraData   = header.extraData
+
+
+func hash(header: MiningHeader): Hash256 =
+  keccakHash(rlp.encode(header))
+
+func isGenesis(header: BlockHeader): bool =
+  header.blockNumber == 0.u256 and
+    header.parentHash == GENESIS_PARENT_HASH
+
+# ------------------------------------------------------------------------------
+# Private cache management functions
 # ------------------------------------------------------------------------------
 
 proc mkCacheBytes(blockNumber: uint64): seq[Hash512] =
@@ -100,66 +128,176 @@ func cacheHash(x: openArray[Hash512]): Hash256 =
   ctx.finish result.data
   ctx.clear()
 
+# ------------------------------------------------------------------------------
+# Pivate validator functions
+# ------------------------------------------------------------------------------
 
-proc checkPOW(cacheByEpoch: CacheByEpoch;
-              blockNumber: Uint256; miningHash, mixHash: Hash256,
-              nonce: BlockNonce, difficulty: DifficultyInt) =
-  let blockNumber = blockNumber.truncate(uint64)
-  let cache = cacheByEpoch.getCache(blockNumber)
+proc checkPOW(blockNumber: Uint256; miningHash, mixHash: Hash256;
+              nonce: BlockNonce; difficulty: DifficultyInt;
+              cacheByEpoch: CacheByEpoch): Result[void,string] =
+  let
+    blockNumber = blockNumber.truncate(uint64)
+    cache = cacheByEpoch.getCache(blockNumber)
+    size = getDataSize(blockNumber)
+    miningOutput = hashimotoLight(
+      size, cache, miningHash, uint64.fromBytesBE(nonce))
 
-  let size = getDataSize(blockNumber)
-  let miningOutput = hashimotoLight(
-    size, cache, miningHash, uint64.fromBytesBE(nonce))
   if miningOutput.mixDigest != mixHash:
-    echo "actual: ", miningOutput.mixDigest
-    echo "expected: ", mixHash
-    echo "blockNumber: ", blockNumber
-    echo "miningHash: ", miningHash
-    echo "nonce: ", nonce.toHex
-    echo "difficulty: ", difficulty
-    echo "size: ", size
-    echo "cache hash: ", cacheHash(cache)
-    raise newException(ValidationError, "mixHash mismatch")
+    debug "mixHash mismatch",
+      actual = miningOutput.mixDigest,
+      expected = mixHash,
+      blockNumber = blockNumber,
+      miningHash = miningHash,
+      nonce = nonce.toHex,
+      difficulty = difficulty,
+      size = size,
+      cachedHash = cacheHash(cache)
+    return err("mixHash mismatch")
 
   let value = Uint256.fromBytesBE(miningOutput.value.data)
   if value > Uint256.high div difficulty:
-    raise newException(ValidationError, "mining difficulty error")
+    return err("mining difficulty error")
+
+  result = ok()
 
 
-func toMiningHeader(header: BlockHeader): MiningHeader =
-  result.parentHash  = header.parentHash
-  result.ommersHash  = header.ommersHash
-  result.coinbase    = header.coinbase
-  result.stateRoot   = header.stateRoot
-  result.txRoot      = header.txRoot
-  result.receiptRoot = header.receiptRoot
-  result.bloom       = header.bloom
-  result.difficulty  = header.difficulty
-  result.blockNumber = header.blockNumber
-  result.gasLimit    = header.gasLimit
-  result.gasUsed     = header.gasUsed
-  result.timestamp   = header.timestamp
-  result.extraData   = header.extraData
-
-
-func hash(header: MiningHeader): Hash256 =
-  keccakHash(rlp.encode(header))
-
-
-proc validateSeal(cacheByEpoch: CacheByEpoch; header: BlockHeader) =
+proc validateSeal(cacheByEpoch: CacheByEpoch;
+                  header: BlockHeader): Result[void,string] =
   let miningHeader = header.toMiningHeader
   let miningHash = miningHeader.hash
 
-  cacheByEpoch.checkPOW(header.blockNumber, miningHash,
-                        header.mixDigest, header.nonce, header.difficulty)
+  checkPOW(header.blockNumber, miningHash,
+           header.mixDigest, header.nonce, header.difficulty, cacheByEpoch)
+
+
+proc validateGasLimit(chainDB: BaseChainDB;
+                      header: BlockHeader): Result[void,string] =
+  let parentHeader = chainDB.getBlockHeader(header.parentHash)
+  let (lowBound, highBound) = gasLimitBounds(parentHeader)
+
+  if header.gasLimit < lowBound:
+    return err("The gas limit is too low")
+  if header.gasLimit > highBound:
+    return err("The gas limit is too high")
+
+  result = ok()
+
+
+func validateGasLimit(gasLimit, parentGasLimit: GasInt): Result[void,string] =
+  if gasLimit < GAS_LIMIT_MINIMUM:
+    return err("Gas limit is below minimum")
+  if gasLimit > GAS_LIMIT_MAXIMUM:
+    return err("Gas limit is above maximum")
+
+  let diff = gasLimit - parentGasLimit
+  if diff > (parentGasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR):
+    return err("Gas limit difference to parent is too big")
+
+  result = ok()
+
+proc validateHeader(header, parentHeader: BlockHeader; checkSealOK: bool;
+                     cacheByEpoch: CacheByEpoch): Result[void,string] =
+  if header.extraData.len > 32:
+    return err("BlockHeader.extraData larger than 32 bytes")
+
+  result = validateGasLimit(header.gasLimit, parentHeader.gasLimit)
+  if result.isErr:
+    return
+
+  if header.blockNumber != parentHeader.blockNumber + 1:
+    return err("Blocks must be numbered consecutively.")
+
+  if header.timestamp.toUnix <= parentHeader.timestamp.toUnix:
+    return err("timestamp must be strictly later than parent")
+
+  if checkSealOK:
+    return cacheByEpoch.validateSeal(header)
+
+  result = ok()
+
+
+func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
+                                               Result[void,string] =
+  if uncle.blockNumber >= currBlock.blockNumber:
+    return err("uncle block number larger than current block number")
+
+  if uncle.blockNumber != uncleParent.blockNumber + 1:
+    return err("Uncle number is not one above ancestor's number")
+
+  if uncle.timestamp.toUnix < uncleParent.timestamp.toUnix:
+    return err("Uncle timestamp is before ancestor's timestamp")
+
+  if uncle.gasUsed > uncle.gasLimit:
+    return err("Uncle's gas usage is above the limit")
+
+  result = ok()
+
+
+proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
+                    uncles: seq[BlockHeader]; checkSealOK: bool;
+                    cacheByEpoch: CacheByEpoch): Result[void,string] =
+  let hasUncles = uncles.len > 0
+  let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
+
+  if not hasUncles and not shouldHaveUncles:
+    # optimization to avoid loading ancestors from DB, since the block has
+    # no uncles
+    return ok()
+  if hasUncles and not shouldHaveUncles:
+    return err("Block has uncles but header suggests uncles should be empty")
+  if shouldHaveUncles and not hasUncles:
+    return err("Header suggests block should have uncles but block has none")
+
+  # Check for duplicates
+  var uncleSet = initHashSet[Hash256]()
+  for uncle in uncles:
+    let uncleHash = uncle.hash
+    if uncleHash in uncleSet:
+      return err("Block contains duplicate uncles")
+    else:
+      uncleSet.incl uncleHash
+
+  let recentAncestorHashes = chainDB.getAncestorsHashes(
+                               MAX_UNCLE_DEPTH + 1, header)
+  let recentUncleHashes = chainDB.getUncleHashes(recentAncestorHashes)
+  let blockHash = header.hash
+
+  for uncle in uncles:
+    let uncleHash = uncle.hash
+
+    if uncleHash == blockHash:
+      return err("Uncle has same hash as block")
+
+    # ensure the uncle has not already been included.
+    if uncleHash in recentUncleHashes:
+      return err("Duplicate uncle")
+
+    # ensure that the uncle is not one of the canonical chain blocks.
+    if uncleHash in recentAncestorHashes:
+      return err("Uncle cannot be an ancestor")
+
+    # ensure that the uncle was built off of one of the canonical chain
+    # blocks.
+    if (uncle.parentHash notin recentAncestorHashes) or
+       (uncle.parentHash == header.parentHash):
+      return err("Uncle's parent is not an ancestor")
+
+    # Now perform VM level validation of the uncle
+    if checkSealOK:
+      result = cacheByEpoch.validateSeal(uncle)
+      if result.isErr:
+        return
+
+    let uncleParent = chainDB.getBlockHeader(uncle.parentHash)
+    result = validateUncle(header, uncle, uncleParent)
+    if result.isErr:
+      return
+
+  result = ok()
 
 # ------------------------------------------------------------------------------
-# Puplic function, extracted from executor
+# Public function, extracted from executor
 # ------------------------------------------------------------------------------
-
-proc newCacheByEpoch*(): CacheByEpoch =
-  newOrderedTable[uint64, seq[Hash512]]()
-
 
 proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
                           sender: EthAddress, fork: Fork): bool =
@@ -201,156 +339,36 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 
   result = true
 
-
 # ------------------------------------------------------------------------------
 # Public functions, extracted from test_blockchain_json
 # ------------------------------------------------------------------------------
 
-func validateGasLimit*(gasLimit, parentGasLimit: GasInt) =
-  if gasLimit < GAS_LIMIT_MINIMUM:
-    raise newException(ValidationError, "Gas limit is below minimum")
-  if gasLimit > GAS_LIMIT_MAXIMUM:
-    raise newException(ValidationError, "Gas limit is above maximum")
-  let diff = gasLimit - parentGasLimit
-  if diff > (parentGasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR):
-    raise newException(
-      ValidationError, "Gas limit difference to parent is too big")
+proc newCacheByEpoch*(): CacheByEpoch =
+  newOrderedTable[uint64, seq[Hash512]]()
 
 
-proc validateHeader*(header, parentHeader: BlockHeader;
-                     checkSeal: bool; cacheByEpoch: CacheByEpoch) =
-  if header.extraData.len > 32:
-    raise newException(
-      ValidationError, "BlockHeader.extraData larger than 32 bytes")
+proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
+                      uncles: seq[BlockHeader]; checkSealOK: bool;
+                      cacheByEpoch: CacheByEpoch): Result[void,string] =
+  if header.isGenesis:
+    if header.extraData.len > 32:
+      return err("BlockHeader.extraData larger than 32 bytes")
+    return ok()
 
-  validateGasLimit(header.gasLimit, parentHeader.gasLimit)
-
-  if header.blockNumber != parentHeader.blockNumber + 1:
-    raise newException(
-      ValidationError, "Blocks must be numbered consecutively.")
-
-  if header.timestamp.toUnix <= parentHeader.timestamp.toUnix:
-    raise newException(
-      ValidationError, "timestamp must be strictly later than parent")
-
-  if checkSeal:
-    cacheByEpoch.validateSeal(header)
-
-
-func validateUncle*(currBlock, uncle, uncleParent: BlockHeader) =
-  if uncle.blockNumber >= currBlock.blockNumber:
-    raise newException(
-      ValidationError, "uncle block number larger than current block number")
-
-  if uncle.blockNumber != uncleParent.blockNumber + 1:
-    raise newException(
-      ValidationError, "Uncle number is not one above ancestor's number")
-
-  if uncle.timestamp.toUnix < uncleParent.timestamp.toUnix:
-    raise newException(
-      ValidationError, "Uncle timestamp is before ancestor's timestamp")
-
-  if uncle.gasUsed > uncle.gasLimit:
-    raise newException(ValidationError, "Uncle's gas usage is above the limit")
-
-
-proc validateGasLimit*(chainDB: BaseChainDB, header: BlockHeader) =
   let parentHeader = chainDB.getBlockHeader(header.parentHash)
-  let (lowBound, highBound) = gasLimitBounds(parentHeader)
-
-  if header.gasLimit < lowBound:
-    raise newException(ValidationError, "The gas limit is too low")
-  elif header.gasLimit > highBound:
-    raise newException(ValidationError, "The gas limit is too high")
-
-
-proc validateUncles*(chainDB: BaseChainDB; currBlock: EthBlock;
-                     checkSeal: bool; cacheByEpoch: CacheByEpoch) =
-  let hasUncles = currBlock.uncles.len > 0
-  let shouldHaveUncles = currBlock.header.ommersHash != EMPTY_UNCLE_HASH
-
-  if not hasUncles and not shouldHaveUncles:
-    # optimization to avoid loading ancestors from DB, since the block has
-    # no uncles
+  result = header.validateHeader(parentHeader, checkSealOK, cacheByEpoch)
+  if result.isErr:
     return
-  elif hasUncles and not shouldHaveUncles:
-    raise newException(
-      ValidationError,
-      "Block has uncles but header suggests uncles should be empty")
-  elif shouldHaveUncles and not hasUncles:
-    raise newException(
-      ValidationError,
-      "Header suggests block should have uncles but block has none")
 
-  # Check for duplicates
-  var uncleSet = initHashSet[Hash256]()
-  for uncle in currBlock.uncles:
-    let uncleHash = uncle.hash
-    if uncleHash in uncleSet:
-      raise newException(ValidationError, "Block contains duplicate uncles")
-    else:
-      uncleSet.incl uncleHash
+  if uncles.len > MAX_UNCLES:
+    return err("Number of uncles exceed limit.")
 
-  let recentAncestorHashes = chainDB.getAncestorsHashes(
-                               MAX_UNCLE_DEPTH + 1, currBlock.header)
-  let recentUncleHashes = chainDB.getUncleHashes(recentAncestorHashes)
-  let blockHash =currBlock.header.hash
+  if not chainDB.exists(header.stateRoot):
+    return err("`state_root` was not found in the db.")
 
-  for uncle in currBlock.uncles:
-    let uncleHash = uncle.hash
-
-    if uncleHash == blockHash:
-      raise newException(ValidationError, "Uncle has same hash as block")
-
-    # ensure the uncle has not already been included.
-    if uncleHash in recentUncleHashes:
-      raise newException(ValidationError, "Duplicate uncle")
-
-    # ensure that the uncle is not one of the canonical chain blocks.
-    if uncleHash in recentAncestorHashes:
-      raise newException(ValidationError, "Uncle cannot be an ancestor")
-
-    # ensure that the uncle was built off of one of the canonical chain
-    # blocks.
-    if (uncle.parentHash notin recentAncestorHashes) or
-       (uncle.parentHash == currBlock.header.parentHash):
-      raise newException(ValidationError, "Uncle's parent is not an ancestor")
-
-    # Now perform VM level validation of the uncle
-    if checkSeal:
-      cacheByEpoch.validateSeal(uncle)
-
-    let uncleParent = chainDB.getBlockHeader(uncle.parentHash)
-    validateUncle(currBlock.header, uncle, uncleParent)
-
-
-func isGenesis*(currBlock: EthBlock): bool =
-  result = currBlock.header.blockNumber == 0.u256 and
-           currBlock.header.parentHash == GENESIS_PARENT_HASH
-
-
-proc validateBlock*(chainDB: BaseChainDB; currBlock: EthBlock;
-                    checkSeal: bool; cacheByEpoch: CacheByEpoch): bool =
-  if currBlock.isGenesis:
-    if currBlock.header.extraData.len > 32:
-      raise newException(
-        ValidationError, "BlockHeader.extraData larger than 32 bytes")
-    return true
-
-  let parentHeader = chainDB.getBlockHeader(currBlock.header.parentHash)
-  validateHeader(currBlock.header, parentHeader, checkSeal, cacheByEpoch)
-
-  if currBlock.uncles.len > MAX_UNCLES:
-    raise newException(ValidationError, "Number of uncles exceed limit.")
-
-  if not chainDB.exists(currBlock.header.stateRoot):
-    raise newException(
-      ValidationError, "`state_root` was not found in the db.")
-
-  validateUncles(chainDB, currBlock, checkSeal, cacheByEpoch)
-  validateGaslimit(chainDB, currBlock.header)
-
-  result = true
+  result = chainDB.validateUncles(header, uncles, checkSealOK, cacheByEpoch)
+  if result.isOk:
+    result = chainDB.validateGaslimit(header)
 
 # ------------------------------------------------------------------------------
 # End
