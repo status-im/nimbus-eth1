@@ -11,7 +11,7 @@
 #
 # This script assumes the following environment variables:
 #
-#  - [ ] HIVE_BOOTNODE                enode URL of the remote bootstrap node
+#  - [x] HIVE_BOOTNODE                enode URL of the remote bootstrap node
 #  - [x] HIVE_NETWORK_ID              network ID number to use for the eth protocol
 #  - [ ] HIVE_TESTNET                 whether testnet nonces (2^20) are needed
 #  - [ ] HIVE_NODETYPE                sync and pruning selector (archive, full, light)
@@ -51,6 +51,11 @@ FLAGS="--prune:archive --nat:0.0.0.0"
 
 if [ "$HIVE_LOGLEVEL" != "" ]; then
   FLAGS="$FLAGS --log-level:DEBUG"
+fi
+
+# It doesn't make sense to dial out, use only a pre-set bootnode.
+if [ "$HIVE_BOOTNODE" != "" ]; then
+  FLAGS="$FLAGS --bootnodes:$HIVE_BOOTNODE"
 fi
 
 # Configure the genesis chain and use it as start block and dump it to stdout

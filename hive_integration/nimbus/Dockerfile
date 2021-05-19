@@ -34,6 +34,7 @@ RUN usr/bin/nimbus -v > /version.txt
 # Inject the startup script and helper files
 COPY *.sh *.jq *.json /
 RUN chmod +x /nimbus.sh
+RUN chmod +x /enode.sh
 
 # Export the usual networking ports to allow outside access to the node
 EXPOSE 8545 8546 8547 30303 30303/udp
