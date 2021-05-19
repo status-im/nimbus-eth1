@@ -83,11 +83,11 @@ These Hive suites/simulators can be run:
 - `ethereum/rpc`
 - `smoke/network`
 - `smoke/genesis`
+- `devp2p/discv4`
+- `devp2p/eth`
 
 These Hive suites/simulators don't work with `nimbus-eth1` currently:
 
-- `devp2p/discv4`
-- `devp2p/eth`
 - `ethereum/sync`
 - `smoke/clique`
 
@@ -95,8 +95,8 @@ The number of passes and fails output at the time of writing (2021-05-18) is:
 
     ethereum/consensus:  28186 pass,    59 fail, 28245 total
     ethereum/graphql:       36 pass,    10 fail,    46 total
-    devp2p/discv4:           0 pass,    14 fail,    14 total
-    devp2p/eth:              0 pass,     1 fail,     1 total
+    devp2p/discv4:           3 pass,    11 fail,    14 total
+    devp2p/eth:              1 pass,     8 fail,     9 total
     ethereum/rpc:            3 pass,    35 fail,    38 total
     ethereum/sync:           0 pass,     1 fail,     1 total
     smoke/genesis:           3 pass,     0 fail,     3 total
