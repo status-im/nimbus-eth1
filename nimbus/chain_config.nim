@@ -53,6 +53,10 @@ type
     muirGlacierBlock*   : BlockNumber
     berlinBlock*        : BlockNumber
 
+    # TODO: this need to be fixed somehow
+    # using `real` engine configuration
+    poaEngine*          : bool
+
   Genesis* = object
     nonce*      : BlockNonce
     timestamp*  : EthTime
@@ -155,6 +159,10 @@ proc loadCustomGenesis*(fileName: string, cg: var CustomGenesis): bool =
   cg.config.chainId        = cc.config.chainId
   cg.config.daoForkSupport = cc.config.daoForkSupport
   cg.config.eip150Hash     = cc.config.eip150Hash
+
+  # TODO: this need to be fixed somehow
+  # using `real` engine configuration
+  cg.config.poaEngine      = false
 
   template validateFork(forkName: untyped, nextBlock: BlockNumber) =
     let fork = astToStr(forkName)

@@ -78,11 +78,11 @@ proc main() =
     ethNode = setupEthNode(eth)
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
-      id = toPublicNetwork(conf.net.networkId)
+      conf.net.networkId
     )
 
   initializeEmptyDb(chainDB)
-  importRlpBlock(blocksFile, chainDB)
+  discard importRlpBlock(blocksFile, chainDB)
   let ctx = setupGraphqlContext(chainDB, ethNode)
 
   runTest("GraphQL", caseFolder):

@@ -69,9 +69,10 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
   vmState.gasCosts = vmState.fork.forkToSchedule
 
 proc consensusEnginePoA*(vmState: BaseVMState): bool =
-  let networkId = vmState.chainDB.networkId
   # PoA consensus engine have no reward for miner
-  result = networkId in {GoerliNet, RinkebyNet, KovanNet}
+  # TODO: this need to be fixed somehow
+  # using `real` engine configuration
+  vmState.chainDB.config.poaEngine
 
 proc getSignature(bytes: openArray[byte], output: var Signature): bool =
   let sig = Signature.fromRaw(bytes)

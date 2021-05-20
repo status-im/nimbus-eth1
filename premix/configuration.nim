@@ -1,5 +1,16 @@
-import stint, os, parseopt, strutils
-from ../nimbus/config import getDefaultDataDir, ConfigStatus, processInteger, PublicNetwork
+import
+  std/[os, parseopt, strutils],
+  eth/p2p, stint
+
+from ../nimbus/config import
+  getDefaultDataDir,
+  ConfigStatus,
+  processInteger,
+  MainNet,
+  RopstenNet,
+  RinkebyNet,
+  GoerliNet,
+  KovanNet
 
 export ConfigStatus
 
@@ -9,7 +20,7 @@ type
     head*: Uint256
     maxBlocks*: int
     numCommits*: int
-    netId*: PublicNetwork
+    netId*: NetworkId
 
 var premixConfig {.threadvar.}: PremixConfiguration
 
@@ -38,7 +49,7 @@ proc processU256(val: string, o: var Uint256): ConfigStatus =
     o = parse(val, Uint256)
   result = Success
 
-proc processNetId(val: string, o: var PublicNetwork): ConfigStatus =
+proc processNetId(val: string, o: var NetworkId): ConfigStatus =
   case val.toLowerAscii()
   of "main": o = MainNet
   of "ropsten": o = RopstenNet
@@ -46,9 +57,9 @@ proc processNetId(val: string, o: var PublicNetwork): ConfigStatus =
   of "goerli": o = GoerliNet
   of "kovan": o = KovanNet
 
-template checkArgument(fun, o: untyped) =
+template checkArgument(fun, o, value: untyped) =
   ## Checks if arguments got processed successfully
-  var res = (fun)(value, o)
+  let res = fun(value, o)
   if res == Success:
     continue
   elif res == ErrorParseOption:
@@ -76,14 +87,14 @@ proc processArguments*(msg: var string): ConfigStatus =
       case key.toLowerAscii()
       of "datadir": config.dataDir = value
       of "maxblocks":
-        checkArgument processInteger, config.maxBlocks
+        checkArgument(processInteger, config.maxBlocks, value)
       of "head":
-        checkArgument processU256, config.head
+        checkArgument(processU256, config.head, value)
       of "numcommits":
-        checkArgument processInteger, config.numCommits
+        checkArgument(processInteger, config.numCommits, value)
         config.numCommits = max(config.numCommits, 512)
       of "netid":
-        checkArgument processNetId, config.netId
+        checkArgument(processNetId, config.netId, value)
       else:
         msg = "Unknown option " & key
         if value.len > 0: msg = msg & " : " & value

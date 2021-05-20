@@ -1,12 +1,12 @@
 import
   std/[json, strutils, times, tables],
-  eth/[common, rlp, trie], stew/[byteutils],
+  eth/[common, rlp, trie, p2p], stew/[byteutils],
   chronicles, eth/trie/db,
   ./db/[db_chain, state_db],
   ./genesis_alloc, ./config, ./constants,
   ./chain_config
 
-proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
+proc defaultGenesisBlockForNetwork*(id: NetworkId): Genesis =
   result = case id
   of MainNet:
     Genesis(
@@ -42,14 +42,10 @@ proc defaultGenesisBlockForNetwork*(id: PublicNetwork): Genesis =
       difficulty: 1.u256,
       alloc: decodePrealloc(goerliAllocData)
     )
-  of CustomNet:
+  else:
+    # everything else will use custom genesis
     let customGenesis = getConfiguration().customGenesis
     customGenesis.genesis
-  else:
-    # TODO: Fill out the rest
-    error "No default genesis for network", id
-    doAssert(false, "No default genesis for " & $id)
-    Genesis()
 
 proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
   let (tdb, pruneTrie) = if db.isNil: (newMemoryDB(), true)
@@ -91,5 +87,5 @@ proc commit*(g: Genesis, db: BaseChainDB) =
 
 proc initializeEmptyDb*(db: BaseChainDB) =
   trace "Writing genesis to DB"
-  let networkId = getConfiguration().net.networkId.toPublicNetwork()
+  let networkId = getConfiguration().net.networkId
   defaultGenesisBlockForNetwork(networkId).commit(db)

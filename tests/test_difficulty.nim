@@ -61,11 +61,11 @@ template runTests(name: string, hex: bool, calculator: typed) =
       check diff == t.currentDifficulty
 
 proc difficultyMain*() =
-  let mainnetConfig = publicChainConfig(MainNet)
+  let mainnetConfig = chainConfig(MainNet)
   func calcDifficultyMainNetWork(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
     mainnetConfig.calcDifficulty(timeStamp, parent)
 
-  let ropstenConfig = publicChainConfig(RopstenNet)
+  let ropstenConfig = chainConfig(RopstenNet)
   func calcDifficultyRopsten(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
     ropstenConfig.calcDifficulty(timeStamp, parent)
 

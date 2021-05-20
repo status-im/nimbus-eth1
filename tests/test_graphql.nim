@@ -49,7 +49,7 @@ proc setupChain(chainDB: BaseChainDB) =
   conf.customGenesis.genesis.timestamp  = genesis.header.timestamp
   if not parseGenesisAlloc($(jn["pre"]), conf.customGenesis.genesis.alloc):
     quit(QuitFailure)
-  
+
   chainDB.initializeEmptyDb()
 
   let blocks = jn["blocks"]
@@ -69,7 +69,7 @@ proc setupChain(chainDB: BaseChainDB) =
 
 proc graphqlMain*() =
   let conf = getConfiguration()
-  conf.net.networkId = NetworkId(CustomNet)
+  conf.net.networkId = CustomNet
   conf.customGenesis.config = ChainConfig(
     chainId             : MainNet.ChainId,
     byzantiumBlock      : 0.toBlockNumber,
@@ -84,7 +84,7 @@ proc graphqlMain*() =
     ethNode = setupEthNode(eth)
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
-      id = toPublicNetwork(conf.net.networkId)
+      conf.net.networkId
     )
 
   chainDB.setupChain()

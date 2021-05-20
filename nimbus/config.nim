@@ -75,19 +75,11 @@ type
     enabled*: bool
     address*: TransportAddress
 
-  PublicNetwork* = enum
-    CustomNet = 0
-    MainNet = 1
-    # No longer used: MordenNet = 2
-    RopstenNet = 3
-    RinkebyNet = 4
-    GoerliNet = 5
-    KovanNet = 42
-
   NetworkFlags* = enum
     ## Ethereum network flags
-    NoDiscover,                   ## Peer discovery disabled
-    V5Discover,                   ## Dicovery V5 enabled
+    NoDiscover                   ## Peer discovery disabled
+    V5Discover                   ## Dicovery V5 enabled
+    NetworkIdSet                 ## prevent CustomNetwork replacement
 
   DebugFlags* {.pure.} = enum
     ## Debug selection flags
@@ -149,6 +141,16 @@ type
     importFile*: string
 
 const
+  # these are public network id
+  CustomNet*  = 0.NetworkId
+  MainNet*    = 1.NetworkId
+  # No longer used: MordenNet = 2
+  RopstenNet* = 3.NetworkId
+  RinkebyNet* = 4.NetworkId
+  GoerliNet*  = 5.NetworkId
+  KovanNet*   = 42.NetworkId
+
+const
   defaultRpcApi = {RpcFlags.Eth, RpcFlags.Shh}
   defaultProtocols = {ProtocolFlags.Eth, ProtocolFlags.Shh}
   defaultLogLevel = LogLevel.WARN
@@ -172,7 +174,7 @@ proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
   elif number >= c.homesteadBlock: FkHomestead
   else: FkFrontier
 
-proc publicChainConfig*(id: PublicNetwork): ChainConfig =
+proc chainConfig*(id: NetworkId): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
   # but that is not always the case
 
@@ -242,14 +244,11 @@ proc publicChainConfig*(id: PublicNetwork): ChainConfig =
       muirGlacierBlock: 4_460_644.toBlockNumber, # never occured in goerli network
       berlinBlock:      4_460_644.toBlockNumber
     )
-  of CustomNet:
+  else:
+    # everything else will use CustomNet config
     let conf = getConfiguration()
     trace "Custom genesis block configuration loaded", conf=conf.customGenesis.config
     conf.customGenesis.config
-  else:
-    error "No chain config for public network", networkId = id
-    doAssert(false, "No chain config for " & $id)
-    ChainConfig()
 
 proc processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.
@@ -418,18 +417,9 @@ proc setBootnodes(onodes: var seq[ENode], nodeUris: openarray[string]) =
     doAssert(processENode(item, node) == Success)
     onodes.add(node)
 
-macro availableEnumValues(T: type enum): untyped =
-  let impl = getTypeImpl(T)[1].getTypeImpl()
-  result = newNimNode(nnkBracket)
-  for i in 1 ..< impl.len: result.add(newCall("NetworkId", copyNimTree(impl[i])))
-
-proc toPublicNetwork*(id: NetworkId): PublicNetwork {.inline.} =
-  if id in availableEnumValues(PublicNetwork):
-    result = PublicNetwork(id)
-
-proc setNetwork(conf: var NetConfiguration, id: PublicNetwork) =
+proc setNetwork(conf: var NetConfiguration, id: NetworkId) =
   ## Set network id and default network bootnodes
-  conf.networkId = NetworkId(id)
+  conf.networkId = id
   case id
   of MainNet:
     conf.bootNodes.setBootnodes(MainnetBootnodes)
@@ -441,16 +431,10 @@ proc setNetwork(conf: var NetConfiguration, id: PublicNetwork) =
     conf.bootNodes.setBootnodes(GoerliBootnodes)
   of KovanNet:
     conf.bootNodes.setBootnodes(KovanBootnodes)
-  of CustomNet:
-    discard
-
-proc setNetwork(conf: var NetConfiguration, id: NetworkId) =
-  ## Set network id and default network bootnodes
-  let pubNet = toPublicNetwork(id)
-  if pubNet == CustomNet:
-    conf.networkId = id
   else:
-    conf.setNetwork(pubNet)
+    # everything else will use bootnodes
+    # from --bootnodes switch
+    discard
 
 proc processNetArguments(key, value: string): ConfigStatus =
   ## Processes only `Networking` related command line options
@@ -480,12 +464,18 @@ proc processNetArguments(key, value: string): ConfigStatus =
   elif skey == "customnetwork":
     if not loadCustomGenesis(value, config.customGenesis):
       result = Error
-    config.net.networkId = NetworkId(CustomNet)
+    if NetworkIdSet notin config.net.flags:
+      # prevent clash with --networkid if it already set
+      # because any --networkid value that is not
+      # in the public network will also translated as
+      # CustomNetwork
+      config.net.networkId = CustomNet
   elif skey == "networkid":
     var res = 0
     result = processInteger(value, res)
     if result == Success:
       config.net.setNetwork(NetworkId(result))
+      config.net.flags.incl NetworkIdSet
   elif skey == "nodiscover":
     config.net.flags.incl(NoDiscover)
   elif skey == "v5discover":
@@ -655,7 +645,7 @@ proc initConfiguration(): NimbusConfiguration =
   result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
 
   ## Network defaults
-  result.net.setNetwork(defaultNetwork.NetworkId)
+  result.net.setNetwork(defaultNetwork)
   result.net.maxPeers = 25
   result.net.maxPendingPeers = 0
   result.net.bindPort = 30303'u16

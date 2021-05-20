@@ -8,7 +8,7 @@
 import
   sequtils, algorithm,
   stew/[byteutils], eth/trie/[hexary, db],
-  eth/[common, rlp], chronicles,
+  eth/[common, rlp, p2p], chronicles,
   ../errors,  ../constants, ./storage_types,
   ../utils, ../config, ../chain_config
 
@@ -17,7 +17,7 @@ type
     db*       : TrieDatabaseRef
     pruneTrie*: bool
     config*   : ChainConfig
-    networkId*: PublicNetwork
+    networkId*: NetworkId
 
     # startingBlock, currentBlock, and highestBlock
     # are progress indicator
@@ -29,11 +29,11 @@ type
     blockNumber: BlockNumber
     index: int
 
-proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true, id: PublicNetwork = MainNet): BaseChainDB =
+proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true, id: NetworkId = MainNet): BaseChainDB =
   new(result)
   result.db = db
   result.pruneTrie = pruneTrie
-  result.config = publicChainConfig(id)
+  result.config = chainConfig(id)
   result.networkId = id
 
 proc `$`*(db: BaseChainDB): string =

@@ -1,5 +1,5 @@
 import
-  unittest2, eth/common, eth/trie/db,
+  unittest2, eth/[common, p2p], eth/trie/db,
   ../nimbus/db/db_chain, ../nimbus/p2p/chain,
   ../nimbus/config
 
@@ -74,7 +74,7 @@ const
     (blockNumber: 5000000'u64, id: (crc: 0x757a1c47'u32, nextFork: 0'u64)),       # Future Berlin block
   ]
 
-template runTest(network: PublicNetwork) =
+template runTest(network: untyped) =
   test network.astToStr:
     var
       memDB = newMemoryDB()

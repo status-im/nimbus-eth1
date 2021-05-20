@@ -142,7 +142,7 @@ proc doTests {.async.} =
     debugEcho unlock.error
   doAssert(unlock.isOk)
 
-  defaultGenesisBlockForNetwork(conf.net.networkId.toPublicNetwork()).commit(chain)
+  defaultGenesisBlockForNetwork(conf.net.networkId).commit(chain)
   doAssert(canonicalHeadHashKey().toOpenArray in chain.db)
   let env = setupEnv(chain, signer, ks2, conf)
 

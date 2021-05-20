@@ -52,7 +52,8 @@ proc start(nimbus: NimbusNode) =
   let trieDB = trieDB newChainDb(conf.dataDir)
   var chainDB = newBaseChainDB(trieDB,
     conf.prune == PruneMode.Full,
-    conf.net.networkId.toPublicNetwork())
+    conf.net.networkId
+    )
   chainDB.populateProgress()
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:

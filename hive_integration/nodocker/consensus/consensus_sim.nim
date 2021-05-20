@@ -27,7 +27,7 @@ proc processNode(genesisFile, chainFile,
     conf = getConfiguration()
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
-      id = toPublicNetwork(conf.net.networkId)
+      conf.net.networkId
     )
 
   initializeEmptyDb(chainDB)
