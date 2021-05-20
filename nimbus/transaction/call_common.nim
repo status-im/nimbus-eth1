@@ -11,7 +11,7 @@ import
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
   ".."/[db/accounts_cache, utils, forks],
-  ./host_types
+  ./host_types, ./host_services
 
 type
   # Standard call parameters.
