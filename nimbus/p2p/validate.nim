@@ -17,6 +17,7 @@ import
   ../vm_state,
   ../vm_types,
   ../vm_types2,
+  ./validate/cache,
   chronicles,
   eth/[common, rlp, trie/trie_defs],
   ethash,
@@ -29,6 +30,8 @@ import
   times
 
 export
+  cache.EpochHashCache,
+  cache.initEpochHashCache,
   results
 
 type
@@ -48,11 +51,6 @@ type
     extraData   : Blob
 
   Hash512 = MDigest[512]
-
-  CacheByEpoch* = OrderedTableRef[uint64, seq[Hash512]]
-
-const
-  CACHE_MAX_ITEMS = 10
 
 # ------------------------------------------------------------------------------
 # Private Helpers
@@ -85,40 +83,7 @@ func isGenesis(header: BlockHeader): bool =
 # Private cache management functions
 # ------------------------------------------------------------------------------
 
-proc mkCacheBytes(blockNumber: uint64): seq[Hash512] =
-  mkcache(getCacheSize(blockNumber), getSeedhash(blockNumber))
-
-proc findFirstIndex(tab: CacheByEpoch): uint64 =
-  # Kludge: OrderedTable[] still misses a proper API
-  for key in tab.keys:
-    result = key
-    break
-
-
-proc getCache(cacheByEpoch: CacheByEpoch; blockNumber: uint64): seq[Hash512] =
-  # TODO: this is very inefficient
-  let epochIndex = blockNumber div EPOCH_LENGTH
-
-  # Get the cache if already generated, marking it as recently used
-  if epochIndex in cacheByEpoch:
-    let c = cacheByEpoch[epochIndex]
-    cacheByEpoch.del(epochIndex)  # pop and append at end
-    cacheByEpoch[epochIndex] = c
-    return c
-
-  # Limit memory usage for cache
-  if cacheByEpoch.len >= CACHE_MAX_ITEMS:
-    cacheByEpoch.del(cacheByEpoch.findFirstIndex)
-
-  # Generate the cache if it was not already in memory
-  # Simulate requesting mkcache by block number: multiply index by epoch length
-  var c = mkCacheBytes(epochIndex * EPOCH_LENGTH)
-  cacheByEpoch[epochIndex] = c
-
-  result = system.move(c)
-
-
-func cacheHash(x: openArray[Hash512]): Hash256 =
+func cacheHash(x: EpochHashDigest): Hash256 =
   var ctx: keccak256
   ctx.init()
 
@@ -134,10 +99,10 @@ func cacheHash(x: openArray[Hash512]): Hash256 =
 
 proc checkPOW(blockNumber: Uint256; miningHash, mixHash: Hash256;
               nonce: BlockNonce; difficulty: DifficultyInt;
-              cacheByEpoch: CacheByEpoch): Result[void,string] =
+              cacheByEpoch: var EpochHashCache): Result[void,string] =
   let
     blockNumber = blockNumber.truncate(uint64)
-    cache = cacheByEpoch.getCache(blockNumber)
+    cache = cacheByEpoch.getEpochCacheHash(blockNumber)
     size = getDataSize(blockNumber)
     miningOutput = hashimotoLight(
       size, cache, miningHash, uint64.fromBytesBE(nonce))
@@ -161,7 +126,7 @@ proc checkPOW(blockNumber: Uint256; miningHash, mixHash: Hash256;
   result = ok()
 
 
-proc validateSeal(cacheByEpoch: CacheByEpoch;
+proc validateSeal(cacheByEpoch: var EpochHashCache;
                   header: BlockHeader): Result[void,string] =
   let miningHeader = header.toMiningHeader
   let miningHash = miningHeader.hash
@@ -196,7 +161,7 @@ func validateGasLimit(gasLimit, parentGasLimit: GasInt): Result[void,string] =
   result = ok()
 
 proc validateHeader(header, parentHeader: BlockHeader; checkSealOK: bool;
-                     cacheByEpoch: CacheByEpoch): Result[void,string] =
+                     cacheByEpoch: var EpochHashCache): Result[void,string] =
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
@@ -235,7 +200,7 @@ func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
 
 proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
                     uncles: seq[BlockHeader]; checkSealOK: bool;
-                    cacheByEpoch: CacheByEpoch): Result[void,string] =
+                    cacheByEpoch: var EpochHashCache): Result[void,string] =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -343,13 +308,9 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 # Public functions, extracted from test_blockchain_json
 # ------------------------------------------------------------------------------
 
-proc newCacheByEpoch*(): CacheByEpoch =
-  newOrderedTable[uint64, seq[Hash512]]()
-
-
 proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
                       uncles: seq[BlockHeader]; checkSealOK: bool;
-                      cacheByEpoch: CacheByEpoch): Result[void,string] =
+                      cacheByEpoch: var EpochHashCache): Result[void,string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
