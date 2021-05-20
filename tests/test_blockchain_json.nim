@@ -40,7 +40,8 @@ type
     debugData    : JsonNode
     network      : string
 
-var cacheByEpoch = newCacheByEpoch()
+var cacheByEpoch: EpochHashCache
+cacheByEpoch.initEpochHashCache
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = false, trace = false)
 
