@@ -160,8 +160,13 @@ proc start(nimbus: NimbusNode) =
     asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
 
   # Connect via discovery
-  waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes,
-    enableDiscovery = NoDiscover notin conf.net.flags)
+  if conf.net.customBootNodes.len > 0:
+    # override the default bootnodes from public network
+    waitFor nimbus.ethNode.connectToNetwork(conf.net.customBootNodes,
+      enableDiscovery = NoDiscover notin conf.net.flags)
+  else:
+    waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes,
+      enableDiscovery = NoDiscover notin conf.net.flags)
 
   if ProtocolFlags.Eth in conf.net.protocols:
     # TODO: temp code until the CLI/RPC interface is fleshed out

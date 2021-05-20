@@ -93,6 +93,7 @@ type
     flags*: set[NetworkFlags]     ## Network flags
     bootNodes*: seq[ENode]        ## List of bootnodes
     staticNodes*: seq[ENode]      ## List of static nodes to connect to
+    customBootNodes*: seq[ENode]
     bindPort*: uint16             ## Main TCP bind port
     discPort*: uint16             ## Discovery UDP bind port
     metricsServer*: bool          ## Enable metrics server
@@ -417,6 +418,7 @@ proc setBootnodes(onodes: var seq[ENode], nodeUris: openarray[string]) =
     doAssert(processENode(item, node) == Success)
     onodes.add(node)
 
+
 proc setNetwork(conf: var NetConfiguration, id: NetworkId) =
   ## Set network id and default network bootnodes
   conf.networkId = id
@@ -442,11 +444,11 @@ proc processNetArguments(key, value: string): ConfigStatus =
   let config = getConfiguration()
   let skey = key.toLowerAscii()
   if skey == "bootnodes":
-    result = processENodesList(value, config.net.bootNodes)
+    result = processENodesList(value, config.net.customBootNodes)
   elif skey == "bootnodesv4":
-    result = processENodesList(value, config.net.bootNodes)
+    result = processENodesList(value, config.net.customBootNodes)
   elif skey == "bootnodesv5":
-    result = processENodesList(value, config.net.bootNodes)
+    result = processENodesList(value, config.net.customBootNodes)
   elif skey == "staticnodes":
     result = processENodesList(value, config.net.staticNodes)
   elif skey == "testnet":
@@ -480,7 +482,7 @@ proc processNetArguments(key, value: string): ConfigStatus =
     config.net.flags.incl(NoDiscover)
   elif skey == "v5discover":
     config.net.flags.incl(V5Discover)
-    config.net.bootNodes.setBootnodes(DiscoveryV5Bootnodes)
+    config.net.customBootNodes.setBootnodes(DiscoveryV5Bootnodes)
   elif skey == "port":
     var res = 0
     result = processInteger(value, res)
@@ -763,17 +765,8 @@ when declared(os.paramCount): # not available with `--app:lib`
     ## Process command line argument and update `NimbusConfiguration`.
     let config = getConfiguration()
 
-    # At this point `config.net.bootnodes` is likely populated with network default
-    # bootnodes. We want to override those if at least one custom bootnode is
-    # specified on the command line. We temporarily set `config.net.bootNodes`
-    # to empty seq, and in the end restore it if no bootnodes were spricified on
-    # the command line.
-    # TODO: This is pretty hacky and it's better to refactor it to make a clear
-    # distinction between default and custom bootnodes.
-    var tempBootNodes: seq[ENode]
-    swap(tempBootNodes, config.net.bootNodes)
-
-    # The same trick is done to discPort
+    # At this point `config.net.discPort` is likely populated with network default
+    # discPort. We want to override those if it is specified on the command line.
     config.net.discPort = 0
 
     var length = 0
@@ -805,11 +798,6 @@ when declared(os.paramCount): # not available with `--app:lib`
               break
       of cmdEnd:
         doAssert(false) # we're never getting this kind here
-
-    if config.net.bootNodes.len == 0:
-      # No custom bootnodes were specified on the command line, restore to
-      # previous values
-      swap(tempBootNodes, config.net.bootNodes)
 
     if config.net.discPort == 0:
       config.net.discPort = config.net.bindPort
