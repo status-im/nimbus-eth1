@@ -64,6 +64,16 @@ proc setupTxContext(host: TransactionHost) =
   host.txContext.block_difficulty = vmState.blockHeader.difficulty.toEvmc
   host.txContext.chain_id         = vmState.chaindb.config.chainId.uint.u256.toEvmc
 
+const use_evmc_glue = defined(evmc_enabled)
+
+# When using the EVMC binary interface, each of the functions below is wrapped
+# in another function that converts types to be compatible with the binary
+# interface, and the functions below are not called directly.  The conversions
+# mostly just cast between byte-compatible types, so to avoid a redundant call
+# layer, make the functions below `{.inline.}` when wrapped in this way.
+when use_evmc_glue:
+  {.push inline.}
+
 proc accountExists(host: TransactionHost, address: HostAddress): bool =
   if host.vmState.fork >= FkSpurious:
     not host.vmState.readOnlyStateDB.isDeadAccount(address)
@@ -207,6 +217,11 @@ proc emitLog(host: TransactionHost, address: HostAddress,
   log.address = address
   host.logEntries.add(log)
 
-export
-  accountExists, getStorage, storage, getBalance, getCodeSize, getCodeHash,
-  copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog
+when use_evmc_glue:
+  {.pop: inline.}
+  const included_from_host_services = true
+  include ./evmc_host_glue
+else:
+  export
+    accountExists, getStorage, storage, getBalance, getCodeSize, getCodeHash,
+    copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog
