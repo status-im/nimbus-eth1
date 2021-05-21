@@ -12,7 +12,7 @@ import
   sets, times, stint, chronicles,
   eth/common/eth_types, ../db/accounts_cache, ../forks,
   ".."/[vm_types, vm_state, vm_computation, vm_internals],
-  ./host_types
+  ./host_types, ./host_trace
 
 proc setupTxContext(host: TransactionHost) =
   # Conversion issues:
@@ -74,7 +74,7 @@ const use_evmc_glue = defined(evmc_enabled)
 when use_evmc_glue:
   {.push inline.}
 
-proc accountExists(host: TransactionHost, address: HostAddress): bool =
+proc accountExists(host: TransactionHost, address: HostAddress): bool {.show.} =
   if host.vmState.fork >= FkSpurious:
     not host.vmState.readOnlyStateDB.isDeadAccount(address)
   else:
@@ -84,7 +84,7 @@ proc accountExists(host: TransactionHost, address: HostAddress): bool =
 # `selfDestruct`, if an EVM is only allowed to do these things to its own
 # contract account and the host always knows which account?
 
-proc getStorage(host: TransactionHost, address: HostAddress, key: HostKey): HostValue =
+proc getStorage(host: TransactionHost, address: HostAddress, key: HostKey): HostValue {.show.} =
   host.vmState.readOnlyStateDB.getStorage(address, key)
 
 proc setStorage1(host: TransactionHost, address: HostAddress,
@@ -111,7 +111,7 @@ proc setStorage1(host: TransactionHost, address: HostAddress,
     return EVMC_STORAGE_MODIFIED
 
 proc setStorage(host: TransactionHost, address: HostAddress,
-                key: HostKey, value: HostValue): EvmcStorageStatus =
+                key: HostKey, value: HostValue): EvmcStorageStatus {.show.} =
   let status = setStorage1(host, address, key, value)
   let gasParam = GasParams(kind: Op.Sstore,
                            s_status: status,
@@ -121,15 +121,15 @@ proc setStorage(host: TransactionHost, address: HostAddress,
   if gasRefund != 0:
     host.computation.gasMeter.refundGas(gasRefund)
 
-proc getBalance(host: TransactionHost, address: HostAddress): HostBalance =
+proc getBalance(host: TransactionHost, address: HostAddress): HostBalance {.show.} =
   host.vmState.readOnlyStateDB.getBalance(address)
 
-proc getCodeSize(host: TransactionHost, address: HostAddress): HostSize =
+proc getCodeSize(host: TransactionHost, address: HostAddress): HostSize {.show.} =
   # TODO: Check this `HostSize`, it was copied as `uint` from other code.
   # Note: Old `evmc_host` uses `getCode(address).len` instead.
   host.vmState.readOnlyStateDB.getCodeSize(address).HostSize
 
-proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash =
+proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash {.show.} =
   let db = host.vmState.readOnlyStateDB
   # TODO: Copied from `Computation`, but check if that code is wrong with
   # `FkSpurious`, as it has different calls from `accountExists` above.
@@ -140,7 +140,7 @@ proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash =
 
 proc copyCode(host: TransactionHost, address: HostAddress,
               code_offset: HostSize, buffer_data: ptr byte,
-              buffer_size: HostSize): HostSize =
+              buffer_size: HostSize): HostSize {.show.} =
   # We must handle edge cases carefully to prevent overflows.  `len` is signed
   # type `int`, but `code_offset` and `buffer_size` are _unsigned_, and may
   # have large values (deliberately if attacked) that exceed the range of `int`.
@@ -168,7 +168,7 @@ proc copyCode(host: TransactionHost, address: HostAddress,
     copyMem(buffer_data, code[safe_offset].addr, safe_len)
   return safe_len.HostSize
 
-proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) =
+proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.show.} =
   host.vmState.mutateStateDB:
     let closingBalance = db.getBalance(address)
     let beneficiaryBalance = db.getBalance(beneficiary)
@@ -184,23 +184,23 @@ proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) =
   host.touchedAccounts.incl(beneficiary)
   host.selfDestructs.incl(address)
 
-proc call(host: TransactionHost, msg: EvmcMessage): EvmcResult =
+proc call(host: TransactionHost, msg: EvmcMessage): EvmcResult {.show.} =
   echo "**** Nested call not implemented ****"
   return EvmcResult(status_code: EVMC_REJECTED)
 
-proc getTxContext(host: TransactionHost): EvmcTxContext =
+proc getTxContext(host: TransactionHost): EvmcTxContext {.show.} =
   if not host.cachedTxContext:
     host.setupTxContext()
     host.cachedTxContext = true
   return host.txContext
 
-proc getBlockHash(host: TransactionHost, number: HostBlockNumber): HostHash =
+proc getBlockHash(host: TransactionHost, number: HostBlockNumber): HostHash {.show.} =
   # TODO: Clean up the different messy block number types.
   host.vmState.getAncestorHash(number.toBlockNumber)
 
 proc emitLog(host: TransactionHost, address: HostAddress,
              data: ptr byte, data_size: HostSize,
-             topics: ptr HostTopic, topics_count: HostSize) =
+             topics: ptr HostTopic, topics_count: HostSize) {.show.} =
   var log: Log
   # Note, this assumes the EVM ensures `data_size` and `topics_count` cannot be
   # unreasonably large values.  Largest `topics_count` should be 4 according to
