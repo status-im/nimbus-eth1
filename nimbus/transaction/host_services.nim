@@ -9,7 +9,7 @@
 #{.push raises: [Defect].}
 
 import
-  sets, times, stint, chronicles, stew/byteutils,
+  sets, times, stint, chronicles,
   eth/common/eth_types, ../db/accounts_cache, ../forks,
   ".."/[vm_types, vm_state, vm_computation, vm_internals],
   ./host_types
