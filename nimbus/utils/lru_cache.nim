@@ -11,7 +11,10 @@
 ## Hash as hash can: LRU cache
 ## ===========================
 ##
-## provide last-recently-used cache mapper
+## Provide last-recently-used cache data structure. The implementation
+## works with complexity O(1) using a nim hash Table with doubly linked
+## data entries.
+##
 
 const
    # debugging, enable with: nim c -r -d:noisy:3 ...
@@ -32,9 +35,14 @@ type
   LruValue*[T,V,E] =           ## derive an LRU value from function argument
     proc(arg: T): Result[V,E] {.gcsafe, raises: [Defect,CatchableError].}
 
+  LruItem[K,V] = tuple
+    prv, nxt: K                ## doubly linked items
+    value: V
+
   LruCache*[T,K,V,E] = object
     maxItems: int              ## max number of entries
-    tab: OrderedTable[K,V]     ## cache data table
+    tab: Table[K,LruItem[K,V]] ## cache data table
+    first, last: K             ## doubly linked item list queue
     toKey: LruKey[T,K]
     toValue: LruValue[T,V,E]
 
@@ -59,31 +67,52 @@ proc getLruItem*[T,K,V,E](cache: var LruCache[T,K,V,E]; arg: T): Result[V,E] =
   ## Return `toValue(arg)`, preferably from result cached earlier
   let key = cache.toKey(arg)
 
-  # Get the cache if already generated, marking it as recently used
+  # Relink item if already in the cache => move to last position
   if cache.tab.hasKey(key):
-    let value = cache.tab[key]
-    # Pop and append at end. Note that according to manual, this
-    # costs O(n) => inefficient
-    cache.tab.del(key)
-    cache.tab[key] = value
-    return ok(value)
+    let lruItem = cache.tab[key]
 
-  # Return unless OK
+    if key == cache.last:
+      # Nothing to do
+      return ok(lruItem.value)
+
+    # Unlink key Item
+    if key == cache.first:
+      cache.first = lruItem.nxt
+    else:
+      cache.tab[lruItem.prv].nxt = lruItem.nxt
+      cache.tab[lruItem.nxt].prv = lruItem.prv
+
+    # Append key item
+    cache.tab[cache.last].nxt = key
+    cache.tab[key].prv = cache.last
+    cache.last = key
+    return ok(lruItem.value)
+
+  # Calculate value, pass through error unless OK
   let rcValue = ? cache.toValue(arg)
 
-  # Limit mumer of cached items
+  # Limit number of cached items
   if cache.maxItems <= cache.tab.len:
     # Delete oldest/first entry
-    var tbd: K
-    # Kludge: OrderedTable[] still misses a proper API.
-    for key in cache.tab.keys:
-      # Tests suggest that deleting here also works in that particular case.
-      tbd = key
-      break
-    cache.tab.del(tbd)
+    var nextKey = cache.tab[cache.first].nxt
+    cache.tab.del(cache.first)
+    cache.first = nextKey
 
   # Add cache entry
-  cache.tab[key] = rcValue
+  var tabItem: LruItem[K,V]
+
+  # Initialise empty queue
+  if cache.tab.len == 0:
+    cache.first = key
+    cache.last = key
+  else:
+    # Append queue item
+    cache.tab[cache.last].nxt = key
+    tabItem.prv = cache.last
+    cache.last = key
+
+  tabItem.value = rcValue
+  cache.tab[key] = tabItem
   result = ok(rcValue)
 
 # ------------------------------------------------------------------------------
@@ -93,7 +122,7 @@ proc getLruItem*[T,K,V,E](cache: var LruCache[T,K,V,E]; arg: T): Result[V,E] =
 when isMainModule and isMainOK:
 
   import
-    sequtils
+    strformat
 
   const
     cacheLimit = 10
@@ -118,17 +147,64 @@ when isMainModule and isMainOK:
 
   cache.initLruCache(getKey, getValue, cacheLimit)
 
+  proc verifyLinks[T,K,V,E](cache: var LruCache[T,K,V,E]) =
+    var key = cache.first
+    if cache.tab.len == 1:
+      doAssert cache.tab.hasKey(key)
+      doAssert key == cache.last
+    elif 1 < cache.tab.len:
+      # forward links
+      for n in 1 ..< cache.tab.len:
+        var curKey = key
+        key = cache.tab[curKey].nxt
+        if cache.tab[key].prv != curKey:
+          echo &">>> ({n}): " &
+            &"cache.tab[{key}].prv == {cache.tab[key].prv} exp {curKey}"
+          doAssert cache.tab[key].prv == curKey
+      doAssert key == cache.last
+      # backward links
+      for n in 1 ..< cache.tab.len:
+        var curKey = key
+        key = cache.tab[curKey].prv
+        if cache.tab[key].nxt != curKey:
+          echo &">>> ({n}): " &
+            &"cache.tab[{key}].nxt == {cache.tab[key].nxt} exp {curKey}"
+          doAssert cache.tab[key].nxt == curKey
+      doAssert key == cache.first
+
+  proc toKeyList[T,K,V,E](cache: var LruCache[T,K,V,E]): seq[K] =
+    cache.verifyLinks
+    if 0 < cache.tab.len:
+      var key = cache.first
+      while key != cache.last:
+        result.add key
+        key = cache.tab[key].nxt
+      result.add cache.last
+
+  proc toValueList[T,K,V,E](cache: var LruCache[T,K,V,E]): seq[V] =
+    cache.verifyLinks
+    if 0 < cache.tab.len:
+      var key = cache.first
+      while key != cache.last:
+        result.add cache.tab[key].value
+        key = cache.tab[key].nxt
+      result.add cache.tab[cache.last].value
+
   var lastQ: seq[int]
   for w in keyList:
     var
       key = w mod 13
       reSched = cache.tab.hasKey(key)
       value = cache.getLruItem(key)
-      queue = toSeq(cache.tab.keys)
+      queue = cache.toKeyList
+      values = cache.toValueList
+    # verfy key/value pairs
+    for n in 0 ..< queue.len:
+      doAssert $queue[n] == $values[n]
     if reSched:
-      echo "+++ rotate ", value, " => ", queue
+      echo &"+++ rotate {value} => {queue}"
     else:
-      echo "*** append ", value, " => ", queue
+      echo &"*** append {value} => {queue}"
 
 # ------------------------------------------------------------------------------
 # End
