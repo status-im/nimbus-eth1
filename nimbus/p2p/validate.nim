@@ -17,7 +17,7 @@ import
   ../vm_state,
   ../vm_types,
   ../vm_types2,
-  ./validate/cache,
+  ./validate/epoch_hash_cache,
   chronicles,
   eth/[common, rlp, trie/trie_defs],
   ethash,
@@ -30,8 +30,8 @@ import
   times
 
 export
-  cache.EpochHashCache,
-  cache.initEpochHashCache,
+  epoch_hash_cache.EpochHashCache,
+  epoch_hash_cache.initEpochHashCache,
   results
 
 type
@@ -99,10 +99,10 @@ func cacheHash(x: EpochHashDigest): Hash256 =
 
 proc checkPOW(blockNumber: Uint256; miningHash, mixHash: Hash256;
               nonce: BlockNonce; difficulty: DifficultyInt;
-              cacheByEpoch: var EpochHashCache): Result[void,string] =
+              hashCache: var EpochHashCache): Result[void,string] =
   let
     blockNumber = blockNumber.truncate(uint64)
-    cache = cacheByEpoch.getEpochCacheHash(blockNumber)
+    cache = hashCache.getEpochHash(blockNumber)
     size = getDataSize(blockNumber)
     miningOutput = hashimotoLight(
       size, cache, miningHash, uint64.fromBytesBE(nonce))
@@ -126,13 +126,13 @@ proc checkPOW(blockNumber: Uint256; miningHash, mixHash: Hash256;
   result = ok()
 
 
-proc validateSeal(cacheByEpoch: var EpochHashCache;
+proc validateSeal(hashCache: var EpochHashCache;
                   header: BlockHeader): Result[void,string] =
   let miningHeader = header.toMiningHeader
   let miningHash = miningHeader.hash
 
   checkPOW(header.blockNumber, miningHash,
-           header.mixDigest, header.nonce, header.difficulty, cacheByEpoch)
+           header.mixDigest, header.nonce, header.difficulty, hashCache)
 
 
 proc validateGasLimit(chainDB: BaseChainDB;
@@ -161,7 +161,7 @@ func validateGasLimit(gasLimit, parentGasLimit: GasInt): Result[void,string] =
   result = ok()
 
 proc validateHeader(header, parentHeader: BlockHeader; checkSealOK: bool;
-                     cacheByEpoch: var EpochHashCache): Result[void,string] =
+                     hashCache: var EpochHashCache): Result[void,string] =
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
@@ -176,7 +176,7 @@ proc validateHeader(header, parentHeader: BlockHeader; checkSealOK: bool;
     return err("timestamp must be strictly later than parent")
 
   if checkSealOK:
-    return cacheByEpoch.validateSeal(header)
+    return hashCache.validateSeal(header)
 
   result = ok()
 
@@ -200,7 +200,7 @@ func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
 
 proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
                     uncles: seq[BlockHeader]; checkSealOK: bool;
-                    cacheByEpoch: var EpochHashCache): Result[void,string] =
+                    hashCache: var EpochHashCache): Result[void,string] =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -249,7 +249,7 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
 
     # Now perform VM level validation of the uncle
     if checkSealOK:
-      result = cacheByEpoch.validateSeal(uncle)
+      result = hashCache.validateSeal(uncle)
       if result.isErr:
         return
 
@@ -310,14 +310,14 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 
 proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
                       uncles: seq[BlockHeader]; checkSealOK: bool;
-                      cacheByEpoch: var EpochHashCache): Result[void,string] =
+                      hashCache: var EpochHashCache): Result[void,string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
     return ok()
 
   let parentHeader = chainDB.getBlockHeader(header.parentHash)
-  result = header.validateHeader(parentHeader, checkSealOK, cacheByEpoch)
+  result = header.validateHeader(parentHeader, checkSealOK, hashCache)
   if result.isErr:
     return
 
@@ -327,7 +327,7 @@ proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
   if not chainDB.exists(header.stateRoot):
     return err("`state_root` was not found in the db.")
 
-  result = chainDB.validateUncles(header, uncles, checkSealOK, cacheByEpoch)
+  result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
   if result.isOk:
     result = chainDB.validateGaslimit(header)
 
