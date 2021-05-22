@@ -11,9 +11,10 @@
 ## Hash as hash can: LRU cache
 ## ===========================
 ##
-## Provide last-recently-used cache data structure. The implementation
-## works with complexity O(1) using a nim hash Table with doubly linked
-## data entries.
+## Provide last-recently-used cache data structure. The implementation works
+## with the same complexity as the worst case of a nim hash tables operation
+## which is assumed ~O(1) in most cases (so long as the table does not degrade
+## into one-bucket linear mode, or some adjustment algorithm.)
 ##
 
 const
@@ -22,6 +23,7 @@ const
    isMainOk {.used.} = noisy > 2
 
 import
+  math,
   stew/results,
   tables
 
@@ -59,8 +61,7 @@ proc initLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
   cache.maxItems = cacheMaxItems
   cache.toKey = toKey
   cache.toValue = toValue
-  # note: Starting from Nim v0.20, tables are initialized by default and it
-  #       is not necessary to call initOrderedTable() function explicitly.
+  cache.tab = initTable[K,LruItem[K,V]](cacheMaxItems.nextPowerOfTwo)
 
 
 proc getLruItem*[T,K,V,E](cache: var LruCache[T,K,V,E]; arg: T): Result[V,E] =
