@@ -181,8 +181,14 @@ proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.sh
     # contract named itself as the beneficiary.
     db.setBalance(address, 0.u256)
 
-  host.touchedAccounts.incl(beneficiary)
-  host.selfDestructs.incl(address)
+  # TODO: Calling via `computation` is necessary to make some tests pass.
+  # Here's one that passes only with this:
+  #   tests/fixtures/eth_tests/GeneralStateTests/stRandom2/randomStatetest487.json
+  # We can't keep using `computation` though.
+  host.computation.touchedAccounts.incl(beneficiary)
+  host.computation.selfDestructs.incl(address)
+  #host.touchedAccounts.incl(beneficiary)
+  #host.selfDestructs.incl(address)
 
 proc call(host: TransactionHost, msg: EvmcMessage): EvmcResult {.show.} =
   echo "**** Nested call not implemented ****"
