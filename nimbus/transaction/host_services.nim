@@ -212,8 +212,10 @@ proc emitLog(host: TransactionHost, address: HostAddress,
     for i in 0 ..< count:
       log.topics[i] = topicsArray[i]
 
-  log.data = newSeq[byte](data_size.int)
-  copyMem(log.data[0].addr, data, data_size.int)
+  if (data_size > 0):
+    log.data = newSeq[byte](data_size.int)
+    copyMem(log.data[0].addr, data, data_size.int)
+
   log.address = address
   host.logEntries.add(log)
 
