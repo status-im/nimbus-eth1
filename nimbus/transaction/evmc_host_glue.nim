@@ -90,7 +90,8 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
 # a separate library yet.
 import ./evmc_vm_glue
 
-proc evmcExecComputation*(host: TransactionHost): EvmcResult =
+# This must be named `call` to show as "call" when traced by the `show` macro.
+proc call(host: TransactionHost): EvmcResult {.show, inline.} =
   let vm = evmc_create_nimbus_evm()
   if vm.isNil:
     echo "Warning: No EVM"
@@ -121,3 +122,6 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult =
                evmc_revision(host.vmState.fork), host.msg,
                if host.code.len > 0: host.code[0].unsafeAddr else: nil,
                host.code.len.csize_t)
+
+proc evmcExecComputation*(host: TransactionHost): EvmcResult =
+  call(host)

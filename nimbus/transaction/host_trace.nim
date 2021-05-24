@@ -18,6 +18,7 @@ func `$`(address: HostAddress): string = toHex(address)
 func `$`(txc: EvmcTxContext): string = &"gas_price={txc.tx_gas_price.fromEvmc}"
 func `$`(n: typeof(EvmcMessage().sender)): string = $n.fromEvmc
 func `$`(n: typeof(EvmcMessage().value)): string = $n.fromEvmc
+func `$`(host: TransactionHost): string = &"(fork={host.vmState.fork} message=${host.msg})"
 
 macro show*(fn: untyped): auto =
   if not show_tx_calls:
