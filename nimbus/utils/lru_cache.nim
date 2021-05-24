@@ -24,6 +24,7 @@ const
 
 import
   math,
+  eth/rlp,
   stew/results,
   tables
 
@@ -43,8 +44,8 @@ type
 
   LruCache*[T,K,V,E] = object
     maxItems: int              ## max number of entries
-    tab: Table[K,LruItem[K,V]] ## cache data table
     first, last: K             ## doubly linked item list queue
+    tab: Table[K,LruItem[K,V]] ## cache data table
     toKey: LruKey[T,K]
     toValue: LruValue[T,V,E]
 
@@ -54,6 +55,12 @@ type
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc clearLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E]) =
+  cache.first.reset
+  cache.last.reset
+  cache.tab = initTable[K,LruItem[K,V]](cache.maxItems.nextPowerOfTwo)
+
+
 proc initLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
                             toKey: LruKey[T,K], toValue: LruValue[T,V,E];
                             cacheMaxItems = 10) =
@@ -61,7 +68,7 @@ proc initLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
   cache.maxItems = cacheMaxItems
   cache.toKey = toKey
   cache.toValue = toValue
-  cache.tab = initTable[K,LruItem[K,V]](cacheMaxItems.nextPowerOfTwo)
+  cache.clearLruCache
 
 
 proc getLruItem*[T,K,V,E](cache: var LruCache[T,K,V,E]; arg: T): Result[V,E] =
@@ -115,6 +122,31 @@ proc getLruItem*[T,K,V,E](cache: var LruCache[T,K,V,E]; arg: T): Result[V,E] =
   tabItem.value = rcValue
   cache.tab[key] = tabItem
   result = ok(rcValue)
+
+
+proc rlpEncodeLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E]): auto =
+  ## Serialise current `cache`.
+  var rw = initRlpWriter()
+  rw.append(cache.maxItems)
+  rw.append(cache.first)
+  rw.append(cache.last)
+  rw.startList(cache.tab.len)
+  for key,value in cache.tab.pairs:
+    rw.append((key, value))
+  rw.finish
+
+
+proc rlpLoadLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
+                               serialised: openArray[byte]) =
+  ## Load `cache` from serialised data stream. The `cache` must have been
+  ## previously initialised with `initLruCache()`.
+  var rlp = serialised.rlpFromBytes
+  cache.maxItems = rlp.read(int)
+  cache.first = rlp.read(K)
+  cache.last = rlp.read(K)
+  for w in rlp.items:
+    let (key,value) = w.read((K,LruItem[K,V]))
+    cache.tab[key] = value
 
 # ------------------------------------------------------------------------------
 # Debugging/testing
@@ -206,6 +238,24 @@ when isMainModule and isMainOK:
       echo &"+++ rotate {value} => {queue}"
     else:
       echo &"*** append {value} => {queue}"
+
+  var
+    c2 = cache
+    ser = cache.rlpEncodeLruCache
+
+  echo &"<<< #{ser.len} {ser.repr}"
+
+  c2.clearLruCache
+  c2.rlpLoadLruCache(ser)
+
+  var
+    q2 = c2.toKeyList
+    v2 = c2.toValueList
+
+  echo &"<<< {c2.maxItems} {c2.first} {c2.last} {q2}"
+
+  for n in 0 ..< q2.len:
+    doAssert $q2[n] == $v2[n]
 
 # ------------------------------------------------------------------------------
 # End
