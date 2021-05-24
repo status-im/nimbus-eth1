@@ -87,8 +87,40 @@ proc accountExists(host: TransactionHost, address: HostAddress): bool {.show.} =
 proc getStorage(host: TransactionHost, address: HostAddress, key: HostKey): HostValue {.show.} =
   host.vmState.readOnlyStateDB.getStorage(address, key)
 
-proc setStorage1(host: TransactionHost, address: HostAddress,
-                 key: HostKey, value: HostValue): EvmcStorageStatus =
+const
+  # EIP-1283
+  SLOAD_GAS_CONSTANTINOPLE = 200
+  # EIP-2200
+  SSTORE_SET_GAS           = 20000
+  SSTORE_RESET_GAS         = 5000
+  SSTORE_CLEARS_SCHEDULE   = 15000
+  SLOAD_GAS_ISTANBUL       = 800
+  # EIP-2929
+  WARM_STORAGE_READ_COST   = 100
+  COLD_SLOAD_COST          = 2100
+  COLD_ACCOUNT_ACCESS_COST = 2600
+
+func storageModifiedAgainRefund(originalValue, oldValue, value: HostValue,
+                                fork: Fork): int {.inline.} =
+  # Calculate `SSTORE` refund according to EIP-2929 (Berlin),
+  # EIP-2200 (Istanbul) or EIP-1283 (Constantinople only).
+  result = 0
+  if value == originalValue:
+    result = if value.isZero: SSTORE_SET_GAS
+             elif fork >= FkBerlin: SSTORE_RESET_GAS - COLD_SLOAD_COST
+             else: SSTORE_RESET_GAS
+    let SLOAD_GAS = if fork >= FkBerlin: WARM_STORAGE_READ_COST
+                    elif fork >= FkIstanbul: SLOAD_GAS_ISTANBUL
+                    else: SLOAD_GAS_CONSTANTINOPLE
+    result -= SLOAD_GAS
+  if not originalValue.isZero:
+    if value.isZero:
+      result += SSTORE_CLEARS_SCHEDULE
+    elif oldValue.isZero:
+      result -= SSTORE_CLEARS_SCHEDULE
+
+proc setStorage(host: TransactionHost, address: HostAddress,
+                key: HostKey, value: HostValue): EvmcStorageStatus {.show.} =
   let db = host.vmState.readOnlyStateDB
   let oldValue = db.getStorage(address, key)
 
@@ -101,25 +133,23 @@ proc setStorage1(host: TransactionHost, address: HostAddress,
   if host.vmState.fork >= FkIstanbul or host.vmState.fork == FkConstantinople:
     let originalValue = db.getCommittedStorage(address, key)
     if oldValue != originalValue:
+      # Gas refund for `MODIFIED_AGAIN` (EIP-1283/2200/2929 only).
+      let refund = storageModifiedAgainRefund(originalValue, oldValue, value,
+                                              host.vmState.fork)
+      # TODO: Refund depends on `Computation` at the moment.
+      if refund != 0:
+        host.computation.gasMeter.refundGas(refund)
       return EVMC_STORAGE_MODIFIED_AGAIN
 
   if oldValue.isZero:
     return EVMC_STORAGE_ADDED
   elif value.isZero:
+    # Gas refund for `DELETED` (all forks).
+    # TODO: Refund depends on `Computation` at the moment.
+    host.computation.gasMeter.refundGas(SSTORE_CLEARS_SCHEDULE)
     return EVMC_STORAGE_DELETED
   else:
     return EVMC_STORAGE_MODIFIED
-
-proc setStorage(host: TransactionHost, address: HostAddress,
-                key: HostKey, value: HostValue): EvmcStorageStatus {.show.} =
-  let status = setStorage1(host, address, key, value)
-  let gasParam = GasParams(kind: Op.Sstore,
-                           s_status: status,
-                           s_currentValue: currValue,
-                           s_originalValue: origValue)
-  gasRefund = ctx.gasCosts[Sstore].c_handler(newValue, gasParam)[1]
-  if gasRefund != 0:
-    host.computation.gasMeter.refundGas(gasRefund)
 
 proc getBalance(host: TransactionHost, address: HostAddress): HostBalance {.show.} =
   host.vmState.readOnlyStateDB.getBalance(address)
