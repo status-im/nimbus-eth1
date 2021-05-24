@@ -182,6 +182,7 @@ proc chainConfig*(id: NetworkId): ChainConfig =
   result = case id
   of MainNet:
     ChainConfig(
+      poaEngine: false, # TODO: use real engine conf: PoW
       chainId:        MainNet.ChainId,
       homesteadBlock: 1_150_000.toBlockNumber, # 14/03/2016 20:49:53
       daoForkBlock:   1_920_000.toBlockNumber,
@@ -199,6 +200,7 @@ proc chainConfig*(id: NetworkId): ChainConfig =
     )
   of RopstenNet:
     ChainConfig(
+      poaEngine: false, # TODO: use real engine conf: PoW
       chainId:        RopstenNet.ChainId,
       homesteadBlock: 0.toBlockNumber,
       daoForkSupport: false,
@@ -215,6 +217,7 @@ proc chainConfig*(id: NetworkId): ChainConfig =
     )
   of RinkebyNet:
     ChainConfig(
+      poaEngine: true, # TODO: use real engine conf: PoA
       chainId:        RinkebyNet.ChainId,
       homesteadBlock: 1.toBlockNumber,
       daoForkSupport: false,
@@ -231,6 +234,7 @@ proc chainConfig*(id: NetworkId): ChainConfig =
     )
   of GoerliNet:
     ChainConfig(
+      poaEngine: true, # TODO: use real engine conf: PoA
       chainId:        GoerliNet.ChainId,
       homesteadBlock: 0.toBlockNumber,
       daoForkSupport: false,
