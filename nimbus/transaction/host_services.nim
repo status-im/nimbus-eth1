@@ -12,7 +12,7 @@ import
   sets, times, stint, chronicles,
   eth/common/eth_types, ../db/accounts_cache, ../forks,
   ".."/[vm_types, vm_state, vm_computation, vm_internals],
-  ./host_types, ./host_trace
+  ./host_types, ./host_trace, ./host_call_nested
 
 proc setupTxContext(host: TransactionHost) =
   # Conversion issues:
@@ -221,8 +221,7 @@ proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.sh
   #host.selfDestructs.incl(address)
 
 proc call(host: TransactionHost, msg: EvmcMessage): EvmcResult {.show.} =
-  echo "**** Nested call not implemented ****"
-  return EvmcResult(status_code: EVMC_REJECTED)
+  return host.callEvmcNested(msg)
 
 proc getTxContext(host: TransactionHost): EvmcTxContext {.show.} =
   if not host.cachedTxContext:
