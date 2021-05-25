@@ -157,6 +157,35 @@ proc doSerialiserTest(noisy: bool) =
 
   doAssert s1 == rlp.encode(c2.data)
 
+proc doSerialiseSingleEntry(noisy: bool) =
+
+  proc say(a: varargs[string]) =
+    say(noisy = noisy, args = a)
+
+  var
+    c1 = createTestCache()
+    value = c1.getLruItem(77)
+    queue = c1.toKeyList
+    values = c1.toValueList
+
+  say &"c1: append {value} => {queue}"
+
+  var
+    s1 = rlp.encode(c1.data)
+    c2 = createTestCache()
+
+  say &"serialised[{s1.len}]: {s1}"
+
+  c2.clearLruCache
+  doAssert c1 != c2
+
+  c2.data = s1.decode(type c2.data)
+  doAssert c1 == c2
+
+  say &"c2Specs: {c2.maxItems} {c2.first} {c2.last} ..."
+
+  doAssert s1 == rlp.encode(c2.data)
+
 
 proc lruCacheMain*(noisy = defined(debug)) =
   suite "LRU Cache":
@@ -166,6 +195,10 @@ proc lruCacheMain*(noisy = defined(debug)) =
 
     test "Rlp Serialise & Load":
       doSerialiserTest(noisy)
+
+    test "Rlp Single Entry Test":
+      doSerialiseSingleEntry(noisy)
+
 
 when isMainModule:
   lruCacheMain()
