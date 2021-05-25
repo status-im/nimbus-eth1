@@ -11,16 +11,13 @@
 ## Hash as hash can: LRU cache
 ## ===========================
 ##
-## Provide last-recently-used cache data structure. The implementation works
-## with the same complexity as the worst case of a nim hash tables operation
-## which is assumed ~O(1) in most cases (so long as the table does not degrade
-## into one-bucket linear mode, or some adjustment algorithm.)
+## This module provides a generic last-recently-used cache data structure.
 ##
-
-const
-   # debugging, enable with: nim c -r -d:noisy:3 ...
-   noisy {.intdefine.}: int = 0
-   isMainOk {.used.} = noisy > 2
+## The implementation works with the same complexity as the worst case of a
+## nim hash tables operation. This is is assumed to be O(1) in most cases
+## (so long as the table does not degrade into one-bucket linear mode, or
+## some bucket-adjustment algorithm takes over.)
+##
 
 import
   math,
@@ -32,230 +29,156 @@ export
   results
 
 type
-  LruKey*[T,K] =               ## derive an LRU key from function argument
+  LruKey*[T,K] =                  ## User provided handler function, derives an
+                                  ## LRU `key` from function argument `arg`. The
+                                  ## `key` is used to index the cache data.
     proc(arg: T): K {.gcsafe, raises: [Defect,CatchableError].}
 
-  LruValue*[T,V,E] =           ## derive an LRU value from function argument
+  LruValue*[T,V,E] =              ## User provided handler function, derives an
+                                  ## LRU `value` from function argument `arg`.
     proc(arg: T): Result[V,E] {.gcsafe, raises: [Defect,CatchableError].}
 
-  LruItem[K,V] = tuple
-    prv, nxt: K                ## doubly linked items
-    value: V
+  LruItem*[K,V] =                 ## Doubly linked hash-tab item encapsulating
+                                  ## the `value` (which is the result from
+                                  ## `LruValue` handler function.
+    tuple[prv, nxt: K, value: V]
+
+  # There could be {.rlpCustomSerialization.} annotation for the tab field.
+  # As there was a problem with the automatic Rlp serialisation for generic
+  # type, the easier solution was an all manual read()/append() for the whole
+  # generic LruCacheData[K,V] type.
+  LruData[K,V] = object
+    maxItems: int                 ## Max number of entries
+    first, last: K                ## Doubly linked item list queue
+    tab: TableRef[K,LruItem[K,V]] ## (`key`,encapsulated(`value`)) data table
 
   LruCache*[T,K,V,E] = object
-    maxItems: int              ## max number of entries
-    first, last: K             ## doubly linked item list queue
-    tab: Table[K,LruItem[K,V]] ## cache data table
-    toKey: LruKey[T,K]
-    toValue: LruValue[T,V,E]
+    data*: LruData[K,V]           ## Cache data, can be serialised
+    toKey: LruKey[T,K]            ## Handler function, derives `key`
+    toValue: LruValue[T,V,E]      ## Handler function, derives `value`
 
 {.push raises: [Defect,CatchableError].}
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc `==`[K,V](a, b: var LruData[K,V]): bool =
+  a.maxItems == b.maxItems and
+    a.first == b.first and
+    a.last == b.last and
+    a.tab == b.tab
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc clearLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E]) =
-  cache.first.reset
-  cache.last.reset
-  cache.tab = initTable[K,LruItem[K,V]](cache.maxItems.nextPowerOfTwo)
+proc clearLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E])
+                                          {.gcsafe, raises: [Defect].} =
+  ## Reset/clear an initialised LRU cache.
+  cache.data.first.reset
+  cache.data.last.reset
+  cache.data.tab = newTable[K,LruItem[K,V]](cache.data.maxItems.nextPowerOfTwo)
 
 
 proc initLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
                             toKey: LruKey[T,K], toValue: LruValue[T,V,E];
-                            cacheMaxItems = 10) =
-  ## Initialise new LRU cache
-  cache.maxItems = cacheMaxItems
+                            cacheMaxItems = 10) {.gcsafe, raises: [Defect].} =
+  ## Initialise LRU cache. The handlers `toKey()` and `toValue()` are
+  ## explained at the data type definition.
+  cache.data.maxItems = cacheMaxItems
   cache.toKey = toKey
   cache.toValue = toValue
   cache.clearLruCache
 
 
-proc getLruItem*[T,K,V,E](cache: var LruCache[T,K,V,E]; arg: T): Result[V,E] =
-  ## Return `toValue(arg)`, preferably from result cached earlier
-  let key = cache.toKey(arg)
+proc getLruItem*[T,K,V,E](lru: var LruCache[T,K,V,E];
+                             arg: T): Result[V,E] {.gcsafe.} =
+  ## Returns `lru.toValue(arg)`, preferably from result cached earlier.
+  let key = lru.toKey(arg)
 
   # Relink item if already in the cache => move to last position
-  if cache.tab.hasKey(key):
-    let lruItem = cache.tab[key]
+  if lru.data.tab.hasKey(key):
+    let lruItem = lru.data.tab[key]
 
-    if key == cache.last:
+    if key == lru.data.last:
       # Nothing to do
       return ok(lruItem.value)
 
     # Unlink key Item
-    if key == cache.first:
-      cache.first = lruItem.nxt
+    if key == lru.data.first:
+      lru.data.first = lruItem.nxt
     else:
-      cache.tab[lruItem.prv].nxt = lruItem.nxt
-      cache.tab[lruItem.nxt].prv = lruItem.prv
+      lru.data.tab[lruItem.prv].nxt = lruItem.nxt
+      lru.data.tab[lruItem.nxt].prv = lruItem.prv
 
     # Append key item
-    cache.tab[cache.last].nxt = key
-    cache.tab[key].prv = cache.last
-    cache.last = key
+    lru.data.tab[lru.data.last].nxt = key
+    lru.data.tab[key].prv = lru.data.last
+    lru.data.last = key
     return ok(lruItem.value)
 
   # Calculate value, pass through error unless OK
-  let rcValue = ? cache.toValue(arg)
+  let rcValue = ? lru.toValue(arg)
 
   # Limit number of cached items
-  if cache.maxItems <= cache.tab.len:
+  if lru.data.maxItems <= lru.data.tab.len:
     # Delete oldest/first entry
-    var nextKey = cache.tab[cache.first].nxt
-    cache.tab.del(cache.first)
-    cache.first = nextKey
+    var nextKey = lru.data.tab[lru.data.first].nxt
+    lru.data.tab.del(lru.data.first)
+    lru.data.first = nextKey
 
   # Add cache entry
   var tabItem: LruItem[K,V]
 
   # Initialise empty queue
-  if cache.tab.len == 0:
-    cache.first = key
-    cache.last = key
+  if lru.data.tab.len == 0:
+    lru.data.first = key
+    lru.data.last = key
   else:
     # Append queue item
-    cache.tab[cache.last].nxt = key
-    tabItem.prv = cache.last
-    cache.last = key
+    lru.data.tab[lru.data.last].nxt = key
+    tabItem.prv = lru.data.last
+    lru.data.last = key
 
   tabItem.value = rcValue
-  cache.tab[key] = tabItem
+  lru.data.tab[key] = tabItem
   result = ok(rcValue)
 
 
-proc rlpEncodeLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E]): auto =
-  ## Serialise current `cache`.
-  var rw = initRlpWriter()
-  rw.append(cache.maxItems)
-  rw.append(cache.first)
-  rw.append(cache.last)
-  rw.startList(cache.tab.len)
-  for key,value in cache.tab.pairs:
+proc `==`*[T,K,V,E](a, b: var LruCache[T,K,V,E]): bool =
+  ## Returns `true` if both argument LRU caches contain the same data
+  ## regardless of `toKey()`/`toValue()` handler functions.
+  a.data == b.data
+
+
+proc append*[K,V](rw: var RlpWriter; data: LruData[K,V]) {.inline.} =
+  ## Generic support for `rlp.encode(lru.data)` for serialising the data
+  ## part of an LRU cache.
+  rw.append(data.maxItems)
+  rw.append(data.first)
+  rw.append(data.last)
+  rw.startList(data.tab.len)
+  for key,value in data.tab.pairs:
     rw.append((key, value))
-  rw.finish
 
-
-proc rlpLoadLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
-                               serialised: openArray[byte]) =
-  ## Load `cache` from serialised data stream. The `cache` must have been
-  ## previously initialised with `initLruCache()`.
-  var rlp = serialised.rlpFromBytes
-  cache.maxItems = rlp.read(int)
-  cache.first = rlp.read(K)
-  cache.last = rlp.read(K)
+proc read*[K,V](rlp: var Rlp; Q: type LruData[K,V]): Q {.inline.} =
+  ## Generic support for `rlp.decode(bytes)` for loading the data part
+  ## of an LRU cache from a serialised data stream.
+  result.maxItems = rlp.read(int)
+  result.first = rlp.read(K)
+  result.last = rlp.read(K)
+  result.tab = newTable[K,LruItem[K,V]](result.maxItems.nextPowerOfTwo)
   for w in rlp.items:
     let (key,value) = w.read((K,LruItem[K,V]))
-    cache.tab[key] = value
+    result.tab[key] = value
 
-# ------------------------------------------------------------------------------
-# Debugging/testing
-# ------------------------------------------------------------------------------
 
-when isMainModule and isMainOK:
-
-  import
-    strformat
-
-  const
-    cacheLimit = 10
-    keyList = [
-      185, 208,  53,  54, 196, 189, 187, 117,  94,  29,   6, 173, 207,  45,  31,
-      208, 127, 106, 117,  49,  40, 171,   6,  94,  84,  60, 125,  87, 168, 183,
-      200, 155,  34,  27,  67, 107, 108, 223, 249,   4, 113,   9, 205, 100,  77,
-      224,  19, 196,  14,  83, 145, 154,  95,  56, 236,  97, 115, 140, 134,  97,
-      153, 167,  23,  17, 182, 116, 253,  32, 108, 148, 135, 169, 178, 124, 147,
-      231, 236, 174, 211, 247,  22, 118, 144, 224,  68, 124, 200,  92,  63, 183,
-      56,  107,  45, 180, 113, 233,  59, 246,  29, 212, 172, 161, 183, 207, 189,
-      56,  198, 130,  62,  28,  53, 122]
-
-  var
-    getKey: LruKey[int,int] =
-      proc(x: int): int = x
-
-    getValue: LruValue[int,string,int] =
-      proc(x: int): Result[string,int] = ok($x)
-
-    cache: LruCache[int,int,string,int]
-
-  cache.initLruCache(getKey, getValue, cacheLimit)
-
-  proc verifyLinks[T,K,V,E](cache: var LruCache[T,K,V,E]) =
-    var key = cache.first
-    if cache.tab.len == 1:
-      doAssert cache.tab.hasKey(key)
-      doAssert key == cache.last
-    elif 1 < cache.tab.len:
-      # forward links
-      for n in 1 ..< cache.tab.len:
-        var curKey = key
-        key = cache.tab[curKey].nxt
-        if cache.tab[key].prv != curKey:
-          echo &">>> ({n}): " &
-            &"cache.tab[{key}].prv == {cache.tab[key].prv} exp {curKey}"
-          doAssert cache.tab[key].prv == curKey
-      doAssert key == cache.last
-      # backward links
-      for n in 1 ..< cache.tab.len:
-        var curKey = key
-        key = cache.tab[curKey].prv
-        if cache.tab[key].nxt != curKey:
-          echo &">>> ({n}): " &
-            &"cache.tab[{key}].nxt == {cache.tab[key].nxt} exp {curKey}"
-          doAssert cache.tab[key].nxt == curKey
-      doAssert key == cache.first
-
-  proc toKeyList[T,K,V,E](cache: var LruCache[T,K,V,E]): seq[K] =
-    cache.verifyLinks
-    if 0 < cache.tab.len:
-      var key = cache.first
-      while key != cache.last:
-        result.add key
-        key = cache.tab[key].nxt
-      result.add cache.last
-
-  proc toValueList[T,K,V,E](cache: var LruCache[T,K,V,E]): seq[V] =
-    cache.verifyLinks
-    if 0 < cache.tab.len:
-      var key = cache.first
-      while key != cache.last:
-        result.add cache.tab[key].value
-        key = cache.tab[key].nxt
-      result.add cache.tab[cache.last].value
-
-  var lastQ: seq[int]
-  for w in keyList:
-    var
-      key = w mod 13
-      reSched = cache.tab.hasKey(key)
-      value = cache.getLruItem(key)
-      queue = cache.toKeyList
-      values = cache.toValueList
-    # verfy key/value pairs
-    for n in 0 ..< queue.len:
-      doAssert $queue[n] == $values[n]
-    if reSched:
-      echo &"+++ rotate {value} => {queue}"
-    else:
-      echo &"*** append {value} => {queue}"
-
-  var
-    c2 = cache
-    ser = cache.rlpEncodeLruCache
-
-  echo &"<<< #{ser.len} {ser.repr}"
-
-  c2.clearLruCache
-  c2.rlpLoadLruCache(ser)
-
-  var
-    q2 = c2.toKeyList
-    v2 = c2.toValueList
-
-  echo &"<<< {c2.maxItems} {c2.first} {c2.last} {q2}"
-
-  for n in 0 ..< q2.len:
-    doAssert $q2[n] == $v2[n]
+proc specs*[T,K,V,E](cache: var LruCache[T,K,V,E]):
+                                  (int, K, K, TableRef[K,LruItem[K,V]]) =
+  ## Returns cache data & specs `(maxItems,firstKey,lastKey,tableRef)` for
+  ## debugging and testing.
+  (cache.data.maxItems, cache.data.first, cache.data.last, cache.data.tab)
 
 # ------------------------------------------------------------------------------
 # End
