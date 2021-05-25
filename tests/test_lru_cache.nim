@@ -46,7 +46,7 @@ proc first[T,K,V,E](cache: var LruCache[T,K,V,E]): K =
 proc last[T,K,V,E](cache: var LruCache[T,K,V,E]): K =
   cache.specs[2]
 
-proc tab[T,K,V,E](cache: var LruCache[T,K,V,E]): TableRef[K,LruItem[K,V]] =
+proc tab[T,K,V,E](cache: var LruCache[T,K,V,E]): Table[K,LruItem[K,V]] =
   cache.specs[3]
 
 
@@ -135,6 +135,26 @@ proc filledTestCache(noisy: bool): LruCache[int,int,string,int] =
 proc doFillUpTest(noisy: bool) =
   discard filledTestCache(noisy)
 
+
+proc doDeepCopyTest(noisy: bool) =
+
+  proc say(a: varargs[string]) =
+    say(noisy = noisy, args = a)
+
+  var
+    c1 = filledTestCache(false)
+    c2 = c1
+
+  doAssert c1 == c2
+  discard c1.getLruItem(77)
+
+  say &"c1Specs: {c1.maxItems} {c1.first} {c1.last} ..."
+  say &"c2Specs: {c2.maxItems} {c2.first} {c2.last} ..."
+
+  doAssert c1 != c2
+  doAssert c1.tab != c2.tab
+
+
 proc doSerialiserTest(noisy: bool) =
 
   proc say(a: varargs[string]) =
@@ -192,6 +212,9 @@ proc lruCacheMain*(noisy = defined(debug)) =
 
     test "Fill Up":
       doFillUpTest(noisy)
+
+    test "Deep Copy Semantics":
+      doDeepCopyTest(noisy)
 
     test "Rlp Serialise & Load":
       doSerialiserTest(noisy)
