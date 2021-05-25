@@ -18,6 +18,9 @@
 ## (so long as the table does not degrade into one-bucket linear mode, or
 ## some bucket-adjustment algorithm takes over.)
 ##
+## For consistency with every other data type in Nim these have value
+## semantics, this means that `=` performs a deep copy of the LRU cache.
+##
 
 import
   math,
@@ -50,7 +53,7 @@ type
   LruData[K,V] = object
     maxItems: int                 ## Max number of entries
     first, last: K                ## Doubly linked item list queue
-    tab: TableRef[K,LruItem[K,V]] ## (`key`,encapsulated(`value`)) data table
+    tab: Table[K,LruItem[K,V]]    ## (`key`,encapsulated(`value`)) data table
 
   LruCache*[T,K,V,E] = object
     data*: LruData[K,V]           ## Cache data, can be serialised
@@ -78,7 +81,7 @@ proc clearLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E])
   ## Reset/clear an initialised LRU cache.
   cache.data.first.reset
   cache.data.last.reset
-  cache.data.tab = newTable[K,LruItem[K,V]](cache.data.maxItems.nextPowerOfTwo)
+  cache.data.tab = initTable[K,LruItem[K,V]](cache.data.maxItems.nextPowerOfTwo)
 
 
 proc initLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
@@ -176,14 +179,13 @@ proc read*[K,V](rlp: var Rlp; Q: type LruData[K,V]): Q {.inline.} =
   result.maxItems = rlp.read(int)
   result.first = rlp.read(K)
   result.last = rlp.read(K)
-  result.tab = newTable[K,LruItem[K,V]](result.maxItems.nextPowerOfTwo)
   for w in rlp.items:
     let (key,value) = w.read((K,LruItem[K,V]))
     result.tab[key] = value
 
 
 proc specs*[T,K,V,E](cache: var LruCache[T,K,V,E]):
-                                  (int, K, K, TableRef[K,LruItem[K,V]]) =
+                                  (int, K, K, Table[K,LruItem[K,V]]) =
   ## Returns cache data & specs `(maxItems,firstKey,lastKey,tableRef)` for
   ## debugging and testing.
   (cache.data.maxItems, cache.data.first, cache.data.last, cache.data.tab)
