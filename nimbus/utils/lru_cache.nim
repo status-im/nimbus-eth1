@@ -159,8 +159,16 @@ proc append*[K,V](rw: var RlpWriter; data: LruData[K,V]) {.inline.} =
   rw.append(data.first)
   rw.append(data.last)
   rw.startList(data.tab.len)
-  for key,value in data.tab.pairs:
-    rw.append((key, value))
+  # store keys in LRU order
+  if 0 < data.tab.len:
+    var key = data.first
+    for _ in 0 ..< data.tab.len - 1:
+      var value = data.tab[key]
+      rw.append((key, value))
+      key = value.nxt
+    rw.append((key, data.tab[key]))
+    if key != data.last:
+      raiseAssert "Garbled LRU cache next/prv references"
 
 proc read*[K,V](rlp: var Rlp; Q: type LruData[K,V]): Q {.inline.} =
   ## Generic support for `rlp.decode(bytes)` for loading the data part
