@@ -9,7 +9,7 @@
 import
   eth/common/eth_types, stint, options, stew/ranges/ptr_arith,
   ".."/[vm_types, vm_types2, vm_state, vm_computation, vm_state_transactions],
-  ".."/[db/accounts_cache, transaction, vm_precompiles, vm_gas_costs],
+  ".."/[db/accounts_cache, vm_precompiles, vm_gas_costs],
   ".."/vm_internals,
   ./host_types
 
@@ -55,6 +55,34 @@ proc hostToComputationMessage(msg: EvmcMessage): Message =
     flags:           if msg.isStatic: emvcStatic else: emvcNoFlags
   )
 
+# From EIP-2930 (Berlin).
+const
+  ACCESS_LIST_STORAGE_KEY_COST = 1900.GasInt
+  ACCESS_LIST_ADDRESS_COST     = 2400.GasInt
+
+func intrinsicGas(call: CallParams, fork: Fork): GasInt {.inline.} =
+  # Compute the baseline gas cost for this transaction.  This is the amount
+  # of gas needed to send this transaction (but that is not actually used
+  # for computation).
+  var gas = gasFees[fork][GasTransaction]
+
+  # EIP-2 (Homestead) extra intrinsic gas for contract creations.
+  if call.isCreate:
+    gas += gasFees[fork][GasTXCreate]
+
+  # Input data cost, reduced in EIP-2028 (Istanbul).
+  let gasZero    = gasFees[fork][GasTXDataZero]
+  let gasNonZero = gasFees[fork][GasTXDataNonZero]
+  for b in call.input:
+    gas += (if b == 0: gasZero else: gasNonZero)
+
+  # EIP-2930 (Berlin) intrinsic gas for transaction access list.
+  if fork >= FkBerlin:
+    for account in call.accessList:
+      gas += ACCESS_LIST_ADDRESS_COST
+      gas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST
+  return gas
+
 proc initialAccessListEIP2929(call: CallParams) =
   # EIP2929 initial access list.
   let vmState = call.vmState
@@ -87,9 +115,7 @@ proc setupCall(call: CallParams, useIntrinsic: bool): TransactionHost =
 
   var intrinsicGas: GasInt = 0
   if useIntrinsic:
-    intrinsicGas = intrinsicGas(call.input, vmState.fork)
-    if call.isCreate:
-      intrinsicGas += gasFees[vmState.fork][GasTXCreate]
+    intrinsicGas = intrinsicGas(call, vmState.fork)
 
   let host = TransactionHost(
     vmState:       vmState,
