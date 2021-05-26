@@ -246,9 +246,11 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
     transactions: result.txs,
     uncles: result.uncles
   )
-  let res = processBlock(chainDB, result.header, body, tester.vmState)
+  let expectingError = tb.hasException or (not tb.goodBlock)
+  let res = processBlock(chainDB, result.header, body, tester.vmState,
+                         stateHashLoudError = not expectingError)
   if res == ValidationResult.Error:
-    if not (tb.hasException or (not tb.goodBlock)):
+    if not expectingError:
       raise newException(ValidationError, "process block validation")
   else:
     if tester.vmState.generateWitness():

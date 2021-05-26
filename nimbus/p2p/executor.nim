@@ -119,7 +119,8 @@ proc calculateReward(fork: Fork, header: BlockHeader, body: BlockBody, vmState: 
   vmState.mutateStateDB:
     db.addBalance(header.coinbase, mainReward)
 
-proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
+proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState,
+                   stateHashLoudError: bool = true): ValidationResult =
   var dbTx = chainDB.db.beginTransaction()
   defer: dbTx.dispose()
 
@@ -167,13 +168,15 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
 
   let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
-    when defined(geth):
-      error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash
+    if not stateHashLoudError:
+      # Just like any other validation error, someone sent a bad block so we ignore the block.
+      debug "wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
+      return ValidationResult.Error
     else:
       error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
-    # this one is a show stopper until we are confident in our VM's
-    # compatibility with the main chain
-    return ValidationResult.Error
+      # This one is a show stopper until we are confident in our VM's
+      # compatibility with the main chain.
+      return ValidationResult.Error
 
   let bloom = createBloom(vmState.receipts)
   if header.bloom != bloom:
