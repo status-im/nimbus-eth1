@@ -103,6 +103,7 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
          "blocknumber", "chainname", "chainnetwork":
         discard
       else:
+        doAssert("expectException" in key)
         t.hasException = true
 
     result.add t
