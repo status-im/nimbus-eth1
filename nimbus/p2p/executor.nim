@@ -166,12 +166,7 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
 
   let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
-    when defined(geth):
-      error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash
-    else:
-      error "Wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
-    # this one is a show stopper until we are confident in our VM's
-    # compatibility with the main chain
+    debug "wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
     return ValidationResult.Error
 
   let bloom = createBloom(vmState.receipts)
