@@ -1,7 +1,9 @@
-name: nimbus-eth1 CI
+name: CI
 on:
   push:
     paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
+    branches:
+      - master
   pull_request:
     paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
 
