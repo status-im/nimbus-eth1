@@ -26,6 +26,7 @@ type
     isCreate*:     bool                 # True if this is a contract creation.
     value*:        HostValue            # Value sent from sender to recipient.
     input*:        seq[byte]            # Input data.
+    accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
@@ -69,6 +70,12 @@ proc initialAccessListEIP2929(call: CallParams) =
     # TODO: Check this only adds the correct subset of precompiles.
     for c in activePrecompiles():
       db.accessList(c)
+
+    # EIP2930 optional access list.
+    for account in call.accessList:
+      db.accessList(account.address)
+      for key in account.storageKeys:
+        db.accessList(account.address, UInt256.fromBytesBE(key))
 
 proc setupCall(call: CallParams, useIntrinsic: bool): TransactionHost =
   let vmState = call.vmState
