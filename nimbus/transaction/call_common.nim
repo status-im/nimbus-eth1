@@ -54,6 +54,22 @@ proc hostToComputationMessage(msg: EvmcMessage): Message =
     flags:           if msg.isStatic: emvcStatic else: emvcNoFlags
   )
 
+proc initialAccessListEIP2929(call: CallParams) =
+  # EIP2929 initial access list.
+  let vmState = call.vmState
+  if vmState.fork < FkBerlin:
+    return
+
+  vmState.mutateStateDB:
+    db.accessList(call.sender)
+    # For contract creations the EVM will add the contract address to the
+    # access list itself, after calculating the new contract address.
+    if not call.isCreate:
+      db.accessList(call.to)
+    # TODO: Check this only adds the correct subset of precompiles.
+    for c in activePrecompiles():
+      db.accessList(c)
+
 proc setupCall(call: CallParams, useIntrinsic: bool): TransactionHost =
   let vmState = call.vmState
   vmState.setupTxContext(
@@ -99,6 +115,9 @@ proc setupComputation*(call: CallParams): Computation =
 proc runComputation*(call: CallParams): CallResult =
   let host = setupCall(call, true)
   let c = host.computation
+
+  # Must come after `setupCall` for correct fork.
+  initialAccessListEIP2929(call)
 
   # Charge for gas.
   host.vmState.mutateStateDB:
