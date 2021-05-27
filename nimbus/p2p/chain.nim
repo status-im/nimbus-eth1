@@ -1,7 +1,7 @@
 import ../db/db_chain, eth/common, chronicles, ../vm_state, ../vm_types,
   ../vm_computation, ../vm_message, ../vm_types2, stint, nimcrypto,
   ../utils, eth/trie/db, ./executor, ../chain_config, ../genesis, ../utils,
-  stew/endians2
+  stew/endians2, ./validate, ./validate/epoch_hash_cache
 
 when not defined(release):
   import ../tracer
@@ -25,6 +25,8 @@ type
     db: BaseChainDB
     forkIds: array[ChainFork, ForkID]
     blockZeroHash: KeccakHash
+    cacheByEpoch: EpochHashCache
+    extraValidation: bool
 
 func toChainFork(c: ChainConfig, number: BlockNumber): ChainFork =
   if number >= c.berlinBlock: Berlin
@@ -87,7 +89,7 @@ func calculateForkIds(c: ChainConfig, genesisCRC: uint32): array[ChainFork, Fork
     prevFork = result[fork].nextFork
     prevCRC = result[fork].crc
 
-proc newChain*(db: BaseChainDB): Chain =
+proc newChain*(db: BaseChainDB, extraValidation = false): Chain =
   result.new
   result.db = db
 
@@ -97,6 +99,10 @@ proc newChain*(db: BaseChainDB): Chain =
   result.blockZeroHash = g.toBlock.blockHash
   let genesisCRC = crc32(0, result.blockZeroHash.data)
   result.forkIds = calculateForkIds(db.config, genesisCRC)
+  result.extraValidation = extraValidation
+
+  if extraValidation:
+    result.cacheByEpoch.initEpochHashCache
 
 method genesisHash*(c: Chain): KeccakHash {.gcsafe.} =
   c.blockZeroHash
@@ -148,6 +154,17 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
 
     if validationResult != ValidationResult.OK:
       return validationResult
+
+    if c.extraValidation:
+      let res = validateKinship(
+        c.db, headers[i],
+        bodies[i].uncles,
+        checkSealOK = false, # TODO: how to checkseal from here
+        c.cacheByEpoch
+      )
+      if res.isErr:
+        debug "kinship validation error", msg = res.error
+        return ValidationResult.Error
 
     discard c.db.persistHeaderToDb(headers[i])
     if c.db.getCanonicalHead().blockHash != headers[i].blockHash:

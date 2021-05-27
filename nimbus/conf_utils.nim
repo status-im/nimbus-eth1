@@ -25,7 +25,7 @@ proc importRlpBlock*(importFile: string, chainDB: BasechainDB): bool =
     error "failed to import", fileName = importFile
     return false
 
-  var chain = newChain(chainDB)
+  var chain = newChain(chainDB, extraValidation = true)
   # the encoded rlp can contains one or more blocks
   var rlp = rlpFromBytes(res.get)
   let head = chainDB.getCanonicalHead()
