@@ -6,6 +6,7 @@ on:
       - master
   pull_request:
     paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
+  workflow_dispatch:
 
 jobs:
   build:
