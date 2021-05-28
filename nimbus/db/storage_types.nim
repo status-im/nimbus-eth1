@@ -10,6 +10,7 @@ type
     canonicalHeadHash
     slotHashToSlot
     contractHash
+    cliqueSnapshot
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -49,6 +50,11 @@ proc slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
 
 proc contractHashKey*(h: Hash256): DbKey {.inline.} =
   result.data[0] = byte ord(contractHash)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
+
+proc cliqueSnapshotKey*(h: Hash256): DbKey {.inline.} =
+  result.data[0] = byte ord(cliqueSnapshot)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
