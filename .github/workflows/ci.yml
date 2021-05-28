@@ -2,10 +2,9 @@ name: CI
 on:
   push:
     paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
-    branches:
-      - master
-  pull_request:
-    paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
+  # Disable `pull_request`.  Experimenting with using only `push` for PRs.
+  #pull_request:
+  #  paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
   workflow_dispatch:
 
 jobs:
