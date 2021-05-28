@@ -152,7 +152,7 @@
 	path = vendor/nim-evmc
 	url = https://github.com/status-im/nim-evmc
   ignore = dirty
-  branch = master
+	branch = api-version-7.5
 [submodule "vendor/nim-libbacktrace"]
 	path = vendor/nim-libbacktrace
 	url = https://github.com/status-im/nim-libbacktrace.git
