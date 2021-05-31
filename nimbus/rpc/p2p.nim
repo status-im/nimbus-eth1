@@ -12,10 +12,9 @@ import
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
   eth/[common, keys, rlp, p2p], nimcrypto,
   eth/p2p/rlpx_protocols/eth_protocol,
-  ../transaction, ../config, ../vm_state, ../constants, ../vm_types,
+  ../transaction, ../config, ../vm_state, ../constants,
   ../utils, ../db/[db_chain, state_db],
-  rpc_types, rpc_utils, ../vm_message, ../vm_computation,
-  ../vm_types2,
+  rpc_types, rpc_utils,
   ../transaction/call_evm
 
 #[

@@ -8,9 +8,9 @@
 
 import
   eth/common/eth_types, stint, options, stew/byteutils,
-  ".."/[vm_types, vm_types2, vm_state, vm_computation, utils],
-  ".."/[db/db_chain, config, vm_state_transactions, rpc/hexstrings],
-  ".."/[db/accounts_cache, transaction, vm_precompiles, vm_gas_costs], eth/trie/db,
+  ".."/[vm_types, vm_types2, vm_state, utils],
+  ".."/[db/db_chain, config, rpc/hexstrings, utils],
+  ".."/[db/accounts_cache, utils, transaction, vm_gas_costs], eth/trie/db,
   ".."/vm_internals,
   ./call_common
 

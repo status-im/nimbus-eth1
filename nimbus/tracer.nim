@@ -3,7 +3,7 @@ import
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth/trie/db, nimcrypto, strutils,
   chronicles, rpc/hexstrings, launcher,
-  ./vm_types2, ./config
+  ./config
 
 when defined(geth):
   import db/geth_db

@@ -14,9 +14,8 @@ import
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
   graphql/instruments/query_complexity,
-  ../db/[db_chain, state_db], ../errors, ../utils,
+  ../db/[db_chain, state_db], ../utils,
   ../transaction, ../rpc/rpc_utils, ../vm_state, ../config,
-  ../vm_computation, ../vm_state_transactions,
   ../transaction/call_evm
 
 from eth/p2p import EthereumNode

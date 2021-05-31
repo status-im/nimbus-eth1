@@ -1,14 +1,12 @@
 import
   macrocache, strutils, unittest2,
   stew/byteutils, chronicles, eth/common,
-  stew/shims/macros, ../nimbus/config
+  stew/shims/macros
 
 import
   options, json, os, eth/trie/[db, hexary],
-  ../nimbus/[transaction, utils],
   ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/[vm_state_transactions, vm_types2,
-             vm_message, vm_internals, vm_state, vm_types],
+  ../nimbus/[vm_types2, vm_internals],
   ../nimbus/transaction/call_evm
 
 export vm_types2, byteutils
