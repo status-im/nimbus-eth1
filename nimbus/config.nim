@@ -10,8 +10,7 @@
 import
   parseopt, strutils, macros, os, times, json, tables, stew/[byteutils],
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
-  eth/p2p/bootnodes, eth/p2p/rlpx_protocols/whisper_protocol,
-  ./db/select_backend, eth/keys, ./chain_config
+  eth/p2p/bootnodes, ./db/select_backend, eth/keys, ./chain_config
 
 from ./vm_types2 import Fork
 
@@ -57,13 +56,11 @@ type
     ## RPC flags
     Enabled                       ## RPC enabled
     Eth                           ## enable eth_ set of RPC API
-    Shh                           ## enable shh_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
 
   ProtocolFlags* {.pure.} = enum
     ## Protocol flags
     Eth                           ## enable eth subprotocol
-    Shh                           ## enable whisper subprotocol
     Les                           ## enable les subprotocol
 
   RpcConfiguration* = object
@@ -133,7 +130,6 @@ type
     rpc*: RpcConfiguration        ## JSON-RPC configuration
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
-    shh*: WhisperConfig           ## Whisper configuration
     customGenesis*: CustomGenesis ## Custom Genesis Configuration
     # You should only create one instance of the RNG per application / library
     # Ref is used so that it can be shared between components
@@ -305,7 +301,6 @@ proc processRpcApiList(v: string, flags: var set[RpcFlags]): ConfigStatus =
   for item in list:
     case item.toLowerAscii()
     of "eth": flags.incl RpcFlags.Eth
-    of "shh": flags.incl RpcFlags.Shh
     of "debug": flags.incl RpcFlags.Debug
     else:
       warn "unknown rpc api", name = item
@@ -318,7 +313,6 @@ proc processProtocolList(v: string, flags: var set[ProtocolFlags]): ConfigStatus
   for item in list:
     case item.toLowerAscii()
     of "eth": flags.incl ProtocolFlags.Eth
-    of "shh": flags.incl ProtocolFlags.Shh
     of "les": flags.incl ProtocolFlags.Les
     else:
       warn "unknown protocol", name = item
@@ -544,26 +538,6 @@ proc processNetArguments(key, value: string): ConfigStatus =
   else:
     result = EmptyOption
 
-proc processShhArguments(key, value: string): ConfigStatus =
-  ## Processes only `Shh` related command line options
-  result = Success
-  let config = getConfiguration()
-  let skey = key.toLowerAscii()
-  if skey == "shh-maxsize":
-    var res = 0
-    result = processInteger(value, res)
-    if result == Success:
-      config.shh.maxMsgSize = res.uint32
-  elif skey == "shh-pow":
-    var res = 0.0
-    result = processFloat(value, res)
-    if result == Success:
-      config.shh.powRequirement = res
-  elif skey == "shh-light":
-    config.shh.isLightNode = true
-  else:
-    result = EmptyOption
-
 proc processDebugArguments(key, value: string): ConfigStatus =
   ## Processes only `Debug` related command line options
   let config = getConfiguration()
@@ -671,12 +645,6 @@ proc initConfiguration(): NimbusConfiguration =
   result.keystore = getHomeDir() / keystore
   result.prune = PruneMode.Full
 
-  ## Whisper defaults
-  result.shh.maxMsgSize = defaultMaxMsgSize
-  result.shh.powRequirement = defaultMinPow
-  result.shh.isLightNode = false
-  result.shh.bloom = fullBloom()
-
   ## Debug defaults
   result.debug.flags = {}
   result.debug.logLevel = defaultLogLevel
@@ -733,11 +701,6 @@ ETHEREUM NETWORK OPTIONS:
   --networkid:<value>     Network id (0=custom, 1=mainnet, 3=ropsten, 4=rinkeby, 5=goerli, 42=kovan, other...)
   --customnetwork:<path>  Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)
 
-WHISPER OPTIONS:
-  --shh-maxsize:<value>   Max message size accepted (default: $5)
-  --shh-pow:<value>       Minimum POW accepted (default: $6)
-  --shh-light             Run as Whisper light client (no outgoing messages)
-
 LOCAL SERVICE OPTIONS:
   --metrics               Enable the metrics HTTP server
   --metricsport:<value>   Set port (always on localhost) metrics HTTP server will bind to (default: 9093)
@@ -759,9 +722,6 @@ LOGGING AND DEBUGGING OPTIONS:
     join(logLevels, ", "),
     $defaultLogLevel,
     strip($defaultProtocols, chars = {'{','}'}),
-    $defaultMaxMsgSize,
-    $defaultMinPow,
-    $ord(defaultNetwork)
   ]
 
 when declared(os.paramCount): # not available with `--app:lib`
@@ -794,7 +754,6 @@ when declared(os.paramCount): # not available with `--app:lib`
             processArgument processEthArguments, key, value, msg
             processArgument processRpcArguments, key, value, msg
             processArgument processNetArguments, key, value, msg
-            processArgument processShhArguments, key, value, msg
             processArgument processDebugArguments, key, value, msg
             processArgument processGraphqlArguments, key, value, msg
             if result != Success:
