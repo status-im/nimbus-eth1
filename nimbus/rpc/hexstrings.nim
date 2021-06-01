@@ -22,23 +22,19 @@
     * ref BloomFilter
     * PublicKey
     * PrivateKey
-    * SymKey
     * Topic
     * Bytes
 ]#
 
 import
-  stint, stew/byteutils, eth/[keys, rlp], eth/common/eth_types,
-  eth/p2p/rlpx_protocols/whisper_protocol
+  stint, stew/byteutils, eth/[keys, rlp], eth/common/eth_types
 
 type
   HexQuantityStr* = distinct string
   HexDataStr* = distinct string
   EthAddressStr* = distinct string     # Same as HexDataStr but must be less <= 20 bytes
   EthHashStr* = distinct string        # Same as HexDataStr but must be exactly 32 bytes
-  Identifier* = distinct string        # 32 bytes, no 0x prefix!
-  HexStrings = HexQuantityStr | HexDataStr | EthAddressStr | EthHashStr |
-               Identifier
+  HexStrings = HexQuantityStr | HexDataStr | EthAddressStr | EthHashStr
 
 template len*(value: HexStrings): int = value.string.len
 
@@ -115,19 +111,11 @@ func isValidEthHash*(value: string): bool =
   # TODO: Allow shorter hashes (pad with zeros) for convenience?
   result = value.isValidHexData(66)
 
-func isValidIdentifier*(value: string): bool =
-  # 32 bytes for Whisper ID, no 0x prefix
-  result = value.isValidHexData(64, false)
-
 func isValidPublicKey*(value: string): bool =
   # 65 bytes for Public Key plus 1 byte for 0x prefix
   result = value.isValidHexData(132)
 
 func isValidPrivateKey*(value: string): bool =
-  # 32 bytes for Private Key plus 1 byte for 0x prefix
-  result = value.isValidHexData(66)
-
-func isValidSymKey*(value: string): bool =
   # 32 bytes for Private Key plus 1 byte for 0x prefix
   result = value.isValidHexData(66)
 
@@ -222,12 +210,6 @@ proc `%`*(value: PublicKey): JsonNode =
 proc `%`*(value: PrivateKey): JsonNode =
   result = %("0x" & $value)
 
-proc `%`*(value: SymKey): JsonNode =
-  result = %("0x" & value.toHex)
-
-proc `%`*(value: whisper_protocol.Topic): JsonNode =
-  result = %("0x" & value.toHex)
-
 proc `%`*(value: seq[byte]): JsonNode =
   result = %("0x" & value.toHex)
 
@@ -238,12 +220,6 @@ proc toPublicKey*(key: string): PublicKey {.inline.} =
 
 proc toPrivateKey*(key: string): PrivateKey {.inline.} =
   result = PrivateKey.fromHex(key[2 .. ^1]).tryGet()
-
-proc toSymKey*(key: string): SymKey {.inline.} =
-  hexToByteArray(key[2 .. ^1], result)
-
-proc toTopic*(topic: string): whisper_protocol.Topic {.inline.} =
-  hexToByteArray(topic[2 .. ^1], result)
 
 # Marshalling from JSON to Nim types that includes format checking
 
@@ -284,13 +260,6 @@ proc fromJson*(n: JsonNode, argName: string, result: var EthHashStr) =
     raise newException(ValueError, invalidMsg(argName) & " as an Ethereum hash \"" & hexStr & "\"")
   result = hexStr.EthHashStr
 
-proc fromJson*(n: JsonNode, argName: string, result: var Identifier) =
-  n.kind.expect(JString, argName)
-  let hexStr = n.getStr()
-  if not hexStr.isValidIdentifier:
-    raise newException(ValueError, invalidMsg(argName) & " as a identifier \"" & hexStr & "\"")
-  result = hexStr.Identifier
-
 proc fromJson*(n: JsonNode, argName: string, result: var UInt256) =
   n.kind.expect(JString, argName)
   let hexStr = n.getStr()
@@ -311,20 +280,6 @@ proc fromJson*(n: JsonNode, argName: string, result: var PrivateKey) =
   if not hexStr.isValidPrivateKey:
     raise newException(ValueError, invalidMsg(argName) & " as a private key \"" & hexStr & "\"")
   result = hexStr.toPrivateKey
-
-proc fromJson*(n: JsonNode, argName: string, result: var SymKey) =
-  n.kind.expect(JString, argName)
-  let hexStr = n.getStr()
-  if not hexStr.isValidSymKey:
-    raise newException(ValueError, invalidMsg(argName) & " as a symmetric key \"" & hexStr & "\"")
-  result = toSymKey(hexStr)
-
-proc fromJson*(n: JsonNode, argName: string, result: var whisper_protocol.Topic) =
-  n.kind.expect(JString, argName)
-  let hexStr = n.getStr()
-  if not hexStr.isValidTopic:
-    raise newException(ValueError, invalidMsg(argName) & " as a topic \"" & hexStr & "\"")
-  result = toTopic(hexStr)
 
 # Following procs currently required only for testing, the `createRpcSigs` macro
 # requires it as it will convert the JSON results back to the original Nim
