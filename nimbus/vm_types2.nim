@@ -21,14 +21,4 @@ else:
 export
   vmf.Fork
 
-when defined(evmc_enabled) or not defined(vm2_enabled):
-  import
-    ./vm/interpreter/opcode_values as vmo
-else:
-  import
-    ./vm2/interpreter/op_codes as vmo
-
-export
-  vmo.Op
-  
 # End
