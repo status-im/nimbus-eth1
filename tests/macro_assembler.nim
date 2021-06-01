@@ -1,5 +1,5 @@
 import
-  macrocache, strutils, unittest2,
+  macrocache, strutils, sequtils, unittest2,
   stew/byteutils, chronicles, eth/common,
   stew/shims/macros
 
@@ -167,7 +167,9 @@ proc parseCode(codes: NimNode): seq[byte] =
 
 proc parseFork(fork: NimNode): Fork =
   fork[0].expectKind({nnkIdent, nnkStrLit})
-  parseEnum[Fork](strip(fork[0].strVal))
+  # Normalise whitespace and capitalize each word because `parseEnum` matches
+  # enum string values not symbols, and the strings are capitalized in `Fork`.
+  parseEnum[Fork](fork[0].strVal.splitWhitespace().map(capitalizeAscii).join(" "))
 
 proc parseGasUsed(gas: NimNode): GasInt =
   gas[0].expectKind(nnkIntLit)

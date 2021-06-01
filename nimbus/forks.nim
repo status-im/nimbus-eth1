@@ -8,12 +8,12 @@
 
 type
   Fork* = enum
-    FkFrontier       = "frontier"
-    FkHomestead      = "homestead"
-    FkTangerine      = "tangerine whistle"
-    FkSpurious       = "spurious dragon"
-    FkByzantium      = "byzantium"
-    FkConstantinople = "constantinople"
-    FkPetersburg     = "petersburg"
-    FkIstanbul       = "istanbul"
-    FkBerlin         = "berlin"
+    FkFrontier       = "Frontier"
+    FkHomestead      = "Homestead"
+    FkTangerine      = "Tangerine Whistle"
+    FkSpurious       = "Spurious Dragon"
+    FkByzantium      = "Byzantium"
+    FkConstantinople = "Constantinople"
+    FkPetersburg     = "Petersburg"
+    FkIstanbul       = "Istanbul"
+    FkBerlin         = "Berlin"
