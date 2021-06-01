@@ -6,10 +6,10 @@ import
 import
   options, json, os, eth/trie/[db, hexary],
   ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/[vm_types2, vm_internals],
+  ../nimbus/vm_internals,
   ../nimbus/transaction/call_evm
 
-export vm_types2, byteutils
+export byteutils
 {.experimental: "dynamicBindSym".}
 
 # backported from Nim 0.19.9

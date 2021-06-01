@@ -1,6 +1,6 @@
 import
   parseopt, strutils,
-  ../nimbus/vm_types2
+  ../nimbus/forks
 
 type
   ConfigStatus* = enum

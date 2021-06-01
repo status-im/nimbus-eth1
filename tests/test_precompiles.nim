@@ -8,7 +8,7 @@
 import
   unittest2, ../nimbus/vm_precompiles, json, stew/byteutils, test_helpers, os, tables,
   strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain, ../nimbus/constants,
-  ../nimbus/[vm_computation, vm_state, vm_types2], macros,
+  ../nimbus/[vm_computation, vm_state, forks], macros,
   test_allowed_to_fail,
   ../nimbus/transaction/call_evm, options
 

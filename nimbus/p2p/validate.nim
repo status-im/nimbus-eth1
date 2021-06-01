@@ -16,7 +16,7 @@ import
   ../utils/header,
   ../vm_state,
   ../vm_types,
-  ../vm_types2,
+  ../forks,
   ./validate/epoch_hash_cache,
   chronicles,
   eth/[common, rlp, trie/trie_defs],

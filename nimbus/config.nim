@@ -10,9 +10,7 @@
 import
   parseopt, strutils, macros, os, times, json, tables, stew/[byteutils],
   chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
-  eth/p2p/bootnodes, ./db/select_backend, eth/keys, ./chain_config
-
-from ./vm_types2 import Fork
+  eth/p2p/bootnodes, ./db/select_backend, eth/keys, ./chain_config, ./forks
 
 const
   NimbusName* = "Nimbus"

@@ -8,7 +8,7 @@
 import
   ./constants, ./errors, eth/[common, keys], ./utils,
   stew/shims/macros,
-  ./vm_types2, ./vm_gas_costs
+  ./forks, ./vm_gas_costs
 
 import eth/common/transaction as common_transaction
 export common_transaction

@@ -1,8 +1,7 @@
 import unittest2, strutils, tables, os, json,
   ../nimbus/utils/difficulty, stint, times,
   eth/common, test_helpers, stew/byteutils,
-  ../nimbus/constants, ../nimbus/vm_types2,
-  ../nimbus/config
+  ../nimbus/constants, ../nimbus/config
 
 type
   Tester = object

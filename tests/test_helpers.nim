@@ -9,8 +9,7 @@ import
   os, macros, json, strformat, strutils, parseutils, os, tables,
   stew/byteutils, net, eth/[common, keys, rlp, p2p], unittest2,
   testutils/markdown_reports,
-  ../nimbus/[constants, config, transaction, utils, errors],
-  ../nimbus/vm_types2,
+  ../nimbus/[constants, config, transaction, utils, errors, forks],
   ../nimbus/db/accounts_cache,
   ../nimbus/random_keys
 

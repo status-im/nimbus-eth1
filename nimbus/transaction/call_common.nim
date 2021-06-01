@@ -8,9 +8,9 @@
 
 import
   eth/common/eth_types, stint, options, stew/ranges/ptr_arith,
-  ".."/[vm_types, vm_types2, vm_state, vm_computation, vm_state_transactions],
-  ".."/[db/accounts_cache, utils, vm_precompiles, vm_gas_costs],
-  ".."/vm_internals,
+  ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
+  ".."/[vm_internals, vm_precompiles, vm_gas_costs],
+  ".."/[db/accounts_cache, utils, forks],
   ./host_types
 
 type
