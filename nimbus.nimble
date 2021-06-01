@@ -48,7 +48,6 @@ proc test(name: string, lang = "c") =
 task test, "Run tests":
   test "all_tests"
   test "test_rpc"
-  test "test_rpc_whisper"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
