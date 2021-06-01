@@ -152,8 +152,8 @@ const
   KovanNet*   = 42.NetworkId
 
 const
-  defaultRpcApi = {RpcFlags.Eth, RpcFlags.Shh}
-  defaultProtocols = {ProtocolFlags.Eth, ProtocolFlags.Shh}
+  defaultRpcApi = {RpcFlags.Eth}
+  defaultProtocols = {ProtocolFlags.Eth}
   defaultLogLevel = LogLevel.WARN
   defaultNetwork = MainNet
 
@@ -743,7 +743,7 @@ LOCAL SERVICE OPTIONS:
   --metricsport:<value>   Set port (always on localhost) metrics HTTP server will bind to (default: 9093)
   --rpc                   Enable the HTTP-RPC server
   --rpcbind:<value>       Set address:port pair(s) (comma-separated) HTTP-RPC server will bind to (default: localhost:8545)
-  --rpcapi:<value>        Enable specific set of RPC API from list (comma-separated) (available: eth, shh, debug)
+  --rpcapi:<value>        Enable specific set of RPC API from list (comma-separated) (available: eth, debug)
   --graphql               Enable the HTTP-GraphQL server
   --graphqlbind:<value>   Set address:port pair GraphQL server will bind (default: localhost:8547)
 
