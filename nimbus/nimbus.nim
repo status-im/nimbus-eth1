@@ -115,9 +115,6 @@ proc start(nimbus: NimbusNode) =
   # Add protocol capabilities based on protocol flags
   if ProtocolFlags.Eth in conf.net.protocols:
     nimbus.ethNode.addCapability eth
-  if ProtocolFlags.Shh in conf.net.protocols:
-    nimbus.ethNode.addCapability Whisper
-    nimbus.ethNode.configureWhisper(conf.shh)
   if ProtocolFlags.Les in conf.net.protocols:
     nimbus.ethNode.addCapability les
 
@@ -131,9 +128,6 @@ proc start(nimbus: NimbusNode) =
   # Enable RPC APIs based on RPC flags and protocol flags
   if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:
     setupEthRpc(nimbus.ethNode, chainDB, nimbus.rpcServer)
-  if RpcFlags.Shh in conf.rpc.flags and ProtocolFlags.Shh in conf.net.protocols:
-    let keys = newKeyStorage()
-    setupWhisperRPC(nimbus.ethNode, keys, nimbus.rpcServer)
   if RpcFlags.Debug in conf.rpc.flags:
     setupDebugRpc(chainDB, nimbus.rpcServer)
 
