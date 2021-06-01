@@ -9,8 +9,8 @@
 # according to those terms.
 
 import
-  ./types,
-  ./interpreter/[gas_meter, gas_costs, utils/utils_numeric, forks_list],
+  ./types, ../forks,
+  ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
   math, nimcrypto, bncurve/[fields, groups], ./blake2b_f, ./blscurve
 

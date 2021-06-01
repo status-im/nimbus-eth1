@@ -11,7 +11,7 @@
 import
   macros, strformat, tables, sets, options,
   eth/[common, keys, rlp], nimcrypto/keccak,
-  ./interpreter/forks_list, ../errors,
+  ../errors, ../forks,
   ../constants, ../db/[db_chain, accounts_cache],
   ../utils, json, ./transaction_tracer, ./types,
   ../config, ../../stateless/[witness_from_tree, witness_types]

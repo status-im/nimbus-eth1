@@ -19,7 +19,7 @@ const
 
 import
   strformat,
-  ./forks_list,
+  ../../forks,
   ./op_codes,
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,

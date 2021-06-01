@@ -14,7 +14,7 @@
 
 import
   ../../types,
-  ../forks_list,
+  ../../../forks,
   ../op_codes,
   eth/common/eth_types
 

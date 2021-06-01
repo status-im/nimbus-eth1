@@ -17,7 +17,7 @@ const
 import
   ../code_stream,
   ../computation,
-  ./forks_list,
+  ../../forks,
   ./gas_costs,
   ./gas_meter,
   ./op_codes,

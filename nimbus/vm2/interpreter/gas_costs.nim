@@ -8,7 +8,7 @@
 import
   math, eth/common/eth_types,
   ./utils/[macros_gen_opcodes, utils_numeric],
-  ./op_codes, ./forks_list, ../../errors
+  ./op_codes, ../../forks, ../../errors
 
 # Gas Fee Schedule
 # Yellow Paper Appendix G - https://ethereum.github.io/yellowpaper/paper.pdf

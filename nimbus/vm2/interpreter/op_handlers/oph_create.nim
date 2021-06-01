@@ -15,12 +15,12 @@
 import
   ../../../constants,
   ../../../errors,
+  ../../../forks,
   ../../computation,
   ../../memory,
   ../../stack,
   ../../state,
   ../../types,
-  ../forks_list,
   ../gas_costs,
   ../gas_meter,
   ../op_codes,

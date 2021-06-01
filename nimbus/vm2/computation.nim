@@ -9,11 +9,11 @@
 # according to those terms.
 
 import
-  ../constants,
+  ../constants, ../forks,
   ../db/accounts_cache,
   ../utils,
   ./code_stream,
-  ./interpreter/[forks_list, gas_meter, gas_costs, op_codes],
+  ./interpreter/[gas_meter, gas_costs, op_codes],
   ./memory,
   ./message,
   ./stack,

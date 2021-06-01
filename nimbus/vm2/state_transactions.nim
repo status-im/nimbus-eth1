@@ -21,11 +21,12 @@ when not defined(vm2_enabled):
 import
   ../config,
   ../constants,
+  ../forks,
   ../db/accounts_cache,
   ../transaction,
   ./computation,
   ./interpreter_dispatch,
-  ./interpreter/[forks_list, gas_costs, gas_meter],
+  ./interpreter/[gas_costs, gas_meter],
   ./message,
   ./state,
   ./types,
