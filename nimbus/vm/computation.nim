@@ -8,8 +8,8 @@
 import
   chronicles, strformat, macros, options, times,
   sets, eth/[common, keys],
-  ../constants, ../errors,
-  ./interpreter/[opcode_values, gas_meter, gas_costs, vm_forks],
+  ../constants, ../errors, ../forks,
+  ./interpreter/[opcode_values, gas_meter, gas_costs],
   ./code_stream, ./memory, ./message, ./stack, ./types, ./state,
   ../db/[accounts_cache, db_chain],
   ../utils/header, ./precompiles,

@@ -8,8 +8,8 @@
 import
   tables, macros,
   chronicles,
-  ./interpreter/[opcode_values, opcodes_impl, vm_forks, gas_costs, gas_meter, utils/macros_gen_opcodes],
-  ./code_stream, ./types, ../errors, ./precompiles, ./stack,
+  ./interpreter/[opcode_values, opcodes_impl, gas_costs, gas_meter, utils/macros_gen_opcodes],
+  ./code_stream, ./types, ../errors, ../forks, ./precompiles, ./stack,
   terminal # Those are only needed for logging
 
 logScope:

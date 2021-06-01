@@ -9,9 +9,9 @@ import
   strformat, times, sets, sequtils, options,
   chronicles, stint, nimcrypto, stew/ranges/ptr_arith, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
-  ./gas_meter, ./gas_costs, ./opcode_values, ./vm_forks,
+  ./gas_meter, ./gas_costs, ./opcode_values,
   ../memory, ../stack, ../code_stream, ../computation, ../state, ../types,
-  ../../errors, ../../constants,
+  ../../errors, ../../constants, ../../forks,
   ../../db/[db_chain, accounts_cache]
 
 when defined(evmc_enabled):

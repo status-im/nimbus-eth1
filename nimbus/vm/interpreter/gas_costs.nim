@@ -8,7 +8,7 @@
 import
   math, eth/common/eth_types,
   ./utils/[macros_gen_opcodes, utils_numeric],
-  ./opcode_values, ./vm_forks, ../../errors
+  ./opcode_values, ../../forks, ../../errors
 
 when defined(evmc_enabled):
   import evmc/evmc

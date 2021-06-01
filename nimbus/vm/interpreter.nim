@@ -15,13 +15,6 @@ export
   vmo.Op
 
 
-# see vm_forks
-import
-  ./interpreter/vm_forks as vmf
-export
-  vmf.Fork
-
-
 # see vm_message
 import
   ./message as vmm

@@ -14,7 +14,8 @@ import
   ../nimbus/transaction,
   ../nimbus/[vm_state, vm_types, utils],
   ../nimbus/vm_internals,
-  ../nimbus/db/[db_chain, accounts_cache]
+  ../nimbus/db/[db_chain, accounts_cache],
+  ../nimbus/forks
 
 type
   Tester = object

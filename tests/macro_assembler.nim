@@ -6,7 +6,7 @@ import
 import
   options, json, os, eth/trie/[db, hexary],
   ../nimbus/db/[db_chain, accounts_cache],
-  ../nimbus/vm_internals,
+  ../nimbus/vm_internals, ../nimbus/forks,
   ../nimbus/transaction/call_evm
 
 export byteutils

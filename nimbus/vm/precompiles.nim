@@ -1,6 +1,6 @@
 import
-  ./types,
-  ./interpreter/[gas_meter, gas_costs, utils/utils_numeric, vm_forks],
+  ./types, ../forks,
+  ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   ../errors, stint, eth/[keys, common], chronicles, tables, macros,
   math, nimcrypto, bncurve/[fields, groups], ./blake2b_f, ./blscurve
 
