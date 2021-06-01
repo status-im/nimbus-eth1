@@ -8,20 +8,11 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## List of known Etheroum forks
+## List of known Ethereum forks
 ## ============================
 ##
 ## See `here <../../ex/vm/interpreter/forks_list.html>`_ for an
 ## overview.
-##
-## Assumptions on the naming of the fork list:
-##  * each symbol start with the prefix "Fk"
-##  * the first word of the prettified text representaion is the same
-##    text as the one following the "Fk" in the symbol name (irrespective
-##    of character case.)
-
-import
-  strutils
 
 type
   Fork* = enum
@@ -34,10 +25,5 @@ type
     FkPetersburg = "petersburg"
     FkIstanbul = "istanbul"
     FkBerlin = "berlin"
-
-proc toSymbolName*(fork: Fork): string =
-  ## Given a `fork` argument, print the symbol name so that it can be used
-  ## in a macro statement.
-  "Fk" & ($fork).split(' ')[0]
 
 # End

@@ -74,15 +74,13 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
   let branchOnOp = quote do: `opArg`
   result = nnkCaseStmt.newTree(branchOnOp)
   for op in Op:
+    let asOp = quote do: Op(`op`)
 
     # Inner case/switch => Fork
     let branchOnFork = quote do: `forkArg`
     var forkCaseSubExpr = nnkCaseStmt.newTree(branchOnFork)
     for fork in Fork:
-
-      let
-        asFork = quote do: Fork(`fork`)
-        asOp = quote do: Op(`op`)
+      let asFork = quote do: Fork(`fork`)
 
       let branchStmt = block:
         if op == Stop:
@@ -95,9 +93,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
           quote do:
             handleOtherDirective(`asFork`,`asOp`,`k`)
 
-      forkCaseSubExpr.add nnkOfBranch.newTree(
-        newIdentNode(fork.toSymbolName),
-        branchStmt)
+      forkCaseSubExpr.add nnkOfBranch.newTree(asFork, branchStmt)
 
     # Wrap innner case/switch into outer case/switch
     let branchStmt = block:
@@ -115,9 +111,7 @@ proc toCaseStmt(forkArg, opArg, k: NimNode): NimNode =
         quote do:
           `forkCaseSubExpr`
 
-    result.add nnkOfBranch.newTree(
-      newIdentNode(op.toSymbolName),
-      branchStmt)
+    result.add nnkOfBranch.newTree(asOp, branchStmt)
 
   when isChatty:
     echo ">>> ", result.repr
