@@ -34,8 +34,6 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 	clean \
 	libnimbus.so \
 	libnimbus.a \
-	wrappers \
-	wrappers-static \
 	libbacktrace
 
 ifeq ($(NIM_PARAMS),)
@@ -135,52 +133,21 @@ test-reproducibility:
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc,*_wrapper_test}
+	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc}
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif
 
-libnimbus.so: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c --app:lib --noMain --nimcache:nimcache/libnimbus $(NIM_PARAMS) -o:build/$@.0 wrappers/libnimbus.nim && \
-		rm -f build/$@ && \
-		ln -s $@.0 build/$@
-
-# libraries for dynamic linking of non-Nim objects
-EXTRA_LIBS_DYNAMIC := -L"$(CURDIR)/build" -lnimbus -lm
-wrappers: | build deps libnimbus.so
-	echo -e $(BUILD_MSG) "build/C_wrapper_example" && \
-		$(CC) wrappers/wrapper_example.c -Wl,-rpath,'$$ORIGIN' $(EXTRA_LIBS_DYNAMIC) -g -o build/C_wrapper_example
-	echo -e $(BUILD_MSG) "build/go_wrapper_example" && \
-		go build -ldflags "-linkmode external -extldflags '$(EXTRA_LIBS_DYNAMIC)'" -o build/go_wrapper_example wrappers/wrapper_example.go wrappers/cfuncs.go
-	echo -e $(BUILD_MSG) "build/go_wrapper_whisper_example" && \
-		go build -ldflags "-linkmode external -extldflags '$(EXTRA_LIBS_DYNAMIC)'" -o build/go_wrapper_whisper_example wrappers/wrapper_whisper_example.go wrappers/cfuncs.go
-
-libnimbus.a: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		rm -f build/$@ && \
-		$(ENV_SCRIPT) nim c --app:staticlib --noMain --nimcache:nimcache/libnimbus_static $(NIM_PARAMS) -o:build/$@ wrappers/libnimbus.nim && \
-		[[ -e "$@" ]] && mv "$@" build/ # workaround for https://github.com/nim-lang/Nim/issues/12745
-
-# These libraries are for statically linking non-Nim objects to libnimbus.a
-# (where "vendor/nim-libbacktrace/libbacktrace.nim" doesn't get to set its LDFLAGS)
-EXTRA_LIBS_STATIC := -L"$(CURDIR)/build" -lnimbus -L"$(CURDIR)/vendor/nim-libbacktrace/install/usr/lib" -lbacktracenim -lbacktrace -lm -ldl -lpcre
-ifeq ($(shell uname), Darwin)
-USE_VENDORED_LIBUNWIND := 1
-endif # macOS
-ifeq ($(OS), Windows_NT)
-USE_VENDORED_LIBUNWIND := 1
-endif # Windows
-ifeq ($(USE_VENDORED_LIBUNWIND), 1)
-EXTRA_LIBS_STATIC := $(EXTRA_LIBS_STATIC) -lunwind
-endif # USE_VENDORED_LIBUNWIND
-wrappers-static: | build deps libnimbus.a
-	echo -e $(BUILD_MSG) "build/C_wrapper_example_static" && \
-		$(CC) wrappers/wrapper_example.c -static -pthread $(EXTRA_LIBS_STATIC) -g -o build/C_wrapper_example_static
-	echo -e $(BUILD_MSG) "build/go_wrapper_example_static" && \
-		go build -ldflags "-linkmode external -extldflags '-static $(EXTRA_LIBS_STATIC)'" -o build/go_wrapper_example_static wrappers/wrapper_example.go wrappers/cfuncs.go
-	echo -e $(BUILD_MSG) "build/go_wrapper_whisper_example_static" && \
-		go build -ldflags "-linkmode external -extldflags '-static $(EXTRA_LIBS_STATIC)'" -o build/go_wrapper_whisper_example_static wrappers/wrapper_whisper_example.go wrappers/cfuncs.go
+# Note about building Nimbus as a library:
+#
+# There were `wrappers`, `wrappers-static`, `libnimbus.so` and `libnimbus.a`
+# target scripts here, and C and Go examples for calling the Nimbus library in
+# directory `wrappers/`.  They have been removed because they only wrapped
+# Whisper protocol support, which has been removed as it is obsolete.
+#
+# This note is kept so that anyone wanting to build Nimbus as a library or call
+# from C or Go will know it has been done before.  The previous working version
+# can be found in Git history.  Look for the `nimbus-eth1` commit that adds
+# this comment and removes `wrappers/*`.
 
 endif # "variables.mk" was not included
-
