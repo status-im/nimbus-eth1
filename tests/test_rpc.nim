@@ -17,8 +17,6 @@ import
   ../nimbus/p2p/[chain, executor], ../nimbus/utils/difficulty,
   ./rpcclient/test_hexstrings, ./test_helpers, ./macro_assembler
 
-from eth/p2p/rlpx_protocols/whisper_protocol import SymKey
-
 # Perform checks for hex string validation
 #doHexStrTests()
 
