@@ -30,6 +30,7 @@ import
   chronicles,
   eth/[common, keys],
   nimcrypto,
+  sequtils,
   stint
 
 export
@@ -61,7 +62,7 @@ type
 {.push raises: [Defect,CatchableError].}
 
 logScope:
-  topics = "clique snap cache"
+  topics = "clique PoA recent-snaps"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -72,18 +73,18 @@ proc canDiskCheckPointOk(d: RecentDesc): bool =
   # If we're at the genesis, snapshot the initial state.
   if d.args.blockNumber.isZero:
     return true
-
   # Alternatively if we're at a checkpoint block without a parent
   # (light client CHT), or we have piled up more headers than allowed
   # to be re-orged (chain reinit from a freezer), consider the
   # checkpoint trusted and snapshot it.
-  if (d.args.blockNumber mod d.cfg.epoch.u256) == 0:
-    if (FULL_IMMUTABILITY_THRESHOLD < d.local.headers.len) or
-       d.cfg.dbChain.getBlockHeaderResult(d.args.blockNumber - 1).isErr:
+  if (d.args.blockNumber mod d.cfg.epoch) == 0:
+    if FULL_IMMUTABILITY_THRESHOLD < d.local.headers.len:
+      return true
+    if d.cfg.dbChain.getBlockHeaderResult(d.args.blockNumber - 1).isErr:
       return true
 
 proc isCheckPointOk(number: BlockNumber): bool =
-  number mod CHECKPOINT_INTERVAL == 0
+  (number mod CHECKPOINT_INTERVAL) == 0
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -167,10 +168,14 @@ proc initRecentSnaps*(rs: var RecentSnaps;
 
       # Previous snapshot found, apply any pending headers on top of it
       for i in 0 ..< d.local.headers.len div 2:
+        # Reverse lst order
         swap(d.local.headers[i], d.local.headers[^(1+i)])
       block:
         # clique/clique.go(434): snap, err := snap.apply(headers)
+        echo ">>> applySnapshot(",
+                   d.local.headers.mapIt(it.blockNumber.truncate(int)), ")"
         let rc = snap.applySnapshot(d.local.headers)
+        echo "<<< applySnapshot() => ", rc.repr
         if rc.isErr:
           return err(rc.error)
 
