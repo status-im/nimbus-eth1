@@ -13,9 +13,10 @@ endif
 
 # Collect document names
 SFX_FILTER := sed -e 's|^\./||;/\/\./d;/^docs\//d;s/\.[a-z]*$$//'
-PNG_FILES  := $(shell find . -name '*.png' -print|$(SFX_FILTER))
-MD_FILES   := $(shell find . -name '*.md'  -print|$(SFX_FILTER))
-EXE_FILES  := $(shell find . -name '*.nim' -print|$(SFX_FILTER))
+PNG_FILES  := $(shell find -L .        -name '*.png' -print|$(SFX_FILTER))
+MD_FILES   := $(shell find -L .        -name '*.md'  -print|$(SFX_FILTER))
+EXE_FILES  := $(shell find -L .        -name '*.nim' -print|$(SFX_FILTER))
+TXE_FILES  := $(shell find -L ../tests -name '*.nim' -print|$(SFX_FILTER))
 
 # Needed for the NIM compiler that comes with this repo
 NIMBLE_DIR := $(dir $(PWD))/vendor/.nimble
@@ -215,9 +216,16 @@ check_vm:
 
 .PHONY: clobber distclean clean clean-exe clean-docs
 
-.SILENT: clean-exe
+.SILENT: clean-exe clean-test-exe
 clean-exe:
 	for f in $(EXE_FILES); do \
+	  if   [ -f "$$f"     ]; then (set -x; rm -f "$$f"); \
+	  elif [ -f "$$f.out" ]; then (set -x; rm -f "$$f.out"); \
+	  fi ; \
+	done
+
+clean-test-exe:
+	for f in $(TXE_FILES); do \
 	  if   [ -f "$$f"     ]; then (set -x; rm -f "$$f"); \
 	  elif [ -f "$$f.out" ]; then (set -x; rm -f "$$f.out"); \
 	  fi ; \
@@ -245,22 +253,32 @@ clean-docs:
 	  (set -x; rmdir "$$d" $(MUFFLE)) || true; \
 	done
 
-.SILENT: clean-bakfiles
+.SILENT: clean-bakfiles clean-test-bakfiles
 clean-bakfiles:
 	for f in $(shell find . -type f \
 		\( -name '*~' -o -name '*.bak' \) -print); do \
 	  (set -x; rm -f "$$f"); \
 	done
 
-.SILENT: clean-nimcache
+clean-test-bakfiles:
+	for f in $(shell find . -type f \
+		\( -name '*~' -o -name '*.bak' \) -print); do \
+	  (set -x; rm -f "$$f"); \
+	done
+
+.SILENT: clean-nimcache clean-test-nimcache
 clean-nimcache:
 #       |while.. is like "|xargs -rn1 rm -rf" but with nicer log message
 	find . -name 'nimcache' -type d -print 2>/dev/null | \
 	  while read d; do (set -x; rm -rf "$$d"); done
 
-clean:: clean-exe
-clean:: clean-bakfiles
-clean:: clean-nimcache
+clean-test-nimcache:
+	find ../tests -name 'nimcache' -type d -print 2>/dev/null | \
+	  while read d; do (set -x; rm -rf "$$d"); done
+
+clean:: clean-exe      clean-test-exe
+clean:: clean-bakfiles clean-test-bakfiles
+clean:: clean-nimcache clean-test-nimcache
 
 distclean:: clean
 distclean:: clean-docs

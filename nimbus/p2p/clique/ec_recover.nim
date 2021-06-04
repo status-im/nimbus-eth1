@@ -22,6 +22,7 @@ import
   ../../utils,
   ../../utils/lru_cache,
   ./clique_defs,
+  ./clique_utils,
   eth/[common, keys, rlp],
   stint
 
@@ -58,14 +59,14 @@ proc initEcRecover*(cache: var EcRecover) {.gcsafe, raises: [Defect].} =
       # clique/clique.go(153): if len(header.Extra) < extraSeal {
       if msg.len < EXTRA_SEAL:
         return err((errMissingSignature,""))
-      let signature = Signature.fromRaw(
+      let sig = Signature.fromRaw(
         msg.toOpenArray(msg.len - EXTRA_SEAL, msg.high))
-      if signature.isErr:
-        return err((errSkSigResult,$signature.error))
+      if sig.isErr:
+        return err((errSkSigResult,$sig.error))
 
       # Recover the public key from signature and seal hash
       # clique/clique.go(159): pubkey, err := crypto.Ecrecover( [..]
-      let pubKey = recover(signature.value, SKMessage(header.hash.data))
+      let pubKey = recover(sig.value, SKMessage(header.hashSealHeader.data))
       if pubKey.isErr:
         return err((errSkPubKeyResult,$pubKey.error))
 

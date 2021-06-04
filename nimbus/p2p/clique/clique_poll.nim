@@ -19,7 +19,7 @@
 ##
 
 import
-  algorithm,
+  ./clique_utils,
   eth/common,
   sequtils,
   tables
@@ -64,13 +64,7 @@ proc initCliquePoll*(t: var CliquePoll; signers: openArray[EthAddress]) =
 
 proc authSigners*(t: var CliquePoll): seq[EthAddress] =
   ## Sorted ascending list of authorised signer addresses
-  result = toSeq(t.authSig.keys)
-  result.sort do (x, y: EthAddress) -> int:
-    for n in 0 ..< x.len:
-      if x[n] < y[n]:
-        return -1
-      elif y[n] < x[n]:
-        return 1
+  toSeq(t.authSig.keys).sorted(EthAscending)
 
 proc isAuthSigner*(t: var CliquePoll; address: EthAddress): bool =
   ## Check whether `address` is an authorised signer

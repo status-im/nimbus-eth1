@@ -18,16 +18,10 @@
 ## `go-ethereum <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
 ##
 
-const
-   # debugging, enable with: nim c -r -d:noisy:3 ...
-   noisy {.intdefine.}: int = 0
-   isMainOk {.used.} = noisy > 2
-
 import
   eth/common,
-  ethash,
-  nimcrypto,
   stew/results,
+  stint,
   times
 
 {.push raises: [].}
@@ -54,46 +48,38 @@ const
 
 # clique/clique.go(57): var ( [..]
 const
-  EPOCH_LENGTH* = ## Number of blocks after which to checkpoint and reset
-                  ## the pending votes.Suggested 30000 for the testnet to
-                  ## remain analogous to the mainnet ethash epoch.
-    ethash.EPOCH_LENGTH.uint64
-
-  BLOCK_PERIOD* = ## Minimum difference in seconds between two consecutive
-                  ## block's timestamps. Suggested 15s for the testnet to
-                  ## remain analogous to the mainnet ethash target.
+  BLOCK_PERIOD* =        ## Minimum difference in seconds between two
+                         ## consecutive block's timestamps. Suggested 15s for
+                         ## the testnet to remain analogous to the mainnet
+                         ## ethash target.
     initDuration(seconds = 15)
 
-  EXTRA_VANITY* = ## Fixed number of extra-data prefix bytes reserved for
-                  ## signer vanity. Suggested 32 bytes to retain the current
-                  ## extra-data allowance and/or use.
+  EXTRA_VANITY* =        ## Fixed number of extra-data prefix bytes reserved for
+                         ## signer vanity. Suggested 32 bytes to retain the
+                         ## current extra-data allowance and/or use.
     32
 
-  EXTRA_SEAL* =   ## Fixed number of extra-data suffix bytes reserved for
-                  ## signer seal. 65 bytes fixed as signatures are based on
-                  ## the standard secp256k1 curve.
+  EXTRA_SEAL* =          ## Fixed number of extra-data suffix bytes reserved for
+                         ## signer seal. 65 bytes fixed as signatures are based
+                         ## on the standard secp256k1 curve.
     65
 
-  NONCE_AUTH* =   ## Magic nonce number 0xffffffffffffffff to vote on adding a
-                  ## new signer.
+  NONCE_AUTH* =          ## Magic nonce number 0xffffffffffffffff to vote on
+                         ## adding a new signer.
     0xffffffffffffffffu64.toBlockNonce
 
-  NONCE_DROP* =   ## Magic nonce number 0x0000000000000000 to vote on removing
-                  ## a signer.
+  NONCE_DROP* =          ## Magic nonce number 0x0000000000000000 to vote on
+                         ## removing a signer.
     0x0000000000000000u64.toBlockNonce
 
-  UNCLE_HASH* =   ## Always Keccak256(RLP([])) as uncles are meaningless
-                  ## outside of PoW.
-    rlpHash[seq[BlockHeader]](@[])
-
-  DIFF_NOTURN* =  ## Block score (difficulty) for blocks containing out-of-turn
-                  ## signatures. Suggested 1 since it just needs to be an
-                  ## arbitrary baseline constant.
+  DIFF_NOTURN* =         ## Block score (difficulty) for blocks containing
+                         ## out-of-turn signatures. Suggested 1 since it just
+                         ## needs to be an arbitrary baseline constant.
     1.u256
 
-  DIFF_INTURN* =  ## Block score (difficulty) for blocks containing in-turn
-                  ## signatures. Suggested 2 to show a slight preference over
-                  ## out-of-turn signatures.
+  DIFF_INTURN* =         ## Block score (difficulty) for blocks containing
+                         ## in-turn signatures. Suggested 2 to show a slight
+                         ## preference over out-of-turn signatures.
     2.u256
 
 # ------------------------------------------------------------------------------
@@ -134,6 +120,8 @@ const
 # clique/clique.go(76): var ( [..]
 type
   CliqueErrorType* = enum
+    noCliqueError = 0             ## Default/reset value
+
     errUnknownBlock =             ## is returned when the list of signers is
                                   ## requested for a block that is not part of
                                   ## the local blockchain.
@@ -240,14 +228,15 @@ type
     #  "invalid block number"
 
 
-    # additional errors, manually added
-    # ---------------------------------
+    # additional/bespoke errors, manually added
+    # -----------------------------------------
 
     errZeroBlockNumberRejected =
       "Block number must not be Zero"
 
     errSkSigResult                ## eth/keys subsytem error: signature
     errSkPubKeyResult             ## eth/keys subsytem error: public key
+
     errSnapshotLoad               ## DB subsytem error
     errSnapshotStore              ## ..
     errSnapshotClone

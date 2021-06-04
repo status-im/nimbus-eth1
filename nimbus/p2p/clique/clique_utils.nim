@@ -28,11 +28,19 @@ import
   ../../utils,
   ../../vm_types2,
   ./clique_defs,
+  algorithm,
   eth/[common, rlp],
   stew/results,
   stint,
   strformat,
   times
+
+type
+  EthSortOrder* = enum
+    EthDescending = SortOrder.Descending.ord
+    EthAscending = SortOrder.Ascending.ord
+
+{.push raises: [Defect,CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -72,6 +80,16 @@ func zeroItem[T](t: typedesc[T]): T {.inline.} =
 proc isZero*[T: EthAddress|Hash256|Duration](a: T): bool =
   ## `true` if `a` is all zero
   a == zeroItem(T)
+
+proc sorted*(e: openArray[EthAddress]; order = EthAscending): seq[EthAddress] =
+  proc eCmp(x, y: EthAddress): int =
+    for n in 0 ..< x.len:
+      if x[n] < y[n]:
+        return -1
+      elif y[n] < x[n]:
+        return 1
+  e.sorted(cmp = eCmp, order = order.SortOrder)
+
 
 proc cliqueResultErr*(w: CliqueError): CliqueResult =
   ## Return error result (syntactic sugar)
@@ -137,15 +155,6 @@ proc baseFee*(header: BlockHeader): GasInt =
   # FIXME: `baseFee` header field not defined before `London` fork
   0.GasInt
 
-# clique/clique.go(730): func encodeSigHeader(w [..]
-proc encode1559*(header: BlockHeader): seq[byte] =
-  ## Encode header field and considering new `baseFee` field for Eip1559.
-  var writer = initRlpWriter()
-  writer.append(header)
-  if not header.baseFee.isZero:
-    writer.append(header.baseFee)
-  result = writer.finish
-
 # consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]
 proc calc1599BaseFee*(c: var ChainConfig; parent: BlockHeader): GasInt =
   ## calculates the basefee of the header.
@@ -210,6 +219,35 @@ proc verify1559Header*(c: var ChainConfig;
                 &"parent.gasUsed {parent.gasUsed}"))
 
   return ok()
+
+# clique/clique.go(730): func encodeSigHeader(w [..]
+proc encode1559*(header: BlockHeader): seq[byte] =
+  ## Encode header field and considering new `baseFee` field for Eip1559.
+  var writer = initRlpWriter()
+  writer.append(header)
+  if not header.baseFee.isZero:
+    writer.append(header.baseFee)
+  result = writer.finish
+
+# ------------------------------------------------------------------------------
+# Seal hash support
+# ------------------------------------------------------------------------------
+
+# clique/clique.go(730): func encodeSigHeader(w [..]
+proc encodeSealHeader*(header: BlockHeader): seq[byte] =
+  ## Cut sigature off `extraData` header field and consider new `baseFee`
+  ## field for Eip1559.
+  doAssert EXTRA_SEAL < header.extraData.len
+
+  var rlpHeader = header
+  rlpHeader.extraData.setLen(header.extraData.len - EXTRA_SEAL)
+
+  rlpHeader.encode1559
+
+# clique/clique.go(688): func SealHash(header *types.Header) common.Hash {
+proc hashSealHeader*(header: BlockHeader): Hash256 =
+  ## Returns the hash of a block prior to it being sealed.
+  header.encodeSealHeader.keccakHash
 
 # ------------------------------------------------------------------------------
 # End
