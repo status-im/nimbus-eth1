@@ -188,3 +188,8 @@
 	url = https://github.com/status-im/nim-toml-serialization
   ignore = dirty
 	branch = master
+[submodule "vendor/nim-miniz"]
+	path = vendor/nim-miniz
+	url = https://github.com/status-im/nim-miniz
+  ignore = dirty
+	branch = master
