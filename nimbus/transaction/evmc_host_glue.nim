@@ -86,6 +86,10 @@ proc evmcGetHostInterface(): ref evmc_host_interface =
 # The built-in Nimbus EVM, via imported C function.
 proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
 
+# Pull in the definition of the above function because we're not building it as
+# a separate library yet.
+import ./evmc_vm_glue
+
 proc evmcExecComputation*(host: TransactionHost, code: seq[byte]): EvmcResult =
   let vm = evmc_create_nimbus_evm()
   if vm.isNil:
