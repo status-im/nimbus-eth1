@@ -223,7 +223,13 @@ proc emitLog(host: TransactionHost, address: HostAddress,
     copyMem(log.data[0].addr, data, data_size.int)
 
   log.address = address
-  host.logEntries.add(log)
+
+  # TODO: Calling via `computation` is necessary to makes some tests pass.
+  # Here's one that passes only with this:
+  #   tests/fixtures/eth_tests/GeneralStateTests/stRandom2/randomStatetest583.json
+  # We can't keep using `computation` though.
+  host.computation.logEntries.add(log)
+  #host.logEntries.add(log)
 
 when use_evmc_glue:
   {.pop: inline.}
