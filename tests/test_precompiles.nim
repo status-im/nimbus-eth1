@@ -82,7 +82,11 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
 proc precompilesMain*() =
   suite "Precompiles":
-    jsonTest("PrecompileTests", testFixture, skipPrecompilesTests)
+    # TODO: For now, EVMC is incompatible with these tests.
+    when defined(evmc_enabled):
+      discard
+    else:
+      jsonTest("PrecompileTests", testFixture, skipPrecompilesTests)
 
 when isMainModule:
   precompilesMain()
