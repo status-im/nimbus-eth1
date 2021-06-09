@@ -87,6 +87,8 @@ func slowGSTTests(folder: string, name: string): bool =
 
               # Istanbul slow tests
               "CALLBlake2f_MaxRounds.json",
+              "loopMul.json",
+              "loopExp.json",
 
               ]
 
