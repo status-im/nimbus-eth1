@@ -136,7 +136,7 @@ template getCode*(c: Computation, address: EthAddress): seq[byte] =
   else:
     c.vmState.readOnlyStateDB.getCode(address)
 
-proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
+proc generateContractAddress(c: Computation, salt: ContractSalt): EthAddress =
   if c.msg.kind == evmcCreate:
     let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
     result = generateAddress(c.msg.sender, creationNonce)
@@ -145,7 +145,8 @@ proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
 
 import stew/byteutils
 
-proc newComputation*(vmState: BaseVMState, message: Message, salt= 0.u256): Computation =
+proc newComputation*(vmState: BaseVMState, message: Message,
+                     salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
   new result
   result.vmState = vmState
   result.msg = message

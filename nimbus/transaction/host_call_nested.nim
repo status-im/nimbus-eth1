@@ -11,7 +11,7 @@
 import
   sets, stint, chronicles, stew/ranges/ptr_arith,
   eth/common/eth_types,
-  ".."/[vm_types, vm_computation],
+  ".."/[vm_types, vm_computation, utils],
   ./host_types
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
@@ -28,8 +28,8 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
     value: m.value.fromEvmc,
     data: @(makeOpenArray(m.inputData, m.inputSize.int))
   )
-  # TODO: Salt should maybe change endianness when called via EVMC glue.
-  return newComputation(host.vmState, childMsg, m.create2_salt.fromEvmc)
+  return newComputation(host.vmState, childMsg,
+                        cast[ContractSalt](m.create2_salt))
 
 proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
                                res: var EvmcResult) {.inline.} =

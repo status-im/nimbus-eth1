@@ -10,8 +10,8 @@ import
   chronicles, stint, nimcrypto, stew/ranges/ptr_arith, eth/common,
   ./utils/[macros_procs_opcodes, utils_numeric],
   ./gas_meter, ./gas_costs, ./opcode_values,
-  ../memory, ../stack, ../code_stream, ../computation, ../state, ../types,
-  ../../errors, ../../constants, ../../forks,
+  ".."/[memory, stack, code_stream, computation, state, types],
+  ".."/../[errors, constants, forks, utils],
   ../../db/[db_chain, accounts_cache]
 
 when defined(evmc_enabled):
@@ -612,11 +612,11 @@ template genCreate(callName: untyped, opCode: Op): untyped =
     when opCode == Create:
       const callKind = evmcCreate
       let memLen {.inject.} = c.stack.peekInt().safeInt
-      let salt = 0.u256
+      const salt: ContractSalt = ZERO_CONTRACTSALT
     else:
       const callKind = evmcCreate2
       let memLen {.inject.} = c.stack.popInt().safeInt
-      let salt = c.stack.peekInt()
+      let salt = ContractSalt(bytes: c.stack.peekInt().toBytesBE)
 
     c.stack.top(0)
 
@@ -659,7 +659,7 @@ template genCreate(callName: untyped, opCode: Op): untyped =
         input_data: c.memory.readPtr(memPos),
         input_size: memLen.uint,
         value: toEvmc(endowment),
-        create2_salt: toEvmc(salt)
+        create2_salt: toEvmc(salt),
       )
 
       c.chainTo(msg):

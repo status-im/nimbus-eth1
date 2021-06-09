@@ -1,4 +1,4 @@
-import eth/common, stint, evmc/evmc
+import eth/common, stint, evmc/evmc, ../utils
 
 const
   evmc_native* {.booldefine.} = true
@@ -6,7 +6,8 @@ const
 func toEvmc*(a: EthAddress): evmc_address {.inline.} =
   cast[evmc_address](a)
 
-func toEvmc*(h: Hash256): evmc_bytes32 {.inline.} =
+func toEvmc*(h: Hash256 | ContractSalt): evmc_bytes32 {.inline.} =
+  doAssert sizeof(h) == sizeof(evmc_bytes32)
   cast[evmc_bytes32](h)
 
 func toEvmc*(n: Uint256): evmc_uint256be {.inline.} =
@@ -16,8 +17,9 @@ func toEvmc*(n: Uint256): evmc_uint256be {.inline.} =
     cast[evmc_uint256be](n.toByteArrayBE)
 
 func fromEvmc*(T: type, n: evmc_bytes32): T {.inline.} =
-  when T is Hash256:
-    cast[Hash256](n)
+  when T is Hash256 | ContractSalt:
+    doAssert sizeof(n) == sizeof(T)
+    cast[T](n)
   elif T is Uint256:
     when evmc_native:
       cast[Uint256](n)
@@ -30,7 +32,7 @@ func fromEvmc*(a: evmc_address): EthAddress {.inline.} =
   cast[EthAddress](a)
 
 when isMainModule:
-  import constants
+  import ../constants
   var a: evmc_address
   a.bytes[19] = 3.byte
   var na = fromEvmc(a)
@@ -41,3 +43,6 @@ when isMainModule:
   var h = EMPTY_SHA3
   var eh = toEvmc(h)
   assert(h == fromEvmc(Hash256, eh))
+  var s = cast[ContractSalt](BLANK_ROOT_HASH)
+  var es = toEvmc(s)
+  assert(s == fromEvmc(ContractSalt, es))
