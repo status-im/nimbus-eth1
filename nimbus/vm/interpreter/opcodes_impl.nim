@@ -608,11 +608,11 @@ template genCreate(callName: untyped, opCode: Op): untyped =
     when opCode == Create:
       const callKind = evmcCreate
       let memLen {.inject.} = c.stack.peekInt().safeInt
-      let salt = 0.u256
+      const salt = ZERO_HASH256
     else:
       const callKind = evmcCreate2
       let memLen {.inject.} = c.stack.popInt().safeInt
-      let salt = c.stack.peekInt()
+      let salt = Hash256(data: c.stack.peekInt().toBytesBE)
 
     c.stack.top(0)
 

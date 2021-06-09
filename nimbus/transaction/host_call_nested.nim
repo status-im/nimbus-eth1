@@ -28,8 +28,7 @@ proc beforeExecCreateEvmcNested(host: TransactionHost,
     value: m.value.fromEvmc,
     data: @(makeOpenArray(m.inputData, m.inputSize.int))
   )
-  # TODO: Salt should maybe change endianness when called via EVMC glue.
-  return newComputation(host.vmState, childMsg, m.create2_salt.fromEvmc)
+  return newComputation(host.vmState, childMsg, cast[Hash256](m.create2_salt))
 
 proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
                                res: var EvmcResult) {.inline.} =

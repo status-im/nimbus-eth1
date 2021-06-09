@@ -133,7 +133,7 @@ proc enterCreateImpl(c: Computation, m: nimbus_message): Computation =
     value: Uint256.fromEvmc(m.value),
     data: @(makeOpenArray(m.inputData, m.inputSize.int))
     )
-  return newComputation(c.vmState, childMsg, Uint256.fromEvmc(m.create2_salt))
+  return newComputation(c.vmState, childMsg, Hash256.fromEvmc(m.create2_salt))
 
 template leaveCreateImpl(c, child: Computation, res: nimbus_result) =
   if not child.shouldBurnGas:
