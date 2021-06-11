@@ -35,7 +35,7 @@ when defined(chronicles_log_level):
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc generateContractAddress(c: Computation, salt: Uint256): EthAddress =
+proc generateContractAddress(c: Computation, salt: Hash256): EthAddress =
   if c.msg.kind == evmcCreate:
     let creationNonce = c.vmState.readOnlyStateDb().getNonce(c.msg.sender)
     result = generateAddress(c.msg.sender, creationNonce)
@@ -103,7 +103,7 @@ template getCode*(c: Computation, address: EthAddress): seq[byte] =
   c.vmState.readOnlyStateDB.getCode(address)
 
 proc newComputation*(vmState: BaseVMState,
-                     message: Message, salt= 0.u256): Computation =
+                     message: Message, salt: Hash256 = ZERO_HASH256): Computation =
   new result
   result.vmState = vmState
   result.msg = message

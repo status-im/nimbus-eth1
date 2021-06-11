@@ -37,7 +37,7 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc execSubCreate(k: var Vm2Ctx; childMsg: Message; salt = 0.u256) =
+proc execSubCreate(k: var Vm2Ctx; childMsg: Message; salt: Hash256 = ZERO_HASH256) =
   ## Create new VM -- helper for `Create`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
@@ -123,7 +123,7 @@ const
       endowment = k.cpt.stack.popInt()
       memPos    = k.cpt.stack.popInt().safeInt
       memLen    = k.cpt.stack.popInt().safeInt
-      salt      = k.cpt.stack.peekInt()
+      salt      = Hash256(data: k.cpt.stack.peekInt().toBytesBE)
 
     k.cpt.stack.top(0)
 
