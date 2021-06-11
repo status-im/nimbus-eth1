@@ -26,6 +26,7 @@ import
   ethash,
   random,
   sequtils,
+  stew/results,
   stint,
   strutils,
   times
@@ -81,6 +82,19 @@ proc newCliqueCfg*(dbChain: BaseChainDB; period = BLOCK_PERIOD;
 # ------------------------------------------------------------------------------
 # Debugging
 # ------------------------------------------------------------------------------
+
+proc pp*(v: CliqueError): string =
+  ## Pretty print error
+  result = $v[0]
+  if v[1] != "":
+    result &=  " => " & v[1]
+
+proc pp*(v: CliqueResult): string =
+  ## Pretty print result
+  if v.isOk:
+    "OK"
+  else:
+    v.error.pp
 
 proc pp*(p: var PrettyPrinters; v: BlockNonce): string =
   ## Pretty print nonce

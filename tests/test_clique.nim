@@ -65,19 +65,19 @@ proc cliqueMain*(noisy = defined(debug)) =
   ## Tests that Clique signer voting is evaluated correctly for various simple
   ## and complex scenarios, as well as that a few special corner cases fail
   ## correctly.
-  suite "Clicque PoA":
-    var pool = newTesterPool()
-    const maxID = 2
+  suite "Clique PoA Snapshot":
+    var
+      pool = newTesterPool()
+      testSet = {0 .. 99}
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
     for tt in voterSamples:
-      if maxId < tt.id:
-        echo "Tests stopped"
-        break
-
-      test &"Snapshots {tt.id}: {tt.info.substr(0,50)}...":
-        var snap = pool.initSnapshot(tt, noisy)
-        check snap.isOk
+      if tt.id in testSet:
+        test &"Snapshots {tt.id}: {tt.info.substr(0,50)}...":
+          var snap = pool.initSnapshot(tt, noisy)
+          if snap.isErr:
+            # FIXME: double check error behavior
+            check snap.error[0] == tt.failure
 
 
 when isMainModule:

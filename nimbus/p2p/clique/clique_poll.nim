@@ -35,7 +35,7 @@ type
     authorize*: bool          ## authorization type,  whether to authorize or
                               ## deauthorize the voted account
 
-  Tally = tuple
+  Tally = object
     authorize: bool
     signers: Table[EthAddress,Vote]
 
@@ -118,17 +118,22 @@ proc addVote*(t: var CliquePoll; vote: Vote) =
   ##    from the list of authorised signers.
   t.authRemoved = false
 
+  echo ">>> addVote 1"
+
   # clique/snapshot.go(147): if !s.validVote(address, [..]
   if not t.validVote(vote.address, vote.authorize):
     # Voting has no effect
     return
 
   # clique/snapshot.go(253): if snap.cast(header.Coinbase, [..]
+  echo ">>> addVote 2"
 
   # Collect vote
   var numVotes = 0
   if not t.votes.hasKey(vote.address):
-    t.votes[vote.address] = (vote.authorize, {vote.signer: vote}.toTable)
+    t.votes[vote.address] = Tally(
+      authorize: vote.authorize,
+      signers: {vote.signer: vote}.toTable)
     numVotes = 1
   elif t.votes[vote.address].authorize == vote.authorize:
     t.votes[vote.address].signers[vote.signer] = vote
@@ -136,11 +141,15 @@ proc addVote*(t: var CliquePoll; vote: Vote) =
   else:
     return
 
+  echo ">>> addVote 3"
+
   # clique/snapshot.go(262): if tally := snap.Tally[header.Coinbase]; [..]
 
   # Vote passed, update the list of authorised signers if enough votes
   if numVotes < t.authSignersThreshold:
     return
+
+  echo ">>> addVote 4"
 
   var obsolete = @[vote.address]
   if vote.authorize:
@@ -161,6 +170,18 @@ proc addVote*(t: var CliquePoll; vote: Vote) =
 
   for key in obsolete:
     t.votes.del(key)
+
+  echo ">>> addVote done"
+
+# ------------------------------------------------------------------------------
+# Test interface
+# ------------------------------------------------------------------------------
+
+proc votesInternal*(t: var CliquePoll): seq[(EthAddress,EthAddress,Vote)] =
+  for account in toSeq(t.votes.keys).sorted(EthAscending):
+    let tally = t.votes[account]
+    for signer in toSeq(tally.signers.keys).sorted(EthAscending):
+      result.add (account, signer, tally.signers[signer])
 
 # ------------------------------------------------------------------------------
 # End

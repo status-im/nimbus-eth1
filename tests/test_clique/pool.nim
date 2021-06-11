@@ -26,7 +26,6 @@ import
   sequtils,
   stew/objects,
   strformat,
-  strutils,
   tables,
   times
 
@@ -144,12 +143,14 @@ proc ppNonce(ap: TesterPool; v: BlockNonce): string =
 
 proc ppAddress(ap: TesterPool; v: EthAddress): string =
   ## Pretty print address
-  result = ap.findName(v)
-  if result == "":
-    if v.isZero:
-      result = "@0"
+  if v.isZero:
+    result = "@0"
+  else:
+    let a = ap.findName(v)
+    if a == "":
+      result = &"@{v}"
     else:
-      result = $v
+      result = &"@{a}"
 
 proc ppExtraData(ap: TesterPool; v: Blob): string =
   ## Visualise `extraData` field
@@ -190,10 +191,11 @@ proc ppExtraData(ap: TesterPool; v: Blob): string =
 
 proc ppBlockHeader(ap: TesterPool; v: BlockHeader; delim: string): string =
   ## Pretty print block header
+  let sep = if 0 < delim.len: delim else: ";"
   &"(blockNumber=#{v.blockNumber.truncate(uint64)}" &
-    delim & &"coinbase={ap.ppAddress(v.coinbase)}" &
-    delim & &"nonce={ap.ppNonce(v.nonce)}" &
-    delim & &"extraData={ap.ppExtraData(v.extraData)})"
+    &"{sep}coinbase={ap.ppAddress(v.coinbase)}" &
+    &"{sep}nonce={ap.ppNonce(v.nonce)}" &
+    &"{sep}extraData={ap.ppExtraData(v.extraData)})"
 
 proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
   pp.nonce =       proc(v:BlockNonce):            string = ap.ppNonce(v)
@@ -367,7 +369,11 @@ proc getPrettyPrinters*(t: TesterPool): var PrettyPrinters =
 # ------------------------------------------------------------------------------
 
 #[
-let tt = voterSamples[0]
+
+import
+  algorithm, strutils
+
+let tt = voterSamples.filterIt(it.id == 21)[0]
 
 var p = newTesterPool()
 p.resetVoterChain(tt.signers)
@@ -377,10 +383,14 @@ p.commitVoterChain
 
 let topHeader = p.topVoterHeader
 
-echo "*** adresses: ", toSeq(p.names.pairs).mapIt(&"{it[1]}:{it[0]}").join(", ")
+echo "*** adresses: ", toSeq(p.names.pairs)
+                         .mapIt(&"{it[1]}:{it[0]}")
+                         .sorted
+                         .join("\n" & ' '.repeat(14))
 echo "     genesis: ", p.pp(p.chain.getBlockHeader(0.u256),15)
 echo "   topHeader: ", p.pp(topHeader,15)
 
 var snap = p.snapshot(topHeader.blockNumber, topHeader.hash, @[])
-echo ">>> ", snap
+echo ">>> snap=", snap.pp(10)
+
 ]#
