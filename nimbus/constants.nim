@@ -16,8 +16,8 @@ const
   # address zero by accident, unrecoverably, due to poor user interface issues.
   ZERO_ADDRESS* =                           default(EthAddress)
 
-  # ZERO_HASH32 is the parent hash of genesis blocks.
-  ZERO_HASH32* =                            Hash256()
+  # ZERO_HASH256 is the parent hash of genesis blocks.
+  ZERO_HASH256* =                           Hash256()
 
   GAS_LIMIT_EMA_DENOMINATOR* =              1_024
   GAS_LIMIT_ADJUSTMENT_FACTOR* =            1_024
@@ -43,10 +43,10 @@ const
   GENESIS_BLOCK_NUMBER* =                   0.toBlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
   GENESIS_GAS_LIMIT* =                      3_141_592
-  GENESIS_PARENT_HASH* =                    ZERO_HASH32
+  GENESIS_PARENT_HASH* =                    ZERO_HASH256
   GENESIS_COINBASE* =                       ZERO_ADDRESS
   GENESIS_NONCE* =                          "\x00\x00\x00\x00\x00\x00\x00B"
-  GENESIS_MIX_HASH* =                       ZERO_HASH32
+  GENESIS_MIX_HASH* =                       ZERO_HASH256
   GENESIS_EXTRA_DATA* =                     ""
   GAS_LIMIT_MINIMUM* =                      5000
   GAS_LIMIT_MAXIMUM* =                      high(GasInt)

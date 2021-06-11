@@ -295,7 +295,7 @@ proc cliqueVerifyImpl*(c: Clique; header: BlockHeader;
   ## optionally pass in a batch of parents (ascending order) to avoid looking
   ## those up from the database. This is useful for concurrently verifying
   ## a batch of new headers.
-  c.failed = (ZERO_HASH32,cliqueNoError)
+  c.failed = (ZERO_HASH256,cliqueNoError)
 
   block:
     # Check header fields independent of parent blocks
