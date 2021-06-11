@@ -30,7 +30,7 @@ import
   ./clique_defs,
   algorithm,
   eth/[common, rlp],
-  stew/results,
+  stew/[objects, results],
   stint,
   strformat,
   times
@@ -45,12 +45,6 @@ type
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc toEthAddress(a: openArray[byte]; start: int): EthAddress =
-  ## Concert seq[..] => Array[..]
-  doAssert start + EthAddress.len <= a.len
-  for n in 0 ..< EthAddress.len:
-    result[n] = a[start + n]
 
 proc gasLimitBounds(limit: GasInt): (GasInt, GasInt) =
   ## See also utils.header.gasLimitBounds()
@@ -98,11 +92,17 @@ proc cliqueResultErr*(w: CliqueError): CliqueResult =
 
 proc extraDataSigners*(extraData: Blob): seq[EthAddress] =
   ## Extract signer addresses from extraData header field
-  if EXTRA_VANITY + EXTRA_SEAL < extraData.len:
+
+  proc toEthAddress(a: openArray[byte]; start: int): EthAddress {.inline.} =
+    toArray(EthAddress.len, a[start ..< start + EthAddress.len])
+
+  if EXTRA_VANITY + EXTRA_SEAL < extraData.len and
+      ((extraData.len - (EXTRA_VANITY + EXTRA_SEAL)) mod EthAddress.len) == 0:
     var addrOffset = EXTRA_VANITY
-    while addrOffset + EthAddress.len <= EXTRA_SEAL:
+    while addrOffset + EthAddress.len <= extraData.len - EXTRA_SEAL:
       result.add extraData.toEthAddress(addrOffset)
       addrOffset += EthAddress.len
+
 
 proc getBlockHeaderResult*(c: BaseChainDB;
                            number: BlockNumber): Result[BlockHeader,void] =
@@ -111,6 +111,7 @@ proc getBlockHeaderResult*(c: BaseChainDB;
   if c.getBlockHeader(number, header):
     return ok(header)
   result = err()
+
 
 # core/types/block.go(343): func (b *Block) WithSeal(header [..]
 proc withHeader*(b: EthBlock; header: BlockHeader): EthBlock =

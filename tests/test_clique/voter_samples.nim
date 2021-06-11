@@ -325,7 +325,7 @@ const
                  TesterVote(signer: "B"),
                  TesterVote(signer: "A", checkpoint: @["A", "B", "C"]),
                  TesterVote(signer: "A", newbatch: true)],
-    failure: errRecentlySigned)]
+      failure: errRecentlySigned)]
 
 static:
   # For convenience, make sure that IDs are increasing

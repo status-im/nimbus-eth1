@@ -634,6 +634,12 @@ proc snapshotInternal*(c: var Clique; number: BlockNumber; hash: Hash256;
 proc cfgInternal*(c: var Clique): auto =
   c.cfg
 
+proc pp*(rc: var Result[Snapshot,CliqueError]; indent = 0): string =
+  if rc.isOk:
+    rc.value.pp(indent)
+  else:
+    "(error: " & rc.error.pp & ")"
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

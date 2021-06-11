@@ -172,10 +172,10 @@ proc initRecentSnaps*(rs: var RecentSnaps;
         swap(d.local.headers[i], d.local.headers[^(1+i)])
       block:
         # clique/clique.go(434): snap, err := snap.apply(headers)
-        echo ">>> applySnapshot(",
+        echo ">>> calling applySnapshot(",
                    d.local.headers.mapIt(it.blockNumber.truncate(int)), ")"
         let rc = snap.applySnapshot(d.local.headers)
-        echo "<<< applySnapshot() => ", rc.repr
+        echo "<<< calling applySnapshot() => ", rc.pp
         if rc.isErr:
           return err(rc.error)
 
