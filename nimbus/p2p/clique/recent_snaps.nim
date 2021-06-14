@@ -21,6 +21,7 @@
 ##
 
 import
+  std/[sequtils, strutils],
   ../../utils,
   ../../utils/lru_cache,
   ./clique_cfg,
@@ -30,7 +31,6 @@ import
   chronicles,
   eth/[common, keys],
   nimcrypto,
-  sequtils,
   stint
 
 export
@@ -52,14 +52,16 @@ type
   # Internal descriptor used by toValue()
   RecentDesc = object
     cfg: CliqueCfg
+    debug: bool
     args: RecentArgs
     local: LocalArgs
 
   RecentSnaps* = object
     cfg: CliqueCfg
+    debug: bool
     cache: LruCache[RecentDesc,RecentKey,Snapshot,CliqueError]
 
-{.push raises: [Defect,CatchableError].}
+{.push raises: [Defect].}
 
 logScope:
   topics = "clique PoA recent-snaps"
@@ -68,8 +70,19 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc say(d: RecentDesc; v: varargs[string,`$`]) =
+  ## Debugging output
+  ppExceptionWrap:
+    if d.debug:
+      stderr.write "*** " & v.join & "\n"
+
+proc getPrettyPrinters(d: RecentDesc): var PrettyPrinters =
+  ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
+  d.cfg.prettyPrint
+
 # clique/clique.go(394): if number == 0 || (number%c.config.Epoch [..]
-proc canDiskCheckPointOk(d: RecentDesc): bool =
+proc canDiskCheckPointOk(d: RecentDesc): bool {.
+                         gcsafe, raises: [Defect,RlpError].} =
   # If we're at the genesis, snapshot the initial state.
   if d.args.blockNumber.isZero:
     return true
@@ -99,7 +112,8 @@ proc tryDiskSnapshot(d: RecentDesc; snap: var Snapshot): bool =
         blockHash = d.args.blockHash
       return true
 
-proc tryDiskCheckPoint(d: RecentDesc; snap: var Snapshot): bool =
+proc tryDiskCheckPoint(d: RecentDesc; snap: var Snapshot): bool  {.
+                       gcsafe, raises: [Defect,RlpError].} =
   if d.canDiskCheckPointOk:
     # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
     let checkPoint = d.cfg.dbChain.getBlockHeaderResult(d.args.blockNumber)
@@ -109,6 +123,7 @@ proc tryDiskCheckPoint(d: RecentDesc; snap: var Snapshot): bool =
       hash = checkPoint.value.hash
       signersList = checkPoint.value.extraData.extraDataSigners
     snap.initSnapshot(d.cfg, d.args.blockNumber, hash, signersList)
+    snap.setDebug(d.debug)
 
     if snap.storeSnapshot.isOk:
       info "Stored checkpoint snapshot to disk",
@@ -161,6 +176,7 @@ proc initRecentSnaps*(rs: var RecentSnaps;
             return err((errUnknownAncestor,""))
           header = rc.value
 
+        # Add to batch (note that list order needs to be reversed later)
         d.local.headers.add header
         d.args.blockNumber -= 1.u256
         d.args.blockHash = header.parentHash
@@ -168,14 +184,15 @@ proc initRecentSnaps*(rs: var RecentSnaps;
 
       # Previous snapshot found, apply any pending headers on top of it
       for i in 0 ..< d.local.headers.len div 2:
-        # Reverse lst order
+        # Reverse list order
         swap(d.local.headers[i], d.local.headers[^(1+i)])
       block:
         # clique/clique.go(434): snap, err := snap.apply(headers)
-        echo ">>> calling applySnapshot(",
-                   d.local.headers.mapIt(it.blockNumber.truncate(int)), ")"
+        d.say "recentSnaps => applySnapshot([",
+              d.local.headers.mapIt("#" & $it.blockNumber.truncate(int))
+                  .join(",").string, "])"
         let rc = snap.applySnapshot(d.local.headers)
-        echo "<<< calling applySnapshot() => ", rc.pp
+        d.say "recentSnaps => applySnapshot() => ", rc.pp
         if rc.isErr:
           return err(rc.error)
 
@@ -198,11 +215,16 @@ proc initRecentSnaps*(rs: var RecentSnaps;
 proc initRecentSnaps*(cfg: CliqueCfg): RecentSnaps {.gcsafe,raises: [Defect].} =
   result.initRecentSnaps(cfg)
 
+proc setDebug*(rs: var RecentSnaps; debug: bool) =
+  ## Set debugging mode on/off
+  rs.debug = debug
 
-proc getRecentSnaps*(rs: var RecentSnaps; args: RecentArgs): auto =
+proc getRecentSnaps*(rs: var RecentSnaps; args: RecentArgs): auto {.
+                     gcsafe, raises: [Defect,CatchableError].} =
   ## Get snapshot from cache or disk
   rs.cache.getLruItem:
     RecentDesc(cfg:   rs.cfg,
+               debug: rs.debug,
                args:  args,
                local: LocalArgs())
 

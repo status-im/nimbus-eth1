@@ -9,32 +9,23 @@
 # according to those terms.
 
 import
-  ../../nimbus/config,
-  ../../nimbus/chain_config,
-  ../../nimbus/constants,
-  ../../nimbus/utils,
+  std/[random, sequtils, strformat, strutils, tables, times],
+  ../../nimbus/[config, chain_config, constants, genesis, utils],
   ../../nimbus/db/db_chain,
-  ../../nimbus/genesis,
   ../../nimbus/p2p/clique,
   ../../nimbus/p2p/clique/[clique_defs, clique_utils],
-  ../../nimbus/utils,
   ./voter_samples as vs,
   eth/[common, keys, rlp, trie/db],
   ethash,
-  random,
   secp256k1_abi,
-  sequtils,
-  stew/objects,
-  strformat,
-  tables,
-  times
+  stew/objects
 
 export
   vs
 
 const
   prngSeed = 42
-  genesisTemplate = "../customgenesis/berlin2000.json"
+  # genesisTemplate = "../customgenesis/berlin2000.json"
 
 type
   XSealKey = array[EXTRA_SEAL,byte]
@@ -54,6 +45,7 @@ type
 
     names: Table[EthAddress,string]    ## reverse lookup for debugging
     xSeals: Table[XSealKey,XSealValue] ## collect signatures for debugging
+    debug: bool                        ## debuggin mode for sub-systems
 
 # ------------------------------------------------------------------------------
 # Private Helpers
@@ -65,7 +57,7 @@ proc bespokeGenesis(file: string): CustomGenesis =
     let networkId = getConfiguration().net.networkId
     result.genesis = defaultGenesisBlockForNetwork(networkId)
   else:
-    doAssert genesisTemplate.loadCustomGenesis(result)
+    doAssert file.loadCustomGenesis(result)
   result.config.poaEngine = true
 
 proc chain(ap: TesterPool): BaseChainDB =
@@ -125,7 +117,7 @@ proc findName(ap: TesterPool; address: EthAddress): string =
   if address in ap.names:
     return ap.names[address]
 
-proc findSignature*(ap: TesterPool; sig: openArray[byte]): XSealValue =
+proc findSignature(ap: TesterPool; sig: openArray[byte]): XSealValue =
   ## Find a previusly registered signature
   if sig.len == XSealKey.len:
     let key = toArray(XSealKey.len,sig)
@@ -207,6 +199,15 @@ proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc getPrettyPrinters*(t: TesterPool): var PrettyPrinters =
+  ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
+  t.engine.cfgInternal.prettyPrint
+
+proc say*(t: TesterPool; v: varargs[string,`$`]) =
+  if t.debug:
+    stderr.write v.join & "\n"
+
+
 proc newTesterPool*(epoch = 0.u256; genesisTemplate = ""): TesterPool =
   new result
   result.boot = genesisTemplate.bespokeGenesis
@@ -219,9 +220,17 @@ proc newTesterPool*(epoch = 0.u256; genesisTemplate = ""): TesterPool =
          dbChain = BaseChainDB(),
          period = initDuration(seconds = 1),
          epoch = epoch)
-       .initClique(testMode = true)
+       .initClique
+  result.engine.setDebug(false)
   result.engine.cfgInternal.prettyPrint.initPrettyPrinters(result)
   result.resetChainDb(@[])
+
+
+proc setDebug*(ap: TesterPool; debug = true) =
+  ## Set debugging mode on/off
+  ap.debug = debug
+  ap.engine.setDebug(debug)
+
 
 # clique/snapshot_test.go(62): func (ap *testerAccountPool) address(account [..]
 proc address*(ap: TesterPool; account: string): EthAddress =
@@ -229,6 +238,7 @@ proc address*(ap: TesterPool; account: string): EthAddress =
   ## a new account if no previous one exists yet.
   if account != "":
     result = ap.privateKey(account).toPublicKey.toCanonicalAddress
+
 
 # clique/snapshot_test.go(49): func (ap *testerAccountPool) [..]
 proc checkpoint*(ap: TesterPool;
@@ -266,13 +276,28 @@ proc sign*(ap: TesterPool; header: var BlockHeader; signer: string) =
 proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
                parent: openArray[BlockHeader]): auto =
   ## Call p2p/clique.snapshotInternal()
+  if ap.debug:
+    var header = ap.chain.getBlockHeader(number)
+    ap.say "*** snapshot argument: ", ap.pp(header,24)
+    while true:
+      doAssert ap.chain.getBlockHeader(header.parentHash,header)
+      ap.say "        parent header: ", ap.pp(header,24)
+      if header.blockNumber.isZero:
+        break
+    when false: # all addresses are typically pp-mappable
+      ap.say "          address map: ", toSeq(ap.names.pairs)
+                                          .mapIt(&"@{it[1]}:{it[0]}")
+                                          .sorted
+                                          .join("\n" & ' '.repeat(23))
+
   ap.engine.snapshotInternal(number, hash, parent)
 
 # ------------------------------------------------------------------------------
 # Public: set up & manage voter database
 # ------------------------------------------------------------------------------
 
-proc resetVoterChain*(ap: TesterPool; signers: openArray[string]) =
+proc resetVoterChain*(ap: TesterPool;
+                      signers: openArray[string]; epoch: uint64) =
   ## Reset the batch list for voter headers and update genesis block
   ap.batch = @[newSeq[BlockHeader]()]
 
@@ -288,8 +313,9 @@ proc resetVoterChain*(ap: TesterPool; signers: openArray[string]) =
   # clique/snapshot_test.go(397):
   extraData.add 0.byte.repeat(EXTRA_SEAL)
 
-  # store modified genesis block
+  # store modified genesis block and epoch
   ap.resetChainDb(extraData)
+  ap.engine.cfgInternal.epoch = epoch
 
 
 # clique/snapshot_test.go(415): blocks, _ := core.GenerateChain(&config, [..]
@@ -320,9 +346,12 @@ proc appendVoter*(ap: TesterPool; voter: TesterVote) =
     # clique/snapshot_test.go(436): header.Difficulty = diffInTurn [..]
     difficulty:  DIFF_INTURN,  # Ignored, we just need a valid number
     #
-    # clique/snapshot_test.go(432): if auths := tt.votes[j].checkpoint; [..]
-    extraData:   0.byte.repeat(
-      EXTRA_VANITY + voter.checkpoint.len * EthAddress.len + EXTRA_SEAL))
+    extraData:   0.byte.repeat(EXTRA_VANITY + EXTRA_SEAL))
+
+  # clique/snapshot_test.go(432): if auths := tt.votes[j].checkpoint; [..]
+  if 0 < voter.checkpoint.len:
+    doAssert (header.blockNumber mod ap.engine.cfgInternal.epoch) == 0
+    ap.checkpoint(header,voter.checkpoint)
 
   # Generate the signature, embed it into the header and the block
   ap.sign(header, voter.signer)
@@ -360,37 +389,6 @@ proc topVoterHeader*(ap: TesterPool): BlockHeader =
   if 0 < ap.batch[^1].len:
     result = ap.batch[^1][^1]
 
-proc getPrettyPrinters*(t: TesterPool): var PrettyPrinters =
-  ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
-  t.engine.cfgInternal.prettyPrint
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-
-#[
-
-import
-  algorithm, strutils
-
-let tt = voterSamples.filterIt(it.id == 21)[0]
-
-var p = newTesterPool()
-p.resetVoterChain(tt.signers)
-for voter in tt.votes:
-  p.appendVoter(voter)
-p.commitVoterChain
-
-let topHeader = p.topVoterHeader
-
-echo "*** adresses: ", toSeq(p.names.pairs)
-                         .mapIt(&"{it[1]}:{it[0]}")
-                         .sorted
-                         .join("\n" & ' '.repeat(14))
-echo "     genesis: ", p.pp(p.chain.getBlockHeader(0.u256),15)
-echo "   topHeader: ", p.pp(topHeader,15)
-
-var snap = p.snapshot(topHeader.blockNumber, topHeader.hash, @[])
-echo ">>> snap=", snap.pp(10)
-
-]#

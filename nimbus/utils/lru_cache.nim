@@ -60,7 +60,7 @@ type
     toKey: LruKey[T,K]            ## Handler function, derives `key`
     toValue: LruValue[T,V,E]      ## Handler function, derives `value`
 
-{.push raises: [Defect,CatchableError].}
+{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -95,8 +95,8 @@ proc initLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
   cache.clearLruCache
 
 
-proc getLruItem*[T,K,V,E](lru: var LruCache[T,K,V,E];
-                             arg: T): Result[V,E] {.gcsafe.} =
+proc getLruItem*[T,K,V,E](lru: var LruCache[T,K,V,E]; arg: T): Result[V,E] {.
+                          gcsafe, raises: [Defect,CatchableError].} =
   ## Returns `lru.toValue(arg)`, preferably from result cached earlier.
   let key = lru.toKey(arg)
 
@@ -155,7 +155,8 @@ proc `==`*[T,K,V,E](a, b: var LruCache[T,K,V,E]): bool =
   a.data == b.data
 
 
-proc append*[K,V](rw: var RlpWriter; data: LruData[K,V]) {.inline.} =
+proc append*[K,V](rw: var RlpWriter; data: LruData[K,V]) {.
+                  inline, raises: [Defect,KeyError].} =
   ## Generic support for `rlp.encode(lru.data)` for serialising the data
   ## part of an LRU cache.
   rw.append(data.maxItems)
@@ -173,7 +174,8 @@ proc append*[K,V](rw: var RlpWriter; data: LruData[K,V]) {.inline.} =
     if key != data.last:
       raiseAssert "Garbled LRU cache next/prv references"
 
-proc read*[K,V](rlp: var Rlp; Q: type LruData[K,V]): Q {.inline.} =
+proc read*[K,V](rlp: var Rlp; Q: type LruData[K,V]): Q {.
+                inline, raises: [Defect,RlpError].} =
   ## Generic support for `rlp.decode(bytes)` for loading the data part
   ## of an LRU cache from a serialised data stream.
   result.maxItems = rlp.read(int)

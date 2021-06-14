@@ -116,4 +116,5 @@ cliBuilder:
           ../stateless/test_witness_json,
           ./test_misc,
           ./test_graphql,
-          ./test_lru_cache
+          ./test_lru_cache,
+          ./test_clique

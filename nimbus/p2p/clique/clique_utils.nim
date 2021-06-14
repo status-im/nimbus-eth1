@@ -21,26 +21,25 @@
 ##
 
 import
+  std/[algorithm, strformat, times],
   ../../chain_config,
   ../../config,
   ../../constants,
   ../../db/db_chain,
+  ../../errors,
   ../../utils,
   ../../vm_types2,
   ./clique_defs,
-  algorithm,
   eth/[common, rlp],
   stew/[objects, results],
-  stint,
-  strformat,
-  times
+  stint
 
 type
   EthSortOrder* = enum
     EthDescending = SortOrder.Descending.ord
     EthAscending = SortOrder.Ascending.ord
 
-{.push raises: [Defect,CatchableError].}
+{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -105,12 +104,13 @@ proc extraDataSigners*(extraData: Blob): seq[EthAddress] =
 
 
 proc getBlockHeaderResult*(c: BaseChainDB;
-                           number: BlockNumber): Result[BlockHeader,void] =
+                           number: BlockNumber): Result[BlockHeader,void] {.
+                             gcsafe, raises: [Defect,RlpError].} =
   ## Slightly re-phrased dbChain.getBlockHeader(..) command
   var header: BlockHeader
   if c.getBlockHeader(number, header):
     return ok(header)
-  result = err()
+  err()
 
 
 # core/types/block.go(343): func (b *Block) WithSeal(header [..]
@@ -123,7 +123,8 @@ proc withHeader*(b: EthBlock; header: BlockHeader): EthBlock =
     uncles: b.uncles)
 
 # consensus/misc/forks.go(30): func VerifyForkHashes(config [..]
-proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader): CliqueResult =
+proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader): CliqueResult {.
+                       gcsafe, raises: [Defect,ValueError].} =
   ## Verify that blocks conforming to network hard-forks do have the correct
   ## hashes, to avoid clients going off on different chains.
 
@@ -138,7 +139,8 @@ proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader): CliqueResult =
   return err((errCliqueGasRepriceFork,
               &"Homestead gas reprice fork: have {c.eip150Hash}, want {hash}"))
 
-proc validateGasLimit*(c: var BaseChainDB; header: BlockHeader): CliqueResult =
+proc validateGasLimit*(c: var BaseChainDB; header: BlockHeader): CliqueResult {.
+                       gcsafe, raises: [Defect,RlpError,BlockNotFound].} =
   ## See also private function p2p.validate.validateGasLimit()
   let parent = c.getBlockHeader(header.parentHash)
   header.validateGasLimit(parent.gasLimit)
@@ -196,7 +198,8 @@ proc calc1599BaseFee*(c: var ChainConfig; parent: BlockHeader): GasInt =
 
 # consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
 proc verify1559Header*(c: var ChainConfig;
-                       parent, header: BlockHeader): CliqueResult =
+                       parent, header: BlockHeader): CliqueResult {.
+                         gcsafe, raises: [Defect,ValueError].} =
   ## Verify that the gas limit remains within allowed bounds
   let limit = if c.isLondonOrLater(parent.blockNumber):
                 parent.gasLimit
@@ -228,7 +231,7 @@ proc encode1559*(header: BlockHeader): seq[byte] =
   writer.append(header)
   if not header.baseFee.isZero:
     writer.append(header.baseFee)
-  result = writer.finish
+  writer.finish
 
 # ------------------------------------------------------------------------------
 # Seal hash support

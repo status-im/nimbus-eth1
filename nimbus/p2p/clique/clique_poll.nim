@@ -19,10 +19,10 @@
 ##
 
 import
+  std/[sequtils, strutils, tables],
+  ./clique_cfg,
   ./clique_utils,
-  eth/common,
-  sequtils,
-  tables
+  eth/common
 
 type
   Vote* = object ## Vote represent single votes that an authorized
@@ -44,12 +44,27 @@ type
     authSig: Table[EthAddress,bool] ## currently authorised signers
     authRemoved: bool               ## last `addVote()` action was removing an
                                     ## authorised signer from the `authSig` list
+    debug: bool                     ## debug mode
 
-{.push raises: [Defect,CatchableError].}
+{.push raises: [Defect].}
+
+# ------------------------------------------------------------------------------
+# Private
+# ------------------------------------------------------------------------------
+
+proc say(t: var CliquePoll; v: varargs[string,`$`]) =
+  ## Debugging output
+  ppExceptionWrap:
+    if t.debug:
+      stderr.write "*** " & v.join & "\n"
 
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
+
+proc setDebug*(t: var CliquePoll; debug: bool) =
+  ## Set debugging mode on/off
+  t.debug = debug
 
 proc initCliquePoll*(t: var CliquePoll) =
   ## Ininialise an empty `CliquePoll` descriptor.
@@ -84,7 +99,8 @@ proc authSignersThreshold*(t: var CliquePoll): int =
   1 + (t.authSig.len div 2)
 
 
-proc delVote*(t: var CliquePoll; signer, address: EthAddress) =
+proc delVote*(t: var CliquePoll; signer, address: EthAddress) {.
+              gcsafe, raises: [Defect,KeyError].} =
   ## Remove a particular previously added vote.
   if address in t.votes:
     if signer in t.votes[address].signers:
@@ -100,7 +116,8 @@ proc validVote*(t: var CliquePoll; address: EthAddress; authorize: bool): bool =
   if address in t.authSig: not authorize else: authorize
 
 
-proc addVote*(t: var CliquePoll; vote: Vote) =
+proc addVote*(t: var CliquePoll; vote: Vote) {.
+              gcsafe, raises: [Defect,KeyError].} =
   ## Add a new vote collecting the signers for the particular voting address.
   ##
   ## Unless it is the first vote for this address, the authorisation type
@@ -117,45 +134,53 @@ proc addVote*(t: var CliquePoll; vote: Vote) =
   ##  * If the authorisation type is `false`, the address is removed
   ##    from the list of authorised signers.
   t.authRemoved = false
-
-  echo ">>> addVote 1"
+  var
+    numVotes = 0
+    authOk = vote.authorize
 
   # clique/snapshot.go(147): if !s.validVote(address, [..]
   if not t.validVote(vote.address, vote.authorize):
-    # Voting has no effect
-    return
 
-  # clique/snapshot.go(253): if snap.cast(header.Coinbase, [..]
-  echo ">>> addVote 2"
+    # Corner case: touch votes for this account
+    if t.votes.hasKey(vote.address):
+      let refVote =  t.votes[vote.address]
+      numVotes = refVote.signers.len
+      authOk = refVote.authorize
+      t.say "addVote touch votes (corner case)"
 
-  # Collect vote
-  var numVotes = 0
-  if not t.votes.hasKey(vote.address):
+  elif not t.votes.hasKey(vote.address):
+    # Collect inital vote
     t.votes[vote.address] = Tally(
       authorize: vote.authorize,
       signers: {vote.signer: vote}.toTable)
     numVotes = 1
+    t.say "addVote accepted, first vote, authorize=", vote.authorize
+
   elif t.votes[vote.address].authorize == vote.authorize:
+    # Collect additional vote
     t.votes[vote.address].signers[vote.signer] = vote
     numVotes = t.votes[vote.address].signers.len
-  else:
-    return
+    t.say "addVote accepted, ", numVotes, " votes, authorize=", vote.authorize
 
-  echo ">>> addVote 3"
+  else:
+    t.say "addVote not applicable!"
+    return
 
   # clique/snapshot.go(262): if tally := snap.Tally[header.Coinbase]; [..]
 
   # Vote passed, update the list of authorised signers if enough votes
   if numVotes < t.authSignersThreshold:
+    t.say "addVote not enough votes for address yet, have ", numVotes,
+      " need ", t.authSignersThreshold
     return
 
-  echo ">>> addVote 4"
-
   var obsolete = @[vote.address]
-  if vote.authorize:
+  if authOk:
     # Has minimum votes, so add it
     t.authSig[vote.address] = true
+    t.say "addVote authorise address .."
   else:
+    t.say "addVote de-authorise address .."
     # clique/snapshot.go(266): delete(snap.Signers, [..]
     t.authSig.del(vote.address)
     t.authRemoved = true
@@ -171,17 +196,16 @@ proc addVote*(t: var CliquePoll; vote: Vote) =
   for key in obsolete:
     t.votes.del(key)
 
-  echo ">>> addVote done"
+  t.say "addVote done"
 
 # ------------------------------------------------------------------------------
 # Test interface
 # ------------------------------------------------------------------------------
 
 proc votesInternal*(t: var CliquePoll): seq[(EthAddress,EthAddress,Vote)] =
-  for account in toSeq(t.votes.keys).sorted(EthAscending):
-    let tally = t.votes[account]
-    for signer in toSeq(tally.signers.keys).sorted(EthAscending):
-      result.add (account, signer, tally.signers[signer])
+  for account,tally in t.votes.pairs:
+    for signer,vote in tally.signers.pairs:
+      result.add (account, signer, vote)
 
 # ------------------------------------------------------------------------------
 # End

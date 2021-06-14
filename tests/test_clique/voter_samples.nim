@@ -315,7 +315,21 @@ const
     TestSpecs(
       id:      23,
       info:    "Recent signatures should not reset on checkpoint blocks " &
-               "imported in a batch " &
+               "imported in a batch ",
+      epoch:   3,
+      signers: @["A", "B", "C"],
+      votes:   @[TesterVote(signer: "A"),
+                 TesterVote(signer: "B"),
+                 TesterVote(signer: "A", checkpoint: @["A", "B", "C"]),
+                 TesterVote(signer: "A")],
+      failure: errRecentlySigned),
+
+    # The last test does not differ from the previous one with the current
+    # test environment.
+    TestSpecs(
+      id:      24,
+      info:    "Recent signatures (revisted) should not reset on checkpoint " &
+               "blocks imported in a batch " &
                "(https://github.com/ethereum/go-ethereum/issues/17593). "&
                "Whilst this seems overly specific and weird, it was a "&
                "Rinkeby consensus split.",
