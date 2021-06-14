@@ -24,20 +24,15 @@ const
    isMainOk {.used.} = noisy > 2
 
 import
+  std/[algorithm, sequtils, strformat, strutils, tables, times],
   ../../db/[storage_types, db_chain],
   ../../utils/lru_cache,
   ./clique_cfg,
   ./clique_defs,
   ./clique_poll,
   ./ec_recover,
-  algorithm,
   chronicles,
-  eth/[common, rlp, trie/db],
-  sequtils,
-  strformat,
-  strutils,
-  tables,
-  times
+  eth/[common, rlp, trie/db]
 
 type
   AddressHistory = Table[BlockNumber,EthAddress]
@@ -49,6 +44,7 @@ type
 
     # clique/snapshot.go(58): Recents map[uint64]common.Address [..]
     ballot: CliquePoll       ## Votes => authorised signers
+    debug: bool              ## debug mode
 
   # clique/snapshot.go(50): type Snapshot struct [..]
   Snapshot* = object ## Snapshot is the state of the authorization voting at
@@ -56,7 +52,7 @@ type
     cfg: CliqueCfg           ## parameters to fine tune behavior
     data*: SnapshotData      ## real snapshot
 
-{.push raises: [Defect,CatchableError].}
+{.push raises: [Defect].}
 
 logScope:
   topics = "clique PoA snapshot"
@@ -65,41 +61,46 @@ logScope:
 # Pretty printers for debugging
 # ------------------------------------------------------------------------------
 
+proc say(s: var Snapshot; v: varargs[string,`$`]) =
+  ## Debugging output
+  ppExceptionWrap:
+    if s.data.debug:
+      stderr.write "*** " & v.join & "\n"
+
 proc getPrettyPrinters(s: var Snapshot): var PrettyPrinters =
   ## Mixin for pretty printers
   s.cfg.prettyPrint
 
 proc pp(s: var Snapshot; h: var AddressHistory): string =
-  toSeq(h.keys)
-    .mapIt(it.truncate(uint64))
-    .sorted
-    .mapIt("#" & $it & ":" & s.pp(h[it.u256]))
-    .join(",")
+  ppExceptionWrap:
+    toSeq(h.keys)
+      .mapIt(it.truncate(uint64))
+      .sorted
+      .mapIt("#" & $it & ":" & s.pp(h[it.u256]))
+      .join(",")
 
 proc pp(s: var Snapshot; v: Vote): string =
   proc authorized(b: bool): string =
-    if b: ",auhorized" else: ""
-  "{" & &"signer={s.pp(v.signer)}" &
-        &",address={s.pp(v.address)}" &
-        &",blockNumber={v.blockNumber.truncate(uint64)}" &
-        &"{authorized(v.authorize)}" & "}"
+    if b: "auhorize" else: "de-authorize"
+  ppExceptionWrap:
+    "(" & &"address={s.pp(v.address)}" &
+          &",signer={s.pp(v.signer)}" &
+          &",blockNumber={v.blockNumber.truncate(uint64)}" &
+          &",{authorized(v.authorize)}" & ")"
 
-proc pp(s: var Snapshot;
-        v: (EthAddress,EthAddress,Vote); delim: string): string =
-  &"(account={s.pp(v[0])}" &
-    &"{delim}signer={s.pp(v[1])}" &
-    &"{delim}vote={s.pp(v[2])})"
+proc votesList(s: var Snapshot; sep: string): string =
+  proc s3Cmp(a, b: (string,string,Vote)): int =
+    result = cmp(a[0], b[0])
+    if result == 0:
+      result = cmp(a[1], b[1])
+  s.data.ballot.votesInternal
+    .mapIt((s.pp(it[0]),s.pp(it[1]),it[2]))
+    .sorted(cmp = s3cmp)
+    .mapIt(s.pp(it[2]))
+    .join(sep)
 
-proc pp(s: var Snapshot;
-        w: seq[(EthAddress,EthAddress,Vote)]; sep1, sep2: string): string =
-  w.mapIt(s.pp(it,sep1)).join(sep2)
-
-proc pp(s: var Snapshot;
-        w: seq[(EthAddress,EthAddress,Vote)]; indent = 0): string =
-  let
-    sep1 = if 0 < indent: "\n" & ' '.repeat(indent) else: ","
-    sep2 = if 0 < indent: "\n" & ' '.repeat(indent) else: " "
-  s.pp(w,sep1,sep2)
+proc signersList(s: var Snapshot): string =
+  s.pp(s.data.ballot.authSigners).sorted.join(",")
 
 # ------------------------------------------------------------------------------
 # Public pretty printers
@@ -110,15 +111,13 @@ proc pp*(s: var Snapshot; delim: string): string =
   let
     sep1 = if 0 < delim.len: delim
            else: ";"
-    sep2 = if 0 < delim.len and delim[0] == '\n': delim & ' '.repeat(8)
+    sep2 = if 0 < delim.len and delim[0] == '\n': delim & ' '.repeat(7)
            else: ";"
-    sep3 = if 0 < delim.len and delim[0] == '\n': delim & ' '.repeat(7)
-           else: ";"
-  &"(blockNumber=#{s.data.blockNumber}" &
-    &"{sep1}recents=[{s.pp(s.data.recents)}]" &
-    &"{sep1}votes=[" &
-      s.pp(s.data.ballot.votesInternal,sep2,sep3) &
-      "])"
+  ppExceptionWrap:
+    &"(blockNumber=#{s.data.blockNumber}" &
+      &"{sep1}recents=" & "{" & s.pp(s.data.recents) & "}" &
+      &"{sep1}signers=" & "{" & s.signersList & "}" &
+      &"{sep1}votes=[" & s.votesList(sep2) & "])"
 
 proc pp*(s: var Snapshot; indent = 0): string =
   ## Pretty print descriptor
@@ -144,6 +143,11 @@ proc read[K,V](rlp: var Rlp;
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc setDebug*(s: var Snapshot; debug: bool) =
+  ## Set debugging mode on/off
+  s.data.debug = debug
+  s.data.ballot.setDebug(debug)
+
 # clique/snapshot.go(72): func newSnapshot(config [..]
 proc initSnapshot*(s: var Snapshot; cfg: CliqueCfg;
            number: BlockNumber; hash: Hash256; signers: openArray[EthAddress]) =
@@ -155,11 +159,9 @@ proc initSnapshot*(s: var Snapshot; cfg: CliqueCfg;
   s.data.blockHash = hash
   s.data.recents = initTable[BlockNumber,EthAddress]()
   s.data.ballot.initCliquePoll(signers)
-  echo ">>> initSnapshot #", number.truncate(uint64),
-    " >> ", s.pp(s.data.ballot.authSigners)
 
 proc initSnapshot*(cfg: CliqueCfg; number: BlockNumber; hash: Hash256;
-                   signers: openArray[EthAddress]): Snapshot =
+                   signers: openArray[EthAddress]; debug = true): Snapshot =
   result.initSnapshot(cfg, number, hash, signers)
 
 
@@ -197,11 +199,12 @@ proc storeSnapshot*(s: var Snapshot): CliqueResult {.gcsafe,raises: [Defect].} =
 
 # clique/snapshot.go(185): func (s *Snapshot) apply(headers [..]
 proc applySnapshot*(s: var Snapshot;
-                    headers: openArray[BlockHeader]): CliqueResult =
+                    headers: openArray[BlockHeader]): CliqueResult {.
+                      gcsafe, raises: [Defect,CatchableError].} =
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot `s`.
 
-  echo ">>> applySnapshot ", s.pp(headers).join("\n" & ' '.repeat(18))
+  s.say "applySnapshot ", s.pp(headers).join("\n" & ' '.repeat(18))
 
   # Allow passing in no headers for cleaner code
   if headers.len == 0:
@@ -222,19 +225,21 @@ proc applySnapshot*(s: var Snapshot;
   var
     logged = start
 
+  s.say "applySnapshot state=", s.pp(25)
+
   # clique/snapshot.go(206): for i, header := range headers [..]
   for headersIndex in 0 ..< headers.len:
-    echo ">>> applySnapshot headersIndex=", headersIndex
     let
       # headersIndex => also used for logging at the end of this loop
       header = headers[headersIndex]
       number = header.blockNumber
 
-    echo "<<< applySnapshot 1"
+    s.say "applySnapshot processing #", number.truncate(uint64)
 
     # Remove any votes on checkpoint blocks
     if (number mod s.cfg.epoch) == 0:
       s.data.ballot.initCliquePoll
+      s.data.ballot.setDebug(s.data.debug)
 
     # Delete the oldest signer from the recent list to allow it signing again
     block:
@@ -242,23 +247,19 @@ proc applySnapshot*(s: var Snapshot;
       if limit <= number:
         s.data.recents.del(number - limit)
 
-    echo "<<< applySnapshot 2 snap=", s.pp(26)
-
     # Resolve the authorization key and check against signers
     let signer = ? s.cfg.signatures.getEcRecover(header)
-    echo "<<< applySnapshot 3 ", s.pp(signer)
+    s.say "applySnapshot signer=", s.pp(signer)
 
     if not s.data.ballot.isAuthSigner(signer):
-      echo "<<< applySnapshot 3 => fail ", s.pp(29)
+      s.say "applySnapshot signer not authorised => fail ", s.pp(29)
       return err((errUnauthorizedSigner,""))
 
-    echo "<<< applySnapshot 4"
     for recent in s.data.recents.values:
       if recent == signer:
+        s.say "applySnapshot signer recently seen ", s.pp(signer)
         return err((errRecentlySigned,""))
     s.data.recents[number] = signer
-
-    echo "<<< applySnapshot 5"
 
     # Header authorized, discard any previous vote from the signer
     # clique/snapshot.go(233): for i, vote := range snap.Votes {
@@ -275,20 +276,22 @@ proc applySnapshot*(s: var Snapshot;
                     signer:      signer,
                     blockNumber: number,
                     authorize:   authOk)
-    echo "<<< applySnapshot calling addVote ", s.pp(vote)
+    s.say "applySnapshot calling addVote ", s.pp(vote)
     # clique/snapshot.go(253): if snap.cast(header.Coinbase, authorize) {
     s.data.ballot.addVote(vote)
-
-    echo "<<< applySnapshot 6 ", s.pp(21)
 
     # clique/snapshot.go(269): if limit := uint64(len(snap.Signers)/2 [..]
     if s.data.ballot.authSignersShrunk:
       # Signer list shrunk, delete any leftover recent caches
       let limit = s.data.ballot.authSignersThreshold.u256
       if limit <= number:
-        s.data.recents.del(number - limit)
+        # Pop off least block number from the list
+        let item = number - limit
+        s.say "will delete recent item #", item, " (", number, "-", limit,
+          ") from recents={", s.pp(s.data.recents), "}"
+        s.data.recents.del(item)
 
-    echo "<<< applySnapshot 7"
+    s.say "applySnapshot state=", s.pp(25)
 
     # If we're taking too much time (ecrecover), notify the user once a while
     if logInterval < logged - getTime():
@@ -308,6 +311,7 @@ proc applySnapshot*(s: var Snapshot;
   s.data.blockNumber += headers.len.u256
   s.data.blockHash = headers[^1].blockHash
   result = ok()
+
 
 proc validVote*(s: var Snapshot; address: EthAddress; authorize: bool): bool =
   ## Returns `true` if voting makes sense, at all.

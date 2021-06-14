@@ -19,17 +19,14 @@
 ##
 
 import
+  std/[random, sequtils, strutils, times],
   ../../db/db_chain,
   ./clique_defs,
   ./ec_recover,
   eth/common,
   ethash,
-  random,
-  sequtils,
   stew/results,
-  stint,
-  strutils,
-  times
+  stint
 
 const
   prngSeed = 42
@@ -38,7 +35,10 @@ type
   SimpleTypePP = BlockNonce|EthAddress|Blob|BlockHeader
   SeqTypePP = EthAddress|BlockHeader
 
-  PrettyPrinters* = object
+  PrettyPrintDefect* = object of Defect
+    ## Defect raised with `pp()` problems, should be used for debugging only
+
+  PrettyPrinters* = object ## Set of pretty printers for debugging
     nonce*: proc(v: BlockNonce):
                  string {.gcsafe,raises: [Defect,CatchableError].}
     address*: proc(v: EthAddress):
@@ -53,13 +53,13 @@ type
     signatures*: EcRecover  ## Recent block signatures to speed up mining
     period*: Duration       ## time between blocks to enforce
     prng*: Rand             ## PRNG state for internal random generator
-    epoch*: UInt256         ## The number of blocks after which to checkpoint
+    bcEpoch: UInt256        ## The number of blocks after which to checkpoint
                             ## and reset the pending votes.Suggested 30000 for
                             ## the testnet to remain analogous to the mainnet
                             ## ethash epoch.
     prettyPrint*: PrettyPrinters ## debugging support
 
-{.push raises: [Defect,CatchableError].}
+{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -70,7 +70,7 @@ proc newCliqueCfg*(dbChain: BaseChainDB; period = BLOCK_PERIOD;
   CliqueCfg(
     dbChain:     dbChain,
     period:      period,
-    epoch:       if epoch.isZero: EPOCH_LENGTH.u256 else: epoch,
+    bcEpoch:      if epoch.isZero: EPOCH_LENGTH.u256 else: epoch,
     signatures:  initEcRecover(),
     prng:        initRand(prngSeed),
     prettyPrint: PrettyPrinters(
@@ -79,9 +79,32 @@ proc newCliqueCfg*(dbChain: BaseChainDB; period = BLOCK_PERIOD;
                    extraData:   proc(v:Blob):                      string = $v,
                    blockHeader: proc(v:BlockHeader; delim:string): string = $v))
 
+proc epoch*(cfg: CliqueCfg): BlockNumber {.inline.} =
+  ## Getter
+  cfg.bcEpoch
+
+proc `epoch=`*(cfg: CliqueCfg; epoch: BlockNumber) {.inline.} =
+  ## Setter
+  cfg.bcEpoch = epoch
+  if cfg.bcEpoch.isZero:
+    cfg.bcEpoch = EPOCH_LENGTH.u256
+
+proc `epoch=`*(cfg: CliqueCfg; epoch: SomeUnsignedInt) {.inline.} =
+  ## Setter
+  cfg.epoch = epoch.u256
+
 # ------------------------------------------------------------------------------
 # Debugging
 # ------------------------------------------------------------------------------
+
+template ppExceptionWrap*(body: untyped) =
+  ## Exception relay to `PrettyPrintDefect`, intended to be used with `pp()`
+  ## related functions.
+  try:
+    body
+  except:
+    raise (ref PrettyPrintDefect)(msg: getCurrentException().msg)
+
 
 proc pp*(v: CliqueError): string =
   ## Pretty print error
@@ -96,13 +119,14 @@ proc pp*(v: CliqueResult): string =
   else:
     v.error.pp
 
+
 proc pp*(p: var PrettyPrinters; v: BlockNonce): string =
-  ## Pretty print nonce
-  p.nonce(v)
+  ## Pretty print nonce (for debugging)
+  ppExceptionWrap: p.nonce(v)
 
 proc pp*(p: var PrettyPrinters; v: EthAddress): string =
-  ## Pretty print address
-  p.address(v)
+  ## Pretty print address (for debugging)
+  ppExceptionWrap: p.address(v)
 
 proc pp*(p: var PrettyPrinters; v: openArray[EthAddress]): seq[string] =
   ## Pretty print address list
@@ -110,11 +134,11 @@ proc pp*(p: var PrettyPrinters; v: openArray[EthAddress]): seq[string] =
 
 proc pp*(p: var PrettyPrinters; v: Blob): string =
   ## Visualise `extraData` field
-  p.extraData(v)
+  ppExceptionWrap: p.extraData(v)
 
 proc pp*(p: var PrettyPrinters; v: BlockHeader; delim: string): string =
   ## Pretty print block header
-  p.blockHeader(v, delim)
+  ppExceptionWrap: p.blockHeader(v, delim)
 
 proc pp*(p: var PrettyPrinters; v: BlockHeader; indent = 3): string =
   ## Pretty print block header, NL delimited, indented fields
@@ -127,54 +151,54 @@ proc pp*(p: var PrettyPrinters; v: openArray[BlockHeader]): seq[string] =
 
 
 proc pp*[T;V: SimpleTypePP](t: T; v: V): string =
-  ## Generic prtetty printer, requires `getPrettyPrinters()` function:
+  ## Generic pretty printer, requires `getPrettyPrinters()` function:
   ## ::
   ##     proc getPrettyPrinters(t: SomeLocalType): var PrettyPrinters
   ##
   mixin getPrettyPrinters
-  t.getPrettyPrinters.pp(v)
+  ppExceptionWrap: t.getPrettyPrinters.pp(v)
 
 proc pp*[T;V: var SimpleTypePP](t: var T; v: V): string =
-  ## Generic prtetty printer, requires `getPrettyPrinters()` function:
+  ## Generic pretty printer, requires `getPrettyPrinters()` function:
   ## ::
   ##     proc getPrettyPrinters(t: var SomeLocalType): var PrettyPrinters
   ##
   mixin getPrettyPrinters
-  t.getPrettyPrinters.pp(v)
+  ppExceptionWrap: t.getPrettyPrinters.pp(v)
 
 
 proc pp*[T;V: SeqTypePP](t: T; v: openArray[V]): seq[string] =
-  ## Generic prtetty printer, requires `getPrettyPrinters()` function:
+  ## Generic pretty printer, requires `getPrettyPrinters()` function:
   ## ::
   ##     proc getPrettyPrinters(t: SomeLocalType): var PrettyPrinters
   ##
   mixin getPrettyPrinters
-  t.getPrettyPrinters.pp(v)
+  ppExceptionWrap: t.getPrettyPrinters.pp(v)
 
 proc pp*[T;V: SeqTypePP](t: var T; v: openArray[V]): seq[string] =
-  ## Generic prtetty printer, requires `getPrettyPrinters()` function:
+  ## Generic pretty printer, requires `getPrettyPrinters()` function:
   ## ::
   ##     proc getPrettyPrinters(t: var SomeLocalType): var PrettyPrinters
   ##
   mixin getPrettyPrinters
-  t.getPrettyPrinters.pp(v)
+  ppExceptionWrap: t.getPrettyPrinters.pp(v)
 
 
 proc pp*[T;X: int|string](t: T; v: BlockHeader; sep: X): string =
-  ## Generic prtetty printer, requires `getPrettyPrinters()` function:
+  ## Generic pretty printer, requires `getPrettyPrinters()` function:
   ## ::
   ##     proc getPrettyPrinters(t: SomeLocalType): var PrettyPrinters
   ##
   mixin getPrettyPrinters
-  t.getPrettyPrinters.pp(v,sep)
+  ppExceptionWrap: t.getPrettyPrinters.pp(v,sep)
 
 proc pp*[T;X: int|string](t: var T; v: BlockHeader; sep: X): string =
-  ## Generic prtetty printer, requires `getPrettyPrinters()` function:
+  ## Generic pretty printer, requires `getPrettyPrinters()` function:
   ## ::
   ##     proc getPrettyPrinters(t: var SomeLocalType): var PrettyPrinters
   ##
   mixin getPrettyPrinters
-  t.getPrettyPrinters.pp(v,sep)
+  ppExceptionWrap: t.getPrettyPrinters.pp(v,sep)
 
 # ------------------------------------------------------------------------------
 # End

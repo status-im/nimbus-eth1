@@ -32,13 +32,13 @@ type
 
   EcRecover* = LruCache[BlockHeader,EcKey32,EthAddress,CliqueError]
 
-{.push raises: [Defect,CatchableError].}
+{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc initEcRecover*(cache: var EcRecover) {.gcsafe, raises: [Defect].} =
+proc initEcRecover*(cache: var EcRecover) =
 
   var toKey: LruKey[BlockHeader,EcKey32] =
 
@@ -80,17 +80,20 @@ proc initEcRecover*: EcRecover {.gcsafe, raises: [Defect].} =
 
 
 # clique/clique.go(145): func ecrecover(header [..]
-proc getEcRecover*(addrCache: var EcRecover; header: BlockHeader): auto =
+proc getEcRecover*(addrCache: var EcRecover; header: BlockHeader): auto {.
+                   gcsafe, raises: [Defect,CatchableError].} =
   ## extract Ethereum account address from a signed header block, the relevant
   ## signature used is appended to the re-purposed extra data field
   addrCache.getLruItem(header)
 
 
-proc append*(rw: var RlpWriter; ecRec: EcRecover) {.inline.} =
+proc append*(rw: var RlpWriter; ecRec: EcRecover) {.
+             inline, raises: [Defect,KeyError].} =
   ## Generic support for `rlp.encode(ecRec)`
   rw.append(ecRec.data)
 
-proc read*(rlp: var Rlp; Q: type EcRecover): Q {.inline.} =
+proc read*(rlp: var Rlp; Q: type EcRecover): Q {.
+           inline, raises: [Defect,KeyError].} =
   ## Generic support for `rlp.decode(bytes)` for loading the cache from a
   ## serialised data stream.
   result.initEcRecover
