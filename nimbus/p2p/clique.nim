@@ -214,7 +214,7 @@ proc verifyCascadingFields(c: var Clique; header: BlockHeader;
   if (header.blockNumber mod c.cfg.epoch.u256) == 0:
     let
       signersList = snap.value.signers
-      extraList = header.extraData.extraDataSigners
+      extraList = header.extraData.extraDataAddresses
     if signersList != extraList:
       return err((errMismatchingCheckpointSigners,""))
 

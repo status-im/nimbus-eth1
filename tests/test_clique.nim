@@ -28,18 +28,19 @@ proc cliqueMain*(noisy = defined(debug)) =
   suite "Clique PoA Snapshot":
     var
       pool = newTesterPool()
-      skipSet = {20, 23, 24}
-      testSet = {0 .. 99}
+      skipSet = {999}
+      testSet = {0 .. 999}
 
     pool.setDebug(noisy)
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
     for tt in voterSamples.filterIt(it.id in testSet):
-      pool.say "\n"
-      test &"Snapshots {tt.id}: {tt.info.substr(0,50)}...":
+
+      test &"Snapshots {tt.id: 2}: {tt.info.substr(0,50)}...":
+        pool.say "\n"
 
         if tt.id in skipSet:
-          echo &"Test {tt.id} skipped"
+          skip()
 
         else:
           # Assemble a chain of headers from the cast votes

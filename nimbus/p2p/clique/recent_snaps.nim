@@ -76,44 +76,51 @@ proc say(d: RecentDesc; v: varargs[string,`$`]) =
     if d.debug:
       stderr.write "*** " & v.join & "\n"
 
+proc say(rs: var RecentSnaps; v: varargs[string,`$`]) =
+  ## Debugging output
+  ppExceptionWrap:
+    if rs.debug:
+      stderr.write "*** " & v.join & "\n"
+
 proc getPrettyPrinters(d: RecentDesc): var PrettyPrinters =
   ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
   d.cfg.prettyPrint
 
-# clique/clique.go(394): if number == 0 || (number%c.config.Epoch [..]
-proc canDiskCheckPointOk(d: RecentDesc): bool {.
-                         gcsafe, raises: [Defect,RlpError].} =
-  # If we're at the genesis, snapshot the initial state.
+
+proc canDiskCheckPointOk(d: RecentDesc):
+                        bool {.inline, raises: [Defect,RlpError].} =
+
+  # clique/clique.go(394): if number == 0 || (number%c.config.Epoch [..]
   if d.args.blockNumber.isZero:
+    # If we're at the genesis, snapshot the initial state.
     return true
-  # Alternatively if we're at a checkpoint block without a parent
-  # (light client CHT), or we have piled up more headers than allowed
-  # to be re-orged (chain reinit from a freezer), consider the
-  # checkpoint trusted and snapshot it.
+
   if (d.args.blockNumber mod d.cfg.epoch) == 0:
+    # Alternatively if we're at a checkpoint block without a parent
+    # (light client CHT), or we have piled up more headers than allowed
+    # to be re-orged (chain reinit from a freezer), consider the
+    # checkpoint trusted and snapshot it.
     if FULL_IMMUTABILITY_THRESHOLD < d.local.headers.len:
       return true
     if d.cfg.dbChain.getBlockHeaderResult(d.args.blockNumber - 1).isErr:
       return true
 
-proc isCheckPointOk(number: BlockNumber): bool =
-  (number mod CHECKPOINT_INTERVAL) == 0
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(383): if number%checkpointInterval == 0 [..]
-proc tryDiskSnapshot(d: RecentDesc; snap: var Snapshot): bool =
-  if d.args.blockNumber.isCheckPointOk:
+proc tryLoadDiskSnapshot(d: RecentDesc; snap: var Snapshot): bool {.inline.} =
+  # clique/clique.go(383): if number%checkpointInterval == 0 [..]
+  if (d.args.blockNumber mod CHECKPOINT_INTERVAL) == 0:
     if snap.loadSnapshot(d.cfg, d.args.blockHash).isOk:
       trace "Loaded voting snapshot from disk",
         blockNumber = d.args.blockNumber,
         blockHash = d.args.blockHash
       return true
 
-proc tryDiskCheckPoint(d: RecentDesc; snap: var Snapshot): bool  {.
-                       gcsafe, raises: [Defect,RlpError].} =
+
+proc tryStoreDiskCheckPoint(d: RecentDesc; snap: var Snapshot):
+                           bool {.gcsafe, raises: [Defect,RlpError].} =
   if d.canDiskCheckPointOk:
     # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
     let checkPoint = d.cfg.dbChain.getBlockHeaderResult(d.args.blockNumber)
@@ -121,8 +128,8 @@ proc tryDiskCheckPoint(d: RecentDesc; snap: var Snapshot): bool  {.
       return false
     let
       hash = checkPoint.value.hash
-      signersList = checkPoint.value.extraData.extraDataSigners
-    snap.initSnapshot(d.cfg, d.args.blockNumber, hash, signersList)
+      accountList = checkPoint.value.extraData.extraDataAddresses
+    snap.initSnapshot(d.cfg, d.args.blockNumber, hash, accountList)
     snap.setDebug(d.debug)
 
     if snap.storeSnapshot.isOk:
@@ -148,12 +155,12 @@ proc initRecentSnaps*(rs: var RecentSnaps;
 
       while true:
         # If an on-disk checkpoint snapshot can be found, use that
-        if d.tryDiskSnapshot(snap):
+        if d.tryLoadDiskSnapshot(snap):
           # clique/clique.go(386): snap = s
           break
 
         # Save checkpoint e.g. when at the genesis ..
-        if d.tryDiskCheckPoint(snap):
+        if d.tryStoreDiskCheckPoint(snap):
           # clique/clique.go(407): log.Info("Stored [..]
           break
 
@@ -164,7 +171,7 @@ proc initRecentSnaps*(rs: var RecentSnaps;
           header = d.args.parents[^1]
 
           # clique/clique.go(416): if header.Hash() != hash [..]
-          if header.hash != d.args.blockHash and
+          if header.hash        != d.args.blockHash or
              header.blockNumber != d.args.blockNumber:
             return err((errUnknownAncestor,""))
           d.args.parents.setLen(d.args.parents.len-1)
@@ -189,15 +196,16 @@ proc initRecentSnaps*(rs: var RecentSnaps;
       block:
         # clique/clique.go(434): snap, err := snap.apply(headers)
         d.say "recentSnaps => applySnapshot([",
-              d.local.headers.mapIt("#" & $it.blockNumber.truncate(int))
-                  .join(",").string, "])"
+          d.local.headers.mapIt("#" & $it.blockNumber.truncate(int))
+            .join(",").string, "])"
         let rc = snap.applySnapshot(d.local.headers)
         d.say "recentSnaps => applySnapshot() => ", rc.pp
         if rc.isErr:
           return err(rc.error)
 
       # If we've generated a new checkpoint snapshot, save to disk
-      if snap.blockNumber.isCheckPointOk and 0 < d.local.headers.len:
+      if (snap.blockNumber mod CHECKPOINT_INTERVAL) == 0 and
+         0 < d.local.headers.len:
         var rc = snap.storeSnapshot
         if rc.isErr:
           return err(rc.error)
@@ -222,6 +230,7 @@ proc setDebug*(rs: var RecentSnaps; debug: bool) =
 proc getRecentSnaps*(rs: var RecentSnaps; args: RecentArgs): auto {.
                      gcsafe, raises: [Defect,CatchableError].} =
   ## Get snapshot from cache or disk
+  rs.say "getRecentSnap #", args.blockNumber.truncate(uint64)
   rs.cache.getLruItem:
     RecentDesc(cfg:   rs.cfg,
                debug: rs.debug,
