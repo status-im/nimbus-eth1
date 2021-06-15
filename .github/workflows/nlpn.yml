@@ -1,9 +1,11 @@
 name: nlpn CI
 on:
   push:
-    paths: ['nlpn/**', '.github/workflows/nlpn.yml']
+    paths: ['nlpn/**', '.github/workflows/nlpn.yml', 'vendor/**', 'Makefile',
+      'nimbus.nimble']
   pull_request:
-    paths: ['nlpn/**', '.github/workflows/nlpn.yml']
+    paths: ['nlpn/**', '.github/workflows/nlpn.yml', 'vendor/**', 'Makefile',
+      'nimbus.nimble']
 
 jobs:
   build:
@@ -51,13 +53,10 @@ jobs:
         run: |
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
             PLATFORM=x64
-            GOARCH=amd64
           else
             PLATFORM=x86
-            GOARCH=386
           fi
           echo "PLATFORM=${PLATFORM}" >> $GITHUB_ENV
-          echo "GOARCH=${GOARCH}" >> $GITHUB_ENV
 
           # libminiupnp / natpmp
           if [[ '${{ runner.os }}' == 'Linux' && '${{ matrix.target.cpu }}' == 'i386' ]]; then
@@ -173,7 +172,6 @@ jobs:
           build/nlpn.exe --help
           # mingw32-make ${DEFAULT_MAKE_FLAGS} test
 
-
       - name: Run nlpn tests (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -181,8 +179,8 @@ jobs:
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} nlpn
           build/nlpn --help
-          # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
-          # env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test test-reproducibility
+          # CC is needed to select correct compiler 32/64 bit
+          # env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} test test-reproducibility
 
       - name: Run nlpn tests (Macos)
         if: runner.os == 'Macos'
