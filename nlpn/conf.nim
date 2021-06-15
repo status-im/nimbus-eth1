@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [Defect].}
+
 import
   confutils, confutils/std/net, chronicles,
   eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node]
@@ -85,14 +87,22 @@ type
       defaultValue: DefaultAdminListenAddress
       name: "rpc-address" }: ValidIpAddress
 
-proc parseCmdArg*(T: type enr.Record, p: TaintedString): T =
+    case cmd* {.
+      command
+      defaultValue: noCommand .}: PortalCmd
+    of noCommand:
+      discard
+
+proc parseCmdArg*(T: type enr.Record, p: TaintedString): T
+    {.raises: [Defect, ConfigurationError].} =
   if not fromURI(result, p):
     raise newException(ConfigurationError, "Invalid ENR")
 
 proc completeCmdArg*(T: type enr.Record, val: TaintedString): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type Node, p: TaintedString): T =
+proc parseCmdArg*(T: type Node, p: TaintedString): T
+    {.raises: [Defect, ConfigurationError].} =
   var record: enr.Record
   if not fromURI(record, p):
     raise newException(ConfigurationError, "Invalid ENR")
@@ -109,7 +119,8 @@ proc parseCmdArg*(T: type Node, p: TaintedString): T =
 proc completeCmdArg*(T: type Node, val: TaintedString): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T =
+proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T
+    {.raises: [Defect, ConfigurationError].} =
   try:
     result = PrivateKey.fromHex(string(p)).tryGet()
   except CatchableError:

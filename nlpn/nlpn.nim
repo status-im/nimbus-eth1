@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [Defect].}
+
 import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver,
@@ -13,14 +15,18 @@ import
   eth/p2p/portal/protocol as portal_protocol,
   ./conf
 
-proc run(config: PortalConf) =
+proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   let
     rng = newRng()
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
     # TODO: allow for no TCP port mapping!
-    (extIp, _, extUdpPort) = setupAddress(config.nat,
-      config.listenAddress, udpPort, udpPort, "dcli")
+    (extIp, _, extUdpPort) =
+      try: setupAddress(config.nat,
+        config.listenAddress, udpPort, udpPort, "dcli")
+      except CatchableError as exc: raise exc
+      # TODO: Ideally we don't have the Exception here
+      except Exception as exc: raiseAssert exc.msg
 
   let d = newProtocol(config.nodeKey,
           extIp, none(Port), extUdpPort,
@@ -42,6 +48,7 @@ proc run(config: PortalConf) =
     try:
       chronos_httpserver.startMetricsHttpServer($address, port)
     except CatchableError as exc: raise exc
+    # TODO: Ideally we don't have the Exception here
     except Exception as exc: raiseAssert exc.msg
 
   d.start()
@@ -49,8 +56,11 @@ proc run(config: PortalConf) =
   runForever()
 
 when isMainModule:
+  {.pop.}
   let config = PortalConf.load()
+  {.push raises: [Defect].}
 
   setLogLevel(config.logLevel)
 
-  run(config)
+  case config.cmd
+  of noCommand: run(config)
