@@ -29,6 +29,7 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 	deps \
 	update \
 	nimbus \
+	nlpn \
 	test \
 	test-reproducibility \
 	clean \
@@ -109,6 +110,10 @@ nimbus: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims
 
+nlpn: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim nlpn $(NIM_PARAMS) nimbus.nims
+
 # symlink
 nimbus.nims:
 	ln -s nimbus.nimble $@
@@ -133,7 +138,7 @@ test-reproducibility:
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,$(TOOLS_CSV),all_tests,test_rpc}
+	rm -rf build/{nimbus,nlpn,$(TOOLS_CSV),all_tests,test_rpc}
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif
