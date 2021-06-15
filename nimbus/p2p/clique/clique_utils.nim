@@ -89,7 +89,7 @@ proc cliqueResultErr*(w: CliqueError): CliqueResult =
   err(w)
 
 
-proc extraDataSigners*(extraData: Blob): seq[EthAddress] =
+proc extraDataAddresses*(extraData: Blob): seq[EthAddress] =
   ## Extract signer addresses from extraData header field
 
   proc toEthAddress(a: openArray[byte]; start: int): EthAddress {.inline.} =

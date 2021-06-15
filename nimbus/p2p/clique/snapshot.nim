@@ -30,6 +30,7 @@ import
   ./clique_cfg,
   ./clique_defs,
   ./clique_poll,
+  ./clique_utils,
   ./ec_recover,
   chronicles,
   eth/[common, rlp, trie/db]
@@ -202,7 +203,7 @@ proc applySnapshot*(s: var Snapshot;
                     headers: openArray[BlockHeader]): CliqueResult {.
                       gcsafe, raises: [Defect,CatchableError].} =
   ## Initialises an authorization snapshot `snap` by applying the `headers`
-  ## to the argument snapshot `s`.
+  ## to the argument snapshot desciptor `s`.
 
   s.say "applySnapshot ", s.pp(headers).join("\n" & ' '.repeat(18))
 
@@ -238,7 +239,23 @@ proc applySnapshot*(s: var Snapshot;
 
     # Remove any votes on checkpoint blocks
     if (number mod s.cfg.epoch) == 0:
-      s.data.ballot.initCliquePoll
+      # clique/snapshot.go(210): snap.Votes = nil
+      s.say "applySnapshot epoch => reset, state=", s.pp(41)
+
+      # This part differs from the go implementation in that the `signer`
+      # list is re-assigned. The original implementation silently assumes
+      # that the `signer` list is the same as the previous one but this is
+      # not enforced.
+      #
+      # The eip225 discussion has it as: [..] where every epoch transition
+      # flushes all pending votes. Furthermore, these epoch transitions can
+      # also act as stateless checkpoints containing the list of current
+      # authorized signers within the header extra-data. This permits clients
+      # to sync up based only on a checkpoint hash without having to replay
+      # all the voting that was done on the chain up to that point. It also
+      # allows the genesis header to fully define the chain, containing the
+      # list of initial signers.
+      s.data.ballot.initCliquePoll(header.extraData.extraDataAddresses)
       s.data.ballot.setDebug(s.data.debug)
 
     # Delete the oldest signer from the recent list to allow it signing again
