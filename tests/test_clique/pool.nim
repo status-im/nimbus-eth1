@@ -51,18 +51,17 @@ type
 # Private Helpers
 # ------------------------------------------------------------------------------
 
-proc bespokeGenesis(file: string): CustomGenesis =
-  ## Find genesis block
-  if file == "":
-    let networkId = getConfiguration().net.networkId
-    result.genesis = defaultGenesisBlockForNetwork(networkId)
-  else:
-    doAssert file.loadCustomGenesis(result)
-  result.config.poaEngine = true
-
 proc chain(ap: TesterPool): BaseChainDB =
   ## Getter
   ap.engine.cfgInternal.dbChain
+
+proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
+  ## Shortcut => db/db_chain.getBlockHeader()
+  doAssert ap.chain.getBlockHeader(number, result)
+
+proc getBlockHeader(ap: TesterPool; hash: Hash256): BlockHeader =
+  ## Shortcut => db/db_chain.getBlockHeader()
+  doAssert ap.chain.getBlockHeader(hash, result)
 
 proc isZero(a: openArray[byte]): bool =
   result = true
@@ -189,11 +188,31 @@ proc ppBlockHeader(ap: TesterPool; v: BlockHeader; delim: string): string =
     &"{sep}nonce={ap.ppNonce(v.nonce)}" &
     &"{sep}extraData={ap.ppExtraData(v.extraData)})"
 
+# ------------------------------------------------------------------------------
+# Private: Constructor helpers
+# ------------------------------------------------------------------------------
+
 proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
   pp.nonce =       proc(v:BlockNonce):            string = ap.ppNonce(v)
   pp.address =     proc(v:EthAddress):            string = ap.ppAddress(v)
   pp.extraData =   proc(v:Blob):                  string = ap.ppExtraData(v)
   pp.blockHeader = proc(v:BlockHeader; d:string): string = ap.ppBlockHeader(v,d)
+
+proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
+  result = ap
+  result.boot.config.poaEngine = true
+  result.prng = initRand(prngSeed)
+  result.batch = @[newSeq[BlockHeader]()]
+  result.accounts = initTable[string,PrivateKey]()
+  result.xSeals = initTable[XSealKey,XSealValue]()
+  result.names = initTable[EthAddress,string]()
+  result.engine = newCliqueCfg(
+         dbChain = BaseChainDB(),
+         period = initDuration(seconds = 1))
+       .initClique
+  result.engine.setDebug(false)
+  result.engine.cfgInternal.prettyPrint.initPrettyPrinters(result)
+  result.resetChainDb(@[])
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -203,33 +222,26 @@ proc getPrettyPrinters*(t: TesterPool): var PrettyPrinters =
   ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
   t.engine.cfgInternal.prettyPrint
 
+proc setDebug*(ap: TesterPool; debug=true): TesterPool {.inline,discardable,} =
+  ## Set debugging mode on/off
+  result = ap
+  ap.debug = debug
+  ap.engine.setDebug(debug)
+
 proc say*(t: TesterPool; v: varargs[string,`$`]) =
   if t.debug:
     stderr.write v.join & "\n"
 
 
-proc newTesterPool*(epoch = 0.u256; genesisTemplate = ""): TesterPool =
-  new result
-  result.boot = genesisTemplate.bespokeGenesis
-  result.prng = initRand(prngSeed)
-  result.batch = @[newSeq[BlockHeader]()]
-  result.accounts = initTable[string,PrivateKey]()
-  result.xSeals = initTable[XSealKey,XSealValue]()
-  result.names = initTable[EthAddress,string]()
-  result.engine = newCliqueCfg(
-         dbChain = BaseChainDB(),
-         period = initDuration(seconds = 1),
-         epoch = epoch)
-       .initClique
-  result.engine.setDebug(false)
-  result.engine.cfgInternal.prettyPrint.initPrettyPrinters(result)
-  result.resetChainDb(@[])
-
-
-proc setDebug*(ap: TesterPool; debug = true) =
-  ## Set debugging mode on/off
-  ap.debug = debug
-  ap.engine.setDebug(debug)
+proc sayHeaderChain*(ap: TesterPool; indent = 0): TesterPool {.discardable.} =
+  result = ap
+  let pfx = ' '.repeat(indent)
+  var top = if 0 < ap.batch[^1].len: ap.batch[^1][^1]
+            else: ap.getBlockHeader(0.u256)
+  ap.say pfx, "   top header: " & ap.pp(top, 16+indent)
+  while not top.blockNumber.isZero:
+    top = ap.getBlockHeader(top.parentHash)
+    ap.say pfx, "parent header: " &  ap.pp(top, 16+indent)
 
 
 # clique/snapshot_test.go(62): func (ap *testerAccountPool) address(account [..]
@@ -277,13 +289,9 @@ proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
                parent: openArray[BlockHeader]): auto =
   ## Call p2p/clique.snapshotInternal()
   if ap.debug:
-    var header = ap.chain.getBlockHeader(number)
-    ap.say "*** snapshot argument: ", ap.pp(header,24)
-    while true:
-      doAssert ap.chain.getBlockHeader(header.parentHash,header)
-      ap.say "        parent header: ", ap.pp(header,24)
-      if header.blockNumber.isZero:
-        break
+    var header = ap.getBlockHeader(number)
+    ap.say "*** snapshot argument: #", number
+    ap.sayHeaderChain(8)
     when false: # all addresses are typically pp-mappable
       ap.say "          address map: ", toSeq(ap.names.pairs)
                                           .mapIt(&"@{it[1]}:{it[0]}")
@@ -293,12 +301,40 @@ proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
   ap.engine.snapshotInternal(number, hash, parent)
 
 # ------------------------------------------------------------------------------
+# Public: Constructor
+# ------------------------------------------------------------------------------
+
+proc newVoterPool*(genesisTemplate = ""): TesterPool =
+  new result
+  if genesisTemplate == "":
+    let networkId = getConfiguration().net.networkId
+    result.boot.genesis = defaultGenesisBlockForNetwork(networkId)
+  else:
+    # Find genesis block
+    doAssert genesisTemplate.loadCustomGenesis(result.boot)
+  result.initTesterPool
+
+proc newVoterPool*(customGenesis: CustomGenesis): TesterPool =
+  TesterPool(boot: customGenesis).initTesterPool
+
+# ------------------------------------------------------------------------------
 # Public: set up & manage voter database
 # ------------------------------------------------------------------------------
 
-proc resetVoterChain*(ap: TesterPool;
-                      signers: openArray[string]; epoch: uint64) =
+proc setVoterAccount*(ap: TesterPool; account: string;
+                      prvKey: PrivateKey): TesterPool {.discardable.} =
+  ## Manually define/import account
+  result = ap
+  ap.accounts[account] = prvKey
+  let address = prvKey.toPublicKey.toCanonicalAddress
+  ap.names[address] = account
+
+
+proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
+                      epoch = 0): TesterPool {.discardable.} =
   ## Reset the batch list for voter headers and update genesis block
+  result = ap
+
   ap.batch = @[newSeq[BlockHeader]()]
 
   # clique/snapshot_test.go(384): signers := make([]common.Address, [..]
@@ -315,15 +351,18 @@ proc resetVoterChain*(ap: TesterPool;
 
   # store modified genesis block and epoch
   ap.resetChainDb(extraData)
-  ap.engine.cfgInternal.epoch = epoch
+  ap.engine.cfgInternal.epoch = epoch.uint
 
 
 # clique/snapshot_test.go(415): blocks, _ := core.GenerateChain(&config, [..]
-proc appendVoter*(ap: TesterPool; voter: TesterVote) =
+proc appendVoter*(ap: TesterPool;
+                  voter: TesterVote): TesterPool {.discardable.} =
   ## Append a voter header to the block chain batch list
+  result = ap
+
   doAssert 0 < ap.batch.len # see initTesterPool() and resetVoterChain()
   let parent = if ap.batch[^1].len == 0:
-                 ap.chain.getBlockHeader(0.u256)
+                 ap.getBlockHeader(0.u256)
                else:
                  ap.batch[^1][^1]
 
@@ -361,8 +400,18 @@ proc appendVoter*(ap: TesterPool; voter: TesterVote) =
   ap.batch[^1].add header
 
 
-proc commitVoterChain*(ap: TesterPool) =
+proc appendVoter*(ap: TesterPool;
+                  voters: openArray[TesterVote]): TesterPool {.discardable.} =
+  ## Append a list of voter headers to the block chain batch list
+  result = ap
+  for voter in voters:
+    ap.appendVoter(voter)
+
+
+proc commitVoterChain*(ap: TesterPool): TesterPool {.discardable.} =
   ## Write the headers from the voter header batch list to the block chain DB
+  result = ap
+
   # Create a pristine blockchain with the genesis injected
   for headers in ap.batch:
     if 0 < headers.len:

@@ -74,7 +74,6 @@ proc getPrettyPrinters(s: var Snapshot): var PrettyPrinters =
 proc pp(s: var Snapshot; h: var AddressHistory): string =
   ppExceptionWrap:
     toSeq(h.keys)
-      .mapIt(it.truncate(uint64))
       .sorted
       .mapIt("#" & $it & ":" & s.pp(h[it.u256]))
       .join(",")
@@ -85,7 +84,7 @@ proc pp(s: var Snapshot; v: Vote): string =
   ppExceptionWrap:
     "(" & &"address={s.pp(v.address)}" &
           &",signer={s.pp(v.signer)}" &
-          &",blockNumber={v.blockNumber.truncate(uint64)}" &
+          &",blockNumber={v.blockNumber}" &
           &",{authorized(v.authorize)}" & ")"
 
 proc votesList(s: var Snapshot; sep: string): string =
@@ -234,7 +233,7 @@ proc applySnapshot*(s: var Snapshot;
       header = headers[headersIndex]
       number = header.blockNumber
 
-    s.say "applySnapshot processing #", number.truncate(uint64)
+    s.say "applySnapshot processing #", number
 
     # Remove any votes on checkpoint blocks
     if (number mod s.cfg.epoch) == 0:

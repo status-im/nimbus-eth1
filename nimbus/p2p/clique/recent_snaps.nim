@@ -230,7 +230,7 @@ proc setDebug*(rs: var RecentSnaps; debug: bool) =
 proc getRecentSnaps*(rs: var RecentSnaps; args: RecentArgs): auto {.
                      gcsafe, raises: [Defect,CatchableError].} =
   ## Get snapshot from cache or disk
-  rs.say "getRecentSnap #", args.blockNumber.truncate(uint64)
+  rs.say "getRecentSnap #", args.blockNumber
   rs.cache.getLruItem:
     RecentDesc(cfg:   rs.cfg,
                debug: rs.debug,
