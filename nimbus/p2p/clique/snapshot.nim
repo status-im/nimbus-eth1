@@ -30,7 +30,6 @@ import
   ./clique_cfg,
   ./clique_defs,
   ./clique_poll,
-  ./clique_utils,
   ./ec_recover,
   chronicles,
   eth/[common, rlp, trie/db]
@@ -82,7 +81,7 @@ proc pp(s: var Snapshot; h: var AddressHistory): string =
 
 proc pp(s: var Snapshot; v: Vote): string =
   proc authorized(b: bool): string =
-    if b: "auhorize" else: "de-authorize"
+    if b: "authorise" else: "de-authorise"
   ppExceptionWrap:
     "(" & &"address={s.pp(v.address)}" &
           &",signer={s.pp(v.signer)}" &
@@ -239,24 +238,15 @@ proc applySnapshot*(s: var Snapshot;
 
     # Remove any votes on checkpoint blocks
     if (number mod s.cfg.epoch) == 0:
-      # clique/snapshot.go(210): snap.Votes = nil
-      s.say "applySnapshot epoch => reset, state=", s.pp(41)
-
-      # This part differs from the go implementation in that the `signer`
-      # list is re-assigned. The original implementation silently assumes
-      # that the `signer` list is the same as the previous one but this is
-      # not enforced.
+      # Note that the correctness of the authorised accounts list is verified in
+      #   clique/clique.verifyCascadingFields(),
+      #   see clique/clique.go(355): if number%c.config.Epoch == 0 {
+      # This means, the account list passed with the epoch header is verified
+      # to be the same as the one we already have.
       #
-      # The eip225 discussion has it as: [..] where every epoch transition
-      # flushes all pending votes. Furthermore, these epoch transitions can
-      # also act as stateless checkpoints containing the list of current
-      # authorized signers within the header extra-data. This permits clients
-      # to sync up based only on a checkpoint hash without having to replay
-      # all the voting that was done on the chain up to that point. It also
-      # allows the genesis header to fully define the chain, containing the
-      # list of initial signers.
-      s.data.ballot.initCliquePoll(header.extraData.extraDataAddresses)
-      s.data.ballot.setDebug(s.data.debug)
+      # clique/snapshot.go(210): snap.Votes = nil
+      s.data.ballot.flushVotes
+      s.say "applySnapshot epoch => reset, state=", s.pp(41)
 
     # Delete the oldest signer from the recent list to allow it signing again
     block:

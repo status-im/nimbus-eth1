@@ -110,6 +110,11 @@ proc delVote*(t: var CliquePoll; signer, address: EthAddress) {.
         t.votes[address].signers.del(signer)
 
 
+proc flushVotes*(t: var CliquePoll) =
+  ## Reset/flush pending votes, authorised signers remain the same.
+  t.votes.clear
+
+
 # clique/snapshot.go(141): func (s *Snapshot) validVote(address [..]
 proc validVote*(t: var CliquePoll; address: EthAddress; authorize: bool): bool =
   ## Check whether voting would have an effect in `addVote()`
