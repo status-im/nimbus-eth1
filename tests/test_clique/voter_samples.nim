@@ -29,7 +29,7 @@ type
   TestSpecs* = object   ## Define the various voting scenarios to test
     id*: int                  ## Test id
     info*: string             ## Test description
-    epoch*:   uint64          ## Number of blocks in an epoch (unset = 30000)
+    epoch*: int               ## Number of blocks in an epoch (unset = 30000)
     signers*: seq[string]     ## Initial list of authorized signers in the
                               ## genesis
     votes*: seq[TesterVote]   ## Chain of signed blocks, potentially influencing

@@ -17,6 +17,7 @@ import
   stint,
   unittest2
 
+
 # clique/snapshot_test.go(99): func TestClique(t *testing.T) {
 proc cliqueMain*(noisy = defined(debug)) =
   ## Clique PoA Snapshot
@@ -27,11 +28,10 @@ proc cliqueMain*(noisy = defined(debug)) =
   ##
   suite "Clique PoA Snapshot":
     var
-      pool = newTesterPool()
+      pool = newVoterPool().setDebug(noisy)
+    const
       skipSet = {999}
       testSet = {0 .. 999}
-
-    pool.setDebug(noisy)
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
     for tt in voterSamples.filterIt(it.id in testSet):
@@ -45,12 +45,11 @@ proc cliqueMain*(noisy = defined(debug)) =
         else:
           # Assemble a chain of headers from the cast votes
           # see clique/snapshot_test.go(407): config := *params.TestChainConfig
-          pool.resetVoterChain(tt.signers, tt.epoch)
-
-          # see clique/snapshot_test.go(425): for j, block := range blocks {
-          for voter in tt.votes:
-            pool.appendVoter(voter)
-          pool.commitVoterChain
+          pool
+            .resetVoterChain(tt.signers, tt.epoch)
+            # see clique/snapshot_test.go(425): for j, block := range blocks {
+            .appendVoter(tt.votes)
+            .commitVoterChain
 
           # see clique/snapshot_test.go(476): snap, err := engine.snapshot( [..]
           let topHeader = pool.topVoterHeader
