@@ -36,7 +36,7 @@ proc cliqueMain*(noisy = defined(debug)) =
     # clique/snapshot_test.go(379): for i, tt := range tests {
     for tt in voterSamples.filterIt(it.id in testSet):
 
-      test &"Snapshots {tt.id: 2}: {tt.info.substr(0,50)}...":
+      test &"Snapshots {tt.id:2}: {tt.info.substr(0,50)}...":
         pool.say "\n"
 
         if tt.id in skipSet:

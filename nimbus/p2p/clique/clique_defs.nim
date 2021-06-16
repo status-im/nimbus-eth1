@@ -250,7 +250,7 @@ type
     errCliqueGasRepriceFork
     errCliqueSealSigFn
 
-    errCliqueStopped = "Process was interrupted"
+    errCliqueStopped = "process was interrupted"
     errCliqueExpectedBaseFee = "header is missing baseFee"
     errCliqueGasLimitTooLow = "gas limit is too low"
     errCliqueGasLimitTooHigh = "gas limit is too high"
