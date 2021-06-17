@@ -169,8 +169,11 @@ proc stripLeadingZeros(x: string): string =
   strip(x, leading = true, trailing = false, chars = {'0'})
 
 proc bigIntNode(val: UInt256): RespResult =
-  let hex = stripLeadingZeros(val.toHex)
-  ok(Node(kind: nkString, stringVal: "0x" & hex, pos: Pos()))
+  if val == 0.u256:
+    ok(Node(kind: nkString, stringVal: "0x0", pos: Pos()))
+  else:
+    let hex = stripLeadingZeros(val.toHex)
+    ok(Node(kind: nkString, stringVal: "0x" & hex, pos: Pos()))
 
 proc bigIntNode(x: uint64 | int64): RespResult =
   # stdlib toHex is not suitable for hive
@@ -218,8 +221,11 @@ proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: Hash256): RespResult =
 proc getOmmers(ctx: GraphqlContextRef, ommersHash: Hash256): RespResult =
   try:
     let uncles = getUncles(ctx.chainDB, ommersHash)
-    if uncles.len == 0:
-      return ok(respNull())
+    when false:
+      # EIP 1767 says no ommers == null
+      # but hive test case want empty array []
+      if uncles.len == 0:
+        return ok(respNull())
     var list = respList()
     for n in uncles:
       list.add headerNode(ctx, n)
@@ -301,8 +307,11 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
 
 proc accountNode(ctx: GraphqlContextRef, header: BlockHeader, address: EthAddress): RespResult =
   let db = getAccountDb(ctx.chainDB, header)
-  if not db.accountExists(address):
-    return ok(respNull())
+  when false:
+    # EIP 1767 unclear about non existent account
+    # but hive test case demand something
+    if not db.accountExists(address):
+      return ok(respNull())
   let acc = db.getAccount(address)
   ok(accountNode(ctx, acc, address, db))
 
@@ -637,8 +646,7 @@ proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.ap
     return hres
   let h = HeaderNode(hres.get())
   let db = getAccountDb(ctx.chainDB, h.header)
-  let creationNonce = db.getNonce(sender)
-  let contractAddress = generateAddress(sender, creationNonce)
+  let contractAddress = generateAddress(sender, tx.tx.nonce)
   ctx.accountNode(h.header, contractAddress)
 
 proc txLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =

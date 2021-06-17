@@ -154,7 +154,7 @@
       "code":"0x",
       "storage":"0x0000000000000000000000000000000000000000000000000000000000000000"
     },
-    "nullAccount":null
+    "nullAccount":{"__typename":"Account"}
   }
 }
 """

@@ -1,13 +1,24 @@
 {
-  "request" :"{ account(address: \"0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b\") { transactionCount } }",
-
-  "responses": [{
-    "data" : {
-      "account" :{
-          "transactionCount" : 32
+  "request": "{block{ account(address: \"0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b\") { transactionCount } }}",
+  "responses": [
+    {
+      "data": {
+        "block": {
+          "account": {
+            "transactionCount": 32
+          }
+        }
+      }
+    },
+    {
+      "data": {
+        "block": {
+          "account": {
+            "transactionCount": "0x20"
+          }
+        }
       }
     }
-  }],
-
+  ],
   "statusCode": 200
 }
