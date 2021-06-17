@@ -2,10 +2,10 @@ name: nlpn CI
 on:
   push:
     paths: ['nlpn/**', '.github/workflows/nlpn.yml', 'vendor/**', 'Makefile',
-      'nimbus.nimble']
+      'nimbus.nimble', '!nlpn/**/*.md']
   pull_request:
     paths: ['nlpn/**', '.github/workflows/nlpn.yml', 'vendor/**', 'Makefile',
-      'nimbus.nimble']
+      'nimbus.nimble', '!nlpn/**/*.md']
 
 jobs:
   build:
