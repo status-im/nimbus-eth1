@@ -1,7 +1,17 @@
-import ../db/db_chain, eth/common, chronicles, ../vm_state,
-  stint, nimcrypto,
-  ../utils, eth/trie/db, ./executor, ../chain_config, ../genesis, ../utils,
-  stew/endians2, ./validate, ./validate/epoch_hash_cache
+import
+  ../chain_config,
+  ../db/db_chain,
+  ../genesis,
+  ../utils,
+  ../vm_state,
+  ./executor,
+  ./validate,
+  ./validate/epoch_hash_cache,
+  chronicles,
+  eth/[common, trie/db],
+  nimcrypto,
+  stew/endians2,
+  stint
 
 when not defined(release):
   import ../tracer
@@ -27,6 +37,44 @@ type
     blockZeroHash: KeccakHash
     cacheByEpoch: EpochHashCache
     extraValidation: bool
+
+  CanonicalState = object    ## temporary state cache
+    canoHead: BlockHeader    ## current canonical head
+    restoreHead: BlockHeader ## restore value
+    sibling: BlockHeader     ## block number reference of which to be replaced
+    needRestoreOk: bool      ## need to restore canonical head
+
+
+proc updateCanonicalHead(c: Chain; header: BlockHeader;
+                         forceUpdateOk: bool): CanonicalState {.inline.} =
+  ## If enabled via `forceUpdateOk` the canonical head is moved to the
+  ## parent of the argument header and the previous state is captured so
+  ## it can be restored.
+  result.canoHead = c.db.getCanonicalHead()
+  if forceUpdateOk:
+    let
+      canoNumber = result.canoHead.blockNumber
+      canoHash = result.canoHead.hash
+      thisNumber = header.blockNumber
+      parentHash = header.parentHash
+
+    # Check whether there is something to do, at all
+    if forceUpdateOk and parentHash != canoHash and thisNumber <= canoNumber:
+      # Set new caconical head and provide restore information.
+      result.restoreHead = result.canoHead
+      result.canoHead = c.db.getBlockHeader(parentHash)
+      c.db.setHead(result.canoHead)
+
+      # Restore original header only if
+      #  * the restored chain would be the lingest (i.e. the bock number
+      #    of the restored head will be unique maximum number)
+      #  * or the sibling header on the to be restored chain, shadowed by the
+      #     argument header has higher difficulty.
+      result.sibling = c.db.getBlockHeader(thisNumber)
+      if thisNumber < canoNumber or
+         header.difficulty < result.sibling.difficulty:
+        result.needRestoreOk = true
+
 
 func toChainFork(c: ChainConfig, number: BlockNumber): ChainFork =
   if number >= c.berlinBlock: Berlin
@@ -130,7 +178,10 @@ method getAncestorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, ski
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): ValidationResult {.gcsafe.} =
+method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
+                      bodies: openarray[BlockBody];
+                      forceCanonicalParent = true):
+                        ValidationResult {.gcsafe,base.} =
   # Run the VM here
   if headers.len != bodies.len:
     debug "Number of headers not matching number of bodies"
@@ -140,11 +191,15 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
 
-  trace "Persisting blocks", fromBlock = headers[0].blockNumber, toBlock = headers[^1].blockNumber
+  trace "Persisting blocks",
+    fromBlock = headers[0].blockNumber,
+    toBlock = headers[^1].blockNumber
+
   for i in 0 ..< headers.len:
-    let head = c.db.getCanonicalHead()
-    let vmState = newBaseVMState(head.stateRoot, headers[i], c.db)
-    let validationResult = processBlock(c.db, headers[i], bodies[i], vmState)
+    let
+      canoState = c.updateCanonicalHead(headers[i], forceCanonicalParent)
+      vmState = newBaseVMState(canoState.canoHead.stateRoot, headers[i], c.db)
+      validationResult = processBlock(c.db, headers[i], bodies[i], vmState)
 
     when not defined(release):
       if validationResult == ValidationResult.Error and
@@ -178,6 +233,15 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
     c.db.currentBlock = headers[i].blockNumber
+
+    # Reset canonical head (if requested)
+    if canoState.needRestoreOk:
+      # The follong command would restore the block number reference to the
+      # original header which is now shadowed by the argument header. At least
+      # for the tests, this maked no difference so it is omitted.
+      #
+      # c.db.addBlockNumberToHashLookup(canoState.sibling)
+      c.db.setHead(canoState.restoreHead)
 
   transaction.commit()
 
