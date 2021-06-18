@@ -9,11 +9,11 @@
 
 import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver,
+  chronos, metrics, metrics/chronos_httpserver, json_rpc/servers/httpserver,
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/portal/protocol as portal_protocol,
-  ./conf
+  ./conf, ./rpc/eth_api
 
 proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   let
@@ -50,6 +50,13 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     except CatchableError as exc: raise exc
     # TODO: Ideally we don't have the Exception here
     except Exception as exc: raiseAssert exc.msg
+
+  if config.rpcEnabled:
+    let
+      ta = initTAddress(config.rpcAddress, config.rpcPort)
+      rpcHttpServer = newRpcHttpServer([ta])
+    rpcHttpServer.installEthApiHandlers()
+    rpcHttpServer.start()
 
   d.start()
 
