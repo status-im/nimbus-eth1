@@ -249,6 +249,13 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
        (uncle.parentHash == header.parentHash):
       return err("Uncle's parent is not an ancestor")
 
+    # check uncle against own parent
+    var parent: BlockHeader
+    if not chainDB.getBlockHeader(uncle.parentHash,parent):
+      return err("Uncle's parent has gone missing")
+    if uncle.timestamp <= parent.timestamp:
+      return err("Uncle's parent must me older")
+
     # Now perform VM level validation of the uncle
     if checkSealOK:
       result = hashCache.validateSeal(uncle)

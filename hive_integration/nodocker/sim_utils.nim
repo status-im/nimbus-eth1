@@ -19,7 +19,9 @@ template runTest*(suiteName: string, caseFolder: string, body: untyped) =
   disableParamFiltering()
   suite suiteName:
     var status = initOrderedTable[string, OrderedTable[string, Status]]()
-    for fileName {.inject.} in walkDirRec(caseFolder):
+    for fileName {.inject.} in walkDirRec(
+                    caseFolder, yieldFilter = {pcFile,pcLinkToFile}):
+
       if not fileName.endsWith(".json"):
         continue
 
