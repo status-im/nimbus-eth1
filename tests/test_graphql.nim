@@ -8,8 +8,8 @@
 # those terms.
 
 import
-  std/[os, json, unittest],
-  stew/byteutils,
+  std/[os, json],
+  stew/byteutils, unittest2,
   eth/[p2p, common, trie/db, rlp, trie],
   eth/p2p/rlpx_protocols/eth_protocol,
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,

@@ -7,7 +7,7 @@
 
 # Separated from main tests for brevity
 
-import unittest, ../../nimbus/rpc/hexstrings, json
+import unittest2, ../../nimbus/rpc/hexstrings, json
 
 proc doHexStrTests* =
   suite "[RPC] Hex quantity":
@@ -54,7 +54,7 @@ proc doHexStrTests* =
           source = "0x0123"
           x = hexQuantityStr source
         check %x != %source
-      
+
   suite "[RPC] Hex data":
     test "Zero value":
       expect ValueError:
