@@ -19,8 +19,7 @@ type
   EthHeader = object
     header: BlockHeader
 
-proc importRlpBlock*(importFile: string;
-                     chainDB: BasechainDB; forceCanonicalParent = false): bool =
+proc importRlpBlock*(importFile: string; chainDB: BasechainDB): bool =
   let res = io2.readAllBytes(importFile)
   if res.isErr:
     error "failed to import", fileName = importFile
@@ -36,7 +35,7 @@ proc importRlpBlock*(importFile: string;
       let header = rlp.read(EthHeader).header
       let body = rlp.readRecordType(BlockBody, false)
       if header.blockNumber > head.blockNumber:
-        let valid = chain.persistBlocks([header], [body], forceCanonicalParent)
+        let valid = chain.persistBlocks([header], [body])
         if valid == ValidationResult.Error:
           error "failed to import rlp encoded blocks", fileName = importFile
           return false
