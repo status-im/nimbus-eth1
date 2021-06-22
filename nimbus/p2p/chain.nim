@@ -182,13 +182,6 @@ method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
         return ValidationResult.Error
 
     discard c.db.persistHeaderToDb(headers[i])
-    # The following check makes no sense anymore if the `head` is the parent
-    # was allowed to be inserted somewhere before the canonocal head.
-    #
-    # if c.db.getCanonicalHead().blockHash != headers[i].blockHash:
-    #   debug "Stored block header hash doesn't match declared hash"
-    #   return ValidationResult.Error
-
     discard c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
     discard c.db.persistReceipts(vmState.receipts)
 
