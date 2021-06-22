@@ -1,7 +1,17 @@
-import ../db/db_chain, eth/common, chronicles, ../vm_state,
-  stint, nimcrypto,
-  ../utils, eth/trie/db, ./executor, ../chain_config, ../genesis, ../utils,
-  stew/endians2, ./validate, ./validate/epoch_hash_cache
+import
+  ../chain_config,
+  ../db/db_chain,
+  ../genesis,
+  ../utils,
+  ../vm_state,
+  ./executor,
+  ./validate,
+  ./validate/epoch_hash_cache,
+  chronicles,
+  eth/[common, trie/db],
+  nimcrypto,
+  stew/endians2,
+  stint
 
 when not defined(release):
   import ../tracer
@@ -130,7 +140,8 @@ method getAncestorHeader*(c: Chain, h: BlockHeader, output: var BlockHeader, ski
 method getBlockBody*(c: Chain, blockHash: KeccakHash): BlockBodyRef =
   result = nil
 
-method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarray[BlockBody]): ValidationResult {.gcsafe.} =
+method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
+                  bodies: openarray[BlockBody]): ValidationResult {.gcsafe.} =
   # Run the VM here
   if headers.len != bodies.len:
     debug "Number of headers not matching number of bodies"
@@ -140,11 +151,15 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
 
-  trace "Persisting blocks", fromBlock = headers[0].blockNumber, toBlock = headers[^1].blockNumber
+  trace "Persisting blocks",
+    fromBlock = headers[0].blockNumber,
+    toBlock = headers[^1].blockNumber
+
   for i in 0 ..< headers.len:
-    let head = c.db.getCanonicalHead()
-    let vmState = newBaseVMState(head.stateRoot, headers[i], c.db)
-    let validationResult = processBlock(c.db, headers[i], bodies[i], vmState)
+    let
+      head = c.db.getBlockHeader(headers[i].parentHash)
+      vmState = newBaseVMState(head.stateRoot, headers[i], c.db)
+      validationResult = processBlock(c.db, headers[i], bodies[i], vmState)
 
     when not defined(release):
       if validationResult == ValidationResult.Error and
@@ -167,10 +182,6 @@ method persistBlocks*(c: Chain, headers: openarray[BlockHeader], bodies: openarr
         return ValidationResult.Error
 
     discard c.db.persistHeaderToDb(headers[i])
-    if c.db.getCanonicalHead().blockHash != headers[i].blockHash:
-      debug "Stored block header hash doesn't match declared hash"
-      return ValidationResult.Error
-
     discard c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
     discard c.db.persistReceipts(vmState.receipts)
 

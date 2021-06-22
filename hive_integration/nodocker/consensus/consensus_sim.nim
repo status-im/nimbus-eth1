@@ -8,8 +8,8 @@
 # those terms.
 
 import
-  std/[os, parseopt, json],
-  eth/[common, p2p, trie/db], stew/byteutils,
+  std/[os, parseopt, strformat, json],
+  eth/[common, trie/db], stew/byteutils,
   ../../../nimbus/db/db_chain,
   ../../../nimbus/[genesis, config, conf_utils],
   ../sim_utils
@@ -42,7 +42,13 @@ proc main() =
                    else:
                      paramStr(1)
 
+  if not caseFolder.dirExists:
+    # Handy early error message and stop directive
+    let progname = getAppFilename().extractFilename
+    quit(&"*** {progname}: Not a case folder: {caseFolder}")
+
   runTest("Consensus", caseFolder):
+    # Variable `fileName` is injected by `runTest()`
     let node = parseFile(fileName)
     processNode(fileName, node["chainfile"].getStr,
       node["lastblockhash"].getStr, testStatusIMPL)
