@@ -259,10 +259,19 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   result.header.difficulty = baseHeaderForImport.difficulty
 
   if validation:
-    if not validateBlockUnchanged(result, preminedBlock):
-      raise newException(ValidationError, "block changed")
+    if chainDB.validateDaoMarker(result.header).isErr:
+      raise newException(ValidationError, "unsupported DAO")
     if not validateBlock(chainDB, result, checkSeal):
       raise newException(ValidationError, "invalid block")
+    #
+    # Note that the `validateBlockUnchanged()` clause is almost certainly
+    # `false` so the sorrounding if clause has been replaced by an uncontional
+    # exception. The reason for that this works relies on the fact that
+    # `validation` flag is set exactly if some check is expected to fail.
+    #
+    # if not validateBlockUnchanged(result, preminedBlock):
+    #   raise newException(ValidationError, "block changed")
+    raise newException(ValidationError, "administrative exception")
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 

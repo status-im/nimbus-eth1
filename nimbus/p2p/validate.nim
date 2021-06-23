@@ -9,6 +9,7 @@
 # according to those terms.
 
 import
+  std/[sequtils, sets, tables, times],
   ../constants,
   ../db/[db_chain, accounts_cache],
   ../transaction,
@@ -17,22 +18,26 @@ import
   ../vm_state,
   ../vm_types,
   ../forks,
+  ./dao,
   ./validate/epoch_hash_cache,
   chronicles,
   eth/[common, rlp, trie/trie_defs],
   ethash,
   nimcrypto,
   options,
-  sets,
-  stew/[results, endians2],
-  strutils,
-  tables,
-  times
+  stew/[results, endians2]
+
+from stew/byteutils
+  import nil
 
 export
   epoch_hash_cache.EpochHashCache,
   epoch_hash_cache.initEpochHashCache,
   results
+
+const
+  daoForkBlockExtraData =
+    byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
 
 type
   MiningHeader = object
@@ -339,6 +344,25 @@ proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
   result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
   if result.isOk:
     result = chainDB.validateGaslimit(header)
+
+
+proc validateDaoMarker*(chainDB: BaseChainDB;
+                        header: BlockHeader): Result[void,string] =
+
+  if chainDB.config.daoForkSupport and
+     chainDB.config.daoForkBlock <= header.blockNumber and
+     header.extraData != daoForkBlockExtraData:
+    return err("`extra data` should be marked DAO")
+
+  result = ok()
+
+
+proc validateKinshipAndDao*(chainDB: BaseChainDB; header: BlockHeader;
+                            uncles: seq[BlockHeader]; checkSealOK: bool;
+                            hCache: var EpochHashCache): Result[void,string] =
+  result = chainDB.validateKinship(header, uncles, checkSealOK, hCache)
+  if result.isOk:
+    result = chainDB.validateDaoMarker(header)
 
 # ------------------------------------------------------------------------------
 # End

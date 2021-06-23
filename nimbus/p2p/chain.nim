@@ -171,8 +171,8 @@ method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
       return validationResult
 
     if c.extraValidation:
-      let res = validateKinship(
-        c.db, headers[i],
+      let res = c.db.validateKinshipAndDao(
+        headers[i],
         bodies[i].uncles,
         checkSealOK = false, # TODO: how to checkseal from here
         c.cacheByEpoch
