@@ -22,27 +22,40 @@ type
 proc importRlpBlock*(importFile: string; chainDB: BasechainDB): bool =
   let res = io2.readAllBytes(importFile)
   if res.isErr:
-    error "failed to import", fileName = importFile
+    error "failed to import",
+      fileName = importFile
     return false
 
-  var chain = newChain(chainDB, extraValidation = true)
-  # the encoded rlp can contains one or more blocks
-  var rlp = rlpFromBytes(res.get)
-  let head = chainDB.getCanonicalHead()
+  var
+    # the encoded rlp can contains one or more blocks
+    rlp = rlpFromBytes(res.get)
+    chain = newChain(chainDB, extraValidation = true)
+    errorCount = 0
+  let
+    head = chainDB.getCanonicalHead()
 
-  try:
-    while true:
-      let header = rlp.read(EthHeader).header
-      let body = rlp.readRecordType(BlockBody, false)
+  while rlp.hasData:
+    try:
+      let
+        header = rlp.read(EthHeader).header
+        body = rlp.readRecordType(BlockBody, false)
       if header.blockNumber > head.blockNumber:
-        let valid = chain.persistBlocks([header], [body])
-        if valid == ValidationResult.Error:
-          error "failed to import rlp encoded blocks", fileName = importFile
-          return false
-      if not rlp.hasData:
-        break
-  except CatchableError as e:
-    error "rlp error", fileName = importFile, msg = e.msg, exception = e.name
-    return false
+        if chain.persistBlocks([header], [body]) == ValidationResult.Error:
+          # register one more error and continue
+          errorCount.inc
+    except RlpError as e:
+      # terminate if there was a decoding error
+      error "rlp error",
+        fileName = importFile,
+        msg = e.msg,
+        exception = e.name
+      return false
+    except CatchableError as e:
+      # otherwise continue
+      error "import error",
+        fileName = importFile,
+        msg = e.msg,
+        exception = e.name
+      errorCount.inc
 
-  return true
+  return errorCount == 0
