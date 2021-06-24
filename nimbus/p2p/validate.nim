@@ -14,7 +14,7 @@ import
   ../db/[db_chain, accounts_cache],
   ../transaction,
   ../utils,
-  ../utils/header,
+  ../utils/[difficulty, header],
   ../vm_state,
   ../vm_types,
   ../forks,
@@ -167,8 +167,9 @@ func validateGasLimit(gasLimit, parentGasLimit: GasInt): Result[void,string] =
 
   result = ok()
 
-proc validateHeader(header, parentHeader: BlockHeader; checkSealOK: bool;
-                     hashCache: var EpochHashCache): Result[void,string] =
+proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
+                    checkSealOK: bool; hashCache: var EpochHashCache):
+                      Result[void,string] =
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
@@ -181,6 +182,15 @@ proc validateHeader(header, parentHeader: BlockHeader; checkSealOK: bool;
 
   if header.timestamp.toUnix <= parentHeader.timestamp.toUnix:
     return err("timestamp must be strictly later than parent")
+
+  if db.config.daoForkSupport and
+     db.config.daoForkBlock <= header.blockNumber and
+     header.extraData != daoForkBlockExtraData:
+    return err("header extra data should be marked DAO")
+
+  let calcDiffc = db.config.calcDifficulty(header.timestamp, parentHeader)
+  if header.difficulty < calcDiffc:
+    return err("provided header difficulty is too low")
 
   if checkSealOK:
     return hashCache.validateSeal(header)
@@ -322,16 +332,17 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 # Public functions, extracted from test_blockchain_json
 # ------------------------------------------------------------------------------
 
-proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
-                      uncles: seq[BlockHeader]; checkSealOK: bool;
-                      hashCache: var EpochHashCache): Result[void,string] =
+proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
+                               uncles: seq[BlockHeader]; checkSealOK: bool;
+                               hashCache: var EpochHashCache):
+                                 Result[void,string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
     return ok()
 
   let parentHeader = chainDB.getBlockHeader(header.parentHash)
-  result = header.validateHeader(parentHeader, checkSealOK, hashCache)
+  result = chainDB.validateHeader(header, parentHeader, checkSealOK, hashCache)
   if result.isErr:
     return
 
@@ -344,25 +355,6 @@ proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
   result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
   if result.isOk:
     result = chainDB.validateGaslimit(header)
-
-
-proc validateDaoMarker*(chainDB: BaseChainDB;
-                        header: BlockHeader): Result[void,string] =
-
-  if chainDB.config.daoForkSupport and
-     chainDB.config.daoForkBlock <= header.blockNumber and
-     header.extraData != daoForkBlockExtraData:
-    return err("`extra data` should be marked DAO")
-
-  result = ok()
-
-
-proc validateKinshipAndDao*(chainDB: BaseChainDB; header: BlockHeader;
-                            uncles: seq[BlockHeader]; checkSealOK: bool;
-                            hCache: var EpochHashCache): Result[void,string] =
-  result = chainDB.validateKinship(header, uncles, checkSealOK, hCache)
-  if result.isOk:
-    result = chainDB.validateDaoMarker(header)
 
 # ------------------------------------------------------------------------------
 # End
