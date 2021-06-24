@@ -245,14 +245,10 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
 
   if validation:
     let rc = chainDB.validateHeaderAndKinship(
-      result.header, result.uncles, checkSeal, cacheByEpoch)
+      result.header, body, checkSeal, cacheByEpoch)
     if rc.isErr:
       raise newException(
         ValidationError, "validateHeaderAndKinship: " & rc.error)
-    #
-    # FIXME: next directive must be removed when all cases are covered
-    #        by `validateHeaderAndKinship()`
-    raise newException(ValidationError, "administrative exception")
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
@@ -299,8 +295,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
 
         # manually validating
         check chainDB.validateHeaderAndKinship(
-          preminedBlock.header, preminedBlock.uncles,
-          checkSeal, cacheByEpoch).isOk
+          preminedBlock, checkSeal, cacheByEpoch).isOk
 
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()

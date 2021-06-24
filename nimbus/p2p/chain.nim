@@ -165,7 +165,7 @@ method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
 
     when not defined(release):
       if validationResult == ValidationResult.Error and
-          body.transactions.calcTxRoot == header.txRoot:
+         body.transactions.calcTxRoot == header.txRoot:
         dumpDebuggingMetaData(c.db, header, body, vmState)
         warn "Validation error. Debugging metadata dumped."
 
@@ -175,7 +175,7 @@ method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
     if c.extraValidation:
       let res = c.db.validateHeaderAndKinship(
         header,
-        body.uncles,
+        body,
         checkSealOK = false, # TODO: how to checkseal from here
         c.cacheByEpoch
       )

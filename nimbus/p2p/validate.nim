@@ -168,8 +168,8 @@ func validateGasLimit(gasLimit, parentGasLimit: GasInt): Result[void,string] =
   result = ok()
 
 proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
-                    checkSealOK: bool; hashCache: var EpochHashCache):
-                      Result[void,string] =
+                    numTransactions: int; checkSealOK: bool;
+                    hashCache: var EpochHashCache): Result[void,string] =
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
@@ -177,8 +177,11 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
   if result.isErr:
     return
 
+  if header.gasUsed == 0 and 0 < numTransactions:
+    return err("zero gasUsed but tranactions present");
+
   if header.blockNumber != parentHeader.blockNumber + 1:
-    return err("Blocks must be numbered consecutively.")
+    return err("Blocks must be numbered consecutively")
 
   if header.timestamp.toUnix <= parentHeader.timestamp.toUnix:
     return err("timestamp must be strictly later than parent")
@@ -333,16 +336,16 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 # ------------------------------------------------------------------------------
 
 proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
-                               uncles: seq[BlockHeader]; checkSealOK: bool;
-                               hashCache: var EpochHashCache):
-                                 Result[void,string] =
+            uncles: seq[BlockHeader]; numTransactions: int; checkSealOK: bool;
+            hashCache: var EpochHashCache): Result[void,string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
     return ok()
 
   let parentHeader = chainDB.getBlockHeader(header.parentHash)
-  result = chainDB.validateHeader(header, parentHeader, checkSealOK, hashCache)
+  result = chainDB.validateHeader(
+    header, parentHeader,numTransactions,  checkSealOK, hashCache)
   if result.isErr:
     return
 
@@ -355,6 +358,19 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
   result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
   if result.isOk:
     result = chainDB.validateGaslimit(header)
+
+
+proc validateHeaderAndKinship*(chainDB: BaseChainDB;
+                      header: BlockHeader; body: BlockBody; checkSealOK: bool;
+                      hashCache: var EpochHashCache): Result[void,string] =
+  chainDB.validateHeaderAndKinship(
+    header, body.uncles, body.transactions.len, checkSealOK, hashCache)
+
+
+proc validateHeaderAndKinship*(chainDB: BaseChainDB; ethBlock: EthBlock;
+        checkSealOK: bool; hashCache: var EpochHashCache): Result[void,string] =
+  chainDB.validateHeaderAndKinship(
+    ethBlock.header, ethBlock.uncles, ethBlock.txs.len, checkSealOK, hashCache)
 
 # ------------------------------------------------------------------------------
 # End
