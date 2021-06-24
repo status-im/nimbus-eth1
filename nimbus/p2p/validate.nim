@@ -9,30 +9,35 @@
 # according to those terms.
 
 import
+  std/[sequtils, sets, tables, times],
   ../constants,
   ../db/[db_chain, accounts_cache],
   ../transaction,
   ../utils,
-  ../utils/header,
+  ../utils/[difficulty, header],
   ../vm_state,
   ../vm_types,
   ../forks,
+  ./dao,
   ./validate/epoch_hash_cache,
   chronicles,
   eth/[common, rlp, trie/trie_defs],
   ethash,
   nimcrypto,
   options,
-  sets,
-  stew/[results, endians2],
-  strutils,
-  tables,
-  times
+  stew/[results, endians2]
+
+from stew/byteutils
+  import nil
 
 export
   epoch_hash_cache.EpochHashCache,
   epoch_hash_cache.initEpochHashCache,
   results
+
+const
+  daoForkBlockExtraData =
+    byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
 
 type
   MiningHeader = object
@@ -162,8 +167,9 @@ func validateGasLimit(gasLimit, parentGasLimit: GasInt): Result[void,string] =
 
   result = ok()
 
-proc validateHeader(header, parentHeader: BlockHeader; checkSealOK: bool;
-                     hashCache: var EpochHashCache): Result[void,string] =
+proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
+                    numTransactions: int; checkSealOK: bool;
+                    hashCache: var EpochHashCache): Result[void,string] =
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
@@ -171,11 +177,23 @@ proc validateHeader(header, parentHeader: BlockHeader; checkSealOK: bool;
   if result.isErr:
     return
 
+  if header.gasUsed == 0 and 0 < numTransactions:
+    return err("zero gasUsed but tranactions present");
+
   if header.blockNumber != parentHeader.blockNumber + 1:
-    return err("Blocks must be numbered consecutively.")
+    return err("Blocks must be numbered consecutively")
 
   if header.timestamp.toUnix <= parentHeader.timestamp.toUnix:
     return err("timestamp must be strictly later than parent")
+
+  if db.config.daoForkSupport and
+     db.config.daoForkBlock <= header.blockNumber and
+     header.extraData != daoForkBlockExtraData:
+    return err("header extra data should be marked DAO")
+
+  let calcDiffc = db.config.calcDifficulty(header.timestamp, parentHeader)
+  if header.difficulty < calcDiffc:
+    return err("provided header difficulty is too low")
 
   if checkSealOK:
     return hashCache.validateSeal(header)
@@ -317,16 +335,17 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 # Public functions, extracted from test_blockchain_json
 # ------------------------------------------------------------------------------
 
-proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
-                      uncles: seq[BlockHeader]; checkSealOK: bool;
-                      hashCache: var EpochHashCache): Result[void,string] =
+proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
+            uncles: seq[BlockHeader]; numTransactions: int; checkSealOK: bool;
+            hashCache: var EpochHashCache): Result[void,string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
     return ok()
 
   let parentHeader = chainDB.getBlockHeader(header.parentHash)
-  result = header.validateHeader(parentHeader, checkSealOK, hashCache)
+  result = chainDB.validateHeader(
+    header, parentHeader,numTransactions,  checkSealOK, hashCache)
   if result.isErr:
     return
 
@@ -339,6 +358,19 @@ proc validateKinship*(chainDB: BaseChainDB; header: BlockHeader;
   result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
   if result.isOk:
     result = chainDB.validateGaslimit(header)
+
+
+proc validateHeaderAndKinship*(chainDB: BaseChainDB;
+                      header: BlockHeader; body: BlockBody; checkSealOK: bool;
+                      hashCache: var EpochHashCache): Result[void,string] =
+  chainDB.validateHeaderAndKinship(
+    header, body.uncles, body.transactions.len, checkSealOK, hashCache)
+
+
+proc validateHeaderAndKinship*(chainDB: BaseChainDB; ethBlock: EthBlock;
+        checkSealOK: bool; hashCache: var EpochHashCache): Result[void,string] =
+  chainDB.validateHeaderAndKinship(
+    ethBlock.header, ethBlock.uncles, ethBlock.txs.len, checkSealOK, hashCache)
 
 # ------------------------------------------------------------------------------
 # End

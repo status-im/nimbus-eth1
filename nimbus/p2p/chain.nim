@@ -3,6 +3,7 @@ import
   ../db/db_chain,
   ../genesis,
   ../utils,
+  ../utils/difficulty,
   ../vm_state,
   ./executor,
   ./validate,
@@ -157,38 +158,39 @@ method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
 
   for i in 0 ..< headers.len:
     let
-      head = c.db.getBlockHeader(headers[i].parentHash)
-      vmState = newBaseVMState(head.stateRoot, headers[i], c.db)
-      validationResult = processBlock(c.db, headers[i], bodies[i], vmState)
+      (header, body) = (headers[i], bodies[i])
+      parentHeader = c.db.getBlockHeader(header.parentHash)
+      vmState = newBaseVMState(parentHeader.stateRoot, header, c.db)
+      validationResult = processBlock(c.db, header, body, vmState)
 
     when not defined(release):
       if validationResult == ValidationResult.Error and
-          bodies[i].transactions.calcTxRoot == headers[i].txRoot:
-        dumpDebuggingMetaData(c.db, headers[i], bodies[i], vmState)
+         body.transactions.calcTxRoot == header.txRoot:
+        dumpDebuggingMetaData(c.db, header, body, vmState)
         warn "Validation error. Debugging metadata dumped."
 
     if validationResult != ValidationResult.OK:
       return validationResult
 
     if c.extraValidation:
-      let res = validateKinship(
-        c.db, headers[i],
-        bodies[i].uncles,
+      let res = c.db.validateHeaderAndKinship(
+        header,
+        body,
         checkSealOK = false, # TODO: how to checkseal from here
         c.cacheByEpoch
       )
       if res.isErr:
-        debug "kinship validation error", msg = res.error
+        debug "block validation error", msg = res.error
         return ValidationResult.Error
 
-    discard c.db.persistHeaderToDb(headers[i])
-    discard c.db.persistTransactions(headers[i].blockNumber, bodies[i].transactions)
+    discard c.db.persistHeaderToDb(header)
+    discard c.db.persistTransactions(header.blockNumber, body.transactions)
     discard c.db.persistReceipts(vmState.receipts)
 
     # update currentBlock *after* we persist it
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
-    c.db.currentBlock = headers[i].blockNumber
+    c.db.currentBlock = header.blockNumber
 
   transaction.commit()
 

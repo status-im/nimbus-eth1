@@ -215,17 +215,6 @@ proc blockWitness(vmState: BaseVMState, chainDB: BaseChainDB) =
   if root != rootHash:
     raise newException(ValidationError, "Invalid trie generated from block witness")
 
-func validateBlockUnchanged(a, b: EthBlock): bool =
-  result = rlp.encode(a) == rlp.encode(b)
-
-proc validateBlock(chainDB: BaseChainDB;
-                   ethBlock: EthBlock; checkSealOK: bool): bool =
-  let rc = chainDB.validateKinship(
-    ethBlock.header, ethBlock.uncles, checkSealOK, cacheByEpoch)
-  if rc.isErr:
-    debugEcho "invalid block: " & rc.error
-  rc.isOk
-
 proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   preminedBlock: EthBlock, tb: TestBlock, checkSeal, validation: bool): EthBlock =
 
@@ -254,15 +243,12 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
     if tester.vmState.generateWitness():
       blockWitness(tester.vmState, chainDB)
 
-  result.header.stateRoot  = tester.vmState.blockHeader.stateRoot
-  result.header.parentHash = parentHeader.hash
-  result.header.difficulty = baseHeaderForImport.difficulty
-
   if validation:
-    if not validateBlockUnchanged(result, preminedBlock):
-      raise newException(ValidationError, "block changed")
-    if not validateBlock(chainDB, result, checkSeal):
-      raise newException(ValidationError, "invalid block")
+    let rc = chainDB.validateHeaderAndKinship(
+      result.header, body, checkSeal, cacheByEpoch)
+    if rc.isErr:
+      raise newException(
+        ValidationError, "validateHeaderAndKinship: " & rc.error)
 
   discard chainDB.persistHeaderToDb(preminedBlock.header)
 
@@ -305,8 +291,12 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
     if testBlock.goodBlock:
       try:
         let (preminedBlock, _, _) = tester.applyFixtureBlockToChain(
-            testBlock, chainDB, checkSeal, validation = false)  # we manually validate below
-        check validateBlock(chainDB, preminedBlock, checkSeal) == true
+            testBlock, chainDB, checkSeal, validation = false)
+
+        # manually validating
+        check chainDB.validateHeaderAndKinship(
+          preminedBlock, checkSeal, cacheByEpoch).isOk
+
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()
 
