@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[tables, strutils,sequtils, options, times],
+  std/[tables, strutils, options, times],
   eth/[common, rlp, p2p], stint, stew/[byteutils],
   nimcrypto/hash,
   json_serialization, chronicles,
