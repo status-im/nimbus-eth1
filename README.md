@@ -1,11 +1,10 @@
 # Nimbus: an Ethereum 2.0 Sharding Client for Resource-Restricted Devices
 
-[![Build Status (Azure Pipelines)](https://dev.azure.com/nimbus-dev/nimbus/_apis/build/status/status-im.nimbus?branchName=master)](https://dev.azure.com/nimbus-dev/nimbus/_build/latest?definitionId=6&branchName=master)
-[![Build Status (Travis)](https://img.shields.io/travis/status-im/nimbus/master.svg?label=Linux%20/%20macOS "Linux/macOS build status (Travis)")](https://travis-ci.org/status-im/nimbus)
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
-![Github action](https://github.com/status-im/nimbus-eth1/workflows/nimbus-eth1%20CI/badge.svg)
+![GH action-nimbus-eth1](https://github.com/status-im/nimbus-eth1/workflows/CI/badge.svg)
+![GH action-nlpn](https://github.com/status-im/nimbus-eth1/workflows/nlpn%20CI/badge.svg)
 
 [![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus-orange.svg)](https://discord.gg/XRxWahP)
 [![Gitter: #status-im/nimbus](https://img.shields.io/badge/gitter-status--im%2Fnimbus-orange.svg)](https://gitter.im/status-im/nimbus)
