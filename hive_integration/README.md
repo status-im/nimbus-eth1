@@ -93,7 +93,7 @@ These Hive suites/simulators don't work with `nimbus-eth1` currently:
 
 The number of passes and fails output at the time of writing (2021-05-20) is:
 
-    ethereum/consensus:  28186 pass,    59 fail, 28245 total
+    ethereum/consensus:  28249 pass,     0 fail, 28249 total (Berlin, without London)
     ethereum/graphql:       40 pass,     6 fail,    46 total
     devp2p/discv4:           3 pass,    11 fail,    14 total
     devp2p/eth:              1 pass,     8 fail,     9 total
