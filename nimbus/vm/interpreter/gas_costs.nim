@@ -537,6 +537,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
           GasLimit:        fixed GasBase,
           ChainIdOp:       fixed GasBase,
           SelfBalance:     fixed GasLow,
+          BaseFee:         fixed GasBase,
 
           # 50s: Stack, Memory, Storage and Flow Operations
           Pop:            fixed GasBase,

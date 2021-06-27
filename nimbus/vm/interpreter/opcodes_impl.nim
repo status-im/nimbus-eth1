@@ -384,6 +384,10 @@ op gasLimit, inline = true:
   ## 0x45, Get the block's gas limit
   push: c.getGasLimit()
 
+op baseFee, inline = true:
+  ## 0x45, Get the block's gas limit
+  push: c.getBaseFee()
+
 op chainId, inline = true:
   ## 0x46, Get current chain’s EIP-155 unique identifier.
   push: c.getChainId()

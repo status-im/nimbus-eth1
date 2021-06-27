@@ -81,6 +81,7 @@ fill_enum_holes:
 
       ChainIdOp =      0x46, # Get current chain’s EIP-155 unique identifier.
       SelfBalance =    0x47, # Get current contract's balance.
+      BaseFee =        0x48, # Get block’s base fee. EIP-3198
 
       # 50s: Stack, Memory, Storage and Flow Operations
       Pop =            0x50, # Remove item from stack.

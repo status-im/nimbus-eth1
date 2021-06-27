@@ -57,6 +57,12 @@ template getGasLimit*(c: Computation): GasInt =
   else:
     c.vmState.gasLimit
 
+template getBaseFee*(c: Computation): Uint256 =
+  when evmc_enabled:
+    Uint256.fromEvmc c.host.getTxContext().block_base_fee
+  else:
+    c.vmState.baseFee
+
 template getChainId*(c: Computation): uint =
   when evmc_enabled:
     Uint256.fromEvmc(c.host.getTxContext().chain_id).truncate(uint)

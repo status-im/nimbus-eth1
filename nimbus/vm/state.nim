@@ -141,6 +141,9 @@ method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
 method gasLimit*(vmState: BaseVMState): GasInt {.base, gcsafe.} =
   vmState.blockHeader.gasLimit
 
+method baseFee*(vmState: BaseVMState): Uint256 {.base, gcsafe.} =
+  vmState.blockHeader.baseFee
+
 when defined(geth):
   import db/geth_db
 

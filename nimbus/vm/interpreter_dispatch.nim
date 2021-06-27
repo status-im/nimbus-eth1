@@ -251,6 +251,7 @@ let BerlinOpDispatch {.compileTime.}: array[Op, NimNode] = genBerlinJumpTable(Is
 proc genLondonJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
   result = ops
   # incoming EIP-3198 and EIP-3529
+  result[BaseFee] = newIdentNode "baseFee"
 
 let LondonOpDispatch {.compileTime.}: array[Op, NimNode] = genLondonJumpTable(BerlinOpDispatch)
 

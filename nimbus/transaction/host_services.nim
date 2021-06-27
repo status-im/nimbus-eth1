@@ -63,6 +63,7 @@ proc setupTxContext(host: TransactionHost) =
   # vmState.difficulty now unused
   host.txContext.block_difficulty = vmState.blockHeader.difficulty.toEvmc
   host.txContext.chain_id         = vmState.chaindb.config.chainId.uint.u256.toEvmc
+  host.txContext.block_base_fee   = vmState.blockHeader.baseFee.toEvmc
 
 const use_evmc_glue = defined(evmc_enabled)
 
