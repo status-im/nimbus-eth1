@@ -68,6 +68,11 @@ const
     k.cpt.stack.push:
       k.cpt.getBalance(k.cpt.msg.contractAddress)
 
+  baseFeeOp: Vm2OpFn = proc (k: var Vm2Ctx) =
+    ## 0x48, Get the block's base fee.
+    k.cpt.stack.push:
+      k.cpt.getBaseFee
+
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
@@ -137,6 +142,14 @@ const
      info: "Get current contract's balance",
      exec: (prep: vm2OpIgnore,
             run:  selfBalanceOp,
+            post: vm2OpIgnore)),
+
+    (opCode: BaseFee,     ## 0x48, EIP-1559 Block base fee.
+     forks: Vm2OpLondonAndLater,
+     name: "baseFee",
+     info: "Get current block's EIP-1559 base fee",
+     exec: (prep: vm2OpIgnore,
+            run:  baseFeeOp,
             post: vm2OpIgnore))]
 
 # ------------------------------------------------------------------------------

@@ -61,6 +61,9 @@ template getDifficulty*(c: Computation): DifficultyInt =
 template getGasLimit*(c: Computation): GasInt =
   c.vmState.gasLimit
 
+template getBaseFee*(c: Computation): Uint256 =
+  c.vmState.baseFee
+
 template getChainId*(c: Computation): uint =
   c.vmState.chaindb.config.chainId.uint
 
