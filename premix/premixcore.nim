@@ -15,7 +15,7 @@ proc fakeAlloc(n: JsonNode) =
       currMem = n[i]["memory"]
       prevPc = n[i-1]["pc"].getInt()
       currPc = n[i]["pc"].getInt()
-      
+
     if currMem.len > prevMem.len and prevPc == currPc - 1:
       let diff = currMem.len - prevMem.len
       for _ in 0 ..< diff:
@@ -75,7 +75,7 @@ proc hasInternalTx(tx: Transaction, blockNumber: Uint256, sender: EthAddress): b
     code = request("eth_getCode", %[%recipient.prefixHex, number])
     recipientHasCode = code.getStr.len > 2 # "0x"
 
-  if tx.isContractCreation:
+  if tx.contractCreation:
     return recipientHasCode or tx.payload.len > 0
 
   recipientHasCode
@@ -148,14 +148,14 @@ proc requestPostState*(premix, n: JsonNode, blockNumber: Uint256) =
     var txKind = TxKind.Regular
     let tx = parseTransaction(t)
     let sender = tx.getSender
-    if tx.isContractCreation: txKind = TxKind.ContractCreation
+    if tx.contractCreation: txKind = TxKind.ContractCreation
     if hasInternalTx(tx, blockNumber, sender):
       let txTrace = requestInternalTx(t["hash"], tracer)
       for address, account in txTrace:
         updateAccount(address, account, blockNumber)
         premix.add account
-      if not tx.isContractCreation: txKind = TxKind.ContractCall
-    else:      
+      if not tx.contractCreation: txKind = TxKind.ContractCall
+    else:
       premix.requestAccount(blockNumber, tx.getRecipient(sender))
       premix.requestAccount(blockNumber, sender)
 

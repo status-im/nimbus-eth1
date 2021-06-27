@@ -198,28 +198,12 @@ proc parseAccessList(n: JsonNode): AccessList =
       ap.storageKeys.add hexToByteArray[32](sk.getStr())
     result.add ap
 
-proc signTx(tx: var LegacyTx, privateKey: PrivateKey) =
-  let sig = sign(privateKey, tx.rlpEncode)
-  let raw = sig.toRaw()
-  tx.R = fromBytesBE(Uint256, raw[0..31])
-  tx.S = fromBytesBE(Uint256, raw[32..63])
-  tx.V = raw[64].int64 + 27
-
-proc signTx(tx: var AccessListTx, privateKey: PrivateKey) =
-  let sig = sign(privateKey, tx.rlpEncode)
-  let raw = sig.toRaw()
-  tx.R = fromBytesBE(Uint256, raw[0..31])
-  tx.S = fromBytesBE(Uint256, raw[32..63])
-  tx.V = raw[64].int64
-
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
   let nonce    = j["nonce"].getHexadecimalInt.AccountNonce
   let gasPrice = j["gasPrice"].getHexadecimalInt
   let gasLimit = j["gasLimit"][gasIndex].getHexadecimalInt
 
-  var toAddr: EthAddress
-  var contract: bool
-
+  var toAddr: Option[EthAddress]
   # Fixture transactions with `"to": ""` are contract creations.
   #
   # Fixture transactions with `"to": "0x..."` or `"to": "..."` where `...` are
@@ -230,12 +214,8 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   # "0x" prefix is used in some but not all fixtures, and upper case hex digits
   # occur in a few.
   let rawTo = j["to"].getStr
-  if rawTo == "":
-    toAddr   = ZERO_ADDRESS
-    contract = true
-  else:
-    toAddr   = rawTo.parseAddress
-    contract = false
+  if rawTo != "":
+    toAddr = some(rawTo.parseAddress)
 
   let value = fromHex(UInt256, j["value"][valueIndex].getStr)
   let payload = j["data"][dataIndex].getStr.safeHexToSeqByte
@@ -246,37 +226,29 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
 
   if j.hasKey("accessLists"):
     let accList = j["accessLists"][dataIndex]
-    var tx = AccessListTx(
+    var tx = Transaction(
+      txType: TxEip2930,
       nonce: nonce,
       gasPrice: gasPrice,
       gasLimit: gasLimit,
       to: toAddr,
-      isContractCreation: contract,
       value: value,
       payload: payload,
       accessList: parseAccessList(accList),
-      chainId: common.ChainId(1)
+      chainId: ChainId(1)
     )
-    signTx(tx, privateKey)
-    Transaction(
-      txType: AccessListTxType,
-      accessListTx: tx
-    )
+    signTransaction(tx, privateKey, ChainId(1), false)
   else:
-    var tx = LegacyTx(
+    var tx = Transaction(
+      txType: TxLegacy,
       nonce: nonce,
       gasPrice: gasPrice,
       gasLimit: gasLimit,
       to: toAddr,
-      isContractCreation: contract,
       value: value,
       payload: payload
     )
-    signTx(tx, privateKey)
-    Transaction(
-      txType: LegacyTxType,
-      legacyTx: tx
-    )
+    signTransaction(tx, privateKey, ChainId(1), false)
 
 proc hashLogEntries*(logs: seq[Log]): string =
   toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))

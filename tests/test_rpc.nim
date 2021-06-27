@@ -53,25 +53,30 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
 
   ac.setCode(ks2, code)
   ac.addBalance(signer, 9_000_000_000.u256)
-  var vmState = newBaseVMState(ac.rootHash, BlockHeader(parentHash: parentHash), chain)
+  var
+    vmState = newBaseVMState(ac.rootHash, BlockHeader(parentHash: parentHash), chain)
+    zeroAddress: EthAddress
 
   let
-    unsignedTx1 = LegacyUnsignedTx(
+    unsignedTx1 = Transaction(
+      txType  : TxLegacy,
       nonce   : 0,
       gasPrice: 1_100,
       gasLimit: 70_000,
       value   : 1.u256,
-      isContractCreation: false
+      to      : some(zeroAddress)
     )
-    unsignedTx2 = LegacyUnsignedTx(
+    unsignedTx2 = Transaction(
+      txType  : TxLegacy,
       nonce   : 0,
       gasPrice: 1_200,
       gasLimit: 70_000,
       value   : 2.u256,
-      isContractCreation: false
+      to      : some(zeroAddress)
     )
-    signedTx1 = signTransaction(unsignedTx1, chain, acc.privateKey)
-    signedTx2 = signTransaction(unsignedTx2, chain, acc.privateKey)
+    eip155    = chain.currentBlock >= chain.config.eip155Block
+    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, chain.config.chainId, eip155)
+    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, chain.config.chainId, eip155)
     txs = [signedTx1, signedTx2]
     txRoot = chain.persistTransactions(blockNumber, txs)
 

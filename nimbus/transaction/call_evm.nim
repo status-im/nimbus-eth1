@@ -119,13 +119,13 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
     gasPrice:     tx.gasPrice,
     gasLimit:     tx.gasLimit,
     sender:       sender,
-    to:           tx.to,
-    isCreate:     tx.isContractCreation,
+    to:           tx.destination,
+    isCreate:     tx.contractCreation,
     value:        tx.value,
     input:        tx.payload
   )
-  if tx.txType == AccessListTxType:
-    shallowCopy(call.accessList, tx.accessListTx.accessList)
+  if tx.txType > TxLegacy:
+    shallowCopy(call.accessList, tx.accessList)
   return runComputation(call).gasUsed
 
 type
@@ -156,7 +156,7 @@ proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byt
   # creates the new contract using `code` like `CREATE`, but then executes the
   # contract like it's `CALL`.
 
-  doAssert tx.isContractCreation
+  doAssert tx.contractCreation
   let contractAddress = generateAddress(sender, vmState.readOnlyStateDB.getNonce(sender))
   vmState.mutateStateDB:
     db.setCode(contractAddress, code)

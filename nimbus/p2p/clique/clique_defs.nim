@@ -110,7 +110,7 @@ const
   # params/protocol_params.go(123): InitialBaseFee = 1000000000 [..]
   EIP1559_INITIAL_BASE_FEE* = ##\
     ## Initial base fee for Eip1559 blocks.
-    1000000000i64
+    1000000000.u256
 
 # ------------------------------------------------------------------------------
 # Error tokens

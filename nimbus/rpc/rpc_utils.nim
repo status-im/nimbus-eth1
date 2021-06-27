@@ -63,12 +63,9 @@ proc calculateMedianGasPrice*(chain: BaseChainDB): GasInt =
     else:
       result = prices[middle]
 
-proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): LegacyUnsignedTx =
+proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): Transaction =
   if tx.to.isSome:
-    result.to = toAddress(tx.to.get())
-    result.isContractCreation = false
-  else:
-    result.isContractCreation = true
+    result.to = some(toAddress(tx.to.get))
 
   if tx.gas.isSome:
     result.gasLimit = hexToInt(tx.gas.get().string, GasInt)
@@ -91,47 +88,6 @@ proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): Le
     result.nonce = defaultNonce
 
   result.payload = hexToSeqByte(tx.data.string)
-
-func rlpEncode(tx: LegacyUnsignedTx, chainId: ChainId): auto =
-  rlp.encode(LegacyTx(
-    nonce: tx.nonce,
-    gasPrice: tx.gasPrice,
-    gasLimit: tx.gasLimit,
-    to: tx.to,
-    value: tx.value,
-    payload: tx.payload,
-    isContractCreation: tx.isContractCreation,
-    V: chainId.int64,
-    R: 0.u256,
-    S: 0.u256
-    ))
-
-proc signTransaction*(tx: LegacyUnsignedTx, chain: BaseChainDB, privateKey: PrivateKey): Transaction =
-  let eip155 = chain.currentBlock >= chain.config.eip155Block
-  let rlpTx = if eip155:
-                rlpEncode(tx, chain.config.chainId)
-              else:
-                rlp.encode(tx)
-
-  let sig = sign(privateKey, rlpTx).toRaw
-  let v = if eip155:
-            sig[64].int64 + chain.config.chainId.int64 * 2'i64 + 35'i64
-          else:
-            sig[64].int64 + 27'i64
-
-  let tx = LegacyTx(
-    nonce: tx.nonce,
-    gasPrice: tx.gasPrice,
-    gasLimit: tx.gasLimit,
-    to: tx.to,
-    value: tx.value,
-    payload: tx.payload,
-    isContractCreation: tx.isContractCreation,
-    V: v,
-    R: Uint256.fromBytesBE(sig[0..31]),
-    S: Uint256.fromBytesBE(sig[32..63])
-    )
-  Transaction(txType: LegacyTxType, legacyTx: tx)
 
 proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): RpcCallData =
   if call.source.isSome:
@@ -169,8 +125,7 @@ proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: i
   result.hash = tx.rlpHash
   result.input = tx.payLoad
   result.nonce = encodeQuantity(tx.nonce.uint64)
-  if not tx.isContractCreation:
-    result.to = some(tx.to)
+  result.to = some(tx.destination)
   result.transactionIndex = some(encodeQuantity(txIndex.uint64))
   result.value = encodeQuantity(tx.value)
   result.v = encodeQuantity(tx.V.uint)
@@ -220,14 +175,11 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txInde
   result.blockHash = header.hash
   result.blockNumber = encodeQuantity(header.blockNumber)
   result.`from` = tx.getSender()
-
-  if tx.isContractCreation:
-    result.to = some(tx.to)
-
+  result.to = some(tx.destination)
   result.cumulativeGasUsed = encodeQuantity(receipt.cumulativeGasUsed.uint64)
   result.gasUsed = encodeQuantity(gasUsed.uint64)
 
-  if tx.isContractCreation:
+  if tx.contractCreation:
     var sender: EthAddress
     if tx.getSender(sender):
       let contractAddress = generateAddress(sender, tx.nonce)
@@ -241,4 +193,4 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction, txInde
     result.root = some(receipt.stateRoot)
   else:
     # 1 = success, 0 = failure.
-    result.status = some(receipt.status)
+    result.status = some(receipt.status.int)

@@ -580,13 +580,13 @@ proc txTo(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   # TODO: with block param
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
-  if tx.tx.isContractCreation:
+  if tx.tx.contractCreation:
     return ok(respNull())
   let hres = ctx.getBlockByNumber(tx.blockNumber)
   if hres.isErr:
     return hres
   let h = HeaderNode(hres.get())
-  ctx.accountNode(h.header, tx.tx.to)
+  ctx.accountNode(h.header, tx.tx.to.get())
 
 proc txValue(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -617,7 +617,7 @@ proc txStatus(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.}
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
   if tx.receipt.hasStatus:
-    longNode(tx.receipt.status().uint64)
+    longNode(tx.receipt.status.uint64)
   else:
     ok(respNull())
 
@@ -638,7 +638,7 @@ proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.ap
   if not getSender(tx.tx, sender):
     return err("can't calculate sender")
 
-  if not tx.tx.isContractCreation:
+  if not tx.tx.contractCreation:
     return ok(respNull())
 
   let hres = getBlockByNumber(ctx, tx.blockNumber)
@@ -677,11 +677,11 @@ proc txType(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
 proc txAccessList(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
-  if tx.tx.txType == LegacyTxType:
+  if tx.tx.txType == TxLegacy:
     ok(respNull())
   else:
     var list = respList()
-    for x in tx.tx.accessListTx.accessList:
+    for x in tx.tx.accessList:
       list.add aclNode(ctx, x)
     ok(list)
 

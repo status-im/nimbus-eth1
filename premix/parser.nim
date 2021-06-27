@@ -81,14 +81,15 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "nonce", result.nonce
 
 proc parseTransaction*(n: JsonNode): Transaction =
-  var tx: LegacyTx
+  var tx = Transaction(txType: TxLegacy)
   n.fromJson "nonce", tx.nonce
   n.fromJson "gasPrice", tx.gasPrice
   n.fromJson "gas", tx.gasLimit
 
-  tx.isContractCreation = n["to"].kind == JNull
-  if not tx.isContractCreation:
-    n.fromJson "to", tx.to
+  if n["to"].kind != JNull:
+    var to: EthAddress
+    n.fromJson "to", to
+    tx.to = some(to)
 
   n.fromJson "value", tx.value
   n.fromJson "input", tx.payload
@@ -99,7 +100,7 @@ proc parseTransaction*(n: JsonNode): Transaction =
   var sender = tx.getSender()
   doAssert sender.prefixHex == n["from"].getStr()
   doAssert n["hash"].getStr() == tx.rlpHash().prefixHex
-  result = Transaction(txType: LegacyTxType, legacyTx: tx)
+  tx
 
 proc parseLog(n: JsonNode): Log =
   n.fromJson "address", result.address
@@ -120,20 +121,22 @@ proc parseLogs(n: JsonNode): seq[Log] =
     result = @[]
 
 proc parseReceipt*(n: JsonNode): Receipt =
-  var rec: LegacyReceipt
+  var rec = Receipt(receiptType: LegacyReceipt)
   if n.hasKey("root"):
     var hash: Hash256
     n.fromJson "root", hash
-    rec.stateRootOrStatus = hashOrStatus(hash)
+    rec.isHash = true
+    rec.hash = hash
   else:
     var status: int
     n.fromJson "status", status
-    rec.stateRootOrStatus = hashOrStatus(status == 1)
+    rec.isHash = false
+    rec.status = status == 1
 
   n.fromJson "cumulativeGasUsed", rec.cumulativeGasUsed
   n.fromJson "logsBloom", rec.bloom
   rec.logs = parseLogs(n["logs"])
-  Receipt(receiptType: LegacyReceiptType, legacyReceipt: rec)
+  rec
 
 proc headerHash*(n: JsonNode): Hash256 =
   n.fromJson "hash", result

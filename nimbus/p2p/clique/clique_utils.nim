@@ -154,12 +154,8 @@ proc isLondonOrLater*(c: var ChainConfig; number: BlockNumber): bool =
   ## FIXME: London is not defined yet, will come after Berlin
   FkBerlin < c.toFork(number)
 
-proc baseFee*(header: BlockHeader): GasInt =
-  # FIXME: `baseFee` header field not defined before `London` fork
-  0.GasInt
-
 # consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]
-proc calc1599BaseFee*(c: var ChainConfig; parent: BlockHeader): GasInt =
+proc calc1599BaseFee*(c: var ChainConfig; parent: BlockHeader): UInt256 =
   ## calculates the basefee of the header.
 
   # If the current block is the first EIP-1559 block, return the
@@ -174,26 +170,29 @@ proc calc1599BaseFee*(c: var ChainConfig; parent: BlockHeader): GasInt =
   if parent.gasUsed == parentGasTarget:
     return parent.baseFee
 
-  let parentGasDenom = parentGasTarget.i128 *
-                         EIP1559_BASE_FEE_CHANGE_DENOMINATOR.i128
+  let parentGasDenom = parentGasTarget.u256 *
+                         EIP1559_BASE_FEE_CHANGE_DENOMINATOR.u256
+
+  # baseFee is an Option[T]
+  let parentBaseFee  = parent.baseFee
 
   if parentGasTarget < parent.gasUsed:
     # If the parent block used more gas than its target, the baseFee should
     # increase.
     let
-      gasUsedDelta = (parent.gasUsed - parentGasTarget).i128
-      baseFeeDelta = (parent.baseFee.i128 * gasUsedDelta) div parentGasDenom
+      gasUsedDelta = (parent.gasUsed - parentGasTarget).u256
+      baseFeeDelta = (parentBaseFee * gasUsedDelta) div parentGasDenom
 
-    return parent.baseFee + max(baseFeeDelta.truncate(GasInt), 1)
+    return parentBaseFee + max(baseFeeDelta, 1.u256)
 
   else:
     # Otherwise if the parent block used less gas than its target, the
     # baseFee should decrease.
     let
-      gasUsedDelta = (parentGasTarget - parent.gasUsed).i128
-      baseFeeDelta = (parent.baseFee.i128 * gasUsedDelta) div parentGasDenom
+      gasUsedDelta = (parentGasTarget - parent.gasUsed).u256
+      baseFeeDelta = (parentBaseFee * gasUsedDelta) div parentGasDenom
 
-    return max(parent.baseFee - baseFeeDelta.truncate(GasInt), 0)
+    return max(parentBaseFee - baseFeeDelta, 0.u256)
 
 
 # consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
@@ -209,13 +208,14 @@ proc verify1559Header*(c: var ChainConfig;
   if rc.isErr:
     return err(rc.error)
 
+  let headerBaseFee = header.baseFee
   # Verify the header is not malformed
-  if header.baseFee.isZero:
+  if headerBaseFee.isZero:
     return err((errCliqueExpectedBaseFee,""))
 
   # Verify the baseFee is correct based on the parent header.
   var expectedBaseFee = c.calc1599BaseFee(parent)
-  if header.baseFee != expectedBaseFee:
+  if headerBaseFee != expectedBaseFee:
     return err((errCliqueBaseFeeError,
                 &"invalid baseFee: have {expectedBaseFee}, "&
                 &"want {header.baseFee}, " &
@@ -223,15 +223,6 @@ proc verify1559Header*(c: var ChainConfig;
                 &"parent.gasUsed {parent.gasUsed}"))
 
   return ok()
-
-# clique/clique.go(730): func encodeSigHeader(w [..]
-proc encode1559*(header: BlockHeader): seq[byte] =
-  ## Encode header field and considering new `baseFee` field for Eip1559.
-  var writer = initRlpWriter()
-  writer.append(header)
-  if not header.baseFee.isZero:
-    writer.append(header.baseFee)
-  writer.finish
 
 # ------------------------------------------------------------------------------
 # Seal hash support
@@ -246,7 +237,7 @@ proc encodeSealHeader*(header: BlockHeader): seq[byte] =
   var rlpHeader = header
   rlpHeader.extraData.setLen(header.extraData.len - EXTRA_SEAL)
 
-  rlpHeader.encode1559
+  rlp.encode(rlpHeader)
 
 # clique/clique.go(688): func SealHash(header *types.Header) common.Hash {
 proc hashSealHeader*(header: BlockHeader): Hash256 =

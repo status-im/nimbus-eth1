@@ -214,9 +214,10 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     let
       accDB    = accountDbFromTag("latest")
       tx       = unsignedTx(data, chain, accDB.getNonce(address) + 1)
-      signedTx = signTransaction(tx, chain, acc.privateKey)
+      eip155   = chain.currentBlock >= chain.config.eip155Block
+      signedTx = signTransaction(tx, acc.privateKey, chain.config.chainId, eip155)
       rlpTx    = rlp.encode(signedTx)
-
+    
     result = hexDataStr(rlpTx)
 
   server.rpc("eth_sendTransaction") do(data: TxSend) -> EthHashStr:
@@ -237,9 +238,10 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     let
       accDB    = accountDbFromTag("latest")
       tx       = unsignedTx(data, chain, accDB.getNonce(address) + 1)
-      signedTx = signTransaction(tx, chain, acc.privateKey)
+      eip155   = chain.currentBlock >= chain.config.eip155Block
+      signedTx = signTransaction(tx, acc.privateKey, chain.config.chainId, eip155)
       rlpTx    = rlp.encode(signedTx)
-
+    
     result = keccak_256.digest(rlpTx).ethHashStr
 
   server.rpc("eth_sendRawTransaction") do(data: HexDataStr) -> EthHashStr:

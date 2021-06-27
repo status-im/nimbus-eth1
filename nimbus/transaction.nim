@@ -7,35 +7,10 @@
 
 import
   ./constants, ./errors, eth/[common, keys], ./utils,
-  stew/shims/macros,
   ./forks, ./vm_gas_costs
 
 import eth/common/transaction as common_transaction
 export common_transaction
-
-template txc(fn: untyped, params: varargs[untyped]): untyped =
-  if tx.txType == LegacyTxType:
-    unpackArgs(fn, [tx.legacyTx, params])
-  else:
-    unpackArgs(fn, [tx.accessListTx, params])
-
-template txField(field: untyped): untyped =
-  if tx.txType == LegacyTxType:
-    tx.legacyTx.field
-  else:
-    tx.accessListTx.field
-
-template txFieldAsgn(field, data: untyped) =
-  if tx.txType == LegacyTxType:
-    tx.legacyTx.field = data
-  else:
-    tx.accessListTx.field = data
-
-template recField(field: untyped): untyped =
-  if rec.receiptType == LegacyReceiptType:
-    rec.legacyReceipt.field
-  else:
-    rec.accessListReceipt.field
 
 func intrinsicGas*(data: openarray[byte], fork: Fork): GasInt =
   result = gasFees[fork][GasTransaction]
@@ -45,16 +20,7 @@ func intrinsicGas*(data: openarray[byte], fork: Fork): GasInt =
     else:
       result += gasFees[fork][GasTXDataNonZero]
 
-proc intrinsicGas*(tx: LegacyTx, fork: Fork): GasInt =
-  # Compute the baseline gas cost for this transaction.  This is the amount
-  # of gas needed to send this transaction (but that is not actually used
-  # for computation)
-  result = tx.payload.intrinsicGas(fork)
-
-  if tx.isContractCreation:
-    result = result + gasFees[fork][GasTXCreate]
-
-proc intrinsicGas*(tx: AccessListTx, fork: Fork): GasInt =
+proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
   const
     ADDRESS_COST     = 2400
     STORAGE_KEY_COST = 1900
@@ -64,58 +30,44 @@ proc intrinsicGas*(tx: AccessListTx, fork: Fork): GasInt =
   # for computation)
   result = tx.payload.intrinsicGas(fork)
 
-  result = result + tx.accessList.len * ADDRESS_COST
-  var numKeys = 0
-  for n in tx.accessList:
-    inc(numKeys, n.storageKeys.len)
-
-  result = result + numKeys * STORAGE_KEY_COST
-  if tx.isContractCreation:
+  if tx.contractCreation:
     result = result + gasFees[fork][GasTXCreate]
 
-proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
-  txc(intrinsicGas, fork)
-
-proc getSignature*(tx: LegacyTx, output: var Signature): bool =
-  var bytes: array[65, byte]
-  bytes[0..31] = tx.R.toByteArrayBE()
-  bytes[32..63] = tx.S.toByteArrayBE()
-
-  # TODO: V will become a byte or range soon.
-  var v = tx.V
-  if v >= EIP155_CHAIN_ID_OFFSET:
-    v = 28 - (v and 0x01)
-  elif v == 27 or v == 28:
-    discard
-  else:
-    return false
-
-  bytes[64] = byte(v - 27)
-  let sig = Signature.fromRaw(bytes)
-  if sig.isOk:
-    output = sig[]
-    return true
-  return false
-
-proc getSignature*(tx: AccessListTx, output: var Signature): bool =
-  var bytes: array[65, byte]
-  bytes[0..31] = tx.R.toByteArrayBE()
-  bytes[32..63] = tx.S.toByteArrayBE()
-  bytes[64] = tx.V.byte
-  let sig = Signature.fromRaw(bytes)
-  if sig.isOk:
-    output = sig[]
-    return true
-  return false
+  if tx.txType > TxLegacy:
+    result = result + tx.accessList.len * ADDRESS_COST
+    var numKeys = 0
+    for n in tx.accessList:
+      inc(numKeys, n.storageKeys.len)
+    result = result + numKeys * STORAGE_KEY_COST
 
 proc getSignature*(tx: Transaction, output: var Signature): bool =
-  txc(getSignature, output)
+  var bytes: array[65, byte]
+  bytes[0..31] = tx.R.toByteArrayBE()
+  bytes[32..63] = tx.S.toByteArrayBE()
+
+  if tx.txType == TxLegacy:
+    var v = tx.V
+    if v >= EIP155_CHAIN_ID_OFFSET:
+      v = 28 - (v and 0x01)
+    elif v == 27 or v == 28:
+      discard
+    else:
+      return false
+    bytes[64] = byte(v - 27)
+  else:
+    bytes[64] = tx.V.byte
+
+  let sig = Signature.fromRaw(bytes)
+  if sig.isOk:
+    output = sig[]
+    return true
+  return false
 
 proc toSignature*(tx: Transaction): Signature =
   if not getSignature(tx, result):
     raise newException(Exception, "Invalid signature")
 
-proc getSender*(tx: LegacyTx | AccessListTx | Transaction, output: var EthAddress): bool =
+proc getSender*(tx: Transaction, output: var EthAddress): bool =
   ## Find the address the transaction was sent from.
   var sig: Signature
   if tx.getSignature(sig):
@@ -125,98 +77,18 @@ proc getSender*(tx: LegacyTx | AccessListTx | Transaction, output: var EthAddres
       output = pubkey[].toCanonicalAddress()
       result = true
 
-proc getSender*(tx: LegacyTx | AccessListTx | Transaction): EthAddress =
+proc getSender*(tx: Transaction): EthAddress =
   ## Raises error on failure to recover public key
   if not tx.getSender(result):
     raise newException(ValidationError, "Could not derive sender address from transaction")
 
-proc getRecipient*(tx: LegacyTx | AccessListTx, sender: EthAddress): EthAddress =
-  if tx.isContractCreation:
+proc getRecipient*(tx: Transaction, sender: EthAddress): EthAddress =
+  if tx.contractCreation:
     result = generateAddress(sender, tx.nonce)
   else:
-    result = tx.to
+    result = tx.to.get()
 
-proc getRecipient*(tx: Transaction, sender: EthAddress): EthAddress =
-  txc(getRecipient, sender)
-
-proc gasLimit*(tx: Transaction): GasInt =
-  txField(gasLimit)
-
-proc gasPrice*(tx: Transaction): GasInt =
-  txField(gasPrice)
-
-proc value*(tx: Transaction): UInt256 =
-  txField(value)
-
-proc isContractCreation*(tx: Transaction): bool =
-  txField(isContractCreation)
-
-proc to*(tx: Transaction): EthAddress =
-  txField(to)
-
-proc payload*(tx: Transaction): Blob =
-  txField(payload)
-
-proc nonce*(tx: Transaction): AccountNonce =
-  txField(nonce)
-
-proc V*(tx: Transaction): int64 =
-  txField(V)
-
-proc R*(tx: Transaction): UInt256 =
-  txField(R)
-
-proc S*(tx: Transaction): UInt256 =
-  txField(S)
-
-proc `payload=`*(tx: var Transaction, data: Blob) =
-  txFieldAsgn(payload, data)
-
-proc `gasLimit=`*(tx: var Transaction, data: GasInt) =
-  txFieldAsgn(gasLimit, data)
-
-proc cumulativeGasUsed*(rec: Receipt): GasInt =
-  recField(cumulativeGasUsed)
-
-proc logs*(rec: Receipt): auto =
-  recField(logs)
-
-proc bloom*(rec: Receipt): auto =
-  recField(bloom)
-
-proc hasStateRoot*(rec: Receipt): bool =
-  if rec.receiptType == LegacyReceiptType:
-    rec.legacyReceipt.hasStateRoot
-  else:
-    false
-
-proc hasStatus*(rec: Receipt): bool =
-  if rec.receiptType == LegacyReceiptType:
-    rec.legacyReceipt.hasStatus
-  else:
-    true
-
-proc status*(rec: Receipt): int =
-  if rec.receiptType == LegacyReceiptType:
-    rec.legacyReceipt.status
-  else:
-    rec.accessListReceipt.status.int
-
-proc stateRoot*(rec: Receipt): Hash256 =
-  if rec.receiptType == LegacyReceiptType:
-    return rec.legacyReceipt.stateRoot
-
-proc validate*(tx: LegacyTx, fork: Fork) =
-  # Hook called during instantiation to ensure that all transaction
-  # parameters pass validation rules
-  if tx.intrinsicGas(fork) > tx.gasLimit:
-    raise newException(ValidationError, "Insufficient gas")
-
-  # check signature validity
-  var sender: EthAddress
-  if not tx.getSender(sender):
-    raise newException(ValidationError, "Invalid signature or failed message verification")
-
+proc validateTxLegacy(tx: Transaction, fork: Fork) =
   var
     vMin = 27'i64
     vMax = 28'i64
@@ -239,7 +111,17 @@ proc validate*(tx: LegacyTx, fork: Fork) =
   if not isValid:
     raise newException(ValidationError, "Invalid transaction")
 
-proc validate*(tx: AccessListTx, fork: Fork) =
+proc validateTxEip2930(tx: Transaction) =
+  var isValid = tx.V in {0'i64, 1'i64}
+  isValid = isValid and tx.S >= Uint256.one
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+
+  if not isValid:
+    raise newException(ValidationError, "Invalid transaction")
+
+proc validate*(tx: Transaction, fork: Fork) =
+  # parameters pass validation rules
   if tx.intrinsicGas(fork) > tx.gasLimit:
     raise newException(ValidationError, "Insufficient gas")
 
@@ -248,19 +130,30 @@ proc validate*(tx: AccessListTx, fork: Fork) =
   if not tx.getSender(sender):
     raise newException(ValidationError, "Invalid signature or failed message verification")
 
-  var isValid = tx.V in {0'i64, 1'i64}
-  isValid = isValid and tx.S >= Uint256.one
-  isValid = isValid and tx.S < SECPK1_N
-  isValid = isValid and tx.R < SECPK1_N
-
-  # TODO: chainId need validation?
-  # TODO: accessList need validation?
-
-  if not isValid:
-    raise newException(ValidationError, "Invalid transaction")
-
-proc validate*(tx: Transaction, fork: Fork) =
-  if tx.txType == LegacyTxType:
-    validate(tx.legacyTx, fork)
+  case tx.txType
+  of TxLegacy:
+    validateTxLegacy(tx, fork)
   else:
-    validate(tx.accessListTx, fork)
+    validateTxEip2930(tx)
+
+proc signTransaction*(tx: Transaction, privateKey: PrivateKey, chainId: ChainId, eip155: bool): Transaction =
+  result = tx
+  if eip155:
+    # trigger rlpEncodeEIP155 in nim-eth
+    result.V = chainId.int64 * 2'i64 + 35'i64
+
+  let
+    rlpTx = rlpEncode(result)
+    sig = sign(privateKey, rlpTx).toRaw
+
+  case tx.txType
+  of TxLegacy:
+    if eip155:
+      result.V = sig[64].int64 + result.V
+    else:
+      result.V = sig[64].int64 + 27'i64
+  else:
+    result.V = sig[64].int64
+
+  result.R = Uint256.fromBytesBE(sig[0..31])
+  result.S = Uint256.fromBytesBE(sig[32..63])

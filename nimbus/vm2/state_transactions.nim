@@ -60,12 +60,12 @@ proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress
   )
 
   let msg = Message(
-    kind: if tx.isContractCreation: evmcCreate else: evmcCall,
+    kind: if tx.contractCreation: evmcCreate else: evmcCall,
     depth: 0,
     gas: gas,
     sender: sender,
     contractAddress: tx.getRecipient(sender),
-    codeAddress: tx.to,
+    codeAddress: tx.destination,
     value: tx.value,
     data: tx.payload
     )

@@ -60,25 +60,19 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
   result = bloom.value.toByteArrayBE
 
 proc makeReceipt*(vmState: BaseVMState, fork: Fork, txType: TxType): Receipt =
-  if txType == AccessListTxType:
-    var rec = AccessListReceipt(
-      status: vmState.status,
-      cumulativeGasUsed: vmState.cumulativeGasUsed,
-      logs: vmState.getAndClearLogEntries()
-    )
-    rec.bloom = logsBloom(rec.logs).value.toByteArrayBE
-    return Receipt(receiptType: AccessListReceiptType, accessListReceipt: rec)
-
-  var rec: LegacyReceipt
+  var rec: Receipt
   if fork < FkByzantium:
-    rec.stateRootOrStatus = hashOrStatus(vmState.accountDb.rootHash)
+    rec.isHash = true
+    rec.hash   = vmState.accountDb.rootHash
   else:
-    rec.stateRootOrStatus = hashOrStatus(vmState.status)
+    rec.isHash = false
+    rec.status = vmState.status
 
+  rec.receiptType = txType
   rec.cumulativeGasUsed = vmState.cumulativeGasUsed
   rec.logs = vmState.getAndClearLogEntries()
   rec.bloom = logsBloom(rec.logs).value.toByteArrayBE
-  Receipt(receiptType: LegacyReceiptType, legacyReceipt: rec)
+  rec
 
 func eth(n: int): Uint256 {.compileTime.} =
   n.u256 * pow(10.u256, 18)
