@@ -2,7 +2,7 @@ name: CI
 on:
   push:
     paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**',
-      'nlpn/**', '.github/workflows/nlpn.yml']
+      'fluffy/**', '.github/workflows/fluffy.yml']
   # Disable `pull_request`.  Experimenting with using only `push` for PRs.
   #pull_request:
   #  paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']

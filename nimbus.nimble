@@ -51,5 +51,5 @@ task test, "Run tests":
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
 
-task nlpn, "Build nlpn":
-  buildBinary "nlpn", "nlpn/", "-d:chronicles_log_level=TRACE"
+task fluffy, "Build fluffy":
+  buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE"
