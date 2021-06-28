@@ -111,9 +111,14 @@ type
   GasCosts* = array[Op, GasCost]
 
 const
+  # From EIP-2929
   ColdSloadCost*         = 2100
   ColdAccountAccessCost* = 2600
   WarmStorageReadCost*   = 100
+
+  # From EIP-2930 (Berlin).
+  ACCESS_LIST_STORAGE_KEY_COST* = 1900.GasInt
+  ACCESS_LIST_ADDRESS_COST*     = 2400.GasInt
 
 template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
@@ -693,12 +698,22 @@ func berlinGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result[GasSLoad]        = 0
   result[GasCall]         = WarmStorageReadCost
 
+func londonGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
+  result = previousFees
+  # EIP-3529 RefundsClear(4800) =
+  # EIP-2929(5000 - ColdSloadCost) +
+  # EIP-2930(ACCESS_LIST_STORAGE_KEY_COST)
+  result[RefundsClear] =
+    5000 - ColdSloadCost +
+    ACCESS_LIST_STORAGE_KEY_COST
+
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees
   TangerineGasFees = HomesteadGasFees.tangerineGasFees
   SpuriousGasFees = TangerineGasFees.spuriousGasFees
   IstanbulGasFees = SpuriousGasFees.istanbulGasFees
   BerlinGasFees = IstanbulGasFees.berlinGasFees
+  LondonGasFees = BerlinGasFees.londonGasFees
 
   gasFees*: array[Fork, GasFeeSchedule] = [
     FkFrontier: BaseGasFees,
@@ -710,7 +725,7 @@ const
     FkPetersburg: SpuriousGasFees,
     FkIstanbul: IstanbulGasFees,
     FkBerlin: BerlinGasFees,
-    FkLondon: BerlinGasFees
+    FkLondon: LondonGasFees
   ]
 
 

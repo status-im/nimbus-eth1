@@ -48,6 +48,8 @@ export
   vmg.GasSHA256Word,
   vmg.WarmStorageReadCost,
   vmg.forkToSchedule,
-  vmg.gasFees
+  vmg.gasFees,
+  vmg.ACCESS_LIST_STORAGE_KEY_COST,
+  vmg.ACCESS_LIST_ADDRESS_COST
 
 # End
