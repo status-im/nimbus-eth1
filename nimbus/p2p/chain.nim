@@ -30,7 +30,8 @@ type
     Petersburg,
     Istanbul,
     MuirGlacier,
-    Berlin
+    Berlin,
+    London
 
   Chain* = ref object of AbstractChainDB
     db: BaseChainDB
@@ -40,7 +41,8 @@ type
     extraValidation: bool
 
 func toChainFork(c: ChainConfig, number: BlockNumber): ChainFork =
-  if number >= c.berlinBlock: Berlin
+  if number >= c.londonBlock: London
+  elif number >= c.berlinBlock: Berlin
   elif number >= c.muirGlacierBlock: MuirGlacier
   elif number >= c.istanbulBlock: Istanbul
   elif number >= c.petersburgBlock: Petersburg
@@ -71,6 +73,7 @@ func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
     toNextFork(c.istanbulBlock),
     toNextFork(c.muirGlacierBlock),
     toNextFork(c.berlinBlock),
+    toNextFork(c.londonBlock)
   ]
 
   if fork == high(ChainFork):

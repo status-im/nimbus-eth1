@@ -90,7 +90,8 @@ const
     eth2, # FkConstantinople
     eth2, # FkPetersburg
     eth2, # FkIstanbul
-    eth2  # FkBerlin
+    eth2, # FkBerlin
+    eth2  # FkLondon
   ]
 
 proc calculateReward(fork: Fork, header: BlockHeader, body: BlockBody, vmState: BaseVMState) =

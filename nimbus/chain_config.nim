@@ -32,6 +32,7 @@ type
     istanbulBlock      : Option[BlockNumber]
     muirGlacierBlock   : Option[BlockNumber]
     berlinBlock        : Option[BlockNumber]
+    londonBlock        : Option[BlockNumber]
 
   ChainConfig* = object
     chainId*            : ChainId
@@ -52,6 +53,7 @@ type
     istanbulBlock*      : BlockNumber
     muirGlacierBlock*   : BlockNumber
     berlinBlock*        : BlockNumber
+    londonBlock*        : BlockNumber
 
     # TODO: this need to be fixed somehow
     # using `real` engine configuration
@@ -174,7 +176,8 @@ proc loadCustomGenesis*(fileName: string, cg: var CustomGenesis): bool =
       error "Forks can't be assigned out of order", fork=fork
       return false
 
-  validateFork(berlinBlock,         high(BlockNumber).toBlockNumber)
+  validateFork(londonBlock,         high(BlockNumber).toBlockNumber)
+  validateFork(berlinBlock,         cg.config.londonBlock)
   validateFork(muirGlacierBlock,    cg.config.berlinBlock)
   validateFork(istanbulBlock,       cg.config.muirGlacierBlock)
   validateFork(petersburgBlock,     cg.config.istanbulBlock)

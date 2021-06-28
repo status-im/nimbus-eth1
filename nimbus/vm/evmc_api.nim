@@ -25,6 +25,7 @@ type
     block_gas_limit* : int64          # The block gas limit.
     block_difficulty*: evmc_uint256be # The block difficulty.
     chain_id*        : evmc_uint256be # The blockchain's ChainID.
+    block_base_fee*  : evmc_uint256be # The block base fee.
 
   nimbus_message* = object
     kind*: evmc_call_kind

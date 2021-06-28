@@ -231,7 +231,7 @@ let IstanbulOpDispatch {.compileTime.}: array[Op, NimNode] = genIstanbulJumpTabl
 
 proc genBerlinJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
   result = ops
-  # EIP-2315: temporary disabled    
+  # EIP-2315: temporary disabled
   # Reason  : not included in berlin hard fork
 
   #result[BeginSub] = newIdentNode "beginSub"
@@ -247,6 +247,12 @@ proc genBerlinJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTi
   result[SStore] = newIdentNode "sstoreEIP2929"
 
 let BerlinOpDispatch {.compileTime.}: array[Op, NimNode] = genBerlinJumpTable(IstanbulOpDispatch)
+
+proc genLondonJumpTable(ops: array[Op, NimNode]): array[Op, NimNode] {.compileTime.} =
+  result = ops
+  # incoming EIP-3198 and EIP-3529
+
+let LondonOpDispatch {.compileTime.}: array[Op, NimNode] = genLondonJumpTable(BerlinOpDispatch)
 
 proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
 
@@ -336,6 +342,9 @@ macro genIstanbulDispatch(c: Computation): untyped =
 macro genBerlinDispatch(c: Computation): untyped =
   result = opTableToCaseStmt(BerlinOpDispatch, c)
 
+macro genLondonDispatch(c: Computation): untyped =
+  result = opTableToCaseStmt(LondonOpDispatch, c)
+
 proc frontierVM(c: Computation) =
   genFrontierDispatch(c)
 
@@ -363,6 +372,9 @@ proc istanbulVM(c: Computation) {.gcsafe.} =
 proc berlinVM(c: Computation) {.gcsafe.} =
   genBerlinDispatch(c)
 
+proc londonVM(c: Computation) {.gcsafe.} =
+  genLondonDispatch(c)
+
 proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
   # TODO: Optimise getting fork and updating opCodeExec only when necessary
   case fork
@@ -382,8 +394,10 @@ proc selectVM(c: Computation, fork: Fork) {.gcsafe.} =
     c.petersburgVM()
   of FkIstanbul:
     c.istanbulVM()
-  else:
+  of FkBerlin:
     c.berlinVM()
+  else:
+    c.londonVM()
 
 proc executeOpcodes(c: Computation) =
   let fork = c.fork

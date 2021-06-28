@@ -159,7 +159,8 @@ proc `$`*(c: ChainId): string =
   $(c.int)
 
 proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
-  if number >= c.berlinBlock: FkBerlin
+  if number >= c.londonBlock: FkLondon
+  elif number >= c.berlinBlock: FkBerlin
   elif number >= c.istanbulBlock: FkIstanbul
   elif number >= c.petersburgBlock: FkPetersburg
   elif number >= c.constantinopleBlock: FkConstantinople
@@ -190,7 +191,8 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       petersburgBlock:7_280_000.toBlockNumber, # 28/02/2019 07:52:04
       istanbulBlock:  9_069_000.toBlockNumber, # 08/12/2019 12:25:09
       muirGlacierBlock: 9_200_000.toBlockNumber, # 02/01/2020 08:30:49
-      berlinBlock:      12_244_000.toBlockNumber # 15/04/2021 10:07:03
+      berlinBlock:    12_244_000.toBlockNumber, # 15/04/2021 10:07:03
+      londonBlock:    high(BlockNumber)
     )
   of RopstenNet:
     ChainConfig(
@@ -207,7 +209,8 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       petersburgBlock:4_939_394.toBlockNumber,
       istanbulBlock:  6_485_846.toBlockNumber,
       muirGlacierBlock: 7_117_117.toBlockNumber,
-      berlinBlock:      9_812_189.toBlockNumber
+      berlinBlock:      9_812_189.toBlockNumber,
+      londonBlock:    high(BlockNumber)
     )
   of RinkebyNet:
     ChainConfig(
@@ -224,7 +227,8 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       petersburgBlock:4_321_234.toBlockNumber,
       istanbulBlock:  5_435_345.toBlockNumber,
       muirGlacierBlock: 8_290_928.toBlockNumber, # never occured in rinkeby network
-      berlinBlock:      8_290_928.toBlockNumber
+      berlinBlock:      8_290_928.toBlockNumber,
+      londonBlock:    high(BlockNumber)
     )
   of GoerliNet:
     ChainConfig(
@@ -241,7 +245,8 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       petersburgBlock: 0.toBlockNumber,
       istanbulBlock:  1_561_651.toBlockNumber,
       muirGlacierBlock: 4_460_644.toBlockNumber, # never occured in goerli network
-      berlinBlock:      4_460_644.toBlockNumber
+      berlinBlock:    4_460_644.toBlockNumber,
+      londonBlock:    high(BlockNumber)
     )
   else:
     # everything else will use CustomNet config

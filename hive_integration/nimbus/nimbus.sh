@@ -30,6 +30,7 @@
 #  - [x] HIVE_FORK_ISTANBUL           block number for Istanbul transition
 #  - [x] HIVE_FORK_MUIRGLACIER        block number for Muir Glacier transition
 #  - [x] HIVE_FORK_BERLIN             block number for Berlin transition
+#  - [x] HIVE_FORK_LONDON             block number for London transition
 #
 # Clique PoA:
 #

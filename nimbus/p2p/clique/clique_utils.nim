@@ -151,8 +151,7 @@ proc validateGasLimit*(c: var BaseChainDB; header: BlockHeader): CliqueResult {.
 
 # params/config.go(450): func (c *ChainConfig) IsLondon(num [..]
 proc isLondonOrLater*(c: var ChainConfig; number: BlockNumber): bool =
-  ## FIXME: London is not defined yet, will come after Berlin
-  FkBerlin < c.toFork(number)
+  c.toFork(number) >= FkLondon
 
 # consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]
 proc calc1599BaseFee*(c: var ChainConfig; parent: BlockHeader): UInt256 =
