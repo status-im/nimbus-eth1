@@ -175,6 +175,10 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
       actual = contractCode.len
     return false
 
+  if fork >= FkLondon and contractCode[0] == 0xFE.byte:
+    debug "Contract code can't start with 0xEF byte"
+    return false
+
   let storageAddr = c.msg.contractAddress
   if c.isSelfDestructed(storageAddr): return
 
