@@ -60,11 +60,6 @@ proc hostToComputationMessage*(msg: EvmcMessage): Message =
     flags:           if msg.isStatic: emvcStatic else: emvcNoFlags
   )
 
-# From EIP-2930 (Berlin).
-const
-  ACCESS_LIST_STORAGE_KEY_COST = 1900.GasInt
-  ACCESS_LIST_ADDRESS_COST     = 2400.GasInt
-
 func intrinsicGas(call: CallParams, fork: Fork): GasInt {.inline.} =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
@@ -215,12 +210,18 @@ proc runComputation*(call: CallParams): CallResult =
   else:
     doExec(host, call)
 
+  # EIP-3529: Reduction in refunds
+  let MaxRefundQuotient = if host.vmState.fork >= FkLondon:
+                            5.GasInt
+                          else:
+                            2.GasInt
+
   # Calculated gas used, taking into account refund rules.
   var gasRemaining: GasInt = 0
   if call.noRefund:
     gasRemaining = c.gasMeter.gasRemaining
   elif not c.shouldBurnGas:
-    let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div 2
+    let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
     let refund = min(c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
     gasRemaining = c.gasMeter.gasRemaining

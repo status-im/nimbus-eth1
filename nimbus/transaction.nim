@@ -21,10 +21,6 @@ func intrinsicGas*(data: openarray[byte], fork: Fork): GasInt =
       result += gasFees[fork][GasTXDataNonZero]
 
 proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
-  const
-    ADDRESS_COST     = 2400
-    STORAGE_KEY_COST = 1900
-
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation)
@@ -34,11 +30,11 @@ proc intrinsicGas*(tx: Transaction, fork: Fork): GasInt =
     result = result + gasFees[fork][GasTXCreate]
 
   if tx.txType > TxLegacy:
-    result = result + tx.accessList.len * ADDRESS_COST
+    result = result + tx.accessList.len * ACCESS_LIST_ADDRESS_COST
     var numKeys = 0
     for n in tx.accessList:
       inc(numKeys, n.storageKeys.len)
-    result = result + numKeys * STORAGE_KEY_COST
+    result = result + numKeys * ACCESS_LIST_STORAGE_KEY_COST
 
 proc getSignature*(tx: Transaction, output: var Signature): bool =
   var bytes: array[65, byte]
