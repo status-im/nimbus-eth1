@@ -140,11 +140,18 @@ template calcDifficultyConstantinople*(timeStamp: EthTime, parent: BlockHeader):
   makeDifficultyCalculator(5_000_000, timeStamp, parent)
 
 template calcDifficultyMuirGlacier*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+  # EIP-2384
   makeDifficultyCalculator(9_000_000, timeStamp, parent)
+
+template calcDifficultyLondon*(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
+  # EIP-3554
+  makeDifficultyCalculator(9_700_000, timeStamp, parent)
 
 func calcDifficulty*(c: ChainConfig, timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
   let next = parent.blockNumber + bigOne
-  if next >= c.muirGlacierBlock:
+  if next >= c.londonBlock:
+    result = calcDifficultyLondon(timeStamp, parent)
+  elif next >= c.muirGlacierBlock:
     result = calcDifficultyMuirGlacier(timeStamp, parent)
   elif next >= c.constantinopleBlock:
     result = calcDifficultyConstantinople(timeStamp, parent)
