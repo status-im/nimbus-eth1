@@ -1,6 +1,6 @@
 # Nimbus Light Portal Network Client
 
-[![nlpn CI](https://github.com/status-im/nimbus-eth1/actions/workflows/nlpn.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/nlpn.yml)
+[![fluffy CI](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 [![License: Apache](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -27,32 +27,32 @@ To keep up to date with changes and development progress, follow the
 ### Prerequisites
 - GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
 
-### Build nlpn client
+### Build fluffy client
 ```bash
 git clone git@github.com:status-im/nimbus-eth1.git
 cd nimbus-eth1
-make nlpn
+make fluffy
 
 # See available command line options
-./build/nlpn --help
+./build/fluffy --help
 
 # Example command: Run the client and connect to a bootnode.
-./build/nlpn --log-level:debug --bootnode:enr:<base64 encoding of ENR>
+./build/fluffy --log-level:debug --bootnode:enr:<base64 encoding of ENR>
 ```
 
-### Update and rebuild nlpn client
+### Update and rebuild fluffy client
 ```bash
 # From the nimbus-eth1 repository
 git pull
 # To bring the git submodules up to date
 make update
 
-make nlpn
+make fluffy
 ```
 
 ### Windows support
 
-Follow the steps outlined [here](../README.md#windows) to build nlpn on Windows.
+Follow the steps outlined [here](../README.md#windows) to build fluffy on Windows.
 
 
 ## For Developers
@@ -78,10 +78,10 @@ The code follows the
 
 Licensed and distributed under either of
 
-* MIT license: [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
+* MIT license: [LICENSE-MIT](../LICENSE-MIT) or http://opensource.org/licenses/MIT
 
 or
 
-* Apache License, Version 2.0, ([LICENSE-APACHEv2](LICENSE-APACHEv2) or http://www.apache.org/licenses/LICENSE-2.0)
+* Apache License, Version 2.0, ([LICENSE-APACHEv2](../LICENSE-APACHEv2) or http://www.apache.org/licenses/LICENSE-2.0)
 
 at your option. These files may not be copied, modified, or distributed except according to those terms.

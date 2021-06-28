@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 ![GH action-nimbus-eth1](https://github.com/status-im/nimbus-eth1/workflows/CI/badge.svg)
-![GH action-nlpn](https://github.com/status-im/nimbus-eth1/workflows/nlpn%20CI/badge.svg)
+![GH action-fluffy](https://github.com/status-im/nimbus-eth1/workflows/fluffy%20CI/badge.svg)
 
 [![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus-orange.svg)](https://discord.gg/XRxWahP)
 [![Gitter: #status-im/nimbus](https://img.shields.io/badge/gitter-status--im%2Fnimbus-orange.svg)](https://gitter.im/status-im/nimbus)
