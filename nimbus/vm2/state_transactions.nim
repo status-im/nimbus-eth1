@@ -89,7 +89,9 @@ proc execComputation*(c: Computation) =
   c.execCallOrCreate()
 
   if c.isSuccess:
-    c.refundSelfDestruct()
+    if c.fork < FkLondon:
+      # EIP-3529: Reduction in refunds
+      c.refundSelfDestruct()
     shallowCopy(c.vmState.selfDestructs, c.selfDestructs)
     shallowCopy(c.vmState.logEntries, c.logEntries)
     c.vmState.touchedAccounts.incl c.touchedAccounts

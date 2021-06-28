@@ -8,7 +8,7 @@
 import
   options, sets,
   eth/common, chronicles, ../db/accounts_cache,
-  ../transaction,
+  ../transaction, ../forks,
   ./computation, ./interpreter, ./state, ./types
 
 proc execComputation*(c: Computation) =
@@ -19,7 +19,9 @@ proc execComputation*(c: Computation) =
   c.execCallOrCreate()
 
   if c.isSuccess:
-    c.refundSelfDestruct()
+    if c.fork < FkLondon:
+      # EIP-3529: Reduction in refunds
+      c.refundSelfDestruct()
     shallowCopy(c.vmState.selfDestructs, c.selfDestructs)
     shallowCopy(c.vmState.logEntries, c.logEntries)
     c.vmState.touchedAccounts.incl c.touchedAccounts
