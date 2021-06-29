@@ -97,21 +97,6 @@ const
     ## the cutoff threshold and by clique as the snapshot trust limit.
     90000
 
-  # params/protocol_params.go(121): BaseFeeChangeDenominator = 8 [..]
-  EIP1559_BASE_FEE_CHANGE_DENOMINATOR* = ##\
-    ## Bounds the amount the base fee can change between blocks.
-    8
-
-  # params/protocol_params.go(122): ElasticityMultiplier = 2  [..]
-  EIP1559_ELASTICITY_MULTIPLIER* = ##\
-    ## Bounds the maximum gas limit an EIP-1559 block may have.
-    2
-
-  # params/protocol_params.go(123): InitialBaseFee = 1000000000 [..]
-  EIP1559_INITIAL_BASE_FEE* = ##\
-    ## Initial base fee for Eip1559 blocks.
-    1000000000.u256
-
 # ------------------------------------------------------------------------------
 # Error tokens
 # ------------------------------------------------------------------------------
@@ -244,16 +229,12 @@ type
     errSnapshotStore              ## ..
     errSnapshotClone
 
+    errCliqueGasLimitOrBaseFee
     errCliqueExceedsGasLimit
-    errCliqueUnsupportedBaseFee
-    errCliqueBaseFeeError
     errCliqueGasRepriceFork
     errCliqueSealSigFn
 
     errCliqueStopped = "process was interrupted"
-    errCliqueExpectedBaseFee = "header is missing baseFee"
-    errCliqueGasLimitTooLow = "gas limit is too low"
-    errCliqueGasLimitTooHigh = "gas limit is too high"
     errCliqueUnclesNotAllowed = "uncles not allowed"
 
     # not really an error

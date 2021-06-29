@@ -20,6 +20,7 @@ import
   ../forks,
   ./dao,
   ./validate/epoch_hash_cache,
+  ./gaslimit,
   chronicles,
   eth/[common, rlp, trie/trie_defs],
   ethash,
@@ -141,41 +142,11 @@ proc validateSeal(hashCache: var EpochHashCache;
   checkPOW(header.blockNumber, miningHash,
            header.mixDigest, header.nonce, header.difficulty, hashCache)
 
-
-proc validateGasLimit(chainDB: BaseChainDB;
-                      header: BlockHeader): Result[void,string] =
-  let parentHeader = chainDB.getBlockHeader(header.parentHash)
-  let (lowBound, highBound) = gasLimitBounds(parentHeader)
-
-  if header.gasLimit < lowBound:
-    return err("The gas limit is too low")
-  if header.gasLimit > highBound:
-    return err("The gas limit is too high")
-
-  result = ok()
-
-
-func validateGasLimit(gasLimit, parentGasLimit: GasInt): Result[void,string] =
-  if gasLimit < GAS_LIMIT_MINIMUM:
-    return err("Gas limit is below minimum")
-  if gasLimit > GAS_LIMIT_MAXIMUM:
-    return err("Gas limit is above maximum")
-
-  let diff = gasLimit - parentGasLimit
-  if diff > (parentGasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR):
-    return err("Gas limit difference to parent is too big")
-
-  result = ok()
-
 proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
                     numTransactions: int; checkSealOK: bool;
                     hashCache: var EpochHashCache): Result[void,string] =
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
-
-  result = validateGasLimit(header.gasLimit, parentHeader.gasLimit)
-  if result.isErr:
-    return
 
   if header.gasUsed == 0 and 0 < numTransactions:
     return err("zero gasUsed but tranactions present");
@@ -346,9 +317,9 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
       return err("BlockHeader.extraData larger than 32 bytes")
     return ok()
 
-  let parentHeader = chainDB.getBlockHeader(header.parentHash)
+  let parent = chainDB.getBlockHeader(header.parentHash)
   result = chainDB.validateHeader(
-    header, parentHeader,numTransactions,  checkSealOK, hashCache)
+    header, parent, numTransactions, checkSealOK, hashCache)
   if result.isErr:
     return
 
@@ -360,7 +331,7 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
 
   result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
   if result.isOk:
-    result = chainDB.validateGaslimit(header)
+    result = chainDB.validateGasLimitOrBaseFee(header, parent)
 
 
 proc validateHeaderAndKinship*(chainDB: BaseChainDB;

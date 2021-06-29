@@ -45,24 +45,6 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc gasLimitBounds(limit: GasInt): (GasInt, GasInt) =
-  ## See also utils.header.gasLimitBounds()
-  let
-    bndRange = limit div GAS_LIMIT_ADJUSTMENT_FACTOR
-    upperBound = if GAS_LIMIT_MAXIMUM - bndRange < limit: GAS_LIMIT_MAXIMUM
-                 else: limit + bndRange
-    lowerBound = max(GAS_LIMIT_MINIMUM, limit - bndRange)
-
-  return (lowerBound, upperBound)
-
-proc validateGasLimit(header: BlockHeader; limit: GasInt): CliqueResult =
-  let (lowBound, highBound) = gasLimitBounds(limit)
-  if header.gasLimit < lowBound:
-    return err((errCliqueGasLimitTooLow,""))
-  if highBound < header.gasLimit:
-    return err((errCliqueGasLimitTooHigh,""))
-  return ok()
-
 func zeroItem[T](t: typedesc[T]): T {.inline.} =
   discard
 
@@ -138,90 +120,6 @@ proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader): CliqueResult {.
 
   return err((errCliqueGasRepriceFork,
               &"Homestead gas reprice fork: have {c.eip150Hash}, want {hash}"))
-
-proc validateGasLimit*(c: var BaseChainDB; header: BlockHeader): CliqueResult {.
-                       gcsafe, raises: [Defect,RlpError,BlockNotFound].} =
-  ## See also private function p2p.validate.validateGasLimit()
-  let parent = c.getBlockHeader(header.parentHash)
-  header.validateGasLimit(parent.gasLimit)
-
-# ------------------------------------------------------------------------------
-# Eip 1559 support
-# ------------------------------------------------------------------------------
-
-# params/config.go(450): func (c *ChainConfig) IsLondon(num [..]
-proc isLondonOrLater*(c: var ChainConfig; number: BlockNumber): bool =
-  c.toFork(number) >= FkLondon
-
-# consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]
-proc calc1599BaseFee*(c: var ChainConfig; parent: BlockHeader): UInt256 =
-  ## calculates the basefee of the header.
-
-  # If the current block is the first EIP-1559 block, return the
-  # initial base fee.
-  if not c.isLondonOrLater(parent.blockNumber):
-    return EIP1559_INITIAL_BASE_FEE
-
-  let parentGasTarget = parent.gasLimit div EIP1559_ELASTICITY_MULTIPLIER
-
-  # If the parent gasUsed is the same as the target, the baseFee remains
-  # unchanged.
-  if parent.gasUsed == parentGasTarget:
-    return parent.baseFee
-
-  let parentGasDenom = parentGasTarget.u256 *
-                         EIP1559_BASE_FEE_CHANGE_DENOMINATOR.u256
-
-  # baseFee is an Option[T]
-  let parentBaseFee  = parent.baseFee
-
-  if parentGasTarget < parent.gasUsed:
-    # If the parent block used more gas than its target, the baseFee should
-    # increase.
-    let
-      gasUsedDelta = (parent.gasUsed - parentGasTarget).u256
-      baseFeeDelta = (parentBaseFee * gasUsedDelta) div parentGasDenom
-
-    return parentBaseFee + max(baseFeeDelta, 1.u256)
-
-  else:
-    # Otherwise if the parent block used less gas than its target, the
-    # baseFee should decrease.
-    let
-      gasUsedDelta = (parentGasTarget - parent.gasUsed).u256
-      baseFeeDelta = (parentBaseFee * gasUsedDelta) div parentGasDenom
-
-    return max(parentBaseFee - baseFeeDelta, 0.u256)
-
-
-# consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
-proc verify1559Header*(c: var ChainConfig;
-                       parent, header: BlockHeader): CliqueResult {.
-                         gcsafe, raises: [Defect,ValueError].} =
-  ## Verify that the gas limit remains within allowed bounds
-  let limit = if c.isLondonOrLater(parent.blockNumber):
-                parent.gasLimit
-              else:
-                parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
-  let rc = header.validateGasLimit(limit)
-  if rc.isErr:
-    return err(rc.error)
-
-  let headerBaseFee = header.baseFee
-  # Verify the header is not malformed
-  if headerBaseFee.isZero:
-    return err((errCliqueExpectedBaseFee,""))
-
-  # Verify the baseFee is correct based on the parent header.
-  var expectedBaseFee = c.calc1599BaseFee(parent)
-  if headerBaseFee != expectedBaseFee:
-    return err((errCliqueBaseFeeError,
-                &"invalid baseFee: have {expectedBaseFee}, "&
-                &"want {header.baseFee}, " &
-                &"parent.baseFee {parent.baseFee}, "&
-                &"parent.gasUsed {parent.gasUsed}"))
-
-  return ok()
 
 # ------------------------------------------------------------------------------
 # Seal hash support
