@@ -42,6 +42,7 @@ proc processNetWork(network: string): JsonNode =
     petersburgBlock     = 2000
     istanbulBlock       = 2000
     berlinBlock         = 2000
+    londonBlock         = 2000
 
   case network
   of "Frontier":
@@ -90,6 +91,16 @@ proc processNetWork(network: string): JsonNode =
     petersburgBlock = 0
     istanbulBlock = 0
     berlinBlock   = 0
+  of "London":
+    homesteadBlock = 0
+    eip150Block    = 0
+    eip158Block    = 0
+    byzantiumBlock = 0
+    constantinopleBlock = 0
+    petersburgBlock = 0
+    istanbulBlock = 0
+    berlinBlock   = 0
+    londonBlock = 0
   of "FrontierToHomesteadAt5":
     homesteadBlock = 5
   of "HomesteadToEIP150At5":
@@ -134,6 +145,16 @@ proc processNetWork(network: string): JsonNode =
     petersburgBlock = 0
     istanbulBlock = 0
     berlinBlock = 5
+  of "BerlinToLondonAt5":
+    homesteadBlock = 0
+    eip150Block = 0
+    eip158Block = 0
+    byzantiumBlock = 0
+    constantinopleBlock = 0
+    petersburgBlock = 0
+    istanbulBlock = 0
+    berlinBlock = 0
+    londonBlock = 5
   else:
     doAssert(false, "unsupported network: " & network)
 
@@ -149,14 +170,21 @@ proc processNetWork(network: string): JsonNode =
   n["petersburgBlock"]     = newJInt(petersburgBlock)
   n["istanbulBlock"]       = newJInt(istanbulBlock)
   n["berlinBlock"]         = newJInt(berlinBlock)
+  n["londonBlock"]         = newJInt(londonBlock)
   n["chainId"]             = newJInt(1)
   result = n
+
+proc optionalField(n: string, genesis, gen: JsonNode) =
+  if n in gen:
+    genesis[n] = gen[n]
 
 proc extractChainData(n: JsonNode, chainFile: string): ChainData =
   let gen = n["genesisBlockHeader"]
   var genesis = newJObject()
   for x in genFields:
     genesis[x] = gen[x]
+
+  optionalField("baseFeePerGas", genesis, gen)
   genesis["alloc"] = n["pre"]
 
   var ngen = newJObject()
