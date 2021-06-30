@@ -157,6 +157,9 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
     stateRoot: emptyRlpHash
     )
 
+  if "currentBaseFee" in fenv:
+    tester.header.baseFee = fromHex(UInt256, fenv{"currentBaseFee"}.getStr)
+
   let specifyIndex = getConfiguration().index
   tester.trace = trace
   tester.debugMode = debugMode

@@ -35,12 +35,6 @@ type
 
 proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
   hexToByteArray(n[name].getStr(), x)
-  if x.prefixHex != toLowerAscii(n[name].getStr()):
-    debugEcho "name: ", name
-    debugEcho "A: ", x.prefixHex
-    debugEcho "B: ", toLowerAscii(n[name].getStr())
-    quit(1)
-
   doAssert(x.prefixHex == toLowerAscii(n[name].getStr()), name)
 
 proc fromJson*(n: JsonNode, name: string, x: var Hash256) =
@@ -63,6 +57,12 @@ proc fromJson*(n: JsonNode, name: string, x: var EthTime) =
   x = initTime(hexToInt(n[name].getStr(), int64), 0)
   doAssert(x.toUnix.prefixHex == toLowerAscii(n[name].getStr()), name)
 
+proc fromJson*[T](n: JsonNode, name: string, x: var Option[T]) =
+  if name in n:
+    var val: T
+    n.fromJson(name, val)
+    x = some(val)
+
 proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "parentHash", result.parentHash
   n.fromJson "sha3Uncles", result.ommersHash
@@ -79,6 +79,7 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "extraData", result.extraData
   n.fromJson "mixHash", result.mixDigest
   n.fromJson "nonce", result.nonce
+  n.fromJson "baseFeePerGas", result.fee
 
 proc parseTransaction*(n: JsonNode): Transaction =
   var tx = Transaction(txType: TxLegacy)
