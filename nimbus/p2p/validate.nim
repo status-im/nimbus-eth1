@@ -259,6 +259,10 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
     if result.isErr:
       return
 
+    result = chainDB.validateGasLimitOrBaseFee(uncle, uncleParent)
+    if result.isErr:
+      return
+
   result = ok()
 
 # ------------------------------------------------------------------------------
@@ -270,11 +274,34 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
   let balance = vmState.readOnlyStateDB.getBalance(sender)
   let nonce = vmState.readOnlyStateDB.getNonce(sender)
 
+  if tx.txType == TxEip2930 and fork < FkBerlin:
+    debug "invalid tx: Eip2930 Tx type detected before Berlin"
+    return
+
+  if tx.txType == TxEip1559 and fork < FkLondon:
+    debug "invalid tx: Eip1559 Tx type detected before London"
+    return
+
   if vmState.cumulativeGasUsed + tx.gasLimit > vmState.blockHeader.gasLimit:
     debug "invalid tx: block header gasLimit reached",
       maxLimit=vmState.blockHeader.gasLimit,
       gasUsed=vmState.cumulativeGasUsed,
       addition=tx.gasLimit
+    return
+
+  # ensure that the user was willing to at least pay the base fee
+  let baseFee = vmState.blockHeader.baseFee.truncate(GasInt)
+  if tx.maxFee < baseFee:
+    debug "invalid tx: maxFee is smaller than baseFee",
+      maxFee=tx.maxFee,
+      baseFee=baseFee
+    return
+
+  # The total must be the larger of the two
+  if tx.maxFee < tx.maxPriorityFee:
+    debug "invalid tx: maxFee is smaller than maPriorityFee",
+      maxFee=tx.maxFee,
+      maxPriorityFee=tx.maxPriorityFee
     return
 
   let gasCost = tx.gasLimit.u256 * tx.gasPrice.u256

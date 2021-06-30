@@ -4,7 +4,7 @@ import
   chronicles, eth/trie/db,
   ./db/[db_chain, state_db],
   ./genesis_alloc, ./config, ./constants,
-  ./chain_config
+  ./chain_config, ./forks, ./p2p/gaslimit
 
 proc defaultGenesisBlockForNetwork*(id: NetworkId): Genesis =
   result = case id
@@ -73,6 +73,11 @@ proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
     receiptRoot: BLANK_ROOT_HASH,
     ommersHash: EMPTY_UNCLE_HASH
   )
+
+  if g.baseFeePerGas.isSome:
+    result.baseFee = g.baseFeePerGas.get()
+  elif db.isNil.not and db.config.toFork(0.toBlockNumber) >= FkLondon:
+    result.baseFee = EIP1559_INITIAL_BASE_FEE.u256
 
   if g.gasLimit == 0:
     result.gasLimit = GENESIS_GAS_LIMIT

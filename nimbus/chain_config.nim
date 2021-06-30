@@ -68,7 +68,8 @@ type
     mixHash*    : Hash256
     coinbase*   : EthAddress
     alloc*      : GenesisAlloc
-
+    baseFeePerGas*: Option[UInt256]
+    
   GenesisAlloc* = Table[EthAddress, GenesisAccount]
   GenesisAccount* = object
     code*   : seq[byte]

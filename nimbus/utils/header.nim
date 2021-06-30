@@ -59,7 +59,7 @@ proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
 
 proc generateHeaderFromParentHeader*(config: ChainConfig, parent: BlockHeader,
     coinbase: EthAddress, timestamp: Option[EthTime],
-    gasLimit: Option[GasInt], extraData: Blob): BlockHeader =
+    gasLimit: Option[GasInt], extraData: Blob, baseFee: Option[Uint256]): BlockHeader =
 
   var lcTimestamp: EthTime
   if timestamp.isNone:
@@ -78,4 +78,5 @@ proc generateHeaderFromParentHeader*(config: ChainConfig, parent: BlockHeader,
     stateRoot: parent.stateRoot,
     coinbase: coinbase,
     extraData: extraData,
+    fee: baseFee
   )
