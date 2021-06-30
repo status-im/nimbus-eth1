@@ -94,12 +94,14 @@ const
   # EIP-2200
   SSTORE_SET_GAS           = 20000
   SSTORE_RESET_GAS         = 5000
-  SSTORE_CLEARS_SCHEDULE   = 15000
   SLOAD_GAS_ISTANBUL       = 800
   # EIP-2929
   WARM_STORAGE_READ_COST   = 100
   COLD_SLOAD_COST          = 2100
   COLD_ACCOUNT_ACCESS_COST = 2600
+
+  SSTORE_CLEARS_SCHEDULE_EIP2200 = 15000
+  SSTORE_CLEARS_SCHEDULE_EIP3529 = 4800
 
 func storageModifiedAgainRefund(originalValue, oldValue, value: HostValue,
                                 fork: Fork): int {.inline.} =
@@ -114,6 +116,11 @@ func storageModifiedAgainRefund(originalValue, oldValue, value: HostValue,
                     elif fork >= FkIstanbul: SLOAD_GAS_ISTANBUL
                     else: SLOAD_GAS_CONSTANTINOPLE
     result -= SLOAD_GAS
+
+  let SSTORE_CLEARS_SCHEDULE = if fork >= FkLondon:
+                                 SSTORE_CLEARS_SCHEDULE_EIP3529
+                               else:
+                                 SSTORE_CLEARS_SCHEDULE_EIP2200
   if not originalValue.isZero:
     if value.isZero:
       result += SSTORE_CLEARS_SCHEDULE
@@ -147,6 +154,10 @@ proc setStorage(host: TransactionHost, address: HostAddress,
   elif value.isZero:
     # Gas refund for `DELETED` (all forks).
     # TODO: Refund depends on `Computation` at the moment.
+    let SSTORE_CLEARS_SCHEDULE = if host.vmState.fork >= FkLondon:
+                                   SSTORE_CLEARS_SCHEDULE_EIP3529
+                                 else:
+                                   SSTORE_CLEARS_SCHEDULE_EIP2200
     host.computation.gasMeter.refundGas(SSTORE_CLEARS_SCHEDULE)
     return EVMC_STORAGE_DELETED
   else:
