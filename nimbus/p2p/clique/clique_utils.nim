@@ -23,11 +23,8 @@
 import
   std/[algorithm, strformat, times],
   ../../chain_config,
-  ../../config,
   ../../constants,
   ../../db/db_chain,
-  ../../errors,
-  ../../forks,
   ../../utils,
   ./clique_defs,
   eth/[common, rlp],

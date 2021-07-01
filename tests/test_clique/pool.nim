@@ -53,7 +53,7 @@ type
 
 proc chain(ap: TesterPool): BaseChainDB =
   ## Getter
-  ap.engine.cfgInternal.dbChain
+  ap.engine.cfg.dbChain
 
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
@@ -98,14 +98,14 @@ proc privateKey(ap: TesterPool; account: string): PrivateKey =
 
 proc resetChainDb(ap: TesterPool; extraData: Blob) =
   ## Setup new block chain with bespoke genesis
-  ap.engine.cfgInternal.dbChain = BaseChainDB(
+  ap.engine.cfg.dbChain = BaseChainDB(
       db: newMemoryDb(),
       config: ap.boot.config)
   # new genesis block
   var g = ap.boot.genesis
   if 0 < extraData.len:
     g.extraData = extraData
-  g.commit(ap.engine.cfgInternal.dbChain)
+  g.commit(ap.engine.cfg.dbChain)
 
 # ------------------------------------------------------------------------------
 # Private pretty printer call backs
@@ -200,7 +200,6 @@ proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
 
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
   result = ap
-  result.boot.config.poaEngine = true
   result.prng = initRand(prngSeed)
   result.batch = @[newSeq[BlockHeader]()]
   result.accounts = initTable[string,PrivateKey]()
@@ -211,7 +210,7 @@ proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
          period = initDuration(seconds = 1))
        .initClique
   result.engine.setDebug(false)
-  result.engine.cfgInternal.prettyPrint.initPrettyPrinters(result)
+  result.engine.cfg.prettyPrint.initPrettyPrinters(result)
   result.resetChainDb(@[])
 
 # ------------------------------------------------------------------------------
@@ -220,7 +219,7 @@ proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
 
 proc getPrettyPrinters*(t: TesterPool): var PrettyPrinters =
   ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
-  t.engine.cfgInternal.prettyPrint
+  t.engine.cfg.prettyPrint
 
 proc setDebug*(ap: TesterPool; debug=true): TesterPool {.inline,discardable,} =
   ## Set debugging mode on/off
@@ -298,7 +297,7 @@ proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
                                           .sorted
                                           .join("\n" & ' '.repeat(23))
 
-  ap.engine.snapshotInternal(number, hash, parent)
+  ap.engine.snapshot(number, hash, parent)
 
 # ------------------------------------------------------------------------------
 # Public: Constructor
@@ -351,7 +350,7 @@ proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
 
   # store modified genesis block and epoch
   ap.resetChainDb(extraData)
-  ap.engine.cfgInternal.epoch = epoch.uint
+  ap.engine.cfg.epoch = epoch.uint
 
 
 # clique/snapshot_test.go(415): blocks, _ := core.GenerateChain(&config, [..]
@@ -389,7 +388,7 @@ proc appendVoter*(ap: TesterPool;
 
   # clique/snapshot_test.go(432): if auths := tt.votes[j].checkpoint; [..]
   if 0 < voter.checkpoint.len:
-    doAssert (header.blockNumber mod ap.engine.cfgInternal.epoch) == 0
+    doAssert (header.blockNumber mod ap.engine.cfg.epoch) == 0
     ap.checkpoint(header,voter.checkpoint)
 
   # Generate the signature, embed it into the header and the block
