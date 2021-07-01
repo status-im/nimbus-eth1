@@ -63,7 +63,7 @@ def to_bool:
     "petersburgBlock": env.HIVE_FORK_PETERSBURG|to_int,
     "istanbulBlock": env.HIVE_FORK_ISTANBUL|to_int,
     "muirGlacierBlock": env.HIVE_FORK_MUIR_GLACIER|to_int,
-    "berlinBlock": env.HIVE_FORK_BERLIN|to_int
+    "berlinBlock": env.HIVE_FORK_BERLIN|to_int,
     "londonBlock": env.HIVE_FORK_LONDON|to_int
   }|remove_empty
 }
