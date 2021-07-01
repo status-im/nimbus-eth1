@@ -13,9 +13,9 @@ import
   ../../nimbus/[config, chain_config, constants, genesis, utils],
   ../../nimbus/db/db_chain,
   ../../nimbus/p2p/clique,
-  ../../nimbus/p2p/clique/[clique_defs, clique_utils],
+  ../../nimbus/p2p/clique/clique_utils,
   ./voter_samples as vs,
-  eth/[common, keys, rlp, trie/db],
+  eth/[common, keys, p2p, rlp, trie/db],
   ethash,
   secp256k1_abi,
   stew/objects
@@ -51,7 +51,7 @@ type
 # Private Helpers
 # ------------------------------------------------------------------------------
 
-proc chain(ap: TesterPool): BaseChainDB =
+proc chain(ap: TesterPool): auto =
   ## Getter
   ap.engine.cfg.dbChain
 
@@ -101,6 +101,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob) =
   ap.engine.cfg.dbChain = BaseChainDB(
       db: newMemoryDb(),
       config: ap.boot.config)
+  ap.engine.cfg.dbChain.populateProgress
   # new genesis block
   var g = ap.boot.genesis
   if 0 < extraData.len:
@@ -184,6 +185,9 @@ proc ppBlockHeader(ap: TesterPool; v: BlockHeader; delim: string): string =
   ## Pretty print block header
   let sep = if 0 < delim.len: delim else: ";"
   &"(blockNumber=#{v.blockNumber.truncate(uint64)}" &
+    &"{sep}parentHash={v.parentHash}" &
+    &"{sep}selfHash={v.hash}" &
+    &"{sep}stateRoot={v.stateRoot}" &
     &"{sep}coinbase={ap.ppAddress(v.coinbase)}" &
     &"{sep}nonce={ap.ppNonce(v.nonce)}" &
     &"{sep}extraData={ap.ppExtraData(v.extraData)})"
@@ -299,22 +303,30 @@ proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
 
   ap.engine.snapshot(number, hash, parent)
 
+proc clique*(ap: TesterPool): var Clique =
+  ## Getter
+  ap.engine
+
 # ------------------------------------------------------------------------------
 # Public: Constructor
 # ------------------------------------------------------------------------------
 
-proc newVoterPool*(genesisTemplate = ""): TesterPool =
-  new result
-  if genesisTemplate == "":
-    let networkId = getConfiguration().net.networkId
-    result.boot.genesis = defaultGenesisBlockForNetwork(networkId)
-  else:
-    # Find genesis block
-    doAssert genesisTemplate.loadCustomGenesis(result.boot)
-  result.initTesterPool
-
 proc newVoterPool*(customGenesis: CustomGenesis): TesterPool =
   TesterPool(boot: customGenesis).initTesterPool
+
+proc newVoterPool*(id: NetworkId): TesterPool =
+  CustomGenesis(
+    config: chainConfig(id),
+    genesis: defaultGenesisBlockForNetwork(id)).newVoterPool
+
+proc newVoterPool*(genesisTemplate = ""): TesterPool =
+  if genesisTemplate == "":
+    return getConfiguration().net.networkId.newVoterPool
+
+  # Find genesis block from template
+  new result
+  doAssert genesisTemplate.loadCustomGenesis(result.boot)
+  result.initTesterPool
 
 # ------------------------------------------------------------------------------
 # Public: set up & manage voter database
