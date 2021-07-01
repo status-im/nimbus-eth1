@@ -23,12 +23,12 @@ proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
       # TODO: Add possiblity to start client on differnt transports based on uri.
       let httpClient = newRpcHttpClient()
       waitFor httpClient.connect(uri)
-      notice "Initialized bridge client:", uri
+      notice "Initialized bridge client:", uri = uri
       return some[BridgeClient](httpClient)
     else:
       return none(BridgeClient)
   except CatchableError as err:
-    notice "Failed to initialize bridge client", err.msg
+    notice "Failed to initialize bridge client", error = err.msg
     return none(BridgeClient)
 
 proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
