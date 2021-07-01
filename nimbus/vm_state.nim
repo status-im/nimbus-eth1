@@ -32,6 +32,7 @@ export
   vms.disableTracing,
   vms.enableTracing,
   vms.gasLimit,
+  vms.baseFee,
   vms.generateWitness,
   vms.`generateWitness=`,
   vms.getAncestorHash,

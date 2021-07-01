@@ -76,7 +76,7 @@ func normalizeBlockHeader(node: JsonNode): JsonNode =
     of "receiptTrie": node["receiptsRoot"] = v
     of "transactionsTrie": node["transactionsRoot"] = v
     of "number", "difficulty", "gasUsed",
-      "gasLimit", "timestamp":
+      "gasLimit", "timestamp", "baseFeePerGas":
         node[k] = normalizeNumber(v)
     of "extraData":
       node[k] = normalizeData(v)
@@ -102,8 +102,14 @@ proc parseBlocks(blocks: JsonNode): seq[TestBlock] =
       of "transactions", "uncleHeaders",
          "blocknumber", "chainname", "chainnetwork":
         discard
+      of "transactionSequence":
+        var noError = true
+        for tx in value:
+          let valid = tx["valid"].getStr == "true"
+          noError = noError and valid
+        doAssert(noError == false, "NOT A VALID TEST CASE")
       else:
-        doAssert("expectException" in key)
+        doAssert("expectException" in key, key)
         t.hasException = true
 
     result.add t
@@ -139,6 +145,7 @@ func vmConfiguration(network: string, c: var ChainConfig) =
     c.istanbulBlock       = number[FkIstanbul]
     c.muirGlacierBlock    = number[FkBerlin]
     c.berlinBlock         = number[FkBerlin]
+    c.londonBlock         = number[FkLondon]
 
   case network
   of "EIP150":
@@ -172,6 +179,10 @@ func vmConfiguration(network: string, c: var ChainConfig) =
     c.assignNumber(FkIstanbul, Zero)
   of "Berlin":
     c.assignNumber(FkBerlin, Zero)
+  of "London":
+    c.assignNumber(FkLondon, Zero)
+  of "BerlinToLondonAt5":
+    c.assignNumber(FkLondon, Five)
   else:
     raise newException(ValueError, "unsupported network " & network)
 
@@ -224,7 +235,8 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
       preminedBlock.header.coinbase,
       some(preminedBlock.header.timestamp),
       some(preminedBlock.header.gasLimit),
-      @[]
+      @[],
+      preminedBlock.header.fee
   )
 
   deepCopy(result, preminedBlock)

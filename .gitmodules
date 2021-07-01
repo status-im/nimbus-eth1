@@ -188,8 +188,8 @@
   url = https://github.com/status-im/nim-zlib
   ignore = dirty
   branch = master
-[submodule "vendor/nim-ws"]
-  path = vendor/nim-ws
-  url = https://github.com/status-im/nim-ws
+[submodule "vendor/nim-websock"]
+  path = vendor/nim-websock
+  url = https://github.com/status-im/nim-websock
   ignore = dirty
   branch = master

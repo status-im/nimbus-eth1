@@ -47,6 +47,7 @@ proc setupChain(chainDB: BaseChainDB) =
   conf.customGenesis.genesis.mixHash    = genesis.header.mixDigest
   conf.customGenesis.genesis.coinBase   = genesis.header.coinbase
   conf.customGenesis.genesis.timestamp  = genesis.header.timestamp
+  conf.customGenesis.genesis.baseFeePerGas = genesis.header.fee
   if not parseGenesisAlloc($(jn["pre"]), conf.customGenesis.genesis.alloc):
     quit(QuitFailure)
 
@@ -75,9 +76,10 @@ proc graphqlMain*() =
     byzantiumBlock      : 0.toBlockNumber,
     constantinopleBlock : 0.toBlockNumber,
     petersburgBlock     : 0.toBlockNumber,
-    istanbulBlock       : 10.toBlockNumber,
-    muirGlacierBlock    : high(BlockNumber).toBlockNumber,
-    berlinBlock         : high(BlockNumber).toBlockNumber
+    istanbulBlock       : 0.toBlockNumber,
+    muirGlacierBlock    : 0.toBlockNumber,
+    berlinBlock         : 10.toBlockNumber,
+    londonBlock         : high(BlockNumber).toBlockNumber
   )
 
   let

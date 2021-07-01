@@ -19,16 +19,6 @@ proc hasUncles*(header: BlockHeader): bool = header.ommersHash != EMPTY_UNCLE_HA
 proc `$`*(header: BlockHeader): string =
   result = &"BlockHeader(timestamp: {header.timestamp} difficulty: {header.difficulty} blockNumber: {header.blockNumber} gasLimit: {header.gasLimit})"
 
-proc gasLimitBounds*(parent: BlockHeader): (GasInt, GasInt) =
-  ## Compute the boundaries for the block gas limit based on the parent block.
-  let
-    boundaryRange = (parent.gasLimit div GAS_LIMIT_ADJUSTMENT_FACTOR)
-    upperBound = if GAS_LIMIT_MAXIMUM - boundaryRange < parent.gasLimit:
-      GAS_LIMIT_MAXIMUM else: parent.gasLimit + boundaryRange
-    lowerBound = max(GAS_LIMIT_MINIMUM, parent.gasLimit - boundaryRange)
-
-  return (lowerBound, upperBound)
-
 proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
   #[
     For each block:
@@ -69,7 +59,7 @@ proc computeGasLimit*(parent: BlockHeader, gasLimitFloor: GasInt): GasInt =
 
 proc generateHeaderFromParentHeader*(config: ChainConfig, parent: BlockHeader,
     coinbase: EthAddress, timestamp: Option[EthTime],
-    gasLimit: Option[GasInt], extraData: Blob): BlockHeader =
+    gasLimit: Option[GasInt], extraData: Blob, baseFee: Option[Uint256]): BlockHeader =
 
   var lcTimestamp: EthTime
   if timestamp.isNone:
@@ -88,4 +78,5 @@ proc generateHeaderFromParentHeader*(config: ChainConfig, parent: BlockHeader,
     stateRoot: parent.stateRoot,
     coinbase: coinbase,
     extraData: extraData,
+    fee: baseFee
   )

@@ -107,20 +107,20 @@
   "block":{
     "__typename":"Block",
     "number":3,
-    "hash":"0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c",
+    "hash":"0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1",
     "parent":{
       "__typename":"Block",
       "number":2
     },
     "nonce":"0x0000000000000000",
-    "transactionsRoot":"0x1722b8a91bfc4f5614ce36ee77c7cce6620ab4af36d3c54baa66d7dbeb7bce1a",
+    "transactionsRoot":"0x8c8775e959d553f9f991a21a8502dbe6819c53c518711f2cbbbd7ed998f65647",
     "transactionCount":1,
-    "stateRoot":"0xdfdfd50db3c9075423f86f5ae262f2c73e6d27ade353b29e5da20439b00e3548",
+    "stateRoot":"0x81b1df384897709e96a4b6319fda4e8f7682a1c9d753b1fb772ed4fb19f1e443",
     "receiptsRoot":"0x056b23fbba480696b65fe5a59b8f2148a1299103c4f57df839233af2cf4ca2d2",
     "miner":{
       "__typename":"Account",
       "address":"0x8888f1f195afa192cfee860698584c030f4c9db1",
-      "balance":"0x542253a126cf3618",
+      "balance":"0x542253a12a8f8dc0",
       "transactionCount":0,
       "code":"0x",
       "storage":"0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -137,15 +137,15 @@
     "ommers":[
       {
         "__typename":"Block",
-        "hash":"0x62f9a23a486f43c792befd29e22bb09da1d1ae14769ef4b3cbf6223ec34246dd"
+        "hash":"0x04ce5bd77e7ea5b155978bea58e4f82b52b70a1efedf960b3c4aa9f87aba4b43"
       }
     ],
     "ommerAt":{
       "__typename":"Block",
-      "hash":"0x62f9a23a486f43c792befd29e22bb09da1d1ae14769ef4b3cbf6223ec34246dd"
+      "hash":"0x04ce5bd77e7ea5b155978bea58e4f82b52b70a1efedf960b3c4aa9f87aba4b43"
     },
     "nullOmmer":null,
-    "ommerHash":"0xeb6fefdb008e34f3ec507d07dc05b4f4e84bc2a8f2e93a9310e9de0547725fc7",
+    "ommerHash":"0x0887ea790d755abdba5bfd980ea54ba4e390f4da120406ee6db4a8eddeaffeb8",
     "account":{
       "__typename":"Account",
       "address":"0x095e7baea6a6c7c4c2dfeb977efac326af552d87",
@@ -216,7 +216,7 @@
     "transactions":[
       {
         "__typename":"Transaction",
-        "hash":"0x4ffa559ae277813fb886d1fa8743a590ba6b699f9893de99f5d1bcea9620b278",
+        "hash":"0xbb8e2ffb7276bc688c0305d5c35ae219cf036ac7a3b058ffa9d32275cc75f31b",
         "nonce":0,
         "index":0,
         "from":{
@@ -228,7 +228,7 @@
           "address":"0x095e7baea6a6c7c4c2dfeb977efac326af552d87"
         },
         "value":"0xa",
-        "gasPrice":"0x1",
+        "gasPrice":"0x3e8",
         "gas":314159,
         "inputData":"0x",
         "block":{
@@ -240,8 +240,8 @@
         "cumulativeGasUsed":21000,
         "createdContract":null,
         "logs":[],
-        "r":"0x77c7cd36820c71821c1aed59de46e70e701c4a8dd89c9ba508ab722210f60da8",
-        "s":"0x3f29825d40c7c3f7bff3ca69267e0f3fb74b2d18b8c2c4e3c135b5d3b06e288d",
+        "r":"0x25d49a54362b5ae38cf895fa9a1d3ded6f7d5577e572c9a93cdebff6e33ceaf7",
+        "s":"0x773806df18e22db29acde1dd96c0418e28738af7f520e5e2c5c673494029e5",
         "v":"0x1b",
         "type":0,
         "accessList":null
@@ -258,7 +258,7 @@
   name = "query.block(hash)"
   code = """
 {
-  block(hash: "0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c") {
+  block(hash: "0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1") {
     __typename
     hash
     number
@@ -269,7 +269,7 @@
 {
   "block":{
     "__typename":"Block",
-    "hash":"0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c",
+    "hash":"0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1",
     "number":3
   }
 }
@@ -290,7 +290,7 @@
 {
   "block":{
     "__typename":"Block",
-    "hash":"0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c",
+    "hash":"0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1",
     "number":3
   }
 }
@@ -300,7 +300,7 @@
   name = "query.transaction"
   code = """
 {
-  transaction(hash: "0x4ffa559ae277813fb886d1fa8743a590ba6b699f9893de99f5d1bcea9620b278") {
+  transaction(hash: "0xbb8e2ffb7276bc688c0305d5c35ae219cf036ac7a3b058ffa9d32275cc75f31b") {
     __typename
     hash
     value
@@ -311,7 +311,7 @@
 {
   "transaction":{
     "__typename":"Transaction",
-    "hash":"0x4ffa559ae277813fb886d1fa8743a590ba6b699f9893de99f5d1bcea9620b278",
+    "hash":"0xbb8e2ffb7276bc688c0305d5c35ae219cf036ac7a3b058ffa9d32275cc75f31b",
     "value":"0xa"
   }
 }
@@ -326,7 +326,7 @@
 """
   result = """
 {
-  "gasPrice":"0x1"
+  "gasPrice":"0x3e8"
 }
 """
 
@@ -379,17 +379,17 @@
     {
       "__typename":"Block",
       "number":1,
-      "hash":"0xb2c29779b51f0d912226d7741a5c65046d897236d1254391feac424fa1e1bf31"
+      "hash":"0xa4b71270e83c38d941d61fc2d8f3842f98a83203b82c3dea3176f1feb5a67b17"
     },
     {
       "__typename":"Block",
       "number":2,
-      "hash":"0x02350242f009d1bc334c055d5c3f366796f0a602a32b87ee7115db84d547dec2"
+      "hash":"0x579d2bdb721bde7a6bc56b53f4962a58493ee11482e8f738702ddb3d65888a74"
     },
     {
       "__typename":"Block",
       "number":3,
-      "hash":"0x7196c8f0a4a138af6aa57ac5ba3702baa9838962c86706e868683fc02543e13c"
+      "hash":"0x72d69cc3c74c2740c27f4becae6c9f9fc524c702a9a48d23c564b13dce5fe0a1"
     }
   ]
 }

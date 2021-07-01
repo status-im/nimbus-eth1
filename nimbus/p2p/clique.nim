@@ -24,6 +24,7 @@ import
   ../db/[db_chain, state_db],
   ../utils,
   ./clique/[clique_cfg, clique_defs, clique_utils, ec_recover, recent_snaps],
+  ./gaslimit,
   chronicles,
   chronos,
   eth/[common, keys, rlp],
@@ -190,20 +191,9 @@ proc verifyCascadingFields(c: var Clique; header: BlockHeader;
                 &"invalid gasUsed: have {header.gasUsed}, " &
                 &"gasLimit {header.gasLimit}"))
 
-  if not c.cfg.dbChain.config.isLondonOrLater(header.blockNumber):
-    # Verify BaseFee not present before EIP-1559 fork.
-    if not header.baseFee.isZero:
-      return err((errCliqueUnsupportedBaseFee,
-                  "invalid baseFee before London fork: have " &
-                  &"{header.baseFee}, want <0>"))
-    let rc = c.cfg.dbChain.validateGasLimit(header)
-    if rc.isErr:
-      return err(rc.error)
-  else:
-    let rc = c.cfg.dbChain.config.verify1559Header(parent = parent,
-                                                   header = header)
-    if rc.isErr:
-      return err(rc.error)
+  let rc = c.cfg.dbChain.validateGasLimitOrBaseFee(header, parent)
+  if rc.isErr:
+    return err((errCliqueGasLimitOrBaseFee, rc.error))
 
   # Retrieve the snapshot needed to verify this header and cache it
   var snap = c.snapshot(header.blockNumber-1, header.parentHash, parents)

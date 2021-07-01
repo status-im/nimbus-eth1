@@ -29,7 +29,8 @@ const
     FkConstantinople: "Constantinople",
     FkPetersburg: "ConstantinopleFix",
     FkIstanbul: "Istanbul",
-    FkBerlin: "Berlin"
+    FkBerlin: "Berlin",
+    FkLondon: "London"
   }.toTable
 
   supportedForks* = {
@@ -41,7 +42,8 @@ const
     FkConstantinople,
     FkPetersburg,
     FkIstanbul,
-    FkBerlin}
+    FkBerlin,
+    FkLondon}
 
   nameToFork* = revmap(forkNames)
 
@@ -199,8 +201,8 @@ proc parseAccessList(n: JsonNode): AccessList =
     result.add ap
 
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
-  let nonce    = j["nonce"].getHexadecimalInt.AccountNonce
-  let gasPrice = j["gasPrice"].getHexadecimalInt
+  let dynamicFeeTx = "gasPrice" notin j
+  let nonce    = j["nonce"].getHexadecimalInt.AccountNonce  
   let gasLimit = j["gasLimit"][gasIndex].getHexadecimalInt
 
   var toAddr: Option[EthAddress]
@@ -223,7 +225,24 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   var secretKey = j["secretKey"].getStr
   removePrefix(secretKey, "0x")
   let privateKey = PrivateKey.fromHex(secretKey).tryGet()
-
+    
+  if dynamicFeeTx:
+    let accList = j["accessLists"][dataIndex]
+    var tx = Transaction(
+      txType: TxEip1559,
+      nonce: nonce,
+      maxFee: j["maxFeePerGas"].getHexadecimalInt,
+      maxPriorityFee: j["maxPriorityFeePerGas"].getHexadecimalInt,
+      gasLimit: gasLimit,
+      to: toAddr,
+      value: value,
+      payload: payload,
+      accessList: parseAccessList(accList),
+      chainId: ChainId(1)
+    )
+    return signTransaction(tx, privateKey, ChainId(1), false)
+  
+  let gasPrice = j["gasPrice"].getHexadecimalInt
   if j.hasKey("accessLists"):
     let accList = j["accessLists"][dataIndex]
     var tx = Transaction(

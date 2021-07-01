@@ -61,17 +61,133 @@ OK: 1/2 Fail: 0/2 Skip: 1/2
 + badOpcodes.json                                                 OK
 + eip2315NotRemoved.json                                          OK
 + invalidAddr.json                                                OK
++ invalidDiffPlaces.json                                          OK
++ opc0CDiffPlaces.json                                            OK
++ opc0DDiffPlaces.json                                            OK
++ opc0EDiffPlaces.json                                            OK
++ opc0FDiffPlaces.json                                            OK
++ opc1EDiffPlaces.json                                            OK
++ opc1FDiffPlaces.json                                            OK
++ opc21DiffPlaces.json                                            OK
++ opc22DiffPlaces.json                                            OK
++ opc23DiffPlaces.json                                            OK
++ opc24DiffPlaces.json                                            OK
++ opc25DiffPlaces.json                                            OK
++ opc26DiffPlaces.json                                            OK
++ opc27DiffPlaces.json                                            OK
++ opc28DiffPlaces.json                                            OK
++ opc29DiffPlaces.json                                            OK
++ opc2ADiffPlaces.json                                            OK
++ opc2BDiffPlaces.json                                            OK
++ opc2CDiffPlaces.json                                            OK
++ opc2DDiffPlaces.json                                            OK
++ opc2EDiffPlaces.json                                            OK
++ opc2FDiffPlaces.json                                            OK
++ opc49DiffPlaces.json                                            OK
++ opc4ADiffPlaces.json                                            OK
++ opc4BDiffPlaces.json                                            OK
++ opc4CDiffPlaces.json                                            OK
++ opc4DDiffPlaces.json                                            OK
++ opc4EDiffPlaces.json                                            OK
++ opc4FDiffPlaces.json                                            OK
++ opc5CDiffPlaces.json                                            OK
++ opc5DDiffPlaces.json                                            OK
++ opc5EDiffPlaces.json                                            OK
++ opc5FDiffPlaces.json                                            OK
++ opcA5DiffPlaces.json                                            OK
++ opcA6DiffPlaces.json                                            OK
++ opcA7DiffPlaces.json                                            OK
++ opcA8DiffPlaces.json                                            OK
++ opcA9DiffPlaces.json                                            OK
++ opcAADiffPlaces.json                                            OK
++ opcABDiffPlaces.json                                            OK
++ opcACDiffPlaces.json                                            OK
++ opcADDiffPlaces.json                                            OK
++ opcAEDiffPlaces.json                                            OK
++ opcAFDiffPlaces.json                                            OK
++ opcB0DiffPlaces.json                                            OK
++ opcB1DiffPlaces.json                                            OK
++ opcB2DiffPlaces.json                                            OK
++ opcB3DiffPlaces.json                                            OK
++ opcB4DiffPlaces.json                                            OK
++ opcB5DiffPlaces.json                                            OK
++ opcB6DiffPlaces.json                                            OK
++ opcB7DiffPlaces.json                                            OK
++ opcB8DiffPlaces.json                                            OK
++ opcB9DiffPlaces.json                                            OK
++ opcBADiffPlaces.json                                            OK
++ opcBBDiffPlaces.json                                            OK
++ opcBCDiffPlaces.json                                            OK
++ opcBDDiffPlaces.json                                            OK
++ opcBEDiffPlaces.json                                            OK
++ opcBFDiffPlaces.json                                            OK
++ opcC0DiffPlaces.json                                            OK
++ opcC1DiffPlaces.json                                            OK
++ opcC2DiffPlaces.json                                            OK
++ opcC3DiffPlaces.json                                            OK
++ opcC4DiffPlaces.json                                            OK
++ opcC5DiffPlaces.json                                            OK
++ opcC6DiffPlaces.json                                            OK
++ opcC7DiffPlaces.json                                            OK
++ opcC8DiffPlaces.json                                            OK
++ opcC9DiffPlaces.json                                            OK
++ opcCADiffPlaces.json                                            OK
++ opcCBDiffPlaces.json                                            OK
++ opcCCDiffPlaces.json                                            OK
++ opcCDDiffPlaces.json                                            OK
++ opcCEDiffPlaces.json                                            OK
++ opcCFDiffPlaces.json                                            OK
++ opcD0DiffPlaces.json                                            OK
++ opcD1DiffPlaces.json                                            OK
++ opcD2DiffPlaces.json                                            OK
++ opcD3DiffPlaces.json                                            OK
++ opcD4DiffPlaces.json                                            OK
++ opcD5DiffPlaces.json                                            OK
++ opcD6DiffPlaces.json                                            OK
++ opcD7DiffPlaces.json                                            OK
++ opcD8DiffPlaces.json                                            OK
++ opcD9DiffPlaces.json                                            OK
++ opcDADiffPlaces.json                                            OK
++ opcDBDiffPlaces.json                                            OK
++ opcDCDiffPlaces.json                                            OK
++ opcDDDiffPlaces.json                                            OK
++ opcDEDiffPlaces.json                                            OK
++ opcDFDiffPlaces.json                                            OK
++ opcE0DiffPlaces.json                                            OK
++ opcE1DiffPlaces.json                                            OK
++ opcE2DiffPlaces.json                                            OK
++ opcE3DiffPlaces.json                                            OK
++ opcE4DiffPlaces.json                                            OK
++ opcE5DiffPlaces.json                                            OK
++ opcE6DiffPlaces.json                                            OK
++ opcE7DiffPlaces.json                                            OK
++ opcE8DiffPlaces.json                                            OK
++ opcE9DiffPlaces.json                                            OK
++ opcEADiffPlaces.json                                            OK
++ opcEBDiffPlaces.json                                            OK
++ opcECDiffPlaces.json                                            OK
++ opcEDDiffPlaces.json                                            OK
++ opcEEDiffPlaces.json                                            OK
++ opcEFDiffPlaces.json                                            OK
++ opcF6DiffPlaces.json                                            OK
++ opcF7DiffPlaces.json                                            OK
++ opcF8DiffPlaces.json                                            OK
++ opcF9DiffPlaces.json                                            OK
++ opcFBDiffPlaces.json                                            OK
++ opcFCDiffPlaces.json                                            OK
++ opcFEDiffPlaces.json                                            OK
 + undefinedOpcodeFirstByte.json                                   OK
 ```
-OK: 4/4 Fail: 0/4 Skip: 0/4
+OK: 119/119 Fail: 0/119 Skip: 0/119
 ## stBugs
 ```diff
 + evmBytecode.json                                                OK
 + randomStatetestDEFAULT-Tue_07_58_41-15153-575192.json           OK
++ randomStatetestDEFAULT-Tue_07_58_41-15153-575192_london.json    OK
 + returndatacopyPythonBug_Tue_03_48_41-1432.json                  OK
 + staticcall_createfails.json                                     OK
 ```
-OK: 4/4 Fail: 0/4 Skip: 0/4
+OK: 5/5 Fail: 0/5 Skip: 0/5
 ## stCallCodes
 ```diff
 + call_OOG_additionalGasCosts1.json                               OK
@@ -351,6 +467,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + CREATE2_Bounds2.json                                            OK
 + CREATE2_Bounds3.json                                            OK
 + CREATE2_ContractSuicideDuringInit_ThenStoreThenReturn.json      OK
++ CREATE2_EOF1.json                                               OK
 + CREATE2_FirstByte_loop.json                                     OK
 + CREATE2_Suicide.json                                            OK
 + Create2OOGafterInitCode.json                                    OK
@@ -395,7 +512,7 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 + returndatacopy_following_successful_create.json                 OK
 + returndatasize_following_successful_create.json                 OK
 ```
-OK: 46/47 Fail: 0/47 Skip: 1/47
+OK: 47/48 Fail: 0/48 Skip: 1/48
 ## stCreateTest
 ```diff
 + CREATE_AcreateB_BSuicide_BStore.json                            OK
@@ -409,6 +526,7 @@ OK: 46/47 Fail: 0/47 Skip: 1/47
 + CREATE_EContractCreateNEContractInInitOOG_Tr.json               OK
 + CREATE_EContractCreateNEContractInInit_Tr.json                  OK
 + CREATE_EContract_ThenCALLToNonExistentAcc.json                  OK
++ CREATE_EOF1.json                                                OK
 + CREATE_EmptyContract.json                                       OK
 + CREATE_EmptyContractAndCallIt_0wei.json                         OK
 + CREATE_EmptyContractAndCallIt_1wei.json                         OK
@@ -433,7 +551,7 @@ OK: 46/47 Fail: 0/47 Skip: 1/47
 + TransactionCollisionToEmptyButCode.json                         OK
 + TransactionCollisionToEmptyButNonce.json                        OK
 ```
-OK: 34/34 Fail: 0/34 Skip: 0/34
+OK: 35/35 Fail: 0/35 Skip: 0/35
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -527,6 +645,20 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 + gasCostReturn.json                                              OK
 ```
 OK: 40/40 Fail: 0/40 Skip: 0/40
+## stEIP1559
+```diff
++ baseFeeDiffPlaces.json                                          OK
++ gasPriceDiffPlaces.json                                         OK
++ intrinsic.json                                                  OK
++ lowFeeCap.json                                                  OK
++ lowGasLimit.json                                                OK
++ lowGasPriceOldTypes.json                                        OK
++ outOfFunds.json                                                 OK
++ outOfFundsOldTypes.json                                         OK
++ tipTooHigh.json                                                 OK
++ typeTwoBerlin.json                                              OK
+```
+OK: 10/10 Fail: 0/10 Skip: 0/10
 ## stEIP158Specific
 ```diff
 + CALL_OneVCallSuicide.json                                       OK
@@ -541,23 +673,28 @@ OK: 7/7 Fail: 0/7 Skip: 0/7
 ## stEIP2930
 ```diff
 + addressOpcodes.json                                             OK
++ coinbaseT01.json                                                OK
++ coinbaseT2.json                                                 OK
 + manualCreate.json                                               OK
 + storageCosts.json                                               OK
 + transactionCosts.json                                           OK
 + variedContext.json                                              OK
 ```
-OK: 5/5 Fail: 0/5 Skip: 0/5
+OK: 7/7 Fail: 0/7 Skip: 0/7
 ## stExample
 ```diff
 + accessListExample.json                                          OK
 + add11.json                                                      OK
 + add11_yml.json                                                  OK
++ basefeeExample.json                                             OK
++ eip1559.json                                                    OK
++ invalidTr.json                                                  OK
 + labelsExample.json                                              OK
 + rangesExample.json                                              OK
 + solidityExample.json                                            OK
 + yulExample.json                                                 OK
 ```
-OK: 7/7 Fail: 0/7 Skip: 0/7
+OK: 10/10 Fail: 0/10 Skip: 0/10
 ## stExtCodeHash
 ```diff
 + callToNonExistent.json                                          OK
@@ -1614,6 +1751,9 @@ OK: 1/2 Fail: 0/2 Skip: 1/2
 + refund50_2.json                                                 OK
 + refund50percentCap.json                                         OK
 + refund600.json                                                  OK
++ refundFF.json                                                   OK
++ refundMax.json                                                  OK
++ refundSSTORE.json                                               OK
 + refundSuicide50procentCap.json                                  OK
 + refund_CallA.json                                               OK
 + refund_CallA_OOG.json                                           OK
@@ -1630,7 +1770,7 @@ OK: 1/2 Fail: 0/2 Skip: 1/2
 + refund_multimpleSuicide.json                                    OK
 + refund_singleSuicide.json                                       OK
 ```
-OK: 19/19 Fail: 0/19 Skip: 0/19
+OK: 22/22 Fail: 0/22 Skip: 0/22
 ## stReturnDataTest
 ```diff
 + call_ecrec_success_empty_then_returndatasize.json               OK
@@ -1762,13 +1902,14 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 27/27 Fail: 0/27 Skip: 0/27
 ## stSelfBalance
 ```diff
++ diffPlaces.json                                                 OK
 + selfBalance.json                                                OK
 + selfBalanceCallTypes.json                                       OK
 + selfBalanceEqualsBalance.json                                   OK
 + selfBalanceGasCost.json                                         OK
 + selfBalanceUpdate.json                                          OK
 ```
-OK: 5/5 Fail: 0/5 Skip: 0/5
+OK: 6/6 Fail: 0/6 Skip: 0/6
 ## stShift
 ```diff
 + sar00.json                                                      OK
@@ -2269,6 +2410,7 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + ContractStoreClearsSuccess.json                                 OK
 + CreateMessageReverted.json                                      OK
 + CreateMessageSuccess.json                                       OK
++ CreateTransactionEOF1.json                                      OK
 + CreateTransactionSuccess.json                                   OK
 + EmptyTransaction3.json                                          OK
 + HighGasLimit.json                                               OK
@@ -2294,7 +2436,7 @@ OK: 12/14 Fail: 0/14 Skip: 2/14
 + TransactionToAddressh160minusOne.json                           OK
 + TransactionToItself.json                                        OK
 ```
-OK: 28/28 Fail: 0/28 Skip: 0/28
+OK: 29/29 Fail: 0/29 Skip: 0/29
 ## stTransitionTest
 ```diff
 + createNameRegistratorPerTxsAfter.json                           OK
@@ -2759,4 +2901,4 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 OK: 11/11 Fail: 0/11 Skip: 0/11
 
 ---TOTAL---
-OK: 2417/2517 Fail: 0/2517 Skip: 100/2517
+OK: 2555/2655 Fail: 0/2655 Skip: 100/2655

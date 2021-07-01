@@ -18,6 +18,7 @@ proc hostGetTxContextImpl(ctx: Computation): nimbus_tx_context {.cdecl.} =
   result.block_gas_limit = int64(vmstate.blockHeader.gasLimit)
   result.block_difficulty = toEvmc(vmstate.difficulty)
   result.chain_id = toEvmc(vmstate.chaindb.config.chainId.uint.u256)
+  result.block_base_fee = toEvmc(vmstate.blockHeader.baseFee)
 
 proc hostGetBlockHashImpl(ctx: Computation, number: int64): Hash256 {.cdecl.} =
   ctx.vmState.getAncestorHash(number.u256)

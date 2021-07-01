@@ -6,6 +6,11 @@ import options, sets,
   ./dao, ./validate, ../config, ../forks,
   ../transaction/call_evm
 
+proc eip1559TxNormalization(tx: Transaction): Transaction =
+  result = tx
+  if tx.txType < TxEip1559:
+    result.maxPriorityFee = tx.gasPrice
+    result.maxFee = tx.gasPrice
 
 proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
   ## Process the transaction, write the results to db.
@@ -13,18 +18,33 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
+  var tx = eip1559TxNormalization(tx)
+  var priorityFee: GasInt
+  if fork >= FkLondon:
+    # priority fee is capped because the base fee is filled first
+    let baseFee = vmState.blockHeader.baseFee.truncate(GasInt)
+    priorityFee = min(tx.maxPriorityFee, tx.maxFee - baseFee)
+    # signer pays both the priority fee and the base fee
+    # tx.gasPrice now is the effective gasPrice
+    tx.gasPrice = priorityFee + baseFee
+
+  let miner = vmState.coinbase()
   if validateTransaction(vmState, tx, sender, fork):
     result = txCallEvm(tx, sender, vmState, fork)
 
+    # miner fee
+    if fork >= FkLondon:
+      # miner only receives the priority fee;
+      # note that the base fee is not given to anyone (it is burned)
+      let txFee = result.u256 * priorityFee.u256
+      vmState.accountDb.addBalance(miner, txFee)
+    else:
+      let txFee = result.u256 * tx.gasPrice.u256
+      vmState.accountDb.addBalance(miner, txFee)
+
   vmState.cumulativeGasUsed += result
 
-  let miner = vmState.coinbase()
-
   vmState.mutateStateDB:
-    # miner fee
-    let txFee = result.u256 * tx.gasPrice.u256
-    db.addBalance(miner, txFee)
-
     for deletedAccount in vmState.selfDestructs:
       db.deleteAccount deletedAccount
 
@@ -144,6 +164,12 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
           debug "Could not get sender", txIndex, tx
           return ValidationResult.Error
         vmState.receipts[txIndex] = makeReceipt(vmState, fork, tx.txType)
+
+  if vmState.cumulativeGasUsed != header.gasUsed:
+    debug "gasUsed neq cumulativeGasUsed",
+      gasUsed=header.gasUsed,
+      cumulativeGasUsed=vmState.cumulativeGasUsed
+    return ValidationResult.Error
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
     let h = chainDB.persistUncles(body.uncles)

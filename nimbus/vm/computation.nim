@@ -235,7 +235,7 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
     debug "Contract code size exceeds EIP170", limit=EIP170_CODE_SIZE_LIMIT, actual=contractCode.len
     return false
 
-  if fork >= FkLondon and contractCode[0] == 0xFE.byte:
+  if fork >= FkLondon and contractCode[0] == 0xEF.byte:
     debug "Contract code can't start with 0xEF byte"
     return false
 
