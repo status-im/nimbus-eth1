@@ -9,36 +9,27 @@
 
 import 
   std/json,
-  eth/common, chronos, json_rpc/[rpcclient], httputils
+  eth/common, chronos, json_rpc/rpcclient
 
 # Specification of api https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-bridge-nodes.md#api
 # TODO after nethermind plugin will be ready we can get few responses from those endpoints, to create mock client to test if we
 # properly parse respones
 type
-  BridgeClientRef* = ref object
-    client*: RpcClient
-
-proc init*(T: type BridgeClientRef, client: RpcClient): T = T(client: client)
-
-proc newHttpBridgeClient*(remoteAddrress: string): Future[BridgeClientRef] {.async.}=
-  var client = newRpcHttpClient()
-  client.httpMethod(MethodPost)
-  await client.connect(remoteAddrress)
-  return BridgeClientRef.init(client)
+  BridgeClient* = RpcClient
 
 # bridge_waitNewCanonicalChain
-proc waitNewCanonicalChain*(bridgeClient: BridgeClientRef): Future[void] {.async, raises: [Defect, CatchableError].} = discard
+proc waitNewCanonicalChain*(bridgeClient: BridgeClient): Future[void] {.async, raises: [Defect, CatchableError].} = discard
 
 #bridge_getBlockChanges
-proc getBlockChanges*(bridgeClient: BridgeClientRef, blockHash: Hash256): Future[AccessList] {.async, raises: [Defect, CatchableError].} = discard
+proc getBlockChanges*(bridgeClient: BridgeClient, blockHash: Hash256): Future[AccessList] {.async, raises: [Defect, CatchableError].} = discard
 
 #bridge_getItemWitness"
-proc getItemWitness*(bridgeClient: BridgeClientRef, blockHash: Hash256, acctAddr: EthAddress, slotAddr: StorageKey):
+proc getItemWitness*(bridgeClient: BridgeClient, blockHash: Hash256, acctAddr: EthAddress, slotAddr: StorageKey):
   Future[seq[seq[byte]]] {.async, raises: [Defect, CatchableError].} = discard
 
 #bridge_getNextItem
-proc getNextItem*(bridgeClient: BridgeClientRef, blockHash: Hash256, acctAddr: EthAddress, slotAddr: StorageKey):
+proc getNextItem*(bridgeClient: BridgeClient, blockHash: Hash256, acctAddr: EthAddress, slotAddr: StorageKey):
   Future[(EthAddress, StorageKey)] {.async, raises: [Defect, CatchableError].} = discard
 
-proc close*(bridgeClient: BridgeClientRef): Future[void] {.async, raises: [Defect, CatchableError].} = 
-  await bridgeClient.client.close()
+proc close*(bridgeClient: BridgeClient): Future[void] {.async, raises: [Defect, CatchableError].} = 
+  await bridgeClient.close()

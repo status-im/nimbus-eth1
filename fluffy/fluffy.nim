@@ -9,11 +9,27 @@
 
 import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver, json_rpc/servers/httpserver,
+  chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient, json_rpc/servers/httpserver,
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/portal/protocol as portal_protocol,
-  ./conf, ./rpc/eth_api
+  ./conf, ./rpc/eth_api, ./rpc/bridge_client
+
+
+proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
+  try:
+    if (maybeUri.isSome()):
+      let uri = maybeUri.unsafeGet()
+      # TODO: Add possiblity to start client on differnt transports based on uri.
+      let httpClient = newRpcHttpClient()
+      waitFor httpClient.connect(uri)
+      notice "Initialized bridge client:", uri
+      return some[BridgeClient](httpClient)
+    else:
+      return none(BridgeClient)
+  except CatchableError as err:
+    notice "Failed to initialize bridge client", err.msg
+    return none(BridgeClient)
 
 proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   let
@@ -57,6 +73,8 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
       rpcHttpServer = newRpcHttpServer([ta])
     rpcHttpServer.installEthApiHandlers()
     rpcHttpServer.start()
+
+  let bridgeClient = initializeBridgeClient(config.bridgeClientUri)
 
   d.start()
 
