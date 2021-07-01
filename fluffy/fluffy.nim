@@ -74,7 +74,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     rpcHttpServer.installEthApiHandlers()
     rpcHttpServer.start()
 
-  let bridgeClient = initializeBridgeClient(config.bridgeClientUri)
+  let bridgeClient = initializeBridgeClient(config.bridgeUri)
 
   d.start()
 
