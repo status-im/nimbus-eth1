@@ -48,7 +48,8 @@ def to_bool:
     "nonce"      : .nonce,
     "parentHash" : .parentHash,
     "timestamp"  : .timestamp,
-    "alloc"      : .alloc
+    "alloc"      : .alloc,
+    "baseFeePerGas": .baseFeePerGas
   }|remove_empty,
   "config": {
     "chainId": env.HIVE_CHAIN_ID|to_int,
