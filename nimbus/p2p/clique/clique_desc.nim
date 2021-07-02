@@ -20,6 +20,7 @@
 
 import
   std/[tables],
+  ../../db/db_chain,
   ../../constants,
   ./clique_cfg,
   ./clique_defs,
@@ -37,10 +38,10 @@ type
   Proposals = Table[EthAddress,bool]
 
   # clique/clique.go(172): type Clique struct { [..]
-  Clique* = object ## Clique is the proof-of-authority consensus engine
-                   ## proposed to support the Ethereum testnet following
-                   ## the Ropsten attacks.
-    cCfg: CliqueCfg        ## Consensus engine parameters to fine tune behaviour
+  Clique* = ref object ## Clique is the proof-of-authority consensus engine
+                       ## proposed to support the Ethereum testnet following
+                       ## the Ropsten attacks.
+    cCfg: CliqueCfg         ## Common engine parameters to fine tune behaviour
 
     cRecents: RecentSnaps   ## Snapshots for recent block to speed up reorgs
     # signatures => see CliqueCfg
@@ -64,26 +65,17 @@ type
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(191): func New(config [..]
-proc initClique*(c: var Clique; cfg: CliqueCfg) =
+proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
-  c.cCfg = cfg
-  c.cRecents = initRecentSnaps(cfg)
-  c.cProposals = initTable[EthAddress,bool]()
-  c.cLock = newAsyncLock()
-
-proc initClique*(cfg: CliqueCfg): Clique =
-  result.initClique(cfg)
+  Clique(cCfg:       cfg,
+         cRecents:   initRecentSnaps(cfg),
+         cProposals: initTable[EthAddress,bool](),
+         cLock:      newAsyncLock())
 
 # ------------------------------------------------------------------------------
 # Public debug/pretty print
 # ------------------------------------------------------------------------------
-
-proc setDebug*(c: var Clique; debug: bool) =
-  ## Set debugging mode on/off and set the `fakeDiff` flag `true`
-  c.cFakeDiff = true
-  c.cDebug = debug
-  c.cRecents.setDebug(debug)
 
 proc pp*(rc: var Result[Snapshot,CliqueError]; indent = 0): string =
   if rc.isOk:
@@ -95,39 +87,61 @@ proc pp*(rc: var Result[Snapshot,CliqueError]; indent = 0): string =
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc cfg*(c: var Clique): auto {.inline.} =
+proc cfg*(c: Clique): auto {.inline.} =
   ## Getter
   c.cCfg
 
-proc recents*(c: var Clique): var RecentSnaps {.inline.} =
+proc db*(c: Clique): BaseChainDB {.inline.} =
+  ## Getter
+  c.cCfg.db
+
+proc recents*(c: Clique): var RecentSnaps {.inline.} =
   ## Getter
   c.cRecents
 
-proc proposals*(c: var Clique): var Proposals {.inline.} =
+proc proposals*(c: Clique): var Proposals {.inline.} =
   ## Getter
   c.cProposals
 
-proc debug*(c: var Clique): auto {.inline.} =
+proc debug*(c: Clique): auto {.inline.} =
   ## Getter
   c.cDebug
 
-proc fakeDiff*(c: var Clique): auto {.inline.} =
+proc fakeDiff*(c: Clique): auto {.inline.} =
   ## Getter
   c.cFakeDiff
+
+# ------------------------------------------------------------------------------
+# Public setters
+# ------------------------------------------------------------------------------
+
+proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
+  ## Setter, re-set database
+  c.cCfg.db = db
+  c.cProposals = initTable[EthAddress,bool]()
+  c.cRecents = c.cCfg.initRecentSnaps
+  c.cRecents.debug = c.cDebug
+  # note that the signatures[] cache need not be flushed
+
+proc `debug=`*(c: Clique; debug: bool) =
+  ## Set debugging mode on/off and set the `fakeDiff` flag `true`
+  c.cFakeDiff = true
+  c.cDebug = debug
+  c.cRecents.debug = debug
 
 # ------------------------------------------------------------------------------
 # Public lock/unlock
 # ------------------------------------------------------------------------------
 
-proc lock*(c: var Clique) {.inline, raises: [Defect,CatchableError].} =
+proc lock*(c: Clique) {.inline, raises: [Defect,CatchableError].} =
   ## Lock descriptor
   waitFor c.cLock.acquire
 
-proc unLock*(c: var Clique) {.inline, raises: [Defect,AsyncLockError].} =
+proc unLock*(c: Clique) {.inline, raises: [Defect,AsyncLockError].} =
   ## Unlock descriptor
   c.cLock.release
 
-template doExclusively*(c: var Clique; action: untyped) =
+template doExclusively*(c: Clique; action: untyped) =
   ## Handy helper
   c.lock
   action

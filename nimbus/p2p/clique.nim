@@ -24,14 +24,14 @@ import
 
 {.push raises: [Defect].}
 
+logScope:
+  topics = "clique PoA"
+
 export
   clique_cfg,
   clique_defs,
   clique_desc,
   clique_miner.snapshot
-
-logScope:
-  topics = "clique PoA"
 
 # ------------------------------------------------------------------------------
 # End

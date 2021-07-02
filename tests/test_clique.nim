@@ -26,13 +26,13 @@ let
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc dbChain(ap: TesterPool): auto =
+proc db(ap: TesterPool): auto =
   ## Getter
-  ap.clique.cfg.dbChain
+  ap.clique.db
 
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
-  doAssert ap.dbChain.getBlockHeader(number, result)
+  doAssert ap.db.getBlockHeader(number, result)
 
 # ------------------------------------------------------------------------------
 # Test Runners
@@ -99,7 +99,7 @@ proc runGoerliReplay(noisy = true;
                      dir = "tests"; stopAfterBlock = uint64.high) =
   var
     pool = GoerliNet.newVoterPool
-    xChain = pool.dbChain.newChain
+    xChain = pool.db.newChain
     cache: array[7,(seq[BlockHeader],seq[BlockBody])]
     cInx = 0
     stoppedOk = false
@@ -159,7 +159,7 @@ proc cliqueMain*(noisy = defined(debug)) =
 
 when isMainModule:
   let noisy = defined(debug)
-  # noisy.runCliqueSnapshot
+  noisy.runCliqueSnapshot
   noisy.runGoerliReplay(dir = ".", stopAfterBlock = 1000)
 
 # ------------------------------------------------------------------------------

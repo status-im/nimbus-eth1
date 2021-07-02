@@ -115,7 +115,7 @@ proc newChain*(db: BaseChainDB, extraValidation = false): Chain =
   let genesisCRC = crc32(0, result.blockZeroHash.data)
   result.forkIds = calculateForkIds(db.config, genesisCRC)
   result.extraValidation = extraValidation
-  result.poa = db.newCliqueCfg.initClique
+  result.poa = db.newCliqueCfg.newClique
 
   if extraValidation:
     result.cacheByEpoch.initEpochHashCache

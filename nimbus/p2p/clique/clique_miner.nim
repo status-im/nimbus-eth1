@@ -23,7 +23,7 @@
 import
   std/[random, sequtils, strformat, tables, times],
   ../../constants,
-  ../../db/[db_chain, state_db],
+  ../../db/state_db,
   ../../utils,
   ../gaslimit,
   ./clique_cfg,
@@ -46,7 +46,7 @@ type
   CliqueSyncDefect* = object of Defect
     ## Defect raised with lock/unlock problem
 
-proc snapshot*(c: var Clique; blockNumber: BlockNumber; hash: Hash256;
+proc snapshot*(c: Clique; blockNumber: BlockNumber; hash: Hash256;
                parents: openArray[Blockheader]): Result[Snapshot,CliqueError] {.
                  gcsafe, raises: [Defect,CatchableError].}
 
@@ -65,17 +65,16 @@ template syncExceptionWrap(action: untyped) =
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(145): func ecrecover(header [..]
-proc ecrecover(c: var Clique;
-               header: BlockHeader): Result[EthAddress,CliqueError] {.
-                 gcsafe, raises: [Defect,CatchableError].} =
+proc ecrecover(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
+                     {.gcsafe, raises: [Defect,CatchableError].} =
   ## ecrecover extracts the Ethereum account address from a signed header.
   c.cfg.signatures.getEcRecover(header)
 
 
 # clique/clique.go(463): func (c *Clique) verifySeal(chain [..]
-proc verifySeal(c: var Clique; header: BlockHeader;
-                parents: openArray[BlockHeader]): CliqueResult {.
-                  gcsafe, raises: [Defect,CatchableError].} =
+proc verifySeal(c: Clique; header: BlockHeader;
+                parents: openArray[BlockHeader]): CliqueResult
+                     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether the signature contained in the header satisfies the
   ## consensus protocol requirements. The method accepts an optional list of
   ## parent headers that aren't yet part of the local blockchain to generate
@@ -118,9 +117,9 @@ proc verifySeal(c: var Clique; header: BlockHeader;
 
 
 # clique/clique.go(314): func (c *Clique) verifyCascadingFields(chain [..]
-proc verifyCascadingFields(c: var Clique; header: BlockHeader;
-                           parents: openArray[BlockHeader]): CliqueResult {.
-                             gcsafe, raises: [Defect,CatchableError].} =
+proc verifyCascadingFields(c: Clique; header: BlockHeader;
+                           parents: openArray[BlockHeader]): CliqueResult
+                                {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify all the header fields that are not standalone, rather depend on a
   ## batch of previous headers. The caller may optionally pass in a batch of
   ## parents (ascending order) to avoid looking those up from the database.
@@ -135,7 +134,7 @@ proc verifyCascadingFields(c: var Clique; header: BlockHeader;
   if 0 < parents.len:
     parent = parents[^1]
   else:
-    let rc = c.cfg.dbChain.getBlockHeaderResult(header.blockNumber-1)
+    let rc = c.db.getBlockHeaderResult(header.blockNumber-1)
     if rc.isErr:
       return err((errUnknownAncestor,""))
     parent = rc.value
@@ -153,7 +152,7 @@ proc verifyCascadingFields(c: var Clique; header: BlockHeader;
                 &"invalid gasUsed: have {header.gasUsed}, " &
                 &"gasLimit {header.gasLimit}"))
 
-  let rc = c.cfg.dbChain.validateGasLimitOrBaseFee(header, parent)
+  let rc = c.db.validateGasLimitOrBaseFee(header, parent)
   if rc.isErr:
     return err((errCliqueGasLimitOrBaseFee, rc.error))
 
@@ -175,9 +174,9 @@ proc verifyCascadingFields(c: var Clique; header: BlockHeader;
 
 
 # clique/clique.go(246): func (c *Clique) verifyHeader(chain [..]
-proc verifyHeader(c: var Clique; header: BlockHeader;
-                  parents: openArray[BlockHeader]): CliqueResult {.
-                    gcsafe, raises: [Defect,CatchableError].} =
+proc verifyHeader(c: Clique; header: BlockHeader;
+                  parents: openArray[BlockHeader]): CliqueResult
+                       {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether a header conforms to the consensus rules.The caller may
   ## optionally pass in a batch of parents (ascending order) to avoid looking
   ## those up from the database. This is useful for concurrently verifying
@@ -240,7 +239,7 @@ proc verifyHeader(c: var Clique; header: BlockHeader;
                   &"invalid gasLimit: have {header.gasLimit}, must be int64"))
 
   # If all checks passed, validate any special fields for hard forks
-  let rc = c.cfg.dbChain.config.verifyForkHashes(header)
+  let rc = c.db.config.verifyForkHashes(header)
   if rc.isErr:
     return err(rc.error)
 
@@ -260,9 +259,9 @@ proc calcDifficulty(snap: var Snapshot; signer: EthAddress): DifficultyInt =
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(369): func (c *Clique) snapshot(chain [..]
-proc snapshot*(c: var Clique; blockNumber: BlockNumber; hash: Hash256;
-               parents: openArray[Blockheader]): Result[Snapshot,CliqueError] {.
-                 gcsafe, raises: [Defect,CatchableError].} =
+proc snapshot*(c: Clique; blockNumber: BlockNumber; hash: Hash256;
+               parents: openArray[Blockheader]): Result[Snapshot,CliqueError]
+                    {.gcsafe, raises: [Defect,CatchableError].} =
   ## snapshot retrieves the authorization snapshot at a given point in time.
   c.recents.getRecentSnaps:
     RecentArgs(blockHash:   hash,
@@ -270,9 +269,8 @@ proc snapshot*(c: var Clique; blockNumber: BlockNumber; hash: Hash256;
                parents:     toSeq(parents))
 
 # clique/clique.go(212): func (c *Clique) Author(header [..]
-proc author*(c: var Clique;
-             header: BlockHeader): Result[EthAddress,CliqueError] {.
-               gcsafe, raises: [Defect,CatchableError].} =
+proc author*(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
+                  {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `author()` retrieves the Ethereum address of the
   ## account that minted the given block, which may be different from the
   ## header's coinbase if a consensus engine is based on signatures.
@@ -283,8 +281,8 @@ proc author*(c: var Clique;
 
 
 # clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
-proc verifyHeader*(c: var Clique; header: BlockHeader): CliqueResult {.
-                   gcsafe, raises: [Defect,CatchableError].} =
+proc verifyHeader*(c: Clique; header: BlockHeader): CliqueResult
+                        {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `verifyHeader()` checks whether a header
   ## conforms to the consensus rules of a given engine. Verifying the seal
   ## may be done optionally here, or explicitly via the `verifySeal()` method.
@@ -294,7 +292,7 @@ proc verifyHeader*(c: var Clique; header: BlockHeader): CliqueResult {.
   c.verifyHeader(header, @[])
 
 # clique/clique.go(224): func (c *Clique) VerifyHeader(chain [..]
-proc verifyHeaders*(c: var Clique; headers: openArray[BlockHeader]):
+proc verifyHeaders*(c: Clique; headers: openArray[BlockHeader]):
                                 Future[seq[CliqueResult]] {.async,gcsafe.} =
   ## For the Consensus Engine, `verifyHeader()` s similar to VerifyHeader, but
   ## verifies a batch of headers concurrently. This method is accompanied
@@ -316,7 +314,7 @@ proc verifyHeaders*(c: var Clique; headers: openArray[BlockHeader]):
     c.doExclusively:
       c.stopVHeaderReq = false
 
-proc stopVerifyHeader*(c: var Clique): bool {.discardable.} =
+proc stopVerifyHeader*(c: Clique): bool {.discardable.} =
   ## Activate the stop flag for running `verifyHeader()` function.
   ## Returns `true` if the stop flag could be activated.
   syncExceptionWrap:
@@ -327,7 +325,7 @@ proc stopVerifyHeader*(c: var Clique): bool {.discardable.} =
 
 
 # clique/clique.go(450): func (c *Clique) VerifyUncles(chain [..]
-proc verifyUncles*(c: var Clique; ethBlock: EthBlock): CliqueResult =
+proc verifyUncles*(c: Clique; ethBlock: EthBlock): CliqueResult =
   ## For the Consensus Engine, `verifyUncles()` verifies that the given
   ## block's uncles conform to the consensus rules of a given engine.
   ##
@@ -339,8 +337,8 @@ proc verifyUncles*(c: var Clique; ethBlock: EthBlock): CliqueResult =
 
 
 # clique/clique.go(506): func (c *Clique) Prepare(chain [..]
-proc prepare*(c: var Clique; header: var BlockHeader): CliqueResult {.
-              gcsafe, raises: [Defect,CatchableError].} =
+proc prepare*(c: Clique; header: var BlockHeader): CliqueResult
+                    {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `prepare()` initializes the consensus fields
   ## of a block header according to the rules of a particular engine. The
   ## changes are executed inline.
@@ -384,7 +382,7 @@ proc prepare*(c: var Clique; header: var BlockHeader): CliqueResult {.
   header.mixDigest.reset
 
   # Ensure the timestamp has the correct delay
-  let parent = c.cfg.dbChain.getBlockHeaderResult(header.blockNumber-1)
+  let parent = c.db.getBlockHeaderResult(header.blockNumber-1)
   if parent.isErr:
     return err((errUnknownAncestor,""))
 
@@ -396,7 +394,7 @@ proc prepare*(c: var Clique; header: var BlockHeader): CliqueResult {.
 
 
 # clique/clique.go(571): func (c *Clique) Finalize(chain [..]
-proc finalize*(c: var Clique; header: BlockHeader; db: AccountStateDB) =
+proc finalize*(c: Clique; header: BlockHeader; db: AccountStateDB) =
   ## For the Consensus Engine, `finalize()` runs any post-transaction state
   ## modifications (e.g. block rewards) but does not assemble the block.
   ##
@@ -413,7 +411,7 @@ proc finalize*(c: var Clique; header: BlockHeader; db: AccountStateDB) =
   # header.ommersHash = EMPTY_UNCLE_HASH
 
 # clique/clique.go(579): func (c *Clique) FinalizeAndAssemble(chain [..]
-proc finalizeAndAssemble*(c: var Clique; header: BlockHeader;
+proc finalizeAndAssemble*(c: Clique; header: BlockHeader;
                           db: AccountStateDB; txs: openArray[Transaction];
                           receipts: openArray[Receipt]):
                             Result[EthBlock,CliqueError] =
@@ -438,7 +436,7 @@ proc finalizeAndAssemble*(c: var Clique; header: BlockHeader;
 
 
 # clique/clique.go(589): func (c *Clique) Authorize(signer [..]
-proc authorize*(c: var Clique; signer: EthAddress; signFn: CliqueSignerFn) =
+proc authorize*(c: Clique; signer: EthAddress; signFn: CliqueSignerFn) =
   ## Injects private key into the consensus engine to mint new blocks with.
   syncExceptionWrap:
     c.doExclusively:
@@ -469,7 +467,7 @@ proc sealHash*(header: BlockHeader): Hash256 =
 
 
 # clique/clique.go(599): func (c *Clique) Seal(chain [..]
-proc seal*(c: var Clique; ethBlock: EthBlock):
+proc seal*(c: Clique; ethBlock: EthBlock):
                      Future[Result[EthBlock,CliqueError]] {.async,gcsafe.} =
   ## For the Consensus Engine, `seal()` generates a new sealing request for
   ## the given input block and pushes the result into the given channel.
@@ -529,8 +527,8 @@ proc seal*(c: var Clique; ethBlock: EthBlock):
       let rndWiggleSec = c.cfg.prng.rand((wiggle.inSeconds and int.high).int)
       delay += initDuration(seconds = rndWiggleSec)
 
-  trace "Out-of-turn signing requested",
-    wiggle = $wiggle
+    trace "Out-of-turn signing requested",
+      wiggle = $wiggle
 
   # Sign all the things!
   let sigHash = signFn(signer,header.cliqueRlp)
@@ -560,7 +558,7 @@ proc seal*(c: var Clique; ethBlock: EthBlock):
     c.stopSealReq = false
   return ok(ethBlock.withHeader(header))
 
-proc stopSeal*(c: var Clique): bool {.discardable.} =
+proc stopSeal*(c: Clique): bool {.discardable.} =
   ## Activate the stop flag for running `seal()` function.
   ## Returns `true` if the stop flag could be activated.
   syncExceptionWrap:
@@ -571,9 +569,9 @@ proc stopSeal*(c: var Clique): bool {.discardable.} =
 
 
 # clique/clique.go(673): func (c *Clique) CalcDifficulty(chain [..]
-proc calcDifficulty(c: var Clique;
-                    parent: BlockHeader): Result[DifficultyInt,CliqueError] {.
-                      gcsafe, raises: [Defect,CatchableError].} =
+proc calcDifficulty(c: Clique;
+                    parent: BlockHeader): Result[DifficultyInt,CliqueError]
+                      {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `calcDifficulty()` is the difficulty adjustment
   ## algorithm. It returns the difficulty that a new block should have.
   ##
@@ -587,7 +585,7 @@ proc calcDifficulty(c: var Clique;
 
 
 # # clique/clique.go(710): func (c *Clique) SealHash(header [..]
-# proc sealHash(c: var Clique; header: BlockHeader): Hash256 =
+# proc sealHash(c: Clique; header: BlockHeader): Hash256 =
 #   ## SealHash returns the hash of a block prior to it being sealed.
 #   header.encodeSigHeader.keccakHash
 

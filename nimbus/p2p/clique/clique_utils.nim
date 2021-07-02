@@ -82,12 +82,12 @@ proc extraDataAddresses*(extraData: Blob): seq[EthAddress] =
       addrOffset += EthAddress.len
 
 
-proc getBlockHeaderResult*(c: BaseChainDB;
+proc getBlockHeaderResult*(db: BaseChainDB;
                            number: BlockNumber): Result[BlockHeader,void] {.
                              gcsafe, raises: [Defect,RlpError].} =
   ## Slightly re-phrased dbChain.getBlockHeader(..) command
   var header: BlockHeader
-  if c.getBlockHeader(number, header):
+  if db_chain.getBlockHeader(db, number, header):
     return ok(header)
   err()
 

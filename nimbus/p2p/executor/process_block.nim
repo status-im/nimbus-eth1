@@ -143,7 +143,7 @@ proc processBlock*(vmState: BaseVMState;
   dbTx.commit(applyDeletes = false)
 
 
-proc processBlock*(vmState: BaseVMState; poa: var Clique;
+proc processBlock*(vmState: BaseVMState; poa: Clique;
                    header: BlockHeader, body: BlockBody): ValidationResult =
   ## Processes `(header,body)` pair for a any network regardless of PoA or not
   var dbTx = vmState.chainDB.db.beginTransaction()

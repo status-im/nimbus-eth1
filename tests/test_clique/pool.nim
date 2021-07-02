@@ -53,7 +53,7 @@ type
 
 proc chain(ap: TesterPool): auto =
   ## Getter
-  ap.engine.cfg.dbChain
+  ap.engine.db
 
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
@@ -98,15 +98,13 @@ proc privateKey(ap: TesterPool; account: string): PrivateKey =
 
 proc resetChainDb(ap: TesterPool; extraData: Blob) =
   ## Setup new block chain with bespoke genesis
-  ap.engine.cfg.dbChain = BaseChainDB(
-      db: newMemoryDb(),
-      config: ap.boot.config)
-  ap.engine.cfg.dbChain.populateProgress
+  ap.engine.db = BaseChainDB(db: newMemoryDb(), config: ap.boot.config)
+  ap.engine.db.populateProgress
   # new genesis block
   var g = ap.boot.genesis
   if 0 < extraData.len:
     g.extraData = extraData
-  g.commit(ap.engine.cfg.dbChain)
+  g.commit(ap.engine.db)
 
 # ------------------------------------------------------------------------------
 # Private pretty printer call backs
@@ -209,11 +207,10 @@ proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
   result.accounts = initTable[string,PrivateKey]()
   result.xSeals = initTable[XSealKey,XSealValue]()
   result.names = initTable[EthAddress,string]()
-  result.engine = newCliqueCfg(
-         dbChain = BaseChainDB(),
-         period = initDuration(seconds = 1))
-       .initClique
-  result.engine.setDebug(false)
+  result.engine = BaseChainDB(
+    db: newMemoryDb(),
+    config: ap.boot.config).newCliqueCfg.newClique
+  result.engine.debug = false
   result.engine.cfg.prettyPrint.initPrettyPrinters(result)
   result.resetChainDb(@[])
 
@@ -229,7 +226,7 @@ proc setDebug*(ap: TesterPool; debug=true): TesterPool {.inline,discardable,} =
   ## Set debugging mode on/off
   result = ap
   ap.debug = debug
-  ap.engine.setDebug(debug)
+  ap.engine.debug = debug
 
 proc say*(t: TesterPool; v: varargs[string,`$`]) =
   if t.debug:
@@ -303,7 +300,7 @@ proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
 
   ap.engine.snapshot(number, hash, parent)
 
-proc clique*(ap: TesterPool): var Clique =
+proc clique*(ap: TesterPool): Clique =
   ## Getter
   ap.engine
 

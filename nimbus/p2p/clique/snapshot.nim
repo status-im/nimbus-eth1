@@ -25,7 +25,7 @@ const
 
 import
   std/[algorithm, sequtils, strformat, strutils, tables, times],
-  ../../db/[storage_types, db_chain],
+  ../../db/storage_types,
   ../../utils/lru_cache,
   ./clique_cfg,
   ./clique_defs,
@@ -38,8 +38,8 @@ type
   AddressHistory = Table[BlockNumber,EthAddress]
 
   SnapshotData* = object
-    blockNumber: BlockNumber ## truncated block num where snapshot was created
-    blockHash: Hash256       ## block hash where snapshot was created
+    blockNumber: BlockNumber ## block number where snapshot was created on
+    blockHash: Hash256       ## block hash where snapshot was created on
     recents: AddressHistory  ## recent signers for spam protections
 
     # clique/snapshot.go(58): Recents map[uint64]common.Address [..]
@@ -168,16 +168,20 @@ proc blockNumber*(s: var Snapshot): BlockNumber =
   ## Getter
   s.data.blockNumber
 
+proc blockHash*(s: var Snapshot): Hash256 =
+  ## Getter
+  s.data.blockHash
+
+
 # clique/snapshot.go(88): func loadSnapshot(config [..]
 proc loadSnapshot*(s: var Snapshot; cfg: CliqueCfg;
            hash: Hash256): CliqueResult {.gcsafe, raises: [Defect].} =
   ## Load an existing snapshot from the database.
   try:
-    let
-      key = hash.cliqueSnapshotKey
-      value = cfg.dbChain.db.get(key.toOpenArray)
-    s.data = value.decode(SnapshotData)
     s.cfg = cfg
+    s.data = s.cfg.db.db
+       .get(hash.cliqueSnapshotKey.toOpenArray)
+       .decode(SnapshotData)
   except CatchableError as e:
     return err((errSnapshotLoad,e.msg))
   result = ok()
@@ -187,10 +191,8 @@ proc loadSnapshot*(s: var Snapshot; cfg: CliqueCfg;
 proc storeSnapshot*(s: var Snapshot): CliqueResult {.gcsafe,raises: [Defect].} =
   ## Insert the snapshot into the database.
   try:
-    let
-      key = s.data.blockHash.cliqueSnapshotKey
-      value = rlp.encode(s.data)
-    s.cfg.dbChain.db.put(key.toOpenArray, value)
+    s.cfg.db.db
+       .put(s.data.blockHash.cliqueSnapshotKey.toOpenArray, rlp.encode(s.data))
   except CatchableError as e:
     return err((errSnapshotStore,e.msg))
   result = ok()
