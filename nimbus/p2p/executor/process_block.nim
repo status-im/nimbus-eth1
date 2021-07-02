@@ -26,8 +26,11 @@ import
   nimcrypto
 
 
-proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
-  var dbTx = chainDB.db.beginTransaction()
+proc processBlock*(vmState: BaseVMState;
+                   header: BlockHeader, body: BlockBody): ValidationResult =
+  var
+    chainDB = vmState.chaindb
+    dbTx = chainDB.db.beginTransaction()
   defer: dbTx.dispose()
 
   if chainDB.config.daoForkSupport and header.blockNumber == chainDB.config.daoForkBlock:

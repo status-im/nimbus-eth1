@@ -164,7 +164,7 @@ method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
       (header, body) = (headers[i], bodies[i])
       parentHeader = c.db.getBlockHeader(header.parentHash)
       vmState = newBaseVMState(parentHeader.stateRoot, header, c.db)
-      validationResult = processBlock(c.db, header, body, vmState)
+      validationResult = vmState.processBlock(header, body)
 
     when not defined(release):
       if validationResult == ValidationResult.Error and
