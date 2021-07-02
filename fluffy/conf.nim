@@ -87,6 +87,11 @@ type
       defaultValue: DefaultAdminListenAddress
       name: "rpc-address" }: ValidIpAddress
 
+    bridgeUri* {.
+      defaultValue: none(string)
+      desc: "if provided, enables getting data from bridge node"
+      name: "bridge-client-uri" .}: Option[string]
+
     case cmd* {.
       command
       defaultValue: noCommand .}: PortalCmd
