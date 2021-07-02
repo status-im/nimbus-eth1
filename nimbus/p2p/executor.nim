@@ -114,10 +114,13 @@ const
     eth2  # FkLondon
   ]
 
-proc calculateReward(fork: Fork, header: BlockHeader, body: BlockBody, vmState: BaseVMState) =
-  # PoA consensus engine have no reward for miner
-  if vmState.consensusEnginePoA: return
 
+proc updatePoaState(chainDB: BaseChainDB; fork: Fork;
+                    header: BlockHeader; body: BlockBody): ValidationResult =
+  ValidationResult.Ok
+
+proc calculateReward(vmState: BaseVMState;
+                     fork: Fork; header: BlockHeader; body: BlockBody) =
   let blockReward = blockRewards[fork]
   var mainReward = blockReward
 
@@ -132,6 +135,8 @@ proc calculateReward(fork: Fork, header: BlockHeader, body: BlockBody, vmState: 
 
   vmState.mutateStateDB:
     db.addBalance(header.coinbase, mainReward)
+
+
 
 proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, vmState: BaseVMState): ValidationResult =
   var dbTx = chainDB.db.beginTransaction()
@@ -177,7 +182,12 @@ proc processBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, v
       debug "Uncle hash mismatch"
       return ValidationResult.Error
 
-  calculateReward(fork, header, body, vmState)
+  # PoA consensus engine have no reward for miner
+  if not chainDB.config.poaEngine:
+    vmState.calculateReward(fork, header, body)
+  elif chainDB.updatePoaState(fork, header, body) == ValidationResult.Error:
+    debug "PoA update failed"
+    return ValidationResult.Error
 
   # Reward beneficiary
   vmState.mutateStateDB:
