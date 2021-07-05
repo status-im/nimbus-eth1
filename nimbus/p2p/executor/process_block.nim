@@ -16,6 +16,7 @@ import
   ../../utils,
   ../../vm_state,
   ../../vm_types,
+  ../clique,
   ../dao,
   ./calculate_reward,
   ./executor_helpers,
@@ -116,6 +117,35 @@ proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
 
 proc processBlock*(vmState: BaseVMState;
                    header: BlockHeader, body: BlockBody): ValidationResult =
+  ## Processes `(header,body)` pair for a non-PoA network
+  if vmState.chainDB.config.poaEngine:
+    # PoA consensus engine unsupported, see the other version of
+    # processBlock() below
+    debug "Unsupported PoA request"
+    return ValidationResult.Error
+
+  var dbTx = vmState.chainDB.db.beginTransaction()
+  defer: dbTx.dispose()
+
+  if not vmState.procBlkPreamble(dbTx, header, body):
+    return ValidationResult.Error
+
+  vmState.calculateReward(header, body)
+
+  if not vmState.procBlkEpilogue(dbTx, header, body):
+    return ValidationResult.Error
+
+  # `applyDeletes = false`
+  # If the trie pruning activated, each of the block will have its own state
+  # trie keep intact, rather than destroyed by trie pruning. But the current
+  # block will still get a pruned trie. If trie pruning deactivated,
+  # `applyDeletes` have no effects.
+  dbTx.commit(applyDeletes = false)
+
+
+proc processBlock*(vmState: BaseVMState; poa: var Clique;
+                   header: BlockHeader, body: BlockBody): ValidationResult =
+  ## Processes `(header,body)` pair for a any network regardless of PoA or not
   var dbTx = vmState.chainDB.db.beginTransaction()
   defer: dbTx.dispose()
 
@@ -132,11 +162,6 @@ proc processBlock*(vmState: BaseVMState;
   if not vmState.procBlkEpilogue(dbTx, header, body):
     return ValidationResult.Error
 
-  # `applyDeletes = false`
-  # If the trie pruning activated, each of the block will have its own state
-  # trie keep intact, rather than destroyed by trie pruning. But the current
-  # block will still get a pruned trie. If trie pruning deactivated,
-  # `applyDeletes` have no effects.
   dbTx.commit(applyDeletes = false)
 
 # ------------------------------------------------------------------------------

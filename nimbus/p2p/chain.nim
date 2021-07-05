@@ -3,8 +3,8 @@ import
   ../db/db_chain,
   ../genesis,
   ../utils,
-  ../utils/difficulty,
   ../vm_state,
+  ./clique,
   ./executor,
   ./validate,
   ./validate/epoch_hash_cache,
@@ -39,6 +39,7 @@ type
     blockZeroHash: KeccakHash
     cacheByEpoch: EpochHashCache
     extraValidation: bool
+    poa: Clique
 
 func toChainFork(c: ChainConfig, number: BlockNumber): ChainFork =
   if number >= c.londonBlock: London
@@ -114,6 +115,7 @@ proc newChain*(db: BaseChainDB, extraValidation = false): Chain =
   let genesisCRC = crc32(0, result.blockZeroHash.data)
   result.forkIds = calculateForkIds(db.config, genesisCRC)
   result.extraValidation = extraValidation
+  result.poa = db.newCliqueCfg.initClique
 
   if extraValidation:
     result.cacheByEpoch.initEpochHashCache
@@ -164,7 +166,7 @@ method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
       (header, body) = (headers[i], bodies[i])
       parentHeader = c.db.getBlockHeader(header.parentHash)
       vmState = newBaseVMState(parentHeader.stateRoot, header, c.db)
-      validationResult = vmState.processBlock(header, body)
+      validationResult = vmState.processBlock(c.poa, header, body)
 
     when not defined(release):
       if validationResult == ValidationResult.Error and
