@@ -25,31 +25,35 @@ import
   eth/[common, trie/db],
   nimcrypto
 
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
-proc processBlock*(vmState: BaseVMState;
-                   header: BlockHeader, body: BlockBody): ValidationResult =
-  var
-    chainDB = vmState.chaindb
-    dbTx = chainDB.db.beginTransaction()
-  defer: dbTx.dispose()
+proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
+                     header: BlockHeader, body: BlockBody): bool =
+  var chainDB = vmState.chaindb
 
-  if chainDB.config.daoForkSupport and header.blockNumber == chainDB.config.daoForkBlock:
+  if chainDB.config.daoForkSupport and
+     header.blockNumber == chainDB.config.daoForkBlock:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
   if body.transactions.calcTxRoot != header.txRoot:
-    debug "Mismatched txRoot", blockNumber=header.blockNumber
-    return ValidationResult.Error
+    debug "Mismatched txRoot",
+      blockNumber=header.blockNumber
+    return false
 
   let fork = chainDB.config.toFork(vmState.blockNumber)
 
   if header.txRoot != BLANK_ROOT_HASH:
     if body.transactions.len == 0:
-      debug "No transactions in body", blockNumber=header.blockNumber
-      return ValidationResult.Error
+      debug "No transactions in body",
+        blockNumber=header.blockNumber
+      return false
     else:
-      trace "Has transactions", blockNumber = header.blockNumber, blockHash = header.blockHash
-
+      trace "Has transactions",
+        blockNumber = header.blockNumber,
+        blockHash = header.blockHash
       vmState.receipts = newSeq[Receipt](body.transactions.len)
       vmState.cumulativeGasUsed = 0
       for txIndex, tx in body.transactions:
@@ -57,28 +61,29 @@ proc processBlock*(vmState: BaseVMState;
         if tx.getSender(sender):
           discard processTransaction(tx, sender, vmState, fork)
         else:
-          debug "Could not get sender", txIndex, tx
-          return ValidationResult.Error
+          debug "Could not get sender",
+            txIndex, tx
+          return false
         vmState.receipts[txIndex] = makeReceipt(vmState, fork, tx.txType)
 
   if vmState.cumulativeGasUsed != header.gasUsed:
     debug "gasUsed neq cumulativeGasUsed",
       gasUsed=header.gasUsed,
       cumulativeGasUsed=vmState.cumulativeGasUsed
-    return ValidationResult.Error
+    return false
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
     let h = chainDB.persistUncles(body.uncles)
     if h != header.ommersHash:
       debug "Uncle hash mismatch"
-      return ValidationResult.Error
+      return false
 
-  # PoA consensus engine have no reward for miner
-  if not chainDB.config.poaEngine:
-    vmState.calculateReward(fork, header, body)
-  elif chainDB.updatePoaState(fork, header, body) == ValidationResult.Error:
-    debug "PoA update failed"
-    return ValidationResult.Error
+  return true
+
+
+proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
+                     header: BlockHeader, body: BlockBody): bool =
+  var chainDB = vmState.chaindb
 
   # Reward beneficiary
   vmState.mutateStateDB:
@@ -88,23 +93,61 @@ proc processBlock*(vmState: BaseVMState;
 
   let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
-    debug "wrong state root in block", blockNumber=header.blockNumber, expected=header.stateRoot, actual=stateDb.rootHash, arrivedFrom=chainDB.getCanonicalHead().stateRoot
-    return ValidationResult.Error
+    debug "wrong state root in block",
+      blockNumber=header.blockNumber,
+      expected=header.stateRoot,
+      actual=stateDb.rootHash,
+      arrivedFrom=chainDB.getCanonicalHead().stateRoot
+    return false
 
   let bloom = createBloom(vmState.receipts)
   if header.bloom != bloom:
-    debug "wrong bloom in block", blockNumber=header.blockNumber
-    return ValidationResult.Error
+    debug "wrong bloom in block",
+      blockNumber=header.blockNumber
+    return false
 
   let receiptRoot = calcReceiptRoot(vmState.receipts)
   if header.receiptRoot != receiptRoot:
-    debug "wrong receiptRoot in block", blockNumber=header.blockNumber, actual=receiptRoot, expected=header.receiptRoot
+    debug "wrong receiptRoot in block",
+      blockNumber=header.blockNumber,
+      actual=receiptRoot,
+      expected=header.receiptRoot
+    return false
+
+  return true
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc processBlock*(vmState: BaseVMState;
+                   header: BlockHeader, body: BlockBody): ValidationResult =
+  var
+    chainDB = vmState.chaindb
+    dbTx = chainDB.db.beginTransaction()
+  defer: dbTx.dispose()
+
+  if not vmState.procBlkPreamble(dbTx, header, body):
+    return ValidationResult.Error
+
+  # PoA consensus engine have no reward for miner
+  let fork = chainDB.config.toFork(vmState.blockNumber)
+  if not chainDB.config.poaEngine:
+    vmState.calculateReward(fork, header, body)
+  elif chainDB.updatePoaState(fork, header, body) == ValidationResult.Error:
+    debug "PoA update failed"
+    return ValidationResult.Error
+
+  if not vmState.procBlkEpilogue(dbTx, header, body):
     return ValidationResult.Error
 
   # `applyDeletes = false`
-  # If the trie pruning activated, each of the block will have its own state trie keep intact,
-  # rather than destroyed by trie pruning. But the current block will still get a pruned trie.
-  # If trie pruning deactivated, `applyDeletes` have no effects.
+  # If the trie pruning activated, each of the block will have its own state
+  # trie keep intact, rather than destroyed by trie pruning. But the current
+  # block will still get a pruned trie. If trie pruning deactivated,
+  # `applyDeletes` have no effects.
   dbTx.commit(applyDeletes = false)
 
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------
