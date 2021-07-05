@@ -117,4 +117,5 @@ cliBuilder:
           ./test_misc,
           ./test_graphql,
           ./test_lru_cache,
-          ./test_clique
+          ./test_clique,
+          ../fluffy/test_bridge_parser
