@@ -9,13 +9,12 @@
 # according to those terms.
 
 import
-  ../../db/db_chain,
-  ../../forks,
+  ../../vm_types,
   eth/[common]
 
 
-proc updatePoaState*(chainDB: BaseChainDB; fork: Fork;
-                    header: BlockHeader; body: BlockBody): ValidationResult =
-  ValidationResult.Ok
+proc updatePoaState*(vmState: BaseVMState;
+                     header: BlockHeader; body: BlockBody): bool =
+  true
 
 # End

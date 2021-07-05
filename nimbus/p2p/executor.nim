@@ -18,7 +18,7 @@ import
 
 export
   calculate_reward.blockRewards,
-  executor_helpers,
+  executor_helpers.createBloom,
   process_block,
   process_transaction
 

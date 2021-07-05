@@ -13,6 +13,7 @@ import
   ../../forks,
   ../../vm_state,
   ../../vm_types,
+  ./executor_helpers,
   eth/common
 
 
@@ -37,8 +38,8 @@ const
   ]
 
 proc calculateReward*(vmState: BaseVMState;
-                      fork: Fork; header: BlockHeader; body: BlockBody) =
-  let blockReward = blockRewards[fork]
+                      header: BlockHeader; body: BlockBody) =
+  let blockReward = blockRewards[vmState.getFork]
   var mainReward = blockReward
 
   for uncle in body.uncles:

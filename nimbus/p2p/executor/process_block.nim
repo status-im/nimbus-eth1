@@ -31,24 +31,20 @@ import
 
 proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
                      header: BlockHeader, body: BlockBody): bool =
-  var chainDB = vmState.chaindb
-
-  if chainDB.config.daoForkSupport and
-     header.blockNumber == chainDB.config.daoForkBlock:
+  if vmState.chainDB.config.daoForkSupport and
+     vmState.chainDB.config.daoForkBlock == header.blockNumber:
     vmState.mutateStateDB:
       db.applyDAOHardFork()
 
   if body.transactions.calcTxRoot != header.txRoot:
     debug "Mismatched txRoot",
-      blockNumber=header.blockNumber
+      blockNumber = header.blockNumber
     return false
-
-  let fork = chainDB.config.toFork(vmState.blockNumber)
 
   if header.txRoot != BLANK_ROOT_HASH:
     if body.transactions.len == 0:
       debug "No transactions in body",
-        blockNumber=header.blockNumber
+        blockNumber = header.blockNumber
       return false
     else:
       trace "Has transactions",
@@ -59,21 +55,21 @@ proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
       for txIndex, tx in body.transactions:
         var sender: EthAddress
         if tx.getSender(sender):
-          discard processTransaction(tx, sender, vmState, fork)
+          discard tx.processTransaction(sender, vmState)
         else:
           debug "Could not get sender",
             txIndex, tx
           return false
-        vmState.receipts[txIndex] = makeReceipt(vmState, fork, tx.txType)
+        vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
 
   if vmState.cumulativeGasUsed != header.gasUsed:
     debug "gasUsed neq cumulativeGasUsed",
-      gasUsed=header.gasUsed,
-      cumulativeGasUsed=vmState.cumulativeGasUsed
+      gasUsed = header.gasUsed,
+      cumulativeGasUsed = vmState.cumulativeGasUsed
     return false
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    let h = chainDB.persistUncles(body.uncles)
+    let h = vmState.chainDB.persistUncles(body.uncles)
     if h != header.ommersHash:
       debug "Uncle hash mismatch"
       return false
@@ -83,8 +79,6 @@ proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
 
 proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
                      header: BlockHeader, body: BlockBody): bool =
-  var chainDB = vmState.chaindb
-
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.generateWitness:
@@ -94,24 +88,24 @@ proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
   let stateDb = vmState.accountDb
   if header.stateRoot != stateDb.rootHash:
     debug "wrong state root in block",
-      blockNumber=header.blockNumber,
-      expected=header.stateRoot,
-      actual=stateDb.rootHash,
-      arrivedFrom=chainDB.getCanonicalHead().stateRoot
+      blockNumber = header.blockNumber,
+      expected = header.stateRoot,
+      actual = stateDb.rootHash,
+      arrivedFrom = vmState.chainDB.getCanonicalHead().stateRoot
     return false
 
   let bloom = createBloom(vmState.receipts)
   if header.bloom != bloom:
     debug "wrong bloom in block",
-      blockNumber=header.blockNumber
+      blockNumber = header.blockNumber
     return false
 
   let receiptRoot = calcReceiptRoot(vmState.receipts)
   if header.receiptRoot != receiptRoot:
     debug "wrong receiptRoot in block",
-      blockNumber=header.blockNumber,
-      actual=receiptRoot,
-      expected=header.receiptRoot
+      blockNumber = header.blockNumber,
+      actual = receiptRoot,
+      expected = header.receiptRoot
     return false
 
   return true
@@ -122,19 +116,16 @@ proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
 
 proc processBlock*(vmState: BaseVMState;
                    header: BlockHeader, body: BlockBody): ValidationResult =
-  var
-    chainDB = vmState.chaindb
-    dbTx = chainDB.db.beginTransaction()
+  var dbTx = vmState.chainDB.db.beginTransaction()
   defer: dbTx.dispose()
 
   if not vmState.procBlkPreamble(dbTx, header, body):
     return ValidationResult.Error
 
   # PoA consensus engine have no reward for miner
-  let fork = chainDB.config.toFork(vmState.blockNumber)
-  if not chainDB.config.poaEngine:
-    vmState.calculateReward(fork, header, body)
-  elif chainDB.updatePoaState(fork, header, body) == ValidationResult.Error:
+  if not vmState.chainDB.config.poaEngine:
+    vmState.calculateReward(header, body)
+  elif not vmState.updatePoaState(header, body):
     debug "PoA update failed"
     return ValidationResult.Error
 

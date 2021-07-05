@@ -16,6 +16,7 @@ import
   ../../vm_state,
   ../../vm_types,
   ../validate,
+  ./executor_helpers,
   chronicles,
   eth/common
 
@@ -74,5 +75,10 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
   if vmState.generateWitness:
     vmState.accountDb.collectWitnessData()
   vmState.accountDb.persist(clearCache = false)
+
+
+proc processTransaction*(tx: Transaction,
+                         sender: EthAddress, vmState: BaseVMState): GasInt =
+    tx.processTransaction(sender, vmState, vmState.getFork)
 
 # End

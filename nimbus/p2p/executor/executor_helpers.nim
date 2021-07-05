@@ -9,6 +9,7 @@
 # according to those terms.
 
 import
+  ../../config,
   ../../db/accounts_cache,
   ../../forks,
   ../../vm_state,
@@ -34,9 +35,13 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
     bloom.value = bloom.value or logsBloom(rec.logs).value
   result = bloom.value.toByteArrayBE
 
-proc makeReceipt*(vmState: BaseVMState, fork: Fork, txType: TxType): Receipt =
+proc getFork*(vmState: BaseVMState): Fork {.inline.} =
+  ## Shortcut for configured fork, deliberately not naming it toFork()
+  vmState.chainDB.config.toFork(vmState.blockNumber)
+
+proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
   var rec: Receipt
-  if fork < FkByzantium:
+  if vmState.getFork < FkByzantium:
     rec.isHash = true
     rec.hash   = vmState.accountDb.rootHash
   else:
