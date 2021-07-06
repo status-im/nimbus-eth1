@@ -29,7 +29,7 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
     extra_params &= " " & paramStr(i)
   exec "nim " & lang & " --out:build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
 
-proc test(name: string, lang = "c") =
+proc test(path: string, name: string, lang = "c") =
   # Verify stack usage is kept low by setting 750k stack limit in tests.
   const stackLimitKiB = 750
   when not defined(windows):
@@ -42,14 +42,17 @@ proc test(name: string, lang = "c") =
     const (buildOption, runPrefix) =
       (" -d:windowsNoSetStack --passL:-Wl,--stack," & $(stackLimitKiB * 1024), "")
 
-  buildBinary name, "tests/", "-d:chronicles_log_level=ERROR" & buildOption
+  buildBinary name, (path & "/"), "-d:chronicles_log_level=ERROR" & buildOption
   exec runPrefix & "build/" & name
 
 task test, "Run tests":
-  test "all_tests"
+  test "tests", "all_tests"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
 
 task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE"
+
+task testfluffy, "Run fluffy tests":
+  test "fluffy", "all_tests"

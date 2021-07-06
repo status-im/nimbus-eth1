@@ -8,7 +8,8 @@
 {.push raises: [Defect].}
 
 import
-  std/json, stew/[byteutils, results],
+  std/json, 
+  stew/[byteutils, results],
   eth/common, chronos, json_rpc/rpcclient
 
 # Specification of api https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-bridge-nodes.md#api

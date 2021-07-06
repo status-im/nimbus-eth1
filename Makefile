@@ -126,6 +126,10 @@ libbacktrace:
 test: | build deps
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
+# builds and runs the test suite
+test-fluffy: | build deps
+	$(ENV_SCRIPT) nim testfluffy $(NIM_PARAMS) nimbus.nims
+
 # primitive reproducibility test
 test-reproducibility:
 	+ [ -e build/nimbus ] || $(MAKE) V=0 nimbus; \
