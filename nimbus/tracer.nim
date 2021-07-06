@@ -2,8 +2,7 @@ import
   db/[db_chain, accounts_cache, capturedb], eth/common, utils, json,
   constants, vm_state, vm_types, transaction, p2p/executor,
   eth/trie/db, nimcrypto, strutils,
-  chronicles, rpc/hexstrings, launcher,
-  ./config
+  chronicles, rpc/hexstrings, launcher
 
 when defined(geth):
   import db/geth_db
@@ -104,7 +103,6 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
     beforeRoot: Hash256
 
   let
-    fork = chainDB.config.toFork(header.blockNumber)
     miner = vmState.coinbase()
 
   for idx, tx in body.transactions:
@@ -120,7 +118,7 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
       stateDiff["beforeRoot"] = %($stateDb.rootHash)
       beforeRoot = stateDb.rootHash
 
-    gasUsed = processTransaction(tx, sender, vmState, fork)
+    gasUsed = processTransaction(tx, sender, vmState)
 
     if idx == txIndex:
       after.captureAccount(stateDb, sender, senderName)
@@ -176,7 +174,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
   for idx, uncle in body.uncles:
     before.captureAccount(stateBefore, uncle.coinbase, uncleName & $idx)
 
-  discard captureChainDB.processBlock(header, body, vmState)
+  discard vmState.processBlock(header, body)
 
   var stateAfter = vmState.accountDb
 
@@ -220,11 +218,10 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
   doAssert(body.transactions.len != 0)
 
   var gasUsed = GasInt(0)
-  let fork = chainDB.config.toFork(header.blockNumber)
 
   for tx in body.transactions:
     let sender = tx.getSender
-    gasUsed = gasUsed + processTransaction(tx, sender, vmState, fork)
+    gasUsed = gasUsed + processTransaction(tx, sender, vmState)
 
   result = vmState.getTracingResult()
   result["gas"] = %gasUsed

@@ -12,7 +12,7 @@ import
   stew/endians2, nimcrypto,
   ./test_helpers, ./test_allowed_to_fail,
   ../premix/parser, test_config,
-  ../nimbus/[vm_state, utils, vm_types, errors, transaction, constants, forks],
+  ../nimbus/[vm_state, utils, vm_types, errors, constants, forks],
   ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/utils/header,
   ../nimbus/p2p/[executor, validate],
@@ -247,7 +247,7 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
     transactions: result.txs,
     uncles: result.uncles
   )
-  let res = processBlock(chainDB, result.header, body, tester.vmState)
+  let res = tester.vmState.processBlock(result.header, body)
   if res == ValidationResult.Error:
     if not (tb.hasException or (not tb.goodBlock)):
       raise newException(ValidationError, "process block validation")

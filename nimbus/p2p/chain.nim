@@ -3,8 +3,8 @@ import
   ../db/db_chain,
   ../genesis,
   ../utils,
-  ../utils/difficulty,
   ../vm_state,
+  ./clique,
   ./executor,
   ./validate,
   ./validate/epoch_hash_cache,
@@ -37,8 +37,17 @@ type
     db: BaseChainDB
     forkIds: array[ChainFork, ForkID]
     blockZeroHash: KeccakHash
-    cacheByEpoch: EpochHashCache
-    extraValidation: bool
+
+    extraValidation: bool ##\
+      ## Trigger extra validation, currently with `persistBlocksin()` only.
+
+    cacheByEpoch: EpochHashCache ##\
+      ## Objects cache to speed up lookup in validation functions.
+
+    poa: Clique ##\
+      ## For non-PoA networks (when `db.config.poaEngine` is `false`),
+      ## this descriptor is ignored.
+
 
 func toChainFork(c: ChainConfig, number: BlockNumber): ChainFork =
   if number >= c.londonBlock: London
@@ -115,6 +124,11 @@ proc newChain*(db: BaseChainDB, extraValidation = false): Chain =
   result.forkIds = calculateForkIds(db.config, genesisCRC)
   result.extraValidation = extraValidation
 
+  # Initalise the PoA state regardless of whether it is needed on the current
+  # network. For non-PoA networks (when `db.config.poaEngine` is `false`),
+  # this descriptor is ignored.
+  result.poa = db.newCliqueCfg.newClique
+
   if extraValidation:
     result.cacheByEpoch.initEpochHashCache
 
@@ -164,7 +178,12 @@ method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
       (header, body) = (headers[i], bodies[i])
       parentHeader = c.db.getBlockHeader(header.parentHash)
       vmState = newBaseVMState(parentHeader.stateRoot, header, c.db)
-      validationResult = processBlock(c.db, header, body, vmState)
+
+      # The following processing function call will update the PoA state which
+      # is passed as second function argument. The PoA state is ignored for
+      # non-PoA networks (in which case `vmState.processBlock(header,body)`
+      # would also be correct but not vice versa.)
+      validationResult = vmState.processBlock(c.poa, header, body)
 
     when not defined(release):
       if validationResult == ValidationResult.Error and

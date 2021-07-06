@@ -9,17 +9,37 @@
 # according to those terms.
 
 import
-  std/[algorithm, sequtils, strformat, strutils],
-  ../nimbus/p2p/[clique, clique/snapshot],
+  std/[algorithm, os, sequtils, strformat, strutils],
+  ../nimbus/config,
+  ../nimbus/db/db_chain,
+  ../nimbus/p2p/[chain, clique, clique/snapshot],
   ../nimbus/utils,
-  ./test_clique/pool,
-  eth/keys,
+  ./test_clique/[pool, undump],
+  eth/[common, keys],
   stint,
   unittest2
 
+let
+  goerliCapture = "test_clique" / "goerli51840.txt.gz"
+
+# ------------------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------------------
+
+proc db(ap: TesterPool): auto =
+  ## Getter
+  ap.clique.db
+
+proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
+  ## Shortcut => db/db_chain.getBlockHeader()
+  doAssert ap.db.getBlockHeader(number, result)
+
+# ------------------------------------------------------------------------------
+# Test Runners
+# ------------------------------------------------------------------------------
 
 # clique/snapshot_test.go(99): func TestClique(t *testing.T) {
-proc cliqueMain*(noisy = defined(debug)) =
+proc runCliqueSnapshot(noisy = true) =
   ## Clique PoA Snapshot
   ## ::
   ##    Tests that Clique signer voting is evaluated correctly for various
@@ -75,7 +95,73 @@ proc cliqueMain*(noisy = defined(debug)) =
             check snapResult == expected
 
 
-when isMainModule:
-  cliqueMain()
+proc runGoerliReplay(noisy = true;
+                     dir = "tests"; stopAfterBlock = uint64.high) =
+  var
+    pool = GoerliNet.newVoterPool
+    xChain = pool.db.newChain
+    cache: array[7,(seq[BlockHeader],seq[BlockBody])]
+    cInx = 0
+    stoppedOk = false
 
+  suite "Replay Goerli Chain":
+
+    for w in (dir / goerliCapture).undumpNextGroup:
+
+      if w[0][0].blockNumber == 0.u256:
+        # Verify Genesis
+        doAssert w[0][0] == pool.getBlockHeader(0.u256)
+
+      else:
+        # Condense in cache
+        cache[cInx] = w
+        cInx.inc
+
+        # Handy for partial tests
+        if stopAfterBlock <= cache[cInx-1][0][0].blockNumber.truncate(uint64):
+          stoppedOk = true
+          break
+
+        # Run from cache if complete set
+        if cache.len <= cInx:
+          cInx = 0
+          let
+            first = cache[0][0][0].blockNumber
+            last = cache[^1][0][^1].blockNumber
+          test &"Goerli Blocks #{first}..#{last} ({cache.len} transactions)":
+            for (headers,bodies) in cache:
+              let addedPersistBlocks = xChain.persistBlocks(headers, bodies)
+              check addedPersistBlocks == ValidationResult.Ok
+              if addedPersistBlocks != ValidationResult.Ok: return
+
+    # Rest from cache
+    if 0 < cInx:
+      let
+        first = cache[0][0][0].blockNumber
+        last = cache[cInx-1][0][^1].blockNumber
+      test &"Goerli Blocks #{first}..#{last} ({cInx} transactions)":
+        for (headers,bodies) in cache:
+          let addedPersistBlocks = xChain.persistBlocks(headers, bodies)
+          check addedPersistBlocks == ValidationResult.Ok
+          if addedPersistBlocks != ValidationResult.Ok: return
+
+    if stoppedOk:
+      test &"Runner stooped after reaching #{stopAfterBlock}":
+        discard
+
+# ------------------------------------------------------------------------------
+# Main function(s)
+# ------------------------------------------------------------------------------
+
+proc cliqueMain*(noisy = defined(debug)) =
+  noisy.runCliqueSnapshot
+  noisy.runGoerliReplay
+
+when isMainModule:
+  let noisy = defined(debug)
+  noisy.runCliqueSnapshot
+  noisy.runGoerliReplay(dir = ".", stopAfterBlock = 1000)
+
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------

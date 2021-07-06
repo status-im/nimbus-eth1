@@ -14,7 +14,8 @@ import
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
   ../nimbus/[constants, vm_state, config, genesis, utils, transaction],
   ../nimbus/db/[accounts_cache, db_chain, storage_types, state_db],
-  ../nimbus/p2p/[chain, executor], ../nimbus/utils/difficulty,
+  ../nimbus/p2p/[chain, executor, executor/executor_helpers],
+  ../nimbus/utils/difficulty,
   ./rpcclient/test_hexstrings, ./test_helpers, ./macro_assembler
 
 # Perform checks for hex string validation
@@ -41,7 +42,6 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
     acc = conf.getAccount(signer).tryGet()
     blockNumber = 1.toBlockNumber
     parentHash = parent.blockHash
-    fork = chain.config.toFork(blockNumber)
 
   const code = evmByteCode:
     PUSH4 "0xDEADBEEF"  # PUSH
@@ -84,8 +84,8 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfigura
   vmState.cumulativeGasUsed = 0
   for txIndex, tx in txs:
     let sender = tx.getSender()
-    discard processTransaction(tx, sender, vmState, fork)
-    vmState.receipts[txIndex] = makeReceipt(vmState, fork, tx.txType)
+    discard processTransaction(tx, sender, vmState)
+    vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let
     receiptRoot = chain.persistReceipts(vmState.receipts)

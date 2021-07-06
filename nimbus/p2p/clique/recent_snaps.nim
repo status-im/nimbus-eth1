@@ -102,7 +102,7 @@ proc canDiskCheckPointOk(d: RecentDesc):
     # checkpoint trusted and snapshot it.
     if FULL_IMMUTABILITY_THRESHOLD < d.local.headers.len:
       return true
-    if d.cfg.dbChain.getBlockHeaderResult(d.args.blockNumber - 1).isErr:
+    if d.cfg.db.getBlockHeaderResult(d.args.blockNumber - 1).isErr:
       return true
 
 # ------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ proc tryStoreDiskCheckPoint(d: RecentDesc; snap: var Snapshot):
                            bool {.gcsafe, raises: [Defect,RlpError].} =
   if d.canDiskCheckPointOk:
     # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
-    let checkPoint = d.cfg.dbChain.getBlockHeaderResult(d.args.blockNumber)
+    let checkPoint = d.cfg.db.getBlockHeaderResult(d.args.blockNumber)
     if checkPoint.isErr:
       return false
     let
@@ -178,7 +178,7 @@ proc initRecentSnaps*(rs: var RecentSnaps;
 
         else:
           # No explicit parents (or no more left), reach out to the database
-          let rc = d.cfg.dbChain.getBlockHeaderResult(d.args.blockNumber)
+          let rc = d.cfg.db.getBlockHeaderResult(d.args.blockNumber)
           if rc.isErr:
             return err((errUnknownAncestor,""))
           header = rc.value
@@ -210,8 +210,8 @@ proc initRecentSnaps*(rs: var RecentSnaps;
         if rc.isErr:
           return err(rc.error)
         trace "Stored voting snapshot to disk",
-          blockNumber = d.blockNumber,
-          blockHash = hash
+          blockNumber = snap.blockNumber,
+          blockHash = snap.blockHash
 
       # clique/clique.go(438): c.recents.Add(snap.Hash, snap)
       return ok(snap)
@@ -223,9 +223,6 @@ proc initRecentSnaps*(rs: var RecentSnaps;
 proc initRecentSnaps*(cfg: CliqueCfg): RecentSnaps {.gcsafe,raises: [Defect].} =
   result.initRecentSnaps(cfg)
 
-proc setDebug*(rs: var RecentSnaps; debug: bool) =
-  ## Set debugging mode on/off
-  rs.debug = debug
 
 proc getRecentSnaps*(rs: var RecentSnaps; args: RecentArgs): auto {.
                      gcsafe, raises: [Defect,CatchableError].} =
@@ -236,6 +233,11 @@ proc getRecentSnaps*(rs: var RecentSnaps; args: RecentArgs): auto {.
                debug: rs.debug,
                args:  args,
                local: LocalArgs())
+
+
+proc `debug=`*(rs: var RecentSnaps; debug: bool) =
+  ## Setter, debugging mode on/off
+  rs.debug = debug
 
 # ------------------------------------------------------------------------------
 # End
