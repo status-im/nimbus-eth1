@@ -180,7 +180,7 @@ jobs:
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy
           build/fluffy --help
           # CC is needed to select correct compiler 32/64 bit
-          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} test-fluffy test-reproducibility
+          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} test-fluffy test-fluffy-reproducibility
 
       - name: Run fluffy tests (Macos)
         if: runner.os == 'Macos'
@@ -189,4 +189,4 @@ jobs:
           make ${DEFAULT_MAKE_FLAGS} fluffy
           build/fluffy --help
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} test-fluffy test-reproducibility
+          make ${DEFAULT_MAKE_FLAGS} test-fluffy test-fluffy-reproducibility
