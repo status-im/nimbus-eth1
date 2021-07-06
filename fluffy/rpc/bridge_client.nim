@@ -52,7 +52,8 @@ proc getNextItem*(bridgeClient: BridgeClient, blockHash: Hash256, acctAddr: EthA
 
 # bridge_getBlockWitness
 # Returns a list of all RLP-encoded merkle trie values (including contract bytecode) accessed during block execution
-proc getBlockWitness*(bridgeClient: BridgeClient, blockNumber: BlockNumber): Future[Result[seq[seq[byte]], string]] {.async, raises: [Defect, CatchableError].} =
+proc getBlockWitness*(bridgeClient: BridgeClient, blockNumber: BlockNumber): 
+  Future[Result[seq[seq[byte]], string]] {.async, raises: [Defect, CatchableError].} =
   let result = await bridgeClient.call("bridge_getBlockWitnessblockNumber", %[%blockNumber])
   return parseWitness(result)
 
