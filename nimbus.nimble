@@ -55,4 +55,4 @@ task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE"
 
 task testfluffy, "Run fluffy tests":
-  test "fluffy", "all_tests"
+  test "fluffy", "all_fluffy_tests"
