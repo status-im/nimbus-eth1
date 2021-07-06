@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  json_rpc/rpcserver
+  json_rpc/rpcproxy
 
 # Subset of Eth JSON-RPC API: https://eth.wiki/json-rpc/API
 # Supported subset will eventually be found here:
@@ -20,80 +20,80 @@ import
 # Can be done by just forwarding the rpc call, or by adding a call here, but
 # that would introduce a unnecessary serializing/deserializing step.
 
-proc installEthApiHandlers*(rpcServer: RpcServer)
+proc installEthApiHandlers*(rpcServerWithProxy: var RpcHttpProxy)
     {.raises: [Defect, CatchableError].} =
 
   # Supported API
-  rpcServer.rpc("eth_blockNumber") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_blockNumber") 
 
-  rpcServer.rpc("eth_call") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_call") 
 
-  rpcServer.rpc("eth_chainId") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_chainId") 
 
-  rpcServer.rpc("eth_estimateGas") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_estimateGas") 
 
-  rpcServer.rpc("eth_feeHistory") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_feeHistory") 
 
-  rpcServer.rpc("eth_getBalance") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getBalance") 
 
-  rpcServer.rpc("eth_getBlockByHash") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getBlockByHash") 
 
-  rpcServer.rpc("eth_getBlockByNumber") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getBlockByNumber") 
 
-  rpcServer.rpc("eth_getBlockTransactionCountByHash") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByHash") 
 
-  rpcServer.rpc("eth_getBlockTransactionCountByNumber") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getBlockTransactionCountByNumber") 
 
-  rpcServer.rpc("eth_getCode") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getCode") 
 
-  rpcServer.rpc("eth_getRawTransactionByHash") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByHash") 
 
-  rpcServer.rpc("eth_getRawTransactionByBlockHashAndIndex") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByBlockHashAndIndex") 
 
-  rpcServer.rpc("eth_getRawTransactionByBlockNumberAndIndex") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getRawTransactionByBlockNumberAndIndex") 
 
-  rpcServer.rpc("eth_getStorageAt") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getStorageAt") 
 
-  rpcServer.rpc("eth_getTransactionByBlockHashAndIndex") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getTransactionByBlockHashAndIndex") 
 
-  rpcServer.rpc("eth_getTransactionByBlockNumberAndIndex") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getTransactionByBlockNumberAndIndex") 
 
-  rpcServer.rpc("eth_getTransactionByHash") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getTransactionByHash") 
 
-  rpcServer.rpc("eth_getTransactionCount") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getTransactionCount") 
 
-  rpcServer.rpc("eth_getTransactionReceipt") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getTransactionReceipt") 
 
-  rpcServer.rpc("eth_getUncleByBlockHashAndIndex") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getUncleByBlockHashAndIndex") 
 
-  rpcServer.rpc("eth_getUncleByBlockNumberAndIndex") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getUncleByBlockNumberAndIndex") 
 
-  rpcServer.rpc("eth_getUncleCountByBlockHash") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getUncleCountByBlockHash") 
 
-  rpcServer.rpc("eth_getUncleCountByBlockNumber") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getUncleCountByBlockNumber") 
 
-  rpcServer.rpc("eth_getProof") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getProof") 
 
-  rpcServer.rpc("eth_sendRawTransaction") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_sendRawTransaction") 
 
   # Optional API
 
-  rpcServer.rpc("eth_gasPrice") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_gasPrice") 
 
-  rpcServer.rpc("eth_getFilterChanges") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getFilterChanges") 
 
-  rpcServer.rpc("eth_getFilterLogs") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getFilterLogs") 
 
-  rpcServer.rpc("eth_getLogs") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_getLogs") 
 
-  rpcServer.rpc("eth_newBlockFilter") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_newBlockFilter") 
 
-  rpcServer.rpc("eth_newFilter") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_newFilter") 
 
-  rpcServer.rpc("eth_newPendingTransactionFilter") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_newPendingTransactionFilter") 
 
-  rpcServer.rpc("eth_pendingTransactions") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_pendingTransactions") 
 
-  rpcServer.rpc("eth_syncing") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_syncing") 
 
-  rpcServer.rpc("eth_uninstallFilter") do (): discard
+  rpcServerWithProxy.registerProxyMethod("eth_uninstallFilter") 

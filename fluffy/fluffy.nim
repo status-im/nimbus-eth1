@@ -9,7 +9,7 @@
 
 import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient, json_rpc/servers/httpserver,
+  chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient, json_rpc/rpcproxy,
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   eth/p2p/portal/protocol as portal_protocol,
@@ -68,11 +68,12 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     except Exception as exc: raiseAssert exc.msg
 
   if config.rpcEnabled:
-    let
-      ta = initTAddress(config.rpcAddress, config.rpcPort)
-      rpcHttpServer = newRpcHttpServer([ta])
-    rpcHttpServer.installEthApiHandlers()
-    rpcHttpServer.start()
+    let ta = initTAddress(config.rpcAddress, config.rpcPort)
+    var rpcHttpServerWithProxy = newRpcHttpProxy([$ta])
+    rpcHttpServerWithProxy.installEthApiHandlers()
+    # TODO for now we can only proxy to local node (or remote one without ssl) to make it possible
+    # to call infura https://github.com/status-im/nim-json-rpc/pull/101 needs to get merged for http client to support https/
+    waitFor rpcHttpServerWithProxy.start(config.proxyUri)
 
   let bridgeClient = initializeBridgeClient(config.bridgeUri)
 
