@@ -21,8 +21,8 @@
 import
   std/[random, sequtils, strutils, times],
   ../../db/db_chain,
+  ./clique_cfg/ec_recover,
   ./clique_defs,
-  ./ec_recover,
   eth/common,
   ethash,
   stew/results,
@@ -48,21 +48,23 @@ type
     blockHeader*: proc(v: BlockHeader; delim: string):
                  string {.gcsafe,raises: [Defect,CatchableError].}
 
+
   CliqueCfg* = ref object
     db*: BaseChainDB
-    signatures*: EcRecover  ## Recent block signatures to speed up mining
-    period*: Duration       ## time between blocks to enforce
-    prng*: Rand             ## PRNG state for internal random generator
-    bcEpoch: UInt256        ## The number of blocks after which to checkpoint
-                            ## and reset the pending votes.Suggested 30000 for
-                            ## the testnet to remain analogous to the mainnet
-                            ## ethash epoch.
+    period*: Duration      ## time between blocks to enforce
+    prng*: Rand            ## PRNG state for internal random generator
+
+    signatures: EcRecover  ## Recent block signatures cached to speed up mining
+    bcEpoch: UInt256       ## The number of blocks after which to checkpoint
+                           ## and reset the pending votes.Suggested 30000 for
+                           ## the testnet to remain analogous to the mainnet
+                           ## ethash epoch.
     prettyPrint*: PrettyPrinters ## debugging support
 
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Public constructor
 # ------------------------------------------------------------------------------
 
 proc newCliqueCfg*(db: BaseChainDB; period = BLOCK_PERIOD;
@@ -70,7 +72,7 @@ proc newCliqueCfg*(db: BaseChainDB; period = BLOCK_PERIOD;
   CliqueCfg(
     db:          db,
     period:      period,
-    bcEpoch:      if epoch.isZero: EPOCH_LENGTH.u256 else: epoch,
+    bcEpoch:     if epoch.isZero: EPOCH_LENGTH.u256 else: epoch,
     signatures:  initEcRecover(),
     prng:        initRand(prngSeed),
     prettyPrint: PrettyPrinters(
@@ -79,9 +81,25 @@ proc newCliqueCfg*(db: BaseChainDB; period = BLOCK_PERIOD;
                    extraData:   proc(v:Blob):                      string = $v,
                    blockHeader: proc(v:BlockHeader; delim:string): string = $v))
 
+# ------------------------------------------------------------------------------
+# Public helper funcion
+# ------------------------------------------------------------------------------
+
+proc ecRecover*(cfg: CliqueCfg; header: BlockHeader): auto
+                                   {.gcsafe, raises: [Defect,CatchableError].}=
+  cfg.signatures.getEcRecover(header)
+
+# ------------------------------------------------------------------------------
+# Public getter
+# ------------------------------------------------------------------------------
+
 proc epoch*(cfg: CliqueCfg): BlockNumber {.inline.} =
   ## Getter
   cfg.bcEpoch
+
+# ------------------------------------------------------------------------------
+# Public setters
+# ------------------------------------------------------------------------------
 
 proc `epoch=`*(cfg: CliqueCfg; epoch: BlockNumber) {.inline.} =
   ## Setter

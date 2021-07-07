@@ -24,7 +24,6 @@ import
   std/[algorithm, strformat, times],
   ../../chain_config,
   ../../constants,
-  ../../db/db_chain,
   ../../utils,
   ./clique_defs,
   eth/[common, rlp],
@@ -82,24 +81,13 @@ proc extraDataAddresses*(extraData: Blob): seq[EthAddress] =
       addrOffset += EthAddress.len
 
 
-proc getBlockHeaderResult*(db: BaseChainDB;
-                           number: BlockNumber): Result[BlockHeader,void] {.
-                             gcsafe, raises: [Defect,RlpError].} =
-  ## Slightly re-phrased dbChain.getBlockHeader(..) command
-  var header: BlockHeader
-  if db_chain.getBlockHeader(db, number, header):
-    return ok(header)
-  err()
-
-
 # core/types/block.go(343): func (b *Block) WithSeal(header [..]
 proc withHeader*(b: EthBlock; header: BlockHeader): EthBlock =
   ## New block with the data from `b` but the header replaced with the
   ## argument one.
-  EthBlock(
-    header: header,
-    txs:    b.txs,
-    uncles: b.uncles)
+  EthBlock(header: header,
+           txs:    b.txs,
+           uncles: b.uncles)
 
 # consensus/misc/forks.go(30): func VerifyForkHashes(config [..]
 proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader): CliqueResult {.

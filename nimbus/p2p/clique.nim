@@ -19,7 +19,7 @@
 ##
 
 import
-  ./clique/[clique_cfg, clique_defs, clique_desc, clique_miner],
+  ./clique/[clique_cfg, clique_defs, clique_desc, clique_miner, snapshot],
   chronicles
 
 {.push raises: [Defect].}
@@ -31,7 +31,8 @@ export
   clique_cfg,
   clique_defs,
   clique_desc,
-  clique_miner.snapshot
+  clique_miner,
+  snapshot
 
 # ------------------------------------------------------------------------------
 # End

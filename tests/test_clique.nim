@@ -12,7 +12,7 @@ import
   std/[algorithm, os, sequtils, strformat, strutils],
   ../nimbus/config,
   ../nimbus/db/db_chain,
-  ../nimbus/p2p/[chain, clique, clique/snapshot],
+  ../nimbus/p2p/[chain, clique],
   ../nimbus/utils,
   ./test_clique/[pool, undump],
   eth/[common, keys],
@@ -146,7 +146,7 @@ proc runGoerliReplay(noisy = true;
           if addedPersistBlocks != ValidationResult.Ok: return
 
     if stoppedOk:
-      test &"Runner stooped after reaching #{stopAfterBlock}":
+      test &"Runner stopped after reaching #{stopAfterBlock}":
         discard
 
 # ------------------------------------------------------------------------------

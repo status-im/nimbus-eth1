@@ -19,10 +19,10 @@
 ##
 
 import
-  ../../utils,
-  ../../utils/lru_cache,
-  ./clique_defs,
-  ./clique_utils,
+  ../../../utils,
+  ../../../utils/lru_cache,
+  ../clique_defs,
+  ../clique_utils,
   eth/[common, keys, rlp],
   stint
 

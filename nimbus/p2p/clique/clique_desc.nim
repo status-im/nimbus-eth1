@@ -24,7 +24,7 @@ import
   ../../constants,
   ./clique_cfg,
   ./clique_defs,
-  ./recent_snaps,
+  ./snapshot/lru_snaps,
   chronos,
   eth/[common, keys, rlp]
 
@@ -43,7 +43,7 @@ type
                        ## the Ropsten attacks.
     cCfg: CliqueCfg         ## Common engine parameters to fine tune behaviour
 
-    cRecents: RecentSnaps   ## Snapshots for recent block to speed up reorgs
+    cRecents: LruSnaps      ## Snapshots for recent block to speed up reorgs
     # signatures => see CliqueCfg
 
     cProposals: Proposals   ## Cu1rrent list of proposals we are pushing
@@ -69,7 +69,7 @@ proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
   Clique(cCfg:       cfg,
-         cRecents:   initRecentSnaps(cfg),
+         cRecents:   initLruSnaps(cfg),
          cProposals: initTable[EthAddress,bool](),
          cLock:      newAsyncLock())
 
@@ -95,7 +95,7 @@ proc db*(c: Clique): BaseChainDB {.inline.} =
   ## Getter
   c.cCfg.db
 
-proc recents*(c: Clique): var RecentSnaps {.inline.} =
+proc recents*(c: Clique): var LruSnaps {.inline.} =
   ## Getter
   c.cRecents
 
@@ -119,7 +119,7 @@ proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
   ## Setter, re-set database
   c.cCfg.db = db
   c.cProposals = initTable[EthAddress,bool]()
-  c.cRecents = c.cCfg.initRecentSnaps
+  c.cRecents = c.cCfg.initLruSnaps
   c.cRecents.debug = c.cDebug
   # note that the signatures[] cache need not be flushed
 

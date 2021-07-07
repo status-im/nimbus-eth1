@@ -22,22 +22,26 @@
 
 import
   std/[sequtils, strutils],
-  ../../utils,
-  ../../utils/lru_cache,
-  ./clique_cfg,
-  ./clique_defs,
-  ./clique_utils,
-  ./snapshot,
+  ../../../db/db_chain,
+  ../../../utils,
+  ../../../utils/lru_cache,
+  ../clique_cfg,
+  ../clique_defs,
+  ../clique_utils,
+  ./snapshot_desc,
+  ./snapshot_apply,
   chronicles,
   eth/[common, keys],
   nimcrypto,
+  stew/results,
   stint
 
 export
-  snapshot
+  results,
+  snapshot_desc
 
 type
-  RecentArgs* = ref object
+  LruSnapsArgs* = ref object
     blockHash*: Hash256
     blockNumber*: BlockNumber
     parents*: seq[BlockHeader]
@@ -47,47 +51,47 @@ type
     headers: seq[BlockHeader]
 
   # Internal type, simplify Hash256 for rlp serialisation
-  RecentKey = array[32, byte]
+  LruSnapsKey = array[32, byte]
 
   # Internal descriptor used by toValue()
-  RecentDesc = object
+  LruSnapsDesc = object
     cfg: CliqueCfg
     debug: bool
-    args: RecentArgs
+    args: LruSnapsArgs
     local: LocalArgs
 
-  RecentSnaps* = object
+  LruSnaps* = object
     cfg: CliqueCfg
     debug: bool
-    cache: LruCache[RecentDesc,RecentKey,Snapshot,CliqueError]
+    cache: LruCache[LruSnapsDesc,LruSnapsKey,Snapshot,CliqueError]
 
 {.push raises: [Defect].}
 
 logScope:
-  topics = "clique PoA recent-snaps"
+  topics = "clique PoA lru-snaps"
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc say(d: RecentDesc; v: varargs[string,`$`]) =
+proc say(d: LruSnapsDesc; v: varargs[string,`$`]) =
   ## Debugging output
   ppExceptionWrap:
     if d.debug:
       stderr.write "*** " & v.join & "\n"
 
-proc say(rs: var RecentSnaps; v: varargs[string,`$`]) =
+proc say(rs: var LruSnaps; v: varargs[string,`$`]) =
   ## Debugging output
   ppExceptionWrap:
     if rs.debug:
       stderr.write "*** " & v.join & "\n"
 
-proc getPrettyPrinters(d: RecentDesc): var PrettyPrinters =
+proc getPrettyPrinters(d: LruSnapsDesc): var PrettyPrinters =
   ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
   d.cfg.prettyPrint
 
 
-proc canDiskCheckPointOk(d: RecentDesc):
+proc canDiskCheckPointOk(d: LruSnapsDesc):
                         bool {.inline, raises: [Defect,RlpError].} =
 
   # clique/clique.go(394): if number == 0 || (number%c.config.Epoch [..]
@@ -102,14 +106,15 @@ proc canDiskCheckPointOk(d: RecentDesc):
     # checkpoint trusted and snapshot it.
     if FULL_IMMUTABILITY_THRESHOLD < d.local.headers.len:
       return true
-    if d.cfg.db.getBlockHeaderResult(d.args.blockNumber - 1).isErr:
+    var ignore: BlockHeader
+    if not d.cfg.db.getBlockHeader(d.args.blockNumber - 1, ignore):
       return true
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc tryLoadDiskSnapshot(d: RecentDesc; snap: var Snapshot): bool {.inline.} =
+proc tryLoadDiskSnapshot(d: LruSnapsDesc; snap: var Snapshot): bool {.inline.} =
   # clique/clique.go(383): if number%checkpointInterval == 0 [..]
   if (d.args.blockNumber mod CHECKPOINT_INTERVAL) == 0:
     if snap.loadSnapshot(d.cfg, d.args.blockHash).isOk:
@@ -119,18 +124,18 @@ proc tryLoadDiskSnapshot(d: RecentDesc; snap: var Snapshot): bool {.inline.} =
       return true
 
 
-proc tryStoreDiskCheckPoint(d: RecentDesc; snap: var Snapshot):
+proc tryStoreDiskCheckPoint(d: LruSnapsDesc; snap: var Snapshot):
                            bool {.gcsafe, raises: [Defect,RlpError].} =
   if d.canDiskCheckPointOk:
     # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
-    let checkPoint = d.cfg.db.getBlockHeaderResult(d.args.blockNumber)
-    if checkPoint.isErr:
+    var checkPoint: BlockHeader
+    if not d.cfg.db.getBlockHeader(d.args.blockNumber, checkPoint):
       return false
     let
-      hash = checkPoint.value.hash
-      accountList = checkPoint.value.extraData.extraDataAddresses
+      hash = checkPoint.hash
+      accountList = checkPoint.extraData.extraDataAddresses
     snap.initSnapshot(d.cfg, d.args.blockNumber, hash, accountList)
-    snap.setDebug(d.debug)
+    snap.debug = d.debug
 
     if snap.storeSnapshot.isOk:
       info "Stored checkpoint snapshot to disk",
@@ -142,15 +147,15 @@ proc tryStoreDiskCheckPoint(d: RecentDesc; snap: var Snapshot):
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc initRecentSnaps*(rs: var RecentSnaps;
+proc initLruSnaps*(rs: var LruSnaps;
                       cfg: CliqueCfg) {.gcsafe,raises: [Defect].} =
 
-  var toKey: LruKey[RecentDesc,RecentKey] =
-    proc(d: RecentDesc): RecentKey =
+  var toKey: LruKey[LruSnapsDesc,LruSnapsKey] =
+    proc(d: LruSnapsDesc): LruSnapsKey =
       d.args.blockHash.data
 
-  var toValue: LruValue[RecentDesc,Snapshot,CliqueError] =
-    proc(d: RecentDesc): Result[Snapshot,CliqueError] =
+  var toValue: LruValue[LruSnapsDesc,Snapshot,CliqueError] =
+    proc(d: LruSnapsDesc): Result[Snapshot,CliqueError] =
       var snap: Snapshot
 
       while true:
@@ -176,12 +181,9 @@ proc initRecentSnaps*(rs: var RecentSnaps;
             return err((errUnknownAncestor,""))
           d.args.parents.setLen(d.args.parents.len-1)
 
-        else:
-          # No explicit parents (or no more left), reach out to the database
-          let rc = d.cfg.db.getBlockHeaderResult(d.args.blockNumber)
-          if rc.isErr:
-            return err((errUnknownAncestor,""))
-          header = rc.value
+        # No explicit parents (or no more left), reach out to the database
+        elif not d.cfg.db.getBlockHeader(d.args.blockNumber, header):
+          return err((errUnknownAncestor,""))
 
         # Add to batch (note that list order needs to be reversed later)
         d.local.headers.add header
@@ -195,11 +197,11 @@ proc initRecentSnaps*(rs: var RecentSnaps;
         swap(d.local.headers[i], d.local.headers[^(1+i)])
       block:
         # clique/clique.go(434): snap, err := snap.apply(headers)
-        d.say "recentSnaps => applySnapshot([",
+        d.say "lruSnaps => applySnapshot([",
           d.local.headers.mapIt("#" & $it.blockNumber.truncate(int))
             .join(",").string, "])"
-        let rc = snap.applySnapshot(d.local.headers)
-        d.say "recentSnaps => applySnapshot() => ", rc.pp
+        let rc = snap.snapshotApply(d.local.headers)
+        d.say "lruSnaps => applySnapshot() => ", rc.pp
         if rc.isErr:
           return err(rc.error)
 
@@ -220,22 +222,22 @@ proc initRecentSnaps*(rs: var RecentSnaps;
   rs.cache.initLruCache(toKey, toValue, INMEMORY_SNAPSHOTS)
 
 
-proc initRecentSnaps*(cfg: CliqueCfg): RecentSnaps {.gcsafe,raises: [Defect].} =
-  result.initRecentSnaps(cfg)
+proc initLruSnaps*(cfg: CliqueCfg): LruSnaps {.gcsafe,raises: [Defect].} =
+  result.initLruSnaps(cfg)
 
 
-proc getRecentSnaps*(rs: var RecentSnaps; args: RecentArgs): auto {.
+proc getLruSnaps*(rs: var LruSnaps; args: LruSnapsArgs): auto {.
                      gcsafe, raises: [Defect,CatchableError].} =
   ## Get snapshot from cache or disk
-  rs.say "getRecentSnap #", args.blockNumber
+  rs.say "getLruSnap #", args.blockNumber
   rs.cache.getLruItem:
-    RecentDesc(cfg:   rs.cfg,
-               debug: rs.debug,
-               args:  args,
-               local: LocalArgs())
+    LruSnapsDesc(cfg:   rs.cfg,
+                 debug: rs.debug,
+                 args:  args,
+                 local: LocalArgs())
 
 
-proc `debug=`*(rs: var RecentSnaps; debug: bool) =
+proc `debug=`*(rs: var LruSnaps; debug: bool) =
   ## Setter, debugging mode on/off
   rs.debug = debug
 

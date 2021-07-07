@@ -23,15 +23,15 @@
 import
   std/[random, sequtils, strformat, tables, times],
   ../../constants,
-  ../../db/state_db,
+  ../../db/[db_chain, state_db],
   ../../utils,
   ../gaslimit,
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
   ./clique_utils,
-  ./ec_recover,
-  ./recent_snaps,
+  ./snapshot,
+  ./snapshot/[snapshot_desc, snapshot_misc],
   chronicles,
   chronos,
   eth/[common, keys, rlp],
@@ -45,10 +45,6 @@ logScope:
 type
   CliqueSyncDefect* = object of Defect
     ## Defect raised with lock/unlock problem
-
-proc snapshot*(c: Clique; blockNumber: BlockNumber; hash: Hash256;
-               parents: openArray[Blockheader]): Result[Snapshot,CliqueError] {.
-                 gcsafe, raises: [Defect,CatchableError].}
 
 # ------------------------------------------------------------------------------
 # Private Helpers
@@ -68,7 +64,7 @@ template syncExceptionWrap(action: untyped) =
 proc ecrecover(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
                      {.gcsafe, raises: [Defect,CatchableError].} =
   ## ecrecover extracts the Ethereum account address from a signed header.
-  c.cfg.signatures.getEcRecover(header)
+  c.cfg.ecRecover(header)
 
 
 # clique/clique.go(463): func (c *Clique) verifySeal(chain [..]
@@ -133,11 +129,8 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
   var parent: BlockHeader
   if 0 < parents.len:
     parent = parents[^1]
-  else:
-    let rc = c.db.getBlockHeaderResult(header.blockNumber-1)
-    if rc.isErr:
-      return err((errUnknownAncestor,""))
-    parent = rc.value
+  elif not c.db.getBlockHeader(header.blockNumber-1, parent):
+    return err((errUnknownAncestor,""))
 
   if parent.blockNumber != header.blockNumber-1 or
      parent.hash != header.parentHash:
@@ -258,16 +251,6 @@ proc calcDifficulty(snap: var Snapshot; signer: EthAddress): DifficultyInt =
 # Public functions
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(369): func (c *Clique) snapshot(chain [..]
-proc snapshot*(c: Clique; blockNumber: BlockNumber; hash: Hash256;
-               parents: openArray[Blockheader]): Result[Snapshot,CliqueError]
-                    {.gcsafe, raises: [Defect,CatchableError].} =
-  ## snapshot retrieves the authorization snapshot at a given point in time.
-  c.recents.getRecentSnaps:
-    RecentArgs(blockHash:   hash,
-               blockNumber: blockNumber,
-               parents:     toSeq(parents))
-
 # clique/clique.go(212): func (c *Clique) Author(header [..]
 proc author*(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
                   {.gcsafe, raises: [Defect,CatchableError].} =
@@ -360,7 +343,7 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueResult
       # Gather all the proposals that make sense voting on
       var addresses: seq[EthAddress]
       for (address,authorize) in c.proposals.pairs:
-        if snap.value.validVote(address, authorize):
+        if snap.value.isValidVote(address, authorize):
           addresses.add address
 
       # If there's pending proposals, cast a vote on them
@@ -382,11 +365,11 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueResult
   header.mixDigest.reset
 
   # Ensure the timestamp has the correct delay
-  let parent = c.db.getBlockHeaderResult(header.blockNumber-1)
-  if parent.isErr:
+  var parent: BlockHeader
+  if not c.db.getBlockHeader(header.blockNumber-1, parent):
     return err((errUnknownAncestor,""))
 
-  header.timestamp = parent.value.timestamp + c.cfg.period
+  header.timestamp = parent.timestamp + c.cfg.period
   if header.timestamp < getTime():
     header.timestamp = getTime()
 
