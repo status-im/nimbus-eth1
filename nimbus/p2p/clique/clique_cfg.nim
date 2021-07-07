@@ -49,7 +49,7 @@ type
                  string {.gcsafe,raises: [Defect,CatchableError].}
 
   CliqueCfg* = ref object
-    dbChain*: BaseChainDB
+    db*: BaseChainDB
     signatures*: EcRecover  ## Recent block signatures to speed up mining
     period*: Duration       ## time between blocks to enforce
     prng*: Rand             ## PRNG state for internal random generator
@@ -65,10 +65,10 @@ type
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc newCliqueCfg*(dbChain: BaseChainDB; period = BLOCK_PERIOD;
+proc newCliqueCfg*(db: BaseChainDB; period = BLOCK_PERIOD;
                    epoch = 0.u256): CliqueCfg =
   CliqueCfg(
-    dbChain:     dbChain,
+    db:          db,
     period:      period,
     bcEpoch:      if epoch.isZero: EPOCH_LENGTH.u256 else: epoch,
     signatures:  initEcRecover(),
