@@ -34,6 +34,7 @@ export
   snapshot_misc.signers,
   results
 
+{.push raises: [Defect].}
 
 # clique/clique.go(369): func (c *Clique) snapshot(chain [..]
 proc snapshot*(c: Clique; blockNumber: BlockNumber; hash: Hash256;

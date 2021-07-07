@@ -12,8 +12,7 @@ import
   std/[random, sequtils, strformat, strutils, tables, times],
   ../../nimbus/[config, chain_config, constants, genesis, utils],
   ../../nimbus/db/db_chain,
-  ../../nimbus/p2p/clique,
-  ../../nimbus/p2p/clique/clique_utils,
+  ../../nimbus/p2p/[chain, clique, clique/clique_utils],
   ./voter_samples as vs,
   eth/[common, keys, p2p, rlp, trie/db],
   ethash,
@@ -25,7 +24,6 @@ export
 
 const
   prngSeed = 42
-  # genesisTemplate = "../customgenesis/berlin2000.json"
 
 type
   XSealKey = array[EXTRA_SEAL,byte]
@@ -41,7 +39,7 @@ type
     accounts: Table[string,PrivateKey] ## accounts table
     boot: CustomGenesis                ## imported Genesis configuration
     batch: seq[seq[BlockHeader]]       ## collect header chains
-    engine: Clique
+    chain: Chain
 
     names: Table[EthAddress,string]    ## reverse lookup for debugging
     xSeals: Table[XSealKey,XSealValue] ## collect signatures for debugging
@@ -51,17 +49,13 @@ type
 # Private Helpers
 # ------------------------------------------------------------------------------
 
-proc chain(ap: TesterPool): auto =
-  ## Getter
-  ap.engine.db
-
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
-  doAssert ap.chain.getBlockHeader(number, result)
+  doAssert ap.chain.clique.db.getBlockHeader(number, result)
 
 proc getBlockHeader(ap: TesterPool; hash: Hash256): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
-  doAssert ap.chain.getBlockHeader(hash, result)
+  doAssert ap.chain.clique.db.getBlockHeader(hash, result)
 
 proc isZero(a: openArray[byte]): bool =
   result = true
@@ -95,16 +89,6 @@ proc privateKey(ap: TesterPool; account: string): PrivateKey =
       ap.accounts[account] = result
       let address = result.toPublicKey.toCanonicalAddress
       ap.names[address] = account
-
-proc resetChainDb(ap: TesterPool; extraData: Blob) =
-  ## Setup new block chain with bespoke genesis
-  ap.engine.db = BaseChainDB(db: newMemoryDb(), config: ap.boot.config)
-  ap.engine.db.populateProgress
-  # new genesis block
-  var g = ap.boot.genesis
-  if 0 < extraData.len:
-    g.extraData = extraData
-  g.commit(ap.engine.db)
 
 # ------------------------------------------------------------------------------
 # Private pretty printer call backs
@@ -190,6 +174,7 @@ proc ppBlockHeader(ap: TesterPool; v: BlockHeader; delim: string): string =
     &"{sep}nonce={ap.ppNonce(v.nonce)}" &
     &"{sep}extraData={ap.ppExtraData(v.extraData)})"
 
+
 # ------------------------------------------------------------------------------
 # Private: Constructor helpers
 # ------------------------------------------------------------------------------
@@ -200,6 +185,19 @@ proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
   pp.extraData =   proc(v:Blob):                  string = ap.ppExtraData(v)
   pp.blockHeader = proc(v:BlockHeader; d:string): string = ap.ppBlockHeader(v,d)
 
+proc resetChainDb(ap: TesterPool; extraData: Blob) =
+  ## Setup new block chain with bespoke genesis
+  ap.chain = BaseChainDB(db: newMemoryDb(), config: ap.boot.config).newChain
+  ap.chain.clique.db.populateProgress
+  # new genesis block
+  var g = ap.boot.genesis
+  if 0 < extraData.len:
+    g.extraData = extraData
+  g.commit(ap.chain.clique.db)
+  # fine tune Clique descriptor
+  ap.chain.clique.cfg.prettyPrint.initPrettyPrinters(ap)
+  ap.chain.clique.debug = ap.debug
+
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
   result = ap
   result.prng = initRand(prngSeed)
@@ -207,31 +205,19 @@ proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
   result.accounts = initTable[string,PrivateKey]()
   result.xSeals = initTable[XSealKey,XSealValue]()
   result.names = initTable[EthAddress,string]()
-  result.engine = BaseChainDB(
-    db: newMemoryDb(),
-    config: ap.boot.config).newCliqueCfg.newClique
-  result.engine.debug = false
-  result.engine.cfg.prettyPrint.initPrettyPrinters(result)
   result.resetChainDb(@[])
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Public: pretty printer support
 # ------------------------------------------------------------------------------
 
 proc getPrettyPrinters*(t: TesterPool): var PrettyPrinters =
   ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
-  t.engine.cfg.prettyPrint
-
-proc setDebug*(ap: TesterPool; debug=true): TesterPool {.inline,discardable,} =
-  ## Set debugging mode on/off
-  result = ap
-  ap.debug = debug
-  ap.engine.debug = debug
+  t.chain.clique.cfg.prettyPrint
 
 proc say*(t: TesterPool; v: varargs[string,`$`]) =
   if t.debug:
     stderr.write v.join & "\n"
-
 
 proc sayHeaderChain*(ap: TesterPool; indent = 0): TesterPool {.discardable.} =
   result = ap
@@ -243,6 +229,44 @@ proc sayHeaderChain*(ap: TesterPool; indent = 0): TesterPool {.discardable.} =
     top = ap.getBlockHeader(top.parentHash)
     ap.say pfx, "parent header: " &  ap.pp(top, 16+indent)
 
+# ------------------------------------------------------------------------------
+# Public: Constructor
+# ------------------------------------------------------------------------------
+
+proc newVoterPool*(networkId = GoerliNet): TesterPool =
+  TesterPool(
+    boot: CustomGenesis(
+      genesis: defaultGenesisBlockForNetwork(networkId),
+      config:  chainConfig(networkId))).initTesterPool
+
+# ------------------------------------------------------------------------------
+# Public: getter
+# ------------------------------------------------------------------------------
+
+proc chain*(ap: TesterPool): auto {.inline.} =
+  ## Getter
+  ap.chain
+
+proc clique*(ap: TesterPool): auto {.inline.} =
+  ## Getter
+  ap.chain.clique
+
+proc db*(ap: TesterPool): auto {.inline.} =
+  ## Getter
+  ap.clique.db
+
+# ------------------------------------------------------------------------------
+# Public: setter
+# ------------------------------------------------------------------------------
+
+proc `debug=`*(ap: TesterPool; debug: bool) {.inline,} =
+  ## Set debugging mode on/off
+  ap.debug = debug
+  ap.clique.debug = debug
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
 # clique/snapshot_test.go(62): func (ap *testerAccountPool) address(account [..]
 proc address*(ap: TesterPool; account: string): EthAddress =
@@ -298,44 +322,19 @@ proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
                                           .sorted
                                           .join("\n" & ' '.repeat(23))
 
-  ap.engine.snapshot(number, hash, parent)
-
-proc clique*(ap: TesterPool): Clique =
-  ## Getter
-  ap.engine
-
-# ------------------------------------------------------------------------------
-# Public: Constructor
-# ------------------------------------------------------------------------------
-
-proc newVoterPool*(customGenesis: CustomGenesis): TesterPool =
-  TesterPool(boot: customGenesis).initTesterPool
-
-proc newVoterPool*(id: NetworkId): TesterPool =
-  CustomGenesis(
-    config: chainConfig(id),
-    genesis: defaultGenesisBlockForNetwork(id)).newVoterPool
-
-proc newVoterPool*(genesisTemplate = ""): TesterPool =
-  if genesisTemplate == "":
-    return getConfiguration().net.networkId.newVoterPool
-
-  # Find genesis block from template
-  new result
-  doAssert genesisTemplate.loadCustomGenesis(result.boot)
-  result.initTesterPool
+  ap.clique.snapshot(number, hash, parent)
 
 # ------------------------------------------------------------------------------
 # Public: set up & manage voter database
 # ------------------------------------------------------------------------------
 
-proc setVoterAccount*(ap: TesterPool; account: string;
-                      prvKey: PrivateKey): TesterPool {.discardable.} =
-  ## Manually define/import account
-  result = ap
-  ap.accounts[account] = prvKey
-  let address = prvKey.toPublicKey.toCanonicalAddress
-  ap.names[address] = account
+#proc setVoterAccount*(ap: TesterPool; account: string;
+#                      prvKey: PrivateKey): TesterPool {.discardable.} =
+#  ## Manually define/import account
+#  result = ap
+#  ap.accounts[account] = prvKey
+#  let address = prvKey.toPublicKey.toCanonicalAddress
+#  ap.names[address] = account
 
 
 proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
@@ -359,7 +358,7 @@ proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
 
   # store modified genesis block and epoch
   ap.resetChainDb(extraData)
-  ap.engine.cfg.epoch = epoch.uint
+  ap.clique.cfg.epoch = epoch.uint
 
 
 # clique/snapshot_test.go(415): blocks, _ := core.GenerateChain(&config, [..]
@@ -397,7 +396,7 @@ proc appendVoter*(ap: TesterPool;
 
   # clique/snapshot_test.go(432): if auths := tt.votes[j].checkpoint; [..]
   if 0 < voter.checkpoint.len:
-    doAssert (header.blockNumber mod ap.engine.cfg.epoch) == 0
+    doAssert (header.blockNumber mod ap.clique.cfg.epoch) == 0
     ap.checkpoint(header,voter.checkpoint)
 
   # Generate the signature, embed it into the header and the block
@@ -415,30 +414,12 @@ proc appendVoter*(ap: TesterPool;
   for voter in voters:
     ap.appendVoter(voter)
 
-
 proc commitVoterChain*(ap: TesterPool): TesterPool {.discardable.} =
   ## Write the headers from the voter header batch list to the block chain DB
   result = ap
-
-  # Create a pristine blockchain with the genesis injected
   for headers in ap.batch:
-    if 0 < headers.len:
-      doAssert ap.chain.getCanonicalHead.blockNumber < headers[0].blockNumber
-
-      # see p2p/chain.persistBlocks()
-      ap.chain.highestBlock = headers[^1].blockNumber
-      let transaction = ap.chain.db.beginTransaction()
-      for i in 0 ..< headers.len:
-        let header = headers[i]
-
-        discard ap.chain.persistHeaderToDb(header)
-        doAssert ap.chain.getCanonicalHead().blockHash == header.blockHash
-
-        discard ap.chain.persistTransactions(header.blockNumber, @[])
-        discard ap.chain.persistReceipts(@[])
-        ap.chain.currentBlock = header.blockNumber
-      transaction.commit()
-
+    let bodies = BlockBody().repeat(headers.len)
+    doAssert ap.chain.persistBlocks(headers,bodies) == ValidationResult.OK
 
 proc topVoterHeader*(ap: TesterPool): BlockHeader =
   ## Get top header from voter batch list

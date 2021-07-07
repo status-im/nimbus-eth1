@@ -112,7 +112,10 @@ func calculateForkIds(c: ChainConfig, genesisCRC: uint32): array[ChainFork, Fork
     prevFork = result[fork].nextFork
     prevCRC = result[fork].crc
 
-proc newChain*(db: BaseChainDB, extraValidation = false): Chain =
+proc newChain*(db: BaseChainDB; poa: Clique; extraValidation = false): Chain =
+  ## Constructor for the `Chain` descriptor object. For most applications,
+  ## the `poa` argument is transparent and should be initilaised on the fly
+  ## which is available below.
   result.new
   result.db = db
 
@@ -131,6 +134,16 @@ proc newChain*(db: BaseChainDB, extraValidation = false): Chain =
 
   if extraValidation:
     result.cacheByEpoch.initEpochHashCache
+
+proc newChain*(db: BaseChainDB, extraValidation = false): Chain =
+  ## Constructor for the `Chain` descriptor object with default initialisation
+  ## for the PoA handling. PoA handling is applicable on PoA networks only and
+  ## the initialisation (takes place but) is ignored, otherwise.
+  db.newChain(db.newCliqueCfg.newClique, extraValidation)
+
+proc clique*(c: Chain): Clique {.inline.} =
+  ## Getter
+  c.poa
 
 method genesisHash*(c: Chain): KeccakHash {.gcsafe.} =
   c.blockZeroHash

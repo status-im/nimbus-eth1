@@ -10,7 +10,6 @@
 
 import
   std/[algorithm, os, sequtils, strformat, strutils],
-  ../nimbus/config,
   ../nimbus/db/db_chain,
   ../nimbus/p2p/[chain, clique],
   ../nimbus/utils,
@@ -25,10 +24,6 @@ let
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
-
-proc db(ap: TesterPool): auto =
-  ## Getter
-  ap.clique.db
 
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
@@ -48,10 +43,12 @@ proc runCliqueSnapshot(noisy = true) =
   ##
   suite "Clique PoA Snapshot":
     var
-      pool = newVoterPool().setDebug(noisy)
+      pool = newVoterPool()
     const
       skipSet = {999}
       testSet = {0 .. 999}
+
+    pool.debug = noisy
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
     for tt in voterSamples.filterIt(it.id in testSet):
@@ -98,8 +95,7 @@ proc runCliqueSnapshot(noisy = true) =
 proc runGoerliReplay(noisy = true;
                      dir = "tests"; stopAfterBlock = uint64.high) =
   var
-    pool = GoerliNet.newVoterPool
-    xChain = pool.db.newChain
+    pool = newVoterPool()
     cache: array[7,(seq[BlockHeader],seq[BlockBody])]
     cInx = 0
     stoppedOk = false
@@ -130,7 +126,7 @@ proc runGoerliReplay(noisy = true;
             last = cache[^1][0][^1].blockNumber
           test &"Goerli Blocks #{first}..#{last} ({cache.len} transactions)":
             for (headers,bodies) in cache:
-              let addedPersistBlocks = xChain.persistBlocks(headers, bodies)
+              let addedPersistBlocks = pool.chain.persistBlocks(headers,bodies)
               check addedPersistBlocks == ValidationResult.Ok
               if addedPersistBlocks != ValidationResult.Ok: return
 
@@ -141,7 +137,7 @@ proc runGoerliReplay(noisy = true;
         last = cache[cInx-1][0][^1].blockNumber
       test &"Goerli Blocks #{first}..#{last} ({cInx} transactions)":
         for (headers,bodies) in cache:
-          let addedPersistBlocks = xChain.persistBlocks(headers, bodies)
+          let addedPersistBlocks = pool.chain.persistBlocks(headers,bodies)
           check addedPersistBlocks == ValidationResult.Ok
           if addedPersistBlocks != ValidationResult.Ok: return
 
