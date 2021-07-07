@@ -14,7 +14,7 @@ import
 const
   DefaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
   DefaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
-  DefaultProxyAddrss* = (static "http://127.0.0.1:8546")
+  DefaultProxyAddress* = (static "http://127.0.0.1:8546")
 
 type
   PortalCmd* = enum
@@ -96,7 +96,7 @@ type
     # it makes little sense to have default value here in final release, but until then
     # it would be troublesome to add some fake uri param every time
     proxyUri* {.
-      defaultValue: DefaultProxyAddrss
+      defaultValue: DefaultProxyAddress
       desc: "uri of client to get data for unimplemented rpc methods"
       name: "proxy-uri" .}: string
 
