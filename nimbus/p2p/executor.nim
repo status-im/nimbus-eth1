@@ -11,13 +11,11 @@
 
 import
   ./executor/[
-    calculate_reward,
     executor_helpers,
     process_block,
     process_transaction]
 
 export
-  calculate_reward.blockRewards,
   executor_helpers.createBloom,
   process_block,
   process_transaction

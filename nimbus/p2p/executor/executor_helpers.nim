@@ -9,6 +9,7 @@
 # according to those terms.
 
 import
+  std/[strformat],
   ../../config,
   ../../db/accounts_cache,
   ../../forks,
@@ -17,10 +18,19 @@ import
   eth/[common, bloom]
 
 type
+  ExecutorError* = object of CatchableError
+    ## Catch and relay exception error
+
   # TODO: these types need to be removed
   # once eth/bloom and eth/common sync'ed
   Bloom = common.BloomFilter
   LogsBloom = bloom.BloomFilter
+
+{.push raises: [Defect].}
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 # TODO: move these three receipt procs below somewhere else more appropriate
 func logsBloom(logs: openArray[Log]): LogsBloom =
@@ -29,17 +39,41 @@ func logsBloom(logs: openArray[Log]): LogsBloom =
     for topic in log.topics:
       result.incl topic
 
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+template safeExecutor*(info: string; code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    raise (ref CatchableError)(msg: e.msg)
+  except Defect as e:
+    raise (ref Defect)(msg: e.msg)
+  except:
+    let e = getCurrentException()
+    raise newException(ExecutorError, info & "(): " & $e.name & " -- " & e.msg)
+
 func createBloom*(receipts: openArray[Receipt]): Bloom =
   var bloom: LogsBloom
   for rec in receipts:
     bloom.value = bloom.value or logsBloom(rec.logs).value
   result = bloom.value.toByteArrayBE
 
-proc getFork*(vmState: BaseVMState): Fork {.inline.} =
-  ## Shortcut for configured fork, deliberately not naming it toFork()
+proc getForkUnsafe*(vmState: BaseVMState): Fork
+                       {.inline, raises: [Exception].} =
+  ## Shortcut for configured fork, deliberately not naming it toFork(). This
+  ## function may throw an `Exception` and must be wrapped.
   vmState.chainDB.config.toFork(vmState.blockNumber)
 
-proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
+proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt
+                    {.inline, raises: [Defect,CatchableError].} =
+
+  proc getFork(vmState: BaseVMState): Fork
+               {.inline, raises: [Defect,CatchableError].} =
+    safeExecutor("getFork"):
+      result = vmState.getForkUnsafe
+
   var rec: Receipt
   if vmState.getFork < FkByzantium:
     rec.isHash = true
@@ -54,4 +88,6 @@ proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
   rec.bloom = logsBloom(rec.logs).value.toByteArrayBE
   rec
 
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------

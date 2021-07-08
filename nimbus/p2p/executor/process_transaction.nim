@@ -20,6 +20,11 @@ import
   chronicles,
   eth/common
 
+{.push raises: [Defect].}
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 proc eip1559TxNormalization(tx: Transaction): Transaction =
   result = tx
@@ -28,9 +33,10 @@ proc eip1559TxNormalization(tx: Transaction): Transaction =
     result.maxFee = tx.gasPrice
 
 
-proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): GasInt =
-  ## Process the transaction, write the results to db.
-  ## Returns amount of ETH to be rewarded to miner
+proc processTransactionImpl(tx: Transaction, sender: EthAddress,
+                            vmState: BaseVMState, fork: Fork): GasInt
+                              # wildcard exception, wrapped below
+                              {.gcsafe, raises: [Exception].} =
   trace "Sender", sender
   trace "txHash", rlpHash = tx.rlpHash
 
@@ -76,9 +82,26 @@ proc processTransaction*(tx: Transaction, sender: EthAddress, vmState: BaseVMSta
     vmState.accountDb.collectWitnessData()
   vmState.accountDb.persist(clearCache = false)
 
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
-proc processTransaction*(tx: Transaction,
-                         sender: EthAddress, vmState: BaseVMState): GasInt =
-    tx.processTransaction(sender, vmState, vmState.getFork)
+proc processTransaction*(tx: Transaction, sender: EthAddress,
+                         vmState: BaseVMState, fork: Fork): GasInt
+                            {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Process the transaction, write the results to db.
+  ## Returns amount of ETH to be rewarded to miner
+  safeExecutor("processTransaction"):
+    result = tx.processTransactionImpl(sender, vmState, fork)
 
+proc processTransaction*(tx: Transaction, sender: EthAddress,
+                         vmState: BaseVMState): GasInt
+                            {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Same as the other prototype variant with the `fork` argument derived
+  ## from `vmState` in a canonical way
+  safeExecutor("processTransaction"):
+    result = tx.processTransaction(sender, vmState, vmState.getForkUnsafe)
+
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------

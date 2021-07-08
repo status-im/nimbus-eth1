@@ -24,7 +24,10 @@ const
   eth5 = 5.eth
   eth3 = 3.eth
   eth2 = 2.eth
-  blockRewards*: array[Fork, Uint256] = [
+
+  # Note than the `blockRewards` were previously exported but nowhere
+  # used otherwise.
+  blockRewards: array[Fork, Uint256] = [
     eth5, # FkFrontier
     eth5, # FkHomestead
     eth5, # FkTangerine
@@ -37,9 +40,17 @@ const
     eth2  # FkLondon
   ]
 
+{.push raises: [Defect].}
+
+
 proc calculateReward*(vmState: BaseVMState;
-                      header: BlockHeader; body: BlockBody) =
-  let blockReward = blockRewards[vmState.getFork]
+                      header: BlockHeader; body: BlockBody)
+                         {.gcsafe, raises: [Defect,CatchableError].} =
+
+  var blockReward: Uint256
+  safeExecutor("getFork"):
+    blockReward = blockRewards[vmState.getForkUnsafe]
+
   var mainReward = blockReward
 
   for uncle in body.uncles:
