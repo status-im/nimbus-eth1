@@ -50,19 +50,30 @@ type
 
   CliqueCfg* = ref object of RootRef
     db*: BaseChainDB ##\
-      ## all purpose (incl. blockchain) database
+      ## All purpose (incl. blockchain) database.
 
-    period*: Duration ##\
-      ## time between blocks to enforce
+    period: Duration ##\
+      ## Time between blocks to enforce.
+
+    ckpInterval: int ##\
+      ## Number of blocks after which to save the vote snapshot to the
+      ## database.
+
+    roThreshold: int ##\
+      ## Number of blocks after which a chain segment is considered immutable
+      ## (ie. soft finality). It is used by the downloader as a hard limit
+      ## against deep ancestors, by the blockchain against deep reorgs, by the
+      ## freezer as the cutoff threshold and by clique as the snapshot trust
+      ## limit.
 
     prng: Rand ##\
       ## PRNG state for internal random generator. This PRNG is
       ## cryptographically insecure but with reproducible data stream.
 
     signatures: EcRecover ##\
-      ## Recent block signatures cached to speed up mining
+      ## Recent block signatures cached to speed up mining.
 
-    bcEpoch: UInt256 ##\
+    epoch: int ##\
       ## The number of blocks after which to checkpoint and reset the pending
       ## votes.Suggested 30000 for the testnet to remain analogous to the
       ## mainnet ethash epoch.
@@ -76,12 +87,13 @@ type
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newCliqueCfg*(db: BaseChainDB; period = BLOCK_PERIOD;
-                   epoch = 0.u256): CliqueCfg =
-  CliqueCfg(
+proc newCliqueCfg*(db: BaseChainDB): CliqueCfg =
+  result = CliqueCfg(
     db:          db,
-    period:      period,
-    bcEpoch:     if epoch.isZero: EPOCH_LENGTH.u256 else: epoch,
+    epoch:       EPOCH_LENGTH,
+    period:      BLOCK_PERIOD,
+    ckpInterval: CHECKPOINT_INTERVAL,
+    roThreshold: FULL_IMMUTABILITY_THRESHOLD,
     signatures:  initEcRecover(),
     prng:        initRand(prngSeed),
     prettyPrint: PrettyPrinters(
@@ -99,6 +111,30 @@ proc ecRecover*(cfg: CliqueCfg; header: BlockHeader): auto
   cfg.signatures.getEcRecover(header)
 
 # ------------------------------------------------------------------------------
+# Public setters
+# ------------------------------------------------------------------------------
+
+proc `epoch=`*(cfg: CliqueCfg; epoch: SomeInteger) {.inline.} =
+  ## Setter
+  cfg.epoch = if 0 < epoch: epoch
+              else: EPOCH_LENGTH
+
+proc `period=`*(cfg: CliqueCfg; period: Duration)  {.inline.} =
+  ## Setter
+  cfg.period = if period != Duration(): period
+               else: BLOCK_PERIOD
+
+proc `ckpInterval=`*(cfg: CliqueCfg; numBlocks: SomeInteger) {.inline.} =
+  ## Setter
+  cfg.ckpInterval = if 0 < numBlocks: numBlocks
+                    else: CHECKPOINT_INTERVAL
+
+proc `roThreshold=`*(cfg: CliqueCfg; numBlocks: SomeInteger) {.inline.} =
+  ## Setter
+  cfg.roThreshold = if 0 < numBlocks: numBlocks
+                    else: FULL_IMMUTABILITY_THRESHOLD
+
+# ------------------------------------------------------------------------------
 # Public PRNG, may be overloaded
 # ------------------------------------------------------------------------------
 
@@ -113,23 +149,21 @@ method rand*(cfg: CliqueCfg; max: Natural): int {.gcsafe,base.} =
 # Public getter
 # ------------------------------------------------------------------------------
 
-proc epoch*(cfg: CliqueCfg): BlockNumber {.inline.} =
+proc epoch*(cfg: CliqueCfg): auto {.inline.} =
   ## Getter
-  cfg.bcEpoch
+  cfg.epoch.u256
 
-# ------------------------------------------------------------------------------
-# Public setters
-# ------------------------------------------------------------------------------
+proc period*(cfg: CliqueCfg): auto {.inline.} =
+  ## Getter
+  cfg.period
 
-proc `epoch=`*(cfg: CliqueCfg; epoch: BlockNumber) {.inline.} =
-  ## Setter
-  cfg.bcEpoch = epoch
-  if cfg.bcEpoch.isZero:
-    cfg.bcEpoch = EPOCH_LENGTH.u256
+proc ckpInterval*(cfg: CliqueCfg): auto {.inline.} =
+  ## Getter
+  cfg.ckpInterval.u256
 
-proc `epoch=`*(cfg: CliqueCfg; epoch: SomeUnsignedInt) {.inline.} =
-  ## Setter
-  cfg.epoch = epoch.u256
+proc roThreshold*(cfg: CliqueCfg): auto {.inline.} =
+  ## Getter
+  cfg.roThreshold
 
 # ------------------------------------------------------------------------------
 # Debugging
@@ -150,7 +184,7 @@ proc pp*(v: CliqueError): string =
   if v[1] != "":
     result &=  " => " & v[1]
 
-proc pp*(v: CliqueResult): string =
+proc pp*(v: CliqueOkResult): string =
   ## Pretty print result
   if v.isOk:
     "OK"

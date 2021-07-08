@@ -31,6 +31,9 @@ import
 type
   AddressHistory = Table[BlockNumber,EthAddress]
 
+  SnapshotResult* =           ## Typical snapshot handler return code
+    Result[Snapshot,CliqueError]
+
   SnapshotData* = object
     blockNumber: BlockNumber  ## block number where snapshot was created on
     blockHash: Hash256        ## block hash where snapshot was created on
@@ -202,7 +205,7 @@ proc `debug=`*(s: var Snapshot; debug: bool) =
 
 # clique/snapshot.go(88): func loadSnapshot(config [..]
 proc loadSnapshot*(s: var Snapshot; cfg: CliqueCfg;
-           hash: Hash256): CliqueResult {.gcsafe, raises: [Defect].} =
+           hash: Hash256): CliqueOkResult {.gcsafe, raises: [Defect].} =
   ## Load an existing snapshot from the database.
   try:
     s.cfg = cfg
@@ -214,7 +217,8 @@ proc loadSnapshot*(s: var Snapshot; cfg: CliqueCfg;
   result = ok()
 
 # clique/snapshot.go(104): func (s *Snapshot) store(db [..]
-proc storeSnapshot*(s: var Snapshot): CliqueResult {.gcsafe,raises: [Defect].} =
+proc storeSnapshot*(s: var Snapshot):
+                            CliqueOkResult {.gcsafe,raises: [Defect].} =
   ## Insert the snapshot into the database.
   try:
     s.cfg.db.db

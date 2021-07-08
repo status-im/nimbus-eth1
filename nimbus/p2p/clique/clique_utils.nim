@@ -62,7 +62,7 @@ proc sorted*(e: openArray[EthAddress]; order = EthAscending): seq[EthAddress] =
   e.sorted(cmp = eCmp, order = order.SortOrder)
 
 
-proc cliqueResultErr*(w: CliqueError): CliqueResult =
+proc cliqueResultErr*(w: CliqueError): CliqueOkResult =
   ## Return error result (syntactic sugar)
   err(w)
 
@@ -90,8 +90,8 @@ proc withHeader*(b: EthBlock; header: BlockHeader): EthBlock =
            uncles: b.uncles)
 
 # consensus/misc/forks.go(30): func VerifyForkHashes(config [..]
-proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader): CliqueResult {.
-                       gcsafe, raises: [Defect,ValueError].} =
+proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader):
+                       CliqueOkResult {.gcsafe, raises: [Defect,ValueError].} =
   ## Verify that blocks conforming to network hard-forks do have the correct
   ## hashes, to avoid clients going off on different chains.
 

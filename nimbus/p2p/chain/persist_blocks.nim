@@ -23,6 +23,11 @@ import
   stew/endians2,
   stint
 
+# debugging clique
+import
+  std/[algorithm, strformat, strutils],
+  ../clique/clique_desc
+
 when not defined(release):
   import ../../tracer
 
@@ -36,11 +41,6 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
                        bodies: openarray[BlockBody]): ValidationResult
                           # wildcard exception, wrapped below
                           {.inline, raises: [Exception].} =
-  # Run the VM here
-  if headers.len != bodies.len:
-    debug "Number of headers not matching number of bodies"
-    return ValidationResult.Error
-
   c.db.highestBlock = headers[^1].blockNumber
   let transaction = c.db.db.beginTransaction()
   defer: transaction.dispose()
@@ -90,15 +90,32 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     # between eth_blockNumber and eth_syncing
     c.db.currentBlock = header.blockNumber
 
+  if c.db.config.poaEngine:
+    if c.clique.snapshotRegister(headers[^1]).isErr:
+      debug "PoA signer snapshot failed"
+    # set if-clause to `true` for debugging ...
+    if false:
+      let list = c.clique.pp(c.clique.snapshotSigners).sorted
+      echo &"*** {list.len} trusted signer(s): ", list.join(" ")
+
   transaction.commit()
 
 # ------------------------------------------------------------------------------
-# Public  `AbstractChainDB` overload method
+# Public `AbstractChainDB` overload method
 # ------------------------------------------------------------------------------
 
 method persistBlocks*(c: Chain; headers: openarray[BlockHeader];
                       bodies: openarray[BlockBody]): ValidationResult
                         {.gcsafe, raises: [Defect,CatchableError].} =
+  # Run the VM here
+  if headers.len != bodies.len:
+    debug "Number of headers not matching number of bodies"
+    return ValidationResult.Error
+
+  if headers.len == 0:
+    debug "Nothing to do"
+    return ValidationResult.OK
+
   safeP2PChain("persistBlocks"):
     result = c.persistBlocksImpl(headers,bodies)
 

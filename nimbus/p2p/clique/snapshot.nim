@@ -22,28 +22,68 @@
 
 import
   std/[sequtils],
+  ../../db/db_chain,
   ./clique_defs,
   ./clique_desc,
-  ./snapshot/[lru_snaps, snapshot_desc, snapshot_misc],
+  ./snapshot/[ballot, lru_snaps, snapshot_desc],
   eth/common,
   stew/results
 
 export
   clique_defs.CliqueError,
+  clique_defs.CliqueOkResult,
   snapshot_desc.Snapshot,
-  snapshot_misc.signers,
+  snapshot_desc.SnapshotResult,
   results
 
 {.push raises: [Defect].}
 
 # clique/clique.go(369): func (c *Clique) snapshot(chain [..]
-proc snapshot*(c: Clique; blockNumber: BlockNumber; hash: Hash256;
-               parents: openArray[Blockheader]): Result[Snapshot,CliqueError]
-                    {.gcsafe, raises: [Defect,CatchableError].} =
-  ## snapshot retrieves the authorization snapshot at a given point in time.
-  c.recents.getLruSnaps:
-    LruSnapsArgs(blockHash:   hash,
-                 blockNumber: blockNumber,
-                 parents:     toSeq(parents))
+#proc snapshotRegister*(c: Clique; blockNumber: BlockNumber; hash: Hash256;
+#                       parents: openArray[Blockheader]): CliqueOkResult
+#                        {.deprecated,gcsafe,raises: [Defect,CatchableError].} =
+#  ## Create authorisation state snapshot of a given point in the block chain
+#  ## and store it in the `Clique` descriptor to be retrievable as `c.lastSnap`.
+#  c.lastSnap = c.recents.getLruSnaps:
+#    LruSnapsArgs(blockHash:   hash,
+#                 blockNumber: blockNumber,
+#                 parents:     toSeq(parents))
+#
+#  return if c.lastSnap.isErr: err((c.lastSnap.error)) else: ok()
+
+
+proc snapshotRegister*(c: Clique; header: Blockheader;
+                       parents: openArray[Blockheader]): CliqueOkResult
+                         {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Create authorisation state snapshot of a given point in the block chain
+  ## and store it in the `Clique` descriptor to be retrievable as `c.lastSnap`.
+  c.lastSnap = c.recents.getLruSnaps(header, parents)
+  return if c.lastSnap.isErr: err((c.lastSnap.error)) else: ok()
+
+proc snapshotRegister*(c: Clique; header: Blockheader): CliqueOkResult
+                         {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  c.snapshotRegister(header, @[])
+
+
+proc snapshotRegister*(c: Clique; hash: Hash256;
+                       parents: openArray[Blockheader]): CliqueOkResult
+                         {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Create authorisation state snapshot of a given point in the block chain
+  ## and store it in the `Clique` descriptor to be retrievable as `c.lastSnap`.
+  var header: BlockHeader
+  if not c.cfg.db.getBlockHeader(hash, header):
+    return err((errUnknownHash,""))
+  c.snapshotRegister(header, parents)
+
+proc snapshotRegister*(c: Clique; hash: Hash256): CliqueOkResult
+                         {.gcsafe,raises: [Defect,CatchableError].} =
+  c.snapshotRegister(hash, @[])
+
+
+proc snapshotSigners*(c: Clique): seq[EthAddress] {.inline.} =
+  ## Retrieves the sorted list of currently authorized signers if there was
+  ## an snapshor registered recently. Otherrwise an empty list is returned.
+  if c.lastSnap.isOK:
+    result = c.lastSnap.value.ballot.authSigners
 
 # End

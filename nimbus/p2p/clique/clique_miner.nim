@@ -69,7 +69,7 @@ proc ecrecover(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
 
 # clique/clique.go(463): func (c *Clique) verifySeal(chain [..]
 proc verifySeal(c: Clique; header: BlockHeader;
-                parents: openArray[BlockHeader]): CliqueResult
+                parents: openArray[BlockHeader]): CliqueOkResult
                      {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether the signature contained in the header satisfies the
   ## consensus protocol requirements. The method accepts an optional list of
@@ -81,28 +81,28 @@ proc verifySeal(c: Clique; header: BlockHeader;
     return err((errUnknownBlock,""))
 
   # Retrieve the snapshot needed to verify this header and cache it
-  var snap = c.snapshot(header.blockNumber-1, header.parentHash, parents)
-  if snap.isErr:
-      return err(snap.error)
+  if c.snapshotRegister(header.parentHash, parents).isErr:
+    return err(c.lastSnap.error)
+  var snap = c.lastSnap.value
 
   # Resolve the authorization key and check against signers
   let signer = c.ecrecover(header)
   if signer.isErr:
       return err(signer.error)
 
-  if not snap.value.isSigner(signer.value):
+  if not snap.isSigner(signer.value):
     return err((errUnauthorizedSigner,""))
 
-  let seen = snap.value.recent(signer.value)
+  let seen = snap.recent(signer.value)
   if seen.isOk:
     # Signer is among recents, only fail if the current block does not
     # shift it out
-    if header.blockNumber - snap.value.signersThreshold.u256 < seen.value:
+    if header.blockNumber - snap.signersThreshold.u256 < seen.value:
       return err((errRecentlySigned,""))
 
   # Ensure that the difficulty corresponds to the turn-ness of the signer
   if not c.fakeDiff:
-    if snap.value.inTurn(header.blockNumber, signer.value):
+    if snap.inTurn(header.blockNumber, signer.value):
       if header.difficulty != DIFF_INTURN:
         return err((errWrongDifficulty,""))
     else:
@@ -114,7 +114,7 @@ proc verifySeal(c: Clique; header: BlockHeader;
 
 # clique/clique.go(314): func (c *Clique) verifyCascadingFields(chain [..]
 proc verifyCascadingFields(c: Clique; header: BlockHeader;
-                           parents: openArray[BlockHeader]): CliqueResult
+                           parents: openArray[BlockHeader]): CliqueOkResult
                                 {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify all the header fields that are not standalone, rather depend on a
   ## batch of previous headers. The caller may optionally pass in a batch of
@@ -150,14 +150,14 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
     return err((errCliqueGasLimitOrBaseFee, rc.error))
 
   # Retrieve the snapshot needed to verify this header and cache it
-  var snap = c.snapshot(header.blockNumber-1, header.parentHash, parents)
-  if snap.isErr:
-    return err(snap.error)
+  if c.snapshotRegister(header.parentHash, parents).isErr:
+    return err(c.lastSnap.error)
+  var snap = c.lastSnap.value
 
   # If the block is a checkpoint block, verify the signer list
   if (header.blockNumber mod c.cfg.epoch.u256) == 0:
     let
-      signersList = snap.value.signers
+      signersList = c.snapshotSigners
       extraList = header.extraData.extraDataAddresses
     if signersList != extraList:
       return err((errMismatchingCheckpointSigners,""))
@@ -168,7 +168,7 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
 
 # clique/clique.go(246): func (c *Clique) verifyHeader(chain [..]
 proc verifyHeader(c: Clique; header: BlockHeader;
-                  parents: openArray[BlockHeader]): CliqueResult
+                  parents: openArray[BlockHeader]): CliqueOkResult
                        {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether a header conforms to the consensus rules.The caller may
   ## optionally pass in a batch of parents (ascending order) to avoid looking
@@ -264,7 +264,7 @@ proc author*(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
 
 
 # clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
-proc verifyHeader*(c: Clique; header: BlockHeader): CliqueResult
+proc verifyHeader*(c: Clique; header: BlockHeader): CliqueOkResult
                         {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `verifyHeader()` checks whether a header
   ## conforms to the consensus rules of a given engine. Verifying the seal
@@ -276,7 +276,7 @@ proc verifyHeader*(c: Clique; header: BlockHeader): CliqueResult
 
 # clique/clique.go(224): func (c *Clique) VerifyHeader(chain [..]
 proc verifyHeaders*(c: Clique; headers: openArray[BlockHeader]):
-                                Future[seq[CliqueResult]] {.async,gcsafe.} =
+                                Future[seq[CliqueOkResult]] {.async,gcsafe.} =
   ## For the Consensus Engine, `verifyHeader()` s similar to VerifyHeader, but
   ## verifies a batch of headers concurrently. This method is accompanied
   ## by a `stopVerifyHeader()` method that can abort the operations.
@@ -308,7 +308,7 @@ proc stopVerifyHeader*(c: Clique): bool {.discardable.} =
 
 
 # clique/clique.go(450): func (c *Clique) VerifyUncles(chain [..]
-proc verifyUncles*(c: Clique; ethBlock: EthBlock): CliqueResult =
+proc verifyUncles*(c: Clique; ethBlock: EthBlock): CliqueOkResult =
   ## For the Consensus Engine, `verifyUncles()` verifies that the given
   ## block's uncles conform to the consensus rules of a given engine.
   ##
@@ -320,7 +320,7 @@ proc verifyUncles*(c: Clique; ethBlock: EthBlock): CliqueResult =
 
 
 # clique/clique.go(506): func (c *Clique) Prepare(chain [..]
-proc prepare*(c: Clique; header: var BlockHeader): CliqueResult
+proc prepare*(c: Clique; header: var BlockHeader): CliqueOkResult
                     {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `prepare()` initializes the consensus fields
   ## of a block header according to the rules of a particular engine. The
@@ -334,16 +334,16 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueResult
   header.nonce.reset
 
   # Assemble the voting snapshot to check which votes make sense
-  var snap = c.snapshot(header.blockNumber-1, header.parentHash, @[])
-  if snap.isErr:
-    return err(snap.error)
+  if c.snapshotRegister(header.parentHash, @[]).isErr:
+    return err(c.lastSnap.error)
+  var snap = c.lastSnap.value
 
   if (header.blockNumber mod c.cfg.epoch) != 0:
     c.doExclusively:
       # Gather all the proposals that make sense voting on
       var addresses: seq[EthAddress]
       for (address,authorize) in c.proposals.pairs:
-        if snap.value.isValidVote(address, authorize):
+        if snap.isValidVote(address, authorize):
           addresses.add address
 
       # If there's pending proposals, cast a vote on them
@@ -353,12 +353,12 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueResult
                        else: NONCE_DROP
 
   # Set the correct difficulty
-  header.difficulty = snap.value.calcDifficulty(c.signer)
+  header.difficulty = snap.calcDifficulty(c.signer)
 
   # Ensure the extra data has all its components
   header.extraData.setLen(EXTRA_VANITY)
   if (header.blockNumber mod c.cfg.epoch) == 0:
-    header.extraData.add snap.value.signers.mapIt(toSeq(it)).concat
+    header.extraData.add c.snapshotSigners.mapIt(toSeq(it)).concat
   header.extraData.add 0.byte.repeat(EXTRA_SEAL)
 
   # Mix digest is reserved for now, set to empty
@@ -482,18 +482,18 @@ proc seal*(c: Clique; ethBlock: EthBlock):
       signFn = c.signFn
 
   # Bail out if we're unauthorized to sign a block
-  var snap = c.snapshot(header.blockNumber-1, header.parentHash, @[])
-  if snap.isErr:
-    return err(snap.error)
-  if not snap.value.isSigner(signer):
+  if c.snapshotRegister(header.parentHash).isErr:
+    return err(c.lastSnap.error)
+  var snap = c.lastSnap.value
+  if not snap.isSigner(signer):
     return err((errUnauthorizedSigner,""))
 
   # If we're amongst the recent signers, wait for the next block
-  let seen = snap.value.recent(signer)
+  let seen = snap.recent(signer)
   if seen.isOk:
     # Signer is among recents, only wait if the current block does not
     # shift it out
-    if header.blockNumber < seen.value + snap.value.signersThreshold.u256:
+    if header.blockNumber < seen.value + snap.signersThreshold.u256:
       info $nilCliqueSealSignedRecently
       return err((nilCliqueSealSignedRecently,""))
 
@@ -501,7 +501,7 @@ proc seal*(c: Clique; ethBlock: EthBlock):
   var delay = header.timestamp - getTime()
   if header.difficulty == DIFF_NOTURN:
     # It's not our turn explicitly to sign, delay it a bit
-    let wiggle = snap.value.signersThreshold.int64 * WIGGLE_TIME
+    let wiggle = snap.signersThreshold.int64 * WIGGLE_TIME
     # Kludge for limited rand() argument range
     if wiggle.inSeconds < (int.high div 1000).int64:
       let rndWiggleMs = c.cfg.rand(wiggle.inMilliSeconds.int)
@@ -561,10 +561,9 @@ proc calcDifficulty(c: Clique;
   ## This implementation  returns the difficulty that a new block should have:
   ## * DIFF_NOTURN(2) if BLOCK_NUMBER % SIGNER_COUNT != SIGNER_INDEX
   ## * DIFF_INTURN(1) if BLOCK_NUMBER % SIGNER_COUNT == SIGNER_INDEX
-  var snap = c.snapshot(parent.blockNumber, parent.blockHash, @[])
-  if snap.isErr:
-    return err(snap.error)
-  return ok(snap.value.calcDifficulty(c.signer))
+  if c.snapshotRegister(parent).isErr:
+    return err(c.lastSnap.error)
+  return ok(c.lastSnap.value.calcDifficulty(c.signer))
 
 
 # # clique/clique.go(710): func (c *Clique) SealHash(header [..]

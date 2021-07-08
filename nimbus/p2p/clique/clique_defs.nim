@@ -220,6 +220,8 @@ type
     # additional/bespoke errors, manually added
     # -----------------------------------------
 
+    errUnknownHash = "No header found for hash value"
+
     errZeroBlockNumberRejected = "Block number must not be Zero"
 
     errSkSigResult                ## eth/keys subsytem error: signature
@@ -247,7 +249,7 @@ type
 
 type
   CliqueError* = (CliqueErrorType,string)
-  CliqueResult* = Result[void,CliqueError]
+  CliqueOkResult* = Result[void,CliqueError]
 
 # ------------------------------------------------------------------------------
 # End

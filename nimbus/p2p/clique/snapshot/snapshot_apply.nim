@@ -43,7 +43,7 @@ logScope:
 
 # clique/snapshot.go(185): func (s *Snapshot) apply(headers [..]
 proc snapshotApply*(s: var Snapshot;
-                    headers: openArray[BlockHeader]): CliqueResult {.
+                    headers: openArray[BlockHeader]): CliqueOkResult {.
                       gcsafe, raises: [Defect,CatchableError].} =
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.

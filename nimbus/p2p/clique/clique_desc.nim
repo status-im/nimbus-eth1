@@ -41,22 +41,33 @@ type
   Clique* = ref object ## Clique is the proof-of-authority consensus engine
                        ## proposed to support the Ethereum testnet following
                        ## the Ropsten attacks.
-    cCfg: CliqueCfg         ## Common engine parameters to fine tune behaviour
+    signer*: EthAddress ##\
+      ## Ethereum address of the current signing key
 
-    cRecents: LruSnaps      ## Snapshots for recent block to speed up reorgs
-    # signatures => see CliqueCfg
-
-    cProposals: Proposals   ## Cu1rrent list of proposals we are pushing
-
-    signer*: EthAddress     ## Ethereum address of the signing key
     signFn*: CliqueSignerFn ## Signer function to authorize hashes with
-    cLock: AsyncLock        ## Protects the signer fields
-
     stopSealReq*: bool      ## Stop running `seal()` function
     stopVHeaderReq*: bool   ## Stop running `verifyHeader()` function
+    # signatures => see CliqueCfg
 
-    cFakeDiff: bool         ## Testing only: skip difficulty verifications
-    cDebug: bool            ## debug mode
+    cfg: CliqueCfg ##\
+      ## Common engine parameters to fine tune behaviour
+
+    recents: LruSnaps ##\
+      ## Snapshots cache for recent block search
+
+    lastSnap: SnapshotResult ##\
+      ## Stashing last snapshot operation here
+
+    proposals: Proposals ##\
+      ## Cu1rrent list of proposals we are pushing
+
+    asyncLock: AsyncLock ##\
+      ## Protects the signer fields
+
+    fakeDiff: bool ##\
+      ## Testing/debugging only: skip difficulty verifications
+    debug: bool ##\
+      ## Testing/debugging only: debug mode
 
 {.push raises: [Defect].}
 
@@ -68,16 +79,20 @@ type
 proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
-  Clique(cCfg:       cfg,
-         cRecents:   initLruSnaps(cfg),
-         cProposals: initTable[EthAddress,bool](),
-         cLock:      newAsyncLock())
+  Clique(cfg:       cfg,
+         recents:   initLruSnaps(cfg),
+         proposals: initTable[EthAddress,bool](),
+         asyncLock: newAsyncLock())
 
 # ------------------------------------------------------------------------------
 # Public debug/pretty print
 # ------------------------------------------------------------------------------
 
-proc pp*(rc: var Result[Snapshot,CliqueError]; indent = 0): string =
+proc getPrettyPrinters*(c: Clique): var PrettyPrinters =
+  ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
+  c.cfg.prettyPrint
+
+proc pp*(rc: var SnapshotResult; indent = 0): string =
   if rc.isOk:
     rc.value.pp(indent)
   else:
@@ -87,29 +102,33 @@ proc pp*(rc: var Result[Snapshot,CliqueError]; indent = 0): string =
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc cfg*(c: Clique): auto {.inline.} =
-  ## Getter
-  c.cCfg
-
-proc db*(c: Clique): BaseChainDB {.inline.} =
-  ## Getter
-  c.cCfg.db
-
 proc recents*(c: Clique): var LruSnaps {.inline.} =
   ## Getter
-  c.cRecents
+  c.recents
 
 proc proposals*(c: Clique): var Proposals {.inline.} =
   ## Getter
-  c.cProposals
+  c.proposals
+
+proc lastSnap*(c: Clique): var SnapshotResult {.inline.} =
+  ## Getter, last error message
+  c.lastSnap
+
+proc cfg*(c: Clique): auto {.inline.} =
+  ## Getter
+  c.cfg
+
+proc db*(c: Clique): auto {.inline.} =
+  ## Getter
+  c.cfg.db
 
 proc debug*(c: Clique): auto {.inline.} =
   ## Getter
-  c.cDebug
+  c.debug
 
 proc fakeDiff*(c: Clique): auto {.inline.} =
   ## Getter
-  c.cFakeDiff
+  c.fakeDiff
 
 # ------------------------------------------------------------------------------
 # Public setters
@@ -117,17 +136,21 @@ proc fakeDiff*(c: Clique): auto {.inline.} =
 
 proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
   ## Setter, re-set database
-  c.cCfg.db = db
-  c.cProposals = initTable[EthAddress,bool]()
-  c.cRecents = c.cCfg.initLruSnaps
-  c.cRecents.debug = c.cDebug
+  c.cfg.db = db
+  c.proposals = initTable[EthAddress,bool]()
+  c.recents = c.cfg.initLruSnaps
+  c.recents.debug = c.debug
   # note that the signatures[] cache need not be flushed
 
 proc `debug=`*(c: Clique; debug: bool) =
-  ## Set debugging mode on/off and set the `fakeDiff` flag `true`
-  c.cFakeDiff = true
-  c.cDebug = debug
-  c.cRecents.debug = debug
+  ## Seter, debugging mode on/off and set the `fakeDiff` flag `true`
+  c.fakeDiff = true
+  c.debug = debug
+  c.recents.debug = debug
+
+proc `lastSnap=`*(c: Clique; snap: SnapshotResult) =
+  ## Setter, last error message
+  c.lastSnap = snap
 
 # ------------------------------------------------------------------------------
 # Public lock/unlock
@@ -135,11 +158,11 @@ proc `debug=`*(c: Clique; debug: bool) =
 
 proc lock*(c: Clique) {.inline, raises: [Defect,CatchableError].} =
   ## Lock descriptor
-  waitFor c.cLock.acquire
+  waitFor c.asyncLock.acquire
 
 proc unLock*(c: Clique) {.inline, raises: [Defect,AsyncLockError].} =
   ## Unlock descriptor
-  c.cLock.release
+  c.asyncLock.release
 
 template doExclusively*(c: Clique; action: untyped) =
   ## Handy helper

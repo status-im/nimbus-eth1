@@ -226,15 +226,30 @@ proc initLruSnaps*(cfg: CliqueCfg): LruSnaps {.gcsafe,raises: [Defect].} =
   result.initLruSnaps(cfg)
 
 
-proc getLruSnaps*(rs: var LruSnaps; args: LruSnapsArgs): auto {.
-                     gcsafe, raises: [Defect,CatchableError].} =
+#proc getLruSnaps*(rs: var LruSnaps; args: LruSnapsArgs): SnapshotResult
+#                     {.gcsafe, raises: [Defect,CatchableError].} =
+#  ## Get snapshot from cache or disk
+#  rs.say "getLruSnap #", args.blockNumber
+#  rs.cache.getLruItem:
+#    LruSnapsDesc(cfg:   rs.cfg,
+#                 debug: rs.debug,
+#                 args:  args,
+#                 local: LocalArgs())
+
+proc getLruSnaps*(rs: var LruSnaps; header: BlockHeader;
+                  parents: openArray[Blockheader]): SnapshotResult
+                     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Get snapshot from cache or disk
-  rs.say "getLruSnap #", args.blockNumber
+  rs.say "getLruSnap #", header.blockNumber
   rs.cache.getLruItem:
-    LruSnapsDesc(cfg:   rs.cfg,
-                 debug: rs.debug,
-                 args:  args,
-                 local: LocalArgs())
+    LruSnapsDesc(
+      cfg:   rs.cfg,
+      debug: rs.debug,
+      local: LocalArgs(),
+      args:  LruSnapsArgs(
+        blockHash:   header.hash,
+        blockNumber: header.blockNumber,
+        parents:     toSeq(parents)))
 
 
 proc `debug=`*(rs: var LruSnaps; debug: bool) =

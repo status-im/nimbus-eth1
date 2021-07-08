@@ -12,7 +12,6 @@ import
   std/[algorithm, os, sequtils, strformat, strutils],
   ../nimbus/db/db_chain,
   ../nimbus/p2p/[chain, clique],
-  ../nimbus/utils,
   ./test_clique/[pool, undump],
   eth/[common, keys],
   stint,
@@ -68,23 +67,19 @@ proc runCliqueSnapshot(noisy = true) =
             .appendVoter(tt.votes)
             .commitVoterChain
 
-          # see clique/snapshot_test.go(476): snap, err := engine.snapshot( [..]
-          let topHeader = pool.topVoterHeader
-          var snap = pool.snapshot(topHeader.blockNumber, topHeader.hash, @[])
-
           # see clique/snapshot_test.go(477): if err != nil {
-          if snap.isErr:
+          if pool.lastSnap.isErr:
             # Note that clique/snapshot_test.go does not verify _here_ against
             # the scheduled test error -- rather this voting error is supposed
             # to happen earlier (processed at clique/snapshot_test.go(467)) when
             # assembling the block chain (sounds counter intuitive to the author
             # of this source file as the scheduled errors are _clique_ related).
-            check snap.error[0] == tt.failure
+            check pool.lastSnap.error[0] == tt.failure
           else:
             let
               expected = tt.results.mapIt("@" & it).sorted
-              snapResult = pool.pp(snap.value.signers).sorted
-            pool.say "*** snap state=", snap.pp(16)
+              snapResult = pool.pp(pool.snapshotSigners).sorted
+            pool.say "*** snap state=", pool.lastSnap.pp(16)
             pool.say "        result=[", snapResult.join(",") & "]"
             pool.say "      expected=[", expected.join(",") & "]"
 

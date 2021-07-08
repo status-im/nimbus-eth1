@@ -39,9 +39,9 @@ proc signersThreshold*(s: var Snapshot): int {.inline.} =
   ## Minimum number of authorised signers needed.
   s.ballot.authSignersThreshold
 
-proc signers*(s: var Snapshot): seq[EthAddress] {.inline.} =
-  ## Retrieves the sorted list of authorized signers
-  s.ballot.authSigners
+#proc signers*(s: var Snapshot): seq[EthAddress] {.inline.} =
+#  ## Retrieves the sorted list of authorized signers
+#  s.ballot.authSigners
 
 # ------------------------------------------------------------------------------
 # Public functions

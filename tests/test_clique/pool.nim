@@ -255,6 +255,14 @@ proc db*(ap: TesterPool): auto {.inline.} =
   ## Getter
   ap.clique.db
 
+proc snapshotSigners*(ap: TesterPool): auto {.inline.} =
+  ## Getter
+  ap.clique.snapshotSigners
+
+proc lastSnap*(ap: TesterPool): var SnapshotResult {.inline.} =
+  ## Getter
+  ap.clique.lastSnap
+
 # ------------------------------------------------------------------------------
 # Public: setter
 # ------------------------------------------------------------------------------
@@ -308,22 +316,6 @@ proc sign*(ap: TesterPool; header: var BlockHeader; signer: string) =
     blockNumber: header.blockNumber.truncate(uint64),
     account:     signer)
 
-
-proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
-               parent: openArray[BlockHeader]): auto =
-  ## Call p2p/clique.snapshotInternal()
-  if ap.debug:
-    var header = ap.getBlockHeader(number)
-    ap.say "*** snapshot argument: #", number
-    ap.sayHeaderChain(8)
-    when false: # all addresses are typically pp-mappable
-      ap.say "          address map: ", toSeq(ap.names.pairs)
-                                          .mapIt(&"@{it[1]}:{it[0]}")
-                                          .sorted
-                                          .join("\n" & ' '.repeat(23))
-
-  ap.clique.snapshot(number, hash, parent)
-
 # ------------------------------------------------------------------------------
 # Public: set up & manage voter database
 # ------------------------------------------------------------------------------
@@ -335,6 +327,12 @@ proc snapshot*(ap: TesterPool; number: BlockNumber; hash: Hash256;
 #  ap.accounts[account] = prvKey
 #  let address = prvKey.toPublicKey.toCanonicalAddress
 #  ap.names[address] = account
+#
+#proc topVoterHeader*(ap: TesterPool): BlockHeader =
+#  ## Get top header from voter batch list
+#  doAssert 0 < ap.batch.len # see initTesterPool() and resetVoterChain()
+#  if 0 < ap.batch[^1].len:
+#    result = ap.batch[^1][^1]
 
 
 proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
@@ -414,18 +412,26 @@ proc appendVoter*(ap: TesterPool;
   for voter in voters:
     ap.appendVoter(voter)
 
+
 proc commitVoterChain*(ap: TesterPool): TesterPool {.discardable.} =
   ## Write the headers from the voter header batch list to the block chain DB
   result = ap
+
   for headers in ap.batch:
     let bodies = BlockBody().repeat(headers.len)
     doAssert ap.chain.persistBlocks(headers,bodies) == ValidationResult.OK
 
-proc topVoterHeader*(ap: TesterPool): BlockHeader =
-  ## Get top header from voter batch list
-  doAssert 0 < ap.batch.len # see initTesterPool() and resetVoterChain()
-  if 0 < ap.batch[^1].len:
-    result = ap.batch[^1][^1]
+    if ap.debug:
+      let
+        number = headers[^1].blockNumber
+        header = ap.getBlockHeader(number)
+      ap.say "*** snapshot argument: #", number
+      ap.sayHeaderChain(8)
+      when false: # all addresses are typically pp-mappable
+        ap.say "          address map: ", toSeq(ap.names.pairs)
+                                            .mapIt(&"@{it[1]}:{it[0]}")
+                                            .sorted
+                                            .join("\n" & ' '.repeat(23))
 
 # ------------------------------------------------------------------------------
 # End
