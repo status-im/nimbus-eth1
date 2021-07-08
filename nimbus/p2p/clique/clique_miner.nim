@@ -21,7 +21,7 @@
 ##
 
 import
-  std/[random, sequtils, strformat, tables, times],
+  std/[sequtils, strformat, tables, times],
   ../../constants,
   ../../db/[db_chain, state_db],
   ../../utils,
@@ -348,7 +348,7 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueResult
 
       # If there's pending proposals, cast a vote on them
       if 0 < addresses.len:
-        header.coinbase = addresses[c.cfg.prng.rand(addresses.len-1)]
+        header.coinbase = addresses[c.cfg.rand(addresses.len-1)]
         header.nonce = if header.coinbase in c.proposals: NONCE_AUTH
                        else: NONCE_DROP
 
@@ -504,10 +504,10 @@ proc seal*(c: Clique; ethBlock: EthBlock):
     let wiggle = snap.value.signersThreshold.int64 * WIGGLE_TIME
     # Kludge for limited rand() argument range
     if wiggle.inSeconds < (int.high div 1000).int64:
-      let rndWiggleMs = c.cfg.prng.rand(wiggle.inMilliSeconds.int)
+      let rndWiggleMs = c.cfg.rand(wiggle.inMilliSeconds.int)
       delay += initDuration(milliseconds = rndWiggleMs)
     else:
-      let rndWiggleSec = c.cfg.prng.rand((wiggle.inSeconds and int.high).int)
+      let rndWiggleSec = c.cfg.rand((wiggle.inSeconds and int.high).int)
       delay += initDuration(seconds = rndWiggleSec)
 
     trace "Out-of-turn signing requested",

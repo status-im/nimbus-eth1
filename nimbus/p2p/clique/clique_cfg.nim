@@ -48,18 +48,27 @@ type
     blockHeader*: proc(v: BlockHeader; delim: string):
                  string {.gcsafe,raises: [Defect,CatchableError].}
 
+  CliqueCfg* = ref object of RootRef
+    db*: BaseChainDB ##\
+      ## all purpose (incl. blockchain) database
 
-  CliqueCfg* = ref object
-    db*: BaseChainDB
-    period*: Duration      ## time between blocks to enforce
-    prng*: Rand            ## PRNG state for internal random generator
+    period*: Duration ##\
+      ## time between blocks to enforce
 
-    signatures: EcRecover  ## Recent block signatures cached to speed up mining
-    bcEpoch: UInt256       ## The number of blocks after which to checkpoint
-                           ## and reset the pending votes.Suggested 30000 for
-                           ## the testnet to remain analogous to the mainnet
-                           ## ethash epoch.
-    prettyPrint*: PrettyPrinters ## debugging support
+    prng: Rand ##\
+      ## PRNG state for internal random generator. This PRNG is
+      ## cryptographically insecure but with reproducible data stream.
+
+    signatures: EcRecover ##\
+      ## Recent block signatures cached to speed up mining
+
+    bcEpoch: UInt256 ##\
+      ## The number of blocks after which to checkpoint and reset the pending
+      ## votes.Suggested 30000 for the testnet to remain analogous to the
+      ## mainnet ethash epoch.
+
+    prettyPrint*: PrettyPrinters ##\
+      ## debugging support
 
 {.push raises: [Defect].}
 
@@ -88,6 +97,17 @@ proc newCliqueCfg*(db: BaseChainDB; period = BLOCK_PERIOD;
 proc ecRecover*(cfg: CliqueCfg; header: BlockHeader): auto
                                    {.gcsafe, raises: [Defect,CatchableError].}=
   cfg.signatures.getEcRecover(header)
+
+# ------------------------------------------------------------------------------
+# Public PRNG, may be overloaded
+# ------------------------------------------------------------------------------
+
+method rand*(cfg: CliqueCfg; max: Natural): int {.gcsafe,base.} =
+  ## The method returns a random number base on an internal PRNG providing a
+  ## reproducible stream of random data. This function is supposed to be used
+  ## exactly when repeatability comes in handy. Never to be used for crypto key
+  ## generation or like (except testing.)
+  cfg.prng.rand(max)
 
 # ------------------------------------------------------------------------------
 # Public getter
