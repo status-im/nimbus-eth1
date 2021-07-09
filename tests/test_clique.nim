@@ -68,18 +68,18 @@ proc runCliqueSnapshot(noisy = true) =
             .commitVoterChain
 
           # see clique/snapshot_test.go(477): if err != nil {
-          if pool.lastSnap.isErr:
+          if pool.error != cliqueNoError:
             # Note that clique/snapshot_test.go does not verify _here_ against
             # the scheduled test error -- rather this voting error is supposed
             # to happen earlier (processed at clique/snapshot_test.go(467)) when
             # assembling the block chain (sounds counter intuitive to the author
             # of this source file as the scheduled errors are _clique_ related).
-            check pool.lastSnap.error[0] == tt.failure
+            check pool.error[0] == tt.failure
           else:
             let
               expected = tt.results.mapIt("@" & it).sorted
-              snapResult = pool.pp(pool.snapshotSigners).sorted
-            pool.say "*** snap state=", pool.lastSnap.pp(16)
+              snapResult = pool.pp(pool.cliqueSigners).sorted
+            pool.say "*** snap state=", pool.snapshot.pp(16)
             pool.say "        result=[", snapResult.join(",") & "]"
             pool.say "      expected=[", expected.join(",") & "]"
 
@@ -87,13 +87,17 @@ proc runCliqueSnapshot(noisy = true) =
             check snapResult == expected
 
 
-proc runGoerliReplay(noisy = true;
-                     dir = "tests"; stopAfterBlock = uint64.high) =
+proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
   var
     pool = newVoterPool()
     cache: array[7,(seq[BlockHeader],seq[BlockBody])]
     cInx = 0
     stoppedOk = false
+
+  pool.debug = noisy
+
+  let stopThreshold = if stopAfterBlock == 0u64: uint64.high.u256
+                      else: stopAfterBlock.u256
 
   suite "Replay Goerli Chain":
 
@@ -109,7 +113,7 @@ proc runGoerliReplay(noisy = true;
         cInx.inc
 
         # Handy for partial tests
-        if stopAfterBlock <= cache[cInx-1][0][0].blockNumber.truncate(uint64):
+        if stopThreshold <= cache[cInx-1][0][0].blockNumber:
           stoppedOk = true
           break
 
@@ -137,7 +141,7 @@ proc runGoerliReplay(noisy = true;
           if addedPersistBlocks != ValidationResult.Ok: return
 
     if stoppedOk:
-      test &"Runner stopped after reaching #{stopAfterBlock}":
+      test &"Runner stopped after reaching #{stopThreshold}":
         discard
 
 # ------------------------------------------------------------------------------
@@ -151,7 +155,7 @@ proc cliqueMain*(noisy = defined(debug)) =
 when isMainModule:
   let noisy = defined(debug)
   noisy.runCliqueSnapshot
-  noisy.runGoerliReplay(dir = ".", stopAfterBlock = 1000)
+  noisy.runGoerliReplay(dir = ".", stopAfterBlock = 0)
 
 # ------------------------------------------------------------------------------
 # End

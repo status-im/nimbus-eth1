@@ -21,8 +21,10 @@
 import
   std/[algorithm, sequtils, strformat, strutils, tables],
   ../../../db/storage_types,
+  ../../../utils,
   ../clique_cfg,
   ../clique_defs,
+  ../clique_utils,
   ./ballot,
   chronicles,
   eth/[common, rlp, trie/db],
@@ -31,9 +33,6 @@ import
 type
   AddressHistory = Table[BlockNumber,EthAddress]
 
-  SnapshotResult* =           ## Typical snapshot handler return code
-    Result[Snapshot,CliqueError]
-
   SnapshotData* = object
     blockNumber: BlockNumber  ## block number where snapshot was created on
     blockHash: Hash256        ## block hash where snapshot was created on
@@ -41,13 +40,12 @@ type
 
     # clique/snapshot.go(58): Recents map[uint64]common.Address [..]
     ballot: Ballot            ## Votes => authorised signers
-    debug: bool               ## debug mode
 
   # clique/snapshot.go(50): type Snapshot struct [..]
-  Snapshot* = object ## Snapshot is the state of the authorization voting at
-                     ## a given point in time.
-    cfg: CliqueCfg           ## parameters to fine tune behavior
-    data*: SnapshotData      ## real snapshot
+  Snapshot* = object          ## Snapshot is the state of the authorization
+                              ## voting at a given point in time.
+    cfg: CliqueCfg            ## parameters to fine tune behavior
+    data*: SnapshotData       ## real snapshot
 
 {.push raises: [Defect].}
 
@@ -94,12 +92,6 @@ proc read[K,V](rlp: var Rlp;
 # Public pretty printers
 # ------------------------------------------------------------------------------
 
-proc say*(s: var Snapshot; v: varargs[string,`$`]) {.gcsafe.} =
-  ## Debugging output
-  ppExceptionWrap:
-    if s.data.debug:
-      stderr.write "*** " & v.join & "\n"
-
 proc getPrettyPrinters*(s: var Snapshot): var PrettyPrinters =
   ## Mixin for pretty printers
   s.cfg.prettyPrint
@@ -145,18 +137,25 @@ proc pp*(s: var Snapshot; indent = 0): string {.gcsafe.} =
 # clique/snapshot.go(72): func newSnapshot(config [..]
 proc initSnapshot*(s: var Snapshot; cfg: CliqueCfg;
            number: BlockNumber; hash: Hash256; signers: openArray[EthAddress]) =
-  ## This creates a new snapshot with the specified startup parameters. The
-  ## method does not initialize the set of recent signers, so only ever use
-  ## if for the genesis block.
+  ## Create a new snapshot with the specified startup parameters. This
+  ## constructor does not initialize the set of recent `signers`, so only ever
+  ## use if for the genesis block.
   s.cfg = cfg
   s.data.blockNumber = number
   s.data.blockHash = hash
   s.data.recents = initTable[BlockNumber,EthAddress]()
   s.data.ballot.initBallot(signers)
+  s.data.ballot.debug = s.cfg.debug
 
-proc initSnapshot*(cfg: CliqueCfg; number: BlockNumber; hash: Hash256;
-                   signers: openArray[EthAddress]; debug = true): Snapshot =
-  result.initSnapshot(cfg, number, hash, signers)
+proc initSnapshot*(s: var Snapshot; cfg: CliqueCfg; header: BlockHeader) =
+  ## Create a new snapshot for the given header. The header need not be on the
+  ## block chain, yet. The trusted signer list is derived from the
+  ## `extra data` field of the header.
+  let signers = header.extraData.extraDataAddresses
+  s.initSnapshot(cfg, header.blockNumber, header.hash, signers)
+
+proc initSnapshot*(cfg: CliqueCfg; header: BlockHeader): Snapshot =
+  result.initSnapshot(cfg, header)
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -194,11 +193,6 @@ proc `blockHash=`*(s: var Snapshot; hash: Hash256) {.inline.} =
   ## Getter
   s.data.blockHash = hash
 
-proc `debug=`*(s: var Snapshot; debug: bool) =
-  ## Set debugging mode on/off
-  s.data.debug = debug
-  s.data.ballot.debug = debug
-
 # ------------------------------------------------------------------------------
 # Public load/store support
 # ------------------------------------------------------------------------------
@@ -212,6 +206,7 @@ proc loadSnapshot*(s: var Snapshot; cfg: CliqueCfg;
     s.data = s.cfg.db.db
        .get(hash.cliqueSnapshotKey.toOpenArray)
        .decode(SnapshotData)
+    s.data.ballot.debug = s.cfg.debug
   except CatchableError as e:
     return err((errSnapshotLoad,e.msg))
   result = ok()

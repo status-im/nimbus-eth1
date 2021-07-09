@@ -19,7 +19,7 @@
 ##
 
 import
-  std/[strutils, tables, times],
+  std/[tables, times],
   ../clique_cfg,
   ../clique_defs,
   ./ballot,
@@ -37,6 +37,10 @@ logScope:
 # Private functions needed to support RLP conversion
 # ------------------------------------------------------------------------------
 
+proc say(s: var Snapshot; v: varargs[string,`$`]) {.inline.} =
+  # s.cfg.say v
+  discard
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -48,7 +52,7 @@ proc snapshotApply*(s: var Snapshot;
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 
-  s.say "applySnapshot ", s.pp(headers).join("\n" & ' '.repeat(18))
+  #s.say "applySnapshot ", s.pp(headers).join("\n" & ' '.repeat(18))
 
   # Allow passing in no headers for cleaner code
   if headers.len == 0:

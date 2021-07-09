@@ -23,14 +23,15 @@ import
   ../../db/db_chain,
   ../../constants,
   ./clique_cfg,
-  ./snapshot/lru_snaps,
+  ./clique_defs,
+  ./snapshot/[lru_snaps, snapshot_desc],
   chronos,
   eth/[common, keys, rlp]
 
 type
   # clique/clique.go(142): type SignerFn func(signer [..]
-  CliqueSignerFn* =        ## Hashes and signs the data to be signed by
-                           ## a backing account
+  CliqueSignerFn* =    ## Hashes and signs the data to be signed by
+                       ## a backing account
     proc(signer: EthAddress;
          message: openArray[byte]): Result[Hash256,cstring] {.gcsafe.}
 
@@ -54,8 +55,11 @@ type
     recents: LruSnaps ##\
       ## Snapshots cache for recent block search
 
-    lastSnap: SnapshotResult ##\
+    snapshot: Snapshot ##\
       ## Stashing last snapshot operation here
+
+    error: CliqueError ##\
+      ## Last error, typically stored by snaphot utility
 
     proposals: Proposals ##\
       ## Cu1rrent list of proposals we are pushing
@@ -65,8 +69,6 @@ type
 
     fakeDiff: bool ##\
       ## Testing/debugging only: skip difficulty verifications
-    debug: bool ##\
-      ## Testing/debugging only: debug mode
 
 {.push raises: [Defect].}
 
@@ -80,6 +82,7 @@ proc newClique*(cfg: CliqueCfg): Clique =
   ## initial signers set to the ones provided by the user.
   Clique(cfg:       cfg,
          recents:   initLruSnaps(cfg),
+         snapshot:  cfg.initSnapshot(BlockHeader()), # dummy
          proposals: initTable[EthAddress,bool](),
          asyncLock: newAsyncLock())
 
@@ -90,12 +93,6 @@ proc newClique*(cfg: CliqueCfg): Clique =
 proc getPrettyPrinters*(c: Clique): var PrettyPrinters =
   ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
   c.cfg.prettyPrint
-
-proc pp*(rc: var SnapshotResult; indent = 0): string =
-  if rc.isOk:
-    rc.value.pp(indent)
-  else:
-    "(error: " & rc.error.pp & ")"
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -109,9 +106,13 @@ proc proposals*(c: Clique): var Proposals {.inline.} =
   ## Getter
   c.proposals
 
-proc lastSnap*(c: Clique): var SnapshotResult {.inline.} =
+proc snapshot*(c: Clique): var Snapshot {.inline.} =
+  ## Getter, last processed snapshot
+  c.snapshot
+
+proc error*(c: Clique): auto {.inline.} =
   ## Getter, last error message
-  c.lastSnap
+  c.error
 
 proc cfg*(c: Clique): auto {.inline.} =
   ## Getter
@@ -120,10 +121,6 @@ proc cfg*(c: Clique): auto {.inline.} =
 proc db*(c: Clique): auto {.inline.} =
   ## Getter
   c.cfg.db
-
-proc debug*(c: Clique): auto {.inline.} =
-  ## Getter
-  c.debug
 
 proc fakeDiff*(c: Clique): auto {.inline.} =
   ## Getter
@@ -138,18 +135,18 @@ proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
   c.cfg.db = db
   c.proposals = initTable[EthAddress,bool]()
   c.recents = c.cfg.initLruSnaps
-  c.recents.debug = c.debug
-  # note that the signatures[] cache need not be flushed
 
-proc `debug=`*(c: Clique; debug: bool) =
-  ## Seter, debugging mode on/off and set the `fakeDiff` flag `true`
-  c.fakeDiff = true
-  c.debug = debug
-  c.recents.debug = debug
+proc `fakeDiff=`*(c: Clique; debug: bool) =
+  ## Setter
+  c.fakeDiff = debug
 
-proc `lastSnap=`*(c: Clique; snap: SnapshotResult) =
-  ## Setter, last error message
-  c.lastSnap = snap
+proc `snapshot=`*(c: Clique; snap: Snapshot) =
+  ## Setter
+  c.snapshot = snap
+
+proc `error=`*(c: Clique; error: CliqueError) =
+  ## Setter
+  c.error = error
 
 # ------------------------------------------------------------------------------
 # Public lock/unlock

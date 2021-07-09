@@ -24,9 +24,10 @@ import
   stint
 
 # debugging clique
-import
-  std/[algorithm, strformat, strutils],
-  ../clique/clique_desc
+when defined(debug):
+  import
+    std/[algorithm, strformat, strutils],
+    ../clique/clique_desc
 
 when not defined(release):
   import ../../tracer
@@ -91,12 +92,12 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     c.db.currentBlock = header.blockNumber
 
   if c.db.config.poaEngine:
-    if c.clique.snapshotRegister(headers[^1]).isErr:
+    if c.clique.cliqueSnapshot(headers[^1]).isErr:
       debug "PoA signer snapshot failed"
-    # set if-clause to `true` for debugging ...
-    if false:
-      let list = c.clique.pp(c.clique.snapshotSigners).sorted
-      echo &"*** {list.len} trusted signer(s): ", list.join(" ")
+    when defined(debug):
+      #let list = c.clique.pp(c.clique.cliqueSigners).sorted
+      #echo &"*** {list.len} trusted signer(s): ", list.join(" ")
+      discard
 
   transaction.commit()
 

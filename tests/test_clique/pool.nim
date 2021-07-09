@@ -12,7 +12,10 @@ import
   std/[random, sequtils, strformat, strutils, tables, times],
   ../../nimbus/[config, chain_config, constants, genesis, utils],
   ../../nimbus/db/db_chain,
-  ../../nimbus/p2p/[chain, clique, clique/clique_utils],
+  ../../nimbus/p2p/[chain,
+                    clique,
+                    clique/clique_utils,
+                    clique/snapshot/snapshot_desc],
   ./voter_samples as vs,
   eth/[common, keys, p2p, rlp, trie/db],
   ethash,
@@ -20,7 +23,7 @@ import
   stew/objects
 
 export
-  vs
+  vs, snapshot_desc
 
 const
   prngSeed = 42
@@ -43,7 +46,6 @@ type
 
     names: Table[EthAddress,string]    ## reverse lookup for debugging
     xSeals: Table[XSealKey,XSealValue] ## collect signatures for debugging
-    debug: bool                        ## debuggin mode for sub-systems
 
 # ------------------------------------------------------------------------------
 # Private Helpers
@@ -96,8 +98,9 @@ proc privateKey(ap: TesterPool; account: string): PrivateKey =
 
 proc findName(ap: TesterPool; address: EthAddress): string =
   ## Find name for a particular address
-  if address in ap.names:
-    return ap.names[address]
+  if address notin ap.names:
+    ap.names[address] = &"X{ap.names.len+1}"
+  ap.names[address]
 
 proc findSignature(ap: TesterPool; sig: openArray[byte]): XSealValue =
   ## Find a previusly registered signature
@@ -196,7 +199,6 @@ proc resetChainDb(ap: TesterPool; extraData: Blob) =
   g.commit(ap.chain.clique.db)
   # fine tune Clique descriptor
   ap.chain.clique.cfg.prettyPrint.initPrettyPrinters(ap)
-  ap.chain.clique.debug = ap.debug
 
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
   result = ap
@@ -216,7 +218,7 @@ proc getPrettyPrinters*(t: TesterPool): var PrettyPrinters =
   t.chain.clique.cfg.prettyPrint
 
 proc say*(t: TesterPool; v: varargs[string,`$`]) =
-  if t.debug:
+  if t.chain.clique.cfg.debug:
     stderr.write v.join & "\n"
 
 proc sayHeaderChain*(ap: TesterPool; indent = 0): TesterPool {.discardable.} =
@@ -255,13 +257,21 @@ proc db*(ap: TesterPool): auto {.inline.} =
   ## Getter
   ap.clique.db
 
-proc snapshotSigners*(ap: TesterPool): auto {.inline.} =
+proc debug*(ap: TesterPool): auto {.inline.} =
   ## Getter
-  ap.clique.snapshotSigners
+  ap.clique.cfg.debug
 
-proc lastSnap*(ap: TesterPool): var SnapshotResult {.inline.} =
+proc cliqueSigners*(ap: TesterPool): auto {.inline.} =
   ## Getter
-  ap.clique.lastSnap
+  ap.clique.cliqueSigners
+
+proc error*(ap: TesterPool): auto {.inline.} =
+  ## Getter
+  ap.clique.error
+
+proc snapshot*(ap: TesterPool): var Snapshot {.inline.} =
+  ## Getter
+  ap.clique.snapshot
 
 # ------------------------------------------------------------------------------
 # Public: setter
@@ -269,8 +279,7 @@ proc lastSnap*(ap: TesterPool): var SnapshotResult {.inline.} =
 
 proc `debug=`*(ap: TesterPool; debug: bool) {.inline,} =
   ## Set debugging mode on/off
-  ap.debug = debug
-  ap.clique.debug = debug
+  ap.clique.cfg.debug = debug
 
 # ------------------------------------------------------------------------------
 # Public functions

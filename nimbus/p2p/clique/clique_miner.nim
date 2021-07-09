@@ -30,7 +30,8 @@ import
   ./clique_defs,
   ./clique_desc,
   ./clique_utils,
-  ./snapshot,
+  ./clique_snapshot,
+  ./clique_signers,
   ./snapshot/[snapshot_desc, snapshot_misc],
   chronicles,
   chronos,
@@ -81,28 +82,28 @@ proc verifySeal(c: Clique; header: BlockHeader;
     return err((errUnknownBlock,""))
 
   # Retrieve the snapshot needed to verify this header and cache it
-  if c.snapshotRegister(header.parentHash, parents).isErr:
-    return err(c.lastSnap.error)
-  var snap = c.lastSnap.value
+  let rc = c.cliqueSnapshot(header.parentHash, parents)
+  if rc.isErr:
+    return err(rc.error)
 
   # Resolve the authorization key and check against signers
   let signer = c.ecrecover(header)
   if signer.isErr:
       return err(signer.error)
 
-  if not snap.isSigner(signer.value):
+  if not c.snapshot.isSigner(signer.value):
     return err((errUnauthorizedSigner,""))
 
-  let seen = snap.recent(signer.value)
+  let seen = c.snapshot.recent(signer.value)
   if seen.isOk:
     # Signer is among recents, only fail if the current block does not
     # shift it out
-    if header.blockNumber - snap.signersThreshold.u256 < seen.value:
+    if header.blockNumber - c.snapshot.signersThreshold.u256 < seen.value:
       return err((errRecentlySigned,""))
 
   # Ensure that the difficulty corresponds to the turn-ness of the signer
   if not c.fakeDiff:
-    if snap.inTurn(header.blockNumber, signer.value):
+    if c.snapshot.inTurn(header.blockNumber, signer.value):
       if header.difficulty != DIFF_INTURN:
         return err((errWrongDifficulty,""))
     else:
@@ -145,19 +146,21 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
                 &"invalid gasUsed: have {header.gasUsed}, " &
                 &"gasLimit {header.gasLimit}"))
 
-  let rc = c.db.validateGasLimitOrBaseFee(header, parent)
-  if rc.isErr:
-    return err((errCliqueGasLimitOrBaseFee, rc.error))
+  block:
+    let rc = c.db.validateGasLimitOrBaseFee(header, parent)
+    if rc.isErr:
+      return err((errCliqueGasLimitOrBaseFee, rc.error))
 
   # Retrieve the snapshot needed to verify this header and cache it
-  if c.snapshotRegister(header.parentHash, parents).isErr:
-    return err(c.lastSnap.error)
-  var snap = c.lastSnap.value
+  block:
+    let rc = c.cliqueSnapshot(header.parentHash, parents)
+    if rc.isErr:
+      return err(rc.error)
 
   # If the block is a checkpoint block, verify the signer list
   if (header.blockNumber mod c.cfg.epoch.u256) == 0:
     let
-      signersList = c.snapshotSigners
+      signersList = c.cliqueSigners
       extraList = header.extraData.extraDataAddresses
     if signersList != extraList:
       return err((errMismatchingCheckpointSigners,""))
@@ -334,16 +337,16 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueOkResult
   header.nonce.reset
 
   # Assemble the voting snapshot to check which votes make sense
-  if c.snapshotRegister(header.parentHash, @[]).isErr:
-    return err(c.lastSnap.error)
-  var snap = c.lastSnap.value
+  let rc = c.cliqueSnapshot(header.parentHash, @[])
+  if rc.isErr:
+    return err(rc.error)
 
   if (header.blockNumber mod c.cfg.epoch) != 0:
     c.doExclusively:
       # Gather all the proposals that make sense voting on
       var addresses: seq[EthAddress]
       for (address,authorize) in c.proposals.pairs:
-        if snap.isValidVote(address, authorize):
+        if c.snapshot.isValidVote(address, authorize):
           addresses.add address
 
       # If there's pending proposals, cast a vote on them
@@ -353,12 +356,12 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueOkResult
                        else: NONCE_DROP
 
   # Set the correct difficulty
-  header.difficulty = snap.calcDifficulty(c.signer)
+  header.difficulty = c.snapshot.calcDifficulty(c.signer)
 
   # Ensure the extra data has all its components
   header.extraData.setLen(EXTRA_VANITY)
   if (header.blockNumber mod c.cfg.epoch) == 0:
-    header.extraData.add c.snapshotSigners.mapIt(toSeq(it)).concat
+    header.extraData.add c.cliqueSigners.mapIt(toSeq(it)).concat
   header.extraData.add 0.byte.repeat(EXTRA_SEAL)
 
   # Mix digest is reserved for now, set to empty
@@ -482,18 +485,18 @@ proc seal*(c: Clique; ethBlock: EthBlock):
       signFn = c.signFn
 
   # Bail out if we're unauthorized to sign a block
-  if c.snapshotRegister(header.parentHash).isErr:
-    return err(c.lastSnap.error)
-  var snap = c.lastSnap.value
-  if not snap.isSigner(signer):
+  let rc = c.cliqueSnapshot(header.parentHash)
+  if rc.isErr:
+    return err(rc.error)
+  if not c.snapshot.isSigner(signer):
     return err((errUnauthorizedSigner,""))
 
   # If we're amongst the recent signers, wait for the next block
-  let seen = snap.recent(signer)
+  let seen = c.snapshot.recent(signer)
   if seen.isOk:
     # Signer is among recents, only wait if the current block does not
     # shift it out
-    if header.blockNumber < seen.value + snap.signersThreshold.u256:
+    if header.blockNumber < seen.value + c.snapshot.signersThreshold.u256:
       info $nilCliqueSealSignedRecently
       return err((nilCliqueSealSignedRecently,""))
 
@@ -501,7 +504,7 @@ proc seal*(c: Clique; ethBlock: EthBlock):
   var delay = header.timestamp - getTime()
   if header.difficulty == DIFF_NOTURN:
     # It's not our turn explicitly to sign, delay it a bit
-    let wiggle = snap.signersThreshold.int64 * WIGGLE_TIME
+    let wiggle = c.snapshot.signersThreshold.int64 * WIGGLE_TIME
     # Kludge for limited rand() argument range
     if wiggle.inSeconds < (int.high div 1000).int64:
       let rndWiggleMs = c.cfg.rand(wiggle.inMilliSeconds.int)
@@ -561,9 +564,10 @@ proc calcDifficulty(c: Clique;
   ## This implementation  returns the difficulty that a new block should have:
   ## * DIFF_NOTURN(2) if BLOCK_NUMBER % SIGNER_COUNT != SIGNER_INDEX
   ## * DIFF_INTURN(1) if BLOCK_NUMBER % SIGNER_COUNT == SIGNER_INDEX
-  if c.snapshotRegister(parent).isErr:
-    return err(c.lastSnap.error)
-  return ok(c.lastSnap.value.calcDifficulty(c.signer))
+  let rc = c.cliqueSnapshot(parent)
+  if rc.isErr:
+    return err(rc.error)
+  return ok(c.snapshot.calcDifficulty(c.signer))
 
 
 # # clique/clique.go(710): func (c *Clique) SealHash(header [..]

@@ -104,8 +104,8 @@ const
 # clique/clique.go(76): var ( [..]
 type
   CliqueErrorType* = enum
-    noCliqueError = 0 ##\
-      ## Default/reset value
+    resetCliqueError = 0 ##\
+      ## Default/reset value (use `cliqueNoError` below rather than this valie)
 
     errUnknownBlock =  ##\
       ## is returned when the list of signers is requested for a block that is
@@ -221,6 +221,7 @@ type
     # -----------------------------------------
 
     errUnknownHash = "No header found for hash value"
+    errEmptyLruCache = "No snapshos available"
 
     errZeroBlockNumberRejected = "Block number must not be Zero"
 
@@ -244,12 +245,15 @@ type
     nilCliqueSealSignedRecently = "Signed recently, must wait for others"
 
 # ------------------------------------------------------------------------------
-# More types
+# More types and constants
 # ------------------------------------------------------------------------------
 
 type
   CliqueError* = (CliqueErrorType,string)
   CliqueOkResult* = Result[void,CliqueError]
+
+const
+  cliqueNoError* = (resetCliqueError, "")
 
 # ------------------------------------------------------------------------------
 # End

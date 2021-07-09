@@ -78,6 +78,9 @@ type
       ## votes.Suggested 30000 for the testnet to remain analogous to the
       ## mainnet ethash epoch.
 
+    debug*: bool ##\
+      ## Debug mode flag
+
     prettyPrint*: PrettyPrinters ##\
       ## debugging support
 
@@ -176,6 +179,11 @@ template ppExceptionWrap*(body: untyped) =
     body
   except:
     raise (ref PrettyPrintDefect)(msg: getCurrentException().msg)
+
+proc say*(cfg: CliqueCfg; v: varargs[string,`$`]) {.inline.} =
+  ## Debugging output
+  ppExceptionWrap:
+    if cfg.debug: stderr.write "*** " & v.join & "\n"
 
 
 proc pp*(v: CliqueError): string =

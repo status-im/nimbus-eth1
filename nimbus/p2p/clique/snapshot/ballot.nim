@@ -19,7 +19,8 @@
 ##
 
 import
-  std/[sequtils, strutils, tables],
+  std/[sequtils, tables],
+  # std/[strutils],
   ../clique_cfg,
   ../clique_utils,
   eth/common
@@ -52,11 +53,11 @@ type
 # Private
 # ------------------------------------------------------------------------------
 
-proc say(t: var Ballot; v: varargs[string,`$`]) =
+proc say(t: var Ballot; v: varargs[string,`$`]) {.inline.} =
   ## Debugging output
   ppExceptionWrap:
-    if t.debug:
-      stderr.write "*** " & v.join & "\n"
+    # if t.debug: stderr.write "*** " & v.join & "\n"
+    discard
 
 # ------------------------------------------------------------------------------
 # Public debugging/pretty-printer support
