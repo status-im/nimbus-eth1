@@ -101,11 +101,11 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is AdvertiseMessage: advertise
   elif T is RequestProofsMessage: requestproofs
 
-template toSszType*(x: auto): auto =
-  mixin toSszType
+template toSszType*(x: UInt256): array[32, byte] =
+  toBytesLE(x)
 
-  when x is UInt256: toBytesLE(x)
-  else: x
+template toSszType*(x: auto): auto =
+  x
 
 func fromSszBytes*(T: type UInt256, data: openArray[byte]):
     T {.raises: [MalformedSszError, Defect].} =

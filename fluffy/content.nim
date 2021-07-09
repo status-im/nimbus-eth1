@@ -10,7 +10,9 @@
 {.push raises: [Defect].}
 
 import
-  nimcrypto/[sha2, hash], eth/ssz/ssz_serialization
+  nimcrypto/[sha2, hash], stew/objects, eth/ssz/ssz_serialization
+
+export ssz_serialization
 
 type
   ByteList* = List[byte, 2048]
@@ -22,27 +24,41 @@ type
 
   NetworkId* = uint16
 
-  NodeHash* = List[byte, 32] # MDigest[32 * 8] - sha256
+  NodeHash* = List[byte, 32] # MDigest[32 * 8] - keccak256
 
   CodeHash* = List[byte, 32] # MDigest[32 * 8] - keccak256
 
   Address* = List[byte, 20]
 
   ContentKey* = object
+    networkId*: NetworkId
+    contentType*: ContentType
     # TODO: How shall we deal with the different ContentKey structures?
-    networkId: NetworkId
-    contentType: ContentType
-    address: Address
-    triePath: ByteList
-    nodeHash: NodeHash
+    # Lets start with just node hashes for now.
+    # address: Address
+    # triePath: ByteList
+    nodeHash*: NodeHash
 
   ContentId* = MDigest[32 * 8]
 
-template toSszType*(x: auto): auto =
-  mixin toSszType
+  KeccakHash* = MDigest[32 * 8] # could also import from either eth common types or trie defs
 
-  when x is ContentType: uint8(x)
-  else: x
+template toSszType*(x: ContentType): uint8 =
+  uint8(x)
+
+template toSszType*(x: auto): auto =
+  x
+
+func fromSszBytes*(T: type ContentType, data: openArray[byte]):
+    T {.raises: [MalformedSszError, Defect].} =
+  if data.len != sizeof(uint8):
+    raiseIncorrectSize T
+
+  var contentType: T
+  if not checkedEnumAssign(contentType, data[0]):
+    raiseIncorrectSize T
+
+  contentType
 
 func toContentId*(contentKey: ContentKey): ContentId =
   sha2.sha_256.digest(SSZ.encode(contentKey))
