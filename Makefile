@@ -122,13 +122,17 @@ nimbus.nims:
 libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
-# builds and runs the test suite
+# builds and runs the nimbus test suite
 test: | build deps
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
-# builds and runs the test suite
+# builds and runs the fluffy test suite
 test-fluffy: | build deps
 	$(ENV_SCRIPT) nim testfluffy $(NIM_PARAMS) nimbus.nims
+
+# builds fluffy tools
+tools-fluffy: | build deps
+	$(ENV_SCRIPT) nim portalcli $(NIM_PARAMS) nimbus.nims
 
 # primitive reproducibility test
 test-reproducibility:

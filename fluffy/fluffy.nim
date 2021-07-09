@@ -9,12 +9,11 @@
 
 import
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
-  chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient, json_rpc/rpcproxy,
+  chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient,
+  json_rpc/rpcproxy,
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  eth/p2p/portal/protocol as portal_protocol,
-  ./conf, ./rpc/eth_api, ./rpc/bridge_client
-
+  ./conf, ./network/portal_protocol, ./rpc/eth_api, ./rpc/bridge_client
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:

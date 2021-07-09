@@ -54,5 +54,8 @@ task nimbus, "Build Nimbus":
 task fluffy, "Build fluffy":
   buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE"
 
+task portalcli, "Build portalcli":
+  buildBinary "portalcli", "fluffy/network/", "-d:chronicles_log_level=TRACE"
+
 task testfluffy, "Run fluffy tests":
   test "fluffy", "all_fluffy_tests"
