@@ -169,8 +169,9 @@ jobs:
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy
+          mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           build/fluffy.exe --help
-          mingw32-make ${DEFAULT_MAKE_FLAGS} test-fluffy
+          mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy-test
 
       - name: Run fluffy tests (Linux)
         if: runner.os == 'Linux'
@@ -178,15 +179,17 @@ jobs:
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           build/fluffy --help
           # CC is needed to select correct compiler 32/64 bit
-          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} test-fluffy test-fluffy-reproducibility
+          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} fluffy-test fluffy-test-reproducibility
 
       - name: Run fluffy tests (Macos)
         if: runner.os == 'Macos'
         run: |
           DEFAULT_MAKE_FLAGS="-j${ncpu}"
           make ${DEFAULT_MAKE_FLAGS} fluffy
+          make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           build/fluffy --help
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} test-fluffy test-fluffy-reproducibility
+          make ${DEFAULT_MAKE_FLAGS} fluffy-test fluffy-test-reproducibility
