@@ -10,9 +10,9 @@ import ../../test_macro
 {. warning[UnusedImport]:off .}
 
 import
-  ./tests/test_portal_encoding,
-  ./tests/test_portal
+  ./test_portal_encoding,
+  ./test_portal
 
 cliBuilder:
   import
-    ./tests/test_bridge_parser
+    ./test_bridge_parser

@@ -110,10 +110,6 @@ nimbus: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim nimbus $(NIM_PARAMS) nimbus.nims
 
-fluffy: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim fluffy $(NIM_PARAMS) nimbus.nims
-
 # symlink
 nimbus.nims:
 	ln -s nimbus.nimble $@
@@ -126,14 +122,6 @@ libbacktrace:
 test: | build deps
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
-# builds and runs the fluffy test suite
-test-fluffy: | build deps
-	$(ENV_SCRIPT) nim testfluffy $(NIM_PARAMS) nimbus.nims
-
-# builds fluffy tools
-tools-fluffy: | build deps
-	$(ENV_SCRIPT) nim portalcli $(NIM_PARAMS) nimbus.nims
-
 # primitive reproducibility test
 test-reproducibility:
 	+ [ -e build/nimbus ] || $(MAKE) V=0 nimbus; \
@@ -144,8 +132,14 @@ test-reproducibility:
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
+# Fluffy related targets
+# builds the fluffy client
+fluffy: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim fluffy $(NIM_PARAMS) nimbus.nims
+
 # primitive reproducibility test
-test-fluffy-reproducibility:
+fluffy-test-reproducibility:
 	+ [ -e build/fluffy ] || $(MAKE) V=0 fluffy; \
 		MD5SUM1=$$($(MD5SUM) build/fluffy | cut -d ' ' -f 1) && \
 		rm -rf nimcache/*/fluffy && \
@@ -154,9 +148,17 @@ test-fluffy-reproducibility:
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
+# builds and runs the fluffy test suite
+fluffy-test: | build deps
+	$(ENV_SCRIPT) nim testfluffy $(NIM_PARAMS) nimbus.nims
+
+# builds the fluffy tools
+fluffy-tools: | build deps
+	$(ENV_SCRIPT) nim portalcli $(NIM_PARAMS) nimbus.nims
+
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,test_rpc, all_fluffy_tests}
+	rm -rf build/{nimbus,fluffy,$(TOOLS_CSV),all_tests,test_rpc,all_fluffy_tests,portalcli}
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif

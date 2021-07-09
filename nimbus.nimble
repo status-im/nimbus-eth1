@@ -58,4 +58,4 @@ task portalcli, "Build portalcli":
   buildBinary "portalcli", "fluffy/network/", "-d:chronicles_log_level=TRACE"
 
 task testfluffy, "Run fluffy tests":
-  test "fluffy", "all_fluffy_tests"
+  test "fluffy/tests", "all_fluffy_tests"
