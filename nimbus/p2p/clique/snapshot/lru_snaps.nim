@@ -219,7 +219,7 @@ proc initLruSnaps*(rs: var LruSnaps;
       return ok(snap)
 
   rs.cfg = cfg
-  rs.cache.initLruCache(toKey, toValue, INMEMORY_SNAPSHOTS)
+  rs.cache.initCache(toKey, toValue, INMEMORY_SNAPSHOTS)
 
 
 proc initLruSnaps*(cfg: CliqueCfg): LruSnaps {.gcsafe,raises: [Defect].} =
@@ -241,7 +241,7 @@ proc getLruSnaps*(rs: var LruSnaps; header: BlockHeader;
                      {.gcsafe, raises: [Defect,CatchableError].} =
   ## Get snapshot from cache or disk
   rs.say "getLruSnap #", header.blockNumber
-  rs.cache.getLruItem:
+  rs.cache.getItem:
     LruSnapsDesc(
       cfg:   rs.cfg,
       debug: rs.debug,

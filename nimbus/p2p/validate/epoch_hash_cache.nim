@@ -53,13 +53,13 @@ proc initEpochHashCache*(cache: var EpochHashCache; cacheMaxItems = 10) =
       let top = blockNumber.bnToEpoch.uint64 * EPOCH_LENGTH
       ok( mkcache( getCacheSize(top), getSeedhash(top)))
 
-  cache.initLruCache(toKey, toValue, cacheMaxItems)
+  cache.initCache(toKey, toValue, cacheMaxItems)
 
 
 proc getEpochHash*(cache: var EpochHashCache;
                    blockNumber: uint64): auto {.inline.} =
   ## Return hash list, indexed by epoch of argument `blockNumber`
-  cache.getLruItem(blockNumber).value
+  cache.getItem(blockNumber).value
 
 # ------------------------------------------------------------------------------
 # End
