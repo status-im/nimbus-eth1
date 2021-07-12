@@ -47,6 +47,8 @@ template toSszType*(x: ContentType): uint8 =
   uint8(x)
 
 template toSszType*(x: auto): auto =
+  mixin toSszType
+
   x
 
 func fromSszBytes*(T: type ContentType, data: openArray[byte]):
@@ -61,4 +63,13 @@ func fromSszBytes*(T: type ContentType, data: openArray[byte]):
   contentType
 
 func toContentId*(contentKey: ContentKey): ContentId =
+  # TODO: Hash function to be defined, sha256 used now, might be confusing
+  # with keccak256 that is used for the actual nodes:
+  # https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#content
   sha2.sha_256.digest(SSZ.encode(contentKey))
+
+type
+  ContentStorage* = object
+
+func getContent*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
+  discard

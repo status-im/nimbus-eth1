@@ -8,8 +8,10 @@
 {.push raises: [Defect].}
 
 import
+  std/sequtils,
   stew/[results, byteutils], chronicles,
-  eth/rlp, eth/p2p/discoveryv5/[protocol, node],
+  eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr],
+  ../content,
   ./messages
 
 export messages
@@ -24,6 +26,7 @@ type
   PortalProtocol* = ref object of TalkProtocol
     baseProtocol*: protocol.Protocol
     dataRadius*: UInt256
+    contentStorage*: ContentStorage
 
 proc handlePing(p: PortalProtocol, ping: PingMessage):
     seq[byte] =
@@ -41,18 +44,45 @@ proc handleFindNode(p: PortalProtocol, fn: FindNodeMessage): seq[byte] =
     let enr = ByteList(rlp.encode(p.baseProtocol.localNode.record))
     encodeMessage(NodesMessage(total: 1, enrs: List[ByteList, 32](@[enr])))
   else:
-    # TODO: Not implemented for now, sending empty back.
-    let enrs = List[ByteList, 32](@[])
-    encodeMessage(NodesMessage(total: 1, enrs: enrs))
+    let distances = fn.distances.asSeq()
+    if distances.all(proc (x: uint16): bool = return x <= 256):
+      let
+        nodes = p.baseProtocol.neighboursAtDistances(distances, seenOnly = true)
+        enrs = nodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
 
-proc handleFindContent(p: PortalProtocol, ping: FindContentMessage): seq[byte] =
-  # TODO: Neither payload nor enrs implemented, sending empty back.
+      # TODO: Fixed here to total message of 1 for now, as else we would need to
+      # either move the send of the talkresp messages here, or allow for
+      # returning multiple messages.
+      # On the long run, it might just be better to use a stream in these cases?
+      encodeMessage(
+        NodesMessage(total: 1, enrs: List[ByteList, 32](List(enrs))))
+    else:
+      # invalid request, send empty back
+      let enrs = List[ByteList, 32](@[])
+      encodeMessage(NodesMessage(total: 1, enrs: enrs))
+
+proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
+  # TODO: Need to check networkId, type, trie path
   let
-    enrs = List[ByteList, 32](@[])
-    payload = ByteList(@[])
-  encodeMessage(FoundContentMessage(enrs: enrs, payload: payload))
+    # TODO: Should we first do a simple check on ContentId versus Radius?
+    contentId = toContentId(fc.contentKey)
+    content = p.contentStorage.getContent(fc.contentKey)
+  if content.isSome():
+    let enrs = List[ByteList, 32](@[]) # Empty enrs when payload is send
+    encodeMessage(FoundContentMessage(
+      enrs: enrs, payload: ByteList(content.get())))
+  else:
+    let
+      closestNodes = p.baseProtocol.neighbours(
+        NodeId(readUintBE[256](contentId.data)), seenOnly = true)
+      payload = ByteList(@[]) # Empty payload when enrs are send
+      enrs =
+        closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
 
-proc handleAdvertise(p: PortalProtocol, ping: AdvertiseMessage): seq[byte] =
+    encodeMessage(FoundContentMessage(
+      enrs: List[ByteList, 32](List(enrs)), payload: payload))
+
+proc handleAdvertise(p: PortalProtocol, a: AdvertiseMessage): seq[byte] =
   # TODO: Not implemented
   let
     connectionId = List[byte, 4](@[])
@@ -141,7 +171,7 @@ proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
   else:
     return err(talkresp.error)
 
-proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
+proc findContent*(p: PortalProtocol, dst: Node, contentKey: ContentKey):
     Future[DiscResult[FoundContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 

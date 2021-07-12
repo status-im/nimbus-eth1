@@ -200,8 +200,10 @@ proc run(config: DiscoveryConf) =
 
       key
 
-    # For now just random content keys
-    let contentKey = ByteList(@(UInt256.random(rng[]).toBytes()))
+    # For now just random content node hash
+    let contentKey = ContentKey(networkId: 0'u16,
+      contentType: messages.ContentType.Account,
+      nodeHash: List[byte, 32](@(UInt256.random(rng[]).toBytes())))
     let foundContent = waitFor portal.findContent(config.findContentTarget,
       contentKey)
 
