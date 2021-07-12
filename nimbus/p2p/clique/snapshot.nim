@@ -21,7 +21,6 @@
 ##
 
 import
-  std/[sequtils],
   ../../db/db_chain,
   ./clique_defs,
   ./clique_desc,

@@ -356,7 +356,7 @@ proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
 
   # store modified genesis block and epoch
   ap.resetChainDb(extraData)
-  ap.clique.cfg.epoch = epoch.uint
+  ap.clique.cfg.epoch = epoch
 
 
 # clique/snapshot_test.go(415): blocks, _ := core.GenerateChain(&config, [..]

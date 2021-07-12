@@ -23,7 +23,6 @@ import
   ../../db/db_chain,
   ../../constants,
   ./clique_cfg,
-  ./clique_defs,
   ./snapshot/lru_snaps,
   chronos,
   eth/[common, keys, rlp]
