@@ -29,7 +29,7 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
     extra_params &= " " & paramStr(i)
   exec "nim " & lang & " --out:build/" & name & " " & extra_params & " " & srcDir & name & ".nim"
 
-proc test(path: string, name: string, lang = "c") =
+proc test(path: string, name: string, params = "", lang = "c") =
   # Verify stack usage is kept low by setting 750k stack limit in tests.
   const stackLimitKiB = 750
   when not defined(windows):
@@ -42,11 +42,11 @@ proc test(path: string, name: string, lang = "c") =
     const (buildOption, runPrefix) =
       (" -d:windowsNoSetStack --passL:-Wl,--stack," & $(stackLimitKiB * 1024), "")
 
-  buildBinary name, (path & "/"), "-d:chronicles_log_level=ERROR" & buildOption
+  buildBinary name, (path & "/"), params & buildOption
   exec runPrefix & "build/" & name
 
 task test, "Run tests":
-  test "tests", "all_tests"
+  test "tests", "all_tests", "-d:chronicles_log_level=ERROR"
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
@@ -58,4 +58,4 @@ task portalcli, "Build portalcli":
   buildBinary "portalcli", "fluffy/network/", "-d:chronicles_log_level=TRACE"
 
 task testfluffy, "Run fluffy tests":
-  test "fluffy/tests", "all_fluffy_tests"
+  test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
