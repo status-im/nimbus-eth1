@@ -9,34 +9,10 @@
 
 import
   chronos, testutils/unittests, stew/shims/net,
-  eth/keys, # for rng
-  eth/p2p/discoveryv5/[enr, node, routing_table],
+  eth/keys, eth/p2p/discoveryv5/routing_table,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/portal_protocol
-
-proc localAddress(port: int): node.Address =
-  node.Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
-
-proc initDiscoveryNode(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
-                        address: node.Address,
-                        bootstrapRecords: openarray[Record] = [],
-                        localEnrFields: openarray[(string, seq[byte])] = [],
-                        previousRecord = none[enr.Record]()):
-                        discv5_protocol.Protocol =
-  # set bucketIpLimit to allow bucket split
-  let tableIpLimits = TableIpLimits(tableIpLimit: 1000,  bucketIpLimit: 24)
-
-  result = newProtocol(privKey,
-                       some(address.ip),
-                       some(address.port), some(address.port),
-                       bindPort = address.port,
-                       bootstrapRecords = bootstrapRecords,
-                       localEnrFields = localEnrFields,
-                       previousRecord = previousRecord,
-                       tableIpLimits = tableIpLimits,
-                       rng = rng)
-
-  result.open()
+  ../network/portal_protocol,
+  ./test_helpers
 
 proc random(T: type UInt256, rng: var BrHmacDrbgContext): T =
   var key: UInt256

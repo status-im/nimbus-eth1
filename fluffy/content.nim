@@ -10,7 +10,8 @@
 {.push raises: [Defect].}
 
 import
-  nimcrypto/[sha2, hash], stew/objects, eth/ssz/ssz_serialization
+  nimcrypto/[sha2, hash], stew/objects,
+  eth/ssz/ssz_serialization, eth/trie/[hexary, db]
 
 export ssz_serialization
 
@@ -47,8 +48,6 @@ template toSszType*(x: ContentType): uint8 =
   uint8(x)
 
 template toSszType*(x: auto): auto =
-  mixin toSszType
-
   x
 
 func fromSszBytes*(T: type ContentType, data: openArray[byte]):
@@ -70,6 +69,18 @@ func toContentId*(contentKey: ContentKey): ContentId =
 
 type
   ContentStorage* = object
+    # TODO: Quick implementation for now where we just use HexaryTrie, current
+    # idea is to move in here a more direct storage of the trie nodes, but have
+    # an `ContentProvider` "interface" that could provide the trie nodes via
+    # this direct storage, via the HexaryTrie (for full nodes), or also without
+    # storage, via json rpc client requesting data from a full eth1 client.
+    trie*: HexaryTrie
 
-func getContent*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
-  discard
+proc getContent*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
+  if storage.trie.db == nil: # TODO: for now...
+    return none(seq[byte])
+  let val = storage.trie.db.get(key.nodeHash.asSeq())
+  if val.len > 0:
+    some(val)
+  else:
+    none(seq[byte])
