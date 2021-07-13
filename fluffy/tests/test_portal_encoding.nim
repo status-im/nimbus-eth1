@@ -83,12 +83,16 @@ suite "Portal Protocol Message Encodings":
       message.nodes.enrs.len() == 0
 
   test "FindContent Request":
+    var nodeHash: List[byte, 32]
     let
-      contentKey = ByteList(@[byte 0x01, 0x02, 0x03])
+      contentKey = ContentKey(
+        networkId: 0'u16,
+        contentType: ContentType.Account,
+        nodeHash: nodeHash)
       fn = FindContentMessage(contentKey: contentKey)
 
     let encoded = encodeMessage(fn)
-    check encoded.toHex == "0504000000010203"
+    check encoded.toHex == "050400000000000107000000"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()

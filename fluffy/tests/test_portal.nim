@@ -14,11 +14,11 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/portal_protocol
 
-proc localAddress(port: int): Address =
-  Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
+proc localAddress(port: int): node.Address =
+  node.Address(ip: ValidIpAddress.init("127.0.0.1"), port: Port(port))
 
 proc initDiscoveryNode(rng: ref BrHmacDrbgContext, privKey: PrivateKey,
-                        address: Address,
+                        address: node.Address,
                         bootstrapRecords: openarray[Record] = [],
                         localEnrFields: openarray[(string, seq[byte])] = [],
                         previousRecord = none[enr.Record]()):
@@ -96,13 +96,23 @@ procSuite "Portal Tests":
         nodes.get().enrs.len() == 0
 
     block: # Find for distance
-      # TODO: Add test when implemented
-      discard
+      # ping in one direction to add, ping in the other to update as seen.
+      check (await node1.ping(node2.localNode)).isOk()
+      check (await node2.ping(node1.localNode)).isOk()
+
+      let distance = logDist(node1.localNode.id, node2.localNode.id)
+      let nodes = await proto1.findNode(proto2.baseProtocol.localNode,
+        List[uint16, 256](@[distance]))
+
+      check:
+        nodes.isOk()
+        nodes.get().total == 1'u8
+        nodes.get().enrs.len() == 1
 
     await node1.closeWait()
     await node2.closeWait()
 
-  asyncTest "Portal FindContent/FoundContent":
+  asyncTest "Portal FindContent/FoundContent - send enrs":
     let
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302))
@@ -112,15 +122,22 @@ procSuite "Portal Tests":
       proto1 = PortalProtocol.new(node1)
       proto2 = PortalProtocol.new(node2)
 
-    let contentKey = ByteList(@(UInt256.random(rng[]).toBytes()))
+    # ping in one direction to add, ping in the other to update as seen.
+    check (await node1.ping(node2.localNode)).isOk()
+    check (await node2.ping(node1.localNode)).isOk()
 
+    let contentKey = ContentKey(networkId: 0'u16,
+      contentType: ContentType.Account,
+      nodeHash: List[byte, 32](@(UInt256.random(rng[]).toBytes())))
+
+    # content does not exist so this should provide us with the closest nodes
+    # to the content, which is the only node in the routing table.
     let foundContent = await proto1.findContent(proto2.baseProtocol.localNode,
       contentKey)
 
     check:
       foundContent.isOk()
-      # TODO: adjust when implemented
-      foundContent.get().enrs.len() == 0
+      foundContent.get().enrs.len() == 1
       foundContent.get().payload.len() == 0
 
     await node1.closeWait()

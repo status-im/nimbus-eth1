@@ -12,13 +12,12 @@
 
 import
   stint, stew/[results, objects],
-  eth/ssz/ssz_serialization
+  eth/ssz/ssz_serialization,
+  ../content
 
-export ssz_serialization, stint
+export ssz_serialization, stint, content
 
 type
-  ByteList* = List[byte, 2048]
-
   MessageKind* = enum
     unused = 0x00
 
@@ -48,7 +47,7 @@ type
     # also be limited to 300 bytes instead of 2048
 
   FindContentMessage* = object
-    contentKey*: ByteList
+    contentKey*: ContentKey
 
   FoundContentMessage* = object
     enrs*: List[ByteList, 32]
@@ -103,9 +102,6 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
 
 template toSszType*(x: UInt256): array[32, byte] =
   toBytesLE(x)
-
-template toSszType*(x: auto): auto =
-  x
 
 func fromSszBytes*(T: type UInt256, data: openArray[byte]):
     T {.raises: [MalformedSszError, Defect].} =
