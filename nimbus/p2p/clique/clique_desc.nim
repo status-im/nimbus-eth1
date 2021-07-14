@@ -87,12 +87,19 @@ proc newClique*(cfg: CliqueCfg): Clique =
          asyncLock: newAsyncLock())
 
 # ------------------------------------------------------------------------------
-# Public debug/pretty print
+# Public /pretty print
 # ------------------------------------------------------------------------------
 
+# Debugging only
 proc getPrettyPrinters*(c: Clique): var PrettyPrinters =
   ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
   c.cfg.prettyPrint
+
+proc `$`*(e: CliqueError): string =
+  ## Join text fragments
+  result = $e[0]
+  if e[1] != "":
+    result &= ": " & e[1]
 
 # ------------------------------------------------------------------------------
 # Public getters

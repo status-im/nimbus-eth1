@@ -33,7 +33,7 @@ proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
 # ------------------------------------------------------------------------------
 
 # clique/snapshot_test.go(99): func TestClique(t *testing.T) {
-proc runCliqueSnapshot(noisy = true) =
+proc runCliqueSnapshot(noisy = true; testIds = {0 .. 999}; skipIds = {0}-{0}) =
   ## Clique PoA Snapshot
   ## ::
   ##    Tests that Clique signer voting is evaluated correctly for various
@@ -43,19 +43,17 @@ proc runCliqueSnapshot(noisy = true) =
   suite "Clique PoA Snapshot":
     var
       pool = newVoterPool()
-    const
-      skipSet = {999}
-      testSet = {0 .. 999}
 
     pool.debug = noisy
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
-    for tt in voterSamples.filterIt(it.id in testSet):
+    for tt in voterSamples.filterIt(it.id in testIds):
 
       test &"Snapshots {tt.id:2}: {tt.info.substr(0,50)}...":
         pool.say "\n"
 
-        if tt.id in skipSet:
+        # Noisily skip this test
+        if tt.id in skipIds:
           skip()
 
         else:
@@ -193,8 +191,8 @@ proc cliqueMain*(noisy = defined(debug)) =
 
 when isMainModule:
   let noisy = defined(debug)
-  noisy.runCliqueSnapshot
-  noisy.runGoerliBaybySteps(dir = ".")
+  # noisy.runCliqueSnapshot(testIds = {1 .. 999})
+  # noisy.runGoerliBaybySteps(dir = ".")
   noisy.runGoerliReplay(dir = ".", stopAfterBlock = 0)
 
 # ------------------------------------------------------------------------------

@@ -19,7 +19,7 @@
 ##
 
 import
-  std/[sequtils, strformat],
+  std/[sequtils, strformat, strutils],
   ../../db/db_chain,
   ../../utils,
   ./clique_cfg,
@@ -60,8 +60,14 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc say(d: LocalSnaps; v: varargs[string,`$`]) {.inline.} =
-  d.c.cfg.say v
+  # d.c.cfg.say v
   discard
+
+proc pp(q: openArray[BlockHeader]): string {.inline.} =
+  "[" & toSeq(q).mapIt("#" & $it.blockNumber).join(", ") & "]"
+
+proc pp(h: BlockHeader, q: openArray[BlockHeader]): string {.inline.} =
+  "#" & $h.blockNumber & " " & q.pp
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -107,6 +113,8 @@ proc findSnapshot(d: var LocalSnaps): bool
   var (header, hash) = (d.start.header, d.start.hash)
 
   while true:
+    d.say "findSnapshot headers=(", header.pp(d.parents), ")"
+
     let number = header.blockNumber
 
     # Check whether the snapshot was recently visited and cahed
@@ -116,7 +124,7 @@ proc findSnapshot(d: var LocalSnaps): bool
         # we made sure that this is not a blind entry (currently no reason
         # why there should be any, though)
         d.value.snaps = rc.value
-        # d.say "findSnapshot cached #",number," <", d.value.trail.len
+        # d.say "findSnapshot cached headers=(", header.pp(d.value.trail), ")"
         debug "Found recently cached voting snapshot",
           blockNumber = number,
           blockHash = hash
@@ -125,7 +133,7 @@ proc findSnapshot(d: var LocalSnaps): bool
     # If an on-disk checkpoint snapshot can be found, use that
     if d.isCheckPoint(number) and
        d.value.snaps.loadSnapshot(d.c.cfg, hash).isOK:
-      d.say "findSnapshot disked #",number," <",d.value.trail.len
+      d.say "findSnapshot disked trail=(", header.pp(d.value.trail), ")"
       trace "Loaded voting snapshot from disk",
         blockNumber = number,
         blockHash = hash
@@ -138,7 +146,7 @@ proc findSnapshot(d: var LocalSnaps): bool
       # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
       d.value.snaps.initSnapshot(d.c.cfg, header)
       if d.value.snaps.storeSnapshot.isOK:
-        d.say "findSnapshot <epoch> #",number," <",d.value.trail.len
+        d.say "findSnapshot <epoch> trail=(", header.pp(d.value.trail), ")"
         info "Stored voting snapshot to disk",
           blockNumber = number,
           blockHash = hash
@@ -210,6 +218,10 @@ proc updateSnapshot(c: Clique; header: Blockheader;
       header:  header,
       hash:    header.hash))
 
+  # For convenience, allow the top parent to be the same as the argument header
+  if 0 < d.parents.len and d.parents[^1] == header:
+    d.parents.setLen(d.parents.len - 1)
+
   # Search for previous snapshots
   if not d.findSnapshot:
     return err(d.value.error)
@@ -244,11 +256,11 @@ proc updateSnapshot(c: Clique; header: Blockheader;
     return err(snaps.error)
 
   # clique/clique.go(438): c.recents.Add(snap.Hash, snap)
-  if c.recents.setLruSnaps(snaps.value):
-    return ok(snaps.value)
+  if not c.recents.setLruSnaps(snaps.value):
+    # someting went seriously wrong -- lol
+    return err((errSetLruSnaps, &"block #{snaps.value.blockNumber}"))
 
-  # someting went seriously wrong -- lol
-  err((errSetLruSnaps, &"block #{snaps.value.blockNumber}"))
+  ok(snaps.value)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -262,7 +274,10 @@ proc cliqueSnapshot*(c: Clique; header: Blockheader;
   ## and store it in the `Clique` descriptor to be retrievable as `c.snapshot`
   ## if successful.
   ##
-  ## The retun result error (or no error) is also stored in the `Clique`
+  ## If the `parents[]` argulent list top element (if any) is the same as the
+  ## `header` argument, this top element is silently ignored.
+  ##
+  ## A return result error (or no error) is also stored in the `Clique`
   ## descriptor to be retrievable as `c.error`.
   c.error = cliqueNoError
 
@@ -275,7 +290,7 @@ proc cliqueSnapshot*(c: Clique; header: Blockheader;
   if snaps.isErr:
     c.error = (snaps.error)
     return err(c.error)
-    
+
   c.snapshot = snaps.value
   ok()
 
@@ -295,7 +310,10 @@ proc cliqueSnapshot*(c: Clique; hash: Hash256;
   ## and store it in the `Clique` descriptor to be retrievable as  `c.snapshot`
   ## if successful.
   ##
-  ## The retun result error (or no error) is also stored in the `Clique`
+  ## If the `parents[]` argulent list top element (if any) is the same as the
+  ## `header` argument, this top element is silently ignored.
+  ##
+  ## A return result error (or no error) is also stored in the `Clique`
   ## descriptor to be retrievable as `c.error`.
   c.error = cliqueNoError
 

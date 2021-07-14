@@ -188,7 +188,7 @@ proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
   pp.extraData =   proc(v:Blob):                  string = ap.ppExtraData(v)
   pp.blockHeader = proc(v:BlockHeader; d:string): string = ap.ppBlockHeader(v,d)
 
-proc resetChainDb(ap: TesterPool; extraData: Blob) =
+proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
   ## Setup new block chain with bespoke genesis
   ap.chain = BaseChainDB(db: newMemoryDb(), config: ap.boot.config).newChain
   ap.chain.clique.db.populateProgress
@@ -198,6 +198,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob) =
     g.extraData = extraData
   g.commit(ap.chain.clique.db)
   # fine tune Clique descriptor
+  ap.chain.clique.cfg.debug = debug
   ap.chain.clique.cfg.prettyPrint.initPrettyPrinters(ap)
 
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
@@ -329,21 +330,6 @@ proc sign*(ap: TesterPool; header: var BlockHeader; signer: string) =
 # Public: set up & manage voter database
 # ------------------------------------------------------------------------------
 
-#proc setVoterAccount*(ap: TesterPool; account: string;
-#                      prvKey: PrivateKey): TesterPool {.discardable.} =
-#  ## Manually define/import account
-#  result = ap
-#  ap.accounts[account] = prvKey
-#  let address = prvKey.toPublicKey.toCanonicalAddress
-#  ap.names[address] = account
-#
-#proc topVoterHeader*(ap: TesterPool): BlockHeader =
-#  ## Get top header from voter batch list
-#  doAssert 0 < ap.batch.len # see initTesterPool() and resetVoterChain()
-#  if 0 < ap.batch[^1].len:
-#    result = ap.batch[^1][^1]
-
-
 proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
                       epoch = 0): TesterPool {.discardable.} =
   ## Reset the batch list for voter headers and update genesis block
@@ -364,7 +350,7 @@ proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
   extraData.add 0.byte.repeat(EXTRA_SEAL)
 
   # store modified genesis block and epoch
-  ap.resetChainDb(extraData)
+  ap.resetChainDb(extraData, ap.debug )
   ap.clique.cfg.epoch = epoch
 
 
@@ -384,7 +370,7 @@ proc appendVoter*(ap: TesterPool;
     parentHash:  parent.hash,
     ommersHash:  EMPTY_UNCLE_HASH,
     stateRoot:   parent.stateRoot,
-    timestamp:   parent.timestamp + initDuration(seconds = 10),
+    timestamp:   parent.timestamp + initDuration(seconds = 100),
     txRoot:      BLANK_ROOT_HASH,
     receiptRoot: BLANK_ROOT_HASH,
     blockNumber: parent.blockNumber + 1,
