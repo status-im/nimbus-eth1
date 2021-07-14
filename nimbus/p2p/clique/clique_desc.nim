@@ -82,7 +82,7 @@ proc newClique*(cfg: CliqueCfg): Clique =
   ## initial signers set to the ones provided by the user.
   Clique(cfg:       cfg,
          recents:   initLruSnaps(cfg),
-         snapshot:  cfg.initSnapshot(BlockHeader()), # dummy
+         snapshot:  cfg.newSnapshot(BlockHeader()), # dummy
          proposals: initTable[EthAddress,bool](),
          asyncLock: newAsyncLock())
 
@@ -113,7 +113,7 @@ proc proposals*(c: Clique): var Proposals {.inline.} =
   ## Getter
   c.proposals
 
-proc snapshot*(c: Clique): var Snapshot {.inline.} =
+proc snapshot*(c: Clique): auto {.inline.} =
   ## Getter, last processed snapshot
   c.snapshot
 

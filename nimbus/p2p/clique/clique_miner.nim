@@ -62,7 +62,7 @@ template syncExceptionWrap(action: untyped) =
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(681): func calcDifficulty(snap [..]
-proc calcDifficulty(snap: var Snapshot; signer: EthAddress): DifficultyInt =
+proc calcDifficulty(snap: Snapshot; signer: EthAddress): DifficultyInt =
   if snap.inTurn(snap.blockNumber + 1, signer):
     DIFF_INTURN
   else:

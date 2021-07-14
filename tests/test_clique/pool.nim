@@ -270,7 +270,7 @@ proc error*(ap: TesterPool): auto {.inline.} =
   ## Getter
   ap.clique.error
 
-proc snapshot*(ap: TesterPool): var Snapshot {.inline.} =
+proc snapshot*(ap: TesterPool): Snapshot {.inline.} =
   ## Getter
   ap.clique.snapshot
 

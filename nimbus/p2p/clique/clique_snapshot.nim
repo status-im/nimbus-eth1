@@ -41,13 +41,19 @@ type
   # Internal sub-descriptor for `LocalSnapsDesc`
   LocalPath = object
     snaps:   Snapshot          ## snapshot for given hash
-    trail:   seq[BlockHeader]  ## header chain towards snapshot
+    chain:   seq[BlockHeader]  ## header chain towards snapshot
     error:   CliqueError       ## error message
+
+  # Internal sub-descriptor for `LocalSnapsDesc`
+  LocalSubChain = object
+    first:   int               ## first chain[] element to be used
+    top:     int               ## length of chain starting at position 0
 
   LocalSnaps = object
     c:       Clique
     start:   LocalPivot        ## start here searching for checkpoints
-    value:   LocalPath         ## snapshot location
+    trail:   LocalPath         ## snapshot location
+    subChn:  LocalSubChain     ## chain[] sub-range
     parents: seq[BlockHeader]  ## explicit parents
 
 {.push raises: [Defect].}
@@ -56,7 +62,7 @@ logScope:
   topics = "clique PoA snapshot"
 
 # ------------------------------------------------------------------------------
-# Private debugging functions
+# Private debugging functions, pretty printing
 # ------------------------------------------------------------------------------
 
 proc say(d: LocalSnaps; v: varargs[string,`$`]) {.inline.} =
@@ -68,6 +74,12 @@ proc pp(q: openArray[BlockHeader]): string {.inline.} =
 
 proc pp(h: BlockHeader, q: openArray[BlockHeader]): string {.inline.} =
   "#" & $h.blockNumber & " " & q.pp
+
+proc pp(h: BlockHeader, q: openArray[BlockHeader]; n: int): string {.inline.} =
+  "headers=(#" & $h.blockNumber & " + " & q[0 ..< n].pp & ")"
+
+proc pp(t: var LocalPath): string {.inline.} =
+  "trail=(#" & $t.snaps.blockNumber & " + " & t.chain.pp & ")"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -96,7 +108,7 @@ proc isSnapshotPosition(d: var LocalSnaps;
   if number.isZero:
     # At the genesis => snapshot the initial state.
     return true
-  if d.isEpoch(number) and d.c.cfg.roThreshold < d.value.trail.len:
+  if d.isEpoch(number) and d.c.cfg.roThreshold < d.trail.chain.len:
     # Wwe have piled up more headers than allowed to be re-orged (chain
     # reinit from a freezer), regard checkpoint trusted and snapshot it.
     return true
@@ -108,13 +120,19 @@ proc isSnapshotPosition(d: var LocalSnaps;
 proc findSnapshot(d: var LocalSnaps): bool
                     {.inline, gcsafe, raises: [Defect,CatchableError].} =
   ## Search for a snapshot starting at current header starting at the pivot
-  ## value `ls.start`.
+  ## value `d.start`. The snapshot returned in `trail` is a clone of the
+  ## cached snapshot and can be modified later.
 
-  var (header, hash) = (d.start.header, d.start.hash)
+  var
+    (header, hash) = (d.start.header, d.start.hash)
+    parentsLen = d.parents.len
+
+  # For convenience, ignore the current header as top parents list entry
+  if 0 < parentsLen and d.parents[^1] == header:
+    parentsLen.dec
 
   while true:
-    d.say "findSnapshot headers=(", header.pp(d.parents), ")"
-
+    d.say "findSnapshot ", header.pp(d.parents, parentsLen)
     let number = header.blockNumber
 
     # Check whether the snapshot was recently visited and cahed
@@ -123,114 +141,111 @@ proc findSnapshot(d: var LocalSnaps): bool
       if rc.isOK:
         # we made sure that this is not a blind entry (currently no reason
         # why there should be any, though)
-        d.value.snaps = rc.value
-        # d.say "findSnapshot cached headers=(", header.pp(d.value.trail), ")"
+        d.trail.snaps = rc.value.cloneSnapshot
+        # d.say "findSnapshot cached ", d.trail.pp
         debug "Found recently cached voting snapshot",
           blockNumber = number,
           blockHash = hash
         return true
 
     # If an on-disk checkpoint snapshot can be found, use that
-    if d.isCheckPoint(number) and
-       d.value.snaps.loadSnapshot(d.c.cfg, hash).isOK:
-      d.say "findSnapshot disked trail=(", header.pp(d.value.trail), ")"
-      trace "Loaded voting snapshot from disk",
-        blockNumber = number,
-        blockHash = hash
-      # clique/clique.go(386): snap = s
-      return true
+    if d.isCheckPoint(number):
+      let rc = d.c.cfg.loadSnapshot(hash)
+      if rc.isOk:
+        d.trail.snaps = rc.value.cloneSnapshot
+        d.say "findSnapshot disked ", d.trail.pp
+        trace "Loaded voting snapshot from disk",
+          blockNumber = number,
+          blockHash = hash
+        # clique/clique.go(386): snap = s
+        return true
 
     # Note that epoch is a restart and sync point. Eip-225 requires that the
     # epoch header contains the full list of currently authorised signers.
     if d.isSnapshotPosition(number):
       # clique/clique.go(395): checkpoint := chain.GetHeaderByNumber [..]
-      d.value.snaps.initSnapshot(d.c.cfg, header)
-      if d.value.snaps.storeSnapshot.isOK:
-        d.say "findSnapshot <epoch> trail=(", header.pp(d.value.trail), ")"
+      d.trail.snaps = d.c.cfg.newSnapshot(header)
+      if d.trail.snaps.storeSnapshot.isOK:
+        d.say "findSnapshot <epoch> ", d.trail.pp
         info "Stored voting snapshot to disk",
           blockNumber = number,
           blockHash = hash
         return true
 
-    # No snapshot for this header, gather the header and move backward
-    var parent: BlockHeader
-    if 0 < d.parents.len:
-      # If we have explicit parents, pick from there (enforced)
-      parent = d.parents.pop
+    # No snapshot for this header, get the parent header and move backward
+    hash = header.parentHash
+    # Add to batch (reversed list order, biggest block number comes first)
+    d.trail.chain.add header
+
+    # Assign parent header
+    if 0 < parentslen:
+      # If we have explicit parents, pop it from the parents list
+      parentsLen.dec
+      header = d.parents[parentsLen]
       # clique/clique.go(416): if header.Hash() != hash [..]
-      if parent.hash != header.parentHash:
-        d.value.error = (errUnknownAncestor,"")
+      if header.hash != hash:
+        d.trail.error = (errUnknownAncestor,"")
         return false
 
-    # No explicit parents (or no more left), reach out to the database
-    elif not d.c.cfg.db.getBlockHeader(header.parentHash, parent):
-      d.value.error = (errUnknownAncestor,"")
+    # No explicit parents (or no more parents left), reach out to the database
+    elif not d.c.cfg.db.getBlockHeader(hash, header):
+      d.trail.error = (errUnknownAncestor,"")
       return false
 
-    # Add to batch (note that list order needs to be reversed later)
-    d.value.trail.add header
-    hash = header.parentHash
-    header = parent
     # => while loop
 
   # notreached
   raiseAssert "findSnapshot(): wrong exit from forever-loop"
 
 
-proc applyTrail(d: var LocalSnaps; snaps: var Snapshot;
-                trail: seq[BlockHeader]): Result[Snapshot,CliqueError]
+proc applyTrail(d: var LocalSnaps): CliqueOkResult
                   {.inline, gcsafe, raises: [Defect,CatchableError].} =
   ## Apply any `trail` headers on top of the snapshot `snap`
 
   # Apply trail with reversed list order
-  var liart = trail
+  var liart = d.trail.chain[d.subChn.first ..< d.subChn.top]
   for i in 0 ..< liart.len div 2:
     swap(liart[i], liart[^(1+i)])
 
   block:
     # clique/clique.go(434): snap, err := snap.apply(headers)
-    let rc = snaps.snapshotApply(liart)
+    let rc = d.trail.snaps.snapshotApply(liart)
     if rc.isErr:
       return err(rc.error)
 
   # If we've generated a new checkpoint snapshot, save to disk
-  if d.isCheckPoint(snaps.blockNumber) and 0 < liart.len:
-    var rc = snaps.storeSnapshot
+  if d.isCheckPoint(d.trail.snaps.blockNumber) and 0 < liart.len:
+
+    var rc = d.trail.snaps.storeSnapshot
     if rc.isErr:
       return err(rc.error)
 
-    d.say "updateSnapshot <disk> chechkpoint #", snaps.blockNumber
+    d.say "updateSnapshot <disk> chechkpoint #", d.trail.snaps.blockNumber
     trace "Stored voting snapshot to disk",
-      blockNumber = snaps.blockNumber,
-      blockHash = snaps.blockHash
+      blockNumber = d.trail.snaps.blockNumber,
+      blockHash = d.trail.snaps.blockHash
 
-  ok(snaps)
+  ok()
 
 
-proc updateSnapshot(c: Clique; header: Blockheader;
-              parents: openArray[Blockheader]): Result[Snapshot,CliqueError]
-              {.gcsafe, raises: [Defect,CatchableError].} =
-  # Initialise cache management
-  var d = LocalSnaps(
-    c:       c,
-    parents: toSeq(parents),
-    start:   LocalPivot(
-      header:  header,
-      hash:    header.hash))
-
-  # For convenience, allow the top parent to be the same as the argument header
-  if 0 < d.parents.len and d.parents[^1] == header:
-    d.parents.setLen(d.parents.len - 1)
+proc updateSnapshot(d: var LocalSnaps): Result[Snapshot,CliqueError]
+                   {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Find snapshot for header `d.start.header` and assign it to the LRU cache.
+  ## This function was expects thet the LRU cache already has a slot allocated
+  ## for the snapshot having run `getLruSnaps()`.
 
   # Search for previous snapshots
   if not d.findSnapshot:
-    return err(d.value.error)
+    return err(d.trail.error)
+
+  # Initialise range for header chain[] to be applied to `d.trail.snaps`
+  d.subChn.top = d.trail.chain.len
 
   # Previous snapshot found, apply any pending trail headers on top of it
-  if 0 < d.value.trail.len:
+  if 0 < d.subChn.top:
     let
-      first = d.value.trail[^1].blockNumber
-      last  = d.value.trail[0].blockNumber
+      first = d.trail.chain[^1].blockNumber
+      last  = d.trail.chain[0].blockNumber
       ckpt  = d.maxCheckPointLe(last)
 
     # If there is at least one checkpoint part of the trail sequence, make sure
@@ -240,27 +255,29 @@ proc updateSnapshot(c: Clique; header: Blockheader;
     if first <= ckpt and ckpt < last:
       # Split the trail sequence so that the first one has the checkpoint
       # entry with largest block number.
-      let
-        inx = (last - ckpt).truncate(int)
-        preTrail = d.value.trail[inx ..< d.value.trail.len]
-      # Second part (note reverse block numbers.)
-      d.value.trail.setLen(inx)
+      let inx = (last - ckpt).truncate(int)
 
-      let rc = d.applyTrail(d.value.snaps, preTrail)
+      # First part (note reverse block numbers.)
+      d.subChn.first = inx
+      let rc = d.applyTrail
       if rc.isErr:
         return err(rc.error)
-      d.value.snaps = rc.value
 
-  var snaps = d.applyTrail(d.value.snaps, d.value.trail)
-  if snaps.isErr:
-    return err(snaps.error)
+      # Second part (note reverse block numbers.)
+      d.subChn.first = 0
+      d.subChn.top = inx
+
+  var rc = d.applyTrail
+  if rc.isErr:
+    return err(rc.error)
 
   # clique/clique.go(438): c.recents.Add(snap.Hash, snap)
-  if not c.recents.setLruSnaps(snaps.value):
-    # someting went seriously wrong -- lol
-    return err((errSetLruSnaps, &"block #{snaps.value.blockNumber}"))
+  if not d.c.recents.setLruSnaps(d.trail.snaps):
+    # Someting went seriously wrong, most probably this function was called
+    # before checking the LRU cache first -- lol
+    return err((errSetLruSnaps, &"block #{d.trail.snaps.blockNumber}"))
 
-  ok(snaps.value)
+  ok(d.trail.snaps)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -286,7 +303,14 @@ proc cliqueSnapshot*(c: Clique; header: Blockheader;
     c.snapshot = rc.value
     return ok()
 
-  let snaps = c.updateSnapshot(header, parents)
+  var d = LocalSnaps(
+    c:       c,
+    parents: toSeq(parents),
+    start:   LocalPivot(
+      header:  header,
+      hash:    header.hash))
+
+  let snaps = d.updateSnapshot
   if snaps.isErr:
     c.error = (snaps.error)
     return err(c.error)
@@ -327,7 +351,14 @@ proc cliqueSnapshot*(c: Clique; hash: Hash256;
     c.error = (errUnknownHash,"")
     return err(c.error)
 
-  let snaps = c.updateSnapshot(header, parents)
+  var d = LocalSnaps(
+    c:       c,
+    parents: toSeq(parents),
+    start:   LocalPivot(
+      header:  header,
+      hash:    header.hash))
+
+  let snaps = d.updateSnapshot
   if snaps.isErr:
     c.error = (snaps.error)
     return err(c.error)

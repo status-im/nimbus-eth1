@@ -37,7 +37,7 @@ const
     1024
 
   INMEMORY_SNAPSHOTS* = ##\
-    ## Number of recent vote snapshots to keep in memory
+    ## Number of recent vote snapshots to keep in memory.
     128
 
   INMEMORY_SIGNATURES* = ##\

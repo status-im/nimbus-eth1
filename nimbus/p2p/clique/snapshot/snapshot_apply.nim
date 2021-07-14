@@ -37,7 +37,7 @@ logScope:
 # Private functions needed to support RLP conversion
 # ------------------------------------------------------------------------------
 
-proc say(s: var Snapshot; v: varargs[string,`$`]) {.inline.} =
+proc say(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
   # s.cfg.say v
   discard
 
@@ -46,9 +46,9 @@ proc say(s: var Snapshot; v: varargs[string,`$`]) {.inline.} =
 # ------------------------------------------------------------------------------
 
 # clique/snapshot.go(185): func (s *Snapshot) apply(headers [..]
-proc snapshotApply*(s: var Snapshot;
-                    headers: openArray[BlockHeader]): CliqueOkResult {.
-                      gcsafe, raises: [Defect,CatchableError].} =
+proc snapshotApply*(s: Snapshot;
+                    headers: openArray[BlockHeader]): CliqueOkResult
+                      {.gcsafe, raises: [Defect,CatchableError].} =
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 

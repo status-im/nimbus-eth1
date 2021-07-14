@@ -21,7 +21,7 @@
 ##
 
 import
-  std/[sequtils, strformat, strutils, tables, times],
+  std/[strformat, tables, times],
   ../../chain_config,
   ../../constants,
   ../../db/db_chain,
