@@ -221,7 +221,11 @@ type
     # -----------------------------------------
 
     errUnknownHash = "No header found for hash value"
-    errEmptyLruCache = "No snapshos available"
+    errEmptyLruCache = "No snapshot available"
+
+    errSetLruSnaps = ##\
+      ## Attempt to assign a value to a non-existing slot
+      "Missing LRU slot for snapshot"
 
     errZeroBlockNumberRejected = "Block number must not be Zero"
 

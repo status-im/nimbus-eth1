@@ -19,7 +19,7 @@
 ##
 
 import
-  std/[sequtils],
+  std/[sequtils, strformat],
   ../../db/db_chain,
   ../../utils,
   ./clique_cfg,
@@ -60,7 +60,7 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc say(d: LocalSnaps; v: varargs[string,`$`]) {.inline.} =
-  # d.c.cfg.say v
+  d.c.cfg.say v
   discard
 
 # ------------------------------------------------------------------------------
@@ -150,7 +150,7 @@ proc findSnapshot(d: var LocalSnaps): bool
       # If we have explicit parents, pick from there (enforced)
       parent = d.parents.pop
       # clique/clique.go(416): if header.Hash() != hash [..]
-      if d.parents[^1].hash != header.parentHash:
+      if parent.hash != header.parentHash:
         d.value.error = (errUnknownAncestor,"")
         return false
 
@@ -166,7 +166,7 @@ proc findSnapshot(d: var LocalSnaps): bool
     # => while loop
 
   # notreached
-  raiseAssert "wrong loop-forever exit"
+  raiseAssert "findSnapshot(): wrong exit from forever-loop"
 
 
 proc applyTrail(d: var LocalSnaps; snaps: var Snapshot;
@@ -178,8 +178,6 @@ proc applyTrail(d: var LocalSnaps; snaps: var Snapshot;
   var liart = trail
   for i in 0 ..< liart.len div 2:
     swap(liart[i], liart[^(1+i)])
-
-  d.say "applyTrail #", liart[0].blockNumber, "..#", liart[^1].blockNumber
 
   block:
     # clique/clique.go(434): snap, err := snap.apply(headers)
@@ -217,39 +215,40 @@ proc updateSnapshot(c: Clique; header: Blockheader;
     return err(d.value.error)
 
   # Previous snapshot found, apply any pending trail headers on top of it
-  let
-    first = d.value.trail[^1].blockNumber
-    last  = d.value.trail[0].blockNumber
-    ckpt  = d.maxCheckPointLe(last)
-
-  # It there is at least one checkpoint part of the trail sequence, make sure
-  # that we can store the latest one. This will be done by the `applyTrail()`
-  # handler for the largest block number in the sequence (note that the trail
-  # block numbers are in reverse order.)
-  if first <= ckpt and ckpt < last:
-    # Split the trail sequence so that the first one has the checkpoint.
+  if 0 < d.value.trail.len:
     let
-      inx = (last - ckpt).truncate(int)
-      preTrail = d.value.trail[inx ..< d.value.trail.len]
-    # Second part (note reverse block numbers.)
-    d.value.trail.setLen(inx)
+      first = d.value.trail[^1].blockNumber
+      last  = d.value.trail[0].blockNumber
+      ckpt  = d.maxCheckPointLe(last)
 
-    let rc = d.applyTrail(d.value.snaps, preTrail)
-    if rc.isErr:
-      return err(rc.error)
-    d.value.snaps = rc.value
+    # If there is at least one checkpoint part of the trail sequence, make sure
+    # that we can store the latest one. This will be done by the `applyTrail()`
+    # handler for the largest block number in the sequence (note that the trail
+    # block numbers are in reverse order.)
+    if first <= ckpt and ckpt < last:
+      # Split the trail sequence so that the first one has the checkpoint
+      # entry with largest block number.
+      let
+        inx = (last - ckpt).truncate(int)
+        preTrail = d.value.trail[inx ..< d.value.trail.len]
+      # Second part (note reverse block numbers.)
+      d.value.trail.setLen(inx)
 
-  block:
-    var rc = d.applyTrail(d.value.snaps, d.value.trail)
-    if rc.isErr:
-      return err(rc.error)
+      let rc = d.applyTrail(d.value.snaps, preTrail)
+      if rc.isErr:
+        return err(rc.error)
+      d.value.snaps = rc.value
 
-    # clique/clique.go(438): c.recents.Add(snap.Hash, snap)
-    if c.recents.setLruSnaps(rc.value):
-      return ok(rc.value)
+  var snaps = d.applyTrail(d.value.snaps, d.value.trail)
+  if snaps.isErr:
+    return err(snaps.error)
 
-  # notreached
-  raiseAssert "setLruSnaps() failed"
+  # clique/clique.go(438): c.recents.Add(snap.Hash, snap)
+  if c.recents.setLruSnaps(snaps.value):
+    return ok(snaps.value)
+
+  # someting went seriously wrong -- lol
+  err((errSetLruSnaps, &"block #{snaps.value.blockNumber}"))
 
 # ------------------------------------------------------------------------------
 # Public functions

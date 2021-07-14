@@ -113,7 +113,7 @@ proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
         cInx.inc
 
         # Handy for partial tests
-        if stopThreshold <= cache[cInx-1][0][0].blockNumber:
+        if stopThreshold < cache[cInx-1][0][0].blockNumber:
           stoppedOk = true
           break
 
@@ -144,18 +144,57 @@ proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
       test &"Runner stopped after reaching #{stopThreshold}":
         discard
 
+
+proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
+  var
+    pool = newVoterPool()
+    stoppedOk = false
+
+  pool.debug = noisy
+
+  let stopThreshold = if stopAfterBlock == 0u64: uint64.high.u256
+                      else: stopAfterBlock.u256
+
+  suite "Replay Goerli Chain Transactions Single Blockwise":
+
+    for w in (dir / goerliCapture).undumpNextGroup:
+      if w[0][0].blockNumber == 0.u256:
+        # Verify Genesis
+        doAssert w[0][0] == pool.getBlockHeader(0.u256)
+      else:
+        for n in 0 ..< w[0].len:
+          let
+            header = w[0][n]
+            body = w[1][n]
+            parents = w[0][0 ..< n]
+          # Handy for partial tests
+          if stopThreshold < header.blockNumber:
+            stoppedOk = true
+            break
+          test &"Goerli Block #{header.blockNumber} + {parents.len} parents":
+            check pool.chain.clique.cliqueSnapshot(header,parents).isOk
+            let addedPersistBlocks = pool.chain.persistBlocks(@[header],@[body])
+            check addedPersistBlocks == ValidationResult.Ok
+            if addedPersistBlocks != ValidationResult.Ok: return
+
+    if stoppedOk:
+      test &"Runner stopped after reaching #{stopThreshold}":
+        discard
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc cliqueMain*(noisy = defined(debug)) =
   noisy.runCliqueSnapshot
+  noisy.runGoerliBaybySteps
   noisy.runGoerliReplay
 
 when isMainModule:
   let noisy = defined(debug)
-  noisy.runCliqueSnapshot
-  noisy.runGoerliReplay(dir = ".", stopAfterBlock = 0)
+  #noisy.runCliqueSnapshot
+  noisy.runGoerliBaybySteps(dir = ".")
+  #noisy.runGoerliReplay(dir = ".", stopAfterBlock = 0)
 
 # ------------------------------------------------------------------------------
 # End
