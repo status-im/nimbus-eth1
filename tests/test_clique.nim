@@ -86,7 +86,6 @@ proc runCliqueSnapshot(noisy = true) =
             # Verify the final list of signers against the expected ones
             check snapResult == expected
 
-
 proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
   var
     pool = newVoterPool()
@@ -158,6 +157,8 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
   suite "Replay Goerli Chain Transactions Single Blockwise":
 
     for w in (dir / goerliCapture).undumpNextGroup:
+      if stoppedOk:
+        break
       if w[0][0].blockNumber == 0.u256:
         # Verify Genesis
         doAssert w[0][0] == pool.getBlockHeader(0.u256)
@@ -167,15 +168,15 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
             header = w[0][n]
             body = w[1][n]
             parents = w[0][0 ..< n]
-          # Handy for partial tests
-          if stopThreshold < header.blockNumber:
-            stoppedOk = true
-            break
           test &"Goerli Block #{header.blockNumber} + {parents.len} parents":
             check pool.chain.clique.cliqueSnapshot(header,parents).isOk
             let addedPersistBlocks = pool.chain.persistBlocks(@[header],@[body])
             check addedPersistBlocks == ValidationResult.Ok
             if addedPersistBlocks != ValidationResult.Ok: return
+          # Handy for partial tests
+          if stopThreshold <= header.blockNumber:
+            stoppedOk = true
+            break
 
     if stoppedOk:
       test &"Runner stopped after reaching #{stopThreshold}":
@@ -192,9 +193,9 @@ proc cliqueMain*(noisy = defined(debug)) =
 
 when isMainModule:
   let noisy = defined(debug)
-  #noisy.runCliqueSnapshot
+  noisy.runCliqueSnapshot
   noisy.runGoerliBaybySteps(dir = ".")
-  #noisy.runGoerliReplay(dir = ".", stopAfterBlock = 0)
+  noisy.runGoerliReplay(dir = ".", stopAfterBlock = 0)
 
 # ------------------------------------------------------------------------------
 # End

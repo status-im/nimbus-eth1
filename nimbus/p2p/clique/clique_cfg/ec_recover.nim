@@ -22,7 +22,7 @@ import
   ../../../utils,
   ../../../utils/lru_cache,
   ../clique_defs,
-  ../clique_utils,
+  ../clique_helpers,
   eth/[common, keys, rlp],
   stint
 

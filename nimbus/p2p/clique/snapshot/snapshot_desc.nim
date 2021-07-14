@@ -24,7 +24,7 @@ import
   ../../../utils,
   ../clique_cfg,
   ../clique_defs,
-  ../clique_utils,
+  ../clique_helpers,
   ./ballot,
   chronicles,
   eth/[common, rlp, trie/db],

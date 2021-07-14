@@ -30,8 +30,8 @@ import
 # Constants copied from eip-225 specs & implementation
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(48): const ( [..]
 const
+  # clique/clique.go(48): const ( [..]
   CHECKPOINT_INTERVAL* = ##\
     ## Number of blocks after which to save the vote snapshot to the database
     1024
@@ -45,15 +45,16 @@ const
     4096
 
   WIGGLE_TIME* = ##\
+    ## PoA mining only (currently unsupported).
+    ##
     ## Random delay (per signer) to allow concurrent signers
     initDuration(seconds = 0, milliseconds = 500)
 
-# clique/clique.go(57): var ( [..]
-const
+  # clique/clique.go(57): var ( [..]
   BLOCK_PERIOD* = ##\
-    ## Minimum difference in seconds between two consecutive block's
-    ## timestamps. Suggested 15s for the testnet to remain analogous to the
-    ## mainnet ethash target.
+    ## Minimum difference in seconds between two consecutive block timestamps.
+    ## Suggested time is 15s for the `testnet` to remain analogous to the
+    ## `mainnet` ethash target.
     initDuration(seconds = 15)
 
   EXTRA_VANITY* = ##\
@@ -84,11 +85,6 @@ const
     ## Suggested 2 to show a slight preference over out-of-turn signatures.
     2.u256
 
-# ------------------------------------------------------------------------------
-# Additional constants copied from eip-225 go implementation
-# ------------------------------------------------------------------------------
-
-const
   # params/network_params.go(60): FullImmutabilityThreshold = 90000
   FULL_IMMUTABILITY_THRESHOLD* = ##\
     ## Number of blocks after which a chain segment is considered immutable (ie.
@@ -101,8 +97,8 @@ const
 # Error tokens
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(76): var ( [..]
 type
+  # clique/clique.go(76): var ( [..]
   CliqueErrorType* = enum
     resetCliqueError = 0 ##\
       ## Default/reset value (use `cliqueNoError` below rather than this valie)
@@ -226,8 +222,6 @@ type
     errSetLruSnaps = ##\
       ## Attempt to assign a value to a non-existing slot
       "Missing LRU slot for snapshot"
-
-    errZeroBlockNumberRejected = "Block number must not be Zero"
 
     errSkSigResult                ## eth/keys subsytem error: signature
     errSkPubKeyResult             ## eth/keys subsytem error: public key

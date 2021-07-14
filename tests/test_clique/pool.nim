@@ -14,7 +14,7 @@ import
   ../../nimbus/db/db_chain,
   ../../nimbus/p2p/[chain,
                     clique,
-                    clique/clique_utils,
+                    clique/clique_helpers,
                     clique/snapshot/snapshot_desc],
   ./voter_samples as vs,
   eth/[common, keys, p2p, rlp, trie/db],

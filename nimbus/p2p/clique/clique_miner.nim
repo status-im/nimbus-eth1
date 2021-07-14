@@ -29,7 +29,7 @@ import
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
-  ./clique_utils,
+  ./clique_helpers,
   ./clique_snapshot,
   ./clique_signers,
   ./snapshot/[snapshot_desc, snapshot_misc],
@@ -124,7 +124,7 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
 
   # The genesis block is the always valid dead-end
   if header.blockNumber.isZero:
-    return err((errZeroBlockNumberRejected,""))
+    return err((errUnknownBlock,""))
 
   # Ensure that the block's timestamp isn't too close to its parent
   var parent: BlockHeader
