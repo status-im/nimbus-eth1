@@ -73,38 +73,59 @@ proc `==`[K,V](a, b: var LruData[K,V]): bool =
     a.tab == b.tab
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Public constructor and reset
 # ------------------------------------------------------------------------------
 
-proc clearLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E])
-                                          {.gcsafe, raises: [Defect].} =
-  ## Reset/clear an initialised LRU cache.
+proc clearCache*[T,K,V,E](cache: var LruCache[T,K,V,E]; cacheInitSize = 0)
+                                                {.gcsafe, raises: [Defect].} =
+  ## Reset/clear an initialised LRU cache. The cache will be re-allocated
+  ## with `cacheInitSize` initial spaces if this is positive, or `cacheMaxItems`
+  ## spaces (see `initLruCache()`) as a default.
+  var initSize = cacheInitSize
+  if initSize <= 0:
+    initSize = cache.data.maxItems
   cache.data.first.reset
   cache.data.last.reset
-  cache.data.tab = initTable[K,LruItem[K,V]](cache.data.maxItems.nextPowerOfTwo)
+  cache.data.tab = initTable[K,LruItem[K,V]](initSize.nextPowerOfTwo)
 
 
-proc initLruCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
-                            toKey: LruKey[T,K], toValue: LruValue[T,V,E];
-                            cacheMaxItems = 10) {.gcsafe, raises: [Defect].} =
-  ## Initialise LRU cache. The handlers `toKey()` and `toValue()` are
-  ## explained at the data type definition.
+proc initCache*[T,K,V,E](cache: var LruCache[T,K,V,E];
+                         toKey: LruKey[T,K], toValue: LruValue[T,V,E];
+                         cacheMaxItems = 10; cacheInitSize = 0)
+                                                {.gcsafe, raises: [Defect].} =
+  ## Initialise LRU cache. The handlers `toKey()` and `toValue()` are explained
+  ## at the data type definition. The cache will be allocated with
+  ## `cacheInitSize` initial spaces if this is positive, or `cacheMaxItems`
+  ## spaces (see `initLruCache()`) as a default.
   cache.data.maxItems = cacheMaxItems
   cache.toKey = toKey
   cache.toValue = toValue
-  cache.clearLruCache
+  cache.clearCache
 
+# ------------------------------------------------------------------------------
+# Public functions, basic mechanism
+# ------------------------------------------------------------------------------
 
-proc getLruItem*[T,K,V,E](lru: var LruCache[T,K,V,E]; arg: T): Result[V,E] {.
-                          gcsafe, raises: [Defect,CatchableError].} =
-  ## Returns `lru.toValue(arg)`, preferably from result cached earlier.
+proc getItem*[T,K,V,E](lru: var LruCache[T,K,V,E];
+                       arg: T; peekOK = false): Result[V,E]
+                       {.gcsafe, raises: [Defect,CatchableError].} =
+  ## If the key `lru.toKey(arg)` is a cached key, the associated value will
+  ## be returnd. If the `peekOK` argument equals `false`, the associated
+  ## key-value pair will have been moved to the end of the LRU queue.
+  ##
+  ## If the key `lru.toKey(arg)` is not a cached key and the LRU queue has at
+  ## least `cacheMaxItems` entries (see `initLruCache()`, the first key-value
+  ## pair will be removed from the LRU queue. Then the value the pair
+  ## (`lru.toKey(arg)`,`lru.toValue(arg)`) will be appended to the LRU queue
+  ## and the value part returned.
+  ##
   let key = lru.toKey(arg)
 
   # Relink item if already in the cache => move to last position
   if lru.data.tab.hasKey(key):
     let lruItem = lru.data.tab[key]
 
-    if key == lru.data.last:
+    if peekOk or key == lru.data.last:
       # Nothing to do
       return ok(lruItem.value)
 
@@ -148,6 +169,96 @@ proc getLruItem*[T,K,V,E](lru: var LruCache[T,K,V,E]; arg: T): Result[V,E] {.
   lru.data.tab[key] = tabItem
   result = ok(rcValue)
 
+# ------------------------------------------------------------------------------
+# Public functions, cache info
+# ------------------------------------------------------------------------------
+
+proc hasKey*[T,K,V,E](lru: var LruCache[T,K,V,E]; arg: T): bool {.gcsafe.} =
+  ## Check whether the `arg` argument is cached
+  let key = lru.toKey(arg)
+  lru.data.tab.hasKey(key)
+
+proc firstKey*[T,K,V,E](lru: var LruCache[T,K,V,E]): K {.gcsafe.} =
+  ## Returns the key of the first item in the LRU queue, or the reset
+  ## value it the cache is empty.
+  if 0 < lru.data.tab.len:
+    result = lru.data.first
+
+proc lastKey*[T,K,V,E](lru: var LruCache[T,K,V,E]): K {.gcsafe.} =
+  ## Returns the key of the last item in the LRU queue, or the reset
+  ## value it the cache is empty.
+  if 0 < lru.data.tab.len:
+    result = lru.data.last
+
+
+proc maxLen*[T,K,V,E](lru: var LruCache[T,K,V,E]): int {.gcsafe.} =
+  ## Maximal number of cache entries.
+  lru.data.maxItems
+
+proc len*[T,K,V,E](lru: var LruCache[T,K,V,E]): int {.gcsafe.} =
+  ## Return the number of elements in the cache.
+  lru.data.tab.len
+
+# ------------------------------------------------------------------------------
+# Public functions, advanced features
+# ------------------------------------------------------------------------------
+
+proc setItem*[T,K,V,E](lru: var LruCache[T,K,V,E]; arg: T; value: V): bool
+                    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Update entry with key `lru.toKey(arg)` by `value`. Reurns `true` if the
+  ## key exists in the database, and false otherwise.
+  ##
+  ## This function allows for simlifying the `toValue()` function (see
+  ## `initLruCache()`) to provide a placeholder only and later fill this
+  ## slot with this `setLruItem()` function.
+  let key = lru.toKey(arg)
+  if lru.data.tab.hasKey(key):
+    lru.data.tab[key].value = value
+    return true
+ 
+
+proc delItem*[T,K,V,E](lru: var LruCache[T,K,V,E]; arg: T): bool
+                     {.gcsafe, discardable, raises: [Defect,KeyError].} =
+  ## Delete the `arg` argument from cached. That way, the LRU cache can
+  ## be re-purposed as a sequence with efficient random delete facility.
+  let key = lru.toKey(arg)
+
+  # Relink item if already in the cache => move to last position
+  if lru.data.tab.hasKey(key):
+    let lruItem = lru.data.tab[key]
+
+    # Unlink key Item
+    if lru.data.tab.len == 1:
+      lru.data.first.reset
+      lru.data.last.reset
+    elif key == lru.data.last:
+      lru.data.last = lruItem.prv
+    elif key == lru.data.first:
+      lru.data.first = lruItem.nxt
+    else:
+      lru.data.tab[lruItem.prv].nxt = lruItem.nxt
+      lru.data.tab[lruItem.nxt].prv = lruItem.prv
+
+    lru.data.tab.del(key)
+    return true
+
+
+iterator keyItemPairs*[T,K,V,E](lru: var LruCache[T,K,V,E]): (K,LruItem[K,V])
+                                {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Cycle through all (key,lruItem) pairs in chronological order.
+  if 0 < lru.data.tab.len:
+    var key = lru.data.first
+    for _ in 0 ..< lru.data.tab.len - 1:
+      var item = lru.data.tab[key]
+      yield (key, item)
+      key = item.nxt
+    yield (key, lru.data.tab[key])
+    if key != lru.data.last:
+      raiseAssert "Garbled LRU cache next/prv references"
+
+# ------------------------------------------------------------------------------
+# Public functions, RLP support
+# ------------------------------------------------------------------------------
 
 proc `==`*[T,K,V,E](a, b: var LruCache[T,K,V,E]): bool =
   ## Returns `true` if both argument LRU caches contain the same data
@@ -184,13 +295,6 @@ proc read*[K,V](rlp: var Rlp; Q: type LruData[K,V]): Q {.
   for w in rlp.items:
     let (key,value) = w.read((K,LruItem[K,V]))
     result.tab[key] = value
-
-
-proc specs*[T,K,V,E](cache: var LruCache[T,K,V,E]):
-                                  (int, K, K, Table[K,LruItem[K,V]]) =
-  ## Returns cache data & specs `(maxItems,firstKey,lastKey,tableRef)` for
-  ## debugging and testing.
-  (cache.data.maxItems, cache.data.first, cache.data.last, cache.data.tab)
 
 # ------------------------------------------------------------------------------
 # End

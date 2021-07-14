@@ -11,6 +11,7 @@
 import
   ../nimbus/utils/lru_cache,
   eth/rlp,
+  sequtils,
   strformat,
   tables,
   unittest2
@@ -36,61 +37,23 @@ proc say(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
       echo outText
 
 
-# Privy access to LRU internals
-proc maxItems[T,K,V,E](cache: var LruCache[T,K,V,E]): int =
-  cache.specs[0]
-
-proc first[T,K,V,E](cache: var LruCache[T,K,V,E]): K =
-  cache.specs[1]
-
-proc last[T,K,V,E](cache: var LruCache[T,K,V,E]): K =
-  cache.specs[2]
-
-proc tab[T,K,V,E](cache: var LruCache[T,K,V,E]): Table[K,LruItem[K,V]] =
-  cache.specs[3]
-
-
-proc verifyLinks[T,K,V,E](lru: var LruCache[T,K,V,E]) =
-  var key = lru.first
-  if lru.tab.len == 1:
-    doAssert lru.tab.hasKey(key)
-    doAssert key == lru.last
-  elif 1 < lru.tab.len:
-    # forward links
-    for n in 1 ..< lru.tab.len:
-      var curKey = key
-      key = lru.tab[curKey].nxt
-      if lru.tab[key].prv != curKey:
-        echo &"({n}): lru.tab[{key}].prv == {lru.tab[key].prv} exp {curKey}"
-        doAssert lru.tab[key].prv == curKey
-    doAssert key == lru.last
-    # backward links
-    for n in 1 ..< lru.tab.len:
-      var curKey = key
-      key = lru.tab[curKey].prv
-      if lru.tab[key].nxt != curKey:
-        echo &"({n}): lru.tab[{key}].nxt == {lru.tab[key].nxt} exp {curKey}"
-        doAssert lru.tab[key].nxt == curKey
-    doAssert key == lru.first
+proc verifyBackLinks[T,K,V,E](lru: var LruCache[T,K,V,E]) =
+  var
+    index = 0
+    prvKey: K
+  for key,item in lru.keyItemPairs:
+    if 0 < index:
+      doAssert prvKey == item.prv
+    index.inc
+    prvKey = key
 
 proc toKeyList[T,K,V,E](lru: var LruCache[T,K,V,E]): seq[K] =
-    lru.verifyLinks
-    if 0 < lru.tab.len:
-      var key = lru.first
-      while key != lru.last:
-        result.add key
-        key = lru.tab[key].nxt
-      result.add lru.last
+  lru.verifyBackLinks
+  toSeq(lru.keyItemPairs).mapIt(it[0])
 
 proc toValueList[T,K,V,E](lru: var LruCache[T,K,V,E]): seq[V] =
-  lru.verifyLinks
-  if 0 < lru.tab.len:
-    var key = lru.first
-    while key != lru.last:
-      result.add lru.tab[key].value
-      key = lru.tab[key].nxt
-    result.add lru.tab[lru.last].value
-
+  lru.verifyBackLinks
+  toSeq(lru.keyItemPairs).mapIt(it[1].value)
 
 proc createTestCache: LruCache[int,int,string,int] =
   var
@@ -103,7 +66,7 @@ proc createTestCache: LruCache[int,int,string,int] =
     cache: LruCache[int,int,string,int]
 
   # Create LRU cache
-  cache.initLruCache(getKey, getValue, cacheLimit)
+  cache.initCache(getKey, getValue, cacheLimit)
 
   result = cache
 
@@ -116,17 +79,16 @@ proc filledTestCache(noisy: bool): LruCache[int,int,string,int] =
   for w in keyList:
     var
       key = w mod 13
-      reSched = cache.tab.hasKey(key)
-      value = cache.getLruItem(key)
+      reSched = cache.hasKey(key)
+      value = cache.getItem(key)
       queue = cache.toKeyList
       values = cache.toValueList
-    # verfy key/value pairs
-    for n in 0 ..< queue.len:
-      doAssert $queue[n] == $values[n]
     if reSched:
       noisy.say ">>>", &"rotate {value} => {queue}"
     else:
       noisy.say "+++", &"append {value} => {queue}"
+    doAssert queue.mapIt($it) == values
+    doAssert key == cache.lastKey
 
   result = cache
 
@@ -146,13 +108,13 @@ proc doDeepCopyTest(noisy: bool) =
     c2 = c1
 
   doAssert c1 == c2
-  discard c1.getLruItem(77)
+  discard c1.getItem(77)
 
-  say &"c1Specs: {c1.maxItems} {c1.first} {c1.last} ..."
-  say &"c2Specs: {c2.maxItems} {c2.first} {c2.last} ..."
+  say &"c1Specs: {c1.maxLen} {c1.firstKey} {c1.lastKey} ..."
+  say &"c2Specs: {c2.maxLen} {c2.firstKey} {c2.lastKey} ..."
 
   doAssert c1 != c2
-  doAssert c1.tab != c2.tab
+  doAssert toSeq(c1.keyItemPairs) != toSeq(c2.keyItemPairs)
 
 
 proc doSerialiserTest(noisy: bool) =
@@ -167,15 +129,16 @@ proc doSerialiserTest(noisy: bool) =
 
   say &"serialised[{s1.len}]: {s1}"
 
-  c2.clearLruCache
+  c2.clearCache
   doAssert c1 != c2
 
   c2.data = s1.decode(type c2.data)
   doAssert c1 == c2
 
-  say &"c2Specs: {c2.maxItems} {c2.first} {c2.last} ..."
+  say &"c2Specs: {c2.maxLen} {c2.firstKey} {c2.lastKey} ..."
 
   doAssert s1 == rlp.encode(c2.data)
+
 
 proc doSerialiseSingleEntry(noisy: bool) =
 
@@ -184,7 +147,7 @@ proc doSerialiseSingleEntry(noisy: bool) =
 
   var
     c1 = createTestCache()
-    value = c1.getLruItem(77)
+    value = c1.getItem(77)
     queue = c1.toKeyList
     values = c1.toValueList
 
@@ -196,15 +159,35 @@ proc doSerialiseSingleEntry(noisy: bool) =
 
   say &"serialised[{s1.len}]: {s1}"
 
-  c2.clearLruCache
+  c2.clearCache
   doAssert c1 != c2
 
   c2.data = s1.decode(type c2.data)
   doAssert c1 == c2
 
-  say &"c2Specs: {c2.maxItems} {c2.first} {c2.last} ..."
+  say &"c2Specs: {c2.maxLen} {c2.firstKey} {c2.lastKey} ..."
 
   doAssert s1 == rlp.encode(c2.data)
+
+
+proc doRandomDeleteTest(noisy: bool) =
+
+  proc say(a: varargs[string]) =
+    say(noisy = noisy, args = a)
+
+  var
+    c1 = filledTestCache(false)
+    sq = toSeq(c1.keyItemPairs).mapIt(it[0])
+    s0 = sq
+    inx = 5
+    key = sq[5]
+
+  sq.delete(5,5)
+  say &"sq: {s0} <off sq[5]({key})> {sq}"
+
+  doAssert c1.delItem(key)
+  doAssert sq == toSeq(c1.keyItemPairs).mapIt(it[0])
+  c1.verifyBackLinks
 
 
 proc lruCacheMain*(noisy = defined(debug)) =
@@ -221,6 +204,9 @@ proc lruCacheMain*(noisy = defined(debug)) =
 
     test "Rlp Single Entry Test":
       doSerialiseSingleEntry(noisy)
+
+    test "Random Delete":
+      doRandomDeleteTest(noisy)
 
 
 when isMainModule:

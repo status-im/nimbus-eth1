@@ -9,8 +9,8 @@
 # according to those terms.
 
 ##
-## EIP-225 Clique PoA Consensus Protocol
-## =====================================
+## Signers for Clique PoA Consensus Protocol
+## =========================================
 ##
 ## For details see
 ## `EIP-225 <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
@@ -19,24 +19,20 @@
 ##
 
 import
-  ./clique/[clique_cfg,
-            clique_defs,
-            clique_desc,
-            clique_miner,
-            clique_signers,
-            clique_snapshot,
-            snapshot/snapshot_desc]
+  ./clique_desc,
+  ./snapshot/[ballot, snapshot_desc],
+  eth/common
 
 {.push raises: [Defect].}
 
-export
-  clique_cfg,
-  clique_defs,
-  clique_desc,
-  clique_miner,
-  clique_signers,
-  clique_snapshot,
-  snapshot_desc.Snapshot
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc cliqueSigners*(c: Clique): seq[EthAddress] {.inline.} =
+  ## Retrieves the sorted list of authorized signers for the last registered
+  ## snapshot. If there was no snapshot, an empty list is returned.
+  c.snapshot.ballot.authSigners
 
 # ------------------------------------------------------------------------------
 # End

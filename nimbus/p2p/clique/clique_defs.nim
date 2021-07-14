@@ -104,8 +104,8 @@ const
 # clique/clique.go(76): var ( [..]
 type
   CliqueErrorType* = enum
-    noCliqueError = 0 ##\
-      ## Default/reset value
+    resetCliqueError = 0 ##\
+      ## Default/reset value (use `cliqueNoError` below rather than this valie)
 
     errUnknownBlock =  ##\
       ## is returned when the list of signers is requested for a block that is
@@ -220,6 +220,13 @@ type
     # additional/bespoke errors, manually added
     # -----------------------------------------
 
+    errUnknownHash = "No header found for hash value"
+    errEmptyLruCache = "No snapshot available"
+
+    errSetLruSnaps = ##\
+      ## Attempt to assign a value to a non-existing slot
+      "Missing LRU slot for snapshot"
+
     errZeroBlockNumberRejected = "Block number must not be Zero"
 
     errSkSigResult                ## eth/keys subsytem error: signature
@@ -242,12 +249,15 @@ type
     nilCliqueSealSignedRecently = "Signed recently, must wait for others"
 
 # ------------------------------------------------------------------------------
-# More types
+# More types and constants
 # ------------------------------------------------------------------------------
 
 type
   CliqueError* = (CliqueErrorType,string)
-  CliqueResult* = Result[void,CliqueError]
+  CliqueOkResult* = Result[void,CliqueError]
+
+const
+  cliqueNoError* = (resetCliqueError, "")
 
 # ------------------------------------------------------------------------------
 # End

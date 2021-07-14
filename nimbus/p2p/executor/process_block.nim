@@ -9,7 +9,6 @@
 # according to those terms.
 
 import
-  ../../config,
   ../../constants,
   ../../db/[db_chain, accounts_cache],
   ../../transaction,
@@ -26,12 +25,15 @@ import
   eth/[common, trie/db],
   nimcrypto
 
+{.push raises: [Defect].}
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
-                     header: BlockHeader, body: BlockBody): bool =
+                     header: BlockHeader, body: BlockBody): bool
+                       {.gcsafe, raises: [Defect,CatchableError].} =
   if vmState.chainDB.config.daoForkSupport and
      vmState.chainDB.config.daoForkBlock == header.blockNumber:
     vmState.mutateStateDB:
@@ -79,7 +81,8 @@ proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
 
 
 proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
-                     header: BlockHeader, body: BlockBody): bool =
+                     header: BlockHeader, body: BlockBody): bool
+                       {.gcsafe, raises: [Defect,RlpError].} =
   # Reward beneficiary
   vmState.mutateStateDB:
     if vmState.generateWitness:
@@ -116,8 +119,9 @@ proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
 # ------------------------------------------------------------------------------
 
 proc processBlock*(vmState: BaseVMState;
-                   header: BlockHeader, body: BlockBody): ValidationResult =
-  ## Processes `(header,body)` pair for a non-PoA network
+                   header: BlockHeader, body: BlockBody): ValidationResult
+                     {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Processes `(header,body)` pair for a non-PoA network, only
   if vmState.chainDB.config.poaEngine:
     # PoA consensus engine unsupported, see the other version of
     # processBlock() below
@@ -144,20 +148,25 @@ proc processBlock*(vmState: BaseVMState;
 
 
 proc processBlock*(vmState: BaseVMState; poa: Clique;
-                   header: BlockHeader, body: BlockBody): ValidationResult =
-  ## Processes `(header,body)` pair for a any network regardless of PoA or not
+                   header: BlockHeader, body: BlockBody): ValidationResult
+                     {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Generalised function to processes `(header,body)` pair for any network,
+  ## regardless of PoA or not
+
+  # Process PoA state transition first so there is no need to re-wind on error.
+  if vmState.chainDB.config.poaEngine and
+     not poa.updatePoaState(header, body):
+    debug "PoA update failed"
+    return ValidationResult.Error
+
   var dbTx = vmState.chainDB.db.beginTransaction()
   defer: dbTx.dispose()
 
   if not vmState.procBlkPreamble(dbTx, header, body):
     return ValidationResult.Error
 
-  # PoA consensus engine have no reward for miner
   if not vmState.chainDB.config.poaEngine:
     vmState.calculateReward(header, body)
-  elif not vmState.updatePoaState(header, body):
-    debug "PoA update failed"
-    return ValidationResult.Error
 
   if not vmState.procBlkEpilogue(dbTx, header, body):
     return ValidationResult.Error

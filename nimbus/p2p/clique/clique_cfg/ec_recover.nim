@@ -19,10 +19,10 @@
 ##
 
 import
-  ../../utils,
-  ../../utils/lru_cache,
-  ./clique_defs,
-  ./clique_utils,
+  ../../../utils,
+  ../../../utils/lru_cache,
+  ../clique_defs,
+  ../clique_utils,
   eth/[common, keys, rlp],
   stint
 
@@ -73,7 +73,7 @@ proc initEcRecover*(cache: var EcRecover) =
       # Convert public key to address.
       return ok(pubKey.value.toCanonicalAddress)
 
-  cache.initLruCache(toKey, toValue, INMEMORY_SIGNATURES)
+  cache.initCache(toKey, toValue, INMEMORY_SIGNATURES)
 
 proc initEcRecover*: EcRecover {.gcsafe, raises: [Defect].} =
   result.initEcRecover
@@ -84,7 +84,7 @@ proc getEcRecover*(addrCache: var EcRecover; header: BlockHeader): auto {.
                    gcsafe, raises: [Defect,CatchableError].} =
   ## extract Ethereum account address from a signed header block, the relevant
   ## signature used is appended to the re-purposed extra data field
-  addrCache.getLruItem(header)
+  addrCache.getItem(header)
 
 
 proc append*(rw: var RlpWriter; ecRec: EcRecover) {.

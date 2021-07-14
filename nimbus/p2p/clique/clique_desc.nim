@@ -24,14 +24,14 @@ import
   ../../constants,
   ./clique_cfg,
   ./clique_defs,
-  ./recent_snaps,
+  ./snapshot/[lru_snaps, snapshot_desc],
   chronos,
   eth/[common, keys, rlp]
 
 type
   # clique/clique.go(142): type SignerFn func(signer [..]
-  CliqueSignerFn* =        ## Hashes and signs the data to be signed by
-                           ## a backing account
+  CliqueSignerFn* =    ## Hashes and signs the data to be signed by
+                       ## a backing account
     proc(signer: EthAddress;
          message: openArray[byte]): Result[Hash256,cstring] {.gcsafe.}
 
@@ -41,22 +41,34 @@ type
   Clique* = ref object ## Clique is the proof-of-authority consensus engine
                        ## proposed to support the Ethereum testnet following
                        ## the Ropsten attacks.
-    cCfg: CliqueCfg         ## Common engine parameters to fine tune behaviour
+    signer*: EthAddress ##\
+      ## Ethereum address of the current signing key
 
-    cRecents: RecentSnaps   ## Snapshots for recent block to speed up reorgs
-    # signatures => see CliqueCfg
-
-    cProposals: Proposals   ## Cu1rrent list of proposals we are pushing
-
-    signer*: EthAddress     ## Ethereum address of the signing key
     signFn*: CliqueSignerFn ## Signer function to authorize hashes with
-    cLock: AsyncLock        ## Protects the signer fields
-
     stopSealReq*: bool      ## Stop running `seal()` function
     stopVHeaderReq*: bool   ## Stop running `verifyHeader()` function
+    # signatures => see CliqueCfg
 
-    cFakeDiff: bool         ## Testing only: skip difficulty verifications
-    cDebug: bool            ## debug mode
+    cfg: CliqueCfg ##\
+      ## Common engine parameters to fine tune behaviour
+
+    recents: LruSnaps ##\
+      ## Snapshots cache for recent block search
+
+    snapshot: Snapshot ##\
+      ## Stashing last snapshot operation here
+
+    error: CliqueError ##\
+      ## Last error, typically stored by snaphot utility
+
+    proposals: Proposals ##\
+      ## Cu1rrent list of proposals we are pushing
+
+    asyncLock: AsyncLock ##\
+      ## Protects the signer fields
+
+    fakeDiff: bool ##\
+      ## Testing/debugging only: skip difficulty verifications
 
 {.push raises: [Defect].}
 
@@ -68,48 +80,51 @@ type
 proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
-  Clique(cCfg:       cfg,
-         cRecents:   initRecentSnaps(cfg),
-         cProposals: initTable[EthAddress,bool](),
-         cLock:      newAsyncLock())
+  Clique(cfg:       cfg,
+         recents:   initLruSnaps(cfg),
+         snapshot:  cfg.initSnapshot(BlockHeader()), # dummy
+         proposals: initTable[EthAddress,bool](),
+         asyncLock: newAsyncLock())
 
 # ------------------------------------------------------------------------------
 # Public debug/pretty print
 # ------------------------------------------------------------------------------
 
-proc pp*(rc: var Result[Snapshot,CliqueError]; indent = 0): string =
-  if rc.isOk:
-    rc.value.pp(indent)
-  else:
-    "(error: " & rc.error.pp & ")"
+proc getPrettyPrinters*(c: Clique): var PrettyPrinters =
+  ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
+  c.cfg.prettyPrint
 
 # ------------------------------------------------------------------------------
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc cfg*(c: Clique): auto {.inline.} =
+proc recents*(c: Clique): var LruSnaps {.inline.} =
   ## Getter
-  c.cCfg
-
-proc db*(c: Clique): BaseChainDB {.inline.} =
-  ## Getter
-  c.cCfg.db
-
-proc recents*(c: Clique): var RecentSnaps {.inline.} =
-  ## Getter
-  c.cRecents
+  c.recents
 
 proc proposals*(c: Clique): var Proposals {.inline.} =
   ## Getter
-  c.cProposals
+  c.proposals
 
-proc debug*(c: Clique): auto {.inline.} =
+proc snapshot*(c: Clique): var Snapshot {.inline.} =
+  ## Getter, last processed snapshot
+  c.snapshot
+
+proc error*(c: Clique): auto {.inline.} =
+  ## Getter, last error message
+  c.error
+
+proc cfg*(c: Clique): auto {.inline.} =
   ## Getter
-  c.cDebug
+  c.cfg
+
+proc db*(c: Clique): auto {.inline.} =
+  ## Getter
+  c.cfg.db
 
 proc fakeDiff*(c: Clique): auto {.inline.} =
   ## Getter
-  c.cFakeDiff
+  c.fakeDiff
 
 # ------------------------------------------------------------------------------
 # Public setters
@@ -117,17 +132,21 @@ proc fakeDiff*(c: Clique): auto {.inline.} =
 
 proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
   ## Setter, re-set database
-  c.cCfg.db = db
-  c.cProposals = initTable[EthAddress,bool]()
-  c.cRecents = c.cCfg.initRecentSnaps
-  c.cRecents.debug = c.cDebug
-  # note that the signatures[] cache need not be flushed
+  c.cfg.db = db
+  c.proposals = initTable[EthAddress,bool]()
+  c.recents = c.cfg.initLruSnaps
 
-proc `debug=`*(c: Clique; debug: bool) =
-  ## Set debugging mode on/off and set the `fakeDiff` flag `true`
-  c.cFakeDiff = true
-  c.cDebug = debug
-  c.cRecents.debug = debug
+proc `fakeDiff=`*(c: Clique; debug: bool) =
+  ## Setter
+  c.fakeDiff = debug
+
+proc `snapshot=`*(c: Clique; snap: Snapshot) =
+  ## Setter
+  c.snapshot = snap
+
+proc `error=`*(c: Clique; error: CliqueError) =
+  ## Setter
+  c.error = error
 
 # ------------------------------------------------------------------------------
 # Public lock/unlock
@@ -135,11 +154,11 @@ proc `debug=`*(c: Clique; debug: bool) =
 
 proc lock*(c: Clique) {.inline, raises: [Defect,CatchableError].} =
   ## Lock descriptor
-  waitFor c.cLock.acquire
+  waitFor c.asyncLock.acquire
 
 proc unLock*(c: Clique) {.inline, raises: [Defect,AsyncLockError].} =
   ## Unlock descriptor
-  c.cLock.release
+  c.asyncLock.release
 
 template doExclusively*(c: Clique; action: untyped) =
   ## Handy helper

@@ -19,9 +19,10 @@
 ##
 
 import
-  std/[sequtils, strutils, tables],
-  ./clique_cfg,
-  ./clique_utils,
+  std/[sequtils, tables],
+  # std/[strutils],
+  ../clique_cfg,
+  ../clique_utils,
   eth/common
 
 type
@@ -39,7 +40,7 @@ type
     authorize: bool
     signers: Table[EthAddress,Vote]
 
-  CliquePoll* = object
+  Ballot* = object
     votes: Table[EthAddress,Tally]  ## votes by account -> signer
     authSig: Table[EthAddress,bool] ## currently authorised signers
     authRemoved: bool               ## last `addVote()` action was removing an
@@ -52,45 +53,58 @@ type
 # Private
 # ------------------------------------------------------------------------------
 
-proc say(t: var CliquePoll; v: varargs[string,`$`]) =
+proc say(t: var Ballot; v: varargs[string,`$`]) {.inline.} =
   ## Debugging output
   ppExceptionWrap:
-    if t.debug:
-      stderr.write "*** " & v.join & "\n"
+    # if t.debug: stderr.write "*** " & v.join & "\n"
+    discard
 
 # ------------------------------------------------------------------------------
-# Public
+# Public debugging/pretty-printer support
 # ------------------------------------------------------------------------------
 
-proc setDebug*(t: var CliquePoll; debug: bool) =
-  ## Set debugging mode on/off
-  t.debug = debug
+proc votesInternal*(t: var Ballot): seq[(EthAddress,EthAddress,Vote)] =
+  for account,tally in t.votes.pairs:
+    for signer,vote in tally.signers.pairs:
+      result.add (account, signer, vote)
 
-proc initCliquePoll*(t: var CliquePoll) =
-  ## Ininialise an empty `CliquePoll` descriptor.
+# ------------------------------------------------------------------------------
+# Public constructor
+# ------------------------------------------------------------------------------
+
+proc initBallot*(t: var Ballot) =
+  ## Ininialise an empty `Ballot` descriptor.
   t.votes = initTable[EthAddress,Tally]()
   t.authSig = initTable[EthAddress,bool]()
 
-proc initCliquePoll*(t: var CliquePoll; signers: openArray[EthAddress]) =
-  ## Ininialise `CliquePoll` with a given authorised signers list
-  t.initCliquePoll
+proc initBallot*(t: var Ballot; signers: openArray[EthAddress]) =
+  ## Ininialise `Ballot` with a given authorised signers list
+  t.initBallot
   for a in signers:
     t.authSig[a] = true
 
-proc authSigners*(t: var CliquePoll): seq[EthAddress] =
+# ------------------------------------------------------------------------------
+# Public setters
+# ------------------------------------------------------------------------------
+
+proc `debug=`*(t: var Ballot; debug: bool) =
+  ## Set debugging mode on/off
+  t.debug = debug
+
+# ------------------------------------------------------------------------------
+# Public getters
+# ------------------------------------------------------------------------------
+
+proc authSigners*(t: var Ballot): seq[EthAddress] =
   ## Sorted ascending list of authorised signer addresses
   toSeq(t.authSig.keys).sorted(EthAscending)
 
-proc isAuthSigner*(t: var CliquePoll; address: EthAddress): bool =
-  ## Check whether `address` is an authorised signer
-  address in t.authSig
-
-proc authSignersShrunk*(t: var CliquePoll): bool =
+proc isAuthSignersListShrunk*(t: var Ballot): bool =
   ## Check whether the authorised signers list was shrunk recently after
   ## appying `addVote()`
   t.authRemoved
 
-proc authSignersThreshold*(t: var CliquePoll): int =
+proc authSignersThreshold*(t: var Ballot): int =
   ## Returns the minimum number of authorised signers needed for authorising
   ## a addres for voting. This is currently
   ## ::
@@ -98,8 +112,15 @@ proc authSignersThreshold*(t: var CliquePoll): int =
   ##
   1 + (t.authSig.len div 2)
 
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
-proc delVote*(t: var CliquePoll; signer, address: EthAddress) {.
+proc isAuthSigner*(t: var Ballot; address: EthAddress): bool =
+  ## Check whether `address` is an authorised signer
+  address in t.authSig
+
+proc delVote*(t: var Ballot; signer, address: EthAddress) {.
               gcsafe, raises: [Defect,KeyError].} =
   ## Remove a particular previously added vote.
   if address in t.votes:
@@ -110,18 +131,18 @@ proc delVote*(t: var CliquePoll; signer, address: EthAddress) {.
         t.votes[address].signers.del(signer)
 
 
-proc flushVotes*(t: var CliquePoll) =
+proc flushVotes*(t: var Ballot) =
   ## Reset/flush pending votes, authorised signers remain the same.
   t.votes.clear
 
 
 # clique/snapshot.go(141): func (s *Snapshot) validVote(address [..]
-proc validVote*(t: var CliquePoll; address: EthAddress; authorize: bool): bool =
+proc isValidVote*(t: var Ballot; address: EthAddress; authorize: bool): bool =
   ## Check whether voting would have an effect in `addVote()`
   if address in t.authSig: not authorize else: authorize
 
 
-proc addVote*(t: var CliquePoll; vote: Vote) {.
+proc addVote*(t: var Ballot; vote: Vote) {.
               gcsafe, raises: [Defect,KeyError].} =
   ## Add a new vote collecting the signers for the particular voting address.
   ##
@@ -144,7 +165,7 @@ proc addVote*(t: var CliquePoll; vote: Vote) {.
     authOk = vote.authorize
 
   # clique/snapshot.go(147): if !s.validVote(address, [..]
-  if not t.validVote(vote.address, vote.authorize):
+  if not t.isValidVote(vote.address, vote.authorize):
 
     # Corner case: touch votes for this account
     if t.votes.hasKey(vote.address):
@@ -202,15 +223,6 @@ proc addVote*(t: var CliquePoll; vote: Vote) {.
     t.votes.del(key)
 
   t.say "addVote done"
-
-# ------------------------------------------------------------------------------
-# Test interface
-# ------------------------------------------------------------------------------
-
-proc votesInternal*(t: var CliquePoll): seq[(EthAddress,EthAddress,Vote)] =
-  for account,tally in t.votes.pairs:
-    for signer,vote in tally.signers.pairs:
-      result.add (account, signer, vote)
 
 # ------------------------------------------------------------------------------
 # End

@@ -9,12 +9,11 @@
 # according to those terms.
 
 import
-  ../../vm_types,
+  ../clique,
   eth/[common]
 
 
-proc updatePoaState*(vmState: BaseVMState;
-                     header: BlockHeader; body: BlockBody): bool =
+proc updatePoaState*(poa: Clique; header: BlockHeader; body: BlockBody): bool =
   true
 
 # End

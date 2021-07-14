@@ -24,7 +24,6 @@ import
   std/[algorithm, strformat, times],
   ../../chain_config,
   ../../constants,
-  ../../db/db_chain,
   ../../utils,
   ./clique_defs,
   eth/[common, rlp],
@@ -63,7 +62,7 @@ proc sorted*(e: openArray[EthAddress]; order = EthAscending): seq[EthAddress] =
   e.sorted(cmp = eCmp, order = order.SortOrder)
 
 
-proc cliqueResultErr*(w: CliqueError): CliqueResult =
+proc cliqueResultErr*(w: CliqueError): CliqueOkResult =
   ## Return error result (syntactic sugar)
   err(w)
 
@@ -82,28 +81,17 @@ proc extraDataAddresses*(extraData: Blob): seq[EthAddress] =
       addrOffset += EthAddress.len
 
 
-proc getBlockHeaderResult*(db: BaseChainDB;
-                           number: BlockNumber): Result[BlockHeader,void] {.
-                             gcsafe, raises: [Defect,RlpError].} =
-  ## Slightly re-phrased dbChain.getBlockHeader(..) command
-  var header: BlockHeader
-  if db_chain.getBlockHeader(db, number, header):
-    return ok(header)
-  err()
-
-
 # core/types/block.go(343): func (b *Block) WithSeal(header [..]
 proc withHeader*(b: EthBlock; header: BlockHeader): EthBlock =
   ## New block with the data from `b` but the header replaced with the
   ## argument one.
-  EthBlock(
-    header: header,
-    txs:    b.txs,
-    uncles: b.uncles)
+  EthBlock(header: header,
+           txs:    b.txs,
+           uncles: b.uncles)
 
 # consensus/misc/forks.go(30): func VerifyForkHashes(config [..]
-proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader): CliqueResult {.
-                       gcsafe, raises: [Defect,ValueError].} =
+proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader):
+                       CliqueOkResult {.gcsafe, raises: [Defect,ValueError].} =
   ## Verify that blocks conforming to network hard-forks do have the correct
   ## hashes, to avoid clients going off on different chains.
 
