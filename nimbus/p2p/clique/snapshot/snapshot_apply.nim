@@ -42,28 +42,44 @@ proc say(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
   discard
 
 # ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+iterator pairWalk(first, last: int; offTop: Positive): (int,int) {.gcsafe.} =
+  if first <= last:
+    for n in first .. last - offTop:
+      yield (n,n+1)
+  else:
+    for n in first.countdown(last + offTop):
+      yield (n,n-1)
+
+iterator inxWalk(first, last: int): int {.gcsafe.} =
+  if first <= last:
+    for n in first .. last:
+      yield n
+  else:
+    for n in first.countdown(last):
+      yield n
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 # clique/snapshot.go(185): func (s *Snapshot) apply(headers [..]
-proc snapshotApply*(s: Snapshot;
-                    headers: openArray[BlockHeader]): CliqueOkResult
+proc snapshotApply*(s: Snapshot; headers: var seq[BlockHeader],
+                    first, last: int): CliqueOkResult
                       {.gcsafe, raises: [Defect,CatchableError].} =
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 
   #s.say "applySnapshot ", s.pp(headers).join("\n" & ' '.repeat(18))
 
-  # Allow passing in no headers for cleaner code
-  if headers.len == 0:
-    return ok()
-
   # Sanity check that the headers can be applied
-  if headers[0].blockNumber != s.blockNumber + 1:
+  if headers[first].blockNumber != s.blockNumber + 1:
     return err((errInvalidVotingChain,""))
   # clique/snapshot.go(191): for i := 0; i < len(headers)-1; i++ {
-  for i in 0 ..< headers.len - 1:
-    if headers[i+1].blockNumber != headers[i].blockNumber+1:
+  for (i,j) in first.pairWalk(last, 1):
+    if headers[j].blockNumber != headers[i].blockNumber+1:
       return err((errInvalidVotingChain,""))
 
   # Iterate through the headers and create a new snapshot
@@ -73,10 +89,8 @@ proc snapshotApply*(s: Snapshot;
   var
     logged = start
 
-  s.say "applySnapshot state=", s.pp(25)
-
   # clique/snapshot.go(206): for i, header := range headers [..]
-  for headersIndex in 0 ..< headers.len:
+  for headersIndex in first.inxWalk(last):
     let
       # headersIndex => also used for logging at the end of this loop
       header = headers[headersIndex]
@@ -164,8 +178,15 @@ proc snapshotApply*(s: Snapshot;
 
   # clique/snapshot.go(303): snap.Number += uint64(len(headers))
   s.blockNumber = s.blockNumber + headers.len.u256
-  s.blockHash = headers[^1].blockHash
+  s.blockHash = headers[last].blockHash
   result = ok()
+
+
+proc snapshotApply*(s: Snapshot; headers: var seq[BlockHeader]): CliqueOkResult
+                   {.gcsafe, raises: [Defect,CatchableError].} =
+  if headers.len == 0:
+    return ok()
+  s.snapshotApply(headers, 0, headers.len - 1)
 
 # ------------------------------------------------------------------------------
 # End

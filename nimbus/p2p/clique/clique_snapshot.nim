@@ -69,17 +69,35 @@ proc say(d: LocalSnaps; v: varargs[string,`$`]) {.inline.} =
   # d.c.cfg.say v
   discard
 
-proc pp(q: openArray[BlockHeader]): string {.inline.} =
-  "[" & toSeq(q).mapIt("#" & $it.blockNumber).join(", ") & "]"
 
-proc pp(h: BlockHeader, q: openArray[BlockHeader]): string {.inline.} =
-  "#" & $h.blockNumber & " " & q.pp
+proc pp(q: openArray[BlockHeader]; n: int): string {.inline.} =
+  "[" & toSeq(q[0 ..< n]).mapIt("#" & $it.blockNumber).join(", ") & "]"
+
+proc pp(b: BlockNumber, q: openArray[BlockHeader]; n: int): string {.inline.} =
+  "#" & $b & " + " & q.pp(n)
+
+
+proc pp(q: openArray[BlockHeader]): string {.inline.} =
+  q.pp(q.len)
+
+proc pp(b: BlockNumber, q: openArray[BlockHeader]): string {.inline.} =
+  b.pp(q, q.len)
+
 
 proc pp(h: BlockHeader, q: openArray[BlockHeader]; n: int): string {.inline.} =
-  "headers=(#" & $h.blockNumber & " + " & q[0 ..< n].pp & ")"
+  "headers=(" & h.blockNumber.pp(q,n) & ")"
+
+proc pp(h: BlockHeader, q: openArray[BlockHeader]): string {.inline.} =
+  h.pp(q,q.len)
+
+proc pp(t: var LocalPath; w: var LocalSubChain): string {.inline.} =
+  var (a, b) = (w.first, w.top)
+  if a == 0 and b == 0: b = t.chain.len
+  "trail=(#" & $t.snaps.blockNumber & " + " & t.chain[a ..< b].pp & ")"
 
 proc pp(t: var LocalPath): string {.inline.} =
-  "trail=(#" & $t.snaps.blockNumber & " + " & t.chain.pp & ")"
+  var w = LocalSubChain()
+  t.pp(w)
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -201,30 +219,26 @@ proc findSnapshot(d: var LocalSnaps): bool
 proc applyTrail(d: var LocalSnaps): CliqueOkResult
                   {.inline, gcsafe, raises: [Defect,CatchableError].} =
   ## Apply any `trail` headers on top of the snapshot `snap`
+  if d.subChn.first < d.subChn.top:
+    block:
+      # clique/clique.go(434): snap, err := snap.apply(headers)
+      d.say "applyTrail ", d.trail.pp(d.subChn)
+      let rc = d.trail.snaps.snapshotApply(
+        d.trail.chain, d.subChn.top-1, d.subChn.first)
+      if rc.isErr:
+        return err(rc.error)
 
-  # Apply trail with reversed list order
-  var liart = d.trail.chain[d.subChn.first ..< d.subChn.top]
-  for i in 0 ..< liart.len div 2:
-    swap(liart[i], liart[^(1+i)])
+    # If we've generated a new checkpoint snapshot, save to disk
+    if d.isCheckPoint(d.trail.snaps.blockNumber):
 
-  block:
-    # clique/clique.go(434): snap, err := snap.apply(headers)
-    let rc = d.trail.snaps.snapshotApply(liart)
-    if rc.isErr:
-      return err(rc.error)
+      var rc = d.trail.snaps.storeSnapshot
+      if rc.isErr:
+        return err(rc.error)
 
-  # If we've generated a new checkpoint snapshot, save to disk
-  if d.isCheckPoint(d.trail.snaps.blockNumber) and 0 < liart.len:
-
-    var rc = d.trail.snaps.storeSnapshot
-    if rc.isErr:
-      return err(rc.error)
-
-    d.say "updateSnapshot <disk> chechkpoint #", d.trail.snaps.blockNumber
-    trace "Stored voting snapshot to disk",
-      blockNumber = d.trail.snaps.blockNumber,
-      blockHash = d.trail.snaps.blockHash
-
+      d.say "updateSnapshot <disk> chechkpoint #", d.trail.snaps.blockNumber
+      trace "Stored voting snapshot to disk",
+         blockNumber = d.trail.snaps.blockNumber,
+         blockHash = d.trail.snaps.blockHash
   ok()
 
 
@@ -285,7 +299,7 @@ proc updateSnapshot(d: var LocalSnaps): Result[Snapshot,CliqueError]
 
 # clique/clique.go(369): func (c *Clique) snapshot(chain [..]
 proc cliqueSnapshot*(c: Clique; header: Blockheader;
-                       parents: openArray[Blockheader]): CliqueOkResult
+                     parents: var seq[Blockheader]): CliqueOkResult
                          {.gcsafe, raises: [Defect,CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as `c.snapshot`
@@ -303,9 +317,12 @@ proc cliqueSnapshot*(c: Clique; header: Blockheader;
     c.snapshot = rc.value
     return ok()
 
+  # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
+  parents.shallow
+
   var d = LocalSnaps(
     c:       c,
-    parents: toSeq(parents),
+    parents: parents,
     start:   LocalPivot(
       header:  header,
       hash:    header.hash))
@@ -323,12 +340,13 @@ proc cliqueSnapshot*(c: Clique; header: Blockheader;
 proc cliqueSnapshot*(c: Clique; header: Blockheader): CliqueOkResult
                          {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Short for `cliqueSnapshot(c,header,@[])`
-  c.cliqueSnapshot(header, @[])
+  var blind: seq[Blockheader]
+  c.cliqueSnapshot(header, blind)
 
 
 
 proc cliqueSnapshot*(c: Clique; hash: Hash256;
-                       parents: openArray[Blockheader]): CliqueOkResult
+                     parents: var seq[Blockheader]): CliqueOkResult
                          {.gcsafe,raises: [Defect,CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as  `c.snapshot`
@@ -351,6 +369,9 @@ proc cliqueSnapshot*(c: Clique; hash: Hash256;
     c.error = (errUnknownHash,"")
     return err(c.error)
 
+  # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
+  parents.shallow
+
   var d = LocalSnaps(
     c:       c,
     parents: toSeq(parents),
@@ -370,7 +391,8 @@ proc cliqueSnapshot*(c: Clique; hash: Hash256;
 proc cliqueSnapshot*(c: Clique; hash: Hash256): CliqueOkResult
                          {.gcsafe,raises: [Defect,CatchableError].} =
   ## Short for `cliqueSnapshot(c,hash,@[])`
-  c.cliqueSnapshot(hash, @[])
+  var blind: seq[Blockheader]
+  c.cliqueSnapshot(hash, blind)
 
 # ------------------------------------------------------------------------------
 # End
