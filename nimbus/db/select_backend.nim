@@ -38,9 +38,10 @@ proc del*(db: ChainDB, key: openArray[byte]) =
   db.kv.del(key).expect("working database")
 
 when dbBackend == sqlite:
-  import eth/db/kvstore_sqlite as database_backend
+  import eth/db/kvstore_sqlite3 as database_backend
   proc newChainDB*(path: string): ChainDB =
-    ChainDB(kv: kvStore SqKvStore.init(path, "nimbus").tryGet())
+    let db = SqStoreRef.init(path, "nimbus").expect("working database")
+    ChainDB(kv: kvStore db.openKvStore().expect("working database"))
 elif dbBackend == rocksdb:
   import eth/db/kvstore_rocksdb as database_backend
   proc newChainDB*(path: string): ChainDB =
