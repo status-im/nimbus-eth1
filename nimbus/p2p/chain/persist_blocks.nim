@@ -23,12 +23,6 @@ import
   stew/endians2,
   stint
 
-# debugging clique
-when defined(debug):
-  import
-    std/[algorithm, strformat, strutils],
-    ../clique/clique_desc
-
 when not defined(release):
   import ../../tracer
 
@@ -55,11 +49,6 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
       (header, body) = (headers[i], bodies[i])
       parentHeader = c.db.getBlockHeader(header.parentHash)
       vmState = newBaseVMState(parentHeader.stateRoot, header, c.db)
-
-      # The following processing function call will update the PoA state which
-      # is passed as second function argument. The PoA state is ignored for
-      # non-PoA networks (in which case `vmState.processBlock(header,body)`
-      # would also be correct but not vice versa.)
       validationResult = vmState.processBlock(c.clique, header, body)
 
     when not defined(release):
@@ -71,15 +60,26 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     if validationResult != ValidationResult.OK:
       return validationResult
 
-    if c.extraValidation:
+    if c.extraValidation and not c.db.config.poaEngine:
       let res = c.db.validateHeaderAndKinship(
         header,
         body,
         checkSealOK = false, # TODO: how to checkseal from here
-        c.cacheByEpoch
-      )
+        c.cacheByEpoch)
       if res.isErr:
-        debug "block validation error", msg = res.error
+        debug "block validation error",
+          msg = res.error
+        return ValidationResult.Error
+
+    if c.extraValidation and c.db.config.poaEngine:
+      var parent = if 0 < i: @[headers[i-1]] else: @[]
+      let rc = c.clique.cliqueVerify(header,parent)
+      if rc.isErr:
+        #echo "*** persistBlocksImpl ",
+        #  "#", header.blockNumber, " ", $rc.error
+        debug "PoA header verification failed",
+          blockNumber = header.blockNumber,
+          msg = $rc.error
         return ValidationResult.Error
 
     discard c.db.persistHeaderToDb(header)
@@ -90,14 +90,6 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     # so the rpc return consistent result
     # between eth_blockNumber and eth_syncing
     c.db.currentBlock = header.blockNumber
-
-  if c.db.config.poaEngine:
-    if c.clique.cliqueSnapshot(headers[^1]).isErr:
-      debug "PoA signer snapshot failed"
-    when defined(debug):
-      #let list = c.clique.pp(c.clique.cliqueSigners).sorted
-      #echo &"*** {list.len} trusted signer(s): ", list.join(" ")
-      discard
 
   transaction.commit()
 

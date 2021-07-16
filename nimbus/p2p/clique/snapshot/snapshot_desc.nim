@@ -31,6 +31,10 @@ import
   stew/results
 
 type
+  SnapshotResult* = ##\
+    ## Snapshot/error result type
+    Result[Snapshot,CliqueError]
+
   AddressHistory = Table[BlockNumber,EthAddress]
 
   SnapshotData* = object

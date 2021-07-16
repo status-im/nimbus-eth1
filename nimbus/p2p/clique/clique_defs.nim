@@ -219,6 +219,10 @@ type
     errUnknownHash = "No header found for hash value"
     errEmptyLruCache = "No snapshot available"
 
+    errNotInitialised = ##\
+      ## Initalisation value for `Result` entries
+      "Not initialised"
+
     errSetLruSnaps = ##\
       ## Attempt to assign a value to a non-existing slot
       "Missing LRU slot for snapshot"
@@ -247,11 +251,23 @@ type
 # ------------------------------------------------------------------------------
 
 type
-  CliqueError* = (CliqueErrorType,string)
-  CliqueOkResult* = Result[void,CliqueError]
+  CliqueError* = ##\
+    ## Error message, tinned component + explanatory text (if any)
+    (CliqueErrorType,string)
+
+  CliqueOkResult* = ##\
+    ## Standard ok/error result type for `Clique` functions
+    Result[void,CliqueError]
+
+  CliqueOkXResult* = ##\
+    ## Ok/error result type for `Clique` functions with additional numeric
+    ## component for the error case
+    Result[void,(CliqueError,int)]
 
 const
-  cliqueNoError* = (resetCliqueError, "")
+  cliqueNoError* = ##\
+    ## No-error constant
+    (resetCliqueError, "")
 
 # ------------------------------------------------------------------------------
 # End

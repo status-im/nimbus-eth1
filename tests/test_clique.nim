@@ -33,14 +33,17 @@ proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
 # ------------------------------------------------------------------------------
 
 # clique/snapshot_test.go(99): func TestClique(t *testing.T) {
-proc runCliqueSnapshot(noisy = true; testIds = {0 .. 999}; skipIds = {0}-{0}) =
+proc runCliqueSnapshot(noisy = true; postProcessOk = false;
+                       testIds = {0 .. 999}; skipIds = {0}-{0}) =
   ## Clique PoA Snapshot
   ## ::
   ##    Tests that Clique signer voting is evaluated correctly for various
   ##    simple and complex scenarios, as well as that a few special corner
   ##    cases fail correctly.
   ##
-  suite "Clique PoA Snapshot":
+  let postProcessInfo = if postProcessOk: ", Transaction Finaliser Applied"
+                        else: ", Raw Mode"
+  suite &"Clique PoA Snapshot{postProcessInfo}":
     var
       pool = newVoterPool()
 
@@ -63,26 +66,30 @@ proc runCliqueSnapshot(noisy = true; testIds = {0 .. 999}; skipIds = {0}-{0}) =
             .resetVoterChain(tt.signers, tt.epoch)
             # see clique/snapshot_test.go(425): for j, block := range blocks {
             .appendVoter(tt.votes)
-            .commitVoterChain
+            .commitVoterChain(postProcessOk)
 
           # see clique/snapshot_test.go(477): if err != nil {
-          if pool.error != cliqueNoError:
+          if pool.cliqueSigners.isErr:
             # Note that clique/snapshot_test.go does not verify _here_ against
             # the scheduled test error -- rather this voting error is supposed
             # to happen earlier (processed at clique/snapshot_test.go(467)) when
             # assembling the block chain (sounds counter intuitive to the author
             # of this source file as the scheduled errors are _clique_ related).
-            check pool.error[0] == tt.failure
+            check pool.cliqueSigners.error[0] == tt.failure
           else:
             let
               expected = tt.results.mapIt("@" & it).sorted
-              snapResult = pool.pp(pool.cliqueSigners).sorted
-            pool.say "*** snap state=", pool.snapshot.pp(16)
+              snapResult = pool.pp(pool.cliqueSigners(true).value).sorted
+            pool.say "*** snap state=", pool.snapshot(true).value.pp(16)
             pool.say "        result=[", snapResult.join(",") & "]"
             pool.say "      expected=[", expected.join(",") & "]"
 
             # Verify the final list of signers against the expected ones
             check snapResult == expected
+
+proc runCliqueSnapshot(noisy = true; postProcessOk = false; testId: int) =
+  noisy.runCliqueSnapshot(postProcessOk, testIds = {testId})
+
 
 proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
   var
@@ -142,14 +149,14 @@ proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
         discard
 
 
-proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
+proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
   var
     pool = newVoterPool()
     stoppedOk = false
 
   pool.debug = noisy
 
-  let stopThreshold = if stopAfterBlock == 0u64: uint64.high.u256
+  let stopThreshold = if stopAfterBlock == 0u64: 20.u256
                       else: stopAfterBlock.u256
 
   suite "Replay Goerli Chain Transactions Single Blockwise":
@@ -185,16 +192,22 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
+let
+  skipIDs = {4,6,7,9,11,13,16,17,19}
+  skipMoreIDs = {21..24}
+
 proc cliqueMain*(noisy = defined(debug)) =
-  noisy.runCliqueSnapshot
+  noisy.runCliqueSnapshot(true, skipIDs = skipMoreIDs)
+  noisy.runCliqueSnapshot(false, skipIDs = skipIDs + skipMoreIDs)
   noisy.runGoerliBaybySteps
   noisy.runGoerliReplay
 
 when isMainModule:
   let noisy = defined(debug)
-  # noisy.runCliqueSnapshot(testIds = {1 .. 999})
-  # noisy.runGoerliBaybySteps(dir = ".")
-  noisy.runGoerliReplay(dir = ".", stopAfterBlock = 0)
+  noisy.runCliqueSnapshot(true, {21})
+  #noisy.runCliqueSnapshot(false, skipIDs = skipIDs + skipMoreIDs)
+  #noisy.runGoerliBaybySteps(dir = ".")
+  #noisy.runGoerliReplay(dir = ".")
 
 # ------------------------------------------------------------------------------
 # End

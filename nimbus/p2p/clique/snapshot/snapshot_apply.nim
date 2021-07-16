@@ -66,9 +66,9 @@ iterator inxWalk(first, last: int): int {.gcsafe.} =
 # ------------------------------------------------------------------------------
 
 # clique/snapshot.go(185): func (s *Snapshot) apply(headers [..]
-proc snapshotApply*(s: Snapshot; headers: var seq[BlockHeader],
-                    first, last: int): CliqueOkResult
-                      {.gcsafe, raises: [Defect,CatchableError].} =
+proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
+                       first, last: int): CliqueOkResult
+                         {.gcsafe, raises: [Defect,CatchableError].} =
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 
@@ -186,7 +186,7 @@ proc snapshotApply*(s: Snapshot; headers: var seq[BlockHeader]): CliqueOkResult
                    {.gcsafe, raises: [Defect,CatchableError].} =
   if headers.len == 0:
     return ok()
-  s.snapshotApply(headers, 0, headers.len - 1)
+  s.snapshotApplySeq(headers, 0, headers.len - 1)
 
 # ------------------------------------------------------------------------------
 # End

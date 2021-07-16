@@ -83,27 +83,30 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
   if header.blockNumber.isZero:
     return err((errUnknownBlock,""))
 
+  # Get current snapshot
+  let snapshot = c.snapshot.value
+
   # Verify availability of the cached snapshot
-  doAssert c.snapshot.blockHash == header.parentHash
+  doAssert snapshot.blockHash == header.parentHash
 
   # Resolve the authorization key and check against signers
   let signer =  c.cfg.ecRecover(header)
   if signer.isErr:
       return err(signer.error)
 
-  if not c.snapshot.isSigner(signer.value):
+  if not snapshot.isSigner(signer.value):
     return err((errUnauthorizedSigner,""))
 
-  let seen = c.snapshot.recent(signer.value)
+  let seen = snapshot.recent(signer.value)
   if seen.isOk:
     # Signer is among recents, only fail if the current block does not
     # shift it out
-    if header.blockNumber - c.snapshot.signersThreshold.u256 < seen.value:
+    if header.blockNumber - snapshot.signersThreshold.u256 < seen.value:
       return err((errRecentlySigned,""))
 
   # Ensure that the difficulty corresponds to the turn-ness of the signer
   if not c.fakeDiff:
-    if c.snapshot.inTurn(header.blockNumber, signer.value):
+    if snapshot.inTurn(header.blockNumber, signer.value):
       if header.difficulty != DIFF_INTURN:
         return err((errWrongDifficulty,""))
     else:
@@ -160,13 +163,14 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
   # Retrieve the snapshot needed to verify this header and cache it
   block:
     # clique/clique.go(350): snap, err := c.snapshot(chain, number-1, ..
-    let rc = c.cliqueSnapshot(header.parentHash, parents)
+    let rc = c.cliqueSnapshotSeq(header.parentHash, parents)
     if rc.isErr:
       return err(rc.error)
 
   # If the block is a checkpoint block, verify the signer list
   if (header.blockNumber mod c.cfg.epoch.u256) == 0:
-    if c.snapshot.ballot.authSigners != header.extraData.extraDataAddresses:
+    let snapshot = c.snapshot.value
+    if snapshot.ballot.authSigners != header.extraData.extraDataAddresses:
       return err((errMismatchingCheckpointSigners,""))
 
   # All basic checks passed, verify the seal and return
@@ -240,8 +244,8 @@ proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(246): func (c *Clique) verifyHeader(chain [..]
-proc cliqueVerify*(c: Clique; header: BlockHeader;
-                  parents: var seq[BlockHeader]): CliqueOkResult
+proc cliqueVerifySeq*(c: Clique; header: BlockHeader;
+                      parents: var seq[BlockHeader]): CliqueOkResult
                   {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass in a batch of parents (ascending order) to avoid looking
@@ -265,27 +269,10 @@ proc cliqueVerify*(c: Clique; header: BlockHeader;
   # All basic checks passed, verify cascading fields
   c.verifyCascadingFields(header, parents)
 
-proc cliqueVerify*(c: Clique; header: BlockHeader;
-                  parents: openArray[BlockHeader]): CliqueOkResult
-                  {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Consensus rules verifier, only for an `openArray` typ `parents` list
-  ## rather than a sequence reference. Note that this argument type costs an
-  ## extra copy process to convert the `parents` argument.
-  var list = toSeq(parents)
-  c.cliqueVerify(header, list)
 
-# clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
-proc cliqueVerify*(c: Clique; header: BlockHeader): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Consensus rules verifier without optional parents list.
-  var blind: seq[BlockHeader]
-  c.cliqueVerify(header, blind)
-
-
-
-proc cliqueVerify*(c: Clique;
-              headers: var seq[BlockHeader]): Result[void,(CliqueError,int)]
-              {.gcsafe, raises: [Defect,CatchableError].} =
+proc cliqueVerifySeq*(c: Clique;
+                 headers: var seq[BlockHeader]): Result[void,(CliqueError,int)]
+                 {.gcsafe, raises: [Defect,CatchableError].} =
   ## This function verifies a batch of headers checking each header for
   ## consensus rules conformance. The `headers` list is supposed to
   ## contain a chain of headers, i e. `headers[i]` is parent to `headers[i+1]`.
@@ -299,26 +286,47 @@ proc cliqueVerify*(c: Clique;
   ## will be left untouched by this function.
   if 0 < headers.len:
     headers.shallow
-    let rc = c.cliqueVerify(headers[0])
+    var blind: seq[BlockHeader]
+    let rc = c.cliqueVerifySeq(headers[0],blind)
     if rc.isErr:
       return err((rc.error,0))
     for n in 1 ..< headers.len:
       var list = headers[n-1 .. n-1]
-      let rc = c.cliqueVerify(headers[n],list)
+      let rc = c.cliqueVerifySeq(headers[n],list)
       if rc.isErr:
         return err((rc.error,n))
 
   ok()
 
+
+proc cliqueVerify*(c: Clique; header: BlockHeader;
+                  parents: openArray[BlockHeader]): CliqueOkResult
+                        {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Consensus rules verifier similar to `cliqueVerifySeq()`, only for an
+  ## `openArray` type `parents` list rather than a sequence reference. Note
+  ## that this argument type costs an extra copy process to convert the
+  ## `parents` argument.
+  var list = toSeq(parents)
+  c.cliqueVerifySeq(header, list)
+
+# clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
+proc cliqueVerify*(c: Clique; header: BlockHeader): CliqueOkResult
+                        {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Consensus rules verifier without optional parents list.
+  var blind: seq[BlockHeader]
+  c.cliqueVerifySeq(header, blind)
+
+
 proc cliqueVerify*(c: Clique;
-              headers: openArray[BlockHeader]): Result[void,(CliqueError,int)]
-              {.gcsafe, raises: [Defect,CatchableError].} =
-  ## The function verifies the chained `headers` list for consensus rules
-  ## conformance, only for an `openArray` type `headers` list rather than a
-  ## sequence reference. Note that this argument type costs an extra copy
-  ## process to convert the `headers` argument.
+                   headers: openArray[BlockHeader]): CliqueOkXResult
+                        {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Similar to `cliqueVerifySeq()`, this function verifies the chained
+  ## `headers` list for consensus rules conformance, only for an `openArray`
+  ## type `headers` list rather than a sequence reference. Note that this
+  ## argument type costs an extra copy process to convert the `headers`
+  ## argument.
   var list = toSeq(headers)
-  c.cliqueVerify(list)
+  c.cliqueVerifySeq(list)
 
 # ------------------------------------------------------------------------------
 # End

@@ -19,9 +19,16 @@
 ##
 
 import
+  ./clique_defs,
   ./clique_desc,
   ./snapshot/[ballot, snapshot_desc],
-  eth/common
+  eth/common,
+  stew/results
+
+type
+  SignersResult* = ##\
+    ## Address list/error result type
+    Result[seq[EthAddress],CliqueError]
 
 {.push raises: [Defect].}
 
@@ -29,10 +36,21 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc cliqueSigners*(c: Clique): seq[EthAddress] {.inline.} =
+proc cliqueSigners*(c: Clique; lastOk = false): SignersResult {.inline.} =
   ## Retrieves the sorted list of authorized signers for the last registered
-  ## snapshot. If there was no snapshot, an empty list is returned.
-  c.snapshot.ballot.authSigners
+  ## snapshot.
+  ##
+  ## If the argument `lastOk` is `true`, the signers result are generated
+  ## from the last successfully generated snapshot (if any).
+  let rc = c.snapshot(lastOk)
+  if rc.isErr:
+    return err(rc.error)
+
+  # FIXME: Need to compile `signers` value before passing it to the `ok()`
+  #        directive. NIM (as of 1.2.10) will somehow garble references and
+  #        produce a runtime crash.
+  let signers = rc.value.ballot.authSigners
+  ok(signers)
 
 # ------------------------------------------------------------------------------
 # End

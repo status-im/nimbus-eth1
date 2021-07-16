@@ -190,7 +190,9 @@ proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
 
 proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
   ## Setup new block chain with bespoke genesis
-  ap.chain = BaseChainDB(db: newMemoryDb(), config: ap.boot.config).newChain
+  ap.chain = BaseChainDB(
+    db: newMemoryDb(),
+    config: ap.boot.config).newChain(extraValidation = true)
   ap.chain.clique.db.populateProgress
   # new genesis block
   var g = ap.boot.genesis
@@ -262,17 +264,13 @@ proc debug*(ap: TesterPool): auto {.inline.} =
   ## Getter
   ap.clique.cfg.debug
 
-proc cliqueSigners*(ap: TesterPool): auto {.inline.} =
+proc cliqueSigners*(ap: TesterPool; lastOk = false): auto {.inline.} =
   ## Getter
-  ap.clique.cliqueSigners
+  ap.clique.cliqueSigners(lastOk)
 
-proc error*(ap: TesterPool): auto {.inline.} =
+proc snapshot*(ap: TesterPool; lastOk = false): auto {.inline.} =
   ## Getter
-  ap.clique.error
-
-proc snapshot*(ap: TesterPool): Snapshot {.inline.} =
-  ## Getter
-  ap.clique.snapshot
+  ap.clique.snapshot(lastOk)
 
 # ------------------------------------------------------------------------------
 # Public: setter
@@ -408,25 +406,64 @@ proc appendVoter*(ap: TesterPool;
     ap.appendVoter(voter)
 
 
-proc commitVoterChain*(ap: TesterPool): TesterPool {.discardable.} =
-  ## Write the headers from the voter header batch list to the block chain DB
+proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
+                       stopFaultyHeader = false): TesterPool {.discardable.} =
+  ## Write the headers from the voter header batch list to the block chain DB.
+  ##
+  ## If `postProcessOk` is set, an additional verification step is added at
+  ## the end of each transaction.
+  ##
+  ## if `stopFaultyHeader` is set, the function stopps immediately on error.
+  ## Otherwise the offending bloch is removed, the rest of the batch is
+  ## adjusted and applied again repeatedly.
   result = ap
+  ap.chain.clique.fakeDiff = true
 
-  for headers in ap.batch:
-    let bodies = BlockBody().repeat(headers.len)
-    doAssert ap.chain.persistBlocks(headers,bodies) == ValidationResult.OK
+  var reChainOk = false
+  for n in 0 ..< ap.batch.len:
+    block forLoop:
 
-    if ap.debug:
-      let
-        number = headers[^1].blockNumber
-        header = ap.getBlockHeader(number)
-      ap.say "*** snapshot argument: #", number
-      ap.sayHeaderChain(8)
-      when false: # all addresses are typically pp-mappable
-        ap.say "          address map: ", toSeq(ap.names.pairs)
+      var headers = ap.batch[n]
+      while true:
+        if headers.len == 0:
+          break forLoop # continue with for loop
+
+        ap.say &"*** transaction ({n}) list: [",
+          headers.mapIt(&"#{it.blockNumber}").join(", "), "]"
+
+        # Realign rest of transaction to existing block chain
+        if reChainOk:
+          var parent = ap.chain.clique.db.getCanonicalHead
+          for i in 0 ..< headers.len:
+            headers[i].parentHash = parent.hash
+            headers[i].blockNumber = parent.blockNumber + 1
+            parent = headers[i]
+
+        # Perform transaction into the block chain
+        let bodies = BlockBody().repeat(headers.len)
+        if ap.chain.persistBlocks(headers,bodies) == ValidationResult.OK:
+          break
+        if stopFaultyHeader:
+          return
+
+        # Remove offending block and try again for the rest
+        let topNumber = ap.chain.clique.db.getCanonicalHead.blockNumber
+        ap.say "*** persistBlocks failed, omitting block #", topNumber + 1
+        let prevLen = headers.len
+        headers = headers.filterIt(topNumber + 1 != it.blockNumber)
+        doAssert headers.len < prevLen
+        reChainOk = true
+
+      if ap.debug:
+        ap.say "*** snapshot argument: #", headers[^1].blockNumber
+        ap.sayHeaderChain(8)
+        when false: # all addresses are typically pp-mappable
+          ap.say "          address map: ", toSeq(ap.names.pairs)
                                             .mapIt(&"@{it[1]}:{it[0]}")
                                             .sorted
                                             .join("\n" & ' '.repeat(23))
+      if postProcessOk:
+        discard ap.clique.cliqueSnapshot(headers[^1])
 
 # ------------------------------------------------------------------------------
 # End

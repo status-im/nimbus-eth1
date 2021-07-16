@@ -25,8 +25,10 @@ import
   ./clique_cfg,
   ./clique_defs,
   ./snapshot/[lru_snaps, snapshot_desc],
+  chronicles,
   chronos,
-  eth/[common, keys, rlp]
+  eth/[common, keys, rlp],
+  stew/results
 
 type
   # clique/clique.go(142): type SignerFn func(signer [..]
@@ -38,9 +40,10 @@ type
   Proposals = Table[EthAddress,bool]
 
   # clique/clique.go(172): type Clique struct { [..]
-  Clique* = ref object ## Clique is the proof-of-authority consensus engine
-                       ## proposed to support the Ethereum testnet following
-                       ## the Ropsten attacks.
+  Clique* = ref object ##\
+    ## Clique is the proof-of-authority consensus engine proposed to support
+    ## the Ethereum testnet following the Ropsten attacks.
+
     signer*: EthAddress ##\
       ## Ethereum address of the current signing key
 
@@ -55,11 +58,11 @@ type
     recents: LruSnaps ##\
       ## Snapshots cache for recent block search
 
-    snapshot: Snapshot ##\
-      ## Stashing last snapshot operation here
+    snapsOk: SnapshotResult ##\
+      ## Last successful snapshot
 
-    error: CliqueError ##\
-      ## Last error, typically stored by snaphot utility
+    snapsLast: SnapshotResult ##\
+      ## Last snapshot result
 
     proposals: Proposals ##\
       ## Cu1rrent list of proposals we are pushing
@@ -72,6 +75,9 @@ type
 
 {.push raises: [Defect].}
 
+logScope:
+  topics = "clique PoA constructor"
+
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
@@ -82,7 +88,8 @@ proc newClique*(cfg: CliqueCfg): Clique =
   ## initial signers set to the ones provided by the user.
   Clique(cfg:       cfg,
          recents:   initLruSnaps(cfg),
-         snapshot:  cfg.newSnapshot(BlockHeader()), # dummy
+         snapsOk:   err(SnapshotResult,(errNotInitialised,"")),
+         snapsLast: err(SnapshotResult,(errNotInitialised,"")),
          proposals: initTable[EthAddress,bool](),
          asyncLock: newAsyncLock())
 
@@ -113,13 +120,13 @@ proc proposals*(c: Clique): var Proposals {.inline.} =
   ## Getter
   c.proposals
 
-proc snapshot*(c: Clique): auto {.inline.} =
-  ## Getter, last processed snapshot
-  c.snapshot
-
-proc error*(c: Clique): auto {.inline.} =
-  ## Getter, last error message
-  c.error
+proc snapshot*(c: Clique; lastOk = false): auto {.inline.} =
+  ## Getter, last processed snapshot. If the argument `lastOk` is `true`,
+  ## the last successfully generated snapshot is returned (if any).
+  if lastOk:
+    c.snapsOk
+  else:
+    c.snapsLast
 
 proc cfg*(c: Clique): auto {.inline.} =
   ## Getter
@@ -147,13 +154,11 @@ proc `fakeDiff=`*(c: Clique; debug: bool) =
   ## Setter
   c.fakeDiff = debug
 
-proc `snapshot=`*(c: Clique; snap: Snapshot) =
+proc `snapshot=`*(c: Clique; rc: SnapshotResult) =
   ## Setter
-  c.snapshot = snap
-
-proc `error=`*(c: Clique; error: CliqueError) =
-  ## Setter
-  c.error = error
+  c.snapsLast = rc
+  if rc.isOk:
+    c.snapsOk = rc
 
 # ------------------------------------------------------------------------------
 # Public lock/unlock

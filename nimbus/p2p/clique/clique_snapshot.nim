@@ -185,9 +185,18 @@ proc findSnapshot(d: var LocalSnaps): bool
       d.trail.snaps = d.c.cfg.newSnapshot(header)
       if d.trail.snaps.storeSnapshot.isOK:
         d.say "findSnapshot <epoch> ", d.trail.pp
-        info "Stored voting snapshot to disk",
-          blockNumber = number,
-          blockHash = hash
+        if number.isZero:
+          info "Stored genesis snapshot to disk",
+            blockHash = hash
+          # Initialise signers list so there is always an OK value from now.
+          # This is only convenient to have at least the genesis snapshot
+          # available so that `d.c.clique.snapshot(true)` would not return
+          # an error.
+          d.c.snapshot = ok(SnapshotResult,d.trail.snaps)
+        else:
+          info "Stored voting snapshot to disk",
+            blockNumber = number,
+            blockHash = hash
         return true
 
     # No snapshot for this header, get the parent header and move backward
@@ -223,7 +232,7 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
     block:
       # clique/clique.go(434): snap, err := snap.apply(headers)
       d.say "applyTrail ", d.trail.pp(d.subChn)
-      let rc = d.trail.snaps.snapshotApply(
+      let rc = d.trail.snaps.snapshotApplySeq(
         d.trail.chain, d.subChn.top-1, d.subChn.first)
       if rc.isErr:
         return err(rc.error)
@@ -242,11 +251,13 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
   ok()
 
 
-proc updateSnapshot(d: var LocalSnaps): Result[Snapshot,CliqueError]
+proc updateSnapshot(d: var LocalSnaps): SnapshotResult
                    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Find snapshot for header `d.start.header` and assign it to the LRU cache.
   ## This function was expects thet the LRU cache already has a slot allocated
   ## for the snapshot having run `getLruSnaps()`.
+
+  d.say "updateSnapshot ", d.start.header.blockNumber.pp(d.parents)
 
   # Search for previous snapshots
   if not d.findSnapshot:
@@ -297,10 +308,9 @@ proc updateSnapshot(d: var LocalSnaps): Result[Snapshot,CliqueError]
 # Public functions
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(369): func (c *Clique) snapshot(chain [..]
-proc cliqueSnapshot*(c: Clique; header: Blockheader;
-                     parents: var seq[Blockheader]): CliqueOkResult
-                         {.gcsafe, raises: [Defect,CatchableError].} =
+proc cliqueSnapshotSeq*(c: Clique; header: Blockheader;
+                        parents: var seq[Blockheader]): SnapshotResult
+                           {.gcsafe, raises: [Defect,CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as `c.snapshot`
   ## if successful.
@@ -308,46 +318,33 @@ proc cliqueSnapshot*(c: Clique; header: Blockheader;
   ## If the `parents[]` argulent list top element (if any) is the same as the
   ## `header` argument, this top element is silently ignored.
   ##
-  ## A return result error (or no error) is also stored in the `Clique`
-  ## descriptor to be retrievable as `c.error`.
-  c.error = cliqueNoError
+  ## The function return result is also stored in the `Clique` descriptor to be
+  ## retrievable via. `c.snapshot`. It also makes sure that `c.snapshot(true)`
+  ## will return valid snapshot.
 
   let rc = c.recents.getLruSnaps(header.hash)
   if rc.isOk:
-    c.snapshot = rc.value
-    return ok()
+    c.snapshot = ok(rc.value)
 
-  # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
-  parents.shallow
+  else:
+    # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
+    parents.shallow
 
-  var d = LocalSnaps(
-    c:       c,
-    parents: parents,
-    start:   LocalPivot(
-      header:  header,
-      hash:    header.hash))
+    var snaps = LocalSnaps(
+      c:       c,
+      parents: parents,
+      start:   LocalPivot(
+        header:  header,
+        hash:    header.hash))
 
-  let snaps = d.updateSnapshot
-  if snaps.isErr:
-    c.error = (snaps.error)
-    return err(c.error)
+    c.snapshot = snaps.updateSnapshot
 
-  c.snapshot = snaps.value
-  ok()
+  c.snapshot
 
 
-
-proc cliqueSnapshot*(c: Clique; header: Blockheader): CliqueOkResult
-                         {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Short for `cliqueSnapshot(c,header,@[])`
-  var blind: seq[Blockheader]
-  c.cliqueSnapshot(header, blind)
-
-
-
-proc cliqueSnapshot*(c: Clique; hash: Hash256;
-                     parents: var seq[Blockheader]): CliqueOkResult
-                         {.gcsafe,raises: [Defect,CatchableError].} =
+proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
+                        parents: var seq[Blockheader]): SnapshotResult
+                          {.gcsafe,raises: [Defect,CatchableError].} =
   ## Create authorisation state snapshot of a given point in the block chain
   ## and store it in the `Clique` descriptor to be retrievable as  `c.snapshot`
   ## if successful.
@@ -355,40 +352,54 @@ proc cliqueSnapshot*(c: Clique; hash: Hash256;
   ## If the `parents[]` argulent list top element (if any) is the same as the
   ## `header` argument, this top element is silently ignored.
   ##
-  ## A return result error (or no error) is also stored in the `Clique`
-  ## descriptor to be retrievable as `c.error`.
-  c.error = cliqueNoError
+  ## The function return result is also stored in the `Clique` descriptor to be
+  ## retrievable via. `c.snapshot`. It also makes sure that `c.snapshot(true)`
+  ## will return valid snapshot.
+  var header: BlockHeader
 
   let rc = c.recents.getLruSnaps(hash)
   if rc.isOk:
-    c.snapshot = rc.value
-    return ok()
+    c.snapshot = ok(rc.value)
 
-  var header: BlockHeader
-  if not c.cfg.db.getBlockHeader(hash, header):
-    c.error = (errUnknownHash,"")
-    return err(c.error)
+  elif not c.cfg.db.getBlockHeader(hash, header):
+    c.snapshot = err((errUnknownHash,""))
 
-  # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
-  parents.shallow
+  else:
+    # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
+    parents.shallow
 
-  var d = LocalSnaps(
-    c:       c,
-    parents: toSeq(parents),
-    start:   LocalPivot(
-      header:  header,
-      hash:    header.hash))
+    var snaps = LocalSnaps(
+      c:       c,
+      parents: parents,
+      start:   LocalPivot(
+        header:  header,
+        hash:    header.hash))
 
-  let snaps = d.updateSnapshot
-  if snaps.isErr:
-    c.error = (snaps.error)
-    return err(c.error)
+    c.snapshot = snaps.updateSnapshot
 
-  c.snapshot = snaps.value
-  ok()
+  c.snapshot
 
 
-proc cliqueSnapshot*(c: Clique; hash: Hash256): CliqueOkResult
+# clique/clique.go(369): func (c *Clique) snapshot(chain [..]
+proc cliqueSnapshot*(c: Clique; header: Blockheader;
+                     parents: var seq[Blockheader]): SnapshotResult
+                         {.gcsafe, raises: [Defect,CatchableError].} =
+  var list = toSeq(parents)
+  c.cliqueSnapshotSeq(header,list)
+
+proc cliqueSnapshot*(c: Clique;hash: Hash256;
+                     parents: openArray[Blockheader]): SnapshotResult
+                         {.gcsafe, raises: [Defect,CatchableError].} =
+  var list = toSeq(parents)
+  c.cliqueSnapshotSeq(hash,list)
+
+proc cliqueSnapshot*(c: Clique; header: Blockheader): SnapshotResult
+                         {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Short for `cliqueSnapshot(c,header,@[])`
+  var blind: seq[Blockheader]
+  c.cliqueSnapshotSeq(header, blind)
+
+proc cliqueSnapshot*(c: Clique; hash: Hash256): SnapshotResult
                          {.gcsafe,raises: [Defect,CatchableError].} =
   ## Short for `cliqueSnapshot(c,hash,@[])`
   var blind: seq[Blockheader]
