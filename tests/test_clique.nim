@@ -165,6 +165,7 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
           let
             header = w[0][n]
             body = w[1][n]
+          var
             parents = w[0][0 ..< n]
           test &"Goerli Block #{header.blockNumber} + {parents.len} parents":
             check pool.chain.clique.cliqueSnapshot(header,parents).isOk
