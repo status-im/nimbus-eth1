@@ -35,11 +35,11 @@ logScope:
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc signersThreshold*(s: var Snapshot): int {.inline.} =
+proc signersThreshold*(s: Snapshot): int {.inline.} =
   ## Minimum number of authorised signers needed.
   s.ballot.authSignersThreshold
 
-#proc signers*(s: var Snapshot): seq[EthAddress] {.inline.} =
+#proc signers*(s: Snapshot): seq[EthAddress] {.inline.} =
 #  ## Retrieves the sorted list of authorized signers
 #  s.ballot.authSigners
 
@@ -47,23 +47,23 @@ proc signersThreshold*(s: var Snapshot): int {.inline.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc isValidVote*(s: var Snapshot; address: EthAddress; authorize: bool): bool =
+proc isValidVote*(s: Snapshot; address: EthAddress; authorize: bool): bool =
   ## Returns `true` if voting makes sense, at all.
   s.ballot.isValidVote(address, authorize)
 
-proc recent*(s: var Snapshot; address: EthAddress): Result[BlockNumber,void] =
+proc recent*(s: Snapshot; address: EthAddress): Result[BlockNumber,void] =
   ## Return `BlockNumber` for `address` argument (if any)
   for (number,recent) in s.recents.pairs:
     if recent == address:
       return ok(number)
   return err()
 
-proc isSigner*(s: var Snapshot; address: EthAddress): bool =
+proc isSigner*(s: Snapshot; address: EthAddress): bool =
   ## Checks whether argukment ``address` is in signers list
   s.ballot.isAuthSigner(address)
 
 # clique/snapshot.go(319): func (s *Snapshot) inturn(number [..]
-proc inTurn*(s: var Snapshot; number: BlockNumber, signer: EthAddress): bool =
+proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
   ## Returns `true` if a signer at a given block height is in-turn or not.
   let ascSignersList = s.ballot.authSigners
   for offset in 0 ..< ascSignersList.len:

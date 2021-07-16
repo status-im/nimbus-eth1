@@ -109,8 +109,9 @@ proc newCliqueCfg*(db: BaseChainDB): CliqueCfg =
 # Public helper funcion
 # ------------------------------------------------------------------------------
 
+# clique/clique.go(145): func ecrecover(header [..]
 proc ecRecover*(cfg: CliqueCfg; header: BlockHeader): auto
-                                   {.gcsafe, raises: [Defect,CatchableError].}=
+                                   {.gcsafe, raises: [Defect,CatchableError].} =
   cfg.signatures.getEcRecover(header)
 
 # ------------------------------------------------------------------------------

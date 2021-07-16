@@ -22,21 +22,24 @@ import
   ./clique/[clique_cfg,
             clique_defs,
             clique_desc,
-            clique_miner,
             clique_signers,
             clique_snapshot,
-            snapshot/snapshot_desc]
+            clique_verify,
+            snapshot/snapshot_desc],
+  stew/results
 
 {.push raises: [Defect].}
 
+# note that mining is unsupported, so the `clique_mining` module is ignored
 export
   clique_cfg,
   clique_defs,
   clique_desc,
-  clique_miner,
   clique_signers,
   clique_snapshot,
-  snapshot_desc.Snapshot
+  clique_verify,
+  snapshot_desc.Snapshot,
+  results
 
 # ------------------------------------------------------------------------------
 # End
