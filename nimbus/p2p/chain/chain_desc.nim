@@ -132,7 +132,7 @@ proc newChain*(db: BaseChainDB; poa: Clique; extraValidation = false):
   # Initalise the PoA state regardless of whether it is needed on the current
   # network. For non-PoA networks (when `db.config.poaEngine` is `false`),
   # this descriptor is ignored.
-  result.poa = db.newCliqueCfg.newClique
+  result.poa = db.newClique
 
   # Always initialise the epoch cache even though it migh no be used
   # unless `extraValidation` is set `true`.
@@ -144,7 +144,7 @@ proc newChain*(db: BaseChainDB, extraValidation = false):
   ## Constructor for the `Chain` descriptor object with default initialisation
   ## for the PoA handling. PoA handling is applicable on PoA networks only and
   ## the initialisation (takes place but) is ignored, otherwise.
-  db.newChain(db.newCliqueCfg.newClique, extraValidation)
+  db.newChain(db.newClique, extraValidation)
 
 # ------------------------------------------------------------------------------
 # Public `AbstractChainDB` getter overload  methods

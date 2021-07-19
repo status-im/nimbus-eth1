@@ -20,6 +20,7 @@
 
 import
   std/[sequtils],
+  ../db/db_chain,
   ./clique/[clique_cfg, clique_defs, clique_desc, clique_verify],
   ./clique/snapshot/[ballot, snapshot_desc],
   eth/common,
@@ -31,7 +32,7 @@ import
 export
   clique_cfg,
   clique_defs,
-  clique_desc
+  clique_desc.Clique
 
 type
   CliqueState* = ##\
@@ -44,21 +45,33 @@ type
 # Public
 # ------------------------------------------------------------------------------
 
+proc newClique*(db: BaseChainDB): Clique =
+  ## Constructor for a new Clique proof-of-authority consensus engine. The
+  ## initial state of the engine is `empty`, there are no authorised signers.
+  db.newCliqueCfg.newClique
+
+
 proc cliqueSave*(c: var Clique): CliqueState =
-  ## Save current `Clique` state.
+  ## Save current `Clique` state. This state snapshot saves the internal
+  ## data that make up the list of authorised signers (see `cliqueSigners()`
+  ## below.)
   ok(c.snapshot)
 
 proc cliqueRestore*(c: var Clique; state: var CliqueState) =
   ## Restore current `Clique` state from a saved snapshot.
   ##
   ## For the particular `state` argument this fuction is disabled with
-  ## `cliqueDispose()`. So it can be savely handled in a `defer:` statement.
+  ## `cliqueDispose()`. So it can be savely wrapped in a `defer:` statement.
+  ## In transaction lingo, this would then be the rollback function.
   if state.isOk:
     c.snapshot = state.value
 
 proc cliqueDispose*(c: var Clique; state: var CliqueState) =
   ## Disable the function `cliqueDispose()` for the particular `state`
-  ## argument
+  ## argument.
+  ##
+  ## In transaction lingo, this would be the commit function if
+  ## `cliqueRestore()` was wrapped in a `defer:` statement.
   state = err(CliqueState)
 
 
@@ -68,11 +81,12 @@ proc cliqueVerify*(c: Clique; header: BlockHeader;
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass on a batch of parents (ascending order) to avoid looking
   ## those up from the database. This might be useful for concurrently
-  ## verifying a batch of new headers.
+  ## verifying a batch of new headers. This function updates the list of
+  ## authorised signers (see `cliqueSigners()` below.)
   ##
   ## On success, the latest authorised signers list is available via the
   ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
-  ## in the `Clique` descriptor
+  ## in the `Clique` descriptor and is accessible as `c.failed`.
   var list = toSeq(parents)
   c.cliqueVerifySeq(header, list)
 
@@ -87,16 +101,21 @@ proc cliqueVerify*(c: Clique;
                    headers: openArray[BlockHeader]): CliqueOkResult
                         {.gcsafe, raises: [Defect,CatchableError].} =
   ## This function verifies a batch of headers checking each header for
-  ## consensus rules conformance. The `headers` list is supposed to contain a
-  ## chain of headers, i e. `headers[i]` is parent to `headers[i+1]`.
+  ## consensus rules conformance (see also the other `cliqueVerify()` function
+  ## instance.) The `headers` list is supposed to contain a chain of headers,
+  ## i.e. `headers[i]` is parent to `headers[i+1]`.
   ##
   ## On success, the latest authorised signers list is available via the
   ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
-  ## in the `Clique` descriptor
+  ## in the `Clique` descriptor and is accessible as `c.failed`.
   ##
-  ## If there is an error, this error is also stored within the `Clique`
-  ## descriptor and can be retrieved via `c.failed` along with the hash/ID of
-  ## the failed block header.
+  ## This function is not transaction-save, that is the internal state of
+  ## the authorised signers list has the state of the last update after a
+  ## successful header verification. The hash of the failing header together
+  ## with the error message is then accessible as `c.failed`.
+  ##
+  ## Use the directives `cliqueSave()`, `cliqueDispose()`, and/or
+  ## `cliqueRestore()` for transaction.
   var list = toSeq(headers)
   c.cliqueVerifySeq(list)
 
@@ -105,8 +124,8 @@ proc cliqueSigners*(c: Clique): seq[EthAddress] {.inline.} =
   ## Retrieve the sorted list of authorized signers for the current state
   ## of the `Clique` descriptor.
   ##
-  ## Note the the returned list is sorted on-the-fly each time this function
-  ## is invoked.
+  ## Note that the return argument list is sorted on-the-fly each time this
+  ## function is invoked.
   c.snapshot.ballot.authSigners
 
 # ------------------------------------------------------------------------------

@@ -14,6 +14,7 @@ import
   ../../nimbus/db/db_chain,
   ../../nimbus/p2p/[chain,
                     clique,
+                    clique/clique_desc,
                     clique/clique_helpers,
                     clique/clique_snapshot,
                     clique/snapshot/snapshot_desc],
