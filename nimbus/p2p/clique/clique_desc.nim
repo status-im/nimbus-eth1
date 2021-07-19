@@ -39,6 +39,10 @@ type
 
   Proposals = Table[EthAddress,bool]
 
+  CliqueFailed* = ##\
+    ## Last failed state: block hash and error result
+    (Hash256, CliqueError)
+
   # clique/clique.go(172): type Clique struct { [..]
   Clique* = ref object ##\
     ## Clique is the proof-of-authority consensus engine proposed to support
@@ -58,11 +62,11 @@ type
     recents: LruSnaps ##\
       ## Snapshots cache for recent block search
 
-    snapsOk: SnapshotResult ##\
+    snapshot: Snapshot ##\
       ## Last successful snapshot
 
-    snapsLast: SnapshotResult ##\
-      ## Last snapshot result
+    failed: CliqueFailed ##\
+      ## Last verification error (if any)
 
     proposals: Proposals ##\
       ## Cu1rrent list of proposals we are pushing
@@ -87,9 +91,8 @@ proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
   Clique(cfg:       cfg,
-         recents:   initLruSnaps(cfg),
-         snapsOk:   err(SnapshotResult,(errNotInitialised,"")),
-         snapsLast: err(SnapshotResult,(errNotInitialised,"")),
+         recents:   cfg.initLruSnaps,
+         snapshot:  cfg.newSnapshot(BlockHeader()),
          proposals: initTable[EthAddress,bool](),
          asyncLock: newAsyncLock())
 
@@ -120,13 +123,13 @@ proc proposals*(c: Clique): var Proposals {.inline.} =
   ## Getter
   c.proposals
 
-proc snapshot*(c: Clique; lastOk = false): auto {.inline.} =
-  ## Getter, last processed snapshot. If the argument `lastOk` is `true`,
-  ## the last successfully generated snapshot is returned (if any).
-  if lastOk:
-    c.snapsOk
-  else:
-    c.snapsLast
+proc snapshot*(c: Clique): auto {.inline.} =
+  ## Getter, last successfully processed snapshot.
+  c.snapshot
+
+proc failed*(c: Clique): auto {.inline.} =
+  ## Getter, last snapshot error.
+  c.failed
 
 proc cfg*(c: Clique): auto {.inline.} =
   ## Getter
@@ -154,11 +157,13 @@ proc `fakeDiff=`*(c: Clique; debug: bool) =
   ## Setter
   c.fakeDiff = debug
 
-proc `snapshot=`*(c: Clique; rc: SnapshotResult) =
+proc `snapshot=`*(c: Clique; snaps: Snapshot) =
   ## Setter
-  c.snapsLast = rc
-  if rc.isOk:
-    c.snapsOk = rc
+  c.snapshot = snaps
+
+proc `failed=`*(c: Clique; failure: CliqueFailed) =
+  ## Setter
+  c.failed = failure
 
 # ------------------------------------------------------------------------------
 # Public lock/unlock

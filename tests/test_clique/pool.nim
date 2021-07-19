@@ -268,9 +268,13 @@ proc cliqueSigners*(ap: TesterPool; lastOk = false): auto {.inline.} =
   ## Getter
   ap.clique.cliqueSigners(lastOk)
 
-proc snapshot*(ap: TesterPool; lastOk = false): auto {.inline.} =
+proc snapshot*(ap: TesterPool): auto {.inline.} =
   ## Getter
-  ap.clique.snapshot(lastOk)
+  ap.clique.snapshot
+
+proc failed*(ap: TesterPool): CliqueFailed {.inline.} =
+  ## Getter
+  ap.clique.failed
 
 # ------------------------------------------------------------------------------
 # Public: setter
@@ -446,11 +450,18 @@ proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
         if stopFaultyHeader:
           return
 
+        # If the offending block is the last one of the last transaction,
+        # then there is nothing to do.
+        let culprit =  headers.filterIt(ap.failed[0] == it.hash)
+        doAssert culprit.len == 1
+        let number = culprit[0].blockNumber
+        if n + 1 == ap.batch.len and number == headers[^1].blockNumber:
+          return
+
         # Remove offending block and try again for the rest
-        let topNumber = ap.chain.clique.db.getCanonicalHead.blockNumber
-        ap.say "*** persistBlocks failed, omitting block #", topNumber + 1
+        ap.say "*** persistBlocks failed, omitting block #", culprit
         let prevLen = headers.len
-        headers = headers.filterIt(topNumber + 1 != it.blockNumber)
+        headers = headers.filterIt(number != it.blockNumber)
         doAssert headers.len < prevLen
         reChainOk = true
 

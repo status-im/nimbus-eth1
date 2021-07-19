@@ -20,6 +20,7 @@
 
 import
   std/[sequtils, strformat, strutils],
+  ../../constants,
   ../../db/db_chain,
   ../../utils,
   ./clique_cfg,
@@ -185,18 +186,9 @@ proc findSnapshot(d: var LocalSnaps): bool
       d.trail.snaps = d.c.cfg.newSnapshot(header)
       if d.trail.snaps.storeSnapshot.isOK:
         d.say "findSnapshot <epoch> ", d.trail.pp
-        if number.isZero:
-          info "Stored genesis snapshot to disk",
-            blockHash = hash
-          # Initialise signers list so there is always an OK value from now.
-          # This is only convenient to have at least the genesis snapshot
-          # available so that `d.c.clique.snapshot(true)` would not return
-          # an error.
-          d.c.snapshot = ok(SnapshotResult,d.trail.snaps)
-        else:
-          info "Stored voting snapshot to disk",
-            blockNumber = number,
-            blockHash = hash
+        info "Stored voting snapshot to disk",
+          blockNumber = number,
+          blockHash = hash
         return true
 
     # No snapshot for this header, get the parent header and move backward
@@ -318,28 +310,29 @@ proc cliqueSnapshotSeq*(c: Clique; header: Blockheader;
   ## If the `parents[]` argulent list top element (if any) is the same as the
   ## `header` argument, this top element is silently ignored.
   ##
-  ## The function return result is also stored in the `Clique` descriptor to be
-  ## retrievable via. `c.snapshot`. It also makes sure that `c.snapshot(true)`
-  ## will return valid snapshot.
+  ## If this function is successful, the compiled `Snapshot` will also be
+  ## stored in the `Clique` descriptor which can be retrieved later
+  ## via `c.snapshot`.
+  let rc1 = c.recents.getLruSnaps(header.hash)
+  if rc1.isOk:
+    c.snapshot = rc1.value
+    return ok(rc1.value)
 
-  let rc = c.recents.getLruSnaps(header.hash)
-  if rc.isOk:
-    c.snapshot = ok(rc.value)
+  # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
+  parents.shallow
 
-  else:
-    # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
-    parents.shallow
+  var snaps = LocalSnaps(
+    c:       c,
+    parents: parents,
+    start:   LocalPivot(
+      header:  header,
+      hash:    header.hash))
 
-    var snaps = LocalSnaps(
-      c:       c,
-      parents: parents,
-      start:   LocalPivot(
-        header:  header,
-        hash:    header.hash))
+  let rc2 = snaps.updateSnapshot
+  if rc2.isOk:
+    c.snapshot = rc2.value
 
-    c.snapshot = snaps.updateSnapshot
-
-  c.snapshot
+  rc2
 
 
 proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
@@ -352,32 +345,33 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
   ## If the `parents[]` argulent list top element (if any) is the same as the
   ## `header` argument, this top element is silently ignored.
   ##
-  ## The function return result is also stored in the `Clique` descriptor to be
-  ## retrievable via. `c.snapshot`. It also makes sure that `c.snapshot(true)`
-  ## will return valid snapshot.
+  ## If this function is successful, the compiled `Snapshot` will also be
+  ## stored in the `Clique` descriptor which can be retrieved later
+  ## via `c.snapshot`.
+  let rc1 = c.recents.getLruSnaps(hash)
+  if rc1.isOk:
+    c.snapshot = rc1.value
+    return ok(rc1.value)
+
   var header: BlockHeader
+  if not c.cfg.db.getBlockHeader(hash, header):
+    return err((errUnknownHash,""))
 
-  let rc = c.recents.getLruSnaps(hash)
-  if rc.isOk:
-    c.snapshot = ok(rc.value)
+  # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
+  parents.shallow
 
-  elif not c.cfg.db.getBlockHeader(hash, header):
-    c.snapshot = err((errUnknownHash,""))
+  var snaps = LocalSnaps(
+    c:       c,
+    parents: parents,
+    start:   LocalPivot(
+      header:  header,
+      hash:    hash))
 
-  else:
-    # Avoid deep copy, sequence will not be changed by `updateSnapshot()`
-    parents.shallow
+  let rc2 = snaps.updateSnapshot
+  if rc2.isOk:
+    c.snapshot = rc2.value
 
-    var snaps = LocalSnaps(
-      c:       c,
-      parents: parents,
-      start:   LocalPivot(
-        header:  header,
-        hash:    header.hash))
-
-    c.snapshot = snaps.updateSnapshot
-
-  c.snapshot
+  rc2
 
 
 # clique/clique.go(369): func (c *Clique) snapshot(chain [..]

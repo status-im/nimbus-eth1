@@ -93,6 +93,21 @@ proc read[K,V](rlp: var Rlp;
     result[key] = value
 
 # ------------------------------------------------------------------------------
+# Private constructor helper
+# ------------------------------------------------------------------------------
+
+# clique/snapshot.go(72): func newSnapshot(config [..]
+proc initSnapshot(s: Snapshot; cfg: CliqueCfg;
+           number: BlockNumber; hash: Hash256; signers: openArray[EthAddress]) =
+  ## Initalise a new snapshot.
+  s.cfg = cfg
+  s.data.blockNumber = number
+  s.data.blockHash = hash
+  s.data.recents = initTable[BlockNumber,EthAddress]()
+  s.data.ballot.initBallot(signers)
+  s.data.ballot.debug = s.cfg.debug
+
+# ------------------------------------------------------------------------------
 # Public pretty printers
 # ------------------------------------------------------------------------------
 
@@ -133,23 +148,6 @@ proc pp*(s: Snapshot; indent = 0): string {.gcsafe.} =
   ## Pretty print descriptor
   let delim = if 0 < indent: "\n" & ' '.repeat(indent) else: " "
   s.pp(delim)
-
-# ------------------------------------------------------------------------------
-# Public Constructor
-# ------------------------------------------------------------------------------
-
-# clique/snapshot.go(72): func newSnapshot(config [..]
-proc initSnapshot*(s: Snapshot; cfg: CliqueCfg;
-           number: BlockNumber; hash: Hash256; signers: openArray[EthAddress]) =
-  ## Create a new snapshot with the specified startup parameters. This
-  ## constructor does not initialize the set of recent `signers`, so only ever
-  ## use if for the genesis block.
-  s.cfg = cfg
-  s.data.blockNumber = number
-  s.data.blockHash = hash
-  s.data.recents = initTable[BlockNumber,EthAddress]()
-  s.data.ballot.initBallot(signers)
-  s.data.ballot.debug = s.cfg.debug
 
 # ------------------------------------------------------------------------------
 # Public Constructor

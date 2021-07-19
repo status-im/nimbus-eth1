@@ -84,7 +84,7 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
     return err((errUnknownBlock,""))
 
   # Get current snapshot
-  let snapshot = c.snapshot.value
+  let snapshot = c.snapshot
 
   # Verify availability of the cached snapshot
   doAssert snapshot.blockHash == header.parentHash
@@ -169,8 +169,7 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
 
   # If the block is a checkpoint block, verify the signer list
   if (header.blockNumber mod c.cfg.epoch.u256) == 0:
-    let snapshot = c.snapshot.value
-    if snapshot.ballot.authSigners != header.extraData.extraDataAddresses:
+    if c.snapshot.ballot.authSigners != header.extraData.extraDataAddresses:
       return err((errMismatchingCheckpointSigners,""))
 
   # All basic checks passed, verify the seal and return
@@ -254,20 +253,26 @@ proc cliqueVerifySeq*(c: Clique; header: BlockHeader;
   ##
   ## Note that the sequence argument must be write-accessible, even though it
   ## will be left untouched by this function.
+  c.failed = (ZERO_HASH32,cliqueNoError)
+
   block:
     # Check header fields independent of parent blocks
     let rc = c.verifyHeaderFields(header)
     if rc.isErr:
+      c.failed = (header.hash, rc.error)
       return err(rc.error)
 
   block:
     # If all checks passed, validate any special fields for hard forks
     let rc = c.verifyForkHashes(header)
     if rc.isErr:
+      c.failed = (header.hash, rc.error)
       return err(rc.error)
 
   # All basic checks passed, verify cascading fields
-  c.verifyCascadingFields(header, parents)
+  result = c.verifyCascadingFields(header, parents)
+  if result.isErr:
+    c.failed = (header.hash, result.error)
 
 
 proc cliqueVerifySeq*(c: Clique;
@@ -285,11 +290,13 @@ proc cliqueVerifySeq*(c: Clique;
   ## Note that the sequence argument must be write-accessible, even though it
   ## will be left untouched by this function.
   if 0 < headers.len:
+
     headers.shallow
     var blind: seq[BlockHeader]
     let rc = c.cliqueVerifySeq(headers[0],blind)
     if rc.isErr:
       return err((rc.error,0))
+
     for n in 1 ..< headers.len:
       var list = headers[n-1 .. n-1]
       let rc = c.cliqueVerifySeq(headers[n],list)

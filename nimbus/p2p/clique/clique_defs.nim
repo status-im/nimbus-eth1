@@ -100,8 +100,9 @@ const
 type
   # clique/clique.go(76): var ( [..]
   CliqueErrorType* = enum
-    resetCliqueError = 0 ##\
+    resetCliqueError = ##\
       ## Default/reset value (use `cliqueNoError` below rather than this valie)
+      (0, "no error")
 
     errUnknownBlock =  ##\
       ## is returned when the list of signers is requested for a block that is

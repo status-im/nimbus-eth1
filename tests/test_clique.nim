@@ -42,7 +42,7 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
   ##    cases fail correctly.
   ##
   let postProcessInfo = if postProcessOk: ", Transaction Finaliser Applied"
-                        else: ", Raw Mode"
+                        else: ", Without Finaliser"
   suite &"Clique PoA Snapshot{postProcessInfo}":
     var
       pool = newVoterPool()
@@ -69,18 +69,18 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
             .commitVoterChain(postProcessOk)
 
           # see clique/snapshot_test.go(477): if err != nil {
-          if pool.cliqueSigners.isErr:
+          if tt.failure != cliqueNoError[0]:
             # Note that clique/snapshot_test.go does not verify _here_ against
             # the scheduled test error -- rather this voting error is supposed
             # to happen earlier (processed at clique/snapshot_test.go(467)) when
             # assembling the block chain (sounds counter intuitive to the author
             # of this source file as the scheduled errors are _clique_ related).
-            check pool.cliqueSigners.error[0] == tt.failure
+            check pool.failed[1][0] == tt.failure
           else:
             let
               expected = tt.results.mapIt("@" & it).sorted
-              snapResult = pool.pp(pool.cliqueSigners(true).value).sorted
-            pool.say "*** snap state=", pool.snapshot(true).value.pp(16)
+              snapResult = pool.pp(pool.cliqueSigners).sorted
+            pool.say "*** snap state=", pool.snapshot.pp(16)
             pool.say "        result=[", snapResult.join(",") & "]"
             pool.say "      expected=[", expected.join(",") & "]"
 
@@ -194,20 +194,19 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
 
 let
   skipIDs = {4,6,7,9,11,13,16,17,19}
-  skipMoreIDs = {21..24}
 
 proc cliqueMain*(noisy = defined(debug)) =
-  noisy.runCliqueSnapshot(true, skipIDs = skipMoreIDs)
-  noisy.runCliqueSnapshot(false, skipIDs = skipIDs + skipMoreIDs)
+  noisy.runCliqueSnapshot(true)
+  noisy.runCliqueSnapshot(false, skipIDs = skipIDs)
   noisy.runGoerliBaybySteps
   noisy.runGoerliReplay
 
 when isMainModule:
   let noisy = defined(debug)
-  noisy.runCliqueSnapshot(true, {21})
-  #noisy.runCliqueSnapshot(false, skipIDs = skipIDs + skipMoreIDs)
-  #noisy.runGoerliBaybySteps(dir = ".")
-  #noisy.runGoerliReplay(dir = ".")
+  noisy.runCliqueSnapshot(true)
+  noisy.runCliqueSnapshot(false, skipIDs = skipIDs)
+  noisy.runGoerliBaybySteps(dir = ".")
+  noisy.runGoerliReplay(dir = ".")
 
 # ------------------------------------------------------------------------------
 # End
