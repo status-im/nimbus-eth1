@@ -307,7 +307,7 @@ proc cliqueSnapshotSeq*(c: Clique; header: Blockheader;
   ## and store it in the `Clique` descriptor to be retrievable as `c.snapshot`
   ## if successful.
   ##
-  ## If the `parents[]` argulent list top element (if any) is the same as the
+  ## If the `parents[]` argument list top element (if any) is the same as the
   ## `header` argument, this top element is silently ignored.
   ##
   ## If this function is successful, the compiled `Snapshot` will also be
@@ -342,7 +342,7 @@ proc cliqueSnapshotSeq*(c: Clique; hash: Hash256;
   ## and store it in the `Clique` descriptor to be retrievable as  `c.snapshot`
   ## if successful.
   ##
-  ## If the `parents[]` argulent list top element (if any) is the same as the
+  ## If the `parents[]` argument list top element (if any) is the same as the
   ## `header` argument, this top element is silently ignored.
   ##
   ## If this function is successful, the compiled `Snapshot` will also be

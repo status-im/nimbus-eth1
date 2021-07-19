@@ -238,21 +238,15 @@ proc verifyHeaderFields(c: Clique; header: BlockHeader): CliqueOkResult
                   &"invalid gasLimit: have {header.gasLimit}, must be int64"))
   ok()
 
-# ------------------------------------------------------------------------------
-# Public function
-# ------------------------------------------------------------------------------
 
 # clique/clique.go(246): func (c *Clique) verifyHeader(chain [..]
-proc cliqueVerifySeq*(c: Clique; header: BlockHeader;
+proc cliqueVerifyImpl*(c: Clique; header: BlockHeader;
                       parents: var seq[BlockHeader]): CliqueOkResult
                   {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass in a batch of parents (ascending order) to avoid looking
   ## those up from the database. This is useful for concurrently verifying
   ## a batch of new headers.
-  ##
-  ## Note that the sequence argument must be write-accessible, even though it
-  ## will be left untouched by this function.
   c.failed = (ZERO_HASH32,cliqueNoError)
 
   block:
@@ -274,66 +268,80 @@ proc cliqueVerifySeq*(c: Clique; header: BlockHeader;
   if result.isErr:
     c.failed = (header.hash, result.error)
 
+# ------------------------------------------------------------------------------
+# Public function
+# ------------------------------------------------------------------------------
+
+proc cliqueVerifySeq*(c: Clique; header: BlockHeader;
+                      parents: var seq[BlockHeader]): CliqueOkResult
+                  {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Check whether a header conforms to the consensus rules. The caller may
+  ## optionally pass in a batch of parents (ascending order) to avoid looking
+  ## those up from the database. This is useful for concurrently verifying
+  ## a batch of new headers.
+  ##
+  ## On success, the latest authorised signers list is available via the
+  ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
+  ## in the `Clique` descriptor
+  ##
+  ## If there is an error, this error is also stored within the `Clique`
+  ## descriptor and can be retrieved via `c.failed` along with the hash/ID of
+  ## the failed block header.
+  block:
+    let rc = c.cliqueVerifyImpl(header, parents)
+    if rc.isErr:
+      return rc
+
+  # Adjust current shapshot (the function `cliqueVerifyImpl()` typically
+  # works with the parent snapshot.
+  block:
+    let rc = c.cliqueSnapshotSeq(header, parents)
+    if rc.isErr:
+      return err(rc.error)
+
+  ok()
+
 
 proc cliqueVerifySeq*(c: Clique;
-                 headers: var seq[BlockHeader]): Result[void,(CliqueError,int)]
+                 headers: var seq[BlockHeader]): CliqueOkResult
                  {.gcsafe, raises: [Defect,CatchableError].} =
   ## This function verifies a batch of headers checking each header for
   ## consensus rules conformance. The `headers` list is supposed to
   ## contain a chain of headers, i e. `headers[i]` is parent to `headers[i+1]`.
   ##
-  ## If there is an error, a pair `(<error-code>,<index>)` is returned where
-  ## the first argument is the error code (as with `CliqueOkResult`) and the
-  ## second argument is the `headers[]` index of the entry where the
-  ## verification failed.
+  ## On success, the latest authorised signers list is available via the
+  ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
+  ## in the `Clique` descriptor
+  ##
+  ## If there is an error, this error is also stored within the `Clique`
+  ## descriptor and can be retrieved via `c.failed` along with the hash/ID of
+  ## the failed block header.
   ##
   ## Note that the sequence argument must be write-accessible, even though it
   ## will be left untouched by this function.
   if 0 < headers.len:
-
     headers.shallow
-    var blind: seq[BlockHeader]
-    let rc = c.cliqueVerifySeq(headers[0],blind)
-    if rc.isErr:
-      return err((rc.error,0))
+
+    block:
+      var blind: seq[BlockHeader]
+      let rc = c.cliqueVerifyImpl(headers[0],blind)
+      if rc.isErr:
+        return rc
 
     for n in 1 ..< headers.len:
-      var list = headers[n-1 .. n-1]
-      let rc = c.cliqueVerifySeq(headers[n],list)
+      var parent = headers[n-1 .. n-1] # is actually a single item squence
+      let rc = c.cliqueVerifyImpl(headers[n],parent)
       if rc.isErr:
-        return err((rc.error,n))
+        return rc
+
+    # Adjust current shapshot (the function `cliqueVerifyImpl()` typically
+    # works with the parent snapshot.
+    block:
+      let rc = c.cliqueSnapshot(headers[^1])
+      if rc.isErr:
+        return err(rc.error)
 
   ok()
-
-
-proc cliqueVerify*(c: Clique; header: BlockHeader;
-                  parents: openArray[BlockHeader]): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Consensus rules verifier similar to `cliqueVerifySeq()`, only for an
-  ## `openArray` type `parents` list rather than a sequence reference. Note
-  ## that this argument type costs an extra copy process to convert the
-  ## `parents` argument.
-  var list = toSeq(parents)
-  c.cliqueVerifySeq(header, list)
-
-# clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
-proc cliqueVerify*(c: Clique; header: BlockHeader): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Consensus rules verifier without optional parents list.
-  var blind: seq[BlockHeader]
-  c.cliqueVerifySeq(header, blind)
-
-
-proc cliqueVerify*(c: Clique;
-                   headers: openArray[BlockHeader]): CliqueOkXResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Similar to `cliqueVerifySeq()`, this function verifies the chained
-  ## `headers` list for consensus rules conformance, only for an `openArray`
-  ## type `headers` list rather than a sequence reference. Note that this
-  ## argument type costs an extra copy process to convert the `headers`
-  ## argument.
-  var list = toSeq(headers)
-  c.cliqueVerifySeq(list)
 
 # ------------------------------------------------------------------------------
 # End

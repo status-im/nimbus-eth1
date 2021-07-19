@@ -34,7 +34,7 @@ when not defined(release):
 
 proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
                        bodies: openarray[BlockBody]): ValidationResult
-                          # wildcard exception, wrapped below
+                          # wildcard exception, wrapped below in public section
                           {.inline, raises: [Exception].} =
   c.db.highestBlock = headers[^1].blockNumber
   let transaction = c.db.db.beginTransaction()
@@ -43,6 +43,9 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
   trace "Persisting blocks",
     fromBlock = headers[0].blockNumber,
     toBlock = headers[^1].blockNumber
+
+  var cliqueState = c.clique.cliqueSave
+  defer: c.clique.cliqueRestore(cliqueState)
 
   for i in 0 ..< headers.len:
     let
@@ -74,9 +77,10 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     if c.extraValidation and c.db.config.poaEngine:
       var parent = if 0 < i: @[headers[i-1]] else: @[]
       let rc = c.clique.cliqueVerify(header,parent)
-      if rc.isErr:
-        #echo "*** persistBlocksImpl ",
-        #  "#", header.blockNumber, " ", $rc.error
+      if rc.isOK:
+        # mark it off so it woul not auto-restore previous state
+        c.clique.cliqueDispose(cliqueState)
+      else:
         debug "PoA header verification failed",
           blockNumber = header.blockNumber,
           msg = $rc.error

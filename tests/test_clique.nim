@@ -11,7 +11,7 @@
 import
   std/[algorithm, os, sequtils, strformat, strutils],
   ../nimbus/db/db_chain,
-  ../nimbus/p2p/[chain, clique],
+  ../nimbus/p2p/[chain, clique, clique/clique_snapshot],
   ./test_clique/[pool, undump],
   eth/[common, keys],
   stint,
@@ -193,7 +193,7 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
 # ------------------------------------------------------------------------------
 
 let
-  skipIDs = {4,6,7,9,11,13,16,17,19}
+  skipIDs = {999}
 
 proc cliqueMain*(noisy = defined(debug)) =
   noisy.runCliqueSnapshot(true)
@@ -204,7 +204,7 @@ proc cliqueMain*(noisy = defined(debug)) =
 when isMainModule:
   let noisy = defined(debug)
   noisy.runCliqueSnapshot(true)
-  noisy.runCliqueSnapshot(false, skipIDs = skipIDs)
+  noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps(dir = ".")
   noisy.runGoerliReplay(dir = ".")
 

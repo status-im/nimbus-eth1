@@ -15,6 +15,7 @@ import
   ../../nimbus/p2p/[chain,
                     clique,
                     clique/clique_helpers,
+                    clique/clique_snapshot,
                     clique/snapshot/snapshot_desc],
   ./voter_samples as vs,
   eth/[common, keys, p2p, rlp, trie/db],
@@ -266,7 +267,7 @@ proc debug*(ap: TesterPool): auto {.inline.} =
 
 proc cliqueSigners*(ap: TesterPool; lastOk = false): auto {.inline.} =
   ## Getter
-  ap.clique.cliqueSigners(lastOk)
+  ap.clique.cliqueSigners
 
 proc snapshot*(ap: TesterPool): auto {.inline.} =
   ## Getter

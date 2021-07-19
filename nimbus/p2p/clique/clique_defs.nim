@@ -260,11 +260,6 @@ type
     ## Standard ok/error result type for `Clique` functions
     Result[void,CliqueError]
 
-  CliqueOkXResult* = ##\
-    ## Ok/error result type for `Clique` functions with additional numeric
-    ## component for the error case
-    Result[void,(CliqueError,int)]
-
 const
   cliqueNoError* = ##\
     ## No-error constant
