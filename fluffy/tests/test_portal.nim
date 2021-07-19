@@ -102,9 +102,11 @@ procSuite "Portal Tests":
     check (await node1.ping(node2.localNode)).isOk()
     check (await node2.ping(node1.localNode)).isOk()
 
+    var nodeHash: NodeHash
+
     let contentKey = ContentKey(networkId: 0'u16,
       contentType: ContentType.Account,
-      nodeHash: List[byte, 32](@(UInt256.random(rng[]).toBytes())))
+      nodeHash: nodeHash)
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.

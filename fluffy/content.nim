@@ -25,11 +25,11 @@ type
 
   NetworkId* = uint16
 
-  NodeHash* = List[byte, 32] # MDigest[32 * 8] - keccak256
+  NodeHash* = MDigest[32 * 8] # keccak256
 
-  CodeHash* = List[byte, 32] # MDigest[32 * 8] - keccak256
+  CodeHash* = MDigest[32 * 8] # keccak256
 
-  Address* = List[byte, 20]
+  Address* = array[20, byte]
 
   ContentKey* = object
     networkId*: NetworkId
@@ -79,7 +79,7 @@ type
 proc getContent*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
   if storage.trie.db == nil: # TODO: for now...
     return none(seq[byte])
-  let val = storage.trie.db.get(key.nodeHash.asSeq())
+  let val = storage.trie.db.get(key.nodeHash.data)
   if val.len > 0:
     some(val)
   else:
