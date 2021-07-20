@@ -54,11 +54,14 @@ procSuite "Content Network":
       keys.add(k)
 
     for key in keys:
+      var nodeHash: NodeHash
+      copyMem(nodeHash.data.addr, unsafeAddr key[0], sizeof(nodeHash.data))
+
       let
         contentKey = ContentKey(
           networkId: 0'u16,
           contentType: content.ContentType.Account,
-          nodeHash: List[byte, 32](key))
+          nodeHash: nodeHash)
 
       let foundContent = await proto2.findContent(proto1.baseProtocol.localNode,
         contentKey)

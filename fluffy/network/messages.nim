@@ -48,6 +48,9 @@ type
 
   FindContentMessage* = object
     contentKey*: ContentKey
+  # TODO: According to the specification, this is actually a ByteList from the
+  # serialized ContentKey container, which will result in a different
+  # serialization
 
   FoundContentMessage* = object
     enrs*: List[ByteList, 32]
