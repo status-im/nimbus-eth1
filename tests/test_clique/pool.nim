@@ -194,7 +194,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
   ## Setup new block chain with bespoke genesis
   ap.chain = BaseChainDB(
     db: newMemoryDb(),
-    config: ap.boot.config).newChain(extraValidation = true)
+    config: ap.boot.config).newChain
   ap.chain.clique.db.populateProgress
   # new genesis block
   var g = ap.boot.genesis

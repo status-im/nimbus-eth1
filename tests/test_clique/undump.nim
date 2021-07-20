@@ -48,7 +48,7 @@ proc dumpGroupEndNl*: string =
 proc dumpGroupBlockNl*(header: BlockHeader; body: BlockBody): string =
   dumpGroupBlock(header, body) & "\n"
 
-proc dumpGroupBeginNl*(db: var BaseChainDB;
+proc dumpGroupBeginNl*(db: BaseChainDB;
                        headers: openArray[BlockHeader]): string =
   if headers[0].blockNumber == 1.u256:
     let
@@ -62,7 +62,7 @@ proc dumpGroupBeginNl*(db: var BaseChainDB;
   result &= dumpGroupBegin(headers) & "\n"
 
 
-proc dumpGroupNl*(db: var BaseChainDB; headers: openArray[BlockHeader];
+proc dumpGroupNl*(db: BaseChainDB; headers: openArray[BlockHeader];
                   bodies: openArray[BlockBody]): string =
   db.dumpGroupBeginNl(headers) &
     toSeq(countup(0, headers.len-1))

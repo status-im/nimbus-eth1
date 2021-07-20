@@ -43,10 +43,11 @@ type
     blockZeroHash: KeccakHash
 
     extraValidation: bool ##\
-      ## Trigger extra validation, currently with `persistBlocksin()` only.
+      ## Trigger extra validation, currently within `persistBlocks()`
+      ## function only.
 
     cacheByEpoch: EpochHashCache ##\
-      ## Objects cache to speed up lookup in validation functions.
+      ## Objects cache to speed up hash lookup in validation functions.
 
     poa: Clique ##\
       ## For non-PoA networks (when `db.config.poaEngine` is `false`),
@@ -110,41 +111,63 @@ func calculateForkIds(c: ChainConfig,
     prevCRC = result[fork].crc
 
 # ------------------------------------------------------------------------------
-# Public constructor
+# Private constructor helper
 # ------------------------------------------------------------------------------
 
-proc newChain*(db: BaseChainDB; poa: Clique; extraValidation = false):
-               Chain {.gcsafe, raises: [Defect,CatchableError].} =
+proc initChain(c: Chain; db: BaseChainDB; poa: Clique; extraValidation: bool)
+                  {.gcsafe, raises: [Defect,CatchableError].} =
   ## Constructor for the `Chain` descriptor object. For most applications,
   ## the `poa` argument is transparent and should be initilaised on the fly
   ## which is available below.
-  result.new
-  result.db = db
+  c.db = db
 
   if not db.config.daoForkSupport:
     db.config.daoForkBlock = db.config.homesteadBlock
   let g = defaultGenesisBlockForNetwork(db.networkId)
-  result.blockZeroHash = g.toBlock.blockHash
-  let genesisCRC = crc32(0, result.blockZeroHash.data)
-  result.forkIds = calculateForkIds(db.config, genesisCRC)
-  result.extraValidation = extraValidation
+  c.blockZeroHash = g.toBlock.blockHash
+  let genesisCRC = crc32(0, c.blockZeroHash.data)
+  c.forkIds = calculateForkIds(db.config, genesisCRC)
+  c.extraValidation = extraValidation
 
   # Initalise the PoA state regardless of whether it is needed on the current
   # network. For non-PoA networks (when `db.config.poaEngine` is `false`),
   # this descriptor is ignored.
-  result.poa = db.newClique
+  c.poa = db.newClique
 
   # Always initialise the epoch cache even though it migh no be used
   # unless `extraValidation` is set `true`.
-  result.cacheByEpoch.initEpochHashCache
+  c.cacheByEpoch.initEpochHashCache
+
+# ------------------------------------------------------------------------------
+# Public constructors
+# ------------------------------------------------------------------------------
+
+proc newChain*(db: BaseChainDB; poa: Clique; extraValidation: bool): Chain
+                 {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Constructor for the `Chain` descriptor object. For most applications,
+  ## the `poa` argument is transparent and should be initilaised on the fly
+  ## which is available below. The argument `extraValidation` enables extra
+  ## block chain validation if set `true`.
+  new result
+  result.initChain(db, poa, extraValidation)
 
 
-proc newChain*(db: BaseChainDB, extraValidation = false):
-               Chain {.gcsafe, raises: [Defect,CatchableError].} =
+proc newChain*(db: BaseChainDB, extraValidation: bool): Chain
+                 {.gcsafe, raises: [Defect,CatchableError].} =
   ## Constructor for the `Chain` descriptor object with default initialisation
-  ## for the PoA handling. PoA handling is applicable on PoA networks only and
-  ## the initialisation (takes place but) is ignored, otherwise.
-  db.newChain(db.newClique, extraValidation)
+  ## for the PoA handling. The argument `extraValidation` enables extra block
+  ## chain validation if set `true`.
+  new result
+  result.initChain(db, db.newClique, extraValidation)
+
+proc newChain*(db: BaseChainDB): Chain
+                 {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Constructor for the `Chain` descriptor object. All sub-object descriptors
+  ## are initialised with defaults. So is extra block chain validation
+  ##  * `enabled` for PoA networks (such as Goerli)
+  ##  * `disabled` for nopn-PaA networks
+  new result
+  result.initChain(db, db.newClique, db.config.poaEngine)
 
 # ------------------------------------------------------------------------------
 # Public `AbstractChainDB` getter overload  methods
@@ -186,6 +209,15 @@ proc extraValidation*(c: Chain): auto {.inline.} =
 proc forkIds*(c: Chain): auto {.inline.} =
   ## Getter
   c.forkIds
+
+# ------------------------------------------------------------------------------
+# Public `Chain` setters
+# ------------------------------------------------------------------------------
+
+proc `extraValidation=`*(c: Chain; extraValidation: bool) {.inline.} =
+  ## Setter. If set `true`, the argument `extraValidation` enables extra
+  ## block chain validation.
+  c.extraValidation = extraValidation
 
 # ------------------------------------------------------------------------------
 # End
