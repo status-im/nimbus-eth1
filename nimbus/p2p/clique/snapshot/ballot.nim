@@ -22,7 +22,7 @@ import
   std/[sequtils, tables],
   # std/[strutils],
   ../clique_cfg,
-  ../clique_utils,
+  ../clique_helpers,
   eth/common
 
 type

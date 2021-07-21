@@ -37,48 +37,70 @@ logScope:
 # Private functions needed to support RLP conversion
 # ------------------------------------------------------------------------------
 
-proc say(s: var Snapshot; v: varargs[string,`$`]) {.inline.} =
+proc say(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
   # s.cfg.say v
   discard
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+template pairWalkIj(first, last: int; offTop: Positive; code: untyped) =
+  if first <= last:
+    for n in first .. last - offTop:
+      let
+        i {.inject.} = n
+        j {.inject.} = n + 1
+      code
+  else:
+    for n in first.countdown(last + offTop):
+      let
+        i {.inject.} = n
+        j {.inject.} = n - 1
+      code
+
+template doWalkIt(first, last: int; code: untyped) =
+  if first <= last:
+    for n in first .. last:
+      let it {.inject.} = n
+      code
+  else:
+    for n in first.countdown(last):
+      let it {.inject.} = n
+      code
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 # clique/snapshot.go(185): func (s *Snapshot) apply(headers [..]
-proc snapshotApply*(s: var Snapshot;
-                    headers: openArray[BlockHeader]): CliqueOkResult {.
-                      gcsafe, raises: [Defect,CatchableError].} =
+proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
+                       first, last: int): CliqueOkResult
+                         {.gcsafe, raises: [Defect,CatchableError].} =
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 
   #s.say "applySnapshot ", s.pp(headers).join("\n" & ' '.repeat(18))
 
-  # Allow passing in no headers for cleaner code
-  if headers.len == 0:
-    return ok()
-
   # Sanity check that the headers can be applied
-  if headers[0].blockNumber != s.blockNumber + 1:
+  if headers[first].blockNumber != s.blockNumber + 1:
     return err((errInvalidVotingChain,""))
   # clique/snapshot.go(191): for i := 0; i < len(headers)-1; i++ {
-  for i in 0 ..< headers.len - 1:
-    if headers[i+1].blockNumber != headers[i].blockNumber+1:
+  first.pairWalkIj(last, 1):
+    if headers[j].blockNumber != headers[i].blockNumber+1:
       return err((errInvalidVotingChain,""))
 
   # Iterate through the headers and create a new snapshot
   let
     start = getTime()
-    logInterval = initDuration(seconds = 8)
   var
     logged = start
 
-  s.say "applySnapshot state=", s.pp(25)
-
   # clique/snapshot.go(206): for i, header := range headers [..]
-  for headersIndex in 0 ..< headers.len:
+  first.doWalkIt(last):
     let
       # headersIndex => also used for logging at the end of this loop
+      headersIndex = it
       header = headers[headersIndex]
       number = header.blockNumber
 
@@ -149,23 +171,30 @@ proc snapshotApply*(s: var Snapshot;
     s.say "applySnapshot state=", s.pp(25)
 
     # If we're taking too much time (ecrecover), notify the user once a while
-    if logInterval < logged - getTime():
+    if s.cfg.logInterval < getTime() - logged:
       info "Reconstructing voting history",
         processed = headersIndex,
         total = headers.len,
-        elapsed = start - getTime()
+        elapsed = getTime() - start
       logged = getTime()
 
-  let sinceStart = start - getTime()
-  if logInterval < sinceStart:
+  let sinceStart = getTime() - start
+  if s.cfg.logInterval < sinceStart:
     info "Reconstructed voting history",
       processed = headers.len,
       elapsed = sinceStart
 
   # clique/snapshot.go(303): snap.Number += uint64(len(headers))
   s.blockNumber = s.blockNumber + headers.len.u256
-  s.blockHash = headers[^1].blockHash
+  s.blockHash = headers[last].blockHash
   result = ok()
+
+
+proc snapshotApply*(s: Snapshot; headers: var seq[BlockHeader]): CliqueOkResult
+                   {.gcsafe, raises: [Defect,CatchableError].} =
+  if headers.len == 0:
+    return ok()
+  s.snapshotApplySeq(headers, 0, headers.len - 1)
 
 # ------------------------------------------------------------------------------
 # End

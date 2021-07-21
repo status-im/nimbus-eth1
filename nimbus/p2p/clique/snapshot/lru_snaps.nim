@@ -68,7 +68,7 @@ proc hasLruSnaps*(rs: var LruSnaps; hash: Hash256): bool {.inline.} =
   ## Check whether a particular snapshot exists in the cache
   rs.hasKey(hash)
 
-proc setLruSnaps*(rs: var LruSnaps; snaps: var Snapshot): bool
+proc setLruSnaps*(rs: var LruSnaps; snaps: Snapshot): bool
                          {.gcsafe, inline, raises: [Defect,CatchableError].} =
   ## Cache/overwite particular snapshot
   rs.setItem(snaps.blockHash, ok(LruSnapsResult,snaps))

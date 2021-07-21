@@ -21,17 +21,17 @@
 ##
 
 import
-  std/[sequtils, strformat, tables, times],
+  std/[sequtils, tables, times],
   ../../constants,
   ../../db/[db_chain, state_db],
   ../../utils,
-  ../gaslimit,
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
-  ./clique_utils,
+  ./clique_helpers,
   ./clique_snapshot,
   ./clique_signers,
+  ./clique_verify,
   ./snapshot/[snapshot_desc, snapshot_misc],
   chronicles,
   chronos,
@@ -61,190 +61,8 @@ template syncExceptionWrap(action: untyped) =
 # Private functions
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(145): func ecrecover(header [..]
-proc ecrecover(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
-                     {.gcsafe, raises: [Defect,CatchableError].} =
-  ## ecrecover extracts the Ethereum account address from a signed header.
-  c.cfg.ecRecover(header)
-
-
-# clique/clique.go(463): func (c *Clique) verifySeal(chain [..]
-proc verifySeal(c: Clique; header: BlockHeader;
-                parents: openArray[BlockHeader]): CliqueOkResult
-                     {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Check whether the signature contained in the header satisfies the
-  ## consensus protocol requirements. The method accepts an optional list of
-  ## parent headers that aren't yet part of the local blockchain to generate
-  ## the snapshots from.
-
-  # Verifying the genesis block is not supported
-  if header.blockNumber.isZero:
-    return err((errUnknownBlock,""))
-
-  # Retrieve the snapshot needed to verify this header and cache it
-  let rc = c.cliqueSnapshot(header.parentHash, parents)
-  if rc.isErr:
-    return err(rc.error)
-
-  # Resolve the authorization key and check against signers
-  let signer = c.ecrecover(header)
-  if signer.isErr:
-      return err(signer.error)
-
-  if not c.snapshot.isSigner(signer.value):
-    return err((errUnauthorizedSigner,""))
-
-  let seen = c.snapshot.recent(signer.value)
-  if seen.isOk:
-    # Signer is among recents, only fail if the current block does not
-    # shift it out
-    if header.blockNumber - c.snapshot.signersThreshold.u256 < seen.value:
-      return err((errRecentlySigned,""))
-
-  # Ensure that the difficulty corresponds to the turn-ness of the signer
-  if not c.fakeDiff:
-    if c.snapshot.inTurn(header.blockNumber, signer.value):
-      if header.difficulty != DIFF_INTURN:
-        return err((errWrongDifficulty,""))
-    else:
-      if header.difficulty != DIFF_NOTURN:
-        return err((errWrongDifficulty,""))
-
-  return ok()
-
-
-# clique/clique.go(314): func (c *Clique) verifyCascadingFields(chain [..]
-proc verifyCascadingFields(c: Clique; header: BlockHeader;
-                           parents: openArray[BlockHeader]): CliqueOkResult
-                                {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Verify all the header fields that are not standalone, rather depend on a
-  ## batch of previous headers. The caller may optionally pass in a batch of
-  ## parents (ascending order) to avoid looking those up from the database.
-  ## This is useful for concurrently verifying a batch of new headers.
-
-  # The genesis block is the always valid dead-end
-  if header.blockNumber.isZero:
-    return err((errZeroBlockNumberRejected,""))
-
-  # Ensure that the block's timestamp isn't too close to its parent
-  var parent: BlockHeader
-  if 0 < parents.len:
-    parent = parents[^1]
-  elif not c.db.getBlockHeader(header.blockNumber-1, parent):
-    return err((errUnknownAncestor,""))
-
-  if parent.blockNumber != header.blockNumber-1 or
-     parent.hash != header.parentHash:
-    return err((errUnknownAncestor,""))
-
-  if header.timestamp < parent.timestamp + c.cfg.period:
-    return err((errInvalidTimestamp,""))
-
-  # Verify that the gasUsed is <= gasLimit
-  if header.gasLimit < header.gasUsed:
-    return err((errCliqueExceedsGasLimit,
-                &"invalid gasUsed: have {header.gasUsed}, " &
-                &"gasLimit {header.gasLimit}"))
-
-  block:
-    let rc = c.db.validateGasLimitOrBaseFee(header, parent)
-    if rc.isErr:
-      return err((errCliqueGasLimitOrBaseFee, rc.error))
-
-  # Retrieve the snapshot needed to verify this header and cache it
-  block:
-    let rc = c.cliqueSnapshot(header.parentHash, parents)
-    if rc.isErr:
-      return err(rc.error)
-
-  # If the block is a checkpoint block, verify the signer list
-  if (header.blockNumber mod c.cfg.epoch.u256) == 0:
-    let
-      signersList = c.cliqueSigners
-      extraList = header.extraData.extraDataAddresses
-    if signersList != extraList:
-      return err((errMismatchingCheckpointSigners,""))
-
-  # All basic checks passed, verify the seal and return
-  return c.verifySeal(header, parents)
-
-
-# clique/clique.go(246): func (c *Clique) verifyHeader(chain [..]
-proc verifyHeader(c: Clique; header: BlockHeader;
-                  parents: openArray[BlockHeader]): CliqueOkResult
-                       {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Check whether a header conforms to the consensus rules.The caller may
-  ## optionally pass in a batch of parents (ascending order) to avoid looking
-  ## those up from the database. This is useful for concurrently verifying
-  ## a batch of new headers.
-  if header.blockNumber.isZero:
-    return err((errUnknownBlock,""))
-
-  # Don't waste time checking blocks from the future
-  if getTime() < header.timestamp:
-    return err((errFutureBlock,""))
-
-  # Checkpoint blocks need to enforce zero beneficiary
-  let isCheckPoint = (header.blockNumber mod c.cfg.epoch.u256) == 0
-  if isCheckPoint and not header.coinbase.isZero:
-    return err((errInvalidCheckpointBeneficiary,""))
-
-  # Nonces must be 0x00..0 or 0xff..f, zeroes enforced on checkpoints
-  if header.nonce != NONCE_AUTH and header.nonce != NONCE_DROP:
-    return err((errInvalidVote,""))
-  if isCheckPoint and header.nonce != NONCE_DROP:
-    return err((errInvalidCheckpointVote,""))
-
-  # Check that the extra-data contains both the vanity and signature
-  if header.extraData.len < EXTRA_VANITY:
-    return err((errMissingVanity,""))
-  if header.extraData.len < EXTRA_VANITY + EXTRA_SEAL:
-    return err((errMissingSignature,""))
-
-  # Ensure that the extra-data contains a signer list on checkpoint,
-  # but none otherwise
-  let signersBytes = header.extraData.len - EXTRA_VANITY - EXTRA_SEAL
-  if not isCheckPoint and signersBytes != 0:
-    return err((errExtraSigners,""))
-
-  if isCheckPoint and  (signersBytes mod EthAddress.len) != 0:
-    return err((errInvalidCheckpointSigners,""))
-
-  # Ensure that the mix digest is zero as we do not have fork protection
-  # currently
-  if not header.mixDigest.isZero:
-    return err((errInvalidMixDigest,""))
-
-  # Ensure that the block does not contain any uncles which are meaningless
-  # in PoA
-  if header.ommersHash != EMPTY_UNCLE_HASH:
-    return err((errInvalidUncleHash,""))
-
-  # Ensure that the block's difficulty is meaningful (may not be correct at
-  # this point)
-  if not header.blockNumber.isZero:
-    if header.difficulty.isZero or
-        (header.difficulty != DIFF_INTURN and
-         header.difficulty != DIFF_NOTURN):
-      return err((errInvalidDifficulty,""))
-
-  # verify that the gas limit is <= 2^63-1
-  when header.gasLimit.typeof isnot int64:
-    if int64.high < header.gasLimit:
-      return err((errCliqueExceedsGasLimit,
-                  &"invalid gasLimit: have {header.gasLimit}, must be int64"))
-
-  # If all checks passed, validate any special fields for hard forks
-  let rc = c.db.config.verifyForkHashes(header)
-  if rc.isErr:
-    return err(rc.error)
-
-  # All basic checks passed, verify cascading fields
-  return c.verifyCascadingFields(header, parents)
-
-
 # clique/clique.go(681): func calcDifficulty(snap [..]
-proc calcDifficulty(snap: var Snapshot; signer: EthAddress): DifficultyInt =
+proc calcDifficulty(snap: Snapshot; signer: EthAddress): DifficultyInt =
   if snap.inTurn(snap.blockNumber + 1, signer):
     DIFF_INTURN
   else:
@@ -263,7 +81,7 @@ proc author*(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
   ##
   ## This implementation returns the Ethereum address recovered from the
   ## signature in the header's extra-data section.
-  c.ecrecover(header)
+  c.cfg.ecRecover(header)
 
 
 # clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
@@ -275,7 +93,7 @@ proc verifyHeader*(c: Clique; header: BlockHeader): CliqueOkResult
   ##
   ## This implementation checks whether a header conforms to the consensus
   ## rules.
-  c.verifyHeader(header, @[])
+  c.cliqueVerify(header)
 
 # clique/clique.go(224): func (c *Clique) VerifyHeader(chain [..]
 proc verifyHeaders*(c: Clique; headers: openArray[BlockHeader]):
@@ -296,7 +114,7 @@ proc verifyHeaders*(c: Clique; headers: openArray[BlockHeader]):
       if isStopRequest:
         result.add cliqueResultErr((errCliqueStopped,""))
         break
-      result.add c.verifyHeader(headers[n], headers[0 ..< n])
+      result.add c.cliqueVerify(headers[n], headers[0 ..< n])
     c.doExclusively:
       c.stopVHeaderReq = false
 

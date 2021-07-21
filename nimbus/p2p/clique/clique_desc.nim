@@ -25,8 +25,10 @@ import
   ./clique_cfg,
   ./clique_defs,
   ./snapshot/[lru_snaps, snapshot_desc],
+  chronicles,
   chronos,
-  eth/[common, keys, rlp]
+  eth/[common, keys, rlp],
+  stew/results
 
 type
   # clique/clique.go(142): type SignerFn func(signer [..]
@@ -37,10 +39,15 @@ type
 
   Proposals = Table[EthAddress,bool]
 
+  CliqueFailed* = ##\
+    ## Last failed state: block hash and error result
+    (Hash256, CliqueError)
+
   # clique/clique.go(172): type Clique struct { [..]
-  Clique* = ref object ## Clique is the proof-of-authority consensus engine
-                       ## proposed to support the Ethereum testnet following
-                       ## the Ropsten attacks.
+  Clique* = ref object ##\
+    ## Clique is the proof-of-authority consensus engine proposed to support
+    ## the Ethereum testnet following the Ropsten attacks.
+
     signer*: EthAddress ##\
       ## Ethereum address of the current signing key
 
@@ -56,10 +63,10 @@ type
       ## Snapshots cache for recent block search
 
     snapshot: Snapshot ##\
-      ## Stashing last snapshot operation here
+      ## Last successful snapshot
 
-    error: CliqueError ##\
-      ## Last error, typically stored by snaphot utility
+    failed: CliqueFailed ##\
+      ## Last verification error (if any)
 
     proposals: Proposals ##\
       ## Cu1rrent list of proposals we are pushing
@@ -72,6 +79,9 @@ type
 
 {.push raises: [Defect].}
 
+logScope:
+  topics = "clique PoA constructor"
+
 # ------------------------------------------------------------------------------
 # Public constructor
 # ------------------------------------------------------------------------------
@@ -81,18 +91,25 @@ proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
   Clique(cfg:       cfg,
-         recents:   initLruSnaps(cfg),
-         snapshot:  cfg.initSnapshot(BlockHeader()), # dummy
+         recents:   cfg.initLruSnaps,
+         snapshot:  cfg.newSnapshot(BlockHeader()),
          proposals: initTable[EthAddress,bool](),
          asyncLock: newAsyncLock())
 
 # ------------------------------------------------------------------------------
-# Public debug/pretty print
+# Public /pretty print
 # ------------------------------------------------------------------------------
 
+# Debugging only
 proc getPrettyPrinters*(c: Clique): var PrettyPrinters =
   ## Mixin for pretty printers, see `clique/clique_cfg.pp()`
   c.cfg.prettyPrint
+
+proc `$`*(e: CliqueError): string =
+  ## Join text fragments
+  result = $e[0]
+  if e[1] != "":
+    result &= ": " & e[1]
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -106,13 +123,13 @@ proc proposals*(c: Clique): var Proposals {.inline.} =
   ## Getter
   c.proposals
 
-proc snapshot*(c: Clique): var Snapshot {.inline.} =
-  ## Getter, last processed snapshot
+proc snapshot*(c: Clique): auto {.inline.} =
+  ## Getter, last successfully processed snapshot.
   c.snapshot
 
-proc error*(c: Clique): auto {.inline.} =
-  ## Getter, last error message
-  c.error
+proc failed*(c: Clique): auto {.inline.} =
+  ## Getter, last snapshot error.
+  c.failed
 
 proc cfg*(c: Clique): auto {.inline.} =
   ## Getter
@@ -140,13 +157,13 @@ proc `fakeDiff=`*(c: Clique; debug: bool) =
   ## Setter
   c.fakeDiff = debug
 
-proc `snapshot=`*(c: Clique; snap: Snapshot) =
+proc `snapshot=`*(c: Clique; snaps: Snapshot) =
   ## Setter
-  c.snapshot = snap
+  c.snapshot = snaps
 
-proc `error=`*(c: Clique; error: CliqueError) =
+proc `failed=`*(c: Clique; failure: CliqueFailed) =
   ## Setter
-  c.error = error
+  c.failed = failure
 
 # ------------------------------------------------------------------------------
 # Public lock/unlock

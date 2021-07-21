@@ -30,14 +30,14 @@ import
 # Constants copied from eip-225 specs & implementation
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(48): const ( [..]
 const
+  # clique/clique.go(48): const ( [..]
   CHECKPOINT_INTERVAL* = ##\
     ## Number of blocks after which to save the vote snapshot to the database
     1024
 
   INMEMORY_SNAPSHOTS* = ##\
-    ## Number of recent vote snapshots to keep in memory
+    ## Number of recent vote snapshots to keep in memory.
     128
 
   INMEMORY_SIGNATURES* = ##\
@@ -45,15 +45,16 @@ const
     4096
 
   WIGGLE_TIME* = ##\
+    ## PoA mining only (currently unsupported).
+    ##
     ## Random delay (per signer) to allow concurrent signers
     initDuration(seconds = 0, milliseconds = 500)
 
-# clique/clique.go(57): var ( [..]
-const
+  # clique/clique.go(57): var ( [..]
   BLOCK_PERIOD* = ##\
-    ## Minimum difference in seconds between two consecutive block's
-    ## timestamps. Suggested 15s for the testnet to remain analogous to the
-    ## mainnet ethash target.
+    ## Minimum difference in seconds between two consecutive block timestamps.
+    ## Suggested time is 15s for the `testnet` to remain analogous to the
+    ## `mainnet` ethash target.
     initDuration(seconds = 15)
 
   EXTRA_VANITY* = ##\
@@ -84,11 +85,6 @@ const
     ## Suggested 2 to show a slight preference over out-of-turn signatures.
     2.u256
 
-# ------------------------------------------------------------------------------
-# Additional constants copied from eip-225 go implementation
-# ------------------------------------------------------------------------------
-
-const
   # params/network_params.go(60): FullImmutabilityThreshold = 90000
   FULL_IMMUTABILITY_THRESHOLD* = ##\
     ## Number of blocks after which a chain segment is considered immutable (ie.
@@ -97,15 +93,25 @@ const
     ## the cutoff threshold and by clique as the snapshot trust limit.
     90000
 
+  # Other
+  SNAPS_LOG_INTERVAL_MICSECS* = ##\
+    ##  Time interval after which the `snapshotApply()` function main loop
+    ## produces logging entries. The original value from the Go reference
+    ## implementation has 8 seconds (which seems a bit long.) For the first
+    ## 300k blocks in the Goerli chain, typical execution time in tests was
+    ## mostly below 300 micro secs.
+    initDuration(microSeconds = 200)
+
 # ------------------------------------------------------------------------------
 # Error tokens
 # ------------------------------------------------------------------------------
 
-# clique/clique.go(76): var ( [..]
 type
+  # clique/clique.go(76): var ( [..]
   CliqueErrorType* = enum
-    resetCliqueError = 0 ##\
+    resetCliqueError = ##\
       ## Default/reset value (use `cliqueNoError` below rather than this valie)
+      (0, "no error")
 
     errUnknownBlock =  ##\
       ## is returned when the list of signers is requested for a block that is
@@ -223,11 +229,13 @@ type
     errUnknownHash = "No header found for hash value"
     errEmptyLruCache = "No snapshot available"
 
+    errNotInitialised = ##\
+      ## Initalisation value for `Result` entries
+      "Not initialised"
+
     errSetLruSnaps = ##\
       ## Attempt to assign a value to a non-existing slot
       "Missing LRU slot for snapshot"
-
-    errZeroBlockNumberRejected = "Block number must not be Zero"
 
     errSkSigResult                ## eth/keys subsytem error: signature
     errSkPubKeyResult             ## eth/keys subsytem error: public key
@@ -253,11 +261,18 @@ type
 # ------------------------------------------------------------------------------
 
 type
-  CliqueError* = (CliqueErrorType,string)
-  CliqueOkResult* = Result[void,CliqueError]
+  CliqueError* = ##\
+    ## Error message, tinned component + explanatory text (if any)
+    (CliqueErrorType,string)
+
+  CliqueOkResult* = ##\
+    ## Standard ok/error result type for `Clique` functions
+    Result[void,CliqueError]
 
 const
-  cliqueNoError* = (resetCliqueError, "")
+  cliqueNoError* = ##\
+    ## No-error constant
+    (resetCliqueError, "")
 
 # ------------------------------------------------------------------------------
 # End

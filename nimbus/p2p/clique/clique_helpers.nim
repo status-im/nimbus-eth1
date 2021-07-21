@@ -21,8 +21,7 @@
 ##
 
 import
-  std/[algorithm, strformat, times],
-  ../../chain_config,
+  std/[algorithm, times],
   ../../constants,
   ../../utils,
   ./clique_defs,
@@ -88,23 +87,6 @@ proc withHeader*(b: EthBlock; header: BlockHeader): EthBlock =
   EthBlock(header: header,
            txs:    b.txs,
            uncles: b.uncles)
-
-# consensus/misc/forks.go(30): func VerifyForkHashes(config [..]
-proc verifyForkHashes*(c: var ChainConfig; header: BlockHeader):
-                       CliqueOkResult {.gcsafe, raises: [Defect,ValueError].} =
-  ## Verify that blocks conforming to network hard-forks do have the correct
-  ## hashes, to avoid clients going off on different chains.
-
-  # If the homestead reprice hash is set, validate it
-  if c.eip150Block.isZero or c.eip150Block != header.blockNumber:
-    return ok()
-
-  let hash = header.hash
-  if c.eip150Hash.isZero or c.eip150Hash == hash:
-    return ok()
-
-  return err((errCliqueGasRepriceFork,
-              &"Homestead gas reprice fork: have {c.eip150Hash}, want {hash}"))
 
 # ------------------------------------------------------------------------------
 # Seal hash support

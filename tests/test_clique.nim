@@ -11,7 +11,7 @@
 import
   std/[algorithm, os, sequtils, strformat, strutils],
   ../nimbus/db/db_chain,
-  ../nimbus/p2p/[chain, clique],
+  ../nimbus/p2p/[chain, clique, clique/clique_snapshot],
   ./test_clique/[pool, undump],
   eth/[common, keys],
   stint,
@@ -33,29 +33,30 @@ proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
 # ------------------------------------------------------------------------------
 
 # clique/snapshot_test.go(99): func TestClique(t *testing.T) {
-proc runCliqueSnapshot(noisy = true) =
+proc runCliqueSnapshot(noisy = true; postProcessOk = false;
+                       testIds = {0 .. 999}; skipIds = {0}-{0}) =
   ## Clique PoA Snapshot
   ## ::
   ##    Tests that Clique signer voting is evaluated correctly for various
   ##    simple and complex scenarios, as well as that a few special corner
   ##    cases fail correctly.
   ##
-  suite "Clique PoA Snapshot":
+  let postProcessInfo = if postProcessOk: ", Transaction Finaliser Applied"
+                        else: ", Without Finaliser"
+  suite &"Clique PoA Snapshot{postProcessInfo}":
     var
       pool = newVoterPool()
-    const
-      skipSet = {999}
-      testSet = {0 .. 999}
 
     pool.debug = noisy
 
     # clique/snapshot_test.go(379): for i, tt := range tests {
-    for tt in voterSamples.filterIt(it.id in testSet):
+    for tt in voterSamples.filterIt(it.id in testIds):
 
       test &"Snapshots {tt.id:2}: {tt.info.substr(0,50)}...":
         pool.say "\n"
 
-        if tt.id in skipSet:
+        # Noisily skip this test
+        if tt.id in skipIds:
           skip()
 
         else:
@@ -65,16 +66,16 @@ proc runCliqueSnapshot(noisy = true) =
             .resetVoterChain(tt.signers, tt.epoch)
             # see clique/snapshot_test.go(425): for j, block := range blocks {
             .appendVoter(tt.votes)
-            .commitVoterChain
+            .commitVoterChain(postProcessOk)
 
           # see clique/snapshot_test.go(477): if err != nil {
-          if pool.error != cliqueNoError:
+          if tt.failure != cliqueNoError[0]:
             # Note that clique/snapshot_test.go does not verify _here_ against
             # the scheduled test error -- rather this voting error is supposed
             # to happen earlier (processed at clique/snapshot_test.go(467)) when
             # assembling the block chain (sounds counter intuitive to the author
             # of this source file as the scheduled errors are _clique_ related).
-            check pool.error[0] == tt.failure
+            check pool.failed[1][0] == tt.failure
           else:
             let
               expected = tt.results.mapIt("@" & it).sorted
@@ -85,6 +86,9 @@ proc runCliqueSnapshot(noisy = true) =
 
             # Verify the final list of signers against the expected ones
             check snapResult == expected
+
+proc runCliqueSnapshot(noisy = true; postProcessOk = false; testId: int) =
+  noisy.runCliqueSnapshot(postProcessOk, testIds = {testId})
 
 
 proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
@@ -145,19 +149,21 @@ proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
         discard
 
 
-proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
+proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
   var
     pool = newVoterPool()
     stoppedOk = false
 
   pool.debug = noisy
 
-  let stopThreshold = if stopAfterBlock == 0u64: uint64.high.u256
+  let stopThreshold = if stopAfterBlock == 0u64: 20.u256
                       else: stopAfterBlock.u256
 
   suite "Replay Goerli Chain Transactions Single Blockwise":
 
     for w in (dir / goerliCapture).undumpNextGroup:
+      if stoppedOk:
+        break
       if w[0][0].blockNumber == 0.u256:
         # Verify Genesis
         doAssert w[0][0] == pool.getBlockHeader(0.u256)
@@ -166,16 +172,17 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
           let
             header = w[0][n]
             body = w[1][n]
+          var
             parents = w[0][0 ..< n]
-          # Handy for partial tests
-          if stopThreshold < header.blockNumber:
-            stoppedOk = true
-            break
           test &"Goerli Block #{header.blockNumber} + {parents.len} parents":
             check pool.chain.clique.cliqueSnapshot(header,parents).isOk
             let addedPersistBlocks = pool.chain.persistBlocks(@[header],@[body])
             check addedPersistBlocks == ValidationResult.Ok
             if addedPersistBlocks != ValidationResult.Ok: return
+          # Handy for partial tests
+          if stopThreshold <= header.blockNumber:
+            stoppedOk = true
+            break
 
     if stoppedOk:
       test &"Runner stopped after reaching #{stopThreshold}":
@@ -185,16 +192,21 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 20u64) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
+let
+  skipIDs = {999}
+
 proc cliqueMain*(noisy = defined(debug)) =
-  noisy.runCliqueSnapshot
+  noisy.runCliqueSnapshot(true)
+  noisy.runCliqueSnapshot(false, skipIDs = skipIDs)
   noisy.runGoerliBaybySteps
   noisy.runGoerliReplay
 
 when isMainModule:
   let noisy = defined(debug)
-  #noisy.runCliqueSnapshot
+  noisy.runCliqueSnapshot(true)
+  noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps(dir = ".")
-  #noisy.runGoerliReplay(dir = ".", stopAfterBlock = 0)
+  noisy.runGoerliReplay(dir = ".")
 
 # ------------------------------------------------------------------------------
 # End

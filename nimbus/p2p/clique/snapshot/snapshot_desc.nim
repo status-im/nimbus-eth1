@@ -24,13 +24,17 @@ import
   ../../../utils,
   ../clique_cfg,
   ../clique_defs,
-  ../clique_utils,
+  ../clique_helpers,
   ./ballot,
   chronicles,
   eth/[common, rlp, trie/db],
   stew/results
 
 type
+  SnapshotResult* = ##\
+    ## Snapshot/error result type
+    Result[Snapshot,CliqueError]
+
   AddressHistory = Table[BlockNumber,EthAddress]
 
   SnapshotData* = object
@@ -42,7 +46,7 @@ type
     ballot: Ballot            ## Votes => authorised signers
 
   # clique/snapshot.go(50): type Snapshot struct [..]
-  Snapshot* = object          ## Snapshot is the state of the authorization
+  Snapshot* = ref object      ## Snapshot is the state of the authorization
                               ## voting at a given point in time.
     cfg: CliqueCfg            ## parameters to fine tune behavior
     data*: SnapshotData       ## real snapshot
@@ -56,10 +60,10 @@ logScope:
 # Pretty printers for debugging
 # ------------------------------------------------------------------------------
 
-proc getPrettyPrinters*(s: var Snapshot): var PrettyPrinters {.gcsafe.}
-proc pp*(s: var Snapshot; v: Vote): string {.gcsafe.}
+proc getPrettyPrinters*(s: Snapshot): var PrettyPrinters {.gcsafe.}
+proc pp*(s: Snapshot; v: Vote): string {.gcsafe.}
 
-proc votesList(s: var Snapshot; sep: string): string =
+proc votesList(s: Snapshot; sep: string): string =
   proc s3Cmp(a, b: (string,string,Vote)): int =
     result = cmp(a[0], b[0])
     if result == 0:
@@ -70,7 +74,7 @@ proc votesList(s: var Snapshot; sep: string): string =
     .mapIt(s.pp(it[2]))
     .join(sep)
 
-proc signersList(s: var Snapshot): string =
+proc signersList(s: Snapshot): string =
   s.pp(s.data.ballot.authSigners).sorted.join(",")
 
 # ------------------------------------------------------------------------------
@@ -89,21 +93,36 @@ proc read[K,V](rlp: var Rlp;
     result[key] = value
 
 # ------------------------------------------------------------------------------
+# Private constructor helper
+# ------------------------------------------------------------------------------
+
+# clique/snapshot.go(72): func newSnapshot(config [..]
+proc initSnapshot(s: Snapshot; cfg: CliqueCfg;
+           number: BlockNumber; hash: Hash256; signers: openArray[EthAddress]) =
+  ## Initalise a new snapshot.
+  s.cfg = cfg
+  s.data.blockNumber = number
+  s.data.blockHash = hash
+  s.data.recents = initTable[BlockNumber,EthAddress]()
+  s.data.ballot.initBallot(signers)
+  s.data.ballot.debug = s.cfg.debug
+
+# ------------------------------------------------------------------------------
 # Public pretty printers
 # ------------------------------------------------------------------------------
 
-proc getPrettyPrinters*(s: var Snapshot): var PrettyPrinters =
+proc getPrettyPrinters*(s: Snapshot): var PrettyPrinters =
   ## Mixin for pretty printers
   s.cfg.prettyPrint
 
-proc pp*(s: var Snapshot; h: var AddressHistory): string {.gcsafe.} =
+proc pp*(s: Snapshot; h: var AddressHistory): string {.gcsafe.} =
   ppExceptionWrap:
     toSeq(h.keys)
       .sorted
       .mapIt("#" & $it & ":" & s.pp(h[it.u256]))
       .join(",")
 
-proc pp*(s: var Snapshot; v: Vote): string =
+proc pp*(s: Snapshot; v: Vote): string =
   proc authorized(b: bool): string =
     if b: "authorise" else: "de-authorise"
   ppExceptionWrap:
@@ -112,7 +131,7 @@ proc pp*(s: var Snapshot; v: Vote): string =
           &",blockNumber={v.blockNumber}" &
           &",{authorized(v.authorize)}" & ")"
 
-proc pp*(s: var Snapshot; delim: string): string {.gcsafe.} =
+proc pp*(s: Snapshot; delim: string): string {.gcsafe.} =
   ## Pretty print descriptor
   let
     sep1 = if 0 < delim.len: delim
@@ -125,7 +144,7 @@ proc pp*(s: var Snapshot; delim: string): string {.gcsafe.} =
       &"{sep1}signers=" & "{" & s.signersList & "}" &
       &"{sep1}votes=[" & s.votesList(sep2) & "])"
 
-proc pp*(s: var Snapshot; indent = 0): string {.gcsafe.} =
+proc pp*(s: Snapshot; indent = 0): string {.gcsafe.} =
   ## Pretty print descriptor
   let delim = if 0 < indent: "\n" & ' '.repeat(indent) else: " "
   s.pp(delim)
@@ -134,50 +153,35 @@ proc pp*(s: var Snapshot; indent = 0): string {.gcsafe.} =
 # Public Constructor
 # ------------------------------------------------------------------------------
 
-# clique/snapshot.go(72): func newSnapshot(config [..]
-proc initSnapshot*(s: var Snapshot; cfg: CliqueCfg;
-           number: BlockNumber; hash: Hash256; signers: openArray[EthAddress]) =
-  ## Create a new snapshot with the specified startup parameters. This
-  ## constructor does not initialize the set of recent `signers`, so only ever
-  ## use if for the genesis block.
-  s.cfg = cfg
-  s.data.blockNumber = number
-  s.data.blockHash = hash
-  s.data.recents = initTable[BlockNumber,EthAddress]()
-  s.data.ballot.initBallot(signers)
-  s.data.ballot.debug = s.cfg.debug
-
-proc initSnapshot*(s: var Snapshot; cfg: CliqueCfg; header: BlockHeader) =
+proc newSnapshot*(cfg: CliqueCfg; header: BlockHeader): Snapshot =
   ## Create a new snapshot for the given header. The header need not be on the
   ## block chain, yet. The trusted signer list is derived from the
   ## `extra data` field of the header.
+  new result
   let signers = header.extraData.extraDataAddresses
-  s.initSnapshot(cfg, header.blockNumber, header.hash, signers)
-
-proc initSnapshot*(cfg: CliqueCfg; header: BlockHeader): Snapshot =
-  result.initSnapshot(cfg, header)
+  result.initSnapshot(cfg, header.blockNumber, header.hash, signers)
 
 # ------------------------------------------------------------------------------
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc cfg*(s: var Snapshot): CliqueCfg {.inline.} =
+proc cfg*(s: Snapshot): CliqueCfg {.inline.} =
   ## Getter
   s.cfg
 
-proc blockNumber*(s: var Snapshot): BlockNumber {.inline.} =
+proc blockNumber*(s: Snapshot): BlockNumber {.inline.} =
   ## Getter
   s.data.blockNumber
 
-proc blockHash*(s: var Snapshot): Hash256 {.inline.} =
+proc blockHash*(s: Snapshot): Hash256 {.inline.} =
   ## Getter
   s.data.blockHash
 
-proc recents*(s: var Snapshot): var AddressHistory {.inline.} =
+proc recents*(s: Snapshot): var AddressHistory {.inline.} =
   ## Retrieves the list of recently added addresses
   s.data.recents
 
-proc ballot*(s: var Snapshot): var Ballot {.inline.} =
+proc ballot*(s: Snapshot): var Ballot {.inline.} =
   ## Retrieves the ballot box descriptor with the votes
   s.data.ballot
 
@@ -185,11 +189,11 @@ proc ballot*(s: var Snapshot): var Ballot {.inline.} =
 # Public setters
 # ------------------------------------------------------------------------------
 
-proc `blockNumber=`*(s: var Snapshot; number: BlockNumber) {.inline.} =
+proc `blockNumber=`*(s: Snapshot; number: BlockNumber) {.inline.} =
   ## Getter
   s.data.blockNumber = number
 
-proc `blockHash=`*(s: var Snapshot; hash: Hash256) {.inline.} =
+proc `blockHash=`*(s: Snapshot; hash: Hash256) {.inline.} =
   ## Getter
   s.data.blockHash = hash
 
@@ -198,22 +202,21 @@ proc `blockHash=`*(s: var Snapshot; hash: Hash256) {.inline.} =
 # ------------------------------------------------------------------------------
 
 # clique/snapshot.go(88): func loadSnapshot(config [..]
-proc loadSnapshot*(s: var Snapshot; cfg: CliqueCfg;
-           hash: Hash256): CliqueOkResult {.gcsafe, raises: [Defect].} =
+proc loadSnapshot*(cfg: CliqueCfg; hash: Hash256):
+                   Result[Snapshot,CLiqueError] {.gcsafe, raises: [Defect].} =
   ## Load an existing snapshot from the database.
+  var s = Snapshot(cfg: cfg)
   try:
-    s.cfg = cfg
     s.data = s.cfg.db.db
        .get(hash.cliqueSnapshotKey.toOpenArray)
        .decode(SnapshotData)
     s.data.ballot.debug = s.cfg.debug
   except CatchableError as e:
     return err((errSnapshotLoad,e.msg))
-  result = ok()
+  result = ok(s)
 
 # clique/snapshot.go(104): func (s *Snapshot) store(db [..]
-proc storeSnapshot*(s: var Snapshot):
-                            CliqueOkResult {.gcsafe,raises: [Defect].} =
+proc storeSnapshot*(s: Snapshot): CliqueOkResult {.gcsafe,raises: [Defect].} =
   ## Insert the snapshot into the database.
   try:
     s.cfg.db.db
@@ -221,6 +224,16 @@ proc storeSnapshot*(s: var Snapshot):
   except CatchableError as e:
     return err((errSnapshotStore,e.msg))
   result = ok()
+
+# ------------------------------------------------------------------------------
+# Public deep copy
+# ------------------------------------------------------------------------------
+
+proc cloneSnapshot*(s: Snapshot): Snapshot {.inline.} =
+  ## Clone the snapshot
+  Snapshot(
+    cfg: s.cfg,   # copy ref
+    data: s.data) # copy data
 
 # ------------------------------------------------------------------------------
 # End

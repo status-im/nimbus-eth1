@@ -14,7 +14,8 @@ import
   ../../nimbus/db/db_chain,
   ../../nimbus/p2p/[chain,
                     clique,
-                    clique/clique_utils,
+                    clique/clique_helpers,
+                    clique/clique_snapshot,
                     clique/snapshot/snapshot_desc],
   ./voter_samples as vs,
   eth/[common, keys, p2p, rlp, trie/db],
@@ -188,9 +189,11 @@ proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
   pp.extraData =   proc(v:Blob):                  string = ap.ppExtraData(v)
   pp.blockHeader = proc(v:BlockHeader; d:string): string = ap.ppBlockHeader(v,d)
 
-proc resetChainDb(ap: TesterPool; extraData: Blob) =
+proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
   ## Setup new block chain with bespoke genesis
-  ap.chain = BaseChainDB(db: newMemoryDb(), config: ap.boot.config).newChain
+  ap.chain = BaseChainDB(
+    db: newMemoryDb(),
+    config: ap.boot.config).newChain(extraValidation = true)
   ap.chain.clique.db.populateProgress
   # new genesis block
   var g = ap.boot.genesis
@@ -198,6 +201,7 @@ proc resetChainDb(ap: TesterPool; extraData: Blob) =
     g.extraData = extraData
   g.commit(ap.chain.clique.db)
   # fine tune Clique descriptor
+  ap.chain.clique.cfg.debug = debug
   ap.chain.clique.cfg.prettyPrint.initPrettyPrinters(ap)
 
 proc initTesterPool(ap: TesterPool): TesterPool {.discardable.} =
@@ -261,17 +265,17 @@ proc debug*(ap: TesterPool): auto {.inline.} =
   ## Getter
   ap.clique.cfg.debug
 
-proc cliqueSigners*(ap: TesterPool): auto {.inline.} =
+proc cliqueSigners*(ap: TesterPool; lastOk = false): auto {.inline.} =
   ## Getter
   ap.clique.cliqueSigners
 
-proc error*(ap: TesterPool): auto {.inline.} =
-  ## Getter
-  ap.clique.error
-
-proc snapshot*(ap: TesterPool): var Snapshot {.inline.} =
+proc snapshot*(ap: TesterPool): auto {.inline.} =
   ## Getter
   ap.clique.snapshot
+
+proc failed*(ap: TesterPool): CliqueFailed {.inline.} =
+  ## Getter
+  ap.clique.failed
 
 # ------------------------------------------------------------------------------
 # Public: setter
@@ -329,21 +333,6 @@ proc sign*(ap: TesterPool; header: var BlockHeader; signer: string) =
 # Public: set up & manage voter database
 # ------------------------------------------------------------------------------
 
-#proc setVoterAccount*(ap: TesterPool; account: string;
-#                      prvKey: PrivateKey): TesterPool {.discardable.} =
-#  ## Manually define/import account
-#  result = ap
-#  ap.accounts[account] = prvKey
-#  let address = prvKey.toPublicKey.toCanonicalAddress
-#  ap.names[address] = account
-#
-#proc topVoterHeader*(ap: TesterPool): BlockHeader =
-#  ## Get top header from voter batch list
-#  doAssert 0 < ap.batch.len # see initTesterPool() and resetVoterChain()
-#  if 0 < ap.batch[^1].len:
-#    result = ap.batch[^1][^1]
-
-
 proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
                       epoch = 0): TesterPool {.discardable.} =
   ## Reset the batch list for voter headers and update genesis block
@@ -364,7 +353,7 @@ proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
   extraData.add 0.byte.repeat(EXTRA_SEAL)
 
   # store modified genesis block and epoch
-  ap.resetChainDb(extraData)
+  ap.resetChainDb(extraData, ap.debug )
   ap.clique.cfg.epoch = epoch
 
 
@@ -384,7 +373,7 @@ proc appendVoter*(ap: TesterPool;
     parentHash:  parent.hash,
     ommersHash:  EMPTY_UNCLE_HASH,
     stateRoot:   parent.stateRoot,
-    timestamp:   parent.timestamp + initDuration(seconds = 10),
+    timestamp:   parent.timestamp + initDuration(seconds = 100),
     txRoot:      BLANK_ROOT_HASH,
     receiptRoot: BLANK_ROOT_HASH,
     blockNumber: parent.blockNumber + 1,
@@ -422,25 +411,71 @@ proc appendVoter*(ap: TesterPool;
     ap.appendVoter(voter)
 
 
-proc commitVoterChain*(ap: TesterPool): TesterPool {.discardable.} =
-  ## Write the headers from the voter header batch list to the block chain DB
+proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
+                       stopFaultyHeader = false): TesterPool {.discardable.} =
+  ## Write the headers from the voter header batch list to the block chain DB.
+  ##
+  ## If `postProcessOk` is set, an additional verification step is added at
+  ## the end of each transaction.
+  ##
+  ## if `stopFaultyHeader` is set, the function stopps immediately on error.
+  ## Otherwise the offending bloch is removed, the rest of the batch is
+  ## adjusted and applied again repeatedly.
   result = ap
+  ap.chain.clique.fakeDiff = true
 
-  for headers in ap.batch:
-    let bodies = BlockBody().repeat(headers.len)
-    doAssert ap.chain.persistBlocks(headers,bodies) == ValidationResult.OK
+  var reChainOk = false
+  for n in 0 ..< ap.batch.len:
+    block forLoop:
 
-    if ap.debug:
-      let
-        number = headers[^1].blockNumber
-        header = ap.getBlockHeader(number)
-      ap.say "*** snapshot argument: #", number
-      ap.sayHeaderChain(8)
-      when false: # all addresses are typically pp-mappable
-        ap.say "          address map: ", toSeq(ap.names.pairs)
+      var headers = ap.batch[n]
+      while true:
+        if headers.len == 0:
+          break forLoop # continue with for loop
+
+        ap.say &"*** transaction ({n}) list: [",
+          headers.mapIt(&"#{it.blockNumber}").join(", "), "]"
+
+        # Realign rest of transaction to existing block chain
+        if reChainOk:
+          var parent = ap.chain.clique.db.getCanonicalHead
+          for i in 0 ..< headers.len:
+            headers[i].parentHash = parent.hash
+            headers[i].blockNumber = parent.blockNumber + 1
+            parent = headers[i]
+
+        # Perform transaction into the block chain
+        let bodies = BlockBody().repeat(headers.len)
+        if ap.chain.persistBlocks(headers,bodies) == ValidationResult.OK:
+          break
+        if stopFaultyHeader:
+          return
+
+        # If the offending block is the last one of the last transaction,
+        # then there is nothing to do.
+        let culprit =  headers.filterIt(ap.failed[0] == it.hash)
+        doAssert culprit.len == 1
+        let number = culprit[0].blockNumber
+        if n + 1 == ap.batch.len and number == headers[^1].blockNumber:
+          return
+
+        # Remove offending block and try again for the rest
+        ap.say "*** persistBlocks failed, omitting block #", culprit
+        let prevLen = headers.len
+        headers = headers.filterIt(number != it.blockNumber)
+        doAssert headers.len < prevLen
+        reChainOk = true
+
+      if ap.debug:
+        ap.say "*** snapshot argument: #", headers[^1].blockNumber
+        ap.sayHeaderChain(8)
+        when false: # all addresses are typically pp-mappable
+          ap.say "          address map: ", toSeq(ap.names.pairs)
                                             .mapIt(&"@{it[1]}:{it[0]}")
                                             .sorted
                                             .join("\n" & ' '.repeat(23))
+      if postProcessOk:
+        discard ap.clique.cliqueSnapshot(headers[^1])
 
 # ------------------------------------------------------------------------------
 # End
