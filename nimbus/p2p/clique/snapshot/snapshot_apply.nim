@@ -45,21 +45,29 @@ proc say(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
 # Private functions
 # ------------------------------------------------------------------------------
 
-iterator pairWalk(first, last: int; offTop: Positive): (int,int) {.gcsafe.} =
+template pairWalkIj(first, last: int; offTop: Positive; code: untyped) =
   if first <= last:
     for n in first .. last - offTop:
-      yield (n,n+1)
+      let
+        i {.inject.} = n
+        j {.inject.} = n + 1
+      code
   else:
     for n in first.countdown(last + offTop):
-      yield (n,n-1)
+      let
+        i {.inject.} = n
+        j {.inject.} = n - 1
+      code
 
-iterator inxWalk(first, last: int): int {.gcsafe.} =
+template doWalkIt(first, last: int; code: untyped) =
   if first <= last:
     for n in first .. last:
-      yield n
+      let it {.inject.} = n
+      code
   else:
     for n in first.countdown(last):
-      yield n
+      let it {.inject.} = n
+      code
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -78,7 +86,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
   if headers[first].blockNumber != s.blockNumber + 1:
     return err((errInvalidVotingChain,""))
   # clique/snapshot.go(191): for i := 0; i < len(headers)-1; i++ {
-  for (i,j) in first.pairWalk(last, 1):
+  first.pairWalkIj(last, 1):
     if headers[j].blockNumber != headers[i].blockNumber+1:
       return err((errInvalidVotingChain,""))
 
@@ -90,9 +98,10 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
     logged = start
 
   # clique/snapshot.go(206): for i, header := range headers [..]
-  for headersIndex in first.inxWalk(last):
+  first.doWalkIt(last):
     let
       # headersIndex => also used for logging at the end of this loop
+      headersIndex = it
       header = headers[headersIndex]
       number = header.blockNumber
 
