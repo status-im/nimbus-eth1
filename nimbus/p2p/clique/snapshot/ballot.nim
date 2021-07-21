@@ -99,6 +99,10 @@ proc authSigners*(t: var Ballot): seq[EthAddress] =
   ## Sorted ascending list of authorised signer addresses
   toSeq(t.authSig.keys).sorted(EthAscending)
 
+proc authSignersLen*(t: var Ballot): int =
+  ## Returns the number of currently known authorised signers.
+  t.authSig.len
+
 proc isAuthSignersListShrunk*(t: var Ballot): bool =
   ## Check whether the authorised signers list was shrunk recently after
   ## appying `addVote()`

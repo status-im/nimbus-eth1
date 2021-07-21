@@ -119,6 +119,9 @@ proc start(nimbus: NimbusNode) =
     nimbus.ethNode.addCapability les
 
   nimbus.ethNode.chain = newChain(chainDB)
+  if conf.verifyFromOk:
+    nimbus.ethNode.chain.extraValidation = 0 < conf.verifyFrom
+    nimbus.ethNode.chain.verifyFrom = conf.verifyFrom
 
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:

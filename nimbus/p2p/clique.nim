@@ -128,6 +128,11 @@ proc cliqueSigners*(c: Clique): seq[EthAddress] {.inline.} =
   ## function is invoked.
   c.snapshot.ballot.authSigners
 
+proc cliqueSignersLen*(c: Clique): int {.inline.} =
+  ## Get the number of authorized signers for the current state of the
+  ## `Clique` descriptor. The result is equivalent to `c.cliqueSigners.len`.
+  c.snapshot.ballot.authSignersLen
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

@@ -63,7 +63,9 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     if validationResult != ValidationResult.OK:
       return validationResult
 
-    if c.extraValidation:
+    if c.extraValidation and c.verifyFrom <= header.blockNumber:
+      if c.verifyFrom == header.blockNumber:
+        echo "+++ persistBlocksImpl start verifying at #", header.blockNumber
       if c.db.config.poaEngine:
         var parent = if 0 < i: @[headers[i-1]] else: @[]
         let rc = c.clique.cliqueVerify(header,parent)
@@ -74,6 +76,7 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
           debug "PoA header verification failed",
             blockNumber = header.blockNumber,
             msg = $rc.error
+          echo "+++ persistBlocksImpl #",header.blockNumber," error=",$rc.error
           return ValidationResult.Error
       else:
         let res = c.db.validateHeaderAndKinship(

@@ -46,6 +46,10 @@ type
       ## Trigger extra validation, currently within `persistBlocks()`
       ## function only.
 
+    verifyFrom: BlockNumber ##\
+      ## First block to when `extraValidation` will be applied (only
+      ## effective if `extraValidation` is true.)
+
     cacheByEpoch: EpochHashCache ##\
       ## Objects cache to speed up hash lookup in validation functions.
 
@@ -210,14 +214,24 @@ proc forkIds*(c: Chain): auto {.inline.} =
   ## Getter
   c.forkIds
 
+proc verifyFrom*(c: Chain): auto {.inline.} =
+  ## Getter
+  c.verifyFrom
+
 # ------------------------------------------------------------------------------
 # Public `Chain` setters
 # ------------------------------------------------------------------------------
 
 proc `extraValidation=`*(c: Chain; extraValidation: bool) {.inline.} =
-  ## Setter. If set `true`, the argument `extraValidation` enables extra
-  ## block chain validation.
+  ## Setter. If set `true`, the assignment value `extraValidation` enables
+  ## extra block chain validation.
   c.extraValidation = extraValidation
+
+proc `verifyFrom=`*(c: Chain; verifyFrom: uint64) {.inline.} =
+  ## Setter. The  assignment value `verifyFrom` defines the first block where
+  ## validation should start if the `Clique` field `extraValidation` was set
+  ## `true`.
+  c.verifyFrom = verifyFrom.u256
 
 # ------------------------------------------------------------------------------
 # End

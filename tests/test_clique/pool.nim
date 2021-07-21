@@ -10,7 +10,7 @@
 
 import
   std/[random, sequtils, strformat, strutils, tables, times],
-  ../../nimbus/[config, chain_config, constants, genesis, utils],
+  ../../nimbus/[config, chain_config, constants, genesis],
   ../../nimbus/db/db_chain,
   ../../nimbus/p2p/[chain,
                     clique,
@@ -173,7 +173,7 @@ proc ppBlockHeader(ap: TesterPool; v: BlockHeader; delim: string): string =
   let sep = if 0 < delim.len: delim else: ";"
   &"(blockNumber=#{v.blockNumber.truncate(uint64)}" &
     &"{sep}parentHash={v.parentHash}" &
-    &"{sep}selfHash={v.hash}" &
+    &"{sep}selfHash={v.blockHash}" &
     &"{sep}stateRoot={v.stateRoot}" &
     &"{sep}coinbase={ap.ppAddress(v.coinbase)}" &
     &"{sep}nonce={ap.ppNonce(v.nonce)}" &
@@ -266,9 +266,13 @@ proc debug*(ap: TesterPool): auto {.inline.} =
   ## Getter
   ap.clique.cfg.debug
 
-proc cliqueSigners*(ap: TesterPool; lastOk = false): auto {.inline.} =
+proc cliqueSigners*(ap: TesterPool): auto {.inline.} =
   ## Getter
   ap.clique.cliqueSigners
+
+proc cliqueSignersLen*(ap: TesterPool): auto {.inline.} =
+  ## Getter
+  ap.clique.cliqueSignersLen
 
 proc snapshot*(ap: TesterPool): auto {.inline.} =
   ## Getter
@@ -285,6 +289,10 @@ proc failed*(ap: TesterPool): CliqueFailed {.inline.} =
 proc `debug=`*(ap: TesterPool; debug: bool) {.inline,} =
   ## Set debugging mode on/off
   ap.clique.cfg.debug = debug
+
+proc `verifyFrom=`*(ap: TesterPool; verifyFrom: uint64) {.inline.} =
+  ## Setter, block number where `Clique` should start
+  ap.chain.verifyFrom = verifyFrom
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -371,7 +379,7 @@ proc appendVoter*(ap: TesterPool;
                  ap.batch[^1][^1]
 
   var header = BlockHeader(
-    parentHash:  parent.hash,
+    parentHash:  parent.blockHash,
     ommersHash:  EMPTY_UNCLE_HASH,
     stateRoot:   parent.stateRoot,
     timestamp:   parent.timestamp + initDuration(seconds = 100),
@@ -441,7 +449,7 @@ proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
         if reChainOk:
           var parent = ap.chain.clique.db.getCanonicalHead
           for i in 0 ..< headers.len:
-            headers[i].parentHash = parent.hash
+            headers[i].parentHash = parent.blockHash
             headers[i].blockNumber = parent.blockNumber + 1
             parent = headers[i]
 
@@ -454,7 +462,7 @@ proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
 
         # If the offending block is the last one of the last transaction,
         # then there is nothing to do.
-        let culprit =  headers.filterIt(ap.failed[0] == it.hash)
+        let culprit =  headers.filterIt(ap.failed[0] == it.blockHash)
         doAssert culprit.len == 1
         let number = culprit[0].blockNumber
         if n + 1 == ap.batch.len and number == headers[^1].blockNumber:
