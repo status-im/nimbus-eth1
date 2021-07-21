@@ -78,6 +78,10 @@ type
       ## votes.Suggested 30000 for the testnet to remain analogous to the
       ## mainnet ethash epoch.
 
+    logInterval: Duration ##\
+      ## Time interval after which the `snapshotApply()` function main loop
+      ## produces logging entries.
+
     debug*: bool ##\
       ## Debug mode flag
 
@@ -97,6 +101,7 @@ proc newCliqueCfg*(db: BaseChainDB): CliqueCfg =
     period:      BLOCK_PERIOD,
     ckpInterval: CHECKPOINT_INTERVAL,
     roThreshold: FULL_IMMUTABILITY_THRESHOLD,
+    logInterval: SNAPS_LOG_INTERVAL_MICSECS,
     signatures:  initEcRecover(),
     prng:        initRand(prngSeed),
     prettyPrint: PrettyPrinters(
@@ -138,6 +143,11 @@ proc `roThreshold=`*(cfg: CliqueCfg; numBlocks: SomeInteger) {.inline.} =
   cfg.roThreshold = if 0 < numBlocks: numBlocks
                     else: FULL_IMMUTABILITY_THRESHOLD
 
+proc `logInterval=`*(cfg: CliqueCfg; duration: Duration)  {.inline.} =
+  ## Setter
+  cfg.logInterval = if duration != Duration(): duration
+                    else: SNAPS_LOG_INTERVAL_MICSECS
+
 # ------------------------------------------------------------------------------
 # Public PRNG, may be overloaded
 # ------------------------------------------------------------------------------
@@ -168,6 +178,10 @@ proc ckpInterval*(cfg: CliqueCfg): auto {.inline.} =
 proc roThreshold*(cfg: CliqueCfg): auto {.inline.} =
   ## Getter
   cfg.roThreshold
+
+proc logInterval*(cfg: CliqueCfg): auto {.inline.} =
+  ## Getter
+  cfg.logInterval
 
 # ------------------------------------------------------------------------------
 # Debugging

@@ -93,6 +93,15 @@ const
     ## the cutoff threshold and by clique as the snapshot trust limit.
     90000
 
+  # Other
+  SNAPS_LOG_INTERVAL_MICSECS* = ##\
+    ##  Time interval after which the `snapshotApply()` function main loop
+    ## produces logging entries. The original value from the Go reference
+    ## implementation has 8 seconds (which seems a bit long.) For the first
+    ## 300k blocks in the Goerli chain, typical execution time in tests was
+    ## mostly below 300 micro secs.
+    initDuration(microSeconds = 200)
+
 # ------------------------------------------------------------------------------
 # Error tokens
 # ------------------------------------------------------------------------------

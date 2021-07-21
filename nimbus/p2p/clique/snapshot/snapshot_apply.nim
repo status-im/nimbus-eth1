@@ -93,7 +93,6 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
   # Iterate through the headers and create a new snapshot
   let
     start = getTime()
-    logInterval = initDuration(seconds = 8)
   var
     logged = start
 
@@ -172,15 +171,15 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
     s.say "applySnapshot state=", s.pp(25)
 
     # If we're taking too much time (ecrecover), notify the user once a while
-    if logInterval < logged - getTime():
+    if s.cfg.logInterval < getTime() - logged:
       info "Reconstructing voting history",
         processed = headersIndex,
         total = headers.len,
-        elapsed = start - getTime()
+        elapsed = getTime() - start
       logged = getTime()
 
-  let sinceStart = start - getTime()
-  if logInterval < sinceStart:
+  let sinceStart = getTime() - start
+  if s.cfg.logInterval < sinceStart:
     info "Reconstructed voting history",
       processed = headers.len,
       elapsed = sinceStart
