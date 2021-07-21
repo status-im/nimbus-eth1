@@ -10,7 +10,7 @@
 import
   std/[os, parseopt, json],
   eth/[p2p, trie/db], ../../../nimbus/db/db_chain,
-  eth/p2p/rlpx_protocols/eth_protocol,
+  ../../../nimbus/sync/protocol_eth65,
   ../../../nimbus/[genesis, config, conf_utils],
   ../../../nimbus/graphql/ethapi, ../../../tests/test_helpers,
   graphql, ../sim_utils

@@ -11,7 +11,7 @@ import
   strutils, times, options, tables,
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
   eth/[common, keys, rlp, p2p], nimcrypto,
-  eth/p2p/rlpx_protocols/eth_protocol,
+  ../sync/protocol_eth65,
   ../transaction, ../config, ../vm_state, ../constants,
   ../utils, ../db/[db_chain, state_db],
   rpc_types, rpc_utils,
@@ -38,7 +38,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     result = getAccountDb(chain.headerFromTag(tag))
 
   server.rpc("eth_protocolVersion") do() -> string:
-    result = $eth_protocol.protocolVersion
+    result = $protocol_eth65.protocolVersion
 
   server.rpc("eth_syncing") do() -> JsonNode:
     ## Returns SyncObject or false when not syncing.

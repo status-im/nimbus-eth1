@@ -9,12 +9,12 @@ import
   asynctest, json, strformat, strutils, options, tables, os,
   nimcrypto, stew/byteutils, times,
   json_rpc/[rpcserver, rpcclient], eth/common as eth_common,
-  eth/[rlp, keys], eth/trie/db, eth/p2p/rlpx_protocols/eth_protocol,
-  eth/p2p/private/p2p_types,
+  eth/[rlp, keys, trie/db, p2p/private/p2p_types],
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
   ../nimbus/[constants, vm_state, config, genesis, utils, transaction],
   ../nimbus/db/[accounts_cache, db_chain, storage_types, state_db],
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],
+  ../nimbus/sync/protocol_eth65,
   ../nimbus/utils/difficulty,
   ./rpcclient/test_hexstrings, ./test_helpers, ./macro_assembler
 
@@ -193,7 +193,7 @@ proc rpcMain*() =
 
     test "eth_protocolVersion":
       let res = await client.eth_protocolVersion()
-      check res == $eth_protocol.protocolVersion
+      check res == $protocol_eth65.protocolVersion
 
     test "eth_syncing":
       let res = await client.eth_syncing()

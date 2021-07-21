@@ -15,11 +15,13 @@ import
   eth/keys, db/[storage_types, db_chain, select_backend],
   eth/common as eth_common, eth/p2p as eth_p2p,
   chronos, json_rpc/rpcserver, chronicles,
-  eth/p2p/rlpx_protocols/[eth_protocol, les_protocol],
+  eth/p2p/rlpx_protocols/les_protocol,
   eth/p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
+  ./sync/protocol_eth65,
   config, genesis, rpc/[common, p2p, debug, key_storage], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
-  graphql/ethapi, utils, ./conf_utils
+  graphql/ethapi,
+  "."/[utils, conf_utils]
 
 ## TODO:
 ## * No IPv6 support

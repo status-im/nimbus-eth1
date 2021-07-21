@@ -11,8 +11,8 @@ import
   std/[os, json],
   stew/byteutils, unittest2,
   eth/[p2p, common, trie/db, rlp, trie],
-  eth/p2p/rlpx_protocols/eth_protocol,
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
+  ../nimbus/sync/protocol_eth65,
   ../nimbus/[genesis, config, chain_config], ../nimbus/db/[db_chain, state_db],
   ../nimbus/p2p/chain, ../premix/parser, ./test_helpers
 
