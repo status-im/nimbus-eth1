@@ -38,6 +38,12 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     result = getAccountDb(chain.headerFromTag(tag))
 
   server.rpc("eth_protocolVersion") do() -> string:
+    # Old Ethereum wiki documents this as returning a decimal string.
+    # Infura documents this as returning 0x-prefixed hex string.
+    # Geth 1.10.0 has removed this call "as it makes no sense".
+    # - https://eth.wiki/json-rpc/API#eth_protocolversion
+    # - https://infura.io/docs/ethereum/json-rpc/eth-protocolVersion
+    # - https://blog.ethereum.org/2021/03/03/geth-v1-10-0/#compatibility
     result = $protocol_eth65.protocolVersion
 
   server.rpc("eth_syncing") do() -> JsonNode:
