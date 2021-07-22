@@ -32,7 +32,7 @@ import
   ./clique_desc,
   ./clique_helpers,
   ./clique_snapshot,
-  ./snapshot/[ballot, snapshot_desc, snapshot_misc],
+  ./snapshot/[ballot, snapshot_desc],
   chronicles,
   eth/common,
   stew/results
@@ -67,6 +67,34 @@ proc verifyForkHashes(c: Clique; header: BlockHeader): CliqueOkResult
   err((errCliqueGasRepriceFork,
        &"Homestead gas reprice fork: have {eip150}, want {hash}"))
 
+
+proc signersThreshold*(s: Snapshot): int {.inline.} =
+  ## Minimum number of authorised signers needed.
+  s.ballot.authSignersThreshold
+
+
+proc recentBlockNumber*(s: Snapshot;
+                        a: EthAddress): Result[BlockNumber,void] {.inline.} =
+  ## Return `BlockNumber` for `address` argument (if any)
+  for (number,recent) in s.recents.pairs:
+    if recent == a:
+      return ok(number)
+  return err()
+
+
+proc isSigner*(s: Snapshot; address: EthAddress): bool {.inline.} =
+  ## Checks whether argukment ``address` is in signers list
+  s.ballot.isAuthSigner(address)
+
+
+# clique/snapshot.go(319): func (s *Snapshot) inturn(number [..]
+proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
+  ## Returns `true` if a signer at a given block height is in-turn or not.
+  let ascSignersList = s.ballot.authSigners
+  for offset in 0 ..< ascSignersList.len:
+    if ascSignersList[offset] == signer:
+      return (number mod ascSignersList.len.u256) == offset.u256
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -97,7 +125,7 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
   if not snapshot.isSigner(signer.value):
     return err((errUnauthorizedSigner,""))
 
-  let seen = snapshot.recent(signer.value)
+  let seen = snapshot.recentBlockNumber(signer.value)
   if seen.isOk:
     # Signer is among recents, only fail if the current block does not
     # shift it out
@@ -169,7 +197,10 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
 
   # If the block is a checkpoint block, verify the signer list
   if (header.blockNumber mod c.cfg.epoch.u256) == 0:
-    if c.snapshot.ballot.authSigners != header.extraData.extraDataAddresses:
+    var addrList = header.extraData.extraDataAddresses
+    # not using `authSigners()` here as it is too slow
+    if c.snapshot.ballot.authSignersLen != addrList.len or
+       not c.snapshot.ballot.isAuthSigner(addrList):
       return err((errMismatchingCheckpointSigners,""))
 
   # All basic checks passed, verify the seal and return

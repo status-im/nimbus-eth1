@@ -120,6 +120,16 @@ proc authSignersThreshold*(t: var Ballot): int =
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc isAuthSigner*(t: var Ballot; addresses: var seq[EthAddress]): bool =
+  ## Check whether all `addresses` entries are authorised signers.
+  ##
+  ## Using this function should be preferable over `authSigners()` which has
+  ## complexity `O(log n)` while this function runs with `O(n)`.
+  for a in addresses:
+    if a notin t.authSig:
+      return false
+  true
+
 proc isAuthSigner*(t: var Ballot; address: EthAddress): bool =
   ## Check whether `address` is an authorised signer
   address in t.authSig
