@@ -22,7 +22,6 @@ import
   std/[sequtils, strformat, strutils],
   ../../constants,
   ../../db/db_chain,
-  ../../utils,
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
@@ -72,7 +71,13 @@ proc say(d: LocalSnaps; v: varargs[string,`$`]) {.inline.} =
 
 
 proc pp(q: openArray[BlockHeader]; n: int): string {.inline.} =
-  "[" & toSeq(q[0 ..< n]).mapIt("#" & $it.blockNumber).join(", ") & "]"
+  result = "["
+  if 5 < n:
+    result &= toSeq(q[0 .. 2]).mapIt("#" & $it.blockNumber).join(", ")
+    result &= " .." & $n &  ".. #" & $q[n-1].blockNumber
+  else:
+    result &= toSeq(q[0 ..< n]).mapIt("#" & $it.blockNumber).join(", ")
+  result &= "]"
 
 proc pp(b: BlockNumber, q: openArray[BlockHeader]; n: int): string {.inline.} =
   "#" & $b & " + " & q.pp(n)
@@ -151,7 +156,9 @@ proc findSnapshot(d: var LocalSnaps): bool
     parentsLen.dec
 
   while true:
-    d.say "findSnapshot ", header.pp(d.parents, parentsLen)
+    #d.say "findSnapshot ", header.pp(d.parents, parentsLen),
+    #  " trail=", d.trail.chain.pp
+
     let number = header.blockNumber
 
     # Check whether the snapshot was recently visited and cahed
@@ -202,7 +209,7 @@ proc findSnapshot(d: var LocalSnaps): bool
       parentsLen.dec
       header = d.parents[parentsLen]
       # clique/clique.go(416): if header.Hash() != hash [..]
-      if header.hash != hash:
+      if header.blockHash != hash:
         d.trail.error = (errUnknownAncestor,"")
         return false
 
@@ -228,6 +235,7 @@ proc applyTrail(d: var LocalSnaps): CliqueOkResult
         d.trail.chain, d.subChn.top-1, d.subChn.first)
       if rc.isErr:
         return err(rc.error)
+      d.say "applyTrail snaps=#", d.trail.snaps.blockNumber
 
     # If we've generated a new checkpoint snapshot, save to disk
     if d.isCheckPoint(d.trail.snaps.blockNumber):
@@ -313,7 +321,7 @@ proc cliqueSnapshotSeq*(c: Clique; header: Blockheader;
   ## If this function is successful, the compiled `Snapshot` will also be
   ## stored in the `Clique` descriptor which can be retrieved later
   ## via `c.snapshot`.
-  let rc1 = c.recents.getLruSnaps(header.hash)
+  let rc1 = c.recents.getLruSnaps(header.blockHash)
   if rc1.isOk:
     c.snapshot = rc1.value
     return ok(rc1.value)
@@ -326,7 +334,7 @@ proc cliqueSnapshotSeq*(c: Clique; header: Blockheader;
     parents: parents,
     start:   LocalPivot(
       header:  header,
-      hash:    header.hash))
+      hash:    header.blockHash))
 
   let rc2 = snaps.updateSnapshot
   if rc2.isOk:

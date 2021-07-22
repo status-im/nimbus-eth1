@@ -21,7 +21,6 @@
 import
   std/[algorithm, sequtils, strformat, strutils, tables],
   ../../../db/storage_types,
-  ../../../utils,
   ../clique_cfg,
   ../clique_defs,
   ../clique_helpers,
@@ -159,7 +158,7 @@ proc newSnapshot*(cfg: CliqueCfg; header: BlockHeader): Snapshot =
   ## `extra data` field of the header.
   new result
   let signers = header.extraData.extraDataAddresses
-  result.initSnapshot(cfg, header.blockNumber, header.hash, signers)
+  result.initSnapshot(cfg, header.blockNumber, header.blockHash, signers)
 
 # ------------------------------------------------------------------------------
 # Public getters

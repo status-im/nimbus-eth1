@@ -210,7 +210,7 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
   # Check for duplicates
   var uncleSet = initHashSet[Hash256]()
   for uncle in uncles:
-    let uncleHash = uncle.hash
+    let uncleHash = uncle.blockHash
     if uncleHash in uncleSet:
       return err("Block contains duplicate uncles")
     else:
@@ -219,10 +219,10 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
   let recentAncestorHashes = chainDB.getAncestorsHashes(
                                MAX_UNCLE_DEPTH + 1, header)
   let recentUncleHashes = chainDB.getUncleHashes(recentAncestorHashes)
-  let blockHash = header.hash
+  let blockHash = header.blockHash
 
   for uncle in uncles:
-    let uncleHash = uncle.hash
+    let uncleHash = uncle.blockHash
 
     if uncleHash == blockHash:
       return err("Uncle has same hash as block")

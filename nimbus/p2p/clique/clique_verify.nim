@@ -59,7 +59,7 @@ proc verifyForkHashes(c: Clique; header: BlockHeader): CliqueOkResult
   # If the homestead reprice hash is set, validate it
   let
     eip150 = c.db.config.eip150Hash
-    hash = header.hash
+    hash = header.blockHash
 
   if eip150 == hash:
     return ok()
@@ -137,7 +137,7 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
     return err((errUnknownAncestor,""))
 
   if parent.blockNumber != header.blockNumber-1 or
-     parent.hash != header.parentHash:
+     parent.blockHash != header.parentHash:
     return err((errUnknownAncestor,""))
 
   # clique/clique.go(330): if parent.Time+c.config.Period > header.Time {
@@ -253,20 +253,20 @@ proc cliqueVerifyImpl*(c: Clique; header: BlockHeader;
     # Check header fields independent of parent blocks
     let rc = c.verifyHeaderFields(header)
     if rc.isErr:
-      c.failed = (header.hash, rc.error)
+      c.failed = (header.blockHash, rc.error)
       return err(rc.error)
 
   block:
     # If all checks passed, validate any special fields for hard forks
     let rc = c.verifyForkHashes(header)
     if rc.isErr:
-      c.failed = (header.hash, rc.error)
+      c.failed = (header.blockHash, rc.error)
       return err(rc.error)
 
   # All basic checks passed, verify cascading fields
   result = c.verifyCascadingFields(header, parents)
   if result.isErr:
-    c.failed = (header.hash, result.error)
+    c.failed = (header.blockHash, result.error)
 
 # ------------------------------------------------------------------------------
 # Public function
