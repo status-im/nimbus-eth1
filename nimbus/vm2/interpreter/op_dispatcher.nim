@@ -36,7 +36,7 @@ export
 # ------------------------------------------------------------------------------
 
 template handleStopDirective(k: var Vm2Ctx) =
-  trace "op: Stop"
+  #trace "op: Stop"
   if not k.cpt.code.atEnd() and k.cpt.tracingEnabled:
     # we only trace `REAL STOP` and ignore `FAKE STOP`
     k.cpt.opIndex = k.cpt.traceOpCodeStarted(Stop)

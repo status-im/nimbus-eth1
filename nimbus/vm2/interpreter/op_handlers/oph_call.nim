@@ -212,9 +212,9 @@ const
 
     let senderBalance = k.cpt.getBalance(p.sender)
     if senderBalance < p.value:
-      debug "Insufficient funds",
-        available = senderBalance,
-        needed = k.cpt.msg.value
+      #debug "Insufficient funds",
+      #  available = senderBalance,
+      #  needed = k.cpt.msg.value
       k.cpt.gasMeter.returnGas(childGasLimit)
       return
 
@@ -278,9 +278,9 @@ const
 
     let senderBalance = k.cpt.getBalance(p.sender)
     if senderBalance < p.value:
-      debug "Insufficient funds",
-        available = senderBalance,
-        needed = k.cpt.msg.value
+      #debug "Insufficient funds",
+      #  available = senderBalance,
+      #  needed = k.cpt.msg.value
       k.cpt.gasMeter.returnGas(childGasLimit)
       return
 

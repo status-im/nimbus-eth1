@@ -130,7 +130,7 @@ proc ecRecover*(computation: Computation) =
 
   computation.output.setLen(32)
   computation.output[12..31] = pubkey[].toCanonicalAddress()
-  trace "ECRecover precompile", derivedKey = pubkey[].toCanonicalAddress()
+  #trace "ECRecover precompile", derivedKey = pubkey[].toCanonicalAddress()
 
 proc sha256*(computation: Computation) =
   let
@@ -139,7 +139,7 @@ proc sha256*(computation: Computation) =
 
   computation.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
   computation.output = @(nimcrypto.sha_256.digest(computation.msg.data).data)
-  trace "SHA256 precompile", output = computation.output.toHex
+  #trace "SHA256 precompile", output = computation.output.toHex
 
 proc ripemd160*(computation: Computation) =
   let
@@ -149,7 +149,7 @@ proc ripemd160*(computation: Computation) =
   computation.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   computation.output.setLen(32)
   computation.output[12..31] = @(nimcrypto.ripemd160.digest(computation.msg.data).data)
-  trace "RIPEMD160 precompile", output = computation.output.toHex
+  #trace "RIPEMD160 precompile", output = computation.output.toHex
 
 proc identity*(computation: Computation) =
   let
@@ -158,7 +158,7 @@ proc identity*(computation: Computation) =
 
   computation.gasMeter.consumeGas(gasFee, reason="Identity Precompile")
   computation.output = computation.msg.data
-  trace "Identity precompile", output = computation.output.toHex
+  #trace "Identity precompile", output = computation.output.toHex
 
 proc modExpInternal(computation: Computation, baseLen, expLen, modLen: int, T: type StUint) =
   template data: untyped {.dirty.} =
@@ -693,7 +693,7 @@ proc execPrecompiles*(computation: Computation, fork: Fork): bool {.inline.} =
   if lb in PrecompileAddresses.low.byte .. maxPrecompileAddr.byte:
     result = true
     let precompile = PrecompileAddresses(lb)
-    trace "Call precompile", precompile = precompile, codeAddr = computation.msg.codeAddress
+    #trace "Call precompile", precompile = precompile, codeAddr = computation.msg.codeAddress
     try:
       case precompile
       of paEcRecover: ecRecover(computation)

@@ -267,7 +267,7 @@ proc opTableToCaseStmt(opTable: array[Op, NimNode], c: NimNode): NimNode =
     let branchStmt = block:
       if op == Stop:
         quote do:
-          trace "op: Stop"
+          #trace "op: Stop"
           if not `c`.code.atEnd() and `c`.tracingEnabled:
             # we only trace `REAL STOP` and ignore `FAKE STOP`
             `c`.opIndex = `c`.traceOpCodeStarted(`asOp`)
@@ -416,4 +416,4 @@ proc executeOpcodes(c: Computation) =
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
-    debug "executeOpcodes error", msg=c.error.info
+    #trace "executeOpcodes error", msg=c.error.info

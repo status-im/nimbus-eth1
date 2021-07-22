@@ -37,8 +37,8 @@ proc processTransactionImpl(tx: Transaction, sender: EthAddress,
                             vmState: BaseVMState, fork: Fork): GasInt
                               # wildcard exception, wrapped below
                               {.gcsafe, raises: [Exception].} =
-  trace "Sender", sender
-  trace "txHash", rlpHash = tx.rlpHash
+  #trace "Sender", sender
+  #trace "txHash", rlpHash = tx.rlpHash
 
   var tx = eip1559TxNormalization(tx)
   var priorityFee: GasInt

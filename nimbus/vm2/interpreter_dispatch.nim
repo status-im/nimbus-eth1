@@ -204,7 +204,7 @@ proc executeOpcodes*(c: Computation) =
 
   if c.isError() and c.continuation.isNil:
     if c.tracingEnabled: c.traceError()
-    debug "executeOpcodes error", msg=c.error.info
+    #trace "executeOpcodes error", msg=c.error.info
 
 
 proc execCallOrCreate*(cParam: Computation) =

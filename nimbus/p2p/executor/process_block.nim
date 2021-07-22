@@ -50,9 +50,9 @@ proc procBlkPreamble(vmState: BaseVMState; dbTx: DbTransaction;
         blockNumber = header.blockNumber
       return false
     else:
-      trace "Has transactions",
-        blockNumber = header.blockNumber,
-        blockHash = header.blockHash
+      #trace "Has transactions",
+      #  blockNumber = header.blockNumber,
+      #  blockHash = header.blockHash
       vmState.receipts = newSeq[Receipt](body.transactions.len)
       vmState.cumulativeGasUsed = 0
       for txIndex, tx in body.transactions:

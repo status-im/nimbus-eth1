@@ -827,7 +827,7 @@ template genCall(callName: untyped, opCode: Op): untyped =
     when opCode in {CallCode, Call}:
       let senderBalance = c.getBalance(sender)
       if senderBalance < value:
-        debug "Insufficient funds", available = senderBalance, needed = c.msg.value
+        #debug "Insufficient funds", available = senderBalance, needed = c.msg.value
         # return unused gas
         c.gasMeter.returnGas(childGasLimit)
         return
