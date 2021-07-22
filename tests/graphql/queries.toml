@@ -473,7 +473,7 @@ mutation {
 """
   result = """
 {
-  "protocolVersion":63
+  "protocolVersion":65
 }
 """
 
