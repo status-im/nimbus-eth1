@@ -19,7 +19,7 @@ import
 
 const
   goerliCapture = "test_clique" / "goerli51840.txt.gz"
-  groupReplayTransactions = 1
+  groupReplayTransactions = 7
 
 # ------------------------------------------------------------------------------
 # Helpers
