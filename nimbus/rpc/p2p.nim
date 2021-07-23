@@ -11,7 +11,6 @@ import
   strutils, times, options, tables,
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
   eth/[common, keys, rlp, p2p], nimcrypto,
-  ../sync/protocol_eth65,
   ../transaction, ../config, ../vm_state, ../constants,
   ../utils, ../db/[db_chain, state_db],
   rpc_types, rpc_utils,
@@ -37,14 +36,17 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
   proc accountDbFromTag(tag: string, readOnly = true): ReadOnlyStateDB =
     result = getAccountDb(chain.headerFromTag(tag))
 
-  server.rpc("eth_protocolVersion") do() -> string:
+  server.rpc("eth_protocolVersion") do() -> Option[string]:
     # Old Ethereum wiki documents this as returning a decimal string.
     # Infura documents this as returning 0x-prefixed hex string.
     # Geth 1.10.0 has removed this call "as it makes no sense".
     # - https://eth.wiki/json-rpc/API#eth_protocolversion
     # - https://infura.io/docs/ethereum/json-rpc/eth-protocolVersion
     # - https://blog.ethereum.org/2021/03/03/geth-v1-10-0/#compatibility
-    result = $protocol_eth65.protocolVersion
+    for n in node.capabilities:
+      if n.name == "eth":
+        return some($n.version)
+    return none(string)
 
   server.rpc("eth_syncing") do() -> JsonNode:
     ## Returns SyncObject or false when not syncing.
