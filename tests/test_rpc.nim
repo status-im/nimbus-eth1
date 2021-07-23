@@ -193,7 +193,12 @@ proc rpcMain*() =
 
     test "eth_protocolVersion":
       let res = await client.eth_protocolVersion()
-      check res == $protocol_eth65.protocolVersion
+      # Use a hard-coded number instead of the same expression as the client,
+      # so that bugs introduced via that expression are detected.  Using the
+      # same expression as the client can hide issues when the value is wrong
+      # in both places.  When the expected value genuinely changes, it'll be
+      # obvious.  Just change this number.
+      check res == "65"
 
     test "eth_syncing":
       let res = await client.eth_syncing()
