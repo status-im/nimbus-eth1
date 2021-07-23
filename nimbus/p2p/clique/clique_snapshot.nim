@@ -79,7 +79,7 @@ proc say(d: var LocalSnaps; v: varargs[string,`$`]) {.inline.} =
 proc sayBegin(d: var LocalSnaps; v: varargs[string,`$`]) {.inline.} =
   when traceCliqueMsg:
     d.tStart = getTime()
-  d.c.sayCliqueClear
+  d.c.sayCliqueFlush
   d.say "begin ", v.toSeq.join
 
 proc sayForce(d: var LocalSnaps; v: varargs[string,`$`]) {.inline.} =

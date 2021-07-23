@@ -38,8 +38,17 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc say(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
-  # s.cfg.say v
   discard
+  # uncomment body to enable
+  #s.saySnaps v
+
+proc sayBegin(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
+  s.say "begin ", v.toSeq.join
+
+proc sayForce(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
+  s.saySnapsFlush
+  s.say v
+
 
 proc pp(a: openArray[BlockHeader]; first, last: int): string {.inline.} =
   result = "["
@@ -95,7 +104,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 
-  s.say "applySnapshot #", s.blockNumber, " + ", headers.pp(first, last)
+  s.sayBegin "applySnapshot #", s.blockNumber, " + ", headers.pp(first, last)
 
   # Sanity check that the headers can be applied
   if headers[first].blockNumber != s.blockNumber + 1:
@@ -203,7 +212,9 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
   doAssert headers[last].blockNumber == s.blockNumber+(1+(last-first).abs).u256
   s.blockNumber = headers[last].blockNumber
   s.blockHash = headers[last].blockHash
-  result = ok()
+
+  s.say "applySnapshot ok"
+  ok()
 
 
 proc snapshotApply*(s: Snapshot; headers: var seq[BlockHeader]): CliqueOkResult

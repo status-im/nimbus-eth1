@@ -29,6 +29,16 @@ import
   eth/[common, rlp, trie/db],
   stew/results
 
+const
+  traceSnapshotMsg* = ##\
+    ## Set `true` for enabling messages => `clique_cfg.say()`. Using the
+    ## `-d:debug` compiler flag enabled debugging code which must be enabled
+    ## with setting `clique_cfg.CliqueCfg.debug` to `true`.
+    defined(debug)
+
+when traceSnapshotMsg:
+  import std/[times]
+
 type
   SnapshotResult* = ##\
     ## Snapshot/error result type
@@ -49,6 +59,12 @@ type
                               ## voting at a given point in time.
     cfg: CliqueCfg            ## parameters to fine tune behavior
     data*: SnapshotData       ## real snapshot
+
+    # Debugging helpers ...
+    when traceSnapshotMsg:
+      tFlush: bool
+      tLog: Time
+      tCache: string
 
 {.push raises: [Defect].}
 
@@ -113,6 +129,43 @@ proc initSnapshot(s: Snapshot; cfg: CliqueCfg;
 proc getPrettyPrinters*(s: Snapshot): var PrettyPrinters =
   ## Mixin for pretty printers
   s.cfg.prettyPrint
+
+
+proc saySnaps*(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
+  ## Echo replacement referring to `clique_cfg.say()`. Printed texts are
+  ## prefixed by the elapsed time (in milli seconds) since the last invocation.
+  ## When elapsed time between invocations is smaller than a miilli second,
+  ## only the last invocation prints the test.
+  discard
+  when traceSnapshotMsg:
+    let
+      now = getTime()
+    if s.tLog == Time():
+      s.tLog = now
+    let
+      ela = (now - s.tLog).inMilliSeconds
+      msg = "(" & $ela & ") " & toSeq(v).join
+    s.tLog = now
+    if ela == 0:
+      s.tCache = msg
+    else:
+      if s.tCache != "":
+        s.cfg.say s.tCache
+        s.tCache = ""
+      s.cfg.say msg
+
+proc saySnapsFlush*(s: Snapshot) {.inline.} =
+  discard
+  when traceSnapshotMsg:
+    s.tFlush = true
+
+proc saySnapsClear*(s: Snapshot) {.inline.} =
+  discard
+  when traceSnapshotMsg:
+    s.tFlush = false
+    s.tLog = getTime()
+    s.tCache = ""
+
 
 proc pp*(s: Snapshot; h: var AddressHistory): string {.gcsafe.} =
   ppExceptionWrap:

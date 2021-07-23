@@ -155,7 +155,7 @@ proc runGoerliReplay(noisy = true; showElapsed = false,
               let addedPersistBlocks = pool.chain.persistBlocks(headers,bodies)
               check addedPersistBlocks == ValidationResult.Ok
               if addedPersistBlocks != ValidationResult.Ok: return
-            if showElapsed:
+            if showElapsed and startAtBlock.u256 <= last:
               let
                 elpd = getTime() - start
                 info = &"{elpd.ppSecs:>7} {pool.cliqueSignersLen} {elpd.ppRow}"
@@ -177,7 +177,7 @@ proc runGoerliReplay(noisy = true; showElapsed = false,
           let addedPersistBlocks = pool.chain.persistBlocks(headers,bodies)
           check addedPersistBlocks == ValidationResult.Ok
           if addedPersistBlocks != ValidationResult.Ok: return
-        if showElapsed:
+        if showElapsed and startAtBlock.u256 <= last:
           let
             elpsd = getTime() - start
             info = &"{elpsd.ppSecs:>7} {pool.cliqueSignersLen} {elpsd.ppRow}"
@@ -257,8 +257,8 @@ when isMainModule:
   #noisy.runCliqueSnapshot(true)
   #noisy.runGoerliBaybySteps(dir = ".", captureFile = captureFile)
   #noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
-  noisy.goerliReplay(startAtBlock = 31100u64)
-  # noisy.goerliReplay(startAtBlock = 193537u64) # , stopAfterBlock = 193729u64)
+  #noisy.goerliReplay(startAtBlock = 31100u64)
+  noisy.goerliReplay(startAtBlock = 194881u64) # , stopAfterBlock = 198912u64)
 
 # ------------------------------------------------------------------------------
 # End
