@@ -32,6 +32,9 @@ import
   stew/results,
   stint
 
+when traceCliqueMsg:
+  import std/[times]
+
 type
   # Internal sub-descriptor for `LocalSnapsDesc`
   LocalPivot = object
@@ -56,6 +59,9 @@ type
     subChn:  LocalSubChain     ## chain[] sub-range
     parents: seq[BlockHeader]  ## explicit parents
 
+    when traceCliqueMsg:
+      tStart: Time
+
 {.push raises: [Defect].}
 
 logScope:
@@ -65,9 +71,26 @@ logScope:
 # Private debugging functions, pretty printing
 # ------------------------------------------------------------------------------
 
-proc say(d: LocalSnaps; v: varargs[string,`$`]) {.inline.} =
-  # d.c.cfg.say v
+proc say(d: var LocalSnaps; v: varargs[string,`$`]) {.inline.} =
   discard
+  # uncomment body to enable
+  #d.c.sayClique v
+
+proc sayBegin(d: var LocalSnaps; v: varargs[string,`$`]) {.inline.} =
+  when traceCliqueMsg:
+    d.tStart = getTime()
+  d.c.sayCliqueClear
+  d.say "begin ", v.toSeq.join
+
+proc sayForce(d: var LocalSnaps; v: varargs[string,`$`]) {.inline.} =
+  d.c.sayCliqueFlush
+  d.say v
+
+
+proc elapsed(d: var LocalSnaps): string {.inline.} =
+  discard
+  when traceCliqueMsg:
+    $(getTime() - d.tStart).inMilliSeconds
 
 
 proc pp(q: openArray[BlockHeader]; n: int): string {.inline.} =
@@ -129,13 +152,17 @@ proc isEpoch(d: var LocalSnaps;
 proc isSnapshotPosition(d: var LocalSnaps;
                         number: BlockNumber): bool {.inline.} =
   # clique/clique.go(394): if number == 0 || (number%c.config.Epoch [..]
-  if number.isZero:
-    # At the genesis => snapshot the initial state.
-    return true
-  if d.isEpoch(number) and d.c.cfg.roThreshold < d.trail.chain.len:
-    # Wwe have piled up more headers than allowed to be re-orged (chain
-    # reinit from a freezer), regard checkpoint trusted and snapshot it.
-    return true
+  if d.isEpoch(number):
+    if number.isZero:
+      # At the genesis => snapshot the initial state.
+      return true
+    if not d.c.applySnapsMinBacklog:
+      return true
+    if true: raiseAssert "isSnapshotPosition should not arrive here"
+    if d.c.cfg.roThreshold < d.trail.chain.len:
+      # We have piled up more headers than allowed to be re-orged (chain
+      # reinit from a freezer), regard checkpoint trusted and snapshot it.
+      return true
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -257,7 +284,7 @@ proc updateSnapshot(d: var LocalSnaps): SnapshotResult
   ## This function was expects thet the LRU cache already has a slot allocated
   ## for the snapshot having run `getLruSnaps()`.
 
-  d.say "updateSnapshot ", d.start.header.blockNumber.pp(d.parents)
+  d.sayBegin "updateSnapshot ", d.start.header.blockNumber.pp(d.parents)
 
   # Search for previous snapshots
   if not d.findSnapshot:
@@ -301,6 +328,10 @@ proc updateSnapshot(d: var LocalSnaps): SnapshotResult
     # Someting went seriously wrong, most probably this function was called
     # before checking the LRU cache first -- lol
     return err((errSetLruSnaps, &"block #{d.trail.snaps.blockNumber}"))
+
+  if 1 < d.trail.chain.len:
+    d.sayForce "updateSnapshot ok #", d.trail.snaps.blockNumber,
+      " elapsed=", d.elapsed, " trail.len=", d.trail.chain.len
 
   ok(d.trail.snaps)
 

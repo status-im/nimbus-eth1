@@ -30,6 +30,12 @@ import
   stew/results
 
 const
+  traceCliqueMsg* = ##\
+    ## Set `true` for enabling messages => `clique_cfg.say()`. Using the
+    ## `-d:debug` compiler flag enabled debugging code which must be enabled
+    ## with setting `clique_cfg.CliqueCfg.debug` to `true`.
+    defined(debug)
+
   enableCliqueAsyncLock* = ##\
     ## Async locks are currently unused by `Clique` but were part of the Go
     ## reference implementation. The unused code fragment from the reference
@@ -37,8 +43,11 @@ const
     ## otherwise.
     defined(clique_async_lock)
 
+when traceCliqueMsg:
+  import std/[sequtils, strutils, times]
+
 when enableCliqueAsyncLock:
-  include chronos
+  import chronos
 
 type
   # clique/clique.go(142): type SignerFn func(signer [..]
@@ -81,9 +90,28 @@ type
     proposals: Proposals ##\
       ## Cu1rrent list of proposals we are pushing
 
+    applySnapsMinBacklog: bool ##\
+      ## Epoch is a restart and sync point. Eip-225 requires that the epoch
+      ## header contains the full list of currently authorised signers.
+      ##
+      ## If this flag is set `true`, then the `cliqueSnapshot()` function will
+      ## walk back to the `epoch` header with at least `cfg.roThreshold` blocks
+      ## apart from the current header. This is how it is done in the reference
+      ## implementation.
+      ##
+      ## Leving the flag `false`, the assumption is that all the checkponts
+      ## before have been vetted already regardless of the current branch. So
+      ## the nearest `epoch` header is used.
+
     when enableCliqueAsyncLock:
       asyncLock: AsyncLock ##\
         ## Protects the signer fields
+
+    # Debugging helpers ...
+    when traceCliqueMsg:
+      tFlush: bool
+      tLog: Time
+      tCache: string
 
 {.push raises: [Defect].}
 
@@ -120,6 +148,42 @@ proc `$`*(e: CliqueError): string =
   if e[1] != "":
     result &= ": " & e[1]
 
+proc sayClique*(c: Clique; v: varargs[string,`$`]) {.inline.} =
+  ## Echo replacement referring to `clique_cfg.say()`. Printed texts are
+  ## prefixed by the elapsed time (in milli seconds) since the last invocation.
+  ## When elapsed time between invocations is smaller than a miilli second,
+  ## only the last invocation prints the test.
+  discard
+  when traceCliqueMsg:
+    let
+      now = getTime()
+    if c.tLog == Time():
+      c.tLog = now
+    let
+      ela = (now - c.tLog).inMilliSeconds
+      msg = "(" & $ela & ") " & toSeq(v).join
+    c.tLog = now
+    if ela == 0 and not c.tFlush:
+      c.tCache = msg
+    else:
+      if c.tCache != "":
+        c.cfg.say c.tCache
+        c.tCache = ""
+      c.cfg.say msg
+      c.tFlush = false
+
+proc sayCliqueFlush*(c: Clique) {.inline.} =
+  discard
+  when traceSnapshotMsg:
+    c.tFlush = true
+
+proc sayCliqueClear*(c: Clique) {.inline.} =
+  discard
+  when traceSnapshotMsg:
+    c.tFlush = false
+    c.tLog = getTime()
+    c.tCache = ""
+
 # ------------------------------------------------------------------------------
 # Public getters
 # ------------------------------------------------------------------------------
@@ -148,6 +212,19 @@ proc db*(c: Clique): auto {.inline.} =
   ## Getter
   c.cfg.db
 
+proc applySnapsMinBacklog*(c: Clique): auto {.inline.} =
+  ## Getter.
+  ##
+  ## If this flag is set `true`, then the `cliqueSnapshot()` function will
+  ## walk back to the `epoch` header with at least `cfg.roThreshold` blocks
+  ## apart from the current header. This is how it is done in the reference
+  ## implementation.
+  ##
+  ## Setting the flag `false` which is the default, the assumption is that all
+  ## the checkponts before have been vetted already regardless of the current
+  ## branch. So the nearest `epoch` header is used.
+  c.applySnapsMinBacklog
+
 # ------------------------------------------------------------------------------
 # Public setters
 # ------------------------------------------------------------------------------
@@ -165,6 +242,10 @@ proc `snapshot=`*(c: Clique; snaps: Snapshot) =
 proc `failed=`*(c: Clique; failure: CliqueFailed) =
   ## Setter
   c.failed = failure
+
+proc applySnapsMinBacklog*(c: Clique; value: bool) {.inline.} =
+  ## Setter
+  c.applySnapsMinBacklog = value
 
 # ------------------------------------------------------------------------------
 # Public lock/unlock
