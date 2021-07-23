@@ -26,9 +26,19 @@ import
   ./clique_defs,
   ./snapshot/[lru_snaps, snapshot_desc],
   chronicles,
-  chronos,
   eth/[common, keys, rlp],
   stew/results
+
+const
+  enableCliqueAsyncLock* = ##\
+    ## Async locks are currently unused by `Clique` but were part of the Go
+    ## reference implementation. The unused code fragment from the reference
+    ## implementation are buried in the file `clique_unused.nim` and not used
+    ## otherwise.
+    defined(clique_async_lock)
+
+when enableCliqueAsyncLock:
+  include chronos
 
 type
   # clique/clique.go(142): type SignerFn func(signer [..]
@@ -71,8 +81,9 @@ type
     proposals: Proposals ##\
       ## Cu1rrent list of proposals we are pushing
 
-    asyncLock: AsyncLock ##\
-      ## Protects the signer fields
+    when enableCliqueAsyncLock:
+      asyncLock: AsyncLock ##\
+        ## Protects the signer fields
 
     fakeDiff: bool ##\
       ## Testing/debugging only: skip difficulty verifications
@@ -90,11 +101,12 @@ logScope:
 proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
-  Clique(cfg:       cfg,
-         recents:   cfg.initLruSnaps,
-         snapshot:  cfg.newSnapshot(BlockHeader()),
-         proposals: initTable[EthAddress,bool](),
-         asyncLock: newAsyncLock())
+  result = Clique(cfg:       cfg,
+                  recents:   cfg.initLruSnaps,
+                  snapshot:  cfg.newSnapshot(BlockHeader()),
+                  proposals: initTable[EthAddress,bool]())
+  when enableCliqueAsyncLock:
+    result.asyncLock = newAsyncLock()
 
 # ------------------------------------------------------------------------------
 # Public /pretty print
@@ -169,19 +181,20 @@ proc `failed=`*(c: Clique; failure: CliqueFailed) =
 # Public lock/unlock
 # ------------------------------------------------------------------------------
 
-proc lock*(c: Clique) {.inline, raises: [Defect,CatchableError].} =
-  ## Lock descriptor
-  waitFor c.asyncLock.acquire
+when enableCliqueAsyncLock:
+  proc lock*(c: Clique) {.inline, raises: [Defect,CatchableError].} =
+    ## Lock descriptor
+    waitFor c.asyncLock.acquire
 
-proc unLock*(c: Clique) {.inline, raises: [Defect,AsyncLockError].} =
-  ## Unlock descriptor
-  c.asyncLock.release
+  proc unLock*(c: Clique) {.inline, raises: [Defect,AsyncLockError].} =
+    ## Unlock descriptor
+    c.asyncLock.release
 
-template doExclusively*(c: Clique; action: untyped) =
-  ## Handy helper
-  c.lock
-  action
-  c.unlock
+  template doExclusively*(c: Clique; action: untyped) =
+    ## Handy helper
+    c.lock
+    action
+    c.unlock
 
 # ------------------------------------------------------------------------------
 # End

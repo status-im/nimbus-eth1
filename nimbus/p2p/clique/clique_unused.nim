@@ -37,6 +37,9 @@ import
   eth/[common, keys, rlp],
   nimcrypto
 
+when not enableCliqueAsyncLock:
+  {.fatal: "Async locks must be enabled in clique_desc, try: -d:clique_async_lock"}
+
 {.push raises: [Defect].}
 
 logScope:
