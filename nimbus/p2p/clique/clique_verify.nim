@@ -133,13 +133,12 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
       return err((errRecentlySigned,""))
 
   # Ensure that the difficulty corresponds to the turn-ness of the signer
-  if not c.fakeDiff:
-    if snapshot.inTurn(header.blockNumber, signer.value):
-      if header.difficulty != DIFF_INTURN:
-        return err((errWrongDifficulty,""))
-    else:
-      if header.difficulty != DIFF_NOTURN:
-        return err((errWrongDifficulty,""))
+  if snapshot.inTurn(header.blockNumber, signer.value):
+    if header.difficulty != DIFF_INTURN:
+      return err((errWrongDifficulty,"INTURN expected"))
+  else:
+    if header.difficulty != DIFF_NOTURN:
+      return err((errWrongDifficulty,"NOTURN expected"))
 
   ok()
 

@@ -85,9 +85,6 @@ type
       asyncLock: AsyncLock ##\
         ## Protects the signer fields
 
-    fakeDiff: bool ##\
-      ## Testing/debugging only: skip difficulty verifications
-
 {.push raises: [Defect].}
 
 logScope:
@@ -151,10 +148,6 @@ proc db*(c: Clique): auto {.inline.} =
   ## Getter
   c.cfg.db
 
-proc fakeDiff*(c: Clique): auto {.inline.} =
-  ## Getter
-  c.fakeDiff
-
 # ------------------------------------------------------------------------------
 # Public setters
 # ------------------------------------------------------------------------------
@@ -164,10 +157,6 @@ proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
   c.cfg.db = db
   c.proposals = initTable[EthAddress,bool]()
   c.recents = c.cfg.initLruSnaps
-
-proc `fakeDiff=`*(c: Clique; debug: bool) =
-  ## Setter
-  c.fakeDiff = debug
 
 proc `snapshot=`*(c: Clique; snaps: Snapshot) =
   ## Setter

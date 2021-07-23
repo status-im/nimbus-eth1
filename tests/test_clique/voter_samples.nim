@@ -24,6 +24,10 @@ type
                               ## deauthorize)
     checkpoint*: seq[string]  ## List of authorized signers if this is an epoch
                               ## block
+    noTurn*: bool             ## initialise `NOTURN` it `true`, otherwise
+                              ## `INTURN` (not part of Go ref implementation,
+                              ## used here to avoid `fakeDiff` kludge in the
+                              ## Go implementation)
     newbatch*: bool
 
   TestSpecs* = object   ## Define the various voting scenarios to test
@@ -67,11 +71,11 @@ const
       signers: @["A", "B"],
       votes:   @[TesterVote(signer: "A", voted: "C", auth: true),
                  TesterVote(signer: "B", voted: "C", auth: true),
-                 TesterVote(signer: "A", voted: "D", auth: true),
-                 TesterVote(signer: "B", voted: "D", auth: true),
-                 TesterVote(signer: "C"),
-                 TesterVote(signer: "A", voted: "E", auth: true),
-                 TesterVote(signer: "B", voted: "E", auth: true)],
+                 TesterVote(signer: "A", voted: "D", auth: true, noTurn: true),
+                 TesterVote(signer: "B", voted: "D", auth: true, noTurn: true),
+                 TesterVote(signer: "C",                         noTurn: true),
+                 TesterVote(signer: "A", voted: "E", auth: true, noTurn: true),
+                 TesterVote(signer: "B", voted: "E", auth: true, noTurn: true)],
       results: @["A", "B", "C", "D"]),
 
     TestSpecs(
@@ -102,16 +106,16 @@ const
       id:      7,
       info:    "Three signers, two of them deciding to drop the third",
       signers: @["A", "B", "C"],
-      votes:   @[TesterVote(signer: "A", voted: "C"),
-                 TesterVote(signer: "B", voted: "C")],
+      votes:   @[TesterVote(signer: "A", voted: "C",             noTurn: true),
+                 TesterVote(signer: "B", voted: "C",             noTurn: true)],
       results: @["A", "B"]),
 
     TestSpecs(
       id:      8,
       info:    "Four signers, consensus of two not being enough to drop anyone",
       signers: @["A", "B", "C", "D"],
-      votes:   @[TesterVote(signer: "A", voted: "C"),
-                 TesterVote(signer: "B", voted: "C")],
+      votes:   @[TesterVote(signer: "A", voted: "C",             noTurn: true),
+                 TesterVote(signer: "B", voted: "C",             noTurn: true)],
       results: @["A", "B", "C", "D"]),
 
     TestSpecs(
@@ -119,9 +123,9 @@ const
       info:    "Four signers, consensus of three already being enough to " &
                "drop someone",
       signers: @["A", "B", "C", "D"],
-      votes:   @[TesterVote(signer: "A", voted: "D"),
-                 TesterVote(signer: "B", voted: "D"),
-                 TesterVote(signer: "C", voted: "D")],
+      votes:   @[TesterVote(signer: "A", voted: "D",             noTurn: true),
+                 TesterVote(signer: "B", voted: "D",             noTurn: true),
+                 TesterVote(signer: "C", voted: "D",             noTurn: true)],
       results: @["A", "B", "C"]),
 
     TestSpecs(
@@ -145,8 +149,8 @@ const
                  TesterVote(signer: "B"),
                  TesterVote(signer: "A"),
                  TesterVote(signer: "B", voted: "D", auth: true),
-                 TesterVote(signer: "A"),
-                 TesterVote(signer: "B", voted: "C", auth: true)],
+                 TesterVote(signer: "A",                         noTurn: true),
+                 TesterVote(signer: "B", voted: "C", auth: true, noTurn: true)],
       results: @["A", "B", "C", "D"]),
 
     TestSpecs(
@@ -164,17 +168,17 @@ const
       id:      13,
       info:    "Deauthorizing multiple accounts concurrently is permitted",
       signers: @["A", "B", "C", "D"],
-      votes:   @[TesterVote(signer: "A", voted: "C"),
-                 TesterVote(signer: "B"),
-                 TesterVote(signer: "C"),
-                 TesterVote(signer: "A", voted: "D"),
-                 TesterVote(signer: "B"),
+      votes:   @[TesterVote(signer: "A", voted: "C",             noTurn: true),
+                 TesterVote(signer: "B",                         noTurn: true),
+                 TesterVote(signer: "C",                         noTurn: true),
+                 TesterVote(signer: "A", voted: "D",             noTurn: true),
+                 TesterVote(signer: "B",                         noTurn: true),
                  TesterVote(signer: "C"),
                  TesterVote(signer: "A"),
                  TesterVote(signer: "B", voted: "D"),
-                 TesterVote(signer: "C", voted: "D"),
-                 TesterVote(signer: "A"),
-                 TesterVote(signer: "B", voted: "C")],
+                 TesterVote(signer: "C", voted: "D",             noTurn: true),
+                 TesterVote(signer: "A",                         noTurn: true),
+                 TesterVote(signer: "B", voted: "C",             noTurn: true)],
       results: @["A", "B"]),
 
     TestSpecs(
@@ -185,7 +189,7 @@ const
       votes:   @[TesterVote(signer: "C", voted: "B"),
                  TesterVote(signer: "A", voted: "C"),
                  TesterVote(signer: "B", voted: "C"),
-                 TesterVote(signer: "A", voted: "B")],
+                 TesterVote(signer: "A", voted: "B",             noTurn: true)],
       results: @["A", "B"]),
 
     TestSpecs(
@@ -196,7 +200,7 @@ const
       votes:   @[TesterVote(signer: "C", voted: "D", auth: true),
                  TesterVote(signer: "A", voted: "C"),
                  TesterVote(signer: "B", voted: "C"),
-                 TesterVote(signer: "A", voted: "D", auth: true)],
+                 TesterVote(signer: "A", voted: "D", auth: true, noTurn: true)],
       results: @["A", "B"]),
 
     TestSpecs(
@@ -204,15 +208,15 @@ const
       info:    "Cascading changes are not allowed, only the account being " &
                "voted on may change",
       signers: @["A", "B", "C", "D"],
-      votes:   @[TesterVote(signer: "A", voted: "C"),
-                 TesterVote(signer: "B"),
-                 TesterVote(signer: "C"),
-                 TesterVote(signer: "A", voted: "D"),
-                 TesterVote(signer: "B", voted: "C"),
+      votes:   @[TesterVote(signer: "A", voted: "C",             noTurn: true),
+                 TesterVote(signer: "B",                         noTurn: true),
+                 TesterVote(signer: "C",                         noTurn: true),
+                 TesterVote(signer: "A", voted: "D",             noTurn: true),
+                 TesterVote(signer: "B", voted: "C",             noTurn: true),
                  TesterVote(signer: "C"),
                  TesterVote(signer: "A"),
                  TesterVote(signer: "B", voted: "D"),
-                 TesterVote(signer: "C", voted: "D")],
+                 TesterVote(signer: "C", voted: "D",             noTurn: true)],
       results: @["A", "B", "C"]),
 
     TestSpecs(
@@ -220,17 +224,17 @@ const
       info:    "Changes reaching consensus out of bounds (via a deauth) " &
                "execute on touch",
       signers: @["A", "B", "C", "D"],
-      votes:   @[TesterVote(signer: "A", voted: "C"),
-                 TesterVote(signer: "B"),
-                 TesterVote(signer: "C"),
-                 TesterVote(signer: "A", voted: "D"),
-                 TesterVote(signer: "B", voted: "C"),
+      votes:   @[TesterVote(signer: "A", voted: "C",             noTurn: true),
+                 TesterVote(signer: "B",                         noTurn: true),
+                 TesterVote(signer: "C",                         noTurn: true),
+                 TesterVote(signer: "A", voted: "D",             noTurn: true),
+                 TesterVote(signer: "B", voted: "C",             noTurn: true),
                  TesterVote(signer: "C"),
                  TesterVote(signer: "A"),
                  TesterVote(signer: "B", voted: "D"),
-                 TesterVote(signer: "C", voted: "D"),
-                 TesterVote(signer: "A"),
-                 TesterVote(signer: "C", voted: "C", auth: true)],
+                 TesterVote(signer: "C", voted: "D",             noTurn: true),
+                 TesterVote(signer: "A",                         noTurn: true),
+                 TesterVote(signer: "C", voted: "C", auth: true, noTurn: true)],
       results: @["A", "B"]),
 
     TestSpecs(
@@ -238,17 +242,17 @@ const
       info:    "Changes reaching consensus out of bounds (via a deauth) " &
                "may go out of consensus on first touch",
       signers: @["A", "B", "C", "D"],
-      votes:   @[TesterVote(signer: "A", voted: "C"),
-                 TesterVote(signer: "B"),
-                 TesterVote(signer: "C"),
-                 TesterVote(signer: "A", voted: "D"),
-                 TesterVote(signer: "B", voted: "C"),
+      votes:   @[TesterVote(signer: "A", voted: "C",             noTurn: true),
+                 TesterVote(signer: "B",                         noTurn: true),
+                 TesterVote(signer: "C",                         noTurn: true),
+                 TesterVote(signer: "A", voted: "D",             noTurn: true),
+                 TesterVote(signer: "B", voted: "C",             noTurn: true),
                  TesterVote(signer: "C"),
                  TesterVote(signer: "A"),
                  TesterVote(signer: "B", voted: "D"),
-                 TesterVote(signer: "C", voted: "D"),
-                 TesterVote(signer: "A"),
-                 TesterVote(signer: "B", voted: "C", auth: true)],
+                 TesterVote(signer: "C", voted: "D",             noTurn: true),
+                 TesterVote(signer: "A",                         noTurn: true),
+                 TesterVote(signer: "B", voted: "C", auth: true, noTurn: true)],
       results: @["A", "B", "C"]),
 
     TestSpecs(
@@ -262,27 +266,27 @@ const
       signers: @["A", "B", "C", "D", "E"],
       votes:   @[
         # Authorize F, 3 votes needed
-        TesterVote(signer: "A", voted: "F", auth: true),
-        TesterVote(signer: "B", voted: "F", auth: true),
-        TesterVote(signer: "C", voted: "F", auth: true),
+        TesterVote(signer: "A", voted: "F", auth: true,          noTurn: true),
+        TesterVote(signer: "B", voted: "F", auth: true,          noTurn: true),
+        TesterVote(signer: "C", voted: "F", auth: true,          noTurn: true),
 
         # Deauthorize F, 4 votes needed (leave A's previous vote "unchanged")
-        TesterVote(signer: "D", voted: "F"),
-        TesterVote(signer: "E", voted: "F"),
+        TesterVote(signer: "D", voted: "F",                      noTurn: true),
+        TesterVote(signer: "E", voted: "F",                      noTurn: true),
         TesterVote(signer: "B", voted: "F"),
-        TesterVote(signer: "C", voted: "F"),
+        TesterVote(signer: "C", voted: "F",                      noTurn: true),
 
         # Almost authorize F, 2/3 votes needed
-        TesterVote(signer: "D", voted: "F", auth: true),
-        TesterVote(signer: "E", voted: "F", auth: true),
+        TesterVote(signer: "D", voted: "F", auth: true,          noTurn: true),
+        TesterVote(signer: "E", voted: "F", auth: true,          noTurn: true),
 
         # Deauthorize A, 3 votes needed
         TesterVote(signer: "B", voted: "A"),
-        TesterVote(signer: "C", voted: "A"),
-        TesterVote(signer: "D", voted: "A"),
+        TesterVote(signer: "C", voted: "A",                      noTurn: true),
+        TesterVote(signer: "D", voted: "A",                      noTurn: true),
 
         # Finish authorizing F, 3/3 votes needed
-        TesterVote(signer: "B", voted: "F", auth: true)],
+        TesterVote(signer: "B", voted: "F", auth: true,          noTurn: true)],
       results: @["B", "C", "D", "E", "F"]),
 
     TestSpecs(
@@ -300,7 +304,7 @@ const
       id:      21,
       info:    "An unauthorized signer should not be able to sign blocks",
       signers: @["A"],
-      votes:   @[TesterVote(signer: "B")],
+      votes:   @[TesterVote(signer: "B",                         noTurn: true)],
       failure: errUnauthorizedSigner),
 
     TestSpecs(
@@ -318,9 +322,10 @@ const
                "imported in a batch ",
       epoch:   3,
       signers: @["A", "B", "C"],
-      votes:   @[TesterVote(signer: "A"),
-                 TesterVote(signer: "B"),
-                 TesterVote(signer: "A", checkpoint: @["A", "B", "C"]),
+      votes:   @[TesterVote(signer: "A",                         noTurn: true),
+                 TesterVote(signer: "B",                         noTurn: true),
+                 TesterVote(signer: "A", checkpoint: @["A", "B", "C"],
+                                                                 noTurn: true),
                  TesterVote(signer: "A")],
       failure: errRecentlySigned),
 
@@ -335,9 +340,10 @@ const
                "Rinkeby consensus split.",
       epoch:   3,
       signers: @["A", "B", "C"],
-      votes:   @[TesterVote(signer: "A"),
-                 TesterVote(signer: "B"),
-                 TesterVote(signer: "A", checkpoint: @["A", "B", "C"]),
+      votes:   @[TesterVote(signer: "A",                         noTurn: true),
+                 TesterVote(signer: "B",                         noTurn: true),
+                 TesterVote(signer: "A", checkpoint: @["A", "B", "C"],
+                                                                 noTurn: true),
                  TesterVote(signer: "A", newbatch: true)],
       failure: errRecentlySigned)]
 

@@ -395,7 +395,7 @@ proc appendVoter*(ap: TesterPool;
     nonce:       if voter.auth: NONCE_AUTH else: NONCE_DROP,
     #
     # clique/snapshot_test.go(436): header.Difficulty = diffInTurn [..]
-    difficulty:  DIFF_INTURN,  # Ignored, we just need a valid number
+    difficulty:  if voter.noTurn: DIFF_NOTURN else: DIFF_INTURN,
     #
     extraData:   0.byte.repeat(EXTRA_VANITY + EXTRA_SEAL))
 
@@ -431,7 +431,6 @@ proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
   ## Otherwise the offending bloch is removed, the rest of the batch is
   ## adjusted and applied again repeatedly.
   result = ap
-  ap.chain.clique.fakeDiff = true
 
   var reChainOk = false
   for n in 0 ..< ap.batch.len:

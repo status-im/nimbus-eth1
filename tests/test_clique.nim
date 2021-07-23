@@ -145,7 +145,11 @@ proc runGoerliReplay(noisy = true; showElapsed = false,
             first = cache[0][0][0].blockNumber
             last = cache[^1][0][^1].blockNumber
             blkRange = &"#{first}..#{last}"
-          test &"Goerli Blocks {blkRange} ({cache.len} transactions)":
+            info = if first <= startAtBlock.u256 and startAtBlock.u256 <= last:
+                     &", verification #{startAtBlock}.."
+                   else:
+                     ""
+          test &"Goerli Blocks {blkRange} ({cache.len} transactions{info})":
             let start = getTime()
             for (headers,bodies) in cache:
               let addedPersistBlocks = pool.chain.persistBlocks(headers,bodies)
@@ -163,7 +167,11 @@ proc runGoerliReplay(noisy = true; showElapsed = false,
         first = cache[0][0][0].blockNumber
         last = cache[cInx-1][0][^1].blockNumber
         blkRange = &"#{first}..#{last}"
-      test &"Goerli Blocks {blkRange} ({cache.len} transactions)":
+        info = if first <= startAtBlock.u256 and startAtBlock.u256 <= last:
+                  &", Verification #{startAtBlock}.."
+               else:
+                 ""
+      test &"Goerli Blocks {blkRange} ({cache.len} transactions{info})":
         let start = getTime()
         for (headers,bodies) in cache:
           let addedPersistBlocks = pool.chain.persistBlocks(headers,bodies)
@@ -229,7 +237,7 @@ proc cliqueMain*(noisy = defined(debug)) =
   noisy.runCliqueSnapshot(true)
   noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps
-  noisy.runGoerliReplay(startAtBlock = 3100u64)
+  noisy.runGoerliReplay(startAtBlock = 31100u64)
 
 when isMainModule:
   let
@@ -247,11 +255,9 @@ when isMainModule:
 
   let noisy = defined(debug)
   #noisy.runCliqueSnapshot(true)
-  #noisy.runCliqueSnapshot(false, skipIDs = skipIDs)
   #noisy.runGoerliBaybySteps(dir = ".", captureFile = captureFile)
-
+  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 193537u64, stopAfterBlock = 193729u64)
-  noisy.goerliReplay(startAtBlock = 3100u64, stopAfterBlock = 3300u64)
 
 # ------------------------------------------------------------------------------
 # End
