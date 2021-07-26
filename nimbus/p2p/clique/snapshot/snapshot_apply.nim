@@ -40,15 +40,7 @@ logScope:
 proc say(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
   discard
   # uncomment body to enable
-  #s.saySnaps v
-
-proc sayBegin(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
-  s.say "begin ", v.toSeq.join
-
-proc sayForce(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
-  s.saySnapsFlush
-  s.say v
-
+  s.cfg.say v
 
 proc pp(a: openArray[BlockHeader]; first, last: int): string {.inline.} =
   result = "["
@@ -104,7 +96,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
   ## Initialises an authorization snapshot `snap` by applying the `headers`
   ## to the argument snapshot desciptor `s`.
 
-  s.sayBegin "applySnapshot #", s.blockNumber, " + ", headers.pp(first, last)
+  s.say "applySnapshot begin #", s.blockNumber, " + ", headers.pp(first, last)
 
   # Sanity check that the headers can be applied
   if headers[first].blockNumber != s.blockNumber + 1:
@@ -159,6 +151,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
     for recent in s.recents.values:
       if recent == signer:
         s.say "applySnapshot signer recently seen ", s.pp(signer)
+        echo "+++ applySnapshot #", header.blockNumber, " err=errRecentlySigned"
         return err((errRecentlySigned,""))
     s.recents[number] = signer
 

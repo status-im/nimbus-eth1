@@ -77,7 +77,7 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
           # Assemble a chain of headers from the cast votes
           # see clique/snapshot_test.go(407): config := *params.TestChainConfig
           pool
-            .resetVoterChain(tt.signers, tt.epoch)
+            .resetVoterChain(tt.signers, tt.epoch, tt.runBack)
             # see clique/snapshot_test.go(425): for j, block := range blocks {
             .appendVoter(tt.votes)
             .commitVoterChain(postProcessOk)
@@ -258,11 +258,11 @@ when isMainModule:
       startAtBlock = startAtBlock, stopAfterBlock = stopAfterBlock)
 
   let noisy = defined(debug)
-  noisy.runCliqueSnapshot(true)
-  noisy.runGoerliBaybySteps(dir = ".", captureFile = captureFile)
-  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
-  noisy.goerliReplay(startAtBlock = 31100u64)
-  noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)
+  noisy.runCliqueSnapshot(false) # , testID = 23)
+  #noisy.runGoerliBaybySteps(dir = ".", captureFile = captureFile)
+  #noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
+  #noisy.goerliReplay(startAtBlock = 31100u64)
+  #noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)
 
 # ------------------------------------------------------------------------------
 # End

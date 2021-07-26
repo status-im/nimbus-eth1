@@ -179,7 +179,6 @@ proc ppBlockHeader(ap: TesterPool; v: BlockHeader; delim: string): string =
     &"{sep}nonce={ap.ppNonce(v.nonce)}" &
     &"{sep}extraData={ap.ppExtraData(v.extraData)})"
 
-
 # ------------------------------------------------------------------------------
 # Private: Constructor helpers
 # ------------------------------------------------------------------------------
@@ -343,7 +342,7 @@ proc sign*(ap: TesterPool; header: var BlockHeader; signer: string) =
 # ------------------------------------------------------------------------------
 
 proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
-                      epoch = 0): TesterPool {.discardable.} =
+                      epoch = 0; runBack = true): TesterPool {.discardable.} =
   ## Reset the batch list for voter headers and update genesis block
   result = ap
 
@@ -364,6 +363,7 @@ proc resetVoterChain*(ap: TesterPool; signers: openArray[string];
   # store modified genesis block and epoch
   ap.resetChainDb(extraData, ap.debug )
   ap.clique.cfg.epoch = epoch
+  ap.clique.applySnapsMinBacklog = runBack
 
 
 # clique/snapshot_test.go(415): blocks, _ := core.GenerateChain(&config, [..]

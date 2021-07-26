@@ -30,21 +30,12 @@ import
   stew/results
 
 const
-  traceCliqueMsg* = ##\
-    ## Set `true` for enabling messages => `clique_cfg.say()`. Using the
-    ## `-d:debug` compiler flag enabled debugging code which must be enabled
-    ## with setting `clique_cfg.CliqueCfg.debug` to `true`.
-    defined(debug)
-
   enableCliqueAsyncLock* = ##\
     ## Async locks are currently unused by `Clique` but were part of the Go
     ## reference implementation. The unused code fragment from the reference
     ## implementation are buried in the file `clique_unused.nim` and not used
     ## otherwise.
     defined(clique_async_lock)
-
-when traceCliqueMsg:
-  import std/[sequtils, strutils, times]
 
 when enableCliqueAsyncLock:
   import chronos
@@ -107,12 +98,6 @@ type
       asyncLock: AsyncLock ##\
         ## Protects the signer fields
 
-    # Debugging helpers ...
-    when traceCliqueMsg:
-      tFlush: bool
-      tLog: Time
-      tCache: string
-
 {.push raises: [Defect].}
 
 logScope:
@@ -147,42 +132,6 @@ proc `$`*(e: CliqueError): string =
   result = $e[0]
   if e[1] != "":
     result &= ": " & e[1]
-
-proc sayClique*(c: Clique; v: varargs[string,`$`]) {.inline.} =
-  ## Echo replacement referring to `clique_cfg.say()`. Printed texts are
-  ## prefixed by the elapsed time (in milli seconds) since the last invocation.
-  ## When elapsed time between invocations is smaller than a miilli second,
-  ## only the last invocation prints the test.
-  discard
-  when traceCliqueMsg:
-    let
-      now = getTime()
-    if c.tLog == Time():
-      c.tLog = now
-    let
-      ela = (now - c.tLog).inMilliSeconds
-      msg = "(" & $ela & ") " & toSeq(v).join
-    c.tLog = now
-    if ela == 0 and not c.tFlush:
-      c.tCache = msg
-    else:
-      if c.tCache != "":
-        c.cfg.say c.tCache
-        c.tCache = ""
-      c.cfg.say msg
-      c.tFlush = false
-
-proc sayCliqueFlush*(c: Clique) {.inline.} =
-  discard
-  when traceCliqueMsg:
-    c.tFlush = true
-
-proc sayCliqueClear*(c: Clique) {.inline.} =
-  discard
-  when traceCliqueMsg:
-    c.tFlush = false
-    c.tLog = getTime()
-    c.tCache = ""
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -243,7 +192,7 @@ proc `failed=`*(c: Clique; failure: CliqueFailed) =
   ## Setter
   c.failed = failure
 
-proc applySnapsMinBacklog*(c: Clique; value: bool) {.inline.} =
+proc `applySnapsMinBacklog=`*(c: Clique; value: bool) {.inline.} =
   ## Setter
   c.applySnapsMinBacklog = value
 

@@ -34,6 +34,7 @@ type
     id*: int                  ## Test id
     info*: string             ## Test description
     epoch*: int               ## Number of blocks in an epoch (unset = 30000)
+    runBack*: bool            ## Set `applySnapsMinBacklog` flag
     signers*: seq[string]     ## Initial list of authorized signers in the
                               ## genesis
     votes*: seq[TesterVote]   ## Chain of signed blocks, potentially influencing
@@ -326,7 +327,17 @@ const
                  TesterVote(signer: "B",                         noTurn: true),
                  TesterVote(signer: "A", checkpoint: @["A", "B", "C"],
                                                                  noTurn: true),
-                 TesterVote(signer: "A")],
+                 TesterVote(signer: "A",                         noTurn: true)],
+
+      # Setting the `runBack` flag forces the shapshot handler searching for
+      # a checkpoint before entry 3. So the checkpont will be ignored for
+      # re-setting the system so that address `A` of block #3 is found in the
+      # list of recent signers (see documentation of the flag
+      # `applySnapsMinBacklog` for the `Clique` descriptor.)
+      #
+      # As far as I understand, there was no awareness of the tranaction batch
+      # in the Go implementation -- jordan.
+      runBack: true,
       failure: errRecentlySigned),
 
     # The last test does not differ from the previous one with the current
@@ -344,8 +355,31 @@ const
                  TesterVote(signer: "B",                         noTurn: true),
                  TesterVote(signer: "A", checkpoint: @["A", "B", "C"],
                                                                  noTurn: true),
-                 TesterVote(signer: "A", newbatch: true)],
-      failure: errRecentlySigned)]
+                 TesterVote(signer: "A", newbatch: true,         noTurn: true)],
+
+      # Setting the `runBack` flag forces the shapshot handler searching for
+      # a checkpoint before entry 3. So the checkpont will be ignored for
+      # re-setting the system so that address `A` of block #3 is found in the
+      # list of recent signers (see documentation of the flag
+      # `applySnapsMinBacklog` for the `Clique` descriptor.)
+      #
+      # As far as I understand, there was no awareness of the tranaction batch
+      # in the Go implementation -- jordan.
+      runBack: true,
+      failure: errRecentlySigned),
+
+    # Not found in Go reference implementation
+    TestSpecs(
+      id:      25,
+      info:    "Test 23/24 with using the most recent <epoch> checkpoint",
+      epoch:   3,
+      signers: @["A", "B", "C"],
+      votes:   @[TesterVote(signer: "A",                         noTurn: true),
+                 TesterVote(signer: "B",                         noTurn: true),
+                 TesterVote(signer: "A", checkpoint: @["A", "B", "C"],
+                                                                 noTurn: true),
+                 TesterVote(signer: "A",                         noTurn: true)],
+      results: @["A", "B", "C"])]
 
 static:
   # For convenience, make sure that IDs are increasing

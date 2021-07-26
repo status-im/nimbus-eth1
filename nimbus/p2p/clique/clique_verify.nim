@@ -21,7 +21,7 @@
 ##
 
 import
-  std/[strformat, tables, times],
+  std/[sequtils, strformat, strutils, tables, times],
   ../../chain_config,
   ../../constants,
   ../../db/db_chain,
@@ -41,6 +41,19 @@ import
 
 logScope:
   topics = "clique PoA verify header"
+
+# ------------------------------------------------------------------------------
+# Private helpers, pretty printing
+# ------------------------------------------------------------------------------
+
+proc say(c: Clique; v: varargs[string,`$`]) {.inline.} =
+  discard
+  # uncomment body to enable
+  #c.cfg.say v
+
+proc pp(c: Clique; a: AddressHistory): string
+         {.inline, raises: [Defect,CatchableError].} =
+  "(" & toSeq(a.pairs).mapIt(&"#{it[0]}:{c.pp(it[1])}").join(" ") & ")"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -118,17 +131,22 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
   doAssert snapshot.blockHash == header.parentHash
 
   # Resolve the authorization key and check against signers
-  let signer =  c.cfg.ecRecover(header)
+  let signer = c.cfg.ecRecover(header)
   if signer.isErr:
       return err(signer.error)
 
   if not snapshot.isSigner(signer.value):
     return err((errUnauthorizedSigner,""))
 
+  c.say "verifySeal signer=", c.pp(signer.value), " ", c.pp(snapshot.recents)
   let seen = snapshot.recentBlockNumber(signer.value)
   if seen.isOk:
+    c.say "verifySeal signer=#", seen.value,
+      " header=#", header.blockNumber,
+      " threshold=#", snapshot.signersThreshold.u256
     # Signer is among recents, only fail if the current block does not
     # shift it out
+    # clique/clique.go(486): if limit := uint64(len(snap.Signers)/2 + 1); [..]
     if header.blockNumber - snapshot.signersThreshold.u256 < seen.value:
       return err((errRecentlySigned,""))
 
