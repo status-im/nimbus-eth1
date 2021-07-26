@@ -174,12 +174,12 @@ proc sayClique*(c: Clique; v: varargs[string,`$`]) {.inline.} =
 
 proc sayCliqueFlush*(c: Clique) {.inline.} =
   discard
-  when traceSnapshotMsg:
+  when traceCliqueMsg:
     c.tFlush = true
 
 proc sayCliqueClear*(c: Clique) {.inline.} =
   discard
-  when traceSnapshotMsg:
+  when traceCliqueMsg:
     c.tFlush = false
     c.tLog = getTime()
     c.tCache = ""

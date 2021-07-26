@@ -242,6 +242,10 @@ proc cliqueMain*(noisy = defined(debug)) =
 when isMainModule:
   let
     skipIDs = {999}
+    # A new capture file can be generated using
+    #   `test_clique/indiump.dumpGroupNl()`
+    # placed at the end of
+    #   `p2p/chain/persist_blocks.persistBlocks()`.
     captureFile = "test_clique" / "goerli504192.txt.gz"
     #captureFile = "test_clique" / "dump-stream.out.gz"
 
@@ -254,11 +258,11 @@ when isMainModule:
       startAtBlock = startAtBlock, stopAfterBlock = stopAfterBlock)
 
   let noisy = defined(debug)
-  #noisy.runCliqueSnapshot(true)
-  #noisy.runGoerliBaybySteps(dir = ".", captureFile = captureFile)
-  #noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
-  #noisy.goerliReplay(startAtBlock = 31100u64)
-  noisy.goerliReplay(startAtBlock = 194881u64) # , stopAfterBlock = 198912u64)
+  noisy.runCliqueSnapshot(true)
+  noisy.runGoerliBaybySteps(dir = ".", captureFile = captureFile)
+  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
+  noisy.goerliReplay(startAtBlock = 31100u64)
+  noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)
 
 # ------------------------------------------------------------------------------
 # End
