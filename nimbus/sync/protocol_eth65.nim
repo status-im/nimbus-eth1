@@ -33,13 +33,20 @@ type
     bestDifficulty*: DifficultyInt
 
 const
+  tracePackets* = true       # Set `true` or `false` to control packet traces.
+
+const
   maxStateFetch* = 384
   maxBodiesFetch* = 128
   maxReceiptsFetch* = 256
   maxHeadersFetch* = 192
   ethVersion = 65
 
-func toHex(x: KeccakHash): string = x.data.toHex
+func toHex*(x: KeccakHash): string = x.data.toHex
+macro tracePacket*(msg: static[string], args: varargs[untyped]) =
+  quote do:
+    if tracePackets:
+      trace `msg`, `args`
 
 p2pProtocol eth(version = ethVersion,
                 peerState = PeerState,
@@ -55,6 +62,13 @@ p2pProtocol eth(version = ethVersion,
         forkHash: chainForkId.crc.toBytesBe,
         forkNext: chainForkId.nextFork.u256,
       )
+
+    tracePacket ">> Sending eth.Status (0x00) [eth/" & $ethVersion & "]",
+      peer, td=bestBlock.difficulty,
+      bestHash=bestBlock.blockHash.toHex,
+      networkId=network.networkId,
+      genesis=chain.genesisHash.toHex,
+      forkHash=forkId.forkHash.toHex, forkNext=forkId.forkNext
 
     let m = await peer.status(ethVersion,
                               network.networkId,
@@ -87,24 +101,46 @@ p2pProtocol eth(version = ethVersion,
                 totalDifficulty: DifficultyInt,
                 bestHash: KeccakHash,
                 genesisHash: KeccakHash,
-                forkId: ForkId)
+                forkId: ForkId) =
+      tracePacket "<< Received eth.Status (0x00) [eth/" & $ethVersion & "]",
+         peer, td=totalDifficulty,
+         bestHash=bestHash.toHex,
+         networkId,
+         genesis=genesisHash.toHex,
+         forkHash=forkId.forkHash.toHex, forkNext=forkId.forkNext
 
   # User message 0x01: NewBlockHashes.
   proc newBlockHashes(peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) =
+    tracePacket "<< Discarding eth.NewBlockHashes (0x01)",
+      peer, count=hashes.len
     discard
 
   # User message 0x02: Transactions.
   proc transactions(peer: Peer, transactions: openArray[Transaction]) =
+    tracePacket "<< Discarding eth.Transactions (0x02)",
+      peer, count=transactions.len
     discard
 
   requestResponse:
     # User message 0x03: GetBlockHeaders.
     proc getBlockHeaders(peer: Peer, request: BlocksRequest) =
+      tracePacket "<< Received eth.GetBlockHeaders (0x03)",
+        peer, count=request.maxResults
       if request.maxResults > uint64(maxHeadersFetch):
+        debug "eth.GetBlockHeaders (0x03) requested too many headers",
+          peer, requested=request.maxResults, max=maxHeadersFetch
         await peer.disconnect(BreachOfProtocol)
         return
 
-      await response.send(peer.network.chain.getBlockHeaders(request))
+      let headers = peer.network.chain.getBlockHeaders(request)
+      if headers.len > 0:
+        tracePacket ">> Replying with eth.BlockHeaders (0x04)",
+          peer, count=headers.len
+      else:
+        tracePacket ">> Replying EMPTY eth.BlockHeaders (0x04)",
+          peer, count=0
+
+      await response.send(headers)
 
     # User message 0x04: BlockHeaders.
     proc blockHeaders(p: Peer, headers: openArray[BlockHeader])
@@ -112,11 +148,23 @@ p2pProtocol eth(version = ethVersion,
   requestResponse:
     # User message 0x05: GetBlockBodies.
     proc getBlockBodies(peer: Peer, hashes: openArray[KeccakHash]) =
+      tracePacket "<< Received eth.GetBlockBodies (0x05)",
+        peer, count=hashes.len
       if hashes.len > maxBodiesFetch:
+        debug "eth.GetBlockBodies (0x05) requested too many bodies",
+          peer, requested=hashes.len, max=maxBodiesFetch
         await peer.disconnect(BreachOfProtocol)
         return
 
-      await response.send(peer.network.chain.getBlockBodies(hashes))
+      let bodies = peer.network.chain.getBlockBodies(hashes)
+      if bodies.len > 0:
+        tracePacket ">> Replying with eth.BlockBodies (0x06)",
+          peer, count=bodies.len
+      else:
+        tracePacket ">> Replying EMPTY eth.BlockBodies (0x06)",
+          peer, count=0
+
+      await response.send(bodies)
 
     # User message 0x06: BlockBodies.
     proc blockBodies(peer: Peer, blocks: openArray[BlockBody])
@@ -125,15 +173,25 @@ p2pProtocol eth(version = ethVersion,
   proc newBlock(peer: Peer, bh: EthBlock, totalDifficulty: DifficultyInt) =
     # (Note, needs to use `EthBlock` instead of its alias `NewBlockAnnounce`
     # because either `p2pProtocol` or RLPx doesn't work with an alias.)
+    tracePacket "<< Discarding eth.NewBlock (0x07)",
+      peer, totalDifficulty,
+      blockNumber=bh.header.blockNumber, blockDifficulty=bh.header.difficulty
     discard
 
   # User message 0x08: NewPooledTransactionHashes.
   proc newPooledTransactionHashes(peer: Peer, hashes: openArray[KeccakHash]) =
+    tracePacket "<< Discarding eth.NewPooledTransactionHashes (0x08)",
+      peer, count=hashes.len
     discard
 
   requestResponse:
     # User message 0x09: GetPooledTransactions.
     proc getPooledTransactions(peer: Peer, hashes: openArray[KeccakHash]) =
+      tracePacket "<< Received eth.GetPooledTransactions (0x09)",
+         peer, count=hashes.len
+
+      tracePacket ">> Replying EMPTY eth.PooledTransactions (0x10)",
+         peer, count=0
       await response.send([])
 
     # User message 0x0a: PooledTransactions.
@@ -144,7 +202,18 @@ p2pProtocol eth(version = ethVersion,
   requestResponse:
     # User message 0x0d: GetNodeData.
     proc getNodeData(peer: Peer, hashes: openArray[KeccakHash]) =
-      await response.send(peer.network.chain.getStorageNodes(hashes))
+      tracePacket "<< Received eth.GetNodeData (0x0d)",
+        peer, count=hashes.len
+
+      let blobs = peer.network.chain.getStorageNodes(hashes)
+      if blobs.len > 0:
+        tracePacket ">> Replying with eth.NodeData (0x0e)",
+          peer, count=blobs.len
+      else:
+        tracePacket ">> Replying EMPTY eth.NodeData (0x0e)",
+          peer, count=0
+
+      await response.send(blobs)
 
     # User message 0x0e: NodeData.
     proc nodeData(peer: Peer, data: openArray[Blob])
@@ -152,6 +221,11 @@ p2pProtocol eth(version = ethVersion,
   requestResponse:
     # User message 0x0f: GetReceipts.
     proc getReceipts(peer: Peer, hashes: openArray[KeccakHash]) =
+      tracePacket "<< Received eth.GetReceipts (0x0f)",
+         peer, count=hashes.len
+
+      tracePacket ">> Replying EMPTY eth.Receipts (0x10)",
+         peer, count=0
       await response.send([])
       # TODO: implement `getReceipts` and reactivate this code
       # await response.send(peer.network.chain.getReceipts(hashes))
