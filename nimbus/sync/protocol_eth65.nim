@@ -37,11 +37,11 @@ const
   maxBodiesFetch* = 128
   maxReceiptsFetch* = 256
   maxHeadersFetch* = 192
-  protocolVersion* = 65
+  ethVersion = 65
 
 func toHex(x: KeccakHash): string = x.data.toHex
 
-p2pProtocol eth(version = protocolVersion,
+p2pProtocol eth(version = ethVersion,
                 peerState = PeerState,
                 useRequestIds = false):
 
@@ -56,7 +56,7 @@ p2pProtocol eth(version = protocolVersion,
         forkNext: chainForkId.nextFork.u256,
       )
 
-    let m = await peer.status(protocolVersion,
+    let m = await peer.status(ethVersion,
                               network.networkId,
                               bestBlock.difficulty,
                               bestBlock.blockHash,
@@ -82,7 +82,7 @@ p2pProtocol eth(version = protocolVersion,
   handshake:
     # User message 0x00: Status.
     proc status(peer: Peer,
-                protocolVersion: uint,
+                ethVersionArg: uint,
                 networkId: NetworkId,
                 totalDifficulty: DifficultyInt,
                 bestHash: KeccakHash,
