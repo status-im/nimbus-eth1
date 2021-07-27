@@ -80,13 +80,20 @@ proc cliqueVerify*(c: Clique; header: BlockHeader;
                         {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check whether a header conforms to the consensus rules. The caller may
   ## optionally pass on a batch of parents (ascending order) to avoid looking
-  ## those up from the database. This might be useful for concurrently
-  ## verifying a batch of new headers. This function updates the list of
-  ## authorised signers (see `cliqueSigners()` below.)
+  ## those up from the database. This function updates the list of authorised
+  ## signers (see `cliqueSigners()` below.)
   ##
   ## On success, the latest authorised signers list is available via the
   ## fucntion `c.cliqueSigners()`. Otherwise, the latest error is also stored
   ## in the `Clique` descriptor and is accessible as `c.failed`.
+  ##
+  ## This function is not transaction-save, that is the internal state of
+  ## the authorised signers list has the state of the last update after a
+  ## successful header verification. The hash of the failing header together
+  ## with the error message is then accessible as `c.failed`.
+  ##
+  ## Use the directives `cliqueSave()`, `cliqueDispose()`, and/or
+  ## `cliqueRestore()` for transaction.
   var list = toSeq(parents)
   c.cliqueVerifySeq(header, list)
 
