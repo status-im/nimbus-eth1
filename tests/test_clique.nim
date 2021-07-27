@@ -260,7 +260,7 @@ when isMainModule:
   let noisy = defined(debug)
   noisy.runCliqueSnapshot(true)
   noisy.runCliqueSnapshot(false)
-  noisy.runGoerliBaybySteps(dir = ".", captureFile = captureFile)
+  noisy.runGoerliBaybySteps(dir = ".")
   noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)

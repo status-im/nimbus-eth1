@@ -28,7 +28,8 @@ import
 
 {.push raises: [Defect].}
 
-# note that mining is unsupported, so the `clique_mining` module is ignored
+# Note that mining is unsupported. Unused code ported from the Go
+# implementation is stashed into the `clique_unused` module.
 export
   clique_cfg,
   clique_defs,
