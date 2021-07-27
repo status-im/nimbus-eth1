@@ -34,6 +34,7 @@ type
 
 const
   tracePackets* = true       # Set `true` or `false` to control packet traces.
+  traceHandshakes* = true
 
 const
   maxStateFetch* = 384
@@ -77,6 +78,15 @@ p2pProtocol eth(version = ethVersion,
                               chain.genesisHash,
                               forkId,
                               timeout = chronos.seconds(10))
+
+    if traceHandshakes:
+      trace "Handshake: Local and remote networkId",
+        local=network.networkId, remote=m.networkId
+      trace "Handshake: Local and remote genesisHash",
+        local=chain.genesisHash.toHex, remote=m.genesisHash.toHex
+      trace "Handshake: Local and remote forkId",
+        local=(forkId.forkHash.toHex & "/" & $forkId.forkNext),
+        remote=(m.forkId.forkHash.toHex & "/" & $m.forkId.forkNext)
 
     if m.networkId != network.networkId:
       trace "Peer for a different network (networkId)", peer,
