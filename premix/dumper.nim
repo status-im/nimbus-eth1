@@ -27,7 +27,7 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB)
 
   captureChainDB.setHead(parent, true)
-  discard vmState.processBlock(header, body)
+  discard vmState.processBlockNotPoA(header, body)
 
   transaction.rollback()
   dumpDebuggingMetaData(captureChainDB, header, body, vmState, false)

@@ -247,7 +247,7 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
     transactions: result.txs,
     uncles: result.uncles
   )
-  let res = tester.vmState.processBlock(result.header, body)
+  let res = tester.vmState.processBlockNotPoA(result.header, body)
   if res == ValidationResult.Error:
     if not (tb.hasException or (not tb.goodBlock)):
       raise newException(ValidationError, "process block validation")
