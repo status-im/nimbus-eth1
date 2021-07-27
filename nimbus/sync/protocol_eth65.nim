@@ -21,9 +21,7 @@ type
     hash: KeccakHash
     number: uint64           # Note: Was `uint`, wrong on 32-bit targets.
 
-  NewBlockAnnounce* = object
-    header*: BlockHeader
-    body* {.rlpInline.}: BlockBody
+  NewBlockAnnounce* = EthBlock
 
   ForkId* = object
     forkHash: array[4, byte] # The RLP encoding must be exactly 4 bytes.
@@ -124,7 +122,9 @@ p2pProtocol eth(version = protocolVersion,
     proc blockBodies(peer: Peer, blocks: openArray[BlockBody])
 
   # User message 0x07: NewBlock.
-  proc newBlock(peer: Peer, bh: NewBlockAnnounce, totalDifficulty: DifficultyInt) =
+  proc newBlock(peer: Peer, bh: EthBlock, totalDifficulty: DifficultyInt) =
+    # (Note, needs to use `EthBlock` instead of its alias `NewBlockAnnounce`
+    # because either `p2pProtocol` or RLPx doesn't work with an alias.)
     discard
 
   # User message 0x08: NewPooledTransactionHashes.
