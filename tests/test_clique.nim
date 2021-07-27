@@ -246,11 +246,11 @@ when isMainModule:
     #   `test_clique/indiump.dumpGroupNl()`
     # placed at the end of
     #   `p2p/chain/persist_blocks.persistBlocks()`.
-    captureFile = "test_clique" / "goerli504192.txt.gz"
-    #captureFile = "test_clique" / "dump-stream.out.gz"
+    captureFile = "goerli504192.txt.gz"
+    #captureFile = "dump-stream.out.gz"
 
   proc goerliReplay(noisy = true; showElapsed = true;
-                    dir = "."; captureFile = captureFile;
+                    dir = "/status"; captureFile = captureFile;
                     startAtBlock = 0u64; stopAfterBlock = 0u64) =
     runGoerliReplay(
       noisy = noisy, showElapsed = showElapsed,

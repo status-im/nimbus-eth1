@@ -386,8 +386,8 @@ proc commitVoterChain*(ap: TesterPool; postProcessOk = false;
   ## If `postProcessOk` is set, an additional verification step is added at
   ## the end of each transaction.
   ##
-  ## if `stopFaultyHeader` is set, the function stopps immediately on error.
-  ## Otherwise the offending bloch is removed, the rest of the batch is
+  ## if `stopFaultyHeader` is set, the function stops immediately on error.
+  ## Otherwise the offending block is removed, the rest of the batch is
   ## adjusted and applied again repeatedly.
   result = ap
 

@@ -40,10 +40,6 @@ const
     ## Number of recent vote snapshots to keep in memory.
     128
 
-  INMEMORY_SIGNATURES* = ##\
-    ## Number of recent block signatures to keep in memory
-    4096
-
   WIGGLE_TIME* = ##\
     ## PoA mining only (currently unsupported).
     ##
@@ -61,11 +57,6 @@ const
     ## Fixed number of extra-data prefix bytes reserved for signer vanity.
     ## Suggested 32 bytes to retain the current extra-data allowance and/or use.
     32
-
-  EXTRA_SEAL* = ##\
-    ## Fixed number of extra-data suffix bytes reserved for signer seal.
-    ## 65 bytes fixed as signatures are based on the standard secp256k1 curve.
-    65
 
   NONCE_AUTH* = ##\
     ## Magic nonce number 0xffffffffffffffff to vote on adding a new signer.
@@ -208,20 +199,10 @@ type
       ## unknown.
       "unknown ancestor"
 
-    # errPrunedAncestor = ##\
-    #   ## is returned when validating a block requires an ancestor that is
-    #   ## known, but the state of which is not available.
-    #   "pruned ancestor"
-
     errFutureBlock = ##\
       ## is returned when a block's timestamp is in the future according to
       ## the current node.
       "block in the future"
-
-    # errInvalidNumber = ##\
-    #   ## is returned if a block's number doesn't equal its parent's plus one.
-    #   "invalid block number"
-
 
     # additional/bespoke errors, manually added
     # -----------------------------------------
@@ -237,8 +218,9 @@ type
       ## Attempt to assign a value to a non-existing slot
       "Missing LRU slot for snapshot"
 
-    errSkSigResult                ## eth/keys subsytem error: signature
-    errSkPubKeyResult             ## eth/keys subsytem error: public key
+    errEcRecover = ##\
+      ## Subsytem error"
+      "ecRecover failed"
 
     errSnapshotLoad               ## DB subsytem error
     errSnapshotStore              ## ..

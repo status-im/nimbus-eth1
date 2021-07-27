@@ -69,3 +69,11 @@ const
 
   # EIP
   MaxPrecompilesAddr* =                     0xFFFF
+
+  EXTRA_SEAL* = ##\
+    ## Fixed number of suffix bytes reserved for signer seal of the `extraData`
+    ## header field. The 65 bytes constant value is for signatures based on the
+    ## standard secp256k1 curve.
+    65
+
+# End

@@ -133,7 +133,7 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
   # Resolve the authorization key and check against signers
   let signer = c.cfg.ecRecover(header)
   if signer.isErr:
-      return err(signer.error)
+    return err((errEcRecover,$signer.error))
 
   if not snapshot.isSigner(signer.value):
     return err((errUnauthorizedSigner,""))

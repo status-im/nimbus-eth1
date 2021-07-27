@@ -141,23 +141,25 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
         s.recents.del(number - limit)
 
     # Resolve the authorization key and check against signers
-    let signer = ? s.cfg.ecRecover(header)
+    let signer = s.cfg.ecRecover(header)
+    if signer.isErr:
+      return err((errEcRecover,$signer.error))
     #s.say "applySnapshot signer=", s.pp(signer)
 
-    if not s.ballot.isAuthSigner(signer):
+    if not s.ballot.isAuthSigner(signer.value):
       s.say "applySnapshot signer not authorised => fail ", s.pp(29)
       return err((errUnauthorizedSigner,""))
 
     for recent in s.recents.values:
-      if recent == signer:
-        s.say "applySnapshot signer recently seen ", s.pp(signer)
+      if recent == signer.value:
+        s.say "applySnapshot signer recently seen ", s.pp(signer.value)
         echo "+++ applySnapshot #", header.blockNumber, " err=errRecentlySigned"
         return err((errRecentlySigned,""))
-    s.recents[number] = signer
+    s.recents[number] = signer.value
 
     # Header authorized, discard any previous vote from the signer
     # clique/snapshot.go(233): for i, vote := range snap.Votes {
-    s.ballot.delVote(signer = signer, address = header.coinbase)
+    s.ballot.delVote(signer = signer.value, address = header.coinbase)
 
     # Tally up the new vote from the signer
     # clique/snapshot.go(244): var authorize bool
@@ -167,7 +169,7 @@ proc snapshotApplySeq*(s: Snapshot; headers: var seq[BlockHeader],
     elif header.nonce != NONCE_DROP:
       return err((errInvalidVote,""))
     let vote = Vote(address:     header.coinbase,
-                    signer:      signer,
+                    signer:      signer.value,
                     blockNumber: number,
                     authorize:   authOk)
     #s.say "applySnapshot calling addVote ", s.pp(vote)

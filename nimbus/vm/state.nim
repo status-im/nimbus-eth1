@@ -9,12 +9,32 @@
 # according to those terms.
 
 import
-  macros, strformat, tables, sets, options,
-  eth/[common, keys, rlp], nimcrypto/keccak,
-  ./interpreter/gas_costs, ../errors, ../forks,
-  ../constants, ../db/[db_chain, accounts_cache],
-  ../utils, json, ./transaction_tracer, ./types,
-  ../config, ../../stateless/[witness_from_tree, witness_types]
+  std/[json, macros, options, sets, strformat, tables],
+  ../../stateless/[witness_from_tree, witness_types],
+  ../config,
+  ../constants,
+  ../db/[db_chain, accounts_cache],
+  ../errors,
+  ../forks,
+  ../utils,
+  ../utils/ec_recover,
+  ./interpreter/gas_costs,
+  ./transaction_tracer,
+  ./types,
+  eth/[common, keys]
+
+
+proc getMinerAddress(vmState: BaseVMState): EthAddress =
+  if not vmState.consensusEnginePoA:
+    return vmState.blockHeader.coinbase
+
+  let account = vmState.blockHeader.ecRecover
+  if account.isErr:
+    let msg = "Could not recover account address: " & $account.error
+    raise newException(ValidationError, msg)
+
+  account.value
+
 
 proc newAccessLogs*: AccessLogs =
   AccessLogs(reads: initTable[string, string](), writes: initTable[string, string]())
@@ -28,8 +48,6 @@ proc `$`*(vmState: BaseVMState): string =
     result = "nil"
   else:
     result = &"VMState {vmState.name}:\n  header: {vmState.blockHeader}\n  chaindb:  {vmState.chaindb}"
-
-proc getMinerAddress(vmState: BaseVMState): EthAddress
 
 proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
            chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}) =
@@ -74,43 +92,6 @@ proc consensusEnginePoA*(vmState: BaseVMState): bool =
   # using `real` engine configuration
   vmState.chainDB.config.poaEngine
 
-proc getSignature(bytes: openArray[byte], output: var Signature): bool =
-  let sig = Signature.fromRaw(bytes)
-  if sig.isOk:
-    output = sig[]
-    return true
-  return false
-
-proc headerHashOriExtraData(vmState: BaseVMState): Hash256 =
-  var tmp = vmState.blockHeader
-  tmp.extraData.setLen(tmp.extraData.len-65)
-  result = keccak256.digest(rlp.encode(tmp))
-
-proc calcMinerAddress(sigRaw: openArray[byte], vmState: BaseVMState, output: var EthAddress): bool =
-  var sig: Signature
-  if sigRaw.getSignature(sig):
-    let headerHash = headerHashOriExtraData(vmState)
-    let pubkey = recover(sig, SKMessage(headerHash.data))
-    if pubkey.isOk:
-      output = pubkey[].toCanonicalAddress()
-      result = true
-
-proc getMinerAddress(vmState: BaseVMState): EthAddress =
-  if not vmState.consensusEnginePoA:
-    return vmState.blockHeader.coinbase
-
-  template data: untyped =
-    vmState.blockHeader.extraData
-
-  let len = data.len
-  doAssert(len >= 65)
-
-  var miner: EthAddress
-  if calcMinerAddress(data.toOpenArray(len - 65, len-1), vmState, miner):
-    result = miner
-  else:
-    raise newException(ValidationError, "Could not derive miner address from header extradata")
-
 proc updateBlockHeader*(vmState: BaseVMState, header: BlockHeader) =
   vmState.blockHeader = header
   vmState.touchedAccounts.clear()
@@ -141,7 +122,7 @@ method difficulty*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
 method gasLimit*(vmState: BaseVMState): GasInt {.base, gcsafe.} =
   vmState.blockHeader.gasLimit
 
-method baseFee*(vmState: BaseVMState): Uint256 {.base, gcsafe.} =
+method baseFee*(vmState: BaseVMState): UInt256 {.base, gcsafe.} =
   vmState.blockHeader.baseFee
 
 when defined(geth):

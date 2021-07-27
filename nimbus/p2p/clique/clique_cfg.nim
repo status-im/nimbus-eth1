@@ -21,7 +21,7 @@
 import
   std/[random, sequtils, strutils, times],
   ../../db/db_chain,
-  ./clique_cfg/ec_recover,
+  ../../utils/ec_recover,
   ./clique_defs,
   eth/common,
   ethash,
@@ -117,7 +117,7 @@ proc newCliqueCfg*(db: BaseChainDB): CliqueCfg =
 # clique/clique.go(145): func ecrecover(header [..]
 proc ecRecover*(cfg: CliqueCfg; header: BlockHeader): auto
                                    {.gcsafe, raises: [Defect,CatchableError].} =
-  cfg.signatures.getEcRecover(header)
+  cfg.signatures.ecRecover(header)
 
 # ------------------------------------------------------------------------------
 # Public setters
