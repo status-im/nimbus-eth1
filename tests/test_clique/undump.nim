@@ -11,7 +11,6 @@
 import
   std/[sequtils, strformat, strutils],
   ../../nimbus/db/db_chain,
-  ../../nimbus/utils,
   ./gunzip,
   eth/[common, rlp],
   nimcrypto,
@@ -48,12 +47,12 @@ proc dumpGroupEndNl*: string =
 proc dumpGroupBlockNl*(header: BlockHeader; body: BlockBody): string =
   dumpGroupBlock(header, body) & "\n"
 
-proc dumpGroupBeginNl*(db: var BaseChainDB;
+proc dumpGroupBeginNl*(db: BaseChainDB;
                        headers: openArray[BlockHeader]): string =
   if headers[0].blockNumber == 1.u256:
     let
       h0 = db.getBlockHeader(0.u256)
-      b0 = db.getBlockBody(h0.hash)
+      b0 = db.getBlockBody(h0.blockHash)
     result = "" &
       dumpGroupBegin(@[h0]) & "\n" &
       dumpGroupBlockNl(h0,b0) &
@@ -62,7 +61,7 @@ proc dumpGroupBeginNl*(db: var BaseChainDB;
   result &= dumpGroupBegin(headers) & "\n"
 
 
-proc dumpGroupNl*(db: var BaseChainDB; headers: openArray[BlockHeader];
+proc dumpGroupNl*(db: BaseChainDB; headers: openArray[BlockHeader];
                   bodies: openArray[BlockBody]): string =
   db.dumpGroupBeginNl(headers) &
     toSeq(countup(0, headers.len-1))

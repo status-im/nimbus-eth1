@@ -21,7 +21,6 @@
 import
   std/[algorithm, sequtils, strformat, strutils, tables],
   ../../../db/storage_types,
-  ../../../utils,
   ../clique_cfg,
   ../clique_defs,
   ../clique_helpers,
@@ -35,7 +34,7 @@ type
     ## Snapshot/error result type
     Result[Snapshot,CliqueError]
 
-  AddressHistory = Table[BlockNumber,EthAddress]
+  AddressHistory* = Table[BlockNumber,EthAddress]
 
   SnapshotData* = object
     blockNumber: BlockNumber  ## block number where snapshot was created on
@@ -115,6 +114,7 @@ proc getPrettyPrinters*(s: Snapshot): var PrettyPrinters =
   ## Mixin for pretty printers
   s.cfg.prettyPrint
 
+
 proc pp*(s: Snapshot; h: var AddressHistory): string {.gcsafe.} =
   ppExceptionWrap:
     toSeq(h.keys)
@@ -159,7 +159,7 @@ proc newSnapshot*(cfg: CliqueCfg; header: BlockHeader): Snapshot =
   ## `extra data` field of the header.
   new result
   let signers = header.extraData.extraDataAddresses
-  result.initSnapshot(cfg, header.blockNumber, header.hash, signers)
+  result.initSnapshot(cfg, header.blockNumber, header.blockHash, signers)
 
 # ------------------------------------------------------------------------------
 # Public getters

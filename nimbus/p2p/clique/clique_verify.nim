@@ -21,7 +21,7 @@
 ##
 
 import
-  std/[sequtils, strformat, tables, times],
+  std/[sequtils, strformat, strutils, tables, times],
   ../../chain_config,
   ../../constants,
   ../../db/db_chain,
@@ -32,7 +32,7 @@ import
   ./clique_desc,
   ./clique_helpers,
   ./clique_snapshot,
-  ./snapshot/[ballot, snapshot_desc, snapshot_misc],
+  ./snapshot/[ballot, snapshot_desc],
   chronicles,
   eth/common,
   stew/results
@@ -41,6 +41,19 @@ import
 
 logScope:
   topics = "clique PoA verify header"
+
+# ------------------------------------------------------------------------------
+# Private helpers, pretty printing
+# ------------------------------------------------------------------------------
+
+proc say(c: Clique; v: varargs[string,`$`]) {.inline.} =
+  discard
+  # uncomment body to enable
+  #c.cfg.say v
+
+proc pp(c: Clique; a: AddressHistory): string
+         {.inline, raises: [Defect,CatchableError].} =
+  "(" & toSeq(a.pairs).mapIt(&"#{it[0]}:{c.pp(it[1])}").join(" ") & ")"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -59,13 +72,41 @@ proc verifyForkHashes(c: Clique; header: BlockHeader): CliqueOkResult
   # If the homestead reprice hash is set, validate it
   let
     eip150 = c.db.config.eip150Hash
-    hash = header.hash
+    hash = header.blockHash
 
   if eip150 == hash:
     return ok()
 
   err((errCliqueGasRepriceFork,
        &"Homestead gas reprice fork: have {eip150}, want {hash}"))
+
+
+proc signersThreshold*(s: Snapshot): int {.inline.} =
+  ## Minimum number of authorised signers needed.
+  s.ballot.authSignersThreshold
+
+
+proc recentBlockNumber*(s: Snapshot;
+                        a: EthAddress): Result[BlockNumber,void] {.inline.} =
+  ## Return `BlockNumber` for `address` argument (if any)
+  for (number,recent) in s.recents.pairs:
+    if recent == a:
+      return ok(number)
+  return err()
+
+
+proc isSigner*(s: Snapshot; address: EthAddress): bool {.inline.} =
+  ## Checks whether argukment ``address` is in signers list
+  s.ballot.isAuthSigner(address)
+
+
+# clique/snapshot.go(319): func (s *Snapshot) inturn(number [..]
+proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
+  ## Returns `true` if a signer at a given block height is in-turn or not.
+  let ascSignersList = s.ballot.authSigners
+  for offset in 0 ..< ascSignersList.len:
+    if ascSignersList[offset] == signer:
+      return (number mod ascSignersList.len.u256) == offset.u256
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -90,28 +131,32 @@ proc verifySeal(c: Clique; header: BlockHeader): CliqueOkResult
   doAssert snapshot.blockHash == header.parentHash
 
   # Resolve the authorization key and check against signers
-  let signer =  c.cfg.ecRecover(header)
+  let signer = c.cfg.ecRecover(header)
   if signer.isErr:
       return err(signer.error)
 
   if not snapshot.isSigner(signer.value):
     return err((errUnauthorizedSigner,""))
 
-  let seen = snapshot.recent(signer.value)
+  c.say "verifySeal signer=", c.pp(signer.value), " ", c.pp(snapshot.recents)
+  let seen = snapshot.recentBlockNumber(signer.value)
   if seen.isOk:
+    c.say "verifySeal signer=#", seen.value,
+      " header=#", header.blockNumber,
+      " threshold=#", snapshot.signersThreshold.u256
     # Signer is among recents, only fail if the current block does not
     # shift it out
+    # clique/clique.go(486): if limit := uint64(len(snap.Signers)/2 + 1); [..]
     if header.blockNumber - snapshot.signersThreshold.u256 < seen.value:
       return err((errRecentlySigned,""))
 
   # Ensure that the difficulty corresponds to the turn-ness of the signer
-  if not c.fakeDiff:
-    if snapshot.inTurn(header.blockNumber, signer.value):
-      if header.difficulty != DIFF_INTURN:
-        return err((errWrongDifficulty,""))
-    else:
-      if header.difficulty != DIFF_NOTURN:
-        return err((errWrongDifficulty,""))
+  if snapshot.inTurn(header.blockNumber, signer.value):
+    if header.difficulty != DIFF_INTURN:
+      return err((errWrongDifficulty,"INTURN expected"))
+  else:
+    if header.difficulty != DIFF_NOTURN:
+      return err((errWrongDifficulty,"NOTURN expected"))
 
   ok()
 
@@ -137,7 +182,7 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
     return err((errUnknownAncestor,""))
 
   if parent.blockNumber != header.blockNumber-1 or
-     parent.hash != header.parentHash:
+     parent.blockHash != header.parentHash:
     return err((errUnknownAncestor,""))
 
   # clique/clique.go(330): if parent.Time+c.config.Period > header.Time {
@@ -169,7 +214,10 @@ proc verifyCascadingFields(c: Clique; header: BlockHeader;
 
   # If the block is a checkpoint block, verify the signer list
   if (header.blockNumber mod c.cfg.epoch.u256) == 0:
-    if c.snapshot.ballot.authSigners != header.extraData.extraDataAddresses:
+    var addrList = header.extraData.extraDataAddresses
+    # not using `authSigners()` here as it is too slow
+    if c.snapshot.ballot.authSignersLen != addrList.len or
+       not c.snapshot.ballot.isAuthSigner(addrList):
       return err((errMismatchingCheckpointSigners,""))
 
   # All basic checks passed, verify the seal and return
@@ -253,20 +301,20 @@ proc cliqueVerifyImpl*(c: Clique; header: BlockHeader;
     # Check header fields independent of parent blocks
     let rc = c.verifyHeaderFields(header)
     if rc.isErr:
-      c.failed = (header.hash, rc.error)
+      c.failed = (header.blockHash, rc.error)
       return err(rc.error)
 
   block:
     # If all checks passed, validate any special fields for hard forks
     let rc = c.verifyForkHashes(header)
     if rc.isErr:
-      c.failed = (header.hash, rc.error)
+      c.failed = (header.blockHash, rc.error)
       return err(rc.error)
 
   # All basic checks passed, verify cascading fields
   result = c.verifyCascadingFields(header, parents)
   if result.isErr:
-    c.failed = (header.hash, result.error)
+    c.failed = (header.blockHash, result.error)
 
 # ------------------------------------------------------------------------------
 # Public function

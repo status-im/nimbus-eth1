@@ -26,9 +26,19 @@ import
   ./clique_defs,
   ./snapshot/[lru_snaps, snapshot_desc],
   chronicles,
-  chronos,
   eth/[common, keys, rlp],
   stew/results
+
+const
+  enableCliqueAsyncLock* = ##\
+    ## Async locks are currently unused by `Clique` but were part of the Go
+    ## reference implementation. The unused code fragment from the reference
+    ## implementation are buried in the file `clique_unused.nim` and not used
+    ## otherwise.
+    defined(clique_async_lock)
+
+when enableCliqueAsyncLock:
+  import chronos
 
 type
   # clique/clique.go(142): type SignerFn func(signer [..]
@@ -71,11 +81,22 @@ type
     proposals: Proposals ##\
       ## Cu1rrent list of proposals we are pushing
 
-    asyncLock: AsyncLock ##\
-      ## Protects the signer fields
+    applySnapsMinBacklog: bool ##\
+      ## Epoch is a restart and sync point. Eip-225 requires that the epoch
+      ## header contains the full list of currently authorised signers.
+      ##
+      ## If this flag is set `true`, then the `cliqueSnapshot()` function will
+      ## walk back to the `epoch` header with at least `cfg.roThreshold` blocks
+      ## apart from the current header. This is how it is done in the reference
+      ## implementation.
+      ##
+      ## Leving the flag `false`, the assumption is that all the checkponts
+      ## before have been vetted already regardless of the current branch. So
+      ## the nearest `epoch` header is used.
 
-    fakeDiff: bool ##\
-      ## Testing/debugging only: skip difficulty verifications
+    when enableCliqueAsyncLock:
+      asyncLock: AsyncLock ##\
+        ## Protects the signer fields
 
 {.push raises: [Defect].}
 
@@ -90,11 +111,12 @@ logScope:
 proc newClique*(cfg: CliqueCfg): Clique =
   ## Initialiser for Clique proof-of-authority consensus engine with the
   ## initial signers set to the ones provided by the user.
-  Clique(cfg:       cfg,
-         recents:   cfg.initLruSnaps,
-         snapshot:  cfg.newSnapshot(BlockHeader()),
-         proposals: initTable[EthAddress,bool](),
-         asyncLock: newAsyncLock())
+  result = Clique(cfg:       cfg,
+                  recents:   cfg.initLruSnaps,
+                  snapshot:  cfg.newSnapshot(BlockHeader()),
+                  proposals: initTable[EthAddress,bool]())
+  when enableCliqueAsyncLock:
+    result.asyncLock = newAsyncLock()
 
 # ------------------------------------------------------------------------------
 # Public /pretty print
@@ -139,9 +161,18 @@ proc db*(c: Clique): auto {.inline.} =
   ## Getter
   c.cfg.db
 
-proc fakeDiff*(c: Clique): auto {.inline.} =
-  ## Getter
-  c.fakeDiff
+proc applySnapsMinBacklog*(c: Clique): auto {.inline.} =
+  ## Getter.
+  ##
+  ## If this flag is set `true`, then the `cliqueSnapshot()` function will
+  ## walk back to the `epoch` header with at least `cfg.roThreshold` blocks
+  ## apart from the current header. This is how it is done in the reference
+  ## implementation.
+  ##
+  ## Setting the flag `false` which is the default, the assumption is that all
+  ## the checkponts before have been vetted already regardless of the current
+  ## branch. So the nearest `epoch` header is used.
+  c.applySnapsMinBacklog
 
 # ------------------------------------------------------------------------------
 # Public setters
@@ -153,10 +184,6 @@ proc `db=`*(c: Clique; db: BaseChainDB) {.inline.} =
   c.proposals = initTable[EthAddress,bool]()
   c.recents = c.cfg.initLruSnaps
 
-proc `fakeDiff=`*(c: Clique; debug: bool) =
-  ## Setter
-  c.fakeDiff = debug
-
 proc `snapshot=`*(c: Clique; snaps: Snapshot) =
   ## Setter
   c.snapshot = snaps
@@ -165,23 +192,28 @@ proc `failed=`*(c: Clique; failure: CliqueFailed) =
   ## Setter
   c.failed = failure
 
+proc `applySnapsMinBacklog=`*(c: Clique; value: bool) {.inline.} =
+  ## Setter
+  c.applySnapsMinBacklog = value
+
 # ------------------------------------------------------------------------------
 # Public lock/unlock
 # ------------------------------------------------------------------------------
 
-proc lock*(c: Clique) {.inline, raises: [Defect,CatchableError].} =
-  ## Lock descriptor
-  waitFor c.asyncLock.acquire
+when enableCliqueAsyncLock:
+  proc lock*(c: Clique) {.inline, raises: [Defect,CatchableError].} =
+    ## Lock descriptor
+    waitFor c.asyncLock.acquire
 
-proc unLock*(c: Clique) {.inline, raises: [Defect,AsyncLockError].} =
-  ## Unlock descriptor
-  c.asyncLock.release
+  proc unLock*(c: Clique) {.inline, raises: [Defect,AsyncLockError].} =
+    ## Unlock descriptor
+    c.asyncLock.release
 
-template doExclusively*(c: Clique; action: untyped) =
-  ## Handy helper
-  c.lock
-  action
-  c.unlock
+  template doExclusively*(c: Clique; action: untyped) =
+    ## Handy helper
+    c.lock
+    action
+    c.unlock
 
 # ------------------------------------------------------------------------------
 # End

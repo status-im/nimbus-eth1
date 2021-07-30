@@ -10,7 +10,6 @@
 
 import
   ../../db/db_chain,
-  ../../utils,
   ../../vm_state,
   ../clique,
   ../executor,
@@ -19,12 +18,13 @@ import
   ./chain_helpers,
   chronicles,
   eth/[common, trie/db],
-  nimcrypto,
   stew/endians2,
   stint
 
 when not defined(release):
-  import ../../tracer
+  import
+    ../../tracer,
+    ../../utils
 
 {.push raises: [Defect].}
 
@@ -63,28 +63,28 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     if validationResult != ValidationResult.OK:
       return validationResult
 
-    if c.extraValidation and not c.db.config.poaEngine:
-      let res = c.db.validateHeaderAndKinship(
-        header,
-        body,
-        checkSealOK = false, # TODO: how to checkseal from here
-        c.cacheByEpoch)
-      if res.isErr:
-        debug "block validation error",
-          msg = res.error
-        return ValidationResult.Error
-
-    if c.extraValidation and c.db.config.poaEngine:
-      var parent = if 0 < i: @[headers[i-1]] else: @[]
-      let rc = c.clique.cliqueVerify(header,parent)
-      if rc.isOK:
-        # mark it off so it woul not auto-restore previous state
-        c.clique.cliqueDispose(cliqueState)
+    if c.extraValidation and c.verifyFrom <= header.blockNumber:
+      if c.db.config.poaEngine:
+        var parent = if 0 < i: @[headers[i-1]] else: @[]
+        let rc = c.clique.cliqueVerify(header,parent)
+        if rc.isOK:
+          # mark it off so it would not auto-restore previous state
+          c.clique.cliqueDispose(cliqueState)
+        else:
+          debug "PoA header verification failed",
+            blockNumber = header.blockNumber,
+            msg = $rc.error
+          return ValidationResult.Error
       else:
-        debug "PoA header verification failed",
-          blockNumber = header.blockNumber,
-          msg = $rc.error
-        return ValidationResult.Error
+        let res = c.db.validateHeaderAndKinship(
+          header,
+          body,
+          checkSealOK = false, # TODO: how to checkseal from here
+          c.cacheByEpoch)
+        if res.isErr:
+          debug "block validation error",
+            msg = res.error
+          return ValidationResult.Error
 
     discard c.db.persistHeaderToDb(header)
     discard c.db.persistTransactions(header.blockNumber, body.transactions)

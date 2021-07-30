@@ -174,7 +174,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
   for idx, uncle in body.uncles:
     before.captureAccount(stateBefore, uncle.coinbase, uncleName & $idx)
 
-  discard vmState.processBlock(header, body)
+  discard vmState.processBlockNotPoA(header, body)
 
   var stateAfter = vmState.accountDb
 

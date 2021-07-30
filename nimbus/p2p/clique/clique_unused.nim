@@ -30,13 +30,15 @@ import
   ./clique_desc,
   ./clique_helpers,
   ./clique_snapshot,
-  ./clique_signers,
   ./clique_verify,
-  ./snapshot/[snapshot_desc, snapshot_misc],
+  ./snapshot/[ballot, snapshot_desc],
   chronicles,
   chronos,
   eth/[common, keys, rlp],
   nimcrypto
+
+when not enableCliqueAsyncLock:
+  {.fatal: "Async locks must be enabled in clique_desc, try: -d:clique_async_lock"}
 
 {.push raises: [Defect].}
 
@@ -57,16 +59,55 @@ template syncExceptionWrap(action: untyped) =
   except:
     raise (ref CliqueSyncDefect)(msg: getCurrentException().msg)
 
+
+# clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
+proc verifyHeader(c: Clique; header: BlockHeader): CliqueOkResult
+                  {.gcsafe, raises: [Defect,CatchableError].} =
+  ## See `clique.cliqueVerify()`
+  var blind: seq[BlockHeader]
+  c.cliqueVerifySeq(header, blind)
+
+proc verifyHeader(c: Clique; header: BlockHeader;
+                  parents: openArray[BlockHeader]): CliqueOkResult
+                        {.gcsafe, raises: [Defect,CatchableError].} =
+  ## See `clique.cliqueVerify()`
+  var list = toSeq(parents)
+  c.cliqueVerifySeq(header, list)
+
+
+proc isValidVote(s: Snapshot; a: EthAddress; authorize: bool): bool  {.inline.}=
+  s.ballot.isValidVote(a, authorize)
+
+proc isSigner*(s: Snapshot; address: EthAddress): bool =
+  ## See `clique_verify.isSigner()`
+  s.ballot.isAuthSigner(address)
+
+# clique/snapshot.go(319): func (s *Snapshot) inturn(number [..]
+proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
+  ## See `clique_verify.inTurn()`
+  let ascSignersList = s.ballot.authSigners
+  for offset in 0 ..< ascSignersList.len:
+    if ascSignersList[offset] == signer:
+      return (number mod ascSignersList.len.u256) == offset.u256
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(681): func calcDifficulty(snap [..]
-proc calcDifficulty(snap: Snapshot; signer: EthAddress): DifficultyInt =
-  if snap.inTurn(snap.blockNumber + 1, signer):
+proc calcDifficulty(s: Snapshot; signer: EthAddress): DifficultyInt =
+  if s.inTurn(s.blockNumber + 1, signer):
     DIFF_INTURN
   else:
     DIFF_NOTURN
+
+proc recentBlockNumber*(s: Snapshot;
+                        a: EthAddress): Result[BlockNumber,void] {.inline.} =
+  ## Return `BlockNumber` for `address` argument (if any)
+  for (number,recent) in s.recents.pairs:
+    if recent == a:
+      return ok(number)
+  return err()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -83,17 +124,6 @@ proc author*(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
   ## signature in the header's extra-data section.
   c.cfg.ecRecover(header)
 
-
-# clique/clique.go(217): func (c *Clique) VerifyHeader(chain [..]
-proc verifyHeader*(c: Clique; header: BlockHeader): CliqueOkResult
-                        {.gcsafe, raises: [Defect,CatchableError].} =
-  ## For the Consensus Engine, `verifyHeader()` checks whether a header
-  ## conforms to the consensus rules of a given engine. Verifying the seal
-  ## may be done optionally here, or explicitly via the `verifySeal()` method.
-  ##
-  ## This implementation checks whether a header conforms to the consensus
-  ## rules.
-  c.cliqueVerify(header)
 
 # clique/clique.go(224): func (c *Clique) VerifyHeader(chain [..]
 proc verifyHeaders*(c: Clique; headers: openArray[BlockHeader]):
@@ -114,7 +144,7 @@ proc verifyHeaders*(c: Clique; headers: openArray[BlockHeader]):
       if isStopRequest:
         result.add cliqueResultErr((errCliqueStopped,""))
         break
-      result.add c.cliqueVerify(headers[n], headers[0 ..< n])
+      result.add c.verifyHeader(headers[n], headers[0 ..< n])
     c.doExclusively:
       c.stopVHeaderReq = false
 
@@ -179,7 +209,7 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueOkResult
   # Ensure the extra data has all its components
   header.extraData.setLen(EXTRA_VANITY)
   if (header.blockNumber mod c.cfg.epoch) == 0:
-    header.extraData.add c.cliqueSigners.mapIt(toSeq(it)).concat
+    header.extraData.add c.snapshot.ballot.authSigners.mapIt(toSeq(it)).concat
   header.extraData.add 0.byte.repeat(EXTRA_SEAL)
 
   # Mix digest is reserved for now, set to empty
@@ -310,7 +340,7 @@ proc seal*(c: Clique; ethBlock: EthBlock):
     return err((errUnauthorizedSigner,""))
 
   # If we're amongst the recent signers, wait for the next block
-  let seen = c.snapshot.recent(signer)
+  let seen = c.snapshot.recentBlockNumber(signer)
   if seen.isOk:
     # Signer is among recents, only wait if the current block does not
     # shift it out

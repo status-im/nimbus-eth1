@@ -99,6 +99,10 @@ proc authSigners*(t: var Ballot): seq[EthAddress] =
   ## Sorted ascending list of authorised signer addresses
   toSeq(t.authSig.keys).sorted(EthAscending)
 
+proc authSignersLen*(t: var Ballot): int =
+  ## Returns the number of currently known authorised signers.
+  t.authSig.len
+
 proc isAuthSignersListShrunk*(t: var Ballot): bool =
   ## Check whether the authorised signers list was shrunk recently after
   ## appying `addVote()`
@@ -115,6 +119,16 @@ proc authSignersThreshold*(t: var Ballot): int =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc isAuthSigner*(t: var Ballot; addresses: var seq[EthAddress]): bool =
+  ## Check whether all `addresses` entries are authorised signers.
+  ##
+  ## Using this function should be preferable over `authSigners()` which has
+  ## complexity `O(log n)` while this function runs with `O(n)`.
+  for a in addresses:
+    if a notin t.authSig:
+      return false
+  true
 
 proc isAuthSigner*(t: var Ballot; address: EthAddress): bool =
   ## Check whether `address` is an authorised signer

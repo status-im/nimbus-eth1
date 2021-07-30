@@ -120,7 +120,12 @@ proc start(nimbus: NimbusNode) =
   if ProtocolFlags.Les in conf.net.protocols:
     nimbus.ethNode.addCapability les
 
-  nimbus.ethNode.chain = newChain(chainDB)
+  # chainRef: some name to avoid module-name/filed/function misunderstandings
+  let chainRef = newChain(chainDB)
+  nimbus.ethNode.chain = chainRef
+  if conf.verifyFromOk:
+    chainRef.extraValidation = 0 < conf.verifyFrom
+    chainRef.verifyFrom = conf.verifyFrom
 
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:

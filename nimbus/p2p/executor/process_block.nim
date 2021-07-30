@@ -20,7 +20,6 @@ import
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
-  ./update_poastate,
   chronicles,
   eth/[common, trie/db],
   nimcrypto
@@ -118,10 +117,11 @@ proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc processBlock*(vmState: BaseVMState;
-                   header: BlockHeader, body: BlockBody): ValidationResult
+proc processBlockNotPoA*(vmState: BaseVMState;
+                         header: BlockHeader, body: BlockBody): ValidationResult
                      {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Processes `(header,body)` pair for a non-PoA network, only
+  ## Processes `(header,body)` pair for a non-PoA network, only. This function
+  ## will fail when applied to a PoA network like `Goerli`.
   if vmState.chainDB.config.poaEngine:
     # PoA consensus engine unsupported, see the other version of
     # processBlock() below
@@ -151,13 +151,20 @@ proc processBlock*(vmState: BaseVMState; poa: Clique;
                    header: BlockHeader, body: BlockBody): ValidationResult
                      {.gcsafe, raises: [Defect,CatchableError].} =
   ## Generalised function to processes `(header,body)` pair for any network,
-  ## regardless of PoA or not
+  ## regardless of PoA or not. Currently there is no mining support so this
+  ## function is mostly the same as `processBlockNotPoA()`.
+  ##
+  ## Rather than calculating the PoA state change here, it is done with the
+  ## verification in the `chain/persist_blocks.persistBlocks()` method. So
+  ## the `poa` descriptor is currently unused and only provided for later
+  ## implementations (but can be savely removed, as well.)
 
-  # Process PoA state transition first so there is no need to re-wind on error.
-  if vmState.chainDB.config.poaEngine and
-     not poa.updatePoaState(header, body):
-    debug "PoA update failed"
-    return ValidationResult.Error
+  # # Process PoA state transition first so there is no need to re-wind on
+  # # an error.
+  # if vmState.chainDB.config.poaEngine and
+  #    not poa.updatePoaState(header, body):
+  #   debug "PoA update failed"
+  #   return ValidationResult.Error
 
   var dbTx = vmState.chainDB.db.beginTransaction()
   defer: dbTx.dispose()

@@ -19,7 +19,6 @@
 ##
 
 import
-  ../../../utils,
   ../../../utils/lru_cache,
   ../clique_defs,
   ../clique_helpers,
@@ -46,7 +45,7 @@ proc initEcRecover*(cache: var EcRecover) =
     proc(header:BlockHeader): EcKey32 =
       ## If the signature's already cached, return that
       # clique/clique.go(148): hash := header.Hash()
-      header.hash.data
+      header.blockHash.data
 
   var toValue: LruValue[BlockHeader,EthAddress,CliqueError] =
 

@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[algorithm, os, sequtils, strformat, strutils],
+  std/[algorithm, os, sequtils, strformat, strutils, times],
   ../nimbus/db/db_chain,
   ../nimbus/p2p/[chain, clique, clique/clique_snapshot],
   ./test_clique/[pool, undump],
@@ -17,8 +17,9 @@ import
   stint,
   unittest2
 
-let
+const
   goerliCapture = "test_clique" / "goerli51840.txt.gz"
+  groupReplayTransactions = 7
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -27,6 +28,19 @@ let
 proc getBlockHeader(ap: TesterPool; number: BlockNumber): BlockHeader =
   ## Shortcut => db/db_chain.getBlockHeader()
   doAssert ap.db.getBlockHeader(number, result)
+
+proc ppSecs(elapsed: Duration): string =
+  result = $elapsed.inSeconds
+  let ns = elapsed.inNanoseconds mod 1_000_000_000
+  if ns != 0:
+    # to rounded decimal seconds
+    let ds = (ns + 5_000_000i64) div 10_000_000i64
+    result &= &".{ds:02}"
+  result &= "s"
+
+proc ppRow(elapsed: Duration): string =
+  let ms = elapsed.inMilliSeconds + 500
+  "x".repeat(ms div 1000)
 
 # ------------------------------------------------------------------------------
 # Test Runners
@@ -63,7 +77,7 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false;
           # Assemble a chain of headers from the cast votes
           # see clique/snapshot_test.go(407): config := *params.TestChainConfig
           pool
-            .resetVoterChain(tt.signers, tt.epoch)
+            .resetVoterChain(tt.signers, tt.epoch, tt.runBack)
             # see clique/snapshot_test.go(425): for j, block := range blocks {
             .appendVoter(tt.votes)
             .commitVoterChain(postProcessOk)
@@ -91,21 +105,24 @@ proc runCliqueSnapshot(noisy = true; postProcessOk = false; testId: int) =
   noisy.runCliqueSnapshot(postProcessOk, testIds = {testId})
 
 
-proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
+proc runGoerliReplay(noisy = true; showElapsed = false,
+                     dir = "tests"; captureFile = goerliCapture,
+                     startAtBlock = 0u64; stopAfterBlock = 0u64) =
   var
     pool = newVoterPool()
-    cache: array[7,(seq[BlockHeader],seq[BlockBody])]
+    cache: array[groupReplayTransactions,(seq[BlockHeader],seq[BlockBody])]
     cInx = 0
     stoppedOk = false
 
   pool.debug = noisy
+  pool.verifyFrom = startAtBlock
 
   let stopThreshold = if stopAfterBlock == 0u64: uint64.high.u256
                       else: stopAfterBlock.u256
 
   suite "Replay Goerli Chain":
 
-    for w in (dir / goerliCapture).undumpNextGroup:
+    for w in (dir / captureFile).undumpNextGroup:
 
       if w[0][0].blockNumber == 0.u256:
         # Verify Genesis
@@ -127,29 +144,53 @@ proc runGoerliReplay(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
           let
             first = cache[0][0][0].blockNumber
             last = cache[^1][0][^1].blockNumber
-          test &"Goerli Blocks #{first}..#{last} ({cache.len} transactions)":
+            blkRange = &"#{first}..#{last}"
+            info = if first <= startAtBlock.u256 and startAtBlock.u256 <= last:
+                     &", verification #{startAtBlock}.."
+                   else:
+                     ""
+          test &"Goerli Blocks {blkRange} ({cache.len} transactions{info})":
+            let start = getTime()
             for (headers,bodies) in cache:
               let addedPersistBlocks = pool.chain.persistBlocks(headers,bodies)
               check addedPersistBlocks == ValidationResult.Ok
               if addedPersistBlocks != ValidationResult.Ok: return
+            if showElapsed and startAtBlock.u256 <= last:
+              let
+                elpd = getTime() - start
+                info = &"{elpd.ppSecs:>7} {pool.cliqueSignersLen} {elpd.ppRow}"
+              echo &"\n       elapsed       {blkRange:<17} {info}"
 
     # Rest from cache
     if 0 < cInx:
       let
         first = cache[0][0][0].blockNumber
         last = cache[cInx-1][0][^1].blockNumber
-      test &"Goerli Blocks #{first}..#{last} ({cInx} transactions)":
+        blkRange = &"#{first}..#{last}"
+        info = if first <= startAtBlock.u256 and startAtBlock.u256 <= last:
+                  &", Verification #{startAtBlock}.."
+               else:
+                 ""
+      test &"Goerli Blocks {blkRange} ({cache.len} transactions{info})":
+        let start = getTime()
         for (headers,bodies) in cache:
           let addedPersistBlocks = pool.chain.persistBlocks(headers,bodies)
           check addedPersistBlocks == ValidationResult.Ok
           if addedPersistBlocks != ValidationResult.Ok: return
+        if showElapsed and startAtBlock.u256 <= last:
+          let
+            elpsd = getTime() - start
+            info = &"{elpsd.ppSecs:>7} {pool.cliqueSignersLen} {elpsd.ppRow}"
+          echo &"\n       elapsed       {blkRange:<17} {info}"
 
     if stoppedOk:
       test &"Runner stopped after reaching #{stopThreshold}":
         discard
 
 
-proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
+proc runGoerliBaybySteps(noisy = true;
+                         dir = "tests"; captureFile = goerliCapture,
+                         stopAfterBlock = 0u64) =
   var
     pool = newVoterPool()
     stoppedOk = false
@@ -161,7 +202,7 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
 
   suite "Replay Goerli Chain Transactions Single Blockwise":
 
-    for w in (dir / goerliCapture).undumpNextGroup:
+    for w in (dir / captureFile).undumpNextGroup:
       if stoppedOk:
         break
       if w[0][0].blockNumber == 0.u256:
@@ -192,21 +233,37 @@ proc runGoerliBaybySteps(noisy = true; dir = "tests"; stopAfterBlock = 0u64) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-let
-  skipIDs = {999}
-
 proc cliqueMain*(noisy = defined(debug)) =
   noisy.runCliqueSnapshot(true)
-  noisy.runCliqueSnapshot(false, skipIDs = skipIDs)
+  noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps
-  noisy.runGoerliReplay
+  noisy.runGoerliReplay(startAtBlock = 31100u64)
 
 when isMainModule:
+  let
+    skipIDs = {999}
+    # A new capture file can be generated using
+    #   `test_clique/indiump.dumpGroupNl()`
+    # placed at the end of
+    #   `p2p/chain/persist_blocks.persistBlocks()`.
+    captureFile = "test_clique" / "goerli504192.txt.gz"
+    #captureFile = "test_clique" / "dump-stream.out.gz"
+
+  proc goerliReplay(noisy = true; showElapsed = true;
+                    dir = "."; captureFile = captureFile;
+                    startAtBlock = 0u64; stopAfterBlock = 0u64) =
+    runGoerliReplay(
+      noisy = noisy, showElapsed = showElapsed,
+      dir = dir, captureFile = captureFile,
+      startAtBlock = startAtBlock, stopAfterBlock = stopAfterBlock)
+
   let noisy = defined(debug)
   noisy.runCliqueSnapshot(true)
   noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps(dir = ".")
-  noisy.runGoerliReplay(dir = ".")
+  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
+  #noisy.goerliReplay(startAtBlock = 31100u64)
+  #noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)
 
 # ------------------------------------------------------------------------------
 # End

@@ -134,6 +134,8 @@ type
     rng*: ref BrHmacDrbgContext
     accounts*: Table[EthAddress, NimbusAccount]
     importFile*: string
+    verifyFromOk*: bool           ## activate `verifyFrom` setting
+    verifyFrom*: uint64           ## verification start block, 0 for disable
 
 const
   # these are public network id
@@ -269,6 +271,14 @@ proc processInteger*(v: string, o: var int): ConfigStatus =
   except ValueError:
     result = ErrorParseOption
 
+proc processUInt64*(v: string, o: var uint64): ConfigStatus =
+  ## Convert string to integer.
+  try:
+    o = parseBiggestUInt(v).uint64
+    result = Success
+  except ValueError:
+    result = ErrorParseOption
+
 proc processFloat*(v: string, o: var float): ConfigStatus =
   ## Convert string to float.
   try:
@@ -376,6 +386,11 @@ proc processEthArguments(key, value: string): ConfigStatus =
     result = processPruneList(value, config.prune)
   of "import":
     config.importFile = value
+  of "verifyfrom":
+    var res = 0u64
+    result = processUInt64(value, res)
+    config.verifyFrom = uint64(result)
+    config.verifyFromOk = true
   else:
     result = EmptyOption
 
