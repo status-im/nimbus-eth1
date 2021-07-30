@@ -10,13 +10,25 @@
 [![Gitter: #status-im/nimbus](https://img.shields.io/badge/gitter-status--im%2Fnimbus-orange.svg)](https://gitter.im/status-im/nimbus)
 [![Status: #nimbus-general](https://img.shields.io/badge/status-nimbus--general-orange.svg)](https://get.status.im/chat/public/nimbus-general)
 
-## Rationale
+## Introduction
 
-[Nimbus: an Ethereum 2.0 Sharding Client](https://our.status.im/nimbus-for-newbies/). The code in this repository is currently focusing on Ethereum 1.0 feature parity, while all 2.0 research and development is happening in parallel in [nimbus-eth2](https://github.com/status-im/nimbus-eth2).
+The code in this repository is focusing on Ethereum 1.0 feature parity,
+and Ethereum 1.x research & development.
+
+This repository is also home to [fluffy](./fluffy/README.md), a
+[Portal Network](https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-network.md)
+light client.
+
+All Ethereum 2.0 research and development is happening in parallel in the
+[nimbus-eth2](https://github.com/status-im/nimbus-eth2) repository.
 
 ## Development Updates
 
-To keep up to date with changes and development progress, follow the [Nimbus blog](https://our.status.im/tag/nimbus/).
+Monthly development updates are shared
+[here](https://notes.status.im/s/KOm0W0oRt#).
+
+For more detailed write-ups on the development progress, follow the
+[Nimbus blog](https://our.status.im/tag/nimbus/).
 
 ## Building & Testing
 
