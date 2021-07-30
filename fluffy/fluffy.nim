@@ -77,6 +77,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   let bridgeClient = initializeBridgeClient(config.bridgeUri)
 
   d.start()
+  portal.start()
 
   runForever()
 

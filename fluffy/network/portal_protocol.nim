@@ -40,6 +40,14 @@ type
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
 
+  PortalResult*[T] = Result[T, cstring]
+
+# TODO:
+# - setJustSeen and replaceNode on (all) message replies
+# - On incoming portal ping of unknown node: add node to routing table by
+# grabbing ENR from discv5 routing table (might not have it)?
+# - ENRs with portal protocol capabilities as field?
+
 proc handlePing(p: PortalProtocol, ping: PingMessage):
     seq[byte] =
   let p = PongMessage(enrSeq: p.baseProtocol.localNode.record.seqNum,
@@ -141,7 +149,7 @@ proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
   return proto
 
 proc ping*(p: PortalProtocol, dst: Node):
-    Future[DiscResult[PongMessage]] {.async.} =
+    Future[PortalResult[PongMessage]] {.async.} =
   let ping = PingMessage(enrSeq: p.baseProtocol.localNode.record.seqNum,
     dataRadius: p.dataRadius)
 
@@ -152,7 +160,7 @@ proc ping*(p: PortalProtocol, dst: Node):
     encodeMessage(ping))
 
   if talkresp.isOk():
-    let decoded = decodeMessage(talkresp.get().response)
+    let decoded = decodeMessage(talkresp.get())
     if decoded.isOk():
       let message = decoded.get()
       if message.kind == pong:
@@ -165,7 +173,7 @@ proc ping*(p: PortalProtocol, dst: Node):
     return err(talkresp.error)
 
 proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
-    Future[DiscResult[NodesMessage]] {.async.} =
+    Future[PortalResult[NodesMessage]] {.async.} =
   let fn = FindNodeMessage(distances: distances)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findnode
@@ -173,7 +181,7 @@ proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
     encodeMessage(fn))
 
   if talkresp.isOk():
-    let decoded = decodeMessage(talkresp.get().response)
+    let decoded = decodeMessage(talkresp.get())
     if decoded.isOk():
       let message = decoded.get()
       if message.kind == nodes:
@@ -187,7 +195,7 @@ proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
     return err(talkresp.error)
 
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ContentKey):
-    Future[DiscResult[FoundContentMessage]] {.async.} =
+    Future[PortalResult[FoundContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
@@ -195,7 +203,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ContentKey):
     encodeMessage(fc))
 
   if talkresp.isOk():
-    let decoded = decodeMessage(talkresp.get().response)
+    let decoded = decodeMessage(talkresp.get())
     if decoded.isOk():
       let message = decoded.get()
       if message.kind == foundcontent:
