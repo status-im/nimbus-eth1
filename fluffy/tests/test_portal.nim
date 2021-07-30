@@ -62,7 +62,8 @@ procSuite "Portal Tests":
         nodes.get().total == 1'u8
         nodes.get().enrs.len() == 1
 
-    block: # Find nothing
+    block: # Find nothing: this should result in nothing as we haven't started
+      # the seeding of the portal protocol routing table yet.
       let nodes = await proto1.findNode(proto2.baseProtocol.localNode,
         List[uint16, 256](@[]))
 
@@ -72,9 +73,15 @@ procSuite "Portal Tests":
         nodes.get().enrs.len() == 0
 
     block: # Find for distance
-      # ping in one direction to add, ping in the other to update as seen.
+      # ping in one direction to add, ping in the other to update as seen,
+      # adding the node in the discovery v5 routing table. Could also launch
+      # with bootstrap node instead.
       check (await node1.ping(node2.localNode)).isOk()
       check (await node2.ping(node1.localNode)).isOk()
+
+      # Start the portal protocol to seed nodes from the discoveryv5 routing
+      # table.
+      proto2.start()
 
       let distance = logDist(node1.localNode.id, node2.localNode.id)
       let nodes = await proto1.findNode(proto2.baseProtocol.localNode,
@@ -85,6 +92,7 @@ procSuite "Portal Tests":
         nodes.get().total == 1'u8
         nodes.get().enrs.len() == 1
 
+    proto2.stop()
     await node1.closeWait()
     await node2.closeWait()
 
@@ -102,6 +110,10 @@ procSuite "Portal Tests":
     check (await node1.ping(node2.localNode)).isOk()
     check (await node2.ping(node1.localNode)).isOk()
 
+    # Start the portal protocol to seed nodes from the discoveryv5 routing
+    # table.
+    proto2.start()
+
     var nodeHash: NodeHash
 
     let contentKey = ContentKey(networkId: 0'u16,
@@ -118,5 +130,6 @@ procSuite "Portal Tests":
       foundContent.get().enrs.len() == 1
       foundContent.get().payload.len() == 0
 
+    proto2.stop()
     await node1.closeWait()
     await node2.closeWait()

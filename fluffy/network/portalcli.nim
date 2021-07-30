@@ -215,6 +215,7 @@ proc run(config: DiscoveryConf) =
 
   of noCommand:
     d.start()
+    portal.start()
     waitfor(discover(d))
 
 when isMainModule:
