@@ -37,23 +37,22 @@ _We currently do not guarantee that Nimbus will work on Windows._
 ### Prerequisites
 
 * [RocksDB](https://github.com/facebook/rocksdb/)
-* PCRE
 * GNU Make, Bash and the usual POSIX utilities. Git 2.9.4 or newer.
 
 On Windows, a precompiled DLL collection download is available through the `fetch-dlls` Makefile target: ([Windows instructions](#windows)).
 
 ```bash
 # MacOS with Homebrew
-brew install rocksdb pcre
+brew install rocksdb
 
 # Fedora
-dnf install rocksdb-devel pcre pcre-devel
+dnf install rocksdb-devel
 
 # Debian and Ubuntu
-sudo apt-get install librocksdb-dev libpcre3-dev
+sudo apt-get install librocksdb-dev
 
 # Arch (AUR)
-pakku -S rocksdb pcre-static
+pakku -S rocksdb
 ```
 
 `rocksdb` can also be installed by following [their instructions](https://github.com/facebook/rocksdb/blob/master/INSTALL.md).
@@ -188,7 +187,7 @@ Note, the Ubuntu PRoot is known to contain all Nimbus prerequisites compiled on 
 
 ```bash
 # Install prerequisites
-apt install librocksdb-dev libpcre3-dev
+apt install librocksdb-dev
 
 # Clone repo and build Nimbus just like above
 git clone https://github.com/status-im/nimbus.git
