@@ -136,6 +136,8 @@ type
     importFile*: string
     verifyFromOk*: bool           ## activate `verifyFrom` setting
     verifyFrom*: uint64           ## verification start block, 0 for disable
+    cliquePeriod*: int            ## Enables clique support, 0 for disable
+    engineSigner*: EthAddress     ## Miner account
 
 const
   # these are public network id
@@ -374,6 +376,33 @@ proc processPruneList(v: string, flags: var PruneMode): ConfigStatus =
       warn "unknown prune flags", name = item
       result = ErrorIncorrectOption
 
+proc processEthAddress(value: string, address: var EthAddress): ConfigStatus =
+  try:
+    address = hexToByteArray[20](value)
+    return Success
+  except CatchableError:
+    return ErrorParseOption
+
+proc importPrivateKey(conf: NimbusConfiguration, fileName: string): ConfigStatus =
+
+  try:
+    let pkhex = readFile(fileName)
+    let res = PrivateKey.fromHex(pkhex)
+    if res.isErr:
+      error "not a valid private key, expect 32 bytes hex"
+      return ErrorParseOption
+
+    let seckey = res.get()
+    let acc = seckey.toPublicKey().toCanonicalAddress()
+
+    conf.accounts[acc] = NimbusAccount(
+      privateKey: seckey,
+      unlocked: true
+      )
+
+  except CatchableError:
+    return ErrorParseOption
+
 proc processEthArguments(key, value: string): ConfigStatus =
   result = Success
   let config = getConfiguration()
@@ -391,6 +420,12 @@ proc processEthArguments(key, value: string): ConfigStatus =
     result = processUInt64(value, res)
     config.verifyFrom = uint64(result)
     config.verifyFromOk = true
+  of "clique-period":
+    result = processInteger(value, config.cliquePeriod)
+  of "engine-signer":
+    result = processEthAddress(value, config.engineSigner)
+  of "import-key":
+    result = config.importPrivateKey(value)
   else:
     result = EmptyOption
 
@@ -692,6 +727,9 @@ ETHEREUM OPTIONS:
   --keystore:<value>      Directory for the keystore (default: inside datadir)
   --prune:<value>         Blockchain prune mode (full or archive, default: full)
   --import:<path>         Import RLP encoded block(s), validate, write to database and quit
+  --clique-period:<value> Enables clique support. value is block time in seconds
+  --engine-signer:<value> Enables mining. value is EthAddress in hex
+  --import-key:<path>     Import unencrypted 32 bytes hex private key file
 
 NETWORKING OPTIONS:
   --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
