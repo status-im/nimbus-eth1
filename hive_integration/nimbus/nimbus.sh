@@ -34,12 +34,12 @@
 #
 # Clique PoA:
 #
-#  - [ ] HIVE_CLIQUE_PERIOD           enables clique support. value is block time in seconds.
-#  - [ ] HIVE_CLIQUE_PRIVATEKEY       private key for clique mining
+#  - [x] HIVE_CLIQUE_PERIOD           enables clique support. value is block time in seconds.
+#  - [x] HIVE_CLIQUE_PRIVATEKEY       private key for clique mining
 #
 # Other:
 #
-#  - [ ] HIVE_MINER                   enable mining. value is coinbase address.
+#  - [x] HIVE_MINER                   enable mining. value is coinbase address.
 #  - [ ] HIVE_MINER_EXTRA             extra-data field to set for newly minted blocks
 #  - [ ] HIVE_SKIP_POW                if set, skip PoW verification during block import
 #  - [x] HIVE_LOGLEVEL                client loglevel (0-5)
@@ -62,6 +62,19 @@ fi
 
 if [ "$HIVE_NETWORK_ID" != "" ]; then
   FLAGS="$FLAGS --networkid:$HIVE_NETWORK_ID"
+fi
+
+if [ "$HIVE_CLIQUE_PERIOD" != "" ]; then
+  FLAGS="$FLAGS --clique-period:$HIVE_CLIQUE_PERIOD"
+fi
+
+if [ "$HIVE_CLIQUE_PRIVATEKEY" != "" ]; then
+  echo "$HIVE_CLIQUE_PRIVATEKEY" > /private.key
+  FLAGS="$FLAGS --import-key:/private.key"
+fi
+
+if [ "$HIVE_MINER" != "" ]; then
+  FLAGS="$FLAGS --engine-signer:$HIVE_MINER"
 fi
 
 # Configure the genesis chain and use it as start block and dump it to stdout
@@ -95,6 +108,7 @@ if [ "$HIVE_GRAPHQL_ENABLED" != "" ]; then
   FLAGS="$FLAGS --graphql --graphqlbind:0.0.0.0:8545"
 else
   FLAGS="$FLAGS --rpc --rpcapi:eth,debug --rpcbind:0.0.0.0:8545"
+  FLAGS="$FLAGS --ws --wsapi:eth,debug --wsbind:0.0.0.0:8546"
 fi
 
 echo "Running nimbus with flags $FLAGS"
