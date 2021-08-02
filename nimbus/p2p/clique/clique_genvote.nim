@@ -104,15 +104,17 @@ proc cliqueGenvote*(
   ##
   ## :outOfTurn:
   ##    Must be `false` if the `voter` is `in-turn` which is defined as the
-  ##    property of the header block number retrieving the `seal` account
-  ##    address when used as list index (modulo list-length) into the
-  ##    (internally calculated and sorted) list  of authorised signers. Absence
-  ##    of this property is named `out-of-turn`.
+  ##    property of a header block number retrieving the `seal` account address
+  ##    when used as list index (modulo list-length) into the (internally
+  ##    calculated and sorted) list of authorised signers. Absence of this
+  ##    property is called `out-of-turn`.
   ##
-  ##    The classification `in-turn` and `out-of-turn` is used with a multi
-  ##    mining strategy where `in-turn` is slightly preferred. In a trivial
-  ##    example of an authorised signers list with one entry, all block numbers
-  ##    are modulo 1, so `in-turn` and `voterOutOfTurn` would be left `false`.
+  ##    The classification `in-turn` and `out-of-turn` is used only with a
+  ##    multi mining strategy where an `in-turn` block is slightly preferred.
+  ##    Nevertheless, this property is to be locked into the block chain. In a
+  ##    trivial example of an authorised signers list with exactly one entry,
+  ##    all block numbers are zero modulo one, so are `in-turn`, and
+  ##    `outOfTurn` would be left `false`.
   ##
   ## :checkPoint:
   ##    List of currently authorised signers. According to the Clique protocol
@@ -120,7 +122,7 @@ proc cliqueGenvote*(
   ##    authorised signers from the block chain.
   ##
   ##    This list must appear on an `epoch` block and nowhere else. An `epoch`
-  ##    block is a block the number of which is a multiple of `c.cfg.epoch`.
+  ##    block is a block where the block number is a multiple of `c.cfg.epoch`.
   ##    Typically, `c.cfg.epoch` is initialised as `30'000`.
   ##
   let timeElapsed = if elapsed == initDuration(): c.cfg.period  else: elapsed
@@ -168,7 +170,7 @@ proc cliqueGenvote*(
   ##
   ##    :signature:       `S`
   ##    :account address: `a(S)`
-  ##    :genesis:          extraData contains `a(S)`
+  ##    :genesis:          extraData contains exactly one signer `a(S)`
   ##
   ##    [..]
   ##
@@ -187,7 +189,7 @@ proc cliqueGenvote*(
   ##
   ##
   ##    | \# create first block (assuming empty block chain), mind `a(S)`, `S`
-  ##    | let header = c.clique_genvote(`a(S)`, `S`, elapsed = threeSecs)
+  ##    | let header = c.clique.clique_genvote(`a(S)`, `S`, elapsed = threeSecs)
   ##
   ##    [..]
   ##
