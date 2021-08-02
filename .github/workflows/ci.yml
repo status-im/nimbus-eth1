@@ -128,6 +128,11 @@ jobs:
           elif [[ '${{ matrix.target.evmc }}' == 'nimvm2' ]]; then
             echo "ENABLE_EVMC=0" >> $GITHUB_ENV
             echo "ENABLE_VM2=1" >> $GITHUB_ENV
+            case '${{ matrix.target.cpu }}:${{ runner.os }}' in
+            'i386:Windows')
+              # on a real win7/i386, there is only 64k optimiser space for gcc
+              echo "ENABLE_VM2LOWMEM=1" >> $GITHUB_ENV
+            esac
           else
             echo "ENABLE_EVMC=0" >> $GITHUB_ENV
             echo "ENABLE_VM2=0" >> $GITHUB_ENV
