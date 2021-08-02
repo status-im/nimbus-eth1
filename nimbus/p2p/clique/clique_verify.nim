@@ -102,11 +102,11 @@ proc isSigner*(s: Snapshot; address: EthAddress): bool {.inline.} =
 
 # clique/snapshot.go(319): func (s *Snapshot) inturn(number [..]
 proc inTurn*(s: Snapshot; number: BlockNumber, signer: EthAddress): bool =
-  ## Returns `true` if a signer at a given block height is in-turn or not.
+  ## Returns `true` if a signer at a given block height is in-turn.
   let ascSignersList = s.ballot.authSigners
-  for offset in 0 ..< ascSignersList.len:
-    if ascSignersList[offset] == signer:
-      return (number mod ascSignersList.len.u256) == offset.u256
+  if 0 < ascSignersList.len:
+    let offset = (number mod ascSignersList.len.u256).truncate(int64)
+    return ascSignersList[offset] == signer
 
 # ------------------------------------------------------------------------------
 # Private functions

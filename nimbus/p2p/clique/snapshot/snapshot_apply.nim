@@ -40,7 +40,7 @@ logScope:
 proc say(s: Snapshot; v: varargs[string,`$`]) {.inline.} =
   discard
   # uncomment body to enable
-  s.cfg.say v
+  #s.cfg.say v
 
 proc pp(a: openArray[BlockHeader]; first, last: int): string {.inline.} =
   result = "["

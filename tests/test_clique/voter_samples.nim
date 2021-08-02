@@ -24,10 +24,10 @@ type
                               ## deauthorize)
     checkpoint*: seq[string]  ## List of authorized signers if this is an epoch
                               ## block
-    noTurn*: bool             ## initialise `NOTURN` it `true`, otherwise
-                              ## `INTURN` (not part of Go ref implementation,
-                              ## used here to avoid `fakeDiff` kludge in the
-                              ## Go implementation)
+    noTurn*: bool             ## Initialise `NOTURN` if `true`, otherwise use
+                              ## `INTURN`. This is not part of Go ref test
+                              ## implementation. The flag used here to avoid
+                              ## what is the `fakeDiff` kludge there.
     newbatch*: bool
 
   TestSpecs* = object   ## Define the various voting scenarios to test
