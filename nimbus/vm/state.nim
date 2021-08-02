@@ -23,6 +23,8 @@ import
   ./types,
   eth/[common, keys]
 
+# Forward declaration
+proc consensusEnginePoA*(vmState: BaseVMState): bool
 
 proc getMinerAddress(vmState: BaseVMState): EthAddress =
   if not vmState.consensusEnginePoA:
