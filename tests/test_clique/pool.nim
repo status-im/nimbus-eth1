@@ -15,6 +15,7 @@ import
   ../../nimbus/p2p/[chain,
                     clique,
                     clique/clique_desc,
+                    clique/clique_genvote,
                     clique/clique_helpers,
                     clique/clique_snapshot,
                     clique/snapshot/snapshot_desc],
@@ -304,39 +305,6 @@ proc address*(ap: TesterPool; account: string): EthAddress =
   if account != "":
     result = ap.privateKey(account).toPublicKey.toCanonicalAddress
 
-
-# clique/snapshot_test.go(49): func (ap *testerAccountPool) [..]
-proc checkpoint*(ap: TesterPool;
-                header: var BlockHeader; signers: openArray[string]) =
-  ## creates a Clique checkpoint signer section from the provided list
-  ## of authorized signers and embeds it into the provided header.
-  header.extraData.setLen(EXTRA_VANITY)
-  header.extraData.add signers
-    .mapIt(ap.address(it))
-    .sorted(EthAscending)
-    .mapIt(toSeq(it))
-    .concat
-  header.extraData.add 0.byte.repeat(EXTRA_SEAL)
-
-
-# clique/snapshot_test.go(77): func (ap *testerAccountPool) sign(header n[..]
-proc sign*(ap: TesterPool; header: var BlockHeader; signer: string) =
-  ## sign calculates a Clique digital signature for the given block and embeds
-  ## it back into the header.
-  #
-  # Sign the header and embed the signature in extra data
-  let
-    hashData = header.hashSealHeader.data
-    signature = ap.privateKey(signer).sign(SkMessage(hashData)).toRaw
-    extraLen = header.extraData.len
-  header.extraData.setLen(extraLen -  EXTRA_SEAL)
-  header.extraData.add signature
-  #
-  # Register for debugging
-  ap.xSeals[signature] = XSealValue(
-    blockNumber: header.blockNumber.truncate(uint64),
-    account:     signer)
-
 # ------------------------------------------------------------------------------
 # Public: set up & manage voter database
 # ------------------------------------------------------------------------------
@@ -378,34 +346,25 @@ proc appendVoter*(ap: TesterPool;
                else:
                  ap.batch[^1][^1]
 
-  var header = BlockHeader(
-    parentHash:  parent.blockHash,
-    ommersHash:  EMPTY_UNCLE_HASH,
-    stateRoot:   parent.stateRoot,
-    timestamp:   parent.timestamp + initDuration(seconds = 100),
-    txRoot:      BLANK_ROOT_HASH,
-    receiptRoot: BLANK_ROOT_HASH,
-    blockNumber: parent.blockNumber + 1,
-    gasLimit:    parent.gasLimit,
-    #
-    # clique/snapshot_test.go(417): gen.SetCoinbase(accounts.address( [..]
-    coinbase:    ap.address(voter.voted),
-    #
-    # clique/snapshot_test.go(418): if tt.votes[j].auth {
-    nonce:       if voter.auth: NONCE_AUTH else: NONCE_DROP,
-    #
-    # clique/snapshot_test.go(436): header.Difficulty = diffInTurn [..]
-    difficulty:  if voter.noTurn: DIFF_NOTURN else: DIFF_INTURN,
-    #
-    extraData:   0.byte.repeat(EXTRA_VANITY + EXTRA_SEAL))
+  let header = ap.chain.clique.cliqueGenvote(
+    voter = ap.address(voter.voted),
+    seal = ap.privateKey(voter.signer),
+    parent = parent,
+    elapsed = initDuration(seconds = 100),
+    voteInOk = voter.auth,
+    outOfTurn = voter.noTurn,
+    checkPoint = voter.checkpoint.mapIt(ap.address(it)).sorted(EthAscending))
 
-  # clique/snapshot_test.go(432): if auths := tt.votes[j].checkpoint; [..]
   if 0 < voter.checkpoint.len:
     doAssert (header.blockNumber mod ap.clique.cfg.epoch) == 0
-    ap.checkpoint(header,voter.checkpoint)
 
-  # Generate the signature, embed it into the header and the block
-  ap.sign(header, voter.signer)
+  # Register for debugging
+  let
+    extraLen = header.extraData.len
+    extraSeal = header.extraData[extraLen - EXTRA_SEAL ..< extraLen]
+  ap.xSeals[toArray(XSealKey.len,extraSeal)] = XSealValue(
+    blockNumber: header.blockNumber.truncate(uint64),
+    account:     voter.signer)
 
   if voter.newbatch:
     ap.batch.add @[]

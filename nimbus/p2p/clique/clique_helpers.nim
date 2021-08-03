@@ -9,15 +9,13 @@
 # according to those terms.
 
 ##
-## Tuoole & Utils for Clique PoA Consensus Protocol
-## ================================================
+## Tools & Utils for Clique PoA Consensus Protocol
+## ===============================================
 ##
 ## For details see
 ## `EIP-225 <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
 ## and
 ## `go-ethereum <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-225.md>`_
-##
-## Caveat: Not supporting RLP serialisation encode()/decode()
 ##
 
 import
