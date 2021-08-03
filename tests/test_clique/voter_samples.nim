@@ -17,32 +17,60 @@ type
   TesterVote* = object  ## VoterBlock represents a single block signed by a
                         ## particular account, where the account may or may not
                         ## have cast a Clique vote.
-    signer*: string           ## Account that signed this particular block
-    voted*: string            ## Optional value if the signer voted on
-                              ## adding/removing ## someone
-    auth*: bool               ## Whether the vote was to authorize (or
-                              ## deauthorize)
-    checkpoint*: seq[string]  ## List of authorized signers if this is an epoch
-                              ## block
-    noTurn*: bool             ## initialise `NOTURN` it `true`, otherwise
-                              ## `INTURN` (not part of Go ref implementation,
-                              ## used here to avoid `fakeDiff` kludge in the
-                              ## Go implementation)
+    signer*: string ##\
+      ## Account that signed this particular block
+
+    voted*: string ##\
+      ## Optional value if the signer voted on adding/removing ## someone
+
+    auth*: bool ##\
+      ## Whether the vote was to authorize (or deauthorize)
+
+    checkpoint*: seq[string] ##\
+      ## List of authorized signers if this is an epoch block
+
+    noTurn*: bool  ##\
+      ## Initialise `NOTURN` if `true`, otherwise use `INTURN`. This is not
+      ## part of Go ref test implementation. The flag used here to avoid what
+      ## is implemented as `fakeDiff` kludge in the Go ref test implementation.
+      ##
+      ## Note that the `noTurn` value depends on the sort order of the
+      ## calculated authorised signers account address list. These account
+      ## addresses in turn (no pun intended) depend on the private keys of
+      ## these accounts. Now, the private keys are generated on-the-fly by a
+      ## PRNG which re-seeded the same for each test. So the sort order is
+      ## predictable and the correct value of the the `noTurn` flag can be set
+      ## by sort of experimenting with the tests (and/or refering to earlier
+      ## woking test specs.)
+
     newbatch*: bool
 
-  TestSpecs* = object   ## Define the various voting scenarios to test
-    id*: int                  ## Test id
-    info*: string             ## Test description
-    epoch*: int               ## Number of blocks in an epoch (unset = 30000)
-    runBack*: bool            ## Set `applySnapsMinBacklog` flag
-    signers*: seq[string]     ## Initial list of authorized signers in the
-                              ## genesis
-    votes*: seq[TesterVote]   ## Chain of signed blocks, potentially influencing
-                              ## auths
-    results*: seq[string]     ## Final list of authorized signers after all
-                              ## blocks
-    failure*: CliqueErrorType ## Failure if some block is invalid according to
-                              ## the rules
+
+  TestSpecs* = object   ## Defining genesis and the various voting scenarios
+                        ## to test (see `votes`.)
+    id*: int ##\
+      ## Test id
+
+    info*: string ##\
+      ## Test description
+
+    epoch*: int ##\
+      ## Number of blocks in an epoch (unset = 30000)
+
+    runBack*: bool ##\
+      ## Set `applySnapsMinBacklog` flag
+
+    signers*: seq[string] ##\
+      ## Initial list of authorized signers in the genesis
+
+    votes*: seq[TesterVote] ##\
+      ## Chain of signed blocks, potentially influencing auths
+
+    results*: seq[string] ##\
+      ## Final list of authorized signers after all blocks
+
+    failure*: CliqueErrorType ##\
+      ## Failure if some block is invalid according to the rules
 
 const
   # Define the various voting scenarios to test
