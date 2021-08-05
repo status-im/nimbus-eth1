@@ -148,72 +148,41 @@ proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
 
   return proto
 
+proc reqResponse[Request: SomeMessage, Response: SomeMessage](
+      p: PortalProtocol,
+      toNode: Node,
+      protocol: seq[byte],
+      request: Request
+    ): Future[PortalResult[Response]] {.async.} = 
+    let respResult = await talkreq(p.baseProtocol, toNode, protocol, encodeMessage(request))
+    return respResult
+      .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
+      .flatMap(proc (m: Message): Result[Response, cstring] = 
+        getInnerMessageResult[Response](m, cstring"Invalid message response received")
+      )
+
 proc ping*(p: PortalProtocol, dst: Node):
     Future[PortalResult[PongMessage]] {.async.} =
   let ping = PingMessage(enrSeq: p.baseProtocol.localNode.record.seqNum,
     dataRadius: p.dataRadius)
 
-  # TODO: This send and response handling code could be more generalized for the
-  # different message types.
   trace "Send message request", dstId = dst.id, kind = MessageKind.ping
-  let talkresp = await talkreq(p.baseProtocol, dst, PortalProtocolId,
-    encodeMessage(ping))
-
-  if talkresp.isOk():
-    let decoded = decodeMessage(talkresp.get())
-    if decoded.isOk():
-      let message = decoded.get()
-      if message.kind == pong:
-        return ok(message.pong)
-      else:
-        return err("Invalid message response received")
-    else:
-      return err(decoded.error)
-  else:
-    return err(talkresp.error)
+  return await reqResponse[PingMessage, PongMessage](p, dst, PortalProtocolId, ping)
 
 proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
     Future[PortalResult[NodesMessage]] {.async.} =
   let fn = FindNodeMessage(distances: distances)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findnode
-  let talkresp = await talkreq(p.baseProtocol, dst, PortalProtocolId,
-    encodeMessage(fn))
-
-  if talkresp.isOk():
-    let decoded = decodeMessage(talkresp.get())
-    if decoded.isOk():
-      let message = decoded.get()
-      if message.kind == nodes:
-        # TODO: Verify nodes here?
-        return ok(message.nodes)
-      else:
-        return err("Invalid message response received")
-    else:
-      return err(decoded.error)
-  else:
-    return err(talkresp.error)
+  # TODO Add nodes validation
+  return await reqResponse[FindNodeMessage, NodesMessage](p, dst, PortalProtocolId, fn)
 
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ContentKey):
     Future[PortalResult[FoundContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
-  let talkresp = await talkreq(p.baseProtocol, dst, PortalProtocolId,
-    encodeMessage(fc))
-
-  if talkresp.isOk():
-    let decoded = decodeMessage(talkresp.get())
-    if decoded.isOk():
-      let message = decoded.get()
-      if message.kind == foundcontent:
-        return ok(message.foundcontent)
-      else:
-        return err("Invalid message response received")
-    else:
-      return err(decoded.error)
-  else:
-    return err(talkresp.error)
+  return await reqResponse[FindContentMessage, FoundContentMessage](p, dst, PortalProtocolId, fc)
 
 proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
   var records: seq[Record]
