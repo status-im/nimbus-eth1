@@ -66,6 +66,10 @@ type
     emit_log*: proc(context: evmc_host_context, address: EthAddress,
                     data: ptr byte, data_size: uint,
                     topics: ptr evmc_bytes32, topics_count: uint) {.cdecl, gcsafe.}
+    access_account*: proc(context: evmc_host_context,
+                          address: EthAddress): evmc_access_status {.cdecl, gcsafe.}
+    access_storage*: proc(context: evmc_host_context, address: EthAddress,
+                          key: var evmc_bytes32): evmc_access_status {.cdecl, gcsafe.}
 
 proc nim_host_get_interface*(): ptr nimbus_host_interface {.importc, cdecl.}
 proc nim_host_create_context*(vmstate: pointer, msg: ptr evmc_message): evmc_host_context {.importc, cdecl.}
@@ -138,6 +142,15 @@ proc emitLog*(ctx: HostContext, address: EthAddress, data: openArray[byte],
 
 proc call*(ctx: HostContext, msg: nimbus_message): nimbus_result {.inline.} =
   ctx.host.call(ctx.context, msg.unsafeAddr)
+
+proc accessAccount*(ctx: HostContext,
+                    address: EthAddress): evmc_access_status {.inline.} =
+  ctx.host.access_account(ctx.context, address)
+
+proc accessStorage*(ctx: HostContext, address: EthAddress,
+                    key: Uint256): evmc_access_status {.inline.} =
+  var key = toEvmc(key)
+  ctx.host.access_storage(ctx.context, address, key)
 
 #proc vmHost*(vmState: BaseVMState, gasPrice: GasInt, origin: EthAddress): HostContext =
 #  let host = nim_host_get_interface()

@@ -46,6 +46,7 @@ type
   EvmcStatusCode*    = evmc_status_code
   EvmcCallKind*      = evmc_call_kind
   EvmcStorageStatus* = evmc_storage_status
+  EvmcAccessStatus*  = evmc_access_status
   EvmcTxContext*     = evmc_tx_context
   EvmcMessage*       = evmc_message
   EvmcResult*        = evmc_result
@@ -95,4 +96,4 @@ template isStatic*(msg: EvmcMessage): bool =
 # `evmc_flags` won't export the flags, `evmc_flag_bit_shifts` must be used.
 export
   evmc_status_code, evmc_call_kind,
-  evmc_flag_bit_shifts, evmc_storage_status
+  evmc_flag_bit_shifts, evmc_storage_status, evmc_access_status

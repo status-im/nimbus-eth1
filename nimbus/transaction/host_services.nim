@@ -272,6 +272,23 @@ proc emitLog(host: TransactionHost, address: HostAddress,
   host.computation.logEntries.add(log)
   #host.logEntries.add(log)
 
+proc accessAccount(host: TransactionHost, address: HostAddress): EvmcAccessStatus {.show.} =
+  host.vmState.mutateStateDB:
+    if not db.inAccessList(address):
+      db.accessList(address)
+      return EVMC_ACCESS_COLD
+    else:
+      return EVMC_ACCESS_WARM
+
+proc accessStorage(host: TransactionHost, address: HostAddress,
+                   key: HostKey): EvmcAccessStatus {.show.} =
+  host.vmState.mutateStateDB:
+    if not db.inAccessList(address, key):
+      db.accessList(address, key)
+      return EVMC_ACCESS_COLD
+    else:
+      return EVMC_ACCESS_WARM
+
 when use_evmc_glue:
   {.pop: inline.}
   const included_from_host_services = true

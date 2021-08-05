@@ -124,6 +124,24 @@ proc hostEmitLogImpl(ctx: Computation, address: EthAddress,
   log.address = address
   ctx.addLogEntry(log)
 
+proc hostAccessAccountImpl(ctx: Computation, address: EthAddress): evmc_access_status {.cdecl.} =
+  ctx.vmState.mutateStateDB:
+    if not db.inAccessList(address):
+      db.accessList(address)
+      return EVMC_ACCESS_COLD
+    else:
+      return EVMC_ACCESS_WARM
+
+proc hostAccessStorageImpl(ctx: Computation, address: EthAddress,
+                           key: var evmc_bytes32): evmc_access_status {.cdecl.} =
+  let slot = Uint256.fromEvmc(key)
+  ctx.vmState.mutateStateDB:
+    if not db.inAccessList(address, slot):
+      db.accessList(address, slot)
+      return EVMC_ACCESS_COLD
+    else:
+      return EVMC_ACCESS_WARM
+
 proc enterCreateImpl(c: Computation, m: nimbus_message): Computation =
   # TODO: use evmc_message to evoid copy
   let childMsg = Message(
@@ -215,6 +233,8 @@ proc initHostInterface(): evmc_host_interface =
   result.get_tx_context = cast[evmc_get_tx_context_fn](hostGetTxContextImpl)
   result.get_block_hash = cast[evmc_get_block_hash_fn](hostGetBlockHashImpl)
   result.emit_log = cast[evmc_emit_log_fn](hostEmitLogImpl)
+  result.access_account = cast[evmc_access_account_fn](hostAccessAccountImpl)
+  result.access_storage = cast[evmc_access_storage_fn](hostAccessStorageImpl)
 
 proc vmSetOptionImpl(vm: ptr evmc_vm, name, value: cstring): evmc_set_option_result {.cdecl.} =
   return EVMC_SET_OPTION_INVALID_NAME

@@ -64,6 +64,14 @@ proc emitLog(p: evmc_host_context, address: var evmc_address,
   toHost(p).emitLog(address.fromEvmc, data, data_size,
                     cast[ptr HostTopic](topics), topics_count)
 
+proc accessAccount(p: evmc_host_context,
+                   address: var evmc_address): evmc_access_status {.cdecl.} =
+  toHost(p).accessAccount(address.fromEvmc)
+
+proc accessStorage(p: evmc_host_context, address: var evmc_address,
+                   key: var evmc_bytes32): evmc_access_status {.cdecl.} =
+  toHost(p).accessStorage(address.fromEvmc, key.fromEvmc)
+
 proc evmcGetHostInterface(): ref evmc_host_interface =
   var theHostInterface {.global, threadvar.}: ref evmc_host_interface
   if theHostInterface.isNil:
@@ -80,6 +88,8 @@ proc evmcGetHostInterface(): ref evmc_host_interface =
       get_tx_context: getTxContext,
       get_block_hash: getBlockHash,
       emit_log:       emitLog,
+      access_account: accessAccount,
+      access_storage: accessStorage,
     )
   return theHostInterface
 
