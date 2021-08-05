@@ -788,7 +788,7 @@ LOCAL SERVICE OPTIONS:
   --graphql               Enable the HTTP-GraphQL server
   --graphqlbind:<value>   Set address:port pair GraphQL server will bind (default: localhost:8547)
   --ws                    Enable the Websocket JSON-RPC server
-  --wsbind:<value>        Set address:port pair(s) (comma-separated) Websocket JSON-RPC server will bind to (default: localhost:8546)
+  --wsbind:<value>        Set address:port pair Websocket JSON-RPC server will bind to (default: localhost:8546)
   --wsapi:<value>         Enable specific set of Websocket RPC API from list (comma-separated) (available: eth, debug)
 
 LOGGING AND DEBUGGING OPTIONS:

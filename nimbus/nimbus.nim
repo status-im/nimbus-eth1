@@ -40,6 +40,7 @@ type
     ethNode*: EthereumNode
     state*: NimbusState
     graphqlServer*: GraphqlHttpServerRef
+    wsRpcServer*: RpcWebSocketServer
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
@@ -137,6 +138,18 @@ proc start(nimbus: NimbusNode) =
     setupEthRpc(nimbus.ethNode, chainDB, nimbus.rpcServer)
   if RpcFlags.Debug in conf.rpc.flags:
     setupDebugRpc(chainDB, nimbus.rpcServer)
+
+  # Creating Websocket RPC Server
+  if RpcFlags.Enabled in conf.ws.flags:
+    doAssert(conf.ws.binds.len > 0)
+    nimbus.wsRpcServer = newRpcWebSocketServer(conf.ws.binds[0])
+    setupCommonRpc(nimbus.ethNode, nimbus.wsRpcServer)
+
+  # Enable Websocket RPC APIs based on RPC flags and protocol flags
+  if RpcFlags.Eth in conf.ws.flags and ProtocolFlags.Eth in conf.net.protocols:
+    setupEthRpc(nimbus.ethNode, chainDB, nimbus.wsRpcServer)
+  if RpcFlags.Debug in conf.ws.flags:
+    setupDebugRpc(chainDB, nimbus.wsRpcServer)
 
   ## Starting servers
   if RpcFlags.Enabled in conf.rpc.flags:
