@@ -25,10 +25,21 @@ proc miscMain*() =
       check toAddress(0x10, 0x0).toInt == 0x1000
       check toAddress(0x10, 0x0, 0x0).toInt == 0x100000
 
+    const genesisFile = "tests" / "customgenesis" / "calaveras.json"
     test "networkid cli":
       var msg: string
-      const genesisFile = "tests" / "customgenesis" / "calaveras.json"
       var opt = initOptParser("--customnetwork:" & genesisFile & " --networkid:123")
+      let res = processArguments(msg, opt)
+      if res != Success:
+        echo msg
+        quit(QuitFailure)
+
+      let conf = getConfiguration()
+      check conf.net.networkId == 123.NetworkId
+
+    test "networkid first, customnetwork next":
+      var msg: string
+      var opt = initOptParser(" --networkid:123 --customnetwork:" & genesisFile)
       let res = processArguments(msg, opt)
       if res != Success:
         echo msg
