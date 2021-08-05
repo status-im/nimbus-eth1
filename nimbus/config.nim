@@ -847,6 +847,13 @@ when declared(os.paramCount): # not available with `--app:lib`
     if config.net.discPort == 0:
       config.net.discPort = config.net.bindPort
 
+    if NetworkIdSet notin config.net.flags and config.net.networkId == CustomNet:
+      # WARNING: networkId and chainId are two distinct things
+      # they usage should not be mixed in other places
+      # we only set networkId to chainId if networkId not set in cli and
+      # we are using custom genesis/custom chain config via json file.
+      config.net.networkId = NetworkId(config.customGenesis.config.chainId)
+
   proc processArguments*(msg: var string): ConfigStatus =
     var opt = initOptParser()
     processArguments(msg, opt)
