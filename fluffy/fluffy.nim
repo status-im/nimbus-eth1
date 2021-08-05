@@ -68,11 +68,11 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   if config.rpcEnabled:
     let ta = initTAddress(config.rpcAddress, config.rpcPort)
-    var rpcHttpServerWithProxy = newRpcHttpProxy([ta])
+    var rpcHttpServerWithProxy = RpcProxy.new([ta], config.proxyUri)
     rpcHttpServerWithProxy.installEthApiHandlers()
     # TODO for now we can only proxy to local node (or remote one without ssl) to make it possible
     # to call infura https://github.com/status-im/nim-json-rpc/pull/101 needs to get merged for http client to support https/
-    waitFor rpcHttpServerWithProxy.start(config.proxyUri)
+    waitFor rpcHttpServerWithProxy.start()
 
   let bridgeClient = initializeBridgeClient(config.bridgeUri)
 

@@ -8,13 +8,15 @@
 {.push raises: [Defect].}
 
 import
-  confutils, confutils/std/net, chronicles,
-  eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node]
+  uri, confutils, confutils/std/net, chronicles,
+  eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node],
+  json_rpc/rpcproxy
 
 const
   DefaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
   DefaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
   DefaultProxyAddress* = (static "http://127.0.0.1:8546")
+  DefaultClientConfig* = getHttpClientConfig(DefaultProxyAddress)
 
 type
   PortalCmd* = enum
@@ -96,9 +98,9 @@ type
     # it makes little sense to have default value here in final release, but until then
     # it would be troublesome to add some fake uri param every time
     proxyUri* {.
-      defaultValue: DefaultProxyAddress
+      defaultValue: DefaultClientConfig
       desc: "uri of client to get data for unimplemented rpc methods"
-      name: "proxy-uri" .}: string
+      name: "proxy-uri" .}: ClientConfig
 
     case cmd* {.
       command
@@ -140,4 +142,19 @@ proc parseCmdArg*(T: type PrivateKey, p: TaintedString): T
     raise newException(ConfigurationError, "Invalid private key")
 
 proc completeCmdArg*(T: type PrivateKey, val: TaintedString): seq[string] =
+  return @[]
+
+proc parseCmdArg*(T: type ClientConfig, p: TaintedString): T 
+      {.raises: [Defect, ConfigurationError].} =
+  let uri = parseUri(p)
+  if (uri.scheme == "http" or uri.scheme == "https"):
+    getHttpClientConfig(p)
+  elif (uri.scheme == "ws" or uri.scheme == "wss"):
+    getWebSocketClientConfig(p)
+  else:
+    raise newException(
+      ConfigurationError, "Proxy uri should have defined scheme (http/https/ws/wss)"
+    )
+
+proc completeCmdArg*(T: type ClientConfig, val: TaintedString): seq[string] =
   return @[]
