@@ -20,7 +20,7 @@ import
 # Can be done by just forwarding the rpc call, or by adding a call here, but
 # that would introduce a unnecessary serializing/deserializing step.
 
-proc installEthApiHandlers*(rpcServerWithProxy: var RpcHttpProxy)
+proc installEthApiHandlers*(rpcServerWithProxy: var RpcProxy)
     {.raises: [Defect, CatchableError].} =
 
   # Supported API
@@ -96,4 +96,4 @@ proc installEthApiHandlers*(rpcServerWithProxy: var RpcHttpProxy)
 
   rpcServerWithProxy.registerProxyMethod("eth_syncing") 
 
-  rpcServerWithProxy.registerProxyMethod("eth_uninstallFilter") 
+  rpcServerWithProxy.registerProxyMethod("eth_uninstallFilter")
