@@ -23,15 +23,47 @@ logScope:
 # ##################################
 # Syntactic sugar
 
-proc gasEip2929AccountCheck(c: Computation, address: EthAddress, prevCost = 0.GasInt) =
-  c.vmState.mutateStateDB:
-    let gasCost = if not db.inAccessList(address):
-                    db.accessList(address)
-                    ColdAccountAccessCost
-                  else:
-                    WarmStorageReadCost
+template accessGas(c: Computation, address: EthAddress): GasInt =
+  c.accessGas(ColdAccountAccessCost, WarmStorageReadCost, address)
 
-    c.gasMeter.consumeGas(gasCost - prevCost, reason = "gasEIP2929AccountCheck")
+template accessGas(c: Computation, coldAccessGas, warmAccessGas: GasInt): GasInt =
+  # Simulate making the `address` argument default `= c.msg.contractAddress`.
+  # Works around Nim 1.2.10 compiler's "internal error: environment misses: c".
+  c.accessGas(coldAccessGas, warmAccessGas, c.msg.contractAddress)
+
+template accessGas(c: Computation, coldAccessGas, warmAccessGas: GasInt,
+                   address: EthAddress): GasInt =
+  c.accessGas(address, coldAccessGas, warmAccessGas)
+
+proc accessGas(c: Computation, address = c.msg.contractAddress,
+               coldAccessGas, warmAccessGas: GasInt): GasInt {.inline.} =
+  when evmc_enabled:
+    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
+      coldAccessGas
+    else:
+      warmAccessGas
+  else:
+    c.vmState.mutateStateDB:
+      if not db.inAccessList(address):
+        db.accessList(address)
+        return coldAccessGas
+      else:
+        return warmAccessGas
+
+proc accessGas(c: Computation, coldAccessGas, warmAccessGas: GasInt,
+               slot: Uint256): GasInt {.inline.} =
+  when evmc_enabled:
+    if c.host.accessStorage(c.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
+      coldAccessGas
+    else:
+      warmAccessGas
+  else:
+    c.vmState.mutateStateDB:
+      if not db.inAccessList(c.msg.contractAddress, slot):
+        db.accessList(c.msg.contractAddress, slot)
+        return coldAccessGas
+      else:
+        return warmAccessGas
 
 template push(x: typed) {.dirty.} =
   ## Push an expression on the computation stack
@@ -782,11 +814,11 @@ template genCall(callName: untyped, opCode: Op): untyped =
     # because it will affect `c.gasMeter.gasRemaining`
     # and further `childGasLimit`
     if c.fork >= FkBerlin:
-      c.vmState.mutateStateDB:
-        if not db.inAccessList(destination):
-          db.accessList(destination)
-          # The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant `gasCall`
-          c.gasMeter.consumeGas(ColdAccountAccessCost - WarmStorageReadCost, reason = "EIP2929 gasCall")
+      # The WarmStorageReadCostEIP2929 (100) is already deducted in the form of a constant `gasCall`
+      let gasCost = c.accessGas(ColdAccountAccessCost - WarmStorageReadCost, 0,
+                                destination)
+      if gasCost != 0:
+        c.gasMeter.consumeGas(gasCost, reason = "EIP2929 gasCall")
 
     let contractAddress = when opCode in {Call, StaticCall}: destination else: c.msg.contractAddress
     var (gasCost, childGasLimit) = c.gasCosts[opCode].c_handler(
@@ -986,19 +1018,21 @@ op extCodeHash, inline = true:
 op balanceEIP2929, inline = true:
   ## 0x31, Get balance of the given account.
   let address = c.stack.popAddress()
-
-  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasBalance])
+  c.gasMeter.consumeGas(c.accessGas(address) - gasFees[c.fork][GasBalance],
+                        reason = "balanceEIP2929")
   push: c.getBalance(address)
 
 op extCodeHashEIP2929, inline = true:
   let address = c.stack.popAddress()
-  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCodeHash])
+  c.gasMeter.consumeGas(c.accessGas(address) - gasFees[c.fork][GasExtCodeHash],
+                        reason = "extCodeHashEIP2929")
   push: c.getCodeHash(address)
 
 op extCodeSizeEIP2929, inline = true:
   ## 0x3b, Get size of an account's code
   let address = c.stack.popAddress()
-  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCode])
+  c.gasMeter.consumeGas(c.accessGas(address) - gasFees[c.fork][GasExtCode],
+                        reason = "extCodeSizeEIP2929")
   push: c.getCodeSize(address)
 
 op extCodeCopyEIP2929, inline = true:
@@ -1011,7 +1045,8 @@ op extCodeCopyEIP2929, inline = true:
     c.gasCosts[ExtCodeCopy].m_handler(c.memory.len, memPos, len),
     reason="ExtCodeCopy fee")
 
-  c.gasEip2929AccountCheck(address, gasFees[c.fork][GasExtCode])
+  c.gasMeter.consumeGas(c.accessGas(address) - gasFees[c.fork][GasExtCode],
+                        reason = "extCodeCopyEIP2929")
 
   let codeBytes = c.getCode(address)
   c.memory.writePaddedResult(codeBytes, memPos, codePos, len)
@@ -1029,25 +1064,15 @@ op selfDestructEIP2929, inline = false:
     )
 
   var gasCost = c.gasCosts[SelfDestruct].c_handler(0.u256, gasParams).gasCost
-
-  c.vmState.mutateStateDB:
-    if not db.inAccessList(beneficiary):
-      db.accessList(beneficiary)
-      gasCost = gasCost + ColdAccountAccessCost
+  gasCost += c.accessGas(ColdAccountAccessCost, 0, beneficiary)
 
   c.gasMeter.consumeGas(gasCost, reason = "SELFDESTRUCT EIP161")
   c.selfDestruct(beneficiary)
 
 op sloadEIP2929, inline = true, slot:
   ## 0x54, Load word from storage.
-  c.vmState.mutateStateDB:
-    let gasCost = if not db.inAccessList(c.msg.contractAddress, slot):
-                    db.accessList(c.msg.contractAddress, slot)
-                    ColdSloadCost
-                  else:
-                    WarmStorageReadCost
-    c.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
-
+  let gasCost = c.accessGas(ColdSloadCost, WarmStorageReadCost, slot)
+  c.gasMeter.consumeGas(gasCost, reason = "sloadEIP2929")
   push: c.getStorage(slot)
 
 op sstoreEIP2929, inline = false, slot, newValue:
@@ -1057,10 +1082,9 @@ op sstoreEIP2929, inline = false, slot, newValue:
   if c.gasMeter.gasRemaining <= SentryGasEIP2200:
     raise newException(OutOfGas, "Gas not enough to perform EIP2200 SSTORE")
 
-  c.vmState.mutateStateDB:
-    if not db.inAccessList(c.msg.contractAddress, slot):
-      db.accessList(c.msg.contractAddress, slot)
-      c.gasMeter.consumeGas(ColdSloadCost, reason = "sstoreEIP2929")
+  let gasCost = c.accessGas(ColdSloadCost, 0, slot)
+  if gasCost != 0:
+    c.gasMeter.consumeGas(gasCost, reason = "sstoreEIP2929")
 
   when evmc_enabled:
     sstoreEvmc(c, slot, newValue)
