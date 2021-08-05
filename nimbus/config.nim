@@ -546,7 +546,7 @@ proc processNetArguments(key, value: string): ConfigStatus =
     var res = 0
     result = processInteger(value, res)
     if result == Success:
-      config.net.setNetwork(NetworkId(result))
+      config.net.setNetwork(NetworkId(res))
       config.net.flags.incl NetworkIdSet
   elif skey == "nodiscover":
     config.net.flags.incl(NoDiscover)
