@@ -34,6 +34,21 @@ proc customGenesisTest() =
       check loadCustomGenesis(dataFolder / "berlin2000.json", cga)
       check loadCustomGenesis(dataFolder / "chainid7.json", cgb)
       check loadCustomGenesis(dataFolder / "noconfig.json", cgc)
+      check cga.config.poaEngine == false
+      check cgb.config.poaEngine == false
+      check cgc.config.poaEngine == false
+
+    test "calaveras.json":
+      var cg: CustomGenesis
+      check loadCustomGenesis(dataFolder / "calaveras.json", cg)
+      let h = toBlock(cg.genesis, nil)
+      let stateRoot = "664c93de37eb4a72953ea42b8c046cdb64c9f0b0bca5505ade8d970d49ebdb8c".toDigest
+      let genesisHash = "eb9233d066c275efcdfed8037f4fc082770176aefdbcb7691c71da412a5670f2".toDigest
+      check h.stateRoot == stateRoot
+      check h.blockHash == genesisHash
+      check cg.config.poaEngine == true
+      check cg.config.cliquePeriod == 30
+      check cg.config.cliqueEpoch == 30000
 
 proc genesisMain*() =
   genesisTest()

@@ -17,6 +17,10 @@ import
   json_serialization/lexer
 
 type
+  CliqueOptions = object
+    epoch : Option[int]
+    period: Option[int]
+
   ChainOptions = object
     chainId            : ChainId
     homesteadBlock     : Option[BlockNumber]
@@ -33,6 +37,7 @@ type
     muirGlacierBlock   : Option[BlockNumber]
     berlinBlock        : Option[BlockNumber]
     londonBlock        : Option[BlockNumber]
+    clique             : CliqueOptions
 
   ChainConfig* = object
     chainId*            : ChainId
@@ -55,9 +60,9 @@ type
     berlinBlock*        : BlockNumber
     londonBlock*        : BlockNumber
 
-    # TODO: this need to be fixed somehow
-    # using `real` engine configuration
     poaEngine*          : bool
+    cliquePeriod*       : int
+    cliqueEpoch*        : int
 
   Genesis* = object
     nonce*      : BlockNonce
@@ -69,7 +74,7 @@ type
     coinbase*   : EthAddress
     alloc*      : GenesisAlloc
     baseFeePerGas*: Option[UInt256]
-    
+
   GenesisAlloc* = Table[EthAddress, GenesisAccount]
   GenesisAccount* = object
     code*   : seq[byte]
@@ -163,9 +168,17 @@ proc loadCustomGenesis*(fileName: string, cg: var CustomGenesis): bool =
   cg.config.daoForkSupport = cc.config.daoForkSupport
   cg.config.eip150Hash     = cc.config.eip150Hash
 
-  # TODO: this need to be fixed somehow
-  # using `real` engine configuration
   cg.config.poaEngine      = false
+
+  if cc.config.clique.period.isSome or
+    cc.config.clique.epoch.isSome:
+    cg.config.poaEngine = true
+
+  if cc.config.clique.period.isSome:
+    cg.config.cliquePeriod = cc.config.clique.period.get()
+
+  if cc.config.clique.epoch.isSome:
+    cg.config.cliqueEpoch = cc.config.clique.epoch.get()
 
   template validateFork(forkName: untyped, nextBlock: BlockNumber) =
     let fork = astToStr(forkName)

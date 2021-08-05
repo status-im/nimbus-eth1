@@ -137,7 +137,6 @@ type
     importFile*: string
     verifyFromOk*: bool           ## activate `verifyFrom` setting
     verifyFrom*: uint64           ## verification start block, 0 for disable
-    cliquePeriod*: int            ## Enables clique support, 0 for disable
     engineSigner*: EthAddress     ## Miner account
 
 const
@@ -421,8 +420,6 @@ proc processEthArguments(key, value: string): ConfigStatus =
     result = processUInt64(value, res)
     config.verifyFrom = uint64(result)
     config.verifyFromOk = true
-  of "clique-period":
-    result = processInteger(value, config.cliquePeriod)
   of "engine-signer":
     result = processEthAddress(value, config.engineSigner)
   of "import-key":
@@ -753,7 +750,6 @@ ETHEREUM OPTIONS:
   --keystore:<value>      Directory for the keystore (default: inside datadir)
   --prune:<value>         Blockchain prune mode (full or archive, default: full)
   --import:<path>         Import RLP encoded block(s), validate, write to database and quit
-  --clique-period:<value> Enables clique support. value is block time in seconds
   --engine-signer:<value> Enables mining. value is EthAddress in hex
   --import-key:<path>     Import unencrypted 32 bytes hex private key file
 
