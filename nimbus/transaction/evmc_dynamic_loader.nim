@@ -9,9 +9,12 @@
 #{.push raises: [Defect].}
 
 import
-  std/[dynlib, strformat, strutils, os],
+  std/[dynlib, strutils, os],
   chronicles,
   evmc/evmc, ../config
+
+when defined(posix):
+  import posix
 
 # The built-in Nimbus EVM, via imported C function.
 proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
@@ -29,14 +32,24 @@ var evmcLibraryPath {.threadvar.}: string
 proc evmcSetLibraryPath*(path: string) =
   evmcLibraryPath = path
 
-proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
+proc evmcLoadLibError(path: string): string =
+  when defined(windows):
+    # On Windows, `GetLastError` is correct after `LoadLibrary*` fails.
+    result = osErrorMessage(osLastError())
+  else:
+    # On POSIX, `dlerror` is correct after `dlopen` fails.
+    result = $dlerror()
+    result.removePrefix(path & ": ")                  # Trim prefix (Linux)
+    result.removePrefix("dlopen(" & path & ", 2): ")  # Trim prefix (MacOS)
+
+proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string, bool) =
   var path = evmcLibraryPath
   if path.len == 0:
     path = getEnv("NIMBUS_EVM")
 
   # Use built-in EVM if no other is specified.
   if path.len == 0:
-    return (evmc_create_nimbus_evm, "built-in")
+    return (evmc_create_nimbus_evm, "built-in", true)
 
   # The steps below match the EVMC Loader documentation, copied here:
   #
@@ -56,8 +69,9 @@ proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
   # Load the library.
   let lib = loadLib(path, false)
   if lib.isNil:
-    warn "Error loading EVM library", path
-    return (nil, "")
+    let reason = evmcloadLibError(path)
+    error "Error loading EVM library", path, reason
+    return (nil, "", false)
 
   # Find filename in the path.
   var symbolName = os.extractFilename(path)
@@ -69,43 +83,47 @@ proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
   # Replace all "-" with "_".
   symbolName = symbolName.replace('-', '_')
 
-  # Search for the built function name.
+  # Search for the function name.
   symbolName = "evmc_create_" & symbolName
   var sym = symAddr(lib, symbolName)
   if sym.isNil:
     const fallback = "evmc_create"
     sym = symAddr(lib, fallback)
     if sym.isNil:
-      warn "EVMC create function not found in library", path
-      warn "Tried this library symbol", symbol=symbolName
-      warn "Tried this library symbol", symbol=fallback
-      return (nil, "")
+      error "EVMC create function not found in library",
+        path, tried1=symbolName, tried2=fallBack
+      return (nil, "", false)
 
-  return (cast[evmc_create_vm_name_fn](sym), path)
+  return (cast[evmc_create_vm_name_fn](sym), path, false)
 
 proc evmcLoadVMShowDetail(): ptr evmc_vm =
-  let (vmCreate, vmDescription) = evmcLoadVMGetCreateFn()
+  let (vmCreate, vmDescription, vmBuiltIn) = evmcLoadVMGetCreateFn()
   if vmCreate.isNil:
+    # Already logged an error message in this case.
     return nil
 
   {.gcsafe.}:
-    let vm: ptr evmc_vm = vmCreate()
+    var vm: ptr evmc_vm = vmCreate()
 
   if vm.isNil:
-    warn "The loaded EVM did not create a VM when requested",
+    error "The loaded EVM did not create a VM when requested",
       `from`=vmDescription
-    return nil
-
-  if vm.abi_version != EVMC_ABI_VERSION:
-    warn "The loaded EVM is for an incompatible EVMC ABI",
+  elif vm.abi_version != EVMC_ABI_VERSION:
+    error "The loaded EVM is for an incompatible EVMC ABI",
       requireABI=EVMC_ABI_VERSION, loadedABI=vm.abi_version,
       `from`=vmDescription
-    warn "The loaded EVM will not be used", `from`=vmDescription
-    return nil
+    vm = nil
 
-  let name = if vm.name.isNil: "<nil>" else: $vm.name
-  let version = if vm.version.isNil: "<nil>" else: $vm.version
-  info "Using EVM", name=name, version=version, `from`=vmDescription
+  if vm.isNil:
+    warn "The loaded EVM will not be used", `from`=vmDescription
+  else:
+    let name = if vm.name.isNil: "<nil>" else: $vm.name
+    let version = if vm.version.isNil: "<nil>" else: $vm.version
+    if vmBuiltin:
+      info "Using built-in EVM", name, version, `from`=vmDescription
+    else:
+      info "Using loaded EVM", name, version, `from`=vmDescription
+
   return vm
 
 proc evmcLoadVMCached*(): ptr evmc_vm =

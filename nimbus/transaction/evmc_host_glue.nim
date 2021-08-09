@@ -99,7 +99,7 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
 
   let vm = evmcLoadVMCached()
   if vm.isNil:
-    warn "No EVM"
+    warn "No EVM so returning error from EVM call"
     # Nim defaults are fine for all other fields in the result object.
     result = EvmcResult(status_code: EVMC_INTERNAL_ERROR)
     host.showCallReturn(result)
