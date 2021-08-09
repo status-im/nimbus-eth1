@@ -72,26 +72,22 @@ proc accessStorage(p: evmc_host_context, address: var evmc_address,
                    key: var evmc_bytes32): evmc_access_status {.cdecl.} =
   toHost(p).accessStorage(address.fromEvmc, key.fromEvmc)
 
-proc evmcGetHostInterface(): ref evmc_host_interface =
-  var theHostInterface {.global, threadvar.}: ref evmc_host_interface
-  if theHostInterface.isNil:
-    theHostInterface = (ref evmc_host_interface)(
-      account_exists: accountExists,
-      get_storage:    getStorage,
-      set_storage:    setStorage,
-      get_balance:    getBalance,
-      get_code_size:  getCodeSize,
-      get_code_hash:  getCodeHash,
-      copy_code:      copyCode,
-      selfdestruct:   selfDestruct,
-      call:           call,
-      get_tx_context: getTxContext,
-      get_block_hash: getBlockHash,
-      emit_log:       emitLog,
-      access_account: accessAccount,
-      access_storage: accessStorage,
-    )
-  return theHostInterface
+let hostInterface = evmc_host_interface(
+  account_exists: accountExists,
+  get_storage:    getStorage,
+  set_storage:    setStorage,
+  get_balance:    getBalance,
+  get_code_size:  getCodeSize,
+  get_code_hash:  getCodeHash,
+  copy_code:      copyCode,
+  selfdestruct:   selfDestruct,
+  call:           call,
+  get_tx_context: getTxContext,
+  get_block_hash: getBlockHash,
+  emit_log:       emitLog,
+  access_account: accessAccount,
+  access_storage: accessStorage,
+)
 
 # The built-in Nimbus EVM, via imported C function.
 proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
@@ -111,7 +107,6 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
     host.showCallReturn(result)
     return
 
-  let hostInterface = evmcGetHostInterface()
   let hostContext = cast[evmc_host_context](host)
 
   # Without `{.gcsafe.}:` here, the call via `vm.execute` results in a Nim
@@ -131,7 +126,7 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
   # TODO: But wait: Why does the Nim EVMC test program compile fine without
   # any `gcsafe`, even with `--threads:on`?
   {.gcsafe.}:
-    result = vm.execute(vm, hostInterface[].addr, hostContext,
+    result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
                         evmc_revision(host.vmState.fork), host.msg,
                         if host.code.len > 0: host.code[0].unsafeAddr else: nil,
                         host.code.len.csize_t)
