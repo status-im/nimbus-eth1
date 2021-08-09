@@ -12,7 +12,8 @@ import ../../test_macro
 import
   ./test_portal_encoding,
   ./test_portal,
-  ./test_content_network
+  ./test_content_network,
+  ./test_overlay
 
 cliBuilder:
   import

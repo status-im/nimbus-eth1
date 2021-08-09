@@ -9,6 +9,7 @@ import
   std/os,
   testutils/unittests,
   eth/[keys, trie/db, trie/hexary, ssz/ssz_serialization],
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../nimbus/[genesis, chain_config, db/db_chain],
   ../network/portal_protocol, ../content,
   ./test_helpers
@@ -73,3 +74,6 @@ procSuite "Content Network":
 
       let hash = hexary.keccak(foundContent.get().payload.asSeq())
       check hash.data == key
+    
+    await node1.closeWait()
+    await node2.closeWait()
