@@ -1,4 +1,4 @@
-# Nimbus Light Portal Network Client
+# Fluffy: The Nimbus Portal Network Client
 
 [![fluffy CI](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
@@ -10,8 +10,8 @@
 
 ## Introduction
 This folder holds the development of the Nimbus client implementation supporting
-the Portal Network. The Portal Network is a project still heavily in research
-phase and fully in flux. This client is thus still highly experimental.
+the Portal Network: fluffy. The Portal Network is a project still heavily in
+research phase and fully in flux. This client is thus still highly experimental.
 
 Current status of specifications can be found in the
 [stateless-ethereum-specs repository](https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-network.md).
