@@ -25,7 +25,7 @@ All Ethereum 2.0 research and development is happening in parallel in the
 ## Development Updates
 
 Monthly development updates are shared
-[here](https://notes.status.im/s/KOm0W0oRt#).
+[here](https://hackmd.io/jRpxY4WBQJ-hnsKaPDYqTw).
 
 For more detailed write-ups on the development progress, follow the
 [Nimbus blog](https://our.status.im/tag/nimbus/).
