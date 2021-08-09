@@ -52,6 +52,9 @@ def to_bool:
     "baseFeePerGas": .baseFeePerGas
   }|remove_empty,
   "config": {
+    "clique": (if env.HIVE_CLIQUE_PERIOD == null then null else {
+      "period": env.HIVE_CLIQUE_PERIOD|to_int,
+    } end),
     "chainId": env.HIVE_CHAIN_ID|to_int,
     "homesteadBlock": env.HIVE_FORK_HOMESTEAD|to_int,
     "daoForkBlock": env.HIVE_FORK_DAO_BLOCK|to_int,

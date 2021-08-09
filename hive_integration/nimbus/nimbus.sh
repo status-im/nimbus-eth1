@@ -64,13 +64,10 @@ if [ "$HIVE_NETWORK_ID" != "" ]; then
   FLAGS="$FLAGS --networkid:$HIVE_NETWORK_ID"
 fi
 
-if [ "$HIVE_CLIQUE_PERIOD" != "" ]; then
-  FLAGS="$FLAGS --clique-period:$HIVE_CLIQUE_PERIOD"
-fi
-
 if [ "$HIVE_CLIQUE_PRIVATEKEY" != "" ]; then
-  echo "$HIVE_CLIQUE_PRIVATEKEY" > /private.key
-  FLAGS="$FLAGS --import-key:/private.key"
+# -n will prevent newline when echoing something
+  echo -n "$HIVE_CLIQUE_PRIVATEKEY" > private.key
+  FLAGS="$FLAGS --import-key:private.key"
 fi
 
 if [ "$HIVE_MINER" != "" ]; then
