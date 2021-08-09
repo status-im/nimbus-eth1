@@ -232,8 +232,13 @@ proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.sh
   #host.touchedAccounts.incl(beneficiary)
   #host.selfDestructs.incl(address)
 
-proc call(host: TransactionHost, msg: EvmcMessage): EvmcResult {.show.} =
-  return host.callEvmcNested(msg)
+template call(host: TransactionHost, msg: EvmcMessage): EvmcResult =
+  # `call` is special.  The C stack usage must be kept small for deeply nested
+  # EVM calls.  To ensure small stack, `{.show.}` must be handled at
+  # `host_call_nested`, not here, and this function must use `template` to
+  # inline at Nim level (same for `callEvmcNested`).  `{.inline.}` is not good
+  # enough.  Due to object return it ends up using a lot more stack.
+  host.callEvmcNested(msg)
 
 proc getTxContext(host: TransactionHost): EvmcTxContext {.show.} =
   if not host.cachedTxContext:

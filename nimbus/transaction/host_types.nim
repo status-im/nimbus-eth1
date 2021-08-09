@@ -62,6 +62,7 @@ type
     logEntries*:      seq[Log]
     touchedAccounts*: HashSet[EthAddress]
     selfDestructs*:   HashSet[EthAddress]
+    depth*:           int
 
 # These versions of `toEvmc` and `fromEvmc` don't flip big/little-endian like
 # the older functions in `evmc_helpers`.  New code only flips with _explicit_

@@ -12,7 +12,7 @@ import
   sets, stint, chronicles, stew/ranges/ptr_arith,
   eth/common/eth_types,
   ".."/[vm_types, vm_computation, utils],
-  ./host_types
+  ./host_types, ./host_trace
 
 proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
   dealloc(res.output_data)
@@ -111,6 +111,7 @@ proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
     {.noinline.} =
+  host.showCallEntry(msg)
   if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
     return beforeExecCreateEvmcNested(host, msg)
   else:
@@ -125,6 +126,7 @@ proc afterExecEvmcNested(host: TransactionHost, child: Computation,
     afterExecCreateEvmcNested(host, child, result)
   else:
     afterExecCallEvmcNested(host, child, result)
+  host.showCallReturn(result, kind.isCreate)
 
 template callEvmcNested*(host: TransactionHost, msg: EvmcMessage): EvmcResult =
   # This function must be declared `template` to ensure it is inlined at Nim

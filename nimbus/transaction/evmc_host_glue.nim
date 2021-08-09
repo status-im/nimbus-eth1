@@ -100,13 +100,16 @@ proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc.}
 # a separate library yet.
 import ./evmc_vm_glue
 
-# This must be named `call` to show as "call" when traced by the `show` macro.
-proc call(host: TransactionHost): EvmcResult {.show, inline.} =
+proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
+  host.showCallEntry(host.msg)
+
   let vm = evmc_create_nimbus_evm()
   if vm.isNil:
     echo "Warning: No EVM"
     # Nim defaults are fine for all other fields in the result object.
-    return EvmcResult(status_code: EVMC_INTERNAL_ERROR)
+    result = EvmcResult(status_code: EVMC_INTERNAL_ERROR)
+    host.showCallReturn(result)
+    return
 
   let hostInterface = evmcGetHostInterface()
   let hostContext = cast[evmc_host_context](host)
@@ -128,10 +131,9 @@ proc call(host: TransactionHost): EvmcResult {.show, inline.} =
   # TODO: But wait: Why does the Nim EVMC test program compile fine without
   # any `gcsafe`, even with `--threads:on`?
   {.gcsafe.}:
-    vm.execute(vm, hostInterface[].addr, hostContext,
-               evmc_revision(host.vmState.fork), host.msg,
-               if host.code.len > 0: host.code[0].unsafeAddr else: nil,
-               host.code.len.csize_t)
+    result = vm.execute(vm, hostInterface[].addr, hostContext,
+                        evmc_revision(host.vmState.fork), host.msg,
+                        if host.code.len > 0: host.code[0].unsafeAddr else: nil,
+                        host.code.len.csize_t)
 
-proc evmcExecComputation*(host: TransactionHost): EvmcResult =
-  call(host)
+  host.showCallReturn(result)
