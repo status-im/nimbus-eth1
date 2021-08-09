@@ -386,6 +386,7 @@ proc handleIfKnown(
   ): seq[byte] =
   let subProtocol = p.subProtocols.getOrDefault(subProtocolId)
   if subProtocol.isNil():
+    trace "Received message from not known protocol with id", id = subProtocolId
     @[]
   else:
     handleMessage(subProtocol, message)

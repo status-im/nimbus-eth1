@@ -50,6 +50,31 @@ procSuite "Overlay Tests":
     await node1.closeWait()
     await node2.closeWait()
 
+  asyncTest "Overlay Ping/Pong in-compatible protocols":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+
+      node1Payload = List.init(@[1'u8], 2048)
+      node2Payload = List.init(@[2'u8], 2048)
+
+      # Both nodes support same protocol with different payloads
+      node1Sub = SubProtocolDefinition(subProtocolId: @[1'u8], subProtocolPayLoad: node1Payload)
+      node2Sub = SubProtocolDefinition(subProtocolId: @[2'u8], subProtocolPayLoad: node2Payload)
+
+      proto1 = OverlayProtocol.new(node1 , @[node1Sub])
+      proto2 = OverlayProtocol.new(node2 , @[node2Sub])
+
+    let pong = await proto1.getSubProtocol(@[1'u8]).unsafeGet().ping(proto2.baseProtocol.localNode)
+
+    check:
+      pong.isErr()
+
+    await node1.closeWait()
+    await node2.closeWait()
+
   asyncTest "Overlay FindNode/Nodes":
     let
       node1 = initDiscoveryNode(
