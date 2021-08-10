@@ -19,7 +19,7 @@
 ##
 
 import
-  std/[sequtils],
+  std/[sequtils, times],
   ../db/db_chain,
   ./clique/[clique_cfg, clique_defs, clique_desc, clique_verify],
   ./clique/snapshot/[ballot, snapshot_desc],
@@ -49,8 +49,17 @@ type
 proc newClique*(db: BaseChainDB): Clique =
   ## Constructor for a new Clique proof-of-authority consensus engine. The
   ## initial state of the engine is `empty`, there are no authorised signers.
-  db.newCliqueCfg.newClique
+  ##
+  ## If chain_config provides `Period` or `Epoch`, then `Period` or `Epoch`
+  ## will be taken from chain_config. Otherwise, default value in `newCliqueCfg`
+  ## will be used
 
+  let cfg = db.newCliqueCfg
+  if db.config.cliquePeriod > 0:
+    cfg.period = initDuration(seconds = db.config.cliquePeriod)
+  if db.config.cliqueEpoch > 0:
+    cfg.epoch = db.config.cliqueEpoch
+  cfg.newClique
 
 proc cliqueSave*(c: var Clique): CliqueState =
   ## Save current `Clique` state. This state snapshot saves the internal
