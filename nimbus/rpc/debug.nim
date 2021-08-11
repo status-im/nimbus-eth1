@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  strutils, json, options,
+  json, options,
   json_rpc/rpcserver, rpc_utils, eth/common,
   hexstrings, ../tracer, ../vm_types,
   ../db/[db_chain]

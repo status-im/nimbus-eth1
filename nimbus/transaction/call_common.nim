@@ -10,8 +10,11 @@ import
   eth/common/eth_types, stint, options, stew/ranges/ptr_arith,
   ".."/[vm_types, vm_state, vm_computation, vm_state_transactions],
   ".."/[vm_internals, vm_precompiles, vm_gas_costs],
-  ".."/[db/accounts_cache, utils, forks],
-  ./host_types, ./host_services
+  ".."/[db/accounts_cache, forks],
+  ./host_types
+
+when defined(evmc_enabled):
+  import ".."/[utils]
 
 type
   # Standard call parameters.

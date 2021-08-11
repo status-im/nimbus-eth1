@@ -13,8 +13,7 @@
 import
   chronos, stint, chronicles, stew/byteutils, macros,
   eth/[common/eth_types, rlp, p2p],
-  eth/p2p/[rlpx, private/p2p_types, blockchain_utils],
-  ../p2p/chain
+  eth/p2p/[rlpx, private/p2p_types, blockchain_utils]
 
 type
   NewBlockHashesAnnounce* = object

@@ -8,7 +8,7 @@
 import
   options, sets,
   eth/common, chronicles, ../db/accounts_cache,
-  ../transaction, ../forks,
+  ../forks,
   ./computation, ./interpreter, ./state, ./types
 
 proc execComputation*(c: Computation) =

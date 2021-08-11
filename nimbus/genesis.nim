@@ -1,5 +1,5 @@
 import
-  std/[json, strutils, times, tables],
+  std/[json, times, tables],
   eth/[common, rlp, trie, p2p], stew/[byteutils],
   chronicles, eth/trie/db,
   ./db/[db_chain, state_db],

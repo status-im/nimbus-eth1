@@ -9,8 +9,7 @@ import
   tables, macros,
   chronicles,
   ./interpreter/[opcode_values, opcodes_impl, gas_costs, gas_meter, utils/macros_gen_opcodes],
-  ./code_stream, ./types, ../errors, ../forks, ./precompiles, ./stack,
-  terminal # Those are only needed for logging
+  ./code_stream, ./types, ../errors, ../forks, ./precompiles, ./stack
 
 logScope:
   topics = "vm opcode"

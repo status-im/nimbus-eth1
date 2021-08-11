@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  strutils, times, options, tables,
+  times, options, tables,
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
   eth/[common, keys, rlp, p2p], nimcrypto,
   ../transaction, ../config, ../vm_state, ../constants,
