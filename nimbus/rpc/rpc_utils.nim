@@ -9,11 +9,9 @@
 
 import hexstrings, eth/[common, rlp, keys, trie/db], stew/byteutils, nimcrypto,
   ../db/db_chain, strutils, algorithm, options, times, json,
-  ../constants, stint, hexstrings, rpc_types, ../chain_config,
+  ../constants, stint, hexstrings, rpc_types,
   ../utils, ../transaction,
   ../transaction/call_evm
-
-import eth/common/transaction as common_transaction
 
 func toAddress*(value: EthAddressStr): EthAddress = hexToPaddedByteArray[20](value.string)
 

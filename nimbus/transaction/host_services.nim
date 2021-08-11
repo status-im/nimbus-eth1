@@ -11,7 +11,7 @@
 import
   sets, times, stint, chronicles,
   eth/common/eth_types, ../db/accounts_cache, ../forks,
-  ".."/[vm_types, vm_state, vm_computation, vm_internals],
+  ".."/[vm_state, vm_computation, vm_internals],
   ./host_types, ./host_trace, ./host_call_nested
 
 proc setupTxContext(host: TransactionHost) =

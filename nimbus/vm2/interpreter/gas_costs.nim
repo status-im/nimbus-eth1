@@ -431,8 +431,7 @@ template gasCosts(fork: Fork, prefix, ResultGasCostsName: untyped) =
 
   # ###################################################################################################
 
-  # TODO - change this `let` into `const` - pending: https://github.com/nim-lang/Nim/issues/8015
-  let `ResultGasCostsName`*{.inject, compileTime.}: GasCosts = block:
+  const `ResultGasCostsName`*{.inject, compileTime.}: GasCosts = block:
     # We use a block expression to avoid name redefinition conflicts
     # with "fixed" and "dynamic"
 

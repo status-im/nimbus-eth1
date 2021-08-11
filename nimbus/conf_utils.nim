@@ -8,10 +8,8 @@
 # those terms.
 
 import
-  std/[terminal, os],
-  chronicles, eth/trie/db, eth/[common, rlp], stew/[io2, byteutils],
-  ./config, ./genesis, ./p2p/chain,
-  ./db/[db_chain, select_backend, storage_types]
+  chronicles, eth/[common, rlp], stew/io2,
+  ./p2p/chain, ./db/[db_chain, select_backend]
 
 type
   # trick the rlp decoder
