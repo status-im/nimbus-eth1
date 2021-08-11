@@ -71,18 +71,8 @@ template messageKind*(T: typedesc[OverlayMessage]): MessageKind =
   elif T is FindNodeMessage: findNode
   elif T is NodesMessage: nodes
 
-template toSszType*(x: UInt256): array[32, byte] =
-  toBytesLE(x)
-
 template toSszType*(x: auto): auto =
   x
-
-func fromSszBytes*(T: type UInt256, data: openArray[byte]):
-    T {.raises: [MalformedSszError, Defect].} =
-  if data.len != sizeof(result):
-    raiseIncorrectSize T
-
-  T.fromBytesLE(data)
 
 proc encodeMessage*[T: OverlayMessage](m: T): seq[byte] =
   ord(messageKind(T)).byte & SSZ.encode(m)
