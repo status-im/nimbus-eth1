@@ -40,7 +40,7 @@ type
     subProtocolId*: SubProtocolId
     subProtocolPayLoad*: SubProtocolPayload
 
-  SubProtocol* = ref object
+  OverlaySubProtocol* = ref object
     subProtocolId: SubProtocolId
     subProtocolPayLoad: SubProtocolPayload
     routingTable: RoutingTable
@@ -51,7 +51,7 @@ type
 
   OverlayProtocol* = ref object of TalkProtocol
     baseProtocol*: protocol.Protocol
-    subProtocols: Table[SubProtocolId, SubProtocol]
+    subProtocols: Table[SubProtocolId, OverlaySubProtocol]
 
   SubProtocolResult*[T] = Result[T, cstring]
 
@@ -61,9 +61,9 @@ type
 # grabbing ENR from discv5 routing table (might not have it)?
 # - ENRs with portal protocol capabilities as field?
 
-proc subProtocolIdAsList(p: SubProtocol): ByteList = List.init(p.subProtocolId, 2048)
+proc subProtocolIdAsList(p: OverlaySubProtocol): ByteList = List.init(p.subProtocolId, 2048)
 
-proc handlePing(p: SubProtocol, ping: PingMessage):
+proc handlePing(p: OverlaySubProtocol, ping: PingMessage):
     seq[byte] =
   let p = PongMessage(
     enrSeq: p.baseProtocol.localNode.record.seqNum, 
@@ -72,7 +72,7 @@ proc handlePing(p: SubProtocol, ping: PingMessage):
 
   encodeMessage(p)
 
-proc handleFindNode(p: SubProtocol, fn: FindNodeMessage): seq[byte] =
+proc handleFindNode(p: OverlaySubProtocol, fn: FindNodeMessage): seq[byte] =
   if fn.distances.len == 0:
     let enrs = List[ByteList, 32](@[])
     encodeMessage(NodesMessage(subProtocolId: p.subProtocolIdAsList(), total: 1, enrs: enrs))
@@ -98,8 +98,8 @@ proc handleFindNode(p: SubProtocol, fn: FindNodeMessage): seq[byte] =
       let enrs = List[ByteList, 32](@[])
       encodeMessage(NodesMessage(subProtocolId: p.subProtocolIdAsList(), total: 1, enrs: enrs))
 
-proc new*(T: type SubProtocol, baseProtocol: protocol.Protocol, subProtocolId: SubProtocolId, subProtocolPayLoad: SubProtocolPayload): T =
-  let proto = SubProtocol(
+proc new(T: type OverlaySubProtocol, baseProtocol: protocol.Protocol, subProtocolId: SubProtocolId, subProtocolPayLoad: SubProtocolPayload): T =
+  let proto = OverlaySubProtocol(
       subProtocolId: subProtocolId,
       subProtocolPayLoad: subProtocolPayLoad,
       baseProtocol: baseProtocol
@@ -111,7 +111,7 @@ proc new*(T: type SubProtocol, baseProtocol: protocol.Protocol, subProtocolId: S
   return proto
 
 proc reqResponse[Request: OverlayMessage, Response: OverlayMessage](
-      p: SubProtocol,
+      p: OverlaySubProtocol,
       toNode: Node,
       protocol: seq[byte],
       request: Request
@@ -123,7 +123,7 @@ proc reqResponse[Request: OverlayMessage, Response: OverlayMessage](
         getInnerMessageResult[Response](m, cstring"Invalid message response received")
       )
 
-proc ping*(p: SubProtocol, dst: Node):
+proc ping*(p: OverlaySubProtocol, dst: Node):
     Future[SubProtocolResult[PongMessage]] {.async.} =
   let ping = PingMessage(
     enrSeq: p.baseProtocol.localNode.record.seqNum,
@@ -133,7 +133,7 @@ proc ping*(p: SubProtocol, dst: Node):
   trace "Send message request", dstId = dst.id, kind = MessageKind.ping
   return await reqResponse[PingMessage, PongMessage](p, dst, OverlayProtocolId, ping)
 
-proc findNode*(p: SubProtocol, dst: Node, distances: List[uint16, 256]):
+proc findNode*(p: OverlaySubProtocol, dst: Node, distances: List[uint16, 256]):
     Future[SubProtocolResult[NodesMessage]] {.async.} =
   let fn = FindNodeMessage(subProtocolid: p.subProtocolIdAsList(), distances: distances)
 
@@ -162,7 +162,7 @@ proc lookupDistances(target, dest: NodeId): seq[uint16] =
       distances.add(td - i)
     inc i
 
-proc lookupWorker(p: SubProtocol, destNode: Node, target: NodeId):
+proc lookupWorker(p: OverlaySubProtocol, destNode: Node, target: NodeId):
     Future[seq[Node]] {.async.} =
   var nodes: seq[Node]
   let distances = lookupDistances(target, destNode.id)
@@ -179,7 +179,7 @@ proc lookupWorker(p: SubProtocol, destNode: Node, target: NodeId):
 
   return nodes
 
-proc lookup*(p: SubProtocol, target: NodeId): Future[seq[Node]] {.async.} =
+proc lookup*(p: OverlaySubProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -235,7 +235,7 @@ proc lookup*(p: SubProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
-proc query*(p: SubProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
+proc query*(p: OverlaySubProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     {.async.} =
   ## Query k nodes for the given target, returns all nodes found, including the
   ## nodes queried.
@@ -284,11 +284,11 @@ proc query*(p: SubProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
   p.lastLookup = now(chronos.Moment)
   return queryBuffer
 
-proc queryRandom*(p: SubProtocol): Future[seq[Node]] =
+proc queryRandom*(p: OverlaySubProtocol): Future[seq[Node]] =
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc seedTable(p: SubProtocol) =
+proc seedTable(p: OverlaySubProtocol) =
   # TODO: Just picking something here for now. Maybe nodes should have info in
   # enrs which sub protocols they support
   let closestNodes = p.baseProtocol.neighbours(
@@ -300,7 +300,7 @@ proc seedTable(p: SubProtocol) =
     else:
       debug "Node from discv5 routing table could not be added", uri = toURI(node.record)
 
-proc populateTable(p: SubProtocol) {.async.} =
+proc populateTable(p: OverlaySubProtocol) {.async.} =
   ## Do a set of initial lookups to quickly populate the table.
   # start with a self target query (neighbour nodes)
   let selfQuery = await p.query(p.baseProtocol.localNode.id)
@@ -313,7 +313,7 @@ proc populateTable(p: SubProtocol) {.async.} =
   debug "Total nodes in routing table after populate",
     total = p.routingTable.len()
 
-proc revalidateNode*(p: SubProtocol, n: Node) {.async.} =
+proc revalidateNode*(p: OverlaySubProtocol, n: Node) {.async.} =
   let pong = await p.ping(n)
 
   if pong.isOK():
@@ -327,7 +327,7 @@ proc revalidateNode*(p: SubProtocol, n: Node) {.async.} =
         if verifiedNodes.len > 0:
           discard p.routingTable.addNode(verifiedNodes[0])
 
-proc revalidateLoop(p: SubProtocol) {.async.} =
+proc revalidateLoop(p: OverlaySubProtocol) {.async.} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
   ## message.
   try:
@@ -339,7 +339,7 @@ proc revalidateLoop(p: SubProtocol) {.async.} =
   except CancelledError:
     trace "revalidateLoop canceled"
 
-proc refreshLoop(p: SubProtocol) {.async.} =
+proc refreshLoop(p: OverlaySubProtocol) {.async.} =
   ## Loop that refreshes the routing table by starting a random query in case
   ## no queries were done since `refreshInterval` or more.
   ## It also refreshes the majority address voted for via pong responses.
@@ -357,13 +357,13 @@ proc refreshLoop(p: SubProtocol) {.async.} =
   except CancelledError:
     trace "refreshLoop canceled"
 
-proc start*(p: SubProtocol) =
+proc start*(p: OverlaySubProtocol) =
   p.seedTable()
 
   p.refreshLoop = refreshLoop(p)
   p.revalidateLoop = revalidateLoop(p)
 
-proc stop*(p: SubProtocol) =
+proc stop*(p: OverlaySubProtocol) =
   if not p.revalidateLoop.isNil:
     p.revalidateLoop.cancel()
   if not p.refreshLoop.isNil:
@@ -371,7 +371,7 @@ proc stop*(p: SubProtocol) =
 
 # Definition of OverlayProtocol
 
-proc handleMessage(subProtocol: SubProtocol, m: OverlayMessage): seq[byte] =
+proc handleMessage(subProtocol: OverlaySubProtocol, m: OverlayMessage): seq[byte] =
   when m is PingMessage:
     subProtocol.handlePing(m)
   elif m is FindNodeMessage:
@@ -391,7 +391,7 @@ proc handleIfKnown(
   else:
     handleMessage(subProtocol, message)
     
-proc messageHandler*(protocol: TalkProtocol, request: seq[byte]): seq[byte] =
+proc messageHandler(protocol: TalkProtocol, request: seq[byte]): seq[byte] =
   doAssert(protocol of OverlayProtocol)
 
   let p = OverlayProtocol(protocol)
@@ -412,36 +412,29 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte]): seq[byte] =
   else:
     @[]
 
-proc new*(T: type OverlayProtocol, baseProtocol: protocol.Protocol, supportedProtocols: seq[SubProtocolDefinition]): T =
+proc new*(T: type OverlayProtocol, baseProtocol: protocol.Protocol): T =
   let proto = OverlayProtocol(
       protocolHandler: messageHandler,
       baseProtocol: baseProtocol
     )
-
-  for subProtocol in supportedProtocols:
-    let newSub = SubProtocol.new(baseProtocol, subProtocol.subProtocolId, subProtocol.subProtocolPayLoad)
-    proto.subProtocols[subProtocol.subProtocolId] = newSub
 
   proto.baseProtocol.registerTalkProtocol(OverlayProtocolId, proto).expect(
     "Only one protocol should have this id")
 
   return proto
 
-proc start*(p: OverlayProtocol) =
-  for subProtocol in p.subProtocols.values:
-    subProtocol.start()
-
-proc stop*(p: OverlayProtocol) =
-  for subProtocol in p.subProtocols.values:
-    subProtocol.stop()
-
-proc getSubProtocol*(p: OverlayProtocol, id: SubProtocolId): Option[SubProtocol] =
+proc getSubProtocol*(p: OverlayProtocol, id: SubProtocolId): Option[OverlaySubProtocol] =
   let subProt = p.subProtocols.getOrDefault(id)
   if subProt.isNil():
-    none[SubProtocol]()
+    none[OverlaySubProtocol]()
   else:
     some(subProt)
 
 ## **Note:** Use it only when you are **absolutely sure** the subprotocol is present
-proc unsafeGetSubProtocol*(p: OverlayProtocol, id: SubProtocolId): SubProtocol =
+proc unsafeGetSubProtocol*(p: OverlayProtocol, id: SubProtocolId): OverlaySubProtocol =
   getSubProtocol(p, id).unsafeGet()
+
+proc registerSubProtocol*(o: OverlayProtocol, subProtocolDefinition: SubProtocolDefinition): OverlaySubProtocol =
+  let newSub = OverlaySubProtocol.new(o.baseProtocol, subProtocolDefinition.subProtocolId, subProtocolDefinition.subProtocolPayLoad)
+  o.subProtocols[subProtocolDefinition.subProtocolId] = newSub
+  newSub

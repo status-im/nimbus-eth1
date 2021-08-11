@@ -37,10 +37,13 @@ procSuite "Overlay Tests":
       node1Sub = SubProtocolDefinition(subProtocolId: @[1'u8], subProtocolPayLoad: node1Payload)
       node2Sub = SubProtocolDefinition(subProtocolId: @[1'u8], subProtocolPayLoad: node2Payload)
 
-      proto1 = OverlayProtocol.new(node1 , @[node1Sub])
-      proto2 = OverlayProtocol.new(node2 , @[node2Sub])
+      proto1 = OverlayProtocol.new(node1)
+      proto2 = OverlayProtocol.new(node2)
 
-    let pong = await proto1.getSubProtocol(@[1'u8]).unsafeGet().ping(proto2.baseProtocol.localNode)
+      sub1 = proto1.registerSubProtocol(node1Sub)
+      sub2 = proto2.registerSubProtocol(node2Sub)
+
+    let pong = await sub1.ping(proto2.baseProtocol.localNode)
 
     check:
       pong.isOk()
@@ -64,10 +67,13 @@ procSuite "Overlay Tests":
       node1Sub = SubProtocolDefinition(subProtocolId: @[1'u8], subProtocolPayLoad: node1Payload)
       node2Sub = SubProtocolDefinition(subProtocolId: @[2'u8], subProtocolPayLoad: node2Payload)
 
-      proto1 = OverlayProtocol.new(node1 , @[node1Sub])
-      proto2 = OverlayProtocol.new(node2 , @[node2Sub])
+      proto1 = OverlayProtocol.new(node1)
+      proto2 = OverlayProtocol.new(node2)
 
-    let pong = await proto1.getSubProtocol(@[1'u8]).unsafeGet().ping(proto2.baseProtocol.localNode)
+      sub1 = proto1.registerSubProtocol(node1Sub)
+      sub2 = proto2.registerSubProtocol(node2Sub)
+
+    let pong = await sub1.ping(proto2.baseProtocol.localNode)
 
     check:
       pong.isErr()
@@ -91,11 +97,14 @@ procSuite "Overlay Tests":
       node1Sub = SubProtocolDefinition(subProtocolId: supportedProto, subProtocolPayLoad: node1Payload)
       node2Sub = SubProtocolDefinition(subProtocolId: supportedProto, subProtocolPayLoad: node2Payload)
 
-      proto1 = OverlayProtocol.new(node1 , @[node1Sub])
-      proto2 = OverlayProtocol.new(node2 , @[node2Sub])
+      proto1 = OverlayProtocol.new(node1)
+      proto2 = OverlayProtocol.new(node2)
+
+      sub1 = proto1.registerSubProtocol(node1Sub)
+      sub2 = proto2.registerSubProtocol(node2Sub)
 
     block: # Find itself
-      let nodes = await proto1.unsafeGetSubProtocol(supportedProto).findNode(proto2.baseProtocol.localNode,
+      let nodes = await sub1.findNode(proto2.baseProtocol.localNode,
         List[uint16, 256](@[0'u16]))
 
       check:
@@ -105,7 +114,7 @@ procSuite "Overlay Tests":
 
     block: # Find nothing: this should result in nothing as we haven't started
       # the seeding of the portal protocol routing table yet.
-      let nodes = await proto1.unsafeGetSubProtocol(supportedProto).findNode(proto2.baseProtocol.localNode,
+      let nodes = await sub1.findNode(proto2.baseProtocol.localNode,
         List[uint16, 256](@[]))
 
       check:
@@ -122,10 +131,10 @@ procSuite "Overlay Tests":
 
       # Start the portal protocol to seed nodes from the discoveryv5 routing
       # table.
-      proto2.start()
+      sub2.start()
 
       let distance = logDist(node1.localNode.id, node2.localNode.id)
-      let nodes = await proto1.unsafeGetSubProtocol(supportedProto).findNode(proto2.baseProtocol.localNode,
+      let nodes = await sub1.findNode(proto2.baseProtocol.localNode,
         List[uint16, 256](@[distance]))
 
       check:
@@ -133,6 +142,6 @@ procSuite "Overlay Tests":
         nodes.get().total == 1'u8
         nodes.get().enrs.len() == 1
 
-    proto2.stop()
+    sub2.stop()
     await node1.closeWait()
     await node2.closeWait()
