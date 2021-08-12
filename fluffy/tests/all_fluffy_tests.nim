@@ -13,7 +13,8 @@ import
   ./test_portal_encoding,
   ./test_portal,
   ./test_content_network,
-  ./test_overlay
+  ./test_overlay,
+  ./test_content
 
 cliBuilder:
   import

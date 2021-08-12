@@ -13,8 +13,6 @@ import
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2],
   ./messages
 
-export messages
-
 logScope:
   topics = "overlay"
 
@@ -41,9 +39,9 @@ type
     subProtocolPayLoad*: SubProtocolPayload
 
   OverlaySubProtocol* = ref object
-    subProtocolId: SubProtocolId
+    subProtocolId*: SubProtocolId
     subProtocolPayLoad: SubProtocolPayload
-    routingTable: RoutingTable
+    routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
@@ -61,7 +59,7 @@ type
 # grabbing ENR from discv5 routing table (might not have it)?
 # - ENRs with portal protocol capabilities as field?
 
-proc subProtocolIdAsList(p: OverlaySubProtocol): ByteList = List.init(p.subProtocolId, 2048)
+proc subProtocolIdAsList*(p: OverlaySubProtocol): ByteList = List.init(p.subProtocolId, 2048)
 
 proc handlePing(p: OverlaySubProtocol, ping: PingMessage):
     seq[byte] =

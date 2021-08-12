@@ -11,7 +11,7 @@ import
   chronos, testutils/unittests, stew/shims/net,
   eth/keys, eth/p2p/discoveryv5/routing_table,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/overlay/overlay_protocol,
+  ../network/overlay/[overlay_protocol, messages],
   ./test_helpers
 
 proc random(T: type UInt256, rng: var BrHmacDrbgContext): T =
