@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 # As per spec:
-# https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#wire-protocol
+# https://notes.ethereum.org/tPzmxQD_S3S3uvtpUSA0-g
 
 {.push raises: [Defect].}
 

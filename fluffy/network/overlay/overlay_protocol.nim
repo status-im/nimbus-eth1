@@ -40,7 +40,7 @@ type
 
   OverlaySubProtocol* = ref object
     subProtocolId*: SubProtocolId
-    subProtocolPayLoad: SubProtocolPayload
+    subProtocolPayLoad*: SubProtocolPayload
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     lastLookup: chronos.Moment
