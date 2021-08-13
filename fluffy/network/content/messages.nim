@@ -60,7 +60,8 @@ template messageKind*(T: typedesc[ContentProtocolMessage]): MessageKind =
 template toSszType*(x: auto): auto =
   x
 
-proc encodeMessage*[T: ContentProtocolMessage](m: T): seq[byte] =
+proc encodeMessage*(m: ContentProtocolMessage): seq[byte] =
+  type T = typeof(m)
   ord(messageKind(T)).byte & SSZ.encode(m)
 
 proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =

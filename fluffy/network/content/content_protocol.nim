@@ -16,7 +16,7 @@ logScope:
   topics = "content"
 
 const
-  ContentProtocolId* = "content".toBytes()
+  contentProtocolId* = "content".toBytes()
 
 type
   SubProtocolId* = seq[byte]
@@ -62,7 +62,7 @@ proc findContent*(p: ContentSubprotocol, dst: Node, contentKey: ContentKey):
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
 
-  let respResult = await talkreq(p.baseProtocol, dst, ContentProtocolId, encodeMessage(fc))
+  let respResult = await talkreq(p.baseProtocol, dst, contentProtocolId, encodeMessage(fc))
 
   return respResult
       .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
@@ -111,7 +111,7 @@ proc new*(T: type ContentProtocol, baseProtocol: protocol.Protocol): T =
       baseProtocol: baseProtocol
     )
 
-  proto.baseProtocol.registerTalkProtocol(ContentProtocolId, proto).expect(
+  proto.baseProtocol.registerTalkProtocol(contentProtocolId, proto).expect(
     "Only one protocol should have this id")
 
   proto

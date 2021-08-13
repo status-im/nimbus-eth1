@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  std/[sequtils, sets, algorithm, tables],
+  std/[sequtils, sets, algorithm, tables, sugar],
   stew/[results, byteutils], chronicles, chronos,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2],
   ./messages
@@ -17,15 +17,15 @@ logScope:
   topics = "overlay"
 
 const
-  OverlayProtocolId* = "overlay".toBytes()
-  Alpha = 3 ## Kademlia concurrency factor
-  LookupRequestLimit = 3 ## Amount of distances requested in a single Findnode
+  overlayProtocolId* = "overlay".toBytes()
+  alpha = 3 ## Kademlia concurrency factor
+  lookupRequestLimit = 3 ## Amount of distances requested in a single Findnode
   ## message for a lookup or query
-  RefreshInterval = 5.minutes ## Interval of launching a random query to
+  refreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
-  RevalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
+  revalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
-  InitialLookups = 1 ## Amount of lookups done when populating the routing table
+  initialLookups = 1 ## Amount of lookups done when populating the routing table
 
 type
   ByteList* = List[byte, 2048]
@@ -63,12 +63,12 @@ proc subProtocolIdAsList*(p: OverlaySubProtocol): ByteList = List.init(p.subProt
 
 proc handlePing(p: OverlaySubProtocol, ping: PingMessage):
     seq[byte] =
-  let p = PongMessage(
+  let pong = PongMessage(
     enrSeq: p.baseProtocol.localNode.record.seqNum, 
     subProtocolId: p.subProtocolIdAsList(), 
     subProtocolPayLoad: p.subProtocolPayLoad)
 
-  encodeMessage(p)
+  encodeMessage(pong)
 
 proc handleFindNode(p: OverlaySubProtocol, fn: FindNodeMessage): seq[byte] =
   if fn.distances.len == 0:
@@ -108,17 +108,18 @@ proc new(T: type OverlaySubProtocol, baseProtocol: protocol.Protocol, subProtoco
 
   return proto
 
-proc reqResponse[Request: OverlayMessage, Response: OverlayMessage](
+proc reqResponse(
+      Response: typedesc[OverlayMessage],
       p: OverlaySubProtocol,
       toNode: Node,
       protocol: seq[byte],
-      request: Request
+      request: OverlayMessage
     ): Future[SubProtocolResult[Response]] {.async.} = 
     let respResult = await talkreq(p.baseProtocol, toNode, protocol, encodeMessage(request))
     return respResult
-      .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
-      .flatMap(proc (m: Message): Result[Response, cstring] = 
-        getInnerMessageResult[Response](m, cstring"Invalid message response received")
+      .flatMap((x: seq[byte]) => decodeMessage(x))
+      .flatMap((m: Message) =>
+        getInnerMessageResult(Response, m, cstring"Invalid message response received")
       )
 
 proc ping*(p: OverlaySubProtocol, dst: Node):
@@ -129,7 +130,7 @@ proc ping*(p: OverlaySubProtocol, dst: Node):
     subProtocolPayload: p.subProtocolPayLoad)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.ping
-  return await reqResponse[PingMessage, PongMessage](p, dst, OverlayProtocolId, ping)
+  return await reqResponse(PongMessage, p, dst, overlayProtocolId, ping)
 
 proc findNode*(p: OverlaySubProtocol, dst: Node, distances: List[uint16, 256]):
     Future[SubProtocolResult[NodesMessage]] {.async.} =
@@ -137,7 +138,7 @@ proc findNode*(p: OverlaySubProtocol, dst: Node, distances: List[uint16, 256]):
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findnode
   # TODO Add nodes validation
-  return await reqResponse[FindNodeMessage, NodesMessage](p, dst, OverlayProtocolId, fn)
+  return await reqResponse(NodesMessage, p, dst, overlayProtocolId, fn)
 
 proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
   var records: seq[Record]
@@ -153,7 +154,7 @@ proc lookupDistances(target, dest: NodeId): seq[uint16] =
   let td = logDist(target, dest)
   distances.add(td)
   var i = 1'u16
-  while distances.len < LookupRequestLimit:
+  while distances.len < lookupRequestLimit:
     if td + i < 256:
       distances.add(td + i)
     if td - i > 0'u16:
@@ -191,13 +192,13 @@ proc lookup*(p: OverlaySubProtocol, target: NodeId): Future[seq[Node]] {.async.}
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](Alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
   while true:
     var i = 0
     # Doing `alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < Alpha:
+    while i < closestNodes.len and pendingQueries.len < alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -249,11 +250,11 @@ proc query*(p: OverlaySubProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]]](Alpha)
+  var pendingQueries = newSeqOfCap[Future[seq[Node]]](alpha)
 
   while true:
     var i = 0
-    while i < min(queryBuffer.len, k) and pendingQueries.len < Alpha:
+    while i < min(queryBuffer.len, k) and pendingQueries.len < alpha:
       let n = queryBuffer[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -304,7 +305,7 @@ proc populateTable(p: OverlaySubProtocol) {.async.} =
   let selfQuery = await p.query(p.baseProtocol.localNode.id)
   trace "Discovered nodes in self target query", nodes = selfQuery.len
 
-  for i in 0..<InitialLookups:
+  for i in 0..<initialLookups:
     let randomQuery = await p.queryRandom()
     trace "Discovered nodes in random target query", nodes = randomQuery.len
 
@@ -330,7 +331,7 @@ proc revalidateLoop(p: OverlaySubProtocol) {.async.} =
   ## message.
   try:
     while true:
-      await sleepAsync(milliseconds(p.baseProtocol.rng[].rand(RevalidateMax)))
+      await sleepAsync(milliseconds(p.baseProtocol.rng[].rand(revalidateMax)))
       let n = p.routingTable.nodeToRevalidate()
       if not n.isNil:
         asyncSpawn p.revalidateNode(n)
@@ -346,12 +347,12 @@ proc refreshLoop(p: OverlaySubProtocol) {.async.} =
 
     while true:
       let currentTime = now(chronos.Moment)
-      if currentTime > (p.lastLookup + RefreshInterval):
+      if currentTime > (p.lastLookup + refreshInterval):
         let randomQuery = await p.queryRandom()
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in routing table", total = p.routingTable.len()
 
-      await sleepAsync(RefreshInterval)
+      await sleepAsync(refreshInterval)
   except CancelledError:
     trace "refreshLoop canceled"
 
@@ -416,7 +417,7 @@ proc new*(T: type OverlayProtocol, baseProtocol: protocol.Protocol): T =
       baseProtocol: baseProtocol
     )
 
-  proto.baseProtocol.registerTalkProtocol(OverlayProtocolId, proto).expect(
+  proto.baseProtocol.registerTalkProtocol(overlayProtocolId, proto).expect(
     "Only one protocol should have this id")
 
   return proto

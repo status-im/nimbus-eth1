@@ -74,7 +74,12 @@ template messageKind*(T: typedesc[OverlayMessage]): MessageKind =
 template toSszType*(x: auto): auto =
   x
 
-proc encodeMessage*[T: OverlayMessage](m: T): seq[byte] =
+# TODO consider using faststreams here to avoid copying like:
+# outputStream.write ord(messageKind(T)).byte
+# let sszWriter = SszWriter.init(outputStream)
+# sszWriter.writeValue m
+proc encodeMessage*(m: OverlayMessage): seq[byte] =
+  type T = typeof(m)
   ord(messageKind(T)).byte & SSZ.encode(m)
 
 proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
@@ -104,7 +109,7 @@ proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
 
   ok(message)
 
-template innerMessage[T: OverlayMessage](message: Message, expected: MessageKind): Option[T] =
+template innerMessage(T: typedesc[OverlayMessage], message: Message, expected: MessageKind): Option[T] =
   if (message.kind == expected):
     some[T](message.expected)
   else:
@@ -113,16 +118,16 @@ template innerMessage[T: OverlayMessage](message: Message, expected: MessageKind
 # All our Message variants coresponds to enum MessageKind, therefore we are able to
 # zoom in on inner structure of message by defining expected type T.
 # If expected variant is not active, retrun None
-proc getInnnerMessage*[T: OverlayMessage](m: Message): Option[T] =
-  innerMessage[T](m, messageKind(T))
+proc getInnnerMessage*(T: typedesc[OverlayMessage], m: Message): Option[T] =
+  innerMessage(T, m, messageKind(T))
 
 # Simple conversion from Option to Result, looks like somethif which coul live in
 # Result library.
-proc optToResult*[T, E](opt: Option[T], e: E): Result[T, E] =
+proc optToResult*(T: typedesc, E: typedesc, opt: Option[T], e: E): Result[T, E] =
   if (opt.isSome()):
     ok(opt.unsafeGet())
   else:
     err(e)
 
-proc getInnerMessageResult*[T: OverlayMessage](m: Message, errMessage: cstring): Result[T, cstring] =
-  optToResult(getInnnerMessage[T](m), errMessage)
+proc getInnerMessageResult*(T: typedesc[OverlayMessage], m: Message, errMessage: cstring): Result[T, cstring] =
+  optToResult(T, cstring, getInnnerMessage(T, m), errMessage)
