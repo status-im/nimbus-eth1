@@ -39,4 +39,5 @@ cliBuilder:
           ./test_lru_cache,
           ./test_clique,
           ./test_rndqu,
-          ./test_slst
+          ./test_slst,
+          ./test_txpool
