@@ -38,6 +38,7 @@ type
 
 export
   tracePackets,
+  traceGossips,
   traceHandshakes
 
 const
@@ -47,11 +48,18 @@ const
   maxHeadersFetch* = 192
   ethVersion* = 66
 
-func toHex*(x: KeccakHash): string = x.data.toHex
-macro tracePacket*(msg: static[string], args: varargs[untyped]) =
-  quote do:
-    if tracePackets:
-      trace `msg`, `args`
+func toHex*(hash: KeccakHash): string = hash.data.toHex
+
+template tracePacket*(msg: static[string], args: varargs[untyped]) =
+  if tracePackets: trace `msg`, `args`
+template traceGossip*(msg: static[string], args: varargs[untyped]) =
+  if traceGossips: trace `msg`, `args`
+template traceTimeout*(msg: static[string], args: varargs[untyped]) =
+  if traceTimeouts: trace `msg`, `args`
+template traceNetworkError*(msg: static[string], args: varargs[untyped]) =
+  if traceNetworkErrors: trace `msg`, `args`
+template tracePacketError*(msg: static[string], args: varargs[untyped]) =
+  if tracePacketErrors: trace `msg`, `args`
 
 func traceStep*(request: BlocksRequest): string =
   var str = if request.reverse: "-" else: "+"
@@ -130,13 +138,13 @@ p2pProtocol eth(version = ethVersion,
 
   # User message 0x01: NewBlockHashes.
   proc newBlockHashes(peer: Peer, hashes: openArray[NewBlockHashesAnnounce]) =
-    tracePacket "<< Discarding eth.NewBlockHashes (0x01)",
+    traceGossip "<< Discarding eth.NewBlockHashes (0x01)",
       peer, count=hashes.len
     discard
 
   # User message 0x02: Transactions.
   proc transactions(peer: Peer, transactions: openArray[Transaction]) =
-    tracePacket "<< Discarding eth.Transactions (0x02)",
+    traceGossip "<< Discarding eth.Transactions (0x02)",
       peer, count=transactions.len
     discard
 
@@ -193,7 +201,7 @@ p2pProtocol eth(version = ethVersion,
   proc newBlock(peer: Peer, bh: EthBlock, totalDifficulty: DifficultyInt) =
     # (Note, needs to use `EthBlock` instead of its alias `NewBlockAnnounce`
     # because either `p2pProtocol` or RLPx doesn't work with an alias.)
-    tracePacket "<< Discarding eth.NewBlock (0x07)",
+    traceGossip "<< Discarding eth.NewBlock (0x07)",
       peer, totalDifficulty,
       blockNumber = bh.header.blockNumber,
       blockDifficulty = bh.header.difficulty
@@ -201,7 +209,7 @@ p2pProtocol eth(version = ethVersion,
 
   # User message 0x08: NewPooledTransactionHashes.
   proc newPooledTransactionHashes(peer: Peer, hashes: openArray[KeccakHash]) =
-    tracePacket "<< Discarding eth.NewPooledTransactionHashes (0x08)",
+    traceGossip "<< Discarding eth.NewPooledTransactionHashes (0x08)",
       peer, count=hashes.len
     discard
 
