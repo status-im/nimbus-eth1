@@ -13,7 +13,7 @@ import
   json_rpc/rpcproxy,
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ./conf, ./network/portal_protocol, ./rpc/eth_api, ./rpc/bridge_client
+  ./conf, ./network/state/portal_protocol, ./rpc/eth_api, ./rpc/bridge_client
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:

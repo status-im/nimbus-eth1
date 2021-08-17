@@ -10,7 +10,7 @@
 import
   std/unittest,
   stint, stew/[byteutils, results], eth/p2p/discoveryv5/enr,
-  ../network/messages
+  ../network/state/messages
 
 suite "Portal Protocol Message Encodings":
   test "Ping Request":
