@@ -108,6 +108,7 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult {.inline.} =
     return
 
   let hostContext = cast[evmc_host_context](host)
+  host.hostInterface = hostInterface.unsafeAddr
 
   # Without `{.gcsafe.}:` here, the call via `vm.execute` results in a Nim
   # compile-time error in a far away function.  Starting here, a cascade of

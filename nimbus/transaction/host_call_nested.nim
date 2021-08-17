@@ -112,16 +112,25 @@ proc beforeExecEvmcNested(host: TransactionHost, msg: EvmcMessage): Computation
     # contribute to the stack frame of `callEvmcNested` below.
     {.noinline.} =
   host.showCallEntry(msg)
-  if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
-    return beforeExecCreateEvmcNested(host, msg)
-  else:
-    return beforeExecCallEvmcNested(host, msg)
+  let c = if msg.kind == EVMC_CREATE or msg.kind == EVMC_CREATE2:
+            beforeExecCreateEvmcNested(host, msg)
+          else:
+            beforeExecCallEvmcNested(host, msg)
+  when defined(evmc_enabled):
+    c.host.init(cast[ptr nimbus_host_interface](host.hostInterface),
+                cast[typeof(c.host.context)](host))
+  host.saveComputation.add(host.computation)
+  host.computation = c
+  return c
 
 proc afterExecEvmcNested(host: TransactionHost, child: Computation,
                          kind: EvmcCallKind): EvmcResult
     # This function must be declared with `{.noinline.}` to make sure it doesn't
     # contribute to the stack frame of `callEvmcNested` below.
     {.noinline.} =
+  host.computation = host.saveComputation[^1]
+  host.saveComputation[^1] = nil
+  host.saveComputation.setLen(host.saveComputation.len - 1)
   if kind == EVMC_CREATE or kind == EVMC_CREATE2:
     afterExecCreateEvmcNested(host, child, result)
   else:
