@@ -10,7 +10,7 @@ import
   testutils/unittests,
   eth/[keys, trie/db, trie/hexary, ssz/ssz_serialization],
   ../../nimbus/[genesis, chain_config, db/db_chain],
-  ../network/portal_protocol, ../content,
+  ../network/state/portal_protocol, ../network/state/content,
   ./test_helpers
 
 proc genesisToTrie(filePath: string): HexaryTrie =

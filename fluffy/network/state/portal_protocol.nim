@@ -11,8 +11,7 @@ import
   std/[sequtils, sets, algorithm],
   stew/[results, byteutils], chronicles, chronos,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2],
-  ../content,
-  ./messages
+  ./content, ./messages
 
 export messages
 

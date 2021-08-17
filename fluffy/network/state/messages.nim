@@ -14,7 +14,7 @@ import
   options,
   stint, stew/[results, objects],
   eth/ssz/ssz_serialization,
-  ../content
+  ./content
 
 export ssz_serialization, stint, content
 
