@@ -80,3 +80,26 @@ proc generateHeaderFromParentHeader*(config: ChainConfig, parent: BlockHeader,
     extraData: extraData,
     fee: baseFee
   )
+
+# CalcGasLimit1559 calculates the next block gas limit under 1559 rules.
+func calcGasLimit1559*(parentGasLimit, desiredLimit: GasInt): GasInt =
+  let delta = parentGasLimit div GAS_LIMIT_EMA_DENOMINATOR - 1.GasInt
+  var limit = parentGasLimit
+  var desiredLimit = desiredLimit
+
+  if desiredLimit < GAS_LIMIT_MINIMUM:
+    desiredLimit = GAS_LIMIT_MINIMUM
+
+  # If we're outside our allowed gas range, we try to hone towards them
+  if limit < desiredLimit:
+    limit = parentGasLimit + delta
+    if limit > desiredLimit:
+      limit = desiredLimit
+    return limit
+
+  if limit > desiredLimit:
+    limit = parentGasLimit - delta
+    if limit < desiredLimit:
+      limit = desiredLimit
+
+  return limit
