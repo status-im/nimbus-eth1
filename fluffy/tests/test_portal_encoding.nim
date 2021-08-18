@@ -113,18 +113,21 @@ suite "Portal Protocol Message Encodings":
         networkId: 0'u16,
         contentType: ContentType.Account,
         nodeHash: nodeHash)
-      fn = FindContentMessage(contentKey: contentKey)
+
+      contentEncoded: ByteList = encodeKeyAsList(contentKey)
+      
+      fn = FindContentMessage(contentKey: contentEncoded)
 
     let encoded = encodeMessage(fn)
-    check encoded.toHex == "050000010000000000000000000000000000000000000000000000000000000000000000"
+    check encoded.toHex == "05040000000000010000000000000000000000000000000000000000000000000000000000000000"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
-
+    
     let message = decoded.get()
     check:
       message.kind == findcontent
-      message.findcontent.contentKey == contentKey
+      message.findcontent.contentKey == contentEncoded
 
   test "FoundContent Response - payload":
     let

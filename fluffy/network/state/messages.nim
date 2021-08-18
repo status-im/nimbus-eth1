@@ -48,10 +48,7 @@ type
     # also be limited to 300 bytes instead of 2048
 
   FindContentMessage* = object
-    contentKey*: ContentKey
-  # TODO: According to the specification, this is actually a ByteList from the
-  # serialized ContentKey container, which will result in a different
-  # serialization
+    contentKey*: ByteList
 
   FoundContentMessage* = object
     enrs*: List[ByteList, 32]
