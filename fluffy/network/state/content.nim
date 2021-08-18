@@ -10,6 +10,7 @@
 {.push raises: [Defect].}
 
 import
+  std/[options, sugar],
   nimcrypto/[sha2, hash], stew/objects,
   eth/ssz/ssz_serialization, eth/trie/[hexary, db]
 
@@ -61,11 +62,24 @@ func fromSszBytes*(T: type ContentType, data: openArray[byte]):
 
   contentType
 
-func toContentId*(contentKey: ContentKey): ContentId =
+func encodeKey*(contentKey: ContentKey): seq[byte] =
+  SSZ.encode(contentKey)
+
+# TODO consider if more powerfull error handling is necessary here.
+func decodeKey*(contentKey: ByteList): Option[ContentKey] = 
+  try:
+    some(SSZ.decode(contentKey.asSeq(), ContentKey))
+  except SszError:
+    return none[ContentKey]()
+
+func encodeKeyAsList*(contentKey: ContentKey): ByteList =
+  List.init(encodeKey(contentKey), 2048)
+
+func toContentId*(contentKey: ByteList): ContentId =
   # TODO: Hash function to be defined, sha256 used now, might be confusing
   # with keccak256 that is used for the actual nodes:
   # https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#content
-  sha2.sha_256.digest(SSZ.encode(contentKey))
+  sha2.sha_256.digest(contentKey.asSeq())
 
 type
   ContentStorage* = object
@@ -84,3 +98,6 @@ proc getContent*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
     some(val)
   else:
     none(seq[byte])
+
+proc getContent*(storage: ContentStorage, contentKey: ByteList): Option[seq[byte]] =
+  decodeKey(contentKey).flatMap((key: ContentKey) => getContent(storage, key))

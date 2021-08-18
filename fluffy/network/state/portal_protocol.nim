@@ -176,9 +176,12 @@ proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
   # TODO Add nodes validation
   return await reqResponse[FindNodeMessage, NodesMessage](p, dst, PortalProtocolId, fn)
 
+# TODO It maybe better to accept bytelist, to not tie network layer to particular
+# content
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ContentKey):
     Future[PortalResult[FoundContentMessage]] {.async.} =
-  let fc = FindContentMessage(contentKey: contentKey)
+  let encKey = encodeKeyAsList(contentKey)
+  let fc = FindContentMessage(contentKey: encKey)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
   return await reqResponse[FindContentMessage, FoundContentMessage](p, dst, PortalProtocolId, fc)
