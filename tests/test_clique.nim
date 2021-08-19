@@ -9,12 +9,20 @@
 # according to those terms.
 
 import
-  std/[algorithm, os, sequtils, strformat, strutils, times],
+  std/[algorithm, os, sequtils, strformat,
+    strutils, times, parseopt, tables],
   ../nimbus/db/db_chain,
-  ../nimbus/p2p/[chain, clique, clique/clique_snapshot],
+  ../nimbus/p2p/[chain,
+    clique,
+    clique/clique_snapshot,
+    clique/clique_desc,
+    clique/clique_helpers
+  ],
+  ../nimbus/utils/ec_recover,
+  ../nimbus/[config, utils, constants],
   ./test_clique/[pool, undump],
   eth/[common, keys],
-  stint,
+  stint, stew/byteutils,
   unittest2
 
 const
@@ -229,6 +237,45 @@ proc runGoerliBaybySteps(noisy = true;
       test &"Runner stopped after reaching #{stopThreshold}":
         discard
 
+proc cliqueMiscTests() =
+  suite "clique misc":
+    test "signer func":
+      const
+        engineSigner = "658bdf435d810c91414ec09147daa6db62406379"
+        privateKey   = "tests" / "test_clique" / "private.key"
+
+      var msg: string
+      var opt = initOptParser("--engine-signer:$1 --import-key:$2" % [engineSigner, privateKey])
+      let res = processArguments(msg, opt)
+      check res == Success
+      let signer = hexToByteArray[20](engineSigner)
+      let conf   = getConfiguration()
+      check signer in conf.accounts
+
+      proc signFunc(signer: EthAddress, message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.} =
+        let
+          hashData = keccakHash(message)
+          conf     = getConfiguration()
+          acc      = conf.accounts[signer]
+          rawSign  = sign(acc.privateKey, SkMessage(hashData.data)).toRaw
+
+        ok(rawSign)
+
+      let signerFn: CliqueSignerFn = signFunc
+      var header: BlockHeader
+      header.extraData.setLen(EXTRA_VANITY)
+      header.extraData.add 0.byte.repeat(EXTRA_SEAL)
+
+      let signature = signerFn(signer, header.encodeSealHeader).get()
+      let extraLen = header.extraData.len
+      if EXTRA_SEAL < extraLen:
+        header.extraData.setLen(extraLen - EXTRA_SEAL)
+      header.extraData.add signature
+
+      let resAddr = ecRecover(header)
+      check resAddr.isOk
+      check resAddr.value == signer
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
@@ -238,6 +285,7 @@ proc cliqueMain*(noisy = defined(debug)) =
   noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps
   noisy.runGoerliReplay(startAtBlock = 31100u64)
+  cliqueMiscTests()
 
 when isMainModule:
   let
@@ -257,13 +305,14 @@ when isMainModule:
       dir = dir, captureFile = captureFile,
       startAtBlock = startAtBlock, stopAfterBlock = stopAfterBlock)
 
-  let noisy = defined(debug)
+  #[let noisy = defined(debug)
   noisy.runCliqueSnapshot(true)
   noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps(dir = ".")
-  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
+  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)]#
   #noisy.goerliReplay(startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)
+  cliqueMiscTests()
 
 # ------------------------------------------------------------------------------
 # End

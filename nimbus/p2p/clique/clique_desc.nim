@@ -41,11 +41,13 @@ when enableCliqueAsyncLock:
   import chronos
 
 type
+  RawSignature* = array[RawSignatureSize, byte]
+
   # clique/clique.go(142): type SignerFn func(signer [..]
   CliqueSignerFn* =    ## Hashes and signs the data to be signed by
                        ## a backing account
     proc(signer: EthAddress;
-         message: openArray[byte]): Result[Hash256,cstring] {.gcsafe.}
+         message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.}
 
   Proposals = Table[EthAddress,bool]
 
