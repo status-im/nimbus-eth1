@@ -20,41 +20,79 @@ proc random(T: type UInt256, rng: var BrHmacDrbgContext): T =
 
   key
 
+type Default2NodeTest = ref object
+  node1: discv5_protocol.Protocol
+  node2: discv5_protocol.Protocol
+  proto1: PortalProtocol
+  proto2: PortalProtocol
+
+proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
+  let
+    node1 = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20302))
+    node2 = initDiscoveryNode(
+      rng, PrivateKey.random(rng[]), localAddress(20303))
+
+    proto1 = PortalProtocol.new(node1)
+    proto2 = PortalProtocol.new(node2)
+
+  Default2NodeTest(node1: node1, node2: node2, proto1: proto1, proto2: proto2)
+
+proc stopTest(test: Default2NodeTest) {.async.} =
+  test.proto1.stop()
+  test.proto2.stop()
+  await test.node1.closeWait()
+  await test.node2.closeWait()
+
 procSuite "Portal Tests":
   let rng = newRng()
 
   asyncTest "Portal Ping/Pong":
-    let
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
+    let test = defaultTestCase(rng)
 
-      proto1 = PortalProtocol.new(node1)
-      proto2 = PortalProtocol.new(node2)
-
-    let pong = await proto1.ping(proto2.baseProtocol.localNode)
+    let pong = await test.proto1.ping(test.proto2.baseProtocol.localNode)
 
     check:
       pong.isOk()
       pong.get().enrSeq == 1'u64
       pong.get().dataRadius == UInt256.high()
 
-    await node1.closeWait()
-    await node2.closeWait()
+    await test.stopTest()
+
+  asyncTest "Portal correctly mark node as seen after request":
+    let test = defaultTestCase(rng)
+  
+    let initialNeighbours = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = false)
+
+    check:
+      len(initialNeighbours) == 0
+
+    discard test.proto1.addNode(test.proto2.baseProtocol.localNode)
+    
+    let allNeighboursAfterAdd = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = false)
+    let seenNeighboursAfterAdd = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = true)
+
+    check:
+      len(allNeighboursAfterAdd) == 1
+      len(seenNeighboursAfterAdd) == 0
+
+    let pong = await test.proto1.ping(test.proto2.baseProtocol.localNode)
+
+    let allNeighboursAfterPing = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = false)
+    let seenNeighboursAfterPing = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = true)
+
+    check:
+      pong.isOk()
+      len(allNeighboursAfterPing) == 1
+      len(seenNeighboursAfterPing) == 1
+
+    await test.stopTest()
 
   asyncTest "Portal FindNode/Nodes":
-    let
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
-
-      proto1 = PortalProtocol.new(node1)
-      proto2 = PortalProtocol.new(node2)
-
+    let test = defaultTestCase(rng)
+  
     block: # Find itself
-      let nodes = await proto1.findNode(proto2.baseProtocol.localNode,
+      let nodes = await test.proto1.findNode(test.proto2.baseProtocol.localNode,
         List[uint16, 256](@[0'u16]))
 
       check:
@@ -64,7 +102,7 @@ procSuite "Portal Tests":
 
     block: # Find nothing: this should result in nothing as we haven't started
       # the seeding of the portal protocol routing table yet.
-      let nodes = await proto1.findNode(proto2.baseProtocol.localNode,
+      let nodes = await test.proto1.findNode(test.proto2.baseProtocol.localNode,
         List[uint16, 256](@[]))
 
       check:
@@ -76,43 +114,34 @@ procSuite "Portal Tests":
       # ping in one direction to add, ping in the other to update as seen,
       # adding the node in the discovery v5 routing table. Could also launch
       # with bootstrap node instead.
-      check (await node1.ping(node2.localNode)).isOk()
-      check (await node2.ping(node1.localNode)).isOk()
+      check (await test.node1.ping(test.node2.localNode)).isOk()
+      check (await test.node2.ping(test.node1.localNode)).isOk()
 
       # Start the portal protocol to seed nodes from the discoveryv5 routing
       # table.
-      proto2.start()
+      test.proto2.start()
 
-      let distance = logDist(node1.localNode.id, node2.localNode.id)
-      let nodes = await proto1.findNode(proto2.baseProtocol.localNode,
+      let distance = logDist(test.node1.localNode.id, test.node2.localNode.id)
+      let nodes = await test.proto1.findNode(test.proto2.baseProtocol.localNode,
         List[uint16, 256](@[distance]))
 
       check:
         nodes.isOk()
         nodes.get().total == 1'u8
         nodes.get().enrs.len() == 1
-
-    proto2.stop()
-    await node1.closeWait()
-    await node2.closeWait()
+    
+    await test.stopTest()
 
   asyncTest "Portal FindContent/FoundContent - send enrs":
-    let
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
-
-      proto1 = PortalProtocol.new(node1)
-      proto2 = PortalProtocol.new(node2)
+    let test = defaultTestCase(rng)
 
     # ping in one direction to add, ping in the other to update as seen.
-    check (await node1.ping(node2.localNode)).isOk()
-    check (await node2.ping(node1.localNode)).isOk()
+    check (await test.node1.ping(test.node2.localNode)).isOk()
+    check (await test.node2.ping(test.node1.localNode)).isOk()
 
     # Start the portal protocol to seed nodes from the discoveryv5 routing
     # table.
-    proto2.start()
+    test.proto2.start()
 
     var nodeHash: NodeHash
 
@@ -122,7 +151,7 @@ procSuite "Portal Tests":
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.
-    let foundContent = await proto1.findContent(proto2.baseProtocol.localNode,
+    let foundContent = await test.proto1.findContent(test.proto2.baseProtocol.localNode,
       contentKey)
 
     check:
@@ -130,6 +159,5 @@ procSuite "Portal Tests":
       foundContent.get().enrs.len() == 1
       foundContent.get().payload.len() == 0
 
-    proto2.stop()
-    await node1.closeWait()
-    await node2.closeWait()
+    await test.stopTest()
+

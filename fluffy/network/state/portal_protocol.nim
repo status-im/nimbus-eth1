@@ -41,8 +41,14 @@ type
 
   PortalResult*[T] = Result[T, cstring]
 
+
+proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
+  p.routingTable.addNode(node)
+
+proc neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
+  p.routingTable.neighbours(id = id, seenOnly = seenOnly)
+
 # TODO:
-# - setJustSeen and replaceNode on (all) message replies
 # - On incoming portal ping of unknown node: add node to routing table by
 # grabbing ENR from discv5 routing table (might not have it)?
 # - ENRs with portal protocol capabilities as field?
@@ -147,6 +153,10 @@ proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
 
   return proto
 
+# Requests, decoedes result, validates that proper response has been received
+# and updates the routing table.
+# in original disoveryv5 bootstrap node are not replaced in case of failure, but
+# for now portal protocol has no notion of bootstrap nodes
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
       p: PortalProtocol,
       toNode: Node,
@@ -156,8 +166,13 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     let respResult = await talkreq(p.baseProtocol, toNode, protocol, encodeMessage(request))
     return respResult
       .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
-      .flatMap(proc (m: Message): Result[Response, cstring] = 
-        getInnerMessageResult[Response](m, cstring"Invalid message response received")
+      .flatMap(proc (m: Message): Result[Response, cstring] =
+        let reqResult = getInnerMessageResult[Response](m, cstring"Invalid message response received")
+        if reqResult.isOk():
+          p.routingTable.setJustSeen(toNode)
+        else:
+          p.routingTable.replaceNode(toNode)
+        reqResult
       )
 
 proc ping*(p: PortalProtocol, dst: Node):
