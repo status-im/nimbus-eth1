@@ -30,7 +30,7 @@ export
   results
 
 type
-  rndQuInfo* = enum ##\
+  RndQuInfo* = enum ##\
     ## Error messages as returned by `rndQuVerify()`
     rndQuOk = 0
     rndQuVfyFirstInconsistent
@@ -43,13 +43,13 @@ type
     rndQuVfyPrvNxtExpected
     rndQuVfyFirstExpected
 
-  RndQuDataRef*[K,V] = ref object ##\
+  RndQuItemRef*[K,V] = ref object ##\
     ## Data value container as stored in the queue
     value*: V            ## Some value, can freely be modified
     prv, nxt: K          ## Queue links, read-only
 
   RndQuTab[K,V] =
-    Table[K,RndQuDataRef[K,V]]
+    Table[K,RndQuItemRef[K,V]]
 
   RndQuRef*[K,V] = ref object of RootObj ##\
     ## Data queue descriptor
@@ -59,7 +59,7 @@ type
   RndQuResult*[K,V] = ##\
     ## Data value container or error code, typically used as value \
     ## returned from functions.
-    Result[RndQuDataRef[K,V],void]
+    Result[RndQuItemRef[K,V],void]
 
 {.push raises: [Defect].}
 
@@ -67,16 +67,16 @@ type
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc isFirstItem[K,V](rq: RndQuRef[K,V]; data: RndQuDataRef[K,V]): bool
+proc isFirstItem[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   if 0 < rq.tab.len and
-     rq.tab[rq.first].nxt == data.prv: # terminal node has: nxt == prv
+     rq.tab[rq.first].nxt == item.prv: # terminal node has: nxt == prv
     return true
 
-proc isLastItem[K,V](rq: RndQuRef[K,V]; data: RndQuDataRef[K,V]): bool
+proc isLastItem[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   if 0 < rq.tab.len and
-     rq.tab[rq.last].prv == data.nxt: # terminal node has: nxt == prv
+     rq.tab[rq.last].prv == item.nxt: # terminal node has: nxt == prv
     return true
 
 # ------------------------------------------------------------------------------
@@ -86,179 +86,24 @@ proc isLastItem[K,V](rq: RndQuRef[K,V]; data: RndQuDataRef[K,V]): bool
 proc newRndQu*[K,V](initSize = 10): RndQuRef[K,V] =
   ## Constructor for queue with data random access
   RndQuRef[K,V](
-    tab: initTable[K,RndQuDataRef[K,V]](initSize.nextPowerOfTwo))
-
-# ------------------------------------------------------------------------------
-# Public functions, getter
-# ------------------------------------------------------------------------------
-
-proc len*[K,V](rq: RndQuRef[K,V]): int {.inline.} =
-  ## Getter
-  rq.tab.len
-
-proc prv*[K,V](data: RndQuDataRef[K,V]): K {.inline.} =
-  ## Getter
-  data.prv
-
-proc nxt*[K,V](data: RndQuDataRef[K,V]): K {.inline.} =
-  ## Getter
-  data.nxt
-
-# ------------------------------------------------------------------------------
-# Public functions, fetch key and data container
-# ------------------------------------------------------------------------------
-
-proc rndQuFirstKey*[K,V](rq: RndQuRef[K,V]): Result[K,void] =
-  ## Retrieve first key from queue unless the list is empty.
-  if rq.tab.len == 0:
-    return err()
-  ok(rq.first)
-
-proc rndQuLastKey*[K,V](rq: RndQuRef[K,V]): Result[K,void] =
-  ## Retrieve last key from queue unless the list is empty.
-  if rq.tab.len == 0:
-    return err()
-  ok(rq.last)
-
-proc rndQuNxtKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieve the key following the argument `key` from queue if
-  ## there is any.
-  if not rq.tab.hasKey(key) of rq.last == key:
-    return err()
-  rq.tab[key].nxt
-
-proc rndQuPrvKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieve the key preceeding the argument `key` from queue if
-  ## there is any.
-  if not rq.tab.hasKey(key) of rq.first == key:
-    return err()
-  rq.tab[key].prv
-
-
-proc rndQuFirstItem*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V] =
-  ## Retrieve first data container unless the list is empty.
-  if rq.tab.len == 0:
-    return err()
-  ok(rw.tab[rq.first])
-
-proc rndQuLastItem*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V] =
-  ## Retrieve last data container unless the list is empty.
-  if rq.tab.len == 0:
-    return err()
-  ok(rw.tab[rq.last])
-
-
-proc rndQuItemKey*[K,V](rq: RndQuRef[K,V];
-                        data: RndQuDataRef[K,V]): Result[K,void]
-                         {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieve the key for the argument `val` (if any.) Note that this
-  ## function comes with considerable overhead as only predecessor/successor
-  ## is stored in the argument data container `val`.
-  if not rq.tab.hasKey(data.prv):
-    return err()
-  if rq.isFirstItem(data):
-    return ok(rq.first)
-  if rq.isLastItem(data):
-    return ok(rq.last)
-  let key = rq.tab[data.prv].nxt
-  if rq.tab[key] != data:
-    return err()
-  ok(key)
-
-proc rndQuNxtItem*[K,V](rq: RndQuRef[K,V];
-                        data: RndQuDataRef[K,V]): RndQuResult[K,V]
-                         {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieve the data container following the argument `val` from the queue
-  ## if there is any.
-  if rq.isLastItem(data):
-    return err()
-  ok(rw.tab[data.nxt])
-
-proc rndQuPrvItem*[K,V](rq: RndQuRef[K,V];
-                        data: RndQuDataRef[K,V]): RndQuResult[K,V]
-                          {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieve the data container preceding the argument `val` from the queue
-  ## if there is any.
-  if rq.isFirstItem(data):
-    return err()
-  ok(rw.tab[data.prv])
-
-
-proc rndQuItem*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V] =
-  ## Retrieve the data container stored with the argument `key` from the queue
-  ## if there is any.
-  if not rq.tab.hasKey(key):
-    return err()
-  ok(rw.tab[key])
-
-# ------------------------------------------------------------------------------
-# Public iterators
-# ------------------------------------------------------------------------------
-
-iterator rndQuNxtKeys*[K,V](rq: RndQuRef[K,V]): K
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Forward iterate over all keys in the queue starting with the first item.
-  var
-    key = rq.first
-    keepGoing = 0 < rq.tab.len
-  while keepGoing:
-    keepGoing = key != rq.last
-    yield key
-    key = rq.tab[key].nxt
-
-iterator rndQuNxtPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Forward iterate over all (key,value) pairs in the queue starting with
-  ## the first item.
-  var
-    key = rq.first
-    keepGoing = 0 < rq.tab.len
-  while keepGoing:
-    keepGoing = key != rq.last
-    let item = rq.tab[key]
-    yield (key,item.value)
-    key = item.nxt
-
-
-iterator rndQuPrvKeys*[K,V](rq: RndQuRef[K,V]): K
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Reverse iterate over all keys in the queue starting with the last item.
-  var
-    key = rq.last
-    keepGoing = 0 < rq.tab.len
-  while keepGoing:
-    keepGoing = key != rq.first
-    yield key
-    key = rq.tab[key].prv
-
-iterator rndQuPrvPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Reverse iterate over all (key,value) pairs in the queue starting with
-  ## the last item.
-  var
-    key = rq.last
-    keepGoing = 0 < rq.tab.len
-  while keepGoing:
-    keepGoing = key != rq.first
-    let item = rq.tab[key]
-    yield (key,item.value)
-    key = item.prv
+    tab: initTable[K,RndQuItemRef[K,V]](initSize.nextPowerOfTwo))
 
 # ------------------------------------------------------------------------------
 # Public functions, list operations
 # ------------------------------------------------------------------------------
 
-proc rndQuAppend*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
-                        {.gcsafe,raises: [Defect,KeyError].} =
-  ## Append new `key`. The function returns the data container relative to
-  ## the `key` argument unless the `key` exists already in the queue.
+proc append*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Append new `key`. The function returns the data container item relative
+  ## to the `key` argument unless the `key` exists already in the queue.
+  ##
+  ## All the items on the queue different from the returned data
+  ## container item are called *previous* or *left hand* items.
   if rq.tab.hasKey(key):
     return err()
 
   # Append queue item
-  let item = RndQuDataRef[K,V]()
+  let item = RndQuItemRef[K,V]()
 
   if rq.tab.len == 0:
     rq.first = key
@@ -275,16 +120,23 @@ proc rndQuAppend*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
   rq.tab[key] = item
   ok(item)
 
+template push*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V] =
+  ## Same as `append()`
+  rq.append(key)
 
-proc rndQuPrepend*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
+
+proc prepend*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Prepend new `key`. The function returns the data container relative to
-  ## the `key` argument unless the `key` exists already in the queue.
+  ## Prepend new `key`. The function returns the data container item relative
+  ## to the `key` argument unless the `key` exists already in the queue.
+  ##
+  ## All the items on the queue different from the returned data
+  ## container item are called *following* or *right hand* items.
   if rq.tab.hasKey(key):
     return err()
 
   # Prepend queue item
-  let item = RndQuDataRef[K,V]()
+  let item = RndQuItemRef[K,V]()
 
   if rq.tab.len == 0:
     rq.last = key
@@ -301,10 +153,19 @@ proc rndQuPrepend*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
   rq.tab[key] = item
   ok(item)
 
+template unshift*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V] =
+  ## Same as `prepend()`
+  rq.prepend(key)
 
-proc rndQuShift*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
-                       {.gcsafe,raises: [Defect,KeyError].} =
-  ## Unqueue first queue item and returns the data container deleted.
+
+proc shift*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Deletes the *first* queue item and returns the data container item
+  ## deleted. For a non-empty queue this function is the same as
+  ## `rq.firstKey.value.delele`.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## item returned and deleted is the most *left hand* item.
   if rq.tab.len == 0:
     return err()
 
@@ -322,9 +183,14 @@ proc rndQuShift*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
   ok(item)
 
 
-proc rndQuPop*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
+proc pop*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Pop last queue item and returns the data container deleted.
+  ## Deletes the *last* queue item and returns the data container item
+  ## deleted. For a non-empty queue this function is the same as
+  ## `rq.lastKey.value.delele`.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## item returned and deleted is the most *right hand* item.
   if rq.tab.len == 0:
     return err()
 
@@ -342,17 +208,17 @@ proc rndQuPop*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
   ok(item)
 
 
-proc rndQuDelete*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
-                        {.gcsafe,raises: [Defect,KeyError].} =
+proc delete*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Delete the item with key `key` from the queue and returns the data
-  ## container deleted (if any).
+  ## container item deleted (if any).
   if not rq.tab.hasKey(key):
     return err()
 
   if rq.first == key:
-    return rq.rndQuShift
+    return rq.shift
   if rq.last == key:
-    return rq.rndQuPop
+    return rq.pop
 
   let item = rq.tab[key]
   rq.tab.del(key)
@@ -362,10 +228,210 @@ proc rndQuDelete*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
   ok(item)
 
 # ------------------------------------------------------------------------------
+# Public functions, fetch
+# ------------------------------------------------------------------------------
+
+proc eq*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the data container item stored with the argument `key` from
+  ## the queue if there is any.
+  if not rq.tab.hasKey(key):
+    return err()
+  ok(rq.tab[key])
+
+proc eq*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): Result[K,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the key for the argument `item` (if any.)
+  ##
+  ## Note that this function comes with considerable overhead as only
+  ## predecessor/successor is stored in the argument data container `item`.
+  if not rq.tab.hasKey(item.prv):
+    return err()
+  if rq.isFirstItem(item):
+    return ok(rq.first)
+  if rq.isLastItem(item):
+    return ok(rq.last)
+  let key = rq.tab[item.prv].nxt
+  if rq.tab[key] != item:
+    return err()
+  ok(key)
+
+# ------------------------------------------------------------------------------
+# Public functions, getter
+# ------------------------------------------------------------------------------
+
+proc len*[K,V](rq: RndQuRef[K,V]): int {.inline.} =
+  ## Returns the number of items in the queue
+  rq.tab.len
+
+proc prv*[K,V](item: RndQuItemRef[K,V]): K {.inline.} =
+  ## Getter
+  item.prv
+
+proc nxt*[K,V](item: RndQuItemRef[K,V]): K {.inline.} =
+  ## Getter
+  item.nxt
+
+# ------------------------------------------------------------------------------
+# Public traversal functions, fetch keys
+# ------------------------------------------------------------------------------
+
+proc firstKey*[K,V](rq: RndQuRef[K,V]): Result[K,void] =
+  ## Retrieve first key from queue unless the list is empty.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## key returned is the most *left hand* one.
+  if rq.tab.len == 0:
+    return err()
+  ok(rq.first)
+
+proc lastKey*[K,V](rq: RndQuRef[K,V]): Result[K,void] =
+  ## Retrieve last key from queue unless the list is empty.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## key returned is the most *right hand* one.
+  if rq.tab.len == 0:
+    return err()
+  ok(rq.last)
+
+proc nextKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the key following the argument `key` from queue if
+  ## there is any.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## key returned is the next one to the *right*.
+  if not rq.tab.hasKey(key) of rq.last == key:
+    return err()
+  rq.tab[key].nxt
+
+proc prevKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the key preceeding the argument `key` from queue if
+  ## there is any.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## key returned is the next one to the *left*.
+  if not rq.tab.hasKey(key) of rq.first == key:
+    return err()
+  rq.tab[key].prv
+
+# ------------------------------------------------------------------------------
+# Public traversal functions, data container items
+# ------------------------------------------------------------------------------
+
+proc first*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V] =
+  ## Retrieve first data container item unless the list is empty.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## data container item returned is the most *left hand* one.
+  if rq.tab.len == 0:
+    return err()
+  ok(rw.tab[rq.first])
+
+proc last*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V] =
+  ## Retrieve last data container item unless the list is empty.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## data container item returned is the most *right hand* one.
+  if rq.tab.len == 0:
+    return err()
+  ok(rw.tab[rq.last])
+
+proc next*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the data container item following the argument `item` from the
+  ## queue if there is any.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## data container item returned is the next one to the *right*.
+  if rq.isLastItem(item):
+    return err()
+  ok(rw.tab[item.nxt])
+
+proc prev*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the data container item preceding the argument `item` from the
+  ## queue if there is any.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## data container item returned is the next one to the *left*.
+  if rq.isFirstItem(item):
+    return err()
+  ok(rw.tab[item.prv])
+
+# ------------------------------------------------------------------------------
+# Public iterators
+# ------------------------------------------------------------------------------
+
+iterator nextKeys*[K,V](rq: RndQuRef[K,V]): K
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Iterate over all keys in the queue starting with the
+  ## `rq.firstKey.value` key (if any).
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## iterator processes *left* to *right*.
+  if 0 < rq.tab.len:
+    var key = rq.first
+    while true:
+      yield key
+      if key == rq.last:
+        break
+      key = rq.tab[key].nxt
+
+iterator nextPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Iterate over all (key,value) pairs in the queue starting with the
+  ## `(rq.firstKey.value,rq.first.value)` key/item pair (if any).
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## iterator processes *left* to *right*.
+  if 0 < rq.tab.len:
+    var key = rq.first
+    while true:
+      let item = rq.tab[key]
+      yield (key,item.value)
+      if key == rq.last:
+        break
+      key = item.nxt
+
+
+iterator prevKeys*[K,V](rq: RndQuRef[K,V]): K
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Reverse iterate over all keys in the queue starting with the
+  ## `rq.lastKey.value` key (if any).
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## iterator processes *right* to *left*.
+  if 0 < rq.tab.len:
+    var key = rq.last
+    while true:
+      yield key
+      if key == rq.first:
+        break
+      key = rq.tab[key].prv
+
+iterator prevPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Reverse iterate over all (key,value) pairs in the queue starting with the
+  ## `(rq.lastKey.value,rq.last.value)` key/item pair (if any).
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## iterator processes *right* to *left*.
+  if 0 < rq.tab.len:
+    var key = rq.last
+    while true:
+      let item = rq.tab[key]
+      yield (key,item.value)
+      if key == rq.first:
+        break
+      key = item.prv
+
+# ------------------------------------------------------------------------------
 # Public functions, debugging
 # ------------------------------------------------------------------------------
 
-proc `$`*[K,V](data: RndQuDataRef[K,V]): string =
+proc `$`*[K,V](item: RndQuItemRef[K,V]): string =
   ## Pretty print data container item.
   ##
   ## :CAVEAT:
@@ -374,15 +440,16 @@ proc `$`*[K,V](data: RndQuDataRef[K,V]): string =
   ##    proc `$`*[K](key: K): string {.gcsafe,raises:[Defect,CatchableError].}
   ##    proc `$`*[V](value: V): string {.gcsafe,raises:[Defect,CatchableError].}
   ##
-  if data.isNil:
+  if item.isNil:
     "nil"
   else:
-    "(" & $data.value & ", link[" & $data.prv & "," & $data.nxt & "])"
+    "(" & $item.value & ", link[" & $item.prv & "," & $item.nxt & "])"
 
-proc rndQuVerify*[K,V](rq: RndQuRef[K,V]):
-                Result[void,(K,RndQuDataRef[K,V],rndQuInfo)]
-                 {.gcsafe,raises: [Defect,KeyError].} =
-  ## ...
+proc verify*[K,V](rq: RndQuRef[K,V]):
+           Result[void,(K,RndQuItemRef[K,V],RndQuInfo)]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Check for consistency. Returns and error unless the argument
+  ## queue `rq` is consistent.
   let tabLen = rq.tab.len
   if tabLen == 0:
     return

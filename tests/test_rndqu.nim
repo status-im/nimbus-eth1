@@ -48,18 +48,18 @@ proc runRndQu(noisy = true) =
         rq = newRndQu[int,int]()
         rej: seq[int]
       for n in keyList:
-        let rc = rq.rndQuAppend(n)
+        let rc = rq.push(n) # synonymous for append()
         if rc.isErr:
           rej.add n
         else:
           rc.value.value = -n
-        let check = rq.rndQuVerify
+        let check = rq.verify
         if check.isErr:
           check check.error[2] == rndQuOk
       check rq.len == numUniqeKeys
       check rej.len == numKeyDups
       check rq.len + rej.len == keyList.len
-      check toSeq(rq.rndQuNxtKeys) == toSeq(rq.rndQuPrvKeys).reversed
+      check toSeq(rq.nextKeys) == toSeq(rq.prevKeys).reversed
       fwdRq = rq
       fwdRej = rej
 
@@ -69,18 +69,18 @@ proc runRndQu(noisy = true) =
         rq = newRndQu[int,int]()
         rej: seq[int]
       for n in keyList:
-        let rc = rq.rndQuPrepend(n)
+        let rc = rq.unshift(n) # synonymous for prepend()
         if rc.isErr:
           rej.add n
         else:
           rc.value.value = -n
-        let check = rq.rndQuVerify
+        let check = rq.verify
         if check.isErr:
           check check.error[2] == rndQuOk
       check rq.len == numUniqeKeys
       check rej.len == numKeyDups
       check rq.len + rej.len == keyList.len
-      check toSeq(rq.rndQuNxtKeys) == toSeq(rq.rndQuPrvKeys).reversed
+      check toSeq(rq.nextKeys) == toSeq(rq.prevKeys).reversed
       revRq = rq
       revRej = rej
 
@@ -88,8 +88,8 @@ proc runRndQu(noisy = true) =
       if fwdRq == nil or revRq == nil:
         skip()
       else:
-        check toSeq(fwdRq.rndQuNxtKeys) == toSeq(revRq.rndQuPrvKeys)
-        check toSeq(fwdRq.rndQuPrvKeys) == toSeq(revRq.rndQuNxtKeys)
+        check toSeq(fwdRq.nextKeys) == toSeq(revRq.prevKeys)
+        check toSeq(fwdRq.prevKeys) == toSeq(revRq.nextKeys)
         check fwdRej.sorted == revRej.sorted
 
     test "Delete corresponding random entries from previous queues":
@@ -100,10 +100,28 @@ proc runRndQu(noisy = true) =
           key = keyList[n]
           canDeleteOk = (key notin seen)
 
-          fwdData = fwdRq.rndQuDelete(key)
-          fwdRqCheck = fwdRq.rndQuVerify
-          revData = revRq.rndQuDelete(key)
-          revRqCheck = revRq.rndQuVerify
+          eqFwdData = fwdRq.eq(key)
+          eqRevData = revRq.eq(key)
+
+        if not canDeleteOk:
+          check eqFwdData.isErr
+          check eqRevData.isErr
+        else:
+          check eqFwdData.isOk
+          check eqRevData.isOk
+          let
+            eqFwdKey = fwdRq.eq(eqFwdData.value)
+            eqRevKey = revRq.eq(eqRevData.value)
+          check eqFwdKey.isOk
+          check eqFwdKey.value == key
+          check eqRevKey.isOk
+          check eqRevKey.value == key
+
+        let
+          fwdData = fwdRq.delete(key)
+          fwdRqCheck = fwdRq.verify
+          revData = revRq.delete(key)
+          revRqCheck = revRq.verify
 
         if key notin seen:
           seen.add key
