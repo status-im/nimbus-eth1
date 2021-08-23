@@ -41,6 +41,15 @@ type
 
   PortalResult*[T] = Result[T, cstring]
 
+  LookupResultKind = enum
+    Nodes, Content
+
+  LookupResult = object
+    case kind: LookupResultKind
+    of Nodes:
+      nodes: seq[Node]
+    of Content:
+      content: ByteList  
 
 proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
@@ -102,8 +111,7 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
         NodeId(readUintBE[256](contentId.data)), seenOnly = true)
       payload = ByteList(@[]) # Empty payload when enrs are send
       enrs =
-        closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
-
+        closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw)) 
     encodeMessage(FoundContentMessage(
       enrs: List[ByteList, 32](List(enrs)), payload: payload))
 
@@ -294,6 +302,104 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
 
   p.lastLookup = now(chronos.Moment)
   return closestNodes
+
+proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ContentKey):
+    Future[LookupResult] {.async.} =
+  var nodes: seq[Node]
+
+  let contentMessage = await p.findContent(destNode,  target)
+
+  return (contentMessage.map(proc (m: FoundContentMessage): LookupResult =
+    if (m.enrs.len() != 0 and m.payload.len() == 0):
+      let records = recordsFromBytes(m.enrs)
+      # TODO cannot use verifyNodesRecords(records, destNode, @[0'u16]) as it
+      # also verify logdistances distances, but with content query those are not
+      # used.
+      # Implement version of verifyNodesRecords wchich do not validate distances.
+      for r in records:
+        let node = newNode(r)
+        if node.isOk():
+          let n = node.get()
+          nodes.add(n)
+          # Attempt to add all nodes discovered to routing table
+          discard p.routingTable.addNode(n)
+
+      return LookupResult(kind: Nodes, nodes: nodes)
+    elif (m.payload.len() != 0 and m.enrs.len() == 0):
+      return LookupResult(kind: Content, content: m.payload)
+    else:
+      return LookupResult(kind: Nodes, nodes: nodes)
+
+  )).get(LookupResult(kind: Nodes, nodes: nodes))
+
+# TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
+# networks will probably be very similar. Extract lookup function to separate module
+# and make it more generaic
+proc contentLookup*(p: PortalProtocol, target: ContentKey): Future[Option[ByteList]] {.async.} =
+  let targetId = contentIdAsUint256(toContentId(target))
+  ## Perform a lookup for the given target, return the closest n nodes to the
+  ## target. Maximum value for n is `BUCKET_SIZE`.
+  # `closestNodes` holds the k closest nodes to target found, sorted by distance
+  # Unvalidated nodes are used for requests as a form of validation.
+  var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE,
+    seenOnly = false)
+
+  var asked, seen = initHashSet[NodeId]()
+  asked.incl(p.baseProtocol.localNode.id) # No need to ask our own node
+  seen.incl(p.baseProtocol.localNode.id) # No need to discover our own node
+  for node in closestNodes:
+    seen.incl(node.id)
+
+  var pendingQueries = newSeqOfCap[Future[LookupResult]](Alpha)
+
+  while true:
+    var i = 0
+    # Doing `alpha` amount of requests at once as long as closer non queried
+    # nodes are discovered.
+    while i < closestNodes.len and pendingQueries.len < Alpha:
+      let n = closestNodes[i]
+      if not asked.containsOrIncl(n.id):
+        pendingQueries.add(p.contentLookupWorker(n, target))
+      inc i
+
+    trace "Pending lookup queries", total = pendingQueries.len
+
+    if pendingQueries.len == 0:
+      break
+
+    let query = await one(pendingQueries)
+    trace "Got lookup query response"
+
+    let index = pendingQueries.find(query)
+    if index != -1:
+      pendingQueries.del(index)
+    else:
+      error "Resulting query should have been in the pending queries"
+
+    let lookupResult = query.read
+
+    # TODO: Remove node on timed-out query? To handle failure better, LookUpResult
+    # should have third enum option like failure.
+    case lookupResult.kind
+    of Nodes:
+      for n in lookupResult.nodes:
+        if not seen.containsOrIncl(n.id):
+          # If it wasn't seen before, insert node while remaining sorted
+          closestNodes.insert(n, closestNodes.lowerBound(n,
+            proc(x: Node, n: Node): int =
+              cmp(distanceTo(x, targetId), distanceTo(n, targetId))
+          ))
+
+          if closestNodes.len > BUCKET_SIZE:
+            closestNodes.del(closestNodes.high())
+    of Content:
+      # cancel any pending queries as we have find the content
+      for f in pendingQueries:
+        f.cancel()
+
+      return some(lookupResult.content)
+  
+  return none[ByteList]()
 
 proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]
     {.async.} =
