@@ -15,8 +15,26 @@
 ## library was inspired by Julienne Walker's excellent tutorial,
 ## captured `here <https://archive.is/miDT>`_ or
 ## `here <https://web.archive.org/web/20180706105528/http://eternallyconfuzzled.com/tuts/datastructures/jsw_tut_rbtree.aspx>`_.
-## The downloadable C library was captured
+## The downloadable C library has been captured
 ## `here <https://web.archive.org/web/20160428112900/http://eternallyconfuzzled.com/libs/jsw_rbtree.zip>`_.
+##
+## In a nutshell,t a *red-black tree* emulates a *b-tree* by replacing a
+## b-tree node
+## ::
+##   |       a, b, c
+##   |      /  |  |  \
+##
+## by red or black colored binary nodes
+## ::
+##   |             b
+##   |          <black>
+##   |      a  /       \  c
+##   |    <red>         <red>
+##   |    /   \         /   \
+##
+## So, apart from insert and delete operations which are basically masked
+## *b-tree* operations, search and traversal tools for binary trees can be
+## used for *red-black trees* as well.
 ##
 ## Red-black tree module interface components
 ## ------------------------------------------
@@ -109,6 +127,7 @@ type
     rbVfyLeftLinkGtParent
     rbVfyRightLinkLtParent
     rbVfyBothLinkCmpParentReversed
+    rbVfyBlackChainLevelMismatch
 
   RbDir* = enum ##\
     ## Node link direction, array index.

@@ -26,7 +26,9 @@ type
   RbDdebug[C,K] = object
     tree: RbTreeRef[C,K]     ## tree, not-Nil
     node: RbNodeRef[C]       ## current node
-    level: int               ## ..
+    level: int               ## red + black recursion level
+    blkLevel: int            ## black recursion level
+    blkDepth: int            ## expected black node chain length (unless zero)
     lt: RbLtFn[C]            ## vfy less than
     pr: RbPrnFn
     msg: string              ## collect data
@@ -88,6 +90,11 @@ proc linkBothCompError[C,K](d: var RbDdebug[C,K]): auto
   d.doError(rbVfyBothLinkCmpParentReversed,
             "Left node greater than parent greater than right node")
 
+proc blackChainLevelError[C,K](d: var RbDdebug[C,K]): auto
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  d.doError(rbVfyBlackChainLevelMismatch,
+            "Inconsistent length of black node chains")
+
 
 proc subTreeVerify[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
                          {.gcsafe, raises: [Defect,CatchableError].} =
@@ -121,7 +128,17 @@ proc subTreeVerify[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     if not rightOk:
       return d.linkRightCompError
 
+  # update nesting level and black chain length
   d.level.inc
+  if not node.isRed:
+    d.blkLevel.inc
+
+  if node.linkLeft.isNil and node.linkRight.isNil:
+    # verify black chain length
+    if d.blkDepth == 0:
+      d.blkDepth = d.blkLevel
+    elif d.blkDepth != d.blkLevel:
+      return d.blackChainLevelError
 
   if not node.linkLeft.isNil:
     d.node = node.linkLeft
@@ -136,6 +153,8 @@ proc subTreeVerify[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
       return rc ;
 
   d.level.dec
+  if not node.isRed:
+    d.blkLevel.dec
 
   ok()
 
@@ -148,11 +167,12 @@ proc rbTreeVerify*[C,K](rbt: RbTreeRef[C,K];
                           Result[void,(C,RbInfo)]
                             {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verifies the argument tree `rbt` for
-  ## * No consecutively linked red nodes
+  ## * No consecutively linked red nodes down the tree
   ## * Link consisteny: value(leftLink) < value(node) < value(rightLink). This
   ##   check needs to have the argument `lt` defined, otherwise this check is
   ##   skipped
-  ## * TODO: verufy that all black strains down the tree have the same lengths
+  ## * Black length: verify that all node chains down the tree count the same
+  ##   lengths
   ##
   ## The function returns `rbOk` unless an error is found. If `pr` is defined,
   ## this function is called with some error code and context information.
