@@ -33,35 +33,35 @@ const
 # ------------------------------------------------------------------------------
 
 iterator fwdItems(sl: SLstRef[int,int]): int =
-  var rc = sl.sLstGe(0)
+  var rc = sl.ge(0)
   while rc.isOk:
     yield rc.value.key
-    rc = sl.sLstGt(rc.value.key)
+    rc = sl.gt(rc.value.key)
 
 iterator revItems(sl: SLstRef[int,int]): int =
-  var rc = sl.sLstLe(int.high)
+  var rc = sl.le(int.high)
   while rc.isOk:
     yield rc.value.key
-    rc = sl.sLstLt(rc.value.key)
+    rc = sl.lt(rc.value.key)
 
 iterator fwdWalk(sl: SLstRef[int,int]): int =
   var
-    w = sl.newSLstWalk
-    rc = w.sLstFirst
+    w = sl.newWalk
+    rc = w.first
   while rc.isOk:
     yield rc.value.key
-    rc = w.sLstNext
-  w.sLstWalkDestroy
+    rc = w.next
+  w.destroy
 
 iterator revWalk(sl: SLstRef[int,int]): int =
   var
-    w = sl.newSLstWalk
+    w = sl.newWalk
   var
-    rc = w.sLstLast
+    rc = w.last
   while rc.isOk:
     yield rc.value.key
-    rc = w.sLstPrev
-  w.sLstWalkDestroy
+    rc = w.prev
+  w.destroy
 
 
 proc runSLstTest(noisy = true) =
@@ -76,12 +76,12 @@ proc runSLstTest(noisy = true) =
 
     test &"Insert {keyList.len} items, reject {numKeyDups} duplicates":
       for n in keyList:
-        let rc = sl.sLstInsert(n)
+        let rc = sl.insert(n)
         if rc.isErr:
           rej.add n
         else:
           rc.value.value = -n
-        let check = sl.sLstVerify
+        let check = sl.verify
         if check.isErr:
           check check.error[1] == rbOk # force message
       check sl.len == numUniqeKeys
@@ -96,20 +96,20 @@ proc runSLstTest(noisy = true) =
 
       # check `sLstEq()`
       block:
-        var rc = sl.sLstGe(0)
+        var rc = sl.ge(0)
         while rc.isOk:
-          check rc == sl.sLstEq(rc.value.key)
-          rc = sl.sLstGt(rc.value.key)
+          check rc == sl.eq(rc.value.key)
+          rc = sl.gt(rc.value.key)
 
       # check `sLstThis()`
       block:
         var
-          w = sl.newSLstWalk
-          rc = w.sLstFirst
+          w = sl.newWalk
+          rc = w.first
         while rc.isOk:
-          check rc == w.sLstThis
-          rc = w.sLstNext
-        w.sLstWalkDestroy
+          check rc == w.this
+          rc = w.next
+        w.destroy
 
     test "Delete items":
       var seen: seq[int]
@@ -119,8 +119,8 @@ proc runSLstTest(noisy = true) =
           key = keyList[n]
           canDeleteOk = (key notin seen)
 
-          data = sl.sLstDelete(key)
-          slCheck = sl.sLstVerify
+          data = sl.delete(key)
+          slCheck = sl.verify
 
         if key notin seen:
           seen.add key

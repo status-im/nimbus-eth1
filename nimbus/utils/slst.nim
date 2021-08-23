@@ -25,28 +25,28 @@
 ##
 ##  # add some entries
 ##  for key in [208, 127, 106, 117,  49,  40, 171]:
-##    let rc = sl.sLstInsert(key)
+##    let rc = sl.insert(key)
 ##    if rc.isOk:
-##      # unique key,, store some value
+##      # unique key, store some value
 ##      rc.value.value = -key
 ##
 ##  # print entries with keys greater than 100 in natrual key order
 ##  block:
-##    var rc = sl.sLstGe(100)
+##    var rc = sl.ge(100)
 ##    while rc.isOk:
 ##      echo "*** item ", rc.value.key, " ",  rc.value.value
-##      w = sl.sLstGt(w.value.key)
+##      w = sl.gt(w.value.key)
 ##
-##  # print all key,value entried in natrual key order
+##  # print all key/value entries in natrual key order
 ##  block:
 ##    var
-##      walk = sl.newSLstWalk
-##      rc = w.sLstFirst
+##      walk = sl.newWalk
+##      rc = w.first
 ##    while rc.isOk:
 ##      echo "*** item ", rc.value.key, " ",  rc.value.value
-##      rc = w.sLstNext
+##      rc = w.next
 ##    # optional clan up, see comments on `rbWalkDestroy()`
-##    walk.sLstWalkDestroy
+##    walk.destroy
 ##
 import
   std/[tables],
@@ -67,23 +67,23 @@ export
   results
 
 type
-  SLstDataRef*[K,V] = ref object ##\
+  SLstItemRef*[K,V] = ref object ##\
     ## Data value container as stored in the list/database
     key: K                    ## Sorter key, read-only
     value*: V                 ## Some value, can freely be modified
 
   SLstRef*[K,V] = ##\
     ## Sorted list descriptor
-    RbTreeRef[SLstDataRef[K,V],K]
+    RbTreeRef[SLstItemRef[K,V],K]
 
   SLstWalkRef*[K,V] = ##\
     ## Traversal/walk descriptor for sorted list
-    RbWalkRef[SLstDataRef[K,V],K]
+    RbWalkRef[SLstItemRef[K,V],K]
 
   SLstResult*[K,V] = ##\
     ## Data value container or error code, typically used as value \
     ## returned from functions.
-    RbResult[SLstDataRef[K,V]]
+    RbResult[SLstItemRef[K,V]]
 
 {.push raises: [Defect].}
 
@@ -91,18 +91,18 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc slstCmp[K,V](casket: SLstDataRef[K,V]; key: K): int =
+proc slstCmp[K,V](casket: SLstItemRef[K,V]; key: K): int =
   casket.key.cmp(key)
 
-proc slstMkc[K,V](key: K): SLstDataRef[K,V] =
-  SLstDataRef[K,V](key: key)
+proc slstMkc[K,V](key: K): SLstItemRef[K,V] =
+  SLstItemRef[K,V](key: key)
 
-proc slstClup[K,V](c: var SLstDataRef[K,V]) =
+proc slstClup[K,V](c: var SLstItemRef[K,V]) =
   # ... some smart stuff here?
   c = nil     # GC hint (if any, todo?)
 
 
-proc slstLt[K,V](a, b: SLstDataRef[K,V]): bool =
+proc slstLt[K,V](a, b: SLstItemRef[K,V]): bool =
   ## Debugging only
   a.slstCmp(b.key) < 0
 
@@ -114,7 +114,7 @@ proc slstPr(code: RbInfo; ctxInfo: string) =
 # Public helpers, debugging
 # ------------------------------------------------------------------------------
 
-proc `$`*[K,V](casket: SLstDataRef[K,V]): string =
+proc `$`*[K,V](casket: SLstItemRef[K,V]): string =
   ## Pretty printer
   ##
   ## :CAVEAT:
@@ -138,9 +138,9 @@ proc `$`*[K,V](rc: SLstResult[K,V]): string =
     return $rc.error
   $rc.value
 
-proc sLstVerify*[K,V](sl: SLstRef[K,V]):
-               Result[void,(SLstDataRef[K,V],RbInfo)]
-                 {.gcsafe, raises: [Defect,CatchableError].} =
+proc verify*[K,V](sl: SLstRef[K,V]):
+                  Result[void,(SLstItemRef[K,V],RbInfo)]
+                    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Check for consistency, may print an error message. Returns `rbOk` if
   ## the argument list `sl` is consistent.
   ##
@@ -150,7 +150,7 @@ proc sLstVerify*[K,V](sl: SLstRef[K,V]):
   ##    proc `$`*[V](value: V): string {.gcsafe,raises:[Defect,CatchableError].}
   ##
   sl.rbTreeVerify(
-    lt = proc(a, b: SLstDataRef[K,V]): bool = a.sLstLt(b),
+    lt = proc(a, b: SLstItemRef[K,V]): bool = a.sLstLt(b),
     pr = proc(c: RbInfo; s: string) = c.slstPr(s))
 
 # ------------------------------------------------------------------------------
@@ -159,21 +159,21 @@ proc sLstVerify*[K,V](sl: SLstRef[K,V]):
 
 proc newSLst*[K,V](): SLstRef[K,V] =
   ## Constructor for sorted list with key type `K` and value type `V`
-  newRbTreeRef[SLstDataRef[K,V],K](
-    cmp = proc(c: SLstDataRef[K,V]; k: K): int = c.slstCmp(k),
-    mkc = proc(k: K): SLstDataRef[K,V] = slstMkc[K,V](k))
+  newRbTreeRef[SLstItemRef[K,V],K](
+    cmp = proc(c: SLstItemRef[K,V]; k: K): int = c.slstCmp(k),
+    mkc = proc(k: K): SLstItemRef[K,V] = slstMkc[K,V](k))
 
-proc sLstReset*[K,V](sl: SLstRef[K,V]) =
+proc reset*[K,V](sl: SLstRef[K,V]) =
   ## Reset list descriptor to its inital value. This function also de-registers
-  ## and flushes all traversal descriptors of type `SLstWalk`.
-  sl.rbTreeReset(clup = proc(c: var SLstDataRef[K,V]) = c.slstClup)
+  ## and flushes all traversal descriptors of type `SLstWalkRef`.
+  sl.rbTreeReset(clup = proc(c: var SLstItemRef[K,V]) = c.slstClup)
 
 # ------------------------------------------------------------------------------
 # Public functions, getter
 # ------------------------------------------------------------------------------
 
-proc key*[K,V](data: SLstDataRef[K,V]): K =
-  ## Getter, extracts the key from the data container.
+proc key*[K,V](data: SLstItemRef[K,V]): K =
+  ## Getter, extracts the key from the data container item.
   data.key
 
 proc len*[K,V](sl: SLstRef[K,V]): int =
@@ -184,53 +184,55 @@ proc len*[K,V](sl: SLstRef[K,V]): int =
 # Public functions, list operations
 # ------------------------------------------------------------------------------
 
-proc sLstInsert*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
-  ## Insert `key`, returns data container with the `key`. Function fails if
-  ## `key` exists in the list.
+proc insert*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
+  ## Insert `key`, returns data container item with the `key`. Function fails
+  ## if `key` exists in the list.
   sl.rbTreeInsert(key)
 
-proc sLstFindOrInsert*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
-  ## Insert or find `key`, returns data container with the `key`. This function
-  ## always succeeds (unless there is s problem with the list.)
+proc findOrInsert*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
+  ## Insert or find `key`, returns data container item with the `key`. This
+  ## function always succeeds (unless there is s problem with the list.)
   result = sl.rbTreeInsert(key)
   if result.isErr:
     return sl.rbTreeFindEq(key)
 
-proc sLstDelete*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V]
+proc delete*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V]
                      {.gcsafe,discardable.}=
-  ## Delete `key` from list and return the data container that was
+  ## Delete `key` from list and return the data container item that was
   ## holding the `key` if it was deleted.
   sl.rbTreeDelete(key)
 
-proc sLstFlush*[K,V](sl: SLstRef[K,V]) =
-  ## Flush the sorted list.
-  sl.rbTreeFlush(clup = proc(c: var SLstDataRef[K,V]) = c.slstClup)
+proc flush*[K,V](sl: SLstRef[K,V]) =
+  ## Flush the sorted list, i.e. delete all entries. This function is
+  ## more efficient than running a `delete()` loop.
+  sl.rbTreeFlush(clup = proc(c: var SLstItemRef[K,V]) = c.slstClup)
 
 # ------------------------------------------------------------------------------
 # Public functions, query functions
 # ------------------------------------------------------------------------------
 
-proc sLstEq*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
-  ## Find `key` in list, returns data container with the `key` if it exists.
+proc eq*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
+  ## Find `key` in list, returns data container item with the `key` if it
+  ## exists.
   sl.rbTreeFindEq(key)
 
-proc sLstLe*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
-  ## Find data container with *largest* key *less or equal* the argument `key`
-  ## in list and return it if found.
+proc le*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
+  ## Find data container iten with *largest* key *less or equal* the argument
+  ## `key` in list and return it if found.
   sl.rbTreeFindLe(key)
 
-proc sLstLt*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
-  ## Find data container with *largest* key *less than* the argument `key`
-  ## in list and return it if found.
+proc lt*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
+  ## Find data container item with *largest* key *less than* the argument
+  ## `key` in list and return it if found.
   sl.rbTreeFindLt(key)
 
-proc sLstGe*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
-  ## Find data container with *smallest* key *greater or equal* the argument
-  ## `key` in list and return it if found.
+proc ge*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
+  ## Find data container item with *smallest* key *greater or equal* the
+  ## argument `key` in list and return it if found.
   sl.rbTreeFindGe(key)
 
-proc sLstGt*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
-  ## Find data container with *smallest* key *greater than* the argument
+proc gt*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
+  ## Find data container item with *smallest* key *greater than* the argument
   ## `key` in list and return it if found.
   sl.rbTreeFindGt(key)
 
@@ -238,66 +240,58 @@ proc sLstGt*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
 # Public functions, walk/traversal functions
 # ------------------------------------------------------------------------------
 
-proc newSLstWalk*[K,V](sl: SLstRef[K,V]): SLstWalkRef[K,V] =
+proc newWalk*[K,V](sl: SLstRef[K,V]): SLstWalkRef[K,V] =
   ## Open traversal descriptor on list and register it on the 'SLst`
   ## descriptor.
   sl.newRbWalk
 
-proc sLstWalkDestroy*[K,V](w: SLstWalkRef[K,V]) =
+proc destroy*[K,V](w: SLstWalkRef[K,V]) =
   ## De-register and close the traversal descriptor. This function renders
   ## the descriptor unusable, so it must be disposed of.
   ##
-  ## This destructor function is crucial when insert/delete list operations
-  ## are executed while traversals are open and not rewound. These
-  ## insert/delete operations modify the list so that `sLstThis()`,
-  ## `sLstPrev()`, etc. operations might fail. All traversal descriptors must
-  ## then be rewound or destroyed.
+  ## This destructor function is crucial when insert/delete operations are
+  ## needed to run while traversals are open and not rewound. These
+  ## insert/delete operations modify the list so that `w.this`, `w.prev`,
+  ## etc. operations might fail. All traversal descriptors must then be
+  ## rewound or destroyed.
   w.rbWalkDestroy
 
-proc sLstFirst*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
-  ## Rewind the traversal descriptor to the *left-most* list item and return
-  ## the corresponding data container. The traversal data container walk order
-  ## differs from the from the order of the key type `K` and should be
-  ## considered random.
+proc first*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
+  ## Rewind the traversal descriptor to the *least* list key and return
+  ## the corresponding data container item.
   ##
   ## When all open traversals are rewound, blockers due to insert/delete
   ## list operations are reset.
   w.rbWalkFirst
 
-proc sLstLast*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
-  ## Rewind the traversal descriptor to the *right-most* list item and return
-  ## the corresponding data container. The traversal data container walk order
-  ## differs from the from the order of the key type `K` and should be
-  ## considered random.
+proc last*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
+  ## Rewind the traversal descriptor to the *greatest* list key and return
+  ## the corresponding data container item.
   ##
   ## When all open traversals are rewound, blockers due to insert/delete
   ## list operations are reset.
   w.rbWalkLast
 
-proc sLstThis*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
-  ## Retrieve the *current* data container. This is the same one retrieved
-  ## last with any of the traversal functions returning a data container.
+proc this*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
+  ## Retrieve the *current* data container item. This is the same one retrieved
+  ## last with any of the traversal functions returning the data container item.
   ##
   ## Note that the current node becomes unavailable if it was recently deleted.
   w.rbWalkCurrent
 
-proc sLstNext*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
-  ## Move the traversal descriptor to the next item *right* and return the
-  ## corresponding data container. If this is the first call after
-  ## `newSLstWalk()`, then `sLstWalkFirst()` is called implicitly. The
-  ## traversal data container walk order differs from the from the order of
-  ## the key type `K` and should be considered random.
+proc next*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
+  ## Move the traversal descriptor to the next *greater* key and return the
+  ## corresponding data container item. If this is the first call after
+  ## `newWalk()`, then `w.first` is called implicitly.
   ##
   ## If there were tree insert/delete operations, blockers might be active
   ## causing this function to fail so that a rewind is needed.
   w.rbWalkNext
 
-proc sLstPrev*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
-  ## Move the traversal descriptor to the next item *left* and return
-  ## the corresponding data container. If this is the first call after
-  ## `newSLstWalk()`, then `sLstWalkLast()` is called implicitly. The
-  ## traversal data container walk order differs from the from the order of
-  ## the key type `K` and should be considered random.
+proc prev*[K,V](w: var SLstWalkRef[K,V]): SLstResult[K,V] =
+  ## Move the traversal descriptor to the next *smaller* key and return the
+  ## corresponding data container item . If this is the first call after
+  ## `newWalk()`, then `w.last` is called implicitly.
   ##
   ## If there were tree insert/delete operations, blockers might be active
   ## causing this function to fail so that a rewind is needed.
