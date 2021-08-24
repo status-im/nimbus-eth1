@@ -19,17 +19,7 @@ const
   # ZERO_HASH256 is the parent hash of genesis blocks.
   ZERO_HASH256* =                           Hash256()
 
-  GAS_LIMIT_EMA_DENOMINATOR* =              1_024
   GAS_LIMIT_ADJUSTMENT_FACTOR* =            1_024
-  GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* =   3
-  GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2
-
-  DIFFICULTY_ADJUSTMENT_DENOMINATOR* =      2_048.u256
-  DIFFICULTY_MINIMUM* =                     131_072.u256
-  BYZANTIUM_DIFFICULTY_ADJUSTMENT_CUTOFF* = 9
-
-  BOMB_EXPONENTIAL_PERIOD* =                100_000.u256
-  BOMB_EXPONENTIAL_FREE_PERIODS* =          2.u256
 
   BLOCK_REWARD* =                           5.u256 * 2.u256 # denoms.ether
 
