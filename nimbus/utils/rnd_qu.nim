@@ -19,8 +19,8 @@
 ## algorithm takes over.)
 ##
 ## Note that the queue descriptor is a reference. So assigning a `RndQuRef`
-## descriptor variable does *not* duplicate the descriptor but rather
-## add another link to the descriptor.
+## descriptor variable does *not* duplicate the descriptor. Rather it
+## adds another link to the descriptor object.
 ##
 import
   std/[math, tables],
@@ -123,6 +123,19 @@ proc append*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
 template push*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V] =
   ## Same as `append()`
   rq.append(key)
+
+proc `[]=`*[K,V](rq: RndQuRef[K,V]; key: K; val: V)
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## This function provides a combined append/replace action with table
+  ## semantics:
+  ## * If the argument `key` is not in the queue yet, append the `(key,val)`
+  ##   pair as in `rq.append(key).value.value = val`
+  ## * Otherwise replace the value entry of the queue item by the argument
+  ##   `val` as in `rq.eq(key).value.value = val`
+  if rq.tab.hasKey(key):
+    rq.tab[key].value = val
+  else:
+    rq.append(key).value.value = val
 
 
 proc prepend*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
@@ -227,9 +240,20 @@ proc delete*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
   rq.tab[item.nxt].prv = item.prv
   ok(item)
 
+proc del*[K,V](rq: RndQuRef[K,V]; key: K)
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Similar to `delete()` with table semantics (does nothing unless
+  ## argument `key` exists in the queue.)
+  discard rq.delete(key)
+
 # ------------------------------------------------------------------------------
 # Public functions, fetch
 # ------------------------------------------------------------------------------
+
+proc hasKey*[K,V](rq: RndQuRef[K,V]; key: K): bool =
+  ## Check whether the qrgument `key` has been queued, already
+  rq.tab.hasKey(key)
+
 
 proc eq*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -238,6 +262,14 @@ proc eq*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
   if not rq.tab.hasKey(key):
     return err()
   ok(rq.tab[key])
+
+proc `[]`*[K,V](rq: RndQuRef[K,V]; key: K): V
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## This function provides a simplified version of the `eq()` function with
+  ## table semantics. Note that this finction throws a `KeyError` exception
+  ## unless the argument `key` exists in the queue.
+  rq.tab[key].value
+
 
 proc eq*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): Result[K,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -320,23 +352,25 @@ proc prevKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
 # Public traversal functions, data container items
 # ------------------------------------------------------------------------------
 
-proc first*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V] =
+proc first*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Retrieve first data container item unless the list is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## data container item returned is the most *left hand* one.
   if rq.tab.len == 0:
     return err()
-  ok(rw.tab[rq.first])
+  ok(rq.tab[rq.first])
 
-proc last*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V] =
+proc last*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Retrieve last data container item unless the list is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## data container item returned is the most *right hand* one.
   if rq.tab.len == 0:
     return err()
-  ok(rw.tab[rq.last])
+  ok(rq.tab[rq.last])
 
 proc next*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): RndQuResult[K,V]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -358,7 +392,7 @@ proc prev*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): RndQuResult[K,V]
   ## data container item returned is the next one to the *left*.
   if rq.isFirstItem(item):
     return err()
-  ok(rw.tab[item.prv])
+  ok(rq.tab[item.prv])
 
 # ------------------------------------------------------------------------------
 # Public iterators
@@ -379,10 +413,26 @@ iterator nextKeys*[K,V](rq: RndQuRef[K,V]): K
         break
       key = rq.tab[key].nxt
 
+iterator nextValues*[K,V](rq: RndQuRef[K,V]): V
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Iterate over all values in the queue starting with the
+  ## `rq.first.value.value` item value (if any).
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## iterator processes *left* to *right*.
+  if 0 < rq.tab.len:
+    var key = rq.first
+    while true:
+      let item = rq.tab[key]
+      yield item.value
+      if key == rq.last:
+        break
+      key = item.nxt
+
 iterator nextPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Iterate over all (key,value) pairs in the queue starting with the
-  ## `(rq.firstKey.value,rq.first.value)` key/item pair (if any).
+  ## `(rq.firstKey.value,rq.first.value.value)` key/item pair (if any).
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## iterator processes *left* to *right*.
@@ -411,10 +461,26 @@ iterator prevKeys*[K,V](rq: RndQuRef[K,V]): K
         break
       key = rq.tab[key].prv
 
+iterator prevValues*[K,V](rq: RndQuRef[K,V]): V
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Reverse iterate over all values in the queue starting with the
+  ## `rq.last.value.value` item value (if any).
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## iterator processes *right* to *left*.
+  if 0 < rq.tab.len:
+    var key = rq.last
+    while true:
+      let item = rq.tab[key]
+      yield item.value
+      if key == rq.first:
+        break
+      key = item.prv
+
 iterator prevPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Reverse iterate over all (key,value) pairs in the queue starting with the
-  ## `(rq.lastKey.value,rq.last.value)` key/item pair (if any).
+  ## `(rq.lastKey.value,rq.last.value.value)` key/item pair (if any).
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## iterator processes *right* to *left*.
