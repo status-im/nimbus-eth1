@@ -252,15 +252,8 @@ proc sealHash*(header: BlockHeader): Hash256 =
 proc seal*(c: Clique; ethBlock: var EthBlock):
            Result[void,CliqueError] {.gcsafe,
             raises: [Defect,CatchableError].} =
-  ## For the Consensus Engine, `seal()` generates a new sealing request for
-  ## the given input block and pushes the result into the given channel.
-  ##
-  ## Note, the method returns immediately and will send the result async. More
-  ## than one result may also be returned depending on the consensus algorithm.
-  ##
   ## This implementation attempts to create a sealed block using the local
-  ## signing credentials. If running in the background, the process can be
-  ## stopped by calling the `stopSeal()` function.
+  ## signing credentials.
 
   var header = ethBlock.header
 
