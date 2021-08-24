@@ -45,13 +45,13 @@ proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void, string] 
   let upperLimit = limit div GAS_LIMIT_ADJUSTMENT_FACTOR
 
   if diff >= upperLimit:
-    return err("invalid gas limit: have {header.gasLimit}, want {limit} +-= {upperLimit-1}")
+    return err(&"invalid gas limit: have {header.gasLimit}, want {limit} +-= {upperLimit-1}")
   if header.gasLimit < GAS_LIMIT_MINIMUM:
     return err("invalid gas limit below 5000")
   ok()
 
 proc validateGasLimit(c: BaseChainDB; header: BlockHeader): Result[void, string] {.
-                       gcsafe, raises: [Defect,RlpError,BlockNotFound].} =
+                       gcsafe, raises: [Defect,RlpError,BlockNotFound,ValueError].} =
   let parent = c.getBlockHeader(header.parentHash)
   header.validateGasLimit(parent.gasLimit)
 
@@ -64,7 +64,7 @@ proc isLondonOrLater*(c: ChainConfig; number: BlockNumber): bool =
   c.toFork(number) >= FkLondon
 
 # consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]
-proc calcEip1599BaseFee(c: ChainConfig; parent: BlockHeader): UInt256 =
+proc calcEip1599BaseFee*(c: ChainConfig; parent: BlockHeader): UInt256 =
   ## calculates the basefee of the header.
 
   # If the current block is the first EIP-1559 block, return the

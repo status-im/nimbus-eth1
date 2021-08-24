@@ -218,6 +218,13 @@ proc verifyFrom*(c: Chain): auto {.inline.} =
   ## Getter
   c.verifyFrom
 
+proc currentBlock*(c: Chain): BlockHeader
+  {.gcsafe, raises: [Defect,CatchableError].} =
+  ## currentBlock retrieves the current head block of the canonical chain.
+  ## Ideally the block should be retrieved from the blockchain's internal cache.
+  ## but now it's enough to retrieve it from database
+  c.db.getCanonicalHead()
+
 # ------------------------------------------------------------------------------
 # Public `Chain` setters
 # ------------------------------------------------------------------------------

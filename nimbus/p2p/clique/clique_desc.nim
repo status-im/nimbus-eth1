@@ -217,6 +217,10 @@ when enableCliqueAsyncLock:
     action
     c.unlock
 
+else:
+  template doExclusively*(c: Clique; action: untyped) =
+    action
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
