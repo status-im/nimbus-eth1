@@ -69,15 +69,17 @@ type
 
 proc isFirstItem[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): bool
     {.gcsafe,raises: [Defect,KeyError].} =
-  if 0 < rq.tab.len and
-     rq.tab[rq.first].nxt == item.prv: # terminal node has: nxt == prv
-    return true
+  if 0 < rq.tab.len:
+    if item.nxt == item.prv:               # terminal node has: nxt == prv
+      if rq.tab[rq.first].nxt == item.prv: # verify first entry
+        return true
 
 proc isLastItem[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): bool
     {.gcsafe,raises: [Defect,KeyError].} =
-  if 0 < rq.tab.len and
-     rq.tab[rq.last].prv == item.nxt: # terminal node has: nxt == prv
-    return true
+  if 0 < rq.tab.len:
+    if item.nxt == item.prv:               # terminal node has: nxt == prv
+      if rq.tab[rq.last].prv == item.nxt:  # verify last entry
+        return true
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -333,9 +335,9 @@ proc nextKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## key returned is the next one to the *right*.
-  if not rq.tab.hasKey(key) of rq.last == key:
+  if not rq.tab.hasKey(key) or rq.last == key:
     return err()
-  rq.tab[key].nxt
+  ok(rq.tab[key].nxt)
 
 proc prevKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -344,9 +346,9 @@ proc prevKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## key returned is the next one to the *left*.
-  if not rq.tab.hasKey(key) of rq.first == key:
+  if not rq.tab.hasKey(key) or rq.first == key:
     return err()
-  rq.tab[key].prv
+  ok(rq.tab[key].prv)
 
 # ------------------------------------------------------------------------------
 # Public traversal functions, data container items
@@ -381,7 +383,7 @@ proc next*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): RndQuResult[K,V]
   ## data container item returned is the next one to the *right*.
   if rq.isLastItem(item):
     return err()
-  ok(rw.tab[item.nxt])
+  ok(rq.tab[item.nxt])
 
 proc prev*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): RndQuResult[K,V]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -401,97 +403,119 @@ proc prev*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): RndQuResult[K,V]
 iterator nextKeys*[K,V](rq: RndQuRef[K,V]): K
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Iterate over all keys in the queue starting with the
-  ## `rq.firstKey.value` key (if any).
+  ## `rq.firstKey.value` key (if any). Using the notation introduced with
+  ## `rq.append` and `rq.prepend`, the iterator processes *left* to *right*.
   ##
-  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## iterator processes *left* to *right*.
+  ## Note: When running in a loop it is ok to delete the current item and the
+  ## all items already visited. Items not visited yet must not be deleted.
   if 0 < rq.tab.len:
-    var key = rq.first
-    while true:
-      yield key
-      if key == rq.last:
-        break
+    var
+      key = rq.first
+      loopOK = true
+    while loopOK:
+      let yKey = key
+      loopOK = key != rq.last
       key = rq.tab[key].nxt
+      yield yKey
 
 iterator nextValues*[K,V](rq: RndQuRef[K,V]): V
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Iterate over all values in the queue starting with the
-  ## `rq.first.value.value` item value (if any).
+  ## `rq.first.value.value` item value (if any). Using the notation introduced
+  ## with `rq.append` and `rq.prepend`, the iterator processes *left* to
+  ## *right*.
   ##
-  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## iterator processes *left* to *right*.
+  ## Note: When running in a loop it is ok to delete the current item and the
+  ## all items already visited. Items not visited yet must not be deleted.
   if 0 < rq.tab.len:
-    var key = rq.first
-    while true:
+    var
+      key = rq.first
+      loopOK = true
+    while loopOK:
       let item = rq.tab[key]
-      yield item.value
-      if key == rq.last:
-        break
+      loopOK = key != rq.last
       key = item.nxt
+      yield item.value
 
 iterator nextPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Iterate over all (key,value) pairs in the queue starting with the
-  ## `(rq.firstKey.value,rq.first.value.value)` key/item pair (if any).
+  ## `(rq.firstKey.value,rq.first.value.value)` key/item pair (if any). Using
+  ## the notation introduced with `rq.append` and `rq.prepend`, the iterator
+  ## processes *left* to *right*.
   ##
-  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## iterator processes *left* to *right*.
+  ## Note: When running in a loop it is ok to delete the current item and the
+  ## all items already visited. Items not visited yet must not be deleted.
   if 0 < rq.tab.len:
-    var key = rq.first
-    while true:
-      let item = rq.tab[key]
-      yield (key,item.value)
-      if key == rq.last:
-        break
+    var
+      key = rq.first
+      loopOK = true
+    while loopOK:
+      let
+        yKey = key
+        item = rq.tab[key]
+      loopOK = key != rq.last
       key = item.nxt
+      yield (yKey,item.value)
 
 
 iterator prevKeys*[K,V](rq: RndQuRef[K,V]): K
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Reverse iterate over all keys in the queue starting with the
-  ## `rq.lastKey.value` key (if any).
+  ## `rq.lastKey.value` key (if any). Using the notation introduced with
+  ## `rq.append` and `rq.prepend`, the iterator processes *right* to *left*.
   ##
-  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## iterator processes *right* to *left*.
+  ## Note: When running in a loop it is ok to delete the current item and the
+  ## all items already visited. Items not visited yet must not be deleted.
   if 0 < rq.tab.len:
-    var key = rq.last
-    while true:
-      yield key
-      if key == rq.first:
-        break
+    var
+      key = rq.last
+      loopOK = true
+    while loopOK:
+      let yKey = key
+      loopOK = key != rq.first
       key = rq.tab[key].prv
+      yield yKey
 
 iterator prevValues*[K,V](rq: RndQuRef[K,V]): V
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Reverse iterate over all values in the queue starting with the
-  ## `rq.last.value.value` item value (if any).
+  ## `rq.last.value.value` item value (if any). Using the notation introduced
+  ## with `rq.append` and `rq.prepend`, the iterator processes *right* to
+  ## *left*.
   ##
-  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## iterator processes *right* to *left*.
+  ## Note: When running in a loop it is ok to delete the current item and the
+  ## all items already visited. Items not visited yet must not be deleted.
   if 0 < rq.tab.len:
-    var key = rq.last
-    while true:
+    var
+      key = rq.last
+      loopOK = true
+    while loopOK:
       let item = rq.tab[key]
-      yield item.value
-      if key == rq.first:
-        break
+      loopOK = key != rq.first
       key = item.prv
+      yield item.value
 
 iterator prevPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Reverse iterate over all (key,value) pairs in the queue starting with the
-  ## `(rq.lastKey.value,rq.last.value.value)` key/item pair (if any).
+  ## `(rq.lastKey.value,rq.last.value.value)` key/item pair (if any). Using
+  ## the notation introduced with `rq.append` and `rq.prepend`, the iterator
+  ## processes *right* to *left*.
   ##
-  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## iterator processes *right* to *left*.
+  ## Note: When running in a loop it is ok to delete the current item and the
+  ## all items already visited. Items not visited yet must not be deleted.
   if 0 < rq.tab.len:
-    var key = rq.last
-    while true:
-      let item = rq.tab[key]
-      yield (key,item.value)
-      if key == rq.first:
-        break
+    var
+      key = rq.last
+      loopOK = true
+    while loopOK:
+      let
+        yKey = key
+        item = rq.tab[key]
+      loopOK = key != rq.first
       key = item.prv
+      yield (yKey,item.value)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging

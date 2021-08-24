@@ -9,11 +9,12 @@
 # according to those terms.
 
 import
-  std/[algorithm, sequtils, strformat, tables],
+  std/[algorithm, sequtils, strformat, strutils, tables],
   ../nimbus/utils/rnd_qu,
   unittest2
 
 const
+  usedStrutils = newSeq[string]().join(" ")
   keyList = [
     185, 208,  53,  54, 196, 189, 187, 117,  94,  29,   6, 173, 207,  45,  31,
     208, 127, 106, 117,  49,  40, 171,   6,  94,  84,  60, 125,  87, 168, 183,
@@ -42,7 +43,7 @@ proc runRndQu(noisy = true) =
       fwdRq, revRq: RndQuRef[int,int]
       fwdRej, revRej: seq[int]
 
-    test &"Append and traverse {keyList.len} items, " &
+    test &"Append/traverse {keyList.len} items, " &
         &"rejecting {numKeyDups} duplicates":
       var
         rq = newRndQu[int,int]()
@@ -63,7 +64,7 @@ proc runRndQu(noisy = true) =
       fwdRq = rq
       fwdRej = rej
 
-    test &"Prepend and traverse {keyList.len} items, " &
+    test &"Prepend/traverse {keyList.len} items, " &
         &"rejecting {numKeyDups} duplicates":
       var
         rq = newRndQu[int,int]()
@@ -92,7 +93,7 @@ proc runRndQu(noisy = true) =
         check toSeq(fwdRq.prevKeys) == toSeq(revRq.nextKeys)
         check fwdRej.sorted == revRej.sorted
 
-    test "Delete corresponding random entries from previous queues":
+    test "Delete corresponding entries by keyed access from previous queues":
       var seen: seq[int]
       let sub7 = keyList.len div 7
       for n in toSeq(countUp(0,sub7)).concat(toSeq(countUp(3*sub7,4*sub7))):
@@ -138,6 +139,149 @@ proc runRndQu(noisy = true) =
       check fwdRq.len == revRq.len
       check seen.len + fwdRq.len + fwdRej.len == keyList.len
 
+    # ------
+
+    const groupLen = 7
+
+    proc fillKeyList(rq: RndQuRef[int,int]): RndQuRef[int,int] =
+      for n in keyList:
+        rq[n] = -n
+      doAssert rq.len == numUniqeKeys
+      rq
+
+    proc updateSeen(rq: RndQuRef[int,int]; seen: var seq[int]; n: int) =
+      seen.add n
+      if groupLen <= seen.len:
+        let rqLen = rq.len
+        if noisy:
+          # echo "*** updateSeen: deleting ", seen.mapIt(&"{it:3}").join(" ")
+          discard
+        for a in seen:
+          rq.del(a)
+        doAssert rqLen == seen.len + rq.len
+        seen.setLen(0)
+
+    var keyLst: seq[int]
+
+    test &"Load/forward iterate {numUniqeKeys} items, "&
+          &"deleting in groups of at most {groupLen}":
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          seen, all: seq[int]
+        for w in rq.nextKeys:
+          all.add w
+          rq.updateSeen(seen, w)
+          check rq.verify.isOK
+        check seen.len == rq.len
+        check seen.len < groupLen
+        keyLst = all
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          seen, all: seq[int]
+        for w,_ in rq.nextPairs:
+          all.add w
+          rq.updateSeen(seen, w)
+          check rq.verify.isOK
+        check seen.len == rq.len
+        check seen.len < groupLen
+        check keyLst == all
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          seen, all: seq[int]
+        for v in rq.nextValues:
+          all.add -v
+          rq.updateSeen(seen, -v)
+          check rq.verify.isOK
+        check seen.len == rq.len
+        check seen.len < groupLen
+        check keyLst == all
+
+    test &"Load/reverse iterate {numUniqeKeys} items, "&
+          &"deleting in groups of at most {groupLen}":
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          seen, all: seq[int]
+        for w in rq.prevKeys:
+          all.add w
+          rq.updateSeen(seen, w)
+          check rq.verify.isOK
+        check seen.len == rq.len
+        check seen.len < groupLen
+        check keyLst == all.reversed
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          seen, all: seq[int]
+        for w,_ in rq.prevPairs:
+          all.add w
+          rq.updateSeen(seen, w)
+          check rq.verify.isOK
+        check seen.len == rq.len
+        check seen.len < groupLen
+        check keyLst == all.reversed
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          seen, all: seq[int]
+        for v in rq.prevValues:
+          all.add -v
+          rq.updateSeen(seen, -v)
+          check rq.verify.isOK
+        check seen.len == rq.len
+        check seen.len < groupLen
+        check keyLst == all.reversed
+
+    test &"Load/forward steps {numUniqeKeys} key/item consistency":
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          count = 0
+          rc = rq.firstKey
+        while rc.isOk:
+          check keyLst[count] == rc.value
+          rc = rq.nextKey(rc.value)
+          count.inc
+        check rq.verify.isOK
+        check count == keyLst.len
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          count = 0
+          rc = rq.first
+        while rc.isOk:
+          check keyLst[count] == -rc.value.value
+          rc = rq.next(rc.value)
+          count.inc
+        check count == keyLst.len
+
+    test &"Load/reverse steps {numUniqeKeys} key/item consistency":
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          count = keyLst.len
+          rc = rq.lastKey
+        while rc.isOk:
+          count.dec
+          check keyLst[count] == rc.value
+          rc = rq.prevKey(rc.value)
+        check rq.verify.isOK
+        check count == 0
+      block:
+        var
+          rq = newRndQu[int,int]().fillKeyList
+          count = keyLst.len
+          rc = rq.last
+        while rc.isOk:
+          count.dec
+          check keyLst[count] == -rc.value.value
+          rc = rq.prev(rc.value)
+        check rq.verify.isOK
+        check count == 0
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
@@ -146,7 +290,7 @@ proc rndQuMain*(noisy = defined(debug)) =
   noisy.runRndQu
 
 when isMainModule:
-  let noisy = true # defined(debug)
+  let noisy = defined(debug)
   noisy.runRndQu
 
 # ------------------------------------------------------------------------------
