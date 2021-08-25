@@ -11,6 +11,11 @@
 ## Transaction Pool
 ## ================
 ##
+## Current transaction data organisation:
+##
+## * All incoming transactions are queued (see `rnd_qu` module)
+## * Transactions indexed/bucketed by *gas price* (see `slst` module)
+##
 
 import
   std/[hashes, sequtils, strformat, strutils, tables, times],
@@ -19,39 +24,49 @@ import
   eth/[common, keys],
   stew/results
 
+export
+  results,
+  rnd_qu,
+  slst
+
 type
+  TxInfo* = enum ##\
+    ## Error codes (as used in verification function.)
+    txOk = 0
+    txVfyByIdQueueList      ## Corrupted ID queue/fifo structure
+    txVfyByIdQueueKey       ## Corrupted ID queue/fifo container id
+    txVfyByGasPriceList     ## Corrupted gas price list structure
+    txVfyByGasPriceEntry    ## Corrupted gas price entry queue
+
   TxItemRef* = ref object of RootObj ##\
+    ## Data container with transaction and meta data.
     tx*: Transaction ## Transaction, might be modified
-    id: Hash256      ## Identifier, read-only
+    id: Hash256      ## Identifier/transaction key, read-only
     timeStamp: Time  ## Time when added, read-only
     info: string     ## Whatever, read-only
 
   TxMark* = ##\
-    ## Ready to be used for something, currently just a blind value
-    ## that comes with the `RndQuItemRef` value
+    ## Ready to be used for something, currently just a blind value that\
+    ## comes in when queuing items for the same key (e.g. gas price.)
     int
 
   TxItemList* = ##\
-    ## Chronologically ordered queue with random access
+    ## Chronologically ordered queue/fifo with random access. This is\
+    ## typically used when queuing items for the same key (e.g. gas price.)
     RndQuRef[TxItemRef,TxMark]
 
-  TxResultItems* = ##\
-    ## Typcal function result
-    Result[TxItemList,void]
-
-  TxTimeStampInx = ##\
-    ## Time stamp index list
-    SLstRef[Time,TxItemList]
+  TxIdQueue = ##\
+    ## Chronological queue and ID table, fifo
+    RndQuRef[Hash256,TxItemRef]
 
   TxGasPriceInx = ##\
     ## Gas price index list
     SLstRef[GasInt,TxItemList]
 
   TxPool* = object of RootObj ##\
-    ## ..
-    tab: Table[Hash256,TxItemRef] ## Primary transaction table
+    ## Transaction pool descriptor
+    byIdQueue: TxIdQueue          ## Primary table, queued by arrival event
     byGasPrice: TxGasPriceInx     ## Indexed by gas price
-    byTimeStamp: TxTimeStampInx   ## Indexed by insertion timeStamp
 
 {.push raises: [Defect].}
 
@@ -102,7 +117,7 @@ proc `$`(rq: TxItemList): string =
   $rq.len
 
 # ------------------------------------------------------------------------------
-# Private, generic helpers
+# Private, generic list helpers
 # ------------------------------------------------------------------------------
 
 proc leafInsert[L,K](lst: L; key: K; val: TxItemRef)
@@ -121,19 +136,39 @@ proc leafDelete[L,K](lst: L; key: K; val: TxItemRef)
   ## Remove `(key,val)` pair from list.
   var data = lst.eq(key)
   if data.isOk:
-    discard data.value.value.delete(val)
+    var dupList = data.value.value
+    dupList.del(val)
+    if dupList.len == 0:
+      discard lst.delete(key)
 
 proc leafDelete[L,K](lst: L; key: K) =
   ## For argument `key` remove all `(key,value)` pairs from list for some
   ## value.
   lst.delete(key)
 
-proc hash(val: TxItemRef): Hash =
+# ------------------------------------------------------------------------------
+# Private, other helpers
+# ------------------------------------------------------------------------------
+
+proc hash(itemRef: TxItemRef): Hash =
   ## Needed for the table used in `rnd_qu`
-  cast[pointer](val).hash
+  cast[pointer](itemRef).hash
+
+proc hash(tx: Transaction): Hash256 {.inline.} =
+  ## Transaction hash serves as ID
+  tx.rlpHash
+
+proc item(rc: RndQuResult[Hash256,TxItemRef]): TxItemRef {.inline.} =
+  ## Beware: rc.isOK must hold
+  rc.value.value
+
+proc itemResult(rc: RndQuResult[Hash256,TxItemRef]): Result[TxItemRef,void] =
+  if rc.isErr:
+    return err()
+  return ok(rc.value.value)
 
 # ------------------------------------------------------------------------------
-# Private, explicit helpers
+# Private, explicit list & queue helpers
 # ------------------------------------------------------------------------------
 
 proc newGasPriceInx(): auto =
@@ -154,58 +189,70 @@ proc verifyByGasPrice(xp: TxPool): RbInfo
     return rc.error[1]
 
 
-proc newTimeStampInx(): auto =
-  newSLst[Time,TxItemList]()
+proc newIdQueue(): auto =
+  newRndQu[Hash256,TxItemRef]()
 
-proc insertByTimeStamp(xp: TxPool; key: Time; val: TxItemRef)
+proc verifyByIdQueue(xp: TxPool): RndQuInfo
     {.gcsafe,raises: [Defect,KeyError].} =
-  xp.byTimeStamp.leafInsert(key,val)
-
-proc deleteByTimeStamp(xp: TxPool; key: Time; val: TxItemRef)
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  xp.byTimeStamp.leafDelete(key,val)
-
-proc verifyByTimeStamp(xp: TxPool): RbInfo
-    {.gcsafe, raises: [Defect,CatchableError].} =
-  let rc = xp.byTimeStamp.verify
+  let rc = xp.byIdQueue.verify
   if rc.isErr:
-    return rc.error[1]
+    return rc.error[2]
+  rndQuOk
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
 proc initTxPool*(): TxPool =
+  ## Constructor, returns new tx-pool descriptor.
   TxPool(
-    # tab: no-init-needed
-    byGasPrice:  newGasPriceInx(),
-    byTimeStamp: newTimeStampInx())
+    byIdQueue:  newIdQueue(),
+    byGasPrice: newGasPriceInx())
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
 # ------------------------------------------------------------------------------
 
-proc insert*(xp: var TxPool; tx: Transaction; info = ""): bool
-    {.discardable,gcsafe,raises: [Defect,KeyError].} =
+proc insert*(xp: var TxPool; tx: Transaction; info = ""): Result[Hash256,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Add new transaction argument `tx` to the database. If accepted and added
+  ## to the database, a `key` value is returned which can be used to retrieve
+  ## this transaction direcly via `tx[key].tx`. The following holds for the
+  ## returned `key` value (see `[]` below for details):
+  ## ::
+  ##   xp[key].id == key  # id: transaction key stored in the wrapping container
+  ##   tx.toKey == key    # holds as long as tx is not modified
+  ##
+  ## Adding the transaction will be rejected if the transaction key `tx.toKey`
+  ## exists in the database already.
+  ##
+  ## CAVEAT:
+  ##   The returned transaction key `key` for the transaction `tx` is
+  ##   recoverable as `tx.toKey` only while the trasaction remains unmodified.
+  ##
+  let key = tx.hash
+  if xp.byIdQueue.hasKey(key):
+    return err()
   let item = TxItemRef(
-    id:        tx.rlpHash,
+    id:        key,
     tx:        tx,
     timeStamp: getTime(),
     info:      info)
-  if not xp.tab.hasKey(item.id):
-    xp.tab[item.id] = item
-    xp.insertByGasPrice(item.tx.gasPrice,item)
-    xp.insertByTimeStamp(item.timeStamp,item)
-    return true
+  xp.byIdQueue[key] = item
+  xp.insertByGasPrice(item.tx.gasPrice, item)
+  return ok(key)
 
-proc delete*(xp: var TxPool; hash: Hash256): bool
-    {.discardable,gcsafe,raises: [Defect,KeyError].} =
-  if xp.tab.hasKey(hash):
-    let item = xp.tab[hash]
-    xp.tab.del(item.id)
-    xp.deleteByGasPrice(item.tx.gasPrice,item)
-    xp.deleteByTimeStamp(item.timeStamp,item)
-    return true
+proc delete*(xp: var TxPool; key: Hash256): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Delete transaction (and wrapping container) from the database. If
+  ## successful, the function returns the wrapping container that was just
+  ## removed.
+  let rc = xp.byIdQueue.delete(key)
+  if rc.isErr:
+    return err()
+  let item = rc.item
+  xp.deleteByGasPrice(item.tx.gasPrice, item)
+  return ok(item)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -213,89 +260,167 @@ proc delete*(xp: var TxPool; hash: Hash256): bool
 
 proc len*(xp: var TxPool): int =
   ## Total number of registered transactions
-  xp.tab.len
+  xp.byIdQueue.len
 
 proc len*(rq: TxItemList): int =
-  ## Returns the number of items in the list
+  ## Returns the number of items on the argument queue `rq` which is typically
+  ## the result of an `SLstRef` type object query holding one or more
+  ## duplicates relative to the same index.
   rnd_qu.len(rq)
 
 proc byGasPriceLen*(xp: var TxPool): int =
-  ## Number of different gas prices
+  ## Number of different gas prices known. Fo each gas price there is at least
+  ## one transaction available.
   xp.byGasPrice.len
 
-proc byTimeStampLen*(xp: var TxPool): int =
-  ## Number of different time stamp (should be pretty much the same as
-  ## `xp.len`)
-  xp.byTimeStamp.len
-
-proc id*(w: TxItemRef): Hash256 {.inline.} =
+proc id*(item: TxItemRef): Hash256 {.inline.} =
   ## Getter
-  w.id
+  item.id
 
-proc timeStamp*(w: TxItemRef): Time {.inline.} =
-  ## gGetter
-  w.timeStamp
+proc timeStamp*(item: TxItemRef): Time {.inline.} =
+  ## Getter
+  item.timeStamp
 
-proc info*(w: TxItemRef): string {.inline.} =
-  ## gGetter
-  w.info
+proc info*(item: TxItemRef): string {.inline.} =
+  ## Getter
+  item.info
 
 # ------------------------------------------------------------------------------
-# Public functions, fetch data
+# Public functions, ID queue query
 # ------------------------------------------------------------------------------
 
-proc byGasPriceGe*(xp: var TxPool; gWei: GasInt): TxResultItems =
-  ## Retrieve the list of transaction records with the *least* gas price
-  ## *greater or equal* the argument `gWei`. On success, the resulting
+proc hasKey*(xp: var TxPool; key: Hash256): bool =
+  ## Returns `true` if the argument `key` for a transaction exists in the
+  ## database, already. If this function returns `true`, then it is save to
+  ## use the `xp[key]` paradigm for accessing a transaction container.
+  xp.byIdQueue.hasKey(key)
+
+proc toKey*(tx: Transaction): Hash256 {.inline.} =
+  ## Retrieves transaction key. Note that the returned argument will only apply
+  ## to a transaction in the database if the argument transaction `tx` is
+  ## exactly the same as the one passed earlier to the `insert()` function.
+  tx.hash
+
+proc `[]`*(xp: var TxPool; key: Hash256): TxItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## If it exists, this function retrieves a transaction container `item`
+  ## for the argument `key` with
+  ## ::
+  ##   item.id == key
+  ##
+  ## See also commments on `toKey()` and `insert()`.
+  ##
+  ## Note that the underlying *tables* module may throw a `KeyError` exception
+  ## unless the argument `key` exists in the database.
+  xp.byIdQueue[key]
+
+proc oldest*(xp: var TxPool): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieves oldest item queued (if any): first fifo output item
+  xp.byIdQueue.first.itemResult
+
+proc newest*(xp: var TxPool): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieves newest item queued (if any): last fifo input item
+  xp.byIdQueue.last.itemResult
+
+iterator firstOutItems*(xp: var TxPool): TxItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## ID queue walk/traversal: oldest first (fifo).
+  ##
+  ## Note: When running in a loop it is ok to delete the current item and
+  ## the all items already visited. Items not visited yet must not be deleted.
+  var rc = xp.byIdQueue.first
+  while rc.isOK:
+    let item = rc.item
+    rc = xp.byIdQueue.next(rc.value)
+    yield item
+
+iterator lastInItems*(xp: var TxPool): TxItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## ID queue walk/traversal: newest first (lifo)
+  ##
+  ## Note: When running in a loop it is ok to delete the current item and
+  ## the all items already visited. Items not visited yet must not be deleted.
+  var rc = xp.byIdQueue.last
+  while rc.isOK:
+    let item = rc.item
+    rc = xp.byIdQueue.prev(rc.value)
+    yield item
+
+# ------------------------------------------------------------------------------
+# Public functions, gas price query
+# ------------------------------------------------------------------------------
+
+proc byGasPriceGe*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
+  ## Retrieve the list of transaction records all with the same *least* gas
+  ## price *greater or equal* the argument `gWei`. On success, the resulting
   ## list of transactions has at least one item.
   ##
-  ## While the returned list *must not* be modified, the transaction entries
-  ## in the list may well be altered.
+  ## While the returned *list* of transaction containers *must not* be modified
+  ## directly, a transaction entry within a container may well be altered.
   let rc = xp.byGasPrice.ge(gWei)
   if rc.isOk:
-    doAssert 0 < rc.value.value.len
     return ok(rc.value.value)
   err()
 
-proc byGasPriceGt*(xp: var TxPool; gWei: GasInt): TxResultItems =
+proc byGasPriceGt*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.gt(gWei)
   if rc.isOk:
-    doAssert 0 < rc.value.value.len
     return ok(rc.value.value)
   err()
 
-proc byGasPriceLe*(xp: var TxPool; gWei: GasInt): TxResultItems =
+proc byGasPriceLe*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.le(gWei)
   if rc.isOk:
-    doAssert 0 < rc.value.value.len
     return ok(rc.value.value)
   err()
 
-proc byGasPriceLt*(xp: var TxPool; gWei: GasInt): TxResultItems =
+proc byGasPriceLt*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.lt(gWei)
   if rc.isOk:
-    doAssert 0 < rc.value.value.len
     return ok(rc.value.value)
   err()
 
-# ------------------------------------------------------------------------------
-# Public functions, query functions
-# ------------------------------------------------------------------------------
+iterator byGasPriceIncPairs*(xp: var TxPool;
+                             gWei = GasInt.low): (GasInt,TxItemList) =
+  ## Starting at the lowest, this function traverses increasing gas prices.
+  ##
+  ## While the returned *list* of transaction containers *must not* be modified
+  ## directly, a transaction entry within a container may well be altered.
+  ##
+  ## Note: When running in a loop it is ok to add or delete any entries
+  ## vistied or not visited yet.
+  var rc = xp.byGasPrice.ge(gWei)
+  while rc.isOk:
+    let yKey = rc.value.key
+    yield (ykey, rc.value.value)
+    rc = xp.byGasPrice.gt(ykey)
 
-# ------------------------------------------------------------------------------
-# Public functions, walk/traversal functions
-# ------------------------------------------------------------------------------
-
+iterator byGasPriceDecPairs*(xp: var TxPool;
+                             gWei = GasInt.high): (GasInt,TxItemList) =
+  ## Starting at the highest, this function traverses decreasing gas prices.
+  ##
+  ## While the returned *list* of transaction containers *must not* be modified
+  ## directly, a transaction entry within a container may well be altered.
+  ##
+  ## Note: When running in a loop it is ok to add or delete any entries
+  ## vistied or not visited yet.
+  var rc = xp.byGasPrice.le(gWei)
+  while rc.isOk:
+    let yKey = rc.value.key
+    yield (yKey, rc.value.value)
+    rc = xp.byGasPrice.lt(yKey)
 
 # ------------------------------------------------------------------------------
 # Public functions, pretty printing and debugging
 # ------------------------------------------------------------------------------
 
 proc pp*(tx: Transaction): string =
-
+  ## Pretty print transaction (use for debugging)
   result = "(txType=" & $tx.txType
 
   if tx.chainId.uint64 != 0:
@@ -324,25 +449,36 @@ proc pp*(tx: Transaction): string =
   result &= ")"
 
 proc pp*(w: TxItemRef): string =
+  ## Pretty print item (use for debugging)
   let s = w.tx.pp
   result = "(timeStamp=" & ($w.timeStamp).replace(' ','_') &
     &",hash=" & w.id.toXX &
     s[1 ..< s.len]
 
 proc `$`*(w: TxItemRef): string =
+  ## Visualise item ID (use for debugging)
   "<" & w.id.toXX & ">"
 
-proc verify*(xp: var TxPool): bool
+proc verify*(xp: var TxPool): Result[void,TxInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
-  var rc = xp.verifyByGasPrice
-  if rc != rbOK:
-    return false
+  ## Verify descriptor and subsequent data structures.
+  block:
+    let rc = xp.verifyByGasPrice
+    if rc != rbOK:
+      return err(txVfyByGasPriceList)
+    for (key,lst) in xp.byGasPriceIncPairs:
+      if lst.len == 0:
+        return err(txVfyByGasPriceEntry)
 
-  rc = xp.verifyByTimeStamp
-  if rc != rbOK:
-    return false
+  block:
+    let rc = xp.verifyByIdQueue
+    if rc != rndQuOk:
+      return err(txVfyByIdQueueList)
+    for item in xp.firstOutItems:
+      if item.id != xp[item.id].id:
+        return err(txVfyByIdQueueKey)
 
-  true
+  return ok()
 
 # ------------------------------------------------------------------------------
 # End

@@ -10,8 +10,8 @@
 
 import
   std/[os, sequtils, strformat, strutils, times],
-  ../nimbus/utils/[rnd_qu, tx_pool],
-  ./test_clique/undump, # borrow from there
+  ../nimbus/utils/tx_pool,
+  ./test_clique/undump, # borrow from clique tools
   eth/[common, keys],
   stint,
   unittest2
@@ -91,7 +91,7 @@ proc collectTxPool(xp: var TxPool; noisy: bool; file: string; stopAfter: int) =
         count.inc
         let info = &"{count} #{blkNum}({chainNo}) {n}/{txs.len}"
         noisy.showElapsed(&"insert: {info}"):
-          xp.insert(tx = txs[n], info = info)
+          doAssert xp.insert(tx = txs[n], info = info).isOk
         if stopAfter <= count:
           return
     chainNo.inc
@@ -114,7 +114,7 @@ proc runTxStepper(noisy = true;
 
       # Note: expecting enough transactions in the `goerliCapture` file
       check xp.len == stopAfter
-      check xp.verify
+      check xp.verify.isOk
 
     let
       numGasPrices = xp.byGasPriceLen
@@ -122,23 +122,84 @@ proc runTxStepper(noisy = true;
     test &"Walk {numGasPrices} gas prices for {xp.len} transactions":
       noisy.showElapsed("Gas price walk on collected transactions"):
         var
-          txRc = xp.byGasPriceGe(0)
           gpCount = 0
           txCount = 0
-        while txRc.isOk:
-          let
-            lst = txRc.value
-            gasPrice = lst.firstKey.value.tx.gasPrice
-            infoList = toSeq(lst.nextKeys).mapIt(it.info)
+        for (gasPrice,itemsLst) in xp.byGasPriceIncPairs:
+          let infoList = toSeq(itemsLst.nextKeys).mapIt(it.info)
           gpCount.inc
-          txCount += lst.len
-          if noisy:
+          txCount += itemsLst.len
+          if noisy and false:
             echo &">>> gasPrice={gasPrice} for {infoList.len} entries:"
             let indent = " ".repeat(6)
             echo indent, infoList.join(&"\n{indent}")
-          txRc = xp.byGasPriceGt(gasPrice)
         check gpCount == numGasPrices
         check txCount == xp.len
+        check xp.verify.isOK
+
+    var txList: seq[(Hash256,string,Transaction)]
+
+    test "Walk transaction ID queue fwd/rev":
+      for w in xp.firstOutItems:
+        txList.add (w.id, w.info, w.tx)
+      check txList.len == xp.len
+
+      var top = txList.len
+      for w in xp.lastInItems:
+        top.dec
+        check txList[top][0] == w.id
+        check txList[top][1] == w.info
+        check txList[top][2].toKey == w.tx.toKey
+      check top == 0
+      check xp.verify.isOK
+
+    const groupLen = 13
+
+    proc fillTxList(xq: var TxPool) =
+      for w in txList:
+        doAssert xq.insert(w[2]).value == w[0]
+      doAssert xq.len == txList.len
+
+    proc updateSeen(xq: var TxPool; seen: var seq[Hash256]; n: Hash256) =
+      seen.add n
+      if groupLen <= seen.len:
+        let xqLen = xq.len
+        if noisy:
+          # echo "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
+          discard
+        for a in seen:
+          doAssert xq.delete(a).value.id == a
+        doAssert xqLen == seen.len + xq.len
+        seen.setLen(0)
+
+    test &"Load/forward walk ID queue, " &
+           &"deleting groups of at most {groupLen}":
+      var
+        xq = initTxPool()
+        seen: seq[Hash256]
+      noisy.showElapsed(&"Loading {txList.len} transactions"):
+        xq.fillTxList
+      check xq.verify.isOK
+      noisy.showElapsed("Forward delete-walk ID queue"):
+        for w in xq.firstOutItems:
+          xq.updateSeen(seen, w.id)
+          check xq.verify.isOK
+      check seen.len == xq.len
+      check seen.len < groupLen
+
+    test &"Load/reverse walk ID queue, " &
+        &"deleting in groups of at most {groupLen}":
+      var
+        xq = initTxPool()
+        seen: seq[Hash256]
+      noisy.showElapsed(&"Loading {txList.len} transactions"):
+        xq.fillTxList
+      check xq.verify.isOK
+      noisy.showElapsed("Revese delete-walk ID queue"):
+        for w in xq.lastInItems:
+          xq.updateSeen(seen, w.id)
+          check xq.verify.isOK
+      check seen.len == xq.len
+      check seen.len < groupLen
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -152,7 +213,7 @@ when isMainModule:
     captFile1 = "nimbus-eth1" / "tests" / goerliCapture
     captFile2 = "goerli504192.txt.gz"
 
-  let noisy = true # defined(debug)
+  let noisy = defined(debug)
   noisy.runTxStepper(dir = "/status", captureFile = captFile2,
                      numTransactions = 1500)
 
