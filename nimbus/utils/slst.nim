@@ -196,8 +196,7 @@ proc findOrInsert*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
   if result.isErr:
     return sl.rbTreeFindEq(key)
 
-proc delete*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V]
-                     {.gcsafe,discardable.}=
+proc delete*[K,V](sl: SLstRef[K,V]; key: K): SLstResult[K,V] =
   ## Delete `key` from list and return the data container item that was
   ## holding the `key` if it was deleted.
   sl.rbTreeDelete(key)
