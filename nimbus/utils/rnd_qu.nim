@@ -542,7 +542,7 @@ proc verify*[K,V](rq: RndQuRef[K,V]):
   ## queue `rq` is consistent.
   let tabLen = rq.tab.len
   if tabLen == 0:
-    return
+    return ok()
 
   # Ckeck first and last items
   if rq.tab[rq.first].prv != rq.tab[rq.first].nxt:

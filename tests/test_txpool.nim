@@ -11,7 +11,7 @@
 import
   std/[os, sequtils, strformat, strutils, times],
   ../nimbus/utils/tx_pool,
-  ./test_clique/undump, # borrow from clique tools
+  ./test_txpool/helpers,
   eth/[common, keys],
   stint,
   unittest2
@@ -25,54 +25,6 @@ type
     chainNo: int
     txCount: int
     txs: seq[Transaction]
-
-# ------------------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------------------
-
-proc pp(txs: openArray[Transaction]; pfx = ""): string =
-  let txt = block:
-    var rc = ""
-    if 0 < txs.len:
-      rc = "[" & txs[0].pp
-      for n in 1 ..< txs.len:
-        rc &= ";" & txs[n].pp
-      rc &= "]"
-    rc
-  txt.multiReplace([
-    (",", &",\n   {pfx}"),
-    (";", &",\n  {pfx}")])
-
-proc pp(txs: openArray[Transaction]; pfxLen: int): string =
-  txs.pp(" ".repeat(pfxLen))
-
-proc ppMs(elapsed: Duration): string =
-  result = $elapsed.inMilliSeconds
-  let ns = elapsed.inNanoSeconds mod 1_000_000
-  if ns != 0:
-    # to rounded deca milli seconds
-    let dm = (ns + 5_000i64) div 10_000i64
-    result &= &".{dm:02}"
-  result &= "ms"
-
-proc ppSecs(elapsed: Duration): string =
-  result = $elapsed.inSeconds
-  let ns = elapsed.inNanoseconds mod 1_000_000_000
-  if ns != 0:
-    # to rounded decs seconds
-    let ds = (ns + 5_000_000i64) div 10_000_000i64
-    result &= &".{ds:02}"
-  result &= "s"
-
-template showElapsed(noisy: bool; info: string; code: untyped) =
-  let start = getTime()
-  code
-  if noisy:
-    let elpd {.inject.} = getTime() - start
-    if 0 < elpd.inSeconds:
-      echo "*** ", info, &": {elpd.ppSecs:>4}"
-    else:
-      echo "*** ", info, &": {elpd.ppMs:>4}"
 
 # ------------------------------------------------------------------------------
 # Test Runners
