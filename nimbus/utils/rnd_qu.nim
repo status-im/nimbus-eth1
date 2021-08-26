@@ -45,7 +45,7 @@ type
 
   RndQuItemRef*[K,V] = ref object ##\
     ## Data value container as stored in the queue
-    value*: V            ## Some value, can freely be modified
+    data*: V             ## Some data value, can freely be modified
     prv, nxt: K          ## Queue links, read-only
 
   RndQuTab[K,V] =
@@ -135,9 +135,9 @@ proc `[]=`*[K,V](rq: RndQuRef[K,V]; key: K; val: V)
   ## * Otherwise replace the value entry of the queue item by the argument
   ##   `val` as in `rq.eq(key).value.value = val`
   if rq.tab.hasKey(key):
-    rq.tab[key].value = val
+    rq.tab[key].data = val
   else:
-    rq.append(key).value.value = val
+    rq.append(key).value.data = val
 
 
 proc prepend*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
@@ -270,7 +270,7 @@ proc `[]`*[K,V](rq: RndQuRef[K,V]; key: K): V
   ## This function provides a simplified version of the `eq()` function with
   ## table semantics. Note that this finction throws a `KeyError` exception
   ## unless the argument `key` exists in the queue.
-  rq.tab[key].value
+  rq.tab[key].data
 
 
 proc eq*[K,V](rq: RndQuRef[K,V]; item: RndQuItemRef[K,V]): Result[K,void]
@@ -435,7 +435,7 @@ iterator nextValues*[K,V](rq: RndQuRef[K,V]): V
       let item = rq.tab[key]
       loopOK = key != rq.last
       key = item.nxt
-      yield item.value
+      yield item.data
 
 iterator nextPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -456,7 +456,7 @@ iterator nextPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
         item = rq.tab[key]
       loopOK = key != rq.last
       key = item.nxt
-      yield (yKey,item.value)
+      yield (yKey,item.data)
 
 
 iterator prevKeys*[K,V](rq: RndQuRef[K,V]): K
@@ -494,7 +494,7 @@ iterator prevValues*[K,V](rq: RndQuRef[K,V]): V
       let item = rq.tab[key]
       loopOK = key != rq.first
       key = item.prv
-      yield item.value
+      yield item.data
 
 iterator prevPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -515,7 +515,7 @@ iterator prevPairs*[K,V](rq: RndQuRef[K,V]): (K,V)
         item = rq.tab[key]
       loopOK = key != rq.first
       key = item.prv
-      yield (yKey,item.value)
+      yield (yKey,item.data)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging

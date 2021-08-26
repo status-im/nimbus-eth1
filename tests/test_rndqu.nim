@@ -53,7 +53,7 @@ proc runRndQu(noisy = true) =
         if rc.isErr:
           rej.add n
         else:
-          rc.value.value = -n
+          rc.value.data = -n
         let check = rq.verify
         if check.isErr:
           check check.error[2] == rndQuOk
@@ -74,7 +74,7 @@ proc runRndQu(noisy = true) =
         if rc.isErr:
           rej.add n
         else:
-          rc.value.value = -n
+          rc.value.data = -n
         let check = rq.verify
         if check.isErr:
           check check.error[2] == rndQuOk
@@ -135,7 +135,7 @@ proc runRndQu(noisy = true) =
         check revData.isOk == canDeleteOk
 
         if canDeleteOk:
-          check fwdData.value.value == revData.value.value
+          check fwdData.value.data == revData.value.data
       check fwdRq.len == revRq.len
       check seen.len + fwdRq.len + fwdRej.len == keyList.len
 
@@ -253,7 +253,7 @@ proc runRndQu(noisy = true) =
           count = 0
           rc = rq.first
         while rc.isOk:
-          check keyLst[count] == -rc.value.value
+          check keyLst[count] == -rc.value.data
           rc = rq.next(rc.value)
           count.inc
         check count == keyLst.len
@@ -277,7 +277,7 @@ proc runRndQu(noisy = true) =
           rc = rq.last
         while rc.isOk:
           count.dec
-          check keyLst[count] == -rc.value.value
+          check keyLst[count] == -rc.value.data
           rc = rq.prev(rc.value)
         check rq.verify.isOK
         check count == 0

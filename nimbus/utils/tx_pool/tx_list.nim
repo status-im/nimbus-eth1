@@ -64,20 +64,20 @@ proc leafInsert[L,K](lst: L; key: K; val: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Unconitionally add `(key,val)` pair to list. This might lead to
   ## multiple leaf values per argument `key`.
-  var data = lst.insert(key)
-  if data.isOk:
-    data.value.value = newRndQu[TxItemRef,TxMark](1)
+  var rc = lst.insert(key)
+  if rc.isOk:
+    rc.value.data = newRndQu[TxItemRef,TxMark](1)
   else:
-    data = lst.eq(key)
-  var dupList = data.value.value
+    rc = lst.eq(key)
+  var dupList = rc.value.data
   discard dupList.append(val)
 
 proc leafDelete[L,K](lst: L; key: K; val: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Remove `(key,val)` pair from list.
-  var data = lst.eq(key)
-  if data.isOk:
-    var dupList = data.value.value
+  var rc = lst.eq(key)
+  if rc.isOk:
+    var dupList = rc.value.data
     dupList.del(val)
     if dupList.len == 0:
       discard lst.delete(key)

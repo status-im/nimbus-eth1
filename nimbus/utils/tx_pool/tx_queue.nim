@@ -11,7 +11,7 @@
 ## Queue Structure For Transaction Pool
 ## ====================================
 ##
-## Ackn: Vaguely inspired by the *txLookup* table from
+## Ackn: Vaguely inspired by the *txLookup* maps from
 ## `tx_pool.go <https://github.com/ethereum/go-ethereum/blob/887902ea4d7ee77118ce803e05085bd9055aa46d/core/tx_pool.go#L1646>`_
 ##
 
@@ -42,10 +42,6 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc item(rc: RndQuResult[Hash256,TxItemRef]): TxItemRef {.inline.} =
-  ## Beware: rc.isOK must hold
-  rc.value.value
-
 proc `not`(sched: TxQueueSchedule): TxQueueSchedule {.inline.} =
   if sched == TxLocalQueue: TxRemoteQueue else: TxLocalQueue
 
@@ -53,7 +49,7 @@ proc `not`(sched: TxQueueSchedule): TxQueueSchedule {.inline.} =
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
-proc newAllQueue*(): TxQueueRef =
+proc newQueueRef*(): TxQueueRef =
   TxQueueRef(
     q: [newRndQu[Hash256,TxItemRef](),
         newRndQu[Hash256,TxItemRef]()])
@@ -70,7 +66,7 @@ proc txDelete*(ap: TxQueueRef;
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = ap.q[sched].delete(key)
   if rc.isOK:
-    return ok(rc.item)
+    return ok(rc.value.data)
   err()
 
 proc txVerify*(aq: TxQueueRef): Result[void,RndQuInfo]

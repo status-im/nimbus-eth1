@@ -80,7 +80,7 @@ proc runSLstTest(noisy = true) =
         if rc.isErr:
           rej.add n
         else:
-          rc.value.value = -n
+          rc.value.data = -n
         let check = sl.verify
         if check.isErr:
           check check.error[1] == rbOk # force message

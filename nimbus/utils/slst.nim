@@ -28,13 +28,13 @@
 ##    let rc = sl.insert(key)
 ##    if rc.isOk:
 ##      # unique key, store some value
-##      rc.value.value = -key
+##      rc.value.data = -key
 ##
 ##  # print entries with keys greater than 100 in natrual key order
 ##  block:
 ##    var rc = sl.ge(100)
 ##    while rc.isOk:
-##      echo "*** item ", rc.value.key, " ",  rc.value.value
+##      echo "*** item ", rc.value.key, " ",  rc.value.data
 ##      w = sl.gt(w.value.key)
 ##
 ##  # print all key/value entries in natrual key order
@@ -43,7 +43,7 @@
 ##      walk = sl.newWalk
 ##      rc = w.first
 ##    while rc.isOk:
-##      echo "*** item ", rc.value.key, " ",  rc.value.value
+##      echo "*** item ", rc.value.key, " ",  rc.value.data
 ##      rc = w.next
 ##    # optional clan up, see comments on `rbWalkDestroy()`
 ##    walk.destroy
@@ -70,7 +70,7 @@ type
   SLstItemRef*[K,V] = ref object ##\
     ## Data value container as stored in the list/database
     key: K                    ## Sorter key, read-only
-    value*: V                 ## Some value, can freely be modified
+    data*: V                  ## Some data value, to be modified freely
 
   SLstRef*[K,V] = ##\
     ## Sorted list descriptor
@@ -118,21 +118,21 @@ proc `$`*[K,V](casket: SLstItemRef[K,V]): string =
   ## Pretty printer
   ##
   ## :CAVEAT:
-  ##   This function needs a working definition for the `value` item:
+  ##   This function needs a working definition for the `data` item:
   ##   ::
   ##    proc `$`*[V](value: V): string {.gcsafe,raises:[Defect,CatchableError].}
   ##
   if casket.isNil:
     return "nil"
-  "(" & $casket.key & "," & $casket.value & ")"
+  "(" & $casket.key & "," & $casket.data & ")"
 
 proc `$`*[K,V](rc: SLstResult[K,V]): string =
   ## Pretty printer
   ##
   ## :CAVEAT:
-  ##   This function needs a working definition for the `value` item:
+  ##   This function needs a working definition for the `data` item:
   ##   ::
-  ##    proc `$`*[V](value: V): string {.gcsafe,raises:[Defect,CatchableError].}
+  ##    proc `$`*[V](data: V): string {.gcsafe,raises:[Defect,CatchableError].}
   ##
   if rc.isErr:
     return $rc.error
@@ -145,9 +145,9 @@ proc verify*[K,V](sl: SLstRef[K,V]):
   ## the argument list `sl` is consistent.
   ##
   ## :CAVEAT:
-  ##   This function needs a working definition for the `value` item:
+  ##   This function needs a working definition for the `data` item:
   ##   ::
-  ##    proc `$`*[V](value: V): string {.gcsafe,raises:[Defect,CatchableError].}
+  ##    proc `$`*[V](data: V): string {.gcsafe,raises:[Defect,CatchableError].}
   ##
   sl.rbTreeVerify(
     lt = proc(a, b: SLstItemRef[K,V]): bool = a.sLstLt(b),
@@ -158,7 +158,7 @@ proc verify*[K,V](sl: SLstRef[K,V]):
 # ------------------------------------------------------------------------------
 
 proc newSLst*[K,V](): SLstRef[K,V] =
-  ## Constructor for sorted list with key type `K` and value type `V`
+  ## Constructor for sorted list with key type `K` and data type `V`
   newRbTreeRef[SLstItemRef[K,V],K](
     cmp = proc(c: SLstItemRef[K,V]; k: K): int = c.slstCmp(k),
     mkc = proc(k: K): SLstItemRef[K,V] = slstMkc[K,V](k))

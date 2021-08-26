@@ -64,15 +64,6 @@ proc hash(tx: Transaction): Hash256 {.inline.} =
   ## Transaction hash serves as ID
   tx.rlpHash
 
-proc item(rc: RndQuResult[Hash256,TxItemRef]): TxItemRef {.inline.} =
-  ## Beware: rc.isOK must hold
-  rc.value.value
-
-proc itemResult(rc: RndQuResult[Hash256,TxItemRef]): Result[TxItemRef,void] =
-  if rc.isErr:
-    return err()
-  return ok(rc.value.value)
-
 proc toQueueSched(isLocal: bool): TxQueueSchedule {.inline.} =
   if isLocal: TxLocalQueue else: TxRemoteQueue
 
@@ -83,7 +74,7 @@ proc toQueueSched(isLocal: bool): TxQueueSchedule {.inline.} =
 proc initTxPool*(): TxPool =
   ## Constructor, returns new tx-pool descriptor.
   TxPool(
-    byIdQueue:  newAllQueue(),
+    byIdQueue:  newQueueRef(),
     byGasPrice: newGasItemLst())
 
 # ------------------------------------------------------------------------------
@@ -191,7 +182,7 @@ proc first*(xp: var TxPool): Result[TxItemRef,void]
   for sched in TxQueueSchedule:
     let rc = xp.byIdQueue.first(sched)
     if rc.isOK:
-      return rc.itemResult
+      return ok(rc.value.data)
   err()
 
 proc last*(xp: var TxPool): Result[TxItemRef,void]
@@ -201,7 +192,7 @@ proc last*(xp: var TxPool): Result[TxItemRef,void]
   for sched in TxQueueScheduleReversed:
     let rc = xp.byIdQueue.last(sched)
     if rc.isOK:
-      return rc.itemResult
+      return ok(rc.value.data)
 
 iterator firstOutItems*(xp: var TxPool): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -212,7 +203,7 @@ iterator firstOutItems*(xp: var TxPool): TxItemRef
   for sched in TxQueueSchedule:
     var rc = xp.byIdQueue.first(sched)
     while rc.isOK:
-      let item = rc.item
+      let item = rc.value.data
       rc = xp.byIdQueue.next(sched, rc.value)
       yield item
 
@@ -225,7 +216,7 @@ iterator lastInItems*(xp: var TxPool): TxItemRef
   for sched in TxQueueScheduleReversed:
     var rc = xp.byIdQueue.last(sched)
     while rc.isOK:
-      let item = rc.item
+      let item = rc.value.data
       rc = xp.byIdQueue.prev(sched, rc.value)
       yield item
 
@@ -242,28 +233,28 @@ proc byGasPriceGe*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   ## directly, a transaction entry within a container may well be altered.
   let rc = xp.byGasPrice.ge(gWei)
   if rc.isOk:
-    return ok(rc.value.value)
+    return ok(rc.value.data)
   err()
 
 proc byGasPriceGt*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.gt(gWei)
   if rc.isOk:
-    return ok(rc.value.value)
+    return ok(rc.value.data)
   err()
 
 proc byGasPriceLe*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.le(gWei)
   if rc.isOk:
-    return ok(rc.value.value)
+    return ok(rc.value.data)
   err()
 
 proc byGasPriceLt*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.lt(gWei)
   if rc.isOk:
-    return ok(rc.value.value)
+    return ok(rc.value.data)
   err()
 
 iterator byGasPriceIncPairs*(xp: var TxPool;
@@ -278,7 +269,7 @@ iterator byGasPriceIncPairs*(xp: var TxPool;
   var rc = xp.byGasPrice.ge(gWei)
   while rc.isOk:
     let yKey = rc.value.key
-    yield (ykey, rc.value.value)
+    yield (ykey, rc.value.data)
     rc = xp.byGasPrice.gt(ykey)
 
 iterator byGasPriceDecPairs*(xp: var TxPool;
@@ -293,7 +284,7 @@ iterator byGasPriceDecPairs*(xp: var TxPool;
   var rc = xp.byGasPrice.le(gWei)
   while rc.isOk:
     let yKey = rc.value.key
-    yield (yKey, rc.value.value)
+    yield (yKey, rc.value.data)
     rc = xp.byGasPrice.lt(yKey)
 
 # ------------------------------------------------------------------------------
@@ -319,7 +310,7 @@ proc verify*(xp: var TxPool): Result[void,TxInfo]
     for sched in TxQueueSchedule:
       var rc = xp.byIdQueue.first(sched)
       while rc.isOK:
-        let item = rc.item
+        let item = rc.value.data
         rc = xp.byIdQueue.next(sched, rc.value)
 
         # verify key consistency
