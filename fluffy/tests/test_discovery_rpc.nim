@@ -19,16 +19,20 @@ type TestCase = ref object
   server: RpcProxy
   client: RpcHttpClient
 
-proc setupTest(rng: ref BrHmacDrbgContext): Future[TestCase] {.async.}=
-  let localSrvAddress = "127.0.0.1"
-  let localSrvPort = 8545
-  let ta = initTAddress(localSrvAddress, localSrvPort)
-  let localDiscoveryNode = initDiscoveryNode(
+proc setupTest(rng: ref BrHmacDrbgContext): Future[TestCase] {.async.} =
+  let 
+    localSrvAddress = "127.0.0.1"
+    localSrvPort = 8545
+    ta = initTAddress(localSrvAddress, localSrvPort)
+    localDiscoveryNode = initDiscoveryNode(
       rng, PrivateKey.random(rng[]), localAddress(20302))
-  let fakeProxyConfig = getHttpClientConfig("http://127.0.0.1:8546")
+    fakeProxyConfig = getHttpClientConfig("http://127.0.0.1:8546")
+    client = newRpcHttpClient()
+
   var rpcHttpServerWithProxy = RpcProxy.new([ta], fakeProxyConfig)
+
   rpcHttpServerWithProxy.installDiscoveryApiHandlers(localDiscoveryNode)
-  let client = newRpcHttpClient()
+
   await rpcHttpServerWithProxy.start()
   await client.connect(localSrvAddress, Port(localSrvPort))
   return TestCase(localDiscovery: localDiscoveryNode, server: rpcHttpServerWithProxy, client: client)
