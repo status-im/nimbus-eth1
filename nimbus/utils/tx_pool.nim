@@ -47,7 +47,7 @@ type
 
   TxPool* = object of RootObj ##\
     ## Transaction pool descriptor
-    byIdQueue: TxQueueRef    ## Primary table, queued by arrival event
+    byIdQueue: TxQueue       ## Primary table, queued by arrival event
     byGasPrice: TxGasItemLst ## Indexed by gas price
 
 const
@@ -71,11 +71,13 @@ proc toQueueSched(isLocal: bool): TxQueueSchedule {.inline.} =
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc initTxPool*(): TxPool =
+proc init*(xp: var TxPool) =
   ## Constructor, returns new tx-pool descriptor.
-  TxPool(
-    byIdQueue:  newQueueRef(),
-    byGasPrice: newGasItemLst())
+  xp.byIdQueue.txInit
+  xp.byGasPrice.txInit
+
+proc initTxPool*: TxPool =
+  result.init
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
@@ -140,7 +142,7 @@ proc len*(xp: var TxPool): int =
   for sched in TxQueueSchedule:
     result += xp.byIdQueue.len(sched)
 
-proc len*(rq: TxItemList): int =
+proc len*(rq: var TxItemList): int =
   ## Returns the number of items on the argument queue `rq` which is typically
   ## the result of an `SLstRef` type object query holding one or more
   ## duplicates relative to the same index.
@@ -242,9 +244,9 @@ iterator firstOutItems*(xp: var TxPool): TxItemRef
   for sched in TxQueueSchedule:
     var rc = xp.byIdQueue.first(sched)
     while rc.isOK:
-      let item = rc.value.data
-      rc = xp.byIdQueue.next(sched, rc.value)
-      yield item
+      let (key,data) = (rc.value.key, rc.value.data)
+      rc = xp.byIdQueue.next(sched,key)
+      yield data
 
 iterator lastInItems*(xp: var TxPool): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -255,9 +257,9 @@ iterator lastInItems*(xp: var TxPool): TxItemRef
   for sched in TxQueueScheduleReversed:
     var rc = xp.byIdQueue.last(sched)
     while rc.isOK:
-      let item = rc.value.data
-      rc = xp.byIdQueue.prev(sched, rc.value)
-      yield item
+      let (key,data) = (rc.value.key, rc.value.data)
+      rc = xp.byIdQueue.prev(sched, key)
+      yield data
 
 # ------------------------------------------------------------------------------
 # Public functions, gas price query
@@ -297,7 +299,7 @@ proc byGasPriceLt*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   err()
 
 iterator byGasPriceIncPairs*(xp: var TxPool;
-                             gWei = GasInt.low): (GasInt,TxItemList) =
+                             gWei = GasInt.low): (GasInt,var TxItemList) =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
   ## While the returned *list* of transaction containers *must not* be modified
@@ -312,7 +314,7 @@ iterator byGasPriceIncPairs*(xp: var TxPool;
     rc = xp.byGasPrice.gt(ykey)
 
 iterator byGasPriceDecPairs*(xp: var TxPool;
-                             gWei = GasInt.high): (GasInt,TxItemList) =
+                             gWei = GasInt.high): (GasInt,var TxItemList) =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## While the returned *list* of transaction containers *must not* be modified
@@ -350,7 +352,7 @@ proc verify*(xp: var TxPool): Result[void,TxInfo]
       var rc = xp.byIdQueue.first(sched)
       while rc.isOK:
         let item = rc.value.data
-        rc = xp.byIdQueue.next(sched, rc.value)
+        rc = xp.byIdQueue.next(sched, rc.value.key)
 
         # verify key consistency
         if item.id != xp.byIdQueue.eq(item.id, sched).value.id:

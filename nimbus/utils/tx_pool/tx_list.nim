@@ -32,11 +32,11 @@ type
   TxItemList* = ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    RndQuRef[TxItemRef,TxMark]
+    RndQueue[TxItemRef,TxMark]
 
   TxGasItemLst* = ##\
     ## Generic item list indexed by gas price
-    SLstRef[GasInt,TxItemList]
+    SLst[GasInt,TxItemList]
 
 {.push raises: [Defect].}
 
@@ -44,7 +44,7 @@ type
 # Private, helpers for debugging and pretty printing
 # ------------------------------------------------------------------------------
 
-proc `$`(rq: TxItemList): string =
+proc `$`(rq: var TxItemList): string =
   ## Needed by `rq.verify()` for printing error messages
   $rq.len
 
@@ -60,29 +60,27 @@ proc hash(itemRef: TxItemRef): Hash =
 # Private, generic list helpers
 # ------------------------------------------------------------------------------
 
-proc leafInsert[L,K](lst: L; key: K; val: TxItemRef)
+proc leafInsert[L,K](lst: var L; key: K; val: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Unconitionally add `(key,val)` pair to list. This might lead to
   ## multiple leaf values per argument `key`.
   var rc = lst.insert(key)
   if rc.isOk:
-    rc.value.data = newRndQu[TxItemRef,TxMark](1)
+    rc.value.data.init(1)
   else:
     rc = lst.eq(key)
-  var dupList = rc.value.data
-  discard dupList.append(val)
+  discard rc.value.data.append(val,0)
 
-proc leafDelete[L,K](lst: L; key: K; val: TxItemRef)
+proc leafDelete[L,K](lst: var L; key: K; val: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Remove `(key,val)` pair from list.
   var rc = lst.eq(key)
   if rc.isOk:
-    var dupList = rc.value.data
-    dupList.del(val)
-    if dupList.len == 0:
+    rc.value.data.del(val)
+    if rc.value.data.len == 0:
       discard lst.delete(key)
 
-proc leafDelete[L,K](lst: L; key: K) =
+proc leafDelete[L,K](lst: var L; key: K) =
   ## For argument `key` remove all `(key,value)` pairs from list for some
   ## value.
   lst.delete(key)
@@ -91,18 +89,18 @@ proc leafDelete[L,K](lst: L; key: K) =
 # Public gas price list helpers
 # ------------------------------------------------------------------------------
 
-proc newGasItemLst*(): TxGasItemLst =
-  newSLst[GasInt,TxItemList]()
+proc txInit*(gp: var TxGasItemLst) =
+  gp.init
 
-proc txInsert*(gp: TxGasItemLst; key: GasInt; val: TxItemRef)
+proc txInsert*(gp: var TxGasItemLst; key: GasInt; val: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   gp.leafInsert(key,val)
 
-proc txDelete*(gp: TxGasItemLst; key: GasInt; val: TxItemRef)
+proc txDelete*(gp: var TxGasItemLst; key: GasInt; val: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   gp.leafDelete(key,val)
 
-proc txVerify*(gp: TxGasItemLst): RbInfo
+proc txVerify*(gp: var TxGasItemLst): RbInfo
     {.gcsafe, raises: [Defect,CatchableError].} =
   let rc = gp.verify
   if rc.isErr:

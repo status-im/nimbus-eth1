@@ -28,13 +28,13 @@ type
     TxLocalQueue = 0
     TxRemoteQueue = 1
 
-  TxQueueItemRef* = ##\
+  TxQueuePair* = ##\
     ## Queue handler wrapper, needed in `first()`, `next()`, etc.
-    RndQuItemRef[Hash256,TxItemRef]
+    RndQueuePair[Hash256,TxItemRef]
 
-  TxQueueRef* = ref object ##\
+  TxQueue* = object ##\
     ## Chronological queue and ID table, fifo
-    q: array[TxQueueSchedule, RndQuRef[Hash256,TxItemRef]]
+    q: array[TxQueueSchedule, RndQueue[Hash256,TxItemRef]]
 
 {.push raises: [Defect].}
 
@@ -49,19 +49,18 @@ proc `not`(sched: TxQueueSchedule): TxQueueSchedule {.inline.} =
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
-proc newQueueRef*(): TxQueueRef =
-  TxQueueRef(
-    q: [newRndQu[Hash256,TxItemRef](),
-        newRndQu[Hash256,TxItemRef]()])
+proc txInit*(aq: var TxQueue; localSize = 10; remoteSize = 10) =
+  aq.q[TxLocalQueue].init(localSize)
+  aq.q[TxRemoteQueue].init(remoteSize)
 
-proc txAppend*(aq: TxQueueRef;
+proc txAppend*(aq: var TxQueue;
                key: Hash256; sched: TxQueueSchedule; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Reassigning from an existing local/remote queue is supported
   aq.q[sched][key] = item
   aq.q[not sched].del(key)
 
-proc txDelete*(ap: TxQueueRef;
+proc txDelete*(ap: var TxQueue;
                key: Hash256; sched: TxQueueSchedule): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = ap.q[sched].delete(key)
@@ -69,7 +68,7 @@ proc txDelete*(ap: TxQueueRef;
     return ok(rc.value.data)
   err()
 
-proc txVerify*(aq: TxQueueRef): Result[void,RndQuInfo]
+proc txVerify*(aq: var TxQueue): Result[void,RndQueueInfo]
     {.gcsafe,raises: [Defect,KeyError].} =
   for sched in TxQueueSchedule:
     let rc = aq.q[sched].verify
@@ -81,45 +80,38 @@ proc txVerify*(aq: TxQueueRef): Result[void,RndQuInfo]
 # Public fetch & traversal
 # ------------------------------------------------------------------------------
 
-proc hasKey*(aq: TxQueueRef; key: Hash256; sched: TxQueueSchedule): bool =
+proc hasKey*(aq: var TxQueue; key: Hash256; sched: TxQueueSchedule): bool =
   aq.q[sched].hasKey(key)
 
-proc eq*(aq: TxQueueRef;
+proc eq*(aq: var TxQueue;
          key: Hash256; sched: TxQueueSchedule): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   if aq.q[sched].hasKey(key):
     return ok(aq.q[sched][key])
   err()
 
-proc first*(aq: TxQueueRef;
-            sched: TxQueueSchedule): Result[TxQueueItemRef,void]
+proc first*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   aq.q[sched].first
 
-proc second*(aq: TxQueueRef;
-            sched: TxQueueSchedule): Result[TxQueueItemRef,void]
+proc second*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   aq.q[sched].second
 
-proc beforeLast*(aq: TxQueueRef;
-                 sched: TxQueueSchedule): Result[TxQueueItemRef,void]
+proc beforeLast*(aq: var TxQueue;
+                 sched: TxQueueSchedule): Result[TxQueuePair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   aq.q[sched].beforeLast
 
-proc next*(aq: TxQueueRef;
-           sched: TxQueueSchedule; item: TxQueueItemRef):
-             Result[TxQueueItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  aq.q[sched].next(item)
+proc next*(aq: var TxQueue; sched: TxQueueSchedule; key: Hash256):
+         Result[TxQueuePair,void] {.gcsafe,raises: [Defect,KeyError].} =
+  aq.q[sched].next(key)
 
-proc prev*(aq: TxQueueRef;
-           sched: TxQueueSchedule; item: TxQueueItemRef):
-             Result[TxQueueItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  aq.q[sched].prev(item)
+proc prev*(aq: var TxQueue; sched: TxQueueSchedule; key: Hash256):
+         Result[TxQueuePair,void] {.gcsafe,raises: [Defect,KeyError].} =
+  aq.q[sched].prev(key)
 
-proc last*(aq: TxQueueRef;
-           sched: TxQueueSchedule): Result[TxQueueItemRef,void]
+proc last*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   aq.q[sched].last
 
@@ -127,7 +119,7 @@ proc last*(aq: TxQueueRef;
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc len*(aq: TxQueueRef; sched: TxQueueSchedule): int {.inline.} =
+proc len*(aq: var TxQueue; sched: TxQueueSchedule): int {.inline.} =
   ## Number of local or remote entries
   aq.q[sched].len
 

@@ -32,19 +32,19 @@ const
 # Test Runners
 # ------------------------------------------------------------------------------
 
-iterator fwdItems(sl: SLstRef[int,int]): int =
+iterator fwdItems(sl: var SLst[int,int]): int =
   var rc = sl.ge(0)
   while rc.isOk:
     yield rc.value.key
     rc = sl.gt(rc.value.key)
 
-iterator revItems(sl: SLstRef[int,int]): int =
+iterator revItems(sl: var SLst[int,int]): int =
   var rc = sl.le(int.high)
   while rc.isOk:
     yield rc.value.key
     rc = sl.lt(rc.value.key)
 
-iterator fwdWalk(sl: SLstRef[int,int]): int =
+iterator fwdWalk(sl: var SLst[int,int]): int =
   var
     w = sl.newWalk
     rc = w.first
@@ -53,7 +53,7 @@ iterator fwdWalk(sl: SLstRef[int,int]): int =
     rc = w.next
   w.destroy
 
-iterator revWalk(sl: SLstRef[int,int]): int =
+iterator revWalk(sl: var SLst[int,int]): int =
   var
     w = sl.newWalk
   var
@@ -71,7 +71,7 @@ proc runSLstTest(noisy = true) =
 
   suite "Sorted list based on red-black tree":
     var
-      sl = newSLst[int,int]()
+      sl = initSLst[int,int]()
       rej: seq[int]
 
     test &"Insert {keyList.len} items, reject {numKeyDups} duplicates":

@@ -43,7 +43,7 @@ proc collectTxPool(xp: var TxPool; noisy: bool; file: string; stopAfter: int) =
 
 
 proc toTxPool(q: var seq[TxItemRef]; noisy = true): TxPool =
-  result = initTxPool()
+  result.init
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
       doAssert result.insert(tx = w.tx, info = w.info).value == w.id
@@ -111,7 +111,9 @@ proc runTxStepper(noisy = true;
 
           noisy.showElapsed("Increasing gas price walk on transactions"):
             for (gasPrice,itemsLst) in xq.byGasPriceIncPairs:
-              let infoList = toSeq(itemsLst.nextKeys).mapIt(it.info)
+              var infoList: seq[string]
+              for w in itemsLst.nextKeys: # prevKeys() also works
+                infoList.add w.info
               gpList.add gasPrice
               txCount += itemsLst.len
               if veryNoisy:
@@ -131,7 +133,9 @@ proc runTxStepper(noisy = true;
 
           noisy.showElapsed("Decreasing gas price walk on transactions"):
             for (gasPrice,itemsLst) in xq.byGasPriceDecPairs:
-              let infoList = toSeq(itemsLst.nextKeys).mapIt(it.info)
+              var infoList: seq[string]
+              for w in itemsLst.prevKeys: # nextKeys() also works
+                infoList.add w.info
               gpList.add gasPrice
               txCount += itemsLst.len
               if veryNoisy:
@@ -197,7 +201,9 @@ proc runTxStepper(noisy = true;
         count = 0
       let
         delLe = gasPrices[0] + ((gasPrices[^1] - gasPrices[0]) div 3)
-        delMax = xq.byGasPriceLe(delLe).value.firstKey.value.tx.gasPrice
+        delMax = block:
+          var itLst = xq.byGasPriceLe(delLe).value
+          itLst.firstKey.value.tx.gasPrice
 
       test &"Load/delete with gas price less equal {delMax.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
@@ -217,7 +223,9 @@ proc runTxStepper(noisy = true;
         count = 0
       let
         delGe = gasPrices[^1] - ((gasPrices[^1] - gasPrices[0]) div 3)
-        delMin = xq.byGasPriceGe(delGe).value.firstKey.value.tx.gasPrice
+        delMin = block:
+          var itLst = xq.byGasPriceGe(delGe).value
+          itLst.firstKey.value.tx.gasPrice
 
       test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":

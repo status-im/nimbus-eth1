@@ -11,6 +11,7 @@
 import
   std/[algorithm, sequtils, strformat, strutils, tables],
   ../nimbus/utils/rnd_qu,
+  eth/rlp,
   unittest2
 
 const
@@ -29,20 +30,42 @@ const
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc `$`(item: RndQuItemRef[int,int]): string =
-  "<" & $item.prv & "<" & $item.data & ">" & $item.nxt & ">"
+proc `$`(rc: RndQueuePair[uint,uint]): string =
+  "(" & $rc.key & "," & $rc.data & ")"
 
-proc `$`(rc: RndQuResult[int,int]): string =
-  if rc.isErr:
-    return "<>"
-  $rc.value
+proc `$`(rc: Result[RndQueuePair[uint,uint],void]): string =
+  result = "<"
+  if rc.isOK:
+    result &= $rc.value.key & "," & $rc.value.data
+  result &= ">"
 
-proc toQueue(a: openArray[int]): RndQuRef[int,int] =
-  result = newRndQu[int,int]()
+proc `$`(rc: Result[uint,void]): string =
+  result = "<"
+  if rc.isOK:
+    result &= $rc.value
+  result &= ">"
+
+proc toValue(n: int): uint =
+  (n + 1000).uint
+
+proc fromValue(n: uint): int =
+  (n - 1000).int
+
+proc toKey(n: int): uint =
+  n.uint
+
+proc fromKey(n: uint): int =
+  n.int
+
+proc toQueue(a: openArray[int]): RndQueue[uint,uint] =
   for n in a:
-    result[n] = -n
+    result[n.toKey] = n.toValue
 
-proc addOrFlushGroupwise(rq: RndQuRef[int,int];
+proc toUnique(a: openArray[int]): seq[uint] =
+  var q = a.toQueue
+  toSeq(q.nextKeys)
+
+proc addOrFlushGroupwise(rq: var RndQueue[uint,uint];
                          grpLen: int; seen: var seq[int]; n: int;
                          noisy = true) =
   seen.add n
@@ -54,7 +77,7 @@ proc addOrFlushGroupwise(rq: RndQuRef[int,int];
   if noisy:
     echo "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
   for a in seen:
-    doAssert rq.delete(a).value.data == -a
+    doAssert rq.delete(a.toKey).value.data == a.toValue
   doAssert rqLen == seen.len + rq.len
   seen.setLen(0)
 
@@ -62,29 +85,26 @@ proc addOrFlushGroupwise(rq: RndQuRef[int,int];
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runRndQu(noisy = true) =
+proc runRndQueue(noisy = true) =
   let
-    uniqueKeys = toSeq(keyList.toQueue.nextKeys)
+    uniqueKeys = keyList.toUnique
     numUniqeKeys = keyList.toSeq.mapIt((it,false)).toTable.len
     numKeyDups = keyList.len - numUniqeKeys
 
   suite "Data queue with keyed random access":
     block:
       var
-        fwdRq, revRq: RndQuRef[int,int]
+        fwdRq, revRq: RndQueue[uint,uint]
         fwdRej, revRej: seq[int]
 
       test &"Append/traverse {keyList.len} items, " &
           &"rejecting {numKeyDups} duplicates":
         var
-          rq = newRndQu[int,int]()
+          rq: RndQueue[uint,uint]
           rej: seq[int]
         for n in keyList:
-          let rc = rq.push(n) # synonymous for append()
-          if rc.isErr:
+          if not rq.push(n.toKey, n.toValue): # synonymous for append()
             rej.add n
-          else:
-            rc.value.data = -n
           let check = rq.verify
           if check.isErr:
             check check.error[2] == rndQuOk
@@ -101,14 +121,11 @@ proc runRndQu(noisy = true) =
       test &"Prepend/traverse {keyList.len} items, " &
           &"rejecting {numKeyDups} duplicates":
         var
-          rq = newRndQu[int,int]()
+          rq: RndQueue[uint,uint]
           rej: seq[int]
         for n in keyList:
-          let rc = rq.unshift(n) # synonymous for prepend()
-          if rc.isErr:
+          if not rq.unshift(n.toKey, n.toValue): # synonymous for prepend()
             rej.add n
-          else:
-            rc.value.data = -n
           let check = rq.verify
           if check.isErr:
             check check.error[2] == rndQuOk
@@ -120,20 +137,19 @@ proc runRndQu(noisy = true) =
         revRej = rej
 
       test "Compare previous forward/reverse queues":
-        if fwdRq == nil or revRq == nil:
-          skip()
-        else:
-          check toSeq(fwdRq.nextKeys) == toSeq(revRq.prevKeys)
-          check toSeq(fwdRq.prevKeys) == toSeq(revRq.nextKeys)
-          check fwdRej.sorted == revRej.sorted
+        check 0 < fwdRq.len
+        check 0 < revRq.len
+        check toSeq(fwdRq.nextKeys) == toSeq(revRq.prevKeys)
+        check toSeq(fwdRq.prevKeys) == toSeq(revRq.nextKeys)
+        check fwdRej.sorted == revRej.sorted
 
       test "Delete corresponding entries by keyed access from previous queues":
         var seen: seq[int]
         let sub7 = keyList.len div 7
         for n in toSeq(countUp(0,sub7)).concat(toSeq(countUp(3*sub7,4*sub7))):
           let
-            key = keyList[n]
-            canDeleteOk = (key notin seen)
+            key = keyList[n].toKey
+            canDeleteOk = (key.fromKey notin seen)
 
             eqFwdData = fwdRq.eq(key)
             eqRevData = revRq.eq(key)
@@ -145,12 +161,15 @@ proc runRndQu(noisy = true) =
             check eqFwdData.isOk
             check eqRevData.isOk
             let
-              eqFwdKey = fwdRq.eq(eqFwdData.value)
-              eqRevKey = revRq.eq(eqRevData.value)
-            check eqFwdKey.isOk
-            check eqFwdKey.value == key
-            check eqRevKey.isOk
-            check eqRevKey.value == key
+              eqFwdEq = fwdRq.eq(eqFwdData.value.fromValue.toKey)
+              eqRevEq = revRq.eq(eqRevData.value.fromValue.toKey)
+            check eqFwdEq.isOk
+            check eqRevEq.isOk
+            let
+              eqFwdKey = eqFwdEq.value.fromValue.toKey
+              eqRevKey = eqRevEq.value.fromValue.toKey
+            check eqFwdKey == key
+            check eqRevKey == key
 
           let
             fwdData = fwdRq.delete(key)
@@ -158,8 +177,8 @@ proc runRndQu(noisy = true) =
             revData = revRq.delete(key)
             revRqCheck = revRq.verify
 
-          if key notin seen:
-            seen.add key
+          if key.fromKey notin seen:
+            seen.add key.fromKey
 
           if fwdRqCheck.isErr:
             check fwdRqCheck.error[2] == rndQuOk
@@ -181,13 +200,31 @@ proc runRndQu(noisy = true) =
 
       test &"Load/forward iterate {numUniqeKeys} items, "&
           &"deleting in groups of at most {groupLen}":
+
         block:
           var
             rq = keyList.toQueue
-            seen, all: seq[int]
+            seen: seq[int]
+            all: seq[uint]
+            rc = rq.first
+          while rc.isOK:
+            let key = rc.value.key
+            all.add key
+            rc = rq.next(key)
+            rq.addOrFlushGroupwise(groupLen, seen, key.fromKey, veryNoisy)
+            check rq.verify.isOK
+          check seen.len == rq.len
+          check seen.len < groupLen
+          check uniqueKeys == all
+
+        block:
+          var
+            rq = keyList.toQueue
+            seen: seq[int]
+            all: seq[uint]
           for w in rq.nextKeys:
             all.add w
-            rq.addOrFlushGroupwise(groupLen, seen, w, veryNoisy)
+            rq.addOrFlushGroupwise(groupLen, seen, w.fromKey, veryNoisy)
             check rq.verify.isOK
           check seen.len == rq.len
           check seen.len < groupLen
@@ -195,10 +232,11 @@ proc runRndQu(noisy = true) =
         block:
           var
             rq = keyList.toQueue
-            seen, all: seq[int]
-          for w,_ in rq.nextPairs:
-            all.add w
-            rq.addOrFlushGroupwise(groupLen, seen, w, veryNoisy)
+            seen: seq[int]
+            all: seq[uint]
+          for w in rq.nextPairs:
+            all.add w.key
+            rq.addOrFlushGroupwise(groupLen, seen, w.key.fromKey, veryNoisy)
             check rq.verify.isOK
           check seen.len == rq.len
           check seen.len < groupLen
@@ -206,10 +244,12 @@ proc runRndQu(noisy = true) =
         block:
           var
             rq = keyList.toQueue
-            seen, all: seq[int]
+            seen: seq[int]
+            all: seq[uint]
           for v in rq.nextValues:
-            all.add -v
-            rq.addOrFlushGroupwise(groupLen, seen, -v, veryNoisy)
+            let w = v.fromValue.toKey
+            all.add w
+            rq.addOrFlushGroupwise(groupLen, seen, w.fromKey, veryNoisy)
             check rq.verify.isOK
           check seen.len == rq.len
           check seen.len < groupLen
@@ -220,10 +260,27 @@ proc runRndQu(noisy = true) =
         block:
           var
             rq = keyList.toQueue
-            seen, all: seq[int]
+            seen: seq[int]
+            all: seq[uint]
+            rc = rq.last
+          while rc.isOK:
+            let key = rc.value.key
+            all.add key
+            rc = rq.prev(key)
+            rq.addOrFlushGroupwise(groupLen, seen, key.fromKey, veryNoisy)
+            check rq.verify.isOK
+          check seen.len == rq.len
+          check seen.len < groupLen
+          check uniqueKeys == all.reversed
+
+        block:
+          var
+            rq = keyList.toQueue
+            seen: seq[int]
+            all: seq[uint]
           for w in rq.prevKeys:
             all.add w
-            rq.addOrFlushGroupwise(groupLen, seen, w, veryNoisy)
+            rq.addOrFlushGroupwise(groupLen, seen, w.fromKey, veryNoisy)
             check rq.verify.isOK
           check seen.len == rq.len
           check seen.len < groupLen
@@ -231,10 +288,11 @@ proc runRndQu(noisy = true) =
         block:
           var
             rq = keyList.toQueue
-            seen, all: seq[int]
-          for w,_ in rq.prevPairs:
-            all.add w
-            rq.addOrFlushGroupwise(groupLen, seen, w, veryNoisy)
+            seen: seq[int]
+            all: seq[uint]
+          for w in rq.prevPairs:
+            all.add w.key
+            rq.addOrFlushGroupwise(groupLen, seen, w.key.fromKey, veryNoisy)
             check rq.verify.isOK
           check seen.len == rq.len
           check seen.len < groupLen
@@ -242,10 +300,12 @@ proc runRndQu(noisy = true) =
         block:
           var
             rq = keyList.toQueue
-            seen, all: seq[int]
+            seen: seq[int]
+            all: seq[uint]
           for v in rq.prevValues:
-            all.add -v
-            rq.addOrFlushGroupwise(groupLen, seen, -v, veryNoisy)
+            let w = v.fromValue.toKey
+            all.add w
+            rq.addOrFlushGroupwise(groupLen, seen, w.fromKey, veryNoisy)
             check rq.verify.isOK
           check seen.len == rq.len
           check seen.len < groupLen
@@ -269,8 +329,8 @@ proc runRndQu(noisy = true) =
             count = 0
             rc = rq.first
           while rc.isOk:
-            check uniqueKeys[count] == -rc.value.data
-            rc = rq.next(rc.value)
+            check uniqueKeys[count] == rc.value.data.fromValue.toKey
+            rc = rq.next(rc.value.key)
             count.inc
           check rq.verify.isOK
           check count == uniqueKeys.len
@@ -294,8 +354,8 @@ proc runRndQu(noisy = true) =
             rc = rq.last
           while rc.isOk:
             count.dec
-            check uniqueKeys[count] == -rc.value.data
-            rc = rq.prev(rc.value)
+            check uniqueKeys[count] == rc.value.data.fromValue.toKey
+            rc = rq.prev(rc.value.key)
           check rq.verify.isOK
           check count == 0
 
@@ -328,16 +388,52 @@ proc runRndQu(noisy = true) =
           check rq.verify.isOK
         check rq.len == 1
 
+    # --------------------------------------
+
+    test &"Deep copy semantics":
+      var
+        rp = keyList.toQueue
+        rq = rp
+      let
+        reduceLen = (rp.len div 3)
+      check 0 < reduceLen
+      check rp == rq
+      for _ in 1 .. (rp.len div 3):
+        let key = rp.firstKey.value
+        check rp.delete(key).value.data.fromValue.toKey == key
+      check rq.len == numUniqeKeys
+      check rp.len + reduceLen == rq.len
+
+    test &"Rlp serialise + reload":
+      var
+        rp = [1, 2, 3].toQueue # keyList.toQueue
+        rq = rp
+      check rp == rq
+
+      var
+        sp = rlp.encode(rp)
+        sq = rlp.encode(rq)
+      check sp == sq
+
+      var
+        pr = sp.decode(type rp)
+        qr = sq.decode(type rq)
+
+      check pr.verify.isOK
+      check qr.verify.isOK
+
+      check pr == qr
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc rndQuMain*(noisy = defined(debug)) =
-  noisy.runRndQu
+  noisy.runRndQueue
 
 when isMainModule:
   let noisy = defined(debug)
-  noisy.runRndQu
+  noisy.runRndQueue
 
 # ------------------------------------------------------------------------------
 # End
