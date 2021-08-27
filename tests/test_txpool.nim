@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[os, sequtils, strformat, strutils, times],
+  std/[algorithm, os, sequtils, strformat, strutils, times],
   ../nimbus/utils/tx_pool,
   ./test_txpool/helpers,
   eth/[common, keys],
@@ -19,15 +19,8 @@ import
 const
   goerliCapture = "test_clique" / "goerli51840.txt.gz"
 
-type
-  TxWalK = tuple
-    blockNumber: BlockNumber
-    chainNo: int
-    txCount: int
-    txs: seq[Transaction]
-
 # ------------------------------------------------------------------------------
-# Test Runners
+# Helpers
 # ------------------------------------------------------------------------------
 
 proc collectTxPool(xp: var TxPool; noisy: bool; file: string; stopAfter: int) =
@@ -48,6 +41,35 @@ proc collectTxPool(xp: var TxPool; noisy: bool; file: string; stopAfter: int) =
           return
     chainNo.inc
 
+
+proc toTxPool(q: var seq[TxItemRef]; noisy = true): TxPool =
+  result = initTxPool()
+  noisy.showElapsed(&"Loading {q.len} transactions"):
+    for w in q:
+      doAssert result.insert(tx = w.tx, info = w.info).value == w.id
+  doAssert result.len == q.len
+
+
+proc addOrFlushGroupwise(xp: var TxPool;
+                         grpLen: int; seen: var seq[Hash256]; n: Hash256;
+                         noisy = true) =
+  seen.add n
+  if seen.len < grpLen:
+    return
+
+  # flush group-wise
+  let xpLen = xp.len
+  if noisy:
+    echo "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
+  for a in seen:
+    doAssert xp.delete(a).value.id == a
+  doAssert xpLen == seen.len + xp.len
+  seen.setLen(0)
+
+# ------------------------------------------------------------------------------
+# Test Runner
+# ------------------------------------------------------------------------------
+
 proc runTxStepper(noisy = true;
                   dir = "tests"; captureFile = goerliCapture,
                   numTransactions = 0) =
@@ -56,11 +78,13 @@ proc runTxStepper(noisy = true;
     elapNoisy = false
     stopAfter = if numTransactions == 0: 500 else: numTransactions
   var
-    xp = initTxPool()
+    txList: seq[TxItemRef]
+    gasPrices: seq[GasInt]
 
   suite &"TxPool: Collect {stopAfter} transactions from Goerli capture":
 
     test &"Transactions collected":
+      var xp = initTxPool()
       noisy.showElapsed("Total Collection Time"):
         xp.collectTxPool(elapNoisy, dir / captureFile, stopAfter)
 
@@ -68,90 +92,144 @@ proc runTxStepper(noisy = true;
       check xp.len == stopAfter
       check xp.verify.isOk
 
-    let
-      numGasPrices = xp.byGasPriceLen
-
-    test &"Walk {numGasPrices} gas prices for {xp.len} transactions":
-      noisy.showElapsed("Gas price walk on collected transactions"):
-        var
-          gpCount = 0
-          txCount = 0
-        for (gasPrice,itemsLst) in xp.byGasPriceIncPairs:
-          let infoList = toSeq(itemsLst.nextKeys).mapIt(it.info)
-          gpCount.inc
-          txCount += itemsLst.len
-          if noisy and false:
-            echo &">>> gasPrice={gasPrice} for {infoList.len} entries:"
-            let indent = " ".repeat(6)
-            echo indent, infoList.join(&"\n{indent}")
-        check gpCount == numGasPrices
-        check txCount == xp.len
-        check xp.verify.isOK
-
-    var txList: seq[(Hash256,string,Transaction)]
-
-    test "Walk transaction ID queue fwd/rev":
+      # Load txList[]
       for w in xp.firstOutItems:
-        txList.add (w.id, w.info, w.tx)
+        txList.add w
       check txList.len == xp.len
 
-      var top = txList.len
-      for w in xp.lastInItems:
-        top.dec
-        check txList[top][0] == w.id
-        check txList[top][1] == w.info
-        check txList[top][2].toKey == w.tx.toKey
-      check top == 0
-      check xp.verify.isOK
+    # ---------------------------------
 
-    const groupLen = 13
+    block:
+      var xq = txList.toTxPool(noisy)
+      let veryNoisy = noisy and false
 
-    proc fillTxList(xq: var TxPool) =
-      for w in txList:
-        doAssert xq.insert(w[2]).value == w[0]
-      doAssert xq.len == txList.len
+      test &"Walk {xq.byGasPriceLen} gas prices for {txList.len} transactions":
+        block:
+          var
+            txCount = 0
+            gpList: seq[GasInt]
 
-    proc updateSeen(xq: var TxPool; seen: var seq[Hash256]; n: Hash256) =
-      seen.add n
-      if groupLen <= seen.len:
-        let xqLen = xq.len
-        if noisy:
-          # echo "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
-          discard
-        for a in seen:
-          doAssert xq.delete(a).value.id == a
-        doAssert xqLen == seen.len + xq.len
-        seen.setLen(0)
+          noisy.showElapsed("Increasing gas price walk on transactions"):
+            for (gasPrice,itemsLst) in xq.byGasPriceIncPairs:
+              let infoList = toSeq(itemsLst.nextKeys).mapIt(it.info)
+              gpList.add gasPrice
+              txCount += itemsLst.len
+              if veryNoisy:
+                echo &">>> gasPrice={gasPrice} for {infoList.len} entries:"
+                let indent = " ".repeat(6)
+                echo indent, infoList.join(&"\n{indent}")
 
-    test &"Load/forward walk ID queue, " &
-           &"deleting groups of at most {groupLen}":
+          check txCount == xq.len
+          check gpList.len == xq.byGasPriceLen
+          gasPrices = gpList
+
+        block:
+          var
+            gpCount = 0
+            txCount = 0
+            gpList: seq[GasInt]
+
+          noisy.showElapsed("Decreasing gas price walk on transactions"):
+            for (gasPrice,itemsLst) in xq.byGasPriceDecPairs:
+              let infoList = toSeq(itemsLst.nextKeys).mapIt(it.info)
+              gpList.add gasPrice
+              txCount += itemsLst.len
+              if veryNoisy:
+                echo &">>> gasPrice={gasPrice} for {infoList.len} entries:"
+                let indent = " ".repeat(6)
+                echo indent, infoList.join(&"\n{indent}")
+
+          check txCount == xq.len
+          check gpList.len == xq.byGasPriceLen
+          check gasPrices == gpList.reversed
+
+      test "Walk transaction ID queue fwd/rev":
+        block:
+          var top = 0
+          for w in xq.firstOutItems:
+            check txList[top].id == w.id
+            top.inc
+          check top == txList.len
+        block:
+          var top = txList.len
+          for w in xq.lastInItems:
+            top.dec
+            check txList[top].id == w.id
+          check top == 0
+
+    # ---------------------------------
+
+    block:
+      const groupLen = 13
+      let veryNoisy = noisy and false
+
+      test &"Load/forward walk ID queue, " &
+          &"deleting groups of at most {groupLen}":
+        var
+          xq = txList.toTxPool(noisy)
+          seen: seq[Hash256]
+        check xq.verify.isOK
+        noisy.showElapsed("Forward delete-walk ID queue"):
+          for w in xq.firstOutItems:
+            xq.addOrFlushGroupwise(groupLen, seen, w.id, veryNoisy)
+            check xq.verify.isOK
+        check seen.len == xq.len
+        check seen.len < groupLen
+
+      test &"Load/reverse walk ID queue, " &
+          &"deleting in groups of at most {groupLen}":
+        var
+          xq = txList.toTxPool(noisy)
+          seen: seq[Hash256]
+        check xq.verify.isOK
+        noisy.showElapsed("Revese delete-walk ID queue"):
+          for w in xq.lastInItems:
+            xq.addOrFlushGroupwise(groupLen, seen, w.id, veryNoisy)
+            check xq.verify.isOK
+        check seen.len == xq.len
+        check seen.len < groupLen
+
+    # ---------------------------------
+
+    block:
       var
-        xq = initTxPool()
-        seen: seq[Hash256]
-      noisy.showElapsed(&"Loading {txList.len} transactions"):
-        xq.fillTxList
-      check xq.verify.isOK
-      noisy.showElapsed("Forward delete-walk ID queue"):
-        for w in xq.firstOutItems:
-          xq.updateSeen(seen, w.id)
-          check xq.verify.isOK
-      check seen.len == xq.len
-      check seen.len < groupLen
+        xq = txList.toTxPool(noisy)
+        count = 0
+      let
+        delLe = gasPrices[0] + ((gasPrices[^1] - gasPrices[0]) div 3)
+        delMax = xq.byGasPriceLe(delLe).value.firstKey.value.tx.gasPrice
 
-    test &"Load/reverse walk ID queue, " &
-        &"deleting in groups of at most {groupLen}":
+      test &"Load/delete with gas price less equal {delMax.toKMG}, " &
+          &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
+        noisy.showElapsed(&"Deleting gas prices less equal {delMax.toKMG}"):
+          for (gp,itemList) in xq.byGasPriceDecPairs(delMax):
+            for item in itemList.nextKeys:
+              count.inc
+              check xq.delete(item).isOK
+              check xq.verify.isOK
+        check 0 < count
+        check 0 < xq.len
+        check count + xq.len == txList.len
+
+    block:
       var
-        xq = initTxPool()
-        seen: seq[Hash256]
-      noisy.showElapsed(&"Loading {txList.len} transactions"):
-        xq.fillTxList
-      check xq.verify.isOK
-      noisy.showElapsed("Revese delete-walk ID queue"):
-        for w in xq.lastInItems:
-          xq.updateSeen(seen, w.id)
-          check xq.verify.isOK
-      check seen.len == xq.len
-      check seen.len < groupLen
+        xq = txList.toTxPool(noisy)
+        count = 0
+      let
+        delGe = gasPrices[^1] - ((gasPrices[^1] - gasPrices[0]) div 3)
+        delMin = xq.byGasPriceGe(delGe).value.firstKey.value.tx.gasPrice
+
+      test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
+          &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
+        noisy.showElapsed(&"Deleting gas prices greater than {delMin.toKMG}"):
+          for (gp,itemList) in xq.byGasPriceIncPairs(delMin):
+            for item in itemList.nextKeys:
+              count.inc
+              check xq.delete(item).isOK
+              check xq.verify.isOK
+        check 0 < count
+        check 0 < xq.len
+        check count + xq.len == txList.len
 
 # ------------------------------------------------------------------------------
 # Main function(s)

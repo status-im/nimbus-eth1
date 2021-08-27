@@ -96,6 +96,16 @@ proc first*(aq: TxQueueRef;
     {.gcsafe,raises: [Defect,KeyError].} =
   aq.q[sched].first
 
+proc second*(aq: TxQueueRef;
+            sched: TxQueueSchedule): Result[TxQueueItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  aq.q[sched].second
+
+proc beforeLast*(aq: TxQueueRef;
+                 sched: TxQueueSchedule): Result[TxQueueItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  aq.q[sched].beforeLast
+
 proc next*(aq: TxQueueRef;
            sched: TxQueueSchedule; item: TxQueueItemRef):
              Result[TxQueueItemRef,void]

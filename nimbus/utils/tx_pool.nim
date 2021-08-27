@@ -121,6 +121,16 @@ proc delete*(xp: var TxPool; key: Hash256): Result[TxItemRef,void]
       return ok(item)
   err()
 
+proc delete*(xp: var TxPool; item: TxItemRef): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Variant of `delete()`
+  let rc = xp.byIdQueue.txDelete(item.id, item.local.toQueueSched)
+  if rc.isOK:
+    let item = rc.value
+    xp.byGasPrice.txDelete(item.tx.gasPrice, item)
+    return ok(item)
+  err()
+
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
@@ -184,6 +194,35 @@ proc first*(xp: var TxPool): Result[TxItemRef,void]
     if rc.isOK:
       return ok(rc.value.data)
   err()
+
+proc second*(xp: var TxPool): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieves the *second* item queued from the `local` queue if it exists,
+  ## otherwise from the `remote` queue.
+  if xp.len < 2:
+    return err()
+  if xp.byIdQueue.len(TxLocalQueue) == 1:
+    return ok(xp.byIdQueue.first(TxRemoteQueue).value.data)
+  # So the local queue has either no or at least two elements
+  for sched in TxQueueSchedule:
+    let rc = xp.byIdQueue.second(sched)
+    if rc.isOK:
+      return ok(rc.value.data)
+  err()
+
+proc beforeLast*(xp: var TxPool): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieves the one before the *last* item queued from the `remote`
+  ## queue if it exists, otherwise from the `local` queue.
+  if xp.len < 2:
+    return err()
+  if xp.byIdQueue.len(TxRemoteQueue) == 1:
+    return ok(xp.byIdQueue.first(TxLocalQueue).value.data)
+  # So the remote queue has either no or at least two elements
+  for sched in TxQueueScheduleReversed:
+    let rc = xp.byIdQueue.last(sched)
+    if rc.isOK:
+      return ok(rc.value.data)
 
 proc last*(xp: var TxPool): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =

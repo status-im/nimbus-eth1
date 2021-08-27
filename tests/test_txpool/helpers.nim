@@ -52,6 +52,17 @@ proc ppSecs*(elapsed: Duration): string =
     result &= &".{ds:02}"
   result &= "s"
 
+proc toKMG*[T](s: T): string =
+  proc subst(s: var string; tag, new: string): bool =
+    if tag.len < s.len and s[s.len - tag.len ..< s.len] == tag:
+      s = s[0 ..< s.len - tag.len] & new
+      return true
+  result = $s
+  for w in [("000", "K"),("000K","M"),("000M","G"),("000G","T"),
+            ("000T","P"),("000P","E"),("000E","Z"),("000Z","Y")]:
+    if not result.subst(w[0],w[1]):
+      return
+
 template showElapsed*(noisy: bool; info: string; code: untyped) =
   let start = getTime()
   code
