@@ -193,6 +193,8 @@ proc shift*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
     rq.last.reset
   else:
     rq.first = item.nxt
+    if rq.tab.len == 1:
+      rq.tab[rq.first].nxt = rq.first           # single node points to itself
     rq.tab[rq.first].prv = rq.tab[rq.first].nxt # terminal node has: nxt == prv
 
   ok(item)
@@ -218,6 +220,8 @@ proc pop*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
     rq.last.reset
   else:
     rq.last = item.prv
+    if rq.tab.len == 1:
+      rq.tab[rq.last].prv = rq.last           # single node points to itself
     rq.tab[rq.last].nxt = rq.tab[rq.last].prv # terminal node has: nxt == prv
 
   ok(item)
@@ -237,6 +241,14 @@ proc delete*[K,V](rq: RndQuRef[K,V]; key: K): RndQuResult[K,V]
 
   let item = rq.tab[key]
   rq.tab.del(key)
+
+  # now: 2 < rq.tab.len (otherwise rq.first == key or rq.last == key)
+  if rq.tab[rq.first].nxt == key:
+    # item was the second one
+    rq.tab[rq.first].prv = item.nxt
+  if rq.tab[rq.last].prv == key:
+    # item was one before last
+    rq.tab[rq.last].nxt = item.prv
 
   rq.tab[item.prv].nxt = item.nxt
   rq.tab[item.nxt].prv = item.prv
@@ -311,7 +323,7 @@ proc nxt*[K,V](item: RndQuItemRef[K,V]): K {.inline.} =
 # ------------------------------------------------------------------------------
 
 proc firstKey*[K,V](rq: RndQuRef[K,V]): Result[K,void] =
-  ## Retrieve first key from queue unless the list is empty.
+  ## Retrieve first key from the queue unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## key returned is the most *left hand* one.
@@ -319,8 +331,28 @@ proc firstKey*[K,V](rq: RndQuRef[K,V]): Result[K,void] =
     return err()
   ok(rq.first)
 
+proc secondKey*[K,V](rq: RndQuRef[K,V]): Result[K,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the key next after the first key from queue unless it is empty.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## key returned is the one ti the right of the most *left hand* one.
+  if rq.tab.len < 2:
+    return err()
+  ok(rq.tab[rq.first].nxt)
+
+proc beforeLastKey*[K,V](rq: RndQuRef[K,V]): Result[K,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the key just before the last one from queue unless it is empty.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## key returned is the one to the left of the most *right hand* one.
+  if rq.tab.len < 2:
+    return err()
+  ok(rq.tab[rq.last].prv)
+
 proc lastKey*[K,V](rq: RndQuRef[K,V]): Result[K,void] =
-  ## Retrieve last key from queue unless the list is empty.
+  ## Retrieve last key from queue unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## key returned is the most *right hand* one.
@@ -356,7 +388,7 @@ proc prevKey*[K,V](rq: RndQuRef[K,V]; key: K): Result[K,void]
 
 proc first*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieve first data container item unless the list is empty.
+  ## Retrieve first data container item  from the queue unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## data container item returned is the most *left hand* one.
@@ -364,9 +396,33 @@ proc first*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
     return err()
   ok(rq.tab[rq.first])
 
+proc second*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve data container next to the first item from the queue unless it
+  ## is empty.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## data container item returned is the one to the right of the most
+  ## *left hand* one.
+  if rq.tab.len < 2:
+    return err()
+  ok(rq.tab[rq.tab[rq.first].nxt])
+
+proc beforeLast*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the data container just before the last item from the queue
+  ## unless it is empty.
+  ##
+  ## Using the notation introduced with `rq.append` and `rq.prepend`, the
+  ## data container item returned is the one to the left of the most
+  ## *right hand* one.
+  if rq.tab.len < 2:
+    return err()
+  ok(rq.tab[rq.tab[rq.last].prv])
+
 proc last*[K,V](rq: RndQuRef[K,V]): RndQuResult[K,V]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieve last data container item unless the list is empty.
+  ## Retrieve the last data container item  from the queue if there is any.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
   ## data container item returned is the most *right hand* one.

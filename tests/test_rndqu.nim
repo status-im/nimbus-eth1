@@ -29,258 +29,304 @@ const
 # Helpers
 # ------------------------------------------------------------------------------
 
+proc `$`(item: RndQuItemRef[int,int]): string =
+  "<" & $item.prv & "<" & $item.data & ">" & $item.nxt & ">"
+
+proc `$`(rc: RndQuResult[int,int]): string =
+  if rc.isErr:
+    return "<>"
+  $rc.value
+
+proc toQueue(a: openArray[int]): RndQuRef[int,int] =
+  result = newRndQu[int,int]()
+  for n in a:
+    result[n] = -n
+
+proc addOrFlushGroupwise(rq: RndQuRef[int,int];
+                         grpLen: int; seen: var seq[int]; n: int;
+                         noisy = true) =
+  seen.add n
+  if seen.len < grpLen:
+    return
+
+  # flush group-wise
+  let rqLen = rq.len
+  if noisy:
+    echo "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
+  for a in seen:
+    doAssert rq.delete(a).value.data == -a
+  doAssert rqLen == seen.len + rq.len
+  seen.setLen(0)
+
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
 
 proc runRndQu(noisy = true) =
   let
+    uniqueKeys = toSeq(keyList.toQueue.nextKeys)
     numUniqeKeys = keyList.toSeq.mapIt((it,false)).toTable.len
     numKeyDups = keyList.len - numUniqeKeys
 
   suite "Data queue with keyed random access":
-    var
-      fwdRq, revRq: RndQuRef[int,int]
-      fwdRej, revRej: seq[int]
-
-    test &"Append/traverse {keyList.len} items, " &
-        &"rejecting {numKeyDups} duplicates":
+    block:
       var
-        rq = newRndQu[int,int]()
-        rej: seq[int]
-      for n in keyList:
-        let rc = rq.push(n) # synonymous for append()
-        if rc.isErr:
-          rej.add n
+        fwdRq, revRq: RndQuRef[int,int]
+        fwdRej, revRej: seq[int]
+
+      test &"Append/traverse {keyList.len} items, " &
+          &"rejecting {numKeyDups} duplicates":
+        var
+          rq = newRndQu[int,int]()
+          rej: seq[int]
+        for n in keyList:
+          let rc = rq.push(n) # synonymous for append()
+          if rc.isErr:
+            rej.add n
+          else:
+            rc.value.data = -n
+          let check = rq.verify
+          if check.isErr:
+            check check.error[2] == rndQuOk
+        check rq.len == numUniqeKeys
+        check rej.len == numKeyDups
+        check rq.len + rej.len == keyList.len
+        fwdRq = rq
+        fwdRej = rej
+
+        check uniqueKeys == toSeq(rq.nextKeys)
+        check uniqueKeys == toSeq(rq.prevKeys).reversed
+        check uniqueKeys.len == numUniqeKeys
+
+      test &"Prepend/traverse {keyList.len} items, " &
+          &"rejecting {numKeyDups} duplicates":
+        var
+          rq = newRndQu[int,int]()
+          rej: seq[int]
+        for n in keyList:
+          let rc = rq.unshift(n) # synonymous for prepend()
+          if rc.isErr:
+            rej.add n
+          else:
+            rc.value.data = -n
+          let check = rq.verify
+          if check.isErr:
+            check check.error[2] == rndQuOk
+        check rq.len == numUniqeKeys
+        check rej.len == numKeyDups
+        check rq.len + rej.len == keyList.len
+        check toSeq(rq.nextKeys) == toSeq(rq.prevKeys).reversed
+        revRq = rq
+        revRej = rej
+
+      test "Compare previous forward/reverse queues":
+        if fwdRq == nil or revRq == nil:
+          skip()
         else:
-          rc.value.data = -n
-        let check = rq.verify
-        if check.isErr:
-          check check.error[2] == rndQuOk
-      check rq.len == numUniqeKeys
-      check rej.len == numKeyDups
-      check rq.len + rej.len == keyList.len
-      check toSeq(rq.nextKeys) == toSeq(rq.prevKeys).reversed
-      fwdRq = rq
-      fwdRej = rej
+          check toSeq(fwdRq.nextKeys) == toSeq(revRq.prevKeys)
+          check toSeq(fwdRq.prevKeys) == toSeq(revRq.nextKeys)
+          check fwdRej.sorted == revRej.sorted
 
-    test &"Prepend/traverse {keyList.len} items, " &
-        &"rejecting {numKeyDups} duplicates":
-      var
-        rq = newRndQu[int,int]()
-        rej: seq[int]
-      for n in keyList:
-        let rc = rq.unshift(n) # synonymous for prepend()
-        if rc.isErr:
-          rej.add n
-        else:
-          rc.value.data = -n
-        let check = rq.verify
-        if check.isErr:
-          check check.error[2] == rndQuOk
-      check rq.len == numUniqeKeys
-      check rej.len == numKeyDups
-      check rq.len + rej.len == keyList.len
-      check toSeq(rq.nextKeys) == toSeq(rq.prevKeys).reversed
-      revRq = rq
-      revRej = rej
-
-    test "Compare previous forward/reverse queues":
-      if fwdRq == nil or revRq == nil:
-        skip()
-      else:
-        check toSeq(fwdRq.nextKeys) == toSeq(revRq.prevKeys)
-        check toSeq(fwdRq.prevKeys) == toSeq(revRq.nextKeys)
-        check fwdRej.sorted == revRej.sorted
-
-    test "Delete corresponding entries by keyed access from previous queues":
-      var seen: seq[int]
-      let sub7 = keyList.len div 7
-      for n in toSeq(countUp(0,sub7)).concat(toSeq(countUp(3*sub7,4*sub7))):
-        let
-          key = keyList[n]
-          canDeleteOk = (key notin seen)
-
-          eqFwdData = fwdRq.eq(key)
-          eqRevData = revRq.eq(key)
-
-        if not canDeleteOk:
-          check eqFwdData.isErr
-          check eqRevData.isErr
-        else:
-          check eqFwdData.isOk
-          check eqRevData.isOk
+      test "Delete corresponding entries by keyed access from previous queues":
+        var seen: seq[int]
+        let sub7 = keyList.len div 7
+        for n in toSeq(countUp(0,sub7)).concat(toSeq(countUp(3*sub7,4*sub7))):
           let
-            eqFwdKey = fwdRq.eq(eqFwdData.value)
-            eqRevKey = revRq.eq(eqRevData.value)
-          check eqFwdKey.isOk
-          check eqFwdKey.value == key
-          check eqRevKey.isOk
-          check eqRevKey.value == key
+            key = keyList[n]
+            canDeleteOk = (key notin seen)
 
-        let
-          fwdData = fwdRq.delete(key)
-          fwdRqCheck = fwdRq.verify
-          revData = revRq.delete(key)
-          revRqCheck = revRq.verify
+            eqFwdData = fwdRq.eq(key)
+            eqRevData = revRq.eq(key)
 
-        if key notin seen:
-          seen.add key
+          if not canDeleteOk:
+            check eqFwdData.isErr
+            check eqRevData.isErr
+          else:
+            check eqFwdData.isOk
+            check eqRevData.isOk
+            let
+              eqFwdKey = fwdRq.eq(eqFwdData.value)
+              eqRevKey = revRq.eq(eqRevData.value)
+            check eqFwdKey.isOk
+            check eqFwdKey.value == key
+            check eqRevKey.isOk
+            check eqRevKey.value == key
 
-        if fwdRqCheck.isErr:
-          check fwdRqCheck.error[2] == rndQuOk
-        check fwdData.isOk == canDeleteOk
-        if revRqCheck.isErr:
-          check revRqCheck.error[2] == rndQuOk
-        check revData.isOk == canDeleteOk
+          let
+            fwdData = fwdRq.delete(key)
+            fwdRqCheck = fwdRq.verify
+            revData = revRq.delete(key)
+            revRqCheck = revRq.verify
 
-        if canDeleteOk:
-          check fwdData.value.data == revData.value.data
-      check fwdRq.len == revRq.len
-      check seen.len + fwdRq.len + fwdRej.len == keyList.len
+          if key notin seen:
+            seen.add key
 
-    # ------
+          if fwdRqCheck.isErr:
+            check fwdRqCheck.error[2] == rndQuOk
+          check fwdData.isOk == canDeleteOk
+          if revRqCheck.isErr:
+            check revRqCheck.error[2] == rndQuOk
+          check revData.isOk == canDeleteOk
 
-    const groupLen = 7
+          if canDeleteOk:
+            check fwdData.value.data == revData.value.data
+        check fwdRq.len == revRq.len
+        check seen.len + fwdRq.len + fwdRej.len == keyList.len
 
-    proc fillKeyList(rq: RndQuRef[int,int]): RndQuRef[int,int] =
-      for n in keyList:
-        rq[n] = -n
-      doAssert rq.len == numUniqeKeys
-      rq
+    # --------------------------------------
 
-    proc updateSeen(rq: RndQuRef[int,int]; seen: var seq[int]; n: int) =
-      seen.add n
-      if groupLen <= seen.len:
-        let rqLen = rq.len
-        if noisy:
-          # echo "*** updateSeen: deleting ", seen.mapIt(&"{it:3}").join(" ")
-          discard
-        for a in seen:
-          rq.del(a)
-        doAssert rqLen == seen.len + rq.len
-        seen.setLen(0)
+    block:
+      const groupLen = 7
+      let veryNoisy = noisy and false
 
-    var keyLst: seq[int]
-
-    test &"Load/forward iterate {numUniqeKeys} items, "&
+      test &"Load/forward iterate {numUniqeKeys} items, "&
           &"deleting in groups of at most {groupLen}":
-      block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          seen, all: seq[int]
-        for w in rq.nextKeys:
-          all.add w
-          rq.updateSeen(seen, w)
-          check rq.verify.isOK
-        check seen.len == rq.len
-        check seen.len < groupLen
-        keyLst = all
-      block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          seen, all: seq[int]
-        for w,_ in rq.nextPairs:
-          all.add w
-          rq.updateSeen(seen, w)
-          check rq.verify.isOK
-        check seen.len == rq.len
-        check seen.len < groupLen
-        check keyLst == all
-      block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          seen, all: seq[int]
-        for v in rq.nextValues:
-          all.add -v
-          rq.updateSeen(seen, -v)
-          check rq.verify.isOK
-        check seen.len == rq.len
-        check seen.len < groupLen
-        check keyLst == all
+        block:
+          var
+            rq = keyList.toQueue
+            seen, all: seq[int]
+          for w in rq.nextKeys:
+            all.add w
+            rq.addOrFlushGroupwise(groupLen, seen, w, veryNoisy)
+            check rq.verify.isOK
+          check seen.len == rq.len
+          check seen.len < groupLen
+          check uniqueKeys == all
+        block:
+          var
+            rq = keyList.toQueue
+            seen, all: seq[int]
+          for w,_ in rq.nextPairs:
+            all.add w
+            rq.addOrFlushGroupwise(groupLen, seen, w, veryNoisy)
+            check rq.verify.isOK
+          check seen.len == rq.len
+          check seen.len < groupLen
+          check uniqueKeys == all
+        block:
+          var
+            rq = keyList.toQueue
+            seen, all: seq[int]
+          for v in rq.nextValues:
+            all.add -v
+            rq.addOrFlushGroupwise(groupLen, seen, -v, veryNoisy)
+            check rq.verify.isOK
+          check seen.len == rq.len
+          check seen.len < groupLen
+          check uniqueKeys == all
 
-    test &"Load/reverse iterate {numUniqeKeys} items, "&
+      test &"Load/reverse iterate {numUniqeKeys} items, "&
           &"deleting in groups of at most {groupLen}":
-      block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          seen, all: seq[int]
-        for w in rq.prevKeys:
-          all.add w
-          rq.updateSeen(seen, w)
-          check rq.verify.isOK
-        check seen.len == rq.len
-        check seen.len < groupLen
-        check keyLst == all.reversed
-      block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          seen, all: seq[int]
-        for w,_ in rq.prevPairs:
-          all.add w
-          rq.updateSeen(seen, w)
-          check rq.verify.isOK
-        check seen.len == rq.len
-        check seen.len < groupLen
-        check keyLst == all.reversed
-      block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          seen, all: seq[int]
-        for v in rq.prevValues:
-          all.add -v
-          rq.updateSeen(seen, -v)
-          check rq.verify.isOK
-        check seen.len == rq.len
-        check seen.len < groupLen
-        check keyLst == all.reversed
+        block:
+          var
+            rq = keyList.toQueue
+            seen, all: seq[int]
+          for w in rq.prevKeys:
+            all.add w
+            rq.addOrFlushGroupwise(groupLen, seen, w, veryNoisy)
+            check rq.verify.isOK
+          check seen.len == rq.len
+          check seen.len < groupLen
+          check uniqueKeys == all.reversed
+        block:
+          var
+            rq = keyList.toQueue
+            seen, all: seq[int]
+          for w,_ in rq.prevPairs:
+            all.add w
+            rq.addOrFlushGroupwise(groupLen, seen, w, veryNoisy)
+            check rq.verify.isOK
+          check seen.len == rq.len
+          check seen.len < groupLen
+          check uniqueKeys == all.reversed
+        block:
+          var
+            rq = keyList.toQueue
+            seen, all: seq[int]
+          for v in rq.prevValues:
+            all.add -v
+            rq.addOrFlushGroupwise(groupLen, seen, -v, veryNoisy)
+            check rq.verify.isOK
+          check seen.len == rq.len
+          check seen.len < groupLen
+          check uniqueKeys == all.reversed
 
-    test &"Load/forward steps {numUniqeKeys} key/item consistency":
-      block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          count = 0
-          rc = rq.firstKey
-        while rc.isOk:
-          check keyLst[count] == rc.value
-          rc = rq.nextKey(rc.value)
-          count.inc
-        check rq.verify.isOK
-        check count == keyLst.len
-      block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          count = 0
-          rc = rq.first
-        while rc.isOk:
-          check keyLst[count] == -rc.value.data
-          rc = rq.next(rc.value)
-          count.inc
-        check count == keyLst.len
+      test &"Load/forward steps {numUniqeKeys} key/item consistency":
+        block:
+          var
+            rq = keyList.toQueue
+            count = 0
+            rc = rq.firstKey
+          while rc.isOk:
+            check uniqueKeys[count] == rc.value
+            rc = rq.nextKey(rc.value)
+            count.inc
+          check rq.verify.isOK
+          check count == uniqueKeys.len
+        block:
+          var
+            rq = keyList.toQueue
+            count = 0
+            rc = rq.first
+          while rc.isOk:
+            check uniqueKeys[count] == -rc.value.data
+            rc = rq.next(rc.value)
+            count.inc
+          check rq.verify.isOK
+          check count == uniqueKeys.len
 
-    test &"Load/reverse steps {numUniqeKeys} key/item consistency":
+      test &"Load/reverse steps {numUniqeKeys} key/item consistency":
+        block:
+          var
+            rq = keyList.toQueue
+            count = uniqueKeys.len
+            rc = rq.lastKey
+          while rc.isOk:
+            count.dec
+            check uniqueKeys[count] == rc.value
+            rc = rq.prevKey(rc.value)
+          check rq.verify.isOK
+          check count == 0
+        block:
+          var
+            rq = keyList.toQueue
+            count = uniqueKeys.len
+            rc = rq.last
+          while rc.isOk:
+            count.dec
+            check uniqueKeys[count] == -rc.value.data
+            rc = rq.prev(rc.value)
+          check rq.verify.isOK
+          check count == 0
+
+    # --------------------------------------
+
+    test &"Load/delete second entries from either queue end "&
+      "until only one left":
       block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          count = keyLst.len
-          rc = rq.lastKey
-        while rc.isOk:
-          count.dec
-          check keyLst[count] == rc.value
-          rc = rq.prevKey(rc.value)
-        check rq.verify.isOK
-        check count == 0
+        var rq = keyList.toQueue
+        while true:
+          let rc = rq.secondKey
+          if rc.isErr:
+            check rq.second.isErr
+            break
+          let key = rc.value
+          check rq.second.value.data == rq[key]
+          check rq.delete(key).isOK
+          check rq.verify.isOK
+        check rq.len == 1
       block:
-        var
-          rq = newRndQu[int,int]().fillKeyList
-          count = keyLst.len
-          rc = rq.last
-        while rc.isOk:
-          count.dec
-          check keyLst[count] == -rc.value.data
-          rc = rq.prev(rc.value)
-        check rq.verify.isOK
-        check count == 0
+        var rq = keyList.toQueue
+        while true:
+          let rc = rq.beforeLastKey
+          if rc.isErr:
+            check rq.beforeLast.isErr
+            break
+          let key = rc.value
+          check rq.beforeLast.value.data == rq[key]
+          check rq.delete(key).isOK
+          check rq.verify.isOK
+        check rq.len == 1
 
 # ------------------------------------------------------------------------------
 # Main function(s)
