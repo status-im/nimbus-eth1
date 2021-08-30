@@ -13,7 +13,8 @@ import
   json_rpc/rpcproxy,
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ./conf, ./network/state/portal_protocol, ./rpc/eth_api, ./rpc/bridge_client
+  ./conf, ./rpc/eth_api, ./rpc/bridge_client,
+  ./network/state/[portal_network, content]
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:
@@ -52,7 +53,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   d.open()
 
-  let portal = PortalProtocol.new(d)
+  let portal = PortalNetwork.new(d, newEmptyInMemoryStorage())
 
   if config.metricsEnabled:
     let
