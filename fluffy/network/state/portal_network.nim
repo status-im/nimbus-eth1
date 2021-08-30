@@ -2,7 +2,7 @@ import
   std/options,
   stew/results,
   eth/p2p/discoveryv5/[protocol, node],
-  ./messages, ./content, ./portal_protocol
+  ./content, ./portal_protocol
 
 # TODO expose function in domain specific way i.e operating od state network objects i.e
 # nodes, tries, hashes
@@ -12,7 +12,7 @@ type PortalNetwork* = ref object
 
 proc getHandler(storage: ContentStorage): ContentHandler =
   result =
-    proc (contentKey: ByteList): ContentResult =
+    proc (contentKey: content.ByteList): ContentResult =
       let maybeContent = storage.getContent(contentKey)
       if (maybeContent.isSome()):
         ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())

@@ -107,19 +107,13 @@ suite "Portal Protocol Message Encodings":
       message.nodes.enrs[1] == ByteList(e2.raw)
 
   test "FindContent Request":
-    var nodeHash: NodeHash # zeroes hash
     let
-      contentKey = ContentKey(
-        networkId: 0'u16,
-        contentType: ContentType.Account,
-        nodeHash: nodeHash)
-
-      contentEncoded: ByteList = encodeKeyAsList(contentKey)
+      contentEncoded: ByteList = List.init(@[1'u8], 2048)
       
       fn = FindContentMessage(contentKey: contentEncoded)
 
     let encoded = encodeMessage(fn)
-    check encoded.toHex == "05040000000000010000000000000000000000000000000000000000000000000000000000000000"
+    check encoded.toHex == "050400000001"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()

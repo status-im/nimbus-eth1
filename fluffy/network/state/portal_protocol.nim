@@ -9,7 +9,7 @@
 
 import
   std/[sequtils, sets, algorithm],
-  stew/[results, byteutils], chronicles, chronos,
+  stew/[results, byteutils], chronicles, chronos, nimcrypto/hash,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2],
   ./messages
 
@@ -38,7 +38,7 @@ type
     of ContentFound:
       content*: seq[byte]
     of ContentMissing:
-      contentId*: ContentId
+      contentId*: MDigest[32 * 8]
     of ContentKeyValidationFailure:
       error*: string
 
