@@ -101,7 +101,7 @@ The number of passes and fails output at the time of writing (2021-05-20) is:
     ethereum/sync:           2 pass,     2 fail,     4 total
     smoke/genesis:           3 pass,     0 fail,     3 total
     smoke/network:           1 pass,     0 fail,     1 total
-    smoke/clique:            0 pass,     1 fail,     1 total
+    smoke/clique:            1 pass,     0 fail,     1 total
 
 ## Nim simulators without docker
 
