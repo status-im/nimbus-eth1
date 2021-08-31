@@ -260,8 +260,8 @@ proc shift*[K,V](rq: var RndQueue[K,V]): Result[RndQueuePair[K,V],void]
   ## item returned and deleted is the most *left hand* item.
   if 0 < rq.tab.len:
     let kvp = RndQueuePair[K,V](
-      key = rq.first,
-      val = rq.tab[key].data)
+      key: rq.first,
+      val: rq.tab[rq.first].data)
     rq.shiftImpl
     return ok(RndQueuePair[K,V](kvp))
   err()
@@ -295,8 +295,8 @@ proc pop*[K,V](rq: var RndQueue[K,V]): Result[RndQueuePair[K,V],void]
   ## item returned and deleted is the most *right hand* item.
   if 0 < rq.tab.len:
     let kvp = RndQueuePair[K,V](
-      key = rq.last,
-      val = rq.tab[key].data)
+      key: rq.last,
+      val: rq.tab[rq.last].data)
     rq.popImpl
     return ok(RndQueuePair[K,V](key,val))
   err()
