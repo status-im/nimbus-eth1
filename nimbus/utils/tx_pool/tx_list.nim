@@ -17,7 +17,7 @@
 
 import
   std/[hashes],
-  ../rnd_qu,
+  ../keequ,
   ../slst,
   ./tx_item,
   eth/common,
@@ -32,7 +32,7 @@ type
   TxItemList* = ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    RndQueue[TxItemRef,TxMark]
+    KeeQu[TxItemRef,TxMark]
 
   TxGasItemLst* = ##\
     ## Generic item list indexed by gas price

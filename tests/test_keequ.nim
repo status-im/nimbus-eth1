@@ -10,7 +10,7 @@
 
 import
   std/[algorithm, sequtils, strformat, strutils, tables],
-  ../nimbus/utils/rnd_qu,
+  ../nimbus/utils/keequ,
   eth/rlp,
   unittest2
 
@@ -30,10 +30,10 @@ const
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc `$`(rc: RndQueuePair[uint,uint]): string =
+proc `$`(rc: KeeQuPair[uint,uint]): string =
   "(" & $rc.key & "," & $rc.data & ")"
 
-proc `$`(rc: Result[RndQueuePair[uint,uint],void]): string =
+proc `$`(rc: Result[KeeQuPair[uint,uint],void]): string =
   result = "<"
   if rc.isOK:
     result &= $rc.value.key & "," & $rc.value.data
@@ -57,7 +57,7 @@ proc toKey(n: int): uint =
 proc fromKey(n: uint): int =
   n.int
 
-proc toQueue(a: openArray[int]): RndQueue[uint,uint] =
+proc toQueue(a: openArray[int]): KeeQu[uint,uint] =
   for n in a:
     result[n.toKey] = n.toValue
 
@@ -65,7 +65,7 @@ proc toUnique(a: openArray[int]): seq[uint] =
   var q = a.toQueue
   toSeq(q.nextKeys)
 
-proc addOrFlushGroupwise(rq: var RndQueue[uint,uint];
+proc addOrFlushGroupwise(rq: var KeeQu[uint,uint];
                          grpLen: int; seen: var seq[int]; n: int;
                          noisy = true) =
   seen.add n
@@ -85,7 +85,7 @@ proc addOrFlushGroupwise(rq: var RndQueue[uint,uint];
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runRndQueue(noisy = true) =
+proc runKeeQu(noisy = true) =
   let
     uniqueKeys = keyList.toUnique
     numUniqeKeys = keyList.toSeq.mapIt((it,false)).toTable.len
@@ -94,20 +94,20 @@ proc runRndQueue(noisy = true) =
   suite "Data queue with keyed random access":
     block:
       var
-        fwdRq, revRq: RndQueue[uint,uint]
+        fwdRq, revRq: KeeQu[uint,uint]
         fwdRej, revRej: seq[int]
 
       test &"Append/traverse {keyList.len} items, " &
           &"rejecting {numKeyDups} duplicates":
         var
-          rq: RndQueue[uint,uint]
+          rq: KeeQu[uint,uint]
           rej: seq[int]
         for n in keyList:
           if not rq.push(n.toKey, n.toValue): # synonymous for append()
             rej.add n
           let check = rq.verify
           if check.isErr:
-            check check.error[2] == rndQuOk
+            check check.error[2] == keeQuOk
         check rq.len == numUniqeKeys
         check rej.len == numKeyDups
         check rq.len + rej.len == keyList.len
@@ -121,14 +121,14 @@ proc runRndQueue(noisy = true) =
       test &"Prepend/traverse {keyList.len} items, " &
           &"rejecting {numKeyDups} duplicates":
         var
-          rq: RndQueue[uint,uint]
+          rq: KeeQu[uint,uint]
           rej: seq[int]
         for n in keyList:
           if not rq.unshift(n.toKey, n.toValue): # synonymous for prepend()
             rej.add n
           let check = rq.verify
           if check.isErr:
-            check check.error[2] == rndQuOk
+            check check.error[2] == keeQuOk
         check rq.len == numUniqeKeys
         check rej.len == numKeyDups
         check rq.len + rej.len == keyList.len
@@ -181,10 +181,10 @@ proc runRndQueue(noisy = true) =
             seen.add key.fromKey
 
           if fwdRqCheck.isErr:
-            check fwdRqCheck.error[2] == rndQuOk
+            check fwdRqCheck.error[2] == keeQuOk
           check fwdData.isOk == canDeleteOk
           if revRqCheck.isErr:
-            check revRqCheck.error[2] == rndQuOk
+            check revRqCheck.error[2] == keeQuOk
           check revData.isOk == canDeleteOk
 
           if canDeleteOk:
@@ -428,12 +428,12 @@ proc runRndQueue(noisy = true) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc rndQuMain*(noisy = defined(debug)) =
-  noisy.runRndQueue
+proc keeQuMain*(noisy = defined(debug)) =
+  noisy.runKeeQu
 
 when isMainModule:
   let noisy = defined(debug)
-  noisy.runRndQueue
+  noisy.runKeeQu
 
 # ------------------------------------------------------------------------------
 # End

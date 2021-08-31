@@ -18,12 +18,13 @@ import
 
 type
   TxItemRef* = ref object of RootObj ##\
-    ## Data container with transaction and meta data.
-    tx*: Transaction ## Transaction, can freely be modified
-    id: Hash256      ## Identifier/transaction key, read-only
-    timeStamp: Time  ## Time when added, read-only
-    info: string     ## Whatever, read-only
-    local: bool      ## Local or remote queue, read-only (setter available)
+    ## Data container with transaction and meta data. Entries are *read-only*\
+    ## by default, for some there is a setter available.
+    tx: Transaction  ## Transaction
+    id: Hash256      ## Identifier/transaction key
+    timeStamp: Time  ## Time when added
+    info: string     ## Whatever
+    local: bool      ## Local or remote queue (setter available)
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -95,6 +96,10 @@ proc id*(item: TxItemRef): Hash256 {.inline.} =
   ## Getter
   item.id
 
+proc tx*(item: TxItemRef): Transaction {.inline.} =
+  ## Getter
+  item.tx
+
 proc timeStamp*(item: TxItemRef): Time {.inline.} =
   ## Getter
   item.timeStamp
@@ -146,7 +151,6 @@ proc pp*(tx: Transaction): string =
 
   result &= ",VRS=" & tx.V.toXX(tx.R,tx.S)
   result &= ")"
-
 
 proc pp*(w: TxItemRef): string =
   ## Pretty print item (use for debugging)

@@ -208,7 +208,7 @@ proc runTxStepper(noisy = true;
       test &"Load/delete with gas price less equal {delMax.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
         noisy.showElapsed(&"Deleting gas prices less equal {delMax.toKMG}"):
-          for (gp,itemList) in xq.byGasPriceDecPairs(delMax):
+          for (gp,itemList) in xq.byGasPriceDecPairs(fromLe = delMax):
             for item in itemList.nextKeys:
               count.inc
               check xq.delete(item).isOK
@@ -230,7 +230,7 @@ proc runTxStepper(noisy = true;
       test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
         noisy.showElapsed(&"Deleting gas prices greater than {delMin.toKMG}"):
-          for (gp,itemList) in xq.byGasPriceIncPairs(delMin):
+          for gp, itemList in xq.byGasPriceIncPairs(fromGe = delMin):
             for item in itemList.nextKeys:
               count.inc
               check xq.delete(item).isOK

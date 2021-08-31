@@ -19,7 +19,7 @@
 
 import
   std/[algorithm, sequtils],
-  ./rnd_qu,
+  ./keequ,
   ./slst,
   ./tx_pool/[tx_item, tx_list, tx_queue],
   eth/[common, keys],
@@ -27,13 +27,13 @@ import
 
 export
   results,
-  rnd_qu,
-  slst,
+  keequ,
   TxItemRef,
   tx_item.id,
   tx_item.info,
   tx_item.local,
-  tx_item.timeStamp
+  tx_item.timeStamp,
+  tx_item.tx
 
 type
   TxInfo* = enum ##\
@@ -77,6 +77,7 @@ proc init*(xp: var TxPool) =
   xp.byGasPrice.txInit
 
 proc initTxPool*: TxPool =
+  ## Ditto
   result.init
 
 # ------------------------------------------------------------------------------
@@ -146,7 +147,7 @@ proc len*(rq: var TxItemList): int =
   ## Returns the number of items on the argument queue `rq` which is typically
   ## the result of an `SLstRef` type object query holding one or more
   ## duplicates relative to the same index.
-  rnd_qu.len(rq)
+  keequ.len(rq)
 
 proc byGasPriceLen*(xp: var TxPool): int =
   ## Number of different gas prices known. Fo each gas price there is at least
@@ -299,30 +300,42 @@ proc byGasPriceLt*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
   err()
 
 iterator byGasPriceIncPairs*(xp: var TxPool;
-                             gWei = GasInt.low): (GasInt,var TxItemList) =
+                             fromGe = GasInt.low): (GasInt,var TxItemList) =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
   ## While the returned *list* of transaction containers *must not* be modified
   ## directly, a transaction entry within a container may well be altered.
   ##
-  ## Note: When running in a loop it is ok to add or delete any entries
-  ## vistied or not visited yet.
-  var rc = xp.byGasPrice.ge(gWei)
+  ## Note: When running in a loop it is ok to add or delete any entries,
+  ## visited or not visited yet. So, deleting all entries with gas prices
+  ## greater or equal than `delMin` would look like:
+  ## ::
+  ##  for _, txList in xp.byGasPriceIncPairs(fromGe = delMin):
+  ##    for tx in txList.nextKeys:
+  ##      discard xq.delete(tx)
+  ##
+  var rc = xp.byGasPrice.ge(fromGe)
   while rc.isOk:
     let yKey = rc.value.key
     yield (ykey, rc.value.data)
     rc = xp.byGasPrice.gt(ykey)
 
 iterator byGasPriceDecPairs*(xp: var TxPool;
-                             gWei = GasInt.high): (GasInt,var TxItemList) =
+                             fromLe = GasInt.high): (GasInt,var TxItemList) =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## While the returned *list* of transaction containers *must not* be modified
   ## directly, a transaction entry within a container may well be altered.
   ##
-  ## Note: When running in a loop it is ok to add or delete any entries
-  ## vistied or not visited yet.
-  var rc = xp.byGasPrice.le(gWei)
+  ## Note: When running in a loop it is ok to add or delete any entries,
+  ## vistied or not visited yet. So, deleting all entries with gas prices
+  ## less or equal than `delMax` would look like:
+  ## ::
+  ##  for _, txList in xp.byGasPriceDecPairs(fromLe = delMax):
+  ##    for tx in txList.nextKeys:
+  ##      discard xq.delete(tx)
+  ##
+  var rc = xp.byGasPrice.le(fromLe)
   while rc.isOk:
     let yKey = rc.value.key
     yield (yKey, rc.value.data)

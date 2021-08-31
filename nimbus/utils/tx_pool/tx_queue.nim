@@ -17,7 +17,7 @@
 
 import
   std/[tables],
-  ../rnd_qu,
+  ../keequ,
   ./tx_item,
   eth/common,
   stew/results
@@ -30,11 +30,11 @@ type
 
   TxQueuePair* = ##\
     ## Queue handler wrapper, needed in `first()`, `next()`, etc.
-    RndQueuePair[Hash256,TxItemRef]
+    KeeQuPair[Hash256,TxItemRef]
 
   TxQueue* = object ##\
     ## Chronological queue and ID table, fifo
-    q: array[TxQueueSchedule, RndQueue[Hash256,TxItemRef]]
+    q: array[TxQueueSchedule, KeeQu[Hash256,TxItemRef]]
 
 {.push raises: [Defect].}
 
@@ -68,7 +68,7 @@ proc txDelete*(ap: var TxQueue;
     return ok(rc.value.data)
   err()
 
-proc txVerify*(aq: var TxQueue): Result[void,RndQueueInfo]
+proc txVerify*(aq: var TxQueue): Result[void,KeeQuInfo]
     {.gcsafe,raises: [Defect,KeyError].} =
   for sched in TxQueueSchedule:
     let rc = aq.q[sched].verify
