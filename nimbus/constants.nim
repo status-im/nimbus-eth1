@@ -19,17 +19,7 @@ const
   # ZERO_HASH256 is the parent hash of genesis blocks.
   ZERO_HASH256* =                           Hash256()
 
-  GAS_LIMIT_EMA_DENOMINATOR* =              1_024
   GAS_LIMIT_ADJUSTMENT_FACTOR* =            1_024
-  GAS_LIMIT_USAGE_ADJUSTMENT_NUMERATOR* =   3
-  GAS_LIMIT_USAGE_ADJUSTMENT_DENOMINATOR* = 2
-
-  DIFFICULTY_ADJUSTMENT_DENOMINATOR* =      2_048.u256
-  DIFFICULTY_MINIMUM* =                     131_072.u256
-  BYZANTIUM_DIFFICULTY_ADJUSTMENT_CUTOFF* = 9
-
-  BOMB_EXPONENTIAL_PERIOD* =                100_000.u256
-  BOMB_EXPONENTIAL_FREE_PERIODS* =          2.u256
 
   BLOCK_REWARD* =                           5.u256 * 2.u256 # denoms.ether
 
@@ -50,6 +40,7 @@ const
   GENESIS_EXTRA_DATA* =                     ""
   GAS_LIMIT_MINIMUM* =                      5000
   GAS_LIMIT_MAXIMUM* =                      high(GasInt)
+  DEFAULT_GAS_LIMIT* =                      8_000_000
 
   BLANK_ROOT_HASH* =                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421".toDigest
   EMPTY_SHA3* =                             "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470".toDigest

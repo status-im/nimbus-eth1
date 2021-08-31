@@ -23,8 +23,7 @@
 import
   std/[sequtils, tables, times],
   ../../constants,
-  ../../db/[db_chain, state_db],
-  ../../utils,
+  ../../utils/ec_recover,
   ./clique_cfg,
   ./clique_defs,
   ./clique_desc,
@@ -34,11 +33,7 @@ import
   ./snapshot/[ballot, snapshot_desc],
   chronicles,
   chronos,
-  eth/[common, keys, rlp],
-  nimcrypto
-
-when not enableCliqueAsyncLock:
-  {.fatal: "Async locks must be enabled in clique_desc, try: -d:clique_async_lock"}
+  eth/[common, keys, rlp]
 
 {.push raises: [Defect].}
 
@@ -114,7 +109,7 @@ proc recentBlockNumber*(s: Snapshot;
 # ------------------------------------------------------------------------------
 
 # clique/clique.go(212): func (c *Clique) Author(header [..]
-proc author*(c: Clique; header: BlockHeader): Result[EthAddress,CliqueError]
+proc author*(c: Clique; header: BlockHeader): Result[EthAddress,UtilsError]
                   {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `author()` retrieves the Ethereum address of the
   ## account that minted the given block, which may be different from the
@@ -171,7 +166,7 @@ proc verifyUncles*(c: Clique; ethBlock: EthBlock): CliqueOkResult =
 
 
 # clique/clique.go(506): func (c *Clique) Prepare(chain [..]
-proc prepare*(c: Clique; header: var BlockHeader): CliqueOkResult
+proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOkResult
                     {.gcsafe, raises: [Defect,CatchableError].} =
   ## For the Consensus Engine, `prepare()` initializes the consensus fields
   ## of a block header according to the rules of a particular engine. The
@@ -216,58 +211,11 @@ proc prepare*(c: Clique; header: var BlockHeader): CliqueOkResult
   header.mixDigest.reset
 
   # Ensure the timestamp has the correct delay
-  var parent: BlockHeader
-  if not c.db.getBlockHeader(header.blockNumber-1, parent):
-    return err((errUnknownAncestor,""))
-
   header.timestamp = parent.timestamp + c.cfg.period
   if header.timestamp < getTime():
     header.timestamp = getTime()
 
-  return ok()
-
-
-# clique/clique.go(571): func (c *Clique) Finalize(chain [..]
-proc finalize*(c: Clique; header: BlockHeader; db: AccountStateDB) =
-  ## For the Consensus Engine, `finalize()` runs any post-transaction state
-  ## modifications (e.g. block rewards) but does not assemble the block.
-  ##
-  ## Note: The block header and state database might be updated to reflect any
-  ##       consensus rules that happen at finalization (e.g. block rewards).
-  ##
-  ## Not implemented here, raises `AssertionDefect`
-  raiseAssert "Not implemented"
-  #
-  # ## This implementation ensures no uncles are set, nor block rewards given.
-  # # No block rewards in PoA, so the state remains as is and uncles are dropped
-  # let deleteEmptyObjectsOk = c.cfg.config.eip158block <= header.blockNumber
-  # header.stateRoot = db.intermediateRoot(deleteEmptyObjectsOk)
-  # header.ommersHash = EMPTY_UNCLE_HASH
-
-# clique/clique.go(579): func (c *Clique) FinalizeAndAssemble(chain [..]
-proc finalizeAndAssemble*(c: Clique; header: BlockHeader;
-                          db: AccountStateDB; txs: openArray[Transaction];
-                          receipts: openArray[Receipt]):
-                            Result[EthBlock,CliqueError] =
-  ## For the Consensus Engine, `finalizeAndAssemble()` runs any
-  ## post-transaction state modifications (e.g. block rewards) and assembles
-  ## the final block.
-  ##
-  ## Note: The block header and state database might be updated to reflect any
-  ## consensus rules that happen at finalization (e.g. block rewards).
-  ##
-  ## Not implemented here, raises `AssertionDefect`
-  raiseAssert "Not implemented"
-  # ## Ensuring no uncles are set, nor block rewards given, and returns the
-  # ## final block.
-  #
-  #  # Finalize block
-  #  c.finalize(header, state, txs, uncles)
-  #
-  #  # Assemble and return the final block for sealing
-  #  return types.NewBlock(header, txs, nil, receipts,
-  #                        trie.NewStackTrie(nil)), nil
-
+  ok()
 
 # clique/clique.go(589): func (c *Clique) Authorize(signer [..]
 proc authorize*(c: Clique; signer: EthAddress; signFn: CliqueSignerFn) =
@@ -301,30 +249,23 @@ proc sealHash*(header: BlockHeader): Hash256 =
 
 
 # clique/clique.go(599): func (c *Clique) Seal(chain [..]
-proc seal*(c: Clique; ethBlock: EthBlock):
-                     Future[Result[EthBlock,CliqueError]] {.async,gcsafe.} =
-  ## For the Consensus Engine, `seal()` generates a new sealing request for
-  ## the given input block and pushes the result into the given channel.
-  ##
-  ## Note, the method returns immediately and will send the result async. More
-  ## than one result may also be returned depending on the consensus algorithm.
-  ##
+proc seal*(c: Clique; ethBlock: var EthBlock):
+           Result[void,CliqueError] {.gcsafe,
+            raises: [Defect,CatchableError].} =
   ## This implementation attempts to create a sealed block using the local
-  ## signing credentials. If running in the background, the process can be
-  ## stopped by calling the `stopSeal()` function.
-  c.doExclusively:
-    c.stopSealReq = false
+  ## signing credentials.
+
   var header = ethBlock.header
 
   # Sealing the genesis block is not supported
   if header.blockNumber.isZero:
-    return err((errUnknownBlock,""))
+    return err((errUnknownBlock, ""))
 
   # For 0-period chains, refuse to seal empty blocks (no reward but would spin
   # sealing)
   if c.cfg.period.isZero and ethBlock.txs.len == 0:
     info $nilCliqueSealNoBlockYet
-    return err((nilCliqueSealNoBlockYet,""))
+    return err((nilCliqueSealNoBlockYet, ""))
 
   # Don't hold the signer fields for the entire sealing procedure
   c.doExclusively:
@@ -337,7 +278,7 @@ proc seal*(c: Clique; ethBlock: EthBlock):
   if rc.isErr:
     return err(rc.error)
   if not c.snapshot.isSigner(signer):
-    return err((errUnauthorizedSigner,""))
+    return err((errUnauthorizedSigner, ""))
 
   # If we're amongst the recent signers, wait for the next block
   let seen = c.snapshot.recentBlockNumber(signer)
@@ -346,7 +287,7 @@ proc seal*(c: Clique; ethBlock: EthBlock):
     # shift it out
     if header.blockNumber < seen.value + c.snapshot.signersThreshold.u256:
       info $nilCliqueSealSignedRecently
-      return err((nilCliqueSealSignedRecently,""))
+      return err((nilCliqueSealSignedRecently, ""))
 
   # Sweet, the protocol permits us to sign the block, wait for our time
   var delay = header.timestamp - getTime()
@@ -365,42 +306,19 @@ proc seal*(c: Clique; ethBlock: EthBlock):
       wiggle = $wiggle
 
   # Sign all the things!
-  let sigHash = signFn(signer,header.cliqueRlp)
-  if sigHash.isErr:
-    return err((errCliqueSealSigFn,$sigHash.error))
-  let extraLen = header.extraData.len
-  if EXTRA_SEAL < extraLen:
-    header.extraData.setLen(extraLen - EXTRA_SEAL)
-  header.extraData.add sigHash.value.data
+  try:
+    let signature = signFn(signer,header.cliqueRlp)
+    if signature.isErr:
+      return err((errCliqueSealSigFn,$signature.error))
+    let extraLen = header.extraData.len
+    if EXTRA_SEAL < extraLen:
+      header.extraData.setLen(extraLen - EXTRA_SEAL)
+    header.extraData.add signature.value
+  except Exception as exc:
+    return err((errCliqueSealSigFn, "Error when signing block header"))
 
-  # Wait until sealing is terminated or delay timeout.
-  trace "Waiting for slot to sign and propagate",
-    delay = $delay
-
-  # FIXME: double check
-  let timeOutTime = getTime() + delay
-  while getTime() < timeOutTime:
-    c.doExclusively:
-      let isStopRequest = c.stopVHeaderReq
-    if isStopRequest:
-      warn "Sealing result is not read by miner",
-        sealhash = sealHash(header)
-      return err((errCliqueStopped,""))
-    poll()
-
-  c.doExclusively:
-    c.stopSealReq = false
-  return ok(ethBlock.withHeader(header))
-
-proc stopSeal*(c: Clique): bool {.discardable.} =
-  ## Activate the stop flag for running `seal()` function.
-  ## Returns `true` if the stop flag could be activated.
-  syncExceptionWrap:
-    c.doExclusively:
-      if not c.stopSealReq:
-        c.stopSealReq = true
-        result =true
-
+  ethBlock = ethBlock.withHeader(header)
+  ok()
 
 # clique/clique.go(673): func (c *Clique) CalcDifficulty(chain [..]
 proc calcDifficulty(c: Clique;
@@ -417,11 +335,6 @@ proc calcDifficulty(c: Clique;
     return err(rc.error)
   return ok(c.snapshot.calcDifficulty(c.signer))
 
-
-# # clique/clique.go(710): func (c *Clique) SealHash(header [..]
-# proc sealHash(c: Clique; header: BlockHeader): Hash256 =
-#   ## SealHash returns the hash of a block prior to it being sealed.
-#   header.encodeSigHeader.keccakHash
 
 # ------------------------------------------------------------------------------
 # End

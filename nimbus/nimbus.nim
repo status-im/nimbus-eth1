@@ -21,7 +21,7 @@ import
   config, genesis, rpc/[common, p2p, debug], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi,
-  "."/[utils, conf_utils]
+  "."/[utils, conf_utils, sealer, constants]
 
 ## TODO:
 ## * No IPv6 support
@@ -41,6 +41,7 @@ type
     state*: NimbusState
     graphqlServer*: GraphqlHttpServerRef
     wsRpcServer*: RpcWebSocketServer
+    sealingEngine*: SealingEngineRef
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
@@ -163,6 +164,14 @@ proc start(nimbus: NimbusNode) =
     nimbus.graphqlServer = setupGraphqlHttpServer(conf, chainDB, nimbus.ethNode)
     nimbus.graphqlServer.start()
 
+  if conf.engineSigner != ZERO_ADDRESS:
+    let rs = validateSealer(chainRef)
+    if rs.isErr:
+      echo rs.error
+      quit(QuitFailure)
+    nimbus.sealingEngine = SealingEngineRef.new(chainRef)
+    nimbus.sealingEngine.start()
+
   # metrics server
   if conf.net.metricsServer:
     let metricsAddress = "127.0.0.1"
@@ -199,6 +208,8 @@ proc stop*(nimbus: NimbusNode) {.async, gcsafe.} =
     nimbus.rpcServer.stop()
   if conf.graphql.enabled:
     await nimbus.graphqlServer.stop()
+  if conf.engineSigner != ZERO_ADDRESS:
+    await nimbus.sealingEngine.stop()
 
 proc process*(nimbus: NimbusNode) =
   # Main event loop

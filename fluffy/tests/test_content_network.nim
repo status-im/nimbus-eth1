@@ -74,10 +74,10 @@ procSuite "Content Network":
 
       let hash = hexary.keccak(foundContent.get().payload.asSeq())
       check hash.data == key
-  
+
     await node1.closeWait()
     await node2.closeWait()
-    
+
   asyncTest "Find content in the network via content lookup":
     let
       node1 = initDiscoveryNode(
@@ -121,9 +121,9 @@ procSuite "Content Network":
 
     check:
       foundContent.isSome()
-    
+
     let hash = hexary.keccak(foundContent.get().asSeq())
-    
+
     check hash.data == firstKey
 
     await node1.closeWait()

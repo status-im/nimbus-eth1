@@ -25,6 +25,9 @@ import
   stew/results,
   stint
 
+export
+  utils_defs
+
 const
   INMEMORY_SIGNATURES* = ##\
     ## Number of recent block signatures to keep in memory

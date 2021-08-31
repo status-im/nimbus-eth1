@@ -234,7 +234,7 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
       parentHeader,
       preminedBlock.header.coinbase,
       some(preminedBlock.header.timestamp),
-      some(preminedBlock.header.gasLimit),
+      preminedBlock.header.gasLimit,
       @[],
       preminedBlock.header.fee
   )
