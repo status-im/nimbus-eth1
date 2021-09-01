@@ -14,12 +14,6 @@ import
   ../network/state/portal_protocol,
   ./test_helpers
 
-proc random(T: type UInt256, rng: var BrHmacDrbgContext): T =
-  var key: UInt256
-  brHmacDrbgGenerate(addr rng, addr key, csize_t(sizeof(key)))
-
-  key
-
 type Default2NodeTest = ref object
   node1: discv5_protocol.Protocol
   node2: discv5_protocol.Protocol

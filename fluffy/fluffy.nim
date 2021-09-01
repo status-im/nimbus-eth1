@@ -13,7 +13,7 @@ import
   json_rpc/rpcproxy,
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ./conf, ./rpc/eth_api, ./rpc/bridge_client,
+  ./conf, ./rpc/[eth_api, bridge_client, discovery_api],
   ./network/state/[portal_network, content]
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
@@ -71,6 +71,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     let ta = initTAddress(config.rpcAddress, config.rpcPort)
     var rpcHttpServerWithProxy = RpcProxy.new([ta], config.proxyUri)
     rpcHttpServerWithProxy.installEthApiHandlers()
+    rpcHttpServerWithProxy.installDiscoveryApiHandlers(d)
     # TODO for now we can only proxy to local node (or remote one without ssl) to make it possible
     # to call infura https://github.com/status-im/nim-json-rpc/pull/101 needs to get merged for http client to support https/
     waitFor rpcHttpServerWithProxy.start()

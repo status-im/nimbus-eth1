@@ -47,12 +47,6 @@ proc validateSealer*(chain: Chain): Result[void, string] =
   if not chainConf.poaEngine:
     return err("currently only PoA engine is supported")
 
-  if chainConf.cliquePeriod <= 0:
-    return err("clique period should be greater than 0")
-
-  if chainConf.cliqueEpoch <= 0:
-    return err("clique epoch should be greater than 0")
-
   ok()
 
 proc isLondon(c: ChainConfig, number: BlockNumber): bool {.inline.} =
