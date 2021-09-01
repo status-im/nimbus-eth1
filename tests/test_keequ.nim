@@ -81,6 +81,35 @@ proc addOrFlushGroupwise(rq: var KeeQu[uint,uint];
   doAssert rqLen == seen.len + rq.len
   seen.setLen(0)
 
+proc compileGenericFunctions(rq: var KeeQu[uint,uint]) =
+  ## Verifies that functions compile, at all
+  rq.del(0)
+  rq[0] = 0 # so `rq[0]` works
+  discard rq[0]
+
+  let ignoreValues = (
+    (rq.append(0,0), rq.push(0,0),
+     rq.replace(0,0),
+     rq.prepend(0,0), rq.unshift(0,0),
+     rq.shift, rq.shiftKey, rq.shiftValue,
+     rq.pop, rq.popKey, rq.popValue,
+     rq.delete(0)),
+
+    (rq.hasKey(0), rq.eq(0)),
+
+    (rq.firstKey, rq.secondKey, rq.beforeLastKey, rq.lastKey,
+     rq.nextKey(0), rq.prevKey(0)),
+
+    (rq.first, rq.second, rq.beforeLast, rq.last,
+     rq.next(0), rq.prev(0)),
+
+    (rq.firstValue, rq.secondValue, rq.beforeLastValue, rq.lastValue),
+
+    (rq == rq, rq.len),
+
+    (toSeq(rq.nextKeys), toSeq(rq.nextValues), toSeq(rq.nextPairs),
+     toSeq(rq.prevKeys), toSeq(rq.prevValues), toSeq(rq.prevPairs)))
+
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
@@ -96,6 +125,10 @@ proc runKeeQu(noisy = true) =
       var
         fwdRq, revRq: KeeQu[uint,uint]
         fwdRej, revRej: seq[int]
+
+      test &"All functions smoke test":
+        var rq: KeeQu[uint,uint]
+        rq.compileGenericFunctions
 
       test &"Append/traverse {keyList.len} items, " &
           &"rejecting {numKeyDups} duplicates":
@@ -198,9 +231,10 @@ proc runKeeQu(noisy = true) =
       const groupLen = 7
       let veryNoisy = noisy and false
 
-      test &"Load/forward iterate {numUniqeKeys} items, "&
+      test &"Load/forward/reverse iterate {numUniqeKeys} items, "&
           &"deleting in groups of at most {groupLen}":
 
+        # forward ...
         block:
           var
             rq = keyList.toQueue
@@ -255,8 +289,7 @@ proc runKeeQu(noisy = true) =
           check seen.len < groupLen
           check uniqueKeys == all
 
-      test &"Load/reverse iterate {numUniqeKeys} items, "&
-          &"deleting in groups of at most {groupLen}":
+        # reverse ...
         block:
           var
             rq = keyList.toQueue
@@ -311,7 +344,9 @@ proc runKeeQu(noisy = true) =
           check seen.len < groupLen
           check uniqueKeys == all.reversed
 
-      test &"Load/forward steps {numUniqeKeys} key/item consistency":
+      test &"Load/forward/reverse steps {numUniqeKeys} key/item consistency":
+
+        # forward ...
         block:
           var
             rq = keyList.toQueue
@@ -335,7 +370,7 @@ proc runKeeQu(noisy = true) =
           check rq.verify.isOK
           check count == uniqueKeys.len
 
-      test &"Load/reverse steps {numUniqeKeys} key/item consistency":
+        # reverse ...
         block:
           var
             rq = keyList.toQueue

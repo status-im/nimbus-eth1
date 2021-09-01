@@ -192,6 +192,10 @@ proc init*[K,V](rq: var KeeQu[K,V]; initSize = 10) =
   ## table object.
   rq.tab = initTable[K,KeeQuItem[K,V]](initSize.nextPowerOfTwo)
 
+proc initKeeQu*[K,V](initSize = 10): KeeQu[K,V] =
+  ## Optional initaliser variant.
+  result.init(initSize)
+
 # ------------------------------------------------------------------------------
 # Public functions, list operations
 # ------------------------------------------------------------------------------
@@ -261,7 +265,7 @@ proc shift*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   if 0 < rq.tab.len:
     let kvp = KeeQuPair[K,V](
       key: rq.first,
-      val: rq.tab[rq.first].data)
+      data: rq.tab[rq.first].data)
     rq.shiftImpl
     return ok(KeeQuPair[K,V](kvp))
   err()
@@ -296,9 +300,9 @@ proc pop*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   if 0 < rq.tab.len:
     let kvp = KeeQuPair[K,V](
       key: rq.last,
-      val: rq.tab[rq.last].data)
+      data: rq.tab[rq.last].data)
     rq.popImpl
-    return ok(KeeQuPair[K,V](key,val))
+    return ok(KeeQuPair[K,V](kvp))
   err()
 
 proc popKey*[K,V](rq: var KeeQu[K,V]):
@@ -490,7 +494,7 @@ proc firstValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## value item returned is the most *left hand* one.
   if rq.tab.len == 0:
     return err()
-  ok(rq.tab[rq.first])
+  ok(rq.tab[rq.first].data)
 
 proc secondValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -501,7 +505,7 @@ proc secondValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## value item returned is the one to the right of the most *left hand* one.
   if rq.tab.len < 2:
     return err()
-  ok(rq.tab[rq.tab[rq.first].nxt])
+  ok(rq.tab[rq.tab[rq.first].nxt].data)
 
 proc beforeLastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -512,7 +516,7 @@ proc beforeLastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## value item returned is the one to the left of the most *right hand* one.
   if rq.tab.len < 2:
     return err()
-  ok(rq.tab[rq.tab[rq.last].prv])
+  ok(rq.tab[rq.tab[rq.last].prv].data)
 
 proc lastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -522,7 +526,7 @@ proc lastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## value item returned is the most *right hand* one.
   if rq.tab.len == 0:
     return err()
-  ok(rq.tab[rq.last])
+  ok(rq.tab[rq.last].data)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
