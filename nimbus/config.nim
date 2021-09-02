@@ -196,7 +196,7 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       istanbulBlock:  9_069_000.toBlockNumber, # 08/12/2019 12:25:09
       muirGlacierBlock: 9_200_000.toBlockNumber, # 02/01/2020 08:30:49
       berlinBlock:    12_244_000.toBlockNumber, # 15/04/2021 10:07:03
-      londonBlock:    high(BlockNumber)
+      londonBlock:    12_965_000.toBlockNumber, # 05/08/2021 12:33:42
     )
   of RopstenNet:
     ChainConfig(
@@ -214,7 +214,7 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       istanbulBlock:  6_485_846.toBlockNumber,
       muirGlacierBlock: 7_117_117.toBlockNumber,
       berlinBlock:      9_812_189.toBlockNumber,
-      londonBlock:    high(BlockNumber)
+      londonBlock:    10_499_401.toBlockNumber # June 24, 2021
     )
   of RinkebyNet:
     ChainConfig(
@@ -232,7 +232,7 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       istanbulBlock:  5_435_345.toBlockNumber,
       muirGlacierBlock: 8_290_928.toBlockNumber, # never occured in rinkeby network
       berlinBlock:      8_290_928.toBlockNumber,
-      londonBlock:    high(BlockNumber)
+      londonBlock:    8_897_988.toBlockNumber # July 7, 2021
     )
   of GoerliNet:
     ChainConfig(
@@ -250,7 +250,7 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       istanbulBlock:  1_561_651.toBlockNumber,
       muirGlacierBlock: 4_460_644.toBlockNumber, # never occured in goerli network
       berlinBlock:    4_460_644.toBlockNumber,
-      londonBlock:    high(BlockNumber)
+      londonBlock:    5_062_605.toBlockNumber # June 30, 2021
     )
   else:
     # everything else will use CustomNet config

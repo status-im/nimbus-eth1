@@ -24,8 +24,10 @@ const
     (blockNumber: 9199999'u64, id: (crc: 0x879D6E30'u32, nextFork: 9200000'u64)), # Last Istanbul block
     (blockNumber: 9200000'u64, id: (crc: 0xE029E991'u32, nextFork: 12244000'u64)), # First MuirGlacier block
     (blockNumber: 12243999'u64, id: (crc: 0xE029E991'u32, nextFork: 12244000'u64)), # Last MuirGlacier block
-    (blockNumber: 12244000'u64, id: (crc: 0x0eb440f6'u32, nextFork: 0'u64)),        # First Berlin block
-    (blockNumber: 20000000'u64, id: (crc: 0x0eb440f6'u32, nextFork: 0'u64)),        # Future Berlin block
+    (blockNumber: 12244000'u64, id: (crc: 0x0eb440f6'u32, nextFork: 12965000'u64)), # First Berlin block
+    (blockNumber: 12964999'u64, id: (crc: 0x0eb440f6'u32, nextFork: 12965000'u64)), # Last Berlin block
+    (blockNumber: 12965000'u64, id: (crc: 0xb715077d'u32, nextFork: 0'u64)),        # First London block
+    (blockNumber: 20000000'u64, id: (crc: 0xb715077d'u32, nextFork: 0'u64)),        # Future London block
   ]
 
   RopstenNetIDs = [
@@ -43,8 +45,10 @@ const
     (blockNumber: 7117116'u64, id: (crc: 0x4bc66396'u32, nextFork: 7117117'u64)), # Last Istanbul block
     (blockNumber: 7117117'u64, id: (crc: 0x6727EF90'u32, nextFork: 9812189'u64)), # First MuirGlacier block
     (blockNumber: 9812188'u64, id: (crc: 0x6727EF90'u32, nextFork: 9812189'u64)), # Last MuirGlacier block
-    (blockNumber: 9812189'u64, id: (crc: 0xa157d377'u32, nextFork: 0'u64)),       # First Berlin block
-    (blockNumber: 10000000'u64, id: (crc: 0xa157d377'u32, nextFork: 0'u64)),      # Future Berlin block
+    (blockNumber: 9812189'u64, id: (crc: 0xa157d377'u32, nextFork: 10499401'u64)),  # First Berlin block
+    (blockNumber: 10499400'u64, id: (crc: 0xa157d377'u32, nextFork: 10499401'u64)), # Last Berlin block
+    (blockNumber: 10499401'u64, id: (crc: 0x7119b6b3'u32, nextFork: 0'u64)),        # First London block
+    (blockNumber: 20000000'u64, id: (crc: 0x7119b6b3'u32, nextFork: 0'u64)),        # Future London block
   ]
 
   RinkebyNetIDs = [
@@ -61,8 +65,10 @@ const
     (blockNumber: 5435344'u64, id: (crc: 0xafec6b27'u32, nextFork: 5435345'u64)), # Last Petersburg block
     (blockNumber: 5435345'u64, id: (crc: 0xcbdb8838'u32, nextFork: 8290928'u64)), # First Istanbul block
     (blockNumber: 8290927'u64, id: (crc: 0xcbdb8838'u32, nextFork: 8290928'u64)), # Last Istanbul block
-    (blockNumber: 8290928'u64, id: (crc: 0x6910c8bd'u32, nextFork: 0'u64)),       # First Berlin block
-    (blockNumber: 10000000'u64, id: (crc: 0x6910c8bd'u32, nextFork: 0'u64)),      # Future Berlin block
+    (blockNumber: 8290928'u64, id: (crc: 0x6910c8bd'u32, nextFork: 8897988'u64)), # First Berlin block
+    (blockNumber: 8897987'u64, id: (crc: 0x6910c8bd'u32, nextFork: 8897988'u64)), # Last Berlin block
+    (blockNumber: 8897988'u64, id: (crc: 0x8e29f2f3'u32, nextFork: 0'u64)),       # First London block
+    (blockNumber: 10000000'u64, id: (crc: 0x8e29f2f3'u32, nextFork: 0'u64)),      # Future London block
   ]
 
   GoerliNetIDs = [
@@ -70,12 +76,14 @@ const
     (blockNumber: 1561650'u64, id: (crc: 0xa3f5ab08'u32, nextFork: 1561651'u64)), # Last Petersburg block
     (blockNumber: 1561651'u64, id: (crc: 0xc25efa5c'u32, nextFork: 4460644'u64)), # First Istanbul block
     (blockNumber: 4460643'u64, id: (crc: 0xc25efa5c'u32, nextFork: 4460644'u64)), # Future Istanbul block
-    (blockNumber: 4460644'u64, id: (crc: 0x757a1c47'u32, nextFork: 0'u64)),       # First Berlin block
-    (blockNumber: 5000000'u64, id: (crc: 0x757a1c47'u32, nextFork: 0'u64)),       # Future Berlin block
+    (blockNumber: 4460644'u64, id: (crc: 0x757a1c47'u32, nextFork: 5062605'u64)), # First Berlin block
+    (blockNumber: 5062604'u64, id: (crc: 0x757a1c47'u32, nextFork: 5062605'u64)), # Last Berlin block
+    (blockNumber: 5062605'u64, id: (crc: 0xb8c6299d'u32, nextFork: 0'u64)),       # First London block
+    (blockNumber: 10000000'u64, id: (crc: 0xb8c6299d'u32, nextFork: 0'u64)),      # Future London block
   ]
 
 template runTest(network: untyped) =
-  test network.astToStr:
+  test `network`.astToStr:
     var
       memDB = newMemoryDB()
       chainDB = newBaseChainDB(memDB, true, network)
