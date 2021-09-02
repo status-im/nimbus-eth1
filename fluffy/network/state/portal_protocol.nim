@@ -303,34 +303,42 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
+proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage, dst: Node, nodes: var seq[Node]): LookupResult =
+  if (m.enrs.len() != 0 and m.payload.len() == 0):
+    let records = recordsFromBytes(m.enrs)
+    # TODO cannot use verifyNodesRecords(records, destNode, @[0'u16]) as it
+    # also verify logdistances distances, but with content query those are not
+    # used.
+    # Implement version of verifyNodesRecords wchich do not validate distances.
+    for r in records:
+      let node = newNode(r)
+      if node.isOk():
+        let n = node.get()
+        nodes.add(n)
+        # Attempt to add all nodes discovered to routing table
+        discard p.routingTable.addNode(n)
+
+    return LookupResult(kind: Nodes, nodes: nodes)
+  elif (m.payload.len() != 0 and m.enrs.len() == 0):
+    return LookupResult(kind: Content, content: m.payload)
+  elif ((m.payload.len() != 0 and m.enrs.len() != 0)):
+    # Both payload and enrs are filled, which means protocol breach. For now 
+    # just logging offending node to quickly identify it
+    warn "Invalid foundcontent response form node ", uri = toURI(dst.record)
+    return LookupResult(kind: Nodes, nodes: nodes)
+  else:
+    return LookupResult(kind: Nodes, nodes: nodes)
+
 proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ContentKey):
     Future[LookupResult] {.async.} =
   var nodes: seq[Node]
 
-  let contentMessage = await p.findContent(destNode,  target)
+  let contentMessageResponse = await p.findContent(destNode,  target)
 
-  return (contentMessage.map(proc (m: FoundContentMessage): LookupResult =
-    if (m.enrs.len() != 0 and m.payload.len() == 0):
-      let records = recordsFromBytes(m.enrs)
-      # TODO cannot use verifyNodesRecords(records, destNode, @[0'u16]) as it
-      # also verify logdistances distances, but with content query those are not
-      # used.
-      # Implement version of verifyNodesRecords wchich do not validate distances.
-      for r in records:
-        let node = newNode(r)
-        if node.isOk():
-          let n = node.get()
-          nodes.add(n)
-          # Attempt to add all nodes discovered to routing table
-          discard p.routingTable.addNode(n)
-
-      return LookupResult(kind: Nodes, nodes: nodes)
-    elif (m.payload.len() != 0 and m.enrs.len() == 0):
-      return LookupResult(kind: Content, content: m.payload)
-    else:
-      return LookupResult(kind: Nodes, nodes: nodes)
-
-  )).get(LookupResult(kind: Nodes, nodes: nodes))
+  if contentMessageResponse.isOk():
+    return handleFoundContentMessage(p, contentMessageResponse.get(), destNode, nodes)
+  else:
+    return LookupResult(kind: Nodes, nodes: nodes)
 
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
