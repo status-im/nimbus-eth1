@@ -11,7 +11,7 @@
 
 import
   std/[options, sugar],
-  nimcrypto/[sha2, hash], stew/objects,
+  nimcrypto/[sha2, hash], stew/objects, stint,
   eth/ssz/ssz_serialization, eth/trie/[hexary, db]
 
 export ssz_serialization
@@ -80,6 +80,12 @@ func toContentId*(contentKey: ByteList): ContentId =
   # with keccak256 that is used for the actual nodes:
   # https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#content
   sha2.sha_256.digest(contentKey.asSeq())
+
+func toContentId*(contentKey: ContentKey): ContentId =
+  toContentId(encodeKeyAsList(contentKey))
+
+func contentIdAsUint256*(id: ContentId): Uint256 =
+  readUintBE[256](id.data)
 
 type
   ContentStorage* = object
