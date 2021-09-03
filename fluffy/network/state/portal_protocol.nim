@@ -352,7 +352,7 @@ proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage, dst: N
   else:
     return LookupResult(kind: Nodes, nodes: nodes)
 
-proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ContentKey):
+proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ByteList):
     Future[LookupResult] {.async.} =
   var nodes: seq[Node]
 
@@ -366,8 +366,7 @@ proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ContentKey):
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
-proc contentLookup*(p: PortalProtocol, target: ContentKey): Future[Option[ByteList]] {.async.} =
-  let targetId = contentIdAsUint256(toContentId(target))
+proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256): Future[Option[ByteList]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance

@@ -47,6 +47,7 @@ procSuite "Content Network":
       proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
       proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
 
+    check proto2.portalProtocol.addNode(node1.localNode) == Added
 
     var keys: seq[seq[byte]]
     for k, v in trie.replicate:
@@ -62,10 +63,7 @@ procSuite "Content Network":
           contentType: content.ContentType.Account,
           nodeHash: nodeHash)
 
-      let foundContent = await proto2.findContent(
-        contentKey,
-        proto1.proto.baseProtocol.localNode
-      )
+      let foundContent = await proto2.getContent(contentKey)
 
       check:
         foundContent.isSome()
@@ -78,6 +76,7 @@ procSuite "Content Network":
 
   asyncTest "Find content in the network via content lookup":
     let
+      trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302))
       node2 = initDiscoveryNode(
@@ -86,20 +85,16 @@ procSuite "Content Network":
         rng, PrivateKey.random(rng[]), localAddress(20304))
 
 
-      proto1 = PortalProtocol.new(node1)
-      proto2 = PortalProtocol.new(node2)
-      proto3 = PortalProtocol.new(node3)
+      proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
+      proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
+      proto3 = PortalNetwork.new(node3, ContentStorage(trie: trie))
 
-    let trie =
-      genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
-
-    proto3.contentStorage = ContentStorage(trie: trie)
 
     # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
-    check proto1.addNode(proto2.baseProtocol.localNode) == Added
-    check proto2.addNode(proto3.baseProtocol.localNode) == Added
+    check proto1.portalProtocol.addNode(node2.localNode) == Added
+    check proto2.portalProtocol.addNode(node3.localNode) == Added
 
-    check (await proto2.ping(proto3.baseProtocol.localNode)).isOk()
+    check (await proto2.portalProtocol.ping(node3.localNode)).isOk()
 
     var keys: seq[seq[byte]]
     for k, v in trie.replicate:
@@ -115,12 +110,12 @@ procSuite "Content Network":
       contentType: content.ContentType.Account,
       nodeHash: nodeHash)
 
-    let foundContent = await proto1.contentLookup(contentKey)
+    let foundContent = await proto1.getContent(contentKey)
 
     check:
       foundContent.isSome()
 
-    let hash = hexary.keccak(foundContent.get().asSeq())
+    let hash = hexary.keccak(foundContent.get())
 
     check hash.data == firstKey
 

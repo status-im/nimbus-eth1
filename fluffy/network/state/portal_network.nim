@@ -1,5 +1,5 @@
 import
-  std/options,
+  std/[options, sugar],
   stew/results,
   eth/p2p/discoveryv5/[protocol, node],
   ./content, ./portal_protocol
@@ -8,7 +8,7 @@ import
 # nodes, tries, hashes
 type PortalNetwork* = ref object
   storage: ContentStorage
-  proto*: PortalProtocol
+  portalProtocol*: PortalProtocol
 
 proc getHandler(storage: ContentStorage): ContentHandler =
   result =
@@ -19,28 +19,24 @@ proc getHandler(storage: ContentStorage): ContentHandler =
       else:
         ContentResult(kind: ContentMissing, contentId: toContentId(contentKey))
 
-# TODO temporary find content exposing Node, ulimatly this function would use
-# contentLookup, so uper layer would not need to know anything about
-# routing table nodes
-proc findContent*(p:PortalNetwork, key: ContentKey, dst: Node): Future[Option[seq[byte]]] {.async.} = 
-  var maybeContent: Option[seq[byte]] = none[seq[byte]]()
+# Further improvements which may be necessary:
+# 1. Return proper domain types instead of bytes
+# 2. First check if item is in storage instead of doing lookup
+# 3. Put item into storage (if in radius) after succesful lookup
+proc getContent*(p:PortalNetwork, key: ContentKey): Future[Option[seq[byte]]] {.async.} = 
   let keyAsBytes = encodeKeyAsList(key)
-  let fcResponse = await p.proto.findcontent(dst, keyAsBytes)
-
-  if (fcResponse.isOk()):
-    let message = fcResponse.get()
-    if (len(message.payload) > 0):
-      maybeContent = some(message.payload.asSeq())
-
-  return maybeContent
+  let id = contentIdAsUint256(toContentId(keyAsBytes))
+  let result = await p.portalProtocol.contentLookup(keyAsBytes, id)
+  # for now returning bytes, ultimatly it would be nice to return proper domain types from here
+  return result.map(x => x.asSeq())
 
 proc new*(T: type PortalNetwork, baseProtocol: protocol.Protocol, storage: ContentStorage , dataRadius = UInt256.high()): T =
   let portalProto = PortalProtocol.new(baseProtocol, getHandler(storage), dataRadius)
-  return PortalNetwork(storage: storage, proto: portalProto)
+  return PortalNetwork(storage: storage, portalProtocol: portalProto)
 
 proc start*(p: PortalNetwork) =
-  p.proto.start()
+  p.portalProtocol.start()
 
 proc stop*(p: PortalNetwork) =
-  p.proto.stop()
+  p.portalProtocol.stop()
 
