@@ -11,13 +11,12 @@ type PortalNetwork* = ref object
   portalProtocol*: PortalProtocol
 
 proc getHandler(storage: ContentStorage): ContentHandler =
-  result =
-    proc (contentKey: content.ByteList): ContentResult =
+    return (proc (contentKey: content.ByteList): ContentResult =
       let maybeContent = storage.getContent(contentKey)
       if (maybeContent.isSome()):
         ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
       else:
-        ContentResult(kind: ContentMissing, contentId: toContentId(contentKey))
+        ContentResult(kind: ContentMissing, contentId: toContentId(contentKey)))
 
 # Further improvements which may be necessary:
 # 1. Return proper domain types instead of bytes
