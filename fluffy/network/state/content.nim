@@ -107,3 +107,7 @@ proc getContent*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
 
 proc getContent*(storage: ContentStorage, contentKey: ByteList): Option[seq[byte]] =
   decodeKey(contentKey).flatMap((key: ContentKey) => getContent(storage, key))
+
+proc newEmptyInMemoryStorage*(): ContentStorage =
+  let trie = initHexaryTrie(newMemoryDb())
+  ContentStorage(trie: trie)

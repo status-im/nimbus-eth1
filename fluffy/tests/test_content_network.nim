@@ -11,7 +11,7 @@ import
   eth/[keys, trie/db, trie/hexary, ssz/ssz_serialization],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   ../../nimbus/[genesis, chain_config, db/db_chain],
-  ../network/state/portal_protocol, ../network/state/content,
+  ../network/state/portal_protocol, ../network/state/content, ../network/state/portal_network,
   ./test_helpers
 
 proc genesisToTrie(filePath: string): HexaryTrie =
@@ -37,18 +37,17 @@ procSuite "Content Network":
   let rng = newRng()
   asyncTest "Test Share Full State":
     let
+      trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
+
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302))
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
-      proto1 = PortalProtocol.new(node1)
-      proto2 = PortalProtocol.new(node2)
+      proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
+      proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
 
-    let trie =
-      genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
-
-    proto1.contentStorage = ContentStorage(trie: trie)
+    check proto2.portalProtocol.addNode(node1.localNode) == Added
 
     var keys: seq[seq[byte]]
     for k, v in trie.replicate:
@@ -64,15 +63,12 @@ procSuite "Content Network":
           contentType: content.ContentType.Account,
           nodeHash: nodeHash)
 
-      let foundContent = await proto2.findContent(proto1.baseProtocol.localNode,
-        contentKey)
+      let foundContent = await proto2.getContent(contentKey)
 
       check:
-        foundContent.isOk()
-        foundContent.get().payload.len() != 0
-        foundContent.get().enrs.len() == 0
+        foundContent.isSome()
 
-      let hash = hexary.keccak(foundContent.get().payload.asSeq())
+      let hash = hexary.keccak(foundContent.get())
       check hash.data == key
 
     await node1.closeWait()
@@ -80,6 +76,7 @@ procSuite "Content Network":
 
   asyncTest "Find content in the network via content lookup":
     let
+      trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
       node1 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20302))
       node2 = initDiscoveryNode(
@@ -88,20 +85,16 @@ procSuite "Content Network":
         rng, PrivateKey.random(rng[]), localAddress(20304))
 
 
-      proto1 = PortalProtocol.new(node1)
-      proto2 = PortalProtocol.new(node2)
-      proto3 = PortalProtocol.new(node3)
+      proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
+      proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
+      proto3 = PortalNetwork.new(node3, ContentStorage(trie: trie))
 
-    let trie =
-      genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
-
-    proto3.contentStorage = ContentStorage(trie: trie)
 
     # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
-    check proto1.addNode(proto2.baseProtocol.localNode) == Added
-    check proto2.addNode(proto3.baseProtocol.localNode) == Added
+    check proto1.portalProtocol.addNode(node2.localNode) == Added
+    check proto2.portalProtocol.addNode(node3.localNode) == Added
 
-    check (await proto2.ping(proto3.baseProtocol.localNode)).isOk()
+    check (await proto2.portalProtocol.ping(node3.localNode)).isOk()
 
     var keys: seq[seq[byte]]
     for k, v in trie.replicate:
@@ -117,12 +110,12 @@ procSuite "Content Network":
       contentType: content.ContentType.Account,
       nodeHash: nodeHash)
 
-    let foundContent = await proto1.contentLookup(contentKey)
+    let foundContent = await proto1.getContent(contentKey)
 
     check:
       foundContent.isSome()
 
-    let hash = hexary.keccak(foundContent.get().asSeq())
+    let hash = hexary.keccak(foundContent.get())
 
     check hash.data == firstKey
 

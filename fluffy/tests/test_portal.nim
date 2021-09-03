@@ -9,7 +9,7 @@
 
 import
   chronos, testutils/unittests, stew/shims/net,
-  eth/keys, eth/p2p/discoveryv5/routing_table,
+  eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/state/portal_protocol,
   ./test_helpers
@@ -20,6 +20,10 @@ type Default2NodeTest = ref object
   proto1: PortalProtocol
   proto2: PortalProtocol
 
+proc testHandler(contentKey: ByteList): ContentResult =
+  let id =  sha256.digest("test")
+  ContentResult(kind: ContentMissing, contentId: id)
+
 proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
   let
     node1 = initDiscoveryNode(
@@ -27,8 +31,8 @@ proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
     node2 = initDiscoveryNode(
       rng, PrivateKey.random(rng[]), localAddress(20303))
 
-    proto1 = PortalProtocol.new(node1)
-    proto2 = PortalProtocol.new(node2)
+    proto1 = PortalProtocol.new(node1, testHandler)
+    proto2 = PortalProtocol.new(node2, testHandler)
 
   Default2NodeTest(node1: node1, node2: node2, proto1: proto1, proto2: proto2)
 
@@ -137,11 +141,7 @@ procSuite "Portal Tests":
     # table.
     test.proto2.start()
 
-    var nodeHash: NodeHash
-
-    let contentKey = ContentKey(networkId: 0'u16,
-      contentType: ContentType.Account,
-      nodeHash: nodeHash)
+    let contentKey = List.init(@[1'u8], 2048)
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.

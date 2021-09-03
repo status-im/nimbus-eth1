@@ -9,9 +9,9 @@
 
 import
   std/[sequtils, sets, algorithm],
-  stew/[results, byteutils], chronicles, chronos,
+  stew/[results, byteutils], chronicles, chronos, nimcrypto/hash,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2],
-  ./content, ./messages
+  ./messages
 
 export messages
 
@@ -30,11 +30,27 @@ const
   InitialLookups = 1 ## Amount of lookups done when populating the routing table
 
 type
+  ContentResultKind* = enum
+    ContentFound, ContentMissing, ContentKeyValidationFailure
+
+  ContentResult* = object
+    case kind*: ContentResultKind
+    of ContentFound:
+      content*: seq[byte]
+    of ContentMissing:
+      contentId*: MDigest[32 * 8]
+    of ContentKeyValidationFailure:
+      error*: string
+
+  # Treating Result as typed union type. If content is present handler should return
+  # it, if not it should return content id so that closest neighbours can be localized.
+  ContentHandler* = proc (contentKey: ByteList): ContentResult {.raises: [Defect], gcsafe.}
+
   PortalProtocol* = ref object of TalkProtocol
     routingTable: RoutingTable
     baseProtocol*: protocol.Protocol
     dataRadius*: UInt256
-    contentStorage*: ContentStorage
+    handleContentRequest: ContentHandler
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
@@ -49,7 +65,7 @@ type
     of Nodes:
       nodes: seq[Node]
     of Content:
-      content: ByteList  
+      content: ByteList
 
 proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
@@ -96,24 +112,32 @@ proc handleFindNode(p: PortalProtocol, fn: FindNodeMessage): seq[byte] =
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
 
 proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
+  let contentHandlingResult = p.handleContentRequest(fc.contentKey)
   # TODO: Need to check networkId, type, trie path
-  let
-    # TODO: Should we first do a simple check on ContentId versus Radius?
-    contentId = toContentId(fc.contentKey)
-    content = p.contentStorage.getContent(fc.contentKey)
-  if content.isSome():
+  case contentHandlingResult.kind
+  of ContentFound:
+    let content = contentHandlingResult.content
     let enrs = List[ByteList, 32](@[]) # Empty enrs when payload is send
     encodeMessage(FoundContentMessage(
-      enrs: enrs, payload: ByteList(content.get())))
-  else:
+      enrs: enrs, payload: ByteList(content)))
+  of ContentMissing:
     let
+      contentId = contentHandlingResult.contentId
+      # TODO: Should we first do a simple check on ContentId versus Radius?
       closestNodes = p.routingTable.neighbours(
         NodeId(readUintBE[256](contentId.data)), seenOnly = true)
       payload = ByteList(@[]) # Empty payload when enrs are send
       enrs =
-        closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw)) 
+        closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
     encodeMessage(FoundContentMessage(
       enrs: List[ByteList, 32](List(enrs)), payload: payload))
+
+  of ContentKeyValidationFailure:
+    # Retrun empty response when content key validation fail
+    let content = ByteList(@[])
+    let enrs = List[ByteList, 32](@[]) # Empty enrs when payload is send
+    encodeMessage(FoundContentMessage(
+      enrs: enrs, payload: content))
 
 proc handleAdvertise(p: PortalProtocol, a: AdvertiseMessage): seq[byte] =
   # TODO: Not implemented
@@ -147,11 +171,13 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte]): seq[byte] =
     @[]
 
 proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
+    contentHandler: ContentHandler,
     dataRadius = UInt256.high()): T =
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
     baseProtocol: baseProtocol,
-    dataRadius: dataRadius)
+    dataRadius: dataRadius,
+    handleContentRequest: contentHandler)
 
   proto.routingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
     DefaultTableIpLimits, baseProtocol.rng)
@@ -199,12 +225,9 @@ proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
   # TODO Add nodes validation
   return await reqResponse[FindNodeMessage, NodesMessage](p, dst, PortalProtocolId, fn)
 
-# TODO It maybe better to accept bytelist, to not tie network layer to particular
-# content
-proc findContent*(p: PortalProtocol, dst: Node, contentKey: ContentKey):
+proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     Future[PortalResult[FoundContentMessage]] {.async.} =
-  let encKey = encodeKeyAsList(contentKey)
-  let fc = FindContentMessage(contentKey: encKey)
+  let fc = FindContentMessage(contentKey: contentKey)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
   return await reqResponse[FindContentMessage, FoundContentMessage](p, dst, PortalProtocolId, fc)
@@ -322,14 +345,14 @@ proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage, dst: N
   elif (m.payload.len() != 0 and m.enrs.len() == 0):
     return LookupResult(kind: Content, content: m.payload)
   elif ((m.payload.len() != 0 and m.enrs.len() != 0)):
-    # Both payload and enrs are filled, which means protocol breach. For now 
+    # Both payload and enrs are filled, which means protocol breach. For now
     # just logging offending node to quickly identify it
     warn "Invalid foundcontent response form node ", uri = toURI(dst.record)
     return LookupResult(kind: Nodes, nodes: nodes)
   else:
     return LookupResult(kind: Nodes, nodes: nodes)
 
-proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ContentKey):
+proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ByteList):
     Future[LookupResult] {.async.} =
   var nodes: seq[Node]
 
@@ -343,8 +366,7 @@ proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ContentKey):
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
-proc contentLookup*(p: PortalProtocol, target: ContentKey): Future[Option[ByteList]] {.async.} =
-  let targetId = contentIdAsUint256(toContentId(target))
+proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256): Future[Option[ByteList]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -406,7 +428,7 @@ proc contentLookup*(p: PortalProtocol, target: ContentKey): Future[Option[ByteLi
         f.cancel()
 
       return some(lookupResult.content)
-  
+
   return none[ByteList]()
 
 proc query*(p: PortalProtocol, target: NodeId, k = BUCKET_SIZE): Future[seq[Node]]

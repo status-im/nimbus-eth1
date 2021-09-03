@@ -9,6 +9,7 @@ import
   std/[options, strutils, tables],
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, stew/byteutils,
+  nimcrypto/[hash, sha2],
   eth/[keys, net/nat],
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -146,6 +147,11 @@ proc discover(d: discv5_protocol.Protocol) {.async.} =
     info "Lookup finished", nodes = discovered.len
     await sleepAsync(30.seconds)
 
+# TODO for now just return some random id
+proc testHandler(contentKey: ByteList): ContentResult =
+  let id =  sha256.digest("test")
+  ContentResult(kind: ContentMissing, contentId: id)
+
 proc run(config: DiscoveryConf) =
   let
     rng = newRng()
@@ -164,7 +170,7 @@ proc run(config: DiscoveryConf) =
 
   d.open()
 
-  let portal = PortalProtocol.new(d)
+  let portal = PortalProtocol.new(d, testHandler)
 
   if config.metricsEnabled:
     let
@@ -200,11 +206,9 @@ proc run(config: DiscoveryConf) =
 
       key
 
-    # For now just zeroes content node hash
-    var nodeHash: NodeHash
-    let contentKey = ContentKey(networkId: 0'u16,
-      contentType: messages.ContentType.Account,
-      nodeHash: nodeHash)
+    # For now just some random bytes
+    let contentKey = List.init(@[1'u8], 2048)
+
     let foundContent = waitFor portal.findContent(config.findContentTarget,
       contentKey)
 
