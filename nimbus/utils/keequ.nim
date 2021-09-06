@@ -67,7 +67,7 @@ type
   KeeQuTab[K,V] =
     Table[K,KeeQuItem[K,V]]
 
-  KeeQu*[K,V] = object of RootObj ##\
+  KeeQu*[K,V] = object ##\
     ## Data queue descriptor
     tab: KeeQuTab[K,V] ## Data table
     first, last: K        ## Doubly linked item list queue
@@ -367,6 +367,52 @@ proc `[]`*[K,V](rq: var KeeQu[K,V]; key: K): V
   rq.tab[key].data
 
 # ------------------------------------------------------------------------------
+# Public functions, LRU mode
+# ------------------------------------------------------------------------------
+
+proc lruFetch*[K,V](rq: var KeeQu[K,V]; key: K): Result[V,void]
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Fetch in *last-recently-used* mode: If the argument `key` exists in the
+  ## queue, move the key-value item pair to the right end of the queue and
+  ## return the value associated with the key.
+  let rc = rq.delete(key)
+  if rc.isErr:
+    return err()
+  # Unlink and re-append item
+  rq.appendImpl(key, rc.value.data)
+  ok(rc.value.data)
+
+proc lruAppend*[K,V](rq: var KeeQu[K,V]; key: K; val: V; maxItems: int): V
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Append in *last-recently-used* mode: If the queue has at least `maxItems`
+  ## item entries, do `shift()` out the left most one. Then append the key-value
+  ## argument pair `(key,val)` to the right end. Together with `lruFetch()` this
+  ## function can be used to build a *LRU cache*:
+  ## ::
+  ##   const queueMax = 10
+  ##
+  ##   proc expensiveCalculation(key: int): Result[int,void] =
+  ##     ...
+  ##
+  ##   proc lruCache(q: var KeeQu[int,int]; key: int): Result[int,void] =
+  ##     block:
+  ##       let rc = q.lruFetch(key)
+  ##       if rc.isOK:
+  ##          return ok(rc.value)
+  ##     block:
+  ##       let rc = expensiveCalculation(key)
+  ##       if rc.isOK:
+  ##          return ok(q.lruAppend(key, rc.value, queueMax))
+  ##     err()
+  ##
+  # Limit number of cached items
+  if maxItems <= rq.tab.len:
+    rq.shiftImpl
+  # Append new value
+  rq.appendImpl(key, val)
+  val
+
+# ------------------------------------------------------------------------------
 # Public traversal functions, fetch keys
 # ------------------------------------------------------------------------------
 
@@ -471,16 +517,16 @@ proc next*[K,V](rq: var KeeQu[K,V]; key: K): Result[KeeQuPair[K,V],void]
   ## Similar to `nextKey()` but with key-value item pair return value.
   if not rq.tab.hasKey(key) or rq.last == key:
     return err()
-  let key = rq.tab[key].nxt
-  ok(KeeQuPair[K,V](key: key, data: rq.tab[key].data))
+  let nKey = rq.tab[key].nxt
+  ok(KeeQuPair[K,V](key: nKey, data: rq.tab[nKey].data))
 
 proc prev*[K,V](rq: var KeeQu[K,V]; key: K): Result[KeeQuPair[K,V],void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Similar to `prevKey()` but with key-value item pair return value.
   if not rq.tab.hasKey(key) or rq.first == key:
     return err()
-  let key = rq.tab[key].prv
-  ok(KeeQuPair[K,V](key: key, data: rq.tab[key].data))
+  let pKey = rq.tab[key].prv
+  ok(KeeQuPair[K,V](key: pKey, data: rq.tab[pKey].data))
 
 # ------------------------------------------------------------------------------
 # Public traversal functions, data container items
@@ -549,6 +595,12 @@ proc `==`*[K,V](a, b: var KeeQu[K,V]): bool
 proc len*[K,V](rq: var KeeQu[K,V]): int {.inline.} =
   ## Returns the number of items in the queue
   rq.tab.len
+
+proc clear*[K,V](rq: var KeeQu[K,V]) {.inline.} =
+  ## Clear the queue
+  rq.tab.clear
+  rq.first.reset
+  rq.last.reset
 
 # ------------------------------------------------------------------------------
 # Public iterators

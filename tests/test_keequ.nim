@@ -16,6 +16,10 @@ import
 
 const
   usedStrutils = newSeq[string]().join(" ")
+
+  lruCacheLimit = 10
+  lruCacheModulo = 13
+
   keyList = [
     185, 208,  53,  54, 196, 189, 187, 117,  94,  29,   6, 173, 207,  45,  31,
     208, 127, 106, 117,  49,  40, 171,   6,  94,  84,  60, 125,  87, 168, 183,
@@ -26,8 +30,16 @@ const
     56,  107,  45, 180, 113, 233,  59, 246,  29, 212, 172, 161, 183, 207, 189,
     56,  198, 130,  62,  28,  53, 122]
 
+type
+  KUQueue = # mind the kqueue module from the nim standard lib
+    KeeQu[uint,uint]
+
+  LruCache = object
+    size: int
+    q: KUQueue
+
 # ------------------------------------------------------------------------------
-# Helpers
+# Debugging
 # ------------------------------------------------------------------------------
 
 proc `$`(rc: KeeQuPair[uint,uint]): string =
@@ -45,6 +57,19 @@ proc `$`(rc: Result[uint,void]): string =
     result &= $rc.value
   result &= ">"
 
+proc say(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
+  if noisy:
+    if args.len == 0:
+      echo "*** ", pfx
+    elif 0 < pfx.len and pfx[^1] != ' ':
+      echo pfx, " ", args.toSeq.join
+    else:
+      echo pfx, args.toSeq.join
+
+# ------------------------------------------------------------------------------
+# Converters
+# ------------------------------------------------------------------------------
+
 proc toValue(n: int): uint =
   (n + 1000).uint
 
@@ -57,7 +82,24 @@ proc toKey(n: int): uint =
 proc fromKey(n: uint): int =
   n.int
 
-proc toQueue(a: openArray[int]): KeeQu[uint,uint] =
+# ------------------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------------------
+
+proc lruValue(lru: var LruCache; n: int): uint =
+  let
+    key = n.toKey
+    rc = lru.q.lruFetch(key)
+  if rc.isOK:
+    return rc.value
+  lru.q.lruAppend(key, key.fromKey.toValue, lru.size)
+
+proc toLruCache(a: openArray[int]): LruCache =
+  result.size = lruCacheLimit
+  for n in a.toSeq.mapIt(it mod lruCacheModulo):
+    doAssert result.lruValue(n) == n.toValue
+
+proc toQueue(a: openArray[int]): KUQueue =
   for n in a:
     result[n.toKey] = n.toValue
 
@@ -65,7 +107,7 @@ proc toUnique(a: openArray[int]): seq[uint] =
   var q = a.toQueue
   toSeq(q.nextKeys)
 
-proc addOrFlushGroupwise(rq: var KeeQu[uint,uint];
+proc addOrFlushGroupwise(rq: var KUQueue;
                          grpLen: int; seen: var seq[int]; n: int;
                          noisy = true) =
   seen.add n
@@ -74,14 +116,13 @@ proc addOrFlushGroupwise(rq: var KeeQu[uint,uint];
 
   # flush group-wise
   let rqLen = rq.len
-  if noisy:
-    echo "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
+  noisy.say "updateSeen: deleting ", seen.mapIt($it).join(" ")
   for a in seen:
     doAssert rq.delete(a.toKey).value.data == a.toValue
   doAssert rqLen == seen.len + rq.len
   seen.setLen(0)
 
-proc compileGenericFunctions(rq: var KeeQu[uint,uint]) =
+proc compileGenericFunctions(rq: var KUQueue) =
   ## Verifies that functions compile, at all
   rq.del(0)
   rq[0] = 0 # so `rq[0]` works
@@ -123,7 +164,7 @@ proc runKeeQu(noisy = true) =
   suite "Data queue with keyed random access":
     block:
       var
-        fwdRq, revRq: KeeQu[uint,uint]
+        fwdRq, revRq: KUQueue
         fwdRej, revRej: seq[int]
 
       test &"All functions smoke test":
@@ -133,7 +174,7 @@ proc runKeeQu(noisy = true) =
       test &"Append/traverse {keyList.len} items, " &
           &"rejecting {numKeyDups} duplicates":
         var
-          rq: KeeQu[uint,uint]
+          rq: KUQueue
           rej: seq[int]
         for n in keyList:
           if not rq.push(n.toKey, n.toValue): # synonymous for append()
@@ -154,7 +195,7 @@ proc runKeeQu(noisy = true) =
       test &"Prepend/traverse {keyList.len} items, " &
           &"rejecting {numKeyDups} duplicates":
         var
-          rq: KeeQu[uint,uint]
+          rq: KUQueue
           rej: seq[int]
         for n in keyList:
           if not rq.unshift(n.toKey, n.toValue): # synonymous for prepend()
@@ -459,16 +500,130 @@ proc runKeeQu(noisy = true) =
 
       check pr == qr
 
+
+proc runLruCache(noisy = true) =
+  ## Test runner ported from test_lru_cache.nim
+
+  suite "Data queue as LRU cache":
+
+    test "Fill Up":
+      var
+        cache = newSeq[int]().toLruCache
+        cExpected = keyList.toLruCache
+      for w in keyList:
+        var
+          item = (w mod lruCacheModulo)
+          reSched = cache.q.hasKey(item.toKey)
+          value = cache.lruValue(item)
+          queue = toSeq(cache.q.nextPairs).mapIt(it.key)
+          values = toSeq(cache.q.nextPairs).mapIt(it.data)
+          infoPfx = if reSched: ">>> rotate" else: "+++ append"
+        noisy.say infoPfx, &"{value} => {queue}"
+        check cache.q.verify.isOK
+        check queue.mapIt($it) == values.mapIt($it.fromValue)
+        check item.toKey == cache.q.lastKey.value
+      check toSeq(cache.q.nextPairs) == toSeq(cExpected.q.nextPairs)
+
+    test "Deep copy semantics":
+      var
+        c1 = keyList.toLruCache
+        c2 = c1
+
+      check c1 == c2
+      check c1.lruValue(77) == 77.toValue
+
+      check c1.q.verify.isOK
+      check c2.q.verify.isOK
+
+      noisy.say &"c1Specs: {c1.size} {c1.q.firstKey} {c1.q.lastKey} ..."
+      noisy.say &"c2Specs: {c2.size} {c2.q.firstKey} {c2.q.lastKey} ..."
+
+      check c1 != c2
+      check toSeq(c1.q.nextPairs) != toSeq(c2.q.nextPairs)
+
+    # --------------------
+
+    block:
+      proc append(rw: var RlpWriter; lru: LruCache)
+          {.inline, raises: [Defect,KeyError].} =
+        rw.append((lru.size,lru.q))
+      proc read(rlp: var Rlp; Q: type LruCache): Q
+          {.inline, raises: [Defect,KeyError,RlpError].} =
+        (result.size, result.q) = rlp.read((type result.size, type result.q))
+
+      test "Rlp serialise & load, append":
+        block:
+          var
+            c1 = keyList.toLruCache
+            s1 = rlp.encode(c1)
+            c2 = newSeq[int]().toLruCache
+
+          noisy.say &"serialised[{s1.len}]: {s1}"
+          c2.q.clear
+          check c1 != c2
+          check c1.q.verify.isOK
+          check c2.q.verify.isOK
+
+          c2 = s1.decode(type c2)
+          check c1 == c2
+          check c2.q.verify.isOK
+
+          noisy.say &"c2Specs: {c2.size} {c2.q.firstKey} {c2.q.lastKey} ..."
+          check s1 == rlp.encode(c2)
+
+        block:
+          var
+            c1 = keyList.toLruCache
+            value = c1.lruValue(77)
+            queue = toSeq(c1.q.nextPairs).mapIt(it.key)
+            values = toSeq(c1.q.nextPairs).mapIt(it.data)
+
+          noisy.say &"c1: append {value} => {queue}"
+          var
+            s1 = rlp.encode(c1)
+            c2 = keyList.toLruCache
+
+          noisy.say &"serialised[{s1.len}]: {s1}"
+          c2.q.clear
+          check c1 != c2
+          check c1.q.verify.isOK
+          check c2.q.verify.isOK
+
+          c2 = s1.decode(type c2)
+          check c1 == c2
+          noisy.say &"c2Specs: {c2.size} {c2.q.firstKey} {c2.q.lastKey} ..."
+          check s1 == rlp.encode(c2)
+          check c2.q.verify.isOK
+
+    # --------------------
+
+    test "Random Access Delete":
+      var
+        c1 =  keyList.toLruCache
+        sq = toSeq(c1.q.nextPairs).mapIt(it.key.fromKey)
+        s0 = sq
+        inx = 5
+        key = sq[5].toKey
+
+      sq.delete(5,5) # delete index 5 in sequence
+      noisy.say &"sq: {s0} <off sq[5]({key})> {sq}"
+
+      check c1.q.delete(key).value.key == key
+      check sq == toSeq(c1.q.nextPairs).mapIt(it.key.fromKey)
+      check c1.q.verify.isOk
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc keeQuMain*(noisy = defined(debug)) =
   noisy.runKeeQu
+  noisy.runLruCache
 
 when isMainModule:
   let noisy = defined(debug)
   noisy.runKeeQu
+  noisy.runLruCache
 
 # ------------------------------------------------------------------------------
 # End
