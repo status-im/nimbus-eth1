@@ -317,7 +317,7 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
         # If it wasn't seen before, insert node while remaining sorted
         closestNodes.insert(n, closestNodes.lowerBound(n,
           proc(x: Node, n: Node): int =
-            cmp(distanceTo(x, target), distanceTo(n, target))
+            cmp(distanceTo(x.id, target), distanceTo(n.id, target))
         ))
 
         if closestNodes.len > BUCKET_SIZE:
@@ -417,7 +417,7 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256): Fut
           # If it wasn't seen before, insert node while remaining sorted
           closestNodes.insert(n, closestNodes.lowerBound(n,
             proc(x: Node, n: Node): int =
-              cmp(distanceTo(x, targetId), distanceTo(n, targetId))
+              cmp(distanceTo(x.id, targetId), distanceTo(n.id, targetId))
           ))
 
           if closestNodes.len > BUCKET_SIZE:
