@@ -13,7 +13,8 @@
 import
   chronos, stint, chronicles, stew/byteutils, macros,
   eth/[common/eth_types, rlp, p2p],
-  eth/p2p/[rlpx, private/p2p_types, blockchain_utils]
+  eth/p2p/[rlpx, private/p2p_types, blockchain_utils],
+  ./sync_types
 
 type
   NewBlockHashesAnnounce* = object
@@ -31,9 +32,9 @@ type
     bestBlockHash*: KeccakHash
     bestDifficulty*: DifficultyInt
 
-const
-  tracePackets* = true       # Set `true` or `false` to control packet traces.
-  traceHandshakes* = true
+export
+  tracePackets,
+  traceHandshakes
 
 const
   maxStateFetch* = 384
@@ -47,6 +48,12 @@ macro tracePacket*(msg: static[string], args: varargs[untyped]) =
   quote do:
     if tracePackets:
       trace `msg`, `args`
+
+func traceStep*(request: BlocksRequest): string =
+  var str = if request.reverse: "-" else: "+"
+  if request.skip < high(typeof(request.skip)):
+    return str & $(request.skip + 1)
+  return static($(high(typeof(request.skip)).u256 + 1))
 
 p2pProtocol eth(version = ethVersion,
                 peerState = PeerState,
@@ -134,7 +141,8 @@ p2pProtocol eth(version = ethVersion,
     # User message 0x03: GetBlockHeaders.
     proc getBlockHeaders(peer: Peer, request: BlocksRequest) =
       tracePacket "<< Received eth.GetBlockHeaders (0x03)",
-        peer, count=request.maxResults
+        peer, `block`=request.startBlock, count=request.maxResults,
+        step=traceStep(request)
       if request.maxResults > uint64(maxHeadersFetch):
         debug "eth.GetBlockHeaders (0x03) requested too many headers",
           peer, requested=request.maxResults, max=maxHeadersFetch

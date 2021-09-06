@@ -17,7 +17,7 @@ import
   chronos, json_rpc/rpcserver, chronicles,
   eth/p2p/rlpx_protocols/les_protocol,
   ./p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
-  ./sync/protocol_eth65,
+  ./sync/[protocol_eth65, newsync],
   config, genesis, rpc/[common, p2p, debug], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi,
@@ -178,24 +178,36 @@ proc start(nimbus: NimbusNode) =
     info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsServerPort
     startMetricsHttpServer(metricsAddress, Port(conf.net.metricsServerPort))
 
+  # Initialise "--newsync" before making any network connections.
+  if ProtocolFlags.Eth in conf.net.protocols and conf.newSync:
+    newSyncEarly(nimbus.ethNode)
+
   # Connect directly to the static nodes
   for enode in conf.net.staticNodes:
     asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
 
-  # Connect via discovery
-  if conf.net.customBootNodes.len > 0:
+  # Start the discovery process.
+  let connectFuture = nimbus.ethNode.connectToNetwork(
     # override the default bootnodes from public network
-    waitFor nimbus.ethNode.connectToNetwork(conf.net.customBootNodes,
-      enableDiscovery = NoDiscover notin conf.net.flags)
-  else:
-    waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes,
-      enableDiscovery = NoDiscover notin conf.net.flags)
+    bootstrapNodes = if conf.net.customBootNodes.len > 0:
+                       conf.net.customBootNodes
+                     else:
+                       conf.net.bootNodes,
+    enableDiscovery = NoDiscover notin conf.net.flags
+  )
+  # "old sync" wants to wait until there's at least one peer first.
+  # "new sync" prefers to be tested in all different circumstances.
+  if not conf.newSync:
+    waitFor connectFuture
 
-  if ProtocolFlags.Eth in conf.net.protocols:
+  if ProtocolFlags.Eth in conf.net.protocols and not conf.newSync:
     # TODO: temp code until the CLI/RPC interface is fleshed out
     let status = waitFor nimbus.ethNode.fastBlockchainSync()
     if status != syncSuccess:
       debug "Block sync failed: ", status
+
+  if ProtocolFlags.Eth in conf.net.protocols and conf.newSync:
+    newSync()
 
   if nimbus.state == Starting:
     # it might have been set to "Stopping" with Ctrl+C

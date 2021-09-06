@@ -138,6 +138,7 @@ type
     verifyFromOk*: bool           ## activate `verifyFrom` setting
     verifyFrom*: uint64           ## verification start block, 0 for disable
     engineSigner*: EthAddress     ## Miner account
+    newSync*: bool                ## --newsync experimental option
 
 const
   # these are public network id
@@ -424,6 +425,8 @@ proc processEthArguments(key, value: string): ConfigStatus =
     result = processEthAddress(value, config.engineSigner)
   of "import-key":
     result = config.importPrivateKey(value)
+  of "newsync":
+    config.newSync = true
   else:
     result = EmptyOption
 
@@ -752,6 +755,7 @@ ETHEREUM OPTIONS:
   --import:<path>         Import RLP encoded block(s), validate, write to database and quit
   --engine-signer:<value> Enables mining. value is EthAddress in hex
   --import-key:<path>     Import unencrypted 32 bytes hex private key file
+  --newsync               Enable new sync algorithms [experimental, default: off]
 
 NETWORKING OPTIONS:
   --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
