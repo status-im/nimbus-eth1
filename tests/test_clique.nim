@@ -261,8 +261,8 @@ when isMainModule:
   noisy.runCliqueSnapshot(true)
   noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps(dir = ".")
-  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
-  #noisy.goerliReplay(startAtBlock = 31100u64)
+  #noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
+  noisy.goerliReplay(startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)
 
 # ------------------------------------------------------------------------------

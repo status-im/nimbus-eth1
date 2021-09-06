@@ -8,130 +8,95 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-##
-## Recover Address From Signature
-## ==============================
-##
-## This module provides caching and direct versions for recovering the
-## `EthAddress` from an extended signature. The caching version reduces
-## calculation time for the price of maintaing it in a LRU cache.
-
 import
-  ./utils_defs,
-  ./lru_cache,
-  ../constants,
-  eth/[common, keys, rlp],
-  nimcrypto,
-  stew/results,
-  stint
-
-const
-  INMEMORY_SIGNATURES* = ##\
-    ## Number of recent block signatures to keep in memory
-    4096
+  eth/common,
+  stew/results
 
 type
-  # simplify Hash256 for rlp serialisation
-  EcKey32 = array[32, byte]
+  EcRecoverMode = enum
+    useEc1Recover       ## the original version, based on `lru_cache`
+    useEc2Recover       ## a new version, based on `keequ`
+    useEc2x1Recover     ## new version verified against old version
 
-  EcRecover* = LruCache[BlockHeader,EcKey32,EthAddress,UtilsError]
-
-{.push raises: [Defect].}
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc encodePreSealed(header: BlockHeader): seq[byte] {.inline.} =
-  ## Cut sigature off `extraData` header field and consider new `baseFee`
-  ## field for Eip1559.
-  doAssert EXTRA_SEAL < header.extraData.len
-
-  var rlpHeader = header
-  rlpHeader.extraData.setLen(header.extraData.len - EXTRA_SEAL)
-  rlp.encode(rlpHeader)
+const
+  #ecRecoverMode = useEc1Recover
+  #ecRecoverMode = useEc2Recover
+  ecRecoverMode = useEc2x1Recover
 
 
-proc hashPreSealed(header: BlockHeader): Hash256 {.inline.} =
-  ## Returns the hash of a block prior to it being sealed.
-  keccak256.digest header.encodePreSealed
+when ecRecoverMode == useEc1Recover:
+  import
+    ./ec_recover/ec1recover
+  export
+    ec1recover.EcRecover,
+    ec1recover.append,
+    ec1recover.ecRecover,
+    ec1recover.initEcRecover,
+    ec1recover.read
 
 
-proc ecRecover*(extraData: openArray[byte];
-                hash: Hash256): Result[EthAddress,UtilsError] {.inline.} =
-  ## Extract account address from the last 65 bytes of the `extraData` argument
-  ## (which is typically the bock header field with the same name.) The second
-  ## argument `hash` is used to extract the intermediate public key. Typically,
-  ## this would be the hash of the block header without the last 65 bytes of
-  ## the `extraData` field reserved for the signature.
-  if extraData.len < EXTRA_SEAL:
-    return err((errMissingSignature,""))
+when ecRecoverMode == useEc2Recover:
+  import
+    ./ec_recover/ec2recover
+  export
+    ec2recover.EcRecover,
+    ec2recover.append,
+    ec2recover.ecRecover,
+    ec2recover.init,
+    ec2recover.initEcRecover,
+    ec2recover.len,
+    ec2recover.read
 
-  let sig = Signature.fromRaw(
-    extraData.toOpenArray(extraData.len - EXTRA_SEAL, extraData.high))
-  if sig.isErr:
-    return err((errSkSigResult,$sig.error))
 
-  # Recover the public key from signature and seal hash
-  let pubKey = recover(sig.value, SKMessage(hash.data))
-  if pubKey.isErr:
-    return err((errSkPubKeyResult,$pubKey.error))
+when ecRecoverMode == useEc2x1Recover:
+  import
+    ../transaction,
+    ./ec_recover/[ec1recover, ec2recover, ec_helpers]
+  type
+    EcRecover* = object
+      ec1: ec1recover.EcRecover
+      ec2: ec2recover.EcRecover
 
-  # Convert public key to address.
-  return ok(pubKey.value.toCanonicalAddress)
+  proc ecRecover*(hdr: BlockHeader): auto {.inline.} =
+    result = ec2recover.ecRecover(hdr)
+    doAssert result == ec1recover.ecRecover(hdr)
 
-# ------------------------------------------------------------------------------
-# Public function: straight ecRecover version
-# ------------------------------------------------------------------------------
+  proc ecRecover*(tx: var Transaction): auto =
+    result = ec2recover.ecRecover(tx)
+    var ethAddr: EthAddress
+    doAssert result.isOk == tx.getSender(ethAddr)
+    if result.isOK:
+      doAssert result.value == ethAddr
 
-proc ecRecover*(header: BlockHeader): Result[EthAddress,UtilsError] =
-  ## Extract account address from the `extraData` field (last 65 bytes) of the
-  ## argument header.
-  header.extraData.ecRecover(header.hashPreSealed)
+  proc ecRecover*(tx: Transaction): auto =
+    result = ec2recover.ecRecover(tx)
+    var ethAddr: EthAddress
+    doAssert result.isOk == tx.getSender(ethAddr)
+    if result.isOK:
+      doAssert result.value == ethAddr
 
-# ------------------------------------------------------------------------------
-# Public constructor for caching ecRecover version
-# ------------------------------------------------------------------------------
+  proc len*(e: var EcRecover): int {.inline.} =
+    e.ec2.len
 
-proc initEcRecover*(cache: var EcRecover; cacheSize = INMEMORY_SIGNATURES) =
+  proc init*(e: var EcRecover;
+             cacheSize = ec2recover.INMEMORY_SIGNATURES) {.inline.} =
+    e.ec1.initEcRecover(cacheSize)
+    e.ec2.init(cacheSize)
 
-  var toKey: LruKey[BlockHeader,EcKey32] =
-    proc(header:BlockHeader): EcKey32 =
-      header.blockHash.data
+  proc initEcRecover*: EcRecover {.inline.} =
+    result.init
 
-  cache.initCache(toKey, ecRecover, cacheSize)
+  proc ecRecover*(e: var EcRecover; hdr: BlockHeader): auto {.inline.} =
+    result = e.ec2.ecRecover(hdr)
+    doAssert result == e.ec1.ecRecover(hdr)
+    doAssert e.ec1.similarKeys(e.ec2).isOk
 
-proc initEcRecover*: EcRecover {.gcsafe, raises: [Defect].} =
-  result.initEcRecover
+  proc append*(rw: var RlpWriter; e: EcRecover)
+      {.inline, raises: [Defect,KeyError].} =
+    rw.append((e.ec1,e.ec2))
 
-# ------------------------------------------------------------------------------
-# Public function: caching ecRecover version
-# ------------------------------------------------------------------------------
+  proc read*(rlp: var Rlp; Q: type EcRecover): Q
+      {.inline, raises: [Defect,KeyError].} =
+    (result.ec1, result.ec2) = rlp.read((type result.ec1, type result.ec2))
 
-proc ecRecover*(addrCache: var EcRecover;
-                header: BlockHeader): Result[EthAddress,UtilsError]
-                  {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Extract account address from `extraData` field (last 65 bytes) of the
-  ## argument header. The result is kept in a LRU cache to re-purposed for
-  ## improved result delivery avoiding calculations.
-  addrCache.getItem(header)
-
-# ------------------------------------------------------------------------------
-# Public PLP mixin functions for caching version
-# ------------------------------------------------------------------------------
-
-proc append*(rw: var RlpWriter; ecRec: EcRecover) {.
-             inline, raises: [Defect,KeyError].} =
-  ## Generic support for `rlp.encode(ecRec)`
-  rw.append(ecRec.data)
-
-proc read*(rlp: var Rlp; Q: type EcRecover): Q {.
-           inline, raises: [Defect,KeyError].} =
-  ## Generic support for `rlp.decode(bytes)` for loading the cache from a
-  ## serialised data stream.
-  result.initEcRecover
-  result.data = rlp.read(type result.data)
-
-# ------------------------------------------------------------------------------
 # End
-# ------------------------------------------------------------------------------
