@@ -147,7 +147,8 @@ proc handleAdvertise(p: PortalProtocol, a: AdvertiseMessage): seq[byte] =
   encodeMessage(RequestProofsMessage(connectionId: connectionId,
     contentKeys: contentKeys))
 
-proc messageHandler*(protocol: TalkProtocol, request: seq[byte]): seq[byte] =
+proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
+    srcId: NodeId, srcUdpAddress: Address): seq[byte] =
   doAssert(protocol of PortalProtocol)
 
   let p = PortalProtocol(protocol)
@@ -174,13 +175,12 @@ proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
     contentHandler: ContentHandler,
     dataRadius = UInt256.high()): T =
   let proto = PortalProtocol(
+    routingTable: RoutingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
+      DefaultTableIpLimits, baseProtocol.rng),
     protocolHandler: messageHandler,
     baseProtocol: baseProtocol,
     dataRadius: dataRadius,
     handleContentRequest: contentHandler)
-
-  proto.routingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
-    DefaultTableIpLimits, baseProtocol.rng)
 
   proto.baseProtocol.registerTalkProtocol(PortalProtocolId, proto).expect(
     "Only one protocol should have this id")
