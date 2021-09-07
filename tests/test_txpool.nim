@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[algorithm, os, sequtils, strformat, strutils, times],
+  std/[algorithm, os, random, sequtils, strformat, strutils, times],
   ../nimbus/utils/tx_pool,
   ./test_txpool/helpers,
   eth/[common, keys],
@@ -17,11 +17,27 @@ import
   unittest2
 
 const
+  prngSeed = 42
   goerliCapture = "test_clique" / "goerli51840.txt.gz"
+
+var
+  prng = prngSeed.initRand
+  okCount: array[bool,int]
 
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
+
+proc randOkRatioPC: int =
+  if okCount[false] == 0:
+    int.high
+  else:
+    (okCount[true] * 100 / okCount[false]).int
+
+proc randOk: bool =
+  result = prng.rand(1) > 0
+  okCount[result].inc
+
 
 proc collectTxPool(xp: var TxPool; noisy: bool; file: string; stopAfter: int) =
   var
@@ -34,9 +50,12 @@ proc collectTxPool(xp: var TxPool; noisy: bool; file: string; stopAfter: int) =
         txs = chain[1][chainInx].transactions
       for n in 0 ..< txs.len:
         count.inc
-        let info = &"{count} #{blkNum}({chainNo}) {n}/{txs.len}"
-        noisy.showElapsed(&"insert: {info}"):
-          doAssert xp.insert(tx = txs[n], info = info).isOk
+        let
+          local = randOK()
+          localInfo = if local: "L" else: "R"
+          info = &"{count} #{blkNum}({chainNo}) {n}/{txs.len} {localInfo}"
+        noisy.showElapsed(&"insert: local={local} {info}"):
+          doAssert xp.insert(tx = txs[n], local = local, info = info).isOk
         if stopAfter <= count:
           return
     chainNo.inc
@@ -46,7 +65,7 @@ proc toTxPool(q: var seq[TxItemRef]; noisy = true): TxPool =
   result.init
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
-      doAssert result.insert(tx = w.tx, info = w.info).value == w.id
+      doAssert result.insert(w.tx, w.local, w.info).value == w.id
   doAssert result.len == q.len
 
 
@@ -83,19 +102,75 @@ proc runTxStepper(noisy = true;
 
   suite &"TxPool: Collect {stopAfter} transactions from Goerli capture":
 
-    test &"Transactions collected":
-      var xp = initTxPool()
-      noisy.showElapsed("Total Collection Time"):
-        xp.collectTxPool(elapNoisy, dir / captureFile, stopAfter)
+    block:
+      let veryNoisy = false # noisy
 
-      # Note: expecting enough transactions in the `goerliCapture` file
-      check xp.len == stopAfter
-      check xp.verify.isOk
+      test &"Transactions collected":
+        var xp = initTxPool()
+        elapNoisy.showElapsed("Total Collection Time"):
+          xp.collectTxPool(veryNoisy, dir / captureFile, stopAfter)
 
-      # Load txList[]
-      for w in xp.firstOutItems:
-        txList.add w
-      check txList.len == xp.len
+        # make sure PRNG didi not go bunkers
+        let band = 90
+        check band < randOkRatioPC() and randOkRatioPC() < (10000 div band)
+
+        # Note: expecting enough transactions in the `goerliCapture` file
+        check xp.len == stopAfter
+        check xp.verify.isOk
+
+        # Load txList[]
+        for w in xp.firstOutItems:
+          txList.add w
+        check txList.len == xp.len
+
+    # ---------------------------------
+
+    var xq = txList.toTxPool(noisy)
+    let
+      nLocal = xq.byLocalQueueLen
+      nRemote = xq.byRemoteQueueLen
+
+    test &"Swap local/remote ({nLocal}/{nRemote}) queues":
+      check nLocal + nRemote == txList.len
+
+      # Start with local queue
+      for w in [(true, 0, nLocal), (false, nLocal, txList.len)]:
+        let isLocal = w[0]
+        for n in w[1] ..< w[2]:
+          check txList[n].local == isLocal
+          check xq.reassign(txList[n].id, not isLocal).isOK
+          check txList[n].info == xq.last(not isLocal).value.info
+
+      check nLocal == xq.byRemoteQueueLen
+      check nRemote == xq.byLocalQueueLen
+
+      # Verify sorting of swapped queue
+      var count, n: int
+
+      count = 0
+      for (localOK, start) in [(true, nLocal), (false, 0)]:
+        var rc = xq.first(localOK)
+        n = start
+        while rc.isOK and n < txList.len:
+          check txList[n].info == rc.value.info
+          rc = xq.next(rc.value.id, localOK)
+          n.inc
+          count.inc
+      check count == txList.len
+      check n == nLocal
+
+      # And reverse
+      count = 0
+      for (localOK, top) in [(false, nLocal), (true, txList.len)]:
+        var rc = xq.last(localOK)
+        n = top
+        while rc.isOK and 0 < n:
+          n.dec
+          check txList[n].info == rc.value.info
+          rc = xq.prev(rc.value.id, localOK)
+          count.inc
+      check count == txList.len
+      check n == nLocal
 
     # ---------------------------------
 
@@ -109,7 +184,7 @@ proc runTxStepper(noisy = true;
             txCount = 0
             gpList: seq[GasInt]
 
-          noisy.showElapsed("Increasing gas price walk on transactions"):
+          elapNoisy.showElapsed("Increasing gas price walk on transactions"):
             for (gasPrice,itemsLst) in xq.byGasPriceIncPairs:
               var infoList: seq[string]
               for w in itemsLst.nextKeys: # prevKeys() also works
@@ -131,7 +206,7 @@ proc runTxStepper(noisy = true;
             txCount = 0
             gpList: seq[GasInt]
 
-          noisy.showElapsed("Decreasing gas price walk on transactions"):
+          elapNoisy.showElapsed("Decreasing gas price walk on transactions"):
             for (gasPrice,itemsLst) in xq.byGasPriceDecPairs:
               var infoList: seq[string]
               for w in itemsLst.prevKeys: # nextKeys() also works
@@ -173,7 +248,7 @@ proc runTxStepper(noisy = true;
           xq = txList.toTxPool(noisy)
           seen: seq[Hash256]
         check xq.verify.isOK
-        noisy.showElapsed("Forward delete-walk ID queue"):
+        elapNoisy.showElapsed("Forward delete-walk ID queue"):
           for w in xq.firstOutItems:
             xq.addOrFlushGroupwise(groupLen, seen, w.id, veryNoisy)
             check xq.verify.isOK
@@ -186,7 +261,7 @@ proc runTxStepper(noisy = true;
           xq = txList.toTxPool(noisy)
           seen: seq[Hash256]
         check xq.verify.isOK
-        noisy.showElapsed("Revese delete-walk ID queue"):
+        elapNoisy.showElapsed("Revese delete-walk ID queue"):
           for w in xq.lastInItems:
             xq.addOrFlushGroupwise(groupLen, seen, w.id, veryNoisy)
             check xq.verify.isOK
@@ -207,7 +282,7 @@ proc runTxStepper(noisy = true;
 
       test &"Load/delete with gas price less equal {delMax.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
-        noisy.showElapsed(&"Deleting gas prices less equal {delMax.toKMG}"):
+        elapNoisy.showElapsed(&"Deleting gas prices less equal {delMax.toKMG}"):
           for (gp,itemList) in xq.byGasPriceDecPairs(fromLe = delMax):
             for item in itemList.nextKeys:
               count.inc
@@ -229,7 +304,8 @@ proc runTxStepper(noisy = true;
 
       test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
-        noisy.showElapsed(&"Deleting gas prices greater than {delMin.toKMG}"):
+        elapNoisy.showElapsed(
+            &"Deleting gas prices greater than {delMin.toKMG}"):
           for gp, itemList in xq.byGasPriceIncPairs(fromGe = delMin):
             for item in itemList.nextKeys:
               count.inc

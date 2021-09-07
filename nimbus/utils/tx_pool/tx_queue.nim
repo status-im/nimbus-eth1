@@ -51,12 +51,12 @@ type
 proc `not`(sched: TxQueueSchedule): TxQueueSchedule {.inline.} =
   if sched == TxLocalQueue: TxRemoteQueue else: TxLocalQueue
 
-proc toQueueSched*(isLocal: bool): TxQueueSchedule {.inline.} =
-  if isLocal: TxLocalQueue else: TxRemoteQueue
-
 # ------------------------------------------------------------------------------
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
+
+proc toQueueSched*(isLocal: bool): TxQueueSchedule {.inline.} =
+  if isLocal: TxLocalQueue else: TxRemoteQueue
 
 proc txInit*(aq: var TxQueue; localSize = 10; remoteSize = 10) =
   aq.q[TxLocalQueue].init(localSize)
@@ -107,6 +107,11 @@ proc txVerify*(aq: var TxQueue): Result[void,(TxQuInfo,KeeQuInfo)]
 proc hasKey*(aq: var TxQueue; key: Hash256; sched: TxQueueSchedule): bool =
   aq.q[sched].hasKey(key)
 
+proc hasKey*(aq: var TxQueue; key: Hash256): bool =
+  if aq.q[true.toQueueSched].hasKey(key) or
+     aq.q[false.toQueueSched].hasKey(key):
+    return true
+
 proc eq*(aq: var TxQueue;
          key: Hash256; sched: TxQueueSchedule): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -117,15 +122,6 @@ proc eq*(aq: var TxQueue;
 proc first*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   aq.q[sched].first
-
-proc second*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  aq.q[sched].second
-
-proc beforeLast*(aq: var TxQueue;
-                 sched: TxQueueSchedule): Result[TxQueuePair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  aq.q[sched].beforeLast
 
 proc next*(aq: var TxQueue; sched: TxQueueSchedule; key: Hash256):
          Result[TxQueuePair,void] {.gcsafe,raises: [Defect,KeyError].} =

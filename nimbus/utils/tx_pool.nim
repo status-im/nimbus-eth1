@@ -66,7 +66,7 @@ const
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
-# Private, other helpers
+# Private helpers
 # ------------------------------------------------------------------------------
 
 proc hash(tx: Transaction): Hash256 {.inline.} =
@@ -109,17 +109,15 @@ proc insert*(xp: var TxPool;
   ##   recoverable as `tx.toKey` only while the trasaction remains unmodified.
   ##
   let key = tx.hash
-  for sched in TxQueueSchedule:
-    if xp.byIdQueue.hasKey(key, sched):
-      return err()
-  let rc = tx.newTxItemRef(key, local, info)
-  if rc.isErr:
-    return err()
-  let item = rc.value
-  xp.byIdQueue.txAppend(key, local.toQueueSched, item)
-  xp.byGasPrice.txInsert(item.tx.gasPrice, item)
-  xp.bySender.txInsert(item.sender, item)
-  return ok(key)
+  if not xp.byIdQueue.hasKey(key):
+    let rc = tx.newTxItemRef(key, local, info)
+    if rc.isOK:
+      let item = rc.value
+      xp.byIdQueue.txAppend(key, local.toQueueSched, item)
+      xp.byGasPrice.txInsert(item.tx.gasPrice, item)
+      xp.bySender.txInsert(item.sender, item)
+      return ok(key)
+  err()
 
 
 proc insert*(xp: var TxPool; tx: Transaction; local = true; info = ""): auto
@@ -127,6 +125,25 @@ proc insert*(xp: var TxPool; tx: Transaction; local = true; info = ""): auto
   ## Variant of `insert()` for call-by-value transaction
   var ty = tx
   xp.insert(ty,local,info)
+
+
+proc reassign*(xp: var TxPool;
+               key: Hash256; local: bool): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Reassign transaction local/remote flag of a database entry. The function
+  ## succeeds returning the wrapping transaction container if the transaction
+  ## was found with a different local/remote flag than the argument `local`
+  ## and subsequently was changed.
+  let
+    sched = (not local).toQueueSched
+    rc = xp.byIdQueue.eq(key, sched)
+  if rc.isOK:
+    let item = rc.value
+    if item.local != local:
+      # append will auto-delete any existing entry of the other queue
+      xp.byIdQueue.txAppend(key, local.toQueueSched, item)
+      return ok(item)
+  err()
 
 
 proc delete*(xp: var TxPool; key: Hash256): Result[TxItemRef,void]
@@ -168,6 +185,14 @@ proc len*(rq: var TxListItems): int =
   ## duplicates relative to the same index.
   keequ.len(rq)
 
+proc byLocalQueueLen*(xp: var TxPool): int =
+  ## Number of transactions in local queue
+  xp.byIdQueue.len(TxLocalQueue)
+
+proc byRemoteQueueLen*(xp: var TxPool): int =
+  ## Number of transactions in local queue
+  xp.byIdQueue.len(TxRemoteQueue)
+
 proc byGasPriceLen*(xp: var TxPool): int =
   ## Number of different gas prices known. For each gas price there is at least
   ## one transaction available.
@@ -186,9 +211,8 @@ proc hasKey*(xp: var TxPool; key: Hash256): bool =
   ## Returns `true` if the argument `key` for a transaction exists in the
   ## database, already. If this function returns `true`, then it is save to
   ## use the `xp[key]` paradigm for accessing a transaction container.
-  for sched in TxQueueSchedule:
-    if xp.byIdQueue.hasKey(key, sched):
-      return true
+  xp.byIdQueue.hasKey(key, true.toQueuesched) or
+    xp.byIdQueue.hasKey(key, false.toQueuesched)
 
 proc toKey*(tx: Transaction): Hash256 {.inline.} =
   ## Retrieves transaction key. Note that the returned argument will only apply
@@ -207,58 +231,43 @@ proc `[]`*(xp: var TxPool; key: Hash256): TxItemRef
   ##
   ## Note that the function returns `nil` unless the argument `key` exists
   ## in the database which shiulld be avoided using `hasKey()`.
-  for sched in TxQueueSchedule:
-    let rc = xp.byIdQueue.eq(key, sched)
+  block:
+    let rc = xp.byIdQueue.eq(key, true.toQueuesched)
+    if rc.isOK:
+      return rc.value
+  block:
+    let rc = xp.byIdQueue.eq(key, false.toQueuesched)
     if rc.isOK:
       return rc.value
 
-proc first*(xp: var TxPool): Result[TxItemRef,void]
+
+proc first*(xp: var TxPool; local: bool): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieves the *first* item queued from the `local` queue if it exists,
-  ## otherwise from the `remote` queue.
-  for sched in TxQueueSchedule:
-    let rc = xp.byIdQueue.first(sched)
-    if rc.isOK:
-      return ok(rc.value.data)
+  let rc =  xp.byIdQueue.first(local.toQueuesched)
+  if rc.isOK:
+    return ok(rc.value.data)
   err()
 
-proc second*(xp: var TxPool): Result[TxItemRef,void]
+proc last*(xp: var TxPool; local: bool): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieves the *second* item queued from the `local` queue if it exists,
-  ## otherwise from the `remote` queue.
-  if xp.len < 2:
-    return err()
-  if xp.byIdQueue.len(TxLocalQueue) == 1:
-    return ok(xp.byIdQueue.first(TxRemoteQueue).value.data)
-  # So the local queue has either no or at least two elements
-  for sched in TxQueueSchedule:
-    let rc = xp.byIdQueue.second(sched)
-    if rc.isOK:
-      return ok(rc.value.data)
+  let rc = xp.byIdQueue.last(local.toQueuesched)
+  if rc.isOK:
+    return ok(rc.value.data)
   err()
 
-proc beforeLast*(xp: var TxPool): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieves the one before the *last* item queued from the `remote`
-  ## queue if it exists, otherwise from the `local` queue.
-  if xp.len < 2:
-    return err()
-  if xp.byIdQueue.len(TxRemoteQueue) == 1:
-    return ok(xp.byIdQueue.first(TxLocalQueue).value.data)
-  # So the remote queue has either no or at least two elements
-  for sched in TxQueueScheduleReversed:
-    let rc = xp.byIdQueue.last(sched)
-    if rc.isOK:
-      return ok(rc.value.data)
+proc next*(xp: var TxPool; key: Hash256; local: bool): Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  let rc = xp.byIdQueue.next(local.toQueuesched, key)
+  if rc.isOK:
+    return ok(rc.value.data)
+  err()
 
-proc last*(xp: var TxPool): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieves the *last* item queued from the `remote` queue if it exists,
-  ## otherwise from the `local` queue.
-  for sched in TxQueueScheduleReversed:
-    let rc = xp.byIdQueue.last(sched)
-    if rc.isOK:
-      return ok(rc.value.data)
+proc prev*(xp: var TxPool; key: Hash256; local: bool): Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  let rc = xp.byIdQueue.prev(local.toQueuesched, key)
+  if rc.isOK:
+    return ok(rc.value.data)
+  err()
 
 # ------------------------------------------------------------------------------
 # Public functions, gas price query
