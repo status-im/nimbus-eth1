@@ -9,7 +9,8 @@
 
 import
   chronicles, eth/[common, rlp], stew/io2,
-  ./p2p/chain, ./db/[db_chain, select_backend]
+  ./p2p/chain, ./db/[db_chain, select_backend],
+  config
 
 type
   # trick the rlp decoder

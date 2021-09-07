@@ -82,7 +82,7 @@ type
     balance*: UInt256
     nonce*  : AccountNonce
 
-  CustomGenesis* = object
+  CustomNetwork* = object
     config* : ChainConfig
     genesis*: Genesis
 
@@ -148,7 +148,7 @@ template to(a: string, b: type UInt256): UInt256 =
   # json_serialization decode table stuff
   UInt256.fromHex(a)
 
-proc loadCustomGenesis*(fileName: string, cg: var CustomGenesis): bool =
+proc loadCustomNetwork*(fileName: string, cg: var CustomNetwork): bool =
   var cc: CustomChain
   try:
     cc = Json.loadFile(fileName, CustomChain, allowUnknownFields = true)

@@ -145,7 +145,7 @@ proc rpcMain*() =
       debugEcho unlock.error
     doAssert(unlock.isOk)
 
-    defaultGenesisBlockForNetwork(conf.net.networkId).commit(chain)
+    genesisBlockForNetwork(conf.net.networkId, conf.customNetwork).commit(chain)
     doAssert(canonicalHeadHashKey().toOpenArray in chain.db)
     let env = setupEnv(chain, signer, ks2, ctx)
 
@@ -154,7 +154,7 @@ proc rpcMain*() =
     var
       rpcServer = newRpcSocketServer(["localhost:" & $RPC_PORT])
       client = newRpcSocketClient()
-    setupCommonRpc(ethNode, rpcServer)
+    setupCommonRpc(ethNode, conf, rpcServer)
     setupEthRpc(ethNode, ctx, chain, rpcServer)
 
     # Begin tests

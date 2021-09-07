@@ -30,7 +30,7 @@ proc processNode(genesisFile, chainFile,
       conf.net.networkId
     )
 
-  initializeEmptyDb(chainDB)
+  initializeEmptyDb(chainDB, conf.customNetwork)
   discard importRlpBlock(chainFile, chainDB)
   let head = chainDB.getCanonicalHead()
   let blockHash = "0x" & head.blockHash.data.toHex

@@ -9,7 +9,8 @@ import
   eth/trie/[hexary, db],
   ../nimbus/db/[storage_types, db_chain, select_backend],
   ../nimbus/[genesis],
-  ../nimbus/p2p/chain
+  ../nimbus/p2p/chain,
+  ../nimbus/chain_config
 
 const
   manualCommit = nimbus_db_backend == "lmdb"
@@ -46,7 +47,7 @@ proc main() {.used.} =
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     persistToDb(db):
-      initializeEmptyDb(chainDB)
+      initializeEmptyDb(chainDB, CustomNetwork())
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   var head = chainDB.getCanonicalHead()

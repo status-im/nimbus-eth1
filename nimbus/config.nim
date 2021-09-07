@@ -124,7 +124,7 @@ type
     ws*: RpcConfiguration         ## Websocket JSON-RPC configuration
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
-    customGenesis*: CustomGenesis ## Custom Genesis Configuration
+    customNetwork*: CustomNetwork ## Custom Genesis Configuration
     importKey*: string
     importFile*: string
     verifyFromOk*: bool           ## activate `verifyFrom` setting
@@ -247,8 +247,8 @@ proc chainConfig*(id: NetworkId): ChainConfig =
   else:
     # everything else will use CustomNet config
     let conf = getConfiguration()
-    trace "Custom genesis block configuration loaded", conf=conf.customGenesis.config
-    conf.customGenesis.config
+    trace "Custom genesis block configuration loaded", conf=conf.customNetwork.config
+    conf.customNetwork.config
 
 proc processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.
@@ -497,7 +497,7 @@ proc processNetArguments(key, value: string): ConfigStatus =
   elif skey == "kovan":
     config.net.setNetwork(KovanNet)
   elif skey == "customnetwork":
-    if not loadCustomGenesis(value, config.customGenesis):
+    if not loadCustomNetwork(value, config.customNetwork):
       result = Error
     if NetworkIdSet notin config.net.flags:
       # prevent clash with --networkid if it already set
@@ -809,7 +809,7 @@ when declared(os.paramCount): # not available with `--app:lib`
       # they usage should not be mixed in other places
       # we only set networkId to chainId if networkId not set in cli and
       # we are using custom genesis/custom chain config via json file.
-      config.net.networkId = NetworkId(config.customGenesis.config.chainId)
+      config.net.networkId = NetworkId(config.customNetwork.config.chainId)
 
   proc processArguments*(msg: var string): ConfigStatus =
     var opt = initOptParser()

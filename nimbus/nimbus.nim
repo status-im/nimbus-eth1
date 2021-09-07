@@ -28,9 +28,6 @@ import
 ## * No multiple bind addresses support
 ## * No database support
 
-const
-  nimbusClientId = "nimbus 0.1.0"
-
 type
   NimbusState = enum
     Starting, Running, Stopping
@@ -62,7 +59,7 @@ proc start(nimbus: NimbusNode) =
   chainDB.populateProgress()
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
-    initializeEmptyDb(chainDb)
+    initializeEmptyDb(chainDb, conf.customNetwork)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   if conf.importFile.len > 0:
@@ -126,7 +123,7 @@ proc start(nimbus: NimbusNode) =
         (address.tcpPort, address.udpPort) = extPorts.get()
 
   nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
-                                   nil, nimbusClientId,
+                                   nil, conf.net.ident,
                                    addAllCapabilities = false,
                                    minPeers = conf.net.maxPeers)
   # Add protocol capabilities based on protocol flags
@@ -137,6 +134,7 @@ proc start(nimbus: NimbusNode) =
 
   # chainRef: some name to avoid module-name/filed/function misunderstandings
   let chainRef = newChain(chainDB)
+  chainRef.setForkId(conf.customNetwork)
   nimbus.ethNode.chain = chainRef
   if conf.verifyFromOk:
     chainRef.extraValidation = 0 < conf.verifyFrom
@@ -145,7 +143,7 @@ proc start(nimbus: NimbusNode) =
   ## Creating RPC Server
   if RpcFlags.Enabled in conf.rpc.flags:
     nimbus.rpcServer = newRpcHttpServer(conf.rpc.binds)
-    setupCommonRpc(nimbus.ethNode, nimbus.rpcServer)
+    setupCommonRpc(nimbus.ethNode, conf, nimbus.rpcServer)
 
   # Enable RPC APIs based on RPC flags and protocol flags
   if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:
@@ -157,7 +155,7 @@ proc start(nimbus: NimbusNode) =
   if RpcFlags.Enabled in conf.ws.flags:
     doAssert(conf.ws.binds.len > 0)
     nimbus.wsRpcServer = newRpcWebSocketServer(conf.ws.binds[0])
-    setupCommonRpc(nimbus.ethNode, nimbus.wsRpcServer)
+    setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
 
   # Enable Websocket RPC APIs based on RPC flags and protocol flags
   if RpcFlags.Eth in conf.ws.flags and ProtocolFlags.Eth in conf.net.protocols:

@@ -9,7 +9,7 @@ import
   unittest2, json, os, tables, strutils,
   eth/[common, rlp], stew/byteutils, eth/trie/db,
   ./test_helpers, ../nimbus/db/db_chain,
-  ../nimbus/p2p/chain
+  ../nimbus/p2p/chain, ../nimbus/config
 
 # use tracerTestGen.nim to generate additional test data
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =

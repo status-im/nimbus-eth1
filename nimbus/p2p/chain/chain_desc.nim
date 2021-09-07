@@ -13,6 +13,7 @@ import
   ../../db/db_chain,
   ../../genesis,
   ../../utils,
+  ../../chain_config,
   ../clique,
   ../validate,
   ../validate/epoch_hash_cache,
@@ -127,10 +128,6 @@ proc initChain(c: Chain; db: BaseChainDB; poa: Clique; extraValidation: bool)
 
   if not db.config.daoForkSupport:
     db.config.daoForkBlock = db.config.homesteadBlock
-  let g = defaultGenesisBlockForNetwork(db.networkId)
-  c.blockZeroHash = g.toBlock.blockHash
-  let genesisCRC = crc32(0, c.blockZeroHash.data)
-  c.forkIds = calculateForkIds(db.config, genesisCRC)
   c.extraValidation = extraValidation
 
   # Initalise the PoA state regardless of whether it is needed on the current
@@ -239,6 +236,13 @@ proc `verifyFrom=`*(c: Chain; verifyFrom: uint64) {.inline.} =
   ## validation should start if the `Clique` field `extraValidation` was set
   ## `true`.
   c.verifyFrom = verifyFrom.u256
+
+proc setForkId*(c: Chain, cn = CustomNetwork())
+  {. raises: [Defect,CatchableError].} =
+  let g = genesisBlockForNetwork(c.db.networkId, cn)
+  c.blockZeroHash = g.toBlock.blockHash
+  let genesisCRC = crc32(0, c.blockZeroHash.data)
+  c.forkIds = calculateForkIds(c.db.config, genesisCRC)
 
 # ------------------------------------------------------------------------------
 # End

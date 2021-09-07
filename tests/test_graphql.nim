@@ -41,18 +41,18 @@ proc setupChain(chainDB: BaseChainDB) =
   let genesis = jn.toBlock("genesisRLP")
 
   let conf = getConfiguration()
-  conf.customGenesis.genesis.nonce      = genesis.header.nonce
-  conf.customGenesis.genesis.extraData  = genesis.header.extraData
-  conf.customGenesis.genesis.gasLimit   = genesis.header.gasLimit
-  conf.customGenesis.genesis.difficulty = genesis.header.difficulty
-  conf.customGenesis.genesis.mixHash    = genesis.header.mixDigest
-  conf.customGenesis.genesis.coinBase   = genesis.header.coinbase
-  conf.customGenesis.genesis.timestamp  = genesis.header.timestamp
-  conf.customGenesis.genesis.baseFeePerGas = genesis.header.fee
-  if not parseGenesisAlloc($(jn["pre"]), conf.customGenesis.genesis.alloc):
+  conf.customNetwork.genesis.nonce      = genesis.header.nonce
+  conf.customNetwork.genesis.extraData  = genesis.header.extraData
+  conf.customNetwork.genesis.gasLimit   = genesis.header.gasLimit
+  conf.customNetwork.genesis.difficulty = genesis.header.difficulty
+  conf.customNetwork.genesis.mixHash    = genesis.header.mixDigest
+  conf.customNetwork.genesis.coinBase   = genesis.header.coinbase
+  conf.customNetwork.genesis.timestamp  = genesis.header.timestamp
+  conf.customNetwork.genesis.baseFeePerGas = genesis.header.fee
+  if not parseGenesisAlloc($(jn["pre"]), conf.customNetwork.genesis.alloc):
     quit(QuitFailure)
 
-  chainDB.initializeEmptyDb()
+  chainDB.initializeEmptyDb(conf.customNetwork)
 
   let blocks = jn["blocks"]
   var headers: seq[BlockHeader]
@@ -72,7 +72,7 @@ proc setupChain(chainDB: BaseChainDB) =
 proc graphqlMain*() =
   let conf = getConfiguration()
   conf.net.networkId = CustomNet
-  conf.customGenesis.config = ChainConfig(
+  conf.customNetwork.config = ChainConfig(
     chainId             : MainNet.ChainId,
     byzantiumBlock      : 0.toBlockNumber,
     constantinopleBlock : 0.toBlockNumber,

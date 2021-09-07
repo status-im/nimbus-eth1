@@ -2,7 +2,8 @@ import
   json, eth/common, stint, chronicles, eth/rlp,
   eth/trie/db, ../nimbus/db/[db_chain, capturedb, select_backend],
   ../nimbus/[tracer, config],
-  ../nimbus/p2p/chain
+  ../nimbus/p2p/chain,
+  ../nimbus/chain_config
 
 proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
   let

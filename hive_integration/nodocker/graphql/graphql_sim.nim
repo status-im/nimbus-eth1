@@ -11,7 +11,7 @@ import
   std/[os, parseopt, json],
   eth/[p2p, trie/db], ../../../nimbus/db/db_chain,
   ../../../nimbus/sync/protocol_eth65,
-  ../../../nimbus/[genesis, config, conf_utils],
+  ../../../nimbus/[genesis, config, conf_utils, context],
   ../../../nimbus/graphql/ethapi, ../../../tests/test_helpers,
   graphql, ../sim_utils
 
@@ -74,14 +74,15 @@ proc main() =
     quit(QuitFailure)
 
   let
+    ethCtx = newEthContext()
     conf = getConfiguration()
-    ethNode = setupEthNode(eth)
+    ethNode = setupEthNode(conf, ethCtx, eth)
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
       conf.net.networkId
     )
 
-  initializeEmptyDb(chainDB)
+  initializeEmptyDb(chainDB, conf.customNetwork)
   discard importRlpBlock(blocksFile, chainDB)
   let ctx = setupGraphqlContext(chainDB, ethNode)
 

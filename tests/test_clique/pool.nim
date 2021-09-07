@@ -43,7 +43,7 @@ type
                            ## transactions.
     prng: Rand
     accounts: Table[string,PrivateKey] ## accounts table
-    boot: CustomGenesis                ## imported Genesis configuration
+    boot: CustomNetwork                ## imported Genesis configuration
     batch: seq[seq[BlockHeader]]       ## collect header chains
     chain: Chain
 
@@ -242,8 +242,8 @@ proc sayHeaderChain*(ap: TesterPool; indent = 0): TesterPool {.discardable.} =
 
 proc newVoterPool*(networkId = GoerliNet): TesterPool =
   TesterPool(
-    boot: CustomGenesis(
-      genesis: defaultGenesisBlockForNetwork(networkId),
+    boot: CustomNetwork(
+      genesis: genesisBlockForNetwork(networkId, CustomNetwork()),
       config:  chainConfig(networkId))).initTesterPool
 
 # ------------------------------------------------------------------------------

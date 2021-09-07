@@ -6,7 +6,7 @@ import
   ./genesis_alloc, ./config, ./constants,
   ./chain_config, ./forks, ./p2p/gaslimit
 
-proc defaultGenesisBlockForNetwork*(id: NetworkId): Genesis =
+proc genesisBlockForNetwork*(id: NetworkId, cn: CustomNetwork): Genesis =
   result = case id
   of MainNet:
     Genesis(
@@ -44,8 +44,7 @@ proc defaultGenesisBlockForNetwork*(id: NetworkId): Genesis =
     )
   else:
     # everything else will use custom genesis
-    let customGenesis = getConfiguration().customGenesis
-    customGenesis.genesis
+    cn.genesis
 
 proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
   let (tdb, pruneTrie) = if db.isNil: (newMemoryDB(), true)
@@ -90,7 +89,7 @@ proc commit*(g: Genesis, db: BaseChainDB) =
   doAssert(b.blockNumber == 0, "can't commit genesis block with number > 0")
   discard db.persistHeaderToDb(b)
 
-proc initializeEmptyDb*(db: BaseChainDB) =
+proc initializeEmptyDb*(db: BaseChainDB, cn: CustomNetwork) =
   trace "Writing genesis to DB"
-  let networkId = getConfiguration().net.networkId
-  defaultGenesisBlockForNetwork(networkId).commit(db)
+  let genesis = genesisBlockForNetwork(db.networkId, cn)
+  genesis.commit(db)

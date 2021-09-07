@@ -89,6 +89,7 @@ template runTest(network: untyped) =
       chainDB = newBaseChainDB(memDB, true, network)
       chain = newChain(chainDB)
 
+    chain.setForkId()
     for x in `network IDs`:
       let id = chain.getForkId(x.blockNumber.toBlockNumber)
       check id.crc == x.id.crc
