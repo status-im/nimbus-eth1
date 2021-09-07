@@ -252,6 +252,7 @@ proc lookupDistances(target, dest: NodeId): seq[uint16] =
     if td - i > 0'u16:
       distances.add(td - i)
     inc i
+  distances
 
 proc lookupWorker(p: PortalProtocol, destNode: Node, target: NodeId):
     Future[seq[Node]] {.async.} =
@@ -261,7 +262,7 @@ proc lookupWorker(p: PortalProtocol, destNode: Node, target: NodeId):
   let nodesMessage = await p.findNode(destNode,  List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
-    let verifiedNodes = verifyNodesRecords(records, destNode, @[0'u16])
+    let verifiedNodes = verifyNodesRecords(records, destNode, distances)
     nodes.add(verifiedNodes)
 
     # Attempt to add all nodes discovered

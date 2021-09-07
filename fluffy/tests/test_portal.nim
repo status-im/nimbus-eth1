@@ -130,6 +130,36 @@ procSuite "Portal Tests":
     
     await test.stopTest()
 
+  asyncTest "Portal lookup nodes":
+      let
+        node1 = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20302))
+        node2 = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20303))
+        node3 = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20304))
+
+        proto1 = PortalProtocol.new(node1, testHandler)
+        proto2 = PortalProtocol.new(node2, testHandler)
+        proto3 = PortalProtocol.new(node3, testHandler)
+
+      # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
+      check proto1.addNode(node2.localNode) == Added
+      check proto2.addNode(node3.localNode) == Added
+
+      check (await proto2.ping(node3.localNode)).isOk()
+
+      let lookuResult = await proto1.lookup(node3.localNode.id)
+
+      check:
+        # returned result should contain node3 as it is in node2 routing table
+        lookuResult.contains(node3.localNode)
+
+      await node1.closeWait()
+      await node2.closeWait()
+      await node3.closeWait()
+
+
   asyncTest "Portal FindContent/FoundContent - send enrs":
     let test = defaultTestCase(rng)
 
