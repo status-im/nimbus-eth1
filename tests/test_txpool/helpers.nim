@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[strformat, strutils, times],
+  std/[strformat, sequtils, strutils, times],
   ../../nimbus/utils/tx_pool/[tx_item],
   ../test_clique/undump, # borrow from clique tools
   eth/[common, keys],
@@ -72,5 +72,14 @@ template showElapsed*(noisy: bool; info: string; code: untyped) =
       echo "*** ", info, &": {elpd.ppSecs:>4}"
     else:
       echo "*** ", info, &": {elpd.ppMs:>4}"
+
+proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
+  if noisy:
+    if args.len == 0:
+      echo "*** ", pfx
+    elif 0 < pfx.len and pfx[^1] != ' ':
+      echo pfx, " ", args.toSeq.join
+    else:
+      echo pfx, args.toSeq.join
 
 # End

@@ -21,7 +21,7 @@ import
   std/[algorithm, sequtils],
   ./keequ,
   ./slst,
-  ./tx_pool/[tx_item, tx_list, tx_queue],
+  ./tx_pool/[tx_item, tx_list, tx_queue, tx_tab],
   eth/[common, keys],
   stew/results
 
@@ -39,16 +39,25 @@ type
   TxInfo* = enum ##\
     ## Error codes (as used in verification function.)
     txOk = 0
+
     txVfyByIdQueueList       ## Corrupted ID queue/fifo structure
     txVfyByIdQueueKey        ## Corrupted ID queue/fifo container id
     txVfyByIdQueueSchedule   ## Local flag indicates wrong schedule
+
     txVfyByGasPriceList      ## Corrupted gas price list structure
-    txVfyByGasPriceEntry     ## Corrupted gas price entry queue
+    txVfyByGasPriceLeafEmpty ## Empty gas price list leaf record
+    txVfyByGasPriceLeafQueue ## Corrupted gas price leaf queue
+    txVfyByGasPriceTotal     ## Wrong number of leaves
+
+    txVfyBySenderLeafEmpty   ## Empty sender list leaf record
+    txVfyBySenderLeafQueue   ## Corrupted sender leaf queue
+    txVfyBySenderTotal       ## Wrong number of leaves
 
   TxPool* = object of RootObj ##\
     ## Transaction pool descriptor
     byIdQueue: TxQueue       ## Primary table, queued by arrival event
     byGasPrice: TxGasItemLst ## Indexed by gas price
+    bySender: TxAddrTab      ## Grouped by sender addresses
 
 const
   TxQueueScheduleReversed =
@@ -63,9 +72,6 @@ const
 proc hash(tx: Transaction): Hash256 {.inline.} =
   ## Transaction hash serves as ID
   tx.rlpHash
-
-proc toQueueSched(isLocal: bool): TxQueueSchedule {.inline.} =
-  if isLocal: TxLocalQueue else: TxRemoteQueue
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -85,8 +91,8 @@ proc initTxPool*: TxPool =
 # ------------------------------------------------------------------------------
 
 proc insert*(xp: var TxPool;
-             tx: Transaction; local = true; info = ""): Result[Hash256,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
+             tx: var Transaction; local = true; info = ""): Result[Hash256,void]
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Add new transaction argument `tx` to the database. If accepted and added
   ## to the database, a `key` value is returned which can be used to retrieve
   ## this transaction direcly via `tx[key].tx`. The following holds for the
@@ -106,10 +112,22 @@ proc insert*(xp: var TxPool;
   for sched in TxQueueSchedule:
     if xp.byIdQueue.hasKey(key, sched):
       return err()
-  let item = tx.newTxItemRef(key, local, info)
+  let rc = tx.newTxItemRef(key, local, info)
+  if rc.isErr:
+    return err()
+  let item = rc.value
   xp.byIdQueue.txAppend(key, local.toQueueSched, item)
   xp.byGasPrice.txInsert(item.tx.gasPrice, item)
+  xp.bySender.txInsert(item.sender, item)
   return ok(key)
+
+
+proc insert*(xp: var TxPool; tx: Transaction; local = true; info = ""): auto
+    {.inline, gcsafe,raises: [Defect,CatchableError].} =
+  ## Variant of `insert()` for call-by-value transaction
+  var ty = tx
+  xp.insert(ty,local,info)
+
 
 proc delete*(xp: var TxPool; key: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -121,6 +139,7 @@ proc delete*(xp: var TxPool; key: Hash256): Result[TxItemRef,void]
     if rc.isOK:
       let item = rc.value
       xp.byGasPrice.txDelete(item.tx.gasPrice, item)
+      xp.bySender.txDelete(item.sender, item)
       return ok(item)
   err()
 
@@ -131,6 +150,7 @@ proc delete*(xp: var TxPool; item: TxItemRef): Result[TxItemRef,void]
   if rc.isOK:
     let item = rc.value
     xp.byGasPrice.txDelete(item.tx.gasPrice, item)
+    xp.bySender.txDelete(item.sender, item)
     return ok(item)
   err()
 
@@ -140,19 +160,23 @@ proc delete*(xp: var TxPool; item: TxItemRef): Result[TxItemRef,void]
 
 proc len*(xp: var TxPool): int =
   ## Total number of registered transactions
-  for sched in TxQueueSchedule:
-    result += xp.byIdQueue.len(sched)
+  xp.byIdQueue.nLeaves
 
-proc len*(rq: var TxItemList): int =
+proc len*(rq: var TxListItems): int =
   ## Returns the number of items on the argument queue `rq` which is typically
   ## the result of an `SLstRef` type object query holding one or more
   ## duplicates relative to the same index.
   keequ.len(rq)
 
 proc byGasPriceLen*(xp: var TxPool): int =
-  ## Number of different gas prices known. Fo each gas price there is at least
+  ## Number of different gas prices known. For each gas price there is at least
   ## one transaction available.
   xp.byGasPrice.len
+
+proc bySenderLen*(xp: var TxPool): int =
+  ## Number of different sendeer adresses known. For each address there is at
+  ## least one transaction available.
+  xp.bySender.len
 
 # ------------------------------------------------------------------------------
 # Public functions, ID queue query
@@ -236,6 +260,65 @@ proc last*(xp: var TxPool): Result[TxItemRef,void]
     if rc.isOK:
       return ok(rc.value.data)
 
+# ------------------------------------------------------------------------------
+# Public functions, gas price query
+# ------------------------------------------------------------------------------
+
+proc byGasPriceGe*(xp: var TxPool; gWei: GasInt): Result[TxListItems,void] =
+  ## Retrieve the list of transaction records all with the same *least* gas
+  ## price *greater or equal* the argument `gWei`. On success, the resulting
+  ## list of transactions has at least one item.
+  ##
+  ## While the returned *list* of transaction containers *must not* be modified
+  ## directly, a transaction entry within a container may well be altered.
+  let rc = xp.byGasPrice.ge(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+proc byGasPriceGt*(xp: var TxPool; gWei: GasInt): Result[TxListItems,void] =
+  ## Similar to `byGasPriceGe()`.
+  let rc = xp.byGasPrice.gt(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+proc byGasPriceLe*(xp: var TxPool; gWei: GasInt): Result[TxListItems,void] =
+  ## Similar to `byGasPriceGe()`.
+  let rc = xp.byGasPrice.le(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+proc byGasPriceLt*(xp: var TxPool; gWei: GasInt): Result[TxListItems,void] =
+  ## Similar to `byGasPriceGe()`.
+  let rc = xp.byGasPrice.lt(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+proc byGasPriceEq*(xp: var TxPool; gWei: GasInt): Result[TxListItems,void] =
+  ## Similar to `byGasPriceGe()`.
+  let rc = xp.byGasPrice.eq(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+# ------------------------------------------------------------------------------
+# Public functions, sender query
+# ------------------------------------------------------------------------------
+
+proc bySenderEq*(xp: var TxPool; ethAddr: EthAddress): Result[TxListItems,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Similar to `byGasPriceGe()`.
+  if xp.bySender.hasKey(ethAddr):
+    return ok(xp.bySender[ethAddr])
+  err()
+
+# ------------------------------------------------------------------------------
+# Public iterators
+# ------------------------------------------------------------------------------
+
 iterator firstOutItems*(xp: var TxPool): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## ID queue walk/traversal: oldest first (fifo).
@@ -262,45 +345,8 @@ iterator lastInItems*(xp: var TxPool): TxItemRef
       rc = xp.byIdQueue.prev(sched, key)
       yield data
 
-# ------------------------------------------------------------------------------
-# Public functions, gas price query
-# ------------------------------------------------------------------------------
-
-proc byGasPriceGe*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
-  ## Retrieve the list of transaction records all with the same *least* gas
-  ## price *greater or equal* the argument `gWei`. On success, the resulting
-  ## list of transactions has at least one item.
-  ##
-  ## While the returned *list* of transaction containers *must not* be modified
-  ## directly, a transaction entry within a container may well be altered.
-  let rc = xp.byGasPrice.ge(gWei)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byGasPriceGt*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
-  ## Similar to `byGasPriceGe()`.
-  let rc = xp.byGasPrice.gt(gWei)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byGasPriceLe*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
-  ## Similar to `byGasPriceGe()`.
-  let rc = xp.byGasPrice.le(gWei)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byGasPriceLt*(xp: var TxPool; gWei: GasInt): Result[TxItemList,void] =
-  ## Similar to `byGasPriceGe()`.
-  let rc = xp.byGasPrice.lt(gWei)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
 iterator byGasPriceIncPairs*(xp: var TxPool;
-                             fromGe = GasInt.low): (GasInt,var TxItemList) =
+                             fromGe = GasInt.low): (GasInt,var TxListItems) =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
   ## While the returned *list* of transaction containers *must not* be modified
@@ -321,7 +367,7 @@ iterator byGasPriceIncPairs*(xp: var TxPool;
     rc = xp.byGasPrice.gt(ykey)
 
 iterator byGasPriceDecPairs*(xp: var TxPool;
-                             fromLe = GasInt.high): (GasInt,var TxItemList) =
+                             fromLe = GasInt.high): (GasInt,var TxListItems) =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## While the returned *list* of transaction containers *must not* be modified
@@ -350,30 +396,32 @@ proc verify*(xp: var TxPool): Result[void,TxInfo]
   ## Verify descriptor and subsequent data structures.
   block:
     let rc = xp.byGasPrice.txVerify
-    if rc != rbOK:
-      return err(txVfyByGasPriceList)
-    for (key,lst) in xp.byGasPriceIncPairs:
-      if lst.len == 0:
-        return err(txVfyByGasPriceEntry)
-
+    if rc.isErr:
+      case rc.error[0]
+      of txListOk:           return err(txOk)
+      of txListVfyRbTree:    return err(txVfyByGasPriceList)
+      of txListVfyLeafEmpty: return err(txVfyByGasPriceLeafEmpty)
+      of txListVfyLeafQueue: return err(txVfyByGasPriceLeafQueue)
+      of txListVfySize:      return err(txVfyByGasPriceTotal)
+  block:
+    let rc = xp.bySender.txVerify
+    if rc.isErr:
+      case rc.error[0]
+      of txTabOk:            return err(txOk)
+      of txTabVfyLeafEmpty:  return err(txVfyBySenderLeafEmpty)
+      of txTabVfyLeafQueue:  return err(txVfyBySenderLeafQueue)
+      of txTabVfySize:       return err(txVfyBySenderTotal)
   block:
     let rc = xp.byIdQueue.txVerify
     if rc.isErr:
-      return err(txVfyByIdQueueList)
+      case rc.error[0]
+      of txQuOk:             return err(txOk)
+      of txQuVfyQueueList:   return err(txVfyByIdQueueList)
+      of txQuVfyQueueKey:    return err(txVfyByIdQueueKey)
+      of txQuVfySchedule:    return err(txVfyByIdQueueSchedule)
 
-    for sched in TxQueueSchedule:
-      var rc = xp.byIdQueue.first(sched)
-      while rc.isOK:
-        let item = rc.value.data
-        rc = xp.byIdQueue.next(sched, rc.value.key)
-
-        # verify key consistency
-        if item.id != xp.byIdQueue.eq(item.id, sched).value.id:
-          return err(txVfyByIdQueueKey)
-
-        # verify schedule consistency
-        if item.local.toQueueSched != sched:
-          return err(txVfyByIdQueueSchedule)
+  if xp.len != xp.byIdQueue.nLeaves:
+     return err(txVfyByGasPriceTotal)
 
   ok()
 

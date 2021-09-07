@@ -14,17 +14,21 @@
 
 import
   std/[sequtils, strutils, times],
+  ../ec_recover,
+  ../utils_defs,
+  stew/results,
   eth/common
 
 type
   TxItemRef* = ref object of RootObj ##\
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
-    tx: Transaction  ## Transaction
-    id: Hash256      ## Identifier/transaction key
-    timeStamp: Time  ## Time when added
-    info: string     ## Whatever
-    local: bool      ## Local or remote queue (setter available)
+    tx: Transaction    ## Transaction
+    id: Hash256        ## Identifier/transaction key
+    timeStamp: Time    ## Time when added
+    sender: EthAddress ## Sender account address
+    info: string       ## Whatever
+    local: bool        ## Local or remote queue (setter available)
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -78,37 +82,45 @@ proc `$`(q: seq[AccessPair]): string =
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc newTxItemRef*(tx: Transaction;
-                   key: Hash256; local: bool; info: string): TxItemRef =
+proc newTxItemRef*(tx: Transaction; key: Hash256; local: bool; info: string):
+                 Result[TxItemRef,void] =
   ## Create item descriptor.
-  TxItemRef(
+  let rc = tx.ecRecover
+  if rc.isErr:
+    return err()
+  ok(TxItemRef(
     id:        key,
     tx:        tx,
+    sender:    rc.value,
     timeStamp: getTime(),
     info:      info,
-    local:     local)
+    local:     local))
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc id*(item: TxItemRef): Hash256 {.inline.} =
+proc id*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.id
 
-proc tx*(item: TxItemRef): Transaction {.inline.} =
+proc tx*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.tx
 
-proc timeStamp*(item: TxItemRef): Time {.inline.} =
+proc timeStamp*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.timeStamp
 
-proc info*(item: TxItemRef): string {.inline.} =
+proc sender*(item: TxItemRef): auto {.inline.} =
+  ## Getter
+  item.sender
+
+proc info*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.info
 
-proc local*(item: TxItemRef): bool {.inline.} =
+proc local*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.local
 

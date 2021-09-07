@@ -23,6 +23,12 @@ import
   stew/results
 
 type
+  TxQuInfo* = enum
+    txQuOk = 0
+    txQuVfyQueueList  ## Corrupted ID queue/fifo structure
+    txQuVfyQueueKey   ## Corrupted ID queue/fifo container id
+    txQuVfySchedule   ## Local flag indicates wrong schedule
+
   TxQueueSchedule* = enum ##\
     ## Sub-queues
     TxLocalQueue = 0
@@ -44,6 +50,9 @@ type
 
 proc `not`(sched: TxQueueSchedule): TxQueueSchedule {.inline.} =
   if sched == TxLocalQueue: TxRemoteQueue else: TxLocalQueue
+
+proc toQueueSched*(isLocal: bool): TxQueueSchedule {.inline.} =
+  if isLocal: TxLocalQueue else: TxRemoteQueue
 
 # ------------------------------------------------------------------------------
 # Public all-queue helpers
@@ -68,12 +77,27 @@ proc txDelete*(ap: var TxQueue;
     return ok(rc.value.data)
   err()
 
-proc txVerify*(aq: var TxQueue): Result[void,KeeQuInfo]
+proc txVerify*(aq: var TxQueue): Result[void,(TxQuInfo,KeeQuInfo)]
     {.gcsafe,raises: [Defect,KeyError].} =
   for sched in TxQueueSchedule:
     let rc = aq.q[sched].verify
     if rc.isErr:
-      return err(rc.error[2])
+      return err((txQuVfyQueueList, rc.error[2]))
+
+  for sched in TxQueueSchedule:
+    var rc = aq.q[sched].first
+    while rc.isOK:
+      let item = rc.value.data
+      rc = aq.q[sched].next(rc.value.key)
+
+      # verify key consistency
+      if item.id != aq.q[sched].eq(item.id).value.id:
+        return err((txQuVfyQueueKey, keeQuOk))
+
+      # verify schedule consistency
+      if item.local.toQueueSched != sched:
+        return err((txQuVfySchedule, keeQuOk))
+
   ok()
 
 # ------------------------------------------------------------------------------
@@ -122,6 +146,9 @@ proc last*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
 proc len*(aq: var TxQueue; sched: TxQueueSchedule): int {.inline.} =
   ## Number of local or remote entries
   aq.q[sched].len
+
+proc nLeaves*(aq: var TxQueue): int {.inline.} =
+  aq.q[TxLocalQueue].len + aq.q[TxRemoteQueue].len
 
 # ------------------------------------------------------------------------------
 # End
