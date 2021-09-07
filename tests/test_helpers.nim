@@ -11,7 +11,7 @@ import
   testutils/markdown_reports,
   ../nimbus/[constants, config, transaction, utils, errors, forks],
   ../nimbus/db/accounts_cache,
-  ../nimbus/random_keys
+  ../nimbus/context
 
 func revmap(x: Table[Fork, string]): Table[string, Fork] =
   result = initTable[string, Fork]()
@@ -202,7 +202,7 @@ proc parseAccessList(n: JsonNode): AccessList =
 
 proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
   let dynamicFeeTx = "gasPrice" notin j
-  let nonce    = j["nonce"].getHexadecimalInt.AccountNonce  
+  let nonce    = j["nonce"].getHexadecimalInt.AccountNonce
   let gasLimit = j["gasLimit"][gasIndex].getHexadecimalInt
 
   var toAddr: Option[EthAddress]
@@ -225,7 +225,7 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
   var secretKey = j["secretKey"].getStr
   removePrefix(secretKey, "0x")
   let privateKey = PrivateKey.fromHex(secretKey).tryGet()
-    
+
   if dynamicFeeTx:
     let accList = j["accessLists"][dataIndex]
     var tx = Transaction(
@@ -241,7 +241,7 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
       chainId: ChainId(1)
     )
     return signTransaction(tx, privateKey, ChainId(1), false)
-  
+
   let gasPrice = j["gasPrice"].getHexadecimalInt
   if j.hasKey("accessLists"):
     let accList = j["accessLists"][dataIndex]
@@ -272,11 +272,8 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
 proc hashLogEntries*(logs: seq[Log]): string =
   toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
 
-proc setupEthNode*(capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  var conf = getConfiguration()
-  conf.net.nodekey = randomPrivateKey()
-  let keypair = conf.net.nodekey.toKeyPair()
-
+proc setupEthNode*(conf: NimbusConfiguration, ctx: EthContext, capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
+  let keypair = ctx.hexToKeyPair(conf.net.nodekey).tryGet()
   var srvAddress: Address
   srvAddress.ip = parseIpAddress("0.0.0.0")
   srvAddress.tcpPort = Port(conf.net.bindPort)

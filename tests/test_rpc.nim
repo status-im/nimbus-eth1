@@ -123,16 +123,14 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): Tes
 proc rpcMain*() =
   suite "Remote Procedure Calls":
     # TODO: Include other transports such as Http
-    var
-      ethNode = setupEthNode(eth)
-      chain = newBaseChainDB(newMemoryDb())
-
     let
+      conf = getConfiguration()
+      ctx  = newEthContext()
+      ethNode = setupEthNode(conf, ctx, eth)
+      chain = newBaseChainDB(newMemoryDb())
       signer: EthAddress = hexToByteArray[20]("0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b")
       ks2: EthAddress = hexToByteArray[20]("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
       ks3: EthAddress = hexToByteArray[20]("0x597176e9a64aad0845d83afdaf698fbeff77703b")
-      conf = getConfiguration()
-      ctx  = newEthContext()
 
     ethNode.chain = newChain(chain)
     conf.keyStore = "tests" / "keystore"

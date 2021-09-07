@@ -20,7 +20,7 @@ import
   ./sync/protocol_eth65,
   config, genesis, rpc/[common, p2p, debug], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
-  graphql/ethapi,
+  graphql/ethapi, context,
   "."/[utils, conf_utils, sealer, constants]
 
 ## TODO:
@@ -36,12 +36,13 @@ type
     Starting, Running, Stopping
 
   NimbusNode = ref object
-    rpcServer*: RpcHttpServer
-    ethNode*: EthereumNode
-    state*: NimbusState
-    graphqlServer*: GraphqlHttpServerRef
-    wsRpcServer*: RpcWebSocketServer
-    sealingEngine*: SealingEngineRef
+    rpcServer: RpcHttpServer
+    ethNode: EthereumNode
+    state: NimbusState
+    graphqlServer: GraphqlHttpServerRef
+    wsRpcServer: RpcWebSocketServer
+    sealingEngine: SealingEngineRef
+    ctx: EthContext
 
 proc start(nimbus: NimbusNode) =
   var conf = getConfiguration()
@@ -71,10 +72,17 @@ proc start(nimbus: NimbusNode) =
     else:
       quit(QuitSuccess)
 
-  let res = conf.loadKeystoreFiles()
-  if res.isErr:
-    echo res.error()
-    quit(QuitFailure)
+  if conf.keyStore.len > 0:
+    let res = nimbus.ctx.am.loadKeystores(conf.keyStore)
+    if res.isErr:
+      echo res.error()
+      quit(QuitFailure)
+
+  if conf.importKey.len > 0:
+    let res = nimbus.ctx.am.importPrivateKey(conf.importKey)
+    if res.isErr:
+      echo res.error()
+      quit(QuitFailure)
 
   # metrics logging
   if conf.debug.logMetrics:
@@ -88,7 +96,12 @@ proc start(nimbus: NimbusNode) =
     discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
 
   ## Creating P2P Server
-  let keypair = conf.net.nodekey.toKeyPair()
+  let kpres = nimbus.ctx.hexToKeyPair(conf.net.nodekey)
+  if kpres.isErr:
+    echo kpres.error()
+    quit(QuitFailure)
+
+  let keypair = kpres.get()
 
   var address: Address
   address.ip = parseIpAddress("0.0.0.0")
@@ -136,7 +149,7 @@ proc start(nimbus: NimbusNode) =
 
   # Enable RPC APIs based on RPC flags and protocol flags
   if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:
-    setupEthRpc(nimbus.ethNode, chainDB, nimbus.rpcServer)
+    setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.rpcServer)
   if RpcFlags.Debug in conf.rpc.flags:
     setupDebugRpc(chainDB, nimbus.rpcServer)
 
@@ -148,7 +161,7 @@ proc start(nimbus: NimbusNode) =
 
   # Enable Websocket RPC APIs based on RPC flags and protocol flags
   if RpcFlags.Eth in conf.ws.flags and ProtocolFlags.Eth in conf.net.protocols:
-    setupEthRpc(nimbus.ethNode, chainDB, nimbus.wsRpcServer)
+    setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.wsRpcServer)
   if RpcFlags.Debug in conf.ws.flags:
     setupDebugRpc(chainDB, nimbus.wsRpcServer)
 
@@ -165,11 +178,13 @@ proc start(nimbus: NimbusNode) =
     nimbus.graphqlServer.start()
 
   if conf.engineSigner != ZERO_ADDRESS:
-    let rs = validateSealer(chainRef)
+    let rs = validateSealer(conf, nimbus.ctx, chainRef)
     if rs.isErr:
       echo rs.error
       quit(QuitFailure)
-    nimbus.sealingEngine = SealingEngineRef.new(chainRef)
+    nimbus.sealingEngine = SealingEngineRef.new(
+      chainRef, nimbus.ctx, conf.engineSigner
+    )
     nimbus.sealingEngine.start()
 
   # metrics server
@@ -224,7 +239,7 @@ proc process*(nimbus: NimbusNode) =
   waitFor nimbus.stop()
 
 when isMainModule:
-  var nimbus = NimbusNode(state: Starting)
+  var nimbus = NimbusNode(state: Starting, ctx: newEthContext())
 
   ## Ctrl+C handling
   proc controlCHandler() {.noconv.} =

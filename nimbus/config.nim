@@ -97,7 +97,7 @@ type
     maxPendingPeers*: int         ## Maximum allowed pending peers
     networkId*: NetworkId         ## Network ID as integer
     ident*: string                ## Server ident name string
-    nodeKey*: PrivateKey          ## Server private key
+    nodeKey*: string              ## Server private key
     nat*: NatStrategy             ## NAT strategy
     externalIP*: string           ## user-provided external IP
     protocols*: set[ProtocolFlags]## Enabled subprotocols
@@ -125,9 +125,6 @@ type
     net*: NetConfiguration        ## Network configuration
     debug*: DebugConfiguration    ## Debug configuration
     customGenesis*: CustomGenesis ## Custom Genesis Configuration
-    # You should only create one instance of the RNG per application / library
-    # Ref is used so that it can be shared between components
-    rng*: ref BrHmacDrbgContext
     importKey*: string
     importFile*: string
     verifyFromOk*: bool           ## activate `verifyFrom` setting
@@ -350,15 +347,6 @@ proc processENodesList(v: string, o: var seq[ENode]): ConfigStatus =
     else:
       break
 
-proc processPrivateKey(v: string, o: var PrivateKey): ConfigStatus =
-  ## Convert hexadecimal string to private key object.
-  let seckey = PrivateKey.fromHex(v)
-  if seckey.isOk():
-    o = seckey[]
-    return Success
-
-  result = ErrorParseOption
-
 proc processPruneList(v: string, flags: var PruneMode): ConfigStatus =
   var list = newSeq[string]()
   processList(v, list)
@@ -556,10 +544,7 @@ proc processNetArguments(key, value: string): ConfigStatus =
     if result == Success:
       config.net.maxPendingPeers = res
   elif skey == "nodekey":
-    var res: PrivateKey
-    result = processPrivateKey(value, res)
-    if result == Success:
-      config.net.nodeKey = res
+    config.net.nodeKey = value
   elif skey == "ident":
     config.net.ident = value
   elif skey == "nat":
@@ -660,7 +645,6 @@ proc getDefaultKeystoreDir*(): string =
 proc initConfiguration(): NimbusConfiguration =
   ## Allocates and initializes `NimbusConfiguration` with default values
   result = new NimbusConfiguration
-  result.rng = newRng()
 
   ## Graphql defaults
   result.graphql.enabled = false
@@ -685,7 +669,6 @@ proc initConfiguration(): NimbusConfiguration =
   result.net.ident = NimbusIdent
   result.net.nat = NatAny
   result.net.protocols = defaultProtocols
-  result.net.nodekey = random(PrivateKey, result.rng[])
 
   const
     dataDir = getDefaultDataDir()

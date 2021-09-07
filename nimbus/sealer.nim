@@ -18,8 +18,7 @@ import
     clique_sealer,
     clique_snapshot],
   ./p2p/gaslimit,
-  ./chain_config,
-  ./utils
+  "."/[chain_config, utils, context]
 
 type
   EngineState = enum
@@ -30,16 +29,18 @@ type
     state: EngineState
     engineLoop: Future[void]
     chain: Chain
+    ctx: EthContext
+    signer: EthAddress
 
-proc validateSealer*(chain: Chain): Result[void, string] =
-  let conf = getConfiguration()
+proc validateSealer*(conf: NimbusConfiguration, ctx: EthContext, chain: Chain): Result[void, string] =
   if conf.engineSigner == ZERO_ADDRESS:
     return err("signer address should not zero, use --engine-signer to set signer address")
 
-  if conf.engineSigner notin conf.accounts:
+  let res = ctx.am.getAccount(conf.engineSigner)
+  if res.isErr:
     return err("signer address not in registered accounts, use --import-key/account to register the account")
 
-  let acc = conf.accounts[conf.engineSigner]
+  let acc = res.get()
   if not acc.unlocked:
     return err("signer account not unlocked, please unlock it first via rpc/password file")
 
@@ -119,21 +120,20 @@ proc generateBlock(engine: SealingEngineRef, ethBlock: var EthBlock): Result[voi
 
   ok()
 
-proc signerFunc(signer: EthAddress, message: openArray[byte]):
-              Result[RawSignature, cstring] {.gcsafe.} =
-  let
-    hashData = keccakHash(message)
-    conf     = getConfiguration()
-    acc      = conf.accounts[signer]
-    rawSign  = sign(acc.privateKey, SkMessage(hashData.data)).toRaw
-
-  ok(rawSign)
-
 proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
   let clique = engine.chain.clique
 
-  let conf = getConfiguration()
-  clique.authorize(conf.engineSigner, signerFunc)
+  proc signerFunc(signer: EthAddress, message: openArray[byte]):
+                  Result[RawSignature, cstring] {.gcsafe.} =
+    let
+      hashData = keccakHash(message)
+      ctx      = engine.ctx
+      acc      = ctx.am.getAccount(signer).tryGet()
+      rawSign  = sign(acc.privateKey, SkMessage(hashData.data)).toRaw
+
+    ok(rawSign)
+
+  clique.authorize(engine.signer, signerFunc)
 
   # convert times.Duration to chronos.Duration
   let period = chronos.seconds(clique.cfg.period.inSeconds)
@@ -164,9 +164,14 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
 
     info "block generated", number=blk.header.blockNumber
 
-proc new*(_: type SealingEngineRef, chain: Chain): SealingEngineRef =
+proc new*(_: type SealingEngineRef,
+          chain: Chain,
+          ctx: EthContext,
+          signer: EthAddress): SealingEngineRef =
   SealingEngineRef(
-    chain: chain
+    chain: chain,
+    ctx: ctx,
+    signer: signer
   )
 
 proc start*(engine: SealingEngineRef) =
