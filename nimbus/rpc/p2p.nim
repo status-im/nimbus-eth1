@@ -11,8 +11,8 @@ import
   times, options, tables,
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
   eth/[common, keys, rlp, p2p], nimcrypto,
-  ../transaction, ../config, ../vm_state, ../constants,
-  ../utils, ../db/[db_chain, state_db],
+  ".."/[transaction, config, vm_state, constants, utils, context],
+  ../db/[db_chain, state_db], 
   rpc_types, rpc_utils,
   ../transaction/call_evm
 
@@ -25,7 +25,7 @@ import
       type cast to avoid extra processing.
 ]#
 
-proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
+proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , server: RpcServer) =
 
   proc getAccountDb(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
@@ -83,10 +83,9 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     result = encodeQuantity(calculateMedianGasPrice(chain).uint64)
 
   server.rpc("eth_accounts") do() -> seq[EthAddressStr]:
-    ## Returns a list of addresses owned by client.
-    let conf = getConfiguration()
-    result = newSeqOfCap[EthAddressStr](conf.accounts.len)
-    for k in keys(conf.accounts):
+    ## Returns a list of addresses owned by client.    
+    result = newSeqOfCap[EthAddressStr](ctx.am.numAccounts)
+    for k in ctx.am.addresses:
       result.add ethAddressStr(k)
 
   server.rpc("eth_blockNumber") do() -> HexQuantityStr:
@@ -199,9 +198,8 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## message: message to sign.
     ## Returns signature.
     let
-      address = data.toAddress
-      conf    = getConfiguration()
-      acc     = conf.getAccount(address).tryGet()
+      address = data.toAddress      
+      acc     = ctx.am.getAccount(address).tryGet()
       msg     = hexToSeqByte(message.string)
 
     if not acc.unlocked:
@@ -213,8 +211,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     ## eth_sendRawTransaction
     let
       address = data.source.toAddress
-      conf    = getConfiguration()
-      acc     = conf.getAccount(address).tryGet()
+      acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
       raise newException(ValueError, "Account locked, please unlock it first")
@@ -237,8 +234,7 @@ proc setupEthRpc*(node: EthereumNode, chain: BaseChainDB , server: RpcServer) =
     # TODO: Relies on pending pool implementation
     let
       address = data.source.toAddress
-      conf    = getConfiguration()
-      acc     = conf.getAccount(address).tryGet()
+      acc     = ctx.am.getAccount(address).tryGet()
 
     if not acc.unlocked:
       raise newException(ValueError, "Account locked, please unlock it first")

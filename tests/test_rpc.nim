@@ -16,6 +16,7 @@ import
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],
   ../nimbus/sync/protocol_eth65,
   ../nimbus/utils/difficulty,
+  ../nimbus/context,
   ./rpcclient/test_hexstrings, ./test_helpers, ./macro_assembler
 
 # Perform checks for hex string validation
@@ -35,11 +36,11 @@ type
     txHash: Hash256
     blockHash: HAsh256
 
-proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, conf: NimbusConfiguration): TestEnv =
+proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
   var
     parent = chain.getCanonicalHead()
     ac = newAccountStateDB(chain.db, parent.stateRoot, chain.pruneTrie)
-    acc = conf.getAccount(signer).tryGet()
+    acc = ctx.am.getAccount(signer).tryGet()
     blockNumber = 1.toBlockNumber
     parentHash = parent.blockHash
 
@@ -131,23 +132,24 @@ proc rpcMain*() =
       ks2: EthAddress = hexToByteArray[20]("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
       ks3: EthAddress = hexToByteArray[20]("0x597176e9a64aad0845d83afdaf698fbeff77703b")
       conf = getConfiguration()
+      ctx  = newEthContext()
 
     ethNode.chain = newChain(chain)
     conf.keyStore = "tests" / "keystore"
-    let res = conf.loadKeystoreFiles()
+    let res = ctx.am.loadKeystores(conf.keyStore)
     if res.isErr:
       debugEcho res.error
     doAssert(res.isOk)
 
-    let acc1 = conf.getAccount(signer).tryGet()
-    let unlock = conf.unlockAccount(signer, acc1.keystore["password"].getStr())
+    let acc1 = ctx.am.getAccount(signer).tryGet()
+    let unlock = ctx.am.unlockAccount(signer, acc1.keystore["password"].getStr())
     if unlock.isErr:
       debugEcho unlock.error
     doAssert(unlock.isOk)
 
     defaultGenesisBlockForNetwork(conf.net.networkId).commit(chain)
     doAssert(canonicalHeadHashKey().toOpenArray in chain.db)
-    let env = setupEnv(chain, signer, ks2, conf)
+    let env = setupEnv(chain, signer, ks2, ctx)
 
     # Create Ethereum RPCs
     let RPC_PORT = 8545
@@ -155,7 +157,7 @@ proc rpcMain*() =
       rpcServer = newRpcSocketServer(["localhost:" & $RPC_PORT])
       client = newRpcSocketClient()
     setupCommonRpc(ethNode, rpcServer)
-    setupEthRpc(ethNode, chain, rpcServer)
+    setupEthRpc(ethNode, ctx, chain, rpcServer)
 
     # Begin tests
     rpcServer.start()

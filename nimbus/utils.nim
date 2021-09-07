@@ -1,6 +1,6 @@
 import
-  os, tables, json, ./config, stew/[results, byteutils],
-  eth/trie/db, eth/[trie, rlp, common, keyfile], nimcrypto
+  pkg/[nimcrypto],
+  eth/[trie, rlp, common, trie/db]
 
 export nimcrypto.`$`
 
@@ -58,40 +58,3 @@ proc crc32*(crc: uint32, buf: openArray[byte]): uint32 =
     crcu32 = (crcu32 shr 4) xor kcrc32[int((crcu32 and 0xF) xor (uint32(b) shr 4'u32))]
 
   result = not crcu32
-
-proc loadKeystoreFiles*(conf: NimbusConfiguration): Result[void, string] =
-  try:
-    createDir(conf.keyStore)
-  except OSError, IOError:
-    return err("keystore: cannot create directory")
-
-  for filename in walkDirRec(conf.keyStore):
-    try:
-      var data = json.parseFile(filename)
-      let address: EthAddress = hexToByteArray[20](data["address"].getStr())
-      conf.accounts[address] = NimbusAccount(keystore: data, unlocked: false)
-    except JsonParsingError:
-      return err("keystore: json parsing error " & filename)
-    except ValueError:
-      return err("keystore: data parsing error")
-    except Exception: # json raises Exception
-      return err("keystore: " & getCurrentExceptionMsg())
-
-  result = ok()
-
-proc getAccount*(conf: NimbusConfiguration, address: EthAddress): Result[NimbusAccount, string] =
-  conf.accounts.withValue(address, val) do:
-    result = ok(val[])
-  do:
-    result = err("getAccount: not available " & address.toHex)
-
-proc unlockAccount*(conf: NimbusConfiguration, address: EthAddress, password: string): Result[void, string] =
-  var acc = conf.getAccount(address).tryGet()
-  let res = decodeKeyFileJson(acc.keystore, password)
-  if res.isOk:
-    acc.privateKey = res.get()
-    acc.unlocked = true
-    conf.accounts[address] = acc
-    result = ok()
-  else:
-    result = err($res.error)

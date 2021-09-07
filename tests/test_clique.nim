@@ -19,7 +19,7 @@ import
     clique/clique_helpers
   ],
   ../nimbus/utils/ec_recover,
-  ../nimbus/[config, utils, constants],
+  ../nimbus/[config, utils, constants, context],
   ./test_clique/[pool, undump],
   eth/[common, keys],
   stint, stew/byteutils,
@@ -248,15 +248,19 @@ proc cliqueMiscTests() =
       var opt = initOptParser("--engine-signer:$1 --import-key:$2" % [engineSigner, privateKey])
       let res = processArguments(msg, opt)
       check res == Success
-      let signer = hexToByteArray[20](engineSigner)
-      let conf   = getConfiguration()
-      check signer in conf.accounts
+      
+      let
+        signer = hexToByteArray[20](engineSigner)
+        ctx    = newEthContext()
+        conf   = getConfiguration()
+            
+      check ctx.am.importPrivateKey(conf.importKey).isOk()
+      check ctx.am.getAccount(signer).isOk()
 
       proc signFunc(signer: EthAddress, message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.} =
         let
-          hashData = keccakHash(message)
-          conf     = getConfiguration()
-          acc      = conf.accounts[signer]
+          hashData = keccakHash(message)          
+          acc      = ctx.am.getAccount(signer).tryGet()
           rawSign  = sign(acc.privateKey, SkMessage(hashData.data)).toRaw
 
         ok(rawSign)

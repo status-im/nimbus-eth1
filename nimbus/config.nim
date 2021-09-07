@@ -114,11 +114,6 @@ type
     Full
     Archive
 
-  NimbusAccount* = object
-    privateKey*: PrivateKey
-    keystore*: JsonNode
-    unlocked*: bool
-
   NimbusConfiguration* = ref object
     ## Main Nimbus configuration object
     dataDir*: string
@@ -133,7 +128,7 @@ type
     # You should only create one instance of the RNG per application / library
     # Ref is used so that it can be shared between components
     rng*: ref BrHmacDrbgContext
-    accounts*: Table[EthAddress, NimbusAccount]
+    importKey*: string
     importFile*: string
     verifyFromOk*: bool           ## activate `verifyFrom` setting
     verifyFrom*: uint64           ## verification start block, 0 for disable
@@ -383,26 +378,6 @@ proc processEthAddress(value: string, address: var EthAddress): ConfigStatus =
   except CatchableError:
     return ErrorParseOption
 
-proc importPrivateKey(conf: NimbusConfiguration, fileName: string): ConfigStatus =
-
-  try:
-    let pkhex = readFile(fileName)
-    let res = PrivateKey.fromHex(pkhex)
-    if res.isErr:
-      error "not a valid private key, expect 32 bytes hex"
-      return ErrorParseOption
-
-    let seckey = res.get()
-    let acc = seckey.toPublicKey().toCanonicalAddress()
-
-    conf.accounts[acc] = NimbusAccount(
-      privateKey: seckey,
-      unlocked: true
-      )
-
-  except CatchableError:
-    return ErrorParseOption
-
 proc processEthArguments(key, value: string): ConfigStatus =
   result = Success
   let config = getConfiguration()
@@ -423,7 +398,7 @@ proc processEthArguments(key, value: string): ConfigStatus =
   of "engine-signer":
     result = processEthAddress(value, config.engineSigner)
   of "import-key":
-    result = config.importPrivateKey(value)
+    config.importKey = value
   else:
     result = EmptyOption
 
@@ -686,7 +661,6 @@ proc initConfiguration(): NimbusConfiguration =
   ## Allocates and initializes `NimbusConfiguration` with default values
   result = new NimbusConfiguration
   result.rng = newRng()
-  result.accounts = initTable[EthAddress, NimbusAccount]()
 
   ## Graphql defaults
   result.graphql.enabled = false
