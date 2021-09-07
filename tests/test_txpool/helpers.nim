@@ -10,12 +10,43 @@
 
 import
   std/[strformat, sequtils, strutils, times],
-  ../../nimbus/utils/tx_pool/[tx_item],
+  ../../nimbus/utils/keequ,
+  ../../nimbus/utils/tx_pool/[tx_item, tx_base],
   ../test_clique/undump, # borrow from clique tools
   eth/[common, keys],
   stint
 
+# Make sure that the runner can stay on public view without the need
+# to import `tx_pool/*` sup-modules
 export
+  keequ,
+  tx_base.`[]`,
+  tx_base.TxBaseInfo,
+  tx_base.byGasPriceDecPairs,
+  tx_base.byGasPriceEq,
+  tx_base.byGasPriceGe,
+  tx_base.byGasPriceGt,
+  tx_base.byGasPriceIncPairs,
+  tx_base.byGasPriceLe,
+  tx_base.byGasPriceLen,
+  tx_base.byGasPriceLt,
+  tx_base.byLocalQueueLen,
+  tx_base.byRemoteQueueLen,
+  tx_base.bySenderEq,
+  tx_base.bySenderLen,
+  tx_base.delete,
+  tx_base.first,
+  tx_base.firstOutItems,
+  tx_base.hasKey,
+  tx_base.insert,
+  tx_base.last,
+  tx_base.lastInItems,
+  tx_base.len,
+  tx_base.next,
+  tx_base.prev,
+  tx_base.reassign,
+  tx_base.toKey,
+  tx_base.verify,
   undumpNextGroup
 
 proc pp*(txs: openArray[Transaction]; pfx = ""): string =
