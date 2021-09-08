@@ -504,7 +504,7 @@ proc runKeeQu(noisy = true) =
 proc runLruCache(noisy = true) =
   ## Test runner ported from test_lru_cache.nim
 
-  suite "Data queue as LRU cache":
+  suite "KeeQu: Data queue as LRU cache":
 
     test "Fill Up":
       var

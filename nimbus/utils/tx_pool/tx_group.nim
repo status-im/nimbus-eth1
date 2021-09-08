@@ -13,64 +13,57 @@
 ##
 
 import
-  std/[hashes, tables],
+  std/[math, tables],
   ../keequ,
   ./tx_item,
   eth/[common],
   stew/results
 
 type
-  TxTabInfo* = enum
-    txTabOk = 0
-    txTabVfyLeafEmpty ## Empty leaf list
-    txTabVfyLeafQueue ## Corrupted leaf list
-    txTabVfySize      ## Size count mismatch
+  TxGroupInfo* = enum
+    txGroupOk = 0
+    txGroupVfyLeafEmpty ## Empty leaf list
+    txGroupVfyLeafQueue ## Corrupted leaf list
+    txGroupVfySize      ## Size count mismatch
 
-  TxTabMark* = ##\
+  TxGroupMark* = ##\
     ## Ready to be used for something, currently just a blind value that\
     ## comes in when queuing items for the same key (e.g. gas price.)
     int
 
-  TxTabItems* = ##\
+  TxGroupItems* = ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    KeeQu[TxItemRef,TxTabMark]
+    KeeQu[TxItemRef,TxGroupMark]
 
-  TxAddrTab* = object ##\
+  TxGroupAddr* = object ##\
     ## Per address table
     size: int
-    q: Table[EthAddress,TxTabItems]
+    q: Table[EthAddress,TxGroupItems]
 
 {.push raises: [Defect].}
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc hash(itemRef: TxItemRef): Hash =
-  ## Needed for the `TxListItems` underlying table
-  cast[pointer](itemRef).hash
 
 # ------------------------------------------------------------------------------
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
-proc txInit*(t: var TxAddrTab; size = 10) =
+proc txInit*(t: var TxGroupAddr; size = 10) =
+  ## Optional constructor
   t.size = 0
-  t.q = initTable[EthAddress,TxTabItems](size)
+  t.q = initTable[EthAddress,TxGroupItems](size.nextPowerOfTwo)
 
 
-proc txInsert*(t: var TxAddrTab; ethAddr: EthAddress; item: TxItemRef)
+proc txInsert*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   if not t.q.hasKey(ethAddr):
-    t.q[ethAddr] = initKeeQu[TxItemRef,TxTabMark](1)
+    t.q[ethAddr] = initKeeQu[TxItemRef,TxGroupMark](1)
   elif t.q[ethAddr].hasKey(item):
     return
   t.q[ethAddr][item] = 0
   t.size.inc
 
 
-proc txDelete*(t: var TxAddrTab; ethAddr: EthAddress; item: TxItemRef)
+proc txDelete*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   if t.q.hasKey(ethAddr) and t.q[ethAddr].hasKey(item):
     t.q[ethAddr].del(item)
@@ -79,37 +72,37 @@ proc txDelete*(t: var TxAddrTab; ethAddr: EthAddress; item: TxItemRef)
       t.q.del(ethAddr)
 
 
-proc txVerify*(t: var TxAddrTab): Result[void,(TxTabInfo,KeeQuInfo)]
+proc txVerify*(t: var TxGroupAddr): Result[void,(TxGroupInfo,KeeQuInfo)]
     {.gcsafe,raises: [Defect,KeyError].} =
   var count = 0
 
   for (ethAddr,itQ) in t.q.mpairs:
     count += itQ.len
     if itQ.len == 0:
-      return err((txTabVfyLeafEmpty, keeQuOk))
+      return err((txGroupVfyLeafEmpty, keeQuOk))
 
     let rc = itQ.verify
     if rc.isErr:
-      return err((txTabVfyLeafQueue, rc.error[2]))
+      return err((txGroupVfyLeafQueue, rc.error[2]))
 
   if count != t.size:
-    return err((txTabVfySize, keeQuOk))
+    return err((txGroupVfySize, keeQuOk))
   ok()
 
 
-proc nLeaves*(t: var TxAddrTab): int {.inline.} =
+proc nLeaves*(t: var TxGroupAddr): int {.inline.} =
   t.size
 
 
 # Table ops
-proc`[]`*(t: var TxAddrTab; key: EthAddress): auto
+proc`[]`*(t: var TxGroupAddr; key: EthAddress): auto
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   t.q[key]
 
-proc hasKey*(t: var TxAddrTab; key: EthAddress): auto {.inline.} =
+proc hasKey*(t: var TxGroupAddr; key: EthAddress): auto {.inline.} =
   t.q.hasKey(key)
 
-proc len*(t: var TxAddrTab): auto {.inline.} =
+proc len*(t: var TxGroupAddr): auto {.inline.} =
   t.q.len
 
 # ------------------------------------------------------------------------------

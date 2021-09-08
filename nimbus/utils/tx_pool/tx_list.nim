@@ -16,7 +16,6 @@
 ##
 
 import
-  std/[hashes],
   ../keequ,
   ../slst,
   ./tx_item,
@@ -55,14 +54,6 @@ type
 proc `$`(rq: var TxListItems): string =
   ## Needed by `rq.verify()` for printing error messages
   $rq.len
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc hash(itemRef: TxItemRef): Hash =
-  ## Needed for the `TxListItems` underlying table
-  cast[pointer](itemRef).hash
 
 # ------------------------------------------------------------------------------
 # Public gas price list helpers

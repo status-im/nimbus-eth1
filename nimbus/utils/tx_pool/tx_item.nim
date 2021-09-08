@@ -13,22 +13,22 @@
 ##
 
 import
-  std/[sequtils, strutils, times],
+  std/[hashes, sequtils, strutils, times],
   ../ec_recover,
   ../utils_defs,
-  stew/results,
-  eth/common
+  eth/[common, keys],
+  stew/results
 
 type
   TxItemRef* = ref object of RootObj ##\
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
-    tx: Transaction    ## Transaction
-    id: Hash256        ## Identifier/transaction key
-    timeStamp: Time    ## Time when added
-    sender: EthAddress ## Sender account address
-    info: string       ## Whatever
-    local: bool        ## Local or remote queue (setter available)
+    tx:        Transaction ## Transaction data
+    id:        Hash256     ## Identifier/transaction key
+    timeStamp: Time        ## Time when added
+    sender:    EthAddress  ## Sender account address
+    info:      string      ## Whatever
+    local:     bool        ## Local or remote queue (setter available)
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -92,9 +92,17 @@ proc newTxItemRef*(tx: Transaction; key: Hash256; local: bool; info: string):
     id:        key,
     tx:        tx,
     sender:    rc.value,
-    timeStamp: getTime(),
+    timeStamp: now().utc.toTime,
     info:      info,
     local:     local))
+
+# ------------------------------------------------------------------------------
+#  Public functions, Table ID helper
+# ------------------------------------------------------------------------------
+
+proc hash*(item: TxItemRef): Hash =
+  ## Needed if `TxItemRef` is used as hash-`Table` index.
+  cast[pointer](item).hash
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -123,6 +131,37 @@ proc info*(item: TxItemRef): auto {.inline.} =
 proc local*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.local
+
+# core/types/transaction.go(239): func (tx *Transaction) Protected() bool {
+proc protected*(item: TxItemRef): bool {.inline.} =
+  ## Getter (go/ref compat): is replay-protected
+  if item.tx.txType == TxLegacy:
+    # core/types/transaction.go(229): func isProtectedV(V *big.Int) bool {
+    let v = item.tx.V
+    if (v and 255) == 0:
+      return v != 27 and v != 28 and v != 1 and v != 0
+      # anything not 27 or 28 is considered protected
+  true
+
+# core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
+proc gas*(item: TxItemRef): auto {.inline.} =
+  ## Getter (go/ref compat): the gas limit of the transaction
+  item.tx.gasLimit
+
+# core/types/transaction.go(270): func (tx *Transaction) Gas() uint64 ..
+proc gasPrice*(item: TxItemRef): GasInt {.inline.} =
+  ## Getter (go/ref compat): the gas price of the transaction.
+  item.tx.gasPrice
+
+# core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
+proc gasTipCap*(item: TxItemRef): GasInt {.inline.} =
+  ## Getter (go/ref compat): the gasTipCap per gas of the transaction.
+  item.tx.maxPriorityFee
+
+# core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() *big.Int ..
+proc gasFeeCap*(item: TxItemRef): GasInt {.inline.} =
+  ## GasFeeCap returns the fee cap per gas of the transaction.
+  item.tx.maxFee
 
 # ------------------------------------------------------------------------------
 # Public functions, setters

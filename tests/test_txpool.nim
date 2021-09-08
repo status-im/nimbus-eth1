@@ -18,11 +18,25 @@ import
 
 const
   prngSeed = 42
+  baseDir = "tests"
+  mainnetCapture = "test_txpool" / "mainnet50688.txt.gz"
   goerliCapture = "test_clique" / "goerli51840.txt.gz"
+  loadFile = goerliCapture
+
+  # 90% <= #local/#remote <= 1/90%
+  localRemoteRatioBandPC = 90
+
+  # 95% <= #remote-deleted/#remote-present <= 1/95%
+  deletedItemsRatioBandPC = 95
 
 var
   prng = prngSeed.initRand
-  okCount: array[bool,int]
+
+  # to be set up in runTxBaseTests()
+  okCount: array[bool,int] # entries: [local,remote] entries
+  txList: seq[TxItemRef]
+  gasPrices: seq[GasInt]
+  gasTipCaps: seq[GasInt]
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -69,6 +83,29 @@ proc toTxPool(q: var seq[TxItemRef]; noisy = true): TxPool =
   doAssert result.len == q.len
 
 
+proc toTxPool(q: var seq[TxItemRef]; noisy = true;
+              timeGap: var Time;
+              remoteItemsPC = 30; delayMSecs = 100): TxPool =
+  ## Variant of `toTxPool()` where the loader sleeps some time after
+  ## `remoteItemsPC` percent loading remote items.
+  doAssert 0 < remoteItemsPC and remoteItemsPC < 100
+  result.init
+  var
+    delayAt = okCount[false] * remoteItemsPC div 100
+    middleOfTimeGap = initDuration(milliSeconds = delayMSecs div 2)
+    remoteCount = 0
+  noisy.showElapsed(&"Loading {q.len} transactions"):
+    for w in q:
+      doAssert result.insert(w.tx, w.local, w.info).value == w.id
+      if not w.local:
+        remoteCount.inc
+        if delayAt == remoteCount:
+          noisy.say &"time gap after {remoteCount} remote transactions"
+          timeGap = result[w.id].timeStamp + middleOfTimeGap
+          delayMSecs.sleep
+  doAssert result.len == q.len
+
+
 proc addOrFlushGroupwise(xp: var TxPool;
                          grpLen: int; seen: var seq[Hash256]; n: Hash256;
                          noisy = true) =
@@ -78,52 +115,64 @@ proc addOrFlushGroupwise(xp: var TxPool;
 
   # flush group-wise
   let xpLen = xp.len
-  if noisy:
-    echo "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
+  noisy.say "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
   for a in seen:
     doAssert xp.delete(a).value.id == a
   doAssert xpLen == seen.len + xp.len
   seen.setLen(0)
 
 # ------------------------------------------------------------------------------
-# Test Runner
+# Test Runners
 # ------------------------------------------------------------------------------
 
-proc runTxStepper(noisy = true;
-                  dir = "tests"; captureFile = goerliCapture,
-                  numTransactions = 0) =
-
+proc runTxLoader(noisy = true;
+                 dir = baseDir; captureFile = loadFile, numTransactions = 0) =
   let
-    elapNoisy = false
-    stopAfter = if numTransactions == 0: 500 else: numTransactions
-  var
-    txList: seq[TxItemRef]
-    gasPrices: seq[GasInt]
+    elapNoisy = noisy
+    veryNoisy = false # noisy
+    stopAfter = if numTransactions == 0: 900 else: numTransactions
+    name = captureFile.splitFile.name.split(".")[0]
 
-  suite &"TxPool: Collect {stopAfter} transactions from Goerli capture":
+  suite &"TxPool: Prepare loading transactions from {name} capture":
+    var xp = initTxPool()
+    check txList.len == 0
 
-    block:
-      let veryNoisy = false # noisy
+    test &"Collected {stopAfter} transactions":
+      elapNoisy.showElapsed("Total collection time"):
+        xp.collectTxPool(veryNoisy, dir / captureFile, stopAfter)
 
-      test &"Transactions collected":
-        var xp = initTxPool()
-        elapNoisy.showElapsed("Total Collection Time"):
-          xp.collectTxPool(veryNoisy, dir / captureFile, stopAfter)
+      # make sure that PRNG did not go bunkers
+      check localRemoteRatioBandPC < randOkRatioPC() and
+        randOkRatioPC() < (10000 div localRemoteRatioBandPC)
 
-        # make sure PRNG didi not go bunkers
-        let band = 90
-        check band < randOkRatioPC() and randOkRatioPC() < (10000 div band)
+      # Note: expecting enough transactions in the `goerliCapture` file
+      check xp.len == stopAfter
+      check xp.verify.isOk
 
-        # Note: expecting enough transactions in the `goerliCapture` file
-        check xp.len == stopAfter
-        check xp.verify.isOk
-
-        # Load txList[]
-        for w in xp.firstOutItems:
+      # Load txList[]
+      for localOk in [true, false]:
+        for w in xp.firstOutItems(localOk):
           txList.add w
-        check txList.len == xp.len
+      check txList.len == xp.len
 
-    # ---------------------------------
+    test "Load gas prices and priority fees":
+
+      elapNoisy.showElapsed("Load gas prices"):
+        for w,_ in xp.byGasPriceIncMPairs:
+          gasPrices.add w
+      check gasPrices.len == xp.byGasPriceLen
+
+      elapNoisy.showElapsed("Load priority fee caps"):
+        for w,_ in xp.byGasTipCapIncMPairs:
+          gasTipCaps.add w
+      check gasTipCaps.len == xp.byGasTipCapLen
+
+
+proc runTxBaseTests(noisy = true) =
+
+  let elapNoisy = false
+
+  suite "TxPool: Play with queues and lists against captured transactions":
 
     var xq = txList.toTxPool(noisy)
     let
@@ -185,20 +234,19 @@ proc runTxStepper(noisy = true;
             gpList: seq[GasInt]
 
           elapNoisy.showElapsed("Increasing gas price walk on transactions"):
-            for (gasPrice,itemsLst) in xq.byGasPriceIncPairs:
+            for (gasPrice,itemsLst) in xq.byGasPriceIncMPairs:
               var infoList: seq[string]
               for w in itemsLst.nextKeys: # prevKeys() also works
                 infoList.add w.info
               gpList.add gasPrice
               txCount += itemsLst.len
-              if veryNoisy:
-                echo &">>> gasPrice={gasPrice} for {infoList.len} entries:"
-                let indent = " ".repeat(6)
-                echo indent, infoList.join(&"\n{indent}")
+              veryNoisy.say &"gasPrice={gasPrice} for {infoList.len} entries:"
+              let indent = " ".repeat(6)
+              veryNoisy.say indent, infoList.join(&"\n{indent}")
 
           check txCount == xq.len
           check gpList.len == xq.byGasPriceLen
-          gasPrices = gpList
+          check gasPrices == gpList
 
         block:
           var
@@ -207,16 +255,15 @@ proc runTxStepper(noisy = true;
             gpList: seq[GasInt]
 
           elapNoisy.showElapsed("Decreasing gas price walk on transactions"):
-            for (gasPrice,itemsLst) in xq.byGasPriceDecPairs:
+            for (gasPrice,itemsLst) in xq.byGasPriceDecMPairs:
               var infoList: seq[string]
               for w in itemsLst.prevKeys: # nextKeys() also works
                 infoList.add w.info
               gpList.add gasPrice
               txCount += itemsLst.len
-              if veryNoisy:
-                echo &">>> gasPrice={gasPrice} for {infoList.len} entries:"
-                let indent = " ".repeat(6)
-                echo indent, infoList.join(&"\n{indent}")
+              veryNoisy.say &"gasPrice={gasPrice} for {infoList.len} entries:"
+              let indent = " ".repeat(6)
+              veryNoisy.say indent, infoList.join(&"\n{indent}")
 
           check txCount == xq.len
           check gpList.len == xq.byGasPriceLen
@@ -225,15 +272,17 @@ proc runTxStepper(noisy = true;
       test "Walk transaction ID queue fwd/rev":
         block:
           var top = 0
-          for w in xq.firstOutItems:
-            check txList[top].id == w.id
-            top.inc
+          for localOk in [true, false]:
+            for w in xq.firstOutItems(localOk):
+              check txList[top].id == w.id
+              top.inc
           check top == txList.len
         block:
           var top = txList.len
-          for w in xq.lastInItems:
-            top.dec
-            check txList[top].id == w.id
+          for localOk in [false, true]:
+            for w in xq.lastInItems(localOk):
+              top.dec
+              check txList[top].id == w.id
           check top == 0
 
     # ---------------------------------
@@ -249,9 +298,10 @@ proc runTxStepper(noisy = true;
           seen: seq[Hash256]
         check xq.verify.isOK
         elapNoisy.showElapsed("Forward delete-walk ID queue"):
-          for w in xq.firstOutItems:
-            xq.addOrFlushGroupwise(groupLen, seen, w.id, veryNoisy)
-            check xq.verify.isOK
+          for localOk in [true, false]:
+            for w in xq.firstOutItems(localOk):
+              xq.addOrFlushGroupwise(groupLen, seen, w.id, veryNoisy)
+              check xq.verify.isOK
         check seen.len == xq.len
         check seen.len < groupLen
 
@@ -262,8 +312,9 @@ proc runTxStepper(noisy = true;
           seen: seq[Hash256]
         check xq.verify.isOK
         elapNoisy.showElapsed("Revese delete-walk ID queue"):
-          for w in xq.lastInItems:
-            xq.addOrFlushGroupwise(groupLen, seen, w.id, veryNoisy)
+          for localOk in [false, true]:
+            for w in xq.lastInItems(localOk):
+              xq.addOrFlushGroupwise(groupLen, seen, w.id, veryNoisy)
             check xq.verify.isOK
         check seen.len == xq.len
         check seen.len < groupLen
@@ -283,7 +334,7 @@ proc runTxStepper(noisy = true;
       test &"Load/delete with gas price less equal {delMax.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
         elapNoisy.showElapsed(&"Deleting gas prices less equal {delMax.toKMG}"):
-          for (gp,itemList) in xq.byGasPriceDecPairs(fromLe = delMax):
+          for (gp,itemList) in xq.byGasPriceDecMPairs(fromLe = delMax):
             for item in itemList.nextKeys:
               count.inc
               check xq.delete(item).isOK
@@ -306,7 +357,7 @@ proc runTxStepper(noisy = true;
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
         elapNoisy.showElapsed(
             &"Deleting gas prices greater than {delMin.toKMG}"):
-          for gp, itemList in xq.byGasPriceIncPairs(fromGe = delMin):
+          for gp, itemList in xq.byGasPriceIncMPairs(fromGe = delMin):
             for item in itemList.nextKeys:
               count.inc
               check xq.delete(item).isOK
@@ -315,21 +366,57 @@ proc runTxStepper(noisy = true;
         check 0 < xq.len
         check count + xq.len == txList.len
 
+
+proc runTxPoolTests(noisy = true) =
+
+  suite "TxPool: Play with pool functions and primitives":
+
+    test "Delete about half of non-local transactions that were added later":
+      var
+        gap: Time
+        xq = txList.toTxPool(noisy, gap, remoteItemsPC = 50, delayMSecs = 100)
+
+      xq.lifeTime = getTime() - gap
+
+      check xq.job(TxJobData(kind: txJobsInactiveJobsEviction)).isJobOk
+      check xq.commit == 1
+      check xq.byLocalQueueLen == okCount[true]
+
+      # make sure that deletion was sort of even (~ 50%)
+      let
+        deletedItems = txList.len - xq.len
+        deletedRatio = (deletedItems * 100 / xq.byRemoteQueueLen).int
+      check deletedItemsRatioBandPC < deletedRatio and
+        deletedRatio < (10000 div deletedItemsRatioBandPC)
+
+    # ---------------------------------
+
+    #test "Lalala ..."
+    #  var xq = txList.toTxPool(noisy)
+    #  let lbl = xq.remotesBelowTip
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc txPoolMain*(noisy = defined(debug)) =
-  noisy.runTxStepper
+  noisy.runTxLoader
+  noisy.runTxBaseTests
+  noisy.runTxPoolTests
 
 when isMainModule:
   let
-    captFile1 = "nimbus-eth1" / "tests" / goerliCapture
-    captFile2 = "goerli504192.txt.gz"
+    captFile1 = "goerli504192.txt.gz"
+    captFile2 = "mainnet266881.txt.gz"
 
   let noisy = defined(debug)
-  noisy.runTxStepper(dir = "/status", captureFile = captFile2,
-                     numTransactions = 1500)
+
+  #noisy.runTxLoader(
+  #  dir = "/status", captureFile = captFile2, numTransactions = 1500)
+
+  noisy.runTxLoader(dir = ".")
+  noisy.runTxBaseTests
+  true.runTxPoolTests
 
 # ------------------------------------------------------------------------------
 # End

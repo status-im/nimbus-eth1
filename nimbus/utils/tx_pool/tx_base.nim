@@ -10,15 +10,22 @@
 
 ## Transaction Pool Descriptor
 ## ===========================
+##
+## Current transaction data organisation:
+##
+## * All incoming transactions are queued (see `tx_queue` module)
+## * Transactions indexed/bucketed by *gas price* (see `tx_list` module)
+## * Transactions are grouped by sender address (see `tx_group`)
+##
 
 import
-  std/[algorithm, sequtils],
   ../keequ,
   ../slst,
+  ./tx_group,
+  ./tx_item,
+  ./tx_jobs,
   ./tx_list,
   ./tx_queue,
-  ./tx_tab,
-  ./tx_item,
   eth/[common, keys],
   stew/results
 
@@ -27,29 +34,33 @@ type
     ## Error codes (as used in verification function.)
     txOk = 0
 
-    txVfyByIdQueueList       ## Corrupted ID queue/fifo structure
-    txVfyByIdQueueKey        ## Corrupted ID queue/fifo container id
-    txVfyByIdQueueSchedule   ## Local flag indicates wrong schedule
+    txVfyByJobsQueue          ## Corrupted jobs queue/fifo structure
 
-    txVfyByGasPriceList      ## Corrupted gas price list structure
-    txVfyByGasPriceLeafEmpty ## Empty gas price list leaf record
-    txVfyByGasPriceLeafQueue ## Corrupted gas price leaf queue
-    txVfyByGasPriceTotal     ## Wrong number of leaves
+    txVfyByIdQueueList        ## Corrupted ID queue/fifo structure
+    txVfyByIdQueueKey         ## Corrupted ID queue/fifo container id
+    txVfyByIdQueueSchedule    ## Local flag indicates wrong schedule
 
-    txVfyBySenderLeafEmpty   ## Empty sender list leaf record
-    txVfyBySenderLeafQueue   ## Corrupted sender leaf queue
-    txVfyBySenderTotal       ## Wrong number of leaves
+    txVfyBySenderLeafEmpty    ## Empty sender list leaf record
+    txVfyBySenderLeafQueue    ## Corrupted sender leaf queue
+    txVfyBySenderTotal        ## Wrong number of leaves
 
+    txVfyByGasPriceList       ## Corrupted gas price list structure
+    txVfyByGasPriceLeafEmpty  ## Empty gas price list leaf record
+    txVfyByGasPriceLeafQueue  ## Corrupted gas price leaf queue
+    txVfyByGasPriceTotal      ## Wrong number of leaves
+
+    txVfyByGasTipCapList      ## Corrupted gas price list structure
+    txVfyByGasTipCapLeafEmpty ## Empty gas price list leaf record
+    txVfyByGasTipCapLeafQueue ## Corrupted gas price leaf queue
+    txVfyByGasTipCapTotal     ## Wrong number of leaves
 
   TxPoolBase* = object of RootObj ##\
     ## Base descriptor
-    byIdQueue*: TxQueue       ## Primary table, queued by arrival event
-    byGasPrice*: TxGasItemLst ## Indexed by gas price
-    bySender*: TxAddrTab      ## Grouped by sender addresses
-
-const
-  TxQueueScheduleReversed =
-    toSeq(TxQueueSchedule).reversed
+    byIdQueue*: TxQueue        ## Primary table, queued by arrival event
+    byGasPrice*: TxGasItemLst  ## Indexed by `gasPrice`
+    byGasTipCap*: TxGasItemLst ## Indexed by `maxPriorityFee`
+    bySender*: TxGroupAddr     ## Grouped by sender addresses
+    byJobs*: TxJobs            ## Jobs batch list
 
 {.push raises: [Defect].}
 
@@ -61,7 +72,9 @@ method init*(xp: var TxPoolBase) {.base.} =
   ## Constructor, returns new tx-pool descriptor.
   xp.byIdQueue.txInit
   xp.byGasPrice.txInit
-  # no initialisation needed for bySender
+  xp.byGasTipCap.txInit
+  xp.bySender.txInit
+  xp.byJobs.txInit
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -100,6 +113,7 @@ proc insert*(xp: var TxPoolBase;
       let item = rc.value
       xp.byIdQueue.txAppend(key, local.toQueueSched, item)
       xp.byGasPrice.txInsert(item.tx.gasPrice, item)
+      xp.byGasTipCap.txInsert(item.tx.maxPriorityFee, item)
       xp.bySender.txInsert(item.sender, item)
       return ok(key)
   err()
@@ -132,31 +146,27 @@ proc reassign*(xp: var TxPoolBase;
   err()
 
 
-proc delete*(xp: var TxPoolBase;
-             key: Hash256): Result[TxItemRef,void]
+proc delete*(xp: var TxPoolBase; item: TxItemRef): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Delete transaction (and wrapping container) from the database. If
   ## successful, the function returns the wrapping container that was just
   ## removed.
-  for sched in TxQueueSchedule:
-    let rc = xp.byIdQueue.txDelete(key, sched)
-    if rc.isOK:
-      let item = rc.value
-      xp.byGasPrice.txDelete(item.tx.gasPrice, item)
-      xp.bySender.txDelete(item.sender, item)
-      return ok(item)
-  err()
-
-proc delete*(xp: var TxPoolBase;
-             item: TxItemRef): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Variant of `delete()`
   let rc = xp.byIdQueue.txDelete(item.id, item.local.toQueueSched)
   if rc.isOK:
     let item = rc.value
     xp.byGasPrice.txDelete(item.tx.gasPrice, item)
+    xp.byGasTipCap.txDelete(item.tx.maxPriorityFee, item)
     xp.bySender.txDelete(item.sender, item)
     return ok(item)
+  err()
+
+proc delete*(xp: var TxPoolBase; key: Hash256): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Variant of `delete()`
+  for localOK in [true, false]:
+    let rc = xp.byIdQueue.eq(key, localOK.toQueueSched)
+    if rc.isOK:
+      return xp.delete(rc.value)
   err()
 
 # ------------------------------------------------------------------------------
@@ -182,9 +192,14 @@ proc byRemoteQueueLen*(xp: var TxPoolBase): int =
   xp.byIdQueue.len(TxRemoteQueue)
 
 proc byGasPriceLen*(xp: var TxPoolBase): int =
-  ## Number of different gas prices known. For each gas price there is at least
-  ## one transaction available.
+  ## Number of different `gasPrice` entries known. For each gas price
+  ## there is at least one transaction available.
   xp.byGasPrice.len
+
+proc byGasTipCapLen*(xp: var TxPoolBase): int =
+  ## Number of different `maxPriorityFee` entries known. For each gas price
+  ## there is at least one transaction available.
+  xp.byGasTipCap.len
 
 proc bySenderLen*(xp: var TxPoolBase): int =
   ## Number of different sendeer adresses known. For each address there is at
@@ -260,17 +275,27 @@ proc prev*(xp: var TxPoolBase;
   err()
 
 # ------------------------------------------------------------------------------
-# Public functions, gas price query
+# Public functions, sender query
+# ------------------------------------------------------------------------------
+
+proc bySenderEq*(xp: var TxPoolBase;
+                 ethAddr: EthAddress): Result[TxListItems,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the list of transaction records all with the same `ethAddr`
+  ## argument sender address (if any.)
+  if xp.bySender.hasKey(ethAddr):
+    return ok(xp.bySender[ethAddr])
+  err()
+
+# ------------------------------------------------------------------------------
+# Public functions, `gasPrice` item query
 # ------------------------------------------------------------------------------
 
 proc byGasPriceGe*(xp: var TxPoolBase;
                    gWei: GasInt): Result[TxListItems,void] =
-  ## Retrieve the list of transaction records all with the same *least* gas
-  ## price *greater or equal* the argument `gWei`. On success, the resulting
-  ## list of transactions has at least one item.
-  ##
-  ## While the returned *list* of transaction containers *must not* be modified
-  ## directly, a transaction entry within a container may well be altered.
+  ## Retrieve the list of transaction records all with the same *least*
+  ## `gasPrice` item *greater or equal* the argument `gWei`. On success, the
+  ## resulting list of transactions has at least one item.
   let rc = xp.byGasPrice.ge(gWei)
   if rc.isOk:
     return ok(rc.value.data)
@@ -309,88 +334,179 @@ proc byGasPriceEq*(xp: var TxPoolBase;
   err()
 
 # ------------------------------------------------------------------------------
-# Public functions, sender query
+# Public functions, `maxPriorityFee` item query
 # ------------------------------------------------------------------------------
 
-proc bySenderEq*(xp: var TxPoolBase;
-                 ethAddr: EthAddress): Result[TxListItems,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Similar to `byGasPriceGe()`.
-  if xp.bySender.hasKey(ethAddr):
-    return ok(xp.bySender[ethAddr])
+proc byGasTipCapGe*(xp: var TxPoolBase;
+                   gWei: GasInt): Result[TxListItems,void] =
+  ## Retrieve the list of transaction records all with the same *least*
+  ## `maxPriorityFee` item *greater or equal* the argument `gWei`. On success,
+  ## the resulting list of transactions has at least one item.
+  let rc = xp.byGasTipCap.ge(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
   err()
+
+proc byGasTipCapGt*(xp: var TxPoolBase;
+                   gWei: GasInt): Result[TxListItems,void] =
+  ## Similar to `byGasTipCapGe()`.
+  let rc = xp.byGasTipCap.gt(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+proc byGasTipCapLe*(xp: var TxPoolBase;
+                   gWei: GasInt): Result[TxListItems,void] =
+  ## Similar to `byGasTipCapGe()`.
+  let rc = xp.byGasTipCap.le(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+proc byGasTipCapLt*(xp: var TxPoolBase;
+                   gWei: GasInt): Result[TxListItems,void] =
+  ## Similar to `byGasTipCapGe()`.
+  let rc = xp.byGasTipCap.lt(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+proc byGasTipCapEq*(xp: var TxPoolBase;
+                   gWei: GasInt): Result[TxListItems,void] =
+  ## Similar to `byGasTipCapGe()`.
+  let rc = xp.byGasTipCap.eq(gWei)
+  if rc.isOk:
+    return ok(rc.value.data)
+  err()
+
+# ------------------------------------------------------------------------------
+# Public functions, jobs queue mamgement
+# ------------------------------------------------------------------------------
+
+proc byJobsAdd*(xp: var TxPoolBase; data: TxJobData): TxJobID
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  ## Appends a job to the *FIFO*. This function returns a non-zero *ID* if
+  ## successful.
+  ##
+  ## :Note:
+  ##   An error can only occur if
+  ##   the *ID* of the first job follows the *ID* of the last job (*modulo*
+  ##   `TxJobIdMax`.) This occurs when
+  ##   * there are `TxJobIdMax` jobs already queued
+  ##   * some jobs were deleted in the middle of the queue and the *ID*
+  ##     gap was not shifted out yet.
+  xp.byJobs.txAdd(data)
+
+proc byJobsUnshift*(xp: var TxPoolBase; data: TxJobData): TxJobID
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  ## Stores back a job to to the *FIFO* front end be re-fetched next. This
+  ## function returns a non-zero *ID* if successful.
+  ##
+  ## See also the **Note* at the comment for `txAdd()`.
+  xp.byJobs.txUnshift(data)
+
+proc byJobsDelete*(xp: var TxPoolBase; id: TxJobID): Result[TxJobPair,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Delete a job by argument `id`. The function returns the job just
+  ## deleted (if successful.)
+  ##
+  ## See also the **Note* at the comment for `txAdd()`.
+  xp.byJobs.txDelete(id)
+
+proc byJobsShift*(xp: var TxPoolBase): Result[TxJobPair,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  ## Fetches the next job from the *FIFO*. This is logically the same
+  ## as `txFirst()` followed by `txDelete()`
+  xp.byJobs.txShift
+
+proc byJobsFirst*(xp: var TxPoolBase): Result[TxJobPair,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  xp.byJobs.txFirst
 
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator firstOutItems*(xp: var TxPoolBase): TxItemRef
+iterator firstOutItems*(xp: var TxPoolBase; local: bool): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## ID queue walk/traversal: oldest first (fifo).
   ##
-  ## Note: When running in a loop it is ok to delete the current item and
-  ## the all items already visited. Items not visited yet must not be deleted.
-  for sched in TxQueueSchedule:
-    var rc = xp.byIdQueue.first(sched)
-    while rc.isOK:
-      let (key,data) = (rc.value.key, rc.value.data)
-      rc = xp.byIdQueue.next(sched,key)
-      yield data
+  ## :Note:
+  ##    When running in a loop it is ok to delete the current item and all
+  ##    the items already visited. Items not visited yet must not be deleted.
+  let sched = local.toQueueSched
+  var rc = xp.byIdQueue.first(sched)
+  while rc.isOK:
+    let (key,data) = (rc.value.key, rc.value.data)
+    rc = xp.byIdQueue.next(sched,key)
+    yield data
 
-iterator lastInItems*(xp: var TxPoolBase): TxItemRef
+iterator lastInItems*(xp: var TxPoolBase; local: bool): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## ID queue walk/traversal: newest first (lifo)
   ##
-  ## Note: When running in a loop it is ok to delete the current item and
-  ## the all items already visited. Items not visited yet must not be deleted.
-  for sched in TxQueueScheduleReversed:
-    var rc = xp.byIdQueue.last(sched)
-    while rc.isOK:
-      let (key,data) = (rc.value.key, rc.value.data)
-      rc = xp.byIdQueue.prev(sched, key)
-      yield data
+  ## See also the **Note* at the comment for `firstOutItems()`.
+  let sched = local.toQueueSched
+  var rc = xp.byIdQueue.last(sched)
+  while rc.isOK:
+    let (key,data) = (rc.value.key, rc.value.data)
+    rc = xp.byIdQueue.prev(sched, key)
+    yield data
 
-iterator byGasPriceIncPairs*(xp: var TxPoolBase;
-                             fromGe = GasInt.low): (GasInt,var TxListItems) =
+# ------------
+
+iterator byGasPriceIncMPairs*(xp: var TxPoolBase;
+                              fromGe = GasInt.low): (GasInt,var TxListItems) =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
-  ## While the returned *list* of transaction containers *must not* be modified
-  ## directly, a transaction entry within a container may well be altered.
-  ##
-  ## Note: When running in a loop it is ok to add or delete any entries,
-  ## visited or not visited yet. So, deleting all entries with gas prices
-  ## greater or equal than `delMin` would look like:
-  ## ::
-  ##  for _, txList in xp.byGasPriceIncPairs(fromGe = delMin):
-  ##    for tx in txList.nextKeys:
-  ##      discard xq.delete(tx)
-  ##
+  ## :Note:
+  ##   When running in a loop it is ok to add or delete any entries,
+  ##   vistied or not visited yet. So, deleting all entries with gas prices
+  ##   less or equal than `delMin` would look like:
+  ##   ::
+  ##    for _, itList in xp.byGasPriceIncPairs(fromGe = delMin):
+  ##      for item in itList.nextKeys:
+  ##        discard xq.delete(item)
   var rc = xp.byGasPrice.ge(fromGe)
   while rc.isOk:
     let yKey = rc.value.key
     yield (ykey, rc.value.data)
     rc = xp.byGasPrice.gt(ykey)
 
-iterator byGasPriceDecPairs*(xp: var TxPoolBase;
+iterator byGasPriceDecMPairs*(xp: var TxPoolBase;
                              fromLe = GasInt.high): (GasInt,var TxListItems) =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
-  ## While the returned *list* of transaction containers *must not* be modified
-  ## directly, a transaction entry within a container may well be altered.
-  ##
-  ## Note: When running in a loop it is ok to add or delete any entries,
-  ## vistied or not visited yet. So, deleting all entries with gas prices
-  ## less or equal than `delMax` would look like:
-  ## ::
-  ##  for _, txList in xp.byGasPriceDecPairs(fromLe = delMax):
-  ##    for tx in txList.nextKeys:
-  ##      discard xq.delete(tx)
-  ##
+  ## See also the **Note* at the comment for `byGasPriceIncPairs()`.
   var rc = xp.byGasPrice.le(fromLe)
   while rc.isOk:
     let yKey = rc.value.key
     yield (yKey, rc.value.data)
     rc = xp.byGasPrice.lt(yKey)
+
+# ------------
+
+iterator byGasTipCapIncMPairs*(xp: var TxPoolBase;
+                             fromGe = GasInt.low): (GasInt,var TxListItems) =
+  ## Starting at the lowest, this function traverses increasing gas prices.
+  ##
+  ## See also the **Note* at the comment for `byGasPriceIncPairs()`.
+  var rc = xp.byGasTipCap.ge(fromGe)
+  while rc.isOk:
+    let yKey = rc.value.key
+    yield (ykey, rc.value.data)
+    rc = xp.byGasTipCap.gt(ykey)
+
+iterator byGasTipCapDecMPairs*(xp: var TxPoolBase;
+                             fromLe = GasInt.high): (GasInt,var TxListItems) =
+  ## Starting at the highest, this function traverses decreasing gas prices.
+  ##
+  ## See also the **Note* at the comment for `byGasPriceIncPairs()`.
+  var rc = xp.byGasTipCap.le(fromLe)
+  while rc.isOk:
+    let yKey = rc.value.key
+    yield (yKey, rc.value.data)
+    rc = xp.byGasTipCap.lt(yKey)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
@@ -403,30 +519,51 @@ proc verify*(xp: var TxPoolBase): Result[void,TxBaseInfo]
     let rc = xp.byGasPrice.txVerify
     if rc.isErr:
       case rc.error[0]
-      of txListOk:           return err(txOk)
-      of txListVfyRbTree:    return err(txVfyByGasPriceList)
-      of txListVfyLeafEmpty: return err(txVfyByGasPriceLeafEmpty)
-      of txListVfyLeafQueue: return err(txVfyByGasPriceLeafQueue)
-      of txListVfySize:      return err(txVfyByGasPriceTotal)
+      of txListOk:            return err(txOk)
+      of txListVfyRbTree:     return err(txVfyByGasPriceList)
+      of txListVfyLeafEmpty:  return err(txVfyByGasPriceLeafEmpty)
+      of txListVfyLeafQueue:  return err(txVfyByGasPriceLeafQueue)
+      of txListVfySize:       return err(txVfyByGasPriceTotal)
+  block:
+    let rc = xp.byGasTipCap.txVerify
+    if rc.isErr:
+      case rc.error[0]
+      of txListOk:            return err(txOk)
+      of txListVfyRbTree:     return err(txVfyByGasTipCapList)
+      of txListVfyLeafEmpty:  return err(txVfyByGasTipCapLeafEmpty)
+      of txListVfyLeafQueue:  return err(txVfyByGasTipCapLeafQueue)
+      of txListVfySize:       return err(txVfyByGasTipCapTotal)
   block:
     let rc = xp.bySender.txVerify
     if rc.isErr:
       case rc.error[0]
-      of txTabOk:            return err(txOk)
-      of txTabVfyLeafEmpty:  return err(txVfyBySenderLeafEmpty)
-      of txTabVfyLeafQueue:  return err(txVfyBySenderLeafQueue)
-      of txTabVfySize:       return err(txVfyBySenderTotal)
+      of txGroupOk:           return err(txOk)
+      of txGroupVfyLeafEmpty: return err(txVfyBySenderLeafEmpty)
+      of txGroupVfyLeafQueue: return err(txVfyBySenderLeafQueue)
+      of txGroupVfySize:      return err(txVfyBySenderTotal)
   block:
     let rc = xp.byIdQueue.txVerify
     if rc.isErr:
       case rc.error[0]
-      of txQuOk:             return err(txOk)
-      of txQuVfyQueueList:   return err(txVfyByIdQueueList)
-      of txQuVfyQueueKey:    return err(txVfyByIdQueueKey)
-      of txQuVfySchedule:    return err(txVfyByIdQueueSchedule)
+      of txQuOk:              return err(txOk)
+      of txQuVfyQueueList:    return err(txVfyByIdQueueList)
+      of txQuVfyQueueKey:     return err(txVfyByIdQueueKey)
+      of txQuVfySchedule:     return err(txVfyByIdQueueSchedule)
+  block:
+    let rc = xp.byJobs.txVerify
+    if rc.isErr:
+      case rc.error[0]
+      of txJobsOk:           return err(txOk)
+      of txJobsVfyQueue:     return err(txVfyByJobsQueue)
 
-  if xp.len != xp.byIdQueue.nLeaves:
+  if xp.byIdQueue.nLeaves != xp.bySender.nLeaves:
+     return err(txVfyBySenderTotal)
+
+  if xp.byIdQueue.nLeaves != xp.byGasPrice.nLeaves:
      return err(txVfyByGasPriceTotal)
+
+  if xp.byIdQueue.nLeaves != xp.byGasTipCap.nLeaves:
+     return err(txVfyByGasTipCapTotal)
 
   ok()
 

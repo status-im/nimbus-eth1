@@ -69,7 +69,7 @@ proc runSLstTest(noisy = true) =
     numUniqeKeys = keyList.toSeq.mapIt((it,false)).toTable.len
     numKeyDups = keyList.len - numUniqeKeys
 
-  suite "Sorted list based on red-black tree":
+  suite "SLst: Sorted list based on red-black tree":
     var
       sl = initSLst[int,int]()
       rej: seq[int]
