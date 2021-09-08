@@ -21,7 +21,7 @@ import
   config, genesis, rpc/[common, p2p, debug], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi, context,
-  "."/[utils, conf_utils, sealer, constants]
+  "."/[conf_utils, sealer, constants]
 
 ## TODO:
 ## * No IPv6 support
@@ -54,12 +54,13 @@ proc start(nimbus: NimbusNode) =
   let trieDB = trieDB newChainDb(conf.dataDir)
   var chainDB = newBaseChainDB(trieDB,
     conf.prune == PruneMode.Full,
-    conf.net.networkId
+    conf.net.networkId,
+    conf.customNetwork
     )
   chainDB.populateProgress()
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
-    initializeEmptyDb(chainDb, conf.customNetwork)
+    initializeEmptyDb(chainDb)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   if conf.importFile.len > 0:
@@ -134,7 +135,6 @@ proc start(nimbus: NimbusNode) =
 
   # chainRef: some name to avoid module-name/filed/function misunderstandings
   let chainRef = newChain(chainDB)
-  chainRef.setForkId(conf.customNetwork)
   nimbus.ethNode.chain = chainRef
   if conf.verifyFromOk:
     chainRef.extraValidation = 0 < conf.verifyFrom

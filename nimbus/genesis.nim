@@ -89,7 +89,7 @@ proc commit*(g: Genesis, db: BaseChainDB) =
   doAssert(b.blockNumber == 0, "can't commit genesis block with number > 0")
   discard db.persistHeaderToDb(b)
 
-proc initializeEmptyDb*(db: BaseChainDB, cn: CustomNetwork) =
+proc initializeEmptyDb*(db: BaseChainDB) =
   trace "Writing genesis to DB"
-  let genesis = genesisBlockForNetwork(db.networkId, cn)
+  let genesis = genesisBlockForNetwork(db.networkId, db.customNetwork)
   genesis.commit(db)

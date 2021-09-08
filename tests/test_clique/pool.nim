@@ -244,7 +244,7 @@ proc newVoterPool*(networkId = GoerliNet): TesterPool =
   TesterPool(
     boot: CustomNetwork(
       genesis: genesisBlockForNetwork(networkId, CustomNetwork()),
-      config:  chainConfig(networkId))).initTesterPool
+      config:  chainConfig(networkId, CustomNetwork()))).initTesterPool
 
 # ------------------------------------------------------------------------------
 # Public: getter

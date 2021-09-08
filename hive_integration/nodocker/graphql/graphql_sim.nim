@@ -79,10 +79,11 @@ proc main() =
     ethNode = setupEthNode(conf, ethCtx, eth)
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
-      conf.net.networkId
+      conf.net.networkId,
+      conf.customNetwork
     )
 
-  initializeEmptyDb(chainDB, conf.customNetwork)
+  initializeEmptyDb(chainDB)
   discard importRlpBlock(blocksFile, chainDB)
   let ctx = setupGraphqlContext(chainDB, ethNode)
 

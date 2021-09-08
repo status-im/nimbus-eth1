@@ -1,7 +1,8 @@
 import unittest2, strutils, tables, os, json,
   ../nimbus/utils/difficulty, stint, times,
   eth/common, test_helpers, stew/byteutils,
-  ../nimbus/constants, ../nimbus/config
+  ../nimbus/constants, ../nimbus/config,
+  ../nimbus/chain_config
 
 type
   Tester = object
@@ -60,11 +61,11 @@ template runTests(name: string, hex: bool, calculator: typed) =
       check diff == t.currentDifficulty
 
 proc difficultyMain*() =
-  let mainnetConfig = chainConfig(MainNet)
+  let mainnetConfig = chainConfig(MainNet, CustomNetwork())
   func calcDifficultyMainNetWork(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
     mainnetConfig.calcDifficulty(timeStamp, parent)
 
-  let ropstenConfig = chainConfig(RopstenNet)
+  let ropstenConfig = chainConfig(RopstenNet, CustomNetwork())
   func calcDifficultyRopsten(timeStamp: EthTime, parent: BlockHeader): DifficultyInt =
     ropstenConfig.calcDifficulty(timeStamp, parent)
 

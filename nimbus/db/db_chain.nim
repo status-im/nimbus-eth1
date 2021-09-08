@@ -18,6 +18,7 @@ type
     pruneTrie*: bool
     config*   : ChainConfig
     networkId*: NetworkId
+    customNetwork*: CustomNetwork
 
     # startingBlock, currentBlock, and highestBlock
     # are progress indicator
@@ -29,12 +30,18 @@ type
     blockNumber: BlockNumber
     index: int
 
-proc newBaseChainDB*(db: TrieDatabaseRef, pruneTrie: bool = true, id: NetworkId = MainNet): BaseChainDB =
+proc newBaseChainDB*(
+       db: TrieDatabaseRef,
+       pruneTrie: bool = true,
+       id: NetworkId = MainNet,
+       cn = CustomNetwork() ): BaseChainDB =
+
   new(result)
   result.db = db
   result.pruneTrie = pruneTrie
-  result.config = chainConfig(id)
+  result.config = chainConfig(id, cn)
   result.networkId = id
+  result.customNetwork = cn
 
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"

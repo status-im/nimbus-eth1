@@ -115,6 +115,13 @@ func calculateForkIds(c: ChainConfig,
     prevFork = result[fork].nextFork
     prevCRC = result[fork].crc
 
+proc setForkId(c: Chain, cn: CustomNetwork)
+  {. raises: [Defect,CatchableError].} =
+  let g = genesisBlockForNetwork(c.db.networkId, cn)
+  c.blockZeroHash = g.toBlock.blockHash
+  let genesisCRC = crc32(0, c.blockZeroHash.data)
+  c.forkIds = calculateForkIds(c.db.config, genesisCRC)
+
 # ------------------------------------------------------------------------------
 # Private constructor helper
 # ------------------------------------------------------------------------------
@@ -129,6 +136,7 @@ proc initChain(c: Chain; db: BaseChainDB; poa: Clique; extraValidation: bool)
   if not db.config.daoForkSupport:
     db.config.daoForkBlock = db.config.homesteadBlock
   c.extraValidation = extraValidation
+  c.setForkId(db.customNetwork)
 
   # Initalise the PoA state regardless of whether it is needed on the current
   # network. For non-PoA networks (when `db.config.poaEngine` is `false`),
@@ -236,13 +244,6 @@ proc `verifyFrom=`*(c: Chain; verifyFrom: uint64) {.inline.} =
   ## validation should start if the `Clique` field `extraValidation` was set
   ## `true`.
   c.verifyFrom = verifyFrom.u256
-
-proc setForkId*(c: Chain, cn = CustomNetwork())
-  {. raises: [Defect,CatchableError].} =
-  let g = genesisBlockForNetwork(c.db.networkId, cn)
-  c.blockZeroHash = g.toBlock.blockHash
-  let genesisCRC = crc32(0, c.blockZeroHash.data)
-  c.forkIds = calculateForkIds(c.db.config, genesisCRC)
 
 # ------------------------------------------------------------------------------
 # End

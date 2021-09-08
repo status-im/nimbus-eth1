@@ -31,28 +31,50 @@ proc toBlock(n: JsonNode, key: string): EthBlock =
   let rlpBlob = hexToSeqByte(n[key].str)
   rlp.decode(rlpBlob, EthBlock)
 
-proc setupChain(chainDB: BaseChainDB) =
+proc setupChain(): BaseChainDB =
+  let config = ChainConfig(
+    chainId             : MainNet.ChainId,
+    byzantiumBlock      : 0.toBlockNumber,
+    constantinopleBlock : 0.toBlockNumber,
+    petersburgBlock     : 0.toBlockNumber,
+    istanbulBlock       : 0.toBlockNumber,
+    muirGlacierBlock    : 0.toBlockNumber,
+    berlinBlock         : 10.toBlockNumber,
+    londonBlock         : high(BlockNumber).toBlockNumber
+  )
+
   var jn = json.parseFile(dataFolder / "oneUncle.json")
   for k, v in jn:
     if v["network"].str == "Istanbul":
       jn = v
       break
 
-  let genesis = jn.toBlock("genesisRLP")
-
-  let conf = getConfiguration()
-  conf.customNetwork.genesis.nonce      = genesis.header.nonce
-  conf.customNetwork.genesis.extraData  = genesis.header.extraData
-  conf.customNetwork.genesis.gasLimit   = genesis.header.gasLimit
-  conf.customNetwork.genesis.difficulty = genesis.header.difficulty
-  conf.customNetwork.genesis.mixHash    = genesis.header.mixDigest
-  conf.customNetwork.genesis.coinBase   = genesis.header.coinbase
-  conf.customNetwork.genesis.timestamp  = genesis.header.timestamp
-  conf.customNetwork.genesis.baseFeePerGas = genesis.header.fee
-  if not parseGenesisAlloc($(jn["pre"]), conf.customNetwork.genesis.alloc):
+  let gen = jn.toBlock("genesisRLP")
+  var genesis = Genesis(
+    nonce     : gen.header.nonce,
+    extraData : gen.header.extraData,
+    gasLimit  : gen.header.gasLimit,
+    difficulty: gen.header.difficulty,
+    mixHash   : gen.header.mixDigest,
+    coinBase  : gen.header.coinbase,
+    timestamp : gen.header.timestamp,
+    baseFeePerGas: gen.header.fee
+  )
+  if not parseGenesisAlloc($(jn["pre"]), genesis.alloc):
     quit(QuitFailure)
 
-  chainDB.initializeEmptyDb(conf.customNetwork)
+  let customNetwork = CustomNetwork(
+    config: config,
+    genesis: genesis
+  )
+
+  let chainDB = newBaseChainDB(
+    newMemoryDb(),
+    pruneTrie = false,
+    CustomNet,
+    customNetwork
+  )
+  chainDB.initializeEmptyDb()
 
   let blocks = jn["blocks"]
   var headers: seq[BlockHeader]
@@ -69,29 +91,15 @@ proc setupChain(chainDB: BaseChainDB) =
   let res = chain.persistBlocks(headers, bodies)
   assert(res == ValidationResult.OK)
 
-proc graphqlMain*() =
-  let conf = getConfiguration()
-  conf.net.networkId = CustomNet
-  conf.customNetwork.config = ChainConfig(
-    chainId             : MainNet.ChainId,
-    byzantiumBlock      : 0.toBlockNumber,
-    constantinopleBlock : 0.toBlockNumber,
-    petersburgBlock     : 0.toBlockNumber,
-    istanbulBlock       : 0.toBlockNumber,
-    muirGlacierBlock    : 0.toBlockNumber,
-    berlinBlock         : 10.toBlockNumber,
-    londonBlock         : high(BlockNumber).toBlockNumber
-  )
+  chainDB
 
+proc graphqlMain*() =
   let
+    conf    = getConfiguration()
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    chainDB = newBaseChainDB(newMemoryDb(),
-      pruneTrie = false,
-      conf.net.networkId
-    )
+    chainDB = setupChain()
 
-  chainDB.setupChain()
   let ctx = setupGraphqlContext(chainDB, ethNode)
   when isMainModule:
     ctx.main(caseFolder, purgeSchema = false)

@@ -166,7 +166,7 @@ proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
   elif number >= c.homesteadBlock: FkHomestead
   else: FkFrontier
 
-proc chainConfig*(id: NetworkId): ChainConfig =
+proc chainConfig*(id: NetworkId, cn: CustomNetwork): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
   # but that is not always the case
 
@@ -245,10 +245,9 @@ proc chainConfig*(id: NetworkId): ChainConfig =
       londonBlock:    5_062_605.toBlockNumber # June 30, 2021
     )
   else:
-    # everything else will use CustomNet config
-    let conf = getConfiguration()
-    trace "Custom genesis block configuration loaded", conf=conf.customNetwork.config
-    conf.customNetwork.config
+    # everything else will use CustomNet config    
+    trace "Custom genesis block configuration loaded", conf=cn.config
+    cn.config
 
 proc processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.

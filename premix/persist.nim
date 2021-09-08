@@ -47,7 +47,7 @@ proc main() {.used.} =
 
   if canonicalHeadHashKey().toOpenArray notin trieDB:
     persistToDb(db):
-      initializeEmptyDb(chainDB, CustomNetwork())
+      initializeEmptyDb(chainDB)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
   var head = chainDB.getCanonicalHead()
