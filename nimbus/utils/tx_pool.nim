@@ -10,20 +10,27 @@
 
 ## Transaction Pool
 ## ================
+##
+## TODO:
+##   maxPriorityFee / EIP-1559 handling (currently all zero)
+##
 
 import
   std/[tables, times],
    ./keequ,
-  ./tx_pool/[tx_base, tx_item, tx_jobs],
+  ./tx_pool/[tx_base, tx_group, tx_item, tx_jobs, tx_list],
   eth/[common, keys],
   stew/results
 
 export
+  TxGroupItemsRef,
+  TxListItemsRef,
   TxItemRef,
   results,
   tx_item.id,
   tx_item.info,
   tx_item.local,
+  tx_item.sender,
   tx_item.timeStamp,
   tx_item.tx,
   tx_jobs.TxJobData,
@@ -327,21 +334,30 @@ proc startDate*(xp: var TxPool): auto {.inline.} =
 # Remove removes a transaction from the lookup.
 #func (t *txLookup) Remove(hash common.Hash)
 
-# RemoteToLocals migrates the transactions belongs to the given locals to locals
-# set. The assumption is held the locals set is thread-safe to be used.
-#func (t *txLookup) RemoteToLocals(locals *accountSet) int
-
 # ------------------------------------------------------------------------------
 # Public functions, go like API
 # ------------------------------------------------------------------------------
 
+# core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
+proc remoteToLocals*(xp: var TxPool; signer: EthAddress): int
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## For given account, remote transactions are migrated to local transactions.
+  ## The function returns the number of transactions migrated.
+  let rc = xp.bySenderEq(signer)
+  if rc.isOK:
+    let nRemotes = xp.byRemoteQueueLen
+    for item in rc.value.itemList.nextKeys:
+      if not item.local:
+        discard xp.reassign(item.id, local = true)
+    return nRemotes - xp.byRemoteQueueLen
+
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
-proc remotesBelowTip(xp: var TxPool; threshold: GasInt): seq[Hash256]
+proc remotesBelowTip*(xp: var TxPool; threshold: GasInt): seq[Hash256]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Finds all remote transactions below the given tip threshold (effective
   ## only with *EIP-1559* support, otherwise all transactions are returned.)
-  for _,itList in xp.byGasTipCapDecMPairs(fromLe = threshold):
-    for item in itList.nextKeys:
+  for it in xp.byGasTipCapDec(fromLe = threshold):
+    for item in it.itemList.nextKeys:
       if not item.local:
         result.add item.id
 

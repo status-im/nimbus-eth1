@@ -40,6 +40,7 @@ type
     txVfyByIdQueueKey         ## Corrupted ID queue/fifo container id
     txVfyByIdQueueSchedule    ## Local flag indicates wrong schedule
 
+    txVfyBySenderQueue        ## Corrupted sender queue/table structure
     txVfyBySenderLeafEmpty    ## Empty sender list leaf record
     txVfyBySenderLeafQueue    ## Corrupted sender leaf queue
     txVfyBySenderTotal        ## Wrong number of leaves
@@ -177,12 +178,6 @@ proc len*(xp: var TxPoolBase): int =
   ## Total number of registered transactions
   xp.byIdQueue.nLeaves
 
-proc len*(rq: var TxListItems): int =
-  ## Returns the number of items on the argument queue `rq` which is typically
-  ## the result of an `SLstRef` type object query holding one or more
-  ## duplicates relative to the same index.
-  keequ.len(rq)
-
 proc byLocalQueueLen*(xp: var TxPoolBase): int =
   ## Number of transactions in local queue
   xp.byIdQueue.len(TxLocalQueue)
@@ -279,7 +274,7 @@ proc prev*(xp: var TxPoolBase;
 # ------------------------------------------------------------------------------
 
 proc bySenderEq*(xp: var TxPoolBase;
-                 ethAddr: EthAddress): Result[TxListItems,void]
+                 ethAddr: EthAddress): Result[TxGroupItemsRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Retrieve the list of transaction records all with the same `ethAddr`
   ## argument sender address (if any.)
@@ -292,7 +287,7 @@ proc bySenderEq*(xp: var TxPoolBase;
 # ------------------------------------------------------------------------------
 
 proc byGasPriceGe*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Retrieve the list of transaction records all with the same *least*
   ## `gasPrice` item *greater or equal* the argument `gWei`. On success, the
   ## resulting list of transactions has at least one item.
@@ -302,7 +297,7 @@ proc byGasPriceGe*(xp: var TxPoolBase;
   err()
 
 proc byGasPriceGt*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.gt(gWei)
   if rc.isOk:
@@ -310,7 +305,7 @@ proc byGasPriceGt*(xp: var TxPoolBase;
   err()
 
 proc byGasPriceLe*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.le(gWei)
   if rc.isOk:
@@ -318,7 +313,7 @@ proc byGasPriceLe*(xp: var TxPoolBase;
   err()
 
 proc byGasPriceLt*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.lt(gWei)
   if rc.isOk:
@@ -326,7 +321,7 @@ proc byGasPriceLt*(xp: var TxPoolBase;
   err()
 
 proc byGasPriceEq*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Similar to `byGasPriceGe()`.
   let rc = xp.byGasPrice.eq(gWei)
   if rc.isOk:
@@ -338,7 +333,7 @@ proc byGasPriceEq*(xp: var TxPoolBase;
 # ------------------------------------------------------------------------------
 
 proc byGasTipCapGe*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Retrieve the list of transaction records all with the same *least*
   ## `maxPriorityFee` item *greater or equal* the argument `gWei`. On success,
   ## the resulting list of transactions has at least one item.
@@ -348,7 +343,7 @@ proc byGasTipCapGe*(xp: var TxPoolBase;
   err()
 
 proc byGasTipCapGt*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Similar to `byGasTipCapGe()`.
   let rc = xp.byGasTipCap.gt(gWei)
   if rc.isOk:
@@ -356,7 +351,7 @@ proc byGasTipCapGt*(xp: var TxPoolBase;
   err()
 
 proc byGasTipCapLe*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Similar to `byGasTipCapGe()`.
   let rc = xp.byGasTipCap.le(gWei)
   if rc.isOk:
@@ -364,7 +359,7 @@ proc byGasTipCapLe*(xp: var TxPoolBase;
   err()
 
 proc byGasTipCapLt*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Similar to `byGasTipCapGe()`.
   let rc = xp.byGasTipCap.lt(gWei)
   if rc.isOk:
@@ -372,7 +367,7 @@ proc byGasTipCapLt*(xp: var TxPoolBase;
   err()
 
 proc byGasTipCapEq*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItems,void] =
+                   gWei: GasInt): Result[TxListItemsRef,void] =
   ## Similar to `byGasTipCapGe()`.
   let rc = xp.byGasTipCap.eq(gWei)
   if rc.isOk:
@@ -455,8 +450,19 @@ iterator lastInItems*(xp: var TxPoolBase; local: bool): TxItemRef
 
 # ------------
 
-iterator byGasPriceIncMPairs*(xp: var TxPoolBase;
-                              fromGe = GasInt.low): (GasInt,var TxListItems) =
+iterator bySenderGroups*(xp: var TxPoolBase): TxGroupItemsRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Walk over item lists grouped by sender addresses.
+  var rc = xp.bySender.first
+  while rc.isOK:
+    let (key, itemList) = (rc.value.key, rc.value.data)
+    rc = xp.bySender.next(key)
+    yield itemList
+
+# ------------
+
+iterator byGasPriceInc*(xp: var TxPoolBase;
+                        fromGe = GasInt.low): TxListItemsRef =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
   ## :Note:
@@ -470,42 +476,42 @@ iterator byGasPriceIncMPairs*(xp: var TxPoolBase;
   var rc = xp.byGasPrice.ge(fromGe)
   while rc.isOk:
     let yKey = rc.value.key
-    yield (ykey, rc.value.data)
+    yield rc.value.data
     rc = xp.byGasPrice.gt(ykey)
 
-iterator byGasPriceDecMPairs*(xp: var TxPoolBase;
-                             fromLe = GasInt.high): (GasInt,var TxListItems) =
+iterator byGasPriceDec*(xp: var TxPoolBase;
+                        fromLe = GasInt.high): TxListItemsRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## See also the **Note* at the comment for `byGasPriceIncPairs()`.
   var rc = xp.byGasPrice.le(fromLe)
   while rc.isOk:
     let yKey = rc.value.key
-    yield (yKey, rc.value.data)
+    yield rc.value.data
     rc = xp.byGasPrice.lt(yKey)
 
 # ------------
 
-iterator byGasTipCapIncMPairs*(xp: var TxPoolBase;
-                             fromGe = GasInt.low): (GasInt,var TxListItems) =
+iterator byGasTipCapInc*(xp: var TxPoolBase;
+                         fromGe = GasInt.low): TxListItemsRef =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
   ## See also the **Note* at the comment for `byGasPriceIncPairs()`.
   var rc = xp.byGasTipCap.ge(fromGe)
   while rc.isOk:
     let yKey = rc.value.key
-    yield (ykey, rc.value.data)
+    yield rc.value.data
     rc = xp.byGasTipCap.gt(ykey)
 
-iterator byGasTipCapDecMPairs*(xp: var TxPoolBase;
-                             fromLe = GasInt.high): (GasInt,var TxListItems) =
+iterator byGasTipCapDec*(xp: var TxPoolBase;
+                         fromLe = GasInt.high): TxListItemsRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## See also the **Note* at the comment for `byGasPriceIncPairs()`.
   var rc = xp.byGasTipCap.le(fromLe)
   while rc.isOk:
     let yKey = rc.value.key
-    yield (yKey, rc.value.data)
+    yield rc.value.data
     rc = xp.byGasTipCap.lt(yKey)
 
 # ------------------------------------------------------------------------------
@@ -538,6 +544,7 @@ proc verify*(xp: var TxPoolBase): Result[void,TxBaseInfo]
     if rc.isErr:
       case rc.error[0]
       of txGroupOk:           return err(txOk)
+      of txGroupVfyQueue:     return err(txVfyBySenderQueue)
       of txGroupVfyLeafEmpty: return err(txVfyBySenderLeafEmpty)
       of txGroupVfyLeafQueue: return err(txVfyBySenderLeafQueue)
       of txGroupVfySize:      return err(txVfyBySenderTotal)

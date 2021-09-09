@@ -35,15 +35,15 @@ type
     ## comes in when queuing items for the same key (e.g. gas price.)
     int
 
-  TxListItems* = ##\
+  TxListItemsRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    KeeQu[TxItemRef,TxListMark]
+    itemList*: KeeQu[TxItemRef,TxListMark]
 
   TxGasItemLst* = object ##\
     ## Generic item list indexed by gas price
     size: int
-    l: SLst[GasInt,TxListItems]
+    l: SLst[GasInt,TxListItemsRef]
 
 {.push raises: [Defect].}
 
@@ -51,9 +51,9 @@ type
 # Private, helpers for debugging and pretty printing
 # ------------------------------------------------------------------------------
 
-proc `$`(rq: var TxListItems): string =
+proc `$`(rq: TxListItemsRef): string =
   ## Needed by `rq.verify()` for printing error messages
-  $rq.len
+  $rq.itemList.len
 
 # ------------------------------------------------------------------------------
 # Public gas price list helpers
@@ -70,11 +70,12 @@ proc txInsert*(gp: var TxGasItemLst; key: GasInt; val: TxItemRef)
   ## multiple leaf values per argument `key`.
   var rc = gp.l.insert(key)
   if rc.isOk:
-    rc.value.data.init(1)
+    rc.value.data = TxListItemsRef(
+      itemList: initKeeQu[TxItemRef,TxListMark](1))
   else:
     rc = gp.l.eq(key)
-  if not rc.value.data.hasKey(val):
-    discard rc.value.data.append(val,0)
+  if not rc.value.data.itemList.hasKey(val):
+    discard rc.value.data.itemList.append(val,0)
     gp.size.inc
 
 
@@ -83,10 +84,10 @@ proc txDelete*(gp: var TxGasItemLst; key: GasInt; val: TxItemRef)
   ## Remove `(key,val)` pair from list.
   var rc = gp.l.eq(key)
   if rc.isOk:
-    if rc.value.data.hasKey(val):
-      rc.value.data.del(val)
+    if rc.value.data.itemList.hasKey(val):
+      rc.value.data.itemList.del(val)
       gp.size.dec
-      if rc.value.data.len == 0:
+      if rc.value.data.itemList.len == 0:
         discard gp.l.delete(key)
 
 
@@ -103,11 +104,11 @@ proc txVerify*(gp: var TxGasItemLst): Result[void,(TxListInfo,KeeQuInfo)]
     var itQ = wRc.value.data
     wRc = gp.l.gt(wRc.value.key)
 
-    count += itQ.len
-    if itQ.len == 0:
+    count += itQ.itemList.len
+    if itQ.itemList.len == 0:
       return err((txListVfyLeafEmpty, keeQuOk))
 
-    let qRc = itQ.verify
+    let qRc = itQ.itemList.verify
     if qRc.isErr:
       return err((txListVfyLeafQueue, qRc.error[2]))
 

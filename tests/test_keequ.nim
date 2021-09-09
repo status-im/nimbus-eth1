@@ -161,7 +161,7 @@ proc runKeeQu(noisy = true) =
     numUniqeKeys = keyList.toSeq.mapIt((it,false)).toTable.len
     numKeyDups = keyList.len - numUniqeKeys
 
-  suite "Data queue with keyed random access":
+  suite "KeeQu: Data queue with keyed random access":
     block:
       var
         fwdRq, revRq: KUQueue

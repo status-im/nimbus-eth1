@@ -23,16 +23,23 @@ const
   goerliCapture = "test_clique" / "goerli51840.txt.gz"
   loadFile = goerliCapture
 
-  # 90% <= #local/#remote <= 1/90%
-  localRemoteRatioBandPC = 90
+  # 85% <= #local/#remote <= 1/85%
+  # note: by law of big numbers, the ratio will exceed any upper or lower
+  #       on a +1/-1 random walk if running long enough (with expectation
+  #       value 0)
+  localRemoteRatioBandPC = 85
 
   # 95% <= #remote-deleted/#remote-present <= 1/95%
   deletedItemsRatioBandPC = 95
 
+  # 70% <= #addr-local/#addr-remote <= 1/70%
+  # note: this ratio might vary due to timing race conditions
+  addrGroupLocalRemotePC = 70
+
 var
   prng = prngSeed.initRand
 
-  # to be set up in runTxBaseTests()
+  # to be set up in runTxLoader()
   okCount: array[bool,int] # entries: [local,remote] entries
   txList: seq[TxItemRef]
   gasPrices: seq[GasInt]
@@ -42,7 +49,7 @@ var
 # Helpers
 # ------------------------------------------------------------------------------
 
-proc randOkRatioPC: int =
+proc randOkRatio: int =
   if okCount[false] == 0:
     int.high
   else:
@@ -84,8 +91,8 @@ proc toTxPool(q: var seq[TxItemRef]; noisy = true): TxPool =
 
 
 proc toTxPool(q: var seq[TxItemRef]; noisy = true;
-              timeGap: var Time;
-              remoteItemsPC = 30; delayMSecs = 100): TxPool =
+              timeGap: var Time; nRemoteGapItems: var int;
+              remoteItemsPC = 30; delayMSecs = 200): TxPool =
   ## Variant of `toTxPool()` where the loader sleeps some time after
   ## `remoteItemsPC` percent loading remote items.
   doAssert 0 < remoteItemsPC and remoteItemsPC < 100
@@ -97,9 +104,10 @@ proc toTxPool(q: var seq[TxItemRef]; noisy = true;
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
       doAssert result.insert(w.tx, w.local, w.info).value == w.id
-      if not w.local:
+      if not w.local and remoteCount < delayAt:
         remoteCount.inc
         if delayAt == remoteCount:
+          nRemoteGapItems = remoteCount
           noisy.say &"time gap after {remoteCount} remote transactions"
           timeGap = result[w.id].timeStamp + middleOfTimeGap
           delayMSecs.sleep
@@ -133,7 +141,13 @@ proc runTxLoader(noisy = true;
     stopAfter = if numTransactions == 0: 900 else: numTransactions
     name = captureFile.splitFile.name.split(".")[0]
 
-  suite &"TxPool: Prepare loading transactions from {name} capture":
+  # Reset/initialise
+  okCount.reset
+  txList.reset
+  gasPrices.reset
+  gasTipCaps.reset
+
+  suite &"TxPool: Transactions from {name} capture":
     var xp = initTxPool()
     check txList.len == 0
 
@@ -141,9 +155,12 @@ proc runTxLoader(noisy = true;
       elapNoisy.showElapsed("Total collection time"):
         xp.collectTxPool(veryNoisy, dir / captureFile, stopAfter)
 
+      check okCount[true] + okCount[false] == xp.len
+
       # make sure that PRNG did not go bunkers
-      check localRemoteRatioBandPC < randOkRatioPC() and
-        randOkRatioPC() < (10000 div localRemoteRatioBandPC)
+      let localRemoteRatio = randOkRatio()
+      check localRemoteRatioBandPC < localRemoteRatio
+      check localRemoteRatio < (10000 div localRemoteRatioBandPC)
 
       # Note: expecting enough transactions in the `goerliCapture` file
       check xp.len == stopAfter
@@ -158,13 +175,13 @@ proc runTxLoader(noisy = true;
     test "Load gas prices and priority fees":
 
       elapNoisy.showElapsed("Load gas prices"):
-        for w,_ in xp.byGasPriceIncMPairs:
-          gasPrices.add w
+        for it in xp.byGasPriceInc:
+          gasPrices.add it.itemList.firstKey.value.tx.gasPrice
       check gasPrices.len == xp.byGasPriceLen
 
       elapNoisy.showElapsed("Load priority fee caps"):
-        for w,_ in xp.byGasTipCapIncMPairs:
-          gasTipCaps.add w
+        for it in xp.byGasTipCapInc:
+          gasTipCaps.add it.itemList.firstKey.value.tx.maxPriorityFee
       check gasTipCaps.len == xp.byGasTipCapLen
 
 
@@ -234,12 +251,13 @@ proc runTxBaseTests(noisy = true) =
             gpList: seq[GasInt]
 
           elapNoisy.showElapsed("Increasing gas price walk on transactions"):
-            for (gasPrice,itemsLst) in xq.byGasPriceIncMPairs:
+            for it in xq.byGasPriceInc:
+              let gasPrice = it.itemList.firstKey.value.tx.gasPrice
               var infoList: seq[string]
-              for w in itemsLst.nextKeys: # prevKeys() also works
+              for w in it.itemList.nextKeys: # prevKeys() also works
                 infoList.add w.info
               gpList.add gasPrice
-              txCount += itemsLst.len
+              txCount += it.itemList.len
               veryNoisy.say &"gasPrice={gasPrice} for {infoList.len} entries:"
               let indent = " ".repeat(6)
               veryNoisy.say indent, infoList.join(&"\n{indent}")
@@ -255,12 +273,13 @@ proc runTxBaseTests(noisy = true) =
             gpList: seq[GasInt]
 
           elapNoisy.showElapsed("Decreasing gas price walk on transactions"):
-            for (gasPrice,itemsLst) in xq.byGasPriceDecMPairs:
+            for it in xq.byGasPriceDec:
+              let gasPrice = it.itemList.firstKey.value.tx.gasPrice
               var infoList: seq[string]
-              for w in itemsLst.prevKeys: # nextKeys() also works
+              for w in it.itemList.prevKeys: # nextKeys() also works
                 infoList.add w.info
               gpList.add gasPrice
-              txCount += itemsLst.len
+              txCount += it.itemList.len
               veryNoisy.say &"gasPrice={gasPrice} for {infoList.len} entries:"
               let indent = " ".repeat(6)
               veryNoisy.say indent, infoList.join(&"\n{indent}")
@@ -328,14 +347,14 @@ proc runTxBaseTests(noisy = true) =
       let
         delLe = gasPrices[0] + ((gasPrices[^1] - gasPrices[0]) div 3)
         delMax = block:
-          var itLst = xq.byGasPriceLe(delLe).value
-          itLst.firstKey.value.tx.gasPrice
+          var it = xq.byGasPriceLe(delLe).value
+          it.itemList.firstKey.value.tx.gasPrice
 
       test &"Load/delete with gas price less equal {delMax.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
         elapNoisy.showElapsed(&"Deleting gas prices less equal {delMax.toKMG}"):
-          for (gp,itemList) in xq.byGasPriceDecMPairs(fromLe = delMax):
-            for item in itemList.nextKeys:
+          for it in xq.byGasPriceDec(fromLe = delMax):
+            for item in it.itemList.nextKeys:
               count.inc
               check xq.delete(item).isOK
               check xq.verify.isOK
@@ -350,15 +369,15 @@ proc runTxBaseTests(noisy = true) =
       let
         delGe = gasPrices[^1] - ((gasPrices[^1] - gasPrices[0]) div 3)
         delMin = block:
-          var itLst = xq.byGasPriceGe(delGe).value
-          itLst.firstKey.value.tx.gasPrice
+          var it = xq.byGasPriceGe(delGe).value
+          it.itemList.firstKey.value.tx.gasPrice
 
       test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
         elapNoisy.showElapsed(
             &"Deleting gas prices greater than {delMin.toKMG}"):
-          for gp, itemList in xq.byGasPriceIncMPairs(fromGe = delMin):
-            for item in itemList.nextKeys:
+          for it in xq.byGasPriceInc(fromGe = delMin):
+            for item in it.itemList.nextKeys:
               count.inc
               check xq.delete(item).isOK
               check xq.verify.isOK
@@ -371,29 +390,71 @@ proc runTxPoolTests(noisy = true) =
 
   suite "TxPool: Play with pool functions and primitives":
 
-    test "Delete about half of non-local transactions that were added later":
+    block:
       var
         gap: Time
-        xq = txList.toTxPool(noisy, gap, remoteItemsPC = 50, delayMSecs = 100)
+        nItems: int
+        xq = txList.toTxPool(noisy, gap, nItems,
+                             remoteItemsPC = 35, # arbitrary
+                             delayMSecs = 100)   # large enough to be found
 
-      xq.lifeTime = getTime() - gap
+      test &"Delete about {nItems} expired non-local transactions "&
+          &"out of {xq.byRemoteQueueLen}":
 
-      check xq.job(TxJobData(kind: txJobsInactiveJobsEviction)).isJobOk
-      check xq.commit == 1
-      check xq.byLocalQueueLen == okCount[true]
+        check 0 < nItems
+        xq.lifeTime = getTime() - gap
 
-      # make sure that deletion was sort of even (~ 50%)
-      let
-        deletedItems = txList.len - xq.len
-        deletedRatio = (deletedItems * 100 / xq.byRemoteQueueLen).int
-      check deletedItemsRatioBandPC < deletedRatio and
-        deletedRatio < (10000 div deletedItemsRatioBandPC)
+        check xq.job(TxJobData(kind: txJobsInactiveJobsEviction)).isJobOk
+        check xq.commit == 1
+        check xq.byLocalQueueLen == okCount[true]
+
+        # make sure that deletion was sort of expected
+        let
+          deletedItems = txList.len - xq.len
+          deleteExpextRatio = (deletedItems * 100 / nItems).int
+        check deletedItemsRatioBandPC < deleteExpextRatio
+        check deleteExpextRatio < (10000 div deletedItemsRatioBandPC)
 
     # ---------------------------------
 
-    #test "Lalala ..."
-    #  var xq = txList.toTxPool(noisy)
-    #  let lbl = xq.remotesBelowTip
+    block:
+      var
+        xq = txList.toTxPool(noisy)
+        maxAddr: EthAddress
+        nAddrItems = 0
+        nAddrRemotes = 0
+
+      test "About half of transactions in largest address group are remotes":
+
+        # find address with max number of transactions
+        for it in xq.bySenderGroups:
+          if nAddrItems < it.itemList.len:
+            maxAddr = it.itemList.firstKey.value.sender
+            nAddrItems = it.itemList.len
+        check 0 < nAddrItems
+
+        # count the number of remotes
+        for item in xq.bySenderEq(maxAddr).value.itemList.nextKeys:
+          if not item.local:
+            nAddrRemotes.inc
+
+        # make sure that local/remote ratio makes sense
+        let localRemoteRatio =
+           (((nAddrItems - nAddrRemotes) * 100) / nAddrRemotes).int
+        check addrGroupLocalRemotePC < localRemoteRatio
+        check localRemoteRatio < (10000 div addrGroupLocalRemotePC)
+
+      test &"Reassign {nAddrRemotes} remotes to locals in largest "&
+        &"address group with {nAddrItems} entries":
+
+        let
+          nLocals = xq.byLocalQueueLen
+          nRemotes = xq.byRemoteQueueLen
+          nMoved = xq.remoteToLocals(maxAddr)
+
+        check nMoved == nAddrRemotes
+        check nLocals + nMoved == xq.byLocalQueueLen
+        check nRemotes - nMoved == xq.byRemoteQueueLen
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -407,16 +468,17 @@ proc txPoolMain*(noisy = defined(debug)) =
 when isMainModule:
   let
     captFile1 = "goerli504192.txt.gz"
-    captFile2 = "mainnet266881.txt.gz"
+    captFile2 = "mainnet843841.txt.gz"
 
   let noisy = defined(debug)
 
-  #noisy.runTxLoader(
-  #  dir = "/status", captureFile = captFile2, numTransactions = 1500)
-
-  noisy.runTxLoader(dir = ".")
+  noisy.runTxLoader(
+    dir = "/status", captureFile = captFile2, numTransactions = 1500)
   noisy.runTxBaseTests
-  true.runTxPoolTests
+  noisy.runTxPoolTests
+
+  #noisy.runTxLoader(dir = ".")
+  #noisy.runTxPoolTests
 
 # ------------------------------------------------------------------------------
 # End

@@ -22,6 +22,7 @@ import
 type
   TxGroupInfo* = enum
     txGroupOk = 0
+    txGroupVfyQueue     ## Corrupted address queue/table structure
     txGroupVfyLeafEmpty ## Empty leaf list
     txGroupVfyLeafQueue ## Corrupted leaf list
     txGroupVfySize      ## Size count mismatch
@@ -31,15 +32,19 @@ type
     ## comes in when queuing items for the same key (e.g. gas price.)
     int
 
-  TxGroupItems* = ##\
+  TxGroupItemsRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    KeeQu[TxItemRef,TxGroupMark]
+    itemList*: KeeQu[TxItemRef,TxGroupMark]
 
   TxGroupAddr* = object ##\
     ## Per address table
     size: int
-    q: Table[EthAddress,TxGroupItems]
+    q: KeeQu[EthAddress,TxGroupItemsRef]
+
+  TxGroupAddrPair* = ##\
+    ## Queue handler wrapper, needed in `first()`, `next()`, etc.
+    KeeQuPair[EthAddress,TxGroupItemsRef]
 
 {.push raises: [Defect].}
 
@@ -50,25 +55,26 @@ type
 proc txInit*(t: var TxGroupAddr; size = 10) =
   ## Optional constructor
   t.size = 0
-  t.q = initTable[EthAddress,TxGroupItems](size.nextPowerOfTwo)
+  t.q.init(size)
 
 
 proc txInsert*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   if not t.q.hasKey(ethAddr):
-    t.q[ethAddr] = initKeeQu[TxItemRef,TxGroupMark](1)
-  elif t.q[ethAddr].hasKey(item):
+    t.q[ethAddr] = TxGroupItemsRef(
+      itemList: initKeeQu[TxItemRef,TxGroupMark](1))
+  elif t.q[ethAddr].itemList.hasKey(item):
     return
-  t.q[ethAddr][item] = 0
+  t.q[ethAddr].itemList[item] = 0
   t.size.inc
 
 
 proc txDelete*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
-  if t.q.hasKey(ethAddr) and t.q[ethAddr].hasKey(item):
-    t.q[ethAddr].del(item)
+  if t.q.hasKey(ethAddr) and t.q[ethAddr].itemList.hasKey(item):
+    t.q[ethAddr].itemList.del(item)
     t.size.dec
-    if t.q[ethAddr].len == 0:
+    if t.q[ethAddr].itemList.len == 0:
       t.q.del(ethAddr)
 
 
@@ -76,12 +82,16 @@ proc txVerify*(t: var TxGroupAddr): Result[void,(TxGroupInfo,KeeQuInfo)]
     {.gcsafe,raises: [Defect,KeyError].} =
   var count = 0
 
-  for (ethAddr,itQ) in t.q.mpairs:
-    count += itQ.len
-    if itQ.len == 0:
+  let rc = t.q.verify
+  if rc.isErr:
+    return err((txGroupVfyQueue,rc.error[2]))
+
+  for itQ in t.q.nextValues:
+    count += itQ.itemList.len
+    if itQ.itemList.len == 0:
       return err((txGroupVfyLeafEmpty, keeQuOk))
 
-    let rc = itQ.verify
+    let rc = itQ.itemList.verify
     if rc.isErr:
       return err((txGroupVfyLeafQueue, rc.error[2]))
 
@@ -102,8 +112,15 @@ proc`[]`*(t: var TxGroupAddr; key: EthAddress): auto
 proc hasKey*(t: var TxGroupAddr; key: EthAddress): auto {.inline.} =
   t.q.hasKey(key)
 
-proc len*(t: var TxGroupAddr): auto {.inline.} =
-  t.q.len
+proc len*(t: var TxGroupAddr): auto {.inline.} = t.q.len
+
+proc first*(t: var TxGroupAddr): auto {.gcsafe,raises: [Defect,KeyError].} =
+  t.q.first
+
+proc next*(t: var TxGroupAddr;
+           key: EthAddress): auto {.gcsafe,raises: [Defect,KeyError].} =
+  t.q.next(key)
+
 
 # ------------------------------------------------------------------------------
 # End
