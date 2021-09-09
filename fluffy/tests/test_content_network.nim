@@ -10,25 +10,25 @@ import
   testutils/unittests,
   eth/[keys, trie/db, trie/hexary, ssz/ssz_serialization],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
-  ../../nimbus/[genesis, chain_config, db/db_chain],
+  ../../nimbus/[genesis, chain_config, config, db/db_chain],
   ../network/state/portal_protocol, ../network/state/content, ../network/state/portal_network,
   ./test_helpers
 
 proc genesisToTrie(filePath: string): HexaryTrie =
   # TODO: Doing our best here with API that exists, to be improved.
-  var cg: CustomGenesis
-  if not loadCustomGenesis(filePath, cg):
+  var cn: CustomNetwork
+  if not loadCustomNetwork(filePath, cn):
     quit(1)
 
   var chainDB = newBaseChainDB(
     newMemoryDb(),
-    pruneTrie = false
+    pruneTrie = false,
+    CustomNet,
+    cn
   )
-  # TODO: Can't provide this at the `newBaseChainDB` call, need to adjust API
-  chainDB.config = cg.config
   # TODO: this actually also creates a HexaryTrie and AccountStateDB, which we
   # could skip
-  let header = toBlock(cg.genesis, chainDB)
+  let header = toBlock(cn.genesis, chainDB)
 
   # Trie exists already in flat db, but need to provide the root
   initHexaryTrie(chainDB.db, header.stateRoot, chainDB.pruneTrie)
