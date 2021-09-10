@@ -78,19 +78,13 @@ proc inactiveJobsEviction(xp: var TxPool; maxLifeTime: Duration)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Any non-local transaction old enough will be removed
   let deadLine = utcNow() - maxLifeTime
-  #echo "*** item",
-  #    " ttl=", maxLifeTime.inMilliSeconds, "ms",
-  #    " ttd=", deadLine.pp, " now=", utcNow().pp,
-  #    " remote=#", xp.byRemoteQueueLen
-  for item in xp.firstOutItems(local = false):
+  var rc = xp.first(local = false)
+  while rc.isOK:
+    let item = rc.value
     if deadLine < item.timeStamp:
       break
+    rc = xp.next(item.id, local = false)
     discard xp.delete(item.id)
-    #if item.timeStamp <= deadLine:
-    #  echo "--- item info=", item.info, " time=", item.timeStamp.pp
-    #  discard xp.delete(item.id)
-    #else:
-    #  echo "+++ item info=", item.info, " time=", item.timeStamp.pp
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -142,7 +136,7 @@ proc startDate*(xp: var TxPool): auto {.inline.} =
 #ErrGasLimit = errors.New("exceeds block gas limit")
 
 # ErrNegativeValue is a sanity error to ensure no one is able to specify a
-## transaction with a negative value.
+# transaction with a negative value.
 #ErrNegativeValue = errors.New("negative value")
 
 # ErrOversizedData is returned if the input data of a transaction is greater
@@ -298,45 +292,82 @@ proc startDate*(xp: var TxPool): auto {.inline.} =
 # given hash.
 #func (pool *TxPool) Has(hash common.Hash) bool
 
-# Range calls f on each key and value present in the map. The callback passed
-# should return the indicator whether the iteration needs to be continued.
-# Callers need to specify which set (or both) to be iterated.
-#func (t *txLookup) Range(
-#  f func(hash common.Hash, tx *types.Transaction, local bool)
-#     bool, local bool, remote bool)
-
-# Get returns a transaction if it exists in the lookup, or nil if not found.
-#func (t *txLookup) Get(hash common.Hash) *types.Transaction
-
-# GetLocal returns a transaction if it exists in the lookup, or nil if not
-# found.
-#func (t *txLookup) GetLocal(hash common.Hash) *types.Transaction
-
-# GetRemote returns a transaction if it exists in the lookup, or nil if not
-# found.
-# func (t *txLookup) GetRemote(hash common.Hash) *types.Transaction
-
-# Count returns the current number of transactions in the lookup.
-#func (t *txLookup) Count() int
-
-# LocalCount returns the current number of local transactions in the lookup.
-#func (t *txLookup) LocalCount() int
-
-# RemoteCount returns the current number of remote transactions in the lookup.
-#func (t *txLookup) RemoteCount() int
-
-# Slots returns the current number of slots used in the lookup.
-#func (t *txLookup) Slots() int
-
-# Add adds a transaction to the lookup.
-#func (t *txLookup) Add(tx *types.Transaction, local bool)
-
-# Remove removes a transaction from the lookup.
-#func (t *txLookup) Remove(hash common.Hash)
-
 # ------------------------------------------------------------------------------
-# Public functions, go like API
+# Public functions, go like API -- lookup
 # ------------------------------------------------------------------------------
+
+# -- // Slots returns the current number of slots used in the lookup.
+# -- func (t *txLookup) Slots() int
+#
+# -- // Add adds a transaction to the lookup.
+# -- func (t *txLookup) Add(tx *types.Transaction, local bool)
+#
+# -- // Remove removes a transaction from the lookup.
+# -- func (t *txLookup) Remove(hash common.Hash)
+
+# core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash common.Hash, ..
+iterator rangeFifo*(xp: var TxPool; local: bool): TxItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Local or remote transaction queue walk/traversal: oldest first
+  ##
+  ## :Note:
+  ##    When running in a loop it is ok to delete the current item and all
+  ##    the items already visited. Items not visited yet must not be deleted.
+  var rc = xp.first(local)
+  while rc.isOK:
+    let data = rc.value
+    rc = xp.next(data.id,local)
+    yield data
+
+iterator rangeLifo*(xp: var TxPool; local: bool): TxItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Local or remote transaction queue walk/traversal: oldest last
+  ##
+  ## See also the **Note* at the comment for `rangeFifo()`.
+  var rc = xp.last(local)
+  while rc.isOK:
+    let data = rc.value
+    rc = xp.prev(data.id,local)
+    yield data
+
+# core/tx_pool.go(1702): func (t *txLookup) Get(hash common.Hash) ..
+proc get*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Returns a remote or local transaction if it exists.
+  if xp.hasKey(hash, true) or xp.hasKey(hash, false):
+    return ok(xp[hash])
+  err()
+
+# core/tx_pool.go(1713): func (t *txLookup) GetLocal(hash common.Hash) ..
+proc getLocal*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Returns a local transaction if it exists.
+  if xp.hasKey(hash, local = true):
+    return ok(xp[hash])
+  err()
+
+# core/tx_pool.go(1721): func (t *txLookup) GetRemote(hash common.Hash) ..
+proc getRemote*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Returns a remote transaction if it exists.
+  if xp.hasKey(hash, local = false):
+    return ok(xp[hash])
+  err()
+
+# core/tx_pool.go(1728): func (t *txLookup) Count() int {
+proc count*(xp: var TxPool): int {.inline.} =
+  ## The current number of transactions
+  xp.len
+
+# core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
+proc localCount*(xp: var TxPool): int {.inline.} =
+  ## The current number of local transactions
+  xp.byLocalQueueLen
+
+# core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
+proc remoteCount*(xp: var TxPool): int {.inline.} =
+  ## The current number of remote transactions
+  xp.byRemoteQueueLen
 
 # core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
 proc remoteToLocals*(xp: var TxPool; signer: EthAddress): int

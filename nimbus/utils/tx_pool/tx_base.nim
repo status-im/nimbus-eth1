@@ -174,29 +174,29 @@ proc delete*(xp: var TxPoolBase; key: Hash256): Result[TxItemRef,void]
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc len*(xp: var TxPoolBase): int =
+proc len*(xp: var TxPoolBase): int {.inline.} =
   ## Total number of registered transactions
   xp.byIdQueue.nLeaves
 
-proc byLocalQueueLen*(xp: var TxPoolBase): int =
+proc byLocalQueueLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of transactions in local queue
   xp.byIdQueue.len(TxLocalQueue)
 
-proc byRemoteQueueLen*(xp: var TxPoolBase): int =
+proc byRemoteQueueLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of transactions in local queue
   xp.byIdQueue.len(TxRemoteQueue)
 
-proc byGasPriceLen*(xp: var TxPoolBase): int =
+proc byGasPriceLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of different `gasPrice` entries known. For each gas price
   ## there is at least one transaction available.
   xp.byGasPrice.len
 
-proc byGasTipCapLen*(xp: var TxPoolBase): int =
+proc byGasTipCapLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of different `maxPriorityFee` entries known. For each gas price
   ## there is at least one transaction available.
   xp.byGasTipCap.len
 
-proc bySenderLen*(xp: var TxPoolBase): int =
+proc bySenderLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of different sendeer adresses known. For each address there is at
   ## least one transaction available.
   xp.bySender.len
@@ -205,12 +205,13 @@ proc bySenderLen*(xp: var TxPoolBase): int =
 # Public functions, ID queue query
 # ------------------------------------------------------------------------------
 
-proc hasKey*(xp: var TxPoolBase; key: Hash256): bool =
-  ## Returns `true` if the argument `key` for a transaction exists in the
-  ## database, already. If this function returns `true`, then it is save to
-  ## use the `xp[key]` paradigm for accessing a transaction container.
-  xp.byIdQueue.hasKey(key, true.toQueuesched) or
-    xp.byIdQueue.hasKey(key, false.toQueuesched)
+proc hasKey*(xp: var TxPoolBase; key: Hash256; local: bool): bool {.inline.} =
+  ## Returns `true` if the argument pair `(key,local)` exists in the
+  ## database.
+  ##
+  ## If this function returns `true`, then it is save to use the `xp[key]`
+  ## paradigm for accessing a transaction container.
+  xp.byIdQueue.hasKey(key, local.toQueuesched)
 
 proc toKey*(tx: Transaction): Hash256 {.inline.} =
   ## Retrieves transaction key. Note that the returned argument will only apply
@@ -240,14 +241,14 @@ proc `[]`*(xp: var TxPoolBase; key: Hash256): TxItemRef
 
 
 proc first*(xp: var TxPoolBase; local: bool): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
   let rc =  xp.byIdQueue.first(local.toQueuesched)
   if rc.isOK:
     return ok(rc.value.data)
   err()
 
 proc last*(xp: var TxPoolBase; local: bool): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
   let rc = xp.byIdQueue.last(local.toQueuesched)
   if rc.isOK:
     return ok(rc.value.data)
@@ -255,7 +256,7 @@ proc last*(xp: var TxPoolBase; local: bool): Result[TxItemRef,void]
 
 proc next*(xp: var TxPoolBase;
            key: Hash256; local: bool): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.inline,inline,gcsafe,raises: [Defect,KeyError].} =
   let rc = xp.byIdQueue.next(local.toQueuesched, key)
   if rc.isOK:
     return ok(rc.value.data)
@@ -263,7 +264,7 @@ proc next*(xp: var TxPoolBase;
 
 proc prev*(xp: var TxPoolBase;
            key: Hash256; local: bool): Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+    {.inline,inline,gcsafe,raises: [Defect,KeyError].} =
   let rc = xp.byIdQueue.prev(local.toQueuesched, key)
   if rc.isOK:
     return ok(rc.value.data)
@@ -421,34 +422,6 @@ proc byJobsFirst*(xp: var TxPoolBase): Result[TxJobPair,void]
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
-
-iterator firstOutItems*(xp: var TxPoolBase; local: bool): TxItemRef
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## ID queue walk/traversal: oldest first (fifo).
-  ##
-  ## :Note:
-  ##    When running in a loop it is ok to delete the current item and all
-  ##    the items already visited. Items not visited yet must not be deleted.
-  let sched = local.toQueueSched
-  var rc = xp.byIdQueue.first(sched)
-  while rc.isOK:
-    let (key,data) = (rc.value.key, rc.value.data)
-    rc = xp.byIdQueue.next(sched,key)
-    yield data
-
-iterator lastInItems*(xp: var TxPoolBase; local: bool): TxItemRef
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## ID queue walk/traversal: newest first (lifo)
-  ##
-  ## See also the **Note* at the comment for `firstOutItems()`.
-  let sched = local.toQueueSched
-  var rc = xp.byIdQueue.last(sched)
-  while rc.isOK:
-    let (key,data) = (rc.value.key, rc.value.data)
-    rc = xp.byIdQueue.prev(sched, key)
-    yield data
-
-# ------------
 
 iterator bySenderGroups*(xp: var TxPoolBase): TxGroupItemsRef
     {.gcsafe,raises: [Defect,KeyError].} =
