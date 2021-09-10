@@ -31,8 +31,8 @@ type
 
   TxQueueSchedule* = enum ##\
     ## Sub-queues
-    TxLocalQueue = 0
-    TxRemoteQueue = 1
+    TxQueueLocal = 0
+    TxQueueRemote = 1
 
   TxQueuePair* = ##\
     ## Queue handler wrapper, needed in `first()`, `next()`, etc.
@@ -49,23 +49,24 @@ type
 # ------------------------------------------------------------------------------
 
 proc `not`(sched: TxQueueSchedule): TxQueueSchedule {.inline.} =
-  if sched == TxLocalQueue: TxRemoteQueue else: TxLocalQueue
+  if sched == TxQueueLocal: TxQueueRemote else: TxQueueLocal
 
 # ------------------------------------------------------------------------------
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
 proc toQueueSched*(isLocal: bool): TxQueueSchedule {.inline.} =
-  if isLocal: TxLocalQueue else: TxRemoteQueue
+  if isLocal: TxQueueLocal else: TxQueueRemote
 
 proc txInit*(aq: var TxQueue; localSize = 10; remoteSize = 10) =
-  aq.q[TxLocalQueue].init(localSize)
-  aq.q[TxRemoteQueue].init(remoteSize)
+  aq.q[TxQueueLocal].init(localSize)
+  aq.q[TxQueueRemote].init(remoteSize)
 
-proc txAppend*(aq: var TxQueue;
-               key: Hash256; sched: TxQueueSchedule; item: TxItemRef)
+proc txAppend*(aq: var TxQueue; key: Hash256; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Reassigning from an existing local/remote queue is supported
+  ## Reassigning from an existing local/remote queue is supported (see
+  ## `item.local` flag.)
+  let sched = item.local.toQueueSched
   aq.q[sched][key] = item
   aq.q[not sched].del(key)
 
@@ -144,7 +145,7 @@ proc len*(aq: var TxQueue; sched: TxQueueSchedule): int {.inline.} =
   aq.q[sched].len
 
 proc nLeaves*(aq: var TxQueue): int {.inline.} =
-  aq.q[TxLocalQueue].len + aq.q[TxRemoteQueue].len
+  aq.q[TxQueueLocal].len + aq.q[TxQueueRemote].len
 
 # ------------------------------------------------------------------------------
 # End

@@ -76,7 +76,11 @@ proc collectTxPool(xp: var TxPool; noisy: bool; file: string; stopAfter: int) =
           localInfo = if local: "L" else: "R"
           info = &"{count} #{blkNum}({chainNo}) {n}/{txs.len} {localInfo}"
         noisy.showElapsed(&"insert: local={local} {info}"):
-          doAssert xp.insert(tx = txs[n], local = local, info = info).isOk
+          var tx = txs[n]
+          if local:
+            doAssert xp.addLocal(tx, info = info).isOK
+          else:
+            doAssert xp.addRemote(tx, info = info).isOK
         if stopAfter <= count:
           return
     chainNo.inc
@@ -86,7 +90,11 @@ proc toTxPool(q: var seq[TxItemRef]; noisy = true): TxPool =
   result.init
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
-      doAssert result.insert(w.tx, w.local, w.info).value == w.id
+      var tx = w.tx
+      if w.local:
+        doAssert result.addLocal(tx, w.info).isOK
+      else:
+        doAssert result.addRemote(tx, w.info).isOK
   doAssert result.count == q.len
 
 
@@ -103,7 +111,11 @@ proc toTxPool(q: var seq[TxItemRef]; noisy = true;
     remoteCount = 0
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
-      doAssert result.insert(w.tx, w.local, w.info).value == w.id
+      var tx = w.tx
+      if w.local:
+        doAssert result.addLocal(tx, w.info).isOK
+      else:
+        doAssert result.addRemote(tx, w.info).isOK
       if not w.local and remoteCount < delayAt:
         remoteCount.inc
         if delayAt == remoteCount:
@@ -204,7 +216,7 @@ proc runTxBaseTests(noisy = true) =
         let isLocal = w[0]
         for n in w[1] ..< w[2]:
           check txList[n].local == isLocal
-          check xq.reassign(txList[n].id, not isLocal).isOK
+          check xq.reassign(txList[n].id, not isLocal)
           check txList[n].info == xq.last(not isLocal).value.info
 
       check nLocal == xq.remoteCount
@@ -423,20 +435,22 @@ proc runTxPoolTests(noisy = true) =
         maxAddr: EthAddress
         nAddrItems = 0
         nAddrRemotes = 0
+        nLocalAddr = toSeq(xq.locals).len
 
       test "About half of transactions in largest address group are remotes":
 
         # find address with max number of transactions
         for it in xq.bySenderGroups:
-          if nAddrItems < it.itemList.len:
-            maxAddr = it.itemList.firstKey.value.sender
-            nAddrItems = it.itemList.len
+          if nAddrItems < it.itemListLen:
+            var rc = it.itemList(local = false).firstKey
+            if rc.isErr:
+              rc = it.itemList(local = true).firstKey
+            maxAddr = rc.value.sender
+            nAddrItems = it.itemListLen
         check 0 < nAddrItems
 
         # count the number of remotes
-        for item in xq.bySenderEq(maxAddr).value.itemList.nextKeys:
-          if not item.local:
-            nAddrRemotes.inc
+        nAddrRemotes = xq.bySenderEq(maxAddr).value.itemListLen(local = false)
 
         # make sure that local/remote ratio makes sense
         let localRemoteRatio =
@@ -452,9 +466,21 @@ proc runTxPoolTests(noisy = true) =
           nRemotes = xq.remoteCount
           nMoved = xq.remoteToLocals(maxAddr)
 
+        check xq.verify.isOK
+        check xq.bySenderEq(maxAddr).value.itemListLen(local = false) == 0
         check nMoved == nAddrRemotes
         check nLocals + nMoved == xq.localCount
         check nRemotes - nMoved == xq.remoteCount
+        check nLocalAddr == toSeq(xq.locals).len
+
+      test &"Delete locals from largest address group so it becomes empty":
+
+        let list = xq.bySenderEq(maxAddr).value
+        for item in list.itemList(local = true).nextKeys:
+          doAssert xq.delete(item.id).isOK
+
+        check nLocalAddr == toSeq(xq.locals).len + 1
+        check xq.verify.isOK
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -474,7 +500,7 @@ when isMainModule:
 
   noisy.runTxLoader(
     dir = "/status", captureFile = captFile2, numTransactions = 1500)
-  noisy.runTxBaseTests
+  #noisy.runTxBaseTests
   noisy.runTxPoolTests
 
   #noisy.runTxLoader(dir = ".")

@@ -24,13 +24,17 @@ import
 
 export
   TxGroupItemsRef,
-  TxListItemsRef,
   TxItemRef,
+  TxItemStatus,
+  TxListItemsRef,
   results,
+  tx_group.itemList,
+  tx_group.itemListLen,
   tx_item.id,
   tx_item.info,
   tx_item.local,
   tx_item.sender,
+  tx_item.status,
   tx_item.timeStamp,
   tx_item.tx,
   tx_jobs.TxJobData,
@@ -53,6 +57,55 @@ const
   # GlobalQueue:  1024,
 
 type
+  TxPoolError* = enum
+    txPoolErrNone = ##\
+      ## Default/reset value
+      (0, "no error")
+
+    txPoolErrUnspecified = ##\
+      ## Some unspecified error occured
+      "generic error"
+
+    txPoolErrAlreadyKnown = ##\
+      ## The transactions is already contained within the pool
+      "already known"
+
+    txPoolErrInvalidSender = ##\
+      ## The transaction contains an invalid signature.
+      "invalid sender"
+
+    txPoolErrUnderpriced = ##\
+      ## A transaction's gas price is below the minimum configured for the
+      ## transaction pool.
+      "transaction underpriced"
+
+    txPoolErrTxPoolOverflow = ##\
+      ## The transaction pool is full and can't accpet another remote
+      ## transaction.
+      "txpool is full"
+
+    txPoolErrReplaceUnderpriced = ##\
+      ## A transaction is attempted to be replaced with a different one
+      ## without the required price bump.
+      "replacement transaction underpriced"
+
+    txPoolErrGasLimit = ##\
+      ## A transaction's requested gas limit exceeds the maximum allowance
+      ## of the current block.
+      "exceeds block gas limit"
+
+    txPoolErrNegativeValue = ##\
+      ## A sanity error to ensure no one is able to specify a transaction
+      ## with a negative value.
+      "negative value"
+
+    txPoolErrOversizedData = ##\
+      ## The input data of a transaction is greater than some meaningful
+      ## limit a user might use. This is not a consensus error making the
+      ## transaction invalid, rather a DOS protection.
+      "oversized data"
+
+
   TxPool* = object of TxPoolBase ##\
     ## Transaction pool descriptor
     startDate: Time     ## Start date (read-only)
@@ -71,9 +124,18 @@ proc pp(t: Time): string =
   t.format("yyyy-MM-dd'T'HH:mm:ss'.'fff", utc())
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc knownTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
+proc invalidTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
+proc validTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
+
+# ------------------------------------------------------------------------------
 # Private run handlers
 # ------------------------------------------------------------------------------
 
+# core/tx_pool.go(384): for addr := range pool.queue {
 proc inactiveJobsEviction(xp: var TxPool; maxLifeTime: Duration)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Any non-local transaction old enough will be removed
@@ -85,6 +147,54 @@ proc inactiveJobsEviction(xp: var TxPool; maxLifeTime: Duration)
       break
     rc = xp.next(item.id, local = false)
     discard xp.delete(item.id)
+
+
+# core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
+proc addTxs(xp: var TxPool;
+            txs: var openArray[Transaction]; local: bool; info = ""):
+              Result[void,seq[TxPoolError]]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Attempts to queue a batch of transactions if they are valid.
+  var
+    nErrors = 0
+    errList = newSeq[TxPoolError](txs.len)
+
+  # Filter out known ones without obtaining the pool lock or recovering
+  # signatures
+  for i in 0 ..< txs.len:
+    var tx = txs[i]
+
+    # If the transaction is known, pre-set the error slot
+    let rc = xp.insert(tx, local, info)
+    if rc.isErr:
+      case rc.error:
+      of txBaseErrAlreadyKnown:
+        xp.knownTxMeterMark
+        errList[i] = txPoolErrAlreadyKnown
+      of txBaseErrInvalidSender:
+        xp.invalidTxMeterMark
+        errList[i] = txPoolErrInvalidSender
+      else:
+        errList[i] = txPoolErrUnspecified
+      nErrors.inc
+      continue
+
+    xp.validTxMeterMark
+
+  if 0 < nErrors:
+    return err(errList)
+  ok()
+
+
+proc addTxs(xp: var TxPool; tx: var Transaction; local: bool; info = ""):
+           Result[void,TxPoolError]
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Convenience wrapper
+  var txs = @[tx]
+  let rc = xp.addTxs(txs, local, info)
+  if rc.isErr:
+    return err(rc.error[0])
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -248,54 +358,108 @@ proc startDate*(xp: var TxPool): auto {.inline.} =
 #func (pool *TxPool) Pending(enforceTips bool)
 #  (map[common.Address]types.Transactions, error) {
 
-# Locals retrieves the accounts currently considered local by the pool.
-#func (pool *TxPool) Locals() []common.Address
+# ------------------------------------------------------------------------------
+# Public functions, go like API -- TxPool
+# ------------------------------------------------------------------------------
 
-# AddLocals enqueues a batch of transactions into the pool if they are valid,
-# marking the senders as a local ones, ensuring they go around the local
-# pricing constraints.
-#
-# This method is used to add transactions from the RPC API and performs
-# synchronous pool reorganization and event propagation.
-#func (pool *TxPool) AddLocals(txs []*types.Transaction) []error
+# -- // This is like AddRemotes, but waits for pool reorganization. Tests use
+# -- // this method.
+# -- func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error
 
-# AddLocal enqueues a single local transaction into the pool if it is valid.
-# This is a convenience wrapper aroundd AddLocals.
-# func (pool *TxPool) AddLocal(tx *types.Transaction) error
+# core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
+proc locals*(xp: var TxPool): seq[EthAddress]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Locals retrieves the accounts currently considered local by the pool.
+  for it in xp.bySenderGroups:
+    if 0 < it.itemListLen(local = true):
+      let rc = it.itemList(local = true).firstKey
+      result.add rc.value.sender
 
-# AddRemotes enqueues a batch of transactions into the pool if they are valid.
-# If the senders are not among the locally tracked ones, full pricing
-# constraints will apply.
-#
-# This method is used to add transactions from the p2p network and does not
-# wait for pool reorganization and internal event propagation.
-# func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error
+# core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
+proc addLocals*(xp: var TxPool; txs: var openArray[Transaction]; info = ""):
+              Result[void,seq[TxPoolError]]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Enqueues a batch of transactions into the pool if they are valid,
+  ## marking the senders as local ones, ensuring they go around the local
+  ## pricing constraints.
+  ##
+  ## This method is used to add transactions from the RPC API and performs
+  ## synchronous pool reorganization and event propagation.
+  xp.addTxs(txs, local = true, info)
 
-# This is like AddRemotes, but waits for pool reorganization. Tests use this
-# method.
-#func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error
+# core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
+proc addLocal*(xp: var TxPool; tx: var Transaction; info = ""):
+             Result[void,TxPoolError]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## AddLocal enqueues a single local transaction into the pool if it is valid.
+  ## This is a convenience wrapper aroundd AddLocals.
+  xp.addTxs(tx, local = true, info)
 
-# AddRemote enqueues a single transaction into the pool if it is valid. This
-# is a convenience wrapper around AddRemotes.
-#
-# Deprecated: use AddRemotes
-#func (pool *TxPool) AddRemote(tx *types.Transaction) error
+# core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
+proc addRemotes*(xp: var TxPool; txs: var openArray[Transaction]; info = ""):
+                  Result[void,seq[TxPoolError]]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Enqueue a batch of transactions into the pool if they are valid. If
+  ## the senders are not among the locally tracked ones, full pricing
+  ## constraints will apply.
+  ##
+  ## This method is used to add transactions from the p2p network and does not
+  ## wait for pool reorganization and internal event propagation.
+  xp.addTxs(txs, local = false, info)
 
-# Status returns the status (unknown/pending/queued) of a batch of transactions
-# identified by their hashes.
-#func (pool *TxPool) Status(hashes []common.Hash) []TxStatus
+# core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
+proc addRemote*(xp: var TxPool; tx: var Transaction; info = ""):
+              Result[void,TxPoolError]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Enqueues a single transaction into the pool if it is valid.
+  ## This is a convenience wrapper around AddRemotes.
+  ##
+  ## Deprecated: use AddRemotes
+  xp.addTxs(tx, local = false, info)
 
-# Get returns a transaction if it is contained in the pool and nil otherwise.
-#func (pool *TxPool) Get(hash common.Hash) *types.Transaction
+# core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
+proc has*(xp: var TxPool; hash: Hash256): bool =
+  ## Indicator whether txpool has a transaction cached with the given hash.
+  xp.hasKey(hash, true) or xp.hasKey(hash, false)
 
-# Has returns an indicator whether txpool has a transaction cached with the
-# given hash.
-#func (pool *TxPool) Has(hash common.Hash) bool
+# core/tx_pool.go(975): func (pool *TxPool) Status(hashes []common.Hash) ..
+proc status*(xp: var TxPool; hashes: openArray[Hash256]): seq[TxItemStatus]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Returns the status (unknown/pending/queued) of a batch of transactions
+  ## identified by their hashes.
+  result.setLen(hashes.len)
+  for n in 0 ..< hashes.len:
+    let id = hashes[n]
+    if xp.has(id):
+      result[n] = xp[id].status
+
+# core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
+proc get*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Returns a transaction if it is contained in the pool.
+  if xp.has(hash):
+    return ok(xp[hash])
+  err()
+
+# ------------------------------------------------------------------------------
+# Public functions, go like API -- accountSet
+# ------------------------------------------------------------------------------
+
+# accountSet is simply a set of addresses to check for existence, and a signer
+# capable of deriving addresses from transactions.
+
+# ------------------------------------------------------------------------------
+# Public functions, go like API -- addressByHeartbeat
+# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Public functions, go like API -- lookup
 # ------------------------------------------------------------------------------
 
+# -- // Get returns a transaction if it exists in the lookup, or nil if not
+# -- // found.
+# -- func (t *txLookup) Get(hash common.Hash) *types.Transaction {
+#
 # -- // Slots returns the current number of slots used in the lookup.
 # -- func (t *txLookup) Slots() int
 #
@@ -329,14 +493,6 @@ iterator rangeLifo*(xp: var TxPool; local: bool): TxItemRef
     let data = rc.value
     rc = xp.prev(data.id,local)
     yield data
-
-# core/tx_pool.go(1702): func (t *txLookup) Get(hash common.Hash) ..
-proc get*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Returns a remote or local transaction if it exists.
-  if xp.hasKey(hash, true) or xp.hasKey(hash, false):
-    return ok(xp[hash])
-  err()
 
 # core/tx_pool.go(1713): func (t *txLookup) GetLocal(hash common.Hash) ..
 proc getLocal*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
@@ -377,9 +533,8 @@ proc remoteToLocals*(xp: var TxPool; signer: EthAddress): int
   let rc = xp.bySenderEq(signer)
   if rc.isOK:
     let nRemotes = xp.byRemoteQueueLen
-    for item in rc.value.itemList.nextKeys:
-      if not item.local:
-        discard xp.reassign(item.id, local = true)
+    for item in rc.value.itemList(local = false).nextKeys:
+      discard xp.reassign(item.id, local = true)
     return nRemotes - xp.byRemoteQueueLen
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..

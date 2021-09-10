@@ -27,6 +27,11 @@ type
     txGroupVfyLeafQueue ## Corrupted leaf list
     txGroupVfySize      ## Size count mismatch
 
+  TxGroupSchedule* = enum ##\
+    ## Sub-queues
+    TxGroupLocal = 0
+    TxGroupRemote = 1
+
   TxGroupMark* = ##\
     ## Ready to be used for something, currently just a blind value that\
     ## comes in when queuing items for the same key (e.g. gas price.)
@@ -35,7 +40,7 @@ type
   TxGroupItemsRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    itemList*: KeeQu[TxItemRef,TxGroupMark]
+    itemList: array[TxGroupSchedule, KeeQu[TxItemRef,TxGroupMark]]
 
   TxGroupAddr* = object ##\
     ## Per address table
@@ -49,6 +54,16 @@ type
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc `not`(sched: TxGroupSchedule): TxGroupSchedule {.inline.} =
+  if sched == TxGroupLocal: TxGroupRemote else: TxGroupLocal
+
+proc toGroupSched*(isLocal: bool): TxGroupSchedule {.inline.} =
+  if isLocal: TxGroupLocal else: TxGroupRemote
+
+# ------------------------------------------------------------------------------
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
@@ -60,21 +75,30 @@ proc txInit*(t: var TxGroupAddr; size = 10) =
 
 proc txInsert*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
-  if not t.q.hasKey(ethAddr):
+  ## Reassigning from an existing local/remote queue is supported (see
+  ## `item.local` flag.)
+  let sched = item.local.toGroupSched
+  if t.q.hasKey(ethAddr):
+    if t.q[ethAddr].itemList[sched].hasKey(item):
+      return
+    if t.q[ethAddr].itemList[not sched].delete(item).isOK:
+      t.size.dec # happens with re-assign
+  else:
     t.q[ethAddr] = TxGroupItemsRef(
-      itemList: initKeeQu[TxItemRef,TxGroupMark](1))
-  elif t.q[ethAddr].itemList.hasKey(item):
-    return
-  t.q[ethAddr].itemList[item] = 0
+      itemList: [initKeeQu[TxItemRef,TxGroupMark](1),
+                 initKeeQu[TxItemRef,TxGroupMark](1)])
+  t.q[ethAddr].itemList[sched][item] = 0
   t.size.inc
 
 
 proc txDelete*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
-  if t.q.hasKey(ethAddr) and t.q[ethAddr].itemList.hasKey(item):
-    t.q[ethAddr].itemList.del(item)
+  let sched = item.local.toGroupSched
+  if t.q.hasKey(ethAddr) and t.q[ethAddr].itemList[sched].hasKey(item):
+    t.q[ethAddr].itemList[sched].del(item)
     t.size.dec
-    if t.q[ethAddr].itemList.len == 0:
+    if t.q[ethAddr].itemList[true.toGroupSched].len == 0 and
+       t.q[ethAddr].itemList[false.toGroupSched].len == 0:
       t.q.del(ethAddr)
 
 
@@ -87,13 +111,17 @@ proc txVerify*(t: var TxGroupAddr): Result[void,(TxGroupInfo,KeeQuInfo)]
     return err((txGroupVfyQueue,rc.error[2]))
 
   for itQ in t.q.nextValues:
-    count += itQ.itemList.len
-    if itQ.itemList.len == 0:
+    var itGroupLen = 0
+    for sched in TxGroupSchedule:
+      itGroupLen += itQ.itemList[sched].len
+    count += itGroupLen
+    if itGroupLen == 0:
       return err((txGroupVfyLeafEmpty, keeQuOk))
 
-    let rc = itQ.itemList.verify
-    if rc.isErr:
-      return err((txGroupVfyLeafQueue, rc.error[2]))
+    for sched in TxGroupSchedule:
+      let rc = itQ.itemList[sched].verify
+      if rc.isErr:
+        return err((txGroupVfyLeafQueue, rc.error[2]))
 
   if count != t.size:
     return err((txGroupVfySize, keeQuOk))
@@ -112,15 +140,30 @@ proc`[]`*(t: var TxGroupAddr; key: EthAddress): auto
 proc hasKey*(t: var TxGroupAddr; key: EthAddress): auto {.inline.} =
   t.q.hasKey(key)
 
-proc len*(t: var TxGroupAddr): auto {.inline.} = t.q.len
+proc len*(t: var TxGroupAddr): auto {.inline.} =
+  t.q.len
 
-proc first*(t: var TxGroupAddr): auto {.gcsafe,raises: [Defect,KeyError].} =
+proc first*(t: var TxGroupAddr): auto
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
   t.q.first
 
-proc next*(t: var TxGroupAddr;
-           key: EthAddress): auto {.gcsafe,raises: [Defect,KeyError].} =
+proc next*(t: var TxGroupAddr; key: EthAddress): auto
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
   t.q.next(key)
 
+
+proc itemList*(it: TxGroupItemsRef; local: bool):
+             var KeeQu[TxItemRef,TxGroupMark] {.inline.} =
+  ## Getter
+  it.itemList[local.toGroupSched]
+
+proc itemListLen*(it: TxGroupItemsRef; local: bool): int {.inline.} =
+  ## Getter
+  it.itemList[local.toGroupSched].len
+
+proc itemListLen*(it: TxGroupItemsRef): int {.inline.} =
+  ## Getter
+  it.itemListLen(true) + it.itemListLen(false)
 
 # ------------------------------------------------------------------------------
 # End

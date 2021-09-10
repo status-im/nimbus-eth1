@@ -20,15 +20,23 @@ import
   stew/results
 
 type
+  TxItemStatus* = enum ##\
+    ## current status of a transaction as seen by the pool.
+    txItemStatusUnknown = 0
+    txItemStatusQueued
+    txItemStatusPending
+    txItemStatusIncluded
+
   TxItemRef* = ref object of RootObj ##\
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
-    tx:        Transaction ## Transaction data
-    id:        Hash256     ## Identifier/transaction key
-    timeStamp: Time        ## Time when added
-    sender:    EthAddress  ## Sender account address
-    info:      string      ## Whatever
-    local:     bool        ## Local or remote queue (setter available)
+    tx:        Transaction  ## Transaction data
+    id:        Hash256      ## Identifier/transaction key
+    timeStamp: Time         ## Time when added
+    sender:    EthAddress   ## Sender account address
+    info:      string       ## Whatever
+    local:     bool         ## Local or remote queue (setter available)
+    status:    TxItemStatus ## Transaction status (setter available)
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -72,6 +80,9 @@ proc toKMG[T](s: T): string =
     if not result.subst(w[0],w[1]):
       return
 
+proc pp(w: TxItemStatus): string =
+  ($w).replace("txItemStatus")
+
 proc `$`(w: AccessPair): string =
   "(" & $w.address & "," & "#" & $w.storageKeys.len & ")"
 
@@ -94,7 +105,8 @@ proc newTxItemRef*(tx: Transaction; key: Hash256; local: bool; info: string):
     sender:    rc.value,
     timeStamp: now().utc.toTime,
     info:      info,
-    local:     local))
+    local:     local,
+    status:    txItemStatusQueued))
 
 # ------------------------------------------------------------------------------
 #  Public functions, Table ID helper
@@ -131,6 +143,10 @@ proc info*(item: TxItemRef): auto {.inline.} =
 proc local*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.local
+
+proc status*(item: TxItemRef): auto {.inline.} =
+  ## Getter
+  item.status
 
 # core/types/transaction.go(239): func (tx *Transaction) Protected() bool {
 proc protected*(item: TxItemRef): bool {.inline.} =
@@ -171,6 +187,10 @@ proc `local=`*(item: TxItemRef; val: bool) {.inline.} =
   ## Setter
   item.local = val
 
+proc `status=`*(item: TxItemRef; val: TxItemStatus) {.inline.} =
+  ## Setter
+  item.status = val
+
 # ------------------------------------------------------------------------------
 # Public functions, pretty printing and debugging
 # ------------------------------------------------------------------------------
@@ -208,7 +228,8 @@ proc pp*(w: TxItemRef): string =
   let s = w.tx.pp
   result = "(timeStamp=" & ($w.timeStamp).replace(' ','_') &
     ",hash=" & w.id.toXX &
-    s[1 ..< s.len]
+    ",status=" & w.status.pp &
+    "," & s[1 ..< s.len]
 
 proc `$`*(w: TxItemRef): string =
   ## Visualise item ID (use for debugging)

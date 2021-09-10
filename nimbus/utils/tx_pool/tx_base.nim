@@ -55,6 +55,10 @@ type
     txVfyByGasTipCapLeafQueue ## Corrupted gas price leaf queue
     txVfyByGasTipCapTotal     ## Wrong number of leaves
 
+    txBaseErrAlreadyKnown
+    txBaseErrInvalidSender
+
+
   TxPoolBase* = object of RootObj ##\
     ## Base descriptor
     byIdQueue*: TxQueue        ## Primary table, queued by arrival event
@@ -90,7 +94,8 @@ proc hash(tx: Transaction): Hash256 {.inline.} =
 # ------------------------------------------------------------------------------
 
 proc insert*(xp: var TxPoolBase;
-             tx: var Transaction; local = true; info = ""): Result[Hash256,void]
+             tx: var Transaction; local = true; info = ""):
+               Result[void,TxBaseInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Add new transaction argument `tx` to the database. If accepted and added
   ## to the database, a `key` value is returned which can be used to retrieve
@@ -108,43 +113,36 @@ proc insert*(xp: var TxPoolBase;
   ##   recoverable as `tx.toKey` only while the trasaction remains unmodified.
   ##
   let key = tx.hash
-  if not xp.byIdQueue.hasKey(key):
-    let rc = tx.newTxItemRef(key, local, info)
-    if rc.isOK:
-      let item = rc.value
-      xp.byIdQueue.txAppend(key, local.toQueueSched, item)
-      xp.byGasPrice.txInsert(item.tx.gasPrice, item)
-      xp.byGasTipCap.txInsert(item.tx.maxPriorityFee, item)
-      xp.bySender.txInsert(item.sender, item)
-      return ok(key)
-  err()
+  if xp.byIdQueue.hasKey(key):
+    return err(txBaseErrAlreadyKnown)
+  let rc = tx.newTxItemRef(key, local, info)
+  if rc.isErr:
+    return err(txBaseErrInvalidSender)
+  let item = rc.value
+  xp.byIdQueue.txAppend(key, item)
+  xp.byGasPrice.txInsert(item.tx.gasPrice, item)
+  xp.byGasTipCap.txInsert(item.tx.maxPriorityFee, item)
+  xp.bySender.txInsert(item.sender, item)
+  ok()
 
 
-proc insert*(xp: var TxPoolBase;
-             tx: Transaction; local = true; info = ""): auto
-    {.inline, gcsafe,raises: [Defect,CatchableError].} =
-  ## Variant of `insert()` for call-by-value transaction
-  var ty = tx
-  xp.insert(ty,local,info)
-
-
-proc reassign*(xp: var TxPoolBase;
-               key: Hash256; local: bool): Result[TxItemRef,void]
+proc reassign*(xp: var TxPoolBase; key: Hash256; local: bool): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Reassign transaction local/remote flag of a database entry. The function
   ## succeeds returning the wrapping transaction container if the transaction
   ## was found with a different local/remote flag than the argument `local`
   ## and subsequently was changed.
   let
-    sched = (not local).toQueueSched
-    rc = xp.byIdQueue.eq(key, sched)
+    qSched = (not local).toQueueSched
+    rc = xp.byIdQueue.eq(key, qSched)
   if rc.isOK:
     let item = rc.value
     if item.local != local:
-      # append will auto-delete any existing entry of the other queue
-      xp.byIdQueue.txAppend(key, local.toQueueSched, item)
-      return ok(item)
-  err()
+      item.local = local
+      # txAppend/txInsert will auto-delete an existing entry of the other queue
+      xp.byIdQueue.txAppend(key, item)
+      xp.bySender.txInsert(item.sender, item)
+      return true
 
 
 proc delete*(xp: var TxPoolBase; item: TxItemRef): Result[TxItemRef,void]
@@ -180,11 +178,11 @@ proc len*(xp: var TxPoolBase): int {.inline.} =
 
 proc byLocalQueueLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of transactions in local queue
-  xp.byIdQueue.len(TxLocalQueue)
+  xp.byIdQueue.len(TxQueueLocal)
 
 proc byRemoteQueueLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of transactions in local queue
-  xp.byIdQueue.len(TxRemoteQueue)
+  xp.byIdQueue.len(TxQueueRemote)
 
 proc byGasPriceLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of different `gasPrice` entries known. For each gas price
@@ -218,6 +216,16 @@ proc toKey*(tx: Transaction): Hash256 {.inline.} =
   ## to a transaction in the database if the argument transaction `tx` is
   ## exactly the same as the one passed earlier to the `insert()` function.
   tx.hash
+
+proc hasTx*(xp: var TxPoolBase; tx: Transaction): bool {.inline.} =
+  ## Returns `true` if the argument pair `(key,local)` exists in the
+  ## database.
+  ##
+  ## If this function returns `true`, then it is save to use the `xp[key]`
+  ## paradigm for accessing a transaction container.
+  let key = tx.hash
+  xp.hasKey(key,true) or xp.hasKey(key,false)
+
 
 proc `[]`*(xp: var TxPoolBase; key: Hash256): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
