@@ -10,7 +10,7 @@ import
   eth/common/eth_types, stint, options, stew/byteutils,
   ".."/[vm_types, vm_state, vm_internals, vm_gas_costs, forks],
   ".."/[db/db_chain, db/accounts_cache, transaction], eth/trie/db,
-  ".."/[config, utils, rpc/hexstrings],
+  ".."/[chain_config, utils, rpc/hexstrings],
   ./call_common
 
 type

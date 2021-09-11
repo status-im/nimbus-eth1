@@ -9,8 +9,7 @@ import
   eth/trie/[hexary, db],
   ../nimbus/db/[storage_types, db_chain, select_backend],
   ../nimbus/[genesis],
-  ../nimbus/p2p/chain,
-  ../nimbus/chain_config
+  ../nimbus/p2p/chain
 
 const
   manualCommit = nimbus_db_backend == "lmdb"

@@ -15,8 +15,7 @@ import
   "."/p2p/clique/[clique_defs,
     clique_desc,
     clique_cfg,
-    clique_sealer,
-    clique_snapshot],
+    clique_sealer],
   ./p2p/gaslimit,
   "."/[chain_config, utils, context]
 
@@ -32,7 +31,7 @@ type
     ctx: EthContext
     signer: EthAddress
 
-proc validateSealer*(conf: NimbusConfiguration, ctx: EthContext, chain: Chain): Result[void, string] =
+proc validateSealer*(conf: NimbusConf, ctx: EthContext, chain: Chain): Result[void, string] =
   if conf.engineSigner == ZERO_ADDRESS:
     return err("signer address should not zero, use --engine-signer to set signer address")
 

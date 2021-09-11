@@ -16,8 +16,7 @@ import
   ../constants,
   ../errors,
   ../chain_config,
-  ../forks,
-  ../config
+  ../forks
 
 const
   EIP1559_BASE_FEE_CHANGE_DENOMINATOR* = ##\

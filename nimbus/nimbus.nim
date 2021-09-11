@@ -12,6 +12,7 @@ import
 
 import
   os, strutils, net, options,
+  stew/shims/net as stewNet,
   eth/keys, db/[storage_types, db_chain, select_backend],
   eth/common as eth_common, eth/p2p as eth_p2p,
   chronos, json_rpc/rpcserver, chronicles,
@@ -41,21 +42,28 @@ type
     sealingEngine: SealingEngineRef
     ctx: EthContext
 
-proc start(nimbus: NimbusNode) =
-  var conf = getConfiguration()
+template init(T: type RpcHttpServer, ip: ValidIpAddress, port: Port): T =
+  newRpcHttpServer([initTAddress(ip, port)])
 
+template init(T: type RpcWebSocketServer, ip: ValidIpAddress, port: Port): T =
+  newRpcWebSocketServer(initTAddress(ip, port))
+
+proc start(nimbus: NimbusNode, conf: NimbusConf) =
   ## logging
-  setLogLevel(conf.debug.logLevel)
-  if len(conf.debug.logFile) != 0:
+  setLogLevel(conf.logLevel)
+  if conf.logFile.isSome:
+    let logFile = string conf.logFile.get()
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
-    discard defaultChroniclesStream.output.open(conf.debug.logFile, fmAppend)
+    discard defaultChroniclesStream.output.open(logFile, fmAppend)
 
-  createDir(conf.dataDir)
-  let trieDB = trieDB newChainDb(conf.dataDir)
+  createDir(string conf.dataDir)
+  let trieDB = trieDB newChainDb(string conf.dataDir)
+  let networkId = conf.networkId.get()
+  let customNetwork = conf.customNetwork.get()
   var chainDB = newBaseChainDB(trieDB,
-    conf.prune == PruneMode.Full,
-    conf.net.networkId,
-    conf.customNetwork
+    conf.pruneMode == PruneMode.Full,
+    networkId,
+    customNetwork
     )
   chainDB.populateProgress()
 
@@ -63,115 +71,116 @@ proc start(nimbus: NimbusNode) =
     initializeEmptyDb(chainDb)
     doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
-  if conf.importFile.len > 0:
+  if string(conf.importBlocks).len > 0:
     # success or not, we quit after importing blocks
-    if not importRlpBlock(conf.importFile, chainDB):
+    if not importRlpBlock(string conf.importBlocks, chainDB):
       quit(QuitFailure)
     else:
       quit(QuitSuccess)
 
-  if conf.keyStore.len > 0:
-    let res = nimbus.ctx.am.loadKeystores(conf.keyStore)
+  if string(conf.keyStore).len > 0:
+    let res = nimbus.ctx.am.loadKeystores(string conf.keyStore)
     if res.isErr:
       echo res.error()
       quit(QuitFailure)
 
-  if conf.importKey.len > 0:
-    let res = nimbus.ctx.am.importPrivateKey(conf.importKey)
+  if string(conf.importKey).len > 0:
+    let res = nimbus.ctx.am.importPrivateKey(string conf.importKey)
     if res.isErr:
       echo res.error()
       quit(QuitFailure)
 
   # metrics logging
-  if conf.debug.logMetrics:
+  if conf.logMetricsEnabled:
     # https://github.com/nim-lang/Nim/issues/17369
     var logMetrics: proc(udata: pointer) {.gcsafe, raises: [Defect].}
     logMetrics = proc(udata: pointer) =
       {.gcsafe.}:
         let registry = defaultRegistry
       info "metrics", registry
-      discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
-    discard setTimer(Moment.fromNow(conf.debug.logMetricsInterval.seconds), logMetrics)
+      discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
+    discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
 
   ## Creating P2P Server
-  let kpres = nimbus.ctx.hexToKeyPair(conf.net.nodekey)
+  let kpres = nimbus.ctx.hexToKeyPair(conf.nodeKeyHex)
   if kpres.isErr:
     echo kpres.error()
     quit(QuitFailure)
 
   let keypair = kpres.get()
+  var address = Address(
+    ip: conf.listenAddress,
+    tcpPort: conf.tcpPort,
+    udpPort: conf.udpPort
+  )
 
-  var address: Address
-  address.ip = parseIpAddress("0.0.0.0")
-  address.tcpPort = Port(conf.net.bindPort)
-  address.udpPort = Port(conf.net.discPort)
-  if conf.net.nat == NatNone:
-    if conf.net.externalIP != "":
-      # any required port redirection is assumed to be done by hand
-      address.ip = parseIpAddress(conf.net.externalIP)
+  if conf.nat.hasExtIp:
+    # any required port redirection is assumed to be done by hand
+    address.ip = conf.nat.extIp
   else:
     # automated NAT traversal
-    let extIP = getExternalIP(conf.net.nat)
+    let extIP = getExternalIP(conf.nat.nat)
     # This external IP only appears in the logs, so don't worry about dynamic
     # IPs. Don't remove it either, because the above call does initialisation
     # and discovery for NAT-related objects.
     if extIP.isSome:
       address.ip = extIP.get()
       let extPorts = redirectPorts(tcpPort = address.tcpPort,
-                                    udpPort = address.udpPort,
-                                    description = NIMBUS_NAME & " " & NIMBUS_VERSION)
+                                   udpPort = address.udpPort,
+                                   description = NIMBUS_NAME & " " & NIMBUS_VERSION)
       if extPorts.isSome:
         (address.tcpPort, address.udpPort) = extPorts.get()
 
-  nimbus.ethNode = newEthereumNode(keypair, address, conf.net.networkId,
-                                   nil, conf.net.ident,
+  nimbus.ethNode = newEthereumNode(keypair, address, networkId,
+                                   nil, conf.agentString,
                                    addAllCapabilities = false,
-                                   minPeers = conf.net.maxPeers)
+                                   minPeers = conf.maxPeers)
   # Add protocol capabilities based on protocol flags
-  if ProtocolFlags.Eth in conf.net.protocols:
+  if ProtocolFlag.Eth in conf.protocols.value:
     nimbus.ethNode.addCapability eth
-  if ProtocolFlags.Les in conf.net.protocols:
+  if ProtocolFlag.Les in conf.protocols.value:
     nimbus.ethNode.addCapability les
 
   # chainRef: some name to avoid module-name/filed/function misunderstandings
   let chainRef = newChain(chainDB)
   nimbus.ethNode.chain = chainRef
-  if conf.verifyFromOk:
-    chainRef.extraValidation = 0 < conf.verifyFrom
-    chainRef.verifyFrom = conf.verifyFrom
+  if conf.verifyFrom.isSome:
+    let verifyFrom = conf.verifyFrom.get()
+    chainRef.extraValidation = 0 < verifyFrom
+    chainRef.verifyFrom = verifyFrom
 
-  ## Creating RPC Server
-  if RpcFlags.Enabled in conf.rpc.flags:
-    nimbus.rpcServer = newRpcHttpServer(conf.rpc.binds)
+  # Creating RPC Server
+  if conf.rpcEnabled:
+    nimbus.rpcServer = RpcHttpServer.init(conf.rpcAddress, conf.rpcPort)
     setupCommonRpc(nimbus.ethNode, conf, nimbus.rpcServer)
 
-  # Enable RPC APIs based on RPC flags and protocol flags
-  if RpcFlags.Eth in conf.rpc.flags and ProtocolFlags.Eth in conf.net.protocols:
-    setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.rpcServer)
-  if RpcFlags.Debug in conf.rpc.flags:
-    setupDebugRpc(chainDB, nimbus.rpcServer)
+    # Enable RPC APIs based on RPC flags and protocol flags
+    if RpcFlag.Eth in conf.rpcApi.value and ProtocolFlag.Eth in conf.protocols.value:
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.rpcServer)
+    if RpcFlag.Debug in conf.rpcApi.value:
+      setupDebugRpc(chainDB, nimbus.rpcServer)
 
-  # Creating Websocket RPC Server
-  if RpcFlags.Enabled in conf.ws.flags:
-    doAssert(conf.ws.binds.len > 0)
-    nimbus.wsRpcServer = newRpcWebSocketServer(conf.ws.binds[0])
-    setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
-
-  # Enable Websocket RPC APIs based on RPC flags and protocol flags
-  if RpcFlags.Eth in conf.ws.flags and ProtocolFlags.Eth in conf.net.protocols:
-    setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.wsRpcServer)
-  if RpcFlags.Debug in conf.ws.flags:
-    setupDebugRpc(chainDB, nimbus.wsRpcServer)
-
-  ## Starting servers
-  if RpcFlags.Enabled in conf.rpc.flags:
     nimbus.rpcServer.rpc("admin_quit") do() -> string:
       {.gcsafe.}:
         nimbus.state = Stopping
       result = "EXITING"
+
     nimbus.rpcServer.start()
 
-  if conf.graphql.enabled:
+  # Creating Websocket RPC Server
+  if conf.wsEnabled:
+    nimbus.wsRpcServer = RpcWebSocketServer.init(conf.wsAddress, conf.wsPort)
+    setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
+
+    # Enable Websocket RPC APIs based on RPC flags and protocol flags
+    if RpcFlag.Eth in conf.wsApi.value and ProtocolFlag.Eth in conf.protocols.value:
+      setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.wsRpcServer)
+    if RpcFlag.Debug in conf.wsApi.value:
+      setupDebugRpc(chainDB, nimbus.wsRpcServer)
+
+    nimbus.wsRpcServer.start()
+
+  if conf.graphqlEnabled:
     nimbus.graphqlServer = setupGraphqlHttpServer(conf, chainDB, nimbus.ethNode)
     nimbus.graphqlServer.start()
 
@@ -186,25 +195,20 @@ proc start(nimbus: NimbusNode) =
     nimbus.sealingEngine.start()
 
   # metrics server
-  if conf.net.metricsServer:
-    let metricsAddress = "127.0.0.1"
-    info "Starting metrics HTTP server", address = metricsAddress, port = conf.net.metricsServerPort
-    startMetricsHttpServer(metricsAddress, Port(conf.net.metricsServerPort))
+  if conf.metricsEnabled:
+    info "Starting metrics HTTP server", address = conf.metricsAddress, port = conf.metricsPort
+    startMetricsHttpServer($conf.metricsAddress, conf.metricsPort)
 
   # Connect directly to the static nodes
-  for enode in conf.net.staticNodes:
+  for enode in conf.staticNodes.value:
     asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
 
   # Connect via discovery
-  if conf.net.customBootNodes.len > 0:
-    # override the default bootnodes from public network
-    waitFor nimbus.ethNode.connectToNetwork(conf.net.customBootNodes,
-      enableDiscovery = NoDiscover notin conf.net.flags)
-  else:
-    waitFor nimbus.ethNode.connectToNetwork(conf.net.bootNodes,
-      enableDiscovery = NoDiscover notin conf.net.flags)
+  let bootNodes = conf.getBootNodes()
+  waitFor nimbus.ethNode.connectToNetwork(bootNodes,
+    enableDiscovery = not conf.noDiscover)
 
-  if ProtocolFlags.Eth in conf.net.protocols:
+  if ProtocolFlag.Eth in conf.protocols.value:
     # TODO: temp code until the CLI/RPC interface is fleshed out
     let status = waitFor nimbus.ethNode.fastBlockchainSync()
     if status != syncSuccess:
@@ -214,17 +218,18 @@ proc start(nimbus: NimbusNode) =
     # it might have been set to "Stopping" with Ctrl+C
     nimbus.state = Running
 
-proc stop*(nimbus: NimbusNode) {.async, gcsafe.} =
+proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   trace "Graceful shutdown"
-  var conf = getConfiguration()
-  if RpcFlags.Enabled in conf.rpc.flags:
+  if conf.rpcEnabled:
     nimbus.rpcServer.stop()
-  if conf.graphql.enabled:
+  if conf.wsEnabled:
+    nimbus.wsRpcServer.start()
+  if conf.graphqlEnabled:
     await nimbus.graphqlServer.stop()
   if conf.engineSigner != ZERO_ADDRESS:
     await nimbus.sealingEngine.stop()
 
-proc process*(nimbus: NimbusNode) =
+proc process*(nimbus: NimbusNode, conf: NimbusConf) =
   # Main event loop
   while nimbus.state == Running:
     try:
@@ -234,7 +239,7 @@ proc process*(nimbus: NimbusNode) =
       discard e # silence warning when chronicles not activated
 
   # Stop loop
-  waitFor nimbus.stop()
+  waitFor nimbus.stop(conf)
 
 when isMainModule:
   var nimbus = NimbusNode(state: Starting, ctx: newEthContext())
@@ -248,23 +253,11 @@ when isMainModule:
     echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
   setControlCHook(controlCHandler)
 
-  var message: string
-
-  ## Print Nimbus header
-  echo NimbusHeader
-
   ## Show logs on stdout until we get the user's logging choice
   discard defaultChroniclesStream.output.open(stdout)
 
   ## Processing command line arguments
-  if processArguments(message) != ConfigStatus.Success:
-    echo message
-    quit(QuitFailure)
-  else:
-    if len(message) > 0:
-      echo message
-      quit(QuitSuccess)
+  let conf = makeConfig()
 
-  nimbus.start()
-  nimbus.process()
-
+  nimbus.start(conf)
+  nimbus.process(conf)

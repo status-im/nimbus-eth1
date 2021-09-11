@@ -1,10 +1,8 @@
 import
-  std/[os, parseopt],
+  std/[os],
   unittest2, stew/byteutils,
   eth/common/eth_types,
-  eth/p2p,
   ../nimbus/vm_internals,
-  ../nimbus/config,
   ../nimbus/utils/header
 
 func toAddress(n: int): EthAddress =
@@ -25,41 +23,6 @@ proc miscMain*() =
       check toAddress(0xff).toInt == 0xFF
       check toAddress(0x10, 0x0).toInt == 0x1000
       check toAddress(0x10, 0x0, 0x0).toInt == 0x100000
-
-    const genesisFile = "tests" / "customgenesis" / "calaveras.json"
-    test "networkid cli":
-      var msg: string
-      var opt = initOptParser("--customnetwork:" & genesisFile & " --networkid:345")
-      let res = processArguments(msg, opt)
-      if res != Success:
-        echo msg
-        quit(QuitFailure)
-
-      let conf = getConfiguration()
-      check conf.net.networkId == 345.NetworkId
-
-    test "networkid first, customnetwork next":
-      var msg: string
-      var opt = initOptParser("--networkid:678 --customnetwork:" & genesisFile)
-      let res = processArguments(msg, opt)
-      if res != Success:
-        echo msg
-        quit(QuitFailure)
-
-      let conf = getConfiguration()
-      check conf.net.networkId == 678.NetworkId
-
-    test "networkid not set, copy from chainId of customnetwork":
-      let conf = getConfiguration()
-      conf.net.flags.excl NetworkIdSet
-      var msg: string
-      var opt = initOptParser("--customnetwork:" & genesisFile)
-      let res = processArguments(msg, opt)
-      if res != Success:
-        echo msg
-        quit(QuitFailure)
-
-      check conf.net.networkId == 123.NetworkId
 
     test "calcGasLimitEIP1559":
       type

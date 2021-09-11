@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2019 Status Research & Development GmbH
+# Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -8,246 +8,429 @@
 # those terms.
 
 import
-  parseopt, strutils, macros, os, times, json, tables, stew/[byteutils],
-  chronos, eth/[keys, common, p2p, net/nat], chronicles, nimcrypto/hash,
-  eth/p2p/bootnodes, ./db/select_backend, eth/keys, ./chain_config, ./forks
+  std/[options, strutils, times, os],
+  pkg/[
+    confutils,
+    confutils/defs,
+    stew/byteutils,
+    confutils/std/net
+  ],
+  stew/shims/net as stewNet,
+  eth/[p2p, common, net/nat, p2p/bootnodes],
+  "."/[db/select_backend, chain_config,
+    constants, vm_compile_info
+  ]
 
 const
-  NimbusName* = "Nimbus"
+  NimbusName* = "nimbus-eth1"
   ## project name string
 
   NimbusMajor*: int = 0
   ## is the major number of Nimbus' version.
 
-  NimbusMinor*: int = 0
+  NimbusMinor*: int = 1
   ## is the minor number of Nimbus' version.
 
-  NimbusPatch*: int = 1
+  NimbusPatch*: int = 0
   ## is the patch number of Nimbus' version.
 
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
 
-  NimbusIdent* = "$1/$2 ($3/$4)" % [NimbusName, NimbusVersion, hostCPU, hostOS]
-  ## project ident name for networking services
-
   GitRevision = staticExec("git rev-parse --short HEAD").replace("\n") # remove CR
 
-  NimVersion = staticExec("nim --version")
+  NimVersion = staticExec("nim --version").strip()
+
+  NimbusIdent* = "$# v$# [$#: $#, $#, $#, $#]" % [
+    NimbusName,
+    NimbusVersion,
+    hostOS,
+    hostCPU,
+    nimbus_db_backend,
+    VmName,
+    GitRevision
+  ]
+  ## project ident name for networking services
 
 let
-  NimbusCopyright* = "Copyright (c) 2018-" & $(now().utc.year) & " Status Research & Development GmbH"
-  NimbusHeader* = "$# Version $# [$#: $#, $#, $#]\p$#\p\p$#\p" %
-    [NimbusName, NimbusVersion, hostOS, hostCPU, nimbus_db_backend, GitRevision, NimbusCopyright, NimVersion]
+  # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
+  NimbusCopyright* = "Copyright (c) 2018-" &
+    $(now().utc.year) &
+    " Status Research & Development GmbH"
+
+  # e.g.:
+  # Nimbus v0.1.0 [windows: amd64, rocksdb, evmc, dda8914f]
+  # Copyright (c) 2018-2021 Status Research & Development GmbH
+  NimbusBuild* = "$#\p$#" % [
+    NimbusIdent,
+    NimbusCopyright,
+  ]
+
+  NimbusHeader* = "$#\p\p$#" % [
+    NimbusBuild,
+    NimVersion
+  ]
+
+proc defaultDataDir*(): string =
+  when defined(windows):
+    getHomeDir() / "AppData" / "Roaming" / "Nimbus"
+  elif defined(macosx):
+    getHomeDir() / "Library" / "Application Support" / "Nimbus"
+  else:
+    getHomeDir() / ".cache" / "nimbus"
+
+proc defaultKeystoreDir*(): string =
+  defaultDataDir() / "keystore"
+
+proc getLogLevels(): string =
+  var logLevels: seq[string]
+  for level in LogLevel:
+    if level < enabledLogLevel:
+      continue
+    logLevels.add($level)
+  join(logLevels, ", ")
+
+const
+  defaultDataDirDesc = defaultDataDir()
+  defaultPort              = 30303
+  defaultMetricsServerPort = 9093
+  defaultEthRpcPort        = 8545
+  defaultEthWsPort         = 8546
+  defaultEthGraphqlPort    = 8547
+  defaultListenAddress      = (static ValidIpAddress.init("0.0.0.0"))
+  defaultAdminListenAddress = (static ValidIpAddress.init("127.0.0.1"))
+  defaultListenAddressDesc      = $defaultListenAddress
+  defaultAdminListenAddressDesc = $defaultAdminListenAddress
+  logLevelDesc = getLogLevels()
 
 type
-  ConfigStatus* = enum
-    ## Configuration status flags
-    Success,                      ## Success
-    EmptyOption,                  ## No options in category
-    ErrorUnknownOption,           ## Unknown option in command line found
-    ErrorParseOption,             ## Error in parsing command line option
-    ErrorIncorrectOption,         ## Option has incorrect value
-    Error                         ## Unspecified error
-
-  RpcFlags* {.pure.} = enum
-    ## RPC flags
-    Enabled                       ## RPC enabled
-    Eth                           ## enable eth_ set of RPC API
-    Debug                         ## enable debug_ set of RPC API
-
-  ProtocolFlags* {.pure.} = enum
-    ## Protocol flags
-    Eth                           ## enable eth subprotocol
-    Les                           ## enable les subprotocol
-
-  RpcConfiguration* = object
-    ## JSON-RPC configuration object
-    flags*: set[RpcFlags]         ## RPC flags
-    binds*: seq[TransportAddress] ## RPC bind address
-
-  GraphqlConfiguration* = object
-    enabled*: bool
-    address*: TransportAddress
-
-  NetworkFlags* = enum
-    ## Ethereum network flags
-    NoDiscover                   ## Peer discovery disabled
-    V5Discover                   ## Dicovery V5 enabled
-    NetworkIdSet                 ## prevent CustomNetwork replacement
-
-  DebugFlags* {.pure.} = enum
-    ## Debug selection flags
-    Enabled,                      ## Debugging enabled
-    Test1,                        ## Test1 enabled
-    Test2,                        ## Test2 enabled
-    Test3                         ## Test3 enabled
-
-  NetConfiguration* = object
-    ## Network configuration object
-    flags*: set[NetworkFlags]     ## Network flags
-    bootNodes*: seq[ENode]        ## List of bootnodes
-    staticNodes*: seq[ENode]      ## List of static nodes to connect to
-    customBootNodes*: seq[ENode]
-    bindPort*: uint16             ## Main TCP bind port
-    discPort*: uint16             ## Discovery UDP bind port
-    metricsServer*: bool          ## Enable metrics server
-    metricsServerPort*: uint16    ## metrics HTTP server port
-    maxPeers*: int                ## Maximum allowed number of peers
-    maxPendingPeers*: int         ## Maximum allowed pending peers
-    networkId*: NetworkId         ## Network ID as integer
-    ident*: string                ## Server ident name string
-    nodeKey*: string              ## Server private key
-    nat*: NatStrategy             ## NAT strategy
-    externalIP*: string           ## user-provided external IP
-    protocols*: set[ProtocolFlags]## Enabled subprotocols
-
-  DebugConfiguration* = object
-    ## Debug configuration object
-    flags*: set[DebugFlags]       ## Debug flags
-    logLevel*: LogLevel           ## Log level
-    logFile*: string              ## Log file
-    logMetrics*: bool             ## Enable metrics logging
-    logMetricsInterval*: int      ## Metrics logging interval
-
   PruneMode* {.pure.} = enum
     Full
     Archive
 
-  NimbusConfiguration* = ref object
+  NimbusCmd* = enum
+    noCommand
+
+  ProtocolFlag* {.pure.} = enum
+    ## Protocol flags
+    Eth                           ## enable eth subprotocol
+    Les                           ## enable les subprotocol
+
+  RpcFlag* {.pure.} = enum
+    ## RPC flags
+    Eth                           ## enable eth_ set of RPC API
+    Debug                         ## enable debug_ set of RPC API
+
+  EnodeList* = object
+    value*: seq[Enode]
+
+  Protocols* = object
+    value*: set[ProtocolFlag]
+
+  RpcApi* = object
+    value*: set[RpcFlag]
+
+  NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
-    dataDir*: string
-    keyStore*: string
-    prune*: PruneMode
-    graphql*: GraphqlConfiguration
-    rpc*: RpcConfiguration        ## JSON-RPC configuration
-    ws*: RpcConfiguration         ## Websocket JSON-RPC configuration
-    net*: NetConfiguration        ## Network configuration
-    debug*: DebugConfiguration    ## Debug configuration
-    customNetwork*: CustomNetwork ## Custom Genesis Configuration
-    importKey*: string
-    importFile*: string
-    verifyFromOk*: bool           ## activate `verifyFrom` setting
-    verifyFrom*: uint64           ## verification start block, 0 for disable
-    engineSigner*: EthAddress     ## Miner account
 
-const
-  # these are public network id
-  CustomNet*  = 0.NetworkId
-  MainNet*    = 1.NetworkId
-  # No longer used: MordenNet = 2
-  RopstenNet* = 3.NetworkId
-  RinkebyNet* = 4.NetworkId
-  GoerliNet*  = 5.NetworkId
-  KovanNet*   = 42.NetworkId
+    dataDir* {.
+      separator: "ETHEREUM OPTIONS:"
+      desc: "The directory where nimbus will store all blockchain data"
+      defaultValue: defaultDataDir()
+      defaultValueDesc: $defaultDataDirDesc
+      abbr: "d"
+      name: "data-dir" }: OutDir
 
-const
-  defaultRpcApi = {RpcFlags.Eth}
-  defaultProtocols = {ProtocolFlags.Eth}
-  defaultLogLevel = LogLevel.WARN
-  defaultNetwork = MainNet
+    keyStore* {.
+      desc: "Directory for the keystore files"
+      defaultValue: defaultKeystoreDir()
+      defaultValueDesc: "inside datadir"
+      abbr: "k"
+      name: "key-store" }: OutDir
 
-var nimbusConfig {.threadvar.}: NimbusConfiguration
+    pruneMode* {.
+      desc: "Blockchain prune mode (Full or Archive)"
+      defaultValue: PruneMode.Full
+      defaultValueDesc: $PruneMode.Full
+      abbr : "p"
+      name: "prune-mode" }: PruneMode
 
-proc getConfiguration*(): NimbusConfiguration {.gcsafe.}
+    importBlocks* {.
+      desc: "Import RLP encoded block(s) in a file, validate, write to database and quit"
+      defaultValue: ""
+      abbr: "b"
+      name: "import-blocks" }: InputFile
 
-proc `$`*(c: ChainId): string =
-  $(c.int)
+    importKey* {.
+      desc: "Import unencrypted 32 bytes hex private key file"
+      defaultValue: ""
+      abbr: "e"
+      name: "import-key" }: InputFile
 
-proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
-  if number >= c.londonBlock: FkLondon
-  elif number >= c.berlinBlock: FkBerlin
-  elif number >= c.istanbulBlock: FkIstanbul
-  elif number >= c.petersburgBlock: FkPetersburg
-  elif number >= c.constantinopleBlock: FkConstantinople
-  elif number >= c.byzantiumBlock: FkByzantium
-  elif number >= c.eip158Block: FkSpurious
-  elif number >= c.eip150Block: FkTangerine
-  elif number >= c.homesteadBlock: FkHomestead
-  else: FkFrontier
+    engineSigner* {.
+      desc: "Enable sealing engine to run and producing blocks at specified interval (only PoA/Clique supported)"
+      defaultValue: ZERO_ADDRESS
+      defaultValueDesc: ""
+      abbr: "s"
+      name: "engine-signer" }: EthAddress
 
-proc chainConfig*(id: NetworkId, cn: CustomNetwork): ChainConfig =
-  # For some public networks, NetworkId and ChainId value are identical
-  # but that is not always the case
+    verifyFrom* {.
+      desc: "Enable extra verification when current block number greater than verify-from"
+      defaultValueDesc: ""
+      name: "verify-from" }: Option[uint64]
 
-  result = case id
-  of MainNet:
-    ChainConfig(
-      poaEngine: false, # TODO: use real engine conf: PoW
-      chainId:        MainNet.ChainId,
-      homesteadBlock: 1_150_000.toBlockNumber, # 14/03/2016 20:49:53
-      daoForkBlock:   1_920_000.toBlockNumber,
-      daoForkSupport: true,
-      eip150Block:    2_463_000.toBlockNumber, # 18/10/2016 17:19:31
-      eip150Hash:     toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
-      eip155Block:    2_675_000.toBlockNumber, # 22/11/2016 18:15:44
-      eip158Block:    2_675_000.toBlockNumber,
-      byzantiumBlock: 4_370_000.toBlockNumber, # 16/10/2017 09:22:11
-      constantinopleBlock: 7_280_000.toBlockNumber, # Never Occured in MainNet
-      petersburgBlock:7_280_000.toBlockNumber, # 28/02/2019 07:52:04
-      istanbulBlock:  9_069_000.toBlockNumber, # 08/12/2019 12:25:09
-      muirGlacierBlock: 9_200_000.toBlockNumber, # 02/01/2020 08:30:49
-      berlinBlock:    12_244_000.toBlockNumber, # 15/04/2021 10:07:03
-      londonBlock:    12_965_000.toBlockNumber, # 05/08/2021 12:33:42
-    )
-  of RopstenNet:
-    ChainConfig(
-      poaEngine: false, # TODO: use real engine conf: PoW
-      chainId:        RopstenNet.ChainId,
-      homesteadBlock: 0.toBlockNumber,
-      daoForkSupport: false,
-      eip150Block:    0.toBlockNumber,
-      eip150Hash:     toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
-      eip155Block:    10.toBlockNumber,
-      eip158Block:    10.toBlockNumber,
-      byzantiumBlock: 1_700_000.toBlockNumber,
-      constantinopleBlock: 4_230_000.toBlockNumber,
-      petersburgBlock:4_939_394.toBlockNumber,
-      istanbulBlock:  6_485_846.toBlockNumber,
-      muirGlacierBlock: 7_117_117.toBlockNumber,
-      berlinBlock:      9_812_189.toBlockNumber,
-      londonBlock:    10_499_401.toBlockNumber # June 24, 2021
-    )
-  of RinkebyNet:
-    ChainConfig(
-      poaEngine: true, # TODO: use real engine conf: PoA
-      chainId:        RinkebyNet.ChainId,
-      homesteadBlock: 1.toBlockNumber,
-      daoForkSupport: false,
-      eip150Block:    2.toBlockNumber,
-      eip150Hash:     toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
-      eip155Block:    3.toBlockNumber,
-      eip158Block:    3.toBlockNumber,
-      byzantiumBlock: 1_035_301.toBlockNumber,
-      constantinopleBlock: 3_660_663.toBlockNumber,
-      petersburgBlock:4_321_234.toBlockNumber,
-      istanbulBlock:  5_435_345.toBlockNumber,
-      muirGlacierBlock: 8_290_928.toBlockNumber, # never occured in rinkeby network
-      berlinBlock:      8_290_928.toBlockNumber,
-      londonBlock:    8_897_988.toBlockNumber # July 7, 2021
-    )
-  of GoerliNet:
-    ChainConfig(
-      poaEngine: true, # TODO: use real engine conf: PoA
-      chainId:        GoerliNet.ChainId,
-      homesteadBlock: 0.toBlockNumber,
-      daoForkSupport: false,
-      eip150Block:    0.toBlockNumber,
-      eip150Hash:     toDigest("0000000000000000000000000000000000000000000000000000000000000000"),
-      eip155Block:    0.toBlockNumber,
-      eip158Block:    0.toBlockNumber,
-      byzantiumBlock: 0.toBlockNumber,
-      constantinopleBlock: 0.toBlockNumber,
-      petersburgBlock: 0.toBlockNumber,
-      istanbulBlock:  1_561_651.toBlockNumber,
-      muirGlacierBlock: 4_460_644.toBlockNumber, # never occured in goerli network
-      berlinBlock:    4_460_644.toBlockNumber,
-      londonBlock:    5_062_605.toBlockNumber # June 30, 2021
-    )
-  else:
-    # everything else will use CustomNet config    
-    trace "Custom genesis block configuration loaded", conf=cn.config
-    cn.config
+    case cmd* {.
+      command
+      defaultValue: noCommand }: NimbusCmd
+
+    of noCommand:
+      mainnet* {.
+        separator: "\pETHEREUM NETWORK OPTIONS:"
+        defaultValue: false
+        defaultValueDesc: ""
+        desc: "Use Ethereum main network (default)"
+        }: bool
+
+      ropsten* {.
+        desc: "Use Ropsten test network (proof-of-work, the one most like Ethereum mainnet)"
+        defaultValue: false
+        defaultValueDesc: ""
+        }: bool
+
+      rinkeby* {.
+        desc: "Use Rinkeby test network (proof-of-authority, for those running Geth clients)"
+        defaultValue: false
+        defaultValueDesc: ""
+        }: bool
+
+      goerli* {.
+        desc: "Use Görli test network (proof-of-authority, works across all clients)"
+        defaultValue: false
+        defaultValueDesc: ""
+        }: bool
+
+      kovan* {.
+        desc: "Use Kovan test network (proof-of-authority, for those running OpenEthereum clients)"
+        defaultValue: false
+        defaultValueDesc: ""
+        }: bool
+
+      networkId* {.
+        desc: "Network id (1=mainnet, 3=ropsten, 4=rinkeby, 5=goerli, 42=kovan, other=custom)"
+        defaultValueDesc: "mainnet"
+        abbr: "i"
+        name: "network-id" }: Option[NetworkId]
+
+      customNetwork* {.
+        desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
+        defaultValueDesc: ""
+        abbr: "c"
+        name: "custom-network" }: Option[CustomNetwork]
+
+      bootNodes* {.
+        separator: "\pNETWORKING OPTIONS:"
+        desc: "Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)"
+        defaultValue: EnodeList()
+        defaultValueDesc: ""
+        name: "boot-nodes" }: EnodeList
+
+      bootNodesv4* {.
+        desc: "Comma separated enode URLs for P2P v4 discovery bootstrap (light server, full nodes)"
+        defaultValue: EnodeList()
+        defaultValueDesc: ""
+        name: "boot-nodes-v4" }: EnodeList
+
+      bootNodesv5* {.
+        desc: "Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)"
+        defaultValue: EnodeList()
+        defaultValueDesc: ""
+        name: "boot-nodes-v5" }: EnodeList
+
+      staticNodes* {.
+        desc: "Comma separated enode URLs to connect with"
+        defaultValue: EnodeList()
+        defaultValueDesc: ""
+        name: "static-nodes" }: EnodeList
+
+      listenAddress* {.
+        desc: "Listening address for the Ethereum P2P and Discovery traffic"
+        defaultValue: defaultListenAddress
+        defaultValueDesc: $defaultListenAddressDesc
+        name: "listen-address" }: ValidIpAddress
+
+      tcpPort* {.
+        desc: "Network listening TCP port"
+        defaultValue: defaultPort
+        defaultValueDesc: $defaultPort
+        name: "tcp-port" }: Port
+
+      udpPort* {.
+        desc: "Network listening UDP port"
+        defaultValue: 0 # set udpPort defaultValue in `makeConfig`
+        defaultValueDesc: "default to --tcp-port"
+        name: "udp-port" }: Port
+
+      maxPeers* {.
+        desc: "The maximum number of peers to connect to"
+        defaultValue: 25
+        name: "max-peers" }: int
+
+      maxEndPeers* {.
+        desc: "Maximum number of pending connection attempts"
+        defaultValue: 0
+        name: "max-end-peers" }: int
+
+      nat* {.
+        desc: "Specify method to use for determining public address. " &
+              "Must be one of: any, none, upnp, pmp, extip:<IP>"
+        defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
+        defaultValueDesc: "any"
+        name: "nat" .}: NatConfig
+
+      noDiscover* {.
+        desc: "Disables the peer discovery mechanism (manual peer addition)"
+        defaultValue: false
+        name: "no-discover" .}: bool
+
+      discv5Enabled* {.
+        desc: "Enable Discovery v5"
+        defaultValue: false
+        name: "discv5" .}: bool
+
+      nodeKeyHex* {.
+        desc: "P2P node private key (as hexadecimal string)"
+        defaultValue: ""
+        defaultValueDesc: "random"
+        name: "node-key" .}: string
+
+      agentString* {.
+        desc: "Node agent string which is used as identifier in network"
+        defaultValue: NimbusIdent
+        defaultValueDesc: $NimbusIdent
+        name: "agent-string" .}: string
+
+      protocols* {.
+        desc: "Enable specific set of protocols (Eth, Les)"
+        defaultValue: Protocols(value: {ProtocolFlag.Eth})
+        defaultValueDesc: $ProtocolFlag.Eth
+        name: "protocols" .}: Protocols
+
+      metricsEnabled* {.
+        separator: "\pLOCAL SERVICE OPTIONS:"
+        desc: "Enable the metrics server"
+        defaultValue: false
+        name: "metrics" }: bool
+
+      metricsPort* {.
+        desc: "Listening HTTP port of the metrics server"
+        defaultValue: defaultMetricsServerPort
+        defaultValueDesc: $defaultMetricsServerPort
+        name: "metrics-port" }: Port
+
+      metricsAddress* {.
+        desc: "Listening address of the metrics server"
+        defaultValue: defaultAdminListenAddress
+        defaultValueDesc: $defaultAdminListenAddressDesc
+        name: "metrics-address" }: ValidIpAddress
+
+      rpcEnabled* {.
+        desc: "Enable the JSON-RPC server"
+        defaultValue: false
+        name: "rpc" }: bool
+
+      rpcPort* {.
+        desc: "Listening HTTP port for the JSON-RPC server"
+        defaultValue: defaultEthRpcPort
+        defaultValueDesc: $defaultEthRpcPort
+        name: "rpc-port" }: Port
+
+      rpcAddress* {.
+        desc: "Listening address of the RPC server"
+        defaultValue: defaultAdminListenAddress
+        defaultValueDesc: $defaultAdminListenAddressDesc
+        name: "rpc-address" }: ValidIpAddress
+
+      rpcApi* {.
+        desc: "Enable specific set of RPC API from list (comma-separated) (available: eth, debug)"
+        defaultValue: RpcApi(value: {RpcFlag.Eth})
+        defaultValueDesc: $RpcFlag.Eth
+        name: "rpc-api" }: RpcApi
+
+      wsEnabled* {.
+        desc: "Enable the Websocket JSON-RPC server"
+        defaultValue: false
+        name: "ws" }: bool
+
+      wsPort* {.
+        desc: "Listening Websocket port for the JSON-RPC server"
+        defaultValue: defaultEthWsPort
+        defaultValueDesc: $defaultEthWsPort
+        name: "ws-port" }: Port
+
+      wsAddress* {.
+        desc: "Listening address of the Websocket JSON-RPC server"
+        defaultValue: defaultAdminListenAddress
+        defaultValueDesc: $defaultAdminListenAddressDesc
+        name: "ws-address" }: ValidIpAddress
+
+      wsApi* {.
+        desc: "Enable specific set of Websocket RPC API from list (comma-separated) (available: eth, debug)"
+        defaultValue: RpcApi(value: {RpcFlag.Eth})
+        defaultValueDesc: $RpcFlag.Eth
+        name: "ws-api" }: RpcApi
+
+      graphqlEnabled* {.
+        desc: "Enable the HTTP-GraphQL server"
+        defaultValue: false
+        name: "graphql" }: bool
+
+      graphqlPort* {.
+        desc: "Listening HTTP port for the GraphQL server"
+        defaultValue: defaultEthGraphqlPort
+        defaultValueDesc: $defaultEthGraphqlPort
+        name: "graphql-port" }: Port
+
+      graphqlAddress* {.
+        desc: "Listening address of the GraphQL server"
+        defaultValue: defaultAdminListenAddress
+        defaultValueDesc: $defaultAdminListenAddressDesc
+        name: "graphql-address" }: ValidIpAddress
+
+      logLevel* {.
+        separator: "\pLOGGING AND DEBUGGING OPTIONS:"
+        desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
+        defaultValue: LogLevel.INFO
+        defaultValueDesc: $LogLevel.INFO
+        name: "log-level" }: LogLevel
+
+      logFile* {.
+        desc: "Specifies a path for the written Json log file"
+        name: "log-file" }: Option[OutFile]
+
+      logMetricsEnabled* {.
+        desc: "Enable metrics logging"
+        defaultValue: false
+        name: "log-metrics" .}: bool
+
+      logMetricsInterval* {.
+        desc: "Interval at which to log metrics, in seconds"
+        defaultValue: 10
+        name: "log-metrics-interval" .}: int
+
+proc parseCmdArg(T: type NetworkId, p: TaintedString): T =
+  parseInt(p.string).T
+
+proc completeCmdArg(T: type NetworkId, val: TaintedString): seq[string] =
+  return @[]
+
+proc parseCmdArg(T: type EthAddress, p: TaintedString): T =
+  try:
+    result = hexToByteArray(p.string, 20)
+  except CatchableError:
+    raise newException(ValueError, "failed to parse EthAddress")
+
+proc completeCmdArg(T: type EthAddress, val: TaintedString): seq[string] =
+  return @[]
 
 proc processList(v: string, o: var seq[string]) =
   ## Process comma-separated list of strings.
@@ -256,564 +439,125 @@ proc processList(v: string, o: var seq[string]) =
       if len(n) > 0:
         o.add(n)
 
-proc processInteger*(v: string, o: var int): ConfigStatus =
-  ## Convert string to integer.
-  try:
-    o  = parseInt(v)
-    result = Success
-  except ValueError:
-    result = ErrorParseOption
-
-proc processUInt64*(v: string, o: var uint64): ConfigStatus =
-  ## Convert string to integer.
-  try:
-    o = parseBiggestUInt(v).uint64
-    result = Success
-  except ValueError:
-    result = ErrorParseOption
-
-proc processFloat*(v: string, o: var float): ConfigStatus =
-  ## Convert string to float.
-  try:
-    o  = parseFloat(v)
-    result = Success
-  except ValueError:
-    result = ErrorParseOption
-
-proc processAddressPort(addrStr: string, ta: var TransportAddress): ConfigStatus =
-  try:
-    ta = initTAddress(addrStr)
-    return Success
-  except CatchableError:
-    return ErrorParseOption
-
-proc processAddressPortsList(v: string,
-                             o: var seq[TransportAddress]): ConfigStatus =
-  ## Convert <hostname:port>;...;<hostname:port> to list of `TransportAddress`.
+proc parseCmdArg(T: type EnodeList, p: TaintedString): T =
   var list = newSeq[string]()
-  processList(v, list)
+  processList(p.string, list)
   for item in list:
-    var ta: TransportAddress
-    if processAddressPort(item, ta) == Success:
-      o.add ta
-    else:
-      return ErrorParseOption
-  result = Success
+    let res = ENode.fromString(item)
+    if res.isErr:
+      raise newException(ValueError, "failed to parse EnodeList")
+    result.value.add res.get()
 
-proc processRpcApiList(v: string, flags: var set[RpcFlags]): ConfigStatus =
+proc completeCmdArg(T: type EnodeList, val: TaintedString): seq[string] =
+  return @[]
+
+proc parseCmdArg(T: type Protocols, p: TaintedString): T =
   var list = newSeq[string]()
-  processList(v, list)
-  result = Success
+  processList(p.string, list)
   for item in list:
     case item.toLowerAscii()
-    of "eth": flags.incl RpcFlags.Eth
-    of "debug": flags.incl RpcFlags.Debug
+    of "eth": result.value.incl ProtocolFlag.Eth
+    of "les": result.value.incl ProtocolFlag.Les
     else:
-      warn "unknown rpc api", name = item
-      result = ErrorIncorrectOption
+      raise newException(ValueError, "unknown protocol: " & item)
 
-proc processProtocolList(v: string, flags: var set[ProtocolFlags]): ConfigStatus =
+proc completeCmdArg(T: type Protocols, val: TaintedString): seq[string] =
+  return @[]
+
+proc parseCmdArg(T: type RpcApi, p: TaintedString): T =
   var list = newSeq[string]()
-  processList(v, list)
-  result = Success
+  processList(p.string, list)
   for item in list:
     case item.toLowerAscii()
-    of "eth": flags.incl ProtocolFlags.Eth
-    of "les": flags.incl ProtocolFlags.Les
+    of "eth": result.value.incl RpcFlag.Eth
+    of "debug": result.value.incl RpcFlag.Debug
     else:
-      warn "unknown protocol", name = item
-      result = ErrorIncorrectOption
+      raise newException(ValueError, "unknown rpc api: " & item)
 
-proc processENode(v: string, o: var ENode): ConfigStatus =
-  ## Convert string to ENode.
-  let res = ENode.fromString(v)
-  if res.isOk:
-    o = res[]
-    result = Success
-  else:
-    result = ErrorParseOption
+proc completeCmdArg(T: type RpcApi, val: TaintedString): seq[string] =
+  return @[]
 
-proc processENodesList(v: string, o: var seq[ENode]): ConfigStatus =
-  ## Convert comma-separated list of strings to list of ENode.
-  var
-    node: ENode
-    list = newSeq[string]()
-  processList(v, list)
-  for item in list:
-    result = processENode(item, node)
-    if result == Success:
-      o.add(node)
-    else:
-      break
-
-proc processPruneList(v: string, flags: var PruneMode): ConfigStatus =
-  var list = newSeq[string]()
-  processList(v, list)
-  result = Success
-  for item in list:
-    case item.toLowerAscii()
-    of "full": flags = PruneMode.Full
-    of "archive": flags = PruneMode.Archive
-    else:
-      warn "unknown prune flags", name = item
-      result = ErrorIncorrectOption
-
-proc processEthAddress(value: string, address: var EthAddress): ConfigStatus =
+proc parseCmdArg(T: type CustomNetwork, p: TaintedString): T =
   try:
-    address = hexToByteArray[20](value)
-    return Success
-  except CatchableError:
-    return ErrorParseOption
+    if not loadCustomNetwork(p.string, result):
+      raise newException(ValueError, "failed to load customNetwork")
+  except Exception as exc:
+    # on linux/mac, nim compiler refuse to compile
+    # with unlisted exception error
+    raise newException(ValueError, "failed to load customNetwork")
 
-proc processEthArguments(key, value: string): ConfigStatus =
-  result = Success
-  let config = getConfiguration()
-  case key.toLowerAscii()
-  of "keystore":
-    config.keyStore = value
-  of "datadir":
-    config.dataDir = value
-  of "prune":
-    result = processPruneList(value, config.prune)
-  of "import":
-    config.importFile = value
-  of "verifyfrom":
-    var res = 0u64
-    result = processUInt64(value, res)
-    config.verifyFrom = uint64(result)
-    config.verifyFromOk = true
-  of "engine-signer":
-    result = processEthAddress(value, config.engineSigner)
-  of "import-key":
-    config.importKey = value
-  else:
-    result = EmptyOption
+proc completeCmdArg(T: type CustomNetwork, val: TaintedString): seq[string] =
+  return @[]
 
-proc processRpcArguments(key, value: string): ConfigStatus =
-  ## Processes only `RPC` related command line options
-  result = Success
-  let config = getConfiguration()
-  let skey = key.toLowerAscii()
-  if skey == "rpc":
-    if RpcFlags.Enabled notin config.rpc.flags:
-      config.rpc.flags.incl(RpcFlags.Enabled)
-      config.rpc.flags.incl(defaultRpcApi)
-  elif skey == "rpcbind":
-    config.rpc.binds.setLen(0)
-    result = processAddressPortsList(value, config.rpc.binds)
-  elif skey == "rpcapi":
-    if RpcFlags.Enabled in config.rpc.flags:
-      config.rpc.flags.excl(defaultRpcApi)
-    else:
-      config.rpc.flags.incl(RpcFlags.Enabled)
-    result = processRpcApiList(value, config.rpc.flags)
-  else:
-    result = EmptyOption
-
-proc processGraphqlArguments(key, value: string): ConfigStatus =
-  ## Processes only `Graphql` related command line options
-  result = Success
-  let conf = getConfiguration()
-  case key.toLowerAscii()
-  of "graphql":
-    conf.graphql.enabled = true
-  of "graphqlbind":
-    result = processAddressPort(value, conf.graphql.address)
-  else:
-    result = EmptyOption
-
-proc processWsArguments(key, value: string): ConfigStatus =
-  ## Processes only `Websocket RPC` related command line options
-  result = Success
-  let config = getConfiguration()
-  let skey = key.toLowerAscii()
-  if skey == "ws":
-    if RpcFlags.Enabled notin config.ws.flags:
-      config.ws.flags.incl(RpcFlags.Enabled)
-      config.ws.flags.incl(defaultRpcApi)
-  elif skey == "wsbind":
-    config.ws.binds.setLen(0)
-    result = processAddressPortsList(value, config.ws.binds)
-  elif skey == "wsapi":
-    if RpcFlags.Enabled in config.ws.flags:
-      config.ws.flags.excl(defaultRpcApi)
-    else:
-      config.ws.flags.incl(RpcFlags.Enabled)
-    result = processRpcApiList(value, config.ws.flags)
-  else:
-    result = EmptyOption
-
-proc setBootnodes(onodes: var seq[ENode], nodeUris: openarray[string]) =
-  var node: ENode
-  onodes = newSeqOfCap[ENode](nodeUris.len)
+proc setBootnodes(output: var seq[ENode], nodeUris: openarray[string]) =
+  output = newSeqOfCap[ENode](nodeUris.len)
   for item in nodeUris:
-    doAssert(processENode(item, node) == Success)
-    onodes.add(node)
+    output.add(ENode.fromString(item).tryGet())
 
+proc getBootNodes*(conf: NimbusConf): seq[Enode] =
+  if conf.mainnet:
+    result.setBootnodes(MainnetBootnodes)
+  elif conf.ropsten:
+    result.setBootnodes(RopstenBootnodes)
+  elif conf.rinkeby:
+    result.setBootnodes(RinkebyBootnodes)
+  elif conf.goerli:
+    result.setBootnodes(GoerliBootnodes)
+  elif conf.kovan:
+    result.setBootnodes(KovanBootnodes)
+  elif conf.bootnodes.value.len > 0:
+    result = conf.bootnodes.value
+  elif conf.bootnodesv4.value.len > 0:
+    result = conf.bootnodesv4.value
+  elif conf.bootnodesv5.value.len > 0:
+    result = conf.bootnodesv5.value
 
-proc setNetwork(conf: var NetConfiguration, id: NetworkId) =
-  ## Set network id and default network bootnodes
-  conf.networkId = id
-  case id
-  of MainNet:
-    conf.bootNodes.setBootnodes(MainnetBootnodes)
-  of RopstenNet:
-    conf.bootNodes.setBootnodes(RopstenBootnodes)
-  of RinkebyNet:
-    conf.bootNodes.setBootnodes(RinkebyBootnodes)
-  of GoerliNet:
-    conf.bootNodes.setBootnodes(GoerliBootnodes)
-  of KovanNet:
-    conf.bootNodes.setBootnodes(KovanBootnodes)
+proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
+  if conf.mainnet:
+    some MainNet
+  elif conf.ropsten:
+    some RopstenNet
+  elif conf.rinkeby:
+    some RinkebyNet
+  elif conf.goerli:
+    some GoerliNet
+  elif conf.kovan:
+    some KovanNet
   else:
-    # everything else will use bootnodes
-    # from --bootnodes switch
-    discard
+    conf.networkId
 
-proc processNetArguments(key, value: string): ConfigStatus =
-  ## Processes only `Networking` related command line options
-  result = Success
-  let config = getConfiguration()
-  let skey = key.toLowerAscii()
-  if skey == "bootnodes":
-    result = processENodesList(value, config.net.customBootNodes)
-  elif skey == "bootnodesv4":
-    result = processENodesList(value, config.net.customBootNodes)
-  elif skey == "bootnodesv5":
-    result = processENodesList(value, config.net.customBootNodes)
-  elif skey == "staticnodes":
-    result = processENodesList(value, config.net.staticNodes)
-  elif skey == "testnet":
-    config.net.setNetwork(RopstenNet)
-  elif skey == "mainnet":
-    config.net.setNetwork(MainNet)
-  elif skey == "ropsten":
-    config.net.setNetwork(RopstenNet)
-  elif skey == "rinkeby":
-    config.net.setNetwork(RinkebyNet)
-  elif skey == "goerli":
-    config.net.setNetwork(GoerliNet)
-  elif skey == "kovan":
-    config.net.setNetwork(KovanNet)
-  elif skey == "customnetwork":
-    if not loadCustomNetwork(value, config.customNetwork):
-      result = Error
-    if NetworkIdSet notin config.net.flags:
-      # prevent clash with --networkid if it already set
-      # because any --networkid value that is not
-      # in the public network will also translated as
-      # CustomNetwork
-      config.net.networkId = CustomNet
-  elif skey == "networkid":
-    var res = 0
-    result = processInteger(value, res)
-    if result == Success:
-      config.net.setNetwork(NetworkId(res))
-      config.net.flags.incl NetworkIdSet
-  elif skey == "nodiscover":
-    config.net.flags.incl(NoDiscover)
-  elif skey == "v5discover":
-    config.net.flags.incl(V5Discover)
-    config.net.customBootNodes.setBootnodes(DiscoveryV5Bootnodes)
-  elif skey == "port":
-    var res = 0
-    result = processInteger(value, res)
-    if result == Success:
-      config.net.bindPort = uint16(res and 0xFFFF)
-  elif skey == "discport":
-    var res = 0
-    result = processInteger(value, res)
-    if result == Success:
-      config.net.discPort = uint16(res and 0xFFFF)
-  elif skey == "metrics":
-    config.net.metricsServer = true
-  elif skey == "metricsport":
-    var res = 0
-    result = processInteger(value, res)
-    if result == Success:
-      config.net.metricsServerPort = uint16(res and 0xFFFF)
-  elif skey == "maxpeers":
-    var res = 0
-    result = processInteger(value, res)
-    if result == Success:
-      config.net.maxPeers = res
-  elif skey == "maxpendpeers":
-    var res = 0
-    result = processInteger(value, res)
-    if result == Success:
-      config.net.maxPendingPeers = res
-  elif skey == "nodekey":
-    config.net.nodeKey = value
-  elif skey == "ident":
-    config.net.ident = value
-  elif skey == "nat":
-    case value.toLowerAscii:
-      of "any":
-        config.net.nat = NatAny
-      of "upnp":
-        config.net.nat = NatUpnp
-      of "pmp":
-        config.net.nat = NatPmp
-      of "none":
-        config.net.nat = NatNone
-      else:
-        if isIpAddress(value):
-          config.net.externalIP = value
-          config.net.nat = NatNone
-        else:
-          error "not a valid NAT mechanism, nor a valid IP address", value
-          result = ErrorParseOption
-  elif skey == "protocols":
-    config.net.protocols = {}
-    result = processProtocolList(value, config.net.protocols)
-  else:
-    result = EmptyOption
+proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
+  {.push warning[ProveInit]: off.}
+  result = NimbusConf.load(
+    cmdLine,
+    version = NimbusBuild,
+    copyrightBanner = NimbusHeader
+  )
+  {.pop.}
 
-proc processDebugArguments(key, value: string): ConfigStatus =
-  ## Processes only `Debug` related command line options
-  let config = getConfiguration()
-  result = Success
-  let skey = key.toLowerAscii()
-  if skey == "debug":
-    config.debug.flags.incl(DebugFlags.Enabled)
-  elif skey == "test":
-    var res = newSeq[string]()
-    processList(value, res)
-    for item in res:
-      if item == "test1":
-        config.debug.flags.incl(DebugFlags.Test1)
-      elif item == "test2":
-        config.debug.flags.incl(DebugFlags.Test2)
-      elif item == "test3":
-        config.debug.flags.incl(DebugFlags.Test3)
-  elif skey == "log-level":
-    try:
-      let logLevel = parseEnum[LogLevel](value)
-      if logLevel >= enabledLogLevel:
-        config.debug.logLevel = logLevel
-      else:
-        result = ErrorIncorrectOption
-    except ValueError:
-      result = ErrorIncorrectOption
-  elif skey == "log-file":
-    if len(value) == 0:
-      result = ErrorIncorrectOption
-    else:
-      config.debug.logFile = value
-  elif skey == "logmetrics":
-    config.debug.logMetrics = true
-  elif skey == "logmetricsinterval":
-    var res = 0
-    result = processInteger(value, res)
-    if result == Success:
-      config.debug.logMetricsInterval = res
-  else:
-    result = EmptyOption
+  result.networkId = result.getNetworkId()
 
-proc dumpConfiguration*(): string =
-  ## Dumps current configuration as string
-  let config = getConfiguration()
-  result = repr config
+  if result.networkId.isNone and result.customNetwork.isSome:
+    # WARNING: networkId and chainId are two distinct things
+    # they usage should not be mixed in other places.
+    # We only set networkId to chainId if networkId not set in cli and
+    # --custom-network is set.
+    # If chainId is not defined in config file, it's ok because
+    # the default networkId `CustomNetwork` has 0 value too.
+    result.networkId = some(NetworkId(result.customNetwork.get().config.chainId))
 
-template processArgument(processor, key, value, msg: untyped) =
-  ## Checks if arguments got processed successfully
-  var res = processor(string(key), string(value))
-  if res == Success:
-    result = res
-    continue
-  elif res == ErrorParseOption:
-    msg = "Error processing option '" & key & "' with value '" & value & "'."
-    result = res
-    break
-  elif res == ErrorIncorrectOption:
-    msg = "Incorrect value for option '" & key & "': '" & value & "'."
-    result = res
-    break
+  if result.networkId.isNone:
+    # bootnodes is set via getBootNodes
+    result.networkId = some MainNet
+    result.mainnet = true
 
-proc getDefaultDataDir*(): string =
-  when defined(windows):
-    "AppData" / "Roaming" / "Nimbus"
-  elif defined(macosx):
-    "Library" / "Application Support" / "Nimbus"
-  else:
-    ".cache" / "nimbus"
+  if result.udpPort == Port(0):
+    # if udpPort not set in cli, then
+    result.udpPort = result.tcpPort
 
-proc getDefaultKeystoreDir*(): string =
-  getDefaultDataDir() / "keystore"
+  if result.customNetwork.isNone:
+    result.customNetwork = some CustomNetwork()
 
-proc initConfiguration(): NimbusConfiguration =
-  ## Allocates and initializes `NimbusConfiguration` with default values
-  result = new NimbusConfiguration
-
-  ## Graphql defaults
-  result.graphql.enabled = false
-  result.graphql.address = initTAddress("127.0.0.1:8547")
-
-  ## RPC defaults
-  result.rpc.flags = {}
-  result.rpc.binds = @[initTAddress("127.0.0.1:8545")]
-
-  ## Websocket RPC defaults
-  result.ws.flags = {}
-  result.ws.binds = @[initTAddress("127.0.0.1:8546")]
-
-  ## Network defaults
-  result.net.setNetwork(defaultNetwork)
-  result.net.maxPeers = 25
-  result.net.maxPendingPeers = 0
-  result.net.bindPort = 30303'u16
-  result.net.discPort = 30303'u16
-  result.net.metricsServer = false
-  result.net.metricsServerPort = 9093'u16
-  result.net.ident = NimbusIdent
-  result.net.nat = NatAny
-  result.net.protocols = defaultProtocols
-
-  const
-    dataDir = getDefaultDataDir()
-    keystore = getDefaultKeystoreDir()
-
-  result.dataDir = getHomeDir() / dataDir
-  result.keystore = getHomeDir() / keystore
-  result.prune = PruneMode.Full
-
-  ## Debug defaults
-  result.debug.flags = {}
-  result.debug.logLevel = defaultLogLevel
-  result.debug.logMetrics = false
-  result.debug.logMetricsInterval = 10
-
-proc getConfiguration*(): NimbusConfiguration =
-  ## Retreive current configuration object `NimbusConfiguration`.
-  if isNil(nimbusConfig):
-    nimbusConfig = initConfiguration()
-  result = nimbusConfig
-
-proc getHelpString*(): string =
-  var logLevels: seq[string]
-  for level in LogLevel:
-    if level < enabledLogLevel:
-      continue
-    logLevels.add($level)
-
-  result = """
-
-USAGE:
-  nimbus [options]
-
-ETHEREUM OPTIONS:
-  --datadir:<value>       Base directory for all blockchain-related data
-  --keystore:<value>      Directory for the keystore (default: inside datadir)
-  --prune:<value>         Blockchain prune mode (full or archive, default: full)
-  --import:<path>         Import RLP encoded block(s), validate, write to database and quit
-  --engine-signer:<value> Enables mining. value is EthAddress in hex
-  --import-key:<path>     Import unencrypted 32 bytes hex private key file
-
-NETWORKING OPTIONS:
-  --bootnodes:<value>     Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)
-  --bootnodesv4:<value>   Comma separated enode URLs for P2P v4 discovery bootstrap (light server, full nodes)
-  --bootnodesv5:<value>   Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)
-  --staticnodes:<value>   Comma separated enode URLs to connect with
-  --port:<value>          Network listening TCP port (default: 30303)
-  --discport:<value>      Network listening UDP port (defaults to --port argument)
-  --maxpeers:<value>      Maximum number of network peers (default: 25)
-  --maxpendpeers:<value>  Maximum number of pending connection attempts (default: 0)
-  --nat:<value>           NAT port mapping mechanism (any|none|upnp|pmp|<external IP>) (default: "any")
-  --nodiscover            Disables the peer discovery mechanism (manual peer addition)
-  --v5discover            Enables the experimental RLPx V5 (topic discovery) mechanism
-  --nodekey:<value>       P2P node private key (as hexadecimal string)
-  --ident:<value>         Client identifier (default is '$1')
-  --protocols:<value>     Enable specific set of protocols (default: $4)
-
-ETHEREUM NETWORK OPTIONS:
-  --mainnet               Use Ethereum main network (default)
-  --testnet               Use Ropsten test network
-  --ropsten               Use Ropsten test network (proof-of-work, the one most like Ethereum mainnet)
-  --goerli                Use Görli test network (proof-of-authority, works across all clients)
-  --rinkeby               Use Rinkeby test network (proof-of-authority, for those running Geth clients)
-  --kovan                 Use Kovan test network (proof-of-authority, for those running OpenEthereum clients)
-  --networkid:<value>     Network id (0=custom, 1=mainnet, 3=ropsten, 4=rinkeby, 5=goerli, 42=kovan, other...)
-  --customnetwork:<path>  Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)
-
-LOCAL SERVICE OPTIONS:
-  --metrics               Enable the metrics HTTP server
-  --metricsport:<value>   Set port (always on localhost) metrics HTTP server will bind to (default: 9093)
-  --rpc                   Enable the HTTP-RPC server
-  --rpcbind:<value>       Set address:port pair(s) (comma-separated) HTTP-RPC server will bind to (default: localhost:8545)
-  --rpcapi:<value>        Enable specific set of RPC API from list (comma-separated) (available: eth, debug)
-  --graphql               Enable the HTTP-GraphQL server
-  --graphqlbind:<value>   Set address:port pair GraphQL server will bind (default: localhost:8547)
-  --ws                    Enable the Websocket JSON-RPC server
-  --wsbind:<value>        Set address:port pair Websocket JSON-RPC server will bind to (default: localhost:8546)
-  --wsapi:<value>         Enable specific set of Websocket RPC API from list (comma-separated) (available: eth, debug)
-
-LOGGING AND DEBUGGING OPTIONS:
-  --log-level:<value>     One of: $2 (default: $3)
-  --log-file:<value>      Optional log file, replacing stdout
-  --logmetrics            Enable metrics logging
-  --logmetricsinterval:<value> Interval at which to log metrics, in seconds (default: 10)
-  --debug                 Enable debug mode
-  --test:<value>          Perform specified test
-""" % [
-    NimbusIdent,
-    join(logLevels, ", "),
-    $defaultLogLevel,
-    strip($defaultProtocols, chars = {'{','}'}),
-  ]
-
-when declared(os.paramCount): # not available with `--app:lib`
-  proc processArguments*(msg: var string, opt: var OptParser): ConfigStatus =
-    ## Process command line argument and update `NimbusConfiguration`.
-    let config = getConfiguration()
-
-    # At this point `config.net.discPort` is likely populated with network default
-    # discPort. We want to override those if it is specified on the command line.
-    config.net.discPort = 0
-
-    var length = 0
-    for kind, key, value in opt.getopt():
-      result = Error
-      case kind
-      of cmdArgument:
-        discard
-      of cmdLongOption, cmdShortOption:
-        inc(length)
-        case key.toLowerAscii()
-          of "help", "h":
-            msg = getHelpString()
-            result = Success
-            break
-          of "version", "ver", "v":
-            msg = NimbusVersion
-            result = Success
-            break
-          else:
-            processArgument processEthArguments, key, value, msg
-            processArgument processRpcArguments, key, value, msg
-            processArgument processNetArguments, key, value, msg
-            processArgument processDebugArguments, key, value, msg
-            processArgument processGraphqlArguments, key, value, msg
-            processArgument processWsArguments, key, value, msg
-            if result != Success:
-              msg = "Unknown option: '" & key & "'."
-              break
-      of cmdEnd:
-        doAssert(false) # we're never getting this kind here
-
-    if config.net.discPort == 0:
-      config.net.discPort = config.net.bindPort
-
-    if NetworkIdSet notin config.net.flags and config.net.networkId == CustomNet:
-      # WARNING: networkId and chainId are two distinct things
-      # they usage should not be mixed in other places
-      # we only set networkId to chainId if networkId not set in cli and
-      # we are using custom genesis/custom chain config via json file.
-      config.net.networkId = NetworkId(config.customNetwork.config.chainId)
-
-  proc processArguments*(msg: var string): ConfigStatus =
-    var opt = initOptParser()
-    processArguments(msg, opt)
-
-proc processConfiguration*(pathname: string): ConfigStatus =
-  ## Process configuration file `pathname` and update `NimbusConfiguration`.
-  result = Success
+when isMainModule:
+  # for testing purpose
+  discard makeConfig()

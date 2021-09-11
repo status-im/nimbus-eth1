@@ -1,9 +1,9 @@
 import
-  std/[json, times, tables],
+  std/[times, tables],
   eth/[common, rlp, trie, p2p], stew/[byteutils],
   chronicles, eth/trie/db,
   ./db/[db_chain, state_db],
-  ./genesis_alloc, ./config, ./constants,
+  ./genesis_alloc, ./constants,
   ./chain_config, ./forks, ./p2p/gaslimit
 
 proc genesisBlockForNetwork*(id: NetworkId, cn: CustomNetwork): Genesis =

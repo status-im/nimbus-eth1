@@ -1,20 +1,24 @@
 import
   std/[os, parseopt, strutils],
-  eth/p2p, stint
+  eth/p2p, stint, ../nimbus/config
 
-from ../nimbus/config import
-  getDefaultDataDir,
-  ConfigStatus,
-  processInteger,
+from ../nimbus/chain_config import
   MainNet,
   RopstenNet,
   RinkebyNet,
   GoerliNet,
   KovanNet
 
-export ConfigStatus
-
 type
+  ConfigStatus* = enum
+    ## Configuration status flags
+    Success,                      ## Success
+    EmptyOption,                  ## No options in category
+    ErrorUnknownOption,           ## Unknown option in command line found
+    ErrorParseOption,             ## Error in parsing command line option
+    ErrorIncorrectOption,         ## Option has incorrect value
+    Error                         ## Unspecified error
+
   PremixConfiguration* = ref object
     dataDir*: string
     head*: Uint256
@@ -26,12 +30,20 @@ var premixConfig {.threadvar.}: PremixConfiguration
 
 proc getConfiguration*(): PremixConfiguration {.gcsafe.}
 
+proc processInteger(v: string, o: var int): ConfigStatus =
+  ## Convert string to integer.
+  try:
+    o  = parseInt(v)
+    result = Success
+  except ValueError:
+    result = ErrorParseOption
+
 proc initConfiguration(): PremixConfiguration =
   result = new PremixConfiguration
 
-  const dataDir = getDefaultDataDir()
+  const dataDir = defaultDataDir()
 
-  result.dataDir = getHomeDir() / dataDir
+  result.dataDir = dataDir
   result.head = 0.u256
   result.maxBlocks = 0
   result.numCommits = 128

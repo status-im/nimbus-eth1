@@ -2,8 +2,7 @@ import
   json, eth/common, stint, chronicles, eth/rlp,
   eth/trie/db, ../nimbus/db/[db_chain, capturedb, select_backend],
   ../nimbus/[tracer, config],
-  ../nimbus/p2p/chain,
-  ../nimbus/chain_config
+  ../nimbus/p2p/chain
 
 proc dumpTest(chainDB: BaseChainDB, blockNumber: int) =
   let
@@ -49,8 +48,8 @@ proc main() {.used.} =
 
   # nimbus --rpcapi: eth, debug --prune: archive
 
-  var conf = getConfiguration()
-  let db = newChainDb(conf.dataDir)
+  var conf = makeConfig()
+  let db = newChainDb(string conf.dataDir)
   let trieDB = trieDB db
   let chainDB = newBaseChainDB(trieDB, false)
 
@@ -105,17 +104,6 @@ proc main() {.used.} =
   chainDB.dumpTest(4_370_000) # Byzantium first block
 
 when isMainModule:
-  var message: string
-
-  ## Processing command line arguments
-  if processArguments(message) != Success:
-    echo message
-    quit(QuitFailure)
-  else:
-    if len(message) > 0:
-      echo message
-      quit(QuitSuccess)
-
   try:
     main()
   except:

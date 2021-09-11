@@ -1,7 +1,7 @@
 import
   unittest2, eth/[common, p2p], eth/trie/db,
   ../nimbus/db/db_chain, ../nimbus/p2p/chain,
-  ../nimbus/config
+  ../nimbus/chain_config
 
 const
   MainNetIDs = [

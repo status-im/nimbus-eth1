@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[os, parseopt, json],
+  std/[os, json],
   eth/[p2p, trie/db], ../../../nimbus/db/db_chain,
   ../../../nimbus/sync/protocol_eth65,
   ../../../nimbus/[genesis, config, conf_utils, context],
@@ -66,21 +66,14 @@ proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string, testStatusIM
   ctx.purgeNames(savePoint)
 
 proc main() =
-  var msg: string
-  var opt = initOptParser("--customnetwork:" & genesisFile)
-  let res = processArguments(msg, opt)
-  if res != Success:
-    echo msg
-    quit(QuitFailure)
-
   let
+    conf = makeConfig(@["--customnetwork:" & genesisFile])
     ethCtx = newEthContext()
-    conf = getConfiguration()
     ethNode = setupEthNode(conf, ethCtx, eth)
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
-      conf.net.networkId,
-      conf.customNetwork
+      conf.networkId.get,
+      conf.customNetwork.get
     )
 
   initializeEmptyDb(chainDB)

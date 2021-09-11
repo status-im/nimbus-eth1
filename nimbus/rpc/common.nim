@@ -25,20 +25,20 @@ type
     ip    : string # address string
     ports : NodePorts
 
-proc setupCommonRPC*(node: EthereumNode, conf: NimbusConfiguration, server: RpcServer) =
+proc setupCommonRPC*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
-    result = NimbusIdent
+    result = conf.agentString
 
   server.rpc("web3_sha3") do(data: HexDataStr) -> string:
     var rawdata = nimcrypto.fromHex(data.string[2 .. ^1])
     result = "0x" & $keccak_256.digest(rawdata)
 
   server.rpc("net_version") do() -> string:
-    result = $conf.net.networkId
+    result = $conf.networkId.get()
 
   server.rpc("net_listening") do() -> bool:
     let numPeers = node.peerPool.connectedNodes.len
-    result = numPeers < conf.net.maxPeers
+    result = numPeers < conf.maxPeers
 
   server.rpc("net_peerCount") do() -> HexQuantityStr:
     let peerCount = uint node.peerPool.connectedNodes.len
@@ -48,7 +48,7 @@ proc setupCommonRPC*(node: EthereumNode, conf: NimbusConfiguration, server: RpcS
     let enode = toEnode(node)
     result = NodeInfo(
       id: node.discovery.thisNode.id.toHex,
-      name: NimbusIdent,
+      name: conf.agentString,
       enode: $enode,
       ip: $enode.address.ip,
       ports: NodePorts(

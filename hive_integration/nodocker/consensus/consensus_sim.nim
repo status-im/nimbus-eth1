@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[os, parseopt, strformat, json],
+  std/[os, strformat, json],
   eth/[common, trie/db], stew/byteutils,
   ../../../nimbus/db/db_chain,
   ../../../nimbus/[genesis, config, conf_utils],
@@ -16,19 +16,13 @@ import
 
 proc processNode(genesisFile, chainFile,
                  lastBlockHash: string, testStatusIMPL: var TestStatus) =
-  var msg: string
-  var opt = initOptParser("--customnetwork:" & genesisFile)
-  let res = processArguments(msg, opt)
-  if res != Success:
-    echo msg
-    quit(QuitFailure)
 
   let
-    conf = getConfiguration()
+    conf = makeConfig(@["--customnetwork:" & genesisFile])
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
-      conf.net.networkId,
-      conf.customNetwork
+      conf.networkId.get,
+      conf.customNetwork.get()
     )
 
   initializeEmptyDb(chainDB)

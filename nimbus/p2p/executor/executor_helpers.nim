@@ -10,7 +10,7 @@
 
 import
   std/[strformat],
-  ../../config,
+  ../../chain_config,
   ../../db/accounts_cache,
   ../../forks,
   ../../vm_state,

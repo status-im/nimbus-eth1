@@ -19,7 +19,7 @@ when not defined(vm2_enabled):
   {.error: "NIM flag must be set: -d:vm2_enabled".}
 
 import
-  ../config,
+  ../chain_config,
   ../constants,
   ../forks,
   ../db/accounts_cache,

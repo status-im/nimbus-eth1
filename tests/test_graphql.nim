@@ -10,12 +10,12 @@
 import
   std/[os, json],
   stew/byteutils, unittest2,
-  eth/[p2p, common, trie/db, rlp, trie],
+  eth/[p2p, common, trie/db, rlp],
   graphql, ../nimbus/graphql/ethapi, graphql/test_common,
   ../nimbus/sync/protocol_eth65,
   ../nimbus/[genesis, config, chain_config, context],
-  ../nimbus/db/[db_chain, state_db],
-  ../nimbus/p2p/chain, ../premix/parser, ./test_helpers
+  ../nimbus/db/[db_chain],
+  ../nimbus/p2p/chain, ./test_helpers
 
 type
   EthBlock = object
@@ -95,7 +95,7 @@ proc setupChain(): BaseChainDB =
 
 proc graphqlMain*() =
   let
-    conf    = getConfiguration()
+    conf    = makeConfig(@[]) # don't use makeConfig default cmdLine from inside all_tests
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     chainDB = setupChain()
@@ -108,5 +108,4 @@ proc graphqlMain*() =
     ctx.executeCases(caseFolder, purgeSchema = false)
 
 when isMainModule:
-  processArguments()
   graphqlMain()

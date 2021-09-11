@@ -8,13 +8,18 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-when defined(evmc_enabled):
-  {.warning: "*** Compiling with EVMC enabled".}
+func vmName(): string =
+  when defined(evmc_enabled):
+    "evmc"
+  elif defined(vm2_enabled):
+    "vm2"
+  else:
+    "nimvm"
 
-elif defined(vm2_enabled):
-  {.warning: "*** Compiling with VM2 enabled".}
+const
+  VmName* = vmName()
+  warningMSg = "*** Compiling with " & VmName & " enabled"
 
-else:
-  {.warning: "*** Compiling with standard NIM VM enabled".}
+{.warning: warningMsg.}
 
 {.used.}

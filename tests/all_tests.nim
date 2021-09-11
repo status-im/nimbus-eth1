@@ -37,4 +37,5 @@ cliBuilder:
           ./test_misc,
           ./test_graphql,
           ./test_lru_cache,
-          ./test_clique
+          ./test_clique,
+          ./test_configuration

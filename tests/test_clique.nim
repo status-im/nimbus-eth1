@@ -10,7 +10,7 @@
 
 import
   std/[algorithm, os, sequtils, strformat,
-    strutils, times, parseopt, tables],
+    strutils, times, tables],
   ../nimbus/db/db_chain,
   ../nimbus/p2p/[chain,
     clique,
@@ -244,23 +244,17 @@ proc cliqueMiscTests() =
         engineSigner = "658bdf435d810c91414ec09147daa6db62406379"
         privateKey   = "tests" / "test_clique" / "private.key"
 
-      var msg: string
-      var opt = initOptParser("--engine-signer:$1 --import-key:$2" % [engineSigner, privateKey])
-      let res = processArguments(msg, opt)
-      check res == Success
-      
       let
-        signer = hexToByteArray[20](engineSigner)
-        ctx    = newEthContext()
-        conf   = getConfiguration()
-            
-      check ctx.am.importPrivateKey(conf.importKey).isOk()
-      check ctx.am.getAccount(signer).isOk()
+        conf = makeConfig(@["--engine-signer:" & engineSigner, "--import-key:" & privateKey])
+        ctx  = newEthContext()
+
+      check ctx.am.importPrivateKey(string conf.importKey).isOk()
+      check ctx.am.getAccount(conf.engineSigner).isOk()
 
       proc signFunc(signer: EthAddress, message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.} =
         let
-          hashData = keccakHash(message)          
-          acc      = ctx.am.getAccount(signer).tryGet()
+          hashData = keccakHash(message)
+          acc      = ctx.am.getAccount(conf.engineSigner).tryGet()
           rawSign  = sign(acc.privateKey, SkMessage(hashData.data)).toRaw
 
         ok(rawSign)
@@ -270,7 +264,7 @@ proc cliqueMiscTests() =
       header.extraData.setLen(EXTRA_VANITY)
       header.extraData.add 0.byte.repeat(EXTRA_SEAL)
 
-      let signature = signerFn(signer, header.encodeSealHeader).get()
+      let signature = signerFn(conf.engineSigner, header.encodeSealHeader).get()
       let extraLen = header.extraData.len
       if EXTRA_SEAL < extraLen:
         header.extraData.setLen(extraLen - EXTRA_SEAL)
@@ -278,7 +272,7 @@ proc cliqueMiscTests() =
 
       let resAddr = ecRecover(header)
       check resAddr.isOk
-      check resAddr.value == signer
+      check resAddr.value == conf.engineSigner
 
 # ------------------------------------------------------------------------------
 # Main function(s)

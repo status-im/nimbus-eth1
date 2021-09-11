@@ -11,8 +11,8 @@ import
   times, options, tables,
   json_rpc/rpcserver, hexstrings, stint, stew/byteutils,
   eth/[common, keys, rlp, p2p], nimcrypto,
-  ".."/[transaction, config, vm_state, constants, utils, context],
-  ../db/[db_chain, state_db], 
+  ".."/[transaction, vm_state, constants, utils, context],
+  ../db/[db_chain, state_db],
   rpc_types, rpc_utils,
   ../transaction/call_evm
 
@@ -83,7 +83,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
     result = encodeQuantity(calculateMedianGasPrice(chain).uint64)
 
   server.rpc("eth_accounts") do() -> seq[EthAddressStr]:
-    ## Returns a list of addresses owned by client.    
+    ## Returns a list of addresses owned by client.
     result = newSeqOfCap[EthAddressStr](ctx.am.numAccounts)
     for k in ctx.am.addresses:
       result.add ethAddressStr(k)
@@ -198,7 +198,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
     ## message: message to sign.
     ## Returns signature.
     let
-      address = data.toAddress      
+      address = data.toAddress
       acc     = ctx.am.getAccount(address).tryGet()
       msg     = hexToSeqByte(message.string)
 
@@ -222,7 +222,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
       eip155   = chain.currentBlock >= chain.config.eip155Block
       signedTx = signTransaction(tx, acc.privateKey, chain.config.chainId, eip155)
       rlpTx    = rlp.encode(signedTx)
-    
+
     result = hexDataStr(rlpTx)
 
   server.rpc("eth_sendTransaction") do(data: TxSend) -> EthHashStr:
@@ -245,7 +245,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
       eip155   = chain.currentBlock >= chain.config.eip155Block
       signedTx = signTransaction(tx, acc.privateKey, chain.config.chainId, eip155)
       rlpTx    = rlp.encode(signedTx)
-    
+
     result = keccak_256.digest(rlpTx).ethHashStr
 
   server.rpc("eth_sendRawTransaction") do(data: HexDataStr) -> EthHashStr:

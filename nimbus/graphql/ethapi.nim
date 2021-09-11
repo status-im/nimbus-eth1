@@ -11,6 +11,7 @@ import
   std/[strutils, times],
   stew/[results, byteutils], stint,
   eth/[common, rlp], chronos,
+  stew/shims/net,
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
   graphql/instruments/query_complexity,
@@ -1221,11 +1222,12 @@ proc setupGraphqlContext*(chainDB: BaseChainDB, ethNode: EthereumNode): GraphqlC
   ctx.initEthApi()
   ctx
 
-proc setupGraphqlHttpServer*(conf: NimbusConfiguration,
+proc setupGraphqlHttpServer*(conf: NimbusConf,
                              chainDB: BaseChainDB, ethNode: EthereumNode): GraphqlHttpServerRef =
   let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
   let ctx = setupGraphqlContext(chainDB, ethNode)
-  let sres = GraphqlHttpServerRef.new(ctx, conf.graphql.address, socketFlags = socketFlags)
+  let address = initTAddress(conf.graphqlAddress, conf.graphqlPort)
+  let sres = GraphqlHttpServerRef.new(ctx, address, socketFlags = socketFlags)
   if sres.isErr():
     echo sres.error
     quit(QuitFailure)

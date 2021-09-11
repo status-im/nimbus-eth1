@@ -1,6 +1,6 @@
 import
   json, strutils, times, options, os,
-  eth/[rlp, common], httputils, nimcrypto, chronicles,
+  eth/[rlp, common], httputils, nimcrypto,
   stint, stew/byteutils
 
 import ../nimbus/transaction

@@ -272,14 +272,16 @@ proc getFixtureTransaction*(j: JsonNode, dataIndex, gasIndex, valueIndex: int): 
 proc hashLogEntries*(logs: seq[Log]): string =
   toLowerAscii("0x" & $keccakHash(rlp.encode(logs)))
 
-proc setupEthNode*(conf: NimbusConfiguration, ctx: EthContext, capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keypair = ctx.hexToKeyPair(conf.net.nodekey).tryGet()
+proc setupEthNode*(conf: NimbusConf, ctx: EthContext, capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
+  let keypair = ctx.hexToKeyPair(conf.nodeKeyHex).tryGet()
   var srvAddress: Address
   srvAddress.ip = parseIpAddress("0.0.0.0")
-  srvAddress.tcpPort = Port(conf.net.bindPort)
-  srvAddress.udpPort = Port(conf.net.discPort)
+  srvAddress.tcpPort = conf.tcpPort
+  srvAddress.udpPort = conf.udpPort
   result = newEthereumNode(
-    keypair, srvAddress, conf.net.networkId, nil, "nimbus 0.1.0",
+    keypair, srvAddress,
+    conf.networkId.get(),
+    nil, conf.agentString,
     addAllCapabilities = false)
   for capability in capabilities:
     result.addCapability capability

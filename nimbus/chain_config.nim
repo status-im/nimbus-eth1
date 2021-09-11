@@ -9,12 +9,13 @@
 
 import
   std/[tables, strutils, options, times],
-  eth/[common, rlp], stint, stew/[byteutils],
+  eth/[common, rlp, p2p], stint, stew/[byteutils],
   nimcrypto/hash,
   json_serialization, chronicles,
   json_serialization/std/options as jsoptions,
   json_serialization/std/tables as jstable,
-  json_serialization/lexer
+  json_serialization/lexer,
+  ./forks
 
 type
   CliqueOptions = object
@@ -93,6 +94,16 @@ type
   CustomChain = object
     config : ChainOptions
     genesis: Genesis
+
+const
+  CustomNet*  = 0.NetworkId
+  # these are public network id
+  MainNet*    = 1.NetworkId
+  # No longer used: MordenNet = 2
+  RopstenNet* = 3.NetworkId
+  RinkebyNet* = 4.NetworkId
+  GoerliNet*  = 5.NetworkId
+  KovanNet*   = 42.NetworkId
 
 proc read(rlp: var Rlp, x: var AddressBalance, _: type EthAddress): EthAddress {.inline.} =
   let val = rlp.read(UInt256).toByteArrayBE()
@@ -213,3 +224,98 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool =
     return false
 
   return true
+
+proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
+  if number >= c.londonBlock: FkLondon
+  elif number >= c.berlinBlock: FkBerlin
+  elif number >= c.istanbulBlock: FkIstanbul
+  elif number >= c.petersburgBlock: FkPetersburg
+  elif number >= c.constantinopleBlock: FkConstantinople
+  elif number >= c.byzantiumBlock: FkByzantium
+  elif number >= c.eip158Block: FkSpurious
+  elif number >= c.eip150Block: FkTangerine
+  elif number >= c.homesteadBlock: FkHomestead
+  else: FkFrontier
+
+proc chainConfig*(id: NetworkId, cn: CustomNetwork): ChainConfig =
+  # For some public networks, NetworkId and ChainId value are identical
+  # but that is not always the case
+
+  result = case id
+  of MainNet:
+    ChainConfig(
+      poaEngine: false, # TODO: use real engine conf: PoW
+      chainId:        MainNet.ChainId,
+      homesteadBlock: 1_150_000.toBlockNumber, # 14/03/2016 20:49:53
+      daoForkBlock:   1_920_000.toBlockNumber,
+      daoForkSupport: true,
+      eip150Block:    2_463_000.toBlockNumber, # 18/10/2016 17:19:31
+      eip150Hash:     toDigest("2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
+      eip155Block:    2_675_000.toBlockNumber, # 22/11/2016 18:15:44
+      eip158Block:    2_675_000.toBlockNumber,
+      byzantiumBlock: 4_370_000.toBlockNumber, # 16/10/2017 09:22:11
+      constantinopleBlock: 7_280_000.toBlockNumber, # Never Occured in MainNet
+      petersburgBlock:7_280_000.toBlockNumber, # 28/02/2019 07:52:04
+      istanbulBlock:  9_069_000.toBlockNumber, # 08/12/2019 12:25:09
+      muirGlacierBlock: 9_200_000.toBlockNumber, # 02/01/2020 08:30:49
+      berlinBlock:    12_244_000.toBlockNumber, # 15/04/2021 10:07:03
+      londonBlock:    12_965_000.toBlockNumber, # 05/08/2021 12:33:42
+    )
+  of RopstenNet:
+    ChainConfig(
+      poaEngine: false, # TODO: use real engine conf: PoW
+      chainId:        RopstenNet.ChainId,
+      homesteadBlock: 0.toBlockNumber,
+      daoForkSupport: false,
+      eip150Block:    0.toBlockNumber,
+      eip150Hash:     toDigest("41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d"),
+      eip155Block:    10.toBlockNumber,
+      eip158Block:    10.toBlockNumber,
+      byzantiumBlock: 1_700_000.toBlockNumber,
+      constantinopleBlock: 4_230_000.toBlockNumber,
+      petersburgBlock:4_939_394.toBlockNumber,
+      istanbulBlock:  6_485_846.toBlockNumber,
+      muirGlacierBlock: 7_117_117.toBlockNumber,
+      berlinBlock:      9_812_189.toBlockNumber,
+      londonBlock:    10_499_401.toBlockNumber # June 24, 2021
+    )
+  of RinkebyNet:
+    ChainConfig(
+      poaEngine: true, # TODO: use real engine conf: PoA
+      chainId:        RinkebyNet.ChainId,
+      homesteadBlock: 1.toBlockNumber,
+      daoForkSupport: false,
+      eip150Block:    2.toBlockNumber,
+      eip150Hash:     toDigest("9b095b36c15eaf13044373aef8ee0bd3a382a5abb92e402afa44b8249c3a90e9"),
+      eip155Block:    3.toBlockNumber,
+      eip158Block:    3.toBlockNumber,
+      byzantiumBlock: 1_035_301.toBlockNumber,
+      constantinopleBlock: 3_660_663.toBlockNumber,
+      petersburgBlock:4_321_234.toBlockNumber,
+      istanbulBlock:  5_435_345.toBlockNumber,
+      muirGlacierBlock: 8_290_928.toBlockNumber, # never occured in rinkeby network
+      berlinBlock:      8_290_928.toBlockNumber,
+      londonBlock:    8_897_988.toBlockNumber # July 7, 2021
+    )
+  of GoerliNet:
+    ChainConfig(
+      poaEngine: true, # TODO: use real engine conf: PoA
+      chainId:        GoerliNet.ChainId,
+      homesteadBlock: 0.toBlockNumber,
+      daoForkSupport: false,
+      eip150Block:    0.toBlockNumber,
+      eip150Hash:     toDigest("0000000000000000000000000000000000000000000000000000000000000000"),
+      eip155Block:    0.toBlockNumber,
+      eip158Block:    0.toBlockNumber,
+      byzantiumBlock: 0.toBlockNumber,
+      constantinopleBlock: 0.toBlockNumber,
+      petersburgBlock: 0.toBlockNumber,
+      istanbulBlock:  1_561_651.toBlockNumber,
+      muirGlacierBlock: 4_460_644.toBlockNumber, # never occured in goerli network
+      berlinBlock:    4_460_644.toBlockNumber,
+      londonBlock:    5_062_605.toBlockNumber # June 30, 2021
+    )
+  else:
+    # everything else will use CustomNet config
+    trace "Custom genesis block configuration loaded", conf=cn.config
+    cn.config

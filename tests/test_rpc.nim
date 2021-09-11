@@ -12,12 +12,12 @@ import
   eth/[rlp, keys, trie/db, p2p/private/p2p_types],
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
   ../nimbus/[constants, vm_state, config, genesis, utils, transaction],
-  ../nimbus/db/[accounts_cache, db_chain, storage_types, state_db],
+  ../nimbus/db/[accounts_cache, db_chain, state_db],
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],
   ../nimbus/sync/protocol_eth65,
   ../nimbus/utils/difficulty,
-  ../nimbus/context,
-  ./rpcclient/test_hexstrings, ./test_helpers, ./macro_assembler
+  ../nimbus/[context, chain_config],
+   ./test_helpers, ./macro_assembler
 
 # Perform checks for hex string validation
 #doHexStrTests()
@@ -124,17 +124,22 @@ proc rpcMain*() =
   suite "Remote Procedure Calls":
     # TODO: Include other transports such as Http
     let
-      conf = getConfiguration()
+      conf = makeConfig(@[]) # don't use makeConfig default cmdLine from inside all_tests
       ctx  = newEthContext()
       ethNode = setupEthNode(conf, ctx, eth)
-      chain = newBaseChainDB(newMemoryDb())
+      chain = newBaseChainDB(
+        newMemoryDb(),
+        conf.pruneMode == PruneMode.Full,
+        conf.networkId.get(),
+        conf.customNetwork.get()
+      )
       signer: EthAddress = hexToByteArray[20]("0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b")
       ks2: EthAddress = hexToByteArray[20]("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
       ks3: EthAddress = hexToByteArray[20]("0x597176e9a64aad0845d83afdaf698fbeff77703b")
 
     ethNode.chain = newChain(chain)
-    conf.keyStore = "tests" / "keystore"
-    let res = ctx.am.loadKeystores(conf.keyStore)
+    let keyStore = "tests" / "keystore"
+    let res = ctx.am.loadKeystores(keyStore)
     if res.isErr:
       debugEcho res.error
     doAssert(res.isOk)
@@ -145,8 +150,7 @@ proc rpcMain*() =
       debugEcho unlock.error
     doAssert(unlock.isOk)
 
-    genesisBlockForNetwork(conf.net.networkId, conf.customNetwork).commit(chain)
-    doAssert(canonicalHeadHashKey().toOpenArray in chain.db)
+    initializeEmptyDb(chain)
     let env = setupEnv(chain, signer, ks2, ctx)
 
     # Create Ethereum RPCs
@@ -178,11 +182,11 @@ proc rpcMain*() =
 
     test "net_version":
       let res = await client.net_version()
-      check res == $conf.net.networkId
+      check res == $conf.networkId.get()
 
     test "net_listening":
       let res = await client.net_listening()
-      let listening = ethNode.peerPool.connectedNodes.len < conf.net.maxPeers
+      let listening = ethNode.peerPool.connectedNodes.len < conf.maxPeers
       check res == listening
 
     test "net_peerCount":
