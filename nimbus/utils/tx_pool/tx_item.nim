@@ -20,6 +20,28 @@ import
   stew/results
 
 type
+  TxItemError* = enum
+    TxItemErrNone = 0
+
+    TxItemErrInvalidSig =
+      "invalid transaction v, r, s values"
+
+    TxItemErrUnexpectedProtection =
+      "transaction type does not supported EIP-155 protected signatures"
+
+    TxItemErrInvalidTxType =
+      "transaction type not valid in this context"
+
+    TxItemErrTxTypeNotSupported =
+      "transaction type not supported"
+
+    TxItemErrGasFeeCapTooLow =
+      "fee cap less than base fee"
+
+    TxItemErrEmptyTypedTx =
+      "empty typed transaction bytes"
+
+
   TxItemStatus* = enum ##\
     ## current status of a transaction as seen by the pool.
     txItemStatusUnknown = 0
@@ -148,37 +170,6 @@ proc status*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.status
 
-# core/types/transaction.go(239): func (tx *Transaction) Protected() bool {
-proc protected*(item: TxItemRef): bool {.inline.} =
-  ## Getter (go/ref compat): is replay-protected
-  if item.tx.txType == TxLegacy:
-    # core/types/transaction.go(229): func isProtectedV(V *big.Int) bool {
-    let v = item.tx.V
-    if (v and 255) == 0:
-      return v != 27 and v != 28 and v != 1 and v != 0
-      # anything not 27 or 28 is considered protected
-  true
-
-# core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
-proc gas*(item: TxItemRef): auto {.inline.} =
-  ## Getter (go/ref compat): the gas limit of the transaction
-  item.tx.gasLimit
-
-# core/types/transaction.go(270): func (tx *Transaction) Gas() uint64 ..
-proc gasPrice*(item: TxItemRef): GasInt {.inline.} =
-  ## Getter (go/ref compat): the gas price of the transaction.
-  item.tx.gasPrice
-
-# core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
-proc gasTipCap*(item: TxItemRef): GasInt {.inline.} =
-  ## Getter (go/ref compat): the gasTipCap per gas of the transaction.
-  item.tx.maxPriorityFee
-
-# core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() *big.Int ..
-proc gasFeeCap*(item: TxItemRef): GasInt {.inline.} =
-  ## GasFeeCap returns the fee cap per gas of the transaction.
-  item.tx.maxFee
-
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -190,6 +181,114 @@ proc `local=`*(item: TxItemRef; val: bool) {.inline.} =
 proc `status=`*(item: TxItemRef; val: TxItemStatus) {.inline.} =
   ## Setter
   item.status = val
+
+# ------------------------------------------------------------------------------
+# Public functions, go like API -- Transactions
+# ------------------------------------------------------------------------------
+
+# core/types/transaction.go(239): func (tx *Transaction) Protected() bool {
+proc protected*(it: TxItemRef): bool {.inline.} =
+  ## Getter (go/ref compat): is replay-protected
+  if it.tx.txType == TxLegacy:
+    # core/types/transaction.go(229): func isProtectedV(V *big.Int) bool {
+    let v = it.tx.V
+    if (v and 255) == 0:
+      return v != 27 and v != 28 and v != 1 and v != 0
+      # anything not 27 or 28 is considered protected
+  true
+
+# core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
+proc gas*(it: TxItemRef): auto {.inline.} =
+  ## Getter (go/ref compat): the gas limit of the transaction
+  it.tx.gasLimit
+
+# core/types/transaction.go(270): func (tx *Transaction) Gas() uint64 ..
+proc gasPrice*(it: TxItemRef): GasInt {.inline.} =
+  ## Getter (go/ref compat): the gas price of the transaction.
+  it.tx.gasPrice
+
+# core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
+proc gasTipCap*(it: TxItemRef): GasInt {.inline.} =
+  ## Getter (go/ref compat): the gasTipCap per gas of the transaction.
+  it.tx.maxPriorityFee
+
+# core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() *big.Int ..
+proc gasFeeCap*(it: TxItemRef): GasInt {.inline.} =
+  ## `gasFeeCap` returns the fee cap per gas of the transaction.
+  it.tx.maxFee
+
+# core/types/transaction.go(310): func (tx *Transaction) GasFeeCapCmp(other ..
+proc gasFeeCapCmp*(it, other: TxItemRef): int {.inline.} =
+  ## `gasFeeCapCmp` compares the fee cap of two transactions.
+  it.gasFeeCap.cmp(other.gasFeeCap)
+
+# core/types/transaction.go(315): .. *Transaction) GasFeeCapIntCmp(other ..
+proc gasFeeCapIntCmp*(it: TxItemRef; other: GasInt): int {.inline.} =
+  ## `gasFeeCapIntCmp` compares the fee cap of the transaction against the
+  ## given fee cap.
+  it.gasFeeCap.cmp(other)
+
+# core/types/transaction.go(320): func (tx *Transaction) GasTipCapCmp(other ..
+proc gasTipCapCmp*(it, other: TxItemRef): int {.inline.} =
+  ## `gasTipCapCmp` compares the `gasTipCap` of two transactions.
+  it.gasTipCap.cmp(other.gasTipCap)
+
+# core/types/transaction.go(325): .. (tx *Transaction) GasTipCapIntCmp(other ..
+proc gasTipCapIntCmp*(it: TxItemRef; other: GasInt): int {.inline.} =
+  ## `gasTipCapIntCmp` compares the gasTipCap of the transaction against the
+  ## given gasTipCap.
+  it.gasTipCap.cmp(other)
+
+# core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
+proc effectiveGasTip*(it: TxItemRef;
+                      baseFee: GasInt): Result[GasInt,TxItemError] {.inline.} =
+  ## `effectiveGasTip` returns the effective miner `gasTipCap` for the given
+  ## base fee.
+  ##
+  ## Note: if the effective `gasTipCap` is negative, this method returns the
+  ## error `TxItemErrGasFeeCapTooLow` and the actual negative value can be
+  ## retrieved via `effectiveGasTipValue`.
+  # if baseFee == nil
+  #   return ok(it.gasTipCap)
+  if baseFee < it.gasFeeCap:
+    return err(TxItemErrGasFeeCapTooLow)
+  ok(min(it.gasTipCap, it.gasFeeCap - baseFee))
+
+proc effectiveGasTip*(it: TxItemRef): Result[GasInt,TxItemError] {.inline.} =
+  ok(it.gasTipCap)
+
+# core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
+proc effectiveGasTipValue*(it: TxItemRef; baseFee: GasInt): GasInt {.inline.} =
+  ## `effectiveGasTipValue` is identical to `effectiveGasTip`, but does not
+  ## return an error in case the effective gasTipCap is negative
+  min(it.gasTipCap, it.gasFeeCap - baseFee)
+
+proc effectiveGasTipValue*(it: TxItemRef): GasInt {.inline.} =
+  it.gasTipCap
+
+# core/types/transaction.go(351): .. *Transaction) EffectiveGasTipCmp(other ..
+proc effectiveGasTipCmp*(it, other: TxItemRef; baseFee: GasInt): int
+    {.inline.} =
+  ## `effectiveGasTipCmp` compares the effective `gasTipCap` of two
+  ## transactions assuming the given base fee.
+  # if baseFee == nil
+  #   return it.gasTipCapCmp(other)
+  it.effectiveGasTipValue(baseFee).cmp(other.effectiveGasTipValue(baseFee))
+
+proc effectiveGasTipCmp*(it, other: TxItemRef): int {.inline.} =
+  it.gasTipCapCmp(other)
+
+# core/types/transaction.go(360): ..EffectiveGasTipIntCmp(other..
+proc effectiveGasTipIntCmp*(it: TxItemRef; other, baseFee: GasInt): int
+    {.inline.} =
+  ## `effectiveGasTipIntCmp` compares the effective `gasTipCap` of a
+  ## transaction to the given `gasTipCap`.
+  # if baseFee == nil
+  #   return it.gasTipCapIntCmp(other)
+  it.effectiveGasTipValue(baseFee).cmp(other)
+
+proc effectiveGasTipIntCmp*(it: TxItemRef; other: GasInt): int {.inline.} =
+  it.gasTipCapIntCmp(other)
 
 # ------------------------------------------------------------------------------
 # Public functions, pretty printing and debugging

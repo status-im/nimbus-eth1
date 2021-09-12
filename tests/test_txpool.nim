@@ -187,9 +187,9 @@ proc runTxLoader(noisy = true;
     test "Load gas prices and priority fees":
 
       elapNoisy.showElapsed("Load gas prices"):
-        for it in xp.byGasPriceInc:
-          gasPrices.add it.itemList.firstKey.value.tx.gasPrice
-      check gasPrices.len == xp.byGasPriceLen
+        for gasData in xp.byPriceNonceIncNonce:
+          gasPrices.add gasData.gasPrice
+      check gasPrices.len == xp.byPriceLen
 
       elapNoisy.showElapsed("Load priority fee caps"):
         for it in xp.byGasTipCapInc:
@@ -254,50 +254,65 @@ proc runTxBaseTests(noisy = true) =
 
     block:
       var xq = txList.toTxPool(noisy)
-      let veryNoisy = noisy and false
+      let veryNoisy = noisy # and false
 
-      test &"Walk {xq.byGasPriceLen} gas prices for {txList.len} transactions":
+      test &"Walk {xq.byPriceLen} gas prices for {txList.len} transactions":
         block:
           var
             txCount = 0
             gpList: seq[GasInt]
 
-          elapNoisy.showElapsed("Increasing gas price walk on transactions"):
-            for it in xq.byGasPriceInc:
-              let gasPrice = it.itemList.firstKey.value.tx.gasPrice
-              var infoList: seq[string]
-              for w in it.itemList.nextKeys: # prevKeys() also works
-                infoList.add w.info
+          elapNoisy.showElapsed("Increasing gas price transactions walk"):
+            for gasData in xq.byPriceNonceIncNonce:
+              var
+                infoList: seq[string]
+                gasTxCount = 0
+              for nonceData in gasData.byNonceInc:
+                for it in nonceData.itemList.nextKeys: # prevKeys() also works
+                  infoList.add it.info
+                gasTxCount += nonceData.nItems
+
+              check gasTxCount == gasData.nItems
+              txCount += gasTxCount
+
+              let gasPrice = gasData.gasPrice
               gpList.add gasPrice
-              txCount += it.itemList.len
               veryNoisy.say &"gasPrice={gasPrice} for {infoList.len} entries:"
               let indent = " ".repeat(6)
               veryNoisy.say indent, infoList.join(&"\n{indent}")
 
           check txCount == xq.count
-          check gpList.len == xq.byGasPriceLen
+          check gpList.len == xq.byPriceLen
+          check gasPrices.len == gpList.len
           check gasPrices == gpList
 
         block:
           var
-            gpCount = 0
             txCount = 0
             gpList: seq[GasInt]
 
-          elapNoisy.showElapsed("Decreasing gas price walk on transactions"):
-            for it in xq.byGasPriceDec:
-              let gasPrice = it.itemList.firstKey.value.tx.gasPrice
-              var infoList: seq[string]
-              for w in it.itemList.prevKeys: # nextKeys() also works
-                infoList.add w.info
+          elapNoisy.showElapsed("Decreasing gas price transactions walk"):
+            for gasData in xq.byPriceNonceDecNonce:
+              var
+                infoList: seq[string]
+                gasTxCount = 0
+              for nonceData in gasData.byNonceDec:
+                for it in nonceData.itemList.prevKeys: # nextKeys() also works
+                  infoList.add it.info
+                gasTxCount += nonceData.nItems
+
+              check gasTxCount == gasData.nItems
+              txCount += gasTxCount
+
+              let gasPrice = gasData.gasPrice
               gpList.add gasPrice
-              txCount += it.itemList.len
               veryNoisy.say &"gasPrice={gasPrice} for {infoList.len} entries:"
               let indent = " ".repeat(6)
               veryNoisy.say indent, infoList.join(&"\n{indent}")
 
           check txCount == xq.count
-          check gpList.len == xq.byGasPriceLen
+          check gpList.len == xq.byPriceLen
+          check gasPrices.len == gpList.len
           check gasPrices == gpList.reversed
 
       test "Walk transaction ID queue fwd/rev":
@@ -358,17 +373,15 @@ proc runTxBaseTests(noisy = true) =
         count = 0
       let
         delLe = gasPrices[0] + ((gasPrices[^1] - gasPrices[0]) div 3)
-        delMax = block:
-          var it = xq.byGasPriceLe(delLe).value
-          it.itemList.firstKey.value.tx.gasPrice
+        delMax = xq.byPriceNonceLe(delLe).value.gasPrice
 
       test &"Load/delete with gas price less equal {delMax.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
         elapNoisy.showElapsed(&"Deleting gas prices less equal {delMax.toKMG}"):
-          for it in xq.byGasPriceDec(fromLe = delMax):
-            for item in it.itemList.nextKeys:
+          for nonceData in xq.byPriceNonceDecItem(maxGasPrice = delMax):
+            for item in nonceData.itemList.nextKeys:
               count.inc
-              check xq.delete(item).isOK
+              check xq.delete(item)
               check xq.verify.isOK
         check 0 < count
         check 0 < xq.count
@@ -380,18 +393,16 @@ proc runTxBaseTests(noisy = true) =
         count = 0
       let
         delGe = gasPrices[^1] - ((gasPrices[^1] - gasPrices[0]) div 3)
-        delMin = block:
-          var it = xq.byGasPriceGe(delGe).value
-          it.itemList.firstKey.value.tx.gasPrice
+        delMin = xq.byPriceNonceGe(delGe).value.gasPrice
 
       test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
           &"out of price range {gasPrices[0].toKMG}..{gasPrices[^1].toKMG}":
         elapNoisy.showElapsed(
             &"Deleting gas prices greater than {delMin.toKMG}"):
-          for it in xq.byGasPriceInc(fromGe = delMin):
-            for item in it.itemList.nextKeys:
+          for nonceData in xq.byPriceNonceIncItem(minGasPrice = delMin):
+            for item in nonceData.itemList.nextKeys:
               count.inc
-              check xq.delete(item).isOK
+              check xq.delete(item)
               check xq.verify.isOK
         check 0 < count
         check 0 < xq.count
@@ -500,7 +511,7 @@ when isMainModule:
 
   noisy.runTxLoader(
     dir = "/status", captureFile = captFile2, numTransactions = 1500)
-  #noisy.runTxBaseTests
+  noisy.runTxBaseTests
   noisy.runTxPoolTests
 
   #noisy.runTxLoader(dir = ".")

@@ -18,7 +18,7 @@
 import
   std/[tables, times],
    ./keequ,
-  ./tx_pool/[tx_base, tx_group, tx_item, tx_jobs, tx_list],
+  ./tx_pool/[tx_base, tx_group, tx_item, tx_jobs, tx_list, tx_nonce, tx_price],
   eth/[common, keys],
   stew/results
 
@@ -26,7 +26,15 @@ export
   TxGroupItemsRef,
   TxItemRef,
   TxItemStatus,
+  TxJobData,
+  TxJobID,
+  TxJobKind,
+  TxJobPair,
   TxListItemsRef,
+  TxNonceItemRef,
+  TxNoncePriceRef,
+  TxPriceItemRef,
+  TxPriceNonceRef,
   results,
   tx_group.itemList,
   tx_group.itemListLen,
@@ -36,11 +44,7 @@ export
   tx_item.sender,
   tx_item.status,
   tx_item.timeStamp,
-  tx_item.tx,
-  tx_jobs.TxJobData,
-  tx_jobs.TxJobID,
-  tx_jobs.TxJobKind,
-  tx_jobs.TxJobPair
+  tx_item.tx
 
 const
   txPoolLifeTime = initDuration(hours = 3)
@@ -348,16 +352,6 @@ proc startDate*(xp: var TxPool): auto {.inline.} =
 #func (pool *TxPool) ContentFrom(addr common.Address)
 #  (types.Transactions, types.Transactions)
 
-# Pending retrieves all currently processable transactions, grouped by origin
-# account and sorted by nonce. The returned transaction set is a copy and can
-# be freely modified by calling code.
-#
-# The enforceTips parameter can be used to do an extra filtering on the pending
-# transactions and only return those whose **effective** tip is large enough in
-# the next pending execution environment.
-#func (pool *TxPool) Pending(enforceTips bool)
-#  (map[common.Address]types.Transactions, error) {
-
 # ------------------------------------------------------------------------------
 # Public functions, go like API -- TxPool
 # ------------------------------------------------------------------------------
@@ -365,6 +359,51 @@ proc startDate*(xp: var TxPool): auto {.inline.} =
 # -- // This is like AddRemotes, but waits for pool reorganization. Tests use
 # -- // this method.
 # -- func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error
+
+#gasPrice    *big.Int
+#priced  *txPricedList                // All transactions sorted by price
+#[
+# core/tx_pool.go(536): func (pool *TxPool) Pending(enforceTips bool) (map[..
+proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]] =
+  ## The function retrieves all currently processable transactions, grouped
+  ## by origin account and sorted by nonce. The returned transaction set is
+  ## a copy and can be freely modified by calling code.
+  ##
+  ## The enforceTips parameter can be used to do an extra filtering on the
+  ## pending transactions and only return those whose **effective** tip is
+  ## large enough in the next pending execution environment.
+  var pending = newSeq[seq[TxItemRef]]()
+
+  for it in xq.bySenderGroups:
+    for local in [true, false]:
+      for item in it.itemList(local).nextKeys:
+
+        if enforceTips and not local:
+
+
+          if item.effectiveGasTipIntCmp(
+            xp.gasPrice, xp.priced.urgent.baseFee) < 0:
+	    txs = txs[:i]
+	      break
+  for addr, list := range pool.pending {
+		txs := list.Flatten()
+
+		// If the miner requests tip enforcement, cap the lists now
+		if enforceTips && !pool.locals.contains(addr) {
+			for i, tx := range txs {
+				if tx.EffectiveGasTipIntCmp(pool.gasPrice, pool.priced.urgent.baseFee) < 0 {
+					txs = txs[:i]
+					break
+				}
+			}
+		}
+		if len(txs) > 0 {
+			pending[addr] = txs
+		}
+	}
+	return pending, nil
+]#
+
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc locals*(xp: var TxPool): seq[EthAddress]
@@ -419,8 +458,8 @@ proc addRemote*(xp: var TxPool; tx: var Transaction; info = ""):
 
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
 proc has*(xp: var TxPool; hash: Hash256): bool =
-  ## Indicator whether txpool has a transaction cached with the given hash.
-  xp.hasKey(hash, true) or xp.hasKey(hash, false)
+  ## Indicator whether `TxPool` has a transaction cached with the given hash.
+  xp.hasItemID(hash, local = true) or xp.hasItemID(hash, local = false)
 
 # core/tx_pool.go(975): func (pool *TxPool) Status(hashes []common.Hash) ..
 proc status*(xp: var TxPool; hashes: openArray[Hash256]): seq[TxItemStatus]
@@ -498,7 +537,7 @@ iterator rangeLifo*(xp: var TxPool; local: bool): TxItemRef
 proc getLocal*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Returns a local transaction if it exists.
-  if xp.hasKey(hash, local = true):
+  if xp.hasItemID(hash, local = true):
     return ok(xp[hash])
   err()
 
@@ -506,14 +545,14 @@ proc getLocal*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
 proc getRemote*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Returns a remote transaction if it exists.
-  if xp.hasKey(hash, local = false):
+  if xp.hasItemID(hash, local = false):
     return ok(xp[hash])
   err()
 
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
 proc count*(xp: var TxPool): int {.inline.} =
   ## The current number of transactions
-  xp.len
+  xp.nItems
 
 # core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
 proc localCount*(xp: var TxPool): int {.inline.} =

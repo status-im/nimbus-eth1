@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Table Wrapper For Transaction Pool
-## ==================================
+## Transaction Pool Sender Group Table
+## ===================================
 ##
 
 import
@@ -73,11 +73,13 @@ proc txInit*(t: var TxGroupAddr; size = 10) =
   t.q.init(size)
 
 
-proc txInsert*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
+proc txInsert*(t: var TxGroupAddr; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Reassigning from an existing local/remote queue is supported (see
   ## `item.local` flag.)
-  let sched = item.local.toGroupSched
+  let
+    ethAddr = item.sender
+    sched = item.local.toGroupSched
   if t.q.hasKey(ethAddr):
     if t.q[ethAddr].itemList[sched].hasKey(item):
       return
@@ -91,9 +93,11 @@ proc txInsert*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
   t.size.inc
 
 
-proc txDelete*(t: var TxGroupAddr; ethAddr: EthAddress; item: TxItemRef)
+proc txDelete*(t: var TxGroupAddr; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
-  let sched = item.local.toGroupSched
+  let
+    ethAddr = item.sender
+    sched = item.local.toGroupSched
   if t.q.hasKey(ethAddr) and t.q[ethAddr].itemList[sched].hasKey(item):
     t.q[ethAddr].itemList[sched].del(item)
     t.size.dec
@@ -133,12 +137,12 @@ proc nLeaves*(t: var TxGroupAddr): int {.inline.} =
 
 
 # Table ops
-proc`[]`*(t: var TxGroupAddr; key: EthAddress): auto
+proc`[]`*(t: var TxGroupAddr; itemSender: EthAddress): auto
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  t.q[key]
+  t.q[itemSender]
 
-proc hasKey*(t: var TxGroupAddr; key: EthAddress): auto {.inline.} =
-  t.q.hasKey(key)
+proc hasKey*(t: var TxGroupAddr; itemSender: EthAddress): auto {.inline.} =
+  t.q.hasKey(itemSender)
 
 proc len*(t: var TxGroupAddr): auto {.inline.} =
   t.q.len
@@ -147,9 +151,9 @@ proc first*(t: var TxGroupAddr): auto
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   t.q.first
 
-proc next*(t: var TxGroupAddr; key: EthAddress): auto
+proc next*(t: var TxGroupAddr; itemSender: EthAddress): auto
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  t.q.next(key)
+  t.q.next(itemSender)
 
 
 proc itemList*(it: TxGroupItemsRef; local: bool):

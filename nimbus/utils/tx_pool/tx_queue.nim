@@ -62,21 +62,17 @@ proc txInit*(aq: var TxQueue; localSize = 10; remoteSize = 10) =
   aq.q[TxQueueLocal].init(localSize)
   aq.q[TxQueueRemote].init(remoteSize)
 
-proc txAppend*(aq: var TxQueue; key: Hash256; item: TxItemRef)
+proc txAppend*(aq: var TxQueue; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Reassigning from an existing local/remote queue is supported (see
   ## `item.local` flag.)
   let sched = item.local.toQueueSched
-  aq.q[sched][key] = item
-  aq.q[not sched].del(key)
+  aq.q[sched][item.id] = item
+  aq.q[not sched].del(item.id)
 
-proc txDelete*(ap: var TxQueue;
-               key: Hash256; sched: TxQueueSchedule): Result[TxItemRef,void]
+proc txDelete*(ap: var TxQueue; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = ap.q[sched].delete(key)
-  if rc.isOK:
-    return ok(rc.value.data)
-  err()
+  ap.q[item.local.toQueueSched].delete(item.id).isOK
 
 proc txVerify*(aq: var TxQueue): Result[void,(TxQuInfo,KeeQuInfo)]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -105,19 +101,20 @@ proc txVerify*(aq: var TxQueue): Result[void,(TxQuInfo,KeeQuInfo)]
 # Public fetch & traversal
 # ------------------------------------------------------------------------------
 
-proc hasKey*(aq: var TxQueue; key: Hash256; sched: TxQueueSchedule): bool =
-  aq.q[sched].hasKey(key)
+proc hasItemID*(aq: var TxQueue;
+                itemID: Hash256; sched: TxQueueSchedule): bool =
+  aq.q[sched].hasKey(itemID)
 
-proc hasKey*(aq: var TxQueue; key: Hash256): bool =
-  if aq.q[true.toQueueSched].hasKey(key) or
-     aq.q[false.toQueueSched].hasKey(key):
+proc hasItemID*(aq: var TxQueue; itemID: Hash256): bool =
+  if aq.q[true.toQueueSched].hasKey(itemID) or
+     aq.q[false.toQueueSched].hasKey(itemID):
     return true
 
 proc eq*(aq: var TxQueue;
-         key: Hash256; sched: TxQueueSchedule): Result[TxItemRef,void]
+         itemID: Hash256; sched: TxQueueSchedule): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  if aq.q[sched].hasKey(key):
-    return ok(aq.q[sched][key])
+  if aq.q[sched].hasKey(itemID):
+    return ok(aq.q[sched][itemID])
   err()
 
 proc first*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
