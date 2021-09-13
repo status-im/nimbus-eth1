@@ -13,7 +13,8 @@ import
   ./test_portal_encoding,
   ./test_portal,
   ./test_content_network,
-  ./test_discovery_rpc
+  ./test_discovery_rpc,
+  ./test_custom_distance
 
 cliBuilder:
   import
