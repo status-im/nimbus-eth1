@@ -42,9 +42,11 @@ type
     of ContentKeyValidationFailure:
       error*: string
 
-  # Treating Result as typed union type. If content is present handler should return
-  # it, if not it should return content id so that closest neighbours can be localized.
-  ContentHandler* = proc (contentKey: ByteList): ContentResult {.raises: [Defect], gcsafe.}
+  # Treating Result as typed union type. If the content is present the handler
+  # should return it, if not it should return the content id so that closest
+  # neighbours can be localized.
+  ContentHandler* =
+    proc(contentKey: ByteList): ContentResult {.raises: [Defect], gcsafe.}
 
   PortalProtocol* = ref object of TalkProtocol
     routingTable: RoutingTable
@@ -187,27 +189,30 @@ proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
 
   return proto
 
-# Requests, decoedes result, validates that proper response has been received
-# and updates the routing table.
-# in original disoveryv5 bootstrap node are not replaced in case of failure, but
-# for now portal protocol has no notion of bootstrap nodes
+# Sends the discv5 talkreq nessage with provided Portal message, awaits and
+# validates the proper response, and updates the Portal Network routing table.
+# In discoveryv5 bootstrap nodes are not replaced in case of failure, but
+# for now the Portal protocol has no notion of bootstrap nodes.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
-      p: PortalProtocol,
-      toNode: Node,
-      protocol: seq[byte],
-      request: Request
-    ): Future[PortalResult[Response]] {.async.} = 
-    let respResult = await talkreq(p.baseProtocol, toNode, protocol, encodeMessage(request))
-    return respResult
-      .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
-      .flatMap(proc (m: Message): Result[Response, cstring] =
-        let reqResult = getInnerMessageResult[Response](m, cstring"Invalid message response received")
-        if reqResult.isOk():
-          p.routingTable.setJustSeen(toNode)
-        else:
-          p.routingTable.replaceNode(toNode)
-        reqResult
-      )
+    p: PortalProtocol,
+    toNode: Node,
+    protocol: seq[byte],
+    request: Request
+    ): Future[PortalResult[Response]] {.async.} =
+  let respResult =
+    await talkreq(p.baseProtocol, toNode, protocol, encodeMessage(request))
+
+  return respResult
+    .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
+    .flatMap(proc (m: Message): Result[Response, cstring] =
+      let reqResult = getInnerMessageResult[Response](
+        m, cstring"Invalid message response received")
+      if reqResult.isOk():
+        p.routingTable.setJustSeen(toNode)
+      else:
+        p.routingTable.replaceNode(toNode)
+      reqResult
+    )
 
 proc ping*(p: PortalProtocol, dst: Node):
     Future[PortalResult[PongMessage]] {.async.} =
@@ -215,7 +220,8 @@ proc ping*(p: PortalProtocol, dst: Node):
     dataRadius: p.dataRadius)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.ping
-  return await reqResponse[PingMessage, PongMessage](p, dst, PortalProtocolId, ping)
+  return await reqResponse[PingMessage, PongMessage](
+    p, dst, PortalProtocolId, ping)
 
 proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
     Future[PortalResult[NodesMessage]] {.async.} =
@@ -223,14 +229,16 @@ proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findnode
   # TODO Add nodes validation
-  return await reqResponse[FindNodeMessage, NodesMessage](p, dst, PortalProtocolId, fn)
+  return await reqResponse[FindNodeMessage, NodesMessage](
+    p, dst, PortalProtocolId, fn)
 
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     Future[PortalResult[FoundContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
-  return await reqResponse[FindContentMessage, FoundContentMessage](p, dst, PortalProtocolId, fc)
+  return await reqResponse[FindContentMessage, FoundContentMessage](
+    p, dst, PortalProtocolId, fc)
 
 proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
   var records: seq[Record]
@@ -327,13 +335,14 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
-proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage, dst: Node, nodes: var seq[Node]): LookupResult =
+proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage,
+    dst: Node, nodes: var seq[Node]): LookupResult =
   if (m.enrs.len() != 0 and m.payload.len() == 0):
     let records = recordsFromBytes(m.enrs)
     # TODO cannot use verifyNodesRecords(records, destNode, @[0'u16]) as it
-    # also verify logdistances distances, but with content query those are not
+    # also verifies logdistances distances, but with content query those are not
     # used.
-    # Implement version of verifyNodesRecords wchich do not validate distances.
+    # Implement version of verifyNodesRecords which do not validate distances.
     for r in records:
       let node = newNode(r)
       if node.isOk():
@@ -360,14 +369,16 @@ proc contentLookupWorker(p: PortalProtocol, destNode: Node, target: ByteList):
   let contentMessageResponse = await p.findContent(destNode,  target)
 
   if contentMessageResponse.isOk():
-    return handleFoundContentMessage(p, contentMessageResponse.get(), destNode, nodes)
+    return handleFoundContentMessage(
+      p, contentMessageResponse.get(), destNode, nodes)
   else:
     return LookupResult(kind: Nodes, nodes: nodes)
 
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
 # networks will probably be very similar. Extract lookup function to separate module
 # and make it more generaic
-proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256): Future[Option[ByteList]] {.async.} =
+proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
+    Future[Option[ByteList]] {.async.} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance

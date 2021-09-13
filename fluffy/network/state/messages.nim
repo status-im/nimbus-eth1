@@ -11,7 +11,7 @@
 {.push raises: [Defect].}
 
 import
-  options,
+  std/options,
   stint, stew/[results, objects],
   eth/ssz/ssz_serialization
 
@@ -159,13 +159,13 @@ template innerMessage[T: SomeMessage](message: Message, expected: MessageKind): 
   else:
     none[T]()
 
-# All our Message variants coresponds to enum MessageKind, therefore we are able to
+# All our Message variants correspond to enum MessageKind, therefore we are able to
 # zoom in on inner structure of message by defining expected type T.
-# If expected variant is not active, retrun None
+# If expected variant is not active, return None
 proc getInnnerMessage*[T: SomeMessage](m: Message): Option[T] =
   innerMessage[T](m, messageKind(T))
 
-# Simple conversion from Option to Result, looks like somethif which coul live in
+# Simple conversion from Option to Result, looks like something which could live in
 # Result library.
 proc optToResult*[T, E](opt: Option[T], e: E): Result[T, E] =
   if (opt.isSome()):

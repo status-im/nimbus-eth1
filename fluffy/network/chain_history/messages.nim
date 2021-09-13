@@ -10,7 +10,7 @@
 {.push raises: [Defect].}
 
 import
-  options,
+  std/options,
   stint, stew/[results, objects],
   eth/ssz/ssz_serialization, eth/common/eth_types
 
