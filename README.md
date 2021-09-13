@@ -1,5 +1,4 @@
-# Nimbus: an Ethereum 2.0 Sharding Client for Resource-Restricted Devices
-
+# Nimbus: ultra-light Ethereum execution layer client 
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
@@ -12,14 +11,13 @@
 
 ## Introduction
 
-The code in this repository is focusing on Ethereum 1.0 feature parity,
-and Ethereum 1.x research & development.
+This repository contains our development work on our execution-layer client to pair with [our consensus-layer client](https://github.com/status-im/nimbus-eth2). This client focuses on efficiency and security and strives to be as light-weight as possible in termis of resources used.
 
 This repository is also home to [fluffy](./fluffy/README.md), a
 [Portal Network](https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-network.md)
 light client.
 
-All Ethereum 2.0 research and development is happening in parallel in the
+All consensus-layer client development is happening in parallel in the
 [nimbus-eth2](https://github.com/status-im/nimbus-eth2) repository.
 
 ## Development Updates
