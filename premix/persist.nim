@@ -2,14 +2,19 @@
 
 import
   eth/[common, rlp], stint,
-  chronicles, downloader, configuration,
-  ../nimbus/errors
+  chronicles, configuration,
+  ../nimbus/[errors, chain_config]
 
 import
   eth/trie/[hexary, db],
   ../nimbus/db/[storage_types, db_chain, select_backend],
   ../nimbus/[genesis],
   ../nimbus/p2p/chain
+
+when defined(graphql):
+  import graphql_downloader
+else:
+  import downloader
 
 const
   manualCommit = nimbus_db_backend == "lmdb"
@@ -37,7 +42,7 @@ proc main() {.used.} =
   let conf = configuration.getConfiguration()
   let db = newChainDb(conf.dataDir)
   let trieDB = trieDB db
-  let chainDB = newBaseChainDB(trieDB, false, conf.netId)
+  let chainDB = newBaseChainDB(trieDB, false, conf.netId, networkParams(conf.netId))
 
   # move head to block number ...
   if conf.head != 0.u256:

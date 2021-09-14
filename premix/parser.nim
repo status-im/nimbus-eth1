@@ -3,7 +3,7 @@ import
   eth/[rlp, common], httputils, nimcrypto,
   stint, stew/byteutils
 
-import ../nimbus/transaction
+import ../nimbus/transaction, ../nimbus/utils/ec_recover
 from ../nimbus/rpc/hexstrings import encodeQuantity
 
 func hexToInt*(s: string, T: typedesc[SomeInteger]): T =
@@ -34,24 +34,45 @@ type
   SomeData* = EthAddress | BloomFilter | BlockNonce
 
 proc fromJson*(n: JsonNode, name: string, x: var SomeData) =
-  hexToByteArray(n[name].getStr(), x)
-  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()), name)
+  let node = n[name]
+  if node.kind == JString:
+    hexToByteArray(node.getStr(), x)
+    doAssert(x.prefixHex == toLowerAscii(node.getStr()), name)
+  else:
+    hexToByteArray(node["value"].getStr(), x)
+    doAssert(x.prefixHex == toLowerAscii(node["value"].getStr()), name)
 
 proc fromJson*(n: JsonNode, name: string, x: var Hash256) =
-  hexToByteArray(n[name].getStr(), x.data)
-  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()), name)
+  let node = n[name]
+  if node.kind == JString:
+    hexToByteArray(node.getStr(), x.data)
+    doAssert(x.prefixHex == toLowerAscii(node.getStr()), name)
+  else:
+    hexToByteArray(node["value"].getStr(), x.data)
+    doAssert(x.prefixHex == toLowerAscii(node["value"].getStr()), name)
 
 proc fromJson*(n: JsonNode, name: string, x: var Blob) =
   x = hexToSeqByte(n[name].getStr())
   doAssert(x.prefixHex == toLowerAscii(n[name].getStr()), name)
 
 proc fromJson*(n: JsonNode, name: string, x: var UInt256) =
-  x = UInt256.fromHex(n[name].getStr())
-  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()), name)
+  let node = n[name]
+  if node.kind == JString:
+    x = UInt256.fromHex(node.getStr())
+    doAssert(x.prefixHex == toLowerAscii(node.getStr()), name)
+  else:
+    x = node.getInt().u256
+    doAssert($x == $node.getInt, name)
 
 proc fromJson*(n: JsonNode, name: string, x: var SomeInteger) =
-  x = hexToInt(n[name].getStr(), type(x))
-  doAssert(x.prefixHex == toLowerAscii(n[name].getStr()), name)
+  let node = n[name]
+  if node.kind == JString:
+    x = hexToInt(node.getStr(), type(x))
+    doAssert(x.prefixHex == toLowerAscii(node.getStr()), name)
+  else:
+    type T = type x
+    x = T(node.getInt)
+    doAssert($x == $node.getInt, name)
 
 proc fromJson*(n: JsonNode, name: string, x: var EthTime) =
   x = initTime(hexToInt(n[name].getStr(), int64), 0)
@@ -81,6 +102,16 @@ proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "nonce", result.nonce
   n.fromJson "baseFeePerGas", result.fee
 
+  if result.baseFee == 0.u256:
+    # probably geth bug
+    result.fee = none(Uint256)
+
+proc parseAccessPair(n: JsonNode): AccessPair =
+  n.fromJson "address", result.address
+  let keys = n["storageKeys"]
+  for kn in keys:
+    result.storageKeys.add hexToByteArray[32](kn.getStr())
+
 proc parseTransaction*(n: JsonNode): Transaction =
   var tx = Transaction(txType: TxLegacy)
   n.fromJson "nonce", tx.nonce
@@ -98,10 +129,27 @@ proc parseTransaction*(n: JsonNode): Transaction =
   n.fromJson "r", tx.R
   n.fromJson "s", tx.S
 
-  var sender = tx.getSender()
-  doAssert sender.prefixHex == n["from"].getStr()
-  doAssert n["hash"].getStr() == tx.rlpHash().prefixHex
+  if n["type"].kind != JNull:
+    tx.txType = TxType(n["type"].getInt)
+
+  if tx.txType == TxEip1559:
+    n.fromJson "maxPriorityFeePerGas", tx.maxPriorityFee
+    n.fromJson "maxFeePerGas", tx.maxFee
+
+  if tx.txType == TxEip2930:
+    # chainId is set from top level query
+    let accessList = n["accessList"]
+    if accessList.len > 0:
+      for acn in accessList:
+        tx.accessList.add parseAccessPair(acn)
   tx
+
+proc validateTxSenderAndHash*(n: JsonNode, tx: Transaction) =
+  var sender = tx.getSender()
+  var fromAddr: EthAddress
+  n.fromJson "from", fromAddr
+  doAssert sender.prefixHex == fromAddr.prefixHex
+  doAssert n["hash"].getStr() == tx.rlpHash().prefixHex
 
 proc parseLog(n: JsonNode): Log =
   n.fromJson "address", result.address

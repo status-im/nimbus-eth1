@@ -21,8 +21,8 @@ type
 proc request*(methodName: string, params: JsonNode): JsonNode =
   var client = newRpcHttpClient()
   client.httpMethod(MethodPost)
-  waitFor client.connect("localhost", Port(8545))
-  result = waitFor client.call(methodName, params)  
+  waitFor client.connect("127.0.0.1", Port(8545))
+  result = waitFor client.call(methodName, params)
   waitFor client.close()
 
 proc requestBlockBody(n: JsonNode, blockNumber: BlockNumber): BlockBody =
@@ -31,6 +31,7 @@ proc requestBlockBody(n: JsonNode, blockNumber: BlockNumber): BlockBody =
     result.transactions = newSeqOfCap[Transaction](txs.len)
     for tx in txs:
       let txn = parseTransaction(tx)
+      validateTxSenderAndHash(tx, txn)
       result.transactions.add txn
 
   let uncles = n["uncles"]
