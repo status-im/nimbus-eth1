@@ -13,32 +13,29 @@
 ##
 ## TODO:
 ##   maxPriorityFee / EIP-1559 handling (currently all zero)
-##
+##   status flag is bonkers as currently implemented
+##   pending() needs unit test
 
 import
-  std/[tables, times],
+  std/[algorithm, sequtils, tables, times],
    ./keequ,
-  ./tx_pool/[tx_base, tx_group, tx_item, tx_jobs, tx_list, tx_nonce, tx_price],
+  ./tx_pool/[tx_base, tx_gas, tx_group, tx_item, tx_jobs,tx_price],
   eth/[common, keys],
   stew/results
 
 export
-  TxGroupItemsRef,
+  TxGasItemRef,
+  TxGroupItemRef,
   TxItemRef,
   TxItemStatus,
   TxJobData,
   TxJobID,
   TxJobKind,
   TxJobPair,
-  TxListItemsRef,
-  TxNonceItemRef,
-  TxNoncePriceRef,
   TxPriceItemRef,
   TxPriceNonceRef,
   results,
-  tx_group.itemList,
-  tx_group.itemListLen,
-  tx_item.id,
+  tx_item.itemID,
   tx_item.info,
   tx_item.local,
   tx_item.sender,
@@ -47,11 +44,17 @@ export
   tx_item.tx
 
 const
+  TxNoBaseFee* = ##\
+    ## Initialising this value will cause the `baseFee` be disabled in the
+    ## priced list(s).
+    GasInt.low
+
   txPoolLifeTime = initDuration(hours = 3)
+  txPriceLimit = 1
+
   # Journal:   "transactions.rlp",
   # Rejournal: time.Hour,
   #
-  # PriceLimit: 1,
   # PriceBump:  10,
   #
   # AccountSlots: 16,
@@ -113,7 +116,9 @@ type
   TxPool* = object of TxPoolBase ##\
     ## Transaction pool descriptor
     startDate: Time     ## Start date (read-only)
+    gasPrice*: GasInt
     lifeTime*: Duration ## Maximum amount of time non-executable
+    byJobs: TxJobs      ## Jobs batch list
 
 {.push raises: [Defect].}
 
@@ -149,8 +154,8 @@ proc inactiveJobsEviction(xp: var TxPool; maxLifeTime: Duration)
     let item = rc.value
     if deadLine < item.timeStamp:
       break
-    rc = xp.next(item.id, local = false)
-    discard xp.delete(item.id)
+    rc = xp.next(item.itemID, local = false)
+    discard xp.delete(item.itemID)
 
 
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
@@ -204,15 +209,16 @@ proc addTxs(xp: var TxPool; tx: var Transaction; local: bool; info = ""):
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-method init*(xp: var TxPool) =
+method init*(xp: var TxPool; baseFee = TxNoBaseFee) =
   ## Constructor, returns new tx-pool descriptor.
-  procCall xp.TxPoolBase.init
+  procCall xp.TxPoolBase.init(baseFee)
   xp.startDate = utcNow()
+  xp.gasPrice = txPriceLimit
   xp.lifeTime = txPoolLifeTime
 
-proc initTxPool*: TxPool =
+proc initTxPool*(baseFee = TxNoBaseFee): TxPool =
   ## Ditto
-  result.init
+  result.init(baseFee)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -221,6 +227,21 @@ proc initTxPool*: TxPool =
 proc startDate*(xp: var TxPool): auto {.inline.} =
   ## Getter
   xp.startDate
+
+proc baseFee*(xp: var TxPool): auto {.inline.} =
+  ## Getter, the `baseFee` implying the price list valuation and order. If
+  ## this entry in disabled, the value `TxNoBaseFee` is returnded.
+  procCall xp.TxPoolBase.baseFee
+
+# ------------------------------------------------------------------------------
+# Public functions, setters
+# ------------------------------------------------------------------------------
+
+proc `baseFee=`*(xp: var TxPool; val: GasInt)
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  ## Setter, new base fee (implies reorg). The argument value `TxNoBaseFee`
+  ## disables the `baseFee`.
+  procCall xp.TxPoolBase.`baseFee=`(val)
 
 # ------------------------------------------------------------------------------
 # GO tx_pool todo list
@@ -360,59 +381,46 @@ proc startDate*(xp: var TxPool): auto {.inline.} =
 # -- // this method.
 # -- func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error
 
-#gasPrice    *big.Int
-#priced  *txPricedList                // All transactions sorted by price
-#[
 # core/tx_pool.go(536): func (pool *TxPool) Pending(enforceTips bool) (map[..
-proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]] =
-  ## The function retrieves all currently processable transactions, grouped
-  ## by origin account and sorted by nonce. The returned transaction set is
-  ## a copy and can be freely modified by calling code.
+proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## The function retrieves all currently processable transaction itemss,
+  ## grouped by origin account and sorted by nonce. The returned transaction
+  ## items are a copy and can be freely modified.
   ##
   ## The enforceTips parameter can be used to do an extra filtering on the
   ## pending transactions and only return those whose **effective** tip is
   ## large enough in the next pending execution environment.
-  var pending = newSeq[seq[TxItemRef]]()
+  for addrData in xp.bySenderSched:
+    var list: seq[TxItemRef]
 
-  for it in xq.bySenderGroups:
-    for local in [true, false]:
-      for item in it.itemList(local).nextKeys:
+    block:
+      let rc = addrData.eq(local = true)
+      if rc.isOK:
+        for nonceData in rc.value.byNonceItem:
+          for item in nonceData.itemList.nextkeys:
+            list.add item.dup
 
-        if enforceTips and not local:
+    if enforceTips:
+      let rc = addrData.eq(local = false)
+      if rc.isOK:
+        for nonceData in rc.value.byNonceItem:
+          for item in nonceData.itemList.nextkeys:
+            if xp.gasPrice <= item.effectiveGasTip:
+              list.add item.dup
+        list.sort(
+          cmp = proc(x, y: TxItemRef): int =
+                  x.tx.nonce.cmp(y.tx.nonce))
 
-
-          if item.effectiveGasTipIntCmp(
-            xp.gasPrice, xp.priced.urgent.baseFee) < 0:
-	    txs = txs[:i]
-	      break
-  for addr, list := range pool.pending {
-		txs := list.Flatten()
-
-		// If the miner requests tip enforcement, cap the lists now
-		if enforceTips && !pool.locals.contains(addr) {
-			for i, tx := range txs {
-				if tx.EffectiveGasTipIntCmp(pool.gasPrice, pool.priced.urgent.baseFee) < 0 {
-					txs = txs[:i]
-					break
-				}
-			}
-		}
-		if len(txs) > 0 {
-			pending[addr] = txs
-		}
-	}
-	return pending, nil
-]#
+    if 0 < list.len:
+      result.add list
 
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc locals*(xp: var TxPool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Locals retrieves the accounts currently considered local by the pool.
-  for it in xp.bySenderGroups:
-    if 0 < it.itemListLen(local = true):
-      let rc = it.itemList(local = true).firstKey
-      result.add rc.value.sender
+  ## Retrieves the accounts currently considered local by the pool.
+  toSeq(xp.bySenderNonce(local = true)).mapIt(it.sender)
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 proc addLocals*(xp: var TxPool; txs: var openArray[Transaction]; info = ""):
@@ -509,29 +517,31 @@ proc get*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
 # -- func (t *txLookup) Remove(hash common.Hash)
 
 # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash common.Hash, ..
-iterator rangeFifo*(xp: var TxPool; local: bool): TxItemRef
+iterator rangeFifo*(xp: var TxPool; local: varargs[bool]): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Local or remote transaction queue walk/traversal: oldest first
+  ## Local/remote transaction queue walk/traversal: oldest first
   ##
   ## :Note:
   ##    When running in a loop it is ok to delete the current item and all
   ##    the items already visited. Items not visited yet must not be deleted.
-  var rc = xp.first(local)
-  while rc.isOK:
-    let data = rc.value
-    rc = xp.next(data.id,local)
-    yield data
+  for isLocal in local:
+    var rc = xp.first(isLocal)
+    while rc.isOK:
+      let item = rc.value
+      rc = xp.next(item.itemID,isLocal)
+      yield item
 
-iterator rangeLifo*(xp: var TxPool; local: bool): TxItemRef
+iterator rangeLifo*(xp: var TxPool; local: varargs[bool]): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Local or remote transaction queue walk/traversal: oldest last
   ##
   ## See also the **Note* at the comment for `rangeFifo()`.
-  var rc = xp.last(local)
-  while rc.isOK:
-    let data = rc.value
-    rc = xp.prev(data.id,local)
-    yield data
+  for isLocal in local:
+    var rc = xp.last(isLocal)
+    while rc.isOK:
+      let item = rc.value
+      rc = xp.prev(item.itemID,isLocal)
+      yield item
 
 # core/tx_pool.go(1713): func (t *txLookup) GetLocal(hash common.Hash) ..
 proc getLocal*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
@@ -569,11 +579,12 @@ proc remoteToLocals*(xp: var TxPool; signer: EthAddress): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## For given account, remote transactions are migrated to local transactions.
   ## The function returns the number of transactions migrated.
-  let rc = xp.bySenderEq(signer)
+  let rc = xp.bySenderEq(signer,local = false)
   if rc.isOK:
     let nRemotes = xp.byRemoteQueueLen
-    for item in rc.value.itemList(local = false).nextKeys:
-      discard xp.reassign(item.id, local = true)
+    for nonceData in rc.value.byNonceItem:
+      for item in nonceData.itemList.nextKeys:
+        discard xp.reassign(item, local = true)
     return nRemotes - xp.byRemoteQueueLen
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
@@ -581,10 +592,10 @@ proc remotesBelowTip*(xp: var TxPool; threshold: GasInt): seq[Hash256]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Finds all remote transactions below the given tip threshold (effective
   ## only with *EIP-1559* support, otherwise all transactions are returned.)
-  for it in xp.byGasTipCapDec(fromLe = threshold):
+  for it in xp.byTipCapDec(maxCap = threshold):
     for item in it.itemList.nextKeys:
       if not item.local:
-        result.add item.id
+        result.add item.itemID
 
 # ------------------------------------------------------------------------------
 # Public functions, other
@@ -593,10 +604,10 @@ proc remotesBelowTip*(xp: var TxPool; threshold: GasInt): seq[Hash256]
 proc commit*(xp: var TxPool): int {.gcsafe,raises: [Defect,KeyError].} =
   ## Executes the jobs in the queue (if any.) The function returns the
   ## number of executes jobs.
-  var rc = xp.byJobsShift
+  var rc = xp.byJobs.txShift
   while rc.isOK:
     let job: TxJobPair = rc.value
-    rc = xp.byJobsShift
+    rc = xp.byJobs.txShift
 
     var header: BlockHeader
     case job.data.kind
@@ -616,6 +627,23 @@ proc job*(xp: var TxPool; job: TxJobData): TxJobID
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Append a new job to the queue.
   xp.byJobs.txAdd(job)
+
+# ------------------------------------------------------------------------------
+# Public functions, debugging
+# ------------------------------------------------------------------------------
+
+proc verify*(xp: var TxPool): Result[void,TxBaseInfo]
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Verify descriptor and subsequent data structures.
+
+  block:
+    let rc = xp.byJobs.txVerify
+    if rc.isErr:
+      case rc.error[0]
+      of txJobsOk:       return err(txOk)
+      of txJobsVfyQueue: return err(txVfyByJobsQueue)
+
+  procCall xp.TxPoolBase.verify
 
 # ------------------------------------------------------------------------------
 # End

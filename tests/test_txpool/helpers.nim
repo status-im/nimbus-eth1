@@ -21,55 +21,53 @@ import
 export
   keequ,
   tx_base.TxBaseInfo,
-  tx_base.byGasTipCapDec,
-  tx_base.byGasTipCapEq,
-  tx_base.byNonceLen,
-  tx_base.byNoncePriceDecItem,
-  tx_base.byNoncePriceDecPrice,
-  tx_base.byNoncePriceEq,
-  tx_base.byNoncePriceGe,
-  tx_base.byNoncePriceGt,
-  tx_base.byNoncePriceIncItem,
-  tx_base.byNoncePriceIncPrice,
-  tx_base.byNoncePriceLe,
-  tx_base.byNoncePriceLt,
-  tx_base.byPriceLen,
-  tx_base.byPriceNonceDecItem,
-  tx_base.byPriceNonceDecNonce,
-  tx_base.byPriceNonceEq,
-  tx_base.byPriceNonceGe,
-  tx_base.byPriceNonceGt,
-  tx_base.byPriceNonceIncItem,
-  tx_base.byPriceNonceIncNonce,
-  tx_base.byPriceNonceLe,
-  tx_base.byPriceNonceLt,
-  tx_base.byGasTipCapGe,
-  tx_base.byGasTipCapGt,
-  tx_base.byGasTipCapInc,
-  tx_base.byGasTipCapLe,
-  tx_base.byGasTipCapLen,
-  tx_base.byGasTipCapLt,
   tx_base.byNonceDec,
   tx_base.byNonceEq,
   tx_base.byNonceGe,
   tx_base.byNonceGt,
   tx_base.byNonceInc,
+  tx_base.byNonceItem,
   tx_base.byNonceLe,
   tx_base.byNonceLen,
+  tx_base.byNonceLen,
   tx_base.byNonceLt,
+  tx_base.byPriceDecItem,
+  tx_base.byPriceDecNonce,
+  tx_base.byPriceEq,
+  tx_base.byPriceGe,
+  tx_base.byPriceGt,
+  tx_base.byPriceIncItem,
+  tx_base.byPriceIncNonce,
+  tx_base.byPriceLe,
+  tx_base.byPriceLen,
+  tx_base.byPriceLt,
   tx_base.bySenderEq,
-  tx_base.bySenderGroups,
+  tx_base.bySenderItem,
   tx_base.bySenderLen,
+  tx_base.bySenderNonce,
+  tx_base.bySenderSched,
+  tx_base.byTipCapDec,
+  tx_base.byTipCapEq,
+  tx_base.byTipCapGe,
+  tx_base.byTipCapGt,
+  tx_base.byTipCapInc,
+  tx_base.byTipCapLe,
+  tx_base.byTipCapLen,
+  tx_base.byTipCapLt,
   tx_base.delete,
+  tx_base.effectiveGasTip,
   tx_base.first,
-  tx_base.gasPrice,
+  tx_base.gasTipCap,
   tx_base.last,
-  tx_base.next,
   tx_base.nItems,
+  tx_base.next,
+  tx_base.nonce,
   tx_base.prev,
   tx_base.reassign,
+  tx_base.sender,
   tx_base.toItemID,
   tx_base.verify,
+  tx_item.effectiveGasTip,
   undumpNextGroup
 
 proc pp*(txs: openArray[Transaction]; pfx = ""): string =
@@ -87,6 +85,13 @@ proc pp*(txs: openArray[Transaction]; pfx = ""): string =
 
 proc pp*(txs: openArray[Transaction]; pfxLen: int): string =
   txs.pp(" ".repeat(pfxLen))
+
+proc pp*(it: TxItemRef): string =
+  result = it.info.split[0]
+  if it.local:
+    result &= "L"
+  else:
+    result &= "R"
 
 proc ppMs*(elapsed: Duration): string =
   result = $elapsed.inMilliSeconds

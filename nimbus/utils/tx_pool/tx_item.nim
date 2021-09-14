@@ -53,12 +53,13 @@ type
     ## Data container with transaction and meta data. Entries are *read-only*\
     ## by default, for some there is a setter available.
     tx:        Transaction  ## Transaction data
-    id:        Hash256      ## Identifier/transaction key
+    itemID:    Hash256      ## Transaction hash
     timeStamp: Time         ## Time when added
     sender:    EthAddress   ## Sender account address
     info:      string       ## Whatever
     local:     bool         ## Local or remote queue (setter available)
     status:    TxItemStatus ## Transaction status (setter available)
+    effGasTip: GasInt       ## EffectiveGasTipValue
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -115,14 +116,14 @@ proc `$`(q: seq[AccessPair]): string =
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc newTxItemRef*(tx: Transaction; key: Hash256; local: bool; info: string):
-                 Result[TxItemRef,void] =
+proc newTxItemRef*(tx: Transaction; itemID: Hash256; local: bool; info: string):
+                 Result[TxItemRef,void] {.inline.} =
   ## Create item descriptor.
   let rc = tx.ecRecover
   if rc.isErr:
     return err()
   ok(TxItemRef(
-    id:        key,
+    itemID:    itemID,
     tx:        tx,
     sender:    rc.value,
     timeStamp: now().utc.toTime,
@@ -139,12 +140,72 @@ proc hash*(item: TxItemRef): Hash =
   cast[pointer](item).hash
 
 # ------------------------------------------------------------------------------
-# Public functions, getters
+# Public functions, transaction getters
 # ------------------------------------------------------------------------------
 
-proc id*(item: TxItemRef): auto {.inline.} =
+proc itemID*(tx: Transaction): Hash256 {.inline.} =
+  ## Getter, transaction ID
+  tx.rlpHash
+
+# core/types/transaction.go(239): func (tx *Transaction) Protected() bool {
+proc protected*(tx: Transaction): bool {.inline.} =
+  ## Getter (go/ref compat): is replay-protected
+  if tx.txType == TxLegacy:
+    # core/types/transaction.go(229): func isProtectedV(V *big.Int) bool {
+    if (tx.V and 255) == 0:
+      return tx.V != 27 and tx.V != 28 and tx.V != 1 and tx.V != 0
+      # anything not 27 or 28 is considered protected
+  true
+
+#  core/types/transaction.go(256): func (tx *Transaction) ChainId() *big.Int {
+proc eip155ChainID*(tx: Transaction): ChainID =
+  ## Getter (go/ref compat): the EIP155 chain ID of the transaction. For
+  ## legacy transactions which are not replay-protected, the return value is
+  ## zero.
+  if tx.txType != TxLegacy:
+    return tx.chainID
+  # core/types/transaction_signing.go(510): .. deriveChainId(v *big.Int) ..
+  if tx.V != 27 or tx.V != 28:
+    return ((tx.V - 35) div 2).ChainID
+  # otherwise 0
+
+# core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
+proc gas*(tx: Transaction): auto {.inline.} =
+  ## Getter (go/ref compat): the gas limit of the transaction
+  tx.gasLimit
+
+# core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
+proc gasTipCap*(tx: Transaction): GasInt {.inline.} =
+  ## Getter (go/ref compat): the gasTipCap per gas of the transaction.
+  if tx.txType == TxLegacy:
+    tx.gasPrice
+  else:
+    tx.maxPriorityFee
+
+# core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() *big.Int ..
+proc gasFeeCap*(tx: Transaction): GasInt {.inline.} =
+  ## Getter (go/ref compat): the fee cap per gas of the transaction.
+  if tx.txType == TxLegacy:
+    tx.gasPrice
+  else:
+    tx.maxFee
+
+# core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
+proc cost*(tx: Transaction): UInt256 {.inline.} =
+  ## Getter (go/ref compat): gas * gasPrice + value.
+  (tx.gasPrice * tx.gasLimit).u256 + tx.value
+
+# ------------------------------------------------------------------------------
+# Public functions, item getters
+# ------------------------------------------------------------------------------
+
+proc dup*(item: TxItemRef): auto {.inline.} =
+  ## Getter, provide contents copy
+  item.deepCopy
+
+proc itemID*(item: TxItemRef): auto {.inline.} =
   ## Getter
-  item.id
+  item.itemID
 
 proc tx*(item: TxItemRef): auto {.inline.} =
   ## Getter
@@ -170,6 +231,10 @@ proc status*(item: TxItemRef): auto {.inline.} =
   ## Getter
   item.status
 
+proc effectiveGasTip*(item: TxItemRef): auto {.inline.} =
+  ## Getter
+  item.effGasTip
+
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -182,113 +247,94 @@ proc `status=`*(item: TxItemRef; val: TxItemStatus) {.inline.} =
   ## Setter
   item.status = val
 
+proc `effectiveGasTip=`*(item: TxItemRef; val: GasInt) {.inline.} =
+  ## Setter
+  item.effGasTip = val
+
 # ------------------------------------------------------------------------------
 # Public functions, go like API -- Transactions
 # ------------------------------------------------------------------------------
 
-# core/types/transaction.go(239): func (tx *Transaction) Protected() bool {
-proc protected*(it: TxItemRef): bool {.inline.} =
-  ## Getter (go/ref compat): is replay-protected
-  if it.tx.txType == TxLegacy:
-    # core/types/transaction.go(229): func isProtectedV(V *big.Int) bool {
-    let v = it.tx.V
-    if (v and 255) == 0:
-      return v != 27 and v != 28 and v != 1 and v != 0
-      # anything not 27 or 28 is considered protected
-  true
-
-# core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
-proc gas*(it: TxItemRef): auto {.inline.} =
-  ## Getter (go/ref compat): the gas limit of the transaction
-  it.tx.gasLimit
-
-# core/types/transaction.go(270): func (tx *Transaction) Gas() uint64 ..
-proc gasPrice*(it: TxItemRef): GasInt {.inline.} =
-  ## Getter (go/ref compat): the gas price of the transaction.
-  it.tx.gasPrice
-
-# core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
-proc gasTipCap*(it: TxItemRef): GasInt {.inline.} =
-  ## Getter (go/ref compat): the gasTipCap per gas of the transaction.
-  it.tx.maxPriorityFee
-
-# core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() *big.Int ..
-proc gasFeeCap*(it: TxItemRef): GasInt {.inline.} =
-  ## `gasFeeCap` returns the fee cap per gas of the transaction.
-  it.tx.maxFee
-
+#[
 # core/types/transaction.go(310): func (tx *Transaction) GasFeeCapCmp(other ..
-proc gasFeeCapCmp*(it, other: TxItemRef): int {.inline.} =
-  ## `gasFeeCapCmp` compares the fee cap of two transactions.
-  it.gasFeeCap.cmp(other.gasFeeCap)
+proc gasFeeCapCmp*(tx, other: Transaction): int {.inline.} =
+  ## `gasFeeCapCmp()` compares the fee cap of two transactions.
+  tx.gasFeeCap.cmp(other.gasFeeCap)
 
 # core/types/transaction.go(315): .. *Transaction) GasFeeCapIntCmp(other ..
-proc gasFeeCapIntCmp*(it: TxItemRef; other: GasInt): int {.inline.} =
-  ## `gasFeeCapIntCmp` compares the fee cap of the transaction against the
+proc gasFeeCapIntCmp*(tx: Transaction; other: GasInt): int {.inline.} =
+  ## `gasFeeCapIntCmp()` compares the fee cap of the transaction against the
   ## given fee cap.
-  it.gasFeeCap.cmp(other)
+  tx.gasFeeCap.cmp(other)
 
 # core/types/transaction.go(320): func (tx *Transaction) GasTipCapCmp(other ..
-proc gasTipCapCmp*(it, other: TxItemRef): int {.inline.} =
-  ## `gasTipCapCmp` compares the `gasTipCap` of two transactions.
-  it.gasTipCap.cmp(other.gasTipCap)
+proc gasTipCapCmp*(tx, other: Transaction; TxItemRef): int {.inline.} =
+  ## `gasTipCapCmp()` compares the `gasTipCap` of two transactions.
+  tx.gasTipCap.cmp(other.gasTipCap)
 
 # core/types/transaction.go(325): .. (tx *Transaction) GasTipCapIntCmp(other ..
-proc gasTipCapIntCmp*(it: TxItemRef; other: GasInt): int {.inline.} =
-  ## `gasTipCapIntCmp` compares the gasTipCap of the transaction against the
+proc gasTipCapIntCmp*(tx: Transaction; other: GasInt): int {.inline.} =
+  ## `gasTipCapIntCmp()` compares the gasTipCap of the transaction against the
   ## given gasTipCap.
-  it.gasTipCap.cmp(other)
+  tx.gasTipCap.cmp(other)
+]#
 
+#[
 # core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
-proc effectiveGasTip*(it: TxItemRef;
+proc effectiveGasTip*(tx: Transaction;
                       baseFee: GasInt): Result[GasInt,TxItemError] {.inline.} =
-  ## `effectiveGasTip` returns the effective miner `gasTipCap` for the given
+  ## `effectiveGasTip()` returns the effective miner `gasTipCap` for the given
   ## base fee.
   ##
   ## Note: if the effective `gasTipCap` is negative, this method returns the
   ## error `TxItemErrGasFeeCapTooLow` and the actual negative value can be
-  ## retrieved via `effectiveGasTipValue`.
+  ## retrieved via `effectiveGasTipValue()`.
   # if baseFee == nil
   #   return ok(it.gasTipCap)
-  if baseFee < it.gasFeeCap:
+  if baseFee < tx.gasFeeCap:
     return err(TxItemErrGasFeeCapTooLow)
-  ok(min(it.gasTipCap, it.gasFeeCap - baseFee))
+  ok(min(tx.gasTipCap, tx.gasFeeCap - baseFee))
 
-proc effectiveGasTip*(it: TxItemRef): Result[GasInt,TxItemError] {.inline.} =
-  ok(it.gasTipCap)
+proc effectiveGasTip*(tx: Transaction): Result[GasInt,TxItemError] {.inline.} =
+  ok(tx.gasTipCap)
+]#
 
 # core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
-proc effectiveGasTipValue*(it: TxItemRef; baseFee: GasInt): GasInt {.inline.} =
-  ## `effectiveGasTipValue` is identical to `effectiveGasTip`, but does not
+proc effectiveGasTipValue*(tx: Transaction;
+                           baseFee: GasInt): GasInt {.inline.} =
+  ## `effectiveGasTipValue()` is identical to `effectiveGasTip`, but does not
   ## return an error in case the effective gasTipCap is negative
-  min(it.gasTipCap, it.gasFeeCap - baseFee)
+  min(tx.gasTipCap, tx.gasFeeCap - baseFee)
 
-proc effectiveGasTipValue*(it: TxItemRef): GasInt {.inline.} =
-  it.gasTipCap
+proc effectiveGasTipValue*(tx: Transaction): GasInt {.inline.} =
+  tx.gasTipCap
 
+#[
 # core/types/transaction.go(351): .. *Transaction) EffectiveGasTipCmp(other ..
-proc effectiveGasTipCmp*(it, other: TxItemRef; baseFee: GasInt): int
+proc effectiveGasTipCmp*(tx, other: Transaction; baseFee: GasInt): int
     {.inline.} =
-  ## `effectiveGasTipCmp` compares the effective `gasTipCap` of two
+  ## `effectiveGasTipCmp()` compares the effective `gasTipCap` of two
   ## transactions assuming the given base fee.
   # if baseFee == nil
-  #   return it.gasTipCapCmp(other)
-  it.effectiveGasTipValue(baseFee).cmp(other.effectiveGasTipValue(baseFee))
+  #   return tx.gasTipCapCmp(other)
+  tx.effectiveGasTipValue(baseFee).cmp(other.effectiveGasTipValue(baseFee))
 
-proc effectiveGasTipCmp*(it, other: TxItemRef): int {.inline.} =
-  it.gasTipCapCmp(other)
+proc effectiveGasTipCmp*(tx, other: Transaction): int {.inline.} =
+  tx.gasTipCap.cmp(other.gasTipCap)
+
 
 # core/types/transaction.go(360): ..EffectiveGasTipIntCmp(other..
-proc effectiveGasTipIntCmp*(it: TxItemRef; other, baseFee: GasInt): int
+proc effectiveGasTipIntCmp*(tx: Transaction; other, baseFee: GasInt): int
     {.inline.} =
   ## `effectiveGasTipIntCmp` compares the effective `gasTipCap` of a
   ## transaction to the given `gasTipCap`.
   # if baseFee == nil
-  #   return it.gasTipCapIntCmp(other)
-  it.effectiveGasTipValue(baseFee).cmp(other)
+  #   return tx.gasTipCapIntCmp(other)
+  tx.effectiveGasTipValue(baseFee).cmp(other)
 
-proc effectiveGasTipIntCmp*(it: TxItemRef; other: GasInt): int {.inline.} =
-  it.gasTipCapIntCmp(other)
+proc effectiveGasTipIntCmp*(tx: Transaction; other: GasInt): int {.inline.} =
+  tx.gasTipCap.cmp(other)
+]#
 
 # ------------------------------------------------------------------------------
 # Public functions, pretty printing and debugging
@@ -326,13 +372,13 @@ proc pp*(w: TxItemRef): string =
   ## Pretty print item (use for debugging)
   let s = w.tx.pp
   result = "(timeStamp=" & ($w.timeStamp).replace(' ','_') &
-    ",hash=" & w.id.toXX &
+    ",hash=" & w.itemID.toXX &
     ",status=" & w.status.pp &
     "," & s[1 ..< s.len]
 
 proc `$`*(w: TxItemRef): string =
   ## Visualise item ID (use for debugging)
-  "<" & w.id.toXX & ">"
+  "<" & w.itemID.toXX & ">"
 
 # ------------------------------------------------------------------------------
 # End

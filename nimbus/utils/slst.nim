@@ -164,7 +164,13 @@ proc init*[K,V](sl: var SLst[K,V]) =
     mkc = proc(k: K): SLstItemRef[K,V] = slstMkc[K,V](k))
 
 proc initSLst*[K,V]: SLst[K,V] =
+  ## Variant of `init()`
   result.init
+
+proc move*[K,V](sl: var SLst[K,V]): SLst[K,V] =
+  ## Return a shallow copy of the argument list `sl`, then reset `sl`.
+  result.tree = sl.tree
+  sl.init
 
 proc reset*[K,V](sl: var SLst[K,V]) =
   ## Reset list descriptor to its inital value. This function also de-registers

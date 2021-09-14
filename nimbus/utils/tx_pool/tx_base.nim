@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool Basig Primitives
+## Transaction Pool Basic Primitives
 ## =================================
 ##
 ## Current transaction data organisation:
@@ -21,11 +21,9 @@
 import
   ../keequ,
   ../slst,
+  ./tx_gas,
   ./tx_group,
   ./tx_item,
-  ./tx_jobs,
-  ./tx_list,
-  ./tx_nonce,
   ./tx_price,
   ./tx_queue,
   eth/[common, keys],
@@ -36,13 +34,15 @@ type
     ## Error codes (as used in verification function.)
     txOk = 0
 
-    txVfyByJobsQueue          ## Corrupted jobs queue/fifo structure
+    txBaseErrAlreadyKnown
+    txBaseErrInvalidSender
 
+    # failed verifier codes
     txVfyByIdQueueList        ## Corrupted ID queue/fifo structure
     txVfyByIdQueueKey         ## Corrupted ID queue/fifo container id
     txVfyByIdQueueSchedule    ## Local flag indicates wrong schedule
 
-    txVfyBySenderQueue        ## Corrupted sender queue/table structure
+    txVfyBySenderRbTree       ## Corrupted sender list structure
     txVfyBySenderLeafEmpty    ## Empty sender list leaf record
     txVfyBySenderLeafQueue    ## Corrupted sender leaf queue
     txVfyBySenderTotal        ## Wrong number of leaves
@@ -57,46 +57,53 @@ type
     txVfyByPriceLeafQueue     ## Corrupted gas price leaf queue
     txVfyByPriceTotal         ## Wrong number of leaves
 
-    txVfyByGasTipCapList      ## Corrupted gas price list structure
-    txVfyByGasTipCapLeafEmpty ## Empty gas price list leaf record
-    txVfyByGasTipCapLeafQueue ## Corrupted gas price leaf queue
-    txVfyByGasTipCapTotal     ## Wrong number of leaves
+    txVfyByTipCapList         ## Corrupted gas price list structure
+    txVfyByTipCapLeafEmpty    ## Empty gas price list leaf record
+    txVfyByTipCapLeafQueue    ## Corrupted gas price leaf queue
+    txVfyByTipCapTotal        ## Wrong number of leaves
 
-    txBaseErrAlreadyKnown
-    txBaseErrInvalidSender
+    # codes provided for other modules
+    txVfyByJobsQueue          ## Corrupted jobs queue/fifo structure
 
 
   TxPoolBase* = object of RootObj ##\
     ## Base descriptor
-    byIdQueue*: TxQueue          ## Primary table, queued by arrival event
-    byPriceNonce*: TxPriceItems  ## Indexed by `gasPrice` > `nonce`
-    byNoncePrice*: TxNonceItems  ## Indexed by `nonce` > `gasPrice`
-    byGasTipCap*: TxGasItemLst   ## Indexed by `maxPriorityFee`
-    bySender*: TxGroupAddr       ## Indexed by `sender` > `local`
-    byJobs*: TxJobs              ## Jobs batch list
+    baseFee: GasInt           ## `byPrice` re-org when changing
+    byIdQueue: TxQueue        ## Primary table, queued by arrival event
+    byPrice: TxPriceTab       ## Indexed by `effectiveGasTip` > `nonce`
+    byTipCap: TxGasTab        ## Indexed by `gasTipCap`
+    bySender: TxGroupTab      ## Indexed by `sender` > `local`
 
 {.push raises: [Defect].}
-
-# ------------------------------------------------------------------------------
-# Public functions, constructor
-# ------------------------------------------------------------------------------
-
-method init*(xp: var TxPoolBase) {.base.} =
-  ## Constructor, returns new tx-pool descriptor.
-  xp.byIdQueue.txInit
-  xp.byPriceNonce.txInit
-  xp.byNoncePrice.txInit
-  xp.byGasTipCap.txInit
-  xp.bySender.txInit
-  xp.byJobs.txInit
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc hash(tx: Transaction): Hash256 {.inline.} =
-  ## Transaction hash serves as ID
-  tx.rlpHash
+# core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
+proc updateEffectiveGasTip(xp: var TxPoolBase): TxPriceItemMap =
+  ## This function constucts a `TxPriceItemMap` closure.
+  if GasInt.low < xp.baseFee:
+    let baseFee = xp.baseFee
+    result = proc(item: TxItemRef) =
+      # returns the effective miner `gasTipCap` for the given base fee
+      # (which might well be negative.)
+      item.effectiveGasTip = min(item.tx.gasTipCap, item.tx.gasFeeCap - baseFee)
+  else:
+    result = proc(item: TxItemRef) =
+      item.effectiveGasTip = item.tx.gasTipCap
+
+# ------------------------------------------------------------------------------
+# Public functions, constructor
+# ------------------------------------------------------------------------------
+
+method init*(xp: var TxPoolBase; baseFee = GasInt.low) {.base.} =
+  ## Constructor, returns new tx-pool descriptor.
+  xp.baseFee = baseFee
+  xp.byIdQueue.txInit
+  xp.byPrice.txInit(update = xp.updateEffectiveGasTip)
+  xp.byTipCap.txInit
+  xp.bySender.txInit
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
@@ -121,7 +128,7 @@ proc insert*(xp: var TxPoolBase;
   ##   The returned transaction key `key` for the transaction `tx` is
   ##   recoverable as `tx.toKey` only while the trasaction remains unmodified.
   ##
-  let itemID = tx.hash
+  let itemID = tx.itemID
   if xp.byIdQueue.hasItemID(itemID):
     return err(txBaseErrAlreadyKnown)
   let rc = tx.newTxItemRef(itemID, local, info)
@@ -129,29 +136,27 @@ proc insert*(xp: var TxPoolBase;
     return err(txBaseErrInvalidSender)
   let item = rc.value
   xp.byIdQueue.txAppend(item)
-  xp.byPriceNonce.txInsert(item)
-  xp.byNoncePrice.txInsert(item)
-  xp.byGasTipCap.txInsert(item.tx.maxPriorityFee, item)
+  xp.byPrice.txInsert(item)
+  xp.byTipCap.txInsert(item.tx.gasTipCap, item)
   xp.bySender.txInsert(item)
   ok()
 
 
-proc reassign*(xp: var TxPoolBase; key: Hash256; local: bool): bool
+proc reassign*(xp: var TxPoolBase; item: TxItemRef; local: bool): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Reassign transaction local/remote flag of a database entry. The function
   ## succeeds returning the wrapping transaction container if the transaction
   ## was found with a different local/remote flag than the argument `local`
   ## and subsequently was changed.
-  let
-    qSched = (not local).toQueueSched
-    rc = xp.byIdQueue.eq(key, qSched)
-  if rc.isOK:
-    let item = rc.value
-    if item.local != local:
-      item.local = local
-      # txAppend/txInsert will auto-delete an existing entry of the other queue
-      xp.byIdQueue.txAppend(item)
-      xp.bySender.txInsert(item)
+  if item.local != local:
+    # make sure that the argument `item` is not some copy
+    let rc = xp.byIdQueue.eq(item.itemID, item.local.toQueueSched)
+    if rc.isOK:
+      var realItem = rc.value
+      xp.bySender.txDelete(realItem)  # delete original
+      realItem.local = local
+      xp.bySender.txInsert(realItem)  # re-insert changed
+      xp.byIdQueue.txAppend(realItem) # implicit re-assign
       return true
 
 
@@ -161,9 +166,8 @@ proc delete*(xp: var TxPoolBase; item: TxItemRef): bool
   ## successful, the function returns the wrapping container that was just
   ## removed.
   if xp.byIdQueue.txDelete(item):
-    xp.byPriceNonce.txDelete(item)
-    xp.byNoncePrice.txDelete(item)
-    xp.byGasTipCap.txDelete(item.tx.maxPriorityFee, item)
+    xp.byPrice.txDelete(item)
+    xp.byTipCap.txDelete(item.tx.gasTipCap, item)
     xp.bySender.txDelete(item)
     return true
 
@@ -178,8 +182,14 @@ proc delete*(xp: var TxPoolBase; itemID: Hash256): Result[TxItemRef,void]
   err()
 
 # ------------------------------------------------------------------------------
-# Public functions, getters
+# Public getters: descriptor related
 # ------------------------------------------------------------------------------
+
+proc baseFee*(xp: var TxPoolBase): GasInt {.inline.} =
+  ## Get the `baseFee` implying the price list valuation and order. If
+  ## this entry is disabled, the value `GasInt.low` is returnded.
+  xp.baseFee
+
 
 proc nItems*(xp: var TxPoolBase): int {.inline.} =
   ## Total number of registered transactions
@@ -189,18 +199,19 @@ proc nItems*(gasData: TxPriceNonceRef): int {.inline.} =
   ## Total number of registered transactions for sub-list
   gasData.nLeaves
 
-proc nItems*(nonceData: TxNoncePriceRef): int {.inline.} =
-  ## Total number of registered transactions for sub-list
-  nonceData.nLeaves
-
 proc nItems*(nonceData: TxPriceItemRef): int {.inline.} =
   ## Total number of registered transactions for sub-list, This function
   ## is syntactic sugar for `nonceData.itemList.len`
   nonceData.itemList.len
 
-proc nItems*(nonceData: TxNonceItemRef): int {.inline.} =
+proc nItems*(addrData: TxGroupSchedRef): int {.inline.} =
   ## Ditto
-  nonceData.itemList.len
+  addrData.nLeaves
+
+proc nItems*(schedData: TxGroupNonceRef): int {.inline.} =
+  ## Ditto
+  schedData.nLeaves
+
 
 proc byLocalQueueLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of transactions in local queue
@@ -210,56 +221,54 @@ proc byRemoteQueueLen*(xp: var TxPoolBase): int {.inline.} =
   ## Number of transactions in local queue
   xp.byIdQueue.len(TxQueueRemote)
 
+# ------------------------------------------------------------------------------
+# Public getters: transaction related
+# ------------------------------------------------------------------------------
 
-proc byPriceLen*(xp: var TxPoolBase): int {.inline.} =
-  ## Number of different `gasPrice` entries known.
-  xp.byPriceNonce.len
-
-proc byPriceLen*(nonceData: TxNoncePriceRef): int {.inline.} =
-  ## Number of different `gasPrice` entries known for the sub-list argument
-  ## `nonceData`. This number is positive.
-  nonceData.len
-
-proc byNonceLen*(xp: var TxPoolBase): int {.inline.} =
-  ## Number of different `gasPrice` entries known.
-  xp.byNoncePrice.len
-
-proc byNonceLen*(gasData: TxPriceNonceRef): int {.inline.} =
-  ## Number of different `nonce` entries known for the sub-list argument
-  ## `gasData`. This number is positive.
-  gasData.len
+proc gasTipCap*(gasData: TxGasItemRef): GasInt {.inline.} =
+  ## Returns the `gasTipCap` of the transaction,
+  gasData.itemList.firstKey.value.tx.gasTipCap
 
 
-proc byGasTipCapLen*(xp: var TxPoolBase): int {.inline.} =
-  ## Number of different `maxPriorityFee` entries known. For each gas price
-  ## there is at least one transaction available.
-  xp.byGasTipCap.len
+proc sender*(schedData: TxGroupNonceRef): EthAddress =
+  ## Returns the sender address.
+  let nonceData = schedData.nonceList.ge(AccountNonce.low).value.data
+  nonceData.itemList.firstKey.value.sender
 
-proc bySenderLen*(xp: var TxPoolBase): int {.inline.} =
-  ## Number of different sendeer adresses known. For each address there is at
-  ## least one transaction available.
-  xp.bySender.len
+proc sender*(addrData: TxGroupSchedRef): EthAddress =
+  ## Returns the sender address.
+  var rc = addrData.eq(true)
+  if rc.isErr:
+    rc = addrData.eq(false)
+  rc.value.sender
 
 
-proc gasPrice*(gasData: TxPriceNonceRef): GasInt =
-  ## Returns the gas price associated with a `gasData` argument list (see
-  ## comments on `byPriceNonceGe()` for details.)
+proc effectiveGasTip*(gasData: TxPriceNonceRef): GasInt =
+  ## Returns the price associated with a `effectiveGasTip` argument list.
+  ## Note that this is a virtual getter depending on the `baseFee` of
+  ## the underlying sorted tist.
   let nonceData = gasData.nonceList.ge(AccountNonce.low).value.data
-  nonceData.itemList.firstKey.value.tx.gasPrice
+  nonceData.itemList.firstKey.value.effectiveGasTip
 
-proc gasPrice*(nonceData: TxPriceItemRef): GasInt {.inline.} =
+proc effectiveGasTip*(nonceData: TxPriceItemRef): GasInt {.inline.} =
   ## Ditto
-  nonceData.itemList.firstKey.value.tx.gasPrice
+  nonceData.itemList.firstKey.value.effectiveGasTip
 
-proc nonce*(nonceData: TxNoncePriceRef): AccountNonce =
-  ## Returns the nonce associated with a `nonceData` argument list (see
-  ## comments on `byNoncePriceGe()` for details.)
-  let gasData = nonceData.priceList.ge(GasInt.low).value.data
-  gasData.itemList.firstKey.value.tx.nonce
 
-proc nonce*(gasData: TxNonceItemRef): AccountNonce =
-  ## Ditto
-  gasData.itemList.firstKey.value.tx.nonce
+proc nonce*(nonceData: TxPriceItemRef): AccountNonce {.inline.} =
+  ## Returns the nonce associated with a `nonceData` argument list.
+  nonceData.itemList.firstKey.value.tx.nonce
+
+# ------------------------------------------------------------------------------
+# Public functions, setters
+# ------------------------------------------------------------------------------
+
+proc `baseFee=`*(xp: var TxPoolBase; baseFee: GasInt)
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  ## Setter, new base fee (implies reorg). The argument `GasInt.low`
+  ## disables the `baseFee`.
+  xp.baseFee = baseFee
+  xp.byPrice.update = xp.updateEffectiveGasTip
 
 # ------------------------------------------------------------------------------
 # Public functions, ID queue query
@@ -278,7 +287,7 @@ proc toItemID*(tx: Transaction): Hash256 {.inline.} =
   ## Retrieves transaction key. Note that the returned argument will only apply
   ## to a transaction in the database if the argument transaction `tx` is
   ## exactly the same as the one passed earlier to the `insert()` function.
-  tx.hash
+  tx.itemID
 
 proc hasTx*(xp: var TxPoolBase; tx: Transaction): bool {.inline.} =
   ## Returns `true` if the argument pair `(key,local)` exists in the
@@ -286,7 +295,7 @@ proc hasTx*(xp: var TxPoolBase; tx: Transaction): bool {.inline.} =
   ##
   ## If this function returns `true`, then it is save to use the `xp[key]`
   ## paradigm for accessing a transaction container.
-  let itemID = tx.hash
+  let itemID = tx.itemID
   xp.hasItemID(itemID,true) or xp.hasItemID(itemID,false)
 
 
@@ -342,27 +351,41 @@ proc prev*(xp: var TxPoolBase;
   err()
 
 # ------------------------------------------------------------------------------
-# Public functions, sender query
+# Public functions, `sender > local > nonce` query
 # ------------------------------------------------------------------------------
 
+proc bySenderLen*(xp: var TxPoolBase): int {.inline.} =
+  ## Number of different sendeer adresses known. For each address there is at
+  ## least one transaction available.
+  xp.bySender.len
+
 proc bySenderEq*(xp: var TxPoolBase;
-                 ethAddr: EthAddress): Result[TxGroupItemsRef,void]
+                 sender: EthAddress): Result[TxGroupSchedRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieve the list of transaction records all with the same `ethAddr`
+  ## Retrieve the sub-list of transaction records all with the same `sender`
   ## argument sender address (if any.)
-  if xp.bySender.hasKey(ethAddr):
-    return ok(xp.bySender[ethAddr])
-  err()
+  xp.bySender.eq(sender)
+
+proc bySenderEq*(xp: var TxPoolBase;
+                 sender: EthAddress; local: bool): Result[TxGroupNonceRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieve the sub-list of transaction records all with the same `sender`
+  ## argument sender address (if any.)
+  xp.bySender.eq(sender,local)
 
 # ------------------------------------------------------------------------------
 # Public functions, `gasPrice > nonce` item query
 # ------------------------------------------------------------------------------
 
-proc byPriceNonceGe*(xp: var TxPoolBase;
-                   gasPrice: GasInt): Result[TxPriceNonceRef,void] =
+proc byPriceLen*(xp: var TxPoolBase): int {.inline.} =
+  ## Number of different `gasPrice` entries known.
+  xp.byPrice.len
+
+proc byPriceGe*(xp: var TxPoolBase;
+                gasPrice: GasInt): Result[TxPriceNonceRef,void] =
   ## First step in a cascaded `gasPrice > nonce` item lookup:
   ## ::
-  ##   let rcGas = xq.byPriceNonceGe(gasPrice)
+  ##   let rcGas = xq.byPriceGe(gasPrice)
   ##   if rcGas.isOK:
   ##     let gasData = rcGas.value
   ##     let rcNonce = gasData.byNonceGe(AccountNonce.low)
@@ -376,47 +399,53 @@ proc byPriceNonceGe*(xp: var TxPoolBase;
   ##
   ## Note that in the example above, the statement *if rcNonce.isOK:* is
   ## always true (and redundant) because the sub-list is never empty.
-  let rc = xp.byPriceNonce.ge(gasPrice)
+  let rc = xp.byPrice.ge(gasPrice)
   if rc.isOk:
     return ok(rc.value.data)
   err()
 
-proc byPriceNonceGt*(xp: var TxPoolBase;
-                   gasPrice: GasInt): Result[TxPriceNonceRef,void] =
-  ## Similar to `byPriceNonceGe()`.
-  let rc = xp.byPriceNonce.gt(gasPrice)
+proc byPriceGt*(xp: var TxPoolBase;
+                gasPrice: GasInt): Result[TxPriceNonceRef,void] =
+  ## Similar to `byPriceGe()`.
+  let rc = xp.byPrice.gt(gasPrice)
   if rc.isOk:
     return ok(rc.value.data)
   err()
 
-proc byPriceNonceLe*(xp: var TxPoolBase;
-                   gasPrice: GasInt): Result[TxPriceNonceRef,void] =
-  ## Similar to `byPriceNonceGe()`.
-  let rc = xp.byPriceNonce.le(gasPrice)
+proc byPriceLe*(xp: var TxPoolBase;
+                gasPrice: GasInt): Result[TxPriceNonceRef,void] =
+  ## Similar to `byPriceGe()`.
+  let rc = xp.byPrice.le(gasPrice)
   if rc.isOk:
     return ok(rc.value.data)
   err()
 
-proc byPriceNonceLt*(xp: var TxPoolBase;
-                   gasPrice: GasInt): Result[TxPriceNonceRef,void] =
-  ## Similar to `byPriceNonceGe()`.
-  let rc = xp.byPriceNonce.lt(gasPrice)
+proc byPriceLt*(xp: var TxPoolBase;
+                gasPrice: GasInt): Result[TxPriceNonceRef,void] =
+  ## Similar to `byPriceGe()`.
+  let rc = xp.byPrice.lt(gasPrice)
   if rc.isOk:
     return ok(rc.value.data)
   err()
 
-proc byPriceNonceEq*(xp: var TxPoolBase;
-                   gasPrice: GasInt): Result[TxPriceNonceRef,void] =
-  ## Similar to `byPriceNonceGe()`.
-  let rc = xp.byPriceNonce.eq(gasPrice)
+proc byPriceEq*(xp: var TxPoolBase;
+                gasPrice: GasInt): Result[TxPriceNonceRef,void] =
+  ## Similar to `byPriceGe()`.
+  let rc = xp.byPrice.eq(gasPrice)
   if rc.isOk:
     return ok(rc.value.data)
   err()
 
+# ------
+
+proc byNonceLen*(gasData: TxPriceNonceRef): int {.inline.} =
+  ## Number of different `nonce` entries known for the sub-list argument
+  ## `gasData`. This number is positive.
+  gasData.len
 
 proc byNonceGe*(gasData: TxPriceNonceRef;
                 nonce: AccountNonce): Result[TxPriceItemRef,void] =
-  ## Secont step as explained in `byPriceNonceGe()`
+  ## Secont step as explained in `byPriceGe()`
   let rc = gasData.nonceList.ge(nonce)
   if rc.isOk:
     return ok(rc.value.data)
@@ -455,212 +484,119 @@ proc byNonceEq*(gasData: TxPriceNonceRef;
   err()
 
 # ------------------------------------------------------------------------------
-# Public functions, `nonce > gasPrice` item query
+# Public functions, `gasTipCap` item query
 # ------------------------------------------------------------------------------
 
-proc byNoncePriceGe*(xp: var TxPoolBase;
-                     nonce: AccountNonce): Result[TxNoncePriceRef,void] =
-  ## First step in a cascaded `nonce > gasPrice` item lookup:
-  ## ::
-  ##   let rcNonce = xp.byNoncePriceGe(nonce)
-  ##   if rcNonce.isOK:
-  ##     let nonceData = rcNonce.value
-  ##     let rcGas = nonceData.byPriceGe(AccountNonce.low)
-  ##     if rcGas.isOK:
-  ##       let gasData = rcGas.value
-  ##       let firstItem = gasData.itemList.firstKey.value
-  ##
-  ## The example above retrieves the first item from the item list all with
-  ## the same nonce which is the *least* nonce greater or equal the
-  ## argument `nonce`.
-  ##
-  ## Note that in the example above, the statement *if rcGas.isOK:* is
-  ## always true (and redundant) because the sub-list is never empty.
-  let rc = xp.byNoncePrice.ge(nonce)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
+proc byTipCapLen*(xp: var TxPoolBase): int {.inline.} =
+  ## Number of different `gasTipCap` entries known. For each gas price
+  ## there is at least one transaction available.
+  xp.byTipCap.len
 
-proc byNoncePriceGt*(xp: var TxPoolBase;
-                     nonce: AccountNonce): Result[TxNoncePriceRef,void] =
-  ## Similar to `byNoncePriceGe()`.
-  let rc = xp.byNoncePrice.gt(nonce)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byNoncePriceLe*(xp: var TxPoolBase;
-                     nonce: AccountNonce): Result[TxNoncePriceRef,void] =
-  ## Similar to `byNoncePriceGe()`.
-  let rc = xp.byNoncePrice.le(nonce)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byNoncePriceLt*(xp: var TxPoolBase;
-                     nonce: AccountNonce): Result[TxNoncePriceRef,void] =
-  ## Similar to `byNoncePriceGe()`.
-  let rc = xp.byNoncePrice.lt(nonce)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byNoncePriceEq*(xp: var TxPoolBase;
-                     nonce: AccountNonce): Result[TxNoncePriceRef,void] =
-  ## Similar to `byNoncePriceGe()`.
-  let rc = xp.byNoncePrice.eq(nonce)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-
-proc byPriceGe*(nonceData: TxNoncePriceRef;
-                gasPrice: GasInt): Result[TxNonceItemRef,void] =
-  ## Secont step as explained in `byPriceNonceGe()`
-  let rc = nonceData.priceList.ge(gasPrice)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byPriceGt*(nonceData: TxNoncePriceRef;
-                gasPrice: GasInt): Result[TxNonceItemRef,void] =
-  ## Similar to `byPriceGe()`
-  let rc = nonceData.priceList.gt(gasPrice)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byPriceLe*(nonceData: TxNoncePriceRef;
-                gasPrice: GasInt): Result[TxNonceItemRef,void] =
-  ## Similar to `byPriceGe()`
-  let rc = nonceData.priceList.le(gasPrice)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byPriceLt*(nonceData: TxNoncePriceRef;
-                gasPrice: GasInt): Result[TxNonceItemRef,void] =
-  ## Similar to `byPriceGe()`
-  let rc = nonceData.priceList.lt(gasPrice)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-proc byPriceEq*(nonceData: TxNoncePriceRef;
-                gasPrice: GasInt): Result[TxNonceItemRef,void] =
-  ## Similar to `byPriceGe()`
-  let rc = nonceData.priceList.eq(gasPrice)
-  if rc.isOk:
-    return ok(rc.value.data)
-  err()
-
-# ------------------------------------------------------------------------------
-# Public functions, `maxPriorityFee` item query
-# ------------------------------------------------------------------------------
-
-proc byGasTipCapGe*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItemsRef,void] =
+proc byTipCapGe*(xp: var TxPoolBase; gas: GasInt): Result[TxGasItemRef,void] =
   ## Retrieve the list of transaction records all with the same *least*
-  ## `maxPriorityFee` item *greater or equal* the argument `gWei`. On success,
+  ## `gasTipCap` item *greater or equal* the argument `gas`. On success,
   ## the resulting list of transactions has at least one item.
-  let rc = xp.byGasTipCap.ge(gWei)
-  if rc.isOk:
+  let rc = xp.byTipCap.ge(gas)
+  if rc.isOK:
     return ok(rc.value.data)
   err()
 
-proc byGasTipCapGt*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItemsRef,void] =
-  ## Similar to `byGasTipCapGe()`.
-  let rc = xp.byGasTipCap.gt(gWei)
-  if rc.isOk:
+proc byTipCapGt*(xp: var TxPoolBase; gas: GasInt): Result[TxGasItemRef,void] =
+  ## Similar to `byTipCapGe()`.
+  let rc = xp.byTipCap.gt(gas)
+  if rc.isOK:
     return ok(rc.value.data)
   err()
 
-proc byGasTipCapLe*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItemsRef,void] =
-  ## Similar to `byGasTipCapGe()`.
-  let rc = xp.byGasTipCap.le(gWei)
-  if rc.isOk:
+proc byTipCapLe*(xp: var TxPoolBase; gas: GasInt): Result[TxGasItemRef,void] =
+  ## Similar to `byTipCapGe()`.
+  let rc = xp.byTipCap.le(gas)
+  if rc.isOK:
     return ok(rc.value.data)
   err()
 
-proc byGasTipCapLt*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItemsRef,void] =
-  ## Similar to `byGasTipCapGe()`.
-  let rc = xp.byGasTipCap.lt(gWei)
-  if rc.isOk:
+proc byTipCapLt*(xp: var TxPoolBase; gas: GasInt): Result[TxGasItemRef,void] =
+  ## Similar to `byTipCapGe()`.
+  let rc = xp.byTipCap.lt(gas)
+  if rc.isOK:
     return ok(rc.value.data)
   err()
 
-proc byGasTipCapEq*(xp: var TxPoolBase;
-                   gWei: GasInt): Result[TxListItemsRef,void] =
-  ## Similar to `byGasTipCapGe()`.
-  let rc = xp.byGasTipCap.eq(gWei)
-  if rc.isOk:
+proc byTipCapEq*(xp: var TxPoolBase; gas: GasInt): Result[TxGasItemRef,void] =
+  ## Similar to `byTipCapGe()`.
+  let rc = xp.byTipCap.eq(gas)
+  if rc.isOK:
     return ok(rc.value.data)
   err()
-
-# ------------------------------------------------------------------------------
-# Public functions, jobs queue mamgement
-# ------------------------------------------------------------------------------
-
-proc byJobsAdd*(xp: var TxPoolBase; data: TxJobData): TxJobID
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Appends a job to the *FIFO*. This function returns a non-zero *ID* if
-  ## successful.
-  ##
-  ## :Note:
-  ##   An error can only occur if
-  ##   the *ID* of the first job follows the *ID* of the last job (*modulo*
-  ##   `TxJobIdMax`.) This occurs when
-  ##   * there are `TxJobIdMax` jobs already queued
-  ##   * some jobs were deleted in the middle of the queue and the *ID*
-  ##     gap was not shifted out yet.
-  xp.byJobs.txAdd(data)
-
-proc byJobsUnshift*(xp: var TxPoolBase; data: TxJobData): TxJobID
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Stores back a job to to the *FIFO* front end be re-fetched next. This
-  ## function returns a non-zero *ID* if successful.
-  ##
-  ## See also the **Note* at the comment for `txAdd()`.
-  xp.byJobs.txUnshift(data)
-
-proc byJobsDelete*(xp: var TxPoolBase; id: TxJobID): Result[TxJobPair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Delete a job by argument `id`. The function returns the job just
-  ## deleted (if successful.)
-  ##
-  ## See also the **Note* at the comment for `txAdd()`.
-  xp.byJobs.txDelete(id)
-
-proc byJobsShift*(xp: var TxPoolBase): Result[TxJobPair,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Fetches the next job from the *FIFO*. This is logically the same
-  ## as `txFirst()` followed by `txDelete()`
-  xp.byJobs.txShift
-
-proc byJobsFirst*(xp: var TxPoolBase): Result[TxJobPair,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  xp.byJobs.txFirst
 
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator bySenderGroups*(xp: var TxPoolBase): TxGroupItemsRef
+iterator bySenderItem*(xp: var TxPoolBase): TxGroupItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Walk over item lists grouped by sender addresses.
-  var rc = xp.bySender.first
-  while rc.isOK:
-    let (key, itemList) = (rc.value.key, rc.value.data)
-    rc = xp.bySender.next(key)
-    yield itemList
+  var rcAddr = xp.bySender.first
+  while rcAddr.isOK:
+    let (addrKey, addrData) = (rcAddr.value.key, rcAddr.value.data)
+    rcAddr = xp.bySender.next(addrKey)
+
+    for local in [true, false]:
+      let rcSched = addrData.eq(local)
+
+      if rcSched.isOk:
+        let schedData = rcSched.value
+
+        var rcNonce = schedData.nonceList.ge(AccountNonce.low)
+        while rcNonce.isOk:
+          let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
+          rcNonce = schedData.nonceList.gt(nonceKey)
+
+          yield nonceData
+
+iterator bySenderSched*(xp: var TxPoolBase): TxGroupSchedRef =
+  ## Walk over item lists grouped by sender addresses and local/remote. This
+  ## iterator stops at the `TxGroupSchedRef` level sub-list.
+  var rcAddr = xp.bySender.first
+  while rcAddr.isOK:
+    let (addrKey, addrData) = (rcAddr.value.key, rcAddr.value.data)
+    rcAddr = xp.bySender.next(addrKey)
+
+    yield addrData
+
+iterator bySenderNonce*(xp: var TxPoolBase;
+                        local: varArgs[bool]): TxGroupNonceRef =
+  ## Walk over item lists grouped by sender addresses and local/remote. This
+  ## iterator stops at the `TxGroupNonceRef` level sub-list.
+  var rcAddr = xp.bySender.first
+  while rcAddr.isOK:
+    let (addrKey, addrData) = (rcAddr.value.key, rcAddr.value.data)
+    rcAddr = xp.bySender.next(addrKey)
+
+    for isLocal in local:
+      let rcSched = addrData.eq(isLocal)
+      if rcSched.isOk:
+        yield rcSched.value
+
+iterator byNonceItem*(schedData: TxGroupNonceRef): TxGroupItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Top level part to replace `xp.bySenderItem` with:
+  ## ::
+  ##  for schedData in xp.bySenderNonce(true,false):
+  ##    for nonceData in schedData.byNonceItem:
+  ##      ...
+  ##
+  var rcNonce = schedData.nonceList.ge(AccountNonce.low)
+  while rcNonce.isOk:
+    let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
+    rcNonce = schedData.nonceList.gt(nonceKey)
+
+    yield nonceData
 
 # ------------
 
-iterator byPriceNonceIncItem*(xp: var TxPoolBase;
-                            minGasPrice = GasInt.low): TxPriceItemRef =
+iterator byPriceIncItem*(xp: var TxPoolBase;
+                         minPrice = GasInt.low): TxPriceItemRef =
   ## Starting at the lowest gas price, this function traverses increasing
   ## gas prices followed by nonces.
   ##
@@ -669,10 +605,10 @@ iterator byPriceNonceIncItem*(xp: var TxPoolBase;
   ##   vistied or not visited yet. So, deleting all entries with gas prices
   ##   less or equal than `delMin` would look like:
   ##   ::
-  ##    for _, itList in xp.byPriceNonceIncItem(minGasPrice = delMin):
-  ##      for item in itList.nextKeys:
+  ##    for data in xp.byPriceIncItem(minPrice = delMin):
+  ##      for item in data.nextKeys:
   ##        discard xq.delete(item)
-  var rcGas = xp.byPriceNonce.ge(minGasPrice)
+  var rcGas = xp.byPrice.ge(minPrice)
   while rcGas.isOk:
     let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
 
@@ -682,24 +618,24 @@ iterator byPriceNonceIncItem*(xp: var TxPoolBase;
 
       yield nonceData
       rcNonce = gasData.nonceList.gt(nonceKey)
-    rcGas = xp.byPriceNonce.gt(gaskey)
+    rcGas = xp.byPrice.gt(gaskey)
 
-iterator byPriceNonceIncNonce*(xp: var TxPoolBase;
-                             minGasPrice = GasInt.low): TxPriceNonceRef =
+iterator byPriceIncNonce*(xp: var TxPoolBase;
+                          minPrice = GasInt.low): TxPriceNonceRef =
   ## Starting at the lowest gas price, this iterator traverses increasing
-  ## gas prices. Contrary to `byPriceNonceIncItem()`, this iterator does not
+  ## gas prices. Contrary to `byPriceIncItem()`, this iterator does not
   ## descent into the none sub-list and rather returns it.
-  var rcGas = xp.byPriceNonce.ge(minGasPrice)
+  var rcGas = xp.byPrice.ge(minPrice)
   while rcGas.isOk:
     let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
     yield gasData
-    rcGas = xp.byPriceNonce.gt(gaskey)
+    rcGas = xp.byPrice.gt(gaskey)
 
 iterator byNonceInc*(gasData: TxPriceNonceRef;
                      minNonce = AccountNonce.low): TxPriceItemRef =
-  ## Second part of a cascaded replacement for `byPriceNonceIncItem()`:
+  ## Second part of a cascaded replacement for `byPriceIncItem()`:
   ## ::
-  ##   for gasData in xp.byPriceNonceIncNonce():
+  ##   for gasData in xp.byPriceIncNonce:
   ##     for nonceData in gasData.byNonceInc:
   ##       ...
   var rcNonce = gasData.nonceList.ge(minNonce)
@@ -709,12 +645,12 @@ iterator byNonceInc*(gasData: TxPriceNonceRef;
     rcNonce = gasData.nonceList.gt(nonceKey)
 
 
-iterator byPriceNonceDecItem*(xp: var TxPoolBase;
-                            maxGasPrice = GasInt.high): TxPriceItemRef =
+iterator byPriceDecItem*(xp: var TxPoolBase;
+                         maxPrice = GasInt.high): TxPriceItemRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
-  ## See also the **Note* at the comment for `byPriceNonceIncPairs()`.
-  var rcGas = xp.byPriceNonce.le(maxGasPrice)
+  ## See also the **Note* at the comment for `byPriceIncPairs()`.
+  var rcGas = xp.byPrice.le(maxPrice)
   while rcGas.isOk:
     let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
 
@@ -724,24 +660,24 @@ iterator byPriceNonceDecItem*(xp: var TxPoolBase;
 
       yield nonceData
       rcNonce = gasData.nonceList.lt(nonceKey)
-    rcGas = xp.byPriceNonce.lt(gaskey)
+    rcGas = xp.byPrice.lt(gaskey)
 
-iterator byPriceNonceDecNonce*(xp: var TxPoolBase;
-                             maxGasPrice = GasInt.high): TxPriceNonceRef =
+iterator byPriceDecNonce*(xp: var TxPoolBase;
+                          maxPrice = GasInt.high): TxPriceNonceRef =
   ## Starting at the lowest gas price, this function traverses increasing
-  ## gas prices. Contrary to `byPriceNonceDecItem()`, this iterator does not
+  ## gas prices. Contrary to `byPriceDecItem()`, this iterator does not
   ## descent into the none sub-list and rather returns it.
-  var rcGas = xp.byPriceNonce.le(maxGasPrice)
+  var rcGas = xp.byPrice.le(maxPrice)
   while rcGas.isOk:
     let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
     yield gasData
-    rcGas = xp.byPriceNonce.lt(gaskey)
+    rcGas = xp.byPrice.lt(gaskey)
 
 iterator byNonceDec*(gasData: TxPriceNonceRef;
                      maxNonce = AccountNonce.high): TxPriceItemRef =
-  ## Second part of a cascaded replacement for `byPriceNonceDecItem()`:
+  ## Second part of a cascaded replacement for `byPriceDecItem()`:
   ## ::
-  ##   for gasData in xp.byPriceNonceDecNonce():
+  ##   for gasData in xp.byPriceDecNonce():
   ##     for nonceData in gasData.byNonceDec:
   ##       ...
   var rcNonce = gasData.nonceList.le(maxNonce)
@@ -752,114 +688,25 @@ iterator byNonceDec*(gasData: TxPriceNonceRef;
 
 # ------------
 
-iterator byNoncePriceIncItem*(xp: var TxPoolBase;
-                              minNonce = AccountNonce.low): TxNonceItemRef =
-  ## Starting at the lowest gas price, this function traverses increasing
-  ## nonces followed by gas prices.
-  ##
-  ## See also the **Note* at the comment for `byPriceNonceIncPairs()`.
-  var rcNonce = xp.byNoncePrice.ge(minNonce)
-  if rcNonce.isOK:
-    let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
-
-    var rcGas = nonceData.priceList.ge(GasInt.low)
-    if rcGas.isOK:
-      let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
-
-      yield gasData
-      rcGas = nonceData.priceList.gt(gasKey)
-    rcNonce = xp.byNoncePrice.gt(nonceKey)
-
-iterator byNoncePriceIncPrice*(xp: var TxPoolBase;
-                               minNonce = AccountNonce.low): TxNoncePriceRef =
-  ## Starting at the lowest nonce, this iterator traverses increasing nonces.
-  ## Contrary to `byNonceNonceIncItem()`, this iterator does not descent into
-  ## the none sub-list and rather returns it.
-  var rcNonce = xp.byNoncePrice.ge(minNonce)
-  if rcNonce.isOK:
-    let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
-    yield nonceData
-    rcNonce = xp.byNoncePrice.gt(nonceKey)
-
-iterator byPriceInc*(nonceData: TxNoncePriceRef;
-                     minGasPrice = GasInt.low): TxNonceItemRef =
-  ## Second part of a cascaded replacement for `byNoncePriceIncItem()`:
-  ## ::
-  ##   for nonceData in xp.byNoncePriceIncNonce():
-  ##     for gasData in nonceData.byPriceInc:
-  ##       ...
-  var rcGas = nonceData.priceList.ge(minGasPrice)
-  if rcGas.isOK:
-    let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
-    yield gasData
-    rcGas = nonceData.priceList.gt(gasKey)
-
-
-iterator byNoncePriceDecItem*(xp: var TxPoolBase;
-                              maxNonce = AccountNonce.low): TxNonceItemRef =
-  ## Starting at the lowest gas price, this function traverses decreasing
-  ## nonces followed by gas prices.
-  ##
-  ## See also the **Note* at the comment for `byPriceNonceIncPairs()`.
-  var rcNonce = xp.byNoncePrice.le(maxNonce)
-  if rcNonce.isOK:
-    let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
-
-    var rcGas = nonceData.priceList.le(GasInt.high)
-    if rcGas.isOK:
-      let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
-
-      yield gasData
-      rcGas = nonceData.priceList.gt(gasKey)
-    rcNonce = xp.byNoncePrice.gt(nonceKey)
-
-iterator byNoncePriceDecPrice*(xp: var TxPoolBase;
-                               maxNonce = AccountNonce.low): TxNoncePriceRef =
-  ## Starting at the lowest nonce, this iterator traverses decreasing nonces.
-  ## Contrary to `byNonceNonceIncItem()`, this iterator does not descent into
-  ## the none sub-list and rather returns it.
-  var rcNonce = xp.byNoncePrice.le(maxNonce)
-  if rcNonce.isOK:
-    let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
-    yield nonceData
-    rcNonce = xp.byNoncePrice.lt(nonceKey)
-
-iterator byPriceDec*(nonceData: TxNoncePriceRef;
-                     maxGasPrice = GasInt.low): TxNonceItemRef =
-  ## Second part of a cascaded replacement for `byNoncePriceIncItem()`:
-  ## ::
-  ##   for nonceData in xp.byNoncePriceIncNonce():
-  ##     for gasData in nonceData.byPriceInc:
-  ##       ...
-  var rcGas = nonceData.priceList.le(maxGasPrice)
-  if rcGas.isOK:
-    let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
-    yield gasData
-    rcGas = nonceData.priceList.lt(gasKey)
-
-# ------------
-
-iterator byGasTipCapInc*(xp: var TxPoolBase;
-                         fromGe = GasInt.low): TxListItemsRef =
+iterator byTipCapInc*(xp: var TxPoolBase; minCap = GasInt.low): TxGasItemRef =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
-  ## See also the **Note* at the comment for `byPriceNonceIncPairs()`.
-  var rc = xp.byGasTipCap.ge(fromGe)
+  ## See also the **Note* at the comment for `byPriceIncPairs()`.
+  var rc = xp.byTipCap.ge(minCap)
   while rc.isOk:
     let yKey = rc.value.key
     yield rc.value.data
-    rc = xp.byGasTipCap.gt(ykey)
+    rc = xp.byTipCap.gt(ykey)
 
-iterator byGasTipCapDec*(xp: var TxPoolBase;
-                         fromLe = GasInt.high): TxListItemsRef =
+iterator byTipCapDec*(xp: var TxPoolBase; maxCap = GasInt.high): TxGasItemRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
-  ## See also the **Note* at the comment for `byPriceNonceIncPairs()`.
-  var rc = xp.byGasTipCap.le(fromLe)
+  ## See also the **Note* at the comment for `byPriceIncPairs()`.
+  var rc = xp.byTipCap.le(maxCap)
   while rc.isOk:
     let yKey = rc.value.key
     yield rc.value.data
-    rc = xp.byGasTipCap.lt(yKey)
+    rc = xp.byTipCap.lt(yKey)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
@@ -869,7 +716,7 @@ proc verify*(xp: var TxPoolBase): Result[void,TxBaseInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify descriptor and subsequent data structures.
   block:
-    let rc = xp.byPriceNonce.txVerify
+    let rc = xp.byPrice.txVerify
     if rc.isErr:
       case rc.error[0]
       of txPriceOk:           return err(txOk)
@@ -878,29 +725,20 @@ proc verify*(xp: var TxPoolBase): Result[void,TxBaseInfo]
       of txPriceVfyLeafQueue: return err(txVfyByPriceLeafQueue)
       of txPriceVfySize:      return err(txVfyByPriceTotal)
   block:
-    let rc = xp.byNoncePrice.txVerify
+    let rc = xp.byTipCap.txVerify
     if rc.isErr:
       case rc.error[0]
-      of txNonceOk:           return err(txOk)
-      of txNonceVfyRbTree:    return err(txVfyByNonceList)
-      of txNonceVfyLeafEmpty: return err(txVfyByNonceLeafEmpty)
-      of txNonceVfyLeafQueue: return err(txVfyByNonceLeafQueue)
-      of txNonceVfySize:      return err(txVfyByNonceTotal)
-  block:
-    let rc = xp.byGasTipCap.txVerify
-    if rc.isErr:
-      case rc.error[0]
-      of txListOk:            return err(txOk)
-      of txListVfyRbTree:     return err(txVfyByGasTipCapList)
-      of txListVfyLeafEmpty:  return err(txVfyByGasTipCapLeafEmpty)
-      of txListVfyLeafQueue:  return err(txVfyByGasTipCapLeafQueue)
-      of txListVfySize:       return err(txVfyByGasTipCapTotal)
+      of txGasOk:             return err(txOk)
+      of txGasVfyRbTree:      return err(txVfyByTipCapList)
+      of txGasVfyLeafEmpty:   return err(txVfyByTipCapLeafEmpty)
+      of txGasVfyLeafQueue:   return err(txVfyByTipCapLeafQueue)
+      of txGasVfySize:        return err(txVfyByTipCapTotal)
   block:
     let rc = xp.bySender.txVerify
     if rc.isErr:
       case rc.error[0]
       of txGroupOk:           return err(txOk)
-      of txGroupVfyQueue:     return err(txVfyBySenderQueue)
+      of txGroupVfyRbTree:    return err(txVfyBySenderRbTree)
       of txGroupVfyLeafEmpty: return err(txVfyBySenderLeafEmpty)
       of txGroupVfyLeafQueue: return err(txVfyBySenderLeafQueue)
       of txGroupVfySize:      return err(txVfyBySenderTotal)
@@ -912,24 +750,15 @@ proc verify*(xp: var TxPoolBase): Result[void,TxBaseInfo]
       of txQuVfyQueueList:    return err(txVfyByIdQueueList)
       of txQuVfyQueueKey:     return err(txVfyByIdQueueKey)
       of txQuVfySchedule:     return err(txVfyByIdQueueSchedule)
-  block:
-    let rc = xp.byJobs.txVerify
-    if rc.isErr:
-      case rc.error[0]
-      of txJobsOk:            return err(txOk)
-      of txJobsVfyQueue:      return err(txVfyByJobsQueue)
 
   if xp.byIdQueue.nLeaves != xp.bySender.nLeaves:
      return err(txVfyBySenderTotal)
 
-  if xp.byIdQueue.nLeaves != xp.byPriceNonce.nLeaves:
+  if xp.byIdQueue.nLeaves != xp.byPrice.nLeaves:
      return err(txVfyByPriceTotal)
 
-  if xp.byIdQueue.nLeaves != xp.byNoncePrice.nLeaves:
-     return err(txVfyByNonceTotal)
-
-  if xp.byIdQueue.nLeaves != xp.byGasTipCap.nLeaves:
-     return err(txVfyByGasTipCapTotal)
+  if xp.byIdQueue.nLeaves != xp.byTipCap.nLeaves:
+     return err(txVfyByTipCapTotal)
 
   ok()
 

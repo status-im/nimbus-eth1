@@ -13,8 +13,8 @@
 ##
 
 import
-  std/[math, tables],
   ../keequ,
+  ../slst,
   ./tx_item,
   eth/[common],
   stew/results
@@ -22,12 +22,12 @@ import
 type
   TxGroupInfo* = enum
     txGroupOk = 0
-    txGroupVfyQueue     ## Corrupted address queue/table structure
+    txGroupVfyRbTree    ## Corrupted RB tree
     txGroupVfyLeafEmpty ## Empty leaf list
     txGroupVfyLeafQueue ## Corrupted leaf list
     txGroupVfySize      ## Size count mismatch
 
-  TxGroupSchedule* = enum ##\
+  TxGroupSchedule = enum ##\
     ## Sub-queues
     TxGroupLocal = 0
     TxGroupRemote = 1
@@ -37,19 +37,49 @@ type
     ## comes in when queuing items for the same key (e.g. gas price.)
     int
 
-  TxGroupItemsRef* = ref object ##\
+  TxGroupItemRef* = ref object ##\
+    ## All transaction items accessed by the same index are chronologically
+    ## queued.
+    itemList*: KeeQu[TxItemRef,TxGroupMark]
+
+  TxGroupNonceRef* = ref object ##\
+    ## Sub-list ordered by `AccountNonce` values containing transaction
+    ## item lists.
+    size: int
+    nonceList*: Slst[AccountNonce,TxGroupItemRef]
+
+  TxGroupSchedRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    itemList: array[TxGroupSchedule, KeeQu[TxItemRef,TxGroupMark]]
+    size: int
+    schedList: array[TxGroupSchedule,TxGroupNonceRef]
 
-  TxGroupAddr* = object ##\
+  TxGroupTab* = object ##\
     ## Per address table
     size: int
-    q: KeeQu[EthAddress,TxGroupItemsRef]
+    addrList: SLst[EthAddress,TxGroupSchedRef]
 
-  TxGroupAddrPair* = ##\
-    ## Queue handler wrapper, needed in `first()`, `next()`, etc.
-    KeeQuPair[EthAddress,TxGroupItemsRef]
+  TxGroupPair* = object ##\
+    ## Walk result, needed in `first()`, `next()`, etc.
+    key*: EthAddress
+    data*: TxGroupSchedRef
+
+  TxGroupInx = object ##\
+    ## Internal access data
+    sAddr: TxGroupSchedRef
+    sched: TxGroupNonceRef
+    nonce: TxGroupItemRef
+
+const
+  minEthAddress = block:
+    var rc: EthAddress
+    rc
+
+  maxEthAddress = block:
+    var rc: EthAddress
+    for n in 0 ..< rc.len:
+      rc[n] = 255
+    rc
 
 {.push raises: [Defect].}
 
@@ -57,117 +87,310 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc nActive(gs: TxGroupSchedRef): int {.inline.} =
+  ## Number of non-nil items
+  if not gs.schedList[TxGroupLocal].isNil:
+    result.inc
+  if not gs.schedList[TxGroupRemote].isNil:
+    result.inc
+
+proc `$`(rq: TxGroupItemRef): string =
+  ## Needed by `rq.verify()` for printing error messages
+  $rq.itemList.len
+
+proc `$`(rq: TxGroupSchedRef): string =
+  ## Needed by `rq.verify()` for printing error messages
+  var n = 0
+  if not rq.schedList[TxGroupLocal].isNil: n.inc
+  if not rq.schedList[TxGroupRemote].isNil: n.inc
+  $n
+
+#proc `$`(rq: TxGroupNonceRef): string =
+#  ## Needed by `rq.verify()` for printing error messages
+#  $rq.nonceList.len
+
+proc cmp(a,b: EthAddress): int {.inline.} =
+  ## mixin for SLst
+  for n in 0 ..< EthAddress.len:
+    if a[n] < b[n]:
+      return -1
+    if b[n] < a[n]:
+      return 1
+
 proc `not`(sched: TxGroupSchedule): TxGroupSchedule {.inline.} =
   if sched == TxGroupLocal: TxGroupRemote else: TxGroupLocal
 
-proc toGroupSched*(isLocal: bool): TxGroupSchedule {.inline.} =
-  if isLocal: TxGroupLocal else: TxGroupRemote
+proc toGroupSched*(local: bool): TxGroupSchedule {.inline.} =
+  if local: TxGroupLocal else: TxGroupRemote
+
+
+proc mkInxImpl(gt: var TxGroupTab; item: TxItemRef): TxGroupInx
+    {.gcsafe,raises: [Defect,KeyError].} =
+  block:
+    let rc = gt.addrList.insert(item.sender)
+    if rc.isOk:
+      new result.sAddr
+      rc.value.data = result.sAddr
+    else:
+      result.sAddr = gt.addrList.eq(item.sender).value.data
+  block:
+    let sched = item.local.toGroupSched
+    if result.sAddr.schedList[sched].isNil:
+      new result.sched
+      result.sched.nonceList.init
+      result.sAddr.schedList[sched] = result.sched
+    else:
+      result.sched = result.sAddr.schedList[sched]
+  block:
+    let rc = result.sched.nonceList.insert(item.tx.nonce)
+    if rc.isOk:
+      new result.nonce
+      result.nonce.itemList.init(1)
+      rc.value.data = result.nonce
+    else:
+      result.nonce = result.sched.nonceList.eq(item.tx.nonce).value.data
+
+
+proc getInxImpl(gt: var TxGroupTab; item: TxItemRef): Result[TxGroupInx,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  var inxData: TxGroupInx
+
+  block:
+    let rc = gt.addrList.eq(item.sender)
+    if rc.isOk:
+      inxData.sAddr = rc.value.data
+    else:
+      return err()
+  block:
+    let sched = item.local.toGroupSched
+    inxData.sched = inxData.sAddr.schedList[sched]
+    if inxData.sched.isNil:
+      return err()
+  block:
+    let rc = inxData.sched.nonceList.eq(item.tx.nonce)
+    if rc.isOk:
+      inxData.nonce = rc.value.data
+    else:
+      return err()
+
+  ok(inxData)
 
 # ------------------------------------------------------------------------------
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
-proc txInit*(t: var TxGroupAddr; size = 10) =
+proc txInit*(gt: var TxGroupTab; size = 10) =
   ## Optional constructor
-  t.size = 0
-  t.q.init(size)
+  gt.size = 0
+  gt.addrList.init
 
 
-proc txInsert*(t: var TxGroupAddr; item: TxItemRef)
+proc txInsert*(gt: var TxGroupTab; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Reassigning from an existing local/remote queue is supported (see
-  ## `item.local` flag.)
-  let
-    ethAddr = item.sender
-    sched = item.local.toGroupSched
-  if t.q.hasKey(ethAddr):
-    if t.q[ethAddr].itemList[sched].hasKey(item):
-      return
-    if t.q[ethAddr].itemList[not sched].delete(item).isOK:
-      t.size.dec # happens with re-assign
-  else:
-    t.q[ethAddr] = TxGroupItemsRef(
-      itemList: [initKeeQu[TxItemRef,TxGroupMark](1),
-                 initKeeQu[TxItemRef,TxGroupMark](1)])
-  t.q[ethAddr].itemList[sched][item] = 0
-  t.size.inc
+  ## Add transaction item to the list. The function has no effect if the
+  ## transaction exists, already.
+  let inx = gt.mkInxImpl(item)
+  if not inx.nonce.itemList.hasKey(item):
+    discard inx.nonce.itemList.append(item,0)
+    gt.size.inc
+    inx.sAddr.size.inc
+    inx.sched.size.inc
 
 
-proc txDelete*(t: var TxGroupAddr; item: TxItemRef)
+proc txDelete*(gt: var TxGroupTab; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
-  let
-    ethAddr = item.sender
-    sched = item.local.toGroupSched
-  if t.q.hasKey(ethAddr) and t.q[ethAddr].itemList[sched].hasKey(item):
-    t.q[ethAddr].itemList[sched].del(item)
-    t.size.dec
-    if t.q[ethAddr].itemList[true.toGroupSched].len == 0 and
-       t.q[ethAddr].itemList[false.toGroupSched].len == 0:
-      t.q.del(ethAddr)
+  let rc = gt.getInxImpl(item)
+  if rc.isOK:
+    let inx = rc.value
+
+    inx.nonce.itemList.del(item)
+    gt.size.dec
+    inx.sAddr.size.dec
+    inx.sched.size.dec
+
+    if rc.value.nonce.itemList.len == 0:
+      discard rc.value.sched.nonceList.delete(item.tx.nonce)
+      if rc.value.sched.nonceList.len == 0:
+        let sched = item.local.toGroupSched
+        rc.value.sAddr.schedList[sched] = nil
+        if rc.value.sAddr.schedList[not sched].isNil:
+          discard gt.addrList.delete(item.sender)
 
 
-proc txVerify*(t: var TxGroupAddr): Result[void,(TxGroupInfo,KeeQuInfo)]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  var count = 0
+proc txVerify*(gt: var TxGroupTab): Result[void,(TxGroupInfo,KeeQuInfo)]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## walk `EthAddress` > `TxGroupSchedule` > `AccountNonce` > items
+  var allCount = 0
 
-  let rc = t.q.verify
-  if rc.isErr:
-    return err((txGroupVfyQueue,rc.error[2]))
+  block:
+    let rc = gt.addrList.verify
+    if rc.isErr:
+      return err((txGroupVfyRbTree, keeQuOk))
 
-  for itQ in t.q.nextValues:
-    var itGroupLen = 0
-    for sched in TxGroupSchedule:
-      itGroupLen += itQ.itemList[sched].len
-    count += itGroupLen
-    if itGroupLen == 0:
+  var rcAddr = gt.addrList.ge(minEthAddress)
+  while rcAddr.isOk:
+    var addrCount = 0
+    let (addrKey, addrData) = (rcAddr.value.key, rcAddr.value.data)
+    rcAddr = gt.addrList.gt(addrKey)
+
+    if addrData.nActive == 0:
       return err((txGroupVfyLeafEmpty, keeQuOk))
 
     for sched in TxGroupSchedule:
-      let rc = itQ.itemList[sched].verify
-      if rc.isErr:
-        return err((txGroupVfyLeafQueue, rc.error[2]))
+      let schedData = addrData.schedList[sched]
 
-  if count != t.size:
+      if not schedData.isNil:
+        block:
+          let rc = schedData.nonceList.verify
+          if rc.isErr:
+            return err((txGroupVfyRbTree, keeQuOk))
+
+        var schedCount = 0
+        var rcNonce = schedData.nonceList.ge(AccountNonce.low)
+        while rcNonce.isOk:
+          let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
+          rcNonce = schedData.nonceList.gt(nonceKey)
+
+          allCount += nonceData.itemList.len
+          schedCount += nonceData.itemList.len
+          addrCount  += nonceData.itemList.len
+
+          if nonceData.itemList.len == 0:
+            return err((txGroupVfyLeafEmpty, keeQuOk))
+
+          let rcItem = nonceData.itemList.verify
+          if rcItem.isErr:
+            return err((txGroupVfyLeafQueue, rcItem.error[2]))
+
+        # end while
+        if schedCount != schedData.size:
+          return err((txGroupVfySize, keeQuOk))
+
+    # end for
+    if addrCount != addrData.size:
+      return err((txGroupVfySize, keeQuOk))
+
+  # end while
+  if allCount != gt.size:
     return err((txGroupVfySize, keeQuOk))
+
   ok()
 
+# ------------------------------------------------------------------------------
+# Public functions, getters
+# ------------------------------------------------------------------------------
 
-proc nLeaves*(t: var TxGroupAddr): int {.inline.} =
-  t.size
+proc len*(gt: var TxGroupTab): auto {.inline.} =
+  gt.addrList.len
 
+proc len*(gs: TxGroupSchedRef): int {.inline.} =
+  gs.nActive
 
-# Table ops
-proc`[]`*(t: var TxGroupAddr; itemSender: EthAddress): auto
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  t.q[itemSender]
+# ------------------------------------------------------------------------------
+# Public SLst ops -- `EthAddress` (level 0)
+# ------------------------------------------------------------------------------
 
-proc hasKey*(t: var TxGroupAddr; itemSender: EthAddress): auto {.inline.} =
-  t.q.hasKey(itemSender)
+proc nLeaves*(gt: var TxGroupTab): int {.inline.} =
+  ## Getter, total number of items in the list
+  gt.size
 
-proc len*(t: var TxGroupAddr): auto {.inline.} =
-  t.q.len
+proc eq*(gt: var TxGroupTab; sender: EthAddress): auto {.inline.} =
+  let rc = gt.addrList.eq(sender)
+  if rc.isOK:
+    return Result[TxGroupSchedRef,void].ok(rc.value.data)
+  err()
 
-proc first*(t: var TxGroupAddr): auto
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  t.q.first
+proc first*(gt: var TxGroupTab): Result[TxGroupPair,void] {.inline.} =
+  let rc = gt.addrList.ge(minEthAddress)
+  if rc.isErr:
+    return err()
+  ok(TxGroupPair(key: rc.value.key, data: rc.value.data))
 
-proc next*(t: var TxGroupAddr; itemSender: EthAddress): auto
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  t.q.next(itemSender)
+proc last*(gt: var TxGroupTab): Result[TxGroupPair,void] {.inline.} =
+  let rc = gt.addrList.le(maxEthAddress)
+  if rc.isErr:
+    return err()
+  ok(TxGroupPair(key: rc.value.key, data: rc.value.data))
 
+proc next*(gt: var TxGroupTab;
+           key: EthAddress): Result[TxGroupPair,void] {.inline.} =
+  let rc = gt.addrList.gt(key)
+  if rc.isErr:
+    return err()
+  ok(TxGroupPair(key: rc.value.key, data: rc.value.data))
 
-proc itemList*(it: TxGroupItemsRef; local: bool):
-             var KeeQu[TxItemRef,TxGroupMark] {.inline.} =
-  ## Getter
-  it.itemList[local.toGroupSched]
+proc prev*(gt: var TxGroupTab;
+           key: EthAddress): Result[TxGroupPair,void] {.inline.} =
+  let rc = gt.addrList.lt(key)
+  if rc.isErr:
+    return err()
+  ok(TxGroupPair(key: rc.value.key, data: rc.value.data))
 
-proc itemListLen*(it: TxGroupItemsRef; local: bool): int {.inline.} =
-  ## Getter
-  it.itemList[local.toGroupSched].len
+# ------------------------------------------------------------------------------
+# Public array ops -- `TxGroupSchedule` (level 1)
+# ------------------------------------------------------------------------------
 
-proc itemListLen*(it: TxGroupItemsRef): int {.inline.} =
-  ## Getter
-  it.itemListLen(true) + it.itemListLen(false)
+proc nLeaves*(gs: TxGroupSchedRef): int {.inline.} =
+  ## Getter, total number of items in the sub-list
+  gs.size
+
+proc eq*(gs: TxGroupSchedRef;
+         local: bool): Result[TxGroupNonceRef,void] {.inline.} =
+  let nonceData = gs.schedList[local.toGroupSched]
+  if nonceData.isNil:
+    return err()
+  ok(nonceData)
+
+# ------------------------------------------------------------------------------
+# Public, combined -- `EthAddress > TxGroupSchedule` (level 0 + 1)
+# ------------------------------------------------------------------------------
+
+proc eq*(gt: var TxGroupTab; sender: EthAddress; local: bool): auto {.inline.} =
+  let rc = gt.eq(sender)
+  if rc.isOk:
+    return rc.value.eq(local)
+  err()
+
+# ------------------------------------------------------------------------------
+# Public SLst ops -- `AccountNonce` (level 2)
+# ------------------------------------------------------------------------------
+
+proc nLeaves*(nl: TxGroupNonceRef): int {.inline.} =
+  ## Getter, total number of items in the sub-list
+  nl.size
+
+proc len*(nl: TxGroupNonceRef): int {.inline.} =
+  let rc = nl.nonceList.len
+
+proc eq*(nl: TxGroupNonceRef; nonce: AccountNonce): auto {.inline.} =
+  let rc = nl.nonceList.eq(nonce)
+  if rc.isOK:
+    return Result[TxGroupItemRef,void].ok(rc.value.data)
+  err()
+
+proc ge*(nl: TxGroupNonceRef; nonce: AccountNonce): auto {.inline.} =
+  let rc = nl.nonceList.ge(nonce)
+  if rc.isOK:
+    return Result[TxGroupItemRef,void].ok(rc.value.data)
+  err()
+
+proc gt*(nl: TxGroupNonceRef; nonce: AccountNonce): auto {.inline.} =
+  let rc = nl.nonceList.gt(nonce)
+  if rc.isOK:
+    return Result[TxGroupItemRef,void].ok(rc.value.data)
+  err()
+
+proc le*(nl: TxGroupNonceRef; nonce: AccountNonce): auto {.inline.} =
+  let rc = nl.nonceList.le(nonce)
+  if rc.isOK:
+    return Result[TxGroupItemRef,void].ok(rc.value.data)
+  err()
+
+proc lt*(nl: TxGroupNonceRef; nonce: AccountNonce): auto {.inline.} =
+  let rc = nl.nonceList.lt(nonce)
+  if rc.isOK:
+    return Result[TxGroupItemRef,void].ok(rc.value.data)
+  err()
 
 # ------------------------------------------------------------------------------
 # End

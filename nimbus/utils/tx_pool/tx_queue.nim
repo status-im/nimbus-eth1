@@ -67,12 +67,12 @@ proc txAppend*(aq: var TxQueue; item: TxItemRef)
   ## Reassigning from an existing local/remote queue is supported (see
   ## `item.local` flag.)
   let sched = item.local.toQueueSched
-  aq.q[sched][item.id] = item
-  aq.q[not sched].del(item.id)
+  aq.q[sched][item.itemID] = item
+  aq.q[not sched].del(item.itemID)
 
 proc txDelete*(ap: var TxQueue; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
-  ap.q[item.local.toQueueSched].delete(item.id).isOK
+  ap.q[item.local.toQueueSched].delete(item.itemID).isOK
 
 proc txVerify*(aq: var TxQueue): Result[void,(TxQuInfo,KeeQuInfo)]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -88,7 +88,7 @@ proc txVerify*(aq: var TxQueue): Result[void,(TxQuInfo,KeeQuInfo)]
       rc = aq.q[sched].next(rc.value.key)
 
       # verify key consistency
-      if item.id != aq.q[sched].eq(item.id).value.id:
+      if item.itemID != aq.q[sched].eq(item.itemID).value.itemID:
         return err((txQuVfyQueueKey, keeQuOk))
 
       # verify schedule consistency

@@ -23,27 +23,27 @@ import
   stew/results
 
 type
-  TxListInfo* = enum
-    txListOk = 0
-    txListVfyRbTree    ## Corrupted RB tree
-    txListVfyLeafEmpty ## Empty leaf list
-    txListVfyLeafQueue ## Corrupted leaf list
-    txListVfySize      ## Size count mismatch
+  TxGasInfo* = enum
+    txGasOk = 0
+    txGasVfyRbTree    ## Corrupted RB tree
+    txGasVfyLeafEmpty ## Empty leaf list
+    txGasVfyLeafQueue ## Corrupted leaf list
+    txGasVfySize      ## Size count mismatch
 
-  TxListMark* = ##\
+  TxGasMark* = ##\
     ## Ready to be used for something, currently just a blind value that\
     ## comes in when queuing items for the same key (e.g. gas price.)
     int
 
-  TxListItemsRef* = ref object ##\
+  TxGasItemRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    itemList*: KeeQu[TxItemRef,TxListMark]
+    itemList*: KeeQu[TxItemRef,TxGasMark]
 
-  TxGasItemLst* = object ##\
+  TxGasTab* = object ##\
     ## Generic item list indexed by gas price
     size: int
-    l: SLst[GasInt,TxListItemsRef]
+    gasList: SLst[GasInt,TxGasItemRef]
 
 {.push raises: [Defect].}
 
@@ -51,7 +51,7 @@ type
 # Private, helpers for debugging and pretty printing
 # ------------------------------------------------------------------------------
 
-proc `$`(rq: TxListItemsRef): string =
+proc `$`(rq: TxGasItemRef): string =
   ## Needed by `rq.verify()` for printing error messages
   $rq.itemList.len
 
@@ -59,75 +59,74 @@ proc `$`(rq: TxListItemsRef): string =
 # Public gas price list helpers
 # ------------------------------------------------------------------------------
 
-proc txInit*(gp: var TxGasItemLst) =
+proc txInit*(gp: var TxGasTab) =
   gp.size = 0
-  gp.l.init
+  gp.gasList.init
 
 
-proc txInsert*(gp: var TxGasItemLst; key: GasInt; val: TxItemRef)
+proc txInsert*(gp: var TxGasTab; key: GasInt; val: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Unconitionally add `(key,val)` pair to list. This might lead to
   ## multiple leaf values per argument `key`.
-  var rc = gp.l.insert(key)
+  var rc = gp.gasList.insert(key)
   if rc.isOk:
-    rc.value.data = TxListItemsRef(
-      itemList: initKeeQu[TxItemRef,TxListMark](1))
+    rc.value.data = TxGasItemRef(itemList: initKeeQu[TxItemRef,TxGasMark](1))
   else:
-    rc = gp.l.eq(key)
+    rc = gp.gasList.eq(key)
   if not rc.value.data.itemList.hasKey(val):
     discard rc.value.data.itemList.append(val,0)
     gp.size.inc
 
 
-proc txDelete*(gp: var TxGasItemLst; key: GasInt; val: TxItemRef)
+proc txDelete*(gp: var TxGasTab; key: GasInt; val: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Remove `(key,val)` pair from list.
-  var rc = gp.l.eq(key)
+  var rc = gp.gasList.eq(key)
   if rc.isOk:
     if rc.value.data.itemList.hasKey(val):
       rc.value.data.itemList.del(val)
       gp.size.dec
       if rc.value.data.itemList.len == 0:
-        discard gp.l.delete(key)
+        discard gp.gasList.delete(key)
 
 
-proc txVerify*(gp: var TxGasItemLst): Result[void,(TxListInfo,KeeQuInfo)]
+proc txVerify*(gp: var TxGasTab): Result[void,(TxGasInfo,KeeQuInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   var count = 0
 
-  let sRc = gp.l.verify
+  let sRc = gp.gasList.verify
   if sRc.isErr:
-    return err((txListVfyRbTree, keeQuOk))
+    return err((txGasVfyRbTree, keeQuOk))
 
-  var wRc = gp.l.ge(GasInt.low)
+  var wRc = gp.gasList.ge(GasInt.low)
   while wRc.isOk:
     var itQ = wRc.value.data
-    wRc = gp.l.gt(wRc.value.key)
+    wRc = gp.gasList.gt(wRc.value.key)
 
     count += itQ.itemList.len
     if itQ.itemList.len == 0:
-      return err((txListVfyLeafEmpty, keeQuOk))
+      return err((txGasVfyLeafEmpty, keeQuOk))
 
     let qRc = itQ.itemList.verify
     if qRc.isErr:
-      return err((txListVfyLeafQueue, qRc.error[2]))
+      return err((txGasVfyLeafQueue, qRc.error[2]))
 
   if count != gp.size:
-    return err((txListVfySize, keeQuOk))
+    return err((txGasVfySize, keeQuOk))
   ok()
 
 
-proc nLeaves*(gp: var TxGasItemLst): int {.inline.} =
+proc nLeaves*(gp: var TxGasTab): int {.inline.} =
   gp.size
 
 
 # Slst ops
-proc  eq*(gp: var TxGasItemLst; key: GasInt): auto {.inline.} = gp.l.eq(key)
-proc  ge*(gp: var TxGasItemLst; key: GasInt): auto {.inline.} = gp.l.ge(key)
-proc  gt*(gp: var TxGasItemLst; key: GasInt): auto {.inline.} = gp.l.gt(key)
-proc  le*(gp: var TxGasItemLst; key: GasInt): auto {.inline.} = gp.l.le(key)
-proc  lt*(gp: var TxGasItemLst; key: GasInt): auto {.inline.} = gp.l.lt(key)
-proc len*(gp: var TxGasItemLst):              auto {.inline.} = gp.l.len
+proc len*(gp: var TxGasTab): int               {.inline.} = gp.gasList.len
+proc  eq*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.eq(key)
+proc  ge*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.ge(key)
+proc  gt*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.gt(key)
+proc  le*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.le(key)
+proc  lt*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.lt(key)
 
 # ------------------------------------------------------------------------------
 # End
