@@ -19,6 +19,8 @@ export ssz_serialization, stint
 
 type
   ByteList* = List[byte, 2048]
+  Bytes2* = List[byte, 2]
+
 
   MessageKind* = enum
     unused = 0x00
@@ -29,8 +31,8 @@ type
     nodes = 0x04
     findcontent = 0x05
     foundcontent = 0x06
-    advertise = 0x07
-    requestproofs = 0x08
+    offer = 0x07
+    accept = 0x08
 
   PingMessage* = object
     enrSeq*: uint64
@@ -55,15 +57,12 @@ type
     enrs*: List[ByteList, 32]
     payload*: ByteList
 
-  AdvertiseMessage* = List[ByteList, 32] # No container, heh...
+  OfferMessage* = object
+    contentKeys*: List[ByteList, 64]
 
-  # This would be more consistent with the other messages
-  # AdvertiseMessage* = object
-  #   contentKeys*: List[ByteList, 32]
-
-  RequestProofsMessage* = object
-    connectionId*: List[byte, 4]
-    contentKeys*: List[ByteList, 32]
+  AcceptMessage* = object
+    connectionId*: Bytes2
+    contentKeys*: BitList[64]
 
   Message* = object
     case kind*: MessageKind
@@ -79,10 +78,10 @@ type
       findcontent*: FindContentMessage
     of foundcontent:
       foundcontent*: FoundContentMessage
-    of advertise:
-      advertise*: AdvertiseMessage
-    of requestproofs:
-      requestproofs*: RequestProofsMessage
+    of offer:
+      offer*: OfferMessage
+    of accept:
+      accept*: AcceptMessage
     else:
       discard
 
@@ -90,7 +89,7 @@ type
     PingMessage or PongMessage or
     FindNodeMessage or NodesMessage or
     FindContentMessage or FoundContentMessage or
-    AdvertiseMessage or RequestProofsMessage
+    OfferMessage or AcceptMessage
 
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   when T is PingMessage: ping
@@ -99,8 +98,8 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is NodesMessage: nodes
   elif T is FindContentMessage: findcontent
   elif T is FoundContentMessage: foundcontent
-  elif T is AdvertiseMessage: advertise
-  elif T is RequestProofsMessage: requestproofs
+  elif T is OfferMessage: offer
+  elif T is AcceptMessage: accept
 
 template toSszType*(x: UInt256): array[32, byte] =
   toBytesLE(x)
@@ -144,10 +143,10 @@ proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
       message.findcontent = SSZ.decode(body.toOpenArray(1, body.high), FindContentMessage)
     of foundcontent:
       message.foundcontent = SSZ.decode(body.toOpenArray(1, body.high), FoundContentMessage)
-    of advertise:
-      message.advertise = SSZ.decode(body.toOpenArray(1, body.high), AdvertiseMessage)
-    of requestproofs:
-      message.requestproofs = SSZ.decode(body.toOpenArray(1, body.high), RequestProofsMessage)
+    of offer:
+      message.offer = SSZ.decode(body.toOpenArray(1, body.high), OfferMessage)
+    of accept:
+      message.accept = SSZ.decode(body.toOpenArray(1, body.high), AcceptMessage)
   except SszError:
     return err("Invalid message encoding")
 

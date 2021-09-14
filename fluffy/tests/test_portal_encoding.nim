@@ -166,41 +166,37 @@ suite "Portal Protocol Message Encodings":
       message.foundcontent.enrs[1] == ByteList(e2.raw)
       message.foundcontent.payload == payload
 
-  test "Advertise Request":
+  test "Offer Request":
     let
-      contentKeys = List[ByteList, 32](List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
-      am = AdvertiseMessage(contentKeys)
-      # am = AdvertiseMessage(contentKeys: contentKeys)
+      contentKeys = List[ByteList, 64](List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
+      am = OfferMessage(contentKeys: contentKeys)
 
     let encoded = encodeMessage(am)
-    check encoded.toHex == "0704000000010203"
-                          #  "070400000004000000010203"
+    check encoded.toHex == "070400000004000000010203"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
     let message = decoded.get()
     check:
-      message.kind == advertise
-      message.advertise == contentKeys
-      # message.advertise.contentKeys == contentKeys
+      message.kind == offer
+      message.offer.contentKeys == contentKeys
 
-  test "RequestProofs Response": # That sounds weird
+  test "Accept Response":
     let
-      connectionId = List[byte, 4](@[byte 0x01, 0x02, 0x03, 0x04])
-      contentKeys =
-        List[ByteList, 32](List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
-      n = RequestProofsMessage(connectionId: connectionId,
+      connectionId = Bytes2(@[byte 0x01, 0x02])
+      contentKeys = BitList[64].init(8)
+      n = AcceptMessage(connectionId: connectionId,
         contentKeys: contentKeys)
 
     let encoded = encodeMessage(n)
-    check encoded.toHex == "08080000000c0000000102030404000000010203"
+    check encoded.toHex == "08080000000a00000001020001"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
     let message = decoded.get()
     check:
-      message.kind == requestproofs
-      message.requestproofs.connectionId == connectionId
-      message.requestproofs.contentKeys == contentKeys
+      message.kind == MessageKind.accept
+      message.accept.connectionId == connectionId
+      message.accept.contentKeys == contentKeys

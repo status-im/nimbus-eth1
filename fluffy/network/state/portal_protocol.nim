@@ -143,13 +143,17 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
     encodeMessage(FoundContentMessage(
       enrs: enrs, payload: content))
 
-proc handleAdvertise(p: PortalProtocol, a: AdvertiseMessage): seq[byte] =
-  # TODO: Not implemented
+proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
   let
-    connectionId = List[byte, 4](@[])
-    contentKeys = List[ByteList, 32](@[])
-  encodeMessage(RequestProofsMessage(connectionId: connectionId,
-    contentKeys: contentKeys))
+    # TODO: Random ID that needs to be stored together with some buffer that
+    # gets shared with uTP session that needs to be set up (start listening)
+    connectionId = Bytes2(@[byte 0x01, 0x02])
+    # TODO: Not implemented: Based on the content radius and the content that is
+    # already stored, interest in provided content keys needs to be indicated
+    # by setting bits in this BitList
+    contentKeys = BitList[64].init(a.contentKeys.len)
+  encodeMessage(
+    AcceptMessage(connectionId: connectionId, contentKeys: contentKeys))
 
 proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
     srcId: NodeId, srcUdpAddress: Address): seq[byte] =
@@ -168,8 +172,8 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
       p.handleFindNode(message.findNode)
     of MessageKind.findcontent:
       p.handleFindContent(message.findcontent)
-    of MessageKind.advertise:
-      p.handleAdvertise(message.advertise)
+    of MessageKind.offer:
+      p.handleOffer(message.offer)
     else:
       @[]
   else:
@@ -241,6 +245,18 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
   return await reqResponse[FindContentMessage, FoundContentMessage](
     p, dst, PortalProtocolId, fc)
+
+proc offer*(p: PortalProtocol, dst: Node, contentKeys: List[ByteList, 64]):
+    Future[PortalResult[AcceptMessage]] {.async.} =
+  let offer = OfferMessage(contentKeys: contentKeys)
+
+  trace "Send message request", dstId = dst.id, kind = MessageKind.offer
+
+  return await reqResponse[OfferMessage, AcceptMessage](
+    p, dst, PortalProtocolId, offer)
+
+  # TODO: Actually have to parse the offer message and get the uTP connection
+  # id, and initiate a uTP stream to get the data out.
 
 proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
   var records: seq[Record]
