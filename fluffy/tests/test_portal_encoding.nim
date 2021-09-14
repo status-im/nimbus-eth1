@@ -184,13 +184,13 @@ suite "Portal Protocol Message Encodings":
 
   test "Accept Response":
     let
-      connectionId = Bytes2(@[byte 0x01, 0x02])
+      connectionId = Bytes2([byte 0x01, 0x02])
       contentKeys = BitList[64].init(8)
       n = AcceptMessage(connectionId: connectionId,
         contentKeys: contentKeys)
 
     let encoded = encodeMessage(n)
-    check encoded.toHex == "08080000000a00000001020001"
+    check encoded.toHex == "080102060000000001"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()

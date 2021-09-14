@@ -19,7 +19,7 @@ export ssz_serialization, stint
 
 type
   ByteList* = List[byte, 2048]
-  Bytes2* = List[byte, 2]
+  Bytes2* = array[2, byte]
 
 
   MessageKind* = enum

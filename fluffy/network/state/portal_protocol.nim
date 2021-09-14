@@ -147,7 +147,7 @@ proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
   let
     # TODO: Random ID that needs to be stored together with some buffer that
     # gets shared with uTP session that needs to be set up (start listening)
-    connectionId = Bytes2(@[byte 0x01, 0x02])
+    connectionId = Bytes2([byte 0x01, 0x02])
     # TODO: Not implemented: Based on the content radius and the content that is
     # already stored, interest in provided content keys needs to be indicated
     # by setting bits in this BitList
