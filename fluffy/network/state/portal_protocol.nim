@@ -151,7 +151,7 @@ proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
     # TODO: Not implemented: Based on the content radius and the content that is
     # already stored, interest in provided content keys needs to be indicated
     # by setting bits in this BitList
-    contentKeys = BitList[64].init(a.contentKeys.len)
+    contentKeys = ContentKeysBitList.init(a.contentKeys.len)
   encodeMessage(
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeys))
 
@@ -246,7 +246,7 @@ proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
   return await reqResponse[FindContentMessage, FoundContentMessage](
     p, dst, PortalProtocolId, fc)
 
-proc offer*(p: PortalProtocol, dst: Node, contentKeys: List[ByteList, 64]):
+proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
     Future[PortalResult[AcceptMessage]] {.async.} =
   let offer = OfferMessage(contentKeys: contentKeys)
 
@@ -256,7 +256,8 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: List[ByteList, 64]):
     p, dst, PortalProtocolId, offer)
 
   # TODO: Actually have to parse the offer message and get the uTP connection
-  # id, and initiate a uTP stream to get the data out.
+  # id, and initiate an uTP stream with given uTP connection id to get the data
+  # out.
 
 proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
   var records: seq[Record]

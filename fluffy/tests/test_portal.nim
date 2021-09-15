@@ -187,8 +187,7 @@ procSuite "Portal Tests":
 
   asyncTest "Portal Offer/Accept":
     let test = defaultTestCase(rng)
-
-    let contentKeys = List[ByteList, 64](List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
+    let contentKeys = ContentKeysList(List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
 
     let accept = await test.proto1.offer(
       test.proto2.baseProtocol.localNode, contentKeys)

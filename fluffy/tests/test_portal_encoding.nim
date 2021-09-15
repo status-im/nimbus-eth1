@@ -168,7 +168,7 @@ suite "Portal Protocol Message Encodings":
 
   test "Offer Request":
     let
-      contentKeys = List[ByteList, 64](List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
+      contentKeys = ContentKeysList(List(@[ByteList(@[byte 0x01, 0x02, 0x03])]))
       am = OfferMessage(contentKeys: contentKeys)
 
     let encoded = encodeMessage(am)
@@ -185,7 +185,7 @@ suite "Portal Protocol Message Encodings":
   test "Accept Response":
     let
       connectionId = Bytes2([byte 0x01, 0x02])
-      contentKeys = BitList[64].init(8)
+      contentKeys = ContentKeysBitList.init(8)
       n = AcceptMessage(connectionId: connectionId,
         contentKeys: contentKeys)
 

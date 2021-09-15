@@ -17,10 +17,15 @@ import
 
 export ssz_serialization, stint
 
+const
+  contentKeysLimit = 64
+
 type
   ByteList* = List[byte, 2048]
   Bytes2* = array[2, byte]
 
+  ContentKeysList* = List[ByteList, contentKeysLimit]
+  ContentKeysBitList* = BitList[contentKeysLimit]
 
   MessageKind* = enum
     unused = 0x00
@@ -58,11 +63,11 @@ type
     payload*: ByteList
 
   OfferMessage* = object
-    contentKeys*: List[ByteList, 64]
+    contentKeys*: ContentKeysList
 
   AcceptMessage* = object
     connectionId*: Bytes2
-    contentKeys*: BitList[64]
+    contentKeys*: ContentKeysBitList
 
   Message* = object
     case kind*: MessageKind
