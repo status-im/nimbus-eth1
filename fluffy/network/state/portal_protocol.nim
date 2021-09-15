@@ -10,7 +10,7 @@
 import
   std/[sequtils, sets, algorithm],
   stew/[results, byteutils], chronicles, chronos, nimcrypto/hash,
-  eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2],
+  eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
   ./messages
 
 export messages
@@ -23,6 +23,8 @@ const
   Alpha = 3 ## Kademlia concurrency factor
   LookupRequestLimit = 3 ## Amount of distances requested in a single Findnode
   ## message for a lookup or query
+  EnrsResultLimit = 32 ## Maximum amount of ENRs in the total Nodes messages
+  ## that will be processed
   RefreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
   RevalidateMax = 10000 ## Revalidation of a peer is done between 0 and this
@@ -249,19 +251,6 @@ proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
 
   records
 
-proc lookupDistances(target, dest: NodeId): seq[uint16] =
-  var distances: seq[uint16]
-  let td = logDist(target, dest)
-  distances.add(td)
-  var i = 1'u16
-  while distances.len < LookupRequestLimit:
-    if td + i < 256:
-      distances.add(td + i)
-    if td - i > 0'u16:
-      distances.add(td - i)
-    inc i
-  distances
-
 proc lookupWorker(p: PortalProtocol, destNode: Node, target: NodeId):
     Future[seq[Node]] {.async.} =
   var nodes: seq[Node]
@@ -270,7 +259,7 @@ proc lookupWorker(p: PortalProtocol, destNode: Node, target: NodeId):
   let nodesMessage = await p.findNode(destNode,  List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
-    let verifiedNodes = verifyNodesRecords(records, destNode, distances)
+    let verifiedNodes = verifyNodesRecords(records, destNode, EnrsResultLimit, distances)
     nodes.add(verifiedNodes)
 
     # Attempt to add all nodes discovered
@@ -339,17 +328,12 @@ proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage,
     dst: Node, nodes: var seq[Node]): LookupResult =
   if (m.enrs.len() != 0 and m.payload.len() == 0):
     let records = recordsFromBytes(m.enrs)
-    # TODO cannot use verifyNodesRecords(records, destNode, @[0'u16]) as it
-    # also verifies logdistances distances, but with content query those are not
-    # used.
-    # Implement version of verifyNodesRecords which do not validate distances.
-    for r in records:
-      let node = newNode(r)
-      if node.isOk():
-        let n = node.get()
-        nodes.add(n)
-        # Attempt to add all nodes discovered to routing table
-        discard p.routingTable.addNode(n)
+    let verifiedNodes = verifyNodesRecords(records, dst, EnrsResultLimit)
+    nodes.add(verifiedNodes)
+
+    for n in nodes:
+      # Attempt to add all nodes discovered
+      discard p.routingTable.addNode(n)
 
     return LookupResult(kind: Nodes, nodes: nodes)
   elif (m.payload.len() != 0 and m.enrs.len() == 0):
@@ -531,7 +515,7 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
       let nodes = await p.findNode(n, List[uint16, 256](@[0'u16]))
       if nodes.isOk():
         let records = recordsFromBytes(nodes.get().enrs)
-        let verifiedNodes = verifyNodesRecords(records, n, @[0'u16])
+        let verifiedNodes = verifyNodesRecords(records, n, EnrsResultLimit, @[0'u16])
         if verifiedNodes.len > 0:
           discard p.routingTable.addNode(verifiedNodes[0])
 
