@@ -23,7 +23,7 @@ const
   Alpha = 3 ## Kademlia concurrency factor
   LookupRequestLimit = 3 ## Amount of distances requested in a single Findnode
   ## message for a lookup or query
-  FindNodeResultLimit = 16 ## Maximum amount of ENRs in the total Nodes messages
+  EnrsResultLimit = 32 ## Maximum amount of ENRs in the total Nodes messages
   ## that will be processed
   RefreshInterval = 5.minutes ## Interval of launching a random query to
   ## refresh the routing table.
@@ -259,7 +259,7 @@ proc lookupWorker(p: PortalProtocol, destNode: Node, target: NodeId):
   let nodesMessage = await p.findNode(destNode,  List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
-    let verifiedNodes = verifyNodesRecords(records, destNode, FindNodeResultLimit, distances)
+    let verifiedNodes = verifyNodesRecords(records, destNode, EnrsResultLimit, distances)
     nodes.add(verifiedNodes)
 
     # Attempt to add all nodes discovered
@@ -328,7 +328,7 @@ proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage,
     dst: Node, nodes: var seq[Node]): LookupResult =
   if (m.enrs.len() != 0 and m.payload.len() == 0):
     let records = recordsFromBytes(m.enrs)
-    let verifiedNodes = verifyNodesRecords(records, dst, FindNodeResultLimit)
+    let verifiedNodes = verifyNodesRecords(records, dst, EnrsResultLimit)
     nodes.add(verifiedNodes)
 
     for n in nodes:
@@ -515,7 +515,7 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
       let nodes = await p.findNode(n, List[uint16, 256](@[0'u16]))
       if nodes.isOk():
         let records = recordsFromBytes(nodes.get().enrs)
-        let verifiedNodes = verifyNodesRecords(records, n, FindNodeResultLimit, @[0'u16])
+        let verifiedNodes = verifyNodesRecords(records, n, EnrsResultLimit, @[0'u16])
         if verifiedNodes.len > 0:
           discard p.routingTable.addNode(verifiedNodes[0])
 
