@@ -15,7 +15,7 @@ import
   json_serialization/std/options as jsoptions,
   json_serialization/std/tables as jstable,
   json_serialization/lexer,
-  ./forks
+  "."/[forks, genesis_alloc]
 
 type
   CliqueOptions = object
@@ -83,7 +83,7 @@ type
     balance*: UInt256
     nonce*  : AccountNonce
 
-  CustomNetwork* = object
+  NetworkParams* = object
     config* : ChainConfig
     genesis*: Genesis
 
@@ -159,19 +159,19 @@ template to(a: string, b: type UInt256): UInt256 =
   # json_serialization decode table stuff
   UInt256.fromHex(a)
 
-proc loadCustomNetwork*(fileName: string, cg: var CustomNetwork): bool =
+proc loadNetworkParams*(fileName: string, cg: var NetworkParams): bool =
   var cc: CustomChain
   try:
     cc = Json.loadFile(fileName, CustomChain, allowUnknownFields = true)
   except IOError as e:
-    error "Genesis config file error", fileName, msg=e.msg
+    error "Network params I/O error", fileName, msg=e.msg
     return false
   except JsonReaderError as e:
-    error "Invalid genesis config file format", fileName, msg=e.formatMsg("")
+    error "Invalid network params file format", fileName, msg=e.formatMsg("")
     return false
   except:
     var msg = getCurrentExceptionMsg()
-    error "Error loading genesis block config file", fileName, msg
+    error "Error loading network params file", fileName, msg
     return false
 
   cg.genesis               = cc.genesis
@@ -237,14 +237,14 @@ proc toFork*(c: ChainConfig, number: BlockNumber): Fork =
   elif number >= c.homesteadBlock: FkHomestead
   else: FkFrontier
 
-proc chainConfig*(id: NetworkId, cn: CustomNetwork): ChainConfig =
+proc chainConfigForNetwork(id: NetworkId): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
   # but that is not always the case
 
   result = case id
   of MainNet:
     ChainConfig(
-      poaEngine: false, # TODO: use real engine conf: PoW
+      poaEngine:      false,
       chainId:        MainNet.ChainId,
       homesteadBlock: 1_150_000.toBlockNumber, # 14/03/2016 20:49:53
       daoForkBlock:   1_920_000.toBlockNumber,
@@ -263,7 +263,7 @@ proc chainConfig*(id: NetworkId, cn: CustomNetwork): ChainConfig =
     )
   of RopstenNet:
     ChainConfig(
-      poaEngine: false, # TODO: use real engine conf: PoW
+      poaEngine:      false,
       chainId:        RopstenNet.ChainId,
       homesteadBlock: 0.toBlockNumber,
       daoForkSupport: false,
@@ -281,7 +281,7 @@ proc chainConfig*(id: NetworkId, cn: CustomNetwork): ChainConfig =
     )
   of RinkebyNet:
     ChainConfig(
-      poaEngine: true, # TODO: use real engine conf: PoA
+      poaEngine:      true,
       chainId:        RinkebyNet.ChainId,
       homesteadBlock: 1.toBlockNumber,
       daoForkSupport: false,
@@ -299,7 +299,7 @@ proc chainConfig*(id: NetworkId, cn: CustomNetwork): ChainConfig =
     )
   of GoerliNet:
     ChainConfig(
-      poaEngine: true, # TODO: use real engine conf: PoA
+      poaEngine:      true,
       chainId:        GoerliNet.ChainId,
       homesteadBlock: 0.toBlockNumber,
       daoForkSupport: false,
@@ -316,6 +316,47 @@ proc chainConfig*(id: NetworkId, cn: CustomNetwork): ChainConfig =
       londonBlock:    5_062_605.toBlockNumber # June 30, 2021
     )
   else:
-    # everything else will use CustomNet config
-    trace "Custom genesis block configuration loaded", conf=cn.config
-    cn.config
+    ChainConfig()
+
+proc genesisBlockForNetwork(id: NetworkId): Genesis =
+  result = case id
+  of MainNet:
+    Genesis(
+      nonce: 66.toBlockNonce,
+      extraData: hexToSeqByte("0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa"),
+      gasLimit: 5000,
+      difficulty: 17179869184.u256,
+      alloc: decodePrealloc(mainnetAllocData)
+    )
+  of RopstenNet:
+    Genesis(
+      nonce: 66.toBlockNonce,
+      extraData: hexToSeqByte("0x3535353535353535353535353535353535353535353535353535353535353535"),
+      gasLimit: 16777216,
+      difficulty: 1048576.u256,
+      alloc: decodePrealloc(testnetAllocData)
+    )
+  of RinkebyNet:
+    Genesis(
+      nonce: 0.toBlockNonce,
+      timestamp: initTime(0x58ee40ba, 0),
+      extraData: hexToSeqByte("0x52657370656374206d7920617574686f7269746168207e452e436172746d616e42eb768f2244c8811c63729a21a3569731535f067ffc57839b00206d1ad20c69a1981b489f772031b279182d99e65703f0076e4812653aab85fca0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+      gasLimit: 4700000,
+      difficulty: 1.u256,
+      alloc: decodePrealloc(rinkebyAllocData)
+    )
+  of GoerliNet:
+    Genesis(
+      nonce: 0.toBlockNonce,
+      timestamp: initTime(0x5c51a607, 0),
+      extraData: hexToSeqByte("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+      gasLimit: 0xa00000,
+      difficulty: 1.u256,
+      alloc: decodePrealloc(goerliAllocData)
+    )
+  else:
+    Genesis()
+
+proc networkParams*(id: NetworkId): NetworkParams =
+  result.genesis = genesisBlockForNetwork(id)
+  result.config  = chainConfigForNetwork(id)

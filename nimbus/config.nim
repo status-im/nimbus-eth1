@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2018-2021 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -10,6 +10,7 @@
 import
   std/[options, strutils, times, os],
   pkg/[
+    chronicles,
     confutils,
     confutils/defs,
     stew/byteutils,
@@ -20,6 +21,8 @@ import
   "."/[db/select_backend, chain_config,
     constants, vm_compile_info
   ]
+
+export stewNet
 
 const
   NimbusName* = "nimbus-eth1"
@@ -41,6 +44,8 @@ const
 
   NimVersion = staticExec("nim --version").strip()
 
+  # TODO: fix this agent-string format to match other
+  # eth clients format
   NimbusIdent* = "$# v$# [$#: $#, $#, $#, $#]" % [
     NimbusName,
     NimbusVersion,
@@ -99,8 +104,8 @@ const
   defaultEthGraphqlPort    = 8547
   defaultListenAddress      = (static ValidIpAddress.init("0.0.0.0"))
   defaultAdminListenAddress = (static ValidIpAddress.init("127.0.0.1"))
-  defaultListenAddressDesc      = $defaultListenAddress
-  defaultAdminListenAddressDesc = $defaultAdminListenAddress
+  defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
+  defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
 
 type
@@ -108,8 +113,9 @@ type
     Full
     Archive
 
-  NimbusCmd* = enum
+  NimbusCmd* {.pure.} = enum
     noCommand
+    `import`
 
   ProtocolFlag* {.pure.} = enum
     ## Protocol flags
@@ -121,14 +127,10 @@ type
     Eth                           ## enable eth_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
 
-  EnodeList* = object
-    value*: seq[Enode]
-
-  Protocols* = object
-    value*: set[ProtocolFlag]
-
-  RpcApi* = object
-    value*: set[RpcFlag]
+  DiscoveryType* {.pure.} = enum
+    None
+    V4
+    V5
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
@@ -142,7 +144,7 @@ type
       name: "data-dir" }: OutDir
 
     keyStore* {.
-      desc: "Directory for the keystore files"
+      desc: "Load one or more keystore files from this directory"
       defaultValue: defaultKeystoreDir()
       defaultValueDesc: "inside datadir"
       abbr: "k"
@@ -155,20 +157,15 @@ type
       abbr : "p"
       name: "prune-mode" }: PruneMode
 
-    importBlocks* {.
-      desc: "Import RLP encoded block(s) in a file, validate, write to database and quit"
-      defaultValue: ""
-      abbr: "b"
-      name: "import-blocks" }: InputFile
-
     importKey* {.
-      desc: "Import unencrypted 32 bytes hex private key file"
+      desc: "Import unencrypted 32 bytes hex private key from a file"
       defaultValue: ""
       abbr: "e"
       name: "import-key" }: InputFile
 
     engineSigner* {.
-      desc: "Enable sealing engine to run and producing blocks at specified interval (only PoA/Clique supported)"
+      desc: "Set the signer address(as 20 bytes hex) and enable sealing engine to run and " &
+            "producing blocks at specified interval (only PoA/Clique supported)"
       defaultValue: ZERO_ADDRESS
       defaultValueDesc: ""
       abbr: "s"
@@ -179,182 +176,164 @@ type
       defaultValueDesc: ""
       name: "verify-from" }: Option[uint64]
 
+    network {.
+      separator: "\pETHEREUM NETWORK OPTIONS:"
+      desc: "Name or id number of Ethereum network(mainnet(1), ropsten(3), rinkeby(4), goerli(5), kovan(42), other=custom)"
+      #[longDesc:
+        "- mainnet: Ethereum main network\n" &
+        "- ropsten: Test network (proof-of-work, the one most like Ethereum mainnet)\n" &
+        "- rinkeby: Test network (proof-of-authority, for those running Geth clients)\n" &
+        "- görli  : Test network (proof-of-authority, works across all clients)\n" &
+        "- kovan  : Test network (proof-of-authority, for those running OpenEthereum clients)"]#
+      defaultValue: "" # the default value is set in makeConfig
+      defaultValueDesc: "mainnet(1)"
+      abbr: "i"
+      name: "network" }: string
+
+    customNetwork {.
+      desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
+      defaultValueDesc: ""
+      abbr: "c"
+      name: "custom-network" }: Option[NetworkParams]
+
+    networkId* {.
+      hidden # TODO: use ignore from confutils if its become available
+      defaultValue: MainNet
+      name: "network-id"}: NetworkId
+
+    networkParams* {.
+      hidden # TODO: use ignore from confutils if its become available
+      defaultValue: NetworkParams()
+      name: "network-params"}: NetworkParams
+
+    logLevel* {.
+      separator: "\pLOGGING AND DEBUGGING OPTIONS:"
+      desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
+      defaultValue: LogLevel.INFO
+      defaultValueDesc: $LogLevel.INFO
+      name: "log-level" }: LogLevel
+
+    logFile* {.
+      desc: "Specifies a path for the written Json log file"
+      name: "log-file" }: Option[OutFile]
+
+    logMetricsEnabled* {.
+      desc: "Enable metrics logging"
+      defaultValue: false
+      name: "log-metrics" .}: bool
+
+    logMetricsInterval* {.
+      desc: "Interval at which to log metrics, in seconds"
+      defaultValue: 10
+      name: "log-metrics-interval" .}: int
+
+    bootstrapNodes {.
+      separator: "\pNETWORKING OPTIONS:"
+      desc: "Specifies one or more bootstrap nodes(as enode URL) to use when connecting to the network"
+      defaultValue: @[]
+      defaultValueDesc: ""
+      abbr: "b"
+      name: "bootstrap-node" }: seq[string]
+
+    bootstrapFile {.
+      desc: "Specifies a line-delimited file of bootstrap Ethereum network addresses(enode URL). " &
+            "By default, addresses will be added to bootstrap node list. " &
+            "But if the first line equals to `override` word, it will override built-in list"
+      defaultValue: ""
+      name: "bootstrap-file" }: InputFile
+
+    staticPeers {.
+      desc: "Connect to one or more trusted peers(as enode URL)"
+      defaultValue: @[]
+      defaultValueDesc: ""
+      name: "static-peers" }: seq[string]
+
+    listenAddress* {.
+      desc: "Listening IP address for Ethereum P2P and Discovery traffic"
+      defaultValue: defaultListenAddress
+      defaultValueDesc: $defaultListenAddressDesc
+      name: "listen-address" }: ValidIpAddress
+
+    tcpPort* {.
+      desc: "Ethereum P2P network listening TCP port"
+      defaultValue: defaultPort
+      defaultValueDesc: $defaultPort
+      name: "tcp-port" }: Port
+
+    udpPort* {.
+      desc: "Ethereum P2P network listening UDP port"
+      defaultValue: 0 # set udpPort defaultValue in `makeConfig`
+      defaultValueDesc: "default to --tcp-port"
+      name: "udp-port" }: Port
+
+    maxPeers* {.
+      desc: "Maximum number of peers to connect to"
+      defaultValue: 25
+      name: "max-peers" }: int
+
+    nat* {.
+      desc: "Specify method to use for determining public address. " &
+            "Must be one of: any, none, upnp, pmp, extip:<IP>"
+      defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
+      defaultValueDesc: "any"
+      name: "nat" .}: NatConfig
+
+    discovery* {.
+      desc: "Specify method to find suitable peer in an Ethereum network (None, V4, V5)"
+      #[longDesc:
+        "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
+        "- V4  : Node Discovery Protocol v4(default)\n" &
+        "- V5  : Node Discovery Protocol v5"]#
+      defaultValue: DiscoveryType.V4
+      defaultValueDesc: $DiscoveryType.V4
+      name: "discovery" .}: DiscoveryType
+
+    nodeKeyHex* {.
+      desc: "P2P node private key (as 32 bytes hex string)"
+      defaultValue: ""
+      defaultValueDesc: "random"
+      name: "node-key" .}: string
+
+    agentString* {.
+      desc: "Node agent string which is used as identifier in network"
+      defaultValue: NimbusIdent
+      defaultValueDesc: $NimbusIdent
+      name: "agent-string" .}: string
+
+    protocols {.
+      desc: "Enable specific set of protocols (available: Eth, Les)"
+      defaultValue: @[]
+      defaultValueDesc: $ProtocolFlag.Eth
+      name: "protocols" .}: seq[string]
+
     case cmd* {.
       command
-      defaultValue: noCommand }: NimbusCmd
+      defaultValue: NimbusCmd.noCommand }: NimbusCmd
 
     of noCommand:
-      mainnet* {.
-        separator: "\pETHEREUM NETWORK OPTIONS:"
-        defaultValue: false
-        defaultValueDesc: ""
-        desc: "Use Ethereum main network (default)"
-        }: bool
-
-      ropsten* {.
-        desc: "Use Ropsten test network (proof-of-work, the one most like Ethereum mainnet)"
-        defaultValue: false
-        defaultValueDesc: ""
-        }: bool
-
-      rinkeby* {.
-        desc: "Use Rinkeby test network (proof-of-authority, for those running Geth clients)"
-        defaultValue: false
-        defaultValueDesc: ""
-        }: bool
-
-      goerli* {.
-        desc: "Use Görli test network (proof-of-authority, works across all clients)"
-        defaultValue: false
-        defaultValueDesc: ""
-        }: bool
-
-      kovan* {.
-        desc: "Use Kovan test network (proof-of-authority, for those running OpenEthereum clients)"
-        defaultValue: false
-        defaultValueDesc: ""
-        }: bool
-
-      networkId* {.
-        desc: "Network id (1=mainnet, 3=ropsten, 4=rinkeby, 5=goerli, 42=kovan, other=custom)"
-        defaultValueDesc: "mainnet"
-        abbr: "i"
-        name: "network-id" }: Option[NetworkId]
-
-      customNetwork* {.
-        desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
-        defaultValueDesc: ""
-        abbr: "c"
-        name: "custom-network" }: Option[CustomNetwork]
-
-      bootNodes* {.
-        separator: "\pNETWORKING OPTIONS:"
-        desc: "Comma separated enode URLs for P2P discovery bootstrap (set v4+v5 instead for light servers)"
-        defaultValue: EnodeList()
-        defaultValueDesc: ""
-        name: "boot-nodes" }: EnodeList
-
-      bootNodesv4* {.
-        desc: "Comma separated enode URLs for P2P v4 discovery bootstrap (light server, full nodes)"
-        defaultValue: EnodeList()
-        defaultValueDesc: ""
-        name: "boot-nodes-v4" }: EnodeList
-
-      bootNodesv5* {.
-        desc: "Comma separated enode URLs for P2P v5 discovery bootstrap (light server, light nodes)"
-        defaultValue: EnodeList()
-        defaultValueDesc: ""
-        name: "boot-nodes-v5" }: EnodeList
-
-      staticNodes* {.
-        desc: "Comma separated enode URLs to connect with"
-        defaultValue: EnodeList()
-        defaultValueDesc: ""
-        name: "static-nodes" }: EnodeList
-
-      listenAddress* {.
-        desc: "Listening address for the Ethereum P2P and Discovery traffic"
-        defaultValue: defaultListenAddress
-        defaultValueDesc: $defaultListenAddressDesc
-        name: "listen-address" }: ValidIpAddress
-
-      tcpPort* {.
-        desc: "Network listening TCP port"
-        defaultValue: defaultPort
-        defaultValueDesc: $defaultPort
-        name: "tcp-port" }: Port
-
-      udpPort* {.
-        desc: "Network listening UDP port"
-        defaultValue: 0 # set udpPort defaultValue in `makeConfig`
-        defaultValueDesc: "default to --tcp-port"
-        name: "udp-port" }: Port
-
-      maxPeers* {.
-        desc: "The maximum number of peers to connect to"
-        defaultValue: 25
-        name: "max-peers" }: int
-
-      maxEndPeers* {.
-        desc: "Maximum number of pending connection attempts"
-        defaultValue: 0
-        name: "max-end-peers" }: int
-
-      nat* {.
-        desc: "Specify method to use for determining public address. " &
-              "Must be one of: any, none, upnp, pmp, extip:<IP>"
-        defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
-        defaultValueDesc: "any"
-        name: "nat" .}: NatConfig
-
-      noDiscover* {.
-        desc: "Disables the peer discovery mechanism (manual peer addition)"
-        defaultValue: false
-        name: "no-discover" .}: bool
-
-      discv5Enabled* {.
-        desc: "Enable Discovery v5"
-        defaultValue: false
-        name: "discv5" .}: bool
-
-      nodeKeyHex* {.
-        desc: "P2P node private key (as hexadecimal string)"
-        defaultValue: ""
-        defaultValueDesc: "random"
-        name: "node-key" .}: string
-
-      agentString* {.
-        desc: "Node agent string which is used as identifier in network"
-        defaultValue: NimbusIdent
-        defaultValueDesc: $NimbusIdent
-        name: "agent-string" .}: string
-
-      protocols* {.
-        desc: "Enable specific set of protocols (Eth, Les)"
-        defaultValue: Protocols(value: {ProtocolFlag.Eth})
-        defaultValueDesc: $ProtocolFlag.Eth
-        name: "protocols" .}: Protocols
-
-      metricsEnabled* {.
-        separator: "\pLOCAL SERVICE OPTIONS:"
-        desc: "Enable the metrics server"
-        defaultValue: false
-        name: "metrics" }: bool
-
-      metricsPort* {.
-        desc: "Listening HTTP port of the metrics server"
-        defaultValue: defaultMetricsServerPort
-        defaultValueDesc: $defaultMetricsServerPort
-        name: "metrics-port" }: Port
-
-      metricsAddress* {.
-        desc: "Listening address of the metrics server"
-        defaultValue: defaultAdminListenAddress
-        defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "metrics-address" }: ValidIpAddress
-
       rpcEnabled* {.
+        separator: "\pLOCAL SERVICE OPTIONS:"
         desc: "Enable the JSON-RPC server"
         defaultValue: false
         name: "rpc" }: bool
 
       rpcPort* {.
-        desc: "Listening HTTP port for the JSON-RPC server"
+        desc: "Listening port of the JSON-RPC server"
         defaultValue: defaultEthRpcPort
         defaultValueDesc: $defaultEthRpcPort
         name: "rpc-port" }: Port
 
       rpcAddress* {.
-        desc: "Listening address of the RPC server"
+        desc: "Listening IP address of the JSON-RPC server"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "rpc-address" }: ValidIpAddress
 
-      rpcApi* {.
-        desc: "Enable specific set of RPC API from list (comma-separated) (available: eth, debug)"
-        defaultValue: RpcApi(value: {RpcFlag.Eth})
+      rpcApi {.
+        desc: "Enable specific set of RPC API (available: eth, debug)"
+        defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
-        name: "rpc-api" }: RpcApi
+        name: "rpc-api" }: seq[string]
 
       wsEnabled* {.
         desc: "Enable the Websocket JSON-RPC server"
@@ -362,60 +341,65 @@ type
         name: "ws" }: bool
 
       wsPort* {.
-        desc: "Listening Websocket port for the JSON-RPC server"
+        desc: "Listening port of the Websocket JSON-RPC server"
         defaultValue: defaultEthWsPort
         defaultValueDesc: $defaultEthWsPort
         name: "ws-port" }: Port
 
       wsAddress* {.
-        desc: "Listening address of the Websocket JSON-RPC server"
+        desc: "Listening IP address of the Websocket JSON-RPC server"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "ws-address" }: ValidIpAddress
 
-      wsApi* {.
-        desc: "Enable specific set of Websocket RPC API from list (comma-separated) (available: eth, debug)"
-        defaultValue: RpcApi(value: {RpcFlag.Eth})
+      wsApi {.
+        desc: "Enable specific set of Websocket RPC API (available: eth, debug)"
+        defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
-        name: "ws-api" }: RpcApi
+        name: "ws-api" }: seq[string]
 
       graphqlEnabled* {.
-        desc: "Enable the HTTP-GraphQL server"
+        desc: "Enable the GraphQL HTTP server"
         defaultValue: false
         name: "graphql" }: bool
 
       graphqlPort* {.
-        desc: "Listening HTTP port for the GraphQL server"
+        desc: "Listening port of the GraphQL HTTP server"
         defaultValue: defaultEthGraphqlPort
         defaultValueDesc: $defaultEthGraphqlPort
         name: "graphql-port" }: Port
 
       graphqlAddress* {.
-        desc: "Listening address of the GraphQL server"
+        desc: "Listening IP address of the GraphQL HTTP server"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "graphql-address" }: ValidIpAddress
 
-      logLevel* {.
-        separator: "\pLOGGING AND DEBUGGING OPTIONS:"
-        desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
-        defaultValue: LogLevel.INFO
-        defaultValueDesc: $LogLevel.INFO
-        name: "log-level" }: LogLevel
-
-      logFile* {.
-        desc: "Specifies a path for the written Json log file"
-        name: "log-file" }: Option[OutFile]
-
-      logMetricsEnabled* {.
-        desc: "Enable metrics logging"
+      metricsEnabled* {.
+        desc: "Enable the built-in metrics HTTP server"
         defaultValue: false
-        name: "log-metrics" .}: bool
+        name: "metrics" }: bool
 
-      logMetricsInterval* {.
-        desc: "Interval at which to log metrics, in seconds"
-        defaultValue: 10
-        name: "log-metrics-interval" .}: int
+      metricsPort* {.
+        desc: "Listening port of the built-in metrics HTTP server"
+        defaultValue: defaultMetricsServerPort
+        defaultValueDesc: $defaultMetricsServerPort
+        name: "metrics-port" }: Port
+
+      metricsAddress* {.
+        desc: "Listening IP address of the built-in metrics HTTP server"
+        defaultValue: defaultAdminListenAddress
+        defaultValueDesc: $defaultAdminListenAddressDesc
+        name: "metrics-address" }: ValidIpAddress
+
+    of `import`:
+
+      blocksFile* {.
+        argument
+        desc: "Import RLP encoded block(s) from a file, validate, write to database and quit"
+        defaultValue: ""
+        name: "blocks-file" }: InputFile
+
 
 proc parseCmdArg(T: type NetworkId, p: TaintedString): T =
   parseInt(p.string).T
@@ -439,54 +423,16 @@ proc processList(v: string, o: var seq[string]) =
       if len(n) > 0:
         o.add(n)
 
-proc parseCmdArg(T: type EnodeList, p: TaintedString): T =
-  var list = newSeq[string]()
-  processList(p.string, list)
-  for item in list:
-    let res = ENode.fromString(item)
-    if res.isErr:
-      raise newException(ValueError, "failed to parse EnodeList")
-    result.value.add res.get()
-
-proc completeCmdArg(T: type EnodeList, val: TaintedString): seq[string] =
-  return @[]
-
-proc parseCmdArg(T: type Protocols, p: TaintedString): T =
-  var list = newSeq[string]()
-  processList(p.string, list)
-  for item in list:
-    case item.toLowerAscii()
-    of "eth": result.value.incl ProtocolFlag.Eth
-    of "les": result.value.incl ProtocolFlag.Les
-    else:
-      raise newException(ValueError, "unknown protocol: " & item)
-
-proc completeCmdArg(T: type Protocols, val: TaintedString): seq[string] =
-  return @[]
-
-proc parseCmdArg(T: type RpcApi, p: TaintedString): T =
-  var list = newSeq[string]()
-  processList(p.string, list)
-  for item in list:
-    case item.toLowerAscii()
-    of "eth": result.value.incl RpcFlag.Eth
-    of "debug": result.value.incl RpcFlag.Debug
-    else:
-      raise newException(ValueError, "unknown rpc api: " & item)
-
-proc completeCmdArg(T: type RpcApi, val: TaintedString): seq[string] =
-  return @[]
-
-proc parseCmdArg(T: type CustomNetwork, p: TaintedString): T =
+proc parseCmdArg(T: type NetworkParams, p: TaintedString): T =
   try:
-    if not loadCustomNetwork(p.string, result):
+    if not loadNetworkParams(p.string, result):
       raise newException(ValueError, "failed to load customNetwork")
   except Exception as exc:
     # on linux/mac, nim compiler refuse to compile
     # with unlisted exception error
     raise newException(ValueError, "failed to load customNetwork")
 
-proc completeCmdArg(T: type CustomNetwork, val: TaintedString): seq[string] =
+proc completeCmdArg(T: type NetworkParams, val: TaintedString): seq[string] =
   return @[]
 
 proc setBootnodes(output: var seq[ENode], nodeUris: openarray[string]) =
@@ -494,37 +440,131 @@ proc setBootnodes(output: var seq[ENode], nodeUris: openarray[string]) =
   for item in nodeUris:
     output.add(ENode.fromString(item).tryGet())
 
-proc getBootNodes*(conf: NimbusConf): seq[Enode] =
-  if conf.mainnet:
-    result.setBootnodes(MainnetBootnodes)
-  elif conf.ropsten:
-    result.setBootnodes(RopstenBootnodes)
-  elif conf.rinkeby:
-    result.setBootnodes(RinkebyBootnodes)
-  elif conf.goerli:
-    result.setBootnodes(GoerliBootnodes)
-  elif conf.kovan:
-    result.setBootnodes(KovanBootnodes)
-  elif conf.bootnodes.value.len > 0:
-    result = conf.bootnodes.value
-  elif conf.bootnodesv4.value.len > 0:
-    result = conf.bootnodesv4.value
-  elif conf.bootnodesv5.value.len > 0:
-    result = conf.bootnodesv5.value
+iterator repeatingList(listOfList: openArray[string]): string =
+  for strList in listOfList:
+    var list = newSeq[string]()
+    processList(strList, list)
+    for item in list:
+      yield item
+
+proc append(output: var seq[ENode], nodeUris: openArray[string]) =
+  for item in repeatingList(nodeUris):
+    let res = ENode.fromString(item)
+    if res.isErr:
+      warn "Ignoring invalid bootstrap address", address=item
+      continue
+    output.add res.get()
+
+iterator strippedLines(filename: string): (int, string) =
+  var i = 0
+  for line in lines(filename):
+    let stripped = strip(line)
+    if stripped.startsWith('#'): # Comments
+      continue
+
+    if stripped.len > 0:
+      yield (i, stripped)
+      inc i
+
+proc loadBootstrapFile(fileName: string, output: var seq[Enode]) =
+  if fileName.len == 0:
+    return
+
+  try:
+    for i, ln in strippedLines(fileName):
+      if cmpIgnoreCase(ln, "override") == 0 and i == 0:
+        # override built-in list if the first line is 'override'
+        output = newSeq[ENode]()
+        continue
+
+      let res = ENode.fromString(ln)
+      if res.isErr:
+        warn "Ignoring invalid bootstrap address", address=ln, line=i, file=fileName
+        continue
+
+      output.add res.get()
+
+  except IOError as e:
+    error "Could not read bootstrap file", msg = e.msg
+    quit 1
 
 proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
-  if conf.mainnet:
-    some MainNet
-  elif conf.ropsten:
-    some RopstenNet
-  elif conf.rinkeby:
-    some RinkebyNet
-  elif conf.goerli:
-    some GoerliNet
-  elif conf.kovan:
-    some KovanNet
+  if conf.network.len == 0:
+    return none NetworkId
+
+  let network = toLowerAscii(conf.network)
+  case network
+  of "mainnet": return some MainNet
+  of "ropsten": return some RopstenNet
+  of "rinkeby": return some RinkebyNet
+  of "goerli" : return some GoerliNet
+  of "kovan"  : return some KovanNet
   else:
-    conf.networkId
+    try:
+      some parseInt(network).NetworkId
+    except CatchableError:
+      error "Failed to parse network name or id", network
+      quit QuitFailure
+
+proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
+  if conf.protocols.len == 0:
+    return {ProtocolFlag.Eth}
+
+  for item in repeatingList(conf.protocols):
+    case item.toLowerAscii()
+    of "eth": result.incl ProtocolFlag.Eth
+    of "les": result.incl ProtocolFlag.Les
+    else:
+      error "Unknown protocol", name=item
+      quit QuitFailure
+
+proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
+  if api.len == 0:
+    return {RpcFlag.Eth}
+
+  for item in repeatingList(api):
+    case item.toLowerAscii()
+    of "eth": result.incl RpcFlag.Eth
+    of "debug": result.incl RpcFlag.Debug
+    else:
+      error "Unknown RPC API: ", name=item
+      quit QuitFailure
+
+proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
+  getRpcFlags(conf.rpcApi)
+
+proc getWsFlags*(conf: NimbusConf): set[RpcFlag] =
+  getRpcFlags(conf.wsApi)
+
+proc getBootNodes*(conf: NimbusConf): seq[Enode] =
+  # Ignore standard bootnodes if customNetwork is loaded
+  if conf.customNetwork.isNone:
+    case conf.networkId
+    of MainNet:
+      result.setBootnodes(MainnetBootnodes)
+    of RopstenNet:
+      result.setBootnodes(RopstenBootnodes)
+    of RinkebyNet:
+      result.setBootnodes(RinkebyBootnodes)
+    of GoerliNet:
+      result.setBootnodes(GoerliBootnodes)
+    of KovanNet:
+      result.setBootnodes(KovanBootnodes)
+    else:
+      # custom network id
+      discard
+
+  # always allow custom boostrap nodes
+  # if it is set by user
+  if conf.bootstrapNodes.len > 0:
+    result.append(conf.bootstrapNodes)
+
+  # bootstrap nodes loaded from file might append or
+  # override built-in bootnodes
+  loadBootstrapFile(string conf.bootstrapFile, result)
+
+proc getStaticPeers*(conf: NimbusConf): seq[Enode] =
+  result.append(conf.staticPeers)
 
 proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
   {.push warning[ProveInit]: off.}
@@ -535,28 +575,32 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
   )
   {.pop.}
 
-  result.networkId = result.getNetworkId()
+  var networkId = result.getNetworkId()
 
-  if result.networkId.isNone and result.customNetwork.isSome:
-    # WARNING: networkId and chainId are two distinct things
-    # they usage should not be mixed in other places.
-    # We only set networkId to chainId if networkId not set in cli and
-    # --custom-network is set.
-    # If chainId is not defined in config file, it's ok because
-    # the default networkId `CustomNetwork` has 0 value too.
-    result.networkId = some(NetworkId(result.customNetwork.get().config.chainId))
+  if result.customNetwork.isSome:
+    result.networkParams = result.customNetwork.get()
+    if networkId.isNone:
+      # WARNING: networkId and chainId are two distinct things
+      # they usage should not be mixed in other places.
+      # We only set networkId to chainId if networkId not set in cli and
+      # --custom-network is set.
+      # If chainId is not defined in config file, it's ok because
+      # zero means CustomNet
+      networkId = some(NetworkId(result.networkParams.config.chainId))
 
-  if result.networkId.isNone:
+  if networkId.isNone:
     # bootnodes is set via getBootNodes
-    result.networkId = some MainNet
-    result.mainnet = true
+    networkId = some MainNet
 
-  if result.udpPort == Port(0):
-    # if udpPort not set in cli, then
-    result.udpPort = result.tcpPort
+  result.networkId = networkId.get()
 
   if result.customNetwork.isNone:
-    result.customNetwork = some CustomNetwork()
+    result.networkParams = networkParams(result.networkId)
+
+  if result.cmd == noCommand:
+    if result.udpPort == Port(0):
+      # if udpPort not set in cli, then
+      result.udpPort = result.tcpPort
 
 when isMainModule:
   # for testing purpose

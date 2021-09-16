@@ -115,10 +115,9 @@ func calculateForkIds(c: ChainConfig,
     prevFork = result[fork].nextFork
     prevCRC = result[fork].crc
 
-proc setForkId(c: Chain, cn: CustomNetwork)
+proc setForkId(c: Chain)
   {. raises: [Defect,CatchableError].} =
-  let g = genesisBlockForNetwork(c.db.networkId, cn)
-  c.blockZeroHash = g.toBlock.blockHash
+  c.blockZeroHash = toBlock(c.db.genesis).blockHash
   let genesisCRC = crc32(0, c.blockZeroHash.data)
   c.forkIds = calculateForkIds(c.db.config, genesisCRC)
 
@@ -136,7 +135,7 @@ proc initChain(c: Chain; db: BaseChainDB; poa: Clique; extraValidation: bool)
   if not db.config.daoForkSupport:
     db.config.daoForkBlock = db.config.homesteadBlock
   c.extraValidation = extraValidation
-  c.setForkId(db.customNetwork)
+  c.setForkId()
 
   # Initalise the PoA state regardless of whether it is needed on the current
   # network. For non-PoA networks (when `db.config.poaEngine` is `false`),

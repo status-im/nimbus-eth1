@@ -43,7 +43,8 @@ type
                            ## transactions.
     prng: Rand
     accounts: Table[string,PrivateKey] ## accounts table
-    boot: CustomNetwork                ## imported Genesis configuration
+    networkId: NetworkId
+    boot: NetworkParams                ## imported Genesis configuration
     batch: seq[seq[BlockHeader]]       ## collect header chains
     chain: Chain
 
@@ -192,15 +193,17 @@ proc initPrettyPrinters(pp: var PrettyPrinters; ap: TesterPool) =
 
 proc resetChainDb(ap: TesterPool; extraData: Blob; debug = false) =
   ## Setup new block chain with bespoke genesis
-  ap.chain = BaseChainDB(
-    db: newMemoryDb(),
-    config: ap.boot.config).newChain
+  let chainDB = newBaseChainDB(
+    newMemoryDb(),
+    id = ap.networkId,
+    params = ap.boot)
+  ap.chain = newChain(chainDB)
   ap.chain.clique.db.populateProgress
+
   # new genesis block
-  var g = ap.boot.genesis
   if 0 < extraData.len:
-    g.extraData = extraData
-  g.commit(ap.chain.clique.db)
+    chainDB.genesis.extraData = extraData
+  initializeEmptyDB(chainDB)
   # fine tune Clique descriptor
   ap.chain.clique.cfg.debug = debug
   ap.chain.clique.cfg.prettyPrint.initPrettyPrinters(ap)
@@ -242,9 +245,9 @@ proc sayHeaderChain*(ap: TesterPool; indent = 0): TesterPool {.discardable.} =
 
 proc newVoterPool*(networkId = GoerliNet): TesterPool =
   TesterPool(
-    boot: CustomNetwork(
-      genesis: genesisBlockForNetwork(networkId, CustomNetwork()),
-      config:  chainConfig(networkId, CustomNetwork()))).initTesterPool
+    networkId: networkId,
+    boot: networkParams(networkId)
+  ).initTesterPool
 
 # ------------------------------------------------------------------------------
 # Public: getter

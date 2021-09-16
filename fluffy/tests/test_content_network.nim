@@ -16,8 +16,8 @@ import
 
 proc genesisToTrie(filePath: string): HexaryTrie =
   # TODO: Doing our best here with API that exists, to be improved.
-  var cn: CustomNetwork
-  if not loadCustomNetwork(filePath, cn):
+  var cn: NetworkParams
+  if not loadNetworkParams(filePath, cn):
     quit(1)
 
   var chainDB = newBaseChainDB(

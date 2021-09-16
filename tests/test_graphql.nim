@@ -63,7 +63,7 @@ proc setupChain(): BaseChainDB =
   if not parseGenesisAlloc($(jn["pre"]), genesis.alloc):
     quit(QuitFailure)
 
-  let customNetwork = CustomNetwork(
+  let customNetwork = NetworkParams(
     config: config,
     genesis: genesis
   )
@@ -95,7 +95,7 @@ proc setupChain(): BaseChainDB =
 
 proc graphqlMain*() =
   let
-    conf    = makeConfig(@[]) # don't use makeConfig default cmdLine from inside all_tests
+    conf    = makeTestConfig()
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     chainDB = setupChain()

@@ -45,7 +45,7 @@ proc main() {.used.} =
   # 52029 first block with receipts logs
   # 66407 failed transaction
 
-  # nimbus --rpcapi: eth, debug --prune: archive
+  # nimbus --rpc-api: eth, debug --prune: archive
 
   var conf = makeConfig()
   let db = newChainDb(string conf.dataDir)

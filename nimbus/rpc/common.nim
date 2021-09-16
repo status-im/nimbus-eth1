@@ -34,7 +34,7 @@ proc setupCommonRPC*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     result = "0x" & $keccak_256.digest(rawdata)
 
   server.rpc("net_version") do() -> string:
-    result = $conf.networkId.get()
+    result = $conf.networkId
 
   server.rpc("net_listening") do() -> bool:
     let numPeers = node.peerPool.connectedNodes.len
@@ -46,8 +46,9 @@ proc setupCommonRPC*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
 
   server.rpc("net_nodeInfo") do() -> NodeInfo:
     let enode = toEnode(node)
+    let nodeId = toNodeId(node.keys.pubkey)
     result = NodeInfo(
-      id: node.discovery.thisNode.id.toHex,
+      id: nodeId.toHex,
       name: conf.agentString,
       enode: $enode,
       ip: $enode.address.ip,

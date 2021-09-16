@@ -67,13 +67,13 @@ proc processNode(ctx: GraphqlRef, node: JsonNode, fileName: string, testStatusIM
 
 proc main() =
   let
-    conf = makeConfig(@["--customnetwork:" & genesisFile])
+    conf = makeConfig(@["--custom-network:" & genesisFile])
     ethCtx = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
-      conf.networkId.get,
-      conf.customNetwork.get
+      conf.networkId,
+      conf.networkParams
     )
 
   initializeEmptyDb(chainDB)

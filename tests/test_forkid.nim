@@ -86,7 +86,7 @@ template runTest(network: untyped) =
   test `network`.astToStr:
     var
       memDB = newMemoryDB()
-      chainDB = newBaseChainDB(memDB, true, network)
+      chainDB = newBaseChainDB(memDB, true, network, networkParams(network))
       chain = newChain(chainDB)
 
     for x in `network IDs`:

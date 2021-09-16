@@ -275,13 +275,17 @@ proc hashLogEntries*(logs: seq[Log]): string =
 proc setupEthNode*(conf: NimbusConf, ctx: EthContext, capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
   let keypair = ctx.hexToKeyPair(conf.nodeKeyHex).tryGet()
   var srvAddress: Address
-  srvAddress.ip = parseIpAddress("0.0.0.0")
+  srvAddress.ip = conf.listenAddress
   srvAddress.tcpPort = conf.tcpPort
   srvAddress.udpPort = conf.udpPort
   result = newEthereumNode(
     keypair, srvAddress,
-    conf.networkId.get(),
+    conf.networkId,
     nil, conf.agentString,
     addAllCapabilities = false)
   for capability in capabilities:
     result.addCapability capability
+
+proc makeTestConfig*(): NimbusConf =
+  # commandLineParams() will not works inside all_tests
+  makeConfig(@[])

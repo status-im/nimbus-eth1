@@ -124,14 +124,14 @@ proc rpcMain*() =
   suite "Remote Procedure Calls":
     # TODO: Include other transports such as Http
     let
-      conf = makeConfig(@[]) # don't use makeConfig default cmdLine from inside all_tests
+      conf = makeTestConfig()
       ctx  = newEthContext()
       ethNode = setupEthNode(conf, ctx, eth)
       chain = newBaseChainDB(
         newMemoryDb(),
         conf.pruneMode == PruneMode.Full,
-        conf.networkId.get(),
-        conf.customNetwork.get()
+        conf.networkId,
+        conf.networkParams
       )
       signer: EthAddress = hexToByteArray[20]("0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b")
       ks2: EthAddress = hexToByteArray[20]("0xa3b2222afa5c987da6ef773fde8d01b9f23d481f")
@@ -182,7 +182,7 @@ proc rpcMain*() =
 
     test "net_version":
       let res = await client.net_version()
-      check res == $conf.networkId.get()
+      check res == $conf.networkId
 
     test "net_listening":
       let res = await client.net_listening()

@@ -21,8 +21,8 @@ proc processNode(genesisFile, chainFile,
     conf = makeConfig(@["--customnetwork:" & genesisFile])
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
-      conf.networkId.get,
-      conf.customNetwork.get()
+      conf.networkId,
+      conf.networkParams
     )
 
   initializeEmptyDb(chainDB)

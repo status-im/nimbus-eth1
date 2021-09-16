@@ -41,43 +41,17 @@ type
     wsRpcServer: RpcWebSocketServer
     sealingEngine: SealingEngineRef
     ctx: EthContext
+    chainRef: Chain
 
-template init(T: type RpcHttpServer, ip: ValidIpAddress, port: Port): T =
-  newRpcHttpServer([initTAddress(ip, port)])
-
-template init(T: type RpcWebSocketServer, ip: ValidIpAddress, port: Port): T =
-  newRpcWebSocketServer(initTAddress(ip, port))
-
-proc start(nimbus: NimbusNode, conf: NimbusConf) =
-  ## logging
-  setLogLevel(conf.logLevel)
-  if conf.logFile.isSome:
-    let logFile = string conf.logFile.get()
-    defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
-    discard defaultChroniclesStream.output.open(logFile, fmAppend)
-
-  createDir(string conf.dataDir)
-  let trieDB = trieDB newChainDb(string conf.dataDir)
-  let networkId = conf.networkId.get()
-  let customNetwork = conf.customNetwork.get()
-  var chainDB = newBaseChainDB(trieDB,
-    conf.pruneMode == PruneMode.Full,
-    networkId,
-    customNetwork
-    )
-  chainDB.populateProgress()
-
-  if canonicalHeadHashKey().toOpenArray notin trieDB:
-    initializeEmptyDb(chainDb)
-    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
-
-  if string(conf.importBlocks).len > 0:
+proc importBlocks(conf: NimbusConf, chainDB: BaseChainDB) =
+  if string(conf.blocksFile).len > 0:
     # success or not, we quit after importing blocks
-    if not importRlpBlock(string conf.importBlocks, chainDB):
+    if not importRlpBlock(string conf.blocksFile, chainDB):
       quit(QuitFailure)
     else:
       quit(QuitSuccess)
 
+proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if string(conf.keyStore).len > 0:
     let res = nimbus.ctx.am.loadKeystores(string conf.keyStore)
     if res.isErr:
@@ -90,17 +64,8 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
       echo res.error()
       quit(QuitFailure)
 
-  # metrics logging
-  if conf.logMetricsEnabled:
-    # https://github.com/nim-lang/Nim/issues/17369
-    var logMetrics: proc(udata: pointer) {.gcsafe, raises: [Defect].}
-    logMetrics = proc(udata: pointer) =
-      {.gcsafe.}:
-        let registry = defaultRegistry
-      info "metrics", registry
-      discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
-    discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
-
+proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
+              chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
   ## Creating P2P Server
   let kpres = nimbus.ctx.hexToKeyPair(conf.nodeKeyHex)
   if kpres.isErr:
@@ -131,33 +96,58 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
       if extPorts.isSome:
         (address.tcpPort, address.udpPort) = extPorts.get()
 
-  nimbus.ethNode = newEthereumNode(keypair, address, networkId,
+  nimbus.ethNode = newEthereumNode(keypair, address, conf.networkId,
                                    nil, conf.agentString,
                                    addAllCapabilities = false,
                                    minPeers = conf.maxPeers)
   # Add protocol capabilities based on protocol flags
-  if ProtocolFlag.Eth in conf.protocols.value:
+  if ProtocolFlag.Eth in protocols:
     nimbus.ethNode.addCapability eth
-  if ProtocolFlag.Les in conf.protocols.value:
+  if ProtocolFlag.Les in protocols:
     nimbus.ethNode.addCapability les
 
   # chainRef: some name to avoid module-name/filed/function misunderstandings
-  let chainRef = newChain(chainDB)
-  nimbus.ethNode.chain = chainRef
+  nimbus.chainRef = newChain(chainDB)
+  nimbus.ethNode.chain = nimbus.chainRef
   if conf.verifyFrom.isSome:
     let verifyFrom = conf.verifyFrom.get()
-    chainRef.extraValidation = 0 < verifyFrom
-    chainRef.verifyFrom = verifyFrom
+    nimbus.chainRef.extraValidation = 0 < verifyFrom
+    nimbus.chainRef.verifyFrom = verifyFrom
+
+  # Connect directly to the static nodes
+  let staticPeers = conf.getStaticPeers()
+  for enode in staticPeers:
+    asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
+
+  # Connect via discovery
+  let bootNodes = conf.getBootNodes()
+  if bootNodes.len > 0:
+    waitFor nimbus.ethNode.connectToNetwork(bootNodes,
+      enableDiscovery = conf.discovery != DiscoveryType.None)
+
+proc localServices(nimbus: NimbusNode, conf: NimbusConf,
+                   chainDB: BaseChainDB, protocols: set[ProtocolFlag]) =
+  # metrics logging
+  if conf.logMetricsEnabled:
+    # https://github.com/nim-lang/Nim/issues/17369
+    var logMetrics: proc(udata: pointer) {.gcsafe, raises: [Defect].}
+    logMetrics = proc(udata: pointer) =
+      {.gcsafe.}:
+        let registry = defaultRegistry
+      info "metrics", registry
+      discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
+    discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
 
   # Creating RPC Server
   if conf.rpcEnabled:
-    nimbus.rpcServer = RpcHttpServer.init(conf.rpcAddress, conf.rpcPort)
+    nimbus.rpcServer = newRpcHttpServer([initTAddress(conf.rpcAddress, conf.rpcPort)])
     setupCommonRpc(nimbus.ethNode, conf, nimbus.rpcServer)
 
     # Enable RPC APIs based on RPC flags and protocol flags
-    if RpcFlag.Eth in conf.rpcApi.value and ProtocolFlag.Eth in conf.protocols.value:
+    let rpcFlags = conf.getRpcFlags()
+    if RpcFlag.Eth in rpcFlags and ProtocolFlag.Eth in protocols:
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.rpcServer)
-    if RpcFlag.Debug in conf.rpcApi.value:
+    if RpcFlag.Debug in rpcFlags:
       setupDebugRpc(chainDB, nimbus.rpcServer)
 
     nimbus.rpcServer.rpc("admin_quit") do() -> string:
@@ -169,13 +159,14 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
 
   # Creating Websocket RPC Server
   if conf.wsEnabled:
-    nimbus.wsRpcServer = RpcWebSocketServer.init(conf.wsAddress, conf.wsPort)
+    nimbus.wsRpcServer = newRpcWebSocketServer(initTAddress(conf.wsAddress, conf.wsPort))
     setupCommonRpc(nimbus.ethNode, conf, nimbus.wsRpcServer)
 
     # Enable Websocket RPC APIs based on RPC flags and protocol flags
-    if RpcFlag.Eth in conf.wsApi.value and ProtocolFlag.Eth in conf.protocols.value:
+    let wsFlags = conf.getWsFlags()
+    if RpcFlag.Eth in wsFlags and ProtocolFlag.Eth in protocols:
       setupEthRpc(nimbus.ethNode, nimbus.ctx, chainDB, nimbus.wsRpcServer)
-    if RpcFlag.Debug in conf.wsApi.value:
+    if RpcFlag.Debug in wsFlags:
       setupDebugRpc(chainDB, nimbus.wsRpcServer)
 
     nimbus.wsRpcServer.start()
@@ -185,12 +176,12 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     nimbus.graphqlServer.start()
 
   if conf.engineSigner != ZERO_ADDRESS:
-    let rs = validateSealer(conf, nimbus.ctx, chainRef)
+    let rs = validateSealer(conf, nimbus.ctx, nimbus.chainRef)
     if rs.isErr:
       echo rs.error
       quit(QuitFailure)
     nimbus.sealingEngine = SealingEngineRef.new(
-      chainRef, nimbus.ctx, conf.engineSigner
+      nimbus.chainRef, nimbus.ctx, conf.engineSigner
     )
     nimbus.sealingEngine.start()
 
@@ -199,31 +190,53 @@ proc start(nimbus: NimbusNode, conf: NimbusConf) =
     info "Starting metrics HTTP server", address = conf.metricsAddress, port = conf.metricsPort
     startMetricsHttpServer($conf.metricsAddress, conf.metricsPort)
 
-  # Connect directly to the static nodes
-  for enode in conf.staticNodes.value:
-    asyncCheck nimbus.ethNode.peerPool.connectToNode(newNode(enode))
+proc start(nimbus: NimbusNode, conf: NimbusConf) =
+  ## logging
+  setLogLevel(conf.logLevel)
+  if conf.logFile.isSome:
+    let logFile = string conf.logFile.get()
+    defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
+    discard defaultChroniclesStream.output.open(logFile, fmAppend)
 
-  # Connect via discovery
-  let bootNodes = conf.getBootNodes()
-  waitFor nimbus.ethNode.connectToNetwork(bootNodes,
-    enableDiscovery = not conf.noDiscover)
+  createDir(string conf.dataDir)
+  let trieDB = trieDB newChainDb(string conf.dataDir)
+  var chainDB = newBaseChainDB(trieDB,
+    conf.pruneMode == PruneMode.Full,
+    conf.networkId,
+    conf.networkParams
+    )
+  chainDB.populateProgress()
 
-  if ProtocolFlag.Eth in conf.protocols.value:
-    # TODO: temp code until the CLI/RPC interface is fleshed out
-    let status = waitFor nimbus.ethNode.fastBlockchainSync()
-    if status != syncSuccess:
-      debug "Block sync failed: ", status
+  if canonicalHeadHashKey().toOpenArray notin trieDB:
+    initializeEmptyDb(chainDb)
+    doAssert(canonicalHeadHashKey().toOpenArray in trieDB)
 
-  if nimbus.state == Starting:
-    # it might have been set to "Stopping" with Ctrl+C
-    nimbus.state = Running
+  let protocols = conf.getProtocolFlags()
+
+  case conf.cmd
+  of NimbusCmd.`import`:
+    importBlocks(conf, chainDB)
+  else:
+    manageAccounts(nimbus, conf)
+    setupP2P(nimbus, conf, chainDB, protocols)
+    localServices(nimbus, conf, chainDB, protocols)
+
+    if ProtocolFlag.Eth in protocols:
+      # TODO: temp code until the CLI/RPC interface is fleshed out
+      let status = waitFor nimbus.ethNode.fastBlockchainSync()
+      if status != syncSuccess:
+        debug "Block sync failed: ", status
+
+    if nimbus.state == Starting:
+      # it might have been set to "Stopping" with Ctrl+C
+      nimbus.state = Running
 
 proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   trace "Graceful shutdown"
   if conf.rpcEnabled:
     nimbus.rpcServer.stop()
   if conf.wsEnabled:
-    nimbus.wsRpcServer.start()
+    nimbus.wsRpcServer.stop()
   if conf.graphqlEnabled:
     await nimbus.graphqlServer.stop()
   if conf.engineSigner != ZERO_ADDRESS:
