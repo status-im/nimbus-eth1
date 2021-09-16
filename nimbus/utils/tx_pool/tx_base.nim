@@ -22,10 +22,10 @@ import
   ../keequ,
   ../slst,
   ./tx_gas,
-  ./tx_group,
   ./tx_item,
   ./tx_price,
   ./tx_queue,
+  ./tx_sender,
   eth/[common, keys],
   stew/results
 
@@ -72,7 +72,7 @@ type
     byIdQueue: TxQueue        ## Primary table, queued by arrival event
     byPrice: TxPriceTab       ## Indexed by `effectiveGasTip` > `nonce`
     byTipCap: TxGasTab        ## Indexed by `gasTipCap`
-    bySender: TxGroupTab      ## Indexed by `sender` > `local`
+    bySender: TxSenderTab     ## Indexed by `sender` > `local`
 
 {.push raises: [Defect].}
 
@@ -204,11 +204,11 @@ proc nItems*(nonceData: TxPriceItemRef): int {.inline.} =
   ## is syntactic sugar for `nonceData.itemList.len`
   nonceData.itemList.len
 
-proc nItems*(addrData: TxGroupSchedRef): int {.inline.} =
+proc nItems*(addrData: TxSenderSchedRef): int {.inline.} =
   ## Ditto
   addrData.nLeaves
 
-proc nItems*(schedData: TxGroupNonceRef): int {.inline.} =
+proc nItems*(schedData: TxSenderNonceRef): int {.inline.} =
   ## Ditto
   schedData.nLeaves
 
@@ -230,12 +230,12 @@ proc gasTipCap*(gasData: TxGasItemRef): GasInt {.inline.} =
   gasData.itemList.firstKey.value.tx.gasTipCap
 
 
-proc sender*(schedData: TxGroupNonceRef): EthAddress =
+proc sender*(schedData: TxSenderNonceRef): EthAddress =
   ## Returns the sender address.
   let nonceData = schedData.nonceList.ge(AccountNonce.low).value.data
   nonceData.itemList.firstKey.value.sender
 
-proc sender*(addrData: TxGroupSchedRef): EthAddress =
+proc sender*(addrData: TxSenderSchedRef): EthAddress =
   ## Returns the sender address.
   var rc = addrData.eq(true)
   if rc.isErr:
@@ -360,14 +360,14 @@ proc bySenderLen*(xp: var TxPoolBase): int {.inline.} =
   xp.bySender.len
 
 proc bySenderEq*(xp: var TxPoolBase;
-                 sender: EthAddress): Result[TxGroupSchedRef,void]
+                 sender: EthAddress): Result[TxSenderSchedRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Retrieve the sub-list of transaction records all with the same `sender`
   ## argument sender address (if any.)
   xp.bySender.eq(sender)
 
 proc bySenderEq*(xp: var TxPoolBase;
-                 sender: EthAddress; local: bool): Result[TxGroupNonceRef,void]
+                 sender: EthAddress; local: bool): Result[TxSenderNonceRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Retrieve the sub-list of transaction records all with the same `sender`
   ## argument sender address (if any.)
@@ -533,7 +533,7 @@ proc byTipCapEq*(xp: var TxPoolBase; gas: GasInt): Result[TxGasItemRef,void] =
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator bySenderItem*(xp: var TxPoolBase): TxGroupItemRef
+iterator bySenderItem*(xp: var TxPoolBase): TxSenderItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Walk over item lists grouped by sender addresses.
   var rcAddr = xp.bySender.first
@@ -554,9 +554,9 @@ iterator bySenderItem*(xp: var TxPoolBase): TxGroupItemRef
 
           yield nonceData
 
-iterator bySenderSched*(xp: var TxPoolBase): TxGroupSchedRef =
+iterator bySenderSched*(xp: var TxPoolBase): TxSenderSchedRef =
   ## Walk over item lists grouped by sender addresses and local/remote. This
-  ## iterator stops at the `TxGroupSchedRef` level sub-list.
+  ## iterator stops at the `TxSenderSchedRef` level sub-list.
   var rcAddr = xp.bySender.first
   while rcAddr.isOK:
     let (addrKey, addrData) = (rcAddr.value.key, rcAddr.value.data)
@@ -565,9 +565,9 @@ iterator bySenderSched*(xp: var TxPoolBase): TxGroupSchedRef =
     yield addrData
 
 iterator bySenderNonce*(xp: var TxPoolBase;
-                        local: varArgs[bool]): TxGroupNonceRef =
+                        local: varArgs[bool]): TxSenderNonceRef =
   ## Walk over item lists grouped by sender addresses and local/remote. This
-  ## iterator stops at the `TxGroupNonceRef` level sub-list.
+  ## iterator stops at the `TxSenderNonceRef` level sub-list.
   var rcAddr = xp.bySender.first
   while rcAddr.isOK:
     let (addrKey, addrData) = (rcAddr.value.key, rcAddr.value.data)
@@ -578,7 +578,7 @@ iterator bySenderNonce*(xp: var TxPoolBase;
       if rcSched.isOk:
         yield rcSched.value
 
-iterator byNonceItem*(schedData: TxGroupNonceRef): TxGroupItemRef
+iterator byNonceItem*(schedData: TxSenderNonceRef): TxSenderItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Top level part to replace `xp.bySenderItem` with:
   ## ::
@@ -737,11 +737,11 @@ proc verify*(xp: var TxPoolBase): Result[void,TxBaseInfo]
     let rc = xp.bySender.txVerify
     if rc.isErr:
       case rc.error[0]
-      of txGroupOk:           return err(txOk)
-      of txGroupVfyRbTree:    return err(txVfyBySenderRbTree)
-      of txGroupVfyLeafEmpty: return err(txVfyBySenderLeafEmpty)
-      of txGroupVfyLeafQueue: return err(txVfyBySenderLeafQueue)
-      of txGroupVfySize:      return err(txVfyBySenderTotal)
+      of txSenderOk:           return err(txOk)
+      of txSenderVfyRbTree:    return err(txVfyBySenderRbTree)
+      of txSenderVfyLeafEmpty: return err(txVfyBySenderLeafEmpty)
+      of txSenderVfyLeafQueue: return err(txVfyBySenderLeafQueue)
+      of txSenderVfySize:      return err(txVfyBySenderTotal)
   block:
     let rc = xp.byIdQueue.txVerify
     if rc.isErr:

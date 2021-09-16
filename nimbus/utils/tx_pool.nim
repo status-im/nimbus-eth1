@@ -19,13 +19,12 @@
 import
   std/[algorithm, sequtils, tables, times],
    ./keequ,
-  ./tx_pool/[tx_base, tx_gas, tx_group, tx_item, tx_jobs,tx_price],
+  ./tx_pool/[tx_base, tx_gas, tx_item, tx_jobs,tx_price, tx_sender],
   eth/[common, keys],
   stew/results
 
 export
   TxGasItemRef,
-  TxGroupItemRef,
   TxItemRef,
   TxItemStatus,
   TxJobData,
@@ -34,6 +33,7 @@ export
   TxJobPair,
   TxPriceItemRef,
   TxPriceNonceRef,
+  TxSenderItemRef,
   results,
   tx_item.itemID,
   tx_item.info,
