@@ -37,7 +37,8 @@ func distance*(node_id: UInt256, content_id: UInt256): UInt256 =
 # it in stint library in some more performant way. This version has O(n) complexity.
 func myLog2Distance(value: UInt256): uint16 =
   # Logarithm is not defined for zero values. Implementation in stew for builtin
-  # types return -1 in that case.
+  # types return -1 in that case, but here it is just internal function so just make sure
+  # 0 is never provided.
   doAssert(not value.isZero())
 
   if value == UInt256.one:
