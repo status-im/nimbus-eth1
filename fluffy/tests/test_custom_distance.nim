@@ -46,7 +46,7 @@ suite "State network custom distance function":
     ]
 
     # for each log distance, calulate node-id at given distance from node zero, and then
-    # log distance from calculated node-id to node zero. The results should equal
+    # log distance from calculate node-id to node zero. The results should equal
     # starting log distances
     let logCalculated = logDistances.map(
       proc (x: uint16): uint16 =

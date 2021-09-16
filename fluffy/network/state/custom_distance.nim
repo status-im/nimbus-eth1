@@ -53,7 +53,7 @@ func myLog2Distance(value: UInt256): uint16 =
 
 func atDistance*(id: UInt256, dist: uint16): UInt256 =
   # TODO With current distance function there are always two ids at given distance
-  # so we might as well did: id - u256(dist), maybe it is worth discussing if every client
+  # so we might as well do: id - u256(dist), maybe it is worth discussing if every client
   # should use the same id in this case.
   id + u256(2).pow(dist)
 
