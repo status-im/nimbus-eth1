@@ -171,14 +171,14 @@ proc txVerify*(t: var TxJobs): Result[void,(TxJobsInfo,KeeQuInfo)]
 
 
 # Table ops
-proc`[]`*(t: var TxJobs; id: TxJobID): auto
+proc`[]`*(t: var TxJobs; id: TxJobID): TxJobData
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   t.q[id]
 
-proc hasKey*(t: var TxJobs; id: TxJobID): auto {.inline.} =
+proc hasKey*(t: var TxJobs; id: TxJobID): bool {.inline.} =
   t.q.hasKey(id)
 
-proc len*(t: var TxJobs): auto {.inline.} =
+proc len*(t: var TxJobs): int {.inline.} =
   t.q.len
 
 # ------------------------------------------------------------------------------

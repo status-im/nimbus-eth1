@@ -59,38 +59,38 @@ proc doError[C,K](d: var RbDdebug[C,K]; t: RbInfo; s: string):
     d.pr(t, msg)
   err((d.node.casket,t))
 
-proc rootIsRed[C,K](d: var RbDdebug[C,K]): auto
+proc rootIsRed[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   d.doError(rbVfyRootIsRed, "Root node is red")
 
 
-proc redNodeRedLinkLeft[C,K](d: var RbDdebug[C,K]): auto
+proc redNodeRedLinkLeft[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   d.doError(rbVfyRedParentRedLeftLink, "Parent node and left link red")
 
-proc redNodeRedLinkRight[C,K](d: var RbDdebug[C,K]): auto
+proc redNodeRedLinkRight[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   d.doError(rbVfyRedParentRedRightLink, "Parent node and right link red")
 
-proc redNodeRedLinkBoth[C,K](d: var RbDdebug[C,K]): auto
+proc redNodeRedLinkBoth[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   d.doError(rbVfyRedParentRedBothLinks, "Parent node and both links red")
 
 
-proc linkLeftCompError[C,K](d: var RbDdebug[C,K]): auto
+proc linkLeftCompError[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   d.doError(rbVfyLeftLinkGtParent, "Left node greater than parent")
 
-proc linkRightCompError[C,K](d: var RbDdebug[C,K]): auto
+proc linkRightCompError[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   d.doError(rbVfyRightLinkLtParent, "Right node greater than parent")
 
-proc linkBothCompError[C,K](d: var RbDdebug[C,K]): auto
+proc linkBothCompError[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   d.doError(rbVfyBothLinkCmpParentReversed,
             "Left node greater than parent greater than right node")
 
-proc blackChainLevelError[C,K](d: var RbDdebug[C,K]): auto
+proc blackChainLevelError[C,K](d: var RbDdebug[C,K]): Result[void,(C,RbInfo)]
     {.gcsafe, raises: [Defect,CatchableError].} =
   d.doError(rbVfyBlackChainLevelMismatch,
             "Inconsistent length of black node chains")

@@ -71,7 +71,7 @@ proc runSLstTest(noisy = true) =
 
   suite "SLst: Sorted list based on red-black tree":
     var
-      sl = initSLst[int,int]()
+      sl = init(type SLst[int,int])
       rej: seq[int]
 
     test &"Insert {keyList.len} items, reject {numKeyDups} duplicates":

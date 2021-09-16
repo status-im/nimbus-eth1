@@ -32,15 +32,10 @@ type
     TxSenderLocal = 0
     TxSenderRemote = 1
 
-  TxSenderMark* = ##\
-    ## Ready to be used for something, currently just a blind value that\
-    ## comes in when queuing items for the same key (e.g. gas price.)
-    int
-
   TxSenderItemRef* = ref object ##\
     ## All transaction items accessed by the same index are chronologically
     ## queued.
-    itemList*: KeeQu[TxItemRef,TxSenderMark]
+    itemList*: KeeQuNV[TxItemRef]
 
   TxSenderNonceRef* = ref object ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction
@@ -191,7 +186,7 @@ proc txInsert*(gt: var TxSenderTab; item: TxItemRef)
   ## transaction exists, already.
   let inx = gt.mkInxImpl(item)
   if not inx.nonce.itemList.hasKey(item):
-    discard inx.nonce.itemList.append(item,0)
+    discard inx.nonce.itemList.append(item)
     gt.size.inc
     inx.sAddr.size.inc
     inx.sched.size.inc
@@ -280,7 +275,7 @@ proc txVerify*(gt: var TxSenderTab): Result[void,(TxSenderInfo,KeeQuInfo)]
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc len*(gt: var TxSenderTab): auto {.inline.} =
+proc len*(gt: var TxSenderTab): int {.inline.} =
   gt.addrList.len
 
 proc len*(gs: TxSenderSchedRef): int {.inline.} =
@@ -294,10 +289,11 @@ proc nLeaves*(gt: var TxSenderTab): int {.inline.} =
   ## Getter, total number of items in the list
   gt.size
 
-proc eq*(gt: var TxSenderTab; sender: EthAddress): auto {.inline.} =
+proc eq*(gt: var TxSenderTab; sender: EthAddress):
+       Result[TxSenderSchedRef,void] {.inline.} =
   let rc = gt.addrList.eq(sender)
   if rc.isOK:
-    return Result[TxSenderSchedRef,void].ok(rc.value.data)
+    return ok(rc.value.data)
   err()
 
 proc first*(gt: var TxSenderTab): Result[TxSenderPair,void] {.inline.} =
@@ -345,7 +341,8 @@ proc eq*(gs: TxSenderSchedRef;
 # Public, combined -- `EthAddress > TxSenderSchedule` (level 0 + 1)
 # ------------------------------------------------------------------------------
 
-proc eq*(gt: var TxSenderTab; sender: EthAddress; local: bool): auto {.inline.} =
+proc eq*(gt: var TxSenderTab; sender: EthAddress; local: bool):
+       Result[TxSenderNonceRef,void] {.inline.} =
   let rc = gt.eq(sender)
   if rc.isOk:
     return rc.value.eq(local)
@@ -362,34 +359,39 @@ proc nLeaves*(nl: TxSenderNonceRef): int {.inline.} =
 proc len*(nl: TxSenderNonceRef): int {.inline.} =
   let rc = nl.nonceList.len
 
-proc eq*(nl: TxSenderNonceRef; nonce: AccountNonce): auto {.inline.} =
+proc eq*(nl: TxSenderNonceRef; nonce: AccountNonce):
+       Result[TxSenderItemRef,void] {.inline.} =
   let rc = nl.nonceList.eq(nonce)
   if rc.isOK:
-    return Result[TxSenderItemRef,void].ok(rc.value.data)
+    return ok(rc.value.data)
   err()
 
-proc ge*(nl: TxSenderNonceRef; nonce: AccountNonce): auto {.inline.} =
+proc ge*(nl: TxSenderNonceRef; nonce: AccountNonce):
+       Result[TxSenderItemRef,void] {.inline.} =
   let rc = nl.nonceList.ge(nonce)
   if rc.isOK:
-    return Result[TxSenderItemRef,void].ok(rc.value.data)
+    return ok(rc.value.data)
   err()
 
-proc gt*(nl: TxSenderNonceRef; nonce: AccountNonce): auto {.inline.} =
+proc gt*(nl: TxSenderNonceRef; nonce: AccountNonce):
+       Result[TxSenderItemRef,void] {.inline.} =
   let rc = nl.nonceList.gt(nonce)
   if rc.isOK:
-    return Result[TxSenderItemRef,void].ok(rc.value.data)
+    return ok(rc.value.data)
   err()
 
-proc le*(nl: TxSenderNonceRef; nonce: AccountNonce): auto {.inline.} =
+proc le*(nl: TxSenderNonceRef; nonce: AccountNonce):
+       Result[TxSenderItemRef,void] {.inline.} =
   let rc = nl.nonceList.le(nonce)
   if rc.isOK:
-    return Result[TxSenderItemRef,void].ok(rc.value.data)
+    return ok(rc.value.data)
   err()
 
-proc lt*(nl: TxSenderNonceRef; nonce: AccountNonce): auto {.inline.} =
+proc lt*(nl: TxSenderNonceRef; nonce: AccountNonce):
+       Result[TxSenderItemRef,void] {.inline.} =
   let rc = nl.nonceList.lt(nonce)
   if rc.isOK:
-    return Result[TxSenderItemRef,void].ok(rc.value.data)
+    return ok(rc.value.data)
   err()
 
 # ------------------------------------------------------------------------------

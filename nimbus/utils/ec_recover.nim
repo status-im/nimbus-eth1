@@ -31,8 +31,10 @@ when ecRecoverMode == useEc1Recover:
     ec1recover.EcRecover,
     ec1recover.append,
     ec1recover.ecRecover,
-    ec1recover.initEcRecover,
     ec1recover.read
+
+  proc init*(T: type EcRecover): T {.inline.} =
+    initEcRecover()
 
 
 when ecRecoverMode == useEc2Recover:
@@ -43,9 +45,11 @@ when ecRecoverMode == useEc2Recover:
     ec2recover.append,
     ec2recover.ecRecover,
     ec2recover.init,
-    ec2recover.initEcRecover,
     ec2recover.len,
     ec2recover.read
+
+  proc init*(T: type EcRecover): T {.inline.} =
+    initEcRecover()
 
 
 when ecRecoverMode == useEc2x1Recover:
@@ -57,18 +61,18 @@ when ecRecoverMode == useEc2x1Recover:
       ec1: ec1recover.EcRecover
       ec2: ec2recover.EcRecover
 
-  proc ecRecover*(hdr: BlockHeader): auto {.inline.} =
+  proc ecRecover*(hdr: BlockHeader): EcAddrResult {.inline.} =
     result = ec2recover.ecRecover(hdr)
     doAssert result == ec1recover.ecRecover(hdr)
 
-  proc ecRecover*(tx: var Transaction): auto =
+  proc ecRecover*(tx: var Transaction): EcAddrResult =
     result = ec2recover.ecRecover(tx)
     var ethAddr: EthAddress
     doAssert result.isOk == tx.getSender(ethAddr)
     if result.isOK:
       doAssert result.value == ethAddr
 
-  proc ecRecover*(tx: Transaction): auto =
+  proc ecRecover*(tx: Transaction): EcAddrResult =
     result = ec2recover.ecRecover(tx)
     var ethAddr: EthAddress
     doAssert result.isOk == tx.getSender(ethAddr)
@@ -83,10 +87,12 @@ when ecRecoverMode == useEc2x1Recover:
     e.ec1.initEcRecover(cacheSize)
     e.ec2.init(cacheSize)
 
-  proc initEcRecover*: EcRecover {.inline.} =
-    result.init
+  proc init*(T: type EcRecover;
+             cacheSize = ec2recover.INMEMORY_SIGNATURES): T {.inline.} =
+    result.ec1.initEcRecover(cacheSize)
+    result.ec2.init(cacheSize)
 
-  proc ecRecover*(e: var EcRecover; hdr: BlockHeader): auto {.inline.} =
+  proc ecRecover*(e: var EcRecover; hdr: BlockHeader): EcAddrResult {.inline.} =
     result = e.ec2.ecRecover(hdr)
     doAssert result == e.ec1.ecRecover(hdr)
     doAssert e.ec1.similarKeys(e.ec2).isOk

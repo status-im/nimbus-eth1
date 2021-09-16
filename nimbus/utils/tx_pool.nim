@@ -21,6 +21,7 @@ import
    ./keequ,
   ./tx_pool/[tx_base, tx_gas, tx_item, tx_jobs,tx_price, tx_sender],
   eth/[common, keys],
+  metrics,
   stew/results
 
 export
@@ -113,14 +114,19 @@ type
       "oversized data"
 
 
-  TxPool* = object of TxPoolBase ##\
+  TxPool* = object of RootObj ##\
     ## Transaction pool descriptor
     startDate: Time     ## Start date (read-only)
     gasPrice*: GasInt
     lifeTime*: Duration ## Maximum amount of time non-executable
     byJobs: TxJobs      ## Jobs batch list
+    txDB: TxBaseRef     ## Transaction lists & tables
 
 {.push raises: [Defect].}
+
+declareGauge invalid_transactions, "Number of invalid transactions"
+declareGauge valid_transactions, "Number of valid transactions"
+declareGauge known_transactions, "Number of known transactions"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -136,9 +142,9 @@ proc pp(t: Time): string =
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc knownTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
-proc invalidTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
-proc validTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
+#proc knownTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
+#proc invalidTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
+#proc validTxMeterMark(xp: var TxPool; n = 1) = discard # TODO
 
 # ------------------------------------------------------------------------------
 # Private run handlers
@@ -149,13 +155,13 @@ proc inactiveJobsEviction(xp: var TxPool; maxLifeTime: Duration)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Any non-local transaction old enough will be removed
   let deadLine = utcNow() - maxLifeTime
-  var rc = xp.first(local = false)
+  var rc = xp.txDB.first(local = false)
   while rc.isOK:
     let item = rc.value
     if deadLine < item.timeStamp:
       break
-    rc = xp.next(item.itemID, local = false)
-    discard xp.delete(item.itemID)
+    rc = xp.txDB.next(item.itemID, local = false)
+    discard xp.txDB.delete(item.itemID)
 
 
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
@@ -174,21 +180,21 @@ proc addTxs(xp: var TxPool;
     var tx = txs[i]
 
     # If the transaction is known, pre-set the error slot
-    let rc = xp.insert(tx, local, info)
+    let rc = xp.txDB.insert(tx, local, info)
     if rc.isErr:
       case rc.error:
       of txBaseErrAlreadyKnown:
-        xp.knownTxMeterMark
+        inc known_transactions
         errList[i] = txPoolErrAlreadyKnown
       of txBaseErrInvalidSender:
-        xp.invalidTxMeterMark
+        inc invalid_transactions
         errList[i] = txPoolErrInvalidSender
       else:
         errList[i] = txPoolErrUnspecified
       nErrors.inc
       continue
 
-    xp.validTxMeterMark
+    inc valid_transactions
 
   if 0 < nErrors:
     return err(errList)
@@ -199,7 +205,7 @@ proc addTxs(xp: var TxPool; tx: var Transaction; local: bool; info = ""):
            Result[void,TxPoolError]
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Convenience wrapper
-  var txs = @[tx]
+  var txs = [tx]
   let rc = xp.addTxs(txs, local, info)
   if rc.isErr:
     return err(rc.error[0])
@@ -209,14 +215,14 @@ proc addTxs(xp: var TxPool; tx: var Transaction; local: bool; info = ""):
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-method init*(xp: var TxPool; baseFee = TxNoBaseFee) =
+proc init*(xp: var TxPool; baseFee = TxNoBaseFee) =
   ## Constructor, returns new tx-pool descriptor.
-  procCall xp.TxPoolBase.init(baseFee)
+  xp.txDB = init(type TxBaseRef, baseFee)
   xp.startDate = utcNow()
   xp.gasPrice = txPriceLimit
   xp.lifeTime = txPoolLifeTime
 
-proc initTxPool*(baseFee = TxNoBaseFee): TxPool =
+proc init*(T: type TxPool; baseFee = TxNoBaseFee): T =
   ## Ditto
   result.init(baseFee)
 
@@ -224,14 +230,18 @@ proc initTxPool*(baseFee = TxNoBaseFee): TxPool =
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc startDate*(xp: var TxPool): auto {.inline.} =
+proc startDate*(xp: var TxPool): Time {.inline.} =
   ## Getter
   xp.startDate
 
-proc baseFee*(xp: var TxPool): auto {.inline.} =
+proc baseFee*(xp: var TxPool): GasInt {.inline.} =
   ## Getter, the `baseFee` implying the price list valuation and order. If
   ## this entry in disabled, the value `TxNoBaseFee` is returnded.
-  procCall xp.TxPoolBase.baseFee
+  xp.txDB.baseFee
+
+proc txDB*(xp: var TxPool): TxBaseRef {.inline.} =
+  ## Getter, Transaction lists & tables (for debugging only)
+  xp.txDB
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
@@ -241,7 +251,7 @@ proc `baseFee=`*(xp: var TxPool; val: GasInt)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Setter, new base fee (implies reorg). The argument value `TxNoBaseFee`
   ## disables the `baseFee`.
-  procCall xp.TxPoolBase.`baseFee=`(val)
+  xp.txDB.baseFee = val
 
 # ------------------------------------------------------------------------------
 # GO tx_pool todo list
@@ -368,11 +378,6 @@ proc `baseFee=`*(xp: var TxPool; val: GasInt)
 #  (map[common.Address]types.Transactions,
 #   map[common.Address]types.Transactions)
 
-# ContentFrom retrieves the data content of the transaction pool, returning the
-# pending as well as queued transactions of this address, grouped by nonce.
-#func (pool *TxPool) ContentFrom(addr common.Address)
-#  (types.Transactions, types.Transactions)
-
 # ------------------------------------------------------------------------------
 # Public functions, go like API -- TxPool
 # ------------------------------------------------------------------------------
@@ -381,17 +386,38 @@ proc `baseFee=`*(xp: var TxPool; val: GasInt)
 # -- // this method.
 # -- func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error
 
+#[
+# core/tx_pool.go(514): func (pool *TxPool) ContentFrom(addr common.Address) ..
+proc ContentFrom*(xp: var TxPool;
+                  sender: EthAddress): (seq[TxItemRef], seq[TxItemRef])
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Retrieves the data content of the transaction pool, returning the
+  ## pending as well as queued transactions of this address, grouped by
+  ## nonce.
+
+  result[0] =
+  ar pending types.Transactions
+	if list, ok := pool.pending[addr]; ok {
+		pending = list.Flatten()
+	}
+	var queued types.Transactions
+	if list, ok := pool.queue[addr]; ok {
+		queued = list.Flatten()
+	}
+	return pending, queued
+]#
+
 # core/tx_pool.go(536): func (pool *TxPool) Pending(enforceTips bool) (map[..
 proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## The function retrieves all currently processable transaction itemss,
   ## grouped by origin account and sorted by nonce. The returned transaction
-  ## items are a copy and can be freely modified.
+  ## items are copies and can be freely modified.
   ##
-  ## The enforceTips parameter can be used to do an extra filtering on the
+  ## The `enforceTips` parameter can be used to do an extra filtering on the
   ## pending transactions and only return those whose **effective** tip is
   ## large enough in the next pending execution environment.
-  for addrData in xp.bySenderSched:
+  for addrData in xp.txDB.bySenderSched:
     var list: seq[TxItemRef]
 
     block:
@@ -420,7 +446,7 @@ proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]]
 proc locals*(xp: var TxPool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the accounts currently considered local by the pool.
-  toSeq(xp.bySenderNonce(local = true)).mapIt(it.sender)
+  toSeq(xp.txDB.bySenderNonce(local = true)).mapIt(it.sender)
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 proc addLocals*(xp: var TxPool; txs: var openArray[Transaction]; info = ""):
@@ -467,7 +493,8 @@ proc addRemote*(xp: var TxPool; tx: var Transaction; info = ""):
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
 proc has*(xp: var TxPool; hash: Hash256): bool =
   ## Indicator whether `TxPool` has a transaction cached with the given hash.
-  xp.hasItemID(hash, local = true) or xp.hasItemID(hash, local = false)
+  xp.txDB.hasItemID(hash, local = true) or
+    xp.txDB.hasItemID(hash, local = false)
 
 # core/tx_pool.go(975): func (pool *TxPool) Status(hashes []common.Hash) ..
 proc status*(xp: var TxPool; hashes: openArray[Hash256]): seq[TxItemStatus]
@@ -478,14 +505,14 @@ proc status*(xp: var TxPool; hashes: openArray[Hash256]): seq[TxItemStatus]
   for n in 0 ..< hashes.len:
     let id = hashes[n]
     if xp.has(id):
-      result[n] = xp[id].status
+      result[n] = xp.txDB[id].status
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 proc get*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Returns a transaction if it is contained in the pool.
   if xp.has(hash):
-    return ok(xp[hash])
+    return ok(xp.txDB[hash])
   err()
 
 # ------------------------------------------------------------------------------
@@ -525,10 +552,10 @@ iterator rangeFifo*(xp: var TxPool; local: varargs[bool]): TxItemRef
   ##    When running in a loop it is ok to delete the current item and all
   ##    the items already visited. Items not visited yet must not be deleted.
   for isLocal in local:
-    var rc = xp.first(isLocal)
+    var rc = xp.txDB.first(isLocal)
     while rc.isOK:
       let item = rc.value
-      rc = xp.next(item.itemID,isLocal)
+      rc = xp.txDB.next(item.itemID,isLocal)
       yield item
 
 iterator rangeLifo*(xp: var TxPool; local: varargs[bool]): TxItemRef
@@ -537,62 +564,62 @@ iterator rangeLifo*(xp: var TxPool; local: varargs[bool]): TxItemRef
   ##
   ## See also the **Note* at the comment for `rangeFifo()`.
   for isLocal in local:
-    var rc = xp.last(isLocal)
+    var rc = xp.txDB.last(isLocal)
     while rc.isOK:
       let item = rc.value
-      rc = xp.prev(item.itemID,isLocal)
+      rc = xp.txDB.prev(item.itemID,isLocal)
       yield item
 
 # core/tx_pool.go(1713): func (t *txLookup) GetLocal(hash common.Hash) ..
 proc getLocal*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Returns a local transaction if it exists.
-  if xp.hasItemID(hash, local = true):
-    return ok(xp[hash])
+  if xp.txDB.hasItemID(hash, local = true):
+    return ok(xp.txDB[hash])
   err()
 
 # core/tx_pool.go(1721): func (t *txLookup) GetRemote(hash common.Hash) ..
 proc getRemote*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Returns a remote transaction if it exists.
-  if xp.hasItemID(hash, local = false):
-    return ok(xp[hash])
+  if xp.txDB.hasItemID(hash, local = false):
+    return ok(xp.txDB[hash])
   err()
 
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
 proc count*(xp: var TxPool): int {.inline.} =
   ## The current number of transactions
-  xp.nItems
+  xp.txDB.nItems
 
 # core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
 proc localCount*(xp: var TxPool): int {.inline.} =
   ## The current number of local transactions
-  xp.byLocalQueueLen
+  xp.txDB.byLocalQueueLen
 
 # core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
 proc remoteCount*(xp: var TxPool): int {.inline.} =
   ## The current number of remote transactions
-  xp.byRemoteQueueLen
+  xp.txDB.byRemoteQueueLen
 
 # core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
 proc remoteToLocals*(xp: var TxPool; signer: EthAddress): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## For given account, remote transactions are migrated to local transactions.
   ## The function returns the number of transactions migrated.
-  let rc = xp.bySenderEq(signer,local = false)
+  let rc = xp.txDB.bySenderEq(signer,local = false)
   if rc.isOK:
-    let nRemotes = xp.byRemoteQueueLen
+    let nRemotes = xp.txDB.byRemoteQueueLen
     for nonceData in rc.value.byNonceItem:
       for item in nonceData.itemList.nextKeys:
-        discard xp.reassign(item, local = true)
-    return nRemotes - xp.byRemoteQueueLen
+        discard xp.txDB.reassign(item, local = true)
+    return nRemotes - xp.txDB.byRemoteQueueLen
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
 proc remotesBelowTip*(xp: var TxPool; threshold: GasInt): seq[Hash256]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Finds all remote transactions below the given tip threshold (effective
   ## only with *EIP-1559* support, otherwise all transactions are returned.)
-  for it in xp.byTipCapDec(maxCap = threshold):
+  for it in xp.txDB.byTipCapDec(maxCap = threshold):
     for item in it.itemList.nextKeys:
       if not item.local:
         result.add item.itemID
@@ -643,7 +670,7 @@ proc verify*(xp: var TxPool): Result[void,TxBaseInfo]
       of txJobsOk:       return err(txOk)
       of txJobsVfyQueue: return err(txVfyByJobsQueue)
 
-  procCall xp.TxPoolBase.verify
+  xp.txDB.verify
 
 # ------------------------------------------------------------------------------
 # End

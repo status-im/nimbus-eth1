@@ -170,7 +170,7 @@ proc eip155ChainID*(tx: Transaction): ChainID =
   # otherwise 0
 
 # core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
-proc gas*(tx: Transaction): auto {.inline.} =
+proc gas*(tx: Transaction): GasInt {.inline.} =
   ## Getter (go/ref compat): the gas limit of the transaction
   tx.gasLimit
 
@@ -199,39 +199,39 @@ proc cost*(tx: Transaction): UInt256 {.inline.} =
 # Public functions, item getters
 # ------------------------------------------------------------------------------
 
-proc dup*(item: TxItemRef): auto {.inline.} =
+proc dup*(item: TxItemRef): TxItemRef {.inline.} =
   ## Getter, provide contents copy
   item.deepCopy
 
-proc itemID*(item: TxItemRef): auto {.inline.} =
+proc itemID*(item: TxItemRef): Hash256 {.inline.} =
   ## Getter
   item.itemID
 
-proc tx*(item: TxItemRef): auto {.inline.} =
+proc tx*(item: TxItemRef): Transaction {.inline.} =
   ## Getter
   item.tx
 
-proc timeStamp*(item: TxItemRef): auto {.inline.} =
+proc timeStamp*(item: TxItemRef): Time {.inline.} =
   ## Getter
   item.timeStamp
 
-proc sender*(item: TxItemRef): auto {.inline.} =
+proc sender*(item: TxItemRef): EthAddress {.inline.} =
   ## Getter
   item.sender
 
-proc info*(item: TxItemRef): auto {.inline.} =
+proc info*(item: TxItemRef): string {.inline.} =
   ## Getter
   item.info
 
-proc local*(item: TxItemRef): auto {.inline.} =
+proc local*(item: TxItemRef): bool {.inline.} =
   ## Getter
   item.local
 
-proc status*(item: TxItemRef): auto {.inline.} =
+proc status*(item: TxItemRef): TxItemStatus {.inline.} =
   ## Getter
   item.status
 
-proc effectiveGasTip*(item: TxItemRef): auto {.inline.} =
+proc effectiveGasTip*(item: TxItemRef): GasInt {.inline.} =
   ## Getter
   item.effGasTip
 

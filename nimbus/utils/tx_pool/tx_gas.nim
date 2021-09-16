@@ -30,15 +30,10 @@ type
     txGasVfyLeafQueue ## Corrupted leaf list
     txGasVfySize      ## Size count mismatch
 
-  TxGasMark* = ##\
-    ## Ready to be used for something, currently just a blind value that\
-    ## comes in when queuing items for the same key (e.g. gas price.)
-    int
-
   TxGasItemRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    itemList*: KeeQu[TxItemRef,TxGasMark]
+    itemList*: KeeQuNV[TxItemRef]
 
   TxGasTab* = object ##\
     ## Generic item list indexed by gas price
@@ -70,11 +65,12 @@ proc txInsert*(gp: var TxGasTab; key: GasInt; val: TxItemRef)
   ## multiple leaf values per argument `key`.
   var rc = gp.gasList.insert(key)
   if rc.isOk:
-    rc.value.data = TxGasItemRef(itemList: initKeeQu[TxItemRef,TxGasMark](1))
+    rc.value.data = TxGasItemRef(
+      itemList: init(type KeeQuNV[TxItemRef], initSize = 1))
   else:
     rc = gp.gasList.eq(key)
   if not rc.value.data.itemList.hasKey(val):
-    discard rc.value.data.itemList.append(val,0)
+    discard rc.value.data.itemList.append(val)
     gp.size.inc
 
 
@@ -121,12 +117,28 @@ proc nLeaves*(gp: var TxGasTab): int {.inline.} =
 
 
 # Slst ops
-proc len*(gp: var TxGasTab): int               {.inline.} = gp.gasList.len
-proc  eq*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.eq(key)
-proc  ge*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.ge(key)
-proc  gt*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.gt(key)
-proc  le*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.le(key)
-proc  lt*(gp: var TxGasTab; key: GasInt): auto {.inline.} = gp.gasList.lt(key)
+proc len*(gp: var TxGasTab): int {.inline.} =
+  gp.gasList.len
+
+proc eq*(gp: var TxGasTab; key: GasInt):
+       SLstResult[GasInt,TxGasItemRef] {.inline.} =
+  gp.gasList.eq(key)
+
+proc ge*(gp: var TxGasTab; key: GasInt):
+       SLstResult[GasInt,TxGasItemRef] {.inline.} =
+  gp.gasList.ge(key)
+
+proc gt*(gp: var TxGasTab; key: GasInt):
+       SLstResult[GasInt,TxGasItemRef] {.inline.} =
+  gp.gasList.gt(key)
+
+proc le*(gp: var TxGasTab; key: GasInt):
+       SLstResult[GasInt,TxGasItemRef] {.inline.} =
+  gp.gasList.le(key)
+
+proc lt*(gp: var TxGasTab; key: GasInt):
+       SLstResult[GasInt,TxGasItemRef] {.inline.} =
+  gp.gasList.lt(key)
 
 # ------------------------------------------------------------------------------
 # End

@@ -136,8 +136,8 @@ proc init*(er: var EcRecover; cacheSize = INMEMORY_SIGNATURES; initSize = 10) =
   er.size = cacheSize.uint
   er.q.init(initSize)
 
-proc initEcRecover*(cacheSize = INMEMORY_SIGNATURES;
-                    initSize = 10): EcRecover =
+proc init*(T: type EcRecover;
+           cacheSize = INMEMORY_SIGNATURES; initSize = 10): T =
   ## Inialise recover cache
   result.init(cacheSize, initSize)
 

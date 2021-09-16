@@ -163,7 +163,7 @@ proc init*[K,V](sl: var SLst[K,V]) =
     cmp = proc(c: SLstItemRef[K,V]; k: K): int = c.slstCmp(k),
     mkc = proc(k: K): SLstItemRef[K,V] = slstMkc[K,V](k))
 
-proc initSLst*[K,V]: SLst[K,V] =
+proc init*[K,V](T: type SLst[K,V]): T =
   ## Variant of `init()`
   result.init
 

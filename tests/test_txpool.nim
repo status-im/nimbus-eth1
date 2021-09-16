@@ -143,7 +143,7 @@ proc addOrFlushGroupwise(xp: var TxPool;
   let xpLen = xp.count
   noisy.say "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
   for a in seen:
-    doAssert xp.delete(a).value.itemID == a
+    doAssert xp.txDB.delete(a).value.itemID == a
   doAssert xpLen == seen.len + xp.count
   seen.setLen(0)
 
@@ -167,8 +167,9 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
   gasTipCaps.reset
 
   suite &"TxPool: Transactions from {name} capture{baseInfo}":
-    var xp = initTxPool(baseFee)
+    var xp = init(type TxPool, baseFee)
     check txList.len == 0
+    check xp.txDB.verify.isOK
 
     test &"Collected {stopAfter} transactions":
       elapNoisy.showElapsed("Total collection time"):
@@ -193,14 +194,14 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
     test "Load gas prices and priority fees":
 
       elapNoisy.showElapsed("Load gas prices"):
-        for gasData in xp.byPriceIncNonce:
+        for gasData in xp.txDB.byPriceIncNonce:
           effGasTips.add gasData.effectiveGasTip
-      check effGasTips.len == xp.byPriceLen
+      check effGasTips.len == xp.txDB.byPriceLen
 
       elapNoisy.showElapsed("Load priority fee caps"):
-        for tipData in xp.byTipCapInc:
+        for tipData in xp.txDB.byTipCapInc:
           gasTipCaps.add tipData.gasTipCap
-      check gasTipCaps.len == xp.byTipCapLen
+      check gasTipCaps.len == xp.txDB.byTipCapLen
 
 
 proc runTxBaseTests(noisy = true; baseFee: GasInt) =
@@ -225,8 +226,8 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
         let isLocal = w[0]
         for n in w[1] ..< w[2]:
           check txList[n].local == isLocal
-          check xq.reassign(txList[n], not isLocal)
-          check txList[n].info == xq.last(not isLocal).value.info
+          check xq.txDB.reassign(txList[n], not isLocal)
+          check txList[n].info == xq.txDB.last(not isLocal).value.info
 
       check nLocal == xq.remoteCount
       check nRemote == xq.localCount
@@ -239,11 +240,11 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
 
       count = 0
       for (localOK, start) in [(true, nLocal), (false, 0)]:
-        var rc = xq.first(localOK)
+        var rc = xq.txDB.first(localOK)
         n = start
         while rc.isOK and n < txList.len:
           check txList[n].info == rc.value.info
-          rc = xq.next(rc.value.itemID, localOK)
+          rc = xq.txDB.next(rc.value.itemID, localOK)
           n.inc
           count.inc
       check count == txList.len
@@ -252,12 +253,12 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
       # And reverse
       count = 0
       for (localOK, top) in [(false, nLocal), (true, txList.len)]:
-        var rc = xq.last(localOK)
+        var rc = xq.txDB.last(localOK)
         n = top
         while rc.isOK and 0 < n:
           n.dec
           check txList[n].info == rc.value.info
-          rc = xq.prev(rc.value.itemID, localOK)
+          rc = xq.txDB.prev(rc.value.itemID, localOK)
           count.inc
       check count == txList.len
       check n == nLocal
@@ -270,14 +271,15 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
         veryNoisy = noisy # and false
         indent = " ".repeat(6)
 
-      test &"Walk {xq.byPriceLen} gas prices for {txList.len} transactions":
+      test &"Walk {xq.txDB.byPriceLen} gas prices "&
+          &"for {txList.len} transactions":
         block:
           var
             txCount = 0
             gpList: seq[GasInt]
 
           elapNoisy.showElapsed("Increasing gas price transactions walk"):
-            for gasData in xq.byPriceIncNonce:
+            for gasData in xq.txDB.byPriceIncNonce:
               var
                 infoList: seq[string]
                 gasTxCount = 0
@@ -295,7 +297,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
               veryNoisy.say indent, infoList.join(&"\n{indent}")
 
           check txCount == xq.count
-          check gpList.len == xq.byPriceLen
+          check gpList.len == xq.txDB.byPriceLen
           check effGasTips.len == gpList.len
           check effGasTips == gpList
 
@@ -305,7 +307,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
             gpList: seq[GasInt]
 
           elapNoisy.showElapsed("Decreasing gas price transactions walk"):
-            for gasData in xq.byPriceDecNonce:
+            for gasData in xq.txDB.byPriceDecNonce:
               var
                 infoList: seq[string]
                 gasTxCount = 0
@@ -323,7 +325,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
               veryNoisy.say indent, infoList.join(&"\n{indent}")
 
           check txCount == xq.count
-          check gpList.len == xq.byPriceLen
+          check gpList.len == xq.txDB.byPriceLen
           check effGasTips.len == gpList.len
           check effGasTips == gpList.reversed
 
@@ -353,12 +355,12 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
         var
           xq = txList.toTxPool(baseFee, noisy)
           seen: seq[Hash256]
-        check xq.verify.isOK
+        check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Forward delete-walk ID queue"):
           for localOk in [true, false]:
             for w in xq.rangeFifo(localOk):
               xq.addOrFlushGroupwise(groupLen, seen, w.itemID, veryNoisy)
-              check xq.verify.isOK
+              check xq.txDB.verify.isOK
         check seen.len == xq.count
         check seen.len < groupLen
 
@@ -367,12 +369,12 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
         var
           xq = txList.toTxPool(baseFee, noisy)
           seen: seq[Hash256]
-        check xq.verify.isOK
+        check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Revese delete-walk ID queue"):
           for localOk in [false, true]:
             for w in xq.rangeLifo(localOk):
               xq.addOrFlushGroupwise(groupLen, seen, w.itemID, veryNoisy)
-            check xq.verify.isOK
+            check xq.txDB.verify.isOK
         check seen.len == xq.count
         check seen.len < groupLen
 
@@ -384,16 +386,16 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
         count = 0
       let
         delLe = effGasTips[0] + ((effGasTips[^1] - effGasTips[0]) div 3)
-        delMax = xq.byPriceLe(delLe).value.effectiveGasTip
+        delMax = xq.txDB.byPriceLe(delLe).value.effectiveGasTip
 
       test &"Load/delete with gas price less equal {delMax.toKMG}, " &
           &"out of price range {effGasTips[0].toKMG}..{effGasTips[^1].toKMG}":
         elapNoisy.showElapsed(&"Deleting gas tips less equal {delMax.toKMG}"):
-          for nonceData in xq.byPriceDecItem(maxPrice = delMax):
+          for nonceData in xq.txDB.byPriceDecItem(maxPrice = delMax):
             for item in nonceData.itemList.nextKeys:
               count.inc
-              check xq.delete(item)
-              check xq.verify.isOK
+              check xq.txDB.delete(item)
+              check xq.txDB.verify.isOK
         check 0 < count
         check 0 < xq.count
         check count + xq.count == txList.len
@@ -404,17 +406,17 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
         count = 0
       let
         delGe = effGasTips[^1] - ((effGasTips[^1] - effGasTips[0]) div 3)
-        delMin = xq.byPriceGe(delGe).value.effectiveGasTip
+        delMin = xq.txDB.byPriceGe(delGe).value.effectiveGasTip
 
       test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
           &"out of price range {effGasTips[0].toKMG}..{effGasTips[^1].toKMG}":
         elapNoisy.showElapsed(
             &"Deleting gas tips greater than {delMin.toKMG}"):
-          for nonceData in xq.byPriceIncItem(minPrice = delMin):
+          for nonceData in xq.txDB.byPriceIncItem(minPrice = delMin):
             for item in nonceData.itemList.nextKeys:
               count.inc
-              check xq.delete(item)
-              check xq.verify.isOK
+              check xq.txDB.delete(item)
+              check xq.txDB.verify.isOK
         check 0 < count
         check 0 < xq.count
         check count + xq.count == txList.len
@@ -429,7 +431,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           baseNonces: seq[AccountNonce] # second level sequence
 
         # register sequence of nonces
-        for gasData in xq.byPriceIncNonce:
+        for gasData in xq.txDB.byPriceIncNonce:
           for nonceData in gasData.byNonceInc:
             baseNonces.add nonceData.nonce
 
@@ -438,12 +440,12 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           var
             seen: seq[Hash256]
             tips: seq[GasInt]
-          for gasData in xq.byPriceIncNonce:
+          for gasData in xq.txDB.byPriceIncNonce:
             tips.add gasData.effectiveGasTip
             for nonceData in gasData.byNonceInc:
               for item in nonceData.itemList.nextKeys:
                 seen.add item.itemID
-          check txList.len == xq.nItems
+          check txList.len == xq.txDB.nItems
           check txList.len == seen.len
           check tips != effGasTips              # values should have changed
           check seen != txList.mapIt(it.itemID) # order should have changed
@@ -455,13 +457,13 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
             seen: seq[Hash256]
             tips: seq[GasInt]
             nces: seq[AccountNonce]
-          for gasData in xq.byPriceIncNonce:
+          for gasData in xq.txDB.byPriceIncNonce:
             tips.add gasData.effectiveGasTip
             for nonceData in gasData.byNonceInc:
               nces.add nonceData.nonce
               for item in nonceData.itemList.nextKeys:
                 seen.add item.itemID
-          check txList.len == xq.nItems
+          check txList.len == xq.txDB.nItems
           check txList.len == seen.len
           check tips == effGasTips              # values restored
           check nces == baseNonces              # values restored
@@ -492,6 +494,7 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
         check xq.job(TxJobData(kind: txJobsInactiveJobsEviction)).isJobOk
         check xq.commit == 1
         check xq.localCount == okCount[true]
+        check xq.verify.isOK # not: xq.txDB.verify
 
         # make sure that deletion was sort of expected
         let
@@ -511,19 +514,20 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
         nAddrLocalItems = 0
       let
         nLocalAddrs = toSeq(xq.locals).len
-        nRemoteAddrs = toSeq(xq.bySenderNonce(local = false)).len
+        nRemoteAddrs = toSeq(xq.txDB.bySenderNonce(local = false)).len
 
       test "About half of transactions in largest address group are remotes":
 
         # find address with max number of transactions
-        for schedData in xq.bySenderSched:
+        for schedData in xq.txDB.bySenderSched:
           if nAddrItems < schedData.nItems:
             maxAddr = schedData.sender
             nAddrItems = schedData.nItems
         check 0 < nAddrItems
 
         # count the number of locals and remotes for this address
-        nAddrRemoteItems = xq.bySenderEq(maxAddr, local = false).value.nItems
+        nAddrRemoteItems = xq.txDB.bySenderEq(
+                                  maxAddr, local = false).value.nItems
         nAddrLocalItems = nAddrItems - nAddrRemoteItems
 
         # make sure that local/remote ratio makes sense
@@ -539,13 +543,14 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
           nRemotes = xq.remoteCount
           nMoved = xq.remoteToLocals(maxAddr)
 
-        check xq.verify.isOK
-        check xq.bySenderEq(maxAddr, local = false).isErr
+        check xq.txDB.verify.isOK
+        check xq.txDB.bySenderEq(maxAddr, local = false).isErr
         check nMoved == nAddrRemoteItems
         check nLocals + nMoved == xq.localCount
         check nRemotes - nMoved == xq.remoteCount
 
-        check nRemoteAddrs == 1 + toSeq(xq.bySenderNonce(local = false)).len
+        check nRemoteAddrs ==
+                1 + toSeq(xq.txDB.bySenderNonce(local = false)).len
 
         if 0 < nAddrLocalItems:
           check nLocalAddrs == toSeq(xq.locals).len
@@ -554,13 +559,13 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
 
       test &"Delete locals from largest address group so it becomes empty":
 
-        let addrLocals = xq.bySenderEq(maxAddr, local = true).value
+        let addrLocals = xq.txDB.bySenderEq(maxAddr, local = true).value
         for nonceData in addrLocals.byNonceItem:
           for item in nonceData.itemList.nextKeys:
-            doAssert xq.delete(item.itemID).isOK
+            doAssert xq.txDB.delete(item.itemID).isOK
 
         check nLocalAddrs == 1 + toSeq(xq.locals).len
-        check xq.verify.isOK
+        check xq.txDB.verify.isOK
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -586,7 +591,7 @@ when isMainModule:
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
 
-  #noisy.runTxLoader(baseFee, dir = ".")
+  noisy.runTxLoader(baseFee, dir = ".")
   #noisy.runTxPoolTests(baseFee)
 
 # ------------------------------------------------------------------------------
