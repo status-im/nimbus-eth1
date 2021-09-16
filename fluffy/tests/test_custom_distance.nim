@@ -8,7 +8,7 @@
 {.used.}
 
 import
-  std/unittest,
+  std/[unittest, sequtils],
   stint,
   ../network/state/custom_distance
 
@@ -28,3 +28,32 @@ suite "State network custom distance function":
       # Additional test cases to check some basic properties
       distance(UInt256.zero, MID + MID) == UInt256.zero
       distance(UInt256.zero, UInt256.one) == distance(UInt256.zero, high(UInt256))
+      
+  test "Calculate logarithimic distance":
+    check:
+      logDistance(u256(0), u256(0)) == 0
+      logDistance(u256(0), u256(1)) == 0
+      logDistance(u256(0), u256(2)) == 1
+      logDistance(u256(0), u256(4)) == 2
+      logDistance(u256(0), u256(8)) == 3
+      logDistance(u256(8), u256(0)) == 3
+      logDistance(UInt256.zero, MID) == 255
+      logDistance(UInt256.zero, MID + UInt256.one) == 254
+  
+  test "Calculate id at log distance":
+    let logDistances = @[
+      0'u16, 1, 2, 3, 4, 5, 6, 7, 8
+    ]
+
+    # for each log distance, calulate node-id at given distance from node zero, and then
+    # log distance from calculated node-id to node zero. The results should equal
+    # starting log distances
+    let logCalculated = logDistances.map(
+      proc (x: uint16): uint16 =
+        let nodeAtDist = atDistance(Uint256.zero, x)
+        return logDistance(Uint256.zero, nodeAtDist)
+    )
+
+    check:
+      logDistances == logCalculated
+
