@@ -17,8 +17,8 @@
 
 import
   std/[tables],
-  ../keequ,
-  ./tx_item,
+  ../../keequ,
+  ../tx_item,
   eth/common,
   stew/results
 

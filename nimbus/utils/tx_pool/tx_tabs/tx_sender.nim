@@ -13,9 +13,9 @@
 ##
 
 import
-  ../keequ,
-  ../slst,
-  ./tx_item,
+  ../../keequ,
+  ../../slst,
+  ../tx_item,
   eth/[common],
   stew/results
 

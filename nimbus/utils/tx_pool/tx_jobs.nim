@@ -60,12 +60,12 @@ type
     ## Job queue with increasing job *ID* numbers (wrapping around at
     ## `TxJobIdMax`.)
     topID: TxJobID              ## Next job to append will have `topID+1`
-    q: KeeQu[TxJobID,TxJobData] ## Job queue
+    jobQueue: KeeQu[TxJobID,TxJobData] ## Job queue
 
 const
   TxJobIdMax* = ##\
     ## Wraps around to `1` after last ID
-    99999.TxJobID
+    999999.TxJobID
 
 {.push raises: [Defect].}
 
@@ -84,17 +84,29 @@ proc `+`(a: TxJobID; b: int): TxJobID = a + b.TxJobID
 proc `-`(a: TxJobID; b: int): TxJobID = a - b.TxJobID
 
 # ------------------------------------------------------------------------------
-# Public all-queue helpers
+# Public helpers
 # ------------------------------------------------------------------------------
 
 proc `<=`*(a, b: TxJobID): bool {.borrow.}
 proc `==`*(a, b: TxJobID): bool {.borrow.}
 
-proc txInit*(t: var TxJobs; size = 10) =
-  ## Optional constructor
-  t.q.init(size)
+# ------------------------------------------------------------------------------
+# Public functions, constructor
+# ------------------------------------------------------------------------------
 
-proc txAdd*(t: var TxJobs; data: TxJobData): TxJobID
+proc init*(t: var TxJobs; initSize = 10) =
+  ## Optional constructor
+  t.jobQueue.init(initSize)
+
+proc init*(T: type TxJobs; initSize = 10): T =
+  ## Constructor variant
+  result.init(initSize)
+
+# ------------------------------------------------------------------------------
+# Public functions, add/remove entry
+# ------------------------------------------------------------------------------
+
+proc add*(t: var TxJobs; data: TxJobData): TxJobID
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Appends a job to the *FIFO*. This function returns a non-zero *ID* if
   ## successful.
@@ -111,75 +123,84 @@ proc txAdd*(t: var TxJobs; data: TxJobData): TxJobID
     id = 1.TxJobID
   else:
     id = t.topID + 1
-  if t.q.append(id, data):
+  if t.jobQueue.append(id, data):
     t.topID = id
     return id
 
-proc txUnshift*(t: var TxJobs; data: TxJobData): TxJobID
+proc unshift*(t: var TxJobs; data: TxJobData): TxJobID
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Stores *back* a job to to the *FIFO* front end be re-fetched next. This
   ## function returns a non-zero *ID* if successful.
   ##
   ## See also the **Note* at the comment for `txAdd()`.
   var id: TxJobID
-  if t.q.len == 0:
+  if t.jobQueue.len == 0:
     if t.topID == 0.TxJobID:
       t.topID = TxJobIdMax # must be non-zero after first use
     id = t.topID
   else:
-    id = t.q.firstKey.value - 1
+    id = t.jobQueue.firstKey.value - 1
     if id == 0.TxJobID:
       id = TxJobIdMax
-  if t.q.unshift(id, data):
+  if t.jobQueue.unshift(id, data):
     return id
 
 
-proc txDelete*(t: var TxJobs; id: TxJobID): Result[TxJobPair,void]
+proc delete*(t: var TxJobs; id: TxJobID): Result[TxJobPair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Delete a job by argument `id`. The function returns the job just
   ## deleted (if successful.)
   ##
   ## See also the **Note* at the comment for `txAdd()`.
-  let rc = t.q.delete(id)
+  let rc = t.jobQueue.delete(id)
   if rc.isErr:
     return err()
   ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
-proc txShift*(t: var TxJobs): Result[TxJobPair,void]
+proc shift*(t: var TxJobs): Result[TxJobPair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Fetches the next job from the *FIFO*. This is logically the same
   ## as `txFirst()` followed by `txDelete()`
-  let rc = t.q.shift
+  let rc = t.jobQueue.shift
   if rc.isErr:
     return err()
   ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
+# ------------------------------------------------------------------------------
+# Public fetch & traversal
+# ------------------------------------------------------------------------------
 
-proc txFirst*(t: var TxJobs): Result[TxJobPair,void]
+proc first*(t: var TxJobs): Result[TxJobPair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = t.q.first
+  let rc = t.jobQueue.first
   if rc.isErr:
     return err()
   ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
-proc txVerify*(t: var TxJobs): Result[void,(TxJobsInfo,KeeQuInfo)]
+# ------------------------------------------------------------------------------
+# Public queue/table ops
+# ------------------------------------------------------------------------------
+
+proc`[]`*(t: var TxJobs; id: TxJobID): TxJobData
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  t.jobQueue[id]
+
+proc hasKey*(t: var TxJobs; id: TxJobID): bool {.inline.} =
+  t.jobQueue.hasKey(id)
+
+proc len*(t: var TxJobs): int {.inline.} =
+  t.jobQueue.len
+
+# ------------------------------------------------------------------------------
+# Public functions, debugging
+# ------------------------------------------------------------------------------
+
+proc verify*(t: var TxJobs): Result[void,(TxJobsInfo,KeeQuInfo)]
     {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = t.q.verify
+  let rc = t.jobQueue.verify
   if rc.isErr:
     return err((txJobsVfyQueue,rc.error[2]))
   ok()
-
-
-# Table ops
-proc`[]`*(t: var TxJobs; id: TxJobID): TxJobData
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  t.q[id]
-
-proc hasKey*(t: var TxJobs; id: TxJobID): bool {.inline.} =
-  t.q.hasKey(id)
-
-proc len*(t: var TxJobs): int {.inline.} =
-  t.q.len
 
 # ------------------------------------------------------------------------------
 # End

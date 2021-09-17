@@ -18,24 +18,21 @@
 
 import
   std/[algorithm, sequtils, tables, times],
-   ./keequ,
-  ./tx_pool/[tx_base, tx_gas, tx_item, tx_jobs,tx_price, tx_sender],
+  ./keequ,
+  ./tx_pool/[tx_tabs, tx_item, tx_jobs],
   eth/[common, keys],
   metrics,
   stew/results
 
 export
-  TxGasItemRef,
   TxItemRef,
   TxItemStatus,
   TxJobData,
   TxJobID,
   TxJobKind,
   TxJobPair,
-  TxPriceItemRef,
-  TxPriceNonceRef,
-  TxSenderItemRef,
   results,
+  tx_item.effectiveGasTip,
   tx_item.itemID,
   tx_item.info,
   tx_item.local,
@@ -120,7 +117,7 @@ type
     gasPrice*: GasInt
     lifeTime*: Duration ## Maximum amount of time non-executable
     byJobs: TxJobs      ## Jobs batch list
-    txDB: TxBaseRef     ## Transaction lists & tables
+    txDB: TxTabsRef     ## Transaction lists & tables
 
 {.push raises: [Defect].}
 
@@ -183,10 +180,10 @@ proc addTxs(xp: var TxPool;
     let rc = xp.txDB.insert(tx, local, info)
     if rc.isErr:
       case rc.error:
-      of txBaseErrAlreadyKnown:
+      of txTabsErrAlreadyKnown:
         inc known_transactions
         errList[i] = txPoolErrAlreadyKnown
-      of txBaseErrInvalidSender:
+      of txTabsErrInvalidSender:
         inc invalid_transactions
         errList[i] = txPoolErrInvalidSender
       else:
@@ -217,7 +214,7 @@ proc addTxs(xp: var TxPool; tx: var Transaction; local: bool; info = ""):
 
 proc init*(xp: var TxPool; baseFee = TxNoBaseFee) =
   ## Constructor, returns new tx-pool descriptor.
-  xp.txDB = init(type TxBaseRef, baseFee)
+  xp.txDB = init(type TxTabsRef, baseFee)
   xp.startDate = utcNow()
   xp.gasPrice = txPriceLimit
   xp.lifeTime = txPoolLifeTime
@@ -238,10 +235,6 @@ proc baseFee*(xp: var TxPool): GasInt {.inline.} =
   ## Getter, the `baseFee` implying the price list valuation and order. If
   ## this entry in disabled, the value `TxNoBaseFee` is returnded.
   xp.txDB.baseFee
-
-proc txDB*(xp: var TxPool): TxBaseRef {.inline.} =
-  ## Getter, Transaction lists & tables (for debugging only)
-  xp.txDB
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
@@ -631,13 +624,13 @@ proc remotesBelowTip*(xp: var TxPool; threshold: GasInt): seq[Hash256]
 proc commit*(xp: var TxPool): int {.gcsafe,raises: [Defect,KeyError].} =
   ## Executes the jobs in the queue (if any.) The function returns the
   ## number of executes jobs.
-  var rc = xp.byJobs.txShift
+  var rc = xp.byJobs.shift
   while rc.isOK:
-    let job: TxJobPair = rc.value
-    rc = xp.byJobs.txShift
+    let jobKvp = rc.value
+    rc = xp.byJobs.shift
 
     var header: BlockHeader
-    case job.data.kind
+    case jobKvp.data.kind
     of txJobNone:
       echo "here"
     of txJobsInactiveJobsEviction:
@@ -653,18 +646,22 @@ proc isJobOk*(id: TxJobID): bool =
 proc job*(xp: var TxPool; job: TxJobData): TxJobID
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Append a new job to the queue.
-  xp.byJobs.txAdd(job)
+  xp.byJobs.add(job)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
 # ------------------------------------------------------------------------------
 
-proc verify*(xp: var TxPool): Result[void,TxBaseInfo]
+proc txDB*(xp: var TxPool): TxTabsRef {.inline.} =
+  ## Getter, Transaction lists & tables (for debugging only)
+  xp.txDB
+
+proc verify*(xp: var TxPool): Result[void,TxTabsInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify descriptor and subsequent data structures.
 
   block:
-    let rc = xp.byJobs.txVerify
+    let rc = xp.byJobs.verify
     if rc.isErr:
       case rc.error[0]
       of txJobsOk:       return err(txOk)
