@@ -64,31 +64,14 @@ or
 
 ## Available test suites / simulators
 
-- `devp2p/eth`
-- `devp2p/discv4`
-- `ethereum/sync`
-- `ethereum/consensus`
-- `ethereum/rpc`
-- `ethereum/graphql`
-- `smoke/network`
-- `smoke/genesis`
-- `smoke/clique`
-
-# Current state of the tests
-
-These Hive suites/simulators can be run:
-
-- `ethereum/consensus`
-- `ethereum/graphql`
-- `ethereum/rpc`
-- `smoke/network`
-- `smoke/genesis`
-- `devp2p/discv4`
 - `devp2p/eth` -> require at least 2 clients
+- `devp2p/discv4`
 - `ethereum/sync`
-
-These Hive suites/simulators don't work with `nimbus-eth1` currently:
-
+- `ethereum/consensus`
+- `ethereum/rpc`
+- `ethereum/graphql`
+- `smoke/network`
+- `smoke/genesis`
 - `smoke/clique`
 
 The number of passes and fails output at the time of writing (2021-05-20) is:

@@ -29,7 +29,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY --from=build /usr/bin/nimbus /usr/bin/nimbus
-RUN usr/bin/nimbus -v > /version.txt
+RUN usr/bin/nimbus --version > /version.txt
 
 # Inject the startup script and helper files
 COPY *.sh *.jq *.json /

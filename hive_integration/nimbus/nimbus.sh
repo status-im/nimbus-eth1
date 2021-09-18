@@ -49,7 +49,7 @@
 set -e
 
 nimbus=/usr/bin/nimbus
-FLAGS="--prune:archive --nat:0.0.0.0"
+FLAGS="--prune-mode:archive --nat:extip:0.0.0.0"
 
 if [ "$HIVE_LOGLEVEL" != "" ]; then
   FLAGS="$FLAGS --log-level:DEBUG"
@@ -57,11 +57,11 @@ fi
 
 # It doesn't make sense to dial out, use only a pre-set bootnode.
 if [ "$HIVE_BOOTNODE" != "" ]; then
-  FLAGS="$FLAGS --bootnodes:$HIVE_BOOTNODE"
+  FLAGS="$FLAGS --bootstrap-node:$HIVE_BOOTNODE"
 fi
 
 if [ "$HIVE_NETWORK_ID" != "" ]; then
-  FLAGS="$FLAGS --networkid:$HIVE_NETWORK_ID"
+  FLAGS="$FLAGS --network:$HIVE_NETWORK_ID"
 fi
 
 if [ "$HIVE_CLIQUE_PRIVATEKEY" != "" ]; then
@@ -77,7 +77,7 @@ fi
 # Configure the genesis chain and use it as start block and dump it to stdout
 echo "Supplied genesis state:"
 jq -f /mapper.jq /genesis.json | tee /genesis-start.json
-FLAGS="$FLAGS --customnetwork:/genesis-start.json"
+FLAGS="$FLAGS --custom-network:/genesis-start.json"
 
 # Don't immediately abort, some imports are meant to fail
 set +e
@@ -85,7 +85,9 @@ set +e
 # Load the test chain if present
 echo "Loading initial blockchain..."
 if [ -f /chain.rlp ]; then
-  $nimbus $FLAGS --import:/chain.rlp
+  CMD="import /chain.rlp"
+  echo "Running nimbus: $nimbus $CMD $FLAGS"
+  $nimbus $CMD $FLAGS
 else
   echo "Warning: chain.rlp not found."
 fi
@@ -93,7 +95,7 @@ fi
 # Load the remainder of the test chain
 echo "Loading remaining individual blocks..."
 if [ -d /blocks ]; then
-  (cd /blocks && cat `ls | sort -n` > blocks.rlp && $nimbus $FLAGS --import:blocks.rlp)
+  (cd /blocks && cat `ls | sort -n` > blocks.rlp && $nimbus import blocks.rlp $FLAGS)
 else
   echo "Warning: blocks folder not found."
 fi
@@ -102,10 +104,10 @@ set -e
 
 # Configure RPC.
 if [ "$HIVE_GRAPHQL_ENABLED" != "" ]; then
-  FLAGS="$FLAGS --graphql --graphqlbind:0.0.0.0:8545"
+  FLAGS="$FLAGS --graphql --graphql-address:0.0.0.0 --graphql-port:8545"
 else
-  FLAGS="$FLAGS --rpc --rpcapi:eth,debug --rpcbind:0.0.0.0:8545"
-  FLAGS="$FLAGS --ws --wsapi:eth,debug --wsbind:0.0.0.0:8546"
+  FLAGS="$FLAGS --rpc --rpc-api:eth,debug --rpc-address:0.0.0.0 --rpc-port:8545"
+  FLAGS="$FLAGS --ws --ws-api:eth,debug --ws-address:0.0.0.0 --ws-port:8546"
 fi
 
 echo "Running nimbus with flags $FLAGS"
