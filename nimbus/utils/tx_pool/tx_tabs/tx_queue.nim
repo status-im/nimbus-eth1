@@ -24,23 +24,35 @@ import
 
 type
   TxQuInfo* = enum
-    txQuOk = 0
-    txQuVfyQueueList  ## Corrupted ID queue/fifo structure
-    txQuVfyQueueKey   ## Corrupted ID queue/fifo container id
-    txQuVfySchedule   ## Local flag indicates wrong schedule
+    txQueueOk = 0
+    txQueueVfyQueueList  ## Corrupted ID queue/fifo structure
+    txQueueVfySize       ## Size count mismatch
 
   TxQueueSchedule* = enum ##\
     ## Sub-queues
-    TxQueueLocal = 0
-    TxQueueRemote = 1
+    txQueueLocal = 0
+    txQueueRemote = 1
 
-  TxQueuePair* = ##\
-    ## Queue handler wrapper, needed in `first()`, `next()`, etc.
-    KeeQuPair[Hash256,TxItemRef]
+  TxQueueItemRef* = ref object ##\
+    ## All transaction items accessed by the same index are chronologically
+    ## queued and indexed by the `itemID`.
+    itemList: KeeQu[Hash256,TxItemRef]
 
-  TxQueue* = object ##\
+  TxQueueTab* = object ##\
     ## Chronological queue and ID table, fifo
-    q: array[TxQueueSchedule, KeeQu[Hash256,TxItemRef]]
+    size: int
+    schedList: array[TxQueueSchedule,TxQueueItemRef]
+
+  TxQueueItemPair* = object ##\
+    ## Intermediate result, somehow similar to
+    ## `KeeQuPair` (only that the `key` field is read-only there)
+    key*: bool
+    data*: TxQueueItemRef
+
+  TxQueueInx = object ##\
+    ## Internal access data
+    sched: TxQueueItemRef
+    other: TxQueueItemRef # for append/re-assign
 
 {.push raises: [Defect].}
 
@@ -49,100 +61,225 @@ type
 # ------------------------------------------------------------------------------
 
 proc `not`(sched: TxQueueSchedule): TxQueueSchedule {.inline.} =
-  if sched == TxQueueLocal: TxQueueRemote else: TxQueueLocal
+  if sched == txQueueLocal: txQueueRemote else: txQueueLocal
+
+proc toQueueSched*(local: bool): TxQueueSchedule {.inline.} =
+  if local: txQueueLocal else: txQueueRemote
+
+
+proc mkInxImpl(aq: var TxQueueTab; item: TxItemRef): TxQueueInx =
+  let sched = item.local.toQueueSched
+  block:
+    result.other = aq.schedList[not sched]
+  block:
+    if aq.schedList[sched].isNil:
+      new result.sched
+      result.sched.itemList.init(1)
+      aq.schedList[sched] = result.sched
+    else:
+      result.sched = aq.schedList[sched]
+
+proc getInxImpl(aq: var TxQueueTab; item: TxItemRef): Result[TxQueueInx,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  var inxData: TxQueueInx
+
+  block:
+    let sched = item.local.toQueueSched
+    inxData.sched = aq.schedList[sched]
+    if inxData.sched.isNil:
+      return err()
+
+  ok(inxData)
 
 # ------------------------------------------------------------------------------
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
-proc toQueueSched*(isLocal: bool): TxQueueSchedule {.inline.} =
-  if isLocal: TxQueueLocal else: TxQueueRemote
+proc txInit*(aq: var TxQueueTab) =
+  aq.size = 0
+  aq.schedList.reset
 
-proc txInit*(aq: var TxQueue; localSize = 10; remoteSize = 10) =
-  aq.q[TxQueueLocal].init(localSize)
-  aq.q[TxQueueRemote].init(remoteSize)
 
-proc txAppend*(aq: var TxQueue; item: TxItemRef)
+proc txAppend*(aq: var TxQueueTab; item: TxItemRef)
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Reassigning from an existing local/remote queue is supported (see
-  ## `item.local` flag.)
-  let sched = item.local.toQueueSched
-  aq.q[sched][item.itemID] = item
-  aq.q[not sched].del(item.itemID)
+  ## Add transaction `item` to the list. The function has no effect if the
+  ## transaction exists, already.
+  let inx = aq.mkInxImpl(item)
+  discard inx.sched.itemList.append(item.itemID,item)
+  aq.size.inc
 
-proc txDelete*(ap: var TxQueue; item: TxItemRef): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ap.q[item.local.toQueueSched].delete(item.itemID).isOK
 
-proc txVerify*(aq: var TxQueue): Result[void,(TxQuInfo,KeeQuInfo)]
+proc txDelete*(aq: var TxQueueTab; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
+  let rc = aq.getInxImpl(item)
+  if rc.isOK:
+    let inx = rc.value
+
+    inx.sched.itemList.del(item.itemID)
+    aq.size.dec
+
+    if inx.sched.itemList.len == 0:
+      let sched = item.local.toQueueSched
+      aq.schedList[sched] = nil
+    return true
+
+
+proc txVerify*(aq: var TxQueueTab): Result[void,(TxQuInfo,KeeQuInfo)]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  var allCount = 0
+
   for sched in TxQueueSchedule:
-    let rc = aq.q[sched].verify
-    if rc.isErr:
-      return err((txQuVfyQueueList, rc.error[2]))
+    if not aq.schedList[sched].isNil:
+      let rc = aq.schedList[sched].itemList.verify
+      if rc.isErr:
+        return err((txQueueVfyQueueList, rc.error[2]))
+      allCount += aq.schedList[sched].itemList.len
 
-  for sched in TxQueueSchedule:
-    var rc = aq.q[sched].first
-    while rc.isOK:
-      let item = rc.value.data
-      rc = aq.q[sched].next(rc.value.key)
-
-      # verify key consistency
-      if item.itemID != aq.q[sched].eq(item.itemID).value.itemID:
-        return err((txQuVfyQueueKey, keeQuOk))
-
-      # verify schedule consistency
-      if item.local.toQueueSched != sched:
-        return err((txQuVfySchedule, keeQuOk))
+  if allCount != aq.size:
+    return err((txQueueVfySize, keeQuOk))
 
   ok()
 
 # ------------------------------------------------------------------------------
-# Public fetch & traversal
+# Public array ops -- `TxQueueSchedule` (level 0)
 # ------------------------------------------------------------------------------
 
-proc hasItemID*(aq: var TxQueue;
-                itemID: Hash256; sched: TxQueueSchedule): bool =
-  aq.q[sched].hasKey(itemID)
+proc len*(aq: var TxQueueTab): int {.inline.} =
+  ## Number of local + remote slots (0 .. 2)
+  if not aq.schedList[txQueueLocal].isNil:
+    result.inc
+  if not aq.schedList[txQueueRemote].isNil:
+    result.inc
 
-proc hasItemID*(aq: var TxQueue; itemID: Hash256): bool =
-  if aq.q[true.toQueueSched].hasKey(itemID) or
-     aq.q[false.toQueueSched].hasKey(itemID):
-    return true
+proc nItems*(aq: var TxQueueTab): int {.inline.} =
+  aq.size
 
-proc eq*(aq: var TxQueue;
-         itemID: Hash256; sched: TxQueueSchedule): Result[TxItemRef,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  if aq.q[sched].hasKey(itemID):
-    return ok(aq.q[sched][itemID])
+proc eq*(aq: var TxQueueTab; local: bool):
+       Result[TxQueueItemPair,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  let itemData = aq.schedList[local.toQueueSched]
+  if not itemData.isNil:
+    return ok(TxQueueItemPair(key: local, data: itemData))
   err()
 
-proc first*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  aq.q[sched].first
-
-proc next*(aq: var TxQueue; sched: TxQueueSchedule; key: Hash256):
-         Result[TxQueuePair,void] {.gcsafe,raises: [Defect,KeyError].} =
-  aq.q[sched].next(key)
-
-proc prev*(aq: var TxQueue; sched: TxQueueSchedule; key: Hash256):
-         Result[TxQueuePair,void] {.gcsafe,raises: [Defect,KeyError].} =
-  aq.q[sched].prev(key)
-
-proc last*(aq: var TxQueue; sched: TxQueueSchedule): Result[TxQueuePair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  aq.q[sched].last
-
 # ------------------------------------------------------------------------------
-# Public functions, getters
+# Public KeeQu ops -- traversal functions (level 1)
 # ------------------------------------------------------------------------------
 
-proc len*(aq: var TxQueue; sched: TxQueueSchedule): int {.inline.} =
-  ## Number of local or remote entries
-  aq.q[sched].len
+proc nItems*(itemData: TxQueueItemRef): int {.inline.} =
+  itemData.itemList.len
 
-proc nLeaves*(aq: var TxQueue): int {.inline.} =
-  aq.q[TxQueueLocal].len + aq.q[TxQueueRemote].len
+proc nItems*(rc: Result[TxQueueItemPair,void]): int {.inline.} =
+  if rc.isOK:
+    return rc.value.data.nItems
+  0
+
+
+proc hasKey*(itemData: TxQueueItemRef; itemID: Hash256): bool
+    {.inline.} =
+  itemData.itemList.hasKey(itemID)
+
+proc hasKey*(rc: Result[TxQueueItemPair,void]; itemID: Hash256): bool
+    {.inline.} =
+  if rc.isOK:
+    return rc.value.data.hasKey(itemID)
+  false
+
+
+proc eq*(itemData: TxQueueItemRef; itemID: Hash256):
+       Result[TxItemRef,void] {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.eq(itemID)
+
+proc eq*(rc: Result[TxQueueItemPair,void]; itemID: Hash256):
+       Result[TxItemRef,void] {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.itemList.eq(itemID)
+  err()
+
+
+proc first*(itemData: TxQueueItemRef):
+          Result[KeeQuPair[Hash256,TxItemRef],void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.first
+
+proc first*(rc: Result[TxQueueItemPair,void]):
+          Result[KeeQuPair[Hash256,TxItemRef],void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.first
+  err()
+
+
+proc last*(itemData: TxQueueItemRef):
+          Result[KeeQuPair[Hash256,TxItemRef],void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.last
+
+proc last*(rc: Result[TxQueueItemPair,void]):
+          Result[KeeQuPair[Hash256,TxItemRef],void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.last
+  err()
+
+
+proc next*(itemData: TxQueueItemRef; key: Hash256):
+          Result[KeeQuPair[Hash256,TxItemRef],void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.next(key)
+
+proc next*(rc: Result[TxQueueItemPair,void]; key: Hash256):
+          Result[KeeQuPair[Hash256,TxItemRef],void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.next(key)
+  err()
+
+
+proc prev*(itemData: TxQueueItemRef; key: Hash256):
+          Result[KeeQuPair[Hash256,TxItemRef],void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.prev(key)
+
+proc prev*(rc: Result[TxQueueItemPair,void]; key: Hash256):
+          Result[KeeQuPair[Hash256,TxItemRef],void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.prev(key)
+  err()
+
+# ------------------------------------------------------------------------------
+# Public ops -- combined methods (level 0 + 1)
+# ------------------------------------------------------------------------------
+
+proc hasKey*(aq: var TxQueueTab; itemID: Hash256): bool =
+  block:
+    let itemData = aq.schedList[txQueueLocal]
+    if not itemData.isNil:
+      if itemData.itemList.hasKey(itemID):
+        return true
+  block:
+    let itemData = aq.schedList[txQueueRemote]
+    if not itemData.isNil:
+      if itemData.itemList.hasKey(itemID):
+        return true
+  false
+
+proc eq*(aq: var TxQueueTab; itemID: Hash256):
+       Result[TxItemRef,void] {.gcsafe,raises: [Defect,KeyError].} =
+  block:
+    let itemData = aq.schedList[txQueueLocal]
+    if not itemData.isNil:
+      let rc = itemData.itemList.eq(itemID)
+      if rc.isOK:
+        return ok(rc.value)
+  block:
+    let itemData = aq.schedList[txQueueRemote]
+    if not itemData.isNil:
+      let rc = itemData.itemList.eq(itemID)
+      if rc.isOK:
+        return ok(rc.value)
+  err()
 
 # ------------------------------------------------------------------------------
 # End

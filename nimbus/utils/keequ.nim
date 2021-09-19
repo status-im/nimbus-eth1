@@ -61,8 +61,8 @@ type
 
   KeeQuPair*[K,V] = object ##\
     ## Key-value pair, typically used as return code.
-    key*: K
-    data*: V
+    key: K      ## Sorter key (read-only for consistency with `SLstResult[K,V]`)
+    data*: V    ## Some data value, to be modified freely
 
   KeeQuTab[K,V] =
     Table[K,KeeQuItem[K,V]]
@@ -70,7 +70,7 @@ type
   KeeQu*[K,V] = object ##\
     ## Data queue descriptor
     tab: KeeQuTab[K,V] ## Data table
-    first, last: K        ## Doubly linked item list queue
+    first, last: K     ## Doubly linked item list queue
 
   BlindValue = ##\
     ## Type name is syntactic sugar, used for key-only queues
@@ -760,6 +760,10 @@ proc `==`*[K,V](a, b: var KeeQu[K,V]): bool
       if av.prv != bv.prv or av.nxt != bv.nxt or bv.data != av.data:
         return false
     return true
+
+proc key*[K,V](kqp: KeeQuPair[K,V]): K {.inline.} =
+  ## Getter
+  kqp.key
 
 proc len*[K,V](rq: var KeeQu[K,V]): int {.inline.} =
   ## Returns the number of items in the queue

@@ -33,7 +33,7 @@ type
   TxGasItemRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
-    itemList*: KeeQuNV[TxItemRef]
+    itemList: KeeQuNV[TxItemRef]
 
   TxGasTab* = object ##\
     ## Generic item list indexed by gas price
@@ -111,12 +111,13 @@ proc txVerify*(gp: var TxGasTab): Result[void,(TxGasInfo,KeeQuInfo)]
     return err((txGasVfySize, keeQuOk))
   ok()
 
+# ------------------------------------------------------------------------------
+# Public SLst ops -- `GasInt` (level 0)
+# ------------------------------------------------------------------------------
 
-proc nLeaves*(gp: var TxGasTab): int {.inline.} =
+proc nItems*(gp: var TxGasTab): int {.inline.} =
   gp.size
 
-
-# Slst ops
 proc len*(gp: var TxGasTab): int {.inline.} =
   gp.gasList.len
 
@@ -139,6 +140,70 @@ proc le*(gp: var TxGasTab; key: GasInt):
 proc lt*(gp: var TxGasTab; key: GasInt):
        SLstResult[GasInt,TxGasItemRef] {.inline.} =
   gp.gasList.lt(key)
+
+# ------------------------------------------------------------------------------
+# Public KeeQu ops -- traversal functions (level 1)
+# ------------------------------------------------------------------------------
+
+proc nItems*(itemData: TxGasItemRef): int {.inline.} =
+  itemData.itemList.len
+
+proc nItems*(rc: SLstResult[GasInt,TxGasItemRef]): int {.inline.} =
+  if rc.isOK:
+    return rc.value.data.nItems
+  0
+
+
+proc first*(itemData: TxGasItemRef):
+          Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.first
+
+proc first*(rc: SLstResult[GasInt,TxGasItemRef]):
+          Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.first
+  err()
+
+
+proc last*(itemData: TxGasItemRef):
+          Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.last
+
+proc last*(rc: SLstResult[GasInt,TxGasItemRef]):
+         Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.last
+  err()
+
+
+proc next*(itemData: TxGasItemRef; item: TxItemRef):
+         Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.next(item)
+
+proc next*(rc: SLstResult[GasInt,TxGasItemRef]; item: TxItemRef):
+          Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.next(item)
+  err()
+
+
+proc prev*(itemData: TxGasItemRef; item: TxItemRef):
+         Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  itemData.itemList.prev(item)
+
+proc prev*(rc: SLstResult[GasInt,TxGasItemRef]; item: TxItemRef):
+          Result[TxItemRef,void]
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  if rc.isOK:
+    return rc.value.data.prev(item)
+  err()
 
 # ------------------------------------------------------------------------------
 # End
