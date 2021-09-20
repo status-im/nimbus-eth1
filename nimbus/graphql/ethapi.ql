@@ -66,7 +66,7 @@ type Log {
 type AccessTuple {
   # access list address
   address: Address!
-  
+
   # access list storage keys, null if not present
   storageKeys: [Bytes32!]
 }
@@ -97,6 +97,12 @@ type Transaction {
   # GasPrice is the price offered to miners for gas, in wei per unit.
   gasPrice: BigInt!
 
+  # MaxFeePerGas is the maximum fee per gas offered to include a transaction, in wei.
+  maxFeePerGas: BigInt
+
+  # MaxPriorityFeePerGas is the maximum miner tip per gas offered to include a transaction, in wei.
+  maxPriorityFeePerGas: BigInt
+
   # Gas is the maximum amount of gas this transaction can consume.
   gas: Long!
 
@@ -124,6 +130,14 @@ type Transaction {
   # will be null.
   cumulativeGasUsed: Long
 
+  # EffectiveGasPrice is actual value per gas deducted from the sender's
+  # account. Before EIP-1559, this is equal to the transaction's gas price.
+  # After EIP-1559, it is baseFeePerGas + min(maxFeePerGas - baseFeePerGas,
+  # maxPriorityFeePerGas). Legacy transactions and EIP-2930 transactions are
+  # coerced into the EIP-1559 format by setting both maxFeePerGas and
+  # maxPriorityFeePerGas as the transaction's gas price.
+  effectiveGasPrice: BigInt
+
   # CreatedContract is the account that was created by a contract creation
   # transaction. If the transaction was not a contract creation transaction,
   # or it has not yet been mined, this field will be null.
@@ -147,6 +161,10 @@ type Transaction {
 
   # EIP 2930: optional access list, null if not present
   accessList: [AccessTuple!]
+
+  # If type == 0, chainID returns null.
+  # If type > 0, chainID returns replay protection chainID
+  chainID: Long
 }
 
 # BlockFilterCriteria encapsulates log filter criteria for a filter applied
@@ -208,6 +226,9 @@ type Block {
 
   # GasUsed is the amount of gas that was used executing transactions in this block.
   gasUsed: Long!
+
+  # BaseFeePerGas is the fee perunit of gas burned by the protocol in this block.
+  baseFeePerGas: BigInt
 
   # Timestamp is the unix timestamp at which this block was mined.
   timestamp: BigInt!
@@ -281,6 +302,12 @@ input CallData {
 
   # GasPrice is the price, in wei, offered for each unit of gas.
   gasPrice: BigInt
+
+  # MaxFeePerGas is the maximum fee per gas offered, in wei.
+  maxFeePerGas: BigInt
+
+  # MaxPriorityFeePerGas is the maximum miner tip per gas offered, in wei.
+  maxPriorityFeePerGas: BigInt
 
   # Value is the value, in wei, sent along with the call.
   value: BigInt
@@ -394,11 +421,18 @@ type Query {
   # ensure a transaction is mined in a timely fashion.
   gasPrice: BigInt!
 
+  # MaxPriorityFeePerGas returns the node's estimate of a gas tip sufficient
+  # to ensure a transaction is mined in a timely fashion.
+  maxPriorityFeePerGas: BigInt!
+
   # ProtocolVersion returns the current wire protocol version number.
   protocolVersion: Int!
 
   # Syncing returns information on the current synchronisation state.
   syncing: SyncState
+
+  # ChainID returns the current chain ID for transaction replay protection.
+  chainID: Long!
 }
 
 type Mutation {

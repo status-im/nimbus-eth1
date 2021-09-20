@@ -45,6 +45,7 @@
   name = "query.block(number)"
   code = """
 {
+  chainID
   block(number: 3) {
     __typename
     number
@@ -68,6 +69,7 @@
     }
     extraData
     gasLimit
+    baseFeePerGas
     gasUsed
     timestamp
     logsBloom
@@ -104,6 +106,7 @@
 """
   result = """
 {
+  "chainID":1,
   "block":{
     "__typename":"Block",
     "number":3,
@@ -127,6 +130,7 @@
     },
     "extraData":"0x42",
     "gasLimit":3141592,
+    "baseFeePerGas":null,
     "gasUsed":21000,
     "timestamp":"0x54c99839",
     "logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -203,6 +207,11 @@
         address
         storageKeys
       }
+
+      maxFeePerGas
+      maxPriorityFeePerGas
+      effectiveGasPrice
+      chainID
     }
     transactionAt(index: 0) {
       __typename
@@ -244,7 +253,11 @@
         "s":"0x773806df18e22db29acde1dd96c0418e28738af7f520e5e2c5c673494029e5",
         "v":"0x1b",
         "type":0,
-        "accessList":null
+        "accessList":null,
+        "maxFeePerGas":null,
+        "maxPriorityFeePerGas":null,
+        "effectiveGasPrice":"0x3e8",
+        "chainID":null
       }
     ],
     "transactionAt":{

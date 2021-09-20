@@ -49,6 +49,7 @@ type
     blockNumber: BlockNumber
     receipt: Receipt
     gasUsed: GasInt
+    baseFee: Option[UInt256]
 
   LogNode = ref object of Node
     log: Log
@@ -88,14 +89,15 @@ proc accountNode(ctx: GraphqlContextRef, acc: Account, address: EthAddress, db: 
     db: db
   )
 
-proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: int, blockNumber: BlockNumber): Node =
+proc txNode(ctx: GraphqlContextRef, tx: Transaction, index: int, blockNumber: BlockNumber, baseFee: Option[UInt256]): Node =
   TxNode(
     kind: nkMap,
     typeName: ctx.ids[ethTransaction],
     pos: Pos(),
     tx: tx,
     index: index,
-    blockNumber: blockNumber
+    blockNumber: blockNumber,
+    baseFee: baseFee
   )
 
 proc logNode(ctx: GraphqlContextRef, log: Log, index: int, tx: TxNode): Node =
@@ -254,7 +256,7 @@ proc getTxs(ctx: GraphqlContextRef, header: BlockHeader): RespResult =
     var index = 0
     for n in getBlockTransactionData(ctx.chainDB, header.txRoot):
       let tx = rlp.decode(n, Transaction)
-      list.add txNode(ctx, tx, index, header.blockNumber)
+      list.add txNode(ctx, tx, index, header.blockNumber, header.fee)
       inc index
 
     index = 0
@@ -276,7 +278,7 @@ proc getTxAt(ctx: GraphqlContextRef, header: BlockHeader, index: int): RespResul
   try:
     var tx: Transaction
     if getTransaction(ctx.chainDB, header.txRoot, index, tx):
-      let txn = txNode(ctx, tx, index, header.blockNumber)
+      let txn = txNode(ctx, tx, index, header.blockNumber, header.fee)
 
       var i = 0
       var prevUsed = 0.GasInt
@@ -595,9 +597,46 @@ proc txValue(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} 
   bigIntNode(tx.tx.value)
 
 proc txGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
-  let ctx = GraphqlContextRef(ud)
   let tx = TxNode(parent)
-  bigIntNode(tx.tx.gasPrice)
+  if tx.tx.txType == TxEip1559:
+    if tx.baseFee.isNone:
+      return bigIntNode(tx.tx.gasPrice)
+
+    let baseFee = tx.baseFee.get().truncate(GasInt)
+    let priorityFee = min(tx.tx.maxPriorityFee, tx.tx.maxFee - baseFee)
+    bigIntNode(priorityFee + baseFee)
+  else:
+    bigIntNode(tx.tx.gasPrice)
+
+proc txMaxFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  if tx.tx.txType == TxEip1559:
+    bigIntNode(tx.tx.maxFee)
+  else:
+    ok(respNull())
+
+proc txMaxPriorityFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  if tx.tx.txType == TxEip1559:
+    bigIntNode(tx.tx.maxPriorityFee)
+  else:
+    ok(respNull())
+
+proc txEffectiveGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  if tx.baseFee.isNone:
+    return bigIntNode(tx.tx.gasPrice)
+
+  let baseFee = tx.baseFee.get().truncate(GasInt)
+  let priorityFee = min(tx.tx.maxPriorityFee, tx.tx.maxFee - baseFee)
+  bigIntNode(priorityFee + baseFee)
+
+proc txChainId(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let tx = TxNode(parent)
+  if tx.tx.txType == TxLegacy:
+    ok(respNull())
+  else:
+    longNode(tx.tx.chainId.uint64)
 
 proc txGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
@@ -706,7 +745,11 @@ const txProcs = {
   "s": txS,
   "v": txV,
   "type": txType,
-  "accessList": txAccessList
+  "accessList": txAccessList,
+  "maxFeePerGas": txMaxFeePerGas,
+  "maxPriorityFeePerGas": txMaxPriorityFeePerGas,
+  "effectiveGasPrice": txEffectiveGasPrice,
+  "chainID": txChainId
 }
 
 proc aclAddress(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -919,6 +962,13 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
   except Exception as em:
     err("estimateGas error: " & em.msg)
 
+proc blockBaseFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let h = HeaderNode(parent)
+  if h.header.fee.isSome:
+    bigIntNode(h.header.fee.get)
+  else:
+    ok(respNull())
+
 const blockProcs = {
   "parent": blockParent,
   "number": blockNumberImpl,
@@ -946,7 +996,8 @@ const blockProcs = {
   "logs": blockLogs,
   "account": blockAccount,
   "call": blockCall,
-  "estimateGas": blockEstimateGas
+  "estimateGas": blockEstimateGas,
+  "baseFeePerGas": blockBaseFeePerGas
 }
 
 proc callResultData(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -1118,6 +1169,14 @@ proc querySyncing(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   let ctx = GraphqlContextRef(ud)
   ok(respMap(ctx.ids[ethSyncState]))
 
+proc queryMaxPriorityFeePerGas(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  # TODO: stub, missing impl
+  err("not implemented")
+
+proc queryChainId(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
+  let ctx = GraphqlContextRef(ud)
+  longNode(ctx.chainDB.config.chainId.uint64)
+
 const queryProcs = {
   "account": queryAccount,
   "block": queryBlock,
@@ -1127,7 +1186,9 @@ const queryProcs = {
   "logs": queryLogs,
   "gasPrice": queryGasPrice,
   "protocolVersion": queryProtocolVersion,
-  "syncing": querySyncing
+  "syncing": querySyncing,
+  "maxPriorityFeePerGas": queryMaxPriorityFeePerGas,
+  "chainID": queryChainId
 }
 
 proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
