@@ -14,7 +14,8 @@ import
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ./conf, ./rpc/[eth_api, bridge_client, discovery_api],
-  ./network/state/[portal_network, content]
+  ./network/state/[state_network, state_content],
+  ./network/chain_history/[history_network, history_content]
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:
@@ -53,7 +54,8 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   d.open()
 
-  let portal = PortalNetwork.new(d, newEmptyInMemoryStorage())
+  let stateNetwork = PortalStateNetwork.new(d, state_content.newEmptyInMemoryStorage())
+  let historyNetwork = PortalHistoryNetwork.new(d, history_content.newEmptyInMemoryStorage())
 
   if config.metricsEnabled:
     let
@@ -79,7 +81,8 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
   let bridgeClient = initializeBridgeClient(config.bridgeUri)
 
   d.start()
-  portal.start()
+  stateNetwork.start()
+  historyNetwork.start()
 
   runForever()
 
