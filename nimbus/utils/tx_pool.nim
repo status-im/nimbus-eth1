@@ -12,9 +12,8 @@
 ## ================
 ##
 ## TODO:
-##   * maxPriorityFee / EIP-1559 handling (currently all zero)
-##   * status flag is bonkers as currently implemented
-##   * pending() needs unit test
+##  * unit tests needed for
+##       pending(), ContentFrom()
 ##
 
 import
@@ -164,8 +163,8 @@ proc inactiveJobsEviction(xp: var TxPool; maxLifeTime: Duration)
 
 
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTxs(xp: var TxPool;
-            txs: var openArray[Transaction]; local: bool; info = ""):
+proc addTxs(xp: var TxPool; txs: var openArray[Transaction];
+            local: bool; status: TxItemStatus; info = ""):
               Result[void,seq[TxPoolError]]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Attempts to queue a batch of transactions if they are valid.
@@ -179,7 +178,7 @@ proc addTxs(xp: var TxPool;
     var tx = txs[i]
 
     # If the transaction is known, pre-set the error slot
-    let rc = xp.txDB.insert(tx, local, info)
+    let rc = xp.txDB.insert(tx, local, status, info)
     if rc.isErr:
       case rc.error:
       of txTabsErrAlreadyKnown:
@@ -200,12 +199,13 @@ proc addTxs(xp: var TxPool;
   ok()
 
 
-proc addTxs(xp: var TxPool; tx: var Transaction; local: bool; info = ""):
+proc addTxs(xp: var TxPool; tx: var Transaction;
+            local: bool; status: TxItemStatus; info = ""):
            Result[void,TxPoolError]
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Convenience wrapper
   var txs = [tx]
-  let rc = xp.addTxs(txs, local, info)
+  let rc = xp.addTxs(txs, local, status, info)
   if rc.isErr:
     return err(rc.error[0])
   ok()
@@ -381,26 +381,24 @@ proc `baseFee=`*(xp: var TxPool; val: GasInt)
 # -- // this method.
 # -- func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error
 
-#[
 # core/tx_pool.go(514): func (pool *TxPool) ContentFrom(addr common.Address) ..
 proc ContentFrom*(xp: var TxPool;
-                  sender: EthAddress): (seq[TxItemRef], seq[TxItemRef])
+                  sender: EthAddress): (seq[TxItemRef],seq[TxItemRef])
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Retrieves the data content of the transaction pool, returning the
   ## pending as well as queued transactions of this address, grouped by
   ## nonce.
+  let rcSched = xp.txDB.bySender.eq(sender)
+  if rcSched.isOK:
+    let rcPending = rcSched.eq(txItemPending)
+    if rcPending.isOK:
+      for itemList in rcPending.value.data.walkItemList:
+        result[0].add toSeq(itemList.walkItems)
+    let rcQueued = rcSched.eq(txItemQueued)
+    if rcQueued.isOK:
+      for itemList in rcQueued.value.data.walkItemList:
+        result[1].add toSeq(itemList.walkItems)
 
-  result[0] =
-  ar pending types.Transactions
-	if list, ok := pool.pending[addr]; ok {
-		pending = list.Flatten()
-	}
-	var queued types.Transactions
-	if list, ok := pool.queue[addr]; ok {
-		queued = list.Flatten()
-	}
-	return pending, queued
-]#
 
 # core/tx_pool.go(536): func (pool *TxPool) Pending(enforceTips bool) (map[..
 proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]]
@@ -414,11 +412,12 @@ proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]]
   ## large enough in the next pending execution environment.
   for schedList in xp.txDB.bySender.walkSchedList:
     var list: seq[TxItemRef]
-    for itemList in schedList.walkItemList:
+    for itemList in schedList.walkItemList(txSenderPending):
       for item in itemList.walkItems:
-        if item.status == txItemStatusPending:
-          if not enforceTips or xp.gasPrice <= item.effectiveGasTip:
-            list.add item.dup
+        if item.local or
+           not enforceTips or
+           xp.gasPrice <= item.effectiveGasTip:
+          list.add item.dup
     if 0 < list.len:
       result.add list
 
@@ -431,7 +430,8 @@ proc locals*(xp: var TxPool): seq[EthAddress]
                .mapIt(it.ge(AccountNonce.low).first.value.sender)
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
-proc addLocals*(xp: var TxPool; txs: var openArray[Transaction]; info = ""):
+proc addLocals*(xp: var TxPool; txs: var openArray[Transaction];
+                status = txItemQueued; info = ""):
               Result[void,seq[TxPoolError]]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueues a batch of transactions into the pool if they are valid,
@@ -440,18 +440,20 @@ proc addLocals*(xp: var TxPool; txs: var openArray[Transaction]; info = ""):
   ##
   ## This method is used to add transactions from the RPC API and performs
   ## synchronous pool reorganization and event propagation.
-  xp.addTxs(txs, local = true, info)
+  xp.addTxs(txs, local = true, status, info)
 
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
-proc addLocal*(xp: var TxPool; tx: var Transaction; info = ""):
+proc addLocal*(xp: var TxPool; tx: var Transaction;
+               status = txItemQueued; info = ""):
              Result[void,TxPoolError]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## AddLocal enqueues a single local transaction into the pool if it is valid.
   ## This is a convenience wrapper aroundd AddLocals.
-  xp.addTxs(tx, local = true, info)
+  xp.addTxs(tx, local = true, status, info)
 
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-proc addRemotes*(xp: var TxPool; txs: var openArray[Transaction]; info = ""):
+proc addRemotes*(xp: var TxPool; txs: var openArray[Transaction];
+                 status = txItemQueued; info = ""):
                   Result[void,seq[TxPoolError]]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueue a batch of transactions into the pool if they are valid. If
@@ -460,17 +462,18 @@ proc addRemotes*(xp: var TxPool; txs: var openArray[Transaction]; info = ""):
   ##
   ## This method is used to add transactions from the p2p network and does not
   ## wait for pool reorganization and internal event propagation.
-  xp.addTxs(txs, local = false, info)
+  xp.addTxs(txs, local = false, status, info)
 
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc addRemote*(xp: var TxPool; tx: var Transaction; info = ""):
+proc addRemote*(xp: var TxPool; tx: var Transaction;
+                status = txItemQueued; info = ""):
               Result[void,TxPoolError]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueues a single transaction into the pool if it is valid.
   ## This is a convenience wrapper around AddRemotes.
   ##
   ## Deprecated: use AddRemotes
-  xp.addTxs(tx, local = false, info)
+  xp.addTxs(tx, local = false, status, info)
 
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
 proc has*(xp: var TxPool; hash: Hash256): bool =

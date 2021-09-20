@@ -75,7 +75,8 @@ proc init*(T: type TxTabsRef; baseFee = GasInt.low): T =
 # Public functions, add/remove entry
 # ------------------------------------------------------------------------------
 
-proc insert*(xp: TxTabsRef; tx: var Transaction; local = true; info = ""):
+proc insert*(xp: TxTabsRef; tx: var Transaction;
+             local = false; status = txItemQueued; info = ""):
            Result[void,TxInfo] {.gcsafe,raises: [Defect,CatchableError].} =
   ## Add new transaction argument `tx` to the database. If accepted and added
   ## to the database, a `key` value is returned which can be used to retrieve
@@ -95,7 +96,7 @@ proc insert*(xp: TxTabsRef; tx: var Transaction; local = true; info = ""):
   let itemID = tx.itemID
   if xp.byItemID.hasKey(itemID):
     return err(txTabsErrAlreadyKnown)
-  let rc = tx.newTxItemRef(itemID, local, info)
+  let rc = tx.newTxItemRef(itemID, local, status, info)
   if rc.isErr:
     return err(txTabsErrInvalidSender)
   let item = rc.value
@@ -109,9 +110,9 @@ proc insert*(xp: TxTabsRef; tx: var Transaction; local = true; info = ""):
 proc reassign*(xp: TxTabsRef; item: TxItemRef; local: bool): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Reassign transaction local/remote flag of a database entry. The function
-  ## succeeds returning the wrapping transaction container if the transaction
-  ## was found with a different local/remote flag than the argument `local`
-  ## and subsequently was changed.
+  ## succeeds returning the transaction item if the transaction was found with
+  ## a different local/remote flag than the argument `local` and subsequently
+  ## changed.
   # make sure that the argument `item` is not some copy
   let rc = xp.byItemID.eq(item.itemID)
   if rc.isOK:
@@ -122,6 +123,19 @@ proc reassign*(xp: TxTabsRef; item: TxItemRef; local: bool): bool
       realItem.local = local
       xp.bySender.txInsert(realItem)         # re-insert changed
       xp.byItemID.txAppend(realItem)
+      return true
+
+proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Variant of `reassign()` for the `TxItemStatus` flag.
+  # make sure that the argument `item` is not some copy
+  let rc = xp.byItemID.eq(item.itemID)
+  if rc.isOK:
+    var realItem = rc.value
+    if realItem.status != status:
+      discard xp.bySender.txDelete(realItem) # delete original
+      realItem.status = status
+      xp.bySender.txInsert(realItem)         # re-insert changed
       return true
 
 
@@ -271,9 +285,9 @@ iterator walkItemList*(schedList: TxSenderSchedRef): TxSenderItemRef
     rcNonce = nonceList.gt(nonceKey)
 
 iterator walkItemList*(schedList: TxSenderSchedRef;
-                       local: bool): TxSenderItemRef
+                       sched: TxSenderSchedule): TxSenderItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = schedList.eq(local)
+  let rc = schedList.eq(sched)
   if rc.isOK:
     let nonceList = rc.value.data
     var rcNonce = nonceList.ge(AccountNonce.low)

@@ -41,13 +41,11 @@ type
     TxItemErrEmptyTypedTx =
       "empty typed transaction bytes"
 
-
   TxItemStatus* = enum ##\
     ## current status of a transaction as seen by the pool.
-    txItemStatusUnknown = 0
-    txItemStatusQueued
-    txItemStatusPending
-    txItemStatusIncluded
+    txItemQueued = 0
+    txItemPending
+    txItemIncluded
 
   TxItemRef* = ref object of RootObj ##\
     ## Data container with transaction and meta data. Entries are *read-only*\
@@ -104,7 +102,7 @@ proc toKMG[T](s: T): string =
       return
 
 proc pp(w: TxItemStatus): string =
-  ($w).replace("txItemStatus")
+  ($w).replace("txItem")
 
 proc `$`(w: AccessPair): string =
   "(" & $w.address & "," & "#" & $w.storageKeys.len & ")"
@@ -116,7 +114,8 @@ proc `$`(q: seq[AccessPair]): string =
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc newTxItemRef*(tx: Transaction; itemID: Hash256; local: bool; info: string):
+proc newTxItemRef*(tx: Transaction; itemID: Hash256;
+                   local: bool; status: TxItemStatus; info: string):
                  Result[TxItemRef,void] {.inline.} =
   ## Create item descriptor.
   let rc = tx.ecRecover
@@ -129,7 +128,7 @@ proc newTxItemRef*(tx: Transaction; itemID: Hash256; local: bool; info: string):
     timeStamp: now().utc.toTime,
     info:      info,
     local:     local,
-    status:    txItemStatusQueued))
+    status:    status))
 
 # ------------------------------------------------------------------------------
 #  Public functions, Table ID helper

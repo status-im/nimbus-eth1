@@ -27,7 +27,7 @@ const
   # note: by law of big numbers, the ratio will exceed any upper or lower
   #       on a +1/-1 random walk if running long enough (with expectation
   #       value 0)
-  localRemoteRatioBandPC = 75
+  randInitRatioBandPC = 75
 
   # 95% <= #remote-deleted/#remote-present <= 1/95%
   deletedItemsRatioBandPC = 95
@@ -40,7 +40,9 @@ var
   prng = prngSeed.initRand
 
   # to be set up in runTxLoader()
-  okCount: array[bool,int] # entries: [local,remote] entries
+  okCount: array[bool,int]             # entries: [local,remote] entries
+  statusCount: array[TxItemStatus,int] # ditto
+
   txList: seq[TxItemRef]
   effGasTips: seq[GasInt]
   gasTipCaps: seq[GasInt]
@@ -55,10 +57,23 @@ proc randOkRatio: int =
   else:
     (okCount[true] * 100 / okCount[false]).int
 
+proc randStatusRatios: seq[int] =
+  for n in 1 .. statusCount.len:
+    let
+      inx = (n mod statusCount.len).TxItemStatus
+      prv = (n - 1).TxItemStatus
+    if statusCount[inx] == 0:
+      result.add int.high
+    else:
+      result.add (statusCount[prv] * 100 / statusCount[inx]).int
+
 proc randOk: bool =
   result = prng.rand(1) > 0
   okCount[result].inc
 
+proc randStatus: TxItemStatus =
+  result = prng.rand(TxItemStatus.high.ord).TxItemStatus
+  statusCount[result].inc
 
 proc lstShow(xp: var TxPool; pfx = "*** "): string =
   pfx & "txList=" & txList.mapIt(it.pp).join(" ") & "\n" &
@@ -79,14 +94,15 @@ proc collectTxPool(xp: var TxPool;
         count.inc
         let
           local = randOK()
+          status = randStatus()
           localInfo = if local: "L" else: "R"
           info = &"{count} #{blkNum}({chainNo}) {n}/{txs.len} {localInfo}"
         noisy.showElapsed(&"insert: local={local} {info}"):
           var tx = txs[n]
           if local:
-            doAssert xp.addLocal(tx, info = info).isOK
+            doAssert xp.addLocal(tx, status = status, info = info).isOK
           else:
-            doAssert xp.addRemote(tx, info = info).isOK
+            doAssert xp.addRemote(tx, status = status, info = info).isOK
         if stopAfter <= count:
           return
     chainNo.inc
@@ -98,9 +114,9 @@ proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true): TxPool =
     for w in q:
       var tx = w.tx
       if w.local:
-        doAssert result.addLocal(tx, w.info).isOK
+        doAssert result.addLocal(tx, w.status, w.info).isOK
       else:
-        doAssert result.addRemote(tx, w.info).isOK
+        doAssert result.addRemote(tx, w.status, w.info).isOK
   doAssert result.count == q.len
 
 
@@ -119,9 +135,9 @@ proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
     for w in q:
       var tx = w.tx
       if w.local:
-        doAssert result.addLocal(tx, w.info).isOK
+        doAssert result.addLocal(tx, w.status, w.info).isOK
       else:
-        doAssert result.addRemote(tx, w.info).isOK
+        doAssert result.addRemote(tx, w.status, w.info).isOK
       if not w.local and remoteCount < delayAt:
         remoteCount.inc
         if delayAt == remoteCount:
@@ -164,6 +180,7 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
 
   # Reset/initialise
   okCount.reset
+  statusCount.reset
   txList.reset
   effGasTips.reset
   gasTipCaps.reset
@@ -177,12 +194,17 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
       elapNoisy.showElapsed("Total collection time"):
         xp.collectTxPool(veryNoisy, dir / captureFile, stopAfter)
 
-      check okCount[true] + okCount[false] == xp.count
+      check xp.count == foldl(okCount.toSeq, a+b)     # add okCount[] values
+      check xp.count == foldl(statusCount.toSeq, a+b) # ditto for statusCount[]
 
-      # make sure that PRNG did not go bunkers
+      # make sure that PRNG did not go bonkers
       let localRemoteRatio = randOkRatio()
-      check localRemoteRatioBandPC < localRemoteRatio
-      check localRemoteRatio < (10000 div localRemoteRatioBandPC)
+      check randInitRatioBandPC < localRemoteRatio
+      check localRemoteRatio < (10000 div randInitRatioBandPC)
+
+      for statusRatio in randStatusRatios():
+        check randInitRatioBandPC < statusRatio
+        check statusRatio < (10000 div randInitRatioBandPC)
 
       # Note: expecting enough transactions in the `goerliCapture` file
       check xp.count == stopAfter
@@ -523,61 +545,164 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
         nAddrItems = 0
         nAddrRemoteItems = 0
         nAddrLocalItems = 0
+
+        nAddrQueuedItems = 0
+        nAddrPendingItems = 0
+        nAddrIncludedItems = 0
+
       let
         nLocalAddrs = toSeq(xq.locals).len
         nRemoteAddrs = toSeq(xq.txDB.bySender.walkNonceList(local = false)).len
 
-      test "About half of transactions in largest address group are remotes":
+      block:
+        test "About half of transactions in largest address group are remotes":
 
-        # find address with max number of transactions
-        for schedList in xq.txDB.bySender.walkSchedList:
-          if nAddrItems < schedList.nItems:
-            maxAddr = schedList.any.ge(AccountNonce.low).first.value.sender
-            nAddrItems = schedList.nItems
-        check 0 < nAddrItems
+          # find address with max number of transactions
+          for schedList in xq.txDB.bySender.walkSchedList:
+            if nAddrItems < schedList.nItems:
+              maxAddr = schedList.any.ge(AccountNonce.low).first.value.sender
+              nAddrItems = schedList.nItems
 
-        # count the number of locals and remotes for this address
-        nAddrRemoteItems = xq.txDB.bySender.eq(maxAddr)
-                                           .eq(local = false).value.data.nItems
-        nAddrLocalItems = nAddrItems - nAddrRemoteItems
+          # requite mimimum => there is a status queue with at least 2 entries
+          check 3 < nAddrItems
 
-        # make sure that local/remote ratio makes sense
-        let localRemoteRatio =
-           (((nAddrItems - nAddrRemoteItems) * 100) / nAddrRemoteItems).int
-        check addrGroupLocalRemotePC < localRemoteRatio
-        check localRemoteRatio < (10000 div addrGroupLocalRemotePC)
+          # count the number of locals and remotes for this address
+          nAddrRemoteItems =
+                  xq.txDB.bySender.eq(maxAddr).eq(local = false).nItems
+          nAddrLocalItems =
+                  xq.txDB.bySender.eq(maxAddr).eq(local = true).nItems
+          check nAddrRemoteItems + nAddrLocalItems == nAddrItems
 
-      test &"Reassign {nAddrRemoteItems} remotes to {nAddrLocalItems} locals "&
-          &"in largest address group with {nAddrItems} items":
+          nAddrQueuedItems =
+                  xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
+          nAddrPendingItems =
+                  xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+          nAddrIncludedItems =
+                  xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+          check nAddrQueuedItems +
+                  nAddrPendingItems +
+                  nAddrIncludedItems == nAddrItems
+
+          # make suke the random assignment made some sense
+          check 0 < nAddrQueuedItems
+          check 0 < nAddrPendingItems
+          check 0 < nAddrIncludedItems
+
+          # make sure that local/remote ratio makes sense
+          let localRemoteRatio =
+             (((nAddrItems - nAddrRemoteItems) * 100) / nAddrRemoteItems).int
+          check addrGroupLocalRemotePC < localRemoteRatio
+          check localRemoteRatio < (10000 div addrGroupLocalRemotePC)
+
+      block:
+        test &"Reassign/move {nAddrRemoteItems} \"remote\" to " &
+            &"{nAddrLocalItems} \"local\" items in largest address group " &
+            &"with {nAddrItems} items":
+          let
+            nLocals = xq.localCount
+            nRemotes = xq.remoteCount
+            nMoved = xq.remoteToLocals(maxAddr)
+
+          check xq.txDB.verify.isOK
+          check xq.txDB.bySender.eq(maxAddr).eq(local = false).isErr
+          check nMoved == nAddrRemoteItems
+          check nLocals + nMoved == xq.localCount
+          check nRemotes - nMoved == xq.remoteCount
+
+          check nRemoteAddrs ==
+            1 + toSeq(xq.txDB.bySender.walkNonceList(local = false)).len
+
+          if 0 < nAddrLocalItems:
+            check nLocalAddrs == toSeq(xq.locals).len
+          else:
+            check nLocalAddrs == 1 + toSeq(xq.locals).len
+
+          check nAddrQueuedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
+          check nAddrPendingItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+          check nAddrIncludedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+
+      # --------------------
+
+      block:
+        var
+          fromNumItems = nAddrQueuedItems
+          fromBucketInfo = "queued"
+          fromBucket = txItemQueued
+          toBucketInfo =  "pending"
+          toBucket = txItemPending
+
+        # find the largest from-bucket
+        if fromNumItems < nAddrPendingItems:
+          fromNumItems = nAddrPendingItems
+          fromBucketInfo = "pending"
+          fromBucket = txItemPending
+          toBucketInfo = "included"
+          toBucket = txItemIncluded
+        if fromNumItems < nAddrIncludedItems:
+          fromNumItems = nAddrIncludedItems
+          fromBucketInfo = "included"
+          fromBucket = txItemIncluded
+          toBucketInfo = "queued"
+          toBucket = txItemQueued
+
         let
-          nLocals = xq.localCount
-          nRemotes = xq.remoteCount
-          nMoved = xq.remoteToLocals(maxAddr)
+          moveNumItems = fromNumItems div 2
 
-        check xq.txDB.verify.isOK
-        check xq.txDB.bySender.eq(maxAddr).eq(local = false).isErr
-        check nMoved == nAddrRemoteItems
-        check nLocals + nMoved == xq.localCount
-        check nRemotes - nMoved == xq.remoteCount
+        test &"Reassign {moveNumItems} of {fromNumItems} items "&
+            &"from \"{fromBucketInfo}\" to \"{toBucketInfo}\"":
+          check 0 < moveNumItems
+          check 1 < fromNumItems
 
-        check nRemoteAddrs ==
-                1 + toSeq(xq.txDB.bySender.walkNonceList(local = false)).len
+          var count = 0
+          let ncList = xq.txDB.bySender.eq(maxAddr).eq(fromBucket).value.data
+          block collect:
+            for itemList in ncList.walkItemList:
+              for item in itemList.walkItems:
+                count.inc
+                check xq.txDB.reassign(item, toBucket)
+                if moveNumItems <= count:
+                  break collect
+          check xq.txDB.verify.isOK
 
-        if 0 < nAddrLocalItems:
-          check nLocalAddrs == toSeq(xq.locals).len
-        else:
+          case fromBucket
+          of txItemQueued:
+            check nAddrQueuedItems - moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
+            check nAddrPendingItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+            check nAddrIncludedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+          of txItemPending:
+            check nAddrPendingItems - moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+            check nAddrIncludedItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+            check nAddrQueuedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
+          else:
+            check nAddrIncludedItems - moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+            check nAddrQueuedItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
+            check nAddrIncludedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+
+      # --------------------
+
+      block:
+        test &"Delete locals from largest address group so it becomes empty":
+
+          let addrLocals = xq.txDB.bySender.eq(maxAddr)
+                                           .eq(local = true).value.data
+          for itemList in addrLocals.walkItemList:
+            for item in itemList.walkItems:
+              doAssert xq.txDB.delete(item.itemID).isOK
+
           check nLocalAddrs == 1 + toSeq(xq.locals).len
-
-      test &"Delete locals from largest address group so it becomes empty":
-
-        let addrLocals = xq.txDB.bySender.eq(maxAddr)
-                                         .eq(local = true).value.data
-        for itemList in addrLocals.walkItemList:
-          for item in itemList.walkItems:
-            doAssert xq.txDB.delete(item.itemID).isOK
-
-        check nLocalAddrs == 1 + toSeq(xq.locals).len
-        check xq.txDB.verify.isOK
+          check xq.txDB.verify.isOK
 
 # ------------------------------------------------------------------------------
 # Main function(s)
