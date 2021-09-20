@@ -11,7 +11,7 @@ import
   std/[sequtils, sets, algorithm],
   stew/[results, byteutils], chronicles, chronos, nimcrypto/hash,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
-  ./messages, ./custom_distance
+  ./messages
 
 export messages
 
@@ -180,7 +180,7 @@ proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
     dataRadius = UInt256.high()): T =
   let proto = PortalProtocol(
     routingTable: RoutingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
-      DefaultTableIpLimits, baseProtocol.rng, customDistanceCalculator),
+      DefaultTableIpLimits, baseProtocol.rng),
     protocolHandler: messageHandler,
     baseProtocol: baseProtocol,
     dataRadius: dataRadius,
