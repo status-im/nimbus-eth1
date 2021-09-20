@@ -17,6 +17,7 @@
 import
   ../../keequ,
   ../../slst,
+  ../tx_info,
   ../tx_item,
   eth/common,
   stew/results
@@ -26,13 +27,6 @@ type
     ## Process item before storing. This function may modify the contents
     ## of the `item` argument
     proc(item: TxItemRef) {.gcsafe,raises: [Defect].}
-
-  TxPriceInfo* = enum
-    txPriceOk = 0
-    txPriceVfyRbTree    ## Corrupted RB tree
-    txPriceVfyLeafEmpty ## Empty leaf list
-    txPriceVfyLeafQueue ## Corrupted leaf list
-    txPriceVfySize      ## Size count mismatch
 
   TxPriceItemRef* = ref object ##\
     ## All transaction items accessed by the same index are chronologically
@@ -67,13 +61,10 @@ let
 # Private, helpers for debugging and pretty printing
 # ------------------------------------------------------------------------------
 
-#proc `$`(rq: TxPriceItemRef): string =
-#  ## Needed by `rq.verify()` for printing error messages
-#  $rq.itemList.len
-
 proc `$`(rq: TxPriceNonceRef): string =
   ## Needed by `rq.verify()` for printing error messages
   $rq.nonceList.len
+
 
 proc mkInxImpl(gp: var TxPriceTab; item: TxItemRef): TxPriceInx
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -175,7 +166,7 @@ proc txReorg(gp: var TxPriceTab) {.gcsafe,raises: [Defect,KeyError].} =
         gp.txInsert(item)
 
 
-proc txVerify*(gp: var TxPriceTab): Result[void,(TxPriceInfo,KeeQuInfo)]
+proc txVerify*(gp: var TxPriceTab): Result[void,TxVfyError]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## walk `GasInt` > `AccountNonce` > items
   var allCount = 0
@@ -183,7 +174,7 @@ proc txVerify*(gp: var TxPriceTab): Result[void,(TxPriceInfo,KeeQuInfo)]
   block:
     let rc = gp.priceList.verify
     if rc.isErr:
-      return err((txPriceVfyRbTree, keeQuOk))
+      return err(txVfyGasTipList)
 
   var rcGas = gp.priceList.ge(GasInt.low)
   while rcGas.isOk:
@@ -199,19 +190,19 @@ proc txVerify*(gp: var TxPriceTab): Result[void,(TxPriceInfo,KeeQuInfo)]
       allCount += nonceData.itemList.len
       gasCount += nonceData.itemList.len
       if nonceData.itemList.len == 0:
-        return err((txPriceVfyLeafEmpty, keeQuOk))
+        return err(txVfyGasTipLeafEmpty)
 
       let rcItem = nonceData.itemList.verify
       if rcItem.isErr:
-        return err((txPriceVfyLeafQueue, rcItem.error[2]))
+        return err(txVfyGasTipLeafQueue)
 
     # end while
     if gasCount != gasData.size:
-      return err((txPriceVfySize, keeQuOk))
+      return err(txVfyGasTipTotal)
 
   # end while
   if allCount != gp.size:
-    return err((txPriceVfySize, keeQuOk))
+    return err(txVfyGasTipTotal)
 
   ok()
 

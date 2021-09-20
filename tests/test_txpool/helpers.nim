@@ -20,7 +20,6 @@ import
 # to import `tx_pool/*` sup-modules
 export
   keequ,
-  tx_tabs.TxTabsInfo,
   tx_tabs.TxTabsRef,
   tx_tabs.any,
   tx_tabs.decItemList,

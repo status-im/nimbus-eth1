@@ -14,15 +14,13 @@
 ## TODO:
 ##   * maxPriorityFee / EIP-1559 handling (currently all zero)
 ##   * status flag is bonkers as currently implemented
-##   * pending() needs
-##     - tx_sender re-design (shed: local, remote, both)
-##     - unit test
+##   * pending() needs unit test
 ##
 
 import
-  std/[algorithm, sequtils, tables, times],
+  std/[sequtils, tables, times],
   ./keequ,
-  ./tx_pool/[tx_tabs, tx_item, tx_jobs],
+  ./tx_pool/[tx_tabs, tx_info, tx_item, tx_jobs],
   eth/[common, keys],
   metrics,
   stew/results
@@ -407,7 +405,7 @@ proc ContentFrom*(xp: var TxPool;
 # core/tx_pool.go(536): func (pool *TxPool) Pending(enforceTips bool) (map[..
 proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]]
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## The function retrieves all currently processable transaction itemss,
+  ## The function retrieves all currently processable transaction items,
   ## grouped by origin account and sorted by nonce. The returned transaction
   ## items are copies and can be freely modified.
   ##
@@ -416,28 +414,13 @@ proc pending*(xp: var TxPool; enforceTips = false): seq[seq[TxItemRef]]
   ## large enough in the next pending execution environment.
   for schedList in xp.txDB.bySender.walkSchedList:
     var list: seq[TxItemRef]
-
-    block:
-      let rc = schedList.eq(local = true)
-      if rc.isOK:
-        for itemList in rc.value.data.walkItemList:
-          for item in itemList.walkItems:
+    for itemList in schedList.walkItemList:
+      for item in itemList.walkItems:
+        if item.status == txItemStatusPending:
+          if not enforceTips or xp.gasPrice <= item.effectiveGasTip:
             list.add item.dup
-
-    block:
-      let rc = schedList.eq(local = false)
-      if rc.isOK:
-        for itemList in rc.value.data.walkItemList:
-          for item in itemList.walkItems:
-            if not enforceTips or xp.gasPrice <= item.effectiveGasTip:
-              list.add item.dup
-
     if 0 < list.len:
-      list.sort(
-        cmp = proc(x, y: TxItemRef): int =
-                  x.tx.nonce.cmp(y.tx.nonce))
       result.add list
-
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc locals*(xp: var TxPool): seq[EthAddress]
@@ -655,16 +638,14 @@ proc txDB*(xp: var TxPool): TxTabsRef {.inline.} =
   ## Getter, Transaction lists & tables (for debugging only)
   xp.txDB
 
-proc verify*(xp: var TxPool): Result[void,TxTabsInfo]
+proc verify*(xp: var TxPool): Result[void,TxVfyError]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify descriptor and subsequent data structures.
 
   block:
     let rc = xp.byJobs.verify
     if rc.isErr:
-      case rc.error[0]
-      of txJobsOk:       return err(txOk)
-      of txJobsVfyQueue: return err(txVfyByJobsQueue)
+      return rc
 
   xp.txDB.verify
 

@@ -15,18 +15,12 @@
 import
   ../../keequ,
   ../../slst,
+  ../tx_info,
   ../tx_item,
   eth/[common],
   stew/results
 
 type
-  TxSenderInfo* = enum
-    txSenderOk = 0
-    txSenderVfyRbTree    ## Corrupted RB tree
-    txSenderVfyLeafEmpty ## Empty leaf list
-    txSenderVfyLeafQueue ## Corrupted leaf list
-    txSenderVfySize      ## Size count mismatch
-
   TxSenderSchedule = enum ##\
     ## Sub-queues
     txSenderLocal = 0   ## local sub-table
@@ -87,13 +81,6 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc nActive(gs: TxSenderSchedRef): int {.inline.} =
-  ## Number of non-nil items
-  if not gs.schedList[txSenderLocal].isNil:
-    result.inc
-  if not gs.schedList[txSenderRemote].isNil:
-    result.inc
-
 proc `$`(rq: TxSenderItemRef): string =
   ## Needed by `rq.verify()` for printing error messages
   $rq.itemList.len
@@ -105,6 +92,14 @@ proc `$`(rq: TxSenderSchedRef): string =
   if not rq.schedList[txSenderRemote].isNil: n.inc
   $n
 
+
+proc nActive(gs: TxSenderSchedRef): int {.inline.} =
+  ## Number of non-nil items
+  if not gs.schedList[txSenderLocal].isNil:
+    result.inc
+  if not gs.schedList[txSenderRemote].isNil:
+    result.inc
+
 proc cmp(a,b: EthAddress): int {.inline.} =
   ## mixin for SLst
   for n in 0 ..< EthAddress.len:
@@ -112,6 +107,7 @@ proc cmp(a,b: EthAddress): int {.inline.} =
       return -1
     if b[n] < a[n]:
       return 1
+
 
 proc `not`(sched: TxSenderSchedule): TxSenderSchedule {.inline.} =
   if sched == txSenderLocal: txSenderRemote else: txSenderLocal
@@ -245,7 +241,7 @@ proc txDelete*(gt: var TxSenderTab; item: TxItemRef): bool
     return true
 
 
-proc txVerify*(gt: var TxSenderTab): Result[void,(TxSenderInfo,KeeQuInfo)]
+proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## walk `EthAddress` > `TxSenderSchedule` > `AccountNonce` > items
   var allCount = 0
@@ -253,7 +249,7 @@ proc txVerify*(gt: var TxSenderTab): Result[void,(TxSenderInfo,KeeQuInfo)]
   block:
     let rc = gt.addrList.verify
     if rc.isErr:
-      return err((txSenderVfyRbTree, keeQuOk))
+      return err(txVfySenderRbTree)
 
   var rcAddr = gt.addrList.ge(minEthAddress)
   while rcAddr.isOk:
@@ -263,9 +259,9 @@ proc txVerify*(gt: var TxSenderTab): Result[void,(TxSenderInfo,KeeQuInfo)]
 
     # at lest ((local or remote) and merged) lists must be available
     if addrData.nActive == 0:
-      return err((txSenderVfyLeafEmpty, keeQuOk))
+      return err(txVfySenderLeafEmpty)
     if addrData.schedList[txSenderAny].isNil:
-      return err((txSenderVfyLeafEmpty, keeQuOk))
+      return err(txVfySenderLeafEmpty)
 
     var
       lrCount = 0
@@ -277,7 +273,7 @@ proc txVerify*(gt: var TxSenderTab): Result[void,(TxSenderInfo,KeeQuInfo)]
         block:
           let rc = schedData.nonceList.verify
           if rc.isErr:
-            return err((txSenderVfyRbTree, keeQuOk))
+            return err(txVfySenderRbTree)
 
         var schedCount = 0
         var rcNonce = schedData.nonceList.ge(AccountNonce.low)
@@ -295,27 +291,27 @@ proc txVerify*(gt: var TxSenderTab): Result[void,(TxSenderInfo,KeeQuInfo)]
           schedCount += nonceData.itemList.len
 
           if nonceData.itemList.len == 0:
-            return err((txSenderVfyLeafEmpty, keeQuOk))
+            return err(txVfySenderLeafEmpty)
 
           let rcItem = nonceData.itemList.verify
           if rcItem.isErr:
-            return err((txSenderVfyLeafQueue, rcItem.error[2]))
+            return err(txVfySenderLeafQueue)
 
         # end while
         if schedCount != schedData.size:
-          return err((txSenderVfySize, keeQuOk))
+          return err(txVfySenderTotal)
 
     # end for
     if addrCount != addrData.size:
-      return err((txSenderVfySize, keeQuOk))
+      return err(txVfySenderTotal)
     if lrCount != addrData.size:
-      return err((txSenderVfySize, keeQuOk))
+      return err(txVfySenderTotal)
     if xCount != addrData.size:
-      return err((txSenderVfySize, keeQuOk))
+      return err(txVfySenderTotal)
 
   # end while
   if allCount != gt.size:
-    return err((txSenderVfySize, keeQuOk))
+    return err(txVfySenderTotal)
 
   ok()
 

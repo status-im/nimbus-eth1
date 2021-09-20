@@ -14,7 +14,8 @@
 
 import
   std/[hashes, tables],
-   ../keequ,
+  ../keequ,
+  ./tx_info,
   eth/[common, keys],
   stew/results
 
@@ -195,11 +196,11 @@ proc len*(t: var TxJobs): int {.inline.} =
 # Public functions, debugging
 # ------------------------------------------------------------------------------
 
-proc verify*(t: var TxJobs): Result[void,(TxJobsInfo,KeeQuInfo)]
+proc verify*(t: var TxJobs): Result[void,TxVfyError]
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = t.jobQueue.verify
   if rc.isErr:
-    return err((txJobsVfyQueue,rc.error[2]))
+    return err(txVfyJobsQueue)
   ok()
 
 # ------------------------------------------------------------------------------

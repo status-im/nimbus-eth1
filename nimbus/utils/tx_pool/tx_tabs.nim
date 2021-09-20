@@ -21,56 +21,22 @@
 import
   ../keequ,
   ../slst,
+  ./tx_info,
   ./tx_item,
-  ./tx_tabs/[tx_gas, tx_price, tx_queue, tx_sender],
+  ./tx_tabs/[tx_itemid, tx_price, tx_sender, tx_tipcap],
   eth/[common, keys],
   stew/results
 
 export
-  tx_gas, tx_price, tx_queue, tx_sender
+  tx_price, tx_itemid, tx_sender, tx_tipcap
 
 type
-  TxTabsInfo* = enum ##\
-    ## Error codes (as used in verification function.)
-    txOk = 0
-
-    txTabsErrAlreadyKnown
-    txTabsErrInvalidSender
-
-    # failed verifier codes
-    txVfyByIdQueueList        ## Corrupted ID queue/fifo structure
-    txVfyByIdQueueTotal       ## Wrong number of leaves
-
-    txVfyBySenderRbTree       ## Corrupted sender list structure
-    txVfyBySenderLeafEmpty    ## Empty sender list leaf record
-    txVfyBySenderLeafQueue    ## Corrupted sender leaf queue
-    txVfyBySenderTotal        ## Wrong number of leaves
-
-    txVfyByNonceList          ## Corrupted nonce list structure
-    txVfyByNonceLeafEmpty     ## Empty nonce list leaf record
-    txVfyByNonceLeafQueue     ## Corrupted nonce leaf queue
-    txVfyByNonceTotal         ## Wrong number of leaves
-
-    txVfyByGasTipList         ## Corrupted gas price list structure
-    txVfyByGasTipLeafEmpty    ## Empty gas price list leaf record
-    txVfyByGasTipLeafQueue    ## Corrupted gas price leaf queue
-    txVfyByGasTipTotal        ## Wrong number of leaves
-
-    txVfyByTipCapList         ## Corrupted gas price list structure
-    txVfyByTipCapLeafEmpty    ## Empty gas price list leaf record
-    txVfyByTipCapLeafQueue    ## Corrupted gas price leaf queue
-    txVfyByTipCapTotal        ## Wrong number of leaves
-
-    # codes provided for other modules
-    txVfyByJobsQueue          ## Corrupted jobs queue/fifo structure
-
-
   TxTabsRef* = ref object ##\
     ## Base descriptor
     baseFee: GasInt           ## `byGasTip` re-org when changing
-    byItemID*: TxQueueTab    ## Primary table, queued by arrival event
+    byItemID*: TxItemIDTab    ## Primary table, queued by arrival event
     byGasTip*: TxPriceTab     ## Indexed by `effectiveGasTip` > `nonce`
-    byTipCap*: TxGasTab       ## Indexed by `gasTipCap`
+    byTipCap*: TxTipCapTab    ## Indexed by `gasTipCap`
     bySender*: TxSenderTab    ## Indexed by `sender` > `local` > `nonce`
 
 {.push raises: [Defect].}
@@ -110,7 +76,7 @@ proc init*(T: type TxTabsRef; baseFee = GasInt.low): T =
 # ------------------------------------------------------------------------------
 
 proc insert*(xp: TxTabsRef; tx: var Transaction; local = true; info = ""):
-           Result[void,TxTabsInfo] {.gcsafe,raises: [Defect,CatchableError].} =
+           Result[void,TxInfo] {.gcsafe,raises: [Defect,CatchableError].} =
   ## Add new transaction argument `tx` to the database. If accepted and added
   ## to the database, a `key` value is returned which can be used to retrieve
   ## this transaction direcly via `tx[key].tx`. The following holds for the
@@ -135,7 +101,7 @@ proc insert*(xp: TxTabsRef; tx: var Transaction; local = true; info = ""):
   let item = rc.value
   xp.byItemID.txAppend(item)
   xp.byGasTip.txInsert(item)
-  xp.byTipCap.txInsert(item.tx.gasTipCap, item)
+  xp.byTipCap.txInsert(item)
   xp.bySender.txInsert(item)
   ok()
 
@@ -166,7 +132,7 @@ proc delete*(xp: TxTabsRef; item: TxItemRef): bool
   ## removed.
   if xp.byItemID.txDelete(item):
     xp.byGasTip.txDelete(item)
-    xp.byTipCap.txDelete(item.tx.gasTipCap, item)
+    xp.byTipCap.txDelete(item)
     discard xp.bySender.txDelete(item)
     return true
 
@@ -247,6 +213,7 @@ iterator walkItems*(itemList: TxSenderItemRef): TxItemRef
     yield item
     rcItem = itemList.next(item)
 
+
 iterator walkSchedList*(senderTab: var TxSenderTab): TxSenderSchedRef =
   ## Walk over item lists grouped by sender addresses and local/remote. This
   ## iterator stops at the `TxSenderSchedRef` level sub-list.
@@ -277,7 +244,7 @@ iterator walkItemList*(nonceList: TxSenderNonceRef): TxSenderItemRef
   ## Top level part to replace `xp.bySender.walkItem` with:
   ## ::
   ##  for nonceList in xp.bySender.walkNonceList(true,false):
-  ##    for itemItemList in nonceList.walkItemList:
+  ##    for itemList in nonceList.walkItemList:
   ##      for item in itemList.walkItems:
   ##        ...
   ##
@@ -287,6 +254,34 @@ iterator walkItemList*(nonceList: TxSenderNonceRef): TxSenderItemRef
     yield itemList
     rcNonce = nonceList.gt(nonceKey)
 
+iterator walkItemList*(schedList: TxSenderSchedRef): TxSenderItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Top level part to replace `xp.bySender.walkItem` with:
+  ## ::
+  ##  for schedList in xp.bySender.walkSchedList(true,false):
+  ##    for schedList in nonceList.walkItemList:
+  ##      for item in itemList.walkItems:
+  ##        ...
+  ##
+  let nonceList = schedList.any.value.data
+  var rcNonce = nonceList.ge(AccountNonce.low)
+  while rcNonce.isOk:
+    let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
+    yield itemList
+    rcNonce = nonceList.gt(nonceKey)
+
+iterator walkItemList*(schedList: TxSenderSchedRef;
+                       local: bool): TxSenderItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  let rc = schedList.eq(local)
+  if rc.isOK:
+    let nonceList = rc.value.data
+    var rcNonce = nonceList.ge(AccountNonce.low)
+    while rcNonce.isOk:
+      let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
+      yield itemList
+      rcNonce = nonceList.gt(nonceKey)
+  
 # ------------------------------------------------------------------------------
 # Public iterators, `effectiveGasTip` > `nonce` > `item`
 # -----------------------------------------------------------------------------
@@ -395,8 +390,8 @@ iterator decItemList*(nonceList: TxPriceNonceRef;
 # Public iterators, `gasTipCap` > `item`
 # -----------------------------------------------------------------------------
 
-iterator incItemList*(gasTab: var TxGasTab;
-                      minCap = GasInt.low): TxGasItemRef =
+iterator incItemList*(gasTab: var TxTipCapTab;
+                      minCap = GasInt.low): TxTipCapItemRef =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
   ## See also the **Note* at the comment for `byTipCap.incItem()`.
@@ -406,7 +401,7 @@ iterator incItemList*(gasTab: var TxGasTab;
     yield rc.value.data
     rc = gasTab.gt(gasKey)
 
-iterator walkItems*(itemList: TxGasItemRef): TxItemRef
+iterator walkItems*(itemList: TxTipCapItemRef): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Walk over item lists grouped by sender addresses.
   var rcItem = itemList.first
@@ -415,8 +410,8 @@ iterator walkItems*(itemList: TxGasItemRef): TxItemRef
     yield item
     rcItem = itemList.next(item)
 
-iterator decItemList*(gasTab: var TxGasTab;
-                      maxCap = GasInt.high): TxGasItemRef =
+iterator decItemList*(gasTab: var TxTipCapTab;
+                      maxCap = GasInt.high): TxTipCapItemRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## See also the **Note* at the comment for `byTipCap.incItem()`.
@@ -430,52 +425,34 @@ iterator decItemList*(gasTab: var TxGasTab;
 # Public functions, debugging
 # ------------------------------------------------------------------------------
 
-proc verify*(xp: TxTabsRef): Result[void,TxTabsInfo]
+proc verify*(xp: TxTabsRef): Result[void,TxVfyError]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify descriptor and subsequent data structures.
   block:
     let rc = xp.byGasTip.txVerify
     if rc.isErr:
-      case rc.error[0]
-      of txPriceOk:            return err(txOk)
-      of txPriceVfyRbTree:     return err(txVfyByGasTipList)
-      of txPriceVfyLeafEmpty:  return err(txVfyByGasTipLeafEmpty)
-      of txPriceVfyLeafQueue:  return err(txVfyByGasTipLeafQueue)
-      of txPriceVfySize:       return err(txVfyByGasTipTotal)
+      return rc
   block:
     let rc = xp.byTipCap.txVerify
     if rc.isErr:
-      case rc.error[0]
-      of txGasOk:              return err(txOk)
-      of txGasVfyRbTree:       return err(txVfyByTipCapList)
-      of txGasVfyLeafEmpty:    return err(txVfyByTipCapLeafEmpty)
-      of txGasVfyLeafQueue:    return err(txVfyByTipCapLeafQueue)
-      of txGasVfySize:         return err(txVfyByTipCapTotal)
+      return rc
   block:
     let rc = xp.bySender.txVerify
     if rc.isErr:
-      case rc.error[0]
-      of txSenderOk:           return err(txOk)
-      of txSenderVfyRbTree:    return err(txVfyBySenderRbTree)
-      of txSenderVfyLeafEmpty: return err(txVfyBySenderLeafEmpty)
-      of txSenderVfyLeafQueue: return err(txVfyBySenderLeafQueue)
-      of txSenderVfySize:      return err(txVfyBySenderTotal)
+      return rc
   block:
     let rc = xp.byItemID.txVerify
     if rc.isErr:
-      case rc.error[0]
-      of txQueueOk:            return err(txOk)
-      of txQueueVfyQueueList:  return err(txVfyByIdQueueList)
-      of txQueueVfySize:       return err(txVfyByIdQueueTotal)
+      return rc
 
   if xp.byItemID.nItems != xp.bySender.nItems:
-     return err(txVfyBySenderTotal)
+     return err(txVfySenderTotal)
 
   if xp.byItemID.nItems != xp.byGasTip.nItems:
-     return err(txVfyByGasTipTotal)
+     return err(txVfyGasTipTotal)
 
   if xp.byItemID.nItems != xp.byTipCap.nItems:
-     return err(txVfyByTipCapTotal)
+     return err(txVfyTipCapTotal)
 
   ok()
 
