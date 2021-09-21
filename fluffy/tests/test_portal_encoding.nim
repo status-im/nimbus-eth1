@@ -8,8 +8,7 @@
 {.used.}
 
 import
-  std/unittest,
-  stint, stew/[byteutils, results], eth/p2p/discoveryv5/enr,
+  unittest2, stint, stew/[byteutils, results], eth/p2p/discoveryv5/enr,
   ../network/state/messages
 
 suite "Portal Protocol Message Encodings":

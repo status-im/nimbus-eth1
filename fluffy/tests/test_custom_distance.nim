@@ -8,10 +8,9 @@
 {.used.}
 
 import
-  std/[unittest, sequtils],
-  stint,
+  std/sequtils,
+  stint, unittest2,
   ../network/state/custom_distance
-
 
 suite "State network custom distance function":
   test "Calculate distance according to spec":
@@ -56,4 +55,3 @@ suite "State network custom distance function":
 
     check:
       logDistances == logCalculated
-
