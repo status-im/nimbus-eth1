@@ -40,3 +40,8 @@ proc random*(T: type UInt256, rng: var BrHmacDrbgContext): T =
   brHmacDrbgGenerate(addr rng, addr key, csize_t(sizeof(key)))
 
   key
+
+template asyncTest*(name, body: untyped) =
+  test name:
+    proc scenario {.async.} = body
+    waitFor scenario()

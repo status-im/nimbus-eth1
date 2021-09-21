@@ -7,7 +7,7 @@
 
 import
   std/os,
-  testutils/unittests,
+  unittest2,
   eth/[keys, trie/db, trie/hexary, ssz/ssz_serialization],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   ../../nimbus/[genesis, chain_config, config, db/db_chain],
@@ -33,92 +33,96 @@ proc genesisToTrie(filePath: string): HexaryTrie =
   # Trie exists already in flat db, but need to provide the root
   initHexaryTrie(chainDB.db, header.stateRoot, chainDB.pruneTrie)
 
-procSuite "Content Network":
-  let rng = newRng()
-  asyncTest "Test Share Full State":
-    let
-      trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
-
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
-
-      proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
-      proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
-
-    check proto2.portalProtocol.addNode(node1.localNode) == Added
-
-    var keys: seq[seq[byte]]
-    for k, v in trie.replicate:
-      keys.add(k)
-
-    for key in keys:
-      var nodeHash: NodeHash
-      copyMem(nodeHash.data.addr, unsafeAddr key[0], sizeof(nodeHash.data))
-
+proc contentNetworkMain*() =
+  suite "Content Network":
+    let rng = newRng()
+    asyncTest "Test Share Full State":
       let
-        contentKey = ContentKey(
-          networkId: 0'u16,
-          contentType: content.ContentType.Account,
-          nodeHash: nodeHash)
+        trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
 
-      let foundContent = await proto2.getContent(contentKey)
+        node1 = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20302))
+        node2 = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20303))
+
+        proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
+        proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
+
+      check proto2.portalProtocol.addNode(node1.localNode) == Added
+
+      var keys: seq[seq[byte]]
+      for k, v in trie.replicate:
+        keys.add(k)
+
+      for key in keys:
+        var nodeHash: NodeHash
+        copyMem(nodeHash.data.addr, unsafeAddr key[0], sizeof(nodeHash.data))
+
+        let
+          contentKey = ContentKey(
+            networkId: 0'u16,
+            contentType: content.ContentType.Account,
+            nodeHash: nodeHash)
+
+        let foundContent = await proto2.getContent(contentKey)
+
+        check:
+          foundContent.isSome()
+
+        let hash = hexary.keccak(foundContent.get())
+        check hash.data == key
+
+      await node1.closeWait()
+      await node2.closeWait()
+
+    asyncTest "Find content in the network via content lookup":
+      let
+        trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
+        node1 = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20302))
+        node2 = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20303))
+        node3 = initDiscoveryNode(
+          rng, PrivateKey.random(rng[]), localAddress(20304))
+
+
+        proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
+        proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
+        proto3 = PortalNetwork.new(node3, ContentStorage(trie: trie))
+
+
+      # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
+      check proto1.portalProtocol.addNode(node2.localNode) == Added
+      check proto2.portalProtocol.addNode(node3.localNode) == Added
+
+      check (await proto2.portalProtocol.ping(node3.localNode)).isOk()
+
+      var keys: seq[seq[byte]]
+      for k, v in trie.replicate:
+        keys.add(k)
+
+      # Get first key
+      var nodeHash: NodeHash
+      let firstKey = keys[0]
+      copyMem(nodeHash.data.addr, unsafeAddr firstKey[0], sizeof(nodeHash.data))
+
+      let contentKey = ContentKey(
+        networkId: 0'u16,
+        contentType: content.ContentType.Account,
+        nodeHash: nodeHash)
+
+      let foundContent = await proto1.getContent(contentKey)
 
       check:
         foundContent.isSome()
 
       let hash = hexary.keccak(foundContent.get())
-      check hash.data == key
 
-    await node1.closeWait()
-    await node2.closeWait()
+      check hash.data == firstKey
 
-  asyncTest "Find content in the network via content lookup":
-    let
-      trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
-      node1 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20302))
-      node2 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20303))
-      node3 = initDiscoveryNode(
-        rng, PrivateKey.random(rng[]), localAddress(20304))
+      await node1.closeWait()
+      await node2.closeWait()
+      await node3.closeWait()
 
-
-      proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
-      proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
-      proto3 = PortalNetwork.new(node3, ContentStorage(trie: trie))
-
-
-    # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
-    check proto1.portalProtocol.addNode(node2.localNode) == Added
-    check proto2.portalProtocol.addNode(node3.localNode) == Added
-
-    check (await proto2.portalProtocol.ping(node3.localNode)).isOk()
-
-    var keys: seq[seq[byte]]
-    for k, v in trie.replicate:
-      keys.add(k)
-
-    # Get first key
-    var nodeHash: NodeHash
-    let firstKey = keys[0]
-    copyMem(nodeHash.data.addr, unsafeAddr firstKey[0], sizeof(nodeHash.data))
-
-    let contentKey = ContentKey(
-      networkId: 0'u16,
-      contentType: content.ContentType.Account,
-      nodeHash: nodeHash)
-
-    let foundContent = await proto1.getContent(contentKey)
-
-    check:
-      foundContent.isSome()
-
-    let hash = hexary.keccak(foundContent.get())
-
-    check hash.data == firstKey
-
-    await node1.closeWait()
-    await node2.closeWait()
-    await node3.closeWait()
+when isMainModule:
+  contentNetworkMain()

@@ -9,13 +9,11 @@ import ../../test_macro
 
 {. warning[UnusedImport]:off .}
 
-import
-  ./test_portal_encoding,
-  ./test_portal,
-  ./test_content_network,
-  ./test_discovery_rpc,
-  ./test_custom_distance
-
 cliBuilder:
   import
+    ./test_portal_encoding,
+    ./test_portal,
+    ./test_content_network,
+    ./test_discovery_rpc,
+    ./test_custom_distance,
     ./test_bridge_parser

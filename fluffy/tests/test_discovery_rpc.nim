@@ -8,7 +8,7 @@
 {.used.}
 
 import
-  chronos, testutils/unittests, stew/shims/net,
+  chronos, unittest2, stew/shims/net,
   json_rpc/[rpcproxy, rpcserver], json_rpc/clients/httpclient,
   stint,eth/p2p/discoveryv5/enr, eth/keys,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
@@ -42,24 +42,29 @@ proc stop(t: TestCase) {.async.} =
   await t.server.closeWait()
   await t.localDiscovery.closeWait()
 
-procSuite "Discovery Rpc":
-  let rng = newRng()
 
-  asyncTest "Get local node info":
-    let tc = await setupTest(rng)
-    let resp = await tc.client.call("discv5_nodeInfo", %[])
+proc discoveryRpcMain*() =
+  suite "Discovery Rpc":
+    let rng = newRng()
 
-    check:
-      resp.contains("node_id")
-      resp["node_id"].kind == JString
-      resp.contains("enr")
-      resp["enr"].kind == JString
+    asyncTest "Get local node info":
+      let tc = await setupTest(rng)
+      let resp = await tc.client.call("discv5_nodeInfo", %[])
 
-    let nodeId = resp["node_id"].getStr()
-    let nodeEnr = resp["enr"].getStr()
+      check:
+        resp.contains("node_id")
+        resp["node_id"].kind == JString
+        resp.contains("enr")
+        resp["enr"].kind == JString
 
-    check:
-      nodeEnr == tc.localDiscovery.localNode.record.toURI()
-      nodeId == "0x" & tc.localDiscovery.localNode.id.toHex()
+      let nodeId = resp["node_id"].getStr()
+      let nodeEnr = resp["enr"].getStr()
 
-    waitFor tc.stop()
+      check:
+        nodeEnr == tc.localDiscovery.localNode.record.toURI()
+        nodeId == "0x" & tc.localDiscovery.localNode.id.toHex()
+
+      waitFor tc.stop()
+
+when isMainModule:
+  discoveryRpcMain()
