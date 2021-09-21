@@ -5,8 +5,6 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ../../test_macro
-
 {. warning[UnusedImport]:off .}
 
 import
@@ -14,8 +12,5 @@ import
   ./test_portal,
   ./test_content_network,
   ./test_discovery_rpc,
-  ./test_custom_distance
-
-cliBuilder:
-  import
-    ./test_bridge_parser
+  ./test_custom_distance,
+  ./test_bridge_parser
