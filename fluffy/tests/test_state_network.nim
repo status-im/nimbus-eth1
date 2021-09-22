@@ -11,7 +11,8 @@ import
   eth/[keys, trie/db, trie/hexary, ssz/ssz_serialization],
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   ../../nimbus/[genesis, chain_config, config, db/db_chain],
-  ../network/state/portal_protocol, ../network/state/content, ../network/state/portal_network,
+  ../network/wire/portal_protocol,
+  ../network/state/[state_content, state_network],
   ./test_helpers
 
 proc genesisToTrie(filePath: string): HexaryTrie =
@@ -33,7 +34,7 @@ proc genesisToTrie(filePath: string): HexaryTrie =
   # Trie exists already in flat db, but need to provide the root
   initHexaryTrie(chainDB.db, header.stateRoot, chainDB.pruneTrie)
 
-procSuite "Content Network":
+procSuite "State Content Network":
   let rng = newRng()
   asyncTest "Test Share Full State":
     let
@@ -44,8 +45,8 @@ procSuite "Content Network":
       node2 = initDiscoveryNode(
         rng, PrivateKey.random(rng[]), localAddress(20303))
 
-      proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
-      proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
+      proto1 = StateNetwork.new(node1, ContentStorage(trie: trie))
+      proto2 = StateNetwork.new(node2, ContentStorage(trie: trie))
 
     check proto2.portalProtocol.addNode(node1.localNode) == Added
 
@@ -60,7 +61,7 @@ procSuite "Content Network":
       let
         contentKey = ContentKey(
           networkId: 0'u16,
-          contentType: content.ContentType.Account,
+          contentType: state_content.ContentType.Account,
           nodeHash: nodeHash)
 
       let foundContent = await proto2.getContent(contentKey)
@@ -85,9 +86,9 @@ procSuite "Content Network":
         rng, PrivateKey.random(rng[]), localAddress(20304))
 
 
-      proto1 = PortalNetwork.new(node1, ContentStorage(trie: trie))
-      proto2 = PortalNetwork.new(node2, ContentStorage(trie: trie))
-      proto3 = PortalNetwork.new(node3, ContentStorage(trie: trie))
+      proto1 = StateNetwork.new(node1, ContentStorage(trie: trie))
+      proto2 = StateNetwork.new(node2, ContentStorage(trie: trie))
+      proto3 = StateNetwork.new(node3, ContentStorage(trie: trie))
 
 
     # Node1 knows about Node2, and Node2 knows about Node3 which hold all content
@@ -107,7 +108,7 @@ procSuite "Content Network":
 
     let contentKey = ContentKey(
       networkId: 0'u16,
-      contentType: content.ContentType.Account,
+      contentType: state_content.ContentType.Account,
       nodeHash: nodeHash)
 
     let foundContent = await proto1.getContent(contentKey)

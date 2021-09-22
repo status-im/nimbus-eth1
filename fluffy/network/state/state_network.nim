@@ -1,17 +1,21 @@
 import
   std/[options, sugar],
-  stew/results,
+  stew/[results, byteutils],
   eth/p2p/discoveryv5/[protocol, node],
-  ./content, ./portal_protocol
+  ../wire/portal_protocol,
+  ./state_content
+
+const
+  StateProtocolId* = "portal:state".toBytes()
 
 # TODO expose function in domain specific way i.e operating od state network
 # objects i.e nodes, tries, hashes
-type PortalNetwork* = ref object
-  storage: ContentStorage
+type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
+  storage: ContentStorage
 
 proc getHandler(storage: ContentStorage): ContentHandler =
-    return (proc (contentKey: content.ByteList): ContentResult =
+    return (proc (contentKey: state_content.ByteList): ContentResult =
       let maybeContent = storage.getContent(contentKey)
       if (maybeContent.isSome()):
         ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
@@ -22,7 +26,7 @@ proc getHandler(storage: ContentStorage): ContentHandler =
 # 1. Return proper domain types instead of bytes
 # 2. First check if item is in storage instead of doing lookup
 # 3. Put item into storage (if in radius) after succesful lookup
-proc getContent*(p:PortalNetwork, key: ContentKey):
+proc getContent*(p: StateNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
   let keyAsBytes = encodeKeyAsList(key)
   let id = contentIdAsUint256(toContentId(keyAsBytes))
@@ -31,15 +35,15 @@ proc getContent*(p:PortalNetwork, key: ContentKey):
   # types from here
   return result.map(x => x.asSeq())
 
-proc new*(T: type PortalNetwork, baseProtocol: protocol.Protocol,
+proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
     storage: ContentStorage , dataRadius = UInt256.high()): T =
-  let portalProto =
-    PortalProtocol.new(baseProtocol, getHandler(storage), dataRadius)
+  let portalProtocol = PortalProtocol.new(
+    baseProtocol, StateProtocolId, getHandler(storage), dataRadius)
 
-  return PortalNetwork(storage: storage, portalProtocol: portalProto)
+  return StateNetwork(portalProtocol: portalProtocol, storage: storage)
 
-proc start*(p: PortalNetwork) =
+proc start*(p: StateNetwork) =
   p.portalProtocol.start()
 
-proc stop*(p: PortalNetwork) =
+proc stop*(p: StateNetwork) =
   p.portalProtocol.stop()

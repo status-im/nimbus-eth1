@@ -9,17 +9,16 @@
 
 import
   std/[sequtils, sets, algorithm],
-  stew/[results, byteutils], chronicles, chronos, nimcrypto/hash,
+  stew/results, chronicles, chronos, nimcrypto/hash,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
   ./messages
 
 export messages
 
 logScope:
-  topics = "portal"
+  topics = "portal_wire"
 
 const
-  PortalProtocolId* = "portal".toBytes()
   Alpha = 3 ## Kademlia concurrency factor
   LookupRequestLimit = 3 ## Amount of distances requested in a single Findnode
   ## message for a lookup or query
@@ -51,6 +50,7 @@ type
     proc(contentKey: ByteList): ContentResult {.raises: [Defect], gcsafe.}
 
   PortalProtocol* = ref object of TalkProtocol
+    protocolId: seq[byte]
     routingTable: RoutingTable
     baseProtocol*: protocol.Protocol
     dataRadius*: UInt256
@@ -179,7 +179,9 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
   else:
     @[]
 
-proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
+proc new*(T: type PortalProtocol,
+    baseProtocol: protocol.Protocol,
+    protocolId: seq[byte],
     contentHandler: ContentHandler,
     dataRadius = UInt256.high()): T =
   let proto = PortalProtocol(
@@ -188,9 +190,10 @@ proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
     protocolHandler: messageHandler,
     baseProtocol: baseProtocol,
     dataRadius: dataRadius,
-    handleContentRequest: contentHandler)
+    handleContentRequest: contentHandler,
+    protocolId: protocolId)
 
-  proto.baseProtocol.registerTalkProtocol(PortalProtocolId, proto).expect(
+  proto.baseProtocol.registerTalkProtocol(proto.protocolId, proto).expect(
     "Only one protocol should have this id")
 
   return proto
@@ -202,11 +205,10 @@ proc new*(T: type PortalProtocol, baseProtocol: protocol.Protocol,
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     p: PortalProtocol,
     toNode: Node,
-    protocol: seq[byte],
     request: Request
     ): Future[PortalResult[Response]] {.async.} =
   let respResult =
-    await talkreq(p.baseProtocol, toNode, protocol, encodeMessage(request))
+    await talkreq(p.baseProtocol, toNode, p.protocolId, encodeMessage(request))
 
   return respResult
     .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
@@ -226,8 +228,7 @@ proc ping*(p: PortalProtocol, dst: Node):
     dataRadius: p.dataRadius)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.ping
-  return await reqResponse[PingMessage, PongMessage](
-    p, dst, PortalProtocolId, ping)
+  return await reqResponse[PingMessage, PongMessage](p, dst, ping)
 
 proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
     Future[PortalResult[NodesMessage]] {.async.} =
@@ -235,16 +236,14 @@ proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findnode
   # TODO Add nodes validation
-  return await reqResponse[FindNodeMessage, NodesMessage](
-    p, dst, PortalProtocolId, fn)
+  return await reqResponse[FindNodeMessage, NodesMessage](p, dst, fn)
 
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
     Future[PortalResult[FoundContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
-  return await reqResponse[FindContentMessage, FoundContentMessage](
-    p, dst, PortalProtocolId, fc)
+  return await reqResponse[FindContentMessage, FoundContentMessage](p, dst, fc)
 
 proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
     Future[PortalResult[AcceptMessage]] {.async.} =
@@ -252,8 +251,7 @@ proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.offer
 
-  return await reqResponse[OfferMessage, AcceptMessage](
-    p, dst, PortalProtocolId, offer)
+  return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
 
   # TODO: Actually have to parse the offer message and get the uTP connection
   # id, and initiate an uTP stream with given uTP connection id to get the data

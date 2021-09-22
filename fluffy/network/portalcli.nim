@@ -13,7 +13,7 @@ import
   eth/[keys, net/nat],
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ./state/messages, ./state/portal_protocol
+  ./wire/messages, ./wire/portal_protocol
 
 type
   PortalCmd* = enum
@@ -170,7 +170,7 @@ proc run(config: DiscoveryConf) =
 
   d.open()
 
-  let portal = PortalProtocol.new(d, testHandler)
+  let portal = PortalProtocol.new(d, "portal".toBytes(), testHandler)
 
   if config.metricsEnabled:
     let
