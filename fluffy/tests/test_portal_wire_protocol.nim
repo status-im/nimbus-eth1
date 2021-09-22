@@ -11,7 +11,7 @@ import
   chronos, testutils/unittests, stew/shims/net, stew/byteutils,
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/state/portal_protocol,
+  ../network/wire/portal_protocol,
   ./test_helpers
 
 const protocolId = "portal".toBytes()
@@ -44,7 +44,7 @@ proc stopTest(test: Default2NodeTest) {.async.} =
   await test.node1.closeWait()
   await test.node2.closeWait()
 
-procSuite "Portal Tests":
+procSuite "Portal Wire Protocol Tests":
   let rng = newRng()
 
   asyncTest "Portal Ping/Pong":

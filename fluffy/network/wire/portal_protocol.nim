@@ -16,7 +16,7 @@ import
 export messages
 
 logScope:
-  topics = "portal"
+  topics = "portal_wire"
 
 const
   Alpha = 3 ## Kademlia concurrency factor
@@ -50,6 +50,7 @@ type
     proc(contentKey: ByteList): ContentResult {.raises: [Defect], gcsafe.}
 
   PortalProtocol* = ref object of TalkProtocol
+    protocolId: seq[byte]
     routingTable: RoutingTable
     baseProtocol*: protocol.Protocol
     dataRadius*: UInt256
@@ -57,7 +58,6 @@ type
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
-    protocolId: seq[byte]
 
   PortalResult*[T] = Result[T, cstring]
 

@@ -9,9 +9,9 @@
 
 import
   unittest2, stint, stew/[byteutils, results], eth/p2p/discoveryv5/enr,
-  ../network/state/messages
+  ../network/wire/messages
 
-suite "Portal Protocol Message Encodings":
+suite "Portal Wire Protocol Message Encodings":
   test "Ping Request":
     var dataRadius: UInt256
     let
