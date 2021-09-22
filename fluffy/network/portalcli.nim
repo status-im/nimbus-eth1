@@ -170,7 +170,7 @@ proc run(config: DiscoveryConf) =
 
   d.open()
 
-  let portal = PortalProtocol.new(d, testHandler)
+  let portal = PortalProtocol.new(d, "portal".toBytes(), testHandler)
 
   if config.metricsEnabled:
     let

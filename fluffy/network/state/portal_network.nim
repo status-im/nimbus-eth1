@@ -1,8 +1,11 @@
 import
   std/[options, sugar],
-  stew/results,
+  stew/[results, byteutils],
   eth/p2p/discoveryv5/[protocol, node],
   ./content, ./portal_protocol
+
+const
+  StateProtocolId* = "portal:state".toBytes()
 
 # TODO expose function in domain specific way i.e operating od state network
 # objects i.e nodes, tries, hashes
@@ -33,8 +36,8 @@ proc getContent*(p:PortalNetwork, key: ContentKey):
 
 proc new*(T: type PortalNetwork, baseProtocol: protocol.Protocol,
     storage: ContentStorage , dataRadius = UInt256.high()): T =
-  let portalProto =
-    PortalProtocol.new(baseProtocol, getHandler(storage), dataRadius)
+  let portalProto = PortalProtocol.new(
+    baseProtocol, StateProtocolId, getHandler(storage), dataRadius)
 
   return PortalNetwork(storage: storage, portalProtocol: portalProto)
 
