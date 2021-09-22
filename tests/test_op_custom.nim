@@ -187,6 +187,15 @@ proc opCustomMain*() =
         Balance
       stack: "0x000000000000000000000000000000000000000000000000cff56a1b273a8000"
 
+    assembler: # EIP2929 BALANCE OP
+      title: "EIP2929 BALANCE_1"
+      code:
+        Address
+        Balance
+      stack: "0x000000000000000000000000000000000000000000000000cff56a1b273a8000"
+      fork: berlin
+      gasused: 2602
+
     assembler: # ORIGIN OP
       title: "ORIGIN_1"
       code:
@@ -302,3 +311,6 @@ proc opCustomMain*() =
       code: "0x60012F6002"
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
       success: false
+
+when isMainModule:
+  opCustomMain()

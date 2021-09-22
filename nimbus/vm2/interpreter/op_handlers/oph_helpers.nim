@@ -28,8 +28,7 @@ import
 # Public
 # ------------------------------------------------------------------------------
 
-proc gasEip2929AccountCheck*(c: Computation;
-                             address: EthAddress, prevCost = 0.GasInt) =
+proc gasEip2929AccountCheck*(c: Computation; address: EthAddress) =
   c.vmState.mutateStateDB:
     let gasCost = if not db.inAccessList(address):
                     db.accessList(address)
@@ -38,7 +37,7 @@ proc gasEip2929AccountCheck*(c: Computation;
                     WarmStorageReadCost
 
     c.gasMeter.consumeGas(
-      gasCost - prevCost,
+      gasCost,
       reason = "gasEIP2929AccountCheck")
 
 

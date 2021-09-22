@@ -307,3 +307,27 @@ proc opEnvMain*() =
         "0x6014525451606001601e5254516080016028525460a052546016604860003960"
         "0x166000f26000603f556103e75660005460005360200235"
       stack: "0x94"
+
+    assembler: # EIP2929 EXTCODESIZE OP
+      title: "EIP2929 EXTCODESIZE_1"
+      code:
+        Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
+        ExtCodeSize
+        STOP
+      stack: "0x94"
+      fork: berlin
+      gasused: 2603
+
+    assembler: # EIP2929 EXTCODEHASH OP
+      title: "EIP2929 EXTCODEHASH_1"
+      code:
+        Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
+        ExtCodeHash
+        STOP
+      stack:
+        "0xc862129bffb73168481c6a51fd36afb8342887fbc5314c763ac731c732d7310c"
+      fork: berlin
+      gasused: 2603
+
+when isMainModule:
+  opEnvMain()

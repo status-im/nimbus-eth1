@@ -75,8 +75,7 @@ const
     ## 0x31, EIP292: Get balance of the given account for Berlin and later
     let address = k.cpt.stack.popAddress()
 
-    k.cpt.gasEip2929AccountCheck(
-      address, gasFees[k.cpt.fork][GasBalance])
+    k.cpt.gasEip2929AccountCheck(address)
     k.cpt.stack.push:
       k.cpt.getBalance(address)
 
@@ -177,8 +176,7 @@ const
     ## 0x3b, Get size of an account's code
     let address = k.cpt.stack.popAddress()
 
-    k.cpt.gasEip2929AccountCheck(
-      address, gasFees[k.cpt.fork][GasExtCode])
+    k.cpt.gasEip2929AccountCheck(address)
     k.cpt.stack.push:
       k.cpt.getCodeSize(address)
 
@@ -211,8 +209,7 @@ const
       k.cpt.gasCosts[ExtCodeCopy].m_handler(k.cpt.memory.len, memPos, len),
       reason = "ExtCodeCopy fee")
 
-    k.cpt.gasEip2929AccountCheck(
-      address, gasFees[k.cpt.fork][GasExtCode])
+    k.cpt.gasEip2929AccountCheck(address)
 
     let codeBytes = k.cpt.getCode(address)
     k.cpt.memory.writePaddedResult(codeBytes, memPos, codePos, len)
@@ -258,8 +255,7 @@ const
     ## 0x3f, EIP2929: Returns the keccak256 hash of a contract’s code
     let address = k.cpt.stack.popAddress()
 
-    k.cpt.gasEip2929AccountCheck(
-      address, gasFees[k.cpt.fork][GasExtCodeHash])
+    k.cpt.gasEip2929AccountCheck(address)
 
     k.cpt.stack.push:
       k.cpt.getCodeHash(address)

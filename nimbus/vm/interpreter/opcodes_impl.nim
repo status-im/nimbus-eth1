@@ -1018,20 +1018,20 @@ op extCodeHash, inline = true:
 op balanceEIP2929, inline = true:
   ## 0x31, Get balance of the given account.
   let address = c.stack.popAddress()
-  c.gasMeter.consumeGas(c.accessGas(address) - gasFees[c.fork][GasBalance],
+  c.gasMeter.consumeGas(c.accessGas(address),
                         reason = "balanceEIP2929")
   push: c.getBalance(address)
 
 op extCodeHashEIP2929, inline = true:
   let address = c.stack.popAddress()
-  c.gasMeter.consumeGas(c.accessGas(address) - gasFees[c.fork][GasExtCodeHash],
+  c.gasMeter.consumeGas(c.accessGas(address),
                         reason = "extCodeHashEIP2929")
   push: c.getCodeHash(address)
 
 op extCodeSizeEIP2929, inline = true:
   ## 0x3b, Get size of an account's code
   let address = c.stack.popAddress()
-  c.gasMeter.consumeGas(c.accessGas(address) - gasFees[c.fork][GasExtCode],
+  c.gasMeter.consumeGas(c.accessGas(address),
                         reason = "extCodeSizeEIP2929")
   push: c.getCodeSize(address)
 
@@ -1045,7 +1045,7 @@ op extCodeCopyEIP2929, inline = true:
     c.gasCosts[ExtCodeCopy].m_handler(c.memory.len, memPos, len),
     reason="ExtCodeCopy fee")
 
-  c.gasMeter.consumeGas(c.accessGas(address) - gasFees[c.fork][GasExtCode],
+  c.gasMeter.consumeGas(c.accessGas(address),
                         reason = "extCodeCopyEIP2929")
 
   let codeBytes = c.getCode(address)

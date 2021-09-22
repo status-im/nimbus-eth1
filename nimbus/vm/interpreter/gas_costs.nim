@@ -724,6 +724,12 @@ func istanbulGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
 func berlinGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   # https://eips.ethereum.org/EIPS/eip-2929
   result = previousFees
+
+  # these opcodes gas are calculated inside opcode
+  result[GasBalance]     = 0
+  result[GasExtCodeHash] = 0
+  result[GasExtCode]     = 0
+
   # SLOAD gasCost become fully dynamic, see sloadEIP2929
   result[GasSLoad]        = 0
   result[GasCall]         = WarmStorageReadCost
