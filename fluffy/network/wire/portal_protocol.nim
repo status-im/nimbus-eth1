@@ -55,6 +55,7 @@ type
     baseProtocol*: protocol.Protocol
     dataRadius*: UInt256
     handleContentRequest: ContentHandler
+    bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
@@ -73,6 +74,13 @@ type
 
 proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
+
+proc addNode*(p: PortalProtocol, r: Record): bool =
+  let node = newNode(r)
+  if node.isOk():
+    p.addNode(node[]) == Added
+  else:
+    false
 
 proc neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
@@ -183,15 +191,17 @@ proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: seq[byte],
     contentHandler: ContentHandler,
-    dataRadius = UInt256.high()): T =
+    dataRadius = UInt256.high(),
+    bootstrapRecords: openarray[Record] = []): T =
   let proto = PortalProtocol(
+    protocolHandler: messageHandler,
+    protocolId: protocolId,
     routingTable: RoutingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
       DefaultTableIpLimits, baseProtocol.rng),
-    protocolHandler: messageHandler,
     baseProtocol: baseProtocol,
     dataRadius: dataRadius,
     handleContentRequest: contentHandler,
-    protocolId: protocolId)
+    bootstrapRecords: @bootstrapRecords)
 
   proto.baseProtocol.registerTalkProtocol(proto.protocolId, proto).expect(
     "Only one protocol should have this id")
@@ -496,8 +506,15 @@ proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
 proc seedTable(p: PortalProtocol) =
-  # TODO: Just picking something here for now. Should definitely add portal
-  # protocol info k:v pair in the ENRs and filter on that.
+  ## Seed the table with nodes from the discv5 table and with specifically
+  ## provided bootstrap nodes. The latter are then supposed to be nodes
+  ## supporting the wire protocol for the specific content network.
+  # Note: We allow replacing the bootstrap nodes in the routing table as it is
+  # possible that some of these are not supporting the specific portal network.
+
+  # TODO: Picking some nodes from discv5 routing table now. Should definitely
+  # add supported Portal network info in a k:v pair in the ENRs and filter on
+  # that.
   let closestNodes = p.baseProtocol.neighbours(
     NodeId.random(p.baseProtocol.rng[]), seenOnly = true)
 
@@ -506,6 +523,15 @@ proc seedTable(p: PortalProtocol) =
       debug "Added node from discv5 routing table", uri = toURI(node.record)
     else:
       debug "Node from discv5 routing table could not be added", uri = toURI(node.record)
+
+  # Seed the table with bootstrap nodes.
+  for record in p.bootstrapRecords:
+    if p.addNode(record):
+      debug "Added bootstrap node", uri = toURI(record),
+        protocolId = p.protocolId
+    else:
+      debug "Bootstrap node could not be added", uri = toURI(record),
+        protocolId = p.protocolId
 
 proc populateTable(p: PortalProtocol) {.async.} =
   ## Do a set of initial lookups to quickly populate the table.

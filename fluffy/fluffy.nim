@@ -53,7 +53,8 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   d.open()
 
-  let stateNetwork = StateNetwork.new(d, newEmptyInMemoryStorage())
+  let stateNetwork = StateNetwork.new(d, newEmptyInMemoryStorage(),
+    bootstrapRecords = config.portalBootnodes)
 
   if config.metricsEnabled:
     let

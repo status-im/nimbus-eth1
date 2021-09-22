@@ -60,6 +60,10 @@ type
       defaultValue: PrivateKey.random(keys.newRng()[])
       name: "nodekey" .}: PrivateKey
 
+    portalBootnodes* {.
+      desc: "ENR URI of node to bootstrap the Portal protocol with. Argument may be repeated"
+      name: "portal-bootnode" .}: seq[Record]
+
     metricsEnabled* {.
       defaultValue: false
       desc: "Enable the metrics server"
@@ -170,7 +174,8 @@ proc run(config: DiscoveryConf) =
 
   d.open()
 
-  let portal = PortalProtocol.new(d, "portal".toBytes(), testHandler)
+  let portal = PortalProtocol.new(d, "portal".toBytes(), testHandler,
+    bootstrapRecords = config.portalBootnodes)
 
   if config.metricsEnabled:
     let
