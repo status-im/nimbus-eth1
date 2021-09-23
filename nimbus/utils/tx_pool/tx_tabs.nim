@@ -284,6 +284,9 @@ iterator walkItemList*(schedList: TxSenderSchedRef): TxSenderItemRef
     yield itemList
     rcNonce = nonceList.gt(nonceKey)
 
+#[
+# deprecated
+
 iterator walkItemList*(schedList: TxSenderSchedRef;
                        sched: TxSenderSchedule): TxSenderItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -295,7 +298,20 @@ iterator walkItemList*(schedList: TxSenderSchedRef;
       let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
       yield itemList
       rcNonce = nonceList.gt(nonceKey)
-  
+]#
+
+iterator walkItemList*(schedList: TxSenderSchedRef;
+                       status: TxItemStatus): TxSenderItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  let rc = schedList.eq(status)
+  if rc.isOK:
+    let nonceList = rc.value.data
+    var rcNonce = nonceList.ge(AccountNonce.low)
+    while rcNonce.isOk:
+      let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
+      yield itemList
+      rcNonce = nonceList.gt(nonceKey)
+
 # ------------------------------------------------------------------------------
 # Public iterators, `effectiveGasTip` > `nonce` > `item`
 # -----------------------------------------------------------------------------

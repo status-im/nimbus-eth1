@@ -12,6 +12,54 @@
 ## ===========================================
 
 type
+  TxPoolError* = enum
+    txPoolErrNone = ##\
+      ## Default/reset value
+      (0, "no error")
+
+    txPoolErrUnspecified = ##\
+      ## Some unspecified error occured
+      "generic error"
+
+    txPoolErrAlreadyKnown = ##\
+      ## The transactions is already contained within the pool
+      "already known"
+
+    txPoolErrInvalidSender = ##\
+      ## The transaction contains an invalid signature.
+      "invalid sender"
+
+    txPoolErrUnderpriced = ##\
+      ## A transaction's gas price is below the minimum configured for the
+      ## transaction pool.
+      "transaction underpriced"
+
+    txPoolErrTxPoolOverflow = ##\
+      ## The transaction pool is full and can't accpet another remote
+      ## transaction.
+      "txpool is full"
+
+    txPoolErrReplaceUnderpriced = ##\
+      ## A transaction is attempted to be replaced with a different one
+      ## without the required price bump.
+      "replacement transaction underpriced"
+
+    txPoolErrGasLimit = ##\
+      ## A transaction's requested gas limit exceeds the maximum allowance
+      ## of the current block.
+      "exceeds block gas limit"
+
+    txPoolErrNegativeValue = ##\
+      ## A sanity error to ensure no one is able to specify a transaction
+      ## with a negative value.
+      "negative value"
+
+    txPoolErrOversizedData = ##\
+      ## The input data of a transaction is greater than some meaningful
+      ## limit a user might use. This is not a consensus error making the
+      ## transaction invalid, rather a DOS protection.
+      "oversized data"
+
   TxInfo* = enum ##\
     ## Return codes
     txOk = 0
@@ -48,6 +96,6 @@ type
     txVfyTipCapTotal        ## Wrong number of leaves
 
     # codes provided for other modules
-    txVfyJobsQueue          ## Corrupted jobs queue/fifo structure
+    txVfyJobQueue           ## Corrupted jobs queue/fifo structure
 
 # End

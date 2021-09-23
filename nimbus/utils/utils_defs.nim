@@ -36,6 +36,10 @@ type
       ## eth/keys subsytem error: public key
       "public key error"
 
+    errItemNotFound = ##\
+      ## database lookup failed
+      "not found"
+
   UtilsError* = ##\
     ## Error message, tinned component + explanatory text (if any)
     (UtilsErrorType,string)

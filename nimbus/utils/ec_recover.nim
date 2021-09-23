@@ -8,101 +8,225 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  eth/common,
-  stew/results
+##
+## Recover Address From Signature (Version 2)
+## ==========================================
+##
+## Intended to replace utils/ec_recover eventually.
+##
+## This module provides caching and direct versions for recovering the
+## `EthAddress` from an extended signature. The caching version reduces
+## calculation time for the price of maintaing it in a LRU cache.
 
-type
-  EcRecoverMode = enum
-    useEc1Recover       ## the original version, based on `lru_cache`
-    useEc2Recover       ## a new version, based on `keequ`
-    useEc2x1Recover     ## new version verified against old version
+import
+  ../constants,
+  ./keequ,
+  ./utils_defs,
+  eth/[common, common/transaction, keys, rlp],
+  nimcrypto,
+  stew/results,
+  stint
 
 const
-  #ecRecoverMode = useEc1Recover
-  #ecRecoverMode = useEc2Recover
-  ecRecoverMode = useEc2x1Recover
+  INMEMORY_SIGNATURES* = ##\
+    ## Default number of recent block signatures to keep in memory
+    4096
+
+type
+  EcKey* = ##\
+    ## Internal key used for the LRU cache (derived from Hash256).
+    array[32,byte]
+
+  EcAddrResult* = ##\
+    ## Typical `EthAddress` result as returned bu `ecRecover()` functions.
+    Result[EthAddress,UtilsError]
+
+  EcRecover* = object
+    size: uint
+    q: KeeQu[EcKey,EthAddress]
+
+{.push raises: [Defect].}
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError]
+    {.inline.} =
+  ## Parts copied from `transaction.getSignature`.
+  var data: array[65,byte]
+  data[0..31] = tx.R.toByteArrayBE
+  data[32..63] = tx.S.toByteArrayBE
+
+  if tx.txType != TxLegacy:
+    data[64] = tx.V.byte
+  elif tx.V >= EIP155_CHAIN_ID_OFFSET:
+    data[64] = byte(1 - (tx.V and 1))
+  elif tx.V == 27 or tx.V == 28:
+    data[64] = byte(tx.V - 27)
+  else:
+    return err((errSigPrefixError,"")) # legacy error
+
+  ok(data)
+
+proc encodePreSealed(header: BlockHeader): seq[byte] {.inline.} =
+  ## Cut sigature off `extraData` header field.
+  if header.extraData.len < EXTRA_SEAL:
+    return rlp.encode(header)
+
+  var rlpHeader = header
+  rlpHeader.extraData.setLen(header.extraData.len - EXTRA_SEAL)
+  rlp.encode(rlpHeader)
+
+proc hashPreSealed(header: BlockHeader): Hash256 {.inline.} =
+  ## Returns the hash of a block prior to it being sealed.
+  keccak256.digest header.encodePreSealed
 
 
-when ecRecoverMode == useEc1Recover:
-  import
-    ./ec_recover/ec1recover
-  export
-    ec1recover.EcRecover,
-    ec1recover.append,
-    ec1recover.ecRecover,
-    ec1recover.read
+proc recoverImpl(rawSig: openArray[byte]; msg: Hash256): EcAddrResult =
+  ## Extract account address from the last 65 bytes of the `extraData` argument
+  ## (which is typically the bock header field with the same name.) The second
+  ## argument `hash` is used to extract the intermediate public key. Typically,
+  ## this would be the hash of the block header without the last 65 bytes of
+  ## the `extraData` field reserved for the signature.
+  if rawSig.len < EXTRA_SEAL:
+    return err((errMissingSignature,""))
 
-  proc init*(T: type EcRecover): T {.inline.} =
-    initEcRecover()
+  let sig = Signature.fromRaw(
+    rawSig.toOpenArray(rawSig.len - EXTRA_SEAL, rawSig.high))
+  if sig.isErr:
+    return err((errSkSigResult,$sig.error))
 
+  # Recover the public key from signature and seal hash
+  let pubKey = recover(sig.value, SKMessage(msg.data))
+  if pubKey.isErr:
+    return err((errSkPubKeyResult,$pubKey.error))
 
-when ecRecoverMode == useEc2Recover:
-  import
-    ./ec_recover/ec2recover
-  export
-    ec2recover.EcRecover,
-    ec2recover.append,
-    ec2recover.ecRecover,
-    ec2recover.init,
-    ec2recover.len,
-    ec2recover.read
+  # Convert public key to address.
+  ok(pubKey.value.toCanonicalAddress)
 
-  proc init*(T: type EcRecover): T {.inline.} =
-    initEcRecover()
+# ------------------------------------------------------------------------------
+# Public function: straight ecRecover versions
+# ------------------------------------------------------------------------------
 
+proc ecRecover*(header: BlockHeader): EcAddrResult =
+  ## Extracts account address from the `extraData` field (last 65 bytes) of
+  ## the argument header.
+  header.extraData.recoverImpl(header.hashPreSealed)
 
-when ecRecoverMode == useEc2x1Recover:
-  import
-    ../transaction,
-    ./ec_recover/[ec1recover, ec2recover, ec_helpers]
-  type
-    EcRecover* = object
-      ec1: ec1recover.EcRecover
-      ec2: ec2recover.EcRecover
+proc ecRecover*(tx: var Transaction): EcAddrResult =
+  ## Extracts sender address from transaction. This function has similar
+  ## functionality as `transaction.getSender()`.
+  let txSig = tx.vrsSerialised
+  if txSig.isErr:
+    return err(txSig.error)
+  txSig.value.recoverImpl(tx.txHashNoSignature)
 
-  proc ecRecover*(hdr: BlockHeader): EcAddrResult {.inline.} =
-    result = ec2recover.ecRecover(hdr)
-    doAssert result == ec1recover.ecRecover(hdr)
+proc ecRecover*(tx: Transaction): EcAddrResult {.inline.} =
+  ## Variant of `ecRecover()` for call-by-value header.
+  var ty = tx
+  ty.ecRecover
 
-  proc ecRecover*(tx: var Transaction): EcAddrResult =
-    result = ec2recover.ecRecover(tx)
-    var ethAddr: EthAddress
-    doAssert result.isOk == tx.getSender(ethAddr)
-    if result.isOK:
-      doAssert result.value == ethAddr
+# ------------------------------------------------------------------------------
+# Public constructor for caching ecRecover version
+# ------------------------------------------------------------------------------
 
-  proc ecRecover*(tx: Transaction): EcAddrResult =
-    result = ec2recover.ecRecover(tx)
-    var ethAddr: EthAddress
-    doAssert result.isOk == tx.getSender(ethAddr)
-    if result.isOK:
-      doAssert result.value == ethAddr
+proc init*(er: var EcRecover; cacheSize = INMEMORY_SIGNATURES; initSize = 10) =
+  ## Inialise recover cache
+  er.size = cacheSize.uint
+  er.q.init(initSize)
 
-  proc len*(e: var EcRecover): int {.inline.} =
-    e.ec2.len
+proc init*(T: type EcRecover;
+           cacheSize = INMEMORY_SIGNATURES; initSize = 10): T =
+  ## Inialise recover cache
+  result.init(cacheSize, initSize)
 
-  proc init*(e: var EcRecover;
-             cacheSize = ec2recover.INMEMORY_SIGNATURES) {.inline.} =
-    e.ec1.initEcRecover(cacheSize)
-    e.ec2.init(cacheSize)
+# ------------------------------------------------------------------------------
+# Public functions: miscellaneous
+# ------------------------------------------------------------------------------
 
-  proc init*(T: type EcRecover;
-             cacheSize = ec2recover.INMEMORY_SIGNATURES): T {.inline.} =
-    result.ec1.initEcRecover(cacheSize)
-    result.ec2.init(cacheSize)
+proc len*(er: var EcRecover): int =
+  ## Returns the current number of entries in the LRU cache.
+  er.q.len
 
-  proc ecRecover*(e: var EcRecover; hdr: BlockHeader): EcAddrResult {.inline.} =
-    result = e.ec2.ecRecover(hdr)
-    doAssert result == e.ec1.ecRecover(hdr)
-    doAssert e.ec1.similarKeys(e.ec2).isOk
+# ------------------------------------------------------------------------------
+# Public functions: caching ecRecover version
+# ------------------------------------------------------------------------------
 
-  proc append*(rw: var RlpWriter; e: EcRecover)
-      {.inline, raises: [Defect,KeyError].} =
-    rw.append((e.ec1,e.ec2))
+proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Extract account address from `extraData` field (last 65 bytes) of the
+  ## argument header. The result is kept in a LRU cache to re-purposed for
+  ## improved result delivery avoiding calculations.
+  let key = header.blockHash.data
+  block:
+    let rc = er.q.lruFetch(key)
+    if rc.isOK:
+      return ok(rc.value)
+  block:
+    let rc = header.extraData.recoverImpl(header.hashPreSealed)
+    if rc.isOK:
+      return ok(er.q.lruAppend(key, rc.value, er.size.int))
+    err(rc.error)
 
-  proc read*(rlp: var Rlp; Q: type EcRecover): Q
-      {.inline, raises: [Defect,KeyError].} =
-    (result.ec1, result.ec2) = rlp.read((type result.ec1, type result.ec2))
+proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult
+    {.inline, gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `ecRecover()` for call-by-value header
+  var hdr = header
+  er.ecRecover(hdr)
 
+proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult
+    {.inline, gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `ecRecover()` for hash only. Will only succeed it the
+  ## argument hash is uk the LRU queue.
+  let rc = er.q.lruFetch(hash.data)
+  if rc.isOK:
+    return ok(rc.value)
+  err((errItemNotFound,""))
+
+proc ecRecover*(er: var EcRecover; tx: var Transaction): EcAddrResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `recover()` managing the sender addresses for transactions.
+  let txSig = tx.vrsSerialised
+  if txSig.isErr:
+    return err(txSig.error)
+  let key = (keccak256.digest tx.rlpEncode).data
+  block:
+    let rc = er.q.lruFetch(key)
+    if rc.isOK:
+      return ok(rc.value)
+  block:
+    let rc = txSig.value.recoverImpl(tx.txHashNoSignature)
+    if rc.isOK:
+      return ok(er.q.lruAppend(key, rc.value, er.size.int))
+    err(rc.error)
+
+# ------------------------------------------------------------------------------
+# Public RLP mixin functions for caching version
+# ------------------------------------------------------------------------------
+
+proc append*(rw: var RlpWriter; data: EcRecover)
+    {.inline, raises: [Defect,KeyError].} =
+  ## Generic support for `rlp.encode()`
+  rw.append((data.size,data.q))
+
+proc read*(rlp: var Rlp; Q: type EcRecover): Q
+    {.inline, raises: [Defect,KeyError].} =
+  ## Generic support for `rlp.decode()` for loading the cache from a
+  ## serialised data stream.
+  (result.size, result.q) = rlp.read((type result.size, type result.q))
+
+# ------------------------------------------------------------------------------
+# Debugging
+# ------------------------------------------------------------------------------
+
+iterator keyItemPairs*(er: var EcRecover): (EcKey,EthAddress)
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  var rc = er.q.first
+  while rc.isOK:
+    yield (rc.value.key, rc.value.data)
+    rc = er.q.next(rc.value.key)
+
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------

@@ -291,7 +291,6 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
   block:
     let rc = gt.addrList.verify
     if rc.isErr:
-      echo ">>> txVerify 1"
       return err(txVfySenderRbTree)
   var
     totalCount = 0
@@ -303,10 +302,8 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
 
     # at lest ((local or remote) and merged) lists must be available
     if addrData.nActive == 0:
-      echo ">>> txVerify addr fail 1"
       return err(txVfySenderLeafEmpty)
     if addrData.allList.isNil:
-      echo ">>> txVerify addr fail 2"
       return err(txVfySenderLeafEmpty)
 
     # local/remote list
@@ -319,7 +316,6 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
         block:
           let rc = localData.nonceList.verify
           if rc.isErr:
-            echo ">>> txVerify local fail 1"
             return err(txVfySenderRbTree)
 
         var subCount = 0
@@ -331,17 +327,14 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
           subCount += nonceData.itemList.len
 
           if nonceData.itemList.len == 0:
-            echo ">>> txVerify local fail 2"
             return err(txVfySenderLeafEmpty)
 
           let rcItem = nonceData.itemList.verify
           if rcItem.isErr:
-            echo ">>> txVerify local fail 3"
             return err(txVfySenderLeafQueue)
 
         # end while
         if subCount != localData.size:
-          echo ">>> txVerify local fail 4"
           return err(txVfySenderTotal)
 
         localCount += subCount
@@ -356,7 +349,6 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
         block:
           let rc = statusData.nonceList.verify
           if rc.isErr:
-            echo ">>> txVerify status fail 1"
             return err(txVfySenderRbTree)
 
         var subCount = 0
@@ -368,18 +360,14 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
           subCount += nonceData.itemList.len
 
           if nonceData.itemList.len == 0:
-            echo ">>> txVerify status fail 2"
             return err(txVfySenderLeafEmpty)
 
           let rcItem = nonceData.itemList.verify
           if rcItem.isErr:
-            echo ">>> txVerify status fail 3"
             return err(txVfySenderLeafQueue)
 
         # end while
         if subCount != statusData.size:
-          echo ">>> txVerify status fail 4 subCount=", subCount,
-           " statusData.size=", statusData.size
           return err(txVfySenderTotal)
 
         statusCount += subCount
@@ -400,35 +388,28 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
         allCount += nonceData.itemList.len
 
         if nonceData.itemList.len == 0:
-          echo ">>> txVerify any fail 1"
           return err(txVfySenderLeafEmpty)
 
         let rcItem = nonceData.itemList.verify
         if rcItem.isErr:
-          echo ">>> txVerify any fail 2"
           return err(txVfySenderLeafQueue)
 
       # end while
       if allCount != addrData.allList.size:
-        echo ">>> txVerify any fail 3"
         return err(txVfySenderTotal)
 
     # end for
     if localCount != addrData.size:
-      echo ">>> txVerify addr fail 3"
       return err(txVfySenderTotal)
     if statusCount != addrData.size:
-      echo ">>> txVerify addr fail 4"
       return err(txVfySenderTotal)
     if allCount != addrData.size:
-      echo ">>> txVerify addr fail 5"
       return err(txVfySenderTotal)
 
     totalCount += localCount
 
   # end while
   if totalCount != gt.size:
-    echo ">>> txVerify 2"
     return err(txVfySenderTotal)
 
   ok()
