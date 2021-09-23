@@ -125,7 +125,7 @@ proc encodeMessage*[T: SomeMessage](m: T): seq[byte] =
 proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
   # Decodes to the specific `Message` type.
   if body.len < 1:
-    return err("No message data")
+    return err("No message data, peer might not support this talk protocol")
 
   var kind: MessageKind
   if not checkedEnumAssign(kind, body[0]):

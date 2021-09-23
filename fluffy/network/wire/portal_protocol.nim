@@ -82,6 +82,8 @@ proc addNode*(p: PortalProtocol, r: Record): bool =
   else:
     false
 
+func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
+
 proc neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
 
@@ -210,27 +212,31 @@ proc new*(T: type PortalProtocol,
 
 # Sends the discv5 talkreq nessage with provided Portal message, awaits and
 # validates the proper response, and updates the Portal Network routing table.
-# In discoveryv5 bootstrap nodes are not replaced in case of failure, but
-# for now the Portal protocol has no notion of bootstrap nodes.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     p: PortalProtocol,
     toNode: Node,
     request: Request
     ): Future[PortalResult[Response]] {.async.} =
-  let respResult =
+  let talkresp =
     await talkreq(p.baseProtocol, toNode, p.protocolId, encodeMessage(request))
 
-  return respResult
+  # Note: Failure of `decodeMessage` might also simply mean that the peer is
+  # not supporting the specific talk protocol, as according to specification
+  # an empty response needs to be send in that case.
+  # See: https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#talkreq-request-0x05
+  let messageResponse = talkresp
     .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
     .flatMap(proc (m: Message): Result[Response, cstring] =
-      let reqResult = getInnerMessageResult[Response](
+      getInnerMessageResult[Response](
         m, cstring"Invalid message response received")
-      if reqResult.isOk():
-        p.routingTable.setJustSeen(toNode)
-      else:
-        p.routingTable.replaceNode(toNode)
-      reqResult
     )
+
+  if messageResponse.isOk():
+    p.routingTable.setJustSeen(toNode)
+  else:
+    p.routingTable.replaceNode(toNode)
+
+  return messageResponse
 
 proc ping*(p: PortalProtocol, dst: Node):
     Future[PortalResult[PongMessage]] {.async.} =
@@ -530,7 +536,7 @@ proc seedTable(p: PortalProtocol) =
       debug "Added bootstrap node", uri = toURI(record),
         protocolId = p.protocolId
     else:
-      debug "Bootstrap node could not be added", uri = toURI(record),
+      error "Bootstrap node could not be added", uri = toURI(record),
         protocolId = p.protocolId
 
 proc populateTable(p: PortalProtocol) {.async.} =
