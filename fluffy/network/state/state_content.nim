@@ -96,7 +96,7 @@ type
     # storage, via json rpc client requesting data from a full eth1 client.
     trie*: HexaryTrie
 
-proc getContent*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
+proc get*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
   if storage.trie.db == nil: # TODO: for now...
     return none(seq[byte])
   let val = storage.trie.db.get(key.nodeHash.data)
@@ -105,8 +105,8 @@ proc getContent*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
   else:
     none(seq[byte])
 
-proc getContent*(storage: ContentStorage, contentKey: ByteList): Option[seq[byte]] =
-  decodeKey(contentKey).flatMap((key: ContentKey) => getContent(storage, key))
+proc get*(storage: ContentStorage, contentKey: ByteList): Option[seq[byte]] =
+  decodeKey(contentKey).flatMap((key: ContentKey) => get(storage, key))
 
 proc newEmptyInMemoryStorage*(): ContentStorage =
   let trie = initHexaryTrie(newMemoryDb())

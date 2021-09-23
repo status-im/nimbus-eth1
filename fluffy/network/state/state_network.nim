@@ -16,7 +16,7 @@ type StateNetwork* = ref object
 
 proc getHandler(storage: ContentStorage): ContentHandler =
     return (proc (contentKey: state_content.ByteList): ContentResult =
-      let maybeContent = storage.getContent(contentKey)
+      let maybeContent = storage.get(contentKey)
       if (maybeContent.isSome()):
         ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
       else:
