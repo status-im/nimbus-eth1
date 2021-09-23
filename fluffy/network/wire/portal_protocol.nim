@@ -511,7 +511,7 @@ proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc seedTable(p: PortalProtocol) =
+proc seedTable*(p: PortalProtocol) =
   ## Seed the table with nodes from the discv5 table and with specifically
   ## provided bootstrap nodes. The latter are then supposed to be nodes
   ## supporting the wire protocol for the specific content network.
