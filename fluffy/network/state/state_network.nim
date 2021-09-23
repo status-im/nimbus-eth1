@@ -1,7 +1,7 @@
 import
   std/[options, sugar],
   stew/[results, byteutils],
-  eth/p2p/discoveryv5/[protocol, node],
+  eth/p2p/discoveryv5/[protocol, node, enr],
   ../wire/portal_protocol,
   ./state_content
 
@@ -36,9 +36,11 @@ proc getContent*(p: StateNetwork, key: ContentKey):
   return result.map(x => x.asSeq())
 
 proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
-    storage: ContentStorage , dataRadius = UInt256.high()): T =
+    storage: ContentStorage , dataRadius = UInt256.high(),
+    bootstrapRecords: openarray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, StateProtocolId, getHandler(storage), dataRadius)
+    baseProtocol, StateProtocolId, getHandler(storage), dataRadius,
+    bootstrapRecords)
 
   return StateNetwork(portalProtocol: portalProtocol, storage: storage)
 

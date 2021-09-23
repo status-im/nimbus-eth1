@@ -55,6 +55,7 @@ type
     baseProtocol*: protocol.Protocol
     dataRadius*: UInt256
     handleContentRequest: ContentHandler
+    bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
     refreshLoop: Future[void]
     revalidateLoop: Future[void]
@@ -73,6 +74,15 @@ type
 
 proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
   p.routingTable.addNode(node)
+
+proc addNode*(p: PortalProtocol, r: Record): bool =
+  let node = newNode(r)
+  if node.isOk():
+    p.addNode(node[]) == Added
+  else:
+    false
+
+func localNode*(p: PortalProtocol): Node = p.baseProtocol.localNode
 
 proc neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
   p.routingTable.neighbours(id = id, seenOnly = seenOnly)
@@ -183,15 +193,17 @@ proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: seq[byte],
     contentHandler: ContentHandler,
-    dataRadius = UInt256.high()): T =
+    dataRadius = UInt256.high(),
+    bootstrapRecords: openarray[Record] = []): T =
   let proto = PortalProtocol(
+    protocolHandler: messageHandler,
+    protocolId: protocolId,
     routingTable: RoutingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
       DefaultTableIpLimits, baseProtocol.rng),
-    protocolHandler: messageHandler,
     baseProtocol: baseProtocol,
     dataRadius: dataRadius,
     handleContentRequest: contentHandler,
-    protocolId: protocolId)
+    bootstrapRecords: @bootstrapRecords)
 
   proto.baseProtocol.registerTalkProtocol(proto.protocolId, proto).expect(
     "Only one protocol should have this id")
@@ -200,27 +212,31 @@ proc new*(T: type PortalProtocol,
 
 # Sends the discv5 talkreq nessage with provided Portal message, awaits and
 # validates the proper response, and updates the Portal Network routing table.
-# In discoveryv5 bootstrap nodes are not replaced in case of failure, but
-# for now the Portal protocol has no notion of bootstrap nodes.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     p: PortalProtocol,
     toNode: Node,
     request: Request
     ): Future[PortalResult[Response]] {.async.} =
-  let respResult =
+  let talkresp =
     await talkreq(p.baseProtocol, toNode, p.protocolId, encodeMessage(request))
 
-  return respResult
+  # Note: Failure of `decodeMessage` might also simply mean that the peer is
+  # not supporting the specific talk protocol, as according to specification
+  # an empty response needs to be send in that case.
+  # See: https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#talkreq-request-0x05
+  let messageResponse = talkresp
     .flatMap(proc (x: seq[byte]): Result[Message, cstring] = decodeMessage(x))
     .flatMap(proc (m: Message): Result[Response, cstring] =
-      let reqResult = getInnerMessageResult[Response](
+      getInnerMessageResult[Response](
         m, cstring"Invalid message response received")
-      if reqResult.isOk():
-        p.routingTable.setJustSeen(toNode)
-      else:
-        p.routingTable.replaceNode(toNode)
-      reqResult
     )
+
+  if messageResponse.isOk():
+    p.routingTable.setJustSeen(toNode)
+  else:
+    p.routingTable.replaceNode(toNode)
+
+  return messageResponse
 
 proc ping*(p: PortalProtocol, dst: Node):
     Future[PortalResult[PongMessage]] {.async.} =
@@ -495,9 +511,16 @@ proc queryRandom*(p: PortalProtocol): Future[seq[Node]] =
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc seedTable(p: PortalProtocol) =
-  # TODO: Just picking something here for now. Should definitely add portal
-  # protocol info k:v pair in the ENRs and filter on that.
+proc seedTable*(p: PortalProtocol) =
+  ## Seed the table with nodes from the discv5 table and with specifically
+  ## provided bootstrap nodes. The latter are then supposed to be nodes
+  ## supporting the wire protocol for the specific content network.
+  # Note: We allow replacing the bootstrap nodes in the routing table as it is
+  # possible that some of these are not supporting the specific portal network.
+
+  # TODO: Picking some nodes from discv5 routing table now. Should definitely
+  # add supported Portal network info in a k:v pair in the ENRs and filter on
+  # that.
   let closestNodes = p.baseProtocol.neighbours(
     NodeId.random(p.baseProtocol.rng[]), seenOnly = true)
 
@@ -506,6 +529,15 @@ proc seedTable(p: PortalProtocol) =
       debug "Added node from discv5 routing table", uri = toURI(node.record)
     else:
       debug "Node from discv5 routing table could not be added", uri = toURI(node.record)
+
+  # Seed the table with bootstrap nodes.
+  for record in p.bootstrapRecords:
+    if p.addNode(record):
+      debug "Added bootstrap node", uri = toURI(record),
+        protocolId = p.protocolId
+    else:
+      error "Bootstrap node could not be added", uri = toURI(record),
+        protocolId = p.protocolId
 
 proc populateTable(p: PortalProtocol) {.async.} =
   ## Do a set of initial lookups to quickly populate the table.

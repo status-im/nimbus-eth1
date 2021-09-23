@@ -39,7 +39,7 @@ type
       name: "listen-address" }: ValidIpAddress
 
     bootnodes* {.
-      desc: "ENR URI of node to bootstrap discovery with. Argument may be repeated"
+      desc: "ENR URI of node to bootstrap Discovery v5 with. Argument may be repeated"
       name: "bootnode" .}: seq[Record]
 
     nat* {.
@@ -59,6 +59,12 @@ type
       desc: "P2P node private key as hex",
       defaultValue: PrivateKey.random(keys.newRng()[])
       name: "nodekey" .}: PrivateKey
+
+    # Note: This will add bootstrap nodes for each enabled Portal network.
+    # No distinction is being made on bootstrap nodes for a specific network.
+    portalBootnodes* {.
+      desc: "ENR URI of node to bootstrap the Portal protocols with. Argument may be repeated"
+      name: "portal-bootnode" .}: seq[Record]
 
     metricsEnabled* {.
       defaultValue: false
