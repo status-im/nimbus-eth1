@@ -41,7 +41,7 @@ type
     # triePath: ByteList
     nodeHash*: NodeHash
 
-  ContentId* = MDigest[32 * 8]
+  ContentId* = Uint256
 
   KeccakHash* = MDigest[32 * 8] # could also import from either eth common types or trie defs
 
@@ -62,30 +62,25 @@ func fromSszBytes*(T: type ContentType, data: openArray[byte]):
 
   contentType
 
-func encodeKey*(contentKey: ContentKey): seq[byte] =
-  SSZ.encode(contentKey)
+func encode*(contentKey: ContentKey): ByteList =
+  List.init(SSZ.encode(contentKey), 2048)
 
 # TODO consider if more powerfull error handling is necessary here.
-func decodeKey*(contentKey: ByteList): Option[ContentKey] = 
+func decode*(contentKey: ByteList): Option[ContentKey] =
   try:
     some(SSZ.decode(contentKey.asSeq(), ContentKey))
   except SszError:
     return none[ContentKey]()
 
-func encodeKeyAsList*(contentKey: ContentKey): ByteList =
-  List.init(encodeKey(contentKey), 2048)
-
 func toContentId*(contentKey: ByteList): ContentId =
   # TODO: Hash function to be defined, sha256 used now, might be confusing
   # with keccak256 that is used for the actual nodes:
   # https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#content
-  sha2.sha_256.digest(contentKey.asSeq())
+  let idHash = sha2.sha_256.digest(contentKey.asSeq())
+  readUintBE[256](idHash.data)
 
 func toContentId*(contentKey: ContentKey): ContentId =
-  toContentId(encodeKeyAsList(contentKey))
-
-func contentIdAsUint256*(id: ContentId): Uint256 =
-  readUintBE[256](id.data)
+  toContentId(encode(contentKey))
 
 type
   ContentStorage* = object
@@ -106,7 +101,7 @@ proc get*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
     none(seq[byte])
 
 proc get*(storage: ContentStorage, contentKey: ByteList): Option[seq[byte]] =
-  decodeKey(contentKey).flatMap((key: ContentKey) => get(storage, key))
+  decode(contentKey).flatMap((key: ContentKey) => get(storage, key))
 
 proc newEmptyInMemoryStorage*(): ContentStorage =
   let trie = initHexaryTrie(newMemoryDb())

@@ -23,7 +23,14 @@ type Default2NodeTest = ref object
   proto2: PortalProtocol
 
 proc testHandler(contentKey: ByteList): ContentResult =
-  let id =  sha256.digest("test")
+  let
+    idHash = sha256.digest("test")
+    id = readUintBE[256](idHash.data)
+  # TODO: Ideally we can return here a more valid content id. But that depends
+  # on the content key to content id derivation, which is different for the
+  # different content networks. And we want these tests to be independent from
+  # that. Could do something specifically for these tests, when there is a test
+  # case that would actually test this.
   ContentResult(kind: ContentMissing, contentId: id)
 
 proc defaultTestCase(rng: ref BrHmacDrbgContext): Default2NodeTest =
@@ -50,7 +57,7 @@ procSuite "Portal Wire Protocol Tests":
   asyncTest "Ping/Pong":
     let test = defaultTestCase(rng)
 
-    let pong = await test.proto1.ping(test.proto2.baseProtocol.localNode)
+    let pong = await test.proto1.ping(test.proto2.localNode)
 
     check:
       pong.isOk()
@@ -63,7 +70,7 @@ procSuite "Portal Wire Protocol Tests":
     let test = defaultTestCase(rng)
   
     block: # Find itself
-      let nodes = await test.proto1.findNode(test.proto2.baseProtocol.localNode,
+      let nodes = await test.proto1.findNode(test.proto2.localNode,
         List[uint16, 256](@[0'u16]))
 
       check:
@@ -73,7 +80,7 @@ procSuite "Portal Wire Protocol Tests":
 
     block: # Find nothing: this should result in nothing as we haven't started
       # the seeding of the portal protocol routing table yet.
-      let nodes = await test.proto1.findNode(test.proto2.baseProtocol.localNode,
+      let nodes = await test.proto1.findNode(test.proto2.localNode,
         List[uint16, 256](@[]))
 
       check:
@@ -93,7 +100,7 @@ procSuite "Portal Wire Protocol Tests":
       test.proto2.start()
 
       let distance = logDist(test.node1.localNode.id, test.node2.localNode.id)
-      let nodes = await test.proto1.findNode(test.proto2.baseProtocol.localNode,
+      let nodes = await test.proto1.findNode(test.proto2.localNode,
         List[uint16, 256](@[distance]))
 
       check:
@@ -118,7 +125,7 @@ procSuite "Portal Wire Protocol Tests":
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.
-    let foundContent = await test.proto1.findContent(test.proto2.baseProtocol.localNode,
+    let foundContent = await test.proto1.findContent(test.proto2.localNode,
       contentKey)
 
     check:
@@ -145,15 +152,18 @@ procSuite "Portal Wire Protocol Tests":
   asyncTest "Correctly mark node as seen after request":
     let test = defaultTestCase(rng)
 
-    let initialNeighbours = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = false)
+    let initialNeighbours = test.proto1.neighbours(test.proto1.localNode.id,
+      seenOnly = false)
 
     check:
       len(initialNeighbours) == 0
 
     discard test.proto1.addNode(test.proto2.baseProtocol.localNode)
 
-    let allNeighboursAfterAdd = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = false)
-    let seenNeighboursAfterAdd = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = true)
+    let allNeighboursAfterAdd = test.proto1.neighbours(
+      test.proto1.localNode.id, seenOnly = false)
+    let seenNeighboursAfterAdd = test.proto1.neighbours(
+      test.proto1.localNode.id, seenOnly = true)
 
     check:
       len(allNeighboursAfterAdd) == 1
@@ -161,8 +171,10 @@ procSuite "Portal Wire Protocol Tests":
 
     let pong = await test.proto1.ping(test.proto2.baseProtocol.localNode)
 
-    let allNeighboursAfterPing = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = false)
-    let seenNeighboursAfterPing = test.proto1.neighbours(test.proto1.baseProtocol.localNode.id, seenOnly = true)
+    let allNeighboursAfterPing = test.proto1.neighbours(
+      test.proto1.localNode.id, seenOnly = false)
+    let seenNeighboursAfterPing = test.proto1.neighbours(
+      test.proto1.localNode.id, seenOnly = true)
 
     check:
       pong.isOk()
