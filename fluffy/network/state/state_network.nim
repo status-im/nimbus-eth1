@@ -16,7 +16,7 @@ type StateNetwork* = ref object
 
 proc getHandler(storage: ContentStorage): ContentHandler =
     return (proc (contentKey: state_content.ByteList): ContentResult =
-      let maybeContent = storage.getContent(contentKey)
+      let maybeContent = storage.get(contentKey)
       if (maybeContent.isSome()):
         ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
       else:
@@ -28,12 +28,13 @@ proc getHandler(storage: ContentStorage): ContentHandler =
 # 3. Put item into storage (if in radius) after succesful lookup
 proc getContent*(p: StateNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
-  let keyAsBytes = encodeKeyAsList(key)
-  let id = contentIdAsUint256(toContentId(keyAsBytes))
-  let result = await p.portalProtocol.contentLookup(keyAsBytes, id)
-  # for now returning bytes, ultimatly it would be nice to return proper domain
+  let
+    keyEncoded = encode(key)
+    id = toContentId(keyEncoded)
+    content = await p.portalProtocol.contentLookup(keyEncoded, id)
+  # for now returning bytes, ultimately it would be nice to return proper domain
   # types from here
-  return result.map(x => x.asSeq())
+  return content.map(x => x.asSeq())
 
 proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
     storage: ContentStorage , dataRadius = UInt256.high(),

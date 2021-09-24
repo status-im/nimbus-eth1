@@ -64,6 +64,8 @@ procSuite "State Content Network":
           contentType: state_content.ContentType.Account,
           nodeHash: nodeHash)
 
+      # Note: GetContent and thus the lookup here is not really needed, as we
+      # only have to request data to one node.
       let foundContent = await proto2.getContent(contentKey)
 
       check:
@@ -76,6 +78,8 @@ procSuite "State Content Network":
     await node2.closeWait()
 
   asyncTest "Find content in the network via content lookup":
+    # TODO: Improve this test so it actually need to go through several
+    # findNode request, to properly test the lookup call.
     let
       trie = genesisToTrie("fluffy" / "tests" / "custom_genesis" / "chainid7.json")
       node1 = initDiscoveryNode(

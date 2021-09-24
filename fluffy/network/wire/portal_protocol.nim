@@ -39,7 +39,7 @@ type
     of ContentFound:
       content*: seq[byte]
     of ContentMissing:
-      contentId*: MDigest[32 * 8]
+      contentId*: Uint256
     of ContentKeyValidationFailure:
       error*: string
 
@@ -139,7 +139,7 @@ proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
       contentId = contentHandlingResult.contentId
       # TODO: Should we first do a simple check on ContentId versus Radius?
       closestNodes = p.routingTable.neighbours(
-        NodeId(readUintBE[256](contentId.data)), seenOnly = true)
+        NodeId(contentId), seenOnly = true)
       payload = ByteList(@[]) # Empty payload when enrs are send
       enrs =
         closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))

@@ -13,7 +13,8 @@ import
   eth/[keys, net/nat],
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ./wire/messages, ./wire/portal_protocol
+  ./wire/messages, ./wire/portal_protocol,
+  ./state/state_content
 
 type
   PortalCmd* = enum
@@ -151,10 +152,11 @@ proc discover(d: discv5_protocol.Protocol) {.async.} =
     info "Lookup finished", nodes = discovered.len
     await sleepAsync(30.seconds)
 
-# TODO for now just return some random id
-proc testHandler(contentKey: ByteList): ContentResult =
-  let id =  sha256.digest("test")
-  ContentResult(kind: ContentMissing, contentId: id)
+proc testHandler(contentKey: state_content.ByteList): ContentResult =
+  # Note: We don't incorperate storage in this tool so we always return
+  # missing content. For now we are using the state network derivation but it
+  # could be selective based on the network the tool is used for.
+  ContentResult(kind: ContentMissing, contentId: toContentId(contentKey))
 
 proc run(config: DiscoveryConf) =
   let
