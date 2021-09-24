@@ -69,16 +69,6 @@ proc deleteUnderpricedItems*(tDB: TxTabsRef; price: GasInt): int
         discard tDB.delete(item.itemID)
         result.inc
 
-# core/tx_pool.go(474): func (pool *TxPool) Stats() (int, int) {
-proc pendingQueuedStats*(tDB: TxTabsRef): (int,int)
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Retrieves the current pool stats, namely the pair `(#pending,#queued)`,
-  ## the number of pending and the number of queued (non-executable)
-  ## transactions.
-  for schedList in tDB.bySender.walkSchedList:
-    result[0] += schedList.eq(txItemPending).nItems
-    result[1] += schedList.eq(txItemQueued).nItems
-
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTxs*(tDB: TxTabsRef; txs: openArray[Transaction];
              local: bool; status: TxItemStatus; info = ""):
@@ -93,6 +83,8 @@ proc addTxs*(tDB: TxTabsRef; txs: openArray[Transaction];
   # signatures
   for i in 0 ..< txs.len:
     var tx = txs[i]
+
+    # FIXME: TODO, validate transaction
 
     # If the transaction is known, pre-set the error slot
     let rc = tDB.insert(tx, local, status, info)

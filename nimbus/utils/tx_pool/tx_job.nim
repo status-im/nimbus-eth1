@@ -17,6 +17,7 @@ import
   ../keequ,
   ./tx_info,
   ./tx_item,
+  ./tx_tabs,
   eth/[common, keys],
   stew/results
 
@@ -35,12 +36,12 @@ type
     txJobGetBaseFee
     txJobGetGasPrice
     txJobGetItem
-    txJobLocusCount
     txJobMoveRemoteToLocals
     txJobSetBaseFee
     txJobSetGasPrice
     txJobSetHead
-    txJobStatsReport
+    txJobStatsCount
+
 
   TxJobAddTxsReply* =
     proc(ok: bool; errors: seq[TxPoolError]) {.gcsafe,raises: [].}
@@ -60,9 +61,6 @@ type
   TxJobGetItemReply* =
     proc(item: TxItemRef) {.gcsafe,raises: [].}
 
-  TxJobLocusCountReply* =
-    proc(local, remote: int) {.gcsafe,raises: [].}
-
   TxJobMoveRemoteToLocalsReply* =
     proc(moved: int) {.gcsafe,raises: [].}
 
@@ -72,8 +70,8 @@ type
   TxJobSetHeadReply* = ## FIXME ...
     proc() {.gcsafe,raises: [].}
 
-  TxJobStatsReport* =
-    proc(pending, queued: int) {.gcsafe,raises: [].}
+  TxJobStatsCountReply* =
+    proc(status: TxTabsStatsCount) {.gcsafe,raises: [].}
 
 
   TxJobDataRef* = ref object
@@ -146,13 +144,6 @@ type
         itemId: Hash256,
         reply:  TxJobGetItemReply]
 
-    of txJobLocusCount: ##\
-      ## The current number of `local` and `remote` transactions
-      ##
-      ## Out-of-band job (runs with priority)
-      locusCountArgs*: tuple[
-        reply: TxJobLocusCountReply]
-
     of txJobMoveRemoteToLocals: ##\
       ## For given account, remote transactions are migrated to local
       ## transactions. The function returns the number of transactions
@@ -182,13 +173,13 @@ type
         head:  BlockHeader,
         reply: TxJobSetHeadReply]
 
-    of txJobStatsReport: ##\
-      ## Retrieves the current pool stats, the number of pending and the
-      ## number of queued (non-executable) transactions.
+    of txJobStatsCount: ##\
+      ## Retrieves the current pool stats, the number of local, remote,
+      ## pending, queued, etc. transactions.
       ##
       ## Out-of-band job (runs with priority)
-      statsReportArgs*: tuple[
-        reply: TxJobStatsReport]
+      statsCountArgs*: tuple[
+        reply: TxJobStatsCountReply]
 
 
   TxJobPair* = object
@@ -209,8 +200,7 @@ const
       txJobGetBaseFee,
       txJobGetGasPrice,
       txJobGetItem,
-      txJobLocusCount,
-      txJobStatsReport}
+      txJobStatsCount}
 
   txJobIdMax* = ##\
     ## Wraps around to `1` after last ID

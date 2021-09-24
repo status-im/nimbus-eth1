@@ -775,6 +775,10 @@ proc clear*[K,V](rq: var KeeQu[K,V]) {.inline.} =
   rq.first.reset
   rq.last.reset
 
+proc toKeeQuResult*[K,V](key: K; data: V): Result[KeeQuPair[K,V],void] =
+  ## Helper, chreate `ok()` result
+  ok(KeeQuPair[K,V](key: key, data: data))
+
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------

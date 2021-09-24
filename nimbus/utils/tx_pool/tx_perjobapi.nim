@@ -28,13 +28,13 @@ proc inactiveItemsEviction*(xp: var TxPool): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Remove transactions older than `xp.lifeTime` and theturns the number
   ## of deleted items.
-  var nResult: int
+  var nDeleted: int
   xp.jobCommit(TxJobDataRef(
     kind:    txJobEvictionInactive,
     evictionInactiveArgs: (
       reply: proc(deleted: int) =
-               nResult = deleted)))
-  nResult
+               nDeleted = deleted)))
+  nDeleted
 
 proc setBaseFee*(xp: var TxPool; baseFee: GasInt)
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -76,29 +76,31 @@ proc setGasPrice*(xp: var TxPool; price: GasInt): int
   ## Set the minimum price required by the transaction pool for a new
   ## transaction. Increasing it will drop all transactions below this
   ## threshold.
-  var nResult: int
+  var nDeleted: int
   xp.jobCommit(TxJobDataRef(
     kind:    txJobSetGasPrice,
     setGasPriceArgs: (
       price: price,
       reply: proc(deleted: int) =
-               nResult = deleted)))
-  nResult
+               nDeleted = deleted)))
+  nDeleted
+
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
-proc statsReport*(xp: var TxPool): (int,int)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Retrieves the current pool stats, namely the pair `(#pending,#queued)`,
-  ## the number of pending and the number of queued (non-executable)
-  ## transactions.
-  var nResult: (int,int)
+# core/tx_pool.go(1728): func (t *txLookup) Count() int {
+# core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
+# core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
+proc count*(xp: var TxPool): TxTabsStatsCount
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## The current number of local transactions
+  var rStatus: TxTabsStatsCount
   xp.jobCommit(TxJobDataRef(
-    kind:    txJobStatsReport,
-    statsReportArgs: (
-      reply: proc(pending, queued: int) =
-               nResult[0] = pending
-               nResult[1] = queued)))
-  nResult
+    kind:    txJobStatsCount,
+    statsCountArgs: (
+      reply: proc(status: TxTabsStatsCount) =
+               rStatus = status)))
+  rStatus
+
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc localAccounts*(xp: var TxPool): seq[EthAddress]
@@ -113,51 +115,12 @@ proc localAccounts*(xp: var TxPool): seq[EthAddress]
                rAccounts = accounts)))
   rAccounts
 
+
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
-proc addLocals*(xp: var TxPool;
-          txs: var openArray[Transaction]; status = txItemQueued; info = ""):
-            Result[void,seq[TxPoolError]]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Enqueues a batch of transactions into the pool if they are valid,
-  ## marking the senders as local ones, ensuring they go around the local
-  ## pricing constraints.
-  ##
-  ## This method is used to add transactions from the RPC API and performs
-  ## synchronous pool reorganization and event propagation.
-  var
-    txOk: bool
-    errInfo: seq[TxPoolError]
-  xp.jobCommit(TxJobDataRef(
-    kind:     txJobAddTxs,
-    addTxsArgs: (
-      txs:    toSeq(txs),
-      local:  true,
-      status: status,
-      info:   info,
-      reply:  proc(ok: bool; errors: seq[TxPoolError]) =
-                txOk = ok
-                errInfo = errors)))
-  if txOk:
-    return ok()
-  err(errInfo)
-
-# core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
-proc addLocal*(xp: var TxPool;
-          tx: var Transaction; status = txItemQueued; info = ""):
-            Result[void,TxPoolError]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## AddLocal enqueues a single local transaction into the pool if it is valid.
-  ## This is a convenience wrapper aroundd AddLocals.
-  var txs = [tx]
-  let rc = xp.addLocals(txs, status, info)
-  if rc.isErr:
-     return err(rc.error[0])
-  ok()
-
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-proc addRemotes*(xp: var TxPool;
-          txs: var openArray[Transaction]; status = txItemQueued; info = ""):
-            Result[void,seq[TxPoolError]]
+proc addTxs*(xp: var TxPool; txs: openArray[Transaction];
+             local = false, status = txItemQueued; info = ""):
+               Result[void,seq[TxPoolError]]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueue a batch of transactions into the pool if they are valid. If
   ## the senders are not among the locally tracked ones, full pricing
@@ -172,7 +135,7 @@ proc addRemotes*(xp: var TxPool;
     kind:     txJobAddTxs,
     addTxsArgs: (
       txs:    toSeq(txs),
-      local:  false,
+      local:  local,
       status: status,
       info:   info,
       reply:  proc(ok: bool; errors: seq[TxPoolError]) =
@@ -182,22 +145,21 @@ proc addRemotes*(xp: var TxPool;
     return ok()
   err(errInfo)
 
+# core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc addRemote*(xp: var TxPool;
-          tx: var Transaction; status = txItemQueued; info = ""):
-            Result[void,TxPoolError]
+proc addTx*(xp: var TxPool; tx: var Transaction;
+            local = false, status = txItemQueued; info = ""):
+              Result[void,TxPoolError]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueues a single transaction into the pool if it is valid.
-  ## This is a convenience wrapper around AddRemotes.
-  ##
-  ## Deprecated: use AddRemotes
-  var txs = [tx]
-  let rc = xp.addRemotes(txs, status, info)
+  ## This is a convenience wrapper aroundd addTxs.
+  let rc = xp.addTxs([tx], local, status, info)
   if rc.isErr:
      return err(rc.error[0])
   ok()
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
+# core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
 proc get*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Returns a transaction if it is contained in the pool.
@@ -212,48 +174,6 @@ proc get*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
     return err()
   ok(getItem)
 
-# core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
-proc has*(xp: var TxPool; hash: Hash256): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Indicator whether `TxPool` has a transaction cached with the given hash.
-  xp.get(hash).isOK
-
-# core/tx_pool.go(1728): func (t *txLookup) Count() int {
-proc count*(xp: var TxPool): int
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## The current number of transactions
-  var nLocal, nRemote: int
-  xp.jobCommit(TxJobDataRef(
-    kind:    txJobLocusCount,
-    locusCountArgs: (
-      reply: proc(local, remote: int) =
-               nLocal = local
-               nRemote = remote)))
-  nLocal + nRemote
-
-# core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
-proc localCount*(xp: var TxPool): int
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## The current number of local transactions
-  var nLocal: int
-  xp.jobCommit(TxJobDataRef(
-    kind:    txJobLocusCount,
-    locusCountArgs: (
-      reply: proc(local, remote: int) =
-               nLocal = local)))
-  nLocal
-
-# core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
-proc remoteCount*(xp: var TxPool): int
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## The current number of remote transactions
-  var nRemote: int
-  xp.jobCommit(TxJobDataRef(
-    kind:    txJobLocusCount,
-    locusCountArgs: (
-      reply: proc(local, remote: int) =
-               nRemote = remote)))
-  nRemote
 
 # core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
 proc remoteToLocals*(xp: var TxPool; signer: EthAddress): int

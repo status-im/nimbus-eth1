@@ -23,21 +23,27 @@ import
   ../slst,
   ./tx_info,
   ./tx_item,
-  ./tx_tabs/[tx_itemid, tx_price, tx_sender, tx_tipcap],
+  ./tx_tabs/[tx_itemid, tx_leaf, tx_price, tx_sender, tx_status, tx_tipcap],
   eth/[common, keys],
   stew/results
 
 export
-  tx_price, tx_itemid, tx_sender, tx_tipcap
+  tx_itemid, tx_leaf, tx_price, tx_sender, tx_status, tx_tipcap
 
 type
+  TxTabsStatsCount* = tuple
+    local, remote: int             ## sum => total
+    queued, pending, included: int ## sum => total
+    total: int                     ## sum => total
+
   TxTabsRef* = ref object ##\
     ## Base descriptor
     baseFee: GasInt           ## `byGasTip` re-org when changing
     byItemID*: TxItemIDTab    ## Primary table, queued by arrival event
     byGasTip*: TxPriceTab     ## Indexed by `effectiveGasTip` > `nonce`
     byTipCap*: TxTipCapTab    ## Indexed by `gasTipCap`
-    bySender*: TxSenderTab    ## Indexed by `sender` > `local` > `nonce`
+    bySender*: TxSenderTab    ## Indexed by `sender` > `local/status` > `nonce`
+    byStatus*: TxStatusTab    ## Indexed by `status` > `nonce`
 
 {.push raises: [Defect].}
 
@@ -70,6 +76,7 @@ proc init*(T: type TxTabsRef; baseFee = GasInt.low): T =
   result.byGasTip.txInit(update = result.updateEffectiveGasTip)
   result.byTipCap.txInit
   result.bySender.txInit
+  result.byStatus.txInit
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
@@ -104,6 +111,7 @@ proc insert*(xp: TxTabsRef; tx: var Transaction;
   xp.byGasTip.txInsert(item)
   xp.byTipCap.txInsert(item)
   xp.bySender.txInsert(item)
+  xp.byStatus.txInsert(item)
   ok()
 
 
@@ -134,8 +142,10 @@ proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
     var realItem = rc.value
     if realItem.status != status:
       discard xp.bySender.txDelete(realItem) # delete original
+      discard xp.byStatus.txDelete(realItem)
       realItem.status = status
       xp.bySender.txInsert(realItem)         # re-insert changed
+      xp.byStatus.txInsert(realItem)
       return true
 
 
@@ -148,6 +158,7 @@ proc delete*(xp: TxTabsRef; item: TxItemRef): bool
     xp.byGasTip.txDelete(item)
     xp.byTipCap.txDelete(item)
     discard xp.bySender.txDelete(item)
+    discard xp.byStatus.txDelete(item)
     return true
 
 
@@ -193,11 +204,23 @@ proc hasTx*(xp: TxTabsRef; tx: Transaction): bool {.inline.} =
   ## paradigm for accessing a transaction container.
   xp.byItemID.hasKey(tx.itemID)
 
+proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
+    {.gcsafe,raises: [Defect,KeyError].} =
+  result.pending = xp.byStatus.eq(txItemPending).nItems
+  result.queued = xp.byStatus.eq(txItemQueued).nItems
+
+  result.included = xp.byStatus.eq(txItemIncluded).nItems
+  result.local = xp.byItemID.eq(local = true).nItems
+  result.remote = xp.byItemID.eq(local = false).nItems
+
+  result.total = result.local + result.remote
+
+
 # ------------------------------------------------------------------------------
 # Public iterators, `sender` > `local` > `nonce` > `item`
 # ------------------------------------------------------------------------------
 
-iterator walkItemList*(senderTab: var TxSenderTab): TxSenderItemRef
+iterator walkItemList*(senderTab: var TxSenderTab): TxLeafItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Walk over item lists grouped by sender addresses.
   var rcAddr = senderTab.first
@@ -217,15 +240,6 @@ iterator walkItemList*(senderTab: var TxSenderTab): TxSenderItemRef
           rcNonce = nonceList.gt(nonceKey)
 
     rcAddr = senderTab.next(addrKey)
-
-iterator walkItems*(itemList: TxSenderItemRef): TxItemRef
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Walk over item lists grouped by sender addresses.
-  var rcItem = itemList.first
-  while rcItem.isOk:
-    let item = rcItem.value
-    yield item
-    rcItem = itemList.next(item)
 
 
 iterator walkSchedList*(senderTab: var TxSenderTab): TxSenderSchedRef =
@@ -253,7 +267,7 @@ iterator walkNonceList*(senderTab: var TxSenderTab;
 
     rcAddr = senderTab.next(addrKey)
 
-iterator walkItemList*(nonceList: TxSenderNonceRef): TxSenderItemRef
+iterator walkItemList*(nonceList: TxSenderNonceRef): TxLeafItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Top level part to replace `xp.bySender.walkItem` with:
   ## ::
@@ -268,7 +282,7 @@ iterator walkItemList*(nonceList: TxSenderNonceRef): TxSenderItemRef
     yield itemList
     rcNonce = nonceList.gt(nonceKey)
 
-iterator walkItemList*(schedList: TxSenderSchedRef): TxSenderItemRef
+iterator walkItemList*(schedList: TxSenderSchedRef): TxLeafItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Top level part to replace `xp.bySender.walkItem` with:
   ## ::
@@ -288,7 +302,7 @@ iterator walkItemList*(schedList: TxSenderSchedRef): TxSenderItemRef
 # deprecated
 
 iterator walkItemList*(schedList: TxSenderSchedRef;
-                       sched: TxSenderSchedule): TxSenderItemRef
+                       sched: TxSenderSchedule): TxLeafItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = schedList.eq(sched)
   if rc.isOK:
@@ -301,7 +315,7 @@ iterator walkItemList*(schedList: TxSenderSchedRef;
 ]#
 
 iterator walkItemList*(schedList: TxSenderSchedRef;
-                       status: TxItemStatus): TxSenderItemRef
+                       status: TxItemStatus): TxLeafItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = schedList.eq(status)
   if rc.isOK:
@@ -317,7 +331,7 @@ iterator walkItemList*(schedList: TxSenderSchedRef;
 # -----------------------------------------------------------------------------
 
 iterator incItemList*(priceTab: var TxPriceTab;
-                      minPrice = GasInt.low): TxPriceItemRef =
+                      minPrice = GasInt.low): TxLeafItemRef =
   ## Starting at the lowest gas price, this function traverses increasing
   ## gas prices followed by nonces.
   ##
@@ -341,14 +355,6 @@ iterator incItemList*(priceTab: var TxPriceTab;
 
     rcGas = priceTab.gt(gaskey)
 
-iterator walkItems*(itemList: TxPriceItemRef): TxItemRef
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Walk over item lists grouped by sender addresses.
-  var rcItem = itemList.first
-  while rcItem.isOk:
-    let item = rcItem.value
-    yield item
-    rcItem = itemList.next(item)
 
 iterator incNonceList*(priceTab: var TxPriceTab;
                        minPrice = GasInt.low): TxPriceNonceRef =
@@ -362,7 +368,7 @@ iterator incNonceList*(priceTab: var TxPriceTab;
     rcGas = priceTab.gt(gaskey)
 
 iterator incItemList*(nonceList: TxPriceNonceRef;
-                      minNonce = AccountNonce.low): TxPriceItemRef =
+                      minNonce = AccountNonce.low): TxLeafItemRef =
   ## Second part of a cascaded replacement for `incItem()`:
   ## ::
   ##   for gasData in xp.byGasTip.incNonce:
@@ -376,7 +382,7 @@ iterator incItemList*(nonceList: TxPriceNonceRef;
 
 
 iterator decItemList*(priceTab: var TxPriceTab;
-                      maxPrice = GasInt.high): TxPriceItemRef =
+                      maxPrice = GasInt.high): TxLeafItemRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## See also the **Note* at the comment for `incItem()`.
@@ -404,7 +410,7 @@ iterator decNonceList*(priceTab: var TxPriceTab;
     rcGas = priceTab.lt(gaskey)
 
 iterator decItemList*(nonceList: TxPriceNonceRef;
-                      maxNonce = AccountNonce.high): TxPriceItemRef =
+                      maxNonce = AccountNonce.high): TxLeafItemRef =
   ## Second part of a cascaded replacement for `decItem()`:
   ## ::
   ##   for gasData in xp.byGasTip.decNonce():
@@ -421,7 +427,7 @@ iterator decItemList*(nonceList: TxPriceNonceRef;
 # -----------------------------------------------------------------------------
 
 iterator incItemList*(gasTab: var TxTipCapTab;
-                      minCap = GasInt.low): TxTipCapItemRef =
+                      minCap = GasInt.low): TxLeafItemRef =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
   ## See also the **Note* at the comment for `byTipCap.incItem()`.
@@ -431,17 +437,8 @@ iterator incItemList*(gasTab: var TxTipCapTab;
     yield rc.value.data
     rc = gasTab.gt(gasKey)
 
-iterator walkItems*(itemList: TxTipCapItemRef): TxItemRef
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Walk over item lists grouped by sender addresses.
-  var rcItem = itemList.first
-  while rcItem.isOk:
-    let item = rcItem.value
-    yield item
-    rcItem = itemList.next(item)
-
 iterator decItemList*(gasTab: var TxTipCapTab;
-                      maxCap = GasInt.high): TxTipCapItemRef =
+                      maxCap = GasInt.high): TxLeafItemRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## See also the **Note* at the comment for `byTipCap.incItem()`.
@@ -474,6 +471,21 @@ proc verify*(xp: TxTabsRef): Result[void,TxVfyError]
     let rc = xp.byItemID.txVerify
     if rc.isErr:
       return rc
+  block:
+    let rc = xp.byStatus.txVerify
+    if rc.isErr:
+      return rc
+
+  for status in TxItemStatus:
+    var
+      senderCount = 0
+      rcAddr = xp.bySender.first
+    while rcAddr.isOk:
+      let (addrKey, schedData) = (rcAddr.value.key, rcAddr.value.data)
+      rcAddr = xp.bySender.next(addrKey)
+      senderCount += schedData.eq(status).nItems
+    if xp.byStatus.eq(status).nItems != senderCount:
+      return err(txVfyStatusSenderTotal)
 
   if xp.byItemID.nItems != xp.bySender.nItems:
      return err(txVfySenderTotal)
@@ -483,6 +495,9 @@ proc verify*(xp: TxTabsRef): Result[void,TxVfyError]
 
   if xp.byItemID.nItems != xp.byTipCap.nItems:
      return err(txVfyTipCapTotal)
+
+  if xp.byItemID.nItems != xp.byStatus.nItems:
+     return err(txVfyStatusTotal)
 
   ok()
 

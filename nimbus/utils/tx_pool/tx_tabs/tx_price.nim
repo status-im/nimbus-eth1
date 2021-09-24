@@ -19,6 +19,7 @@ import
   ../../slst,
   ../tx_info,
   ../tx_item,
+  ./tx_leaf,
   eth/common,
   stew/results
 
@@ -28,16 +29,11 @@ type
     ## of the `item` argument
     proc(item: TxItemRef) {.gcsafe,raises: [Defect].}
 
-  TxPriceItemRef* = ref object ##\
-    ## All transaction items accessed by the same index are chronologically
-    ## queued.
-    itemList: KeeQuNV[TxItemRef]
-
   TxPriceNonceRef* = ref object ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction
     ## item lists.
     size: int
-    nonceList: Slst[AccountNonce,TxPriceItemRef]
+    nonceList: Slst[AccountNonce,TxLeafItemRef]
 
   TxPriceTab* = object ##\
     ## Item list indexed by `GasInt` > `AccountNonce`
@@ -48,7 +44,7 @@ type
   TxPriceInx = object ##\
     ## Internal access data
     gas: TxPriceNonceRef
-    nonce: TxPriceItemRef
+    nonce: TxLeafItemRef
 
 let
   txPriceItemMapPass*: TxPriceItemMap = ##\
@@ -81,8 +77,7 @@ proc mkInxImpl(gp: var TxPriceTab; item: TxItemRef): TxPriceInx
   block:
     let rc = result.gas.nonceList.insert(item.tx.nonce)
     if rc.isOk:
-      new result.nonce
-      result.nonce.itemList.init(1)
+      result.nonce = txNew(type TxLeafItemRef)
       rc.value.data = result.nonce
     else:
       result.nonce = result.gas.nonceList.eq(item.tx.nonce).value.data
@@ -121,8 +116,7 @@ proc txInsert*(gp: var TxPriceTab; item: TxItemRef)
   ## Add transaction item to the list. The function has no effect if the
   ## transaction exists, already.
   let inx = gp.mkInxImpl(item)
-  if not inx.nonce.itemList.hasKey(item):
-    discard inx.nonce.itemList.append(item)
+  if inx.nonce.txAppend(item):
     gp.size.inc
     inx.gas.size.inc
 
@@ -134,11 +128,11 @@ proc txDelete*(gp: var TxPriceTab; item: TxItemRef)
   if rc.isOK:
     let inx = rc.value
 
-    inx.nonce.itemList.del(item)
+    discard inx.nonce.txDelete(item)
     gp.size.dec
     inx.gas.size.dec
 
-    if inx.nonce.itemList.len == 0:
+    if inx.nonce.nItems == 0:
       discard inx.gas.nonceList.delete(item.tx.nonce)
       if inx.gas.nonceList.len == 0:
         discard gp.priceList.delete(item.effectiveGasTip)
@@ -159,10 +153,10 @@ proc txReorg(gp: var TxPriceTab) {.gcsafe,raises: [Defect,KeyError].} =
       let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
       rcNonce = gasData.nonceList.gt(nonceKey)
 
-      var rcItem = nonceData.itemList.first
+      var rcItem = nonceData.first
       while rcItem.isOK:
         let item = rcItem.value
-        rcItem = nonceData.itemList.next(item)
+        rcItem = nonceData.next(item)
         gp.txInsert(item)
 
 
@@ -187,12 +181,12 @@ proc txVerify*(gp: var TxPriceTab): Result[void,TxVfyError]
       let (nonceKey, nonceData) = (rcNonce.value.key, rcNonce.value.data)
       rcNonce = gasData.nonceList.gt(nonceKey)
 
-      allCount += nonceData.itemList.len
-      gasCount += nonceData.itemList.len
-      if nonceData.itemList.len == 0:
+      allCount += nonceData.nItems
+      gasCount += nonceData.nItems
+      if nonceData.nItems == 0:
         return err(txVfyGasTipLeafEmpty)
 
-      let rcItem = nonceData.itemList.verify
+      let rcItem = nonceData.txVerify
       if rcItem.isErr:
         return err(txVfyGasTipLeafQueue)
 
@@ -295,122 +289,58 @@ proc nItems*(rc: SLstResult[GasInt,TxPriceNonceRef]): int {.inline.} =
 
 
 proc eq*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.eq(nonce)
 
 proc eq*(rc: SLstResult[GasInt,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.eq(nonce)
   err(rc.error)
 
 
 proc ge*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.ge(nonce)
 
 proc ge*(rc: SLstResult[GasInt,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.ge(nonce)
   err(rc.error)
 
 
 proc gt*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.gt(nonce)
 
 proc gt*(rc: SLstResult[GasInt,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.gt(nonce)
   err(rc.error)
 
 
 proc le*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.le(nonce)
 
 proc le*(rc: SLstResult[GasInt,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.le(nonce)
   err(rc.error)
 
 
 proc lt*(nonceData: TxPriceNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   nonceData.nonceList.lt(nonce)
 
 proc lt*(rc: SLstResult[GasInt,TxPriceNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxPriceItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.nonceList.lt(nonce)
   err(rc.error)
-
-# ------------------------------------------------------------------------------
-# Public KeeQu ops -- traversal functions (level 2)
-# ------------------------------------------------------------------------------
-
-proc nItems*(itemData: TxPriceItemRef): int {.inline.} =
-  itemData.itemList.len
-
-proc nItems*(rc: SLstResult[AccountNonce,TxPriceItemRef]): int {.inline.} =
-  if rc.isOK:
-    return rc.value.data.nItems
-  0
-
-
-proc first*(itemData: TxPriceItemRef):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  itemData.itemList.first
-
-proc first*(rc: SLstResult[AccountNonce,TxPriceItemRef]):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
-    return rc.value.data.first
-  err()
-
-
-proc last*(itemData: TxPriceItemRef):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  itemData.itemList.last
-
-proc last*(rc: SLstResult[AccountNonce,TxPriceItemRef]):
-         Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
-    return rc.value.data.last
-  err()
-
-
-proc next*(itemData: TxPriceItemRef; item: TxItemRef):
-         Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  itemData.itemList.next(item)
-
-proc next*(rc: SLstResult[AccountNonce,TxPriceItemRef]; item: TxItemRef):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
-    return rc.value.data.next(item)
-  err()
-
-
-proc prev*(itemData: TxPriceItemRef; item: TxItemRef):
-         Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  itemData.itemList.prev(item)
-
-proc prev*(rc: SLstResult[AccountNonce,TxPriceItemRef]; item: TxItemRef):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
-    return rc.value.data.prev(item)
-  err()
 
 # ------------------------------------------------------------------------------
 # End

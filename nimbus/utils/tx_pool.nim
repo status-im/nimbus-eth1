@@ -11,9 +11,15 @@
 ## Transaction Pool
 ## ================
 ##
-## TODO:
-##  * unit tests needed for
-##       pending(), ContentFrom()
+## Adding a transaction:
+## ::
+##  |   tx => <queued> => fail, discard
+##  |            ||
+##  |            \/
+##  |            ok, <pending> => into database
+##
+## Classifying a transaction:
+##  * `local` or `remote`, can be changed any time
 ##
 
 import
@@ -43,11 +49,11 @@ export
   TxJobGetItemReply,
   TxJobID,
   TxJobKind,
-  TxJobLocusCountReply,
   TxJobMoveRemoteToLocalsReply,
   TxJobSetGasPriceReply,
   TxJobSetHeadReply,
-  TxJobStatsReport,
+  TxJobStatsCountReply,
+  TxTabsStatsCount,
   results,
   tx_info,
   tx_item.effectiveGasTip,
@@ -185,24 +191,11 @@ proc processJobs(xp: var TxPool): int
         accounts = xp.txDB.collectAccounts(args.local)
       args.reply(accounts = accounts)
 
-    of txJobLocusCount:
-      let
-        args = task.data.locusCountArgs
-      args.reply(
-        local = xp.txDB.byItemID.eq(local = true).nItems,
-        remote = xp.txDB.byItemID.eq(local = false).nItems)
-
     of txJobMoveRemoteToLocals:
       let
         args = task.data.moveRemoteToLocalsArgs
         moved =  xp.txDB.reassignRemoteToLocals(args.account)
       args.reply(moved = moved)
-
-    of txJobStatsReport:
-      let
-        args = task.data.statsReportArgs
-        status = xp.txDB.pendingQueuedStats
-      args.reply(pending = status[0], queued = status[1])
 
     of txJobSetBaseFee:
       let args = task.data.setBaseFeeArgs
@@ -218,6 +211,12 @@ proc processJobs(xp: var TxPool): int
           curPrice = xp.gasPrice,
           newPrice = args.price)
       args.reply(deleted = deleted)
+
+    of txJobStatsCount:
+      let
+        args = task.data.statsCountArgs
+        status = xp.txDB.statsCount
+      args.reply(status = status)
 
     # End case
     result.inc

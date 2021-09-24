@@ -42,7 +42,7 @@ var
 
   # to be set up in runTxLoader()
   okCount: array[bool,int]             # entries: [local,remote] entries
-  statusCount: array[TxItemStatus,int] # ditto
+  statCount: array[TxItemStatus,int] # ditto
 
   txList: seq[TxItemRef]
   effGasTips: seq[GasInt]
@@ -63,14 +63,14 @@ proc randOkRatio: int =
     (okCount[true] * 100 / okCount[false]).int
 
 proc randStatusRatios: seq[int] =
-  for n in 1 .. statusCount.len:
+  for n in 1 .. statCount.len:
     let
-      inx = (n mod statusCount.len).TxItemStatus
+      inx = (n mod statCount.len).TxItemStatus
       prv = (n - 1).TxItemStatus
-    if statusCount[inx] == 0:
+    if statCount[inx] == 0:
       result.add int.high
     else:
-      result.add (statusCount[prv] * 100 / statusCount[inx]).int
+      result.add (statCount[prv] * 100 / statCount[inx]).int
 
 proc randOk: bool =
   result = prng.rand(1) > 0
@@ -78,7 +78,7 @@ proc randOk: bool =
 
 proc randStatus: TxItemStatus =
   result = prng.rand(TxItemStatus.high.ord).TxItemStatus
-  statusCount[result].inc
+  statCount[result].inc
 
 proc lstShow(xp: var TxPool; pfx = "*** "): string =
   pfx & "txList=" & txList.mapIt(it.pp).join(" ") & "\n" &
@@ -104,10 +104,7 @@ proc collectTxPool(xp: var TxPool;
           info = &"{count} #{blkNum}({chainNo}) {n}/{txs.len} {localInfo}"
         noisy.showElapsed(&"insert: local={local} {info}"):
           var tx = txs[n]
-          if local:
-            doAssert xp.addLocal(tx, status = status, info = info).isOK
-          else:
-            doAssert xp.addRemote(tx, status = status, info = info).isOK
+          doAssert xp.addTx(tx, local, status, info).isOK
         if stopAfter <= count:
           return
     chainNo.inc
@@ -116,18 +113,9 @@ proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true): TxPool =
   result.init(baseFee)
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
-      discard result.job(TxJobDataRef(
-        kind:     txJobAddTxs,
-        addTxsArgs: (
-          txs:    @[w.tx],
-          local:  w.local,
-          status: w.status,
-          info:   w.info,
-          reply:  ignAddTxsReply)))
-      if 111 < result.nJobsWaiting:
-        result.jobCommit
-    result.jobCommit
-  doAssert result.count == q.len
+      var tx = w.tx
+      doAssert result.addTx(tx, w.local, w.status, w.info).isOK
+  doAssert result.count.total == q.len
 
 
 proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
@@ -143,26 +131,16 @@ proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
     remoteCount = 0
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
-      discard result.job(TxJobDataRef(
-        kind:     txJobAddTxs,
-        addTxsArgs: (
-          txs:    @[w.tx],
-          local:  w.local,
-          status: w.status,
-          info:   w.info,
-          reply:  ignAddTxsReply)))
-      if 111 < result.nJobsWaiting:
-        result.jobCommit
+      var tx = w.tx
+      doAssert result.addTx(tx, w.local, w.status, w.info).isOK
       if not w.local and remoteCount < delayAt:
         remoteCount.inc
         if delayAt == remoteCount:
-          result.jobCommit
           nRemoteGapItems = remoteCount
           noisy.say &"time gap after {remoteCount} remote transactions"
           timeGap = result.get(w.itemID).value.timeStamp + middleOfTimeGap
           delayMSecs.sleep
-    result.jobCommit
-  doAssert result.count == q.len
+  doAssert result.count.total == q.len
 
 
 proc addOrFlushGroupwise(xp: var TxPool;
@@ -173,13 +151,13 @@ proc addOrFlushGroupwise(xp: var TxPool;
     return
 
   # flush group-wise
-  let xpLen = xp.count
+  let xpLen = xp.count.total
   noisy.say "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
   for a in seen:
     let deletedItem = xp.txDB.delete(a)
     doAssert deletedItem.isOK
     doAssert deletedItem.value.itemID == a
-  doAssert xpLen == seen.len + xp.count
+  doAssert xpLen == seen.len + xp.count.total
   seen.setLen(0)
 
 # ------------------------------------------------------------------------------
@@ -197,7 +175,7 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
 
   # Reset/initialise
   okCount.reset
-  statusCount.reset
+  statCount.reset
   txList.reset
   effGasTips.reset
   gasTipCaps.reset
@@ -211,8 +189,8 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
       elapNoisy.showElapsed("Total collection time"):
         xp.collectTxPool(veryNoisy, dir / captureFile, stopAfter)
 
-      check xp.count == foldl(okCount.toSeq, a+b)     # add okCount[] values
-      check xp.count == foldl(statusCount.toSeq, a+b) # ditto for statusCount[]
+      check xp.count.total == foldl(okCount.toSeq, a+b)   # add okCount[] values
+      check xp.count.total == foldl(statCount.toSeq, a+b) # ditto statCount[]
 
       # make sure that PRNG did not go bonkers
       let localRemoteRatio = randOkRatio()
@@ -224,13 +202,13 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
         check statusRatio < (10000 div randInitRatioBandPC)
 
       # Note: expecting enough transactions in the `goerliCapture` file
-      check xp.count == stopAfter
+      check xp.count.total == stopAfter
       check xp.verify.isOk
 
       # Load txList[]
       for w in xp.rangeFifo(true, false):
         txList.add w
-      check txList.len == xp.count
+      check txList.len == xp.count.total
 
     test "Load gas prices and priority fees":
 
@@ -257,8 +235,8 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
 
     var xq = txList.toTxPool(baseFee, noisy)
     let
-      nLocal = xq.localCount
-      nRemote = xq.remoteCount
+      nLocal = xq.count.local
+      nRemote = xq.count.remote
       txList0local = txList[0].local
 
     test &"Swap local/remote ({nLocal}/{nRemote}) queues":
@@ -273,8 +251,8 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           check txList[n].info == xq.txDB.byItemID.eq(not local)
                                                   .last.value.data.info
           check xq.txDB.verify.isOK
-      check nLocal == xq.remoteCount
-      check nRemote == xq.localCount
+      check nLocal == xq.count.remote
+      check nRemote == xq.count.local
 
       # maks sure the list item was left unchanged
       check txList0local == txList[0].local
@@ -341,7 +319,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
               veryNoisy.say &"gasTip={gasTip} for {infoList.len} entries:"
               veryNoisy.say indent, infoList.join(&"\n{indent}")
 
-          check txCount == xq.count
+          check txCount == xq.count.total
           check gpList.len == xq.txDB.byGasTip.len
           check effGasTips.len == gpList.len
           check effGasTips == gpList
@@ -370,7 +348,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
               veryNoisy.say &"gasPrice={gasTip} for {infoList.len} entries:"
               veryNoisy.say indent, infoList.join(&"\n{indent}")
 
-          check txCount == xq.count
+          check txCount == xq.count.total
           check gpList.len == xq.txDB.byGasTip.len
           check effGasTips.len == gpList.len
           check effGasTips == gpList.reversed
@@ -407,7 +385,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
             for w in xq.rangeFifo(local):
               xq.addOrFlushGroupwise(groupLen, seen, w.itemID, veryNoisy)
               check xq.txDB.verify.isOK
-        check seen.len == xq.count
+        check seen.len == xq.count.total
         check seen.len < groupLen
 
       test &"Load/reverse walk ID queue, " &
@@ -421,7 +399,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
             for w in xq.rangeLifo(local):
               xq.addOrFlushGroupwise(groupLen, seen, w.itemID, veryNoisy)
             check xq.txDB.verify.isOK
-        check seen.len == xq.count
+        check seen.len == xq.count.total
         check seen.len < groupLen
 
     # ---------------------------------
@@ -445,8 +423,8 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
               check xq.txDB.delete(item)
               check xq.txDB.verify.isOK
         check 0 < count
-        check 0 < xq.count
-        check count + xq.count == txList.len
+        check 0 < xq.count.total
+        check count + xq.count.total == txList.len
 
     block:
       var
@@ -468,8 +446,8 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
               check xq.txDB.delete(item)
               check xq.txDB.verify.isOK
         check 0 < count
-        check 0 < xq.count
-        check count + xq.count == txList.len
+        check 0 < xq.count.total
+        check count + xq.count.total == txList.len
 
     block:
       let
@@ -538,15 +516,15 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
                              delayMSecs = 100)   # large enough to be found
 
       test &"Delete about {nItems} expired non-local transactions "&
-          &"out of {xq.remoteCount}":
+          &"out of {xq.count.remote}":
 
         check 0 < nItems
         xq.lifeTime = getTime() - gap
         let deletedItems = xq.inactiveItemsEviction
 
-        check xq.localCount == okCount[true]
+        check xq.count.local == okCount[true]
         check xq.verify.isOK # not: xq.txDB.verify
-        check deletedItems == txList.len - xq.count
+        check deletedItems == txList.len - xq.count.total
 
         # make sure that deletion was sort of expected
         let deleteExpextRatio = (deletedItems * 100 / nItems).int
@@ -619,15 +597,15 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
             &"{nAddrLocalItems} \"local\" items in largest address group " &
             &"with {nAddrItems} items":
           let
-            nLocals = xq.localCount
-            nRemotes = xq.remoteCount
+            nLocals = xq.count.local
+            nRemotes = xq.count.remote
             nMoved = xq.remoteToLocals(maxAddr)
 
           check xq.txDB.verify.isOK
           check xq.txDB.bySender.eq(maxAddr).eq(local = false).isErr
           check nMoved == nAddrRemoteItems
-          check nLocals + nMoved == xq.localCount
-          check nRemotes - nMoved == xq.remoteCount
+          check nLocals + nMoved == xq.count.local
+          check nRemotes - nMoved == xq.count.remote
 
           check nRemoteAddrs ==
             1 + toSeq(xq.txDB.bySender.walkNonceList(local = false)).len
@@ -719,8 +697,8 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
           expect[1] += schedList.eq(txItemQueued).nItems
 
         test &"Get global ({expect[0]},{expect[1]}) status via task manager":
-          let status = xq.statsReport
-          check expect == status
+          let status = xq.count
+          check expect == (status.pending,status.queued)
 
       # --------------------
 

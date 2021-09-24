@@ -178,7 +178,7 @@ proc reset*[K,V](sl: var SLst[K,V]) =
   sl.tree.rbTreeReset(clup = proc(c: var SLstItemRef[K,V]) = c.slstClup)
 
 # ------------------------------------------------------------------------------
-# Public functions, getter
+# Public functions, getter, converter
 # ------------------------------------------------------------------------------
 
 proc key*[K,V](data: SLstItemRef[K,V]): K =
@@ -188,6 +188,10 @@ proc key*[K,V](data: SLstItemRef[K,V]): K =
 proc len*[K,V](sl: var SLst[K,V]): int =
   ## Number of list elements
   sl.tree.size
+
+proc toSLstResult*[K,V](key: K; data: V): SLstResult[K,V] =
+  ## Helper, chreate `ok()` result
+  ok(SLstItemRef[K,V](key: key, data: data))
 
 # ------------------------------------------------------------------------------
 # Public functions, list operations

@@ -20,19 +20,15 @@ import
   ../../slst,
   ../tx_info,
   ../tx_item,
+  ./tx_leaf,
   eth/common,
   stew/results
 
 type
-  TxTipCapItemRef* = ref object ##\
-    ## Chronologically ordered queue/fifo with random access. This is\
-    ## typically used when queuing items for the same key (e.g. gas price.)
-    itemList: KeeQuNV[TxItemRef]
-
   TxTipCapTab* = object ##\
     ## Generic item list indexed by gas price
     size: int
-    gasList: SLst[GasInt,TxTipCapItemRef]
+    gasList: SLst[GasInt,TxLeafItemRef]
 
 {.push raises: [Defect].}
 
@@ -40,9 +36,9 @@ type
 # Private, helpers for debugging and pretty printing
 # ------------------------------------------------------------------------------
 
-proc `$`(rq: TxTipCapItemRef): string =
+proc `$`(leaf: TxLeafItemRef): string =
   ## Needed by `rq.verify()` for printing error messages
-  $rq.itemList.len
+  $leaf.nItems
 
 # ------------------------------------------------------------------------------
 # Public gas price list helpers
@@ -61,12 +57,10 @@ proc txInsert*(gp: var TxTipCapTab; item: TxItemRef)
     key = item.tx.gasTipCap
     rc = gp.gasList.insert(key)
   if rc.isOk:
-    rc.value.data = TxTipCapItemRef(
-      itemList: init(type KeeQuNV[TxItemRef], initSize = 1))
+    rc.value.data = txNew(type TxLeafItemRef)
   else:
     rc = gp.gasList.eq(key)
-  if not rc.value.data.itemList.hasKey(item):
-    discard rc.value.data.itemList.append(item)
+  if rc.value.data.txAppend(item):
     gp.size.inc
 
 
@@ -77,10 +71,9 @@ proc txDelete*(gp: var TxTipCapTab; item: TxItemRef)
     key = item.tx.gasTipCap
     rc = gp.gasList.eq(key)
   if rc.isOk:
-    if rc.value.data.itemList.hasKey(item):
-      rc.value.data.itemList.del(item)
+    if rc.value.data.txDelete(item):
       gp.size.dec
-      if rc.value.data.itemList.len == 0:
+      if rc.value.data.nItems == 0:
         discard gp.gasList.delete(key)
 
 
@@ -88,22 +81,24 @@ proc txVerify*(gp: var TxTipCapTab): Result[void,TxVfyError]
     {.gcsafe, raises: [Defect,CatchableError].} =
   var count = 0
 
-  let sRc = gp.gasList.verify
-  if sRc.isErr:
-    return err(txVfyTipCapList)
+  block:
+    let rc = gp.gasList.verify
+    if rc.isErr:
+      return err(txVfyTipCapList)
 
-  var wRc = gp.gasList.ge(GasInt.low)
-  while wRc.isOk:
-    var itQ = wRc.value.data
-    wRc = gp.gasList.gt(wRc.value.key)
+  var rcGas = gp.gasList.ge(GasInt.low)
+  while rcGas.isOk:
+    var (gasKey, itemData) = (rcGas.value.key, rcGas.value.data)
+    rcGas = gp.gasList.gt(gasKey)
 
-    count += itQ.itemList.len
-    if itQ.itemList.len == 0:
+    count += itemData.nItems
+    if itemData.nItems == 0:
       return err(txVfyTipCapLeafEmpty)
 
-    let qRc = itQ.itemList.verify
-    if qRc.isErr:
-      return err(txVfyTipCapLeafEmpty)
+    block:
+      let rc = itemData.txVerify
+      if rc.isErr:
+        return err(txVfyTipCapLeafEmpty)
 
   if count != gp.size:
     return err(txVfyTipCapTotal)
@@ -121,88 +116,24 @@ proc len*(gp: var TxTipCapTab): int {.inline.} =
   gp.gasList.len
 
 proc eq*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxTipCapItemRef] {.inline.} =
+       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
   gp.gasList.eq(key)
 
 proc ge*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxTipCapItemRef] {.inline.} =
+       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
   gp.gasList.ge(key)
 
 proc gt*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxTipCapItemRef] {.inline.} =
+       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
   gp.gasList.gt(key)
 
 proc le*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxTipCapItemRef] {.inline.} =
+       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
   gp.gasList.le(key)
 
 proc lt*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxTipCapItemRef] {.inline.} =
+       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
   gp.gasList.lt(key)
-
-# ------------------------------------------------------------------------------
-# Public KeeQu ops -- traversal functions (level 1)
-# ------------------------------------------------------------------------------
-
-proc nItems*(itemData: TxTipCapItemRef): int {.inline.} =
-  itemData.itemList.len
-
-proc nItems*(rc: SLstResult[GasInt,TxTipCapItemRef]): int {.inline.} =
-  if rc.isOK:
-    return rc.value.data.nItems
-  0
-
-
-proc first*(itemData: TxTipCapItemRef):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  itemData.itemList.first
-
-proc first*(rc: SLstResult[GasInt,TxTipCapItemRef]):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
-    return rc.value.data.first
-  err()
-
-
-proc last*(itemData: TxTipCapItemRef):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  itemData.itemList.last
-
-proc last*(rc: SLstResult[GasInt,TxTipCapItemRef]):
-         Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
-    return rc.value.data.last
-  err()
-
-
-proc next*(itemData: TxTipCapItemRef; item: TxItemRef):
-         Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  itemData.itemList.next(item)
-
-proc next*(rc: SLstResult[GasInt,TxTipCapItemRef]; item: TxItemRef):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
-    return rc.value.data.next(item)
-  err()
-
-
-proc prev*(itemData: TxTipCapItemRef; item: TxItemRef):
-         Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  itemData.itemList.prev(item)
-
-proc prev*(rc: SLstResult[GasInt,TxTipCapItemRef]; item: TxItemRef):
-          Result[TxItemRef,void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  if rc.isOK:
-    return rc.value.data.prev(item)
-  err()
 
 # ------------------------------------------------------------------------------
 # End

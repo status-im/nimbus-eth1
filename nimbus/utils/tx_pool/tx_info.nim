@@ -72,23 +72,32 @@ type
     txVfyOk = 0
 
     # failed verifier codes
+    txVfyLeafQueue          ## Corrupted leaf item queue
+
+    txVfyGasTipList         ## Corrupted gas price list structure
+    txVfyGasTipLeafEmpty    ## Empty gas price list leaf record
+    txVfyGasTipLeafQueue    ## Corrupted gas price leaf queue
+    txVfyGasTipTotal        ## Wrong number of leaves
+
     txVfyItemIdList         ## Corrupted ID queue/fifo structure
     txVfyItemIdTotal        ## Wrong number of leaves
-
-    txVfySenderRbTree       ## Corrupted sender list structure
-    txVfySenderLeafEmpty    ## Empty sender list leaf record
-    txVfySenderLeafQueue    ## Corrupted sender leaf queue
-    txVfySenderTotal        ## Wrong number of leaves
 
     txVfyNonceList          ## Corrupted nonce list structure
     txVfyNonceLeafEmpty     ## Empty nonce list leaf record
     txVfyNonceLeafQueue     ## Corrupted nonce leaf queue
     txVfyNonceTotal         ## Wrong number of leaves
 
-    txVfyGasTipList         ## Corrupted gas price list structure
-    txVfyGasTipLeafEmpty    ## Empty gas price list leaf record
-    txVfyGasTipLeafQueue    ## Corrupted gas price leaf queue
-    txVfyGasTipTotal        ## Wrong number of leaves
+    txVfySenderRbTree       ## Corrupted sender list structure
+    txVfySenderLeafEmpty    ## Empty sender list leaf record
+    txVfySenderLeafQueue    ## Corrupted sender leaf queue
+    txVfySenderTotal        ## Wrong number of leaves
+
+    txVfyStatusRbTree       ## Corrupted status list structure
+    txVfyStatusLeafEmpty    ## Empty status list leaf record
+    txVfyStatusLeafQueue    ## Corrupted status leaf queue
+    txVfyStatusTotal        ## Wrong number of leaves
+
+    txVfyStatusSenderTotal  ## Sender vs status table mismatch
 
     txVfyTipCapList         ## Corrupted gas price list structure
     txVfyTipCapLeafEmpty    ## Empty gas price list leaf record

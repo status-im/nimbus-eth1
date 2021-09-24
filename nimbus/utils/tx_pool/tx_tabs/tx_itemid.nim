@@ -8,11 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Queue Structure For Transaction Pool
-## ====================================
-##
-## Ackn: Vaguely inspired by the *txLookup* maps from
-## `tx_pool.go <https://github.com/ethereum/go-ethereum/blob/887902ea4d7ee77118ce803e05085bd9055aa46d/core/tx_pool.go#L1646>`_
+## Transaction Pool Table `local/remote` > `itemID` > `insertion-time-rank`
+## ========================================================================
 ##
 
 import
@@ -39,12 +36,6 @@ type
     size: int
     schedList: array[TxItemIdSchedule,TxItemIdItemRef]
 
-  TxItemIdItemPair* = object ##\
-    ## Intermediate result, somehow similar to
-    ## `KeeQuPair` (only that the `key` field is read-only there)
-    key*: bool
-    data*: TxItemIdItemRef
-
   TxItemIdInx = object ##\
     ## Internal access data
     sched: TxItemIdItemRef
@@ -68,12 +59,11 @@ proc mkInxImpl(aq: var TxItemIdTab; item: TxItemRef): TxItemIdInx =
   block:
     result.other = aq.schedList[not sched]
   block:
-    if aq.schedList[sched].isNil:
+    result.sched = aq.schedList[sched]
+    if result.sched.isNil:
       new result.sched
       result.sched.itemList.init(1)
       aq.schedList[sched] = result.sched
-    else:
-      result.sched = aq.schedList[sched]
 
 
 proc getInxImpl(aq: var TxItemIdTab; item: TxItemRef): Result[TxItemIdInx,void]
@@ -152,12 +142,12 @@ proc nItems*(aq: var TxItemIdTab): int {.inline.} =
   aq.size
 
 proc eq*(aq: var TxItemIdTab; local: bool):
-       Result[TxItemIdItemPair,void]
+       Result[KeeQuPair[bool,TxItemIdItemRef],void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   let itemData = aq.schedList[local.toItemIdSched]
-  if not itemData.isNil:
-    return ok(TxItemIdItemPair(key: local, data: itemData))
-  err()
+  if itemData.isNil:
+    return err()
+  toKeeQuResult(key = local, data = itemData)
 
 # ------------------------------------------------------------------------------
 # Public KeeQu ops -- traversal functions (level 1)
@@ -166,81 +156,83 @@ proc eq*(aq: var TxItemIdTab; local: bool):
 proc nItems*(itemData: TxItemIdItemRef): int {.inline.} =
   itemData.itemList.len
 
-proc nItems*(rc: Result[TxItemIdItemPair,void]): int {.inline.} =
+proc nItems*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void]): int {.inline.} =
   if rc.isOK:
     return rc.value.data.nItems
   0
 
 
-proc hasKey*(itemData: TxItemIdItemRef; itemID: Hash256): bool
-    {.inline.} =
+proc hasKey*(itemData: TxItemIdItemRef;
+             itemID: Hash256): bool {.inline.} =
   itemData.itemList.hasKey(itemID)
 
-proc hasKey*(rc: Result[TxItemIdItemPair,void]; itemID: Hash256): bool
-    {.inline.} =
+proc hasKey*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void];
+             itemID: Hash256): bool {.inline.} =
   if rc.isOK:
     return rc.value.data.hasKey(itemID)
   false
 
 
-proc eq*(itemData: TxItemIdItemRef; itemID: Hash256):
-       Result[TxItemRef,void] {.inline,gcsafe,raises: [Defect,KeyError].} =
+proc eq*(itemData: TxItemIdItemRef;
+         itemID: Hash256): Result[TxItemRef,void]
+       {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.eq(itemID)
 
-proc eq*(rc: Result[TxItemIdItemPair,void]; itemID: Hash256):
-       Result[TxItemRef,void] {.inline,gcsafe,raises: [Defect,KeyError].} =
+proc eq*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void];
+         itemID: Hash256): Result[TxItemRef,void]
+       {.inline,gcsafe,raises: [Defect,KeyError].} =
   if rc.isOK:
     return rc.value.data.itemList.eq(itemID)
   err()
 
 
 proc first*(itemData: TxItemIdItemRef):
-          Result[KeeQuPair[Hash256,TxItemRef],void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+            Result[KeeQuPair[Hash256,TxItemRef],void]
+          {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.first
 
-proc first*(rc: Result[TxItemIdItemPair,void]):
-          Result[KeeQuPair[Hash256,TxItemRef],void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+proc first*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void]):
+            Result[KeeQuPair[Hash256,TxItemRef],void]
+          {.inline,gcsafe,raises: [Defect,KeyError].} =
   if rc.isOK:
     return rc.value.data.first
   err()
 
 
 proc last*(itemData: TxItemIdItemRef):
-          Result[KeeQuPair[Hash256,TxItemRef],void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+           Result[KeeQuPair[Hash256,TxItemRef],void]
+         {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.last
 
-proc last*(rc: Result[TxItemIdItemPair,void]):
-          Result[KeeQuPair[Hash256,TxItemRef],void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+proc last*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void]):
+           Result[KeeQuPair[Hash256,TxItemRef],void]
+         {.inline,gcsafe,raises: [Defect,KeyError].} =
   if rc.isOK:
     return rc.value.data.last
   err()
 
 
 proc next*(itemData: TxItemIdItemRef; key: Hash256):
-          Result[KeeQuPair[Hash256,TxItemRef],void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+           Result[KeeQuPair[Hash256,TxItemRef],void]
+         {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.next(key)
 
-proc next*(rc: Result[TxItemIdItemPair,void]; key: Hash256):
-          Result[KeeQuPair[Hash256,TxItemRef],void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+proc next*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void]; key: Hash256):
+           Result[KeeQuPair[Hash256,TxItemRef],void]
+         {.inline,gcsafe,raises: [Defect,KeyError].} =
   if rc.isOK:
     return rc.value.data.next(key)
   err()
 
 
 proc prev*(itemData: TxItemIdItemRef; key: Hash256):
-          Result[KeeQuPair[Hash256,TxItemRef],void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+           Result[KeeQuPair[Hash256,TxItemRef],void]
+         {.inline,gcsafe,raises: [Defect,KeyError].} =
   itemData.itemList.prev(key)
 
-proc prev*(rc: Result[TxItemIdItemPair,void]; key: Hash256):
-          Result[KeeQuPair[Hash256,TxItemRef],void]
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
+proc prev*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void]; key: Hash256):
+           Result[KeeQuPair[Hash256,TxItemRef],void]
+         {.inline,gcsafe,raises: [Defect,KeyError].} =
   if rc.isOK:
     return rc.value.data.prev(key)
   err()
