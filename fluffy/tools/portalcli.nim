@@ -13,8 +13,8 @@ import
   eth/[keys, net/nat],
   eth/p2p/discoveryv5/[enr, node],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ./wire/messages, ./wire/portal_protocol,
-  ./state/state_content
+  ../network/wire/[messages, portal_protocol],
+  ../network/state/state_content
 
 type
   PortalCmd* = enum

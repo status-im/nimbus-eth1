@@ -14,7 +14,7 @@ the Portal Network: fluffy. The Portal Network is a project still heavily in
 research phase and fully in flux. This client is thus still highly experimental.
 
 Current status of specifications can be found in the
-[stateless-ethereum-specs repository](https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-network.md).
+[portal-network-specs repository](https://github.com/ethereum/portal-network-specs/blob/master/portal-network.md).
 
 
 ## Development Updates
@@ -48,6 +48,12 @@ git pull
 make update
 
 make fluffy
+```
+
+### Run fluffy test suite
+```bash
+# From the nimbus-eth1 repository
+make fluffy-test
 ```
 
 ### Windows support
