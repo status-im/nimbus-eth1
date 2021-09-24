@@ -13,17 +13,15 @@
 import
   std/options,
   stint, stew/[results, objects],
-  eth/ssz/ssz_serialization
+  eth/ssz/ssz_serialization,
+  ../../common/common_types
 
-export ssz_serialization, stint
+export ssz_serialization, stint, common_types
 
 const
   contentKeysLimit = 64
 
 type
-  ByteList* = List[byte, 2048]
-  Bytes2* = array[2, byte]
-
   ContentKeysList* = List[ByteList, contentKeysLimit]
   ContentKeysBitList* = BitList[contentKeysLimit]
 
