@@ -1,12 +1,10 @@
 # Portal Network Wire Protocol
 ## Introduction
-The `fluffy/network` directory holds a Nim implementation of the
-[Portal Network Wire Protocol](https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#wire-protocol).
+The `fluffy/network/wire` directory holds a Nim implementation of the
+[Portal Network Wire Protocol](https://github.com/ethereum/portal-network-specs/blob/master/state-network.md#wire-protocol).
 
-Both specification, at above link, and implementations are still WIP.
-
-The protocol builds on top of the Node Discovery v5.1 protocol its `talkreq` and
-`talkresp` messages.
+The wire protocol builds on top of the Node Discovery v5.1 protocol its
+`talkreq` and `talkresp` messages.
 
 For further information on the Nim implementation of the Node Discovery v5.1
 protocol check out the
@@ -23,9 +21,9 @@ cd nimbus-eth1
 make update
 
 # Build & run Portal wire protocol encoding test
-./env.sh nim c -r ./fluffy/tests/test_portal_encoding
+./env.sh nim c -r ./fluffy/tests/test_portal_wire_encoding
 # Build & run Portal wire protocol network test
-./env.sh nim c -r ./fluffy/tests/test_portal
+./env.sh nim c -r ./fluffy/tests/test_portal_wire_protocol
 ```
 
 ## portalcli

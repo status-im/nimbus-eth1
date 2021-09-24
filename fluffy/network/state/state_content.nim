@@ -12,13 +12,12 @@
 import
   std/[options, sugar],
   nimcrypto/[sha2, hash], stew/objects, stint,
-  eth/ssz/ssz_serialization, eth/trie/[hexary, db]
+  eth/ssz/ssz_serialization, eth/trie/[hexary, db],
+  ../../common/common_types
 
-export ssz_serialization
+export ssz_serialization, common_types
 
 type
-  ByteList* = List[byte, 2048]
-
   ContentType* = enum
     Account = 0x01
     ContractStorage = 0x02

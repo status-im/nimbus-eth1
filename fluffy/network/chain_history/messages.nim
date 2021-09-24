@@ -7,14 +7,16 @@
 
 # As per spec:
 # https://hackmd.io/ctTNH9xsSu2ci9DeGidUsQ?view
+
 {.push raises: [Defect].}
 
 import
   std/options,
   stint, stew/[results, objects],
-  eth/ssz/ssz_serialization, eth/common/eth_types
+  eth/ssz/ssz_serialization, eth/common/eth_types,
+  ../../common/common_types
 
-export ssz_serialization, stint
+export ssz_serialization, stint, common_types
 
 # TODO
 # 1. There are a lot of similiarities beetween chain history, portal and overlay
@@ -29,8 +31,6 @@ export ssz_serialization, stint
 # 4. There is still no merkle accumulator specified but it will be needed when receiving
 #    headers
 type
-  ByteList* = List[byte, 2048]
-
   ContentType* = enum
     BlockHeader = 0x01
     BlockBody = 0x02
