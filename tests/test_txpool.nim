@@ -10,9 +10,12 @@
 
 import
   std/[algorithm, os, random, sequtils, strformat, strutils, times],
+  ../nimbus/config,
+  ../nimbus/db/db_chain,
+  ../nimbus/p2p/chain,
   ../nimbus/utils/tx_pool,
   ../nimbus/utils/tx_pool/tx_perjobapi,
-  ./test_txpool/helpers,
+  ./test_txpool/[block_chain, helpers],
   eth/[common, keys],
   stint,
   unittest2
@@ -21,8 +24,7 @@ const
   prngSeed = 42
   baseDir = "tests"
   mainnetCapture = "test_txpool" / "mainnet50688.txt.gz"
-  goerliCapture = "test_clique" / "goerli51840.txt.gz"
-  loadFile = goerliCapture
+  loadFile = mainnetCapture
 
   # 75% <= #local/#remote <= 1/75%
   # note: by law of big numbers, the ratio will exceed any upper or lower
@@ -37,6 +39,9 @@ const
   # note: this ratio might vary due to timing race conditions
   addrGroupLocalRemotePC = 70
 
+  # test block chain
+  networkId = MainNet
+
 var
   prng = prngSeed.initRand
 
@@ -47,6 +52,9 @@ var
   txList: seq[TxItemRef]
   effGasTips: seq[GasInt]
   gasTipCaps: seq[GasInt]
+
+  # running block chain
+  bcDB: BaseChainDB
 
 let
   ignAddTxsReply: TxJobAddTxsReply =
@@ -85,37 +93,50 @@ proc lstShow(xp: var TxPool; pfx = "*** "): string =
     pfx & "fifo=" & toSeq(xp.rangeFifo(true,false)).mapIt(it.pp).join(" ")
 
 
-proc collectTxPool(xp: var TxPool;
-                   noisy: bool; file: string; stopAfter: int) =
+proc importTxPool(xp: var TxPool; noisy: bool;
+                  file: string; loadBlocks: int; loadTxs: int) =
   var
-    count = 0
+    txCount = 0
     chainNo = 0
+    chainDB = bcDB.newChain
   for chain in file.undumpNextGroup:
-    for chainInx in 0 ..< chain[0].len:
-      let
-        blkNum = chain[0][chainInx].blockNumber
-        txs = chain[1][chainInx].transactions
-      for n in 0 ..< txs.len:
-        count.inc
-        let
-          local = randOK()
-          status = randStatus()
-          localInfo = if local: "L" else: "R"
-          info = &"{count} #{blkNum}({chainNo}) {n}/{txs.len} {localInfo}"
-        noisy.showElapsed(&"insert: local={local} {info}"):
-          var tx = txs[n]
-          doAssert xp.addTx(tx, local, status, info).isOK
-        if stopAfter <= count:
-          return
     chainNo.inc
+    if chain[0][0].blockNumber == 0.u256:
+      # Verify Genesis
+      doAssert chain[0][0] == chainDB.db.getBlockHeader(0.u256)
+
+    elif chain[0][0].blockNumber < loadBlocks.u256:
+      let (headers,bodies) = (chain[0],chain[1])
+      doAssert chainDB.persistBlocks(headers,bodies) == ValidationResult.OK
+
+    else:
+      for chainInx in 0 ..< chain[0].len:
+        # load transactions, one-by-one
+        let
+          blkNum = chain[0][chainInx].blockNumber
+          txs = chain[1][chainInx].transactions
+        for n in 0 ..< txs.len:
+          txCount.inc
+          let
+            local = randOK()
+            status = randStatus()
+            localInfo = if local: "L" else: "R"
+            info = &"{txCount} #{blkNum}({chainNo}) {n}/{txs.len} {localInfo}"
+          noisy.showElapsed(&"insert: local={local} {info}"):
+            var tx = txs[n]
+            doAssert xp.addTx(tx, local, status, info).isOK
+          if loadTxs <= txCount:
+            return
+
 
 proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true): TxPool =
-  result.init(baseFee)
+  result.init(bcDB, baseFee)
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
       var tx = w.tx
       doAssert result.addTx(tx, w.local, w.status, w.info).isOK
   doAssert result.count.total == q.len
+
 
 
 proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
@@ -124,7 +145,7 @@ proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
   ## Variant of `toTxPool()` where the loader sleeps some time after
   ## `remoteItemsPC` percent loading remote items.
   doAssert 0 < remoteItemsPC and remoteItemsPC < 100
-  result.init(baseFee)
+  result.init(bcDB, baseFee)
   var
     delayAt = okCount[false] * remoteItemsPC div 100
     middleOfTimeGap = initDuration(milliSeconds = delayMSecs div 2)
@@ -164,12 +185,15 @@ proc addOrFlushGroupwise(xp: var TxPool;
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runTxLoader(noisy = true; baseFee: GasInt;
-                 dir = baseDir; captureFile = loadFile, numTransactions = 0) =
+proc runTxLoader(noisy = true;
+                 baseFee: GasInt;
+                 dir = baseDir; captureFile = loadFile,
+                 numBlocks = 0; numTransactions = 0) =
   let
     elapNoisy = noisy
     veryNoisy = false # noisy
-    stopAfter = if numTransactions == 0: 900 else: numTransactions
+    loadBlocks = if numBlocks == 0: 30000 else: numBlocks
+    loadTxs = if numTransactions == 0: 900 else: numTransactions
     name = captureFile.splitFile.name.split(".")[0]
     baseInfo = if baseFee != TxNoBaseFee: &" with baseFee={baseFee}" else: ""
 
@@ -179,15 +203,21 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
   txList.reset
   effGasTips.reset
   gasTipCaps.reset
+  bcDB = networkId.blockChainForTesting
 
   suite &"TxPool: Transactions from {name} capture{baseInfo}":
-    var xp = init(type TxPool, baseFee)
+    var xp = init(type TxPool, bcDB, baseFee)
     check txList.len == 0
     check xp.txDB.verify.isOK
 
-    test &"Collected {stopAfter} transactions":
+    test &"Import at least {loadBlocks.toKMG} blocks "&
+        &"and collect {loadTxs} transactions":
       elapNoisy.showElapsed("Total collection time"):
-        xp.collectTxPool(veryNoisy, dir / captureFile, stopAfter)
+        xp.importTxPool(veryNoisy, dir / captureFile,
+                        loadBlocks = loadBlocks, loadTxs = loadTxs)
+
+      # make sure that the block chain was initialised
+      check loadBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
 
       check xp.count.total == foldl(okCount.toSeq, a+b)   # add okCount[] values
       check xp.count.total == foldl(statCount.toSeq, a+b) # ditto statCount[]
@@ -202,7 +232,7 @@ proc runTxLoader(noisy = true; baseFee: GasInt;
         check statusRatio < (10000 div randInitRatioBandPC)
 
       # Note: expecting enough transactions in the `goerliCapture` file
-      check xp.count.total == stopAfter
+      check xp.count.total == loadTxs
       check xp.verify.isOk
 
       # Load txList[]
@@ -727,14 +757,16 @@ proc txPoolMain*(noisy = defined(debug)) =
 when isMainModule:
   let
     baseFee = 42.GasInt #  TxNoBaseFee
-    captFile1 = "goerli504192.txt.gz"
+    captFile0 = "goerli504192.txt.gz"
+    captFile1 = "nimbus-eth1/tests" / mainnetCapture
     captFile2 = "mainnet843841.txt.gz"
 
   let noisy = defined(debug)
 
   noisy.runTxLoader(
     baseFee,
-    dir = "/status", captureFile = captFile2, numTransactions = 1500)
+    dir = "/status", captureFile = captFile1, numTransactions = 1500)
+
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
 

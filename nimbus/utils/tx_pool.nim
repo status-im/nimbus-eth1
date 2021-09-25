@@ -24,6 +24,7 @@
 
 import
   std/[times],
+  ../db/db_chain,
   ./tx_pool/[tx_gauge, tx_info, tx_item, tx_job, tx_tabs, tx_tasks],
   chronicles,
   eth/[common, keys],
@@ -89,15 +90,22 @@ const
 type
   TxPool* = object of RootObj ##\
     ## Transaction pool descriptor
+    db: BaseChainDB      ## block chain
     startDate: Time      ## Start date (read-only)
     gasPrice: GasInt     ## Gas price enforced by the pool
-    lifeTime*: Duration  ## Maximum amount of time non-executable
+    lifeTime*: Duration  ## Maximum amount of time non-executable txs are queued
 
     byJob: TxJob         ## Job batch list
     txDB: TxTabsRef      ## Transaction lists & tables
 
     asyncLock: AsyncLock ## Protects the commitLoop field
     commitLoop: bool     ## set while commit loop is running
+
+    # locals: seq[EthAddress] ## Addresses treated as local by default
+    # noLocals: bool          ## May disable handling of locals
+    # priceLimit: GasInt      ## Min gas price for acceptance into the pool
+    # priceBump: uint64       ## Min price bump percentage to replace an already
+    #                         ## existing transaction (nonce)
 
 {.push raises: [Defect].}
 
@@ -257,7 +265,7 @@ proc runJobSerialiser(xp: var TxPool): Result[int,void]
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: var TxPool; baseFee = TxNoBaseFee) =
+proc init*(xp: var TxPool; db: BaseChainDB; baseFee = TxNoBaseFee) =
   ## Constructor, returns new tx-pool descriptor.
   xp.txDB = init(type TxTabsRef, baseFee)
   xp.startDate = utcNow()
@@ -265,9 +273,9 @@ proc init*(xp: var TxPool; baseFee = TxNoBaseFee) =
   xp.lifeTime = txPoolLifeTime
   xp.asyncLock = newAsyncLock()
 
-proc init*(T: type TxPool; baseFee = TxNoBaseFee): T =
+proc init*(T: type TxPool; db: BaseChainDB;  baseFee = TxNoBaseFee): T =
   ## Ditto
-  result.init(baseFee)
+  result.init(db, baseFee)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -317,34 +325,6 @@ proc jobCommit*(xp: var TxPool)
 # ------------------------------------------------------------------------------
 # Public functions, debugging (not serialised)
 # ------------------------------------------------------------------------------
-
-# TxPoolConfig are the configuration parameters of the transaction pool.
-#type TxPoolConfig struct {
-#   Locals    []common.Address // Addresses that should be treated by default
-#                              // as local
-#   NoLocals  bool             // Whether local transaction handling should be
-#                              // disabled
-#   Journal   string           // Journal of local transactions to survive node
-#                              // restarts
-#   Rejournal time.Duration    // Time interval to regenerate the local
-#                              // transaction journal
-#
-#   PriceLimit uint64   // Minimum gas price to enforce for acceptance into the
-#                       // pool
-#   PriceBump  uint64   // Minimum price bump percentage to replace an already
-#                       // existing transaction (nonce)
-#
-#   AccountSlots uint64 // Number of executable transaction slots guaranteed
-#                       // per account
-#   GlobalSlots  uint64 // Maximum number of executable transaction slots for
-#                       // all accounts
-#   AccountQueue uint64 // Maximum number of non-executable transaction slots
-#                       // permitted per account
-#   GlobalQueue  uint64 // Maximum number of non-executable transaction slots
-#                       // for all accounts
-#
-#   Lifetime time.Duration) // Maximum amount of time non-executable
-#                           // transaction are queued
 
 # DefaultTxPoolConfig contains the default configurations for the transaction
 # pool.
