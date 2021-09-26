@@ -84,6 +84,13 @@ proc fromJson*[T](n: JsonNode, name: string, x: var Option[T]) =
     n.fromJson(name, val)
     x = some(val)
 
+proc fromJson*(n: JsonNode, name: string, x: var TxType) =
+  let node = n[name]
+  if node.kind == JInt:
+    x = TxType(node.getInt)
+  else:
+    x = hexToInt(node.getStr(), int).TxType
+
 proc parseBlockHeader*(n: JsonNode): BlockHeader =
   n.fromJson "parentHash", result.parentHash
   n.fromJson "sha3Uncles", result.ommersHash
@@ -130,14 +137,17 @@ proc parseTransaction*(n: JsonNode): Transaction =
   n.fromJson "s", tx.S
 
   if n["type"].kind != JNull:
-    tx.txType = TxType(n["type"].getInt)
+    n.fromJson "type", tx.txType
 
-  if tx.txType == TxEip1559:
+  if tx.txType >= TxEip1559:
     n.fromJson "maxPriorityFeePerGas", tx.maxPriorityFee
     n.fromJson "maxFeePerGas", tx.maxFee
 
-  if tx.txType == TxEip2930:
-    # chainId is set from top level query
+  if tx.txType >= TxEip2930:
+    if n.hasKey("chainId"):
+      let id = hexToInt(n["chainId"].getStr(), int)
+      tx.chainId = ChainId(id)
+
     let accessList = n["accessList"]
     if accessList.len > 0:
       for acn in accessList:

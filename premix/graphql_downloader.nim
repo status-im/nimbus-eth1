@@ -53,6 +53,7 @@ query getBlock($blockNumber: Long!) {
         address
         storageKeys
       }
+      index
     }
   }
 }
@@ -68,7 +69,7 @@ proc fromJson(_: type ChainId, n: JsonNode, name: string): ChainId =
   fromJson(n, name, chainId)
   ChainId(chainId)
 
-proc requestBlock*(blockNumber: BlockNumber): Block =
+proc requestBlock*(blockNumber: BlockNumber, parseTx = true): Block =
   let address = initTAddress("127.0.0.1:8545")
   let clientRes = GraphqlHttpClientRef.new(address)
   if clientRes.isErr:
@@ -92,12 +93,13 @@ proc requestBlock*(blockNumber: BlockNumber): Block =
   let chainId = ChainId.fromJson(n["data"], "chainID")
   result.header = parseBlockHeader(nh)
 
-  let txs = nh["transactions"]
-  for txn in txs:
-    var tx = parseTransaction(txn)
-    tx.chainId = chainId
-    validateTxSenderAndHash(txn, tx)
-    result.body.transactions.add tx
+  if parseTx:
+   let txs = nh["transactions"]
+   for txn in txs:
+     var tx = parseTransaction(txn)
+     tx.chainId = chainId
+     validateTxSenderAndHash(txn, tx)
+     result.body.transactions.add tx
 
   let uncles = nh["ommers"]
   for un in uncles:
