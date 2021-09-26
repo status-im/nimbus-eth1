@@ -46,6 +46,9 @@ proc newBaseChainDB*(
 proc `$`*(db: BaseChainDB): string =
   result = "BaseChainDB"
 
+proc networkParams*(db: BaseChainDB): NetworkParams =
+  NetworkParams(config: db.config, genesis: db.genesis)
+
 proc exists*(self: BaseChainDB, hash: Hash256): bool =
   self.db.contains(hash.data)
 

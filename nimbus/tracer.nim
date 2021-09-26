@@ -86,7 +86,8 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId) # prune or not prune?
+    networkParams = chainDB.networkParams
+    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams) # prune or not prune?
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableAccount})
 
   var stateDb = vmState.accountDb
@@ -153,7 +154,8 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(db.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false, db.networkId)
+    networkParams = db.networkParams
+    captureChainDB = newBaseChainDB(captureTrieDB, false, db.networkId, networkParams)
     # we only need stack dump if we want to scan for internal transaction address
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
     miner = vmState.coinbase()
@@ -210,7 +212,8 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId)
+    networkParams = chainDB.networkParams
+    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams)
     vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableTracing})
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
@@ -243,7 +246,8 @@ proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader,
     memoryDB = newMemoryDB()
     captureDB = newCaptureDB(chainDB.db, memoryDB)
     captureTrieDB = trieDB captureDB
-    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId)
+    networkParams = chainDB.networkParams
+    captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams)
     bloom = createBloom(vmState.receipts)
 
   let blockSummary = %{
