@@ -31,6 +31,8 @@ type
     txJobNone = 0
     txJobAbort
     txJobAddTxs
+    txJobApplyByLocal
+    txJobApplyByStatus
     txJobEvictionInactive
     txJobFetchRejects
     txJobFlushRejects
@@ -39,11 +41,17 @@ type
     txJobGetGasPrice
     txJobGetItem
     txJobMoveRemoteToLocals
+    txJobRejectItem,
     txJobSetBaseFee
     txJobSetGasPrice
     txJobSetHead
     txJobSetMaxRejects
     txJobStatsCount
+
+  TxJobItemApply* = ##\
+    ## Generic item function used as apply function. If the function
+    ## returns false, the apply loop is aborted
+    proc(item: TxItemRef): bool {.gcsafe,raises: [Defect].}
 
 
   TxJobFetchRejectsReply* =
@@ -55,14 +63,13 @@ type
   TxJobGetAccountsReply* =
     proc(accounts: seq[EthAddress]) {.gcsafe,raises: [].}
 
-  TxJobGetBaseFeeReply* =
-    proc(baseFee: GasInt) {.gcsafe,raises: [].}
-
-  TxJobGetGasPriceReply* =
-    proc(gasPrice: GasInt) {.gcsafe,raises: [].}
-
-  TxJobGetItemReply* =
+  TxJobGetItemReply* = ##\
+    ## Generic item function for retrieving `item` values.
     proc(item: TxItemRef) {.gcsafe,raises: [].}
+
+  TxJobGetPriceReply* = ##\
+    ## Generic function used for retrieving `GasInt` values.
+    proc(price: GasInt) {.gcsafe,raises: [].}
 
   TxJobMoveRemoteToLocalsReply* =
     proc(moved: int) {.gcsafe,raises: [].}
@@ -105,6 +112,26 @@ type
         status: TxItemStatus,
         info:   string]
 
+    of txJobApplyByLocal: ##\
+      ## Apply argument function to all `local` or `remote` items.
+      ##
+      ## :Note:
+      ##    It is OK to request the current item to be moved to the waste
+      ##    basket.
+      applyByLocalArgs*: tuple[
+        local: bool,
+        apply: TxJobItemApply]
+
+    of txJobApplyByStatus: ##\
+      ## Apply argument function to all `ststud` items.
+      ##
+      ## :Note:
+      ##    It is OK to request the current item to be moved to the waste
+      ##    basket.
+      applyByStatusArgs*: tuple[
+        status: TxItemStatus,
+        apply:  TxJobItemApply]
+
     of txJobEvictionInactive: ##\
       ## Move transactions older than `xp.lifeTime` to the waste basket.
       discard
@@ -145,14 +172,14 @@ type
       ##
       ## Out-of-band job (runs with priority)
       getBaseFeeArgs*: tuple[
-        reply: TxJobGetBaseFeeReply]
+        reply: TxJobGetPriceReply]
 
     of txJobGetGasPrice: ##\
       ## Get the current gas price enforced by the transaction pool.
       ##
       ## Out-of-band job (runs with priority)
       getGasPriceArgs*: tuple[
-        reply: TxJobGetGasPriceReply]
+        reply: TxJobGetPriceReply]
 
     of txJobGetItem: ##\
       ## Returns a transaction if it is contained in the pool.
@@ -169,6 +196,12 @@ type
       moveRemoteToLocalsArgs*: tuple[
         account: EthAddress,
         reply:   TxJobMoveRemoteToLocalsReply]
+
+    of txJobRejectItem: ##\
+      ## Move argument `item` to waste basket
+      rejectItemArgs*: tuple[
+        item:   TxItemRef,
+        reason: TxInfo]
 
     of txJobSetBaseFee: ##\
       ## New base fee (implies database reorg).
@@ -228,6 +261,7 @@ const
       txJobGetGasPrice,
       txJobSetMaxRejects,
       txJobGetItem,
+      txJobRejectItem,
       txJobStatsCount}
 
   txJobIdMax* = ##\

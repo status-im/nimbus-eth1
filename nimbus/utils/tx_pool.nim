@@ -11,17 +11,29 @@
 ## Transaction Pool
 ## ================
 ##
-## Local transactions are currently unsupported. All transactions are
-## considered from remote accounts.
+## TODO:
+## * Support `local` transactions (currently unsupported.) Foe now, all
+##   transactions are considered from `remote` accounts.
+## * Currently quick test only when queuing transactions. This must be
+##   extended to full verification.
+## * Redefining per account transactions with the same `nonce` is not
+##   supported yet. The old transaction needs to be replaced by the new
+##   one (and moved to the waste basket.)
 ##
-## Adding transactions:
-## --------------------
+## Adding transactions (1):
+## ------------------------
 ## * queue txs after quick test, or move to waste basket
 ## * queued transactions are strored with meta-data and marked `txItemQueued`
 ##
-## Processing transactions:
-## ------------------------
+## Processing transactions (2):
+## ---------------------------
 ## * txs are taken from the queue
+## * checked against minimum fee and other parameters (if any)
+## * transactions are marked `txItemPending`
+##
+## Packing transactions (3):
+## -------------------------
+##
 ##
 
 import
@@ -44,13 +56,13 @@ export
   TxItemRef,
   TxItemStatus,
   TxJobDataRef,
-  TxJobGetAccountsReply,
-  TxJobGetBaseFeeReply,
   TxJobFetchRejectsReply,
   TxJobFlushRejectsReply,
-  TxJobGetGasPriceReply,
+  TxJobGetAccountsReply,
   TxJobGetItemReply,
+  TxJobGetPriceReply,
   TxJobID,
+  TxJobItemApply,
   TxJobKind,
   TxJobMoveRemoteToLocalsReply,
   TxJobSetHeadReply,
@@ -158,12 +170,23 @@ proc processJobs(xp: var TxPool): int
       xp.byJob.init
       break
 
-    of txJobSetHead: # FIXME: tbd
-      discard
-
     of txJobAddTxs:
       let args = task.data.addTxsArgs
       xp.txDB.addTxs(args.txs, args.local, args.status, args.info)
+
+    # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash common.Hash,..
+    of txJobApplyByLocal:
+      let args = task.data.applyByLocalArgs
+      for item in xp.txDB.byItemID.eq(args.local).walkItems:
+        if not args.apply(item):
+          break
+
+    of txJobApplyByStatus:
+      let args = task.data.applyByStatusArgs
+      for itemList in xp.txDB.byStatus.incItemList(args.status):
+        for item in itemList.walkItems:
+          if not args.apply(item):
+            break
 
     of txJobEvictionInactive:
       xp.txDB.deleteExpiredItems(xp.lifeTime)
@@ -182,11 +205,11 @@ proc processJobs(xp: var TxPool): int
 
     of txJobGetBaseFee:
       let args = task.data.getBaseFeeArgs
-      args.reply(baseFee = xp.txDB.baseFee)
+      args.reply(price = xp.txDB.baseFee)
 
     of txJobGetGasPrice:
       let args = task.data.getGasPriceArgs
-      args.reply(gasPrice = xp.gasPrice)
+      args.reply(price = xp.gasPrice)
 
     of txJobGetItem:
       let
@@ -198,17 +221,17 @@ proc processJobs(xp: var TxPool): int
         args.reply(item = nil)
 
     of txJobGetAccounts:
-      let
-        args = task.data.getAccountsArgs
-        accounts = xp.txDB.collectAccounts(args.local)
-      args.reply(accounts = accounts)
+      let args = task.data.getAccountsArgs
+      args.reply(accounts = xp.txDB.collectAccounts(args.local))
 
     of txJobMoveRemoteToLocals:
-      let
-        args = task.data.moveRemoteToLocalsArgs
-        moved =  xp.txDB.reassignRemoteToLocals(args.account)
-      args.reply(moved = moved)
+      let args = task.data.moveRemoteToLocalsArgs
+      args.reply(moved = xp.txDB.reassignRemoteToLocals(args.account))
 
+    of txJobRejectItem:
+      let args = task.data.rejectItemArgs
+      discard xp.txDB.reject(args.item, args.reason)
+      
     of txJobSetBaseFee:
       let args = task.data.setBaseFeeArgs
       if args.disable:
@@ -220,15 +243,16 @@ proc processJobs(xp: var TxPool): int
       let args = task.data.setGasPriceArgs
       xp.txDB.updateGasPrice(curPrice = xp.gasPrice, newPrice = args.price)
 
+    of txJobSetHead: # FIXME: tbd
+      discard
+
     of txJobSetMaxRejects:
       let args = task.data.setMaxRejectsArgs
       xp.txDB.maxRejects = args.size
 
     of txJobStatsCount:
-      let
-        args = task.data.statsCountArgs
-        status = xp.txDB.statsCount
-      args.reply(status = status)
+      let args = task.data.statsCountArgs
+      args.reply(status = xp.txDB.statsCount)
 
     # End case
     result.inc
@@ -475,7 +499,7 @@ proc status*(xp: var TxPool; hashes: openArray[Hash256]): seq[TxItemStatus]
     let rc = xp.txDB.byItemID.eq(hashes[n])
     if rc.isOK:
       result[n] = rc.value.status
-## ]#
+
 
 # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash common.Hash, ..
 iterator rangeFifo*(xp: var TxPool; local: varargs[bool]): TxItemRef
@@ -504,6 +528,7 @@ iterator rangeLifo*(xp: var TxPool; local: varargs[bool]): TxItemRef
       rc = xp.txDB.byItemID.eq(isLocal).prev(item.itemID)
       yield item
 
+]#
 
 proc txDB*(xp: var TxPool): TxTabsRef {.inline.} =
   ## Getter, Transaction lists & tables (for debugging only)

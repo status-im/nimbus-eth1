@@ -32,9 +32,9 @@ export
 
 type
   TxTabsStatsCount* = tuple
-    local, remote: int             ## sum => total
-    queued, pending, included: int ## sum => total
-    total: int                     ## excluding rejects
+    local, remote: int           ## sum => total
+    queued, pending, staged: int ## sum => total
+    total: int                   ## excluding rejects
     rejected: int
 
   TxTabsRef* = ref object ##\
@@ -265,12 +265,12 @@ proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
     {.gcsafe,raises: [Defect,KeyError].} =
   result.queued = xp.byStatus.eq(txItemQueued).nItems
   result.pending = xp.byStatus.eq(txItemPending).nItems
-  result.included = xp.byStatus.eq(txItemIncluded).nItems
+  result.staged = xp.byStatus.eq(txItemStaged).nItems
 
   result.local = xp.byItemID.eq(local = true).nItems
   result.remote = xp.byItemID.eq(local = false).nItems
 
-  result.total = result.local + result.remote
+  result.total =  xp.byItemID.nItems
 
   result.rejected = xp.byRejects.nItems
 
@@ -505,6 +505,30 @@ iterator decItemList*(gasTab: var TxTipCapTab;
     let gasKey = rc.value.key
     yield rc.value.data
     rc = gasTab.lt(gasKey)
+
+# ------------------------------------------------------------------------------
+# Public iterators, `TxItemStatus` > `item`
+# -----------------------------------------------------------------------------
+
+iterator incItemList*(stTab: var TxStatusTab;
+                      status: TxItemStatus): TxLeafItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Ditto
+  var rc = stTab.eq(status).ge(AccountNonce.low)
+  while rc.isOK:
+    let nonceKey = rc.value.key
+    yield rc.value.data
+    rc = stTab.eq(status).gt(nonceKey)
+
+iterator decItemList*(stTab: var TxStatusTab;
+                      status: TxItemStatus): TxLeafItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Ditto
+  var rc = stTab.eq(status).le(AccountNonce.high)
+  while rc.isOK:
+    let nonceKey = rc.value.key
+    yield rc.value.data
+    rc = stTab.eq(status).lt(nonceKey)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging

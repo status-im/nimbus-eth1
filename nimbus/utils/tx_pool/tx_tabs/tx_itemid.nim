@@ -21,11 +21,6 @@ import
   stew/results
 
 type
-  TxItemIdSchedule* = enum ##\
-    ## Sub-queues
-    txItemIdLocal = 0
-    txItemIdRemote = 1
-
   TxItemIdItemRef* = ref object ##\
     ## All transaction items accessed by the same index are chronologically
     ## queued and indexed by the `itemID`.
@@ -34,12 +29,11 @@ type
   TxItemIdTab* = object ##\
     ## Chronological queue and ID table, fifo
     size: int
-    schedList: array[TxItemIdSchedule,TxItemIdItemRef]
+    isLocalList: array[bool,TxItemIdItemRef]
 
   TxItemIdInx = object ##\
     ## Internal access data
-    sched: TxItemIdItemRef
-    other: TxItemIdItemRef # for append/re-assign
+    local: TxItemIdItemRef
 
 {.push raises: [Defect].}
 
@@ -47,34 +41,21 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc `not`(sched: TxItemIdSchedule): TxItemIdSchedule {.inline.} =
-  if sched == txItemIdLocal: txItemIdRemote else: txItemIdLocal
-
-proc toItemIdSched*(local: bool): TxItemIdSchedule {.inline.} =
-  if local: txItemIdLocal else: txItemIdRemote
-
-
 proc mkInxImpl(aq: var TxItemIdTab; item: TxItemRef): TxItemIdInx =
-  let sched = item.local.toItemIdSched
-  block:
-    result.other = aq.schedList[not sched]
-  block:
-    result.sched = aq.schedList[sched]
-    if result.sched.isNil:
-      new result.sched
-      result.sched.itemList.init(1)
-      aq.schedList[sched] = result.sched
+  result.local = aq.isLocalList[item.local]
+  if result.local.isNil:
+    new result.local
+    result.local.itemList.init(1)
+    aq.isLocalList[item.local] = result.local
 
 
 proc getInxImpl(aq: var TxItemIdTab; item: TxItemRef): Result[TxItemIdInx,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   var inxData: TxItemIdInx
 
-  block:
-    let sched = item.local.toItemIdSched
-    inxData.sched = aq.schedList[sched]
-    if inxData.sched.isNil:
-      return err()
+  inxData.local = aq.isLocalList[item.local]
+  if inxData.local.isNil:
+    return err()
 
   ok(inxData)
 
@@ -84,7 +65,7 @@ proc getInxImpl(aq: var TxItemIdTab; item: TxItemRef): Result[TxItemIdInx,void]
 
 proc txInit*(aq: var TxItemIdTab) =
   aq.size = 0
-  aq.schedList.reset
+  aq.isLocalList.reset
 
 
 proc txAppend*(aq: var TxItemIdTab; item: TxItemRef)
@@ -92,7 +73,7 @@ proc txAppend*(aq: var TxItemIdTab; item: TxItemRef)
   ## Add transaction `item` to the list. The function has no effect if the
   ## transaction exists, already.
   let inx = aq.mkInxImpl(item)
-  discard inx.sched.itemList.append(item.itemID,item)
+  discard inx.local.itemList.append(item.itemID,item)
   aq.size.inc
 
 
@@ -102,12 +83,11 @@ proc txDelete*(aq: var TxItemIdTab; item: TxItemRef): bool
   if rc.isOK:
     let inx = rc.value
 
-    inx.sched.itemList.del(item.itemID)
+    inx.local.itemList.del(item.itemID)
     aq.size.dec
 
-    if inx.sched.itemList.len == 0:
-      let sched = item.local.toItemIdSched
-      aq.schedList[sched] = nil
+    if inx.local.itemList.len == 0:
+      aq.isLocalList[item.local] = nil
     return true
 
 
@@ -115,12 +95,12 @@ proc txVerify*(aq: var TxItemIdTab): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,KeyError].} =
   var allCount = 0
 
-  for sched in TxItemIdSchedule:
-    if not aq.schedList[sched].isNil:
-      let rc = aq.schedList[sched].itemList.verify
+  for sched in [true,false]:
+    if not aq.isLocalList[sched].isNil:
+      let rc = aq.isLocalList[sched].itemList.verify
       if rc.isErr:
         return err(txInfoVfyItemIdList)
-      allCount += aq.schedList[sched].itemList.len
+      allCount += aq.isLocalList[sched].itemList.len
 
   if allCount != aq.size:
     return err(txInfoVfyItemIdTotal)
@@ -133,9 +113,9 @@ proc txVerify*(aq: var TxItemIdTab): Result[void,TxInfo]
 
 proc len*(aq: var TxItemIdTab): int {.inline.} =
   ## Number of local + remote slots (0 .. 2)
-  if not aq.schedList[txItemIdLocal].isNil:
+  if not aq.isLocalList[true].isNil:
     result.inc
-  if not aq.schedList[txItemIdRemote].isNil:
+  if not aq.isLocalList[false].isNil:
     result.inc
 
 proc nItems*(aq: var TxItemIdTab): int {.inline.} =
@@ -144,7 +124,7 @@ proc nItems*(aq: var TxItemIdTab): int {.inline.} =
 proc eq*(aq: var TxItemIdTab; local: bool):
        Result[KeeQuPair[bool,TxItemIdItemRef],void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  let itemData = aq.schedList[local.toItemIdSched]
+  let itemData = aq.isLocalList[local]
   if itemData.isNil:
     return err()
   toKeeQuResult(key = local, data = itemData)
@@ -238,17 +218,40 @@ proc prev*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void]; key: Hash256):
   err()
 
 # ------------------------------------------------------------------------------
+# Public KeeQu ops -- iterators (level 1)
+# ------------------------------------------------------------------------------
+
+iterator walkItems*(itemData: TxItemIdItemRef): TxItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Walk over itemID item list
+  var rcItem = itemData.itemList.first
+  while rcItem.isOk:
+    let (key, item) = (rcItem.value.key, rcItem.value.data)
+    rcItem = itemData.itemList.next(key)
+    yield item
+
+iterator walkItems*(rc: Result[KeeQuPair[bool,TxItemIdItemRef],void]): TxItemRef
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Walk over itemID item list
+  if rc.isOK:
+    var rcItem = rc.value.data.itemList.first
+    while rcItem.isOk:
+      let (key, item) = (rcItem.value.key, rcItem.value.data)
+      rcItem = rc.value.data.itemList.next(key)
+      yield item
+
+# ------------------------------------------------------------------------------
 # Public ops -- combined methods (level 0 + 1)
 # ------------------------------------------------------------------------------
 
 proc hasKey*(aq: var TxItemIdTab; itemID: Hash256): bool =
   block:
-    let itemData = aq.schedList[txItemIdLocal]
+    let itemData = aq.isLocalList[true]
     if not itemData.isNil:
       if itemData.itemList.hasKey(itemID):
         return true
   block:
-    let itemData = aq.schedList[txItemIdRemote]
+    let itemData = aq.isLocalList[false]
     if not itemData.isNil:
       if itemData.itemList.hasKey(itemID):
         return true
@@ -257,13 +260,13 @@ proc hasKey*(aq: var TxItemIdTab; itemID: Hash256): bool =
 proc eq*(aq: var TxItemIdTab; itemID: Hash256):
        Result[TxItemRef,void] {.gcsafe,raises: [Defect,KeyError].} =
   block:
-    let itemData = aq.schedList[txItemIdLocal]
+    let itemData = aq.isLocalList[true]
     if not itemData.isNil:
       let rc = itemData.itemList.eq(itemID)
       if rc.isOK:
         return ok(rc.value)
   block:
-    let itemData = aq.schedList[txItemIdRemote]
+    let itemData = aq.isLocalList[false]
     if not itemData.isNil:
       let rc = itemData.itemList.eq(itemID)
       if rc.isOK:

@@ -48,7 +48,7 @@ type
     txSenderAny         ## all entries
     txSenderQueued      ## by status ...
     txSenderPending
-    txSenderIncluded
+    txSenderStaged
 
   TxSenderInx = object ##\
     ## Internal access data
@@ -116,8 +116,8 @@ proc toSenderSchedule(status: TxItemStatus): TxSenderSchedule {.inline.} =
     return txSenderQueued
   of txItemPending:
     return txSenderPending
-  of txItemIncluded:
-    return txSenderIncluded
+  of txItemStaged:
+    return txSenderStaged
 
 
 proc mkItemInx(sub: var TxSenderNonceRef; item: TxItemRef): TxLeafItemRef
@@ -509,8 +509,8 @@ proc eq*(schedData: TxSenderSchedRef;
     return schedData.eq(txItemQueued)
   of txSenderPending:
     return schedData.eq(txItemPending)
-  of txSenderIncluded:
-    return schedData.eq(txItemIncluded)
+  of txSenderStaged:
+    return schedData.eq(txItemStaged)
 
 proc eq*(rc: SLstResult[EthAddress,TxSenderSchedRef];
          key: TxSenderSchedule):

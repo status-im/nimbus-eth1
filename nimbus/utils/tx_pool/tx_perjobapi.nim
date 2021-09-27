@@ -189,6 +189,38 @@ proc setMaxRejects*(xp: var TxPool; size: int)
     setMaxRejectsArgs: (
       size:  size)))
 
+proc itemsApply*(xp: var TxPool; apply: TxJobItemApply; local = false)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Apply argument function `apply` to all items of the `local` or `remote`
+  ## queue.
+  xp.jobCommit(TxJobDataRef(
+    kind:     txJobApplyByLocal,
+    applyByLocalArgs: (
+      local:  local,
+      apply:  apply)))
+
+proc itemsApply*(xp: var TxPool; apply: TxJobItemApply; status: TxItemStatus)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Apply argument function `apply` to all items of the `status` queue.
+  xp.jobCommit(TxJobDataRef(
+    kind:     txJobApplyByStatus,
+    applyByStatusArgs: (
+      status: status,
+      apply:  apply)))
+
+proc rejectItem*(xp: var TxPool; item: TxItemRef; reason: TxInfo)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Move item to wastebasket
+  ##
+  ## :CAVEAT:
+  ##   This function must not be used inside a call back function as of
+  ##   `itemsApply()`. Add the job directly using the `job()` function.
+  xp.jobCommit(TxJobDataRef(
+    kind:     txJobRejectItem,
+    rejectItemArgs: (
+      item:   item,
+      reason: reason)))
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

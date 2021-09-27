@@ -84,9 +84,15 @@ proc randStatus: TxItemStatus =
   result = prng.rand(TxItemStatus.high.ord).TxItemStatus
   statCount[result].inc
 
-proc lstShow(xp: var TxPool; pfx = "*** "): string =
-  pfx & "txList=" & txList.mapIt(it.pp).join(" ") & "\n" &
-    pfx & "fifo=" & toSeq(xp.rangeFifo(true,false)).mapIt(it.pp).join(" ")
+
+proc slurpItems(xp: var TxPool): seq[TxItemRef] =
+  var rList: seq[TxItemRef]
+  let appItFn = proc(item: TxItemRef): bool =
+                  rList.add item
+                  true
+  xp.itemsApply(appItFn, local = true)
+  xp.itemsApply(appItFn, local = false)
+  result = rList
 
 
 proc importTxPool(xp: var TxPool; noisy: bool;
@@ -170,27 +176,32 @@ proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
 
 
 proc addOrFlushGroupwise(xp: var TxPool;
-                         grpLen: int; seen: var seq[Hash256]; n: Hash256;
-                         noisy = true) =
-  seen.add n
-  if seen.len < grpLen:
-    return
+                         grpLen: int; seen: var seq[TxItemRef]; w: TxItemRef;
+                         noisy = true): bool =
+  # to be run as call back inside `itemsApply()`
+  try:
+    seen.add w
+    if grpLen <= seen.len:
+      # clear waste basket
+      discard xp.txDB.flushRejects
 
-  # clear waste basket
-  discard xp.flushRejects
+      # flush group-wise
+      let xpLen = xp.txDB.statsCount.total
+      noisy.say "*** updateSeen: deleting ", seen.mapIt($it.itemID).join(" ")
+      for item in seen:
+        doAssert xp.txDB.reject(item,txInfoErrUnspecified)
+      doAssert xpLen == seen.len + xp.txDB.statsCount.total
+      doAssert seen.len == xp.txDB.statsCount.rejected
+      seen.setLen(0)
 
-  # flush group-wise
-  let xpLen = xp.count.total
-  noisy.say "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
-  for a in seen:
-    let item = xp.get(a).value
-    doAssert xp.txDB.reject(item,txInfoErrUnspecified)
-  doAssert xpLen == seen.len + xp.count.total
-  doAssert xp.count.rejected == seen.len
-  seen.setLen(0)
+      # clear waste basket
+      discard xp.txDB.flushRejects
 
-  # clear waste basket
-  discard xp.flushRejects
+    return true
+
+  except CatchableError:
+    raiseAssert "addOrFlushGroupwise() has problems: " &
+      getCurrentExceptionMsg()
 
 # ------------------------------------------------------------------------------
 # Test Runners
@@ -247,8 +258,7 @@ proc runTxLoader(noisy = true;
       check xp.verify.isOk
 
       # Load txList[]
-      for w in xp.rangeFifo(true, false):
-        txList.add w
+      txList = xp.slurpItems
       check txList.len == xp.count.total
 
     test "Load gas prices and priority fees":
@@ -394,21 +404,6 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           check effGasTips.len == gpList.len
           check effGasTips == gpList.reversed
 
-      test "Walk transaction ID queue fwd/rev":
-        block:
-          var top = 0
-          for w in xq.rangeFifo(true, false):
-            check txList[top].info.split[0] == w.info.split[0]
-            # check txList[top].itemID == w.itemID
-            top.inc
-          check top == txList.len
-        block:
-          var top = txList.len
-          for w in xq.rangeLifo(false, true):
-            top.dec
-            check txList[top].itemID == w.itemID
-          check top == 0
-
     # ---------------------------------
 
     block:
@@ -419,13 +414,15 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           &"deleting groups of at most {groupLen}":
         var
           xq = txList.toTxPool(baseFee, noisy)
-          seen: seq[Hash256]
+          seen: seq[TxItemRef]
+        let
+          itFn = proc(item: TxItemRef): bool =
+                   xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Forward delete-walk ID queue"):
-          for local in [true, false]:
-            for w in xq.rangeFifo(local):
-              xq.addOrFlushGroupwise(groupLen, seen, w.itemID, veryNoisy)
-              check xq.txDB.verify.isOK
+          xq.itemsApply(itFn, local = true)
+          xq.itemsApply(itFn, local = false)
+        check xq.txDB.verify.isOK
         check seen.len == xq.count.total
         check seen.len < groupLen
 
@@ -433,13 +430,15 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           &"deleting in groups of at most {groupLen}":
         var
           xq = txList.toTxPool(baseFee, noisy)
-          seen: seq[Hash256]
+          seen: seq[TxItemRef]
+        let
+          itFn = proc(item: TxItemRef): bool =
+                   xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Revese delete-walk ID queue"):
-          for local in [false, true]:
-            for w in xq.rangeLifo(local):
-              xq.addOrFlushGroupwise(groupLen, seen, w.itemID, veryNoisy)
-            check xq.txDB.verify.isOK
+          xq.itemsApply(itFn, local = true)
+          xq.itemsApply(itFn, local = false)
+        check xq.txDB.verify.isOK
         check seen.len == xq.count.total
         check seen.len < groupLen
 
@@ -587,12 +586,13 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
         xq = txList.toTxPool(baseFee, noisy)
         maxAddr: EthAddress
         nAddrItems = 0
+
         nAddrRemoteItems = 0
         nAddrLocalItems = 0
 
         nAddrQueuedItems = 0
         nAddrPendingItems = 0
-        nAddrIncludedItems = 0
+        nAddrStagedItems = 0
 
       let
         nLocalAddrs = toSeq(xq.localAccounts).len
@@ -624,16 +624,16 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
                   xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
           nAddrPendingItems =
                   xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-          nAddrIncludedItems =
-                  xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+          nAddrStagedItems =
+                  xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
           check nAddrQueuedItems +
                   nAddrPendingItems +
-                  nAddrIncludedItems == nAddrItems
+                  nAddrStagedItems == nAddrItems
 
           # make suke the random assignment made some sense
           check 0 < nAddrQueuedItems
           check 0 < nAddrPendingItems
-          check 0 < nAddrIncludedItems
+          check 0 < nAddrStagedItems
 
           # make sure that local/remote ratio makes sense
           let localRemoteRatio =
@@ -668,8 +668,8 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
                     xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
           check nAddrPendingItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-          check nAddrIncludedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+          check nAddrStagedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
 
       # --------------------
 
@@ -686,12 +686,12 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
           fromNumItems = nAddrPendingItems
           fromBucketInfo = "pending"
           fromBucket = txItemPending
-          toBucketInfo = "included"
-          toBucket = txItemIncluded
-        if fromNumItems < nAddrIncludedItems:
-          fromNumItems = nAddrIncludedItems
-          fromBucketInfo = "included"
-          fromBucket = txItemIncluded
+          toBucketInfo = "staged"
+          toBucket = txItemStaged
+        if fromNumItems < nAddrStagedItems:
+          fromNumItems = nAddrStagedItems
+          fromBucketInfo = "staged"
+          fromBucket = txItemStaged
           toBucketInfo = "queued"
           toBucket = txItemQueued
 
@@ -720,22 +720,22 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
                     xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
             check nAddrPendingItems + moveNumItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-            check nAddrIncludedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+            check nAddrStagedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
           of txItemPending:
             check nAddrPendingItems - moveNumItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-            check nAddrIncludedItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+            check nAddrStagedItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
             check nAddrQueuedItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
           else:
-            check nAddrIncludedItems - moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+            check nAddrStagedItems - moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
             check nAddrQueuedItems + moveNumItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-            check nAddrIncludedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemIncluded).nItems
+            check nAddrStagedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
 
       # --------------------
 
@@ -769,6 +769,20 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
           check xq.count.rejected == rejCount
           check xq.txDB.verify.isOK
 
+
+proc runTxPackerTests(noisy = true; baseFee: GasInt) =
+  let
+    baseInfo = if baseFee != TxNoBaseFee: &" with baseFee={baseFee}" else: ""
+
+  suite &"TxPool: Block packer tests{baseInfo}":
+
+    block:
+      var
+        xq = txList.toTxPool(baseFee, noisy)
+
+      test &"Load \"remote\" transactions":
+        discard
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
@@ -794,6 +808,7 @@ when isMainModule:
 
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
+  noisy.runTxPackerTests(baseFee)
 
   #noisy.runTxLoader(baseFee, dir = ".")
   #noisy.runTxPoolTests(baseFee)

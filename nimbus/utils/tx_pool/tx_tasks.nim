@@ -57,6 +57,7 @@ proc deleteExpiredItems*(tDB: TxTabsRef; maxLifeTime: Duration)
     discard tDB.reject(item,txInfoErrTxExpired)
     queuedEvictionMeter(1)
 
+
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
 proc deleteUnderpricedItems*(tDB: TxTabsRef; price: GasInt)
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -68,6 +69,7 @@ proc deleteUnderpricedItems*(tDB: TxTabsRef; price: GasInt)
     for item in itemList.walkItems:
       if not item.local:
         discard tDB.reject(item,txInfoErrUnderpriced)
+
 
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTxs*(tDB: TxTabsRef; txs: openArray[Transaction];
@@ -95,6 +97,7 @@ proc addTxs*(tDB: TxTabsRef; txs: openArray[Transaction];
     else:
       unspecifiedErrorMeter(1)
 
+
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc collectAccounts*(tDB: TxTabsRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -105,6 +108,7 @@ proc collectAccounts*(tDB: TxTabsRef; local: bool): seq[EthAddress]
     rc = tDB.bySender.next(addrKey)
     if 0 < schedList.eq(local).nItems:
       result.add addrKey
+
 
 # core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
 proc reassignRemoteToLocals*(tDB: TxTabsRef; signer: EthAddress): int
@@ -128,6 +132,7 @@ proc getRemotesBelowTip*(tDB: TxTabsRef; threshold: GasInt): seq[Hash256]
     for item in itemList.walkItems:
       if not item.local:
         result.add item.itemID
+
 
 proc updateGasPrice*(tDB: TxTabsRef; curPrice: var GasInt; newPrice: GasInt)
     {.inline, raises: [Defect,KeyError].} =
