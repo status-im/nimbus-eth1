@@ -16,31 +16,11 @@ import
   std/[hashes, sequtils, strutils, times],
   ../ec_recover,
   ../utils_defs,
+  ./tx_info,
   eth/[common, keys],
   stew/results
 
 type
-  TxItemError* = enum
-    TxItemErrNone = 0
-
-    TxItemErrInvalidSig =
-      "invalid transaction v, r, s values"
-
-    TxItemErrUnexpectedProtection =
-      "transaction type does not supported EIP-155 protected signatures"
-
-    TxItemErrInvalidTxType =
-      "transaction type not valid in this context"
-
-    TxItemErrTxTypeNotSupported =
-      "transaction type not supported"
-
-    TxItemErrGasFeeCapTooLow =
-      "fee cap less than base fee"
-
-    TxItemErrEmptyTypedTx =
-      "empty typed transaction bytes"
-
   TxItemStatus* = enum ##\
     ## current status of a transaction as seen by the pool.
     txItemQueued = 0
@@ -58,6 +38,7 @@ type
     local:     bool         ## Local or remote queue (setter available)
     status:    TxItemStatus ## Transaction status (setter available)
     effGasTip: GasInt       ## EffectiveGasTipValue
+    reject:    TxInfo       ## Reason for moving to rejection queue
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing
@@ -129,6 +110,18 @@ proc newTxItemRef*(tx: Transaction; itemID: Hash256;
     info:      info,
     local:     local,
     status:    status))
+
+proc newTxItemRef*(tx: Transaction; reject: TxInfo;
+                   local: bool; status: TxItemStatus; info: string):
+                     TxItemRef {.inline.} =
+  ## Create incomplete item descriptor, so meta-data can be stored (e.g.
+  ## for holding in the waste basket to be investigated later.)
+  TxItemRef(
+    tx:        tx,
+    timeStamp: now().utc.toTime,
+    info:      info,
+    local:     local,
+    status:    status)
 
 # ------------------------------------------------------------------------------
 #  Public functions, Table ID helper
@@ -234,6 +227,10 @@ proc effectiveGasTip*(item: TxItemRef): GasInt {.inline.} =
   ## Getter
   item.effGasTip
 
+proc reject*(item: TxItemRef): TxInfo {.inline.} =
+  ## Getter
+  item.reject
+
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
@@ -249,6 +246,10 @@ proc `status=`*(item: TxItemRef; val: TxItemStatus) {.inline.} =
 proc `effectiveGasTip=`*(item: TxItemRef; val: GasInt) {.inline.} =
   ## Setter
   item.effGasTip = val
+
+proc `reject=`*(item: TxItemRef; val: TxInfo) {.inline.} =
+  ## Setter
+  item.reject = val
 
 # ------------------------------------------------------------------------------
 # Public functions, go like API -- Transactions

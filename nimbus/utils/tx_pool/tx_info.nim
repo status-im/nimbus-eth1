@@ -12,99 +12,125 @@
 ## ===========================================
 
 type
-  TxPoolError* = enum
-    txPoolErrNone = ##\
-      ## Default/reset value
+  TxInfo* = enum
+    txInfoOk =
       (0, "no error")
 
-    txPoolErrUnspecified = ##\
+    txInfoErrUnspecified = ##\
       ## Some unspecified error occured
       "generic error"
 
-    txPoolErrAlreadyKnown = ##\
+    txInfoErrAlreadyKnown = ##\
       ## The transactions is already contained within the pool
       "already known"
 
-    txPoolErrInvalidSender = ##\
-      ## The transaction contains an invalid signature.
-      "invalid sender"
-
-    txPoolErrUnderpriced = ##\
-      ## A transaction's gas price is below the minimum configured for the
-      ## transaction pool.
-      "transaction underpriced"
-
-    txPoolErrTxPoolOverflow = ##\
+    txInfoErrTxPoolOverflow = ##\
       ## The transaction pool is full and can't accpet another remote
       ## transaction.
       "txpool is full"
 
-    txPoolErrReplaceUnderpriced = ##\
-      ## A transaction is attempted to be replaced with a different one
-      ## without the required price bump.
-      "replacement transaction underpriced"
+    # ------ Transaction format/parsing problems ---------------------
 
-    txPoolErrGasLimit = ##\
-      ## A transaction's requested gas limit exceeds the maximum allowance
-      ## of the current block.
-      "exceeds block gas limit"
-
-    txPoolErrNegativeValue = ##\
-      ## A sanity error to ensure no one is able to specify a transaction
-      ## with a negative value.
-      "negative value"
-
-    txPoolErrOversizedData = ##\
+    txInfoErrOversizedData = ##\
       ## The input data of a transaction is greater than some meaningful
       ## limit a user might use. This is not a consensus error making the
       ## transaction invalid, rather a DOS protection.
-      "oversized data"
+      "Oversized tx data"
 
-  TxInfo* = enum ##\
-    ## Return codes
-    txOk = 0
+    txInfoErrNegativeValue = ##\
+      ## A sanity error to ensure no one is able to specify a transaction
+      ## with a negative value.
+      "Negative value in tx"
 
-    txTabsErrAlreadyKnown
-    txTabsErrInvalidSender
+    txInfoErrUnexpectedProtection = ##\
+      ## Transaction type does not supported EIP-1559 protected signature
+      "Unsupported EIP-1559 signature protection"
 
-  TxVfyError* = enum ##\
-    ## Error codes (as used in verification function.)
-    txVfyOk = 0
+    txInfoErrInvalidTxType = ##\
+      ## Transaction type not valid in this context
+      "Unsupported tx type"
+
+    txInfoErrTxTypeNotSupported = ##\
+      ## Transaction type not supported
+      "Unsupported transaction type"
+
+    txInfoErrEmptyTypedTx = ##\
+      ## Typed transaction, missing data
+      "Empty typed transaction bytes"
+
+    # ------ Signature problems ---------------------
+
+    txInfoErrInvalidSender = ##\
+      ## The transaction contains an invalid signature.
+      "invalid sender"
+
+    txInfoErrInvalidSig = ##\
+      ## invalid transaction v, r, s values
+      "Invalid transaction signature"
+
+    # ------ Gas fee and selection problems ---------------------
+
+    txInfoErrUnderpriced = ##\
+      ## A transaction's gas price is below the minimum configured for the
+      ## transaction pool.
+      "Tx underpriced"
+
+    txInfoErrReplaceUnderpriced = ##\
+      ## A transaction is attempted to be replaced with a different one
+      ## without the required price bump.
+      "Replacement tx underpriced"
+
+    txInfoErrGasLimit = ##\
+      ## A transaction's requested gas limit exceeds the maximum allowance
+      ## of the current block.
+      "Tx exceeds block gasLimit"
+
+    txInfoErrGasFeeCapTooLow = ##\
+      ## Gase fee cap less than base fee
+      "Tx has feeCap < baseFee"
+
+    # ------ operational events related to transactions ---------------------
+
+    txInfoErrTxExpired = ##\
+      ## A transaction has been on the system for too long so it was removed.
+      "Tx expired"
+
+    # ------- debugging error codes as used in verification function -------
 
     # failed verifier codes
-    txVfyLeafQueue          ## Corrupted leaf item queue
+    txInfoVfyLeafQueue          ## Corrupted leaf item queue
 
-    txVfyGasTipList         ## Corrupted gas price list structure
-    txVfyGasTipLeafEmpty    ## Empty gas price list leaf record
-    txVfyGasTipLeafQueue    ## Corrupted gas price leaf queue
-    txVfyGasTipTotal        ## Wrong number of leaves
+    txInfoVfyGasTipList         ## Corrupted gas price list structure
+    txInfoVfyGasTipLeafEmpty    ## Empty gas price list leaf record
+    txInfoVfyGasTipLeafQueue    ## Corrupted gas price leaf queue
+    txInfoVfyGasTipTotal        ## Wrong number of leaves
 
-    txVfyItemIdList         ## Corrupted ID queue/fifo structure
-    txVfyItemIdTotal        ## Wrong number of leaves
+    txInfoVfyItemIdList         ## Corrupted ID queue/fifo structure
+    txInfoVfyItemIdTotal        ## Wrong number of leaves
 
-    txVfyNonceList          ## Corrupted nonce list structure
-    txVfyNonceLeafEmpty     ## Empty nonce list leaf record
-    txVfyNonceLeafQueue     ## Corrupted nonce leaf queue
-    txVfyNonceTotal         ## Wrong number of leaves
+    txInfoVfyNonceList          ## Corrupted nonce list structure
+    txInfoVfyNonceLeafEmpty     ## Empty nonce list leaf record
+    txInfoVfyNonceLeafQueue     ## Corrupted nonce leaf queue
+    txInfoVfyNonceTotal         ## Wrong number of leaves
 
-    txVfySenderRbTree       ## Corrupted sender list structure
-    txVfySenderLeafEmpty    ## Empty sender list leaf record
-    txVfySenderLeafQueue    ## Corrupted sender leaf queue
-    txVfySenderTotal        ## Wrong number of leaves
+    txInfoVfySenderRbTree       ## Corrupted sender list structure
+    txInfoVfySenderLeafEmpty    ## Empty sender list leaf record
+    txInfoVfySenderLeafQueue    ## Corrupted sender leaf queue
+    txInfoVfySenderTotal        ## Wrong number of leaves
 
-    txVfyStatusRbTree       ## Corrupted status list structure
-    txVfyStatusLeafEmpty    ## Empty status list leaf record
-    txVfyStatusLeafQueue    ## Corrupted status leaf queue
-    txVfyStatusTotal        ## Wrong number of leaves
+    txInfoVfyStatusRbTree       ## Corrupted status list structure
+    txInfoVfyStatusLeafEmpty    ## Empty status list leaf record
+    txInfoVfyStatusLeafQueue    ## Corrupted status leaf queue
+    txInfoVfyStatusTotal        ## Wrong number of leaves
 
-    txVfyStatusSenderTotal  ## Sender vs status table mismatch
+    txInfoVfyStatusSenderTotal  ## Sender vs status table mismatch
 
-    txVfyTipCapList         ## Corrupted gas price list structure
-    txVfyTipCapLeafEmpty    ## Empty gas price list leaf record
-    txVfyTipCapLeafQueue    ## Corrupted gas price leaf queue
-    txVfyTipCapTotal        ## Wrong number of leaves
+    txInfoVfyTipCapList         ## Corrupted gas price list structure
+    txInfoVfyTipCapLeafEmpty    ## Empty gas price list leaf record
+    txInfoVfyTipCapLeafQueue    ## Corrupted gas price leaf queue
+    txInfoVfyTipCapTotal        ## Wrong number of leaves
 
     # codes provided for other modules
-    txVfyJobQueue           ## Corrupted jobs queue/fifo structure
+    txInfoVfyJobQueue           ## Corrupted jobs queue/fifo structure
 
 # End

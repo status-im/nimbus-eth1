@@ -77,14 +77,14 @@ proc txDelete*(gp: var TxTipCapTab; item: TxItemRef)
         discard gp.gasList.delete(key)
 
 
-proc txVerify*(gp: var TxTipCapTab): Result[void,TxVfyError]
+proc txVerify*(gp: var TxTipCapTab): Result[void,TxInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
   var count = 0
 
   block:
     let rc = gp.gasList.verify
     if rc.isErr:
-      return err(txVfyTipCapList)
+      return err(txInfoVfyTipCapList)
 
   var rcGas = gp.gasList.ge(GasInt.low)
   while rcGas.isOk:
@@ -93,15 +93,15 @@ proc txVerify*(gp: var TxTipCapTab): Result[void,TxVfyError]
 
     count += itemData.nItems
     if itemData.nItems == 0:
-      return err(txVfyTipCapLeafEmpty)
+      return err(txInfoVfyTipCapLeafEmpty)
 
     block:
       let rc = itemData.txVerify
       if rc.isErr:
-        return err(txVfyTipCapLeafEmpty)
+        return err(txInfoVfyTipCapLeafEmpty)
 
   if count != gp.size:
-    return err(txVfyTipCapTotal)
+    return err(txInfoVfyTipCapTotal)
 
   ok()
 

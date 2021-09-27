@@ -22,20 +22,20 @@ import
 # Metrics for the pending pool
 
 # core/tx_pool.go(97): pendingDiscardMeter = metrics.NewRegisteredMeter(..
-declareGauge pendingDiscardMeter, "n/a"
-declareGauge pendingReplaceMeter, "n/a"
-declareGauge pendingRateLimitMeter, "n/a" # Dropped due to rate limiting
-declareGauge pendingNofundsMeter, "n/a"   # Dropped due to out-of-funds
+declareGauge pendingDiscard, "n/a"
+declareGauge pendingReplace, "n/a"
+declareGauge pendingRateLimit, "n/a" # Dropped due to rate limiting
+declareGauge pendingNofunds, "n/a"   # Dropped due to out-of-funds
 
 
 # Metrics for the queued pool
 
 # core/tx_pool.go(103): queuedDiscardMeter = metrics.NewRegisteredMeter(..
-declareGauge queuedDiscardMeter, "n/a"
-declareGauge queuedReplaceMeter, "n/a"
-declareGauge queuedRateLimitMeter, "n/a" # Dropped due to rate limiting
-declareGauge queuedNofundsMeter, "n/a"   # Dropped due to out-of-funds
-declareGauge queuedEvictionMeter, "na"   # Dropped due to lifetime
+declareGauge queuedDiscard, "n/a"
+declareGauge queuedReplace, "n/a"
+declareGauge queuedRateLimit, "n/a" # Dropped due to rate limiting
+declareGauge queuedNofunds, "n/a"   # Dropped due to out-of-funds
+declareGauge queuedEviction, "na"   # Dropped due to lifetime
 
 
 # General tx metrics
@@ -68,34 +68,43 @@ declareGauge slotsGauge, "n/a"
 # core/tx_pool.go(129): reheapTimer = metrics.NewRegisteredTimer(..
 declareGauge reheapTimer, "n/a"
 
+# ----------------------
+
+declareGauge unspecifiedError,
+  "Some error occured but was not specified in any way. This counter should "&
+    "stay zero."
+
 # ------------------------------------------------------------------------------
 # Global functions (publishing private setting sabove)
 # ------------------------------------------------------------------------------
 
-proc pendingDiscardMeterMark*(n = 1i64)       = pendingDiscardMeter.inc(n)
-proc pendingReplaceMeterMark*(n = 1i64)       = pendingReplaceMeter.inc(n)
-proc pendingRateLimitMeterMark*(n = 1i64)     = pendingRateLimitMeter.inc(n)
-proc pendingNofundsMeterMark*(n = 1i64)       = pendingNofundsMeter.inc(n)
+proc pendingDiscardMeter*(n = 1i64)       = pendingDiscard.inc(n)
+proc pendingReplaceMeter*(n = 1i64)       = pendingReplace.inc(n)
+proc pendingRateLimitMeter*(n = 1i64)     = pendingRateLimit.inc(n)
+proc pendingNofundsMeter*(n = 1i64)       = pendingNofunds.inc(n)
 
-proc queuedDiscardMeterMark*(n = 1i64)        = queuedDiscardMeter.inc(n)
-proc queuedReplaceMeterMark*(n = 1i64)        = queuedReplaceMeter.inc(n)
-proc queuedRateLimitMeterMark*(n = 1i64)      = queuedRateLimitMeter.inc(n)
-proc queuedNofundsMeterMark*(n = 1i64)        = queuedNofundsMeter.inc(n)
-proc queuedEvictionMeterMark*(n = 1i64)       = queuedEvictionMeter.inc(n)
+proc queuedDiscardMeter*(n = 1i64)        = queuedDiscard.inc(n)
+proc queuedReplaceMeter*(n = 1i64)        = queuedReplace.inc(n)
+proc queuedRateLimitMeter*(n = 1i64)      = queuedRateLimit.inc(n)
+proc queuedNofundsMeter*(n = 1i64)        = queuedNofunds.inc(n)
+proc queuedEvictionMeter*(n = 1i64)       = queuedEviction.inc(n)
 
-proc knownTxMeterMark*(n = 1i64)              = knownTransactions.inc(n)
-proc invalidTxMeterMark*(n = 1i64)            = invalidTransactions.inc(n)
-proc validTxMeterMark*(n = 1i64)              = validTransactions.inc(n)
-proc underpricedTxMeterMark*(n = 1i64)        = underpricedTransactions.inc(n)
-proc overflowedTxMeterMark*(n = 1i64)         = overflowedTransactions.inc(n)
-proc throttleTxMeterMark*(n = 1i64)           = throttleTransactions.inc(n)
+proc knownTxMeter*(n = 1i64)              = knownTransactions.inc(n)
+proc invalidTxMeter*(n = 1i64)            = invalidTransactions.inc(n)
+proc validTxMeter*(n = 1i64)              = validTransactions.inc(n)
+proc underpricedTxMeter*(n = 1i64)        = underpricedTransactions.inc(n)
+proc overflowedTxMeter*(n = 1i64)         = overflowedTransactions.inc(n)
+proc throttleTxMeter*(n = 1i64)           = throttleTransactions.inc(n)
 
-proc reorgDurationTimerMark*(n = 1i64)        = reorgDurationTimer.inc(n)
-proc dropBetweenReorgHistogramMark*(n = 1i64) = dropBetweenReorgHistogram.inc(n)
-proc pendingGaugeMark*(n = 1i64)              = pendingGauge.inc(n)
-proc queuedGaugeMark*(n = 1i64)               = queuedGauge.inc(n)
-proc localGaugeMark*(n = 1i64)                = localGauge.inc(n)
-proc slotsGaugeMark*(n = 1i64)                = slotsGauge.inc(n)
+proc unspecifiedErrorMeter*(n = 1i64)     = unspecifiedError.inc(n)
+
+proc reorgDurationTimerMeter*(n = 1i64)   = reorgDurationTimer.inc(n)
+proc dropBetweenReorgHistogramMeter*(n = 1i64) =
+                                            dropBetweenReorgHistogram.inc(n)
+proc pendingGaugeMeter*(n = 1i64)         = pendingGauge.inc(n)
+proc queuedGaugeMeter*(n = 1i64)          = queuedGauge.inc(n)
+proc localGaugeMeter*(n = 1i64)           = localGauge.inc(n)
+proc slotsGaugeMeter*(n = 1i64)           = slotsGauge.inc(n)
 
 # ------------------------------------------------------------------------------
 # End

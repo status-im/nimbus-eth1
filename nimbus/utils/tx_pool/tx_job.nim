@@ -32,6 +32,8 @@ type
     txJobAbort
     txJobAddTxs
     txJobEvictionInactive
+    txJobFetchRejects
+    txJobFlushRejects
     txJobGetAccounts
     txJobGetBaseFee
     txJobGetGasPrice
@@ -40,14 +42,15 @@ type
     txJobSetBaseFee
     txJobSetGasPrice
     txJobSetHead
+    txJobSetMaxRejects
     txJobStatsCount
 
 
-  TxJobAddTxsReply* =
-    proc(ok: bool; errors: seq[TxPoolError]) {.gcsafe,raises: [].}
+  TxJobFetchRejectsReply* =
+    proc(rejects: seq[TxItemRef]; remaining: int) {.gcsafe,raises: [].}
 
-  TxJobEvictionInactiveReply* =
-    proc(deleted: int) {.gcsafe,raises: [].}
+  TxJobFlushRejectsReply* =
+    proc(deleted: int; remaining: int) {.gcsafe,raises: [].}
 
   TxJobGetAccountsReply* =
     proc(accounts: seq[EthAddress]) {.gcsafe,raises: [].}
@@ -63,9 +66,6 @@ type
 
   TxJobMoveRemoteToLocalsReply* =
     proc(moved: int) {.gcsafe,raises: [].}
-
-  TxJobSetGasPriceReply* =
-    proc(deleted: int) {.gcsafe,raises: [].}
 
   TxJobSetHeadReply* = ## FIXME ...
     proc() {.gcsafe,raises: [].}
@@ -103,14 +103,32 @@ type
         txs:    seq[Transaction],
         local:  bool,
         status: TxItemStatus,
-        info:   string,
-        reply:  TxJobAddTxsReply]
+        info:   string]
 
     of txJobEvictionInactive: ##\
-      ## Remove transactions older than `xp.lifeTime`, return the number
-      ## of deleted items.
-      evictionInactiveArgs*: tuple[
-        reply: TxJobEvictionInactiveReply]
+      ## Move transactions older than `xp.lifeTime` to the waste basket.
+      discard
+
+    of txJobFetchRejects: ##\
+      ## Retrieves and deletes at most the `maxItems` oldest items from there
+      ## the waste basket (a waste basket item is considered older if it was
+      ## moved earlier.) The request returns the number of deleted and the
+      ## number of items still remaining in the waste basket.
+      ##
+      ## Out-of-band job (runs with priority)
+      fetchRejectsArgs*: tuple[
+        maxItems: int,
+        reply: TxJobFetchRejectsReply]
+
+    of txJobFlushRejects: ##\
+      ## Deletes at most the `maxItems` oldest items from the waste basket
+      ## and returns the numbers of deleted and remaining items (a waste
+      ## basket item is considered older if it was moved there earlier.)
+      ##
+      ## Out-of-band job (runs with priority)
+      flushRejectsArgs*: tuple[
+        maxItems: int,
+        reply: TxJobFLushRejectsReply]
 
     of txJobGetAccounts: ##\
       ## Retrieves the accounts currently considered `local` or `remote`
@@ -163,8 +181,7 @@ type
       ## transaction. Increasing it will drop all transactions below this
       ## threshold.
       setGasPriceArgs*: tuple[
-        price: GasInt,
-        reply: TxJobSetGasPriceReply]
+        price: GasInt]
 
     of txJobSetHead: ##\
       ## :FIXME:
@@ -172,6 +189,14 @@ type
       setHeadArgs*: tuple[
         head:  BlockHeader,
         reply: TxJobSetHeadReply]
+
+    of txJobSetMaxRejects: ##\
+      ## Set the size of the waste basket. This setting becomes effective with
+      ## the next move of an item into the waste basket.
+      ##
+      ## Out-of-band job (runs with priority)
+      setMaxRejectsArgs*: tuple[
+        size: int]
 
     of txJobStatsCount: ##\
       ## Retrieves the current pool stats, the number of local, remote,
@@ -196,9 +221,12 @@ const
   txJobPriorityKind*: set[TxJobKind] = ##\
     ## Prioritised jobs, either small or important ones (as re-org)
     {txJobAbort,
+      txJobFetchRejects,
+      txJobFlushRejects,
       txJobGetAccounts,
       txJobGetBaseFee,
       txJobGetGasPrice,
+      txJobSetMaxRejects,
       txJobGetItem,
       txJobStatsCount}
 
@@ -341,11 +369,11 @@ proc len*(t: var TxJob): int {.inline.} =
 # Public functions, debugging
 # ------------------------------------------------------------------------------
 
-proc verify*(t: var TxJob): Result[void,TxVfyError]
+proc verify*(t: var TxJob): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = t.jobQueue.verify
   if rc.isErr:
-    return err(txVfyJobQueue)
+    return err(txInfoVfyJobQueue)
   ok()
 
 # ------------------------------------------------------------------------------

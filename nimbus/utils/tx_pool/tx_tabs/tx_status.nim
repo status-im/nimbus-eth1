@@ -141,7 +141,7 @@ proc txDelete*(sq: var TxStatusTab; item: TxItemRef): bool
     return true
 
 
-proc txVerify*(sq: var TxStatusTab): Result[void,TxVfyError]
+proc txVerify*(sq: var TxStatusTab): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## walk `IxItemStatus` > `AccountNonce` > items
   var totalCount = 0
@@ -158,10 +158,10 @@ proc txVerify*(sq: var TxStatusTab): Result[void,TxVfyError]
       block:
         let rc = schedData.nonceList.verify
         if rc.isErr:
-          return err(txVfyStatusRbTree)
+          return err(txInfoVfyStatusRbTree)
 
       if schedData.nonceList.len == 0:
-        return err(txVfyStatusLeafEmpty)
+        return err(txInfoVfyStatusLeafEmpty)
 
       var rcNonce = schedData.nonceList.ge(AccountNonce.low)
       while rcNonce.isOk:
@@ -171,10 +171,10 @@ proc txVerify*(sq: var TxStatusTab): Result[void,TxVfyError]
         block:
           let rc = itemData.txVerify
           if rc.isErr:
-            return err(txVfyStatusLeafQueue)
+            return err(txInfoVfyStatusLeafQueue)
 
           if itemData.nItems == 0:
-            return err(txVfyStatusLeafEmpty)
+            return err(txInfoVfyStatusLeafEmpty)
 
         nonceCount += itemData.nItems
 
@@ -186,26 +186,26 @@ proc txVerify*(sq: var TxStatusTab): Result[void,TxVfyError]
         block:
           let rc = itemData.txVerify
           if rc.isErr:
-            return err(txVfyStatusLeafQueue)
+            return err(txInfoVfyStatusLeafQueue)
 
           if itemData.nItems == 0:
-            return err(txVfyStatusLeafEmpty)
+            return err(txInfoVfyStatusLeafEmpty)
 
         allCount += itemData.nItems
 
       # ----- end sub-list ---------------------------------
 
       if schedData.size != nonceCount:
-        return err(txVfyStatusTotal)
+        return err(txInfoVfyStatusTotal)
 
       if schedData.size != allCount:
-        return err(txVfyStatusTotal)
+        return err(txInfoVfyStatusTotal)
 
       totalCount += schedData.size
 
   # end while
   if totalCount != sq.size:
-    return err(txVfyStatusTotal)
+    return err(txInfoVfyStatusTotal)
 
   ok()
 

@@ -111,7 +111,7 @@ proc txDelete*(aq: var TxItemIdTab; item: TxItemRef): bool
     return true
 
 
-proc txVerify*(aq: var TxItemIdTab): Result[void,TxVfyError]
+proc txVerify*(aq: var TxItemIdTab): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,KeyError].} =
   var allCount = 0
 
@@ -119,11 +119,11 @@ proc txVerify*(aq: var TxItemIdTab): Result[void,TxVfyError]
     if not aq.schedList[sched].isNil:
       let rc = aq.schedList[sched].itemList.verify
       if rc.isErr:
-        return err(txVfyItemIdList)
+        return err(txInfoVfyItemIdList)
       allCount += aq.schedList[sched].itemList.len
 
   if allCount != aq.size:
-    return err(txVfyItemIdTotal)
+    return err(txInfoVfyItemIdTotal)
 
   ok()
 

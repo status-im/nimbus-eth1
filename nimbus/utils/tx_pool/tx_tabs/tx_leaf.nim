@@ -51,15 +51,25 @@ proc txAppend*(leaf: TxLeafItemRef; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   leaf.itemList.append(item)
 
+proc txFetch*(leaf: TxLeafItemRef): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Fifo mode: get oldest item
+  leaf.itemList.shift
+
 proc txDelete*(leaf: TxLeafItemRef; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   leaf.itemList.delete(item).isOK
 
-proc txVerify*(leaf: TxLeafItemRef): Result[void,TxVfyError]
+proc txClear*(leaf: TxLeafItemRef): int
+    {.gcsafe,raises: [Defect,KeyError].} =
+  result = leaf.itemList.len
+  leaf.itemList.clear
+
+proc txVerify*(leaf: TxLeafItemRef): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = leaf.itemList.verify
   if rc.isErr:
-    return err(txVfyLeafQueue)
+    return err(txInfoVfyLeafQueue)
   ok()
 
 # ------------------------------------------------------------------------------

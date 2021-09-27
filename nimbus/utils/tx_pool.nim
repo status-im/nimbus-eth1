@@ -11,21 +11,23 @@
 ## Transaction Pool
 ## ================
 ##
-## Adding a transaction:
-## ::
-##  |   tx => <queued> => fail, discard
-##  |            ||
-##  |            \/
-##  |            ok, <pending> => into database
+## Local transactions are currently unsupported. All transactions are
+## considered from remote accounts.
 ##
-## Classifying a transaction:
-##  * `local` or `remote`, can be changed any time
+## Adding transactions:
+## --------------------
+## * queue txs after quick test, or move to waste basket
+## * queued transactions are strored with meta-data and marked `txItemQueued`
+##
+## Processing transactions:
+## ------------------------
+## * txs are taken from the queue
 ##
 
 import
   std/[times],
   ../db/db_chain,
-  ./tx_pool/[tx_gauge, tx_info, tx_item, tx_job, tx_tabs, tx_tasks],
+  ./tx_pool/[tx_info, tx_item, tx_job, tx_tabs, tx_tasks],
   chronicles,
   eth/[common, keys],
   stew/results
@@ -41,17 +43,16 @@ from chronos import
 export
   TxItemRef,
   TxItemStatus,
-  TxJobAddTxsReply,
   TxJobDataRef,
-  TxJobEvictionInactiveReply,
   TxJobGetAccountsReply,
   TxJobGetBaseFeeReply,
+  TxJobFetchRejectsReply,
+  TxJobFlushRejectsReply,
   TxJobGetGasPriceReply,
   TxJobGetItemReply,
   TxJobID,
   TxJobKind,
   TxJobMoveRemoteToLocalsReply,
-  TxJobSetGasPriceReply,
   TxJobSetHeadReply,
   TxJobStatsCountReply,
   TxTabsStatsCount,
@@ -161,20 +162,23 @@ proc processJobs(xp: var TxPool): int
       discard
 
     of txJobAddTxs:
-      let
-        args = task.data.addTxsArgs
-        rc = xp.txDB.addTxs(args.txs, args.local, args.status, args.info)
-      if rc.isOK:
-        args.reply(true, newSeq[TxPoolError]())
-      else:
-        args.reply(false, rc.error)
+      let args = task.data.addTxsArgs
+      xp.txDB.addTxs(args.txs, args.local, args.status, args.info)
 
     of txJobEvictionInactive:
+      xp.txDB.deleteExpiredItems(xp.lifeTime)
+
+    of txJobFetchRejects:
       let
-        args = task.data.evictionInactiveArgs
-        deleted = xp.txDB.deleteExpiredItems(xp.lifeTime)
-      queuedEvictionMeterMark()
-      args.reply(deleted = deleted)
+        args = task.data.fetchRejectsArgs
+        data = xp.txDB.fetchRejects(args.maxItems)
+      args.reply(rejects = data[0], remaining = data[1])
+
+    of txJobFlushRejects:
+      let
+        args = task.data.flushRejectsArgs
+        data = xp.txDB.flushRejects(args.maxItems)
+      args.reply(deleted = data[0], remaining = data[1])
 
     of txJobGetBaseFee:
       let args = task.data.getBaseFeeArgs
@@ -213,12 +217,12 @@ proc processJobs(xp: var TxPool): int
         xp.txDB.baseFee = args.price
 
     of txJobSetGasPrice:
-      let
-        args = task.data.setGasPriceArgs
-        deleted = xp.txDB.updateGasPrice(
-          curPrice = xp.gasPrice,
-          newPrice = args.price)
-      args.reply(deleted = deleted)
+      let args = task.data.setGasPriceArgs
+      xp.txDB.updateGasPrice(curPrice = xp.gasPrice, newPrice = args.price)
+
+    of txJobSetMaxRejects:
+      let args = task.data.setMaxRejectsArgs
+      xp.txDB.maxRejects = args.size
 
     of txJobStatsCount:
       let
@@ -505,7 +509,7 @@ proc txDB*(xp: var TxPool): TxTabsRef {.inline.} =
   ## Getter, Transaction lists & tables (for debugging only)
   xp.txDB
 
-proc verify*(xp: var TxPool): Result[void,TxVfyError]
+proc verify*(xp: var TxPool): Result[void,TxInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify descriptor and subsequent data structures.
 

@@ -44,7 +44,7 @@ proc utcNow: Time =
 # ------------------------------------------------------------------------------
 
 # core/tx_pool.go(384): for addr := range pool.queue {
-proc deleteExpiredItems*(tDB: TxTabsRef; maxLifeTime: Duration): int
+proc deleteExpiredItems*(tDB: TxTabsRef; maxLifeTime: Duration)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Any non-local transaction old enough will be removed
   let deadLine = utcNow() - maxLifeTime
@@ -54,58 +54,46 @@ proc deleteExpiredItems*(tDB: TxTabsRef; maxLifeTime: Duration): int
     if deadLine < item.timeStamp:
       break
     rc = tDB.byItemID.eq(local = false).next(item.itemID)
-    discard tDB.delete(item.itemID)
-    result.inc
+    discard tDB.reject(item,txInfoErrTxExpired)
+    queuedEvictionMeter(1)
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc deleteUnderpricedItems*(tDB: TxTabsRef; price: GasInt): int
+proc deleteUnderpricedItems*(tDB: TxTabsRef; price: GasInt)
     {.gcsafe,raises: [Defect,KeyError].} =
-  ##  drop all transactions below the argument threshol `price`.
+  ## Drop all transactions below the argument threshold `price`, i.e.
+  ## move these items to the waste basket.
   # Delete while walking the `gasFeeCap` table (it is ok to delete the
   # current item). See also `remotesBelowTip()`.
   for itemList in tDB.byTipCap.decItemList(maxCap = price - 1):
     for item in itemList.walkItems:
       if not item.local:
-        discard tDB.delete(item.itemID)
-        result.inc
+        discard tDB.reject(item,txInfoErrUnderpriced)
 
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTxs*(tDB: TxTabsRef; txs: openArray[Transaction];
-             local: bool; status: TxItemStatus; info = ""):
-               Result[void,seq[TxPoolError]]
+             local: bool; status: TxItemStatus; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Attempts to queue a batch of transactions if they are valid.
-  var
-    nErrors = 0
-    errList = newSeq[TxPoolError](txs.len)
-
-  # Filter out known ones without obtaining the pool lock or recovering
-  # signatures
+  ## Queue a batch of transactions. There transactions are quickly tested
+  ## and moved to the waiting queue, or into the waste basket.
   for i in 0 ..< txs.len:
     var tx = txs[i]
-
-    # FIXME: TODO, validate transaction
-
-    # If the transaction is known, pre-set the error slot
     let rc = tDB.insert(tx, local, status, info)
-    if rc.isErr:
-      case rc.error:
-      of txTabsErrAlreadyKnown:
-        knownTxMeterMark()
-        errList[i] = txPoolErrAlreadyKnown
-      of txTabsErrInvalidSender:
-        invalidTxMeterMark()
-        errList[i] = txPoolErrInvalidSender
-      else:
-        errList[i] = txPoolErrUnspecified
-      nErrors.inc
+
+    if rc.isOk:
+      validTxMeter(1)
       continue
 
-    validTxMeterMark()
+    # store tx in waste basket
+    tDB.reject(tx, rc.error, local, status, info)
 
-  if 0 < nErrors:
-    return err(errList)
-  ok()
+    # update gauge
+    case rc.error:
+    of txInfoErrAlreadyKnown:
+      knownTxMeter(1)
+    of txInfoErrInvalidSender:
+      invalidTxMeter(1)
+    else:
+      unspecifiedErrorMeter(1)
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc collectAccounts*(tDB: TxTabsRef; local: bool): seq[EthAddress]
@@ -141,15 +129,14 @@ proc getRemotesBelowTip*(tDB: TxTabsRef; threshold: GasInt): seq[Hash256]
       if not item.local:
         result.add item.itemID
 
-proc updateGasPrice*(tDB: TxTabsRef;
-                     curPrice: var GasInt; newPrice: GasInt): int
+proc updateGasPrice*(tDB: TxTabsRef; curPrice: var GasInt; newPrice: GasInt)
     {.inline, raises: [Defect,KeyError].} =
   let oldPrice = curPrice
   curPrice = newPrice
 
   # if min miner fee increased, remove txs below the new threshold
   if oldPrice < newPrice:
-    result = tDB.deleteUnderpricedItems(newPrice)
+    tDB.deleteUnderpricedItems(newPrice)
 
   info "Price threshold updated",
      oldPrice,

@@ -24,17 +24,10 @@ import
 # ------------------------------------------------------------------------------
 
 # core/tx_pool.go(384): for addr := range pool.queue {
-proc inactiveItemsEviction*(xp: var TxPool): int
+proc inactiveItemsEviction*(xp: var TxPool)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Remove transactions older than `xp.lifeTime` and theturns the number
-  ## of deleted items.
-  var nDeleted: int
-  xp.jobCommit(TxJobDataRef(
-    kind:    txJobEvictionInactive,
-    evictionInactiveArgs: (
-      reply: proc(deleted: int) =
-               nDeleted = deleted)))
-  nDeleted
+  ## Move transactions older than `xp.lifeTime` to the waste basket.
+  xp.jobCommit(TxJobDataRef(kind: txJobEvictionInactive))
 
 proc setBaseFee*(xp: var TxPool; baseFee: GasInt)
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -71,20 +64,15 @@ proc getGasPrice*(xp: var TxPool): GasInt
   rGasPrice
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc setGasPrice*(xp: var TxPool; price: GasInt): int
+proc setGasPrice*(xp: var TxPool; price: GasInt)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Set the minimum price required by the transaction pool for a new
-  ## transaction. Increasing it will drop all transactions below this
-  ## threshold.
-  var nDeleted: int
+  ## transaction. Increasing it will move all transactions below this
+  ## threshold to the waste basket.
   xp.jobCommit(TxJobDataRef(
-    kind:    txJobSetGasPrice,
+    kind:     txJobSetGasPrice,
     setGasPriceArgs: (
-      price: price,
-      reply: proc(deleted: int) =
-               nDeleted = deleted)))
-  nDeleted
-
+      price:  price)))
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
@@ -118,9 +106,8 @@ proc localAccounts*(xp: var TxPool): seq[EthAddress]
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-proc addTxs*(xp: var TxPool; txs: openArray[Transaction];
-             local = false, status = txItemQueued; info = ""):
-               Result[void,seq[TxPoolError]]
+proc addTxs*(xp: var TxPool; txs: openArray[Transaction]; local = false;
+             status = txItemQueued; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueue a batch of transactions into the pool if they are valid. If
   ## the senders are not among the locally tracked ones, full pricing
@@ -128,35 +115,22 @@ proc addTxs*(xp: var TxPool; txs: openArray[Transaction];
   ##
   ## This method is used to add transactions from the p2p network and does not
   ## wait for pool reorganization and internal event propagation.
-  var
-    txOk: bool
-    errInfo: seq[TxPoolError]
   xp.jobCommit(TxJobDataRef(
     kind:     txJobAddTxs,
     addTxsArgs: (
       txs:    toSeq(txs),
       local:  local,
       status: status,
-      info:   info,
-      reply:  proc(ok: bool; errors: seq[TxPoolError]) =
-                txOk = ok
-                errInfo = errors)))
-  if txOk:
-    return ok()
-  err(errInfo)
+      info:   info)))
 
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc addTx*(xp: var TxPool; tx: var Transaction;
-            local = false, status = txItemQueued; info = ""):
-              Result[void,TxPoolError]
+proc addTx*(xp: var TxPool; tx: var Transaction; local = false;
+            status = txItemQueued; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueues a single transaction into the pool if it is valid.
   ## This is a convenience wrapper aroundd addTxs.
-  let rc = xp.addTxs([tx], local, status, info)
-  if rc.isErr:
-     return err(rc.error[0])
-  ok()
+  xp.addTxs([tx], local, status, info)
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
@@ -188,6 +162,32 @@ proc remoteToLocals*(xp: var TxPool; signer: EthAddress): int
       reply:   proc(moved: int) =
                  nMoved = moved)))
   nMoved
+
+# ----------------------------
+
+proc flushRejects*(xp: var TxPool; numItems = int.high): (int,int)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Flush/delete at most `numItems` oldest items from the waste basket and
+  ## return the numbers of deleted and remaining items (a waste basket item
+  ## is considered older if it was moved there earlier.)
+  var nDeleted, nRemaining: int
+  xp.jobCommit(TxJobDataRef(
+    kind:       txJobFlushRejects,
+    flushRejectsArgs: (
+      maxItems: numItems,
+      reply:    proc(deteted, remaining: int) =
+                  nDeleted = deteted
+                  nRemaining = remaining)))
+  (nDeleted, nRemaining)
+
+proc setMaxRejects*(xp: var TxPool; size: int)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Set the size of the waste basket. This setting becomes effective with
+  ## the next move of an item into the waste basket.
+  xp.jobCommit(TxJobDataRef(
+    kind:    txJobSetMaxRejects,
+    setMaxRejectsArgs: (
+      size:  size)))
 
 # ------------------------------------------------------------------------------
 # End

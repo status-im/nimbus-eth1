@@ -56,10 +56,6 @@ var
   # running block chain
   bcDB: BaseChainDB
 
-let
-  ignAddTxsReply: TxJobAddTxsReply =
-    proc(ok: bool; errors: seq[TxPoolError]) = discard
-
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
@@ -99,6 +95,10 @@ proc importTxPool(xp: var TxPool; noisy: bool;
     txCount = 0
     chainNo = 0
     chainDB = bcDB.newChain
+
+  # clear waste basket
+  discard xp.flushRejects
+
   for chain in file.undumpNextGroup:
     chainNo.inc
     if chain[0][0].blockNumber == 0.u256:
@@ -124,19 +124,23 @@ proc importTxPool(xp: var TxPool; noisy: bool;
             info = &"{txCount} #{blkNum}({chainNo}) {n}/{txs.len} {localInfo}"
           noisy.showElapsed(&"insert: local={local} {info}"):
             var tx = txs[n]
-            doAssert xp.addTx(tx, local, status, info).isOK
+            xp.addTx(tx, local, status, info)
           if loadTxs <= txCount:
+            # make sure that the waste basket was empty
+            doAssert xp.flushRejects[0] == 0
             return
 
 
-proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true): TxPool =
+proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt;
+              noisy = true; maxRejects = txTabMaxRejects): TxPool =
   result.init(bcDB, baseFee)
+  result.setMaxRejects(maxRejects)
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
       var tx = w.tx
-      doAssert result.addTx(tx, w.local, w.status, w.info).isOK
+      result.addTx(tx, w.local, w.status, w.info)
   doAssert result.count.total == q.len
-
+  doAssert result.flushRejects[0] == 0
 
 
 proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
@@ -153,7 +157,7 @@ proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
   noisy.showElapsed(&"Loading {q.len} transactions"):
     for w in q:
       var tx = w.tx
-      doAssert result.addTx(tx, w.local, w.status, w.info).isOK
+      result.addTx(tx, w.local, w.status, w.info)
       if not w.local and remoteCount < delayAt:
         remoteCount.inc
         if delayAt == remoteCount:
@@ -162,6 +166,7 @@ proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
           timeGap = result.get(w.itemID).value.timeStamp + middleOfTimeGap
           delayMSecs.sleep
   doAssert result.count.total == q.len
+  doAssert result.flushRejects[0] == 0
 
 
 proc addOrFlushGroupwise(xp: var TxPool;
@@ -171,15 +176,21 @@ proc addOrFlushGroupwise(xp: var TxPool;
   if seen.len < grpLen:
     return
 
+  # clear waste basket
+  discard xp.flushRejects
+
   # flush group-wise
   let xpLen = xp.count.total
   noisy.say "*** updateSeen: deleting ", seen.mapIt($it).join(" ")
   for a in seen:
-    let deletedItem = xp.txDB.delete(a)
-    doAssert deletedItem.isOK
-    doAssert deletedItem.value.itemID == a
+    let item = xp.get(a).value
+    doAssert xp.txDB.reject(item,txInfoErrUnspecified)
   doAssert xpLen == seen.len + xp.count.total
+  doAssert xp.count.rejected == seen.len
   seen.setLen(0)
+
+  # clear waste basket
+  discard xp.flushRejects
 
 # ------------------------------------------------------------------------------
 # Test Runners
@@ -436,7 +447,9 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
 
     block:
       var
-        xq = txList.toTxPool(baseFee, noisy)
+        xq = txList.toTxPool(baseFee = baseFee,
+                             maxRejects = txList.len,
+                             noisy = noisy)
         count = 0
       let
         delLe = effGasTips[0] + ((effGasTips[^1] - effGasTips[0]) div 3)
@@ -450,11 +463,12 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           for itemList in xq.txDB.byGasTip.decItemList(maxPrice = delMax):
             for item in itemList.walkItems:
               count.inc
-              check xq.txDB.delete(item)
+              check xq.txDB.reject(item,txInfoErrUnspecified)
               check xq.txDB.verify.isOK
         check 0 < count
         check 0 < xq.count.total
         check count + xq.count.total == txList.len
+        check xq.count.rejected == count
 
     block:
       var
@@ -473,11 +487,12 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           for itemList in xq.txDB.byGasTip.incItemList(minPrice = delMin):
             for item in itemList.walkItems:
               count.inc
-              check xq.txDB.delete(item)
+              check xq.txDB.reject(item,txInfoErrUnspecified)
               check xq.txDB.verify.isOK
         check 0 < count
         check 0 < xq.count.total
         check count + xq.count.total == txList.len
+        check xq.count.rejected == count
 
     block:
       let
@@ -550,7 +565,11 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
 
         check 0 < nItems
         xq.lifeTime = getTime() - gap
-        let deletedItems = xq.inactiveItemsEviction
+
+        # evict and pick items from the wastbasket
+        discard xq.flushRejects
+        xq.inactiveItemsEviction
+        let deletedItems = xq.count.rejected
 
         check xq.count.local == okCount[true]
         check xq.verify.isOK # not: xq.txDB.verify
@@ -735,13 +754,19 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
       block:
         test &"Delete locals from largest address group so it becomes empty":
 
+          # clear waste basket
+          discard xq.flushRejects
+
+          var rejCount = 0
           let addrLocals = xq.txDB.bySender.eq(maxAddr)
                                            .eq(local = true).value.data
           for itemList in addrLocals.walkItemList:
             for item in itemList.walkItems:
-              doAssert xq.txDB.delete(item.itemID).isOK
+              check xq.txDB.reject(item,txInfoErrUnspecified)
+              rejCount.inc
 
           check nLocalAddrs == 1 + toSeq(xq.localAccounts).len
+          check xq.count.rejected == rejCount
           check xq.txDB.verify.isOK
 
 # ------------------------------------------------------------------------------

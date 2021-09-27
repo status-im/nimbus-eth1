@@ -34,16 +34,27 @@ type
   TxTabsStatsCount* = tuple
     local, remote: int             ## sum => total
     queued, pending, included: int ## sum => total
-    total: int                     ## sum => total
+    total: int                     ## excluding rejects
+    rejected: int
 
   TxTabsRef* = ref object ##\
     ## Base descriptor
+    maxRejects: int           ## madximal number of items in waste basket
     baseFee: GasInt           ## `byGasTip` re-org when changing
+
     byItemID*: TxItemIDTab    ## Primary table, queued by arrival event
     byGasTip*: TxPriceTab     ## Indexed by `effectiveGasTip` > `nonce`
     byTipCap*: TxTipCapTab    ## Indexed by `gasTipCap`
     bySender*: TxSenderTab    ## Indexed by `sender` > `local/status` > `nonce`
     byStatus*: TxStatusTab    ## Indexed by `status` > `nonce`
+    byRejects*: TxLeafItemRef ## Rejects queue, waste basket
+
+const
+  txTabMaxRejects* = ##\
+    ## Default size of rejects queue (aka waste basket.) Older waste items will
+    ## be automatically removed so that there are no more than this many items
+    ## in the rejects queue.
+    500
 
 {.push raises: [Defect].}
 
@@ -64,27 +75,43 @@ proc updateEffectiveGasTip(xp: TxTabsRef): TxPriceItemMap =
     result = proc(item: TxItemRef) =
       item.effectiveGasTip = item.tx.gasTipCap
 
+proc deleteImpl(xp: TxTabsRef; item: TxItemRef): bool
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Delete transaction (and wrapping container) from the database. If
+  ## successful, the function returns the wrapping container that was just
+  ## removed.
+  if xp.byItemID.txDelete(item):
+    xp.byGasTip.txDelete(item)
+    xp.byTipCap.txDelete(item)
+    discard xp.bySender.txDelete(item)
+    discard xp.byStatus.txDelete(item)
+    return true
+
 # ------------------------------------------------------------------------------
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TxTabsRef; baseFee = GasInt.low): T =
+proc init*(T: type TxTabsRef;
+                   baseFee = GasInt.low; maxRejects = txTabMaxRejects): T =
   ## Constructor, returns new tx-pool descriptor.
   new result
   result.baseFee = baseFee
+  result.maxRejects = maxRejects
+
   result.byItemID.txInit
   result.byGasTip.txInit(update = result.updateEffectiveGasTip)
   result.byTipCap.txInit
   result.bySender.txInit
   result.byStatus.txInit
+  result.byRejects = txNew(type TxLeafItemRef, size = 100)
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
 # ------------------------------------------------------------------------------
 
-proc insert*(xp: TxTabsRef; tx: var Transaction;
-             local = false; status = txItemQueued; info = ""):
-           Result[void,TxInfo] {.gcsafe,raises: [Defect,CatchableError].} =
+proc insert*(xp: TxTabsRef; tx: var Transaction; local = false;
+             status = txItemQueued; info = ""): Result[void,TxInfo]
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Add new transaction argument `tx` to the database. If accepted and added
   ## to the database, a `key` value is returned which can be used to retrieve
   ## this transaction direcly via `tx[key].tx`. The following holds for the
@@ -102,10 +129,10 @@ proc insert*(xp: TxTabsRef; tx: var Transaction;
   ##
   let itemID = tx.itemID
   if xp.byItemID.hasKey(itemID):
-    return err(txTabsErrAlreadyKnown)
+    return err(txInfoErrAlreadyKnown)
   let rc = tx.newTxItemRef(itemID, local, status, info)
   if rc.isErr:
-    return err(txTabsErrInvalidSender)
+    return err(txInfoErrInvalidSender)
   let item = rc.value
   xp.byItemID.txAppend(item)
   xp.byGasTip.txInsert(item)
@@ -149,28 +176,50 @@ proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
       return true
 
 
-proc delete*(xp: TxTabsRef; item: TxItemRef): bool
+proc flushRejects*(xp: TxTabsRef; maxItems = int.high): (int,int)
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Delete transaction (and wrapping container) from the database. If
-  ## successful, the function returns the wrapping container that was just
-  ## removed.
-  if xp.byItemID.txDelete(item):
-    xp.byGasTip.txDelete(item)
-    xp.byTipCap.txDelete(item)
-    discard xp.bySender.txDelete(item)
-    discard xp.byStatus.txDelete(item)
-    return true
+  ## Flush/delete at most `maxItems` oldest items from the waste basket and
+  ## return the numbers of deleted and remaining items (a waste basket item
+  ## is considered older if it was moved there earlier.)
+  if xp.byRejects.nItems <= maxItems:
+    return (xp.byRejects.txClear,0)
+  while result[0] < maxItems:
+    if xp.byRejects.txFetch.isErr:
+      break
+    result[0].inc
+  result[1] = xp.byRejects.nItems
 
-
-proc delete*(xp: TxTabsRef; itemID: Hash256): Result[TxItemRef,void]
+proc fetchRejects*(xp: TxTabsRef; maxItems: int): (seq[TxItemRef],int)
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Variant of `delete()`
-  let rc = xp.byItemID.eq(itemID)
-  if rc.isOK:
-    let item = rc.value
-    if xp.delete(item):
-      return ok(item)
-  err()
+  ## Fetch at most `naxItems` oldest items from the waste basket. The
+  ## function returns the number of deleted and the number of items still
+  ## remaining in the waste basket (a waste basket item is considered older if
+  ## it was moved there earlier.)
+  while result[0].len < maxItems:
+    let rc = xp.byRejects.txFetch
+    if rc.isErr:
+      break
+    result[0].add rc.value
+  result[1] = xp.byRejects.nItems
+
+proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Move argument `item` to rejects queue (aka waste basket.)
+  if xp.deleteImpl(item):
+    if xp.maxRejects <= xp.byRejects.nItems:
+      discard xp.flushRejects(1 + xp.byRejects.nItems - xp.maxRejects)
+    item.reject = reason
+    return xp.byRejects.txAppend(item)
+
+proc reject*(xp: TxTabsRef; tx: var Transaction; reason: TxInfo;
+             local = false; status = txItemQueued; info = "")
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Import a transaction into the rejection queue (e.g. after it could not
+  ## be inserted.)
+  if xp.maxRejects <= xp.byRejects.nItems:
+    discard xp.flushRejects(1 + xp.byRejects.nItems - xp.maxRejects)
+  let item = tx.newTxItemRef(reason, local, status, info)
+  discard xp.byRejects.txAppend(item)
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -180,6 +229,10 @@ proc baseFee*(xp: TxTabsRef): GasInt {.inline.} =
   ## Get the `baseFee` implying the price list valuation and order. If
   ## this entry is disabled, the value `GasInt.low` is returnded.
   xp.baseFee
+
+proc maxRejects*(xp: TxTabsRef): int {.inline.} =
+  ## Getter
+  xp.maxRejects
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
@@ -191,6 +244,10 @@ proc `baseFee=`*(xp: TxTabsRef; baseFee: GasInt)
   ## disables the `baseFee`.
   xp.baseFee = baseFee
   xp.byGasTip.update = xp.updateEffectiveGasTip
+
+proc `maxRejects=`*(xp: TxTabsRef; val: int) {.inline.} =
+  ## Setter, applicable with next `reject()` invocation.
+  xp.maxRejects = val
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
@@ -206,15 +263,16 @@ proc hasTx*(xp: TxTabsRef; tx: Transaction): bool {.inline.} =
 
 proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
     {.gcsafe,raises: [Defect,KeyError].} =
-  result.pending = xp.byStatus.eq(txItemPending).nItems
   result.queued = xp.byStatus.eq(txItemQueued).nItems
-
+  result.pending = xp.byStatus.eq(txItemPending).nItems
   result.included = xp.byStatus.eq(txItemIncluded).nItems
+
   result.local = xp.byItemID.eq(local = true).nItems
   result.remote = xp.byItemID.eq(local = false).nItems
 
   result.total = result.local + result.remote
 
+  result.rejected = xp.byRejects.nItems
 
 # ------------------------------------------------------------------------------
 # Public iterators, `sender` > `local` > `nonce` > `item`
@@ -452,7 +510,7 @@ iterator decItemList*(gasTab: var TxTipCapTab;
 # Public functions, debugging
 # ------------------------------------------------------------------------------
 
-proc verify*(xp: TxTabsRef): Result[void,TxVfyError]
+proc verify*(xp: TxTabsRef): Result[void,TxInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify descriptor and subsequent data structures.
   block:
@@ -485,19 +543,26 @@ proc verify*(xp: TxTabsRef): Result[void,TxVfyError]
       rcAddr = xp.bySender.next(addrKey)
       senderCount += schedData.eq(status).nItems
     if xp.byStatus.eq(status).nItems != senderCount:
-      return err(txVfyStatusSenderTotal)
+      return err(txInfoVfyStatusSenderTotal)
 
   if xp.byItemID.nItems != xp.bySender.nItems:
-     return err(txVfySenderTotal)
+     return err(txInfoVfySenderTotal)
 
   if xp.byItemID.nItems != xp.byGasTip.nItems:
-     return err(txVfyGasTipTotal)
+     return err(txInfoVfyGasTipTotal)
 
   if xp.byItemID.nItems != xp.byTipCap.nItems:
-     return err(txVfyTipCapTotal)
+     return err(txInfoVfyTipCapTotal)
 
   if xp.byItemID.nItems != xp.byStatus.nItems:
-     return err(txVfyStatusTotal)
+     return err(txInfoVfyStatusTotal)
+
+  # ---------------------
+
+  block:
+    let rc = xp.byRejects.txVerify
+    if rc.isErr:
+      return rc
 
   ok()
 

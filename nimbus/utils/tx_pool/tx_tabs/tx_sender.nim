@@ -214,8 +214,8 @@ proc getInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
 # Public all-queue helpers
 # ------------------------------------------------------------------------------
 
-proc txInit*(gt: var TxSenderTab; size = 10) =
-  ## Optional constructor
+proc txInit*(gt: var TxSenderTab) =
+  ## Constructor
   gt.size = 0
   gt.addrList.init
 
@@ -270,13 +270,13 @@ proc txDelete*(gt: var TxSenderTab; item: TxItemRef): bool
     return true
 
 
-proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
+proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## walk `EthAddress` > `TxSenderLocus` > `AccountNonce` > items
+  ## Walk `EthAddress` > `TxSenderLocus` > `AccountNonce` > items
   block:
     let rc = gt.addrList.verify
     if rc.isErr:
-      return err(txVfySenderRbTree)
+      return err(txInfoVfySenderRbTree)
   var
     totalCount = 0
     rcAddr = gt.addrList.ge(minEthAddress)
@@ -287,9 +287,9 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
 
     # at lest ((local or remote) and merged) lists must be available
     if schedData.nActive == 0:
-      return err(txVfySenderLeafEmpty)
+      return err(txInfoVfySenderLeafEmpty)
     if schedData.allList.isNil:
-      return err(txVfySenderLeafEmpty)
+      return err(txInfoVfySenderLeafEmpty)
 
     # local/remote list
     # ----------------------------------------------------------------
@@ -301,7 +301,7 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
         block:
           let rc = localData.nonceList.verify
           if rc.isErr:
-            return err(txVfySenderRbTree)
+            return err(txInfoVfySenderRbTree)
 
         var subCount = 0
         var rcNonce = localData.nonceList.ge(AccountNonce.low)
@@ -312,15 +312,15 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
           subCount += itemData.nItems
 
           if itemData.nItems == 0:
-            return err(txVfySenderLeafEmpty)
+            return err(txInfoVfySenderLeafEmpty)
 
           let rcItem = itemData.txVerify
           if rcItem.isErr:
-            return err(txVfySenderLeafQueue)
+            return err(txInfoVfySenderLeafQueue)
 
         # end while
         if subCount != localData.size:
-          return err(txVfySenderTotal)
+          return err(txInfoVfySenderTotal)
 
         localCount += subCount
 
@@ -334,7 +334,7 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
         block:
           let rc = statusData.nonceList.verify
           if rc.isErr:
-            return err(txVfySenderRbTree)
+            return err(txInfoVfySenderRbTree)
 
         var subCount = 0
         var rcNonce = statusData.nonceList.ge(AccountNonce.low)
@@ -345,15 +345,15 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
           subCount += itemData.nItems
 
           if itemData.nItems == 0:
-            return err(txVfySenderLeafEmpty)
+            return err(txInfoVfySenderLeafEmpty)
 
           let rcItem = itemData.txVerify
           if rcItem.isErr:
-            return err(txVfySenderLeafQueue)
+            return err(txInfoVfySenderLeafQueue)
 
         # end while
         if subCount != statusData.size:
-          return err(txVfySenderTotal)
+          return err(txInfoVfySenderTotal)
 
         statusCount += subCount
 
@@ -363,7 +363,7 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
     block:
       let rc = schedData.allList.nonceList.verify
       if rc.isErr:
-        return err(txVfySenderRbTree)
+        return err(txInfoVfySenderRbTree)
 
       var rcNonce =  schedData.allList.nonceList.ge(AccountNonce.low)
       while rcNonce.isOk:
@@ -373,42 +373,38 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxVfyError]
         allCount += itemData.nItems
 
         if itemData.nItems == 0:
-          return err(txVfySenderLeafEmpty)
+          return err(txInfoVfySenderLeafEmpty)
 
         let rcItem = itemData.txVerify
         if rcItem.isErr:
-          return err(txVfySenderLeafQueue)
+          return err(txInfoVfySenderLeafQueue)
 
       # end while
       if allCount != schedData.allList.size:
-        return err(txVfySenderTotal)
+        return err(txInfoVfySenderTotal)
 
     # end for
     if localCount != schedData.size:
-      return err(txVfySenderTotal)
+      return err(txInfoVfySenderTotal)
     if statusCount != schedData.size:
-      return err(txVfySenderTotal)
+      return err(txInfoVfySenderTotal)
     if allCount != schedData.size:
-      return err(txVfySenderTotal)
+      return err(txInfoVfySenderTotal)
 
     totalCount += localCount
 
   # end while
   if totalCount != gt.size:
-    return err(txVfySenderTotal)
+    return err(txInfoVfySenderTotal)
 
   ok()
 
 # ------------------------------------------------------------------------------
-# Public functions, getters
+# Public SLst ops -- `EthAddress` (level 0)
 # ------------------------------------------------------------------------------
 
 proc len*(gt: var TxSenderTab): int {.inline.} =
   gt.addrList.len
-
-# ------------------------------------------------------------------------------
-# Public SLst ops -- `EthAddress` (level 0)
-# ------------------------------------------------------------------------------
 
 proc nItems*(gt: var TxSenderTab): int {.inline.} =
   ## Getter, total number of items in the list

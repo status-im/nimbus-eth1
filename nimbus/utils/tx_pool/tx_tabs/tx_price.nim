@@ -160,7 +160,7 @@ proc txReorg(gp: var TxPriceTab) {.gcsafe,raises: [Defect,KeyError].} =
         gp.txInsert(item)
 
 
-proc txVerify*(gp: var TxPriceTab): Result[void,TxVfyError]
+proc txVerify*(gp: var TxPriceTab): Result[void,TxInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## walk `GasInt` > `AccountNonce` > items
   var allCount = 0
@@ -168,7 +168,7 @@ proc txVerify*(gp: var TxPriceTab): Result[void,TxVfyError]
   block:
     let rc = gp.priceList.verify
     if rc.isErr:
-      return err(txVfyGasTipList)
+      return err(txInfoVfyGasTipList)
 
   var rcGas = gp.priceList.ge(GasInt.low)
   while rcGas.isOk:
@@ -184,19 +184,19 @@ proc txVerify*(gp: var TxPriceTab): Result[void,TxVfyError]
       allCount += nonceData.nItems
       gasCount += nonceData.nItems
       if nonceData.nItems == 0:
-        return err(txVfyGasTipLeafEmpty)
+        return err(txInfoVfyGasTipLeafEmpty)
 
       let rcItem = nonceData.txVerify
       if rcItem.isErr:
-        return err(txVfyGasTipLeafQueue)
+        return err(txInfoVfyGasTipLeafQueue)
 
     # end while
     if gasCount != gasData.size:
-      return err(txVfyGasTipTotal)
+      return err(txInfoVfyGasTipTotal)
 
   # end while
   if allCount != gp.size:
-    return err(txVfyGasTipTotal)
+    return err(txInfoVfyGasTipTotal)
 
   ok()
 
