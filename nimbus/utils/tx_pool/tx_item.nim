@@ -37,7 +37,7 @@ type
     info:      string       ## Whatever
     local:     bool         ## Local or remote queue (setter available)
     status:    TxItemStatus ## Transaction status (setter available)
-    effGasTip: GasInt       ## EffectiveGasTipValue
+    effGasTip: int64        ## EffectiveGasTipValue
     reject:    TxInfo       ## Reason for moving to rejection queue
 
 # ------------------------------------------------------------------------------
@@ -187,6 +187,15 @@ proc cost*(tx: Transaction): UInt256 {.inline.} =
   ## Getter (go/ref compat): gas * gasPrice + value.
   (tx.gasPrice * tx.gasLimit).u256 + tx.value
 
+proc estimatedGasTip*(tx: Transaction; baseFee: uint64): int64 {.inline.} =
+  ## The effective miner gas tip for the globally argument `baseFee`. The
+  ## result (which is a price per gas) might well be negative.
+  if tx.txType == TxLegacy:
+    tx.gasPrice - baseFee.int64
+  else:
+    # London, EIP1559
+    min(tx.maxPriorityFee, tx.maxFee - baseFee.int64)
+
 # ------------------------------------------------------------------------------
 # Public functions, item getters
 # ------------------------------------------------------------------------------
@@ -223,7 +232,7 @@ proc status*(item: TxItemRef): TxItemStatus {.inline.} =
   ## Getter
   item.status
 
-proc effectiveGasTip*(item: TxItemRef): GasInt {.inline.} =
+proc effGasTip*(item: TxItemRef): int64 {.inline.} =
   ## Getter
   item.effGasTip
 
@@ -243,7 +252,7 @@ proc `status=`*(item: TxItemRef; val: TxItemStatus) {.inline.} =
   ## Setter
   item.status = val
 
-proc `effectiveGasTip=`*(item: TxItemRef; val: GasInt) {.inline.} =
+proc `effGasTip=`*(item: TxItemRef; val: int64) {.inline.} =
   ## Setter
   item.effGasTip = val
 
@@ -297,7 +306,6 @@ proc effectiveGasTip*(tx: Transaction;
 
 proc effectiveGasTip*(tx: Transaction): Result[GasInt,TxItemError] {.inline.} =
   ok(tx.gasTipCap)
-]#
 
 # core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
 proc effectiveGasTipValue*(tx: Transaction;
@@ -309,7 +317,6 @@ proc effectiveGasTipValue*(tx: Transaction;
 proc effectiveGasTipValue*(tx: Transaction): GasInt {.inline.} =
   tx.gasTipCap
 
-#[
 # core/types/transaction.go(351): .. *Transaction) EffectiveGasTipCmp(other ..
 proc effectiveGasTipCmp*(tx, other: Transaction; baseFee: GasInt): int
     {.inline.} =

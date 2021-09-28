@@ -29,42 +29,39 @@ proc inactiveItemsEviction*(xp: var TxPool)
   ## Move transactions older than `xp.lifeTime` to the waste basket.
   xp.jobCommit(TxJobDataRef(kind: txJobEvictionInactive))
 
-proc setBaseFee*(xp: var TxPool; baseFee: GasInt)
+proc setBaseFee*(xp: var TxPool; baseFee: uint64)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Setter, new base fee (implies reorg). The argument value `TxNoBaseFee`
-  ## disables the `baseFee`.
+  ## Setter, implies re-org
   xp.jobCommit(TxJobDataRef(
-    kind:      txJobSetBaseFee,
+    kind:     txJobSetBaseFee,
     setBaseFeeArgs: (
-      disable: baseFee == TxNoBaseFee,
-      price:   baseFee)))
+      price:  baseFee)))
 
-proc getBaseFee*(xp: var TxPool): GasInt
+proc getBaseFee*(xp: var TxPool): uint64
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Get the `baseFee` implying the price list valuation and order. If
-  ## this entry in disabled, the value `TxNoBaseFee` is returnded.
-  var rBaseFee: GasInt
+  ## Getter
+  var rBaseFee: uint64
   xp.jobCommit(TxJobDataRef(
-    kind: txJobGetBaseFee,
+    kind:     txJobGetBaseFee,
     getBaseFeeArgs: (
-      reply: proc(baseFee: GasInt) =
-               rBaseFee = baseFee)))
+      reply:  proc(baseFee: uint64) =
+                rBaseFee = baseFee)))
   rBaseFee
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-proc getGasPrice*(xp: var TxPool): GasInt
+proc getGasPrice*(xp: var TxPool): uint64
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the current gas price enforced by the transaction pool.
-  var rGasPrice: GasInt
+  var rGasPrice: uint64
   xp.jobCommit(TxJobDataRef(
-    kind:    txJobGetGasPrice,
+    kind:     txJobGetGasPrice,
     getGasPriceArgs: (
-      reply: proc(gasPrice: GasInt) =
-               rGasPrice = gasPrice)))
+      reply:  proc(gasPrice: uint64) =
+                rGasPrice = gasPrice)))
   rGasPrice
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc setGasPrice*(xp: var TxPool; price: GasInt)
+proc setGasPrice*(xp: var TxPool; price: uint64)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Set the minimum price required by the transaction pool for a new
   ## transaction. Increasing it will move all transactions below this
@@ -83,10 +80,10 @@ proc count*(xp: var TxPool): TxTabsStatsCount
   ## The current number of local transactions
   var rStatus: TxTabsStatsCount
   xp.jobCommit(TxJobDataRef(
-    kind:    txJobStatsCount,
+    kind:     txJobStatsCount,
     statsCountArgs: (
-      reply: proc(status: TxTabsStatsCount) =
-               rStatus = status)))
+      reply:  proc(status: TxTabsStatsCount) =
+                rStatus = status)))
   rStatus
 
 
@@ -96,18 +93,18 @@ proc localAccounts*(xp: var TxPool): seq[EthAddress]
   ## Retrieves the accounts currently considered local by the pool.
   var rAccounts: seq[EthAddress]
   xp.jobCommit(TxJobDataRef(
-    kind:    txJobGetAccounts,
+    kind:     txJobGetAccounts,
     getAccountsArgs: (
-      local: true,
-      reply: proc(accounts: seq[EthAddress]) =
-               rAccounts = accounts)))
+      local:  true,
+      reply:  proc(accounts: seq[EthAddress]) =
+                rAccounts = accounts)))
   rAccounts
 
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-proc addTxs*(xp: var TxPool; txs: openArray[Transaction]; local = false;
-             status = txItemQueued; info = "")
+proc addTxs*(xp: var TxPool;
+             txs: openArray[Transaction]; local = false; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueue a batch of transactions into the pool if they are valid. If
   ## the senders are not among the locally tracked ones, full pricing
@@ -120,17 +117,15 @@ proc addTxs*(xp: var TxPool; txs: openArray[Transaction]; local = false;
     addTxsArgs: (
       txs:    toSeq(txs),
       local:  local,
-      status: status,
       info:   info)))
 
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc addTx*(xp: var TxPool; tx: var Transaction; local = false;
-            status = txItemQueued; info = "")
+proc addTx*(xp: var TxPool; tx: var Transaction; local = false; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueues a single transaction into the pool if it is valid.
   ## This is a convenience wrapper aroundd addTxs.
-  xp.addTxs([tx], local, status, info)
+  xp.addTxs([tx], local, info)
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
@@ -139,8 +134,8 @@ proc get*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
   ## Returns a transaction if it is contained in the pool.
   var getItem: TxItemRef
   xp.jobCommit(TxJobDataRef(
-    kind:     txJobGetItem,
-    getItemArgs: (
+    kind:     txJobItemGet,
+    itemGetArgs: (
       itemId: hash,
       reply:  proc(item: TxItemRef) =
                 getItem = item)))
@@ -156,7 +151,7 @@ proc remoteToLocals*(xp: var TxPool; signer: EthAddress): int
   ## The function returns the number of transactions migrated.
   var nMoved: int
   xp.jobCommit(TxJobDataRef(
-    kind:    txJobMoveRemoteToLocals,
+    kind:      txJobMoveRemoteToLocals,
     moveRemoteToLocalsArgs: (
       account: signer,
       reply:   proc(moved: int) =
@@ -203,9 +198,17 @@ proc itemsApply*(xp: var TxPool; apply: TxJobItemApply; status: TxItemStatus)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Apply argument function `apply` to all items of the `status` queue.
   xp.jobCommit(TxJobDataRef(
-    kind:     txJobApplyByStatus,
+    kind:      txJobApplyByStatus,
     applyByStatusArgs: (
-      status: status,
+      status:  status,
+      apply:   apply)))
+
+proc rejectsApply*(xp: var TxPool; apply: TxJobItemApply)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Apply argument function `apply` to all rejected items in the waste basket.
+  xp.jobCommit(TxJobDataRef(
+    kind:     txJobApplyByRejected,
+    applyByRejectedArgs: (
       apply:  apply)))
 
 proc rejectItem*(xp: var TxPool; item: TxItemRef; reason: TxInfo)
@@ -216,10 +219,27 @@ proc rejectItem*(xp: var TxPool; item: TxItemRef; reason: TxInfo)
   ##   This function must not be used inside a call back function as of
   ##   `itemsApply()`. Add the job directly using the `job()` function.
   xp.jobCommit(TxJobDataRef(
-    kind:     txJobRejectItem,
+    kind:      txJobRejectItem,
     rejectItemArgs: (
-      item:   item,
-      reason: reason)))
+      item:    item,
+      reason:  reason)))
+
+proc setStatus*(xp: var TxPool; item: TxItemRef; status: TxItemStatus)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Change/update the status of the transaction item.
+  xp.jobCommit(TxJobDataRef(
+    kind:      txJobItemSetStatus,
+    itemSetStatusArgs: (
+      item:    item,
+      status:  status)))
+
+proc updatePendingQueue*(xp: var TxPool; force = false)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Update pending queue
+  xp.jobCommit(TxJobDataRef(
+    kind:     txJobUpdatePending,
+    updatePendingArgs: (
+      force:  force)))
 
 # ------------------------------------------------------------------------------
 # End

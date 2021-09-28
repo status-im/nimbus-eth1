@@ -16,18 +16,21 @@
 
 import
   std/[times],
+  ../../db/accounts_cache,
+  ../../forks,
+  ../../transaction,
   ../keequ,
   ../slst,
+  ./tx_dbhead,
   ./tx_gauge,
   ./tx_info,
-  ./tx_item,
   ./tx_tabs,
   chronicles,
   eth/[common, keys],
   stew/results
 
 logScope:
-  topics = "tx-pool helper"
+  topics = "tx-pool tasks"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -40,7 +43,125 @@ proc utcNow: Time =
 #  t.format("yyyy-MM-dd'T'HH:mm:ss'.'fff", utc())
 
 # ------------------------------------------------------------------------------
-# Global functions
+# Private validation helpers
+# ------------------------------------------------------------------------------
+
+proc checkTxBasic(item: TxItemRef; dbHead: var TxDbHead): bool =
+  ## Inspired by `p2p/validate.validateTransaction()`
+  ##
+  ## Rejected transactions go to the wastebasket
+  ##
+  if item.tx.txType == TxEip2930 and dbHead.fork < FkBerlin:
+    debug "invalid tx: Eip2930 Tx type detected before Berlin"
+    return false
+
+  if item.tx.txType == TxEip1559 and dbHead.fork < FkLondon:
+    debug "invalid tx: Eip1559 Tx type detected before London"
+    return false
+
+  let nonce = ReadOnlyStateDB(dbHead.accDb).getNonce(item.sender)
+  if item.tx.nonce < nonce:
+    debug "invalid tx: account nonce mismatch",
+      txNonce = item.tx.nonce,
+      accountNonce = nonce
+    return false
+
+  if item.tx.gasLimit < item.tx.intrinsicGas(dbHead.fork):
+    debug "invalid tx: not enough gas to perform calculation",
+      available = item.tx.gasLimit,
+      require = item.tx.intrinsicGas(dbHead.fork)
+    return false
+
+  true
+
+proc checkTxFees(item: TxItemRef; gasLimit: GasInt, baseFee: uint64): bool =
+  ## Inspired by `p2p/validate.validateTransaction()`
+  ##
+  ## Rejected transactions go to the queue(1) waiting for a change
+  ## of parameters `gasLimit` and `baseFee`
+  ##
+  if gasLimit < item.tx.gasLimit:
+    debug "invalid tx: block header gasLimit exceeded",
+      maxLimit = gasLimit,
+      gasLimit = item.tx.gasLimit
+    return false
+
+  # ensure that the user was willing to at least pay the base fee
+  if item.tx.txType == TxLegacy:
+    if item.tx.gasPrice < baseFee.int64:
+      debug "invalid tx: legacy gasPrice is smaller than baseFee",
+        gasPrice = item.tx.gasPrice,
+        baseFee = baseFee
+      return false
+  else:
+    if item.tx.maxFee < baseFee.int64:
+      debug "invalid tx: maxFee is smaller than baseFee",
+        maxFee = item.tx.maxFee,
+        baseFee = baseFee
+      return false
+    # The total must be the larger of the two
+    if item.tx.maxFee < item.tx.maxPriorityFee:
+      debug "invalid tx: maxFee is smaller than maPriorityFee",
+        maxFee = item.tx.maxFee,
+        maxPriorityFee = item.tx.maxPriorityFee
+      return false
+
+  true
+
+proc checkTxBalance(item: TxItemRef;
+                    dbHead: var TxDbHead; gasLimit: GasInt): bool =
+  ## Inspired by `p2p/validate.validateTransaction()`
+  ##
+  ## Function currently unused.
+  ##
+  let
+    balance = ReadOnlyStateDB(dbHead.accDb).getBalance(item.sender)
+    gasCost = item.tx.gasLimit.u256 * item.tx.gasPrice.u256
+  if balance < gasCost:
+    debug "invalid tx: not enough cash for gas",
+      available = balance,
+      require = gasCost
+    return false
+
+  let balanceOffGasCost = balance - gasCost
+  if balanceOffGasCost < item.tx.value:
+    debug "invalid tx: not enough cash to send",
+      available = balance,
+      availableMinusGas = balanceOffGasCost,
+      require = item.tx.value
+    return false
+
+  true
+
+# ------------------------------------------------------------------------------
+# Private validation functions
+# ------------------------------------------------------------------------------
+
+proc acceptTxValid(tDB: TxTabsRef;
+                   dbHead: var TxDbHead; item: TxItemRef): TxInfo =
+  ## Check a raw transaction
+  if not item.checkTxBasic(dbHead):
+    return txInfoErrBasicValidatorFailed
+
+  txInfoOk
+
+
+proc acceptTxPending(tDB: TxTabsRef;  dbHead: var TxDbHead;
+                     item: TxItemRef; gasLimit: GasInt): bool =
+  ## Check whether a valid transaction is ready to be set `pending`
+  if item.tx.estimatedGasTip(tDB.baseFee) <= 0:
+    return false
+
+  if not item.checkTxFees(gasLimit, tDB.baseFee):
+    return false
+
+  #if not item.checkTxBalance(dbHead, gasLimit):
+  #  return false
+
+  true
+
+# ------------------------------------------------------------------------------
+# Public functions
 # ------------------------------------------------------------------------------
 
 # core/tx_pool.go(384): for addr := range pool.queue {
@@ -59,37 +180,77 @@ proc deleteExpiredItems*(tDB: TxTabsRef; maxLifeTime: Duration)
 
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc deleteUnderpricedItems*(tDB: TxTabsRef; price: GasInt)
+proc deleteUnderpricedItems*(tDB: TxTabsRef; price: uint64)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Drop all transactions below the argument threshold `price`, i.e.
   ## move these items to the waste basket.
   # Delete while walking the `gasFeeCap` table (it is ok to delete the
   # current item). See also `remotesBelowTip()`.
-  for itemList in tDB.byTipCap.decItemList(maxCap = price - 1):
-    for item in itemList.walkItems:
-      if not item.local:
-        discard tDB.reject(item,txInfoErrUnderpriced)
+  if 0 < price:
+    let topOffOne = price - 1
+    for itemList in tDB.byTipCap.decItemList(maxCap = topOffOne):
+      for item in itemList.walkItems:
+        if not item.local:
+          discard tDB.reject(item,txInfoErrUnderpriced)
 
 
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTxs*(tDB: TxTabsRef; txs: openArray[Transaction];
-             local: bool; status: TxItemStatus; info = "")
+proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead; gasLimit: GasInt;
+             txs: var openArray[Transaction]; local: bool;  info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Queue a batch of transactions. There transactions are quickly tested
   ## and moved to the waiting queue, or into the waste basket.
-  for i in 0 ..< txs.len:
-    var tx = txs[i]
-    let rc = tDB.insert(tx, local, status, info)
+  for tx in txs.mitems:
+    var
+      status = txItemQueued
+      vetted = txInfoOk
 
-    if rc.isOk:
+    # Leave this frame with `continue`, or proceeed with error
+    block txErrorFrame:
+      var
+        itemID = tx.itemID
+        item: TxItemRef
+
+      # Create tx ID and check for dups
+      if tDB.byItemID.hasKey(itemID):
+        vetted = txInfoErrAlreadyKnown
+        break txErrorFrame
+
+      # Create tx wrapper with meta data (status may be changed, later)
+      block:
+        let rc = tx.newTxItemRef(itemID, local, status, info)
+        if rc.isErr:
+          vetted = txInfoErrInvalidSender
+          break txErrorFrame
+        item = rc.value
+
+      # Verify transaction
+      vetted = tDB.acceptTxValid(dbHead, item)
+      if vetted != txInfoOk:
+        break txErrorFrame
+
+      # Update initial state
+      if tDB.acceptTxPending(dbHead, item, gasLimit):
+        status = txItemPending
+        item.status = status
+
+      # Insert into database
+      let rc = tDB.insert(item)
+      if rc.isErr:
+        vetted = rc.error
+        break txErrorFrame
+
+      # All done, this time
       validTxMeter(1)
       continue
 
+      # Error processing below
+
     # store tx in waste basket
-    tDB.reject(tx, rc.error, local, status, info)
+    tDB.reject(tx, vetted, local, status, info)
 
     # update gauge
-    case rc.error:
+    case vetted:
     of txInfoErrAlreadyKnown:
       knownTxMeter(1)
     of txInfoErrInvalidSender:
@@ -125,16 +286,17 @@ proc reassignRemoteToLocals*(tDB: TxTabsRef; signer: EthAddress): int
 
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
-proc getRemotesBelowTip*(tDB: TxTabsRef; threshold: GasInt): seq[Hash256]
+proc getRemotesBelowTip*(tDB: TxTabsRef; threshold: uint64): seq[Hash256]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Finds all remote transactions below the given tip threshold.
-  for itemList in tDB.byTipCap.decItemList(maxCap = threshold - 1):
-    for item in itemList.walkItems:
-      if not item.local:
-        result.add item.itemID
+  if 0 < threshold:
+    for itemList in tDB.byTipCap.decItemList(maxCap = threshold - 1):
+      for item in itemList.walkItems:
+        if not item.local:
+          result.add item.itemID
 
 
-proc updateGasPrice*(tDB: TxTabsRef; curPrice: var GasInt; newPrice: GasInt)
+proc updateGasPrice*(tDB: TxTabsRef; curPrice: var uint64; newPrice: uint64)
     {.inline, raises: [Defect,KeyError].} =
   let oldPrice = curPrice
   curPrice = newPrice
@@ -144,8 +306,11 @@ proc updateGasPrice*(tDB: TxTabsRef; curPrice: var GasInt; newPrice: GasInt)
     tDB.deleteUnderpricedItems(newPrice)
 
   info "Price threshold updated",
-     oldPrice,
-     newPrice
+    oldPrice,
+    newPrice
+
+proc rebuildPendingQueue*(tDB: TxTabsRef) =
+  discard
 
 # ------------------------------------------------------------------------------
 # End

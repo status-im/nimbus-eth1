@@ -67,13 +67,13 @@ proc mkInxImpl(gp: var TxPriceTab; item: TxItemRef): TxPriceInx
   # start with updating argument `item` (typically setting base fee)
   gp.update(item)
   block:
-    let rc = gp.priceList.insert(item.effectiveGasTip)
+    let rc = gp.priceList.insert(item.effGasTip)
     if rc.isOk:
       new result.gas
       result.gas.nonceList.init
       rc.value.data = result.gas
     else:
-      result.gas = gp.priceList.eq(item.effectiveGasTip).value.data
+      result.gas = gp.priceList.eq(item.effGasTip).value.data
   block:
     let rc = result.gas.nonceList.insert(item.tx.nonce)
     if rc.isOk:
@@ -87,7 +87,7 @@ proc getInxImpl(gp: var TxPriceTab; item: TxItemRef): Result[TxPriceInx,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   var inxData: TxPriceInx
   block:
-    let rc = gp.priceList.eq(item.effectiveGasTip)
+    let rc = gp.priceList.eq(item.effGasTip)
     if rc.isOk:
       inxData.gas = rc.value.data
     else:
@@ -135,16 +135,18 @@ proc txDelete*(gp: var TxPriceTab; item: TxItemRef)
     if inx.nonce.nItems == 0:
       discard inx.gas.nonceList.delete(item.tx.nonce)
       if inx.gas.nonceList.len == 0:
-        discard gp.priceList.delete(item.effectiveGasTip)
+        discard gp.priceList.delete(item.effGasTip)
 
 
 proc txReorg(gp: var TxPriceTab) {.gcsafe,raises: [Defect,KeyError].} =
   ## reorg => rebuild list
   var
-    stale = gp.priceList.move
-    rcGas = stale.ge(GasInt.low)
+    stale = gp.priceList.move     # `priceList` becomes empty
+    rcGas = stale.ge(GasInt.low)  # all data in `stale`
+
+  gp.size = 0                     # correct for empty `priceList`
+
   while rcGas.isOk:
-    var gasCount = 0
     let (gasKey, gasData) = (rcGas.value.key, rcGas.value.data)
     rcGas = stale.gt(gasKey)
 
@@ -157,7 +159,7 @@ proc txReorg(gp: var TxPriceTab) {.gcsafe,raises: [Defect,KeyError].} =
       while rcItem.isOK:
         let item = rcItem.value
         rcItem = nonceData.next(item)
-        gp.txInsert(item)
+        gp.txInsert(item) # re-insert into new list
 
 
 proc txVerify*(gp: var TxPriceTab): Result[void,TxInfo]

@@ -58,6 +58,10 @@ type
       ## Typed transaction, missing data
       "Empty typed transaction bytes"
 
+    txInfoErrBasicValidatorFailed = ##\
+      ## Running basic validator failed on current transaction
+      "Tx rejected by basic validator"
+
     # ------ Signature problems ---------------------
 
     txInfoErrInvalidSender = ##\

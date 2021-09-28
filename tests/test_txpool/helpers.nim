@@ -25,7 +25,6 @@ export
   tx_tabs.decItemList,
   tx_tabs.decNonceList,
   tx_tabs.eq,
-  tx_tabs.fetchRejects,
   tx_tabs.first,
   tx_tabs.flushRejects,
   tx_tabs.ge,
@@ -42,13 +41,27 @@ export
   tx_tabs.reassign,
   tx_tabs.reject,
   tx_tabs.statsCount,
-  tx_tabs.txTabMaxRejects,
   tx_tabs.verify,
   tx_tabs.walkItemList,
   tx_tabs.walkItems,
   tx_tabs.walkNonceList,
   tx_tabs.walkSchedList,
   undumpNextGroup
+
+const
+  # pretty printing
+  localInfo* = block:
+    var rc: array[bool,string]
+    rc[true] = "L"
+    rc[false] = "R"
+    rc
+
+  statusInfo* = block:
+    var rc: array[TxItemStatus,string]
+    rc[txItemQueued] = "Q"
+    rc[txItemPending] = "P"
+    rc[txItemStaged] = "S"
+    rc
 
 proc pp*(txs: openArray[Transaction]; pfx = ""): string =
   let txt = block:

@@ -12,19 +12,32 @@ import
   std/[algorithm, os, random, sequtils, strformat, strutils, times],
   ../nimbus/config,
   ../nimbus/db/db_chain,
-  ../nimbus/p2p/chain,
-  ../nimbus/utils/tx_pool,
-  ../nimbus/utils/tx_pool/tx_perjobapi,
-  ./test_txpool/[block_chain, helpers],
-  eth/[common, keys],
+  ../nimbus/utils/[slst, tx_pool],
+  ../nimbus/utils/tx_pool/[tx_item, tx_perjobapi],
+  ./test_txpool/[helpers, setup],
+  eth/[common, keys, p2p],
   stint,
   unittest2
 
+type
+  CaptureSpecs = tuple
+    network: NetworkID
+    dir, file: string
+
 const
   prngSeed = 42
-  baseDir = "tests"
-  mainnetCapture = "test_txpool" / "mainnet50688.txt.gz"
-  loadFile = mainnetCapture
+
+  goerliCapture: CaptureSpecs = (
+    network: GoerliNet,
+    dir: "tests",
+    file: "test_clique"/"goerli51840.txt.gz")
+
+  mainnetCapture: CaptureSpecs = (
+    network: MainNet,
+    dir: "tests",
+    file: "test_txpool" / "mainnet50688.txt.gz")
+
+  loadSpecs = mainnetCapture
 
   # 75% <= #local/#remote <= 1/75%
   # note: by law of big numbers, the ratio will exceed any upper or lower
@@ -40,7 +53,7 @@ const
   addrGroupLocalRemotePC = 70
 
   # test block chain
-  networkId = MainNet
+  networkId = GoerliNet # MainNet
 
 var
   prng = prngSeed.initRand
@@ -84,102 +97,21 @@ proc randStatus: TxItemStatus =
   result = prng.rand(TxItemStatus.high.ord).TxItemStatus
   statCount[result].inc
 
+proc toRemote(item: TxItemRef): TxItemRef =
+  result = item
+  item.local = false
 
-proc slurpItems(xp: var TxPool): seq[TxItemRef] =
-  var rList: seq[TxItemRef]
-  let appItFn = proc(item: TxItemRef): bool =
-                  rList.add item
-                  true
-  xp.itemsApply(appItFn, local = true)
-  xp.itemsApply(appItFn, local = false)
-  result = rList
-
-
-proc importTxPool(xp: var TxPool; noisy: bool;
-                  file: string; loadBlocks: int; loadTxs: int) =
-  var
-    txCount = 0
-    chainNo = 0
-    chainDB = bcDB.newChain
-
-  # clear waste basket
-  discard xp.flushRejects
-
-  for chain in file.undumpNextGroup:
-    chainNo.inc
-    if chain[0][0].blockNumber == 0.u256:
-      # Verify Genesis
-      doAssert chain[0][0] == chainDB.db.getBlockHeader(0.u256)
-
-    elif chain[0][0].blockNumber < loadBlocks.u256:
-      let (headers,bodies) = (chain[0],chain[1])
-      doAssert chainDB.persistBlocks(headers,bodies) == ValidationResult.OK
-
-    else:
-      for chainInx in 0 ..< chain[0].len:
-        # load transactions, one-by-one
-        let
-          blkNum = chain[0][chainInx].blockNumber
-          txs = chain[1][chainInx].transactions
-        for n in 0 ..< txs.len:
-          txCount.inc
-          let
-            local = randOK()
-            status = randStatus()
-            localInfo = if local: "L" else: "R"
-            info = &"{txCount} #{blkNum}({chainNo}) {n}/{txs.len} {localInfo}"
-          noisy.showElapsed(&"insert: local={local} {info}"):
-            var tx = txs[n]
-            xp.addTx(tx, local, status, info)
-          if loadTxs <= txCount:
-            # make sure that the waste basket was empty
-            doAssert xp.flushRejects[0] == 0
-            return
-
-
-proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt;
-              noisy = true; maxRejects = txTabMaxRejects): TxPool =
-  result.init(bcDB, baseFee)
-  result.setMaxRejects(maxRejects)
-  noisy.showElapsed(&"Loading {q.len} transactions"):
-    for w in q:
-      var tx = w.tx
-      result.addTx(tx, w.local, w.status, w.info)
-  doAssert result.count.total == q.len
-  doAssert result.flushRejects[0] == 0
-
-
-proc toTxPool(q: var seq[TxItemRef]; baseFee: GasInt; noisy = true;
-              timeGap: var Time; nRemoteGapItems: var int;
-              remoteItemsPC = 30; delayMSecs = 200): TxPool =
-  ## Variant of `toTxPool()` where the loader sleeps some time after
-  ## `remoteItemsPC` percent loading remote items.
-  doAssert 0 < remoteItemsPC and remoteItemsPC < 100
-  result.init(bcDB, baseFee)
-  var
-    delayAt = okCount[false] * remoteItemsPC div 100
-    middleOfTimeGap = initDuration(milliSeconds = delayMSecs div 2)
-    remoteCount = 0
-  noisy.showElapsed(&"Loading {q.len} transactions"):
-    for w in q:
-      var tx = w.tx
-      result.addTx(tx, w.local, w.status, w.info)
-      if not w.local and remoteCount < delayAt:
-        remoteCount.inc
-        if delayAt == remoteCount:
-          nRemoteGapItems = remoteCount
-          noisy.say &"time gap after {remoteCount} remote transactions"
-          timeGap = result.get(w.itemID).value.timeStamp + middleOfTimeGap
-          delayMSecs.sleep
-  doAssert result.count.total == q.len
-  doAssert result.flushRejects[0] == 0
-
+template wrapException(info: string; action: untyped) =
+  try:
+    action
+  except CatchableError:
+    raiseAssert info & " has problems: " & getCurrentExceptionMsg()
 
 proc addOrFlushGroupwise(xp: var TxPool;
                          grpLen: int; seen: var seq[TxItemRef]; w: TxItemRef;
                          noisy = true): bool =
   # to be run as call back inside `itemsApply()`
-  try:
+  wrapException("addOrFlushGroupwise()"):
     seen.add w
     if grpLen <= seen.len:
       # clear waste basket
@@ -199,25 +131,20 @@ proc addOrFlushGroupwise(xp: var TxPool;
 
     return true
 
-  except CatchableError:
-    raiseAssert "addOrFlushGroupwise() has problems: " &
-      getCurrentExceptionMsg()
-
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runTxLoader(noisy = true;
-                 baseFee: GasInt;
-                 dir = baseDir; captureFile = loadFile,
-                 numBlocks = 0; numTransactions = 0) =
+proc runTxLoader(noisy = true; baseFee = 0;
+                 capture = loadSpecs, numBlocks = 0; numTxs = 0) =
   let
     elapNoisy = noisy
     veryNoisy = false # noisy
-    loadBlocks = if numBlocks == 0: 30000 else: numBlocks
-    loadTxs = if numTransactions == 0: 900 else: numTransactions
-    name = captureFile.splitFile.name.split(".")[0]
-    baseInfo = if baseFee != TxNoBaseFee: &" with baseFee={baseFee}" else: ""
+    nBlocks = if numBlocks == 0: 30000 else: numBlocks
+    nTxs = if numTxs == 0: 900 else: numTxs
+    fileInfo = capture.file.splitFile.name.split(".")[0]
+    suiteInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
+    file = capture.dir /  capture.file
 
   # Reset/initialise
   okCount.reset
@@ -225,21 +152,36 @@ proc runTxLoader(noisy = true;
   txList.reset
   effGasTips.reset
   gasTipCaps.reset
-  bcDB = networkId.blockChainForTesting
+  bcDB = capture.network.blockChainForTesting
 
-  suite &"TxPool: Transactions from {name} capture{baseInfo}":
-    var xp = init(type TxPool, bcDB, baseFee)
-    check txList.len == 0
-    check xp.txDB.verify.isOK
+  suite &"TxPool: Transactions from {fileInfo} capture{suiteInfo}":
+    var xp: TxPool
 
-    test &"Import at least {loadBlocks.toKMG} blocks "&
-        &"and collect {loadTxs} transactions":
+    test &"Import {nBlocks.toKMG} blocks and collect {nTxs} txs":
+
       elapNoisy.showElapsed("Total collection time"):
-        xp.importTxPool(veryNoisy, dir / captureFile,
-                        loadBlocks = loadBlocks, loadTxs = loadTxs)
+        xp = bcDB.toTxPool(file = file,
+                           getLocal = randOk,
+                           getStatus = randStatus,
+                           loadBlocks = nBlocks,
+                           loadTxs = nTxs,
+                           baseFee = baseFee,
+                           noisy = veryNoisy)
+
+      # Set txs to pseudo random status
+      xp.setItemStatusFromInfo
+
+      check txList.len == 0
+      check xp.txDB.verify.isOK
+      check xp.flushRejects[0] == 0
+
+      noisy.say "***",
+         "Latest items:",
+         " <", xp.txDB.byItemID.eq(local = true).last.value.data.info, ">",
+         " <", xp.txDB.byItemID.eq(local = false).last.value.data.info, ">"
 
       # make sure that the block chain was initialised
-      check loadBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
+      check nBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
 
       check xp.count.total == foldl(okCount.toSeq, a+b)   # add okCount[] values
       check xp.count.total == foldl(statCount.toSeq, a+b) # ditto statCount[]
@@ -254,19 +196,18 @@ proc runTxLoader(noisy = true;
         check statusRatio < (10000 div randInitRatioBandPC)
 
       # Note: expecting enough transactions in the `goerliCapture` file
-      check xp.count.total == loadTxs
+      check xp.count.total == nTxs
       check xp.verify.isOk
 
       # Load txList[]
-      txList = xp.slurpItems
+      txList = xp.toItems
       check txList.len == xp.count.total
 
     test "Load gas prices and priority fees":
 
       elapNoisy.showElapsed("Load gas prices"):
         for nonceList in xp.txDB.byGasTip.incNonceList:
-          effGasTips.add nonceList.ge(AccountNonce.low)
-                                  .first.value.effectiveGasTip
+          effGasTips.add nonceList.ge(AccountNonce.low).first.value.effGasTip
 
       check effGasTips.len == xp.txDB.byGasTip.len
 
@@ -276,15 +217,19 @@ proc runTxLoader(noisy = true;
       check gasTipCaps.len == xp.txDB.byTipCap.len
 
 
-proc runTxBaseTests(noisy = true; baseFee: GasInt) =
+proc runTxBaseTests(noisy = true; baseFee = 0) =
 
   let
     elapNoisy = false
-    baseInfo = if baseFee != TxNoBaseFee: &" with baseFee={baseFee}" else: ""
+    baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
 
   suite &"TxPool: Play with queues and lists{baseInfo}":
 
-    var xq = txList.toTxPool(baseFee, noisy)
+    var xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
+
+    # Set txs to pseudo random status
+    xq.setItemStatusFromInfo
+
     let
       nLocal = xq.count.local
       nRemote = xq.count.remote
@@ -339,7 +284,11 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
     # ---------------------------------
 
     block:
-      var xq = txList.toTxPool(baseFee, noisy)
+      var xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
+
+      # Set txs to pseudo random status
+      xq.setItemStatusFromInfo
+
       let
         veryNoisy = noisy # and false
         indent = " ".repeat(6)
@@ -364,8 +313,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
               check gasTxCount == nonceList.nItems
               txCount += gasTxCount
 
-              let gasTip = nonceList.ge(AccountNonce.low)
-                                    .first.value.effectiveGasTip
+              let gasTip = nonceList.ge(AccountNonce.low).first.value.effGasTip
               gpList.add gasTip
               veryNoisy.say &"gasTip={gasTip} for {infoList.len} entries:"
               veryNoisy.say indent, infoList.join(&"\n{indent}")
@@ -393,8 +341,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
               check gasTxCount == nonceList.nItems
               txCount += gasTxCount
 
-              let gasTip = nonceList.ge(AccountNonce.low)
-                                    .first.value.effectiveGasTip
+              let gasTip = nonceList.ge(AccountNonce.low).first.value.effGasTip
               gpList.add gasTip
               veryNoisy.say &"gasPrice={gasTip} for {infoList.len} entries:"
               veryNoisy.say indent, infoList.join(&"\n{indent}")
@@ -413,11 +360,14 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
       test &"Load/forward walk ID queue, " &
           &"deleting groups of at most {groupLen}":
         var
-          xq = txList.toTxPool(baseFee, noisy)
+          xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
           seen: seq[TxItemRef]
-        let
-          itFn = proc(item: TxItemRef): bool =
-                   xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
+
+        # Set txs to pseudo random status
+        xq.setItemStatusFromInfo
+
+        let itFn = proc(item: TxItemRef): bool =
+                     xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Forward delete-walk ID queue"):
           xq.itemsApply(itFn, local = true)
@@ -429,11 +379,14 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
       test &"Load/reverse walk ID queue, " &
           &"deleting in groups of at most {groupLen}":
         var
-          xq = txList.toTxPool(baseFee, noisy)
+          xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
           seen: seq[TxItemRef]
-        let
-          itFn = proc(item: TxItemRef): bool =
-                   xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
+
+        # Set txs to pseudo random status
+        xq.setItemStatusFromInfo
+
+        let itFn = proc(item: TxItemRef): bool =
+                     xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Revese delete-walk ID queue"):
           xq.itemsApply(itFn, local = true)
@@ -446,15 +399,18 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
 
     block:
       var
-        xq = txList.toTxPool(baseFee = baseFee,
-                             maxRejects = txList.len,
-                             noisy = noisy)
         count = 0
+        xq = bcDB.toTxPool(itList = txList,
+                           baseFee = baseFee,
+                           maxRejects = txList.len,
+                           noisy = noisy)
+      # Set txs to pseudo random status
+      xq.setItemStatusFromInfo
+
       let
         delLe = effGasTips[0] + ((effGasTips[^1] - effGasTips[0]) div 3)
-        delMax = xq.txDB.byGasTip.le(delLe)
-                                 .ge(AccountNonce.low)
-                                 .first.value.effectiveGasTip
+        delMax = xq.txDB.byGasTip
+                   .le(delLe).ge(AccountNonce.low).first.value.effGasTip
 
       test &"Load/delete with gas price less equal {delMax.toKMG}, " &
           &"out of price range {effGasTips[0].toKMG}..{effGasTips[^1].toKMG}":
@@ -471,13 +427,18 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
 
     block:
       var
-        xq = txList.toTxPool(baseFee, noisy)
         count = 0
+        xq = bcDB.toTxPool(itList = txList,
+                           baseFee = baseFee,
+                           maxRejects = txList.len,
+                           noisy = noisy)
+      # Set txs to pseudo random status
+      xq.setItemStatusFromInfo
+
       let
         delGe = effGasTips[^1] - ((effGasTips[^1] - effGasTips[0]) div 3)
-        delMin = xq.txDB.byGasTip.ge(delGe)
-                                 .ge(AccountNonce.low)
-                                 .first.value.effectiveGasTip
+        delMin = xq.txDB.byGasTip
+                   .ge(delGe).ge(AccountNonce.low).first.value.effGasTip
 
       test &"Load/delete with gas price greater equal {delMin.toKMG}, " &
           &"out of price range {effGasTips[0].toKMG}..{effGasTips[^1].toKMG}":
@@ -495,26 +456,30 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
 
     block:
       let
-        newBaseFee = if baseFee == TxNoBaseFee: 42.GasInt else: baseFee + 7
+        newBaseFee = if baseFee == 0: 42 else: baseFee + 7
 
       test &"Adjust baseFee to {newBaseFee} and back":
         var
-          xq = txList.toTxPool(baseFee, noisy)
+          xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
           baseNonces: seq[AccountNonce] # second level sequence
+
+        # Set txs to pseudo random status
+        xq.setItemStatusFromInfo
 
         # register sequence of nonces
         for nonceList in xq.txDB.byGasTip.incNonceList:
           for itemList in nonceList.incItemList:
             baseNonces.add itemList.first.value.tx.nonce
 
-        xq.setBaseFee(newBaseFee)
+        xq.setBaseFee(newBaseFee.uint64)
+        check xq.txDB.verify.isOK
 
         block:
           var
             seen: seq[Hash256]
             tips: seq[GasInt]
           for nonceList in xq.txDB.byGasTip.incNonceList:
-            tips.add nonceList.ge(AccountNonce.low).first.value.effectiveGasTip
+            tips.add nonceList.ge(AccountNonce.low).first.value.effGasTip
             for itemList in nonceList.incItemList:
               for item in itemList.walkItems:
                 seen.add item.itemID
@@ -524,7 +489,8 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           check seen != txList.mapIt(it.itemID) # order should have changed
 
         # change back
-        xq.setBaseFee(baseFee)
+        xq.setBaseFee(baseFee.uint64)
+        check xq.txDB.verify.isOK
 
         block:
           var
@@ -532,7 +498,7 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
             tips: seq[GasInt]
             nces: seq[AccountNonce]
           for nonceList in xq.txDB.byGasTip.incNonceList:
-            tips.add nonceList.ge(AccountNonce.low).first.value.effectiveGasTip
+            tips.add nonceList.ge(AccountNonce.low).first.value.effGasTip
             for itemList in nonceList.incItemList:
               nces.add itemList.first.value.tx.nonce
               for item in itemList.walkItems:
@@ -545,9 +511,9 @@ proc runTxBaseTests(noisy = true; baseFee: GasInt) =
           #       the same
 
 
-proc runTxPoolTests(noisy = true; baseFee: GasInt) =
+proc runTxPoolTests(noisy = true; baseFee = 0) =
   let
-    baseInfo = if baseFee != TxNoBaseFee: &" with baseFee={baseFee}" else: ""
+    baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
 
   suite &"TxPool: Play with pool functions and primitives{baseInfo}":
 
@@ -555,9 +521,15 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
       var
         gap: Time
         nItems: int
-        xq = txList.toTxPool(baseFee, noisy, gap, nItems,
-                             remoteItemsPC = 35, # arbitrary
-                             delayMSecs = 100)   # large enough to be found
+        xq = bcDB.toTxPool(timeGap = gap,
+                           nRemoteGapItems = nItems,
+                           itList = txList,
+                           baseFee = baseFee,
+                           remoteItemsPC = 35, # arbitrary
+                           delayMSecs = 100,   # large enough to process
+                           noisy = noisy)
+      # Set txs to pseudo random status
+      xq.setItemStatusFromInfo
 
       test &"Delete about {nItems} expired non-local transactions "&
           &"out of {xq.count.remote}":
@@ -583,7 +555,7 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
 
     block:
       var
-        xq = txList.toTxPool(baseFee, noisy)
+        xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
         maxAddr: EthAddress
         nAddrItems = 0
 
@@ -593,6 +565,9 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
         nAddrQueuedItems = 0
         nAddrPendingItems = 0
         nAddrStagedItems = 0
+
+      # Set txs to pseudo random status
+      xq.setItemStatusFromInfo
 
       let
         nLocalAddrs = toSeq(xq.localAccounts).len
@@ -770,41 +745,74 @@ proc runTxPoolTests(noisy = true; baseFee: GasInt) =
           check xq.txDB.verify.isOK
 
 
-proc runTxPackerTests(noisy = true; baseFee: GasInt) =
+proc runTxPackerTests(noisy = true; baseFee = 0) =
   let
-    baseInfo = if baseFee != TxNoBaseFee: &" with baseFee={baseFee}" else: ""
+    baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
 
   suite &"TxPool: Block packer tests{baseInfo}":
 
+    var ntBaseFee = 0
+
+    test &"Calculate some non-trivial base fee (different from {baseFee})":
+      var
+        xq = bcDB.toTxPool(txList, 0, noisy = noisy)
+        lowKey = xq.txDB.byGasTip.ge(GasInt.low).value.key
+        highKey = xq.txDB.byGasTip.le(GasInt.high).value.key
+        keyRange = (highKey - lowKey).int64
+
+      check 5 < keyRange
+
+      if keyRange < 1000:
+        ntBaseFee = lowKey.int + keyRange.int div 5
+      elif keyRange < 10000:
+        ntBaseFee = lowKey.int + 1000
+      else:
+        ntBaseFee = lowKey.int + 1500
+
     block:
       var
-        xq = txList.toTxPool(baseFee, noisy)
+        xq = bcDB.toTxPool(itList = txList.mapIt(it.toRemote),
+                           baseFee = ntBaseFee,
+                           noisy = noisy)
+      let
+        queued = xq.count.queued
+        pending = xq.count.pending
 
-      test &"Load \"remote\" transactions":
-        discard
+      test &"Load \"remote\" txs with baseFee={ntBaseFee}, "&
+          &"queued/pending={queued}/{pending}":
+
+        check 0 < queued
+        check 0 < pending
+        check xq.count.remote == txList.len
+        check xq.count.rejected == 0
 
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
 
 proc txPoolMain*(noisy = defined(debug)) =
-  let baseFee = 42.GasInt
+  const baseFee = 42
   noisy.runTxLoader(baseFee)
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
+  noisy.runTxPackerTests(baseFee)
 
 when isMainModule:
-  let
-    baseFee = 42.GasInt #  TxNoBaseFee
-    captFile0 = "goerli504192.txt.gz"
-    captFile1 = "nimbus-eth1/tests" / mainnetCapture
-    captFile2 = "mainnet843841.txt.gz"
+  const
+    noisy = defined(debug)
+    baseFee = 42
+    capts0:CaptureSpecs = (goerliCapture.network,  ".", goerliCapture.file)
+    capts1:CaptureSpecs = (mainnetCapture.network, ".", mainnetCapture.file)
+    capts2:CaptureSpecs = (GoerliNet,        "/status", "goerli504192.txt.gz")
+    capts3:CaptureSpecs = (MainNet,          "/status", "mainnet843841.txt.gz")
 
-  let noisy = defined(debug)
+  true.runTxLoader(baseFee, capture = capts3, numBlocks = 30000, numTxs = 1500)
 
-  noisy.runTxLoader(
-    baseFee,
-    dir = "/status", captureFile = captFile1, numTransactions = 1500)
+  #let
+  #  head = bcDB.getCanonicalHead
+  #  parent = bcDB.getBlockHeader(head.parentHash)
+  #  granny = bcDB.getBlockHeader(parent.parentHash)
+  #echo ">>> ", head.gasLimit, " ", parent.gasLimit, " ", granny.gasLimit
 
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)

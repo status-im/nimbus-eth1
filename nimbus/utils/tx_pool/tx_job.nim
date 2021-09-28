@@ -32,14 +32,15 @@ type
     txJobAbort
     txJobAddTxs
     txJobApplyByLocal
+    txJobApplyByRejected
     txJobApplyByStatus
     txJobEvictionInactive
-    txJobFetchRejects
     txJobFlushRejects
     txJobGetAccounts
     txJobGetBaseFee
     txJobGetGasPrice
-    txJobGetItem
+    txJobItemGet,
+    txJobItemSetStatus,
     txJobMoveRemoteToLocals
     txJobRejectItem,
     txJobSetBaseFee
@@ -47,6 +48,7 @@ type
     txJobSetHead
     txJobSetMaxRejects
     txJobStatsCount
+    txJobUpdatePending
 
   TxJobItemApply* = ##\
     ## Generic item function used as apply function. If the function
@@ -54,22 +56,19 @@ type
     proc(item: TxItemRef): bool {.gcsafe,raises: [Defect].}
 
 
-  TxJobFetchRejectsReply* =
-    proc(rejects: seq[TxItemRef]; remaining: int) {.gcsafe,raises: [].}
-
   TxJobFlushRejectsReply* =
     proc(deleted: int; remaining: int) {.gcsafe,raises: [].}
 
   TxJobGetAccountsReply* =
     proc(accounts: seq[EthAddress]) {.gcsafe,raises: [].}
 
-  TxJobGetItemReply* = ##\
+  TxJobItemGetReply* = ##\
     ## Generic item function for retrieving `item` values.
     proc(item: TxItemRef) {.gcsafe,raises: [].}
 
   TxJobGetPriceReply* = ##\
-    ## Generic function used for retrieving `GasInt` values.
-    proc(price: GasInt) {.gcsafe,raises: [].}
+    ## Generic function used for retrieving non-negative price values.
+    proc(price: uint64) {.gcsafe,raises: [].}
 
   TxJobMoveRemoteToLocalsReply* =
     proc(moved: int) {.gcsafe,raises: [].}
@@ -107,10 +106,9 @@ type
       ## :FIXME:
       ##   Transactions need to be tested for validity.
       addTxsArgs*: tuple[
-        txs:    seq[Transaction],
-        local:  bool,
-        status: TxItemStatus,
-        info:   string]
+        txs:   seq[Transaction],
+        local: bool,
+        info:  string]
 
     of txJobApplyByLocal: ##\
       ## Apply argument function to all `local` or `remote` items.
@@ -123,7 +121,7 @@ type
         apply: TxJobItemApply]
 
     of txJobApplyByStatus: ##\
-      ## Apply argument function to all `ststud` items.
+      ## Apply argument function to all `status` items.
       ##
       ## :Note:
       ##    It is OK to request the current item to be moved to the waste
@@ -132,20 +130,14 @@ type
         status: TxItemStatus,
         apply:  TxJobItemApply]
 
+    of txJobApplyByRejected: ##\
+      ## Apply argument function to all rejecrd items.
+      applyByRejectedArgs*: tuple[
+        apply:  TxJobItemApply]
+
     of txJobEvictionInactive: ##\
       ## Move transactions older than `xp.lifeTime` to the waste basket.
       discard
-
-    of txJobFetchRejects: ##\
-      ## Retrieves and deletes at most the `maxItems` oldest items from there
-      ## the waste basket (a waste basket item is considered older if it was
-      ## moved earlier.) The request returns the number of deleted and the
-      ## number of items still remaining in the waste basket.
-      ##
-      ## Out-of-band job (runs with priority)
-      fetchRejectsArgs*: tuple[
-        maxItems: int,
-        reply: TxJobFetchRejectsReply]
 
     of txJobFlushRejects: ##\
       ## Deletes at most the `maxItems` oldest items from the waste basket
@@ -181,13 +173,19 @@ type
       getGasPriceArgs*: tuple[
         reply: TxJobGetPriceReply]
 
-    of txJobGetItem: ##\
+    of txJobItemGet: ##\
       ## Returns a transaction if it is contained in the pool.
       ##
       ## Out-of-band job (runs with priority)
-      getItemArgs*: tuple[
+      itemGetArgs*: tuple[
         itemId: Hash256,
-        reply:  TxJobGetItemReply]
+        reply:  TxJobItemGetReply]
+
+    of txJobItemSetStatus: ##\
+      ## Set/update status for particular item.
+      itemSetStatusArgs*: tuple[
+        item:   TxItemRef,
+        status: TxItemStatus]
 
     of txJobMoveRemoteToLocals: ##\
       ## For given account, remote transactions are migrated to local
@@ -206,15 +204,14 @@ type
     of txJobSetBaseFee: ##\
       ## New base fee (implies database reorg).
       setBaseFeeArgs*: tuple[
-        disable: bool,
-        price:   GasInt]
+        price: uint64]
 
     of txJobSetGasPrice: ##\
       ## Set the minimum price required by the transaction pool for a new
       ## transaction. Increasing it will drop all transactions below this
       ## threshold.
       setGasPriceArgs*: tuple[
-        price: GasInt]
+        price: uint64]
 
     of txJobSetHead: ##\
       ## :FIXME:
@@ -239,6 +236,12 @@ type
       statsCountArgs*: tuple[
         reply: TxJobStatsCountReply]
 
+    of txJobUpdatePending: ##\
+      ## Re-calculate Queued and pending items. If the `force` flag is set,
+      ## re-calculation is done even though the chance flag was unset.
+      updatePendingArgs*: tuple[
+        force: bool]
+
 
   TxJobPair* = object
     id*: TxJobID
@@ -254,13 +257,12 @@ const
   txJobPriorityKind*: set[TxJobKind] = ##\
     ## Prioritised jobs, either small or important ones (as re-org)
     {txJobAbort,
-      txJobFetchRejects,
       txJobFlushRejects,
+      txJobItemGet,
       txJobGetAccounts,
       txJobGetBaseFee,
       txJobGetGasPrice,
       txJobSetMaxRejects,
-      txJobGetItem,
       txJobRejectItem,
       txJobStatsCount}
 

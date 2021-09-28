@@ -12,34 +12,78 @@
 ## ================
 ##
 ## TODO:
-## * Support `local` transactions (currently unsupported.) Foe now, all
-##   transactions are considered from `remote` accounts.
-## * Currently quick test only when queuing transactions. This must be
-##   extended to full verification.
-## * Redefining per account transactions with the same `nonce` is not
-##   supported yet. The old transaction needs to be replaced by the new
-##   one (and moved to the waste basket.)
+## -----
+## * Support `local` transactions (currently unsupported.) Foe now, all txs
+##   are considered from `remote` accounts.
+## * Redefining per account transactions with the same `nonce` is currently
+##   unsupported. The old tx needs to be replaced by the new one while the old
+##   one is moved to the waste basket.
 ##
-## Adding transactions (1):
-## ------------------------
-## * queue txs after quick test, or move to waste basket
-## * queued transactions are strored with meta-data and marked `txItemQueued`
 ##
-## Processing transactions (2):
-## ---------------------------
-## * txs are taken from the queue
-## * checked against minimum fee and other parameters (if any)
-## * transactions are marked `txItemPending`
+## Transaction state diagram:
+## --------------------------
+## ::
+##  .                .                         .
+##  .   <Job queue>  .   <Accounting system>   .   <Tip/waste disposal>
+##  .                .                         .
+##  .                .         +-----------+   .
+##  .     +------------------> | queued(1) | -------------+
+##  .     |          .         +-----------+   .          |
+##  .     |          .           |   ^   ^     .          |
+##  .     |          .           V   |   |     .          |
+##  .     |          .   +------------+  |     .          |
+##  .  enter(0) -------> | pending(2) |  |     .          |
+##  .     |          .   +------------+  |     .          |
+##  .     |          .     |     |       |     .          |
+##  .     |          .     |     V       |     .          |
+##  .     |          .     |   +-----------+   .          |
+##  .     |          .     |   | staged(3) | -----------+ |
+##  .     |          .     |   +-----------+   .        | |
+##  .     |          .     |                   .        v v
+##  .     |          .     |                   .    +----------------+
+##  .     |          .     +----------------------> |  rejected(4)   |
+##  .     +---------------------------------------> | (waste basket) |
+##  .                .                         .    +----------------+
 ##
-## Packing transactions (3):
-## -------------------------
 ##
+## Job Queue
+## ---------
+##
+## * Transactions enteringg the system (0):
+##    + txs are added to the job queue an processed sequentially
+##    + when processed, they are moved
+##
+## Accounting system
+## -----------------
+##
+## * Queued transactions (1):
+##   + queue txs after testing all right but not ready to fit into a block
+##   + queued transactions are strored with meta-data and marked `txItemQueued`
+##
+## * Pending transactions (2):
+##   + vetted txs that are ready to go into a block
+##   + accepted against minimum fee check and other parameters (if any)
+##   + transactions are marked `txItemPending`
+##   + re-org or other events may send them back to queued
+##
+## * Staged transactions (3):
+##   + all transactions to be placed and inclusded in block
+##   + transactions are marked `txItemStaged`
+##   + re-org or other events may send txs back to queued(1) state
+##
+## Tip
+## ---
+##
+## * Rejected transactions (4):
+##   + terminal state (waste basket), auto deleted (fifo with max size)
+##   + accessible while not pushed out (by newer rejections) from the fifo
+##   + transactions are marked with non-zero `reason` code
 ##
 
 import
   std/[times],
   ../db/db_chain,
-  ./tx_pool/[tx_info, tx_item, tx_job, tx_tabs, tx_tasks],
+  ./tx_pool/[tx_dbhead, tx_info, tx_item, tx_job, tx_tabs, tx_tasks],
   chronicles,
   eth/[common, keys],
   stew/results
@@ -56,10 +100,9 @@ export
   TxItemRef,
   TxItemStatus,
   TxJobDataRef,
-  TxJobFetchRejectsReply,
   TxJobFlushRejectsReply,
   TxJobGetAccountsReply,
-  TxJobGetItemReply,
+  TxJobItemGetReply,
   TxJobGetPriceReply,
   TxJobID,
   TxJobItemApply,
@@ -70,7 +113,7 @@ export
   TxTabsStatsCount,
   results,
   tx_info,
-  tx_item.effectiveGasTip,
+  tx_item.effGasTip,
   tx_item.gasTipCap,
   tx_item.itemID,
   tx_item.info,
@@ -81,13 +124,9 @@ export
   tx_item.tx
 
 const
-  TxNoBaseFee* = ##\
-    ## Initialising `baseFee` with this value will disable it in the
-    ## priced list(s).
-    GasInt.low
-
   txPoolLifeTime = initDuration(hours = 3)
   txPriceLimit = 1
+  txGasTarget = 15_000_000
 
   # Journal:   "transactions.rlp",
   # Rejournal: time.Hour,
@@ -103,16 +142,19 @@ const
 type
   TxPool* = object of RootObj ##\
     ## Transaction pool descriptor
-    db: BaseChainDB      ## block chain
+    dbHead: TxDbHead     ## block chain state
     startDate: Time      ## Start date (read-only)
-    gasPrice: GasInt     ## Gas price enforced by the pool
+
+    gasPrice: uint64     ## Gas price enforced by the pool
+    gasTarget: GasInt    ## Packing target
     lifeTime*: Duration  ## Maximum amount of time non-executable txs are queued
 
     byJob: TxJob         ## Job batch list
     txDB: TxTabsRef      ## Transaction lists & tables
 
-    asyncLock: AsyncLock ## Protects the commitLoop field
-    commitLoop: bool     ## set while commit loop is running
+    asyncLock: AsyncLock ## Protects the `commitLoop` descriptor
+    commitLoop: bool     ## Sentinel, set while commit loop is running
+    dirtyPending: bool   ## Pending queue needs update
 
     # locals: seq[EthAddress] ## Addresses treated as local by default
     # noLocals: bool          ## May disable handling of locals
@@ -171,15 +213,18 @@ proc processJobs(xp: var TxPool): int
       break
 
     of txJobAddTxs:
-      let args = task.data.addTxsArgs
-      xp.txDB.addTxs(args.txs, args.local, args.status, args.info)
+      # Add txs => queued(1), pending(2), or rejected(4) (see somment
+      # on to of page for details.
+      var args = task.data.addTxsArgs
+      xp.txDB.addTxs(xp.dbHead, xp.gasTarget, args.txs, args.local, args.info)
 
-    # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash common.Hash,..
     of txJobApplyByLocal:
+      # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash ..
       let args = task.data.applyByLocalArgs
       for item in xp.txDB.byItemID.eq(args.local).walkItems:
         if not args.apply(item):
           break
+      xp.dirtyPending = true
 
     of txJobApplyByStatus:
       let args = task.data.applyByStatusArgs
@@ -187,15 +232,16 @@ proc processJobs(xp: var TxPool): int
         for item in itemList.walkItems:
           if not args.apply(item):
             break
+      xp.dirtyPending = true
+
+    of txJobApplyByRejected: ##\
+      let args = task.data.applyByRejectedArgs
+      for item in xp.txDB.byRejects.walkItems:
+        if not args.apply(item):
+          break
 
     of txJobEvictionInactive:
       xp.txDB.deleteExpiredItems(xp.lifeTime)
-
-    of txJobFetchRejects:
-      let
-        args = task.data.fetchRejectsArgs
-        data = xp.txDB.fetchRejects(args.maxItems)
-      args.reply(rejects = data[0], remaining = data[1])
 
     of txJobFlushRejects:
       let
@@ -211,37 +257,43 @@ proc processJobs(xp: var TxPool): int
       let args = task.data.getGasPriceArgs
       args.reply(price = xp.gasPrice)
 
-    of txJobGetItem:
+    of txJobGetAccounts:
+      let args = task.data.getAccountsArgs
+      args.reply(accounts = xp.txDB.collectAccounts(args.local))
+
+    of txJobItemGet:
       let
-        args = task.data.getItemArgs
+        args = task.data.itemGetArgs
         rc = xp.txDB.byItemID.eq(args.itemID)
       if rc.isOK:
         args.reply(item = rc.value)
       else:
         args.reply(item = nil)
 
-    of txJobGetAccounts:
-      let args = task.data.getAccountsArgs
-      args.reply(accounts = xp.txDB.collectAccounts(args.local))
+    of txJobItemSetStatus:
+      let args = task.data.itemSetStatusArgs
+      discard xp.txDB.reassign(args.item, args.status)
+      xp.dirtyPending = true
 
     of txJobMoveRemoteToLocals:
       let args = task.data.moveRemoteToLocalsArgs
       args.reply(moved = xp.txDB.reassignRemoteToLocals(args.account))
+      xp.dirtyPending = true
 
     of txJobRejectItem:
       let args = task.data.rejectItemArgs
       discard xp.txDB.reject(args.item, args.reason)
-      
+      xp.dirtyPending = true
+
     of txJobSetBaseFee:
       let args = task.data.setBaseFeeArgs
-      if args.disable:
-        xp.txDB.baseFee = TxNoBaseFee
-      else:
-        xp.txDB.baseFee = args.price
+      xp.txDB.baseFee = args.price
+      xp.dirtyPending = true
 
     of txJobSetGasPrice:
       let args = task.data.setGasPriceArgs
       xp.txDB.updateGasPrice(curPrice = xp.gasPrice, newPrice = args.price)
+      xp.dirtyPending = true
 
     of txJobSetHead: # FIXME: tbd
       discard
@@ -253,6 +305,12 @@ proc processJobs(xp: var TxPool): int
     of txJobStatsCount:
       let args = task.data.statsCountArgs
       args.reply(status = xp.txDB.statsCount)
+
+    of txJobUpdatePending:
+      let args = task.data.updatePendingArgs
+      if xp.dirtyPending or args.force:
+        xp.txDB.rebuildPendingQueue
+        xp.dirtyPending = false
 
     # End case
     result.inc
@@ -293,17 +351,24 @@ proc runJobSerialiser(xp: var TxPool): Result[int,void]
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: var TxPool; db: BaseChainDB; baseFee = TxNoBaseFee) =
+proc init*(xp: var TxPool; db: BaseChainDB)
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor, returns new tx-pool descriptor.
-  xp.txDB = init(type TxTabsRef, baseFee)
+  xp.dbHead.init(db)
+  xp.txDB = init(type TxTabsRef)
+
   xp.startDate = utcNow()
   xp.gasPrice = txPriceLimit
+  xp.gasTarget = txGasTarget
   xp.lifeTime = txPoolLifeTime
+
   xp.asyncLock = newAsyncLock()
 
-proc init*(T: type TxPool; db: BaseChainDB;  baseFee = TxNoBaseFee): T =
+
+proc init*(T: type TxPool; db: BaseChainDB): T
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Ditto
-  result.init(db, baseFee)
+  result.init(db)
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
