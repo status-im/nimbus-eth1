@@ -62,6 +62,7 @@ OK: 1/2 Fail: 0/2 Skip: 1/2
 + eip2315NotRemoved.json                                          OK
 + invalidAddr.json                                                OK
 + invalidDiffPlaces.json                                          OK
++ measureGas.json                                                 OK
 + opc0CDiffPlaces.json                                            OK
 + opc0DDiffPlaces.json                                            OK
 + opc0EDiffPlaces.json                                            OK
@@ -176,9 +177,10 @@ OK: 1/2 Fail: 0/2 Skip: 1/2
 + opcFBDiffPlaces.json                                            OK
 + opcFCDiffPlaces.json                                            OK
 + opcFEDiffPlaces.json                                            OK
++ operationDiffGas.json                                           OK
 + undefinedOpcodeFirstByte.json                                   OK
 ```
-OK: 119/119 Fail: 0/119 Skip: 0/119
+OK: 121/121 Fail: 0/121 Skip: 0/121
 ## stBugs
 ```diff
 + evmBytecode.json                                                OK
@@ -550,8 +552,9 @@ OK: 47/48 Fail: 0/48 Skip: 1/48
 + TransactionCollisionToEmpty.json                                OK
 + TransactionCollisionToEmptyButCode.json                         OK
 + TransactionCollisionToEmptyButNonce.json                        OK
++ createFailResult.json                                           OK
 ```
-OK: 35/35 Fail: 0/35 Skip: 0/35
+OK: 36/36 Fail: 0/36 Skip: 0/36
 ## stDelegatecallTestHomestead
 ```diff
   Call1024BalanceTooLow.json                                      Skip
@@ -656,9 +659,11 @@ OK: 40/40 Fail: 0/40 Skip: 0/40
 + outOfFunds.json                                                 OK
 + outOfFundsOldTypes.json                                         OK
 + tipTooHigh.json                                                 OK
++ transactionIntinsicBug.json                                     OK
 + typeTwoBerlin.json                                              OK
++ valCausesOOF.json                                               OK
 ```
-OK: 10/10 Fail: 0/10 Skip: 0/10
+OK: 12/12 Fail: 0/12 Skip: 0/12
 ## stEIP158Specific
 ```diff
 + CALL_OneVCallSuicide.json                                       OK
@@ -921,6 +926,7 @@ OK: 27/38 Fail: 0/38 Skip: 11/38
 + mem64kb_singleByte-32.json                                      OK
 + mem64kb_singleByte-33.json                                      OK
 + mem64kb_singleByte.json                                         OK
++ memCopySelf.json                                                OK
 + memReturn.json                                                  OK
 + mload16bitBound.json                                            OK
 + mload8bitBound.json                                             OK
@@ -939,7 +945,7 @@ OK: 27/38 Fail: 0/38 Skip: 11/38
 + stackLimitPush32_1024.json                                      OK
 + stackLimitPush32_1025.json                                      OK
 ```
-OK: 70/70 Fail: 0/70 Skip: 0/70
+OK: 71/71 Fail: 0/71 Skip: 0/71
 ## stNonZeroCallsTest
 ```diff
 + NonZeroValue_CALL.json                                          OK
@@ -974,102 +980,11 @@ OK: 24/24 Fail: 0/24 Skip: 0/24
 + identity_to_bigger.json                                         OK
 + identity_to_smaller.json                                        OK
 + modexp.json                                                     OK
-+ modexp_0_0_0_1000000.json                                       OK
-+ modexp_0_0_0_155000.json                                        OK
-+ modexp_0_1_0_1000000.json                                       OK
-+ modexp_0_1_0_155000.json                                        OK
-+ modexp_0_1_0_20500.json                                         OK
-+ modexp_0_1_0_22000.json                                         OK
-+ modexp_0_1_0_25000.json                                         OK
-+ modexp_0_1_0_35000.json                                         OK
-+ modexp_0_3_100_1000000.json                                     OK
-+ modexp_0_3_100_155000.json                                      OK
-+ modexp_0_3_100_20500.json                                       OK
-+ modexp_0_3_100_22000.json                                       OK
-+ modexp_0_3_100_25000.json                                       OK
-+ modexp_0_3_100_35000.json                                       OK
-+ modexp_1_0_0_1000000.json                                       OK
-+ modexp_1_0_0_155000.json                                        OK
-+ modexp_1_0_0_20500.json                                         OK
-+ modexp_1_0_0_22000.json                                         OK
-+ modexp_1_0_0_25000.json                                         OK
-+ modexp_1_0_0_35000.json                                         OK
-+ modexp_1_0_1_1000000.json                                       OK
-+ modexp_1_0_1_155000.json                                        OK
-+ modexp_1_0_1_20500.json                                         OK
-+ modexp_1_0_1_22000.json                                         OK
-+ modexp_1_0_1_25000.json                                         OK
-+ modexp_1_0_1_35000.json                                         OK
-+ modexp_1_1_1_1000000.json                                       OK
-+ modexp_1_1_1_155000.json                                        OK
-+ modexp_1_1_1_20500.json                                         OK
-+ modexp_1_1_1_22000.json                                         OK
-+ modexp_1_1_1_25000.json                                         OK
-+ modexp_1_1_1_35000.json                                         OK
-+ modexp_37120_22411_22000.json                                   OK
-+ modexp_37120_37111_0_1000000.json                               OK
-+ modexp_37120_37111_0_155000.json                                OK
-+ modexp_37120_37111_0_20500.json                                 OK
-+ modexp_37120_37111_0_22000.json                                 OK
-+ modexp_37120_37111_0_25000.json                                 OK
-+ modexp_37120_37111_0_35000.json                                 OK
-+ modexp_37120_37111_1_1000000.json                               OK
-+ modexp_37120_37111_1_155000.json                                OK
-+ modexp_37120_37111_1_20500.json                                 OK
-+ modexp_37120_37111_1_25000.json                                 OK
-+ modexp_37120_37111_1_35000.json                                 OK
-+ modexp_37120_37111_37111_1000000.json                           OK
-+ modexp_37120_37111_37111_155000.json                            OK
-+ modexp_37120_37111_37111_20500.json                             OK
-+ modexp_37120_37111_37111_22000.json                             OK
-+ modexp_37120_37111_37111_25000.json                             OK
-+ modexp_37120_37111_37111_35000.json                             OK
-+ modexp_37120_37111_97_1000000.json                              OK
-+ modexp_37120_37111_97_155000.json                               OK
-+ modexp_37120_37111_97_20500.json                                OK
-+ modexp_37120_37111_97_22000.json                                OK
-+ modexp_37120_37111_97_25000.json                                OK
-+ modexp_37120_37111_97_35000.json                                OK
-+ modexp_39936_1_55201_1000000.json                               OK
-+ modexp_39936_1_55201_155000.json                                OK
-+ modexp_39936_1_55201_20500.json                                 OK
-+ modexp_39936_1_55201_22000.json                                 OK
-+ modexp_39936_1_55201_25000.json                                 OK
-+ modexp_39936_1_55201_35000.json                                 OK
-+ modexp_3_09984_39936_1000000.json                               OK
-+ modexp_3_09984_39936_155000.json                                OK
-+ modexp_3_09984_39936_22000.json                                 OK
-+ modexp_3_09984_39936_25000.json                                 OK
-+ modexp_3_09984_39936_35000.json                                 OK
-+ modexp_3_28948_11579_20500.json                                 OK
-+ modexp_3_5_100_1000000.json                                     OK
-+ modexp_3_5_100_155000.json                                      OK
-+ modexp_3_5_100_20500.json                                       OK
-+ modexp_3_5_100_22000.json                                       OK
-+ modexp_3_5_100_25000.json                                       OK
-+ modexp_3_5_100_35000.json                                       OK
-+ modexp_49_2401_2401_1000000.json                                OK
-+ modexp_49_2401_2401_155000.json                                 OK
-+ modexp_49_2401_2401_20500.json                                  OK
-+ modexp_49_2401_2401_22000.json                                  OK
-+ modexp_49_2401_2401_25000.json                                  OK
-+ modexp_49_2401_2401_35000.json                                  OK
-+ modexp_55190_55190_42965_1000000.json                           OK
-+ modexp_55190_55190_42965_155000.json                            OK
-+ modexp_55190_55190_42965_20500.json                             OK
-+ modexp_55190_55190_42965_22000.json                             OK
-+ modexp_55190_55190_42965_25000.json                             OK
-+ modexp_55190_55190_42965_35000.json                             OK
-+ modexp_9_37111_37111_1000000.json                               OK
-+ modexp_9_37111_37111_155000.json                                OK
-+ modexp_9_37111_37111_20500.json                                 OK
-+ modexp_9_37111_37111_22000.json                                 OK
-+ modexp_9_37111_37111_35000.json                                 OK
-+ modexp_9_3711_37111_25000.json                                  OK
++ modexpTests.json                                                OK
 + precompsEIP2929.json                                            OK
 + sec80.json                                                      OK
 ```
-OK: 98/98 Fail: 0/98 Skip: 0/98
+OK: 7/7 Fail: 0/7 Skip: 0/7
 ## stPreCompiledContracts2
 ```diff
 + CALLBlake2f.json                                                OK
@@ -1874,6 +1789,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + InitCollision.json                                              OK
 + InitCollisionNonZeroNonce.json                                  OK
 + SstoreCallToSelfSubRefundBelowZero.json                         OK
++ sstoreGas.json                                                  OK
 + sstore_0to0.json                                                OK
 + sstore_0to0to0.json                                             OK
 + sstore_0to0toX.json                                             OK
@@ -1899,7 +1815,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + sstore_changeFromExternalCallInInitCode.json                    OK
 + sstore_gasLeft.json                                             OK
 ```
-OK: 27/27 Fail: 0/27 Skip: 0/27
+OK: 28/28 Fail: 0/28 Skip: 0/28
 ## stSelfBalance
 ```diff
 + diffPlaces.json                                                 OK
@@ -2879,11 +2795,11 @@ OK: 14/14 Fail: 0/14 Skip: 0/14
 OK: 5/5 Fail: 0/5 Skip: 0/5
 ## vmPerformance
 ```diff
-+ loopExp.json                                                    OK
-+ loopMul.json                                                    OK
+  loopExp.json                                                    Skip
+  loopMul.json                                                    Skip
 + performanceTester.json                                          OK
 ```
-OK: 3/3 Fail: 0/3 Skip: 0/3
+OK: 1/3 Fail: 0/3 Skip: 2/3
 ## vmTests
 ```diff
 + blockInfo.json                                                  OK
@@ -2901,4 +2817,4 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 OK: 11/11 Fail: 0/11 Skip: 0/11
 
 ---TOTAL---
-OK: 2555/2655 Fail: 0/2655 Skip: 100/2655
+OK: 2469/2571 Fail: 0/2571 Skip: 102/2571
