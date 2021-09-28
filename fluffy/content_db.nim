@@ -14,6 +14,8 @@ import
   stint,
   ./network/state/state_content
 
+export kvstore_sqlite3
+
 # This version of content db is the most basic, simple solution where data is
 # stored no matter what content type or content network in the same kvstore with
 # the content id as key. The content id is derived from the content key, and the
@@ -45,10 +47,6 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
       SqStoreRef.init(path, "fluffy").expectDb()
 
   ContentDB(kv: kvStore db.openKvStore().expectDb())
-
-proc huh(path: string) =
-  let db = SqStoreRef.init(path, "fluffy").expectDb()
-  discard ContentDB(kv: kvStore db.openKvStore().expectDb())
 
 proc get*(db: ContentDB, key: openArray[byte]): Option[seq[byte]] =
   var res: Option[seq[byte]]
