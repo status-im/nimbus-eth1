@@ -46,6 +46,10 @@ proc new*(T: type ContentDB, path: string, inMemory = false): ContentDB =
 
   ContentDB(kv: kvStore db.openKvStore().expectDb())
 
+proc huh(path: string) =
+  let db = SqStoreRef.init(path, "fluffy").expectDb()
+  discard ContentDB(kv: kvStore db.openKvStore().expectDb())
+
 proc get*(db: ContentDB, key: openArray[byte]): Option[seq[byte]] =
   var res: Option[seq[byte]]
   proc onData(data: openArray[byte]) = res = some(@data)
