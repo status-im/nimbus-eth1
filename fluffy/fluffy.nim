@@ -8,13 +8,16 @@
 {.push raises: [Defect].}
 
 import
+  std/os,
   confutils, confutils/std/net, chronicles, chronicles/topics_registry,
   chronos, metrics, metrics/chronos_httpserver, json_rpc/clients/httpclient,
-  json_rpc/rpcproxy,
+  json_rpc/rpcproxy, stew/byteutils,
   eth/keys, eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
+  eth/p2p/discoveryv5/node,
   ./conf, ./rpc/[eth_api, bridge_client, discovery_api],
-  ./network/state/[state_network, state_content]
+  ./network/state/[state_network, state_content],
+  ./content_db
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
   try:
@@ -53,7 +56,14 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   d.open()
 
-  let stateNetwork = StateNetwork.new(d, newEmptyInMemoryStorage(),
+  # Store the database at contentdb prefixed with the first 8 chars of node id.
+  # This is done because the content in the db is dependant on the `NodeId` and
+  # the selected `Radius`.
+  let db =
+    ContentDB.new(config.dataDir / "db" / "contentdb_" &
+      d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex())
+
+  let stateNetwork = StateNetwork.new(d, db,
     bootstrapRecords = config.portalBootnodes)
 
   if config.metricsEnabled:

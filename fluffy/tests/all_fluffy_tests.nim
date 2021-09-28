@@ -12,5 +12,6 @@ import
   ./test_portal_wire_protocol,
   ./test_custom_distance,
   ./test_state_network,
+  ./test_content_db,
   ./test_discovery_rpc,
   ./test_bridge_parser
