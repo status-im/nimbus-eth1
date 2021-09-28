@@ -14,6 +14,19 @@ import
   stint,
   ./network/state/state_content
 
+# This version of content db is the most basic, simple solution where data is
+# stored no matter what content type or content network in the same kvstore with
+# the content id as key. The content id is derived from the content key, and the
+# deriviation is different depending on the content type. As we use content id,
+# this part is currently out of the scope / API of the ContentDB.
+# In the future it is likely that that either:
+# 1. More kvstores are added per network, and thus depending on the network a
+# different kvstore needs to be selected.
+# 2. Or more kvstores are added per network and per content type, and thus
+# content key fields are required to access the data.
+# 3. Or databases are created per network (and kvstores pre content type) and
+# thus depending on the network the right db needs to be selected.
+
 type
   ContentDB* = ref object
     kv: KvStoreRef
@@ -49,10 +62,6 @@ proc contains*(db: ContentDB, key: openArray[byte]): bool =
 
 proc del*(db: ContentDB, key: openArray[byte]) =
   db.kv.del(key).expectDb()
-
-# Note: For now the the ContentId is used as key to store the data.
-# Perhaps in future different kvstores will be used for the different types of
-# network and specific content key info could be used to access the data.
 
 # TODO: Could also decide to use the ContentKey SSZ bytestring, as this is what
 # gets send over the network in requests, but that would be a bigger key. Or the

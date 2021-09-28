@@ -8,6 +8,7 @@
 {.push raises: [Defect].}
 
 import
+  std/os,
   uri, confutils, confutils/std/net, chronicles,
   eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node],
   json_rpc/rpcproxy
@@ -59,6 +60,11 @@ type
       desc: "P2P node private key as hex",
       defaultValue: PrivateKey.random(keys.newRng()[])
       name: "nodekey" .}: PrivateKey
+
+    dataDir* {.
+      desc: "The directory where fluffy will store the content data"
+      defaultValue: config.defaultDataDir()
+      name: "data-dir" }: OutDir
 
     # Note: This will add bootstrap nodes for each enabled Portal network.
     # No distinction is being made on bootstrap nodes for a specific network.
@@ -164,3 +170,13 @@ proc parseCmdArg*(T: type ClientConfig, p: TaintedString): T
 
 proc completeCmdArg*(T: type ClientConfig, val: TaintedString): seq[string] =
   return @[]
+
+proc defaultDataDir*(config: PortalConf): string =
+  let dataDir = when defined(windows):
+    "AppData" / "Roaming" / "Fluffy"
+  elif defined(macosx):
+    "Library" / "Application Support" / "Fluffy"
+  else:
+    ".cache" / "fluffy"
+
+  getHomeDir() / dataDir

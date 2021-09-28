@@ -2,6 +2,7 @@ import
   std/[options, sugar],
   stew/[results, byteutils],
   eth/p2p/discoveryv5/[protocol, node, enr],
+  ../../content_db,
   ../wire/portal_protocol,
   ./state_content
 
@@ -12,15 +13,16 @@ const
 # objects i.e nodes, tries, hashes
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
-  storage: ContentStorage
+  contentDB*: ContentDB
 
-proc getHandler(storage: ContentStorage): ContentHandler =
+proc getHandler(contentDB: ContentDB): ContentHandler =
     return (proc (contentKey: state_content.ByteList): ContentResult =
-      let maybeContent = storage.get(contentKey)
+      let contentId = toContentId(contentKey)
+      let maybeContent = contentDB.get(contentId)
       if (maybeContent.isSome()):
         ContentResult(kind: ContentFound, content: maybeContent.unsafeGet())
       else:
-        ContentResult(kind: ContentMissing, contentId: toContentId(contentKey)))
+        ContentResult(kind: ContentMissing, contentId: contentId))
 
 # Further improvements which may be necessary:
 # 1. Return proper domain types instead of bytes
@@ -37,13 +39,13 @@ proc getContent*(p: StateNetwork, key: ContentKey):
   return content.map(x => x.asSeq())
 
 proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
-    storage: ContentStorage , dataRadius = UInt256.high(),
+    contentDB: ContentDB , dataRadius = UInt256.high(),
     bootstrapRecords: openarray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, StateProtocolId, getHandler(storage), dataRadius,
+    baseProtocol, StateProtocolId, getHandler(contentDB), dataRadius,
     bootstrapRecords)
 
-  return StateNetwork(portalProtocol: portalProtocol, storage: storage)
+  return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
 proc start*(p: StateNetwork) =
   p.portalProtocol.start()
