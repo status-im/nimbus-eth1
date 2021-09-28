@@ -153,7 +153,7 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
 
   if header.gasUsed < 0 or header.gasUsed > header.gasLimit:
     return err("gasUsed should be non negative and smaller or equal gasLimit")
-  
+
   if header.blockNumber != parentHeader.blockNumber + 1:
     return err("Blocks must be numbered consecutively")
 
@@ -304,7 +304,12 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
       maxPriorityFee=tx.maxPriorityFee
     return
 
-  let gasCost = tx.gasLimit.u256 * tx.gasPrice.u256
+  # the signer must be able to afford the transaction
+  let gasCost = if tx.txType >= TxEip1559:
+                  tx.gasLimit.u256 * tx.maxFee.u256
+                else:
+                  tx.gasLimit.u256 * tx.gasPrice.u256
+
   if gasCost > balance:
     debug "invalid tx: not enough cash for gas",
       available=balance,
