@@ -11,7 +11,7 @@
 
 ## Introduction
 
-This repository contains our development work on our execution-layer client to pair with [our consensus-layer client](https://github.com/status-im/nimbus-eth2). This client focuses on efficiency and security and strives to be as light-weight as possible in termis of resources used.
+This repository contains our development work on our execution-layer client to pair with [our consensus-layer client](https://github.com/status-im/nimbus-eth2). This client focuses on efficiency and security and strives to be as light-weight as possible in terms of resources used.
 
 This repository is also home to [fluffy](./fluffy/README.md), a
 [Portal Network](https://github.com/ethereum/stateless-ethereum-specs/blob/master/portal-network.md)
