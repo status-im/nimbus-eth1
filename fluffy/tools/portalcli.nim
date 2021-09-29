@@ -16,6 +16,13 @@ import
   ../network/wire/[messages, portal_protocol],
   ../network/state/state_content
 
+const
+  DefaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
+  DefaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
+
+  DefaultListenAddressDesc = $DefaultListenAddress
+  DefaultAdminListenAddressDesc = $DefaultAdminListenAddress
+
 type
   PortalCmd* = enum
     noCommand
@@ -26,6 +33,7 @@ type
   DiscoveryConf* = object
     logLevel* {.
       defaultValue: LogLevel.DEBUG
+      defaultValueDesc: $LogLevel.DEBUG
       desc: "Sets the log level"
       name: "log-level" .}: LogLevel
 
@@ -35,7 +43,8 @@ type
       name: "udp-port" .}: uint16
 
     listenAddress* {.
-      defaultValue: defaultListenAddress(config)
+      defaultValue: DefaultListenAddress
+      defaultValueDesc: $DefaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: ValidIpAddress
 
@@ -47,6 +56,7 @@ type
       desc: "Specify method to use for determining public address. " &
             "Must be one of: any, none, upnp, pmp, extip:<IP>"
       defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
+      defaultValueDesc: "any"
       name: "nat" .}: NatConfig
 
     enrAutoUpdate* {.
@@ -59,6 +69,7 @@ type
     nodeKey* {.
       desc: "P2P node private key as hex",
       defaultValue: PrivateKey.random(keys.newRng()[])
+      defaultValueDesc: "random"
       name: "nodekey" .}: PrivateKey
 
     portalBootnodes* {.
@@ -71,7 +82,8 @@ type
       name: "metrics" .}: bool
 
     metricsAddress* {.
-      defaultValue: defaultAdminListenAddress(config)
+      defaultValue: DefaultAdminListenAddress
+      defaultValueDesc: $DefaultAdminListenAddressDesc
       desc: "Listening address of the metrics server"
       name: "metrics-address" .}: ValidIpAddress
 
@@ -106,12 +118,6 @@ type
         argument
         desc: "ENR URI of the node to send a findContent message"
         name: "node" .}: Node
-
-func defaultListenAddress*(conf: DiscoveryConf): ValidIpAddress =
-  (static ValidIpAddress.init("0.0.0.0"))
-
-func defaultAdminListenAddress*(conf: DiscoveryConf): ValidIpAddress =
-  (static ValidIpAddress.init("127.0.0.1"))
 
 proc parseCmdArg*(T: type enr.Record, p: TaintedString): T =
   if not fromURI(result, p):
