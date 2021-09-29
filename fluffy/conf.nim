@@ -13,11 +13,26 @@ import
   eth/keys, eth/net/nat, eth/p2p/discoveryv5/[enr, node],
   json_rpc/rpcproxy
 
+proc defaultDataDir*(): string =
+  let dataDir = when defined(windows):
+    "AppData" / "Roaming" / "Fluffy"
+  elif defined(macosx):
+    "Library" / "Application Support" / "Fluffy"
+  else:
+    ".cache" / "fluffy"
+
+  getHomeDir() / dataDir
+
 const
   DefaultListenAddress* = (static ValidIpAddress.init("0.0.0.0"))
   DefaultAdminListenAddress* = (static ValidIpAddress.init("127.0.0.1"))
   DefaultProxyAddress* = (static "http://127.0.0.1:8546")
   DefaultClientConfig* = getHttpClientConfig(DefaultProxyAddress)
+
+  DefaultListenAddressDesc = $DefaultListenAddress
+  DefaultAdminListenAddressDesc = $DefaultAdminListenAddress
+  DefaultDataDirDesc = defaultDataDir()
+  DefaultClientConfigDesc = $(DefaultClientConfig.httpUri)
 
 type
   PortalCmd* = enum
@@ -26,6 +41,7 @@ type
   PortalConf* = object
     logLevel* {.
       defaultValue: LogLevel.DEBUG
+      defaultValueDesc: $LogLevel.DEBUG
       desc: "Sets the log level"
       name: "log-level" .}: LogLevel
 
@@ -36,6 +52,7 @@ type
 
     listenAddress* {.
       defaultValue: DefaultListenAddress
+      defaultValueDesc: $DefaultListenAddressDesc
       desc: "Listening address for the Discovery v5 traffic"
       name: "listen-address" }: ValidIpAddress
 
@@ -47,6 +64,7 @@ type
       desc: "Specify method to use for determining public address. " &
             "Must be one of: any, none, upnp, pmp, extip:<IP>"
       defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
+      defaultValueDesc: "any"
       name: "nat" .}: NatConfig
 
     enrAutoUpdate* {.
@@ -59,11 +77,13 @@ type
     nodeKey* {.
       desc: "P2P node private key as hex",
       defaultValue: PrivateKey.random(keys.newRng()[])
+      defaultValueDesc: "random"
       name: "nodekey" .}: PrivateKey
 
     dataDir* {.
       desc: "The directory where fluffy will store the content data"
-      defaultValue: config.defaultDataDir()
+      defaultValue: defaultDataDir()
+      defaultValueDesc: $DefaultDataDirDesc
       name: "data-dir" }: OutDir
 
     # Note: This will add bootstrap nodes for each enabled Portal network.
@@ -79,6 +99,7 @@ type
 
     metricsAddress* {.
       defaultValue: DefaultAdminListenAddress
+      defaultValueDesc: $DefaultAdminListenAddressDesc
       desc: "Listening address of the metrics server"
       name: "metrics-address" .}: ValidIpAddress
 
@@ -100,10 +121,12 @@ type
     rpcAddress* {.
       desc: "Listening address of the RPC server"
       defaultValue: DefaultAdminListenAddress
+      defaultValueDesc: $DefaultAdminListenAddressDesc
       name: "rpc-address" }: ValidIpAddress
 
     bridgeUri* {.
       defaultValue: none(string)
+      defaultValueDesc: ""
       desc: "if provided, enables getting data from bridge node"
       name: "bridge-client-uri" .}: Option[string]
 
@@ -111,7 +134,8 @@ type
     # it would be troublesome to add some fake uri param every time
     proxyUri* {.
       defaultValue: DefaultClientConfig
-      desc: "uri of client to get data for unimplemented rpc methods"
+      defaultValueDesc: $DefaultClientConfigDesc
+      desc: "URI of eth client where to proxy unimplemented rpc methods to"
       name: "proxy-uri" .}: ClientConfig
 
     case cmd* {.
@@ -170,13 +194,3 @@ proc parseCmdArg*(T: type ClientConfig, p: TaintedString): T
 
 proc completeCmdArg*(T: type ClientConfig, val: TaintedString): seq[string] =
   return @[]
-
-proc defaultDataDir*(config: PortalConf): string =
-  let dataDir = when defined(windows):
-    "AppData" / "Roaming" / "Fluffy"
-  elif defined(macosx):
-    "Library" / "Application Support" / "Fluffy"
-  else:
-    ".cache" / "fluffy"
-
-  getHomeDir() / dataDir
