@@ -40,7 +40,7 @@ proc toTxPool*(
     getStatus: proc(): TxItemStatus;  ## input, random function
     loadBlocks: int;                  ## load at most this many blocks
     loadTxs: int;                     ## load at most this many transactions
-    baseFee = 0;                      ## initalise with `baseFee` (unless 0)
+    baseFee = 0u64;                   ## initalise with `baseFee` (unless 0)
     maxRejects = 0;                   ## define size of waste basket (unless 0)
     noisy: bool): TxPool =
 
@@ -93,7 +93,7 @@ proc toTxPool*(
 proc toTxPool*(
     db: BaseChainDB;            ## to be modified, initialisier for `TxPool`
     itList: var seq[TxItemRef]; ## import items into new `TxPool` (read only)
-    baseFee = 0;                ## initalise with `baseFee` (unless 0)
+    baseFee = 0u64;             ## initalise with `baseFee` (unless 0)
     maxRejects = 0;             ## define size of waste basket (unless 0)
     noisy = true): TxPool =
 
@@ -116,7 +116,7 @@ proc toTxPool*(
 proc toTxPool*(
     db: BaseChainDB;
     itList: seq[TxItemRef];
-    baseFee = 0;
+    baseFee = 0u64;
     maxRejects = 0;
     noisy = true): TxPool =
   doAssert not db.isNil
@@ -129,7 +129,7 @@ proc toTxPool*(
     timeGap: var Time;          ## to be set, time in the middle of time gap
     nRemoteGapItems: var int;   ## to be set, # items before time gap
     itList: var seq[TxItemRef]; ## import items into new `TxPool` (read only)
-    baseFee = 0;                ## initalise with `baseFee` (unless 0)
+    baseFee = 0u64;             ## initalise with `baseFee` (unless 0)
     remoteItemsPC = 30;         ## % number if items befor time gap
     delayMSecs = 200;           ## size of time vap
     noisy = true): TxPool =

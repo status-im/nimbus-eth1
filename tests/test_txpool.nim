@@ -135,7 +135,7 @@ proc addOrFlushGroupwise(xp: var TxPool;
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runTxLoader(noisy = true; baseFee = 0;
+proc runTxLoader(noisy = true; baseFee = 0u64;
                  capture = loadSpecs, numBlocks = 0; numTxs = 0) =
   let
     elapNoisy = noisy
@@ -217,7 +217,7 @@ proc runTxLoader(noisy = true; baseFee = 0;
       check gasTipCaps.len == xp.txDB.byTipCap.len
 
 
-proc runTxBaseTests(noisy = true; baseFee = 0) =
+proc runTxBaseTests(noisy = true; baseFee = 0u64) =
 
   let
     elapNoisy = false
@@ -456,7 +456,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0) =
 
     block:
       let
-        newBaseFee = if baseFee == 0: 42 else: baseFee + 7
+        newBaseFee = if baseFee == 0: 42u64 else: baseFee + 7
 
       test &"Adjust baseFee to {newBaseFee} and back":
         var
@@ -511,7 +511,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0) =
           #       the same
 
 
-proc runTxPoolTests(noisy = true; baseFee = 0) =
+proc runTxPoolTests(noisy = true; baseFee = 0u64) =
   let
     baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
 
@@ -751,23 +751,23 @@ proc runTxPackerTests(noisy = true; baseFee = 0) =
 
   suite &"TxPool: Block packer tests{baseInfo}":
 
-    var ntBaseFee = 0
+    var ntBaseFee = 0u64
 
     test &"Calculate some non-trivial base fee (different from {baseFee})":
       var
         xq = bcDB.toTxPool(txList, 0, noisy = noisy)
-        lowKey = xq.txDB.byGasTip.ge(GasInt.low).value.key
-        highKey = xq.txDB.byGasTip.le(GasInt.high).value.key
-        keyRange = (highKey - lowKey).int64
+        lowKey = max(0, xq.txDB.byGasTip.ge(GasInt.low).value.key).uint64
+        highKey = xq.txDB.byGasTip.le(GasInt.high).value.key.uint64
+        keyRange = highKey - lowKey
 
       check 5 < keyRange
 
       if keyRange < 1000:
-        ntBaseFee = lowKey.int + keyRange.int div 5
+        ntBaseFee = lowKey + keyRange div 5
       elif keyRange < 10000:
-        ntBaseFee = lowKey.int + 1000
+        ntBaseFee = lowKey + 1000
       else:
-        ntBaseFee = lowKey.int + 1500
+        ntBaseFee = lowKey + 1500
 
     block:
       var
