@@ -13,7 +13,7 @@
 ##
 ## TODO:
 ## -----
-## * Support `local` transactions (currently unsupported.) Foe now, all txs
+## * Support `local` transactions (currently unsupported.) For now, all txs
 ##   are considered from `remote` accounts.
 ## * Redefining per account transactions with the same `nonce` is currently
 ##   unsupported. The old tx needs to be replaced by the new one while the old
@@ -81,11 +81,9 @@
 ##
 
 import
-  std/[times],
-  ../db/db_chain,
-  ./tx_pool/[tx_dbhead, tx_info, tx_item, tx_job, tx_tabs, tx_tasks],
+  ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job, tx_tabs, tx_tasks],
+  ./tx_pool/tx_tabs/[tx_itemid, tx_leaf],
   chronicles,
-  eth/[common, keys],
   stew/results
 
 export
@@ -101,8 +99,12 @@ export
   TxJobKind,
   TxJobMoveRemoteToLocalsReply,
   TxJobStatsCountReply,
+  TxPool,
   TxTabsStatsCount,
   results,
+  tx_desc.init,
+  tx_desc.gasPrice,
+  tx_desc.startDate,
   tx_info,
   tx_item.effGasTip,
   tx_item.gasTipCap,
@@ -114,53 +116,10 @@ export
   tx_item.timeStamp,
   tx_item.tx
 
-const
-  txPoolLifeTime = initDuration(hours = 3)
-  txPriceLimit = 1
-
-  # Journal:   "transactions.rlp",
-  # Rejournal: time.Hour,
-  #
-  # PriceBump:  10,
-  #
-  # AccountSlots: 16,
-  # GlobalSlots:  4096 + 1024, // urgent + floating queue capacity with
-  #                            // 4:1 ratio
-  # AccountQueue: 64,
-  # GlobalQueue:  1024,
-
-type
-  TxPool* = object of RootObj ##\
-    ## Transaction pool descriptor
-    dbHead: TxDbHead     ## block chain state
-    startDate: Time      ## Start date (read-only)
-
-    gasPrice: uint64     ## Gas price enforced by the pool
-    lifeTime*: Duration  ## Maximum amount of time non-executable txs are queued
-
-    byJob: TxJob         ## Job batch list
-    txDB: TxTabsRef      ## Transaction lists & tables
-
-    commitLoop: bool     ## Sentinel, set while commit loop is running
-    dirtyPending: bool   ## Pending queue needs update
-
-    # locals: seq[EthAddress] ## Addresses treated as local by default
-    # noLocals: bool          ## May disable handling of locals
-    # priceLimit: GasInt      ## Min gas price for acceptance into the pool
-    # priceBump: uint64       ## Min price bump percentage to replace an already
-    #                         ## existing transaction (nonce)
-
 {.push raises: [Defect].}
 
 logScope:
   topics = "tx-pool"
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc utcNow: Time =
-  now().utc.toTime
 
 # ------------------------------------------------------------------------------
 # Private functions: tasks processor
@@ -189,7 +148,7 @@ proc processJobs(xp: var TxPool): int
       # Add txs => queued(1), pending(2), or rejected(4) (see somment
       # on to of page for details.
       var args = task.data.addTxsArgs
-      xp.txDB.addTxs(xp.dbHead, args.txs, args.local, args.info)
+      xp.addTxs(args.txs, args.local, args.info)
 
     of txJobApplyByLocal:
       # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash ..
@@ -214,7 +173,7 @@ proc processJobs(xp: var TxPool): int
           break
 
     of txJobEvictionInactive:
-      xp.txDB.deleteExpiredItems(xp.lifeTime)
+      xp.deleteExpiredItems(xp.lifeTime)
 
     of txJobFlushRejects:
       let
@@ -232,7 +191,7 @@ proc processJobs(xp: var TxPool): int
 
     of txJobGetAccounts:
       let args = task.data.getAccountsArgs
-      args.reply(accounts = xp.txDB.collectAccounts(args.local))
+      args.reply(accounts = xp.collectAccounts(args.local))
 
     of txJobItemGet:
       let
@@ -250,7 +209,7 @@ proc processJobs(xp: var TxPool): int
 
     of txJobMoveRemoteToLocals:
       let args = task.data.moveRemoteToLocalsArgs
-      args.reply(moved = xp.txDB.reassignRemoteToLocals(args.account))
+      args.reply(moved = xp.reassignRemoteToLocals(args.account))
       xp.dirtyPending = true
 
     of txJobRejectItem:
@@ -266,7 +225,9 @@ proc processJobs(xp: var TxPool): int
 
     of txJobSetGasPrice:
       let args = task.data.setGasPriceArgs
-      xp.txDB.updateGasPrice(curPrice = xp.gasPrice, newPrice = args.price)
+      var curPrice = xp.gasPrice
+      xp.updateGasPrice(curPrice = curPrice, newPrice = args.price)
+      xp.gasPrice = curPrice
       xp.dirtyPending = true
 
     of txJobSetHead: # FIXME: tbd
@@ -283,7 +244,7 @@ proc processJobs(xp: var TxPool): int
     of txJobUpdatePending:
       let args = task.data.updatePendingArgs
       if xp.dirtyPending or args.force:
-        xp.txDB.updatePending(xp.dbHead)
+        xp.updatePending(xp.dbHead)
         xp.dirtyPending = false
 
     # End case
@@ -315,34 +276,6 @@ proc runJobSerialiser(xp: var TxPool): Result[int,void]
     xp.commitLoop = false
 
   ok(nJobs)
-
-# ------------------------------------------------------------------------------
-# Public functions, constructor
-# ------------------------------------------------------------------------------
-
-proc init*(xp: var TxPool; db: BaseChainDB)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Constructor, returns new tx-pool descriptor.
-  xp.dbHead.init(db)
-  xp.txDB = init(type TxTabsRef, xp.dbHead.baseFee)
-  xp.byJob.init
-
-  xp.startDate = utcNow()
-  xp.gasPrice = txPriceLimit
-  xp.lifeTime = txPoolLifeTime
-
-proc init*(T: type TxPool; db: BaseChainDB): T
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Ditto
-  result.init(db)
-
-# ------------------------------------------------------------------------------
-# Public functions, getters
-# ------------------------------------------------------------------------------
-
-proc startDate*(xp: var TxPool): Time {.inline.} =
-  ## Getter
-  xp.startDate
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool action serialiser
@@ -378,29 +311,6 @@ proc jobCommit*(xp: var TxPool)
   ## Process current elements of the job queue
   xp.jobCommit(TxJobDataRef(
     kind: txJobNone))
-
-# ------------------------------------------------------------------------------
-# Public functions, debugging (not serialised)
-# ------------------------------------------------------------------------------
-
-proc txDB*(xp: var TxPool): TxTabsRef {.inline.} =
-  ## Getter, Transaction lists & tables (for debugging only)
-  xp.txDB
-
-proc dbHead*(xp: var TxPool): TxDbHead {.inline.} =
-  ## Getter, block chain DB
-  xp.dbHead
-
-proc verify*(xp: var TxPool): Result[void,TxInfo]
-    {.gcsafe, raises: [Defect,CatchableError].} =
-  ## Verify descriptor and subsequent data structures.
-
-  block:
-    let rc = xp.byJob.verify
-    if rc.isErr:
-      return rc
-
-  xp.txDB.verify
 
 # ------------------------------------------------------------------------------
 # End

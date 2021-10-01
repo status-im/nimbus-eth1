@@ -28,7 +28,7 @@ import
   stew/results
 
 export
-  tx_item, tx_itemid, tx_leaf, tx_price, tx_sender, tx_status, tx_tipcap
+  any, eq, ge, gt, le, lt, first, last, next, prev, len, nItems, walkItems
 
 type
   TxTabsStatsCount* = tuple

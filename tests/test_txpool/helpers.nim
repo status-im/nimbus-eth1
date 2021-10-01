@@ -11,7 +11,7 @@
 import
   std/[strformat, sequtils, strutils, times],
   ../../nimbus/utils/keequ,
-  ../../nimbus/utils/tx_pool/[tx_item, tx_tabs],
+  ../../nimbus/utils/tx_pool/[tx_desc, tx_item, tx_tabs],
   ../replay/undump, # borrow from clique tools
   eth/[common, keys],
   stint
@@ -20,6 +20,9 @@ import
 # to import `tx_pool/*` sup-modules
 export
   keequ,
+  tx_desc.dbHead,
+  tx_desc.txDB,
+  tx_desc.verify,
   tx_tabs.TxTabsRef,
   tx_tabs.`baseFee=`,
   tx_tabs.any,

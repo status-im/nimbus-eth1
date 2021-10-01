@@ -22,9 +22,12 @@ import
   ../keequ,
   ../slst,
   ./tx_dbhead,
+  ./tx_desc,
   ./tx_gauge,
   ./tx_info,
+  ./tx_item,
   ./tx_tabs,
+  ./tx_tabs/[tx_itemid, tx_leaf, tx_sender, tx_status],
   chronicles,
   eth/[common, keys],
   stew/results
@@ -46,55 +49,55 @@ proc utcNow: Time =
 # Private validation helpers
 # ------------------------------------------------------------------------------
 
-proc checkTxBasic(item: TxItemRef; dbHead: var TxDbHead): bool =
+proc checkTxBasic(xp: var TxPool; item: TxItemRef): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Rejected transactions will go to the wastebasket
   ##
-  if item.tx.txType == TxEip2930 and dbHead.fork < FkBerlin:
+  if item.tx.txType == TxEip2930 and xp.dbHead.fork < FkBerlin:
     debug "invalid tx: Eip2930 Tx type detected before Berlin"
     return false
 
-  if item.tx.txType == TxEip1559 and dbHead.fork < FkLondon:
+  if item.tx.txType == TxEip1559 and xp.dbHead.fork < FkLondon:
     debug "invalid tx: Eip1559 Tx type detected before London"
     return false
 
-  let nonce = ReadOnlyStateDB(dbHead.accDb).getNonce(item.sender)
+  let nonce = ReadOnlyStateDB(xp.dbHead.accDb).getNonce(item.sender)
   if item.tx.nonce < nonce:
     debug "invalid tx: account nonce mismatch",
       txNonce = item.tx.nonce,
       accountNonce = nonce
     return false
 
-  if item.tx.gasLimit < item.tx.intrinsicGas(dbHead.fork):
+  if item.tx.gasLimit < item.tx.intrinsicGas(xp.dbHead.fork):
     debug "invalid tx: not enough gas to perform calculation",
       available = item.tx.gasLimit,
-      require = item.tx.intrinsicGas(dbHead.fork)
+      require = item.tx.intrinsicGas(xp.dbHead.fork)
     return false
 
   true
 
-proc checkTxFees(item: TxItemRef; dbHead: var TxDbHead; baseFee: uint64): bool =
+proc checkTxFees(xp: var TxPool; item: TxItemRef): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Rejected transactions will go to the queue(1) waiting for a change
   ## of parameters `gasLimit` and `baseFee`
   ##
-  if dbHead.trgGasLimit < item.tx.gasLimit:
+  if xp.dbHead.trgGasLimit < item.tx.gasLimit:
     debug "invalid tx: gasLimit exceeded",
-      maxLimit = dbHead.trgGasLimit,
+      maxLimit = xp.dbHead.trgGasLimit,
       gasLimit = item.tx.gasLimit
     return false
 
   # ensure that the user was willing to at least pay the base fee
   if item.tx.txType == TxLegacy:
-    if item.tx.gasPrice < baseFee.int64:
+    if item.tx.gasPrice < xp.dbHead.baseFee.int64:
       debug "invalid tx: legacy gasPrice is smaller than baseFee",
         gasPrice = item.tx.gasPrice,
-        baseFee = baseFee
+        baseFee = xp.dbHead.baseFee
       return false
   else:
-    if item.tx.maxFee < baseFee.int64:
+    if item.tx.maxFee < xp.dbHead.baseFee.int64:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
         baseFee = baseFee
@@ -108,13 +111,13 @@ proc checkTxFees(item: TxItemRef; dbHead: var TxDbHead; baseFee: uint64): bool =
 
   true
 
-proc checkTxBalance(item: TxItemRef; dbHead: var TxDbHead): bool =
+proc checkTxBalance(xp: var TxPool; item: TxItemRef): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Function currently unused.
   ##
   let
-    balance = ReadOnlyStateDB(dbHead.accDb).getBalance(item.sender)
+    balance = ReadOnlyStateDB(xp.dbHead.accDb).getBalance(item.sender)
     gasCost = item.tx.gasLimit.u256 * item.tx.gasPrice.u256
   if balance < gasCost:
     debug "invalid tx: not enough cash for gas",
@@ -136,22 +139,20 @@ proc checkTxBalance(item: TxItemRef; dbHead: var TxDbHead): bool =
 # Private validation functions
 # ------------------------------------------------------------------------------
 
-proc acceptTxValid(tDB: TxTabsRef;
-                   dbHead: var TxDbHead; item: TxItemRef): TxInfo =
+proc acceptTxValid(xp: var TxPool; item: TxItemRef): TxInfo =
   ## Check a raw transaction
-  if not item.checkTxBasic(dbHead):
+  if not xp.checkTxBasic(item):
     return txInfoErrBasicValidatorFailed
 
   txInfoOk
 
 
-proc acceptTxPending(tDB: TxTabsRef;  dbHead: var TxDbHead;
-                     item: TxItemRef): bool =
+proc acceptTxPending(xp: var TxPool; item: TxItemRef): bool =
   ## Check whether a valid transaction is ready to be set `pending`
-  if item.tx.estimatedGasTip(tDB.baseFee) <= 0:
+  if item.tx.estimatedGasTip(xp.dbHead.baseFee) <= 0:
     return false
 
-  if not item.checkTxFees(dbHead, tDB.baseFee):
+  if not xp.checkTxFees(item):
     return false
 
   #if not item.checkTxBalance(dbHead):
@@ -164,22 +165,22 @@ proc acceptTxPending(tDB: TxTabsRef;  dbHead: var TxDbHead;
 # ------------------------------------------------------------------------------
 
 # core/tx_pool.go(384): for addr := range pool.queue {
-proc deleteExpiredItems*(tDB: TxTabsRef; maxLifeTime: Duration)
+proc deleteExpiredItems*(xp: var TxPool; maxLifeTime: Duration)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Any non-local transaction old enough will be removed
   let deadLine = utcNow() - maxLifeTime
-  var rc = tDB.byItemID.eq(local = false).first
+  var rc = xp.txDB.byItemID.eq(local = false).first
   while rc.isOK:
     let item = rc.value.data
     if deadLine < item.timeStamp:
       break
-    rc = tDB.byItemID.eq(local = false).next(item.itemID)
-    discard tDB.reject(item,txInfoErrTxExpired)
+    rc = xp.txDB.byItemID.eq(local = false).next(item.itemID)
+    discard xp.txDB.reject(item,txInfoErrTxExpired)
     queuedEvictionMeter(1)
 
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc deleteUnderpricedItems*(tDB: TxTabsRef; price: uint64)
+proc deleteUnderpricedItems*(xp: var TxPool; price: uint64)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Drop all transactions below the argument threshold `price`, i.e.
   ## move these items to the waste basket.
@@ -187,14 +188,14 @@ proc deleteUnderpricedItems*(tDB: TxTabsRef; price: uint64)
   # current item). See also `remotesBelowTip()`.
   if 0 < price:
     let topOffOne = price - 1
-    for itemList in tDB.byTipCap.decItemList(maxCap = topOffOne):
+    for itemList in xp.txDB.byTipCap.decItemList(maxCap = topOffOne):
       for item in itemList.walkItems:
         if not item.local:
-          discard tDB.reject(item,txInfoErrUnderpriced)
+          discard xp.txDB.reject(item,txInfoErrUnderpriced)
 
 
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead;
+proc addTxs*(xp: var TxPool;
              txs: var openArray[Transaction]; local: bool;  info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Queue a batch of transactions. There transactions are quickly tested
@@ -211,7 +212,7 @@ proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead;
         item: TxItemRef
 
       # Create tx ID and check for dups
-      if tDB.byItemID.hasKey(itemID):
+      if xp.txDB.byItemID.hasKey(itemID):
         vetted = txInfoErrAlreadyKnown
         break txErrorFrame
 
@@ -224,17 +225,17 @@ proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead;
         item = rc.value
 
       # Verify transaction
-      vetted = tDB.acceptTxValid(dbHead, item)
+      vetted = xp.acceptTxValid(item)
       if vetted != txInfoOk:
         break txErrorFrame
 
       # Update initial state
-      if tDB.acceptTxPending(dbHead, item):
+      if xp.acceptTxPending(item):
         status = txItemPending
         item.status = status
 
       # Insert into database
-      let rc = tDB.insert(item)
+      let rc = xp.txDB.insert(item)
       if rc.isErr:
         vetted = rc.error
         break txErrorFrame
@@ -246,7 +247,7 @@ proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead;
       # Error processing below
 
     # store tx in waste basket
-    tDB.reject(tx, vetted, local, status, info)
+    xp.txDB.reject(tx, vetted, local, status, info)
 
     # update gauge
     case vetted:
@@ -259,56 +260,56 @@ proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead;
 
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
-proc collectAccounts*(tDB: TxTabsRef; local: bool): seq[EthAddress]
+proc collectAccounts*(xp: var TxPool; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the accounts currently considered local by the pool.
-  var rc = tDB.bySender.first
+  var rc = xp.txDB.bySender.first
   while rc.isOK:
     let (addrKey, schedList) = (rc.value.key, rc.value.data)
-    rc = tDB.bySender.next(addrKey)
+    rc = xp.txDB.bySender.next(addrKey)
     if 0 < schedList.eq(local).nItems:
       result.add addrKey
 
 
 # core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
-proc reassignRemoteToLocals*(tDB: TxTabsRef; signer: EthAddress): int
+proc reassignRemoteToLocals*(xp: var TxPool; signer: EthAddress): int
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## For given account, remote transactions are migrated to local transactions.
   ## The function returns the number of transactions migrated.
-  let rc = tDB.bySender.eq(signer).eq(local = false)
+  let rc = xp.txDB.bySender.eq(signer).eq(local = false)
   if rc.isOK:
-    let nRemotes = tDB.byItemID.eq(local = false).nItems
+    let nRemotes = xp.txDB.byItemID.eq(local = false).nItems
     for itemList in rc.value.data.walkItemList:
       for item in itemList.walkItems:
-        discard tDB.reassign(item, local = true)
-    return nRemotes - tDB.byItemID.eq(local = false).nItems
+        discard xp.txDB.reassign(item, local = true)
+    return nRemotes - xp.txDB.byItemID.eq(local = false).nItems
 
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
-proc getRemotesBelowTip*(tDB: TxTabsRef; threshold: uint64): seq[Hash256]
+proc getRemotesBelowTip*(xp: var TxPool; threshold: uint64): seq[Hash256]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Finds all remote transactions below the given tip threshold.
   if 0 < threshold:
-    for itemList in tDB.byTipCap.decItemList(maxCap = threshold - 1):
+    for itemList in xp.txDB.byTipCap.decItemList(maxCap = threshold - 1):
       for item in itemList.walkItems:
         if not item.local:
           result.add item.itemID
 
 
-proc updateGasPrice*(tDB: TxTabsRef; curPrice: var uint64; newPrice: uint64)
+proc updateGasPrice*(xp: var TxPool; curPrice: var uint64; newPrice: uint64)
     {.inline, raises: [Defect,KeyError].} =
   let oldPrice = curPrice
   curPrice = newPrice
 
   # if min miner fee increased, remove txs below the new threshold
   if oldPrice < newPrice:
-    tDB.deleteUnderpricedItems(newPrice)
+    xp.deleteUnderpricedItems(newPrice)
 
   info "Price threshold updated",
     oldPrice,
     newPrice
 
-proc updatePending*(tDB: TxTabsRef; dbHead: var TxDbHead)
+proc updatePending*(xp: var TxPool; dbHead: var TxDbHead)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Similar to `addTxs()` only for queued or pending items on the system.
   var
@@ -318,33 +319,33 @@ proc updatePending*(tDB: TxTabsRef; dbHead: var TxDbHead)
 
   # prepare: stash smaller sub-list, update larger one
   let
-    nPending = tDB.byStatus.eq(txItemPending).nItems
-    nQueued = tDB.byStatus.eq(txItemQueued).nItems
+    nPending = xp.txDB.byStatus.eq(txItemPending).nItems
+    nQueued = xp.txDB.byStatus.eq(txItemQueued).nItems
   if nPending < nQueued:
     stashStatus = txItemPending
     updateStatus = txItemQueued
 
   # action, first step: stash smaller sub-list
-  for itemList in tDB.byStatus.incItemList(stashStatus):
+  for itemList in xp.txDB.byStatus.incItemList(stashStatus):
     for item in itemList.walkItems:
       stashed.add item
 
   # action, second step: update larger sub-list
-  for itemList in tDB.byStatus.incItemList(updateStatus):
+  for itemList in xp.txDB.byStatus.incItemList(updateStatus):
     for item in itemList.walkItems:
       let newStatus =
-        if tDB.acceptTxPending(dbHead, item): txItemPending
+        if xp.acceptTxPending(item): txItemPending
         else: txItemQueued
       if newStatus != updateStatus:
-        discard tDB.reassign(item, newStatus)
+        discard xp.txDB.reassign(item, newStatus)
 
   # action, finalise: update smaller, stashed sup-list
   for item in stashed:
     let newStatus =
-      if tDB.acceptTxPending(dbHead, item): txItemPending
+      if xp.acceptTxPending(item): txItemPending
       else: txItemQueued
     if newStatus != stashStatus:
-      discard tDB.reassign(item, newStatus)
+      discard xp.txDB.reassign(item, newStatus)
 
 # ------------------------------------------------------------------------------
 # End

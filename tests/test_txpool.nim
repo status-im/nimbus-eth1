@@ -741,18 +741,16 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
           check xq.txDB.verify.isOK
 
 
-proc runTxPackerTests(noisy = true; baseFee = 0) =
-  let
-    baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
+proc runTxPackerTests(noisy = true) =
 
-  suite &"TxPool: Block packer tests{baseInfo}":
+  suite &"TxPool: Block packer tests":
     let
       remList = txList.mapIt(it.toRemote) # remotes only list
     var
       ntBaseFee = 0u64
       ntNextFee = 0u64
 
-    test &"Calculate some non-trivial base fee (different from {baseFee})":
+    test &"Calculate some non-trivial base fee":
       var
         xq = bcDB.toTxPool(txList, 0, noisy = noisy)
       let
@@ -827,7 +825,7 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxLoader(baseFee)
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
-  noisy.runTxPackerTests(baseFee)
+  noisy.runTxPackerTests
 
 when isMainModule:
   proc localDir(c: CaptureSpecs): CaptureSpecs =
@@ -846,7 +844,7 @@ when isMainModule:
   true.runTxLoader(baseFee, capture = capts1)
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
-  noisy.runTxPackerTests(baseFee)
+  noisy.runTxPackerTests
 
   #let
   #  head = bcDB.getCanonicalHead
