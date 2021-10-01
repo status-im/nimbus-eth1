@@ -21,13 +21,22 @@ import
   eth/[common, keys],
   stew/results
 
+from chronos import
+  AsyncLock,
+  AsyncLockError,
+  acquire,
+  newAsyncLock,
+  release,
+  waitFor
+
 type
   TxJobID* = ##\
     ## Valid interval: *1 .. TxJobIdMax*, the value `0` corresponds to\
     ## `TxJobIdMax` and is internally accepted only right after initialisation.
     distinct uint
 
-  TxJobKind* = enum
+  TxJobKind* = enum ##\
+    ## Job types
     txJobNone = 0
     txJobAbort
     txJobAddTxs
@@ -39,16 +48,17 @@ type
     txJobGetAccounts
     txJobGetBaseFee
     txJobGetGasPrice
-    txJobItemGet,
-    txJobItemSetStatus,
+    txJobItemGet
+    txJobItemSetStatus
     txJobMoveRemoteToLocals
-    txJobRejectItem,
+    txJobRejectItem
     txJobSetBaseFee
     txJobSetGasPrice
     txJobSetHead
     txJobSetMaxRejects
     txJobStatsCount
     txJobUpdatePending
+
 
   TxJobItemApply* = ##\
     ## Generic item function used as apply function. If the function
@@ -73,9 +83,6 @@ type
   TxJobMoveRemoteToLocalsReply* =
     proc(moved: int) {.gcsafe,raises: [].}
 
-  TxJobSetHeadReply* = ## FIXME ...
-    proc() {.gcsafe,raises: [].}
-
   TxJobStatsCountReply* =
     proc(status: TxTabsStatsCount) {.gcsafe,raises: [].}
 
@@ -99,12 +106,6 @@ type
       ## Enqueues a batch of transactions into the pool if they are valid,
       ## marking the senders as `local` or `remote` ones depending on
       ## the request arguments.
-      ##
-      ## This method is used to add transactions from the RPC API and performs
-      ## synchronous pool reorganization and event propagation.
-      ##
-      ## :FIXME:
-      ##   Transactions need to be tested for validity.
       addTxsArgs*: tuple[
         txs:   seq[Transaction],
         local: bool,
@@ -202,7 +203,9 @@ type
         reason: TxInfo]
 
     of txJobSetBaseFee: ##\
-      ## New base fee (implies database reorg).
+      ## New base fee (implies database reorg). Note that after changing the
+      ## `baseFee`, most probably a re-org should take place (e.g. invoking
+      ## `txJobUpdatePending`)
       setBaseFeeArgs*: tuple[
         price: uint64]
 
@@ -214,11 +217,10 @@ type
         price: uint64]
 
     of txJobSetHead: ##\
-      ## :FIXME:
-      ##    to be implemented
+      ## Change the insertion block header. This call might imply
+      ## re-calculating current transaction states.
       setHeadArgs*: tuple[
-        head:  BlockHeader,
-        reply: TxJobSetHeadReply]
+        head:  Hash256]
 
     of txJobSetMaxRejects: ##\
       ## Set the size of the waste basket. This setting becomes effective with
@@ -252,6 +254,7 @@ type
     ## `TxJobIdMax`.)
     topID: TxJobID                        ## Next job will have `topID+1`
     jobQueue: KeeQu[TxJobID,TxJobDataRef] ## Job queue
+    asyncLock: AsyncLock                  ## Protects access to jom queue
 
 const
   txJobPriorityKind*: set[TxJobKind] = ##\
@@ -287,23 +290,11 @@ proc `+`(a: TxJobID; b: int): TxJobID = a + b.TxJobID
 proc `-`(a: TxJobID; b: int): TxJobID = a - b.TxJobID
 
 # ------------------------------------------------------------------------------
-# Public helpers
+# Public helpers (operators needed in jobAppend() and jobUnshift() functions)
 # ------------------------------------------------------------------------------
 
 proc `<=`*(a, b: TxJobID): bool {.borrow.}
 proc `==`*(a, b: TxJobID): bool {.borrow.}
-
-# ------------------------------------------------------------------------------
-# Public functions, constructor
-# ------------------------------------------------------------------------------
-
-proc init*(t: var TxJob; initSize = 10) =
-  ## Optional constructor
-  t.jobQueue.init(initSize)
-
-proc init*(T: type TxJob; initSize = 10): T =
-  ## Constructor variant
-  result.init(initSize)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -349,57 +340,103 @@ proc jobUnshift(t: var TxJob; data: TxJobDataRef): TxJobID
     return id
 
 # ------------------------------------------------------------------------------
+# Public functions, constructor
+# ------------------------------------------------------------------------------
+
+proc init*(t: var TxJob; initSize = 10) =
+  ## Optional constructor
+  t.jobQueue.init(initSize)
+  t.asyncLock = newAsyncLock()
+
+proc init*(T: type TxJob; initSize = 10): T =
+  ## Constructor variant
+  result.init(initSize)
+
+# ------------------------------------------------------------------------------
+# Public functions, unique descriptor access control
+# ------------------------------------------------------------------------------
+
+proc txJobLock*(t: var TxJob) {.inline, raises: [Defect,CatchableError].} =
+  ## Lock job descriptor. This function should only be used implicitely by
+  ## template `doExclusively()`
+  waitFor t.asyncLock.acquire
+
+proc txJobUnLock*(t: var TxJob) {.inline, raises: [Defect,AsyncLockError].} =
+  ## Unlock job descriptor. This function should only be used implicitely by
+  ## template `doExclusively()`
+  t.asyncLock.release
+
+template doExclusively*(t: var TxJob; action: untyped) =
+  ## Handy helper
+  t.txJobLock
+  action
+  t.txJobUnLock
+
+# ------------------------------------------------------------------------------
 # Public functions, add/remove entry
 # ------------------------------------------------------------------------------
 
 proc add*(t: var TxJob; data: TxJobDataRef): TxJobID
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Add a new job to the *FIFO*.
-  if data.kind in txJobPriorityKind:
-    return t.jobUnshift(data)
-  t.jobAppend(data)
+  t.doExclusively:
+    if data.kind in txJobPriorityKind:
+      result = t.jobUnshift(data)
+    else:
+      result = t.jobAppend(data)
 
 proc delete*(t: var TxJob; id: TxJobID): Result[TxJobPair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Delete a job by argument `id`. The function returns the job just
   ## deleted (if successful.)
   ##
   ## See also the **Note* at the comment for `txAdd()`.
-  let rc = t.jobQueue.delete(id)
-  if rc.isErr:
-    return err()
-  ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+  t.doExclusively:
+    let rc = t.jobQueue.delete(id)
+    if rc.isErr:
+      result = err()
+    else:
+      result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
 proc fetch*(t: var TxJob): Result[TxJobPair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Fetches the next job from the *FIFO*.
-  let rc = t.jobQueue.shift
-  if rc.isErr:
-    return err()
-  ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+  t.doExclusively:
+    let rc = t.jobQueue.shift
+    if rc.isErr:
+      result = err()
+    else:
+      result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
 proc first*(t: var TxJob): Result[TxJobPair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Peek, get the next due job (like `fetch()`) but leave it in the
   ## queue (unlike `fetch()`).
-  let rc = t.jobQueue.first
-  if rc.isErr:
-    return err()
-  ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+  t.doExclusively:
+    let rc = t.jobQueue.first
+    if rc.isErr:
+      result = err()
+    else:
+      result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
 # ------------------------------------------------------------------------------
 # Public queue/table ops
 # ------------------------------------------------------------------------------
 
 proc`[]`*(t: var TxJob; id: TxJobID): TxJobDataRef
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  t.jobQueue[id]
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  t.doExclusively:
+    result = t.jobQueue[id]
 
-proc hasKey*(t: var TxJob; id: TxJobID): bool {.inline.} =
-  t.jobQueue.hasKey(id)
+proc hasKey*(t: var TxJob; id: TxJobID): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  t.doExclusively:
+    result = t.jobQueue.hasKey(id)
 
-proc len*(t: var TxJob): int {.inline.} =
-  t.jobQueue.len
+proc len*(t: var TxJob): int
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  t.doExclusively:
+    result = t.jobQueue.len
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging

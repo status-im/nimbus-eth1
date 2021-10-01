@@ -233,7 +233,7 @@ proc setStatus*(xp: var TxPool; item: TxItemRef; status: TxItemStatus)
       item:    item,
       status:  status)))
 
-proc updatePendingQueue*(xp: var TxPool; force = false)
+proc updatePending*(xp: var TxPool; force = false)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Update pending queue
   xp.jobCommit(TxJobDataRef(

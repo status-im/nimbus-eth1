@@ -23,6 +23,7 @@ type
   CaptureSpecs = tuple
     network: NetworkID
     dir, file: string
+    numBlocks, numTxs: int
 
 const
   prngSeed = 42
@@ -30,7 +31,9 @@ const
   goerliCapture: CaptureSpecs = (
     network: GoerliNet,
     dir: "tests",
-    file: "replay"/"goerli68161.txt.gz")
+    file: "replay" / "goerli68161.txt.gz",
+    numBlocks: 20000,
+    numTxs: 900)
 
   loadSpecs = goerliCapture
 
@@ -130,13 +133,10 @@ proc addOrFlushGroupwise(xp: var TxPool;
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runTxLoader(noisy = true; baseFee = 0u64;
-                 capture = loadSpecs, numBlocks = 0; numTxs = 0) =
+proc runTxLoader(noisy = true; baseFee = 0u64; capture = loadSpecs) =
   let
     elapNoisy = noisy
     veryNoisy = false # noisy
-    nBlocks = if numBlocks == 0: 30000 else: numBlocks
-    nTxs = if numTxs == 0: 900 else: numTxs
     fileInfo = capture.file.splitFile.name.split(".")[0]
     suiteInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
     file = capture.dir /  capture.file
@@ -152,14 +152,15 @@ proc runTxLoader(noisy = true; baseFee = 0u64;
   suite &"TxPool: Transactions from {fileInfo} capture{suiteInfo}":
     var xp: TxPool
 
-    test &"Import {nBlocks.toKMG} blocks and collect {nTxs} txs":
+    test &"Import {capture.numBlocks.toKMG} blocks "&
+        &"and collect {capture.numTxs} txs":
 
       elapNoisy.showElapsed("Total collection time"):
         xp = bcDB.toTxPool(file = file,
                            getLocal = randOk,
                            getStatus = randStatus,
-                           loadBlocks = nBlocks,
-                           loadTxs = nTxs,
+                           loadBlocks = capture.numBlocks,
+                           loadTxs = capture.numTxs,
                            baseFee = baseFee,
                            noisy = veryNoisy)
 
@@ -176,7 +177,7 @@ proc runTxLoader(noisy = true; baseFee = 0u64;
          " <", xp.txDB.byItemID.eq(local = false).last.value.data.info, ">"
 
       # make sure that the block chain was initialised
-      check nBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
+      check capture.numBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
 
       check xp.count.total == foldl(okCount.toSeq, a+b)   # add okCount[] values
       check xp.count.total == foldl(statCount.toSeq, a+b) # ditto statCount[]
@@ -191,7 +192,7 @@ proc runTxLoader(noisy = true; baseFee = 0u64;
         check statusRatio < (10000 div randInitRatioBandPC)
 
       # Note: expecting enough transactions in the `goerliCapture` file
-      check xp.count.total == nTxs
+      check xp.count.total == capture.numTxs
       check xp.verify.isOk
 
       # Load txList[]
@@ -745,41 +746,77 @@ proc runTxPackerTests(noisy = true; baseFee = 0) =
     baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
 
   suite &"TxPool: Block packer tests{baseInfo}":
-
-    var ntBaseFee = 0u64
+    let
+      remList = txList.mapIt(it.toRemote) # remotes only list
+    var
+      ntBaseFee = 0u64
+      ntNextFee = 0u64
 
     test &"Calculate some non-trivial base fee (different from {baseFee})":
       var
         xq = bcDB.toTxPool(txList, 0, noisy = noisy)
-        lowKey = max(0, xq.txDB.byGasTip.ge(GasInt.low).value.key).uint64
+      let
+        minKey = max(0, xq.txDB.byGasTip.ge(GasInt.low).value.key)
+        lowKey = xq.txDB.byGasTip.gt(minKey).value.key.uint64
         highKey = xq.txDB.byGasTip.le(GasInt.high).value.key.uint64
         keyRange = highKey - lowKey
+        keyStep = max(1u64, keyRange div 500_000)
 
-      check 5 < keyRange
+      # what follows is a rather crude partitioning so that
+      # * ntBaseFee partititions non-zero numbers of queued and pending txs
+      # * ntNextFee decreases the number of pending txs
+      ntBaseFee = lowKey + keyStep
 
-      if keyRange < 1000:
-        ntBaseFee = lowKey + keyRange div 5
-      elif keyRange < 10000:
-        ntBaseFee = lowKey + 1000
-      else:
-        ntBaseFee = lowKey + 1500
+      # the following might throw an exception if the table is de-generated
+      var nextKey = ntBaseFee
+      for _ in [1, 2, 3]:
+        let rcNextKey = xq.txDB.byGasTip.gt(nextKey.int64)
+        check rcNextKey.isOK
+        nextKey = rcNextKey.value.key.uint64
+
+      ntNextFee = nextKey + keyStep
+
+      # of course ...
+      check ntBaseFee < ntNextFee
 
     block:
       var
-        xq = bcDB.toTxPool(itList = txList.mapIt(it.toRemote),
-                           baseFee = ntBaseFee,
-                           noisy = noisy)
-      let
-        queued = xq.count.queued
-        pending = xq.count.pending
+        xq = bcDB.toTxPool(remList, baseFee = ntBaseFee, noisy = noisy)
+        xr = bcDB.toTxPool(remList, baseFee = ntNextFee, noisy = noisy)
+      block:
+        let
+          queued = xq.count.queued
+          pending = xq.count.pending
 
-      test &"Load \"remote\" txs with baseFee={ntBaseFee}, "&
-          &"queued/pending={queued}/{pending}":
+        test &"Load \"remote\" txs with baseFee={ntBaseFee}, "&
+            &"queued/pending={queued}/{pending}":
 
-        check 0 < queued
-        check 0 < pending
-        check xq.count.remote == txList.len
-        check xq.count.rejected == 0
+          check 0 < queued
+          check 0 < pending
+          check xq.count.remote == txList.len
+          check xq.count.rejected == 0
+
+      block:
+        let
+          queued = xr.count.queued
+          pending = xr.count.pending
+
+        test &"Re-org txs queues setting baseFee={ntNextFee}, "&
+            &"queued/pending={queued}/{pending}":
+
+          check 0 < queued
+          check 0 < pending
+          check xr.count.remote == txList.len
+          check xr.count.rejected == 0
+
+          check xq.getBaseFee == ntBaseFee
+          xq.setBaseFee(ntNextFee)
+          check xq.getBaseFee == ntNextFee
+
+          xq.updatePending(force = true)
+
+          # now, xq should look like xr
+          check xq.count == xr.count
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -793,24 +830,29 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxPackerTests(baseFee)
 
 when isMainModule:
+  proc localDir(c: CaptureSpecs): CaptureSpecs =
+    result = c
+    result.dir = "."
   const
     noisy = defined(debug)
     baseFee = 42
-    capts0:CaptureSpecs = (goerliCapture.network,  ".", goerliCapture.file)
-    capts2:CaptureSpecs = (GoerliNet,        "/status", "goerli504192.txt.gz")
-    capts3:CaptureSpecs = (MainNet,          "/status", "mainnet843841.txt.gz")
+    capts0: CaptureSpecs =
+                goerliCapture.localDir
+    capts1: CaptureSpecs = (
+                GoerliNet, "/status", "goerli504192.txt.gz", 30000, 1500)
+    capts2: CaptureSpecs = (
+                MainNet, "/status", "mainnet843841.txt.gz", 30000, 1500)
 
-  true.runTxLoader(baseFee, capture = capts3, numBlocks = 30000, numTxs = 1500)
+  true.runTxLoader(baseFee, capture = capts1)
+  noisy.runTxBaseTests(baseFee)
+  noisy.runTxPoolTests(baseFee)
+  noisy.runTxPackerTests(baseFee)
 
   #let
   #  head = bcDB.getCanonicalHead
   #  parent = bcDB.getBlockHeader(head.parentHash)
   #  granny = bcDB.getBlockHeader(parent.parentHash)
   #echo ">>> ", head.gasLimit, " ", parent.gasLimit, " ", granny.gasLimit
-
-  noisy.runTxBaseTests(baseFee)
-  noisy.runTxPoolTests(baseFee)
-  noisy.runTxPackerTests(baseFee)
 
   #noisy.runTxLoader(baseFee, dir = ".")
   #noisy.runTxPoolTests(baseFee)

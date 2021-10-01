@@ -49,7 +49,7 @@ proc utcNow: Time =
 proc checkTxBasic(item: TxItemRef; dbHead: var TxDbHead): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
-  ## Rejected transactions go to the wastebasket
+  ## Rejected transactions will go to the wastebasket
   ##
   if item.tx.txType == TxEip2930 and dbHead.fork < FkBerlin:
     debug "invalid tx: Eip2930 Tx type detected before Berlin"
@@ -74,15 +74,15 @@ proc checkTxBasic(item: TxItemRef; dbHead: var TxDbHead): bool =
 
   true
 
-proc checkTxFees(item: TxItemRef; gasLimit: GasInt, baseFee: uint64): bool =
+proc checkTxFees(item: TxItemRef; dbHead: var TxDbHead; baseFee: uint64): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
-  ## Rejected transactions go to the queue(1) waiting for a change
+  ## Rejected transactions will go to the queue(1) waiting for a change
   ## of parameters `gasLimit` and `baseFee`
   ##
-  if gasLimit < item.tx.gasLimit:
-    debug "invalid tx: block header gasLimit exceeded",
-      maxLimit = gasLimit,
+  if dbHead.trgGasLimit < item.tx.gasLimit:
+    debug "invalid tx: gasLimit exceeded",
+      maxLimit = dbHead.trgGasLimit,
       gasLimit = item.tx.gasLimit
     return false
 
@@ -108,8 +108,7 @@ proc checkTxFees(item: TxItemRef; gasLimit: GasInt, baseFee: uint64): bool =
 
   true
 
-proc checkTxBalance(item: TxItemRef;
-                    dbHead: var TxDbHead; gasLimit: GasInt): bool =
+proc checkTxBalance(item: TxItemRef; dbHead: var TxDbHead): bool =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Function currently unused.
@@ -147,15 +146,15 @@ proc acceptTxValid(tDB: TxTabsRef;
 
 
 proc acceptTxPending(tDB: TxTabsRef;  dbHead: var TxDbHead;
-                     item: TxItemRef; gasLimit: GasInt): bool =
+                     item: TxItemRef): bool =
   ## Check whether a valid transaction is ready to be set `pending`
   if item.tx.estimatedGasTip(tDB.baseFee) <= 0:
     return false
 
-  if not item.checkTxFees(gasLimit, tDB.baseFee):
+  if not item.checkTxFees(dbHead, tDB.baseFee):
     return false
 
-  #if not item.checkTxBalance(dbHead, gasLimit):
+  #if not item.checkTxBalance(dbHead):
   #  return false
 
   true
@@ -195,7 +194,7 @@ proc deleteUnderpricedItems*(tDB: TxTabsRef; price: uint64)
 
 
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead; gasLimit: GasInt;
+proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead;
              txs: var openArray[Transaction]; local: bool;  info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Queue a batch of transactions. There transactions are quickly tested
@@ -230,7 +229,7 @@ proc addTxs*(tDB: TxTabsRef; dbHead: var TxDbHead; gasLimit: GasInt;
         break txErrorFrame
 
       # Update initial state
-      if tDB.acceptTxPending(dbHead, item, gasLimit):
+      if tDB.acceptTxPending(dbHead, item):
         status = txItemPending
         item.status = status
 
@@ -309,8 +308,43 @@ proc updateGasPrice*(tDB: TxTabsRef; curPrice: var uint64; newPrice: uint64)
     oldPrice,
     newPrice
 
-proc rebuildPendingQueue*(tDB: TxTabsRef) =
-  discard
+proc updatePending*(tDB: TxTabsRef; dbHead: var TxDbHead)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Similar to `addTxs()` only for queued or pending items on the system.
+  var
+    stashed: seq[TxItemRef]
+    stashStatus = txItemQueued
+    updateStatus = txItemPending
+
+  # prepare: stash smaller sub-list, update larger one
+  let
+    nPending = tDB.byStatus.eq(txItemPending).nItems
+    nQueued = tDB.byStatus.eq(txItemQueued).nItems
+  if nPending < nQueued:
+    stashStatus = txItemPending
+    updateStatus = txItemQueued
+
+  # action, first step: stash smaller sub-list
+  for itemList in tDB.byStatus.incItemList(stashStatus):
+    for item in itemList.walkItems:
+      stashed.add item
+
+  # action, second step: update larger sub-list
+  for itemList in tDB.byStatus.incItemList(updateStatus):
+    for item in itemList.walkItems:
+      let newStatus =
+        if tDB.acceptTxPending(dbHead, item): txItemPending
+        else: txItemQueued
+      if newStatus != updateStatus:
+        discard tDB.reassign(item, newStatus)
+
+  # action, finalise: update smaller, stashed sup-list
+  for item in stashed:
+    let newStatus =
+      if tDB.acceptTxPending(dbHead, item): txItemPending
+      else: txItemQueued
+    if newStatus != stashStatus:
+      discard tDB.reassign(item, newStatus)
 
 # ------------------------------------------------------------------------------
 # End

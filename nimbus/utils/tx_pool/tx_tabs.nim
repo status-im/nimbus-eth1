@@ -95,10 +95,11 @@ proc insertImpl(xp: TxTabsRef; item: TxItemRef)
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TxTabsRef): T =
+proc init*(T: type TxTabsRef; baseFee = 0u64): T =
   ## Constructor, returns new tx-pool descriptor.
   new result
   result.maxRejects = txTabMaxRejects
+  result.baseFee = baseFee
 
   result.byItemID.txInit
   result.byGasTip.txInit(update = result.updateEffectiveGasTip)
@@ -239,8 +240,9 @@ proc `baseFee=`*(xp: TxTabsRef; baseFee: uint64)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Setter, new base fee (implies reorg). The argument `GasInt.low`
   ## disables the `baseFee`.
-  xp.baseFee = baseFee
-  xp.byGasTip.update = xp.updateEffectiveGasTip
+  if xp.baseFee != baseFee:
+    xp.baseFee = baseFee
+    xp.byGasTip.update = xp.updateEffectiveGasTip
 
 proc `maxRejects=`*(xp: TxTabsRef; val: int) {.inline.} =
   ## Setter, applicable with next `reject()` invocation.

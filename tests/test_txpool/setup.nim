@@ -19,6 +19,8 @@ import
   eth/[common, keys, p2p, trie/db],
   stint
 
+proc isOK(rc: ValidationResult): bool =
+  rc == ValidationResult.OK
 
 proc blockChainForTesting*(network: NetworkID): BaseChainDB =
   let boot = CustomGenesis(
@@ -41,21 +43,15 @@ proc toTxPool*(
     loadBlocks: int;                  ## load at most this many blocks
     loadTxs: int;                     ## load at most this many transactions
     baseFee = 0u64;                   ## initalise with `baseFee` (unless 0)
-    maxRejects = 0;                   ## define size of waste basket (unless 0)
     noisy: bool): TxPool =
 
   var
+    txPoolOk = false
     txCount = 0
     chainNo = 0
     chainDB = db.newChain
 
   doAssert not db.isNil
-
-  result.init(db)
-  if 0 < baseFee:
-    result.txDB.baseFee = baseFee
-  if 0 < maxRejects:
-    result.setMaxRejects(maxRejects)
 
   for chain in file.undumpNextGroup:
     let leadBlkNum = chain[0][0].blockNumber
@@ -67,15 +63,37 @@ proc toTxPool*(
     elif leadBlkNum < loadBlocks.u256:
       # Import into block chain
       let (headers,bodies) = (chain[0],chain[1])
-      doAssert chainDB.persistBlocks(headers,bodies) == ValidationResult.OK
-
+      doAssert chainDB.persistBlocks(headers,bodies).isOK
+      #for h in chain[0]:
+      #  if 0 < h.gasUsed:
+      #    echo ">>> #", h.blockNumber,
+      #     " gasUsed=", h.gasUsed, " gasLimit=", h.gasLimit
     else:
       # Import transactions
-      for chainInx in 0 ..< chain[0].len:
-        # load transactions, one-by-one
+      for inx in 0 ..< chain[0].len:
         let
-          blkNum = chain[0][chainInx].blockNumber
-          txs = chain[1][chainInx].transactions
+          blkNum = chain[0][inx].blockNumber
+          txs = chain[1][inx].transactions
+
+        # Continue importing up until first non-trivial block
+        if not txPoolOk:
+          if txs.len < 1:
+            # collect empty blocks
+            let (headers,bodies) = (@[chain[0][inx]],@[chain[1][inx]])
+            doAssert chainDB.persistBlocks(headers,bodies).isOK
+            continue
+          txPoolOk = true
+          result.init(db)
+          #let h = result.dbHead
+          #echo ">>> #", h.head.blockNumber,
+          #    " fork=", h.fork,
+          #    " baseFee=", h.baseFee,
+          #    " trgBlockSize=", h.trgBlockSize,
+          #    " maxBlockSize=", h.maxBlockSize
+          if 0 < baseFee:
+            result.setBaseFee(baseFee)
+
+        # Load transactions, one-by-one
         for n in 0 ..< txs.len:
           txCount.inc
           let
@@ -101,7 +119,7 @@ proc toTxPool*(
 
   result.init(db)
   if 0 < baseFee:
-    result.txDB.baseFee = baseFee
+    result.setBaseFee(baseFee)
   if 0 < maxRejects:
     result.setMaxRejects(maxRejects)
 
@@ -141,7 +159,7 @@ proc toTxPool*(
 
   result.init(db)
   if 0 < baseFee:
-    result.txDB.baseFee = baseFee
+    result.setBaseFee(baseFee)
 
   var
     nRemoteItems = 0
