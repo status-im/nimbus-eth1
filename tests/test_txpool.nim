@@ -30,14 +30,9 @@ const
   goerliCapture: CaptureSpecs = (
     network: GoerliNet,
     dir: "tests",
-    file: "test_clique"/"goerli51840.txt.gz")
+    file: "replay"/"goerli68161.txt.gz")
 
-  mainnetCapture: CaptureSpecs = (
-    network: MainNet,
-    dir: "tests",
-    file: "test_txpool" / "mainnet50688.txt.gz")
-
-  loadSpecs = mainnetCapture
+  loadSpecs = goerliCapture
 
   # 75% <= #local/#remote <= 1/75%
   # note: by law of big numbers, the ratio will exceed any upper or lower
@@ -471,7 +466,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
           for itemList in nonceList.incItemList:
             baseNonces.add itemList.first.value.tx.nonce
 
-        xq.setBaseFee(newBaseFee.uint64)
+        xq.txDB.baseFee = newBaseFee
         check xq.txDB.verify.isOK
 
         block:
@@ -489,7 +484,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
           check seen != txList.mapIt(it.itemID) # order should have changed
 
         # change back
-        xq.setBaseFee(baseFee.uint64)
+        xq.txDB.baseFee = baseFee
         check xq.txDB.verify.isOK
 
         block:
@@ -802,7 +797,6 @@ when isMainModule:
     noisy = defined(debug)
     baseFee = 42
     capts0:CaptureSpecs = (goerliCapture.network,  ".", goerliCapture.file)
-    capts1:CaptureSpecs = (mainnetCapture.network, ".", mainnetCapture.file)
     capts2:CaptureSpecs = (GoerliNet,        "/status", "goerli504192.txt.gz")
     capts3:CaptureSpecs = (MainNet,          "/status", "mainnet843841.txt.gz")
 

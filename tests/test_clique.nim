@@ -12,13 +12,14 @@ import
   std/[algorithm, os, sequtils, strformat, strutils, times],
   ../nimbus/db/db_chain,
   ../nimbus/p2p/[chain, clique, clique/clique_snapshot],
-  ./test_clique/[pool, undump],
+  ./test_clique/pool,
+  ./replay/undump,
   eth/[common, keys],
   stint,
   unittest2
 
 const
-  goerliCapture = "test_clique" / "goerli51840.txt.gz"
+  goerliCapture = "replay" / "goerli68161.txt.gz"
   groupReplayTransactions = 7
 
 # ------------------------------------------------------------------------------

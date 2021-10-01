@@ -53,17 +53,18 @@ proc toTxPool*(
 
   result.init(db)
   if 0 < baseFee:
-    result.setBaseFee(baseFee.uint64)
+    result.txDB.baseFee = baseFee
   if 0 < maxRejects:
     result.setMaxRejects(maxRejects)
 
   for chain in file.undumpNextGroup:
+    let leadBlkNum = chain[0][0].blockNumber
     chainNo.inc
-    if chain[0][0].blockNumber == 0.u256:
+    if leadBlkNum == 0.u256:
       # Verify Genesis
       doAssert chain[0][0] == db.getBlockHeader(0.u256)
 
-    elif chain[0][0].blockNumber < loadBlocks.u256:
+    elif leadBlkNum < loadBlocks.u256:
       # Import into block chain
       let (headers,bodies) = (chain[0],chain[1])
       doAssert chainDB.persistBlocks(headers,bodies) == ValidationResult.OK
@@ -86,7 +87,6 @@ proc toTxPool*(
             var tx = txs[n]
             result.addTx(tx, local, info)
           if loadTxs <= txCount:
-            # echo ">>>> #", blkNum
             return
 
 
@@ -101,7 +101,7 @@ proc toTxPool*(
 
   result.init(db)
   if 0 < baseFee:
-    result.setBaseFee(baseFee.uint64)
+    result.txDB.baseFee = baseFee
   if 0 < maxRejects:
     result.setMaxRejects(maxRejects)
 
@@ -141,7 +141,7 @@ proc toTxPool*(
 
   result.init(db)
   if 0 < baseFee:
-    result.setBaseFee(baseFee.uint64)
+    result.txDB.baseFee = baseFee
 
   var
     nRemoteItems = 0

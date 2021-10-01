@@ -12,7 +12,7 @@ import
   std/[strformat, sequtils, strutils, times],
   ../../nimbus/utils/keequ,
   ../../nimbus/utils/tx_pool/[tx_item, tx_tabs],
-  ../test_clique/undump, # borrow from clique tools
+  ../replay/undump, # borrow from clique tools
   eth/[common, keys],
   stint
 
@@ -21,7 +21,9 @@ import
 export
   keequ,
   tx_tabs.TxTabsRef,
+  tx_tabs.`baseFee=`,
   tx_tabs.any,
+  tx_tabs.baseFee,
   tx_tabs.decItemList,
   tx_tabs.decNonceList,
   tx_tabs.eq,
