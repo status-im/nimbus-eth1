@@ -21,6 +21,14 @@ import
   ./tx_tabs,
   eth/[common, keys]
 
+from chronos import
+  AsyncLock,
+  AsyncLockError,
+  acquire,
+  newAsyncLock,
+  release,
+  waitFor
+
 const
   txPoolLifeTime = initDuration(hours = 3)
   txPriceLimit = 1
@@ -39,17 +47,21 @@ const
 type
   TxPool* = object of RootObj ##\
     ## Transaction pool descriptor
-    dbHead: TxDbHead     ## block chain state
     startDate: Time      ## Start date (read-only)
+    dbHead: TxDbHead     ## block chain state
 
     gasPrice: uint64     ## Gas price enforced by the pool
     lifeTime*: Duration  ## Maximum amount of time non-executable txs are queued
 
     byJob: TxJob         ## Job batch list
-    txDB: TxTabsRef      ## Transaction lists & tables
+    byJobSync: AsyncLock ## Serialise access to `byJob`
 
-    commitLoop: bool     ## Sentinel, set while commit loop is running
-    dirtyPending: bool   ## Pending queue needs update
+    txDB: TxTabsRef      ## Transaction lists & tables
+    txDBSync: AsyncLock  ## Serialise access to `txDB`
+
+    commitLoop: bool     ## Flag: sentinel, set while commit loop is running
+    dirtyPending: bool   ## Flag: pending queue needs update
+    flagsSync: AsyncLock ## Serialise access to flags
 
     # locals: seq[EthAddress] ## Addresses treated as local by default
     # noLocals: bool          ## May disable handling of locals
@@ -73,18 +85,81 @@ proc utcNow: Time {.inline.} =
 proc init*(xp: var TxPool; db: BaseChainDB)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor, returns new tx-pool descriptor.
-  xp.dbHead.init(db)
-  xp.txDB = init(type TxTabsRef, xp.dbHead.baseFee)
-  xp.byJob.init
-
   xp.startDate = utcNow()
+  xp.dbHead.init(db)
   xp.gasPrice = txPriceLimit
   xp.lifeTime = txPoolLifeTime
+
+  xp.txDB = init(type TxTabsRef, xp.dbHead.baseFee)
+  xp.txDBSync = newAsyncLock()
+
+  xp.byJob.init
+  xp.byJobSync = newAsyncLock()
+
+  xp.commitLoop = false
+  xp.dirtyPending = false
+  xp.flagsSync = newAsyncLock()
+
 
 proc init*(T: type TxPool; db: BaseChainDB): T
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Ditto
   result.init(db)
+
+# ------------------------------------------------------------------------------
+# Public functions, semaphore/locks
+# ------------------------------------------------------------------------------
+
+proc byJobLock*(xp: var TxPool) {.inline, raises: [Defect,CatchableError].} =
+  ## Lock sub-descriptor. This function should only be used implicitely by
+  ## template `byJobExclusively()`
+  waitFor xp.byJobSync.acquire
+
+proc byJobUnLock*(xp: var TxPool) {.inline, raises: [Defect,AsyncLockError].} =
+  ## Unlock sub-descriptor. This function should only be used implicitely by
+  ## template `byJobExclusively()`
+  xp.byJobSync.release
+
+template byJobExclusively*(xp: var TxPool; action: untyped) =
+  ## Handy helper used to serialise access to `xp.byJob` sub-descriptor
+  xp.byJobLock
+  action
+  xp.byJobUnLock
+
+
+proc txDBLock*(xp: var TxPool) {.inline, raises: [Defect,CatchableError].} =
+  ## Lock sub-descriptor. This function should only be used implicitely by
+  ## template `txDBExclusively()`
+  waitFor xp.txDBSync.acquire
+
+proc txDBUnLock*(xp: var TxPool) {.inline, raises: [Defect,AsyncLockError].} =
+  ## Unlock descriptor. This function should only be used implicitely by
+  ## template `txDBExclusively()`
+  xp.txDBSync.release
+
+template txDBExclusively*(txp: var TxPool; action: untyped) =
+  ## Handy helper used to serialise access to `xp.txDB` sub-descriptor
+  xp.txDBLock
+  action
+  xp.txDBUnLock
+
+
+proc flagsLock*(xp: var TxPool) {.inline, raises: [Defect,CatchableError].} =
+  ## Lock descriptor. This function should only be used implicitely by
+  ## template `flagsExclusively()`
+  waitFor xp.flagsSync.acquire
+
+proc flagsUnLock*(xp: var TxPool) {.inline, raises: [Defect,AsyncLockError].} =
+  ## Unlock descriptor. This function should only be used implicitely by
+  ## template `flagsExclusively()`
+  xp.flagsSync.release
+
+template flagsExclusively*(xp: var TxPool; action: untyped) =
+  ## Handy helperused to serialise access to various flags inside the `xp`
+  ## descriptor object.
+  xp.flagsLock
+  action
+  xp.flagsUnLock
 
 # ------------------------------------------------------------------------------
 # Public functions, getters

@@ -21,14 +21,6 @@ import
   eth/[common, keys],
   stew/results
 
-from chronos import
-  AsyncLock,
-  AsyncLockError,
-  acquire,
-  newAsyncLock,
-  release,
-  waitFor
-
 type
   TxJobID* = ##\
     ## Valid interval: *1 .. TxJobIdMax*, the value `0` corresponds to\
@@ -254,7 +246,6 @@ type
     ## `TxJobIdMax`.)
     topID: TxJobID                        ## Next job will have `topID+1`
     jobQueue: KeeQu[TxJobID,TxJobDataRef] ## Job queue
-    asyncLock: AsyncLock                  ## Protects access to jom queue
 
 const
   txJobPriorityKind*: set[TxJobKind] = ##\
@@ -346,31 +337,10 @@ proc jobUnshift(t: var TxJob; data: TxJobDataRef): TxJobID
 proc init*(t: var TxJob; initSize = 10) =
   ## Optional constructor
   t.jobQueue.init(initSize)
-  t.asyncLock = newAsyncLock()
 
 proc init*(T: type TxJob; initSize = 10): T =
   ## Constructor variant
   result.init(initSize)
-
-# ------------------------------------------------------------------------------
-# Public functions, unique descriptor access control
-# ------------------------------------------------------------------------------
-
-proc txJobLock*(t: var TxJob) {.inline, raises: [Defect,CatchableError].} =
-  ## Lock job descriptor. This function should only be used implicitely by
-  ## template `doExclusively()`
-  waitFor t.asyncLock.acquire
-
-proc txJobUnLock*(t: var TxJob) {.inline, raises: [Defect,AsyncLockError].} =
-  ## Unlock job descriptor. This function should only be used implicitely by
-  ## template `doExclusively()`
-  t.asyncLock.release
-
-template doExclusively*(t: var TxJob; action: untyped) =
-  ## Handy helper
-  t.txJobLock
-  action
-  t.txJobUnLock
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
@@ -379,11 +349,10 @@ template doExclusively*(t: var TxJob; action: untyped) =
 proc add*(t: var TxJob; data: TxJobDataRef): TxJobID
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Add a new job to the *FIFO*.
-  t.doExclusively:
-    if data.kind in txJobPriorityKind:
-      result = t.jobUnshift(data)
-    else:
-      result = t.jobAppend(data)
+  if data.kind in txJobPriorityKind:
+    result = t.jobUnshift(data)
+  else:
+    result = t.jobAppend(data)
 
 proc delete*(t: var TxJob; id: TxJobID): Result[TxJobPair,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -391,33 +360,30 @@ proc delete*(t: var TxJob; id: TxJobID): Result[TxJobPair,void]
   ## deleted (if successful.)
   ##
   ## See also the **Note* at the comment for `txAdd()`.
-  t.doExclusively:
-    let rc = t.jobQueue.delete(id)
-    if rc.isErr:
-      result = err()
-    else:
-      result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+  let rc = t.jobQueue.delete(id)
+  if rc.isErr:
+    result = err()
+  else:
+    result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
 proc fetch*(t: var TxJob): Result[TxJobPair,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Fetches the next job from the *FIFO*.
-  t.doExclusively:
-    let rc = t.jobQueue.shift
-    if rc.isErr:
-      result = err()
-    else:
-      result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+  let rc = t.jobQueue.shift
+  if rc.isErr:
+    result = err()
+  else:
+    result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
 proc first*(t: var TxJob): Result[TxJobPair,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Peek, get the next due job (like `fetch()`) but leave it in the
   ## queue (unlike `fetch()`).
-  t.doExclusively:
-    let rc = t.jobQueue.first
-    if rc.isErr:
-      result = err()
-    else:
-      result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+  let rc = t.jobQueue.first
+  if rc.isErr:
+    result = err()
+  else:
+    result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
 # ------------------------------------------------------------------------------
 # Public queue/table ops
@@ -425,18 +391,15 @@ proc first*(t: var TxJob): Result[TxJobPair,void]
 
 proc`[]`*(t: var TxJob; id: TxJobID): TxJobDataRef
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  t.doExclusively:
-    result = t.jobQueue[id]
+  result = t.jobQueue[id]
 
 proc hasKey*(t: var TxJob; id: TxJobID): bool
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  t.doExclusively:
-    result = t.jobQueue.hasKey(id)
+  result = t.jobQueue.hasKey(id)
 
 proc len*(t: var TxJob): int
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  t.doExclusively:
-    result = t.jobQueue.len
+  result = t.jobQueue.len
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
