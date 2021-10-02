@@ -127,8 +127,9 @@ proc toTxPool*(
     for item in itList:
       var tx = item.tx
       result.addTx(tx, item.local, item.info)
+  result.flushRejects
   doAssert result.count.total == itList.len
-  doAssert result.flushRejects[0] == 0
+  doAssert result.count.rejected == 0
 
 
 proc toTxPool*(
@@ -180,11 +181,13 @@ proc toTxPool*(
         if delayAt == remoteCount:
           nRemoteGapItems = remoteCount
           noisy.say &"time gap after {remoteCount} remote transactions"
-          timeGap = result.get(item.itemID).value.timeStamp + middleOfTimeGap
+          let itemID = item.itemID
+          timeGap = result.getItem(itemID).value.timeStamp + middleOfTimeGap
           delayMSecs.sleep
 
+  result.flushRejects
   doAssert result.count.total == itList.len
-  doAssert result.flushRejects[0] == 0
+  doAssert result.count.rejected == 0
 
 
 proc toItems*(xp: var TxPool): seq[TxItemRef] =

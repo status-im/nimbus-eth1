@@ -23,27 +23,27 @@
 ## Transaction state diagram:
 ## --------------------------
 ## ::
-##  .                .                         .
-##  .   <Job queue>  .   <Accounting system>   .   <Tip/waste disposal>
-##  .                .                         .
-##  .                .         +-----------+   .
-##  .     +------------------> | queued(1) | -------------+
-##  .     |          .         +-----------+   .          |
-##  .     |          .           |   ^   ^     .          |
-##  .     |          .           V   |   |     .          |
-##  .     |          .   +------------+  |     .          |
-##  .  enter(0) -------> | pending(2) |  |     .          |
-##  .     |          .   +------------+  |     .          |
-##  .     |          .     |     |       |     .          |
-##  .     |          .     |     V       |     .          |
-##  .     |          .     |   +-----------+   .          |
-##  .     |          .     |   | staged(3) | -----------+ |
-##  .     |          .     |   +-----------+   .        | |
-##  .     |          .     |                   .        v v
-##  .     |          .     |                   .    +----------------+
-##  .     |          .     +----------------------> |  rejected(4)   |
-##  .     +---------------------------------------> | (waste basket) |
-##  .                .                         .    +----------------+
+##  .                   .                          .
+##  .     <Job queue>   .   <Accounting system>    .   <Tip/waste disposal>
+##  .                   .                          .
+##  .                   .         +-----------+    .
+##  .        +------------------> | queued(1) | -------------+
+##  .        |          .         +-----------+    .         |
+##  .        |          .            |   ^   ^     .         |
+##  .        |          .            V   |   |     .         |
+##  .        |          .    +------------+  |     .         |
+##  .  --> enter(0) -------> | pending(2) |  |     .         |
+##  .        |          .    +------------+  |     .         |
+##  .        |          .     |     |        |     .         |
+##  .        |          .     |     V        |     .         |
+##  .        |          .     |   +-----------+    .         |
+##  .        |          .     |   | staged(3) | -----------+ |
+##  .        |          .     |   +-----------+    .       | |
+##  .        |          .     |                    .       v v
+##  .        |          .     |                    .   +----------------+
+##  .        |          .     +----------------------> |  rejected(4)   |
+##  .        +---------------------------------------> | (waste basket) |
+##  .                   .                          .   +----------------+
 ##
 ##
 ## Job Queue
@@ -81,24 +81,22 @@
 ##
 
 import
-  ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job, tx_tabs, tx_tasks],
+  ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
+  ./tx_pool/tx_tabs,
   ./tx_pool/tx_tabs/[tx_itemid, tx_leaf],
+  ./tx_pool/tx_tasks,
+  ./tx_pool/tx_tasks/[tx_add_tx, tx_update_pending],
   chronicles,
+  eth/[common, keys],
   stew/results
 
 export
   TxItemRef,
   TxItemStatus,
   TxJobDataRef,
-  TxJobFlushRejectsReply,
-  TxJobGetAccountsReply,
-  TxJobItemGetReply,
-  TxJobGetPriceReply,
   TxJobID,
   TxJobItemApply,
   TxJobKind,
-  TxJobMoveRemoteToLocalsReply,
-  TxJobStatsCountReply,
   TxPool,
   TxTabsStatsCount,
   results,
@@ -140,119 +138,125 @@ proc processJobs(xp: var TxPool): int
   while rc.isOK:
     let task = rc.value
 
-    xp.txDBExclusively:
-      case task.data.kind
-      of txJobNone:
-        discard
+    case task.data.kind
+    of txJobNone:
+      # no action
+      discard
 
-      of txJobAbort:
-        xp.byJob.init
-        break
+    of txJobAbort:
+      # Stop processing and flush job queue
+      xp.byJob.init
+      break
 
-      of txJobAddTxs:
-        # Add txs => queued(1), pending(2), or rejected(4) (see somment
-        # on to of page for details.
-        var args = task.data.addTxsArgs
-        xp.addTxs(args.txs, args.local, args.info)
+    of txJobAddTxs:
+      # Add txs => queued(1), pending(2), or rejected(4) (see comment
+      # on top of this source file for details.)
+      var args = task.data.addTxsArgs
+      for tx in args.txs.mitems:
+        xp.txDBExclusively:
+          xp.addTx(tx, args.local, args.info)
+      xp.dirtyPending = true
 
-      of txJobApplyByLocal:
+    of txJobApplyByLocal:
+      # Apply argument function to all `local` or `remote` items.
+      let args = task.data.applyByLocalArgs
+      xp.txDBExclusively:
         # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash ..
-        let args = task.data.applyByLocalArgs
         for item in xp.txDB.byItemID.eq(args.local).walkItems:
           if not args.apply(item):
             break
-        xp.dirtyPending = true
+      xp.dirtyPending = true
 
-      of txJobApplyByStatus:
-        let args = task.data.applyByStatusArgs
+    of txJobApplyByStatus:
+      # Apply argument function to all `status` items.
+      let args = task.data.applyByStatusArgs
+      xp.txDBExclusively:
         for itemList in xp.txDB.byStatus.incItemList(args.status):
           for item in itemList.walkItems:
             if not args.apply(item):
               break
-        xp.dirtyPending = true
+      xp.dirtyPending = true
 
-      of txJobApplyByRejected: ##\
-        let args = task.data.applyByRejectedArgs
+    of txJobApplyByRejected:
+      # Apply argument function to all `rejected` items.
+      let args = task.data.applyByRejectedArgs
+      xp.txDBExclusively:
         for item in xp.txDB.byRejects.walkItems:
           if not args.apply(item):
             break
+      xp.dirtyPending = true
 
-      of txJobEvictionInactive:
+    of txJobEvictionInactive:
+      # Move transactions older than `xp.lifeTime` to the waste basket.
+      xp.txDBExclusively:
         xp.deleteExpiredItems(xp.lifeTime)
+      xp.dirtyPending = true
 
-      of txJobFlushRejects:
-        let
-          args = task.data.flushRejectsArgs
-          data = xp.txDB.flushRejects(args.maxItems)
-        args.reply(deleted = data[0], remaining = data[1])
+    of txJobFlushRejects:
+      # Deletes at most the `maxItems` oldest items from the waste basket.
+      let args = task.data.flushRejectsArgs
+      xp.txDBExclusively:
+        discard xp.txDB.flushRejects(args.maxItems)
 
-      of txJobGetBaseFee:
-        let args = task.data.getBaseFeeArgs
-        args.reply(price = xp.txDB.baseFee)
-
-      of txJobGetGasPrice:
-        let args = task.data.getGasPriceArgs
-        args.reply(price = xp.gasPrice)
-
-      of txJobGetAccounts:
-        let args = task.data.getAccountsArgs
-        args.reply(accounts = xp.collectAccounts(args.local))
-
-      of txJobItemGet:
-        let
-          args = task.data.itemGetArgs
-          rc = xp.txDB.byItemID.eq(args.itemID)
-        if rc.isOK:
-          args.reply(item = rc.value)
-        else:
-          args.reply(item = nil)
-
-      of txJobItemSetStatus:
-        let args = task.data.itemSetStatusArgs
+    of txJobItemSetStatus:
+      # Set/update status for particular item.
+      let args = task.data.itemSetStatusArgs
+      xp.txDBExclusively:
         discard xp.txDB.reassign(args.item, args.status)
-        xp.dirtyPending = true
+      xp.dirtyPending = true
 
-      of txJobMoveRemoteToLocals:
-        let args = task.data.moveRemoteToLocalsArgs
-        args.reply(moved = xp.reassignRemoteToLocals(args.account))
-        xp.dirtyPending = true
+    of txJobMoveRemoteToLocals:
+      # For given account, remote transactions are migrated to local
+      # transactions.
+      let args = task.data.moveRemoteToLocalsArgs
+      xp.txDBExclusively:
+        discard xp.reassignRemoteToLocals(args.account)
+      xp.dirtyPending = true
 
-      of txJobRejectItem:
-        let args = task.data.rejectItemArgs
+    of txJobRejectItem:
+      # Move argument `item` to waste basket
+      let args = task.data.rejectItemArgs
+      xp.txDBExclusively:
         discard xp.txDB.reject(args.item, args.reason)
-        xp.dirtyPending = true
+      xp.dirtyPending = true
 
-      of txJobSetBaseFee:
-        let args = task.data.setBaseFeeArgs
-        xp.txDB.baseFee = args.price   # cached value, change implies re-org
+    of txJobSetBaseFee:
+      # New base fee (implies database reorg). Note that after changing the
+      # `baseFee`, most probably a re-org should take place (e.g. invoking
+      # `txJobUpdatePending`)
+      let args = task.data.setBaseFeeArgs
+      xp.txDB.baseFee = args.price     # cached value, change implies re-org
+      xp.txDBExclusively:
         xp.dbHead.baseFee = args.price # representative value
-        xp.dirtyPending = true
+      xp.dirtyPending = true
 
-      of txJobSetGasPrice:
-        let args = task.data.setGasPriceArgs
-        var curPrice = xp.gasPrice
+    of txJobSetGasPrice:
+      # Set the minimum price required by the transaction pool for a new
+      # transaction. Increasing it will move all transactions below this
+      # threshold to the waste basket.
+      let args = task.data.setGasPriceArgs
+      var curPrice = xp.gasPrice
+      xp.txDBExclusively:
         xp.updateGasPrice(curPrice = curPrice, newPrice = args.price)
-        xp.gasPrice = curPrice
-        xp.dirtyPending = true
+      xp.gasPrice = curPrice
+      xp.dirtyPending = true
 
-      of txJobSetHead: # FIXME: tbd
-        discard
+    of txJobSetHead: # FIXME: tbd
+      # Change the insertion block header. This call might imply
+      # re-calculating all current transaction states.
+      discard
 
-      of txJobSetMaxRejects:
-        let args = task.data.setMaxRejectsArgs
-        xp.txDB.maxRejects = args.size
-
-      of txJobStatsCount:
-        let args = task.data.statsCountArgs
-        args.reply(status = xp.txDB.statsCount)
-
-      of txJobUpdatePending:
-        let args = task.data.updatePendingArgs
+    of txJobUpdatePending:
+      # For all items, re-calculate `queued` and `pending` status. If the
+      # `force` flag is set, re-calculation is done even though the change
+      # flag hes remained unset.
+      let args = task.data.updatePendingArgs
+      xp.txDBExclusively:
         if xp.dirtyPending or args.force:
-          xp.updatePending(xp.dbHead)
+          xp.updatePending
           xp.dirtyPending = false
 
-      # End synced case
+    # End case/switch
   
     result.inc
     if task.data.hiatus:
@@ -269,7 +273,7 @@ proc runJobSerialiser(xp: var TxPool): Result[int,void]
   ## number of executes jobs.
 
   var alreadyRunning = true
-  xp.flagsExclusively:
+  xp.paramExclusively:
     if not xp.commitLoop:
       alreadyRunning = false
       xp.commitLoop = true
@@ -278,7 +282,7 @@ proc runJobSerialiser(xp: var TxPool): Result[int,void]
     return err()
 
   let nJobs = xp.processJobs
-  xp.flagsExclusively:
+  xp.paramExclusively:
     xp.commitLoop = false
 
   ok(nJobs)
@@ -319,6 +323,57 @@ proc jobCommit*(xp: var TxPool)
   ## Process current elements of the job queue
   xp.jobCommit(TxJobDataRef(
     kind: txJobNone))
+
+# ------------------------------------------------------------------------------
+# Public functions, immediate actions (not queued as a job.)
+# ------------------------------------------------------------------------------
+
+# core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
+# core/tx_pool.go(1728): func (t *txLookup) Count() int {
+# core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
+# core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
+proc count*(xp: var TxPool): TxTabsStatsCount
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Retrieves the current pool stats: the number of local, remote,
+  ## pending, queued, etc. transactions.
+  xp.txDBExclusively:
+    result = xp.txDB.statsCount
+
+# core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
+# core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
+proc getItem*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Returns a transaction if it is contained in the pool.
+  xp.txDBExclusively:
+    result = xp.txDB.byItemID.eq(hash)
+
+# core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
+proc getAccounts*(xp: var TxPool; local: bool): seq[EthAddress]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Retrieves the accounts currently considered `local` or `remote` (i.e.
+  ## the have txs of that kind) depending on request arguments.
+  xp.txDBExclusively:
+    result = xp.collectAccounts(local)
+
+# core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
+proc getGasPrice*(xp: var TxPool): uint64
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Get the current gas price enforced by the transaction pool.
+  xp.paramExclusively:
+    result = xp.gasPrice
+
+proc getBaseFee*(xp: var TxPool): uint64
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Get the `baseFee` implying the price list valuation and order.
+  xp.paramExclusively:
+    result = xp.txDB.baseFee
+
+proc setMaxRejects*(xp: var TxPool; size: int)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Set the size of the waste basket. This setting becomes effective with
+  ## the next move of an item into the waste basket.
+  xp.txDBExclusively:
+    xp.txDB.maxRejects = size
 
 # ------------------------------------------------------------------------------
 # End

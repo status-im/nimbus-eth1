@@ -37,46 +37,18 @@ type
     txJobApplyByStatus
     txJobEvictionInactive
     txJobFlushRejects
-    txJobGetAccounts
-    txJobGetBaseFee
-    txJobGetGasPrice
-    txJobItemGet
     txJobItemSetStatus
     txJobMoveRemoteToLocals
     txJobRejectItem
     txJobSetBaseFee
     txJobSetGasPrice
     txJobSetHead
-    txJobSetMaxRejects
-    txJobStatsCount
     txJobUpdatePending
-
 
   TxJobItemApply* = ##\
     ## Generic item function used as apply function. If the function
     ## returns false, the apply loop is aborted
     proc(item: TxItemRef): bool {.gcsafe,raises: [Defect].}
-
-
-  TxJobFlushRejectsReply* =
-    proc(deleted: int; remaining: int) {.gcsafe,raises: [].}
-
-  TxJobGetAccountsReply* =
-    proc(accounts: seq[EthAddress]) {.gcsafe,raises: [].}
-
-  TxJobItemGetReply* = ##\
-    ## Generic item function for retrieving `item` values.
-    proc(item: TxItemRef) {.gcsafe,raises: [].}
-
-  TxJobGetPriceReply* = ##\
-    ## Generic function used for retrieving non-negative price values.
-    proc(price: uint64) {.gcsafe,raises: [].}
-
-  TxJobMoveRemoteToLocalsReply* =
-    proc(moved: int) {.gcsafe,raises: [].}
-
-  TxJobStatsCountReply* =
-    proc(status: TxTabsStatsCount) {.gcsafe,raises: [].}
 
 
   TxJobDataRef* = ref object
@@ -124,7 +96,7 @@ type
         apply:  TxJobItemApply]
 
     of txJobApplyByRejected: ##\
-      ## Apply argument function to all rejecrd items.
+      ## Apply argument function to all `rejected` items.
       applyByRejectedArgs*: tuple[
         apply:  TxJobItemApply]
 
@@ -133,46 +105,11 @@ type
       discard
 
     of txJobFlushRejects: ##\
-      ## Deletes at most the `maxItems` oldest items from the waste basket
-      ## and returns the numbers of deleted and remaining items (a waste
-      ## basket item is considered older if it was moved there earlier.)
+      ## Deletes at most the `maxItems` oldest items from the waste basket.
       ##
       ## Out-of-band job (runs with priority)
       flushRejectsArgs*: tuple[
-        maxItems: int,
-        reply: TxJobFLushRejectsReply]
-
-    of txJobGetAccounts: ##\
-      ## Retrieves the accounts currently considered `local` or `remote`
-      ## depending on request argumets.
-      ##
-      ## Out-of-band job (runs with priority)
-      getAccountsArgs*: tuple[
-        local: bool,
-        reply: TxJobGetAccountsReply]
-
-    of txJobGetBaseFee: ##\
-      ## Get the `baseFee` implying the price list valuation and order. If
-      ## this entry in disabled, the value `TxNoBaseFee` is returnded.
-      ##
-      ## Out-of-band job (runs with priority)
-      getBaseFeeArgs*: tuple[
-        reply: TxJobGetPriceReply]
-
-    of txJobGetGasPrice: ##\
-      ## Get the current gas price enforced by the transaction pool.
-      ##
-      ## Out-of-band job (runs with priority)
-      getGasPriceArgs*: tuple[
-        reply: TxJobGetPriceReply]
-
-    of txJobItemGet: ##\
-      ## Returns a transaction if it is contained in the pool.
-      ##
-      ## Out-of-band job (runs with priority)
-      itemGetArgs*: tuple[
-        itemId: Hash256,
-        reply:  TxJobItemGetReply]
+        maxItems: int]
 
     of txJobItemSetStatus: ##\
       ## Set/update status for particular item.
@@ -182,11 +119,9 @@ type
 
     of txJobMoveRemoteToLocals: ##\
       ## For given account, remote transactions are migrated to local
-      ## transactions. The function returns the number of transactions
-      ## migrated.
+      ## transactions.
       moveRemoteToLocalsArgs*: tuple[
-        account: EthAddress,
-        reply:   TxJobMoveRemoteToLocalsReply]
+        account: EthAddress]
 
     of txJobRejectItem: ##\
       ## Move argument `item` to waste basket
@@ -203,8 +138,8 @@ type
 
     of txJobSetGasPrice: ##\
       ## Set the minimum price required by the transaction pool for a new
-      ## transaction. Increasing it will drop all transactions below this
-      ## threshold.
+      ## transaction.  Increasing it will move all transactions below this
+      ## threshold to the waste basket.
       setGasPriceArgs*: tuple[
         price: uint64]
 
@@ -214,25 +149,10 @@ type
       setHeadArgs*: tuple[
         head:  Hash256]
 
-    of txJobSetMaxRejects: ##\
-      ## Set the size of the waste basket. This setting becomes effective with
-      ## the next move of an item into the waste basket.
-      ##
-      ## Out-of-band job (runs with priority)
-      setMaxRejectsArgs*: tuple[
-        size: int]
-
-    of txJobStatsCount: ##\
-      ## Retrieves the current pool stats, the number of local, remote,
-      ## pending, queued, etc. transactions.
-      ##
-      ## Out-of-band job (runs with priority)
-      statsCountArgs*: tuple[
-        reply: TxJobStatsCountReply]
-
     of txJobUpdatePending: ##\
-      ## Re-calculate Queued and pending items. If the `force` flag is set,
-      ## re-calculation is done even though the chance flag was unset.
+      ## For all items, re-calculate `queued` and `pending` status. If the
+      ## `force` flag is set, re-calculation is done even though the change
+      ## flag hes remained unset.
       updatePendingArgs*: tuple[
         force: bool]
 
@@ -252,13 +172,7 @@ const
     ## Prioritised jobs, either small or important ones (as re-org)
     {txJobAbort,
       txJobFlushRejects,
-      txJobItemGet,
-      txJobGetAccounts,
-      txJobGetBaseFee,
-      txJobGetGasPrice,
-      txJobSetMaxRejects,
-      txJobRejectItem,
-      txJobStatsCount}
+      txJobRejectItem}
 
   txJobIdMax* = ##\
     ## Wraps around to `1` after last ID

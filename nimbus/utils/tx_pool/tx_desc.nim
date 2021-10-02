@@ -45,12 +45,15 @@ const
   # GlobalQueue:  1024,
 
 type
+  TxPoolParam* = tuple
+    gasPrice: uint64     ## Gas price enforced by the pool
+    dirtyPending: bool   ## Pending queue needs update
+    commitLoop: bool     ## Sentinel, set while commit loop is running
+
   TxPool* = object of RootObj ##\
     ## Transaction pool descriptor
     startDate: Time      ## Start date (read-only)
     dbHead: TxDbHead     ## block chain state
-
-    gasPrice: uint64     ## Gas price enforced by the pool
     lifeTime*: Duration  ## Maximum amount of time non-executable txs are queued
 
     byJob: TxJob         ## Job batch list
@@ -59,9 +62,8 @@ type
     txDB: TxTabsRef      ## Transaction lists & tables
     txDBSync: AsyncLock  ## Serialise access to `txDB`
 
-    commitLoop: bool     ## Flag: sentinel, set while commit loop is running
-    dirtyPending: bool   ## Flag: pending queue needs update
-    flagsSync: AsyncLock ## Serialise access to flags
+    param: TxPoolParam
+    paramSync: AsyncLock ## Serialise access to flags and parameters
 
     # locals: seq[EthAddress] ## Addresses treated as local by default
     # noLocals: bool          ## May disable handling of locals
@@ -75,9 +77,6 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc utcNow: Time {.inline.} =
-  now().utc.toTime
-
 # ------------------------------------------------------------------------------
 # Public functions, constructor
 # ------------------------------------------------------------------------------
@@ -85,9 +84,8 @@ proc utcNow: Time {.inline.} =
 proc init*(xp: var TxPool; db: BaseChainDB)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor, returns new tx-pool descriptor.
-  xp.startDate = utcNow()
+  xp.startDate = now().utc.toTime
   xp.dbHead.init(db)
-  xp.gasPrice = txPriceLimit
   xp.lifeTime = txPoolLifeTime
 
   xp.txDB = init(type TxTabsRef, xp.dbHead.baseFee)
@@ -96,9 +94,9 @@ proc init*(xp: var TxPool; db: BaseChainDB)
   xp.byJob.init
   xp.byJobSync = newAsyncLock()
 
-  xp.commitLoop = false
-  xp.dirtyPending = false
-  xp.flagsSync = newAsyncLock()
+  xp.param.reset
+  xp.param.gasPrice = txPriceLimit
+  xp.paramSync = newAsyncLock()
 
 
 proc init*(T: type TxPool; db: BaseChainDB): T
@@ -144,22 +142,22 @@ template txDBExclusively*(txp: var TxPool; action: untyped) =
   xp.txDBUnLock
 
 
-proc flagsLock*(xp: var TxPool) {.inline, raises: [Defect,CatchableError].} =
+proc paramLock*(xp: var TxPool) {.inline, raises: [Defect,CatchableError].} =
   ## Lock descriptor. This function should only be used implicitely by
-  ## template `flagsExclusively()`
-  waitFor xp.flagsSync.acquire
+  ## template `paramExclusively()`
+  waitFor xp.paramSync.acquire
 
-proc flagsUnLock*(xp: var TxPool) {.inline, raises: [Defect,AsyncLockError].} =
+proc paramUnLock*(xp: var TxPool) {.inline, raises: [Defect,AsyncLockError].} =
   ## Unlock descriptor. This function should only be used implicitely by
-  ## template `flagsExclusively()`
-  xp.flagsSync.release
+  ## template `paramExclusively()`
+  xp.paramSync.release
 
-template flagsExclusively*(xp: var TxPool; action: untyped) =
+template paramExclusively*(xp: var TxPool; action: untyped) =
   ## Handy helperused to serialise access to various flags inside the `xp`
   ## descriptor object.
-  xp.flagsLock
+  xp.paramLock
   action
-  xp.flagsUnLock
+  xp.paramUnLock
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -183,15 +181,15 @@ proc dbHead*(xp: var TxPool): var TxDbHead {.inline.} =
 
 proc gasPrice*(xp: var TxPool): uint64 {.inline.} =
   ## Getter, as price enforced by the pool
-  xp.gasPrice
+  xp.param.gasPrice
 
 proc commitLoop*(xp: var TxPool): bool {.inline.} =
   ## Getter, sentinel, set while commit loop is running
-  xp.commitLoop
+  xp.param.commitLoop
 
 proc dirtyPending*(xp: var TxPool): bool {.inline.} =
   ## Getter, pending queue needs update
-  xp.dirtyPending
+  xp.param.dirtyPending
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
@@ -199,15 +197,15 @@ proc dirtyPending*(xp: var TxPool): bool {.inline.} =
 
 proc `gasPrice=`*(xp: var TxPool; val: uint64) {.inline.} =
   ## Setter,
-  xp.gasPrice = val
+  xp.param.gasPrice = val
 
 proc `commitLoop=`*(xp: var TxPool; val: bool) {.inline.} =
   ## Setter
-  xp.commitLoop = val
+  xp.param.commitLoop = val
 
 proc `dirtyPending=`*(xp: var TxPool; val: bool) {.inline.} =
   ## Setter
-  xp.dirtyPending = val
+  xp.param.dirtyPending = val
 
 # ------------------------------------------------------------------------------
 # Public functions, heplers (debugging only)

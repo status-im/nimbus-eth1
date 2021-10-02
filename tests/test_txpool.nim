@@ -166,10 +166,11 @@ proc runTxLoader(noisy = true; baseFee = 0u64; capture = loadSpecs) =
 
       # Set txs to pseudo random status
       xp.setItemStatusFromInfo
+      xp.flushRejects
 
       check txList.len == 0
       check xp.txDB.verify.isOK
-      check xp.flushRejects[0] == 0
+      check xp.count.rejected == 0
 
       noisy.say "***",
          "Latest items:",
@@ -534,7 +535,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
         xq.lifeTime = getTime() - gap
 
         # evict and pick items from the wastbasket
-        discard xq.flushRejects
+        xq.flushRejects
         xq.inactiveItemsEviction
         let deletedItems = xq.count.rejected
 
@@ -566,7 +567,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
       xq.setItemStatusFromInfo
 
       let
-        nLocalAddrs = toSeq(xq.localAccounts).len
+        nLocalAddrs = toSeq(xq.getAccounts(local = true)).len
         nRemoteAddrs = toSeq(xq.txDB.bySender.walkNonceList(local = false)).len
 
       block:
@@ -619,21 +620,23 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
           let
             nLocals = xq.count.local
             nRemotes = xq.count.remote
-            nMoved = xq.remoteToLocals(maxAddr)
+
+          xq.remoteToLocals(maxAddr)
 
           check xq.txDB.verify.isOK
           check xq.txDB.bySender.eq(maxAddr).eq(local = false).isErr
-          check nMoved == nAddrRemoteItems
-          check nLocals + nMoved == xq.count.local
-          check nRemotes - nMoved == xq.count.remote
+
+          check nLocals + nRemotes == xq.count.total
+          check xq.count.local + xq.count.remote == xq.count.total
+          check xq.count.local == nLocals + nAddrRemoteItems
 
           check nRemoteAddrs ==
             1 + toSeq(xq.txDB.bySender.walkNonceList(local = false)).len
 
           if 0 < nAddrLocalItems:
-            check nLocalAddrs == toSeq(xq.localAccounts).len
+            check nLocalAddrs == toSeq(xq.getAccounts(local = true)).len
           else:
-            check nLocalAddrs == 1 + toSeq(xq.localAccounts).len
+            check nLocalAddrs == 1 + toSeq(xq.getAccounts(local = true)).len
 
           check nAddrQueuedItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
@@ -726,7 +729,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
         test &"Delete locals from largest address group so it becomes empty":
 
           # clear waste basket
-          discard xq.flushRejects
+          xq.flushRejects
 
           var rejCount = 0
           let addrLocals = xq.txDB.bySender.eq(maxAddr)
@@ -736,7 +739,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
               check xq.txDB.reject(item,txInfoErrUnspecified)
               rejCount.inc
 
-          check nLocalAddrs == 1 + toSeq(xq.localAccounts).len
+          check nLocalAddrs == 1 + toSeq(xq.getAccounts(local = true)).len
           check xq.count.rejected == rejCount
           check xq.txDB.verify.isOK
 

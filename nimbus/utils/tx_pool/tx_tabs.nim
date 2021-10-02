@@ -28,7 +28,8 @@ import
   stew/results
 
 export
-  any, eq, ge, gt, le, lt, first, last, next, prev, len, nItems, walkItems
+  any, eq, first, ge, gt, hasKey, last, le, len, lt,
+  nItems, next, prev, walkItems
 
 type
   TxTabsStatsCount* = tuple
