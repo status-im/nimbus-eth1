@@ -87,6 +87,7 @@ import
   ./tx_pool/tx_tasks,
   ./tx_pool/tx_tasks/[tx_add_tx, tx_update_pending],
   chronicles,
+  chronos,
   eth/[common, keys],
   stew/results
 
@@ -97,7 +98,7 @@ export
   TxJobID,
   TxJobItemApply,
   TxJobKind,
-  TxPool,
+  TxPoolRef,
   TxTabsStatsCount,
   results,
   tx_desc.init,
@@ -123,7 +124,7 @@ logScope:
 # Private functions: tasks processor
 # ------------------------------------------------------------------------------
 
-proc processJobs(xp: var TxPool): int
+proc processJobs(xp: TxPoolRef): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Job queue processor
   ##
@@ -133,19 +134,18 @@ proc processJobs(xp: var TxPool): int
 
   var rc: Result[TxJobPair,void]
   xp.byJobExclusively:
-    rc = xp.byJob.fetch
+    rc = xp.byJob.first
 
   while rc.isOK:
     let task = rc.value
-
     case task.data.kind
     of txJobNone:
-      # no action
+      # No action
       discard
 
     of txJobAbort:
-      # Stop processing and flush job queue
-      xp.byJob.init
+      # Stop processing and flush job queue (including the current one)
+      xp.byJob.clear
       break
 
     of txJobAddTxs:
@@ -257,72 +257,62 @@ proc processJobs(xp: var TxPool): int
           xp.dirtyPending = false
 
     # End case/switch
-  
     result.inc
-    if task.data.hiatus:
-      break
 
-    # Get nxt job
+    # Remove the current job and get the next one. The current job could
+    # not be removed earlier because there might be the `jobCommit()`
+    # funcion waiting for it to have finished.
     xp.byJobExclusively:
-      rc = xp.byJob.fetch
+      discard xp.byJob.fetch
+      rc = xp.byJob.first
 
 
-proc runJobSerialiser(xp: var TxPool): Result[int,void]
+proc grabJobsProcessor(xp: TxPoolRef): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Executes jobs in the queue (if any.) The function returns the
-  ## number of executes jobs.
-
-  var alreadyRunning = true
+  ## Gain unique access to jobs processor
   xp.paramExclusively:
-    if not xp.commitLoop:
-      alreadyRunning = false
-      xp.commitLoop = true
+    result = not xp.commitLoop
+    xp.commitLoop = true
 
-  if alreadyRunning:
-    return err()
-
-  let nJobs = xp.processJobs
+proc releaseJobsProcessor(xp: TxPoolRef)
+    {.gcsafe,raises: [Defect,CatchableError].} =
   xp.paramExclusively:
     xp.commitLoop = false
-
-  ok(nJobs)
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool action1 serialiser
 # ------------------------------------------------------------------------------
 
-proc nJobsWaiting*(xp: var TxPool): int
+proc nJobsWaiting*(xp: TxPoolRef): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Return the number of jobs currently unprocessed, waiting.
   xp.byJobExclusively:
     result = xp.byJob.len
 
-proc job*(xp: var TxPool; job: TxJobDataRef): TxJobID
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc job*(xp: TxPoolRef; job: TxJobDataRef): TxJobID
+    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
   ## Add a new job to the queue (but do not start the commit loop.)
   xp.byJobExclusively:
     result = xp.byJob.add(job)
 
-proc jobCommit*(xp: var TxPool; job: TxJobDataRef)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Add a new job to the queue and start the commit loop (unless running
-  ## already.)
-  ##
-  ## :FIXME:
-  ##   currently this function runs in foreground but needs to be
-  ##   made ready to run on the chronos process handler.
-  job.hiatus = true
-  let jobID = xp.job(job)
-  if xp.runJobSerialiser.isErr:
-    raiseAssert "background processing not implemented yet"
-  while xp.byJob.hasKey(jobID):
-    discard xp.runJobSerialiser
+proc jobCommit*(xp: TxPoolRef) {.async.} =
+  ## This function processes all jobs currently on the queue. Jobs added
+  ## while this function is active are left on the queue and need to be
+  ## processed with another instance of `jobCommit()`.
 
-proc jobCommit*(xp: var TxPool)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Process current elements of the job queue
-  xp.jobCommit(TxJobDataRef(
-    kind: txJobNone))
+  # Wait until the next batch is ready. This needs to be waited for as
+  # there might be another job running running some older jobs. The event
+  # is activated when the latest chunk can be processed.
+  await xp.byJob.waitLatest
+
+  # Run jobs processor. It does not matter if this fails. In that case, some
+  # other `jobCommit()` is running processing at least the current batch.
+  if xp.grabJobsProcessor:
+    # all jobs will be processed in foreground, release afterwards
+    let nJobs = xp.processJobs
+    debug "processed jobs",
+      nJobs
+    xp.releaseJobsProcessor
 
 # ------------------------------------------------------------------------------
 # Public functions, immediate actions (not queued as a job.)
@@ -332,7 +322,7 @@ proc jobCommit*(xp: var TxPool)
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {
 # core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
 # core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
-proc count*(xp: var TxPool): TxTabsStatsCount
+proc count*(xp: TxPoolRef): TxTabsStatsCount
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the current pool stats: the number of local, remote,
   ## pending, queued, etc. transactions.
@@ -341,14 +331,14 @@ proc count*(xp: var TxPool): TxTabsStatsCount
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
-proc getItem*(xp: var TxPool; hash: Hash256): Result[TxItemRef,void]
+proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Returns a transaction if it is contained in the pool.
   xp.txDBExclusively:
     result = xp.txDB.byItemID.eq(hash)
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
-proc getAccounts*(xp: var TxPool; local: bool): seq[EthAddress]
+proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the accounts currently considered `local` or `remote` (i.e.
   ## the have txs of that kind) depending on request arguments.
@@ -356,19 +346,19 @@ proc getAccounts*(xp: var TxPool; local: bool): seq[EthAddress]
     result = xp.collectAccounts(local)
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-proc getGasPrice*(xp: var TxPool): uint64
+proc getGasPrice*(xp: TxPoolRef): uint64
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the current gas price enforced by the transaction pool.
   xp.paramExclusively:
     result = xp.gasPrice
 
-proc getBaseFee*(xp: var TxPool): uint64
+proc getBaseFee*(xp: TxPoolRef): uint64
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the `baseFee` implying the price list valuation and order.
   xp.paramExclusively:
     result = xp.txDB.baseFee
 
-proc setMaxRejects*(xp: var TxPool; size: int)
+proc setMaxRejects*(xp: TxPoolRef; size: int)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Set the size of the waste basket. This setting becomes effective with
   ## the next move of an item into the waste basket.

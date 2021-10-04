@@ -18,6 +18,7 @@ import
   ./tx_info,
   ./tx_item,
   ./tx_tabs,
+  chronos,
   eth/[common, keys],
   stew/results
 
@@ -50,11 +51,7 @@ type
     ## returns false, the apply loop is aborted
     proc(item: TxItemRef): bool {.gcsafe,raises: [Defect].}
 
-
   TxJobDataRef* = ref object
-    hiatus*: bool ##\
-      ## Suspend the job queue and return current results.
-
     case kind*: TxJobKind
     of txJobNone: ##\
       ## no action
@@ -156,16 +153,16 @@ type
       updatePendingArgs*: tuple[
         force: bool]
 
-
   TxJobPair* = object
     id*: TxJobID
     data*: TxJobDataRef
 
-  TxJob* = object ##\
+  TxJobRef* = ref object ##\
     ## Job queue with increasing job *ID* numbers (wrapping around at
     ## `TxJobIdMax`.)
     topID: TxJobID                        ## Next job will have `topID+1`
     jobQueue: KeeQu[TxJobID,TxJobDataRef] ## Job queue
+    eventQueue: KeeQu[TxJobID,AsyncEvent] ## Can wait for some jobs
 
 const
   txJobPriorityKind*: set[TxJobKind] = ##\
@@ -205,7 +202,7 @@ proc `==`*(a, b: TxJobID): bool {.borrow.}
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc jobAppend(t: var TxJob; data: TxJobDataRef): TxJobID
+proc jobAppend(jq: TxJobRef; data: TxJobDataRef): TxJobID
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Appends a job to the *FIFO*. This function returns a non-zero *ID* if
   ## successful.
@@ -218,112 +215,166 @@ proc jobAppend(t: var TxJob; data: TxJobDataRef): TxJobID
   ##   * some jobs were deleted in the middle of the queue and the *ID*
   ##     gap was not shifted out yet.
   var id: TxJobID
-  if txJobIdMax <= t.topID:
+  if txJobIdMax <= jq.topID:
     id = 1.TxJobID
   else:
-    id = t.topID + 1
-  if t.jobQueue.append(id, data):
-    t.topID = id
+    id = jq.topID + 1
+  if jq.jobQueue.append(id, data):
+    jq.topID = id
     return id
 
-proc jobUnshift(t: var TxJob; data: TxJobDataRef): TxJobID
+proc jobUnshift(jq: TxJobRef; data: TxJobDataRef): TxJobID
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Stores *back* a job to to the *FIFO* front end be re-fetched next. This
   ## function returns a non-zero *ID* if successful.
   ##
   ## See also the **Note* at the comment for `txAdd()`.
   var id: TxJobID
-  if t.jobQueue.len == 0:
-    if t.topID == 0.TxJobID:
-      t.topID = txJobIdMax # must be non-zero after first use
-    id = t.topID
+  if jq.jobQueue.len == 0:
+    if jq.topID == 0.TxJobID:
+      jq.topID = txJobIdMax # must be non-zero after first use
+    id = jq.topID
   else:
-    id = t.jobQueue.firstKey.value - 1
+    id = jq.jobQueue.firstKey.value - 1
     if id == 0.TxJobID:
       id = txJobIdMax
-  if t.jobQueue.unshift(id, data):
+  if jq.jobQueue.unshift(id, data):
     return id
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(t: var TxJob; initSize = 10) =
-  ## Optional constructor
-  t.jobQueue.init(initSize)
-
-proc init*(T: type TxJob; initSize = 10): T =
+proc init*(T: type TxJobRef; initSize = 10): T =
   ## Constructor variant
-  result.init(initSize)
+  new result
+  result.jobQueue.init(initSize)
+  result.eventQueue.init(1)
+
+proc clear*(jq: TxJobRef) =
+  ## Re-initilaise variant
+  jq.jobQueue.clear
+  jq.eventQueue.clear
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
 # ------------------------------------------------------------------------------
 
-proc add*(t: var TxJob; data: TxJobDataRef): TxJobID
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc add*(jq: TxJobRef; data: TxJobDataRef): TxJobID
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Add a new job to the *FIFO*.
   if data.kind in txJobPriorityKind:
-    result = t.jobUnshift(data)
+    result = jq.jobUnshift(data)
   else:
-    result = t.jobAppend(data)
+    result = jq.jobAppend(data)
 
-proc delete*(t: var TxJob; id: TxJobID): Result[TxJobPair,void]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Delete a job by argument `id`. The function returns the job just
-  ## deleted (if successful.)
-  ##
-  ## See also the **Note* at the comment for `txAdd()`.
-  let rc = t.jobQueue.delete(id)
+proc isWaitedFor*(jq: TxJobRef; id: TxJobID): bool
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Returns true if somebody waits for the job to have finished.
+  jq.eventQueue.hasKey(id)
+
+proc waitLatest*(jq: TxJobRef) {.async.} =
+  ## Wait for the currently latest job to have finished.
+  let rc = jq.eventQueue.lastKey
   if rc.isErr:
-    result = err()
-  else:
-    result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+    return # nothing to wait for
 
-proc fetch*(t: var TxJob): Result[TxJobPair,void]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Fetches the next job from the *FIFO*.
-  let rc = t.jobQueue.shift
-  if rc.isErr:
-    result = err()
-  else:
-    result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+  # wait for the latest job ID to have finished
+  let id = rc.value
 
-proc first*(t: var TxJob): Result[TxJobPair,void]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+  # event not in table yet?
+  if not jq.eventQueue.hasKey(id):
+    jq.eventQueue[id] = newAsyncEvent()
+
+    # fire immediately if this is the only one
+    if jq.eventQueue.len == 1:
+      jq.eventQueue[id].fire
+      return
+
+  # wait until event has fired
+  await jq.eventQueue[id].wait
+
+
+proc fetch*(jq: TxJobRef): Result[TxJobPair,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Fetches (and deletes) the next job from the *FIFO*.
+  var kvp: TxJobPair
+
+  # first item from queue
+  block:
+    let rc = jq.jobQueue.shift
+    if rc.isErr:
+      return err()
+    kvp.id = rc.value.key
+    kvp.data = rc.value.data
+
+  # process event queue as follows:
+  #
+  #   on the event queue do for the job `kvp.id` of the current event
+  #
+  #   * if the first event has key `kvp.id`
+  #     => remove the first event
+  #     => fire the next event on the queue (if any)
+  #
+  block:
+    # check whether this is the first item, if so => trigger next
+    let rc1st = jq.eventQueue.first
+    if rc1st.isOK and rc1st.value.key == kvp.id:
+
+      jq.eventQueue.del(kvp.id) # not needed anymore
+      let rc2nd = jq.eventQueue.first
+      if rc2nd.isOK:
+        rc2nd.value.data.fire
+
+  ok(kvp)
+
+
+proc first*(jq: TxJobRef): Result[TxJobPair,void]
+    {.gcsafe,raises: [Defect,KeyError].} =
   ## Peek, get the next due job (like `fetch()`) but leave it in the
   ## queue (unlike `fetch()`).
-  let rc = t.jobQueue.first
+  let rc = jq.jobQueue.first
   if rc.isErr:
-    result = err()
-  else:
-    result = ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+    return err()
+  ok(TxJobPair(id: rc.value.key, data: rc.value.data))
 
 # ------------------------------------------------------------------------------
 # Public queue/table ops
 # ------------------------------------------------------------------------------
 
-proc`[]`*(t: var TxJob; id: TxJobID): TxJobDataRef
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  result = t.jobQueue[id]
+proc`[]`*(jq: TxJobRef; id: TxJobID): TxJobDataRef
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  jq.jobQueue[id]
 
-proc hasKey*(t: var TxJob; id: TxJobID): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  result = t.jobQueue.hasKey(id)
+proc hasKey*(jq: TxJobRef; id: TxJobID): bool
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  jq.jobQueue.hasKey(id)
 
-proc len*(t: var TxJob): int
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  result = t.jobQueue.len
+proc len*(jq: TxJobRef): int
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  jq.jobQueue.len
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
 # ------------------------------------------------------------------------------
 
-proc verify*(t: var TxJob): Result[void,TxInfo]
+proc verify*(jq: TxJobRef): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = t.jobQueue.verify
-  if rc.isErr:
-    return err(txInfoVfyJobQueue)
+  block:
+    let rc = jq.jobQueue.verify
+    if rc.isErr:
+      return err(txInfoVfyJobQueue)
+
+  block:
+    var isFired = true
+    for kvp in jq.eventQueue.nextPairs:
+      if not jq.jobQueue.hasKey(kvp.key):
+        return err(txInfoVfyJobEvent)
+      # first id must have been fired and the other reset
+      if kvp.data.isSet != isFired:
+        return err(txInfoVfyJobEvent)
+      isFired = false
+
   ok()
 
 # ------------------------------------------------------------------------------

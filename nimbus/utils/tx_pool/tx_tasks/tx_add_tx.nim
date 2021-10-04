@@ -34,7 +34,7 @@ logScope:
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTx*(xp: var TxPool; tx: var Transaction; local: bool;  info = "")
+proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Queue a transaction. Thetransaction is tested and moved to either of
   ## the `queued` or `pending` waiting queues, or into the waste basket.

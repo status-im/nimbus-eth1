@@ -19,7 +19,7 @@ import
   eth/[common, keys, p2p]
 
 type
-  TxDbHead* = object ##\
+  TxDbHeadRef* = ref object ##\
     ## Cache the state of the block chain which serves as logical insertion
     ## point for a new block. This state is typically the canonical head
     ## when updated.
@@ -57,7 +57,7 @@ proc toForkOrLondon(db: BaseChainDB; number: BlockNumber): Fork =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc update*(dh: var TxDbHead; newHead: BlockHeader)
+proc update*(dh: TxDbHeadRef; newHead: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Update by block header
 
@@ -83,16 +83,12 @@ proc update*(dh: var TxDbHead; newHead: BlockHeader)
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(dh: var TxDbHead; db: BaseChainDB)
+proc init*(T: type TxDbHeadRef; db: BaseChainDB): T
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor
-  dh.db = db
-  dh.update(db.getCanonicalHead)
-
-proc init*(T: type TxDbHead; db: BaseChainDB): T
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Ditto
-  result.init(db)
+  new result
+  result.db = db
+  result.update(db.getCanonicalHead)
 
 # ------------------------------------------------------------------------------
 # End

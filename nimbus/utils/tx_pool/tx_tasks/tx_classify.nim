@@ -31,7 +31,7 @@ logScope:
 # Private transaction validation helpers
 # ------------------------------------------------------------------------------
 
-proc checkTxBasic(xp: var TxPool; item: TxItemRef): bool {.inline.} =
+proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Rejected transactions will go to the wastebasket
@@ -59,7 +59,7 @@ proc checkTxBasic(xp: var TxPool; item: TxItemRef): bool {.inline.} =
 
   true
 
-proc checkTxFees(xp: var TxPool; item: TxItemRef): bool {.inline.} =
+proc checkTxFees(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Rejected transactions will go to the queue(1) waiting for a change
@@ -93,7 +93,7 @@ proc checkTxFees(xp: var TxPool; item: TxItemRef): bool {.inline.} =
 
   true
 
-proc checkTxBalance(xp: var TxPool; item: TxItemRef): bool {.inline.} =
+proc checkTxBalance(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Function currently unused.
@@ -121,7 +121,7 @@ proc checkTxBalance(xp: var TxPool; item: TxItemRef): bool {.inline.} =
 # Public functionss
 # ------------------------------------------------------------------------------
 
-proc classifyTxValid*(xp: var TxPool; item: TxItemRef): TxInfo =
+proc classifyTxValid*(xp: TxPoolRef; item: TxItemRef): TxInfo =
   ## Check a raw transaction whether it should be accepted at all or
   ## re-jected right away.
   if not xp.checkTxBasic(item):
@@ -130,7 +130,7 @@ proc classifyTxValid*(xp: var TxPool; item: TxItemRef): TxInfo =
   txInfoOk
 
 
-proc classifyTxPending*(xp: var TxPool; item: TxItemRef): bool =
+proc classifyTxPending*(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check whether a valid transaction is ready to be set `pending`.
   if item.tx.estimatedGasTip(xp.dbHead.baseFee) <= 0:
     return false

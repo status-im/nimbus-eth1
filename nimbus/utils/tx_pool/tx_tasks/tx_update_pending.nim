@@ -28,7 +28,7 @@ logScope:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc updatePending*(xp: var TxPool)
+proc updatePending*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Similar to `addTxs()` only for queued or pending items on the system.
   var

@@ -19,15 +19,8 @@ import
   ./tx_info,
   ./tx_job,
   ./tx_tabs,
+  chronos,
   eth/[common, keys]
-
-from chronos import
-  AsyncLock,
-  AsyncLockError,
-  acquire,
-  newAsyncLock,
-  release,
-  waitFor
 
 const
   txPoolLifeTime = initDuration(hours = 3)
@@ -35,35 +28,29 @@ const
 
   # Journal:   "transactions.rlp",
   # Rejournal: time.Hour,
-  #
   # PriceBump:  10,
-  #
-  # AccountSlots: 16,
-  # GlobalSlots:  4096 + 1024, // urgent + floating queue capacity with
-  #                            // 4:1 ratio
-  # AccountQueue: 64,
-  # GlobalQueue:  1024,
 
 type
   TxPoolParam* = tuple
     gasPrice: uint64     ## Gas price enforced by the pool
     dirtyPending: bool   ## Pending queue needs update
     commitLoop: bool     ## Sentinel, set while commit loop is running
+    jobExecRepeat: bool  ## Enable job processor (wrapping commit loop)
 
-  TxPool* = object of RootObj ##\
+  TxPoolRef* = ref object of RootObj ##\
     ## Transaction pool descriptor
-    startDate: Time      ## Start date (read-only)
-    dbHead: TxDbHead     ## block chain state
-    lifeTime*: Duration  ## Maximum amount of time non-executable txs are queued
+    startDate: Time           ## Start date (read-only)
+    dbHead: TxDbHeadRef       ## block chain state
+    lifeTime*: times.Duration ## Maximum fife time of a queued tx
 
-    byJob: TxJob         ## Job batch list
-    byJobSync: AsyncLock ## Serialise access to `byJob`
+    byJob: TxJobRef           ## Job batch list
+    byJobSync: AsyncLock      ## Serialise access to `byJob`
 
-    txDB: TxTabsRef      ## Transaction lists & tables
-    txDBSync: AsyncLock  ## Serialise access to `txDB`
+    txDB: TxTabsRef           ## Transaction lists & tables
+    txDBSync: AsyncLock       ## Serialise access to `txDB`
 
     param: TxPoolParam
-    paramSync: AsyncLock ## Serialise access to flags and parameters
+    paramSync: AsyncLock      ## Serialise access to flags and parameters
 
     # locals: seq[EthAddress] ## Addresses treated as local by default
     # noLocals: bool          ## May disable handling of locals
@@ -77,82 +64,82 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------
-# Public functions, constructor
-# ------------------------------------------------------------------------------
-
-proc init*(xp: var TxPool; db: BaseChainDB)
+proc init(xp: TxPoolRef; db: BaseChainDB)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor, returns new tx-pool descriptor.
   xp.startDate = now().utc.toTime
-  xp.dbHead.init(db)
+  xp.dbHead = init(type TxDbHeadRef, db)
   xp.lifeTime = txPoolLifeTime
 
   xp.txDB = init(type TxTabsRef, xp.dbHead.baseFee)
   xp.txDBSync = newAsyncLock()
 
-  xp.byJob.init
+  xp.byJob = init(type TxJobRef)
   xp.byJobSync = newAsyncLock()
 
   xp.param.reset
   xp.param.gasPrice = txPriceLimit
   xp.paramSync = newAsyncLock()
 
+# ------------------------------------------------------------------------------
+# Public functions, constructor
+# ------------------------------------------------------------------------------
 
-proc init*(T: type TxPool; db: BaseChainDB): T
+proc init*(T: type TxPoolRef; db: BaseChainDB): T
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Ditto
+  new result
   result.init(db)
 
 # ------------------------------------------------------------------------------
 # Public functions, semaphore/locks
 # ------------------------------------------------------------------------------
 
-proc byJobLock*(xp: var TxPool) {.inline, raises: [Defect,CatchableError].} =
+proc byJobLock*(xp: TxPoolRef) {.inline, raises: [Defect,CatchableError].} =
   ## Lock sub-descriptor. This function should only be used implicitely by
   ## template `byJobExclusively()`
   waitFor xp.byJobSync.acquire
 
-proc byJobUnLock*(xp: var TxPool) {.inline, raises: [Defect,AsyncLockError].} =
+proc byJobUnLock*(xp: TxPoolRef) {.inline, raises: [Defect,AsyncLockError].} =
   ## Unlock sub-descriptor. This function should only be used implicitely by
   ## template `byJobExclusively()`
   xp.byJobSync.release
 
-template byJobExclusively*(xp: var TxPool; action: untyped) =
+template byJobExclusively*(xp: TxPoolRef; action: untyped) =
   ## Handy helper used to serialise access to `xp.byJob` sub-descriptor
   xp.byJobLock
   action
   xp.byJobUnLock
 
 
-proc txDBLock*(xp: var TxPool) {.inline, raises: [Defect,CatchableError].} =
+proc txDBLock*(xp: TxPoolRef) {.inline, raises: [Defect,CatchableError].} =
   ## Lock sub-descriptor. This function should only be used implicitely by
   ## template `txDBExclusively()`
   waitFor xp.txDBSync.acquire
 
-proc txDBUnLock*(xp: var TxPool) {.inline, raises: [Defect,AsyncLockError].} =
+proc txDBUnLock*(xp: TxPoolRef) {.inline, raises: [Defect,AsyncLockError].} =
   ## Unlock descriptor. This function should only be used implicitely by
   ## template `txDBExclusively()`
   xp.txDBSync.release
 
-template txDBExclusively*(txp: var TxPool; action: untyped) =
+template txDBExclusively*(xp: TxPoolRef; action: untyped) =
   ## Handy helper used to serialise access to `xp.txDB` sub-descriptor
   xp.txDBLock
   action
   xp.txDBUnLock
 
 
-proc paramLock*(xp: var TxPool) {.inline, raises: [Defect,CatchableError].} =
+proc paramLock*(xp: TxPoolRef) {.inline, raises: [Defect,CatchableError].} =
   ## Lock descriptor. This function should only be used implicitely by
   ## template `paramExclusively()`
   waitFor xp.paramSync.acquire
 
-proc paramUnLock*(xp: var TxPool) {.inline, raises: [Defect,AsyncLockError].} =
+proc paramUnLock*(xp: TxPoolRef) {.inline, raises: [Defect,AsyncLockError].} =
   ## Unlock descriptor. This function should only be used implicitely by
   ## template `paramExclusively()`
   xp.paramSync.release
 
-template paramExclusively*(xp: var TxPool; action: untyped) =
+template paramExclusively*(xp: TxPoolRef; action: untyped) =
   ## Handy helperused to serialise access to various flags inside the `xp`
   ## descriptor object.
   xp.paramLock
@@ -163,31 +150,31 @@ template paramExclusively*(xp: var TxPool; action: untyped) =
 # Public functions, getters
 # ------------------------------------------------------------------------------
 
-proc startDate*(xp: var TxPool): Time {.inline.} =
+proc startDate*(xp: TxPoolRef): Time {.inline.} =
   ## Getter
   xp.startDate
 
-proc txDB*(xp: var TxPool): TxTabsRef {.inline.} =
+proc txDB*(xp: TxPoolRef): TxTabsRef {.inline.} =
   ## Getter, pool database
   xp.txDB
 
-proc byJob*(xp: var TxPool): var TxJob {.inline.} =
+proc byJob*(xp: TxPoolRef): TxJobRef {.inline.} =
   ## Getter, job queue
   xp.byJob
 
-proc dbHead*(xp: var TxPool): var TxDbHead {.inline.} =
+proc dbHead*(xp: TxPoolRef): TxDbHeadRef {.inline.} =
   ## Getter, block chain DB
   xp.dbHead
 
-proc gasPrice*(xp: var TxPool): uint64 {.inline.} =
+proc gasPrice*(xp: TxPoolRef): uint64 {.inline.} =
   ## Getter, as price enforced by the pool
   xp.param.gasPrice
 
-proc commitLoop*(xp: var TxPool): bool {.inline.} =
+proc commitLoop*(xp: TxPoolRef): bool {.inline.} =
   ## Getter, sentinel, set while commit loop is running
   xp.param.commitLoop
 
-proc dirtyPending*(xp: var TxPool): bool {.inline.} =
+proc dirtyPending*(xp: TxPoolRef): bool {.inline.} =
   ## Getter, pending queue needs update
   xp.param.dirtyPending
 
@@ -195,15 +182,15 @@ proc dirtyPending*(xp: var TxPool): bool {.inline.} =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `gasPrice=`*(xp: var TxPool; val: uint64) {.inline.} =
+proc `gasPrice=`*(xp: TxPoolRef; val: uint64) {.inline.} =
   ## Setter,
   xp.param.gasPrice = val
 
-proc `commitLoop=`*(xp: var TxPool; val: bool) {.inline.} =
+proc `commitLoop=`*(xp: TxPoolRef; val: bool) {.inline.} =
   ## Setter
   xp.param.commitLoop = val
 
-proc `dirtyPending=`*(xp: var TxPool; val: bool) {.inline.} =
+proc `dirtyPending=`*(xp: TxPoolRef; val: bool) {.inline.} =
   ## Setter
   xp.param.dirtyPending = val
 
@@ -211,7 +198,7 @@ proc `dirtyPending=`*(xp: var TxPool; val: bool) {.inline.} =
 # Public functions, heplers (debugging only)
 # ------------------------------------------------------------------------------
 
-proc verify*(xp: var TxPool): Result[void,TxInfo]
+proc verify*(xp: TxPoolRef): Result[void,TxInfo]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Verify descriptor and subsequent data structures.
 

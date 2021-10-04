@@ -136,5 +136,6 @@ type
 
     # codes provided for other modules
     txInfoVfyJobQueue           ## Corrupted jobs queue/fifo structure
+    txInfoVfyJobEvent           ## Event table sync error
 
 # End

@@ -15,6 +15,7 @@ import
   ../nimbus/utils/[slst, tx_pool],
   ../nimbus/utils/tx_pool/[tx_item, tx_perjobapi],
   ./test_txpool/[helpers, setup],
+  chronos,
   eth/[common, keys, p2p],
   stint,
   unittest2
@@ -105,7 +106,7 @@ template wrapException(info: string; action: untyped) =
   except CatchableError:
     raiseAssert info & " has problems: " & getCurrentExceptionMsg()
 
-proc addOrFlushGroupwise(xp: var TxPool;
+proc addOrFlushGroupwise(xp: TxPoolRef;
                          grpLen: int; seen: var seq[TxItemRef]; w: TxItemRef;
                          noisy = true): bool =
   # to be run as call back inside `itemsApply()`
@@ -150,7 +151,7 @@ proc runTxLoader(noisy = true; baseFee = 0u64; capture = loadSpecs) =
   bcDB = capture.network.blockChainForTesting
 
   suite &"TxPool: Transactions from {fileInfo} capture{suiteInfo}":
-    var xp: TxPool
+    var xp: TxPoolRef
 
     test &"Import {capture.numBlocks.toKMG} blocks "&
         &"and collect {capture.numTxs} txs":
@@ -166,7 +167,6 @@ proc runTxLoader(noisy = true; baseFee = 0u64; capture = loadSpecs) =
 
       # Set txs to pseudo random status
       xp.setItemStatusFromInfo
-      xp.flushRejects
 
       check txList.len == 0
       check xp.txDB.verify.isOK
@@ -213,6 +213,37 @@ proc runTxLoader(noisy = true; baseFee = 0u64; capture = loadSpecs) =
           gasTipCaps.add itemList.first.value.tx.gasTipCap
       check gasTipCaps.len == xp.txDB.byTipCap.len
 
+    test &"Concurrent job processing, test for race conditions":
+      var log = ""
+
+      proc delayJob(xp: TxPoolRef; tmo: int) {.async.} =
+        let n = xp.nJobsWaiting
+        xp.job(TxJobDataRef(kind: txJobNone))
+        xp.job(TxJobDataRef(kind: txJobNone))
+        xp.job(TxJobDataRef(kind: txJobNone))
+        log &= " wait-" & $tmo & "-" & $(xp.nJobsWaiting - n)
+        await chronos.milliseconds(tmo).sleepAsync
+        await xp.jobCommit
+        log &= " done-" & $tmo
+
+      # run async jobs, completion should be sorted by timeout argument
+      #
+      # this proves, that the `jobCommit()` directive properly runs the
+      # latest batch of jobs -- maybe waiting for some other job to finish
+      proc runJobs(xp: TxPoolRef) {.async.} =
+        let
+          p1 = xp.delayJob(900)
+          p2 = xp.delayJob(1)
+          p3 = xp.delayJob(700)
+        await p3
+        await p2
+        await p1
+
+      waitFor xp.runJobs
+      check xp.nJobsWaiting == 0
+      check log == " wait-900-3 wait-1-3 wait-700-3 done-1 done-700 done-900"
+      check xp.verify.isOK
+
 
 proc runTxBaseTests(noisy = true; baseFee = 0u64) =
 
@@ -241,9 +272,10 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
         for n in w[1] ..< w[2]:
           check txList[n].local == local
           check xq.txDB.reassign(txList[n], not local)
-          check txList[n].info == xq.txDB.byItemID.eq(not local)
-                                                  .last.value.data.info
+          check txList[n].info == xq.txDB.byItemID
+                                         .eq(not local).last.value.data.info
           check xq.txDB.verify.isOK
+
       check nLocal == xq.count.remote
       check nRemote == xq.count.local
 
@@ -367,8 +399,9 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
                      xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Forward delete-walk ID queue"):
-          xq.itemsApply(itFn, local = true)
-          xq.itemsApply(itFn, local = false)
+          xq.pjaItemsApply(itFn, local = true)
+          xq.pjaItemsApply(itFn, local = false)
+          waitFor xq.jobCommit
         check xq.txDB.verify.isOK
         check seen.len == xq.count.total
         check seen.len < groupLen
@@ -386,8 +419,9 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
                      xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Revese delete-walk ID queue"):
-          xq.itemsApply(itFn, local = true)
-          xq.itemsApply(itFn, local = false)
+          xq.pjaItemsApply(itFn, local = true)
+          xq.pjaItemsApply(itFn, local = false)
+          waitFor xq.jobCommit
         check xq.txDB.verify.isOK
         check seen.len == xq.count.total
         check seen.len < groupLen
@@ -535,8 +569,9 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
         xq.lifeTime = getTime() - gap
 
         # evict and pick items from the wastbasket
-        xq.flushRejects
-        xq.inactiveItemsEviction
+        xq.pjaFlushRejects
+        xq.pjaInactiveItemsEviction
+        waitFor xq.jobCommit
         let deletedItems = xq.count.rejected
 
         check xq.count.local == okCount[true]
@@ -621,7 +656,8 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
             nLocals = xq.count.local
             nRemotes = xq.count.remote
 
-          xq.remoteToLocals(maxAddr)
+          xq.pjaRemoteToLocals(maxAddr)
+          waitFor xq.jobCommit
 
           check xq.txDB.verify.isOK
           check xq.txDB.bySender.eq(maxAddr).eq(local = false).isErr
@@ -729,7 +765,8 @@ proc runTxPoolTests(noisy = true; baseFee = 0u64) =
         test &"Delete locals from largest address group so it becomes empty":
 
           # clear waste basket
-          xq.flushRejects
+          xq.pjaFlushRejects
+          waitFor xq.jobCommit
 
           var rejCount = 0
           let addrLocals = xq.txDB.bySender.eq(maxAddr)
@@ -811,10 +848,12 @@ proc runTxPackerTests(noisy = true) =
           check xr.count.rejected == 0
 
           check xq.getBaseFee == ntBaseFee
-          xq.setBaseFee(ntNextFee)
+          xq.pjaSetBaseFee(ntNextFee)
+          waitFor xq.jobCommit
           check xq.getBaseFee == ntNextFee
 
-          xq.updatePending(force = true)
+          xq.pjaUpdatePending(force = true)
+          waitFor xq.jobCommit
 
           # now, xq should look like xr
           check xq.count == xr.count
@@ -848,12 +887,6 @@ when isMainModule:
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
   noisy.runTxPackerTests
-
-  #let
-  #  head = bcDB.getCanonicalHead
-  #  parent = bcDB.getBlockHeader(head.parentHash)
-  #  granny = bcDB.getBlockHeader(parent.parentHash)
-  #echo ">>> ", head.gasLimit, " ", parent.gasLimit, " ", granny.gasLimit
 
   #noisy.runTxLoader(baseFee, dir = ".")
   #noisy.runTxPoolTests(baseFee)

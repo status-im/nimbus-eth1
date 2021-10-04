@@ -44,7 +44,7 @@ proc utcNow: Time =
 # ------------------------------------------------------------------------------
 
 # core/tx_pool.go(384): for addr := range pool.queue {
-proc deleteExpiredItems*(xp: var TxPool; maxLifeTime: Duration)
+proc deleteExpiredItems*(xp: TxPoolRef; maxLifeTime: Duration)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Any non-local transaction old enough will be removed
   let deadLine = utcNow() - maxLifeTime
@@ -59,7 +59,7 @@ proc deleteExpiredItems*(xp: var TxPool; maxLifeTime: Duration)
 
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc deleteUnderpricedItems*(xp: var TxPool; price: uint64)
+proc deleteUnderpricedItems*(xp: TxPoolRef; price: uint64)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Drop all transactions below the argument threshold `price`, i.e.
   ## move these items to the waste basket.
@@ -74,7 +74,7 @@ proc deleteUnderpricedItems*(xp: var TxPool; price: uint64)
 
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
-proc collectAccounts*(xp: var TxPool; local: bool): seq[EthAddress]
+proc collectAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the accounts currently considered local by the pool.
   var rc = xp.txDB.bySender.first
@@ -86,7 +86,7 @@ proc collectAccounts*(xp: var TxPool; local: bool): seq[EthAddress]
 
 
 # core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
-proc reassignRemoteToLocals*(xp: var TxPool; signer: EthAddress): int
+proc reassignRemoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## For given account, remote transactions are migrated to local transactions.
   ## The function returns the number of transactions migrated.
@@ -100,7 +100,7 @@ proc reassignRemoteToLocals*(xp: var TxPool; signer: EthAddress): int
 
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
-proc getRemotesBelowTip*(xp: var TxPool; threshold: uint64): seq[Hash256]
+proc getRemotesBelowTip*(xp: TxPoolRef; threshold: uint64): seq[Hash256]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Finds all remote transactions below the given tip threshold.
   if 0 < threshold:
@@ -110,7 +110,7 @@ proc getRemotesBelowTip*(xp: var TxPool; threshold: uint64): seq[Hash256]
           result.add item.itemID
 
 
-proc updateGasPrice*(xp: var TxPool; curPrice: var uint64; newPrice: uint64)
+proc updateGasPrice*(xp: TxPoolRef; curPrice: var uint64; newPrice: uint64)
     {.inline, raises: [Defect,KeyError].} =
   let oldPrice = curPrice
   curPrice = newPrice
