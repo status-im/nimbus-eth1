@@ -12,7 +12,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   ../../nimbus/[genesis, chain_config, config, db/db_chain],
   ../network/wire/portal_protocol,
-  ../network/state/[state_content, state_network],
+  ../network/state/[state_content, state_network, custom_distance],
   ../content_db,
   ./test_helpers
 
@@ -155,3 +155,32 @@ procSuite "State Content Network":
     await node1.closeWait()
     await node2.closeWait()
     await node3.closeWait()
+
+  asyncTest "Find other nodes in state network with correct custom distance":
+    let
+      node1 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20302))
+      node2 = initDiscoveryNode(
+        rng, PrivateKey.random(rng[]), localAddress(20303))
+
+
+      proto1 = StateNetwork.new(node1, ContentDB.new("", inMemory = true))
+      proto2 = StateNetwork.new(node2, ContentDB.new("", inMemory = true))
+
+    check (await node1.ping(node2.localNode)).isOk()
+    check (await node2.ping(node1.localNode)).isOk()
+
+    proto2.portalProtocol.seedTable()
+
+    let distance = logDistance(node1.localNode.id, node2.localNode.id)
+
+    let nodes = await proto1.portalProtocol.findNode(proto2.portalProtocol.localNode,
+        List[uint16, 256](@[distance]))
+
+    check:
+      nodes.isOk()
+      nodes.get().total == 1'u8
+      nodes.get().enrs.len() == 1
+
+    await node1.closeWait()
+    await node2.closeWait()
