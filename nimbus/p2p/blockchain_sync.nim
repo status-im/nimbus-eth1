@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[sets, options, random, hashes],
+  std/[sets, options, random, hashes, sequtils],
   chronos, chronicles,
   eth/common/eth_types,
   eth/[p2p, p2p/private/p2p_types, p2p/rlpx, p2p/peer_pool],
@@ -239,8 +239,27 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
           count=results.get.headers.len
         shallowCopy(workItem.headers, results.get.headers)
 
-        var bodies = newSeq[BlockBody]()
-        var hashes = newSeq[KeccakHash]()
+        var bodies = newSeqOfCap[BlockBody](workItem.headers.len)
+        var hashes = newSeqOfCap[KeccakHash](maxBodiesFetch)
+        template fetchBodies() =
+          tracePacket ">> Sending eth.GetBlockBodies (0x05)", peer,
+            count=hashes.len
+          let b = await peer.getBlockBodies(hashes)
+          if b.isNone:
+            raise newException(CatchableError, "Was not able to get the block bodies")
+          let bodiesLen = b.get.blocks.len
+          tracePacket "<< Got reply eth.BlockBodies (0x06)", peer,
+            count=bodiesLen
+          if bodiesLen == 0:
+            raise newException(CatchableError, "Zero block bodies received for request")
+          elif bodiesLen < hashes.len:
+            hashes.delete(0, bodiesLen - 1)
+          elif bodiesLen == hashes.len:
+            hashes.setLen(0)
+          else:
+            raise newException(CatchableError, "Too many block bodies received for request")
+          bodies.add(b.get.blocks)
+
         var nextIndex = workItem.startIndex
         for i in workItem.headers:
           if i.blockNumber != nextIndex:
@@ -249,25 +268,10 @@ proc obtainBlocksFromPeer(syncCtx: SyncContext, peer: Peer) {.async.} =
             nextIndex = nextIndex + 1
           hashes.add(blockHash(i))
           if hashes.len == maxBodiesFetch:
-            tracePacket ">> Sending eth.GetBlockBodies (0x05)", peer,
-              count=hashes.len
-            let b = await peer.getBlockBodies(hashes)
-            if b.isNone:
-              raise newException(CatchableError, "Was not able to get the block bodies.")
-            tracePacket "<< Got reply eth.BlockBodies (0x06)", peer,
-              count=b.get.blocks.len
-            hashes.setLen(0)
-            bodies.add(b.get.blocks)
+            fetchBodies()
 
-        if hashes.len != 0:
-          tracePacket ">> Sending eth.GetBlockBodies (0x05)", peer,
-            count=hashes.len
-          let b = await peer.getBlockBodies(hashes)
-          if b.isNone:
-            raise newException(CatchableError, "Was not able to get the block bodies.")
-          tracePacket "<< Got reply eth.BlockBodies (0x06)", peer,
-            count=b.get.blocks.len
-          bodies.add(b.get.blocks)
+        while hashes.len != 0:
+          fetchBodies()
 
         if bodies.len == workItem.headers.len:
           shallowCopy(workItem.bodies, bodies)
