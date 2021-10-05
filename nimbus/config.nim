@@ -102,6 +102,7 @@ const
   defaultEthRpcPort        = 8545
   defaultEthWsPort         = 8546
   defaultEthGraphqlPort    = 8547
+  defaultEngineApiPort     = 8550
   defaultListenAddress      = (static ValidIpAddress.init("0.0.0.0"))
   defaultAdminListenAddress = (static ValidIpAddress.init("127.0.0.1"))
   defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
@@ -306,6 +307,27 @@ type
       defaultValueDesc: $DiscoveryType.V4
       name: "discovery" .}: DiscoveryType
 
+    terminalTotalDifficulty* {.
+      desc: "The terminal total difficulty of the eth2 merge transition block"
+      name: "terminal-total-difficulty" .}: Option[UInt256]
+
+    engineApiEnabled* {.
+      desc: "Enable the Engine API"
+      defaultValue: false
+      name: "engine-api" .}: bool
+
+    engineApiPort* {.
+      desc: "Listening port for the Engine API"
+      defaultValue: defaultEngineApiPort
+      defaultValueDesc: $defaultEngineApiPort
+      name: "engine-api-port" .}: Port
+
+    engineApiAddress* {.
+      desc: "Listening address for the Engine API"
+      defaultValue: defaultAdminListenAddress
+      defaultValueDesc: defaultAdminListenAddressDesc
+      name: "engine-api-address" .}: ValidIpAddress
+
     nodeKeyHex* {.
       desc: "P2P node private key (as 32 bytes hex string)"
       defaultValue: ""
@@ -418,11 +440,16 @@ type
         defaultValue: ""
         name: "blocks-file" }: InputFile
 
-
 proc parseCmdArg(T: type NetworkId, p: TaintedString): T =
   parseInt(p.string).T
 
 proc completeCmdArg(T: type NetworkId, val: TaintedString): seq[string] =
+  return @[]
+
+proc parseCmdArg(T: type UInt256, p: TaintedString): T =
+  parse(string p, T)
+
+proc completeCmdArg(T: type UInt256, val: TaintedString): seq[string] =
   return @[]
 
 proc parseCmdArg(T: type EthAddress, p: TaintedString): T =

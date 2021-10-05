@@ -18,11 +18,12 @@ import
   chronos, json_rpc/rpcserver, chronicles,
   eth/p2p/rlpx_protocols/les_protocol,
   ./p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
+  ./p2p/clique/[clique_desc, clique_sealer],
   ./sync/protocol_eth65,
-  config, genesis, rpc/[common, p2p, debug], p2p/chain,
+  config, genesis, rpc/[common, p2p, debug, engine_api], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi, context,
-  "."/[conf_utils, sealer, constants]
+  "."/[conf_utils, sealer, constants, utils]
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -38,6 +39,7 @@ type
 
   NimbusNode = ref object
     rpcServer: RpcHttpServer
+    engineApiServer: RpcHttpServer
     ethNode: EthereumNode
     state: NimbusState
     graphqlServer: GraphqlHttpServerRef
@@ -183,10 +185,37 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     if rs.isErr:
       echo rs.error
       quit(QuitFailure)
+
+    proc signFunc(signer: EthAddress, message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.} =
+      let
+        hashData = keccakHash(message)
+        acc      = nimbus.ctx.am.getAccount(signer).tryGet()
+        rawSign  = sign(acc.privateKey, SkMessage(hashData.data)).toRaw
+
+      ok(rawSign)
+
+    # TODO: There should be a better place to initialize this
+    nimbus.chainRef.clique.authorize(conf.engineSigner, signFunc)
+
+    let initialSealingEngineState =
+      if conf.networkParams.config.terminalTotalDifficulty.isSome and
+         conf.networkParams.config.terminalTotalDifficulty.get.isZero:
+        nimbus.chainRef.ttdReachedAt = some(BlockNumber.zero)
+        EnginePostMerge
+      else:
+        EngineStopped
     nimbus.sealingEngine = SealingEngineRef.new(
-      nimbus.chainRef, nimbus.ctx, conf.engineSigner
-    )
+      # TODO: Implement the initial state correctly
+      nimbus.chainRef, nimbus.ctx, conf.engineSigner, initialSealingEngineState)
     nimbus.sealingEngine.start()
+
+    if conf.engineApiEnabled:
+      nimbus.engineApiServer = newRpcHttpServer([
+        initTAddress(conf.engineApiAddress, conf.engineApiPort)
+      ])
+      setupEngineAPI(nimbus.sealingEngine, nimbus.engineApiServer)
+      nimbus.engineAPiServer.start()
+      info "Starting engine API server", port = conf.engineApiPort
 
   # metrics server
   if conf.metricsEnabled:
@@ -241,6 +270,8 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   trace "Graceful shutdown"
   if conf.rpcEnabled:
     await nimbus.rpcServer.stop()
+  if conf.engineApiEnabled:
+    await nimbus.engineAPiServer.stop()
   if conf.wsEnabled:
     nimbus.wsRpcServer.stop()
   if conf.graphqlEnabled:

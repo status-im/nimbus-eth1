@@ -90,7 +90,8 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
           header,
           body,
           checkSealOK = false, # TODO: how to checkseal from here
-          c.pow)
+          ttdReached = c.isBlockAfterTtd(header.blockNumber),
+          pow = c.pow)
         if res.isErr:
           debug "block validation error",
             msg = res.error

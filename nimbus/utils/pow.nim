@@ -227,8 +227,8 @@ proc getPowSpecs*(header: BlockHeader): PowSpecs =
     difficulty:  header.difficulty)
 
 proc getPowCacheLookup*(tm: PowRef;
-                        blockNumber: BlockNumber): (uint64,Hash256)
-    {.gcsafe,raises: [Defect,CatchableError].} =
+                        blockNumber: BlockNumber): (uint64, Hash256)
+    {.gcsafe, raises: [KeyError, Defect].} =
   ## Returns the pair `(size,digest)` derived from the lookup cache for the
   ## `hashimotoLight()` function for the given block number. The `size` is the
   ## full size of the dataset (the cache represents) as passed on to the
@@ -238,6 +238,8 @@ proc getPowCacheLookup*(tm: PowRef;
   ## This function is intended for error reporting and might also be useful
   ## for testing and debugging.
   let ds = tm.lightByEpoch.get(blockNumber)
+  if ds == nil:
+    raise newException(KeyError, "block not found")
 
   result[0] = ds.size
 

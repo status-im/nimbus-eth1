@@ -65,7 +65,7 @@ proc configurationMain*() =
       check conf.networkId == 678.NetworkId
       check conf.networkParams == NetworkParams()
 
-    test "network-id not set, copy from chainId of customnetwork":
+    test "network-id not set, copy from chainId of custom network":
       let conf = makeConfig(@["--custom-network:" & genesisFile])
       check conf.networkId == 123.NetworkId
 
