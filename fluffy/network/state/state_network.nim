@@ -4,7 +4,8 @@ import
   eth/p2p/discoveryv5/[protocol, node, enr],
   ../../content_db,
   ../wire/portal_protocol,
-  ./state_content
+  ./state_content,
+  ./custom_distance
 
 const
   StateProtocolId* = "portal:state".toBytes()
@@ -43,7 +44,7 @@ proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
     bootstrapRecords: openarray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
     baseProtocol, StateProtocolId, getHandler(contentDB), dataRadius,
-    bootstrapRecords)
+    bootstrapRecords, customDistanceCalculator)
 
   return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 

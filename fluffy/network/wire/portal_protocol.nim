@@ -194,12 +194,14 @@ proc new*(T: type PortalProtocol,
     protocolId: seq[byte],
     contentHandler: ContentHandler,
     dataRadius = UInt256.high(),
-    bootstrapRecords: openarray[Record] = []): T =
+    bootstrapRecords: openarray[Record] = [],
+    distanceCalculator: DistanceCalculator = XorDistanceCalculator
+    ): T =
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
     protocolId: protocolId,
     routingTable: RoutingTable.init(baseProtocol.localNode, DefaultBitsPerHop,
-      DefaultTableIpLimits, baseProtocol.rng),
+      DefaultTableIpLimits, baseProtocol.rng, distanceCalculator),
     baseProtocol: baseProtocol,
     dataRadius: dataRadius,
     handleContentRequest: contentHandler,
