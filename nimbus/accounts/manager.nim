@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[os, json, tables],
+  std/[os, json, tables, strutils],
   stew/[byteutils, results],
   eth/[keyfile, common, keys],
   chronicles
@@ -87,7 +87,7 @@ iterator addresses*(am: AccountsManager): EthAddress =
 proc importPrivateKey*(am: var AccountsManager, fileName: string): Result[void, string] =
   try:
     let pkhex = readFile(fileName)
-    let res = PrivateKey.fromHex(pkhex)
+    let res = PrivateKey.fromHex(pkhex.strip)
     if res.isErr:
       return err("not a valid private key, expect 32 bytes hex")
 

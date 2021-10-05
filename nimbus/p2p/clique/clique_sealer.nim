@@ -167,17 +167,13 @@ proc verifyUncles*(c: Clique; ethBlock: EthBlock): CliqueOkResult =
 
 # clique/clique.go(506): func (c *Clique) Prepare(chain [..]
 proc prepare*(c: Clique; parent: BlockHeader, header: var BlockHeader): CliqueOkResult
-                    {.gcsafe, raises: [Defect,CatchableError].} =
+                    {.gcsafe, raises: [Defect, CatchableError].} =
   ## For the Consensus Engine, `prepare()` initializes the consensus fields
   ## of a block header according to the rules of a particular engine. The
   ## changes are executed inline.
   ##
   ## This implementation prepares all the consensus fields of the header for
   ## running the transactions on top.
-
-  # If the block isn't a checkpoint, cast a random vote (good enough for now)
-  header.coinbase.reset
-  header.nonce.reset
 
   # Assemble the voting snapshot to check which votes make sense
   let rc = c.cliqueSnapshot(header.parentHash, @[])
@@ -225,7 +221,6 @@ proc authorize*(c: Clique; signer: EthAddress; signFn: CliqueSignerFn) =
       c.signer = signer
       c.signFn = signFn
 
-
 # clique/clique.go(724): func CliqueRLP(header [..]
 proc cliqueRlp*(header: BlockHeader): seq[byte] =
   ## Returns the rlp bytes which needs to be signed for the proof-of-authority
@@ -237,7 +232,6 @@ proc cliqueRlp*(header: BlockHeader): seq[byte] =
   ## (signature present or not), which could be abused to produce different
   ##hashes for the same header.
   header.encodeSealHeader
-
 
 # clique/clique.go(688): func SealHash(header *types.Header) common.Hash {
 proc sealHash*(header: BlockHeader): Hash256 =

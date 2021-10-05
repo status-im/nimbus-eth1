@@ -55,8 +55,13 @@ proc exists*(self: BaseChainDB, hash: Hash256): bool =
 proc getBlockHeader*(self: BaseChainDB; blockHash: Hash256, output: var BlockHeader): bool =
   let data = self.db.get(genericHashKey(blockHash).toOpenArray)
   if data.len != 0:
-    output = rlp.decode(data, BlockHeader)
-    result = true
+    try:
+      output = rlp.decode(data, BlockHeader)
+      true
+    except RlpError:
+      false
+  else:
+    false
 
 proc getBlockHeader*(self: BaseChainDB, blockHash: Hash256): BlockHeader =
   ## Returns the requested block header as specified by block hash.
@@ -273,16 +278,23 @@ proc setAsCanonicalChainHead(self: BaseChainDB; headerHash: Hash256): seq[BlockH
 
   return newCanonicalHeaders
 
+proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
+  ## Returns True if the header with the given block hash is in our DB.
+  self.db.contains(genericHashKey(blockHash).toOpenArray)
+
+proc setHead*(self: BaseChainDB, blockHash: Hash256): bool =
+  if self.headerExists(blockHash):
+    self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(blockHash))
+    return true
+  else:
+    return false
+
 proc setHead*(self: BaseChainDB, header: BlockHeader, writeHeader = false) =
   var headerHash = rlpHash(header)
   if writeHeader:
     self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
   self.addBlockNumberToHashLookup(header)
   self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
-
-proc headerExists*(self: BaseChainDB; blockHash: Hash256): bool =
-  ## Returns True if the header with the given block hash is in our DB.
-  self.db.contains(genericHashKey(blockHash).toOpenArray)
 
 proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]): Hash256 =
   var trie = initHexaryTrie(self.db)

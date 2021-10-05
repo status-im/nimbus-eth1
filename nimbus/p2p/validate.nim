@@ -13,18 +13,15 @@ import
   ../constants,
   ../db/[db_chain, accounts_cache],
   ../transaction,
-  ../utils/[difficulty, header],
-  ../vm_state,
-  ../vm_types,
-  ../forks,
+  ../utils/[difficulty, header, pow],
+  ".."/[vm_state, vm_types, forks, errors],
   ./dao,
-  ../utils/pow,
   ./gaslimit,
   chronicles,
   eth/[common, rlp],
   nimcrypto,
   options,
-  stew/[results, endians2]
+  stew/[objects, results, endians2]
 
 from stew/byteutils
   import nil
@@ -52,14 +49,17 @@ func isGenesis(header: BlockHeader): bool =
 # Pivate validator functions
 # ------------------------------------------------------------------------------
 
-proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  let (expMixDigest,miningValue) = pow.getPowDigest(header)
+proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string] =
+  let (expMixDigest, miningValue) = try:
+    pow.getPowDigest(header)
+  except CatchableError as err:
+    return err("test")
 
   if expMixDigest != header.mixDigest:
     let
       miningHash = header.getPowSpecs.miningHash
-      (size, cachedHash) = pow.getPowCacheLookup(header.blockNumber)
+      (size, cachedHash) = try: pow.getPowCacheLookup(header.blockNumber)
+                           except KeyError: return err("Unknown block")
     debug "mixHash mismatch",
       actual = header.mixDigest,
       expected = expMixDigest,
@@ -79,8 +79,7 @@ proc validateSeal(pow: PoWRef; header: BlockHeader): Result[void,string]
 
 proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
                     numTransactions: int; checkSealOK: bool;
-                    pow: PowRef): Result[void,string]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+                    ttdReached: bool; pow: PowRef): Result[void,string] =
 
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
@@ -109,15 +108,27 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")
 
-  let calcDiffc = db.config.calcDifficulty(header.timestamp, parentHeader)
-  if header.difficulty < calcDiffc:
-    return err("provided header difficulty is too low")
+  if ttdReached:
+    if not header.mixDigest.isZeroMemory:
+      return err("Non-zero mix hash in a post-merge block")
 
-  if checkSealOK:
-    return pow.validateSeal(header)
+    if not header.difficulty.isZero:
+      return err("Non-zero difficulty in a post-merge block")
+
+    if not header.nonce.isZeroMemory:
+      return err("Non-zero nonce in a post-merge block")
+
+    if header.ommersHash != EMPTY_UNCLE_HASH:
+      return err("Invalid ommers hash in a post-merge block")
+  else:
+    let calcDiffc = db.config.calcDifficulty(header.timestamp, parentHeader)
+    if header.difficulty < calcDiffc:
+      return err("provided header difficulty is too low")
+
+    if checkSealOK:
+      return pow.validateSeal(header)
 
   result = ok()
-
 
 func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
                                                Result[void,string] =
@@ -138,8 +149,7 @@ func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
 
 proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
                     uncles: seq[BlockHeader]; checkSealOK: bool;
-                    pow: PowRef): Result[void,string]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+                    pow: PowRef): Result[void,string] =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -161,9 +171,16 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
     else:
       uncleSet.incl uncleHash
 
-  let recentAncestorHashes = chainDB.getAncestorsHashes(
-                               MAX_UNCLE_DEPTH + 1, header)
-  let recentUncleHashes = chainDB.getUncleHashes(recentAncestorHashes)
+  let recentAncestorHashes = try:
+    chainDB.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
+  except CatchableError as err:
+    return err("Block not present in database")
+
+  let recentUncleHashes = try:
+    chainDB.getUncleHashes(recentAncestorHashes)
+  except CatchableError as err:
+    return err("Ancenstors not present in database")
+
   let blockHash = header.blockHash
 
   for uncle in uncles:
@@ -199,7 +216,11 @@ proc validateUncles(chainDB: BaseChainDB; header: BlockHeader;
       if result.isErr:
         return
 
-    let uncleParent = chainDB.getBlockHeader(uncle.parentHash)
+    let uncleParent = try:
+      chainDB.getBlockHeader(uncle.parentHash)
+    except BlockNotFound:
+      return err("Uncle parent not found")
+
     result = validateUncle(header, uncle, uncleParent)
     if result.isErr:
       return
@@ -318,18 +339,26 @@ proc validateTransaction*(
 # Public functions, extracted from test_blockchain_json
 # ------------------------------------------------------------------------------
 
-proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
-            uncles: seq[BlockHeader]; numTransactions: int; checkSealOK: bool;
-            pow: PowRef): Result[void,string]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc validateHeaderAndKinship*(
+    chainDB: BaseChainDB;
+    header: BlockHeader;
+    uncles: seq[BlockHeader];
+    numTransactions: int;
+    checkSealOK: bool;
+    ttdReached: bool;
+    pow: PowRef): Result[void, string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
     return ok()
 
-  let parent = chainDB.getBlockHeader(header.parentHash)
+  let parent = try:
+    chainDB.getBlockHeader(header.parentHash)
+  except CatchableError as err:
+    return err("Failed to load block header from DB")
+
   result = chainDB.validateHeader(
-    header, parent, numTransactions, checkSealOK, pow)
+    header, parent, numTransactions, checkSealOK, ttdReached, pow)
   if result.isErr:
     return
 
@@ -339,24 +368,32 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
   if not chainDB.exists(header.stateRoot):
     return err("`state_root` was not found in the db.")
 
-  result = chainDB.validateUncles(header, uncles, checkSealOK, pow)
+  if not ttdReached:
+    result = chainDB.validateUncles(header, uncles, checkSealOK, pow)
+
   if result.isOk:
     result = chainDB.validateGasLimitOrBaseFee(header, parent)
 
+proc validateHeaderAndKinship*(
+    chainDB: BaseChainDB;
+    header: BlockHeader;
+    body: BlockBody;
+    checkSealOK: bool;
+    ttdReached: bool;
+    pow: PowRef): Result[void, string] {.gcsafe,raises: [CatchableError, Defect].} =
 
-proc validateHeaderAndKinship*(chainDB: BaseChainDB;
-                      header: BlockHeader; body: BlockBody; checkSealOK: bool;
-                      pow: PowRef): Result[void,string]
-    {.gcsafe,raises: [Defect,CatchableError].} =
   chainDB.validateHeaderAndKinship(
-    header, body.uncles, body.transactions.len, checkSealOK, pow)
+    header, body.uncles, body.transactions.len, checkSealOK, ttdReached, pow)
 
-
-proc validateHeaderAndKinship*(chainDB: BaseChainDB; ethBlock: EthBlock;
-        checkSealOK: bool; pow: PowRef): Result[void,string]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc validateHeaderAndKinship*(
+    chainDB: BaseChainDB;
+    ethBlock: EthBlock;
+    checkSealOK: bool;
+    ttdReached: bool;
+    pow: PowRef): Result[void,string] =
   chainDB.validateHeaderAndKinship(
-    ethBlock.header, ethBlock.uncles, ethBlock.txs.len, checkSealOK, pow)
+    ethBlock.header, ethBlock.uncles, ethBlock.txs.len,
+    checkSealOK, ttdReached, pow)
 
 # ------------------------------------------------------------------------------
 # End

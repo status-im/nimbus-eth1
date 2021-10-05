@@ -35,7 +35,8 @@ const
 # Pre Eip 1559 gas limit validation
 # ------------------------------------------------------------------------------
 
-proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void, string] =
+proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void, string]
+                     {.raises: [Defect].} =
   let diff = if limit > header.gasLimit:
                limit - header.gasLimit
              else:
@@ -44,14 +45,21 @@ proc validateGasLimit(header: BlockHeader; limit: GasInt): Result[void, string] 
   let upperLimit = limit div GAS_LIMIT_ADJUSTMENT_FACTOR
 
   if diff >= upperLimit:
-    return err(&"invalid gas limit: have {header.gasLimit}, want {limit} +-= {upperLimit-1}")
+    try:
+      return err(&"invalid gas limit: have {header.gasLimit}, want {limit} +-= {upperLimit-1}")
+    except ValueError:
+      # TODO deprecate-strformat
+      raiseAssert "strformat cannot fail"
   if header.gasLimit < GAS_LIMIT_MINIMUM:
     return err("invalid gas limit below 5000")
   ok()
 
-proc validateGasLimit(c: BaseChainDB; header: BlockHeader): Result[void, string] {.
-                       gcsafe, raises: [Defect,RlpError,BlockNotFound,ValueError].} =
-  let parent = c.getBlockHeader(header.parentHash)
+proc validateGasLimit(c: BaseChainDB; header: BlockHeader): Result[void, string]
+                     {.raises: [Defect].} =
+  let parent = try:
+    c.getBlockHeader(header.parentHash)
+  except CatchableError:
+    return err "Parent block not in database"
   header.validateGasLimit(parent.gasLimit)
 
 # ------------------------------------------------------------------------------
@@ -105,8 +113,8 @@ proc calcEip1599BaseFee*(c: ChainConfig; parent: BlockHeader): UInt256 =
 
 # consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
 proc verifyEip1559Header(c: ChainConfig;
-                       parent, header: BlockHeader): Result[void, string] {.
-                         gcsafe, raises: [Defect,ValueError].} =
+                         parent, header: BlockHeader): Result[void, string]
+                        {.raises: [Defect].} =
   ## Verify that the gas limit remains within allowed bounds
   let limit = if c.isLondonOrLater(parent.blockNumber):
                 parent.gasLimit
@@ -124,22 +132,25 @@ proc verifyEip1559Header(c: ChainConfig;
   # Verify the baseFee is correct based on the parent header.
   var expectedBaseFee = c.calcEip1599BaseFee(parent)
   if headerBaseFee != expectedBaseFee:
-    return err(&"invalid baseFee: have {expectedBaseFee}, "&
-               &"want {header.baseFee}, " &
-               &"parent.baseFee {parent.baseFee}, "&
-               &"parent.gasUsed {parent.gasUsed}")
+    try:
+      return err(&"invalid baseFee: have {expectedBaseFee}, "&
+                 &"want {header.baseFee}, " &
+                 &"parent.baseFee {parent.baseFee}, "&
+                 &"parent.gasUsed {parent.gasUsed}")
+    except ValueError:
+      # TODO deprecate-strformat
+      raiseAssert "strformat cannot fail"
 
   return ok()
 
 proc validateGasLimitOrBaseFee*(c: BaseChainDB;
-                                header, parent: BlockHeader): Result[void, string] {.
-                                gcsafe, raises: [Defect,ValueError,CatchableError].} =
+                                header, parent: BlockHeader): Result[void, string]
+                               {.gcsafe, raises: [Defect].} =
 
   if not c.config.isLondonOrLater(header.blockNumber):
     # Verify BaseFee not present before EIP-1559 fork.
     if not header.baseFee.isZero:
-      return err("invalid baseFee before London fork: have " &
-                  &"{header.baseFee}, want <0>")
+      return err("invalid baseFee before London fork: have " & $header.baseFee & ", want <0>")
     let rc = c.validateGasLimit(header)
     if rc.isErr:
       return rc

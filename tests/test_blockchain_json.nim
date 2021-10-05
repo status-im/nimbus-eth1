@@ -262,7 +262,7 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
 
   if validation:
     let rc = chainDB.validateHeaderAndKinship(
-      result.header, body, checkSeal, pow)
+      result.header, body, checkSeal, false, pow)
     if rc.isErr:
       raise newException(
         ValidationError, "validateHeaderAndKinship: " & rc.error)
@@ -312,7 +312,7 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
 
         # manually validating
         check chainDB.validateHeaderAndKinship(
-          preminedBlock, checkSeal, pow).isOk
+          preminedBlock, checkSeal, false, pow).isOk
 
       except:
         debugEcho "FATAL ERROR(WE HAVE BUG): ", getCurrentExceptionMsg()

@@ -40,6 +40,7 @@ type
     londonBlock        : Option[BlockNumber]
     arrowGlacierBlock  : Option[BlockNumber]
     clique             : CliqueOptions
+    terminalTotalDifficulty*: Option[UInt256]
 
   ChainConfig* = object
     chainId*            : ChainId
@@ -67,6 +68,8 @@ type
     cliquePeriod*       : int
     cliqueEpoch*        : int
 
+    terminalTotalDifficulty*: Option[UInt256]
+
   Genesis* = object
     nonce*      : BlockNonce
     timestamp*  : EthTime
@@ -76,6 +79,9 @@ type
     mixHash*    : Hash256
     coinbase*   : EthAddress
     alloc*      : GenesisAlloc
+    number*     : BlockNumber
+    gasUser*    : GasInt
+    parentHash* : Hash256
     baseFeePerGas*: Option[UInt256]
 
   GenesisAlloc* = Table[EthAddress, GenesisAccount]
@@ -96,6 +102,21 @@ type
   CustomChain = object
     config : ChainOptions
     genesis: Genesis
+
+  GenesisFile* = object
+    config      : ChainOptions
+    nonce*      : BlockNonce
+    timestamp*  : EthTime
+    extraData*  : seq[byte]
+    gasLimit*   : GasInt
+    difficulty* : DifficultyInt
+    mixHash*    : Hash256
+    coinbase*   : EthAddress
+    alloc*      : GenesisAlloc
+    number*     : BlockNumber
+    gasUser*    : GasInt
+    parentHash* : Hash256
+    baseFeePerGas*: Option[UInt256]
 
 const
   CustomNet*  = 0.NetworkId
@@ -193,6 +214,8 @@ proc loadNetworkParams*(fileName: string, cg: var NetworkParams):
 
   if cc.config.clique.epoch.isSome:
     cg.config.cliqueEpoch = cc.config.clique.epoch.get()
+
+  cg.config.terminalTotalDifficulty = cc.config.terminalTotalDifficulty
 
   template validateFork(forkName: untyped, nextBlock: BlockNumber) =
     let fork = astToStr(forkName)
