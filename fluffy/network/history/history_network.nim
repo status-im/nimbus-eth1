@@ -11,20 +11,17 @@ import
   eth/p2p/discoveryv5/[protocol, node, enr],
   ../../content_db,
   ../wire/portal_protocol,
-  ./state_content,
-  ./custom_distance
+  ./history_content
 
 const
-  StateProtocolId* = "portal:state".toBytes()
+  HistoryProtocolId* = "portal:history".toBytes()
 
-# TODO expose function in domain specific way i.e operating od state network
-# objects i.e nodes, tries, hashes
-type StateNetwork* = ref object
+type HistoryNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
 
 proc getHandler(contentDB: ContentDB): ContentHandler =
-    return (proc (contentKey: state_content.ByteList): ContentResult =
+    return (proc (contentKey: history_content.ByteList): ContentResult =
       let contentId = toContentId(contentKey)
       let maybeContent = contentDB.get(contentId)
       if (maybeContent.isSome()):
@@ -36,7 +33,7 @@ proc getHandler(contentDB: ContentDB): ContentHandler =
 # 1. Return proper domain types instead of bytes
 # 2. First check if item is in storage instead of doing lookup
 # 3. Put item into storage (if in radius) after succesful lookup
-proc getContent*(p: StateNetwork, key: ContentKey):
+proc getContent*(p: HistoryNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(key)
@@ -46,17 +43,17 @@ proc getContent*(p: StateNetwork, key: ContentKey):
   # types from here
   return content.map(x => x.asSeq())
 
-proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
+proc new*(T: type HistoryNetwork, baseProtocol: protocol.Protocol,
     contentDB: ContentDB , dataRadius = UInt256.high(),
     bootstrapRecords: openarray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, StateProtocolId, getHandler(contentDB), dataRadius,
-    bootstrapRecords, customDistanceCalculator)
+    baseProtocol, HistoryProtocolId, getHandler(contentDB), dataRadius,
+    bootstrapRecords)
 
-  return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
+  return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
-proc start*(p: StateNetwork) =
+proc start*(p: HistoryNetwork) =
   p.portalProtocol.start()
 
-proc stop*(p: StateNetwork) =
+proc stop*(p: HistoryNetwork) =
   p.portalProtocol.stop()
