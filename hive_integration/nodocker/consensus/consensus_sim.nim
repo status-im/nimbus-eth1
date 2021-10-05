@@ -18,7 +18,7 @@ proc processNode(genesisFile, chainFile,
                  lastBlockHash: string, testStatusIMPL: var TestStatus) =
 
   let
-    conf = makeConfig(@["--customnetwork:" & genesisFile])
+    conf = makeConfig(@["--custom-network:" & genesisFile])
     chainDB = newBaseChainDB(newMemoryDb(),
       pruneTrie = false,
       conf.networkId,

@@ -19,9 +19,19 @@ import
   ./p2p/gaslimit,
   "."/[chain_config, utils, context]
 
+from web3/ethtypes as web3types import nil
+
 type
-  EngineState = enum
-    EngineStopped, EngineRunning
+  EngineState* = enum
+    EngineStopped,
+    EngineRunning,
+    EnginePostMerge
+
+  ExecutionPayload = web3types.ExecutionPayload
+  Web3BlockHash = web3types.BlockHash
+  Web3Address = web3types.Address
+  Web3Bloom = web3types.FixedBytes[256]
+  Web3Quantity = web3types.Quantity
 
   SealingEngineRef* = ref SealingEngineObj
   SealingEngineObj = object of RootObj
@@ -117,6 +127,11 @@ proc generateBlock(engine: SealingEngineRef, ethBlock: var EthBlock): Result[voi
   if sealRes.isErr:
     return err("error sealing block header: " & $sealRes.error)
 
+  debug "generated block",
+        blockNumber = ethBlock.header.blockNumber,
+        headerHash = blockHash(ethBlock.header),
+        fullHash = rlpHash(ethBlock)
+
   ok()
 
 proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
@@ -163,14 +178,48 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
 
     info "block generated", number=blk.header.blockNumber
 
+proc generateExecutionPayload*(engine: SealingEngineRef,
+                               randomData: array[32, byte],
+                               payloadRes: var ExecutionPayload): Result[void, string] =
+  var blk: EthBlock
+  let blkRes = engine.generateBlock(blk)
+  if blkRes.isErr:
+    error "sealing engine generateBlock error", msg=blkRes.error
+    return blkRes
+
+  let res = engine.chain.persistBlocks([blk.header], [
+    BlockBody(transactions: blk.txs, uncles: blk.uncles)
+  ])
+
+  payloadRes.parentHash = Web3BlockHash blk.header.parentHash.data
+  payloadRes.coinbase = Web3Address blk.header.coinbase
+  payloadRes.stateRoot = Web3BlockHash blk.header.stateRoot.data
+  payloadRes.receiptRoot = Web3BlockHash blk.header.receiptRoot.data
+  payloadRes.logsBloom = Web3Bloom blk.header.bloom
+  payloadRes.random = web3types.FixedBytes[32](randomData)
+  payloadRes.blockNumber = blk.header.blockNumber
+  payloadRes.gasLimit = Web3Quantity blk.header.gasLimit
+  payloadRes.gasUsed = Web3Quantity blk.header.gasUsed
+  payloadRes.timestamp = Web3Quantity blk.header.timestamp.toUnix
+  # TODO
+  # res.extraData
+  payloadRes.baseFeePerGas = blk.header.fee.get(UInt256.zero)
+  payloadRes.blockHash = Web3BlockHash blockHash(blk.header).data
+  # TODO
+  # res.transactions*: seq[TypedTransaction]
+
+  return ok()
+
 proc new*(_: type SealingEngineRef,
           chain: Chain,
           ctx: EthContext,
-          signer: EthAddress): SealingEngineRef =
+          signer: EthAddress,
+          initialState: EngineState): SealingEngineRef =
   SealingEngineRef(
     chain: chain,
     ctx: ctx,
-    signer: signer
+    signer: signer,
+    state: initialState
   )
 
 proc start*(engine: SealingEngineRef) =
