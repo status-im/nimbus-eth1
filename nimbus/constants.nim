@@ -54,9 +54,10 @@ const
 
   ## Fork specific constants
 
-  # See: https://github.com/ethereum/EIPs/blob/master/EIPS/eip-170.md
-  # and: https://github.com/ethereum/EIPs/issues/170
-  EIP170_CODE_SIZE_LIMIT* =                 24577
+  # See EIP-170 (https://eips.ethereum.org/EIPS/eip-170).  Maximum code size
+  # that can be stored for a new contract.  Init code when creating a new
+  # contract is not subject to this limit.
+  EIP170_MAX_CODE_SIZE* =                   0x6000
 
   # EIP
   MaxPrecompilesAddr* =                     0xFFFF

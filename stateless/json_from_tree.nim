@@ -174,7 +174,7 @@ proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
     # in current block execution
     wb.writeByte(CodeUntouched, "codeType")
     let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
-    if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
+    if wfEIP170 in wb.flags and code.len > EIP170_MAX_CODE_SIZE:
       raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
     wb.writeUVarint32(code.len, "codeLen")
     wb.writeHashNode(acc.codeHash.data, "codeHash")
@@ -189,7 +189,7 @@ proc writeByteCode(wb: var WitnessBuilder, kd: KeyData, acc: Account) =
 
   # the account have code and the EVM use it
   let code = get(wb.db, contractHashKey(acc.codeHash).toOpenArray)
-  if wfEIP170 in wb.flags and code.len > EIP170_CODE_SIZE_LIMIT:
+  if wfEIP170 in wb.flags and code.len > EIP170_MAX_CODE_SIZE:
     raise newException(ContractCodeError, "code len exceed EIP170 code size limit")
   wb.writeUVarint32(code.len, "codeLen")
   wb.write(code, "code")

@@ -169,10 +169,9 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
   let contractCode = c.output
   if contractCode.len == 0: return
 
-  if fork >= FkSpurious and contractCode.len >= EIP170_CODE_SIZE_LIMIT:
+  if fork >= FkSpurious and contractCode.len > EIP170_MAX_CODE_SIZE:
     debug "Contract code size exceeds EIP170",
-      limit = EIP170_CODE_SIZE_LIMIT,
-      actual = contractCode.len
+      max = EIP170_MAX_CODE_SIZE, actual = contractCode.len
     return false
 
   if fork >= FkLondon and contractCode[0] == 0xEF.byte:

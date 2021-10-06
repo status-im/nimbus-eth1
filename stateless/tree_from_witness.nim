@@ -370,7 +370,7 @@ proc readAddress(t: var TreeBuilder): Hash256 =
 
 proc readCodeLen(t: var TreeBuilder): int =
   let codeLen = t.readUVarint32()
-  if wfEIP170 in t.flags and codeLen > EIP170_CODE_SIZE_LIMIT:
+  if wfEIP170 in t.flags and codeLen > EIP170_MAX_CODE_SIZE:
     raise newException(ContractCodeError, "code len exceed EIP170 code size limit: " & $codeLen)
   t.keys[^1].codeLen = codeLen.int
   result = codeLen.int
