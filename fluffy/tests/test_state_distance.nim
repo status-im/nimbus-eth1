@@ -10,34 +10,34 @@
 import
   std/sequtils,
   stint, unittest2,
-  ../network/state/custom_distance
+  ../network/state/state_distance
 
 suite "State network custom distance function":
   test "Calculate distance according to spec":
     check:
       # Test cases from spec
-      distance(u256(10), u256(10)) == 0
-      distance(u256(5), high(UInt256)) == 6
-      distance(high(UInt256), u256(6)) == 7
-      distance(u256(5), u256(1)) == 4
-      distance(u256(1), u256(5)) == 4
-      distance(UInt256.zero, MID) == MID
-      distance(UInt256.zero, MID + UInt256.one) == MID - UInt256.one
+      stateDistance(u256(10), u256(10)) == 0
+      stateDistance(u256(5), high(UInt256)) == 6
+      stateDistance(high(UInt256), u256(6)) == 7
+      stateDistance(u256(5), u256(1)) == 4
+      stateDistance(u256(1), u256(5)) == 4
+      stateDistance(UInt256.zero, MID) == MID
+      stateDistance(UInt256.zero, MID + UInt256.one) == MID - UInt256.one
 
       # Additional test cases to check some basic properties
-      distance(UInt256.zero, MID + MID) == UInt256.zero
-      distance(UInt256.zero, UInt256.one) == distance(UInt256.zero, high(UInt256))
+      stateDistance(UInt256.zero, MID + MID) == UInt256.zero
+      stateDistance(UInt256.zero, UInt256.one) == stateDistance(UInt256.zero, high(UInt256))
       
   test "Calculate logarithimic distance":
     check:
-      logDistance(u256(0), u256(0)) == 0
-      logDistance(u256(0), u256(1)) == 0
-      logDistance(u256(0), u256(2)) == 1
-      logDistance(u256(0), u256(4)) == 2
-      logDistance(u256(0), u256(8)) == 3
-      logDistance(u256(8), u256(0)) == 3
-      logDistance(UInt256.zero, MID) == 255
-      logDistance(UInt256.zero, MID + UInt256.one) == 254
+      stateLogDistance(u256(0), u256(0)) == 0
+      stateLogDistance(u256(0), u256(1)) == 0
+      stateLogDistance(u256(0), u256(2)) == 1
+      stateLogDistance(u256(0), u256(4)) == 2
+      stateLogDistance(u256(0), u256(8)) == 3
+      stateLogDistance(u256(8), u256(0)) == 3
+      stateLogDistance(UInt256.zero, MID) == 255
+      stateLogDistance(UInt256.zero, MID + UInt256.one) == 254
   
   test "Calculate id at log distance":
     let logDistances = @[
@@ -49,8 +49,8 @@ suite "State network custom distance function":
     # starting log distances
     let logCalculated = logDistances.map(
       proc (x: uint16): uint16 =
-        let nodeAtDist = atDistance(Uint256.zero, x)
-        return logDistance(Uint256.zero, nodeAtDist)
+        let nodeAtDist = stateIdAtDistance(Uint256.zero, x)
+        return stateLogDistance(Uint256.zero, nodeAtDist)
     )
 
     check:

@@ -99,7 +99,7 @@ procSuite "Portal Wire Protocol Tests":
       # table.
       test.proto2.start()
 
-      let distance = logDist(test.node1.localNode.id, test.node2.localNode.id)
+      let distance = logDistance(test.node1.localNode.id, test.node2.localNode.id)
       let nodes = await test.proto1.findNode(test.proto2.localNode,
         List[uint16, 256](@[distance]))
 

@@ -29,18 +29,30 @@ proc getHandler(contentDB: ContentDB): ContentHandler =
       else:
         ContentResult(kind: ContentMissing, contentId: contentId))
 
-# Further improvements which may be necessary:
-# 1. Return proper domain types instead of bytes
-# 2. First check if item is in storage instead of doing lookup
-# 3. Put item into storage (if in radius) after succesful lookup
-proc getContent*(p: HistoryNetwork, key: ContentKey):
+proc getContent*(n: HistoryNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(key)
-    id = toContentId(keyEncoded)
-    content = await p.portalProtocol.contentLookup(keyEncoded, id)
-  # for now returning bytes, ultimately it would be nice to return proper domain
-  # types from here
+    contentId = toContentId(keyEncoded)
+
+  let nodeId = n.portalProtocol.localNode.id
+
+  let distance = n.portalProtocol.routingTable.distance(nodeId, contentId)
+  let inRange = distance <= n.portalProtocol.dataRadius
+
+  # When the content id is in our radius range, try to look it up in our db.
+  if inRange:
+    let contentFromDB = n.contentDB.get(contentId)
+    if contentFromDB.isSome():
+      return contentFromDB
+
+  let content = await n.portalProtocol.contentLookup(keyEncoded, contentId)
+
+  if content.isSome() and inRange:
+    n.contentDB.put(contentId, content.get().asSeq())
+
+  # TODO: for now returning bytes, ultimately it would be nice to return proper
+  # domain types.
   return content.map(x => x.asSeq())
 
 proc new*(T: type HistoryNetwork, baseProtocol: protocol.Protocol,
