@@ -33,7 +33,7 @@ proc setupEngineAPI*(sealingEngine: SealingEngineRef, server: RpcServer) =
 
     var payload: ExecutionPayload
     let generatePayloadRes = sealingEngine.generateExecutionPayload(
-      distinctBase payloadAttributes.random,
+      payloadAttributes,
       payload)
     if generatePayloadRes.isErr:
       raise newException(CatchableError, generatePayloadRes.error)

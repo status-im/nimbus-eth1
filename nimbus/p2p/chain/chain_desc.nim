@@ -159,7 +159,6 @@ proc newChain*(db: BaseChainDB; poa: Clique; extraValidation: bool): Chain
   new result
   result.initChain(db, poa, extraValidation)
 
-
 proc newChain*(db: BaseChainDB, extraValidation: bool): Chain
                  {.gcsafe, raises: [Defect,CatchableError].} =
   ## Constructor for the `Chain` descriptor object with default initialisation
