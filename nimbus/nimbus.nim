@@ -182,6 +182,9 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       echo rs.error
       quit(QuitFailure)
 
+    # TODO: There should be a better place to initialize this
+    nimbus.chainRef.clique.signer = conf.engineSigner
+
     let initialSealingEngineState =
       if conf.networkParams.config.terminalTotalDifficulty.isSome and
          conf.networkParams.config.terminalTotalDifficulty.get.isZero:

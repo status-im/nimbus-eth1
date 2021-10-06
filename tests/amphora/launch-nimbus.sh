@@ -15,11 +15,13 @@ DATA_DIR=$(mktemp -d)
 echo Using data dir ${DATA_DIR}
 
 $SCRIPT_DIR/../../build/nimbus \
+  --log-level:TRACE \
   --data-dir:"${DATA_DIR}" \
   --custom-network:"$SCRIPT_DIR/amphora-interop-genesis-m1.json" \
+  --network:0 \
   --engine-api \
   --rpc \
-  --discovery:none \
+  --nat:none --discovery:none \
   --import-key:"$SCRIPT_DIR/signer-key.txt" \
   --engine-signer:0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b
 
