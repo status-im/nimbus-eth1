@@ -9,35 +9,41 @@
 # according to those terms.
 
 ##
-## Recover Address From Signature
-## ==============================
+## Recover Address From Signature (Version 2)
+## ==========================================
+##
+## Intended to replace utils/ec_recover eventually.
 ##
 ## This module provides caching and direct versions for recovering the
 ## `EthAddress` from an extended signature. The caching version reduces
 ## calculation time for the price of maintaing it in a LRU cache.
 
 import
-  ./utils_defs,
-  ./lru_cache,
   ../constants,
-  eth/[common, keys, rlp],
+  ./keequ,
+  ./utils_defs,
+  eth/[common, common/transaction, keys, rlp],
   nimcrypto,
   stew/results,
   stint
 
-export
-  utils_defs
-
 const
   INMEMORY_SIGNATURES* = ##\
-    ## Number of recent block signatures to keep in memory
+    ## Default number of recent block signatures to keep in memory
     4096
 
 type
-  # simplify Hash256 for rlp serialisation
-  EcKey32 = array[32, byte]
+  EcKey* = ##\
+    ## Internal key used for the LRU cache (derived from Hash256).
+    array[32,byte]
 
-  EcRecover* = LruCache[BlockHeader,EcKey32,EthAddress,UtilsError]
+  EcAddrResult* = ##\
+    ## Typical `EthAddress` result as returned bu `ecRecover()` functions.
+    Result[EthAddress,UtilsError]
+
+  EcRecover* = object
+    size: uint
+    q: KeeQu[EcKey,EthAddress]
 
 {.push raises: [Defect].}
 
@@ -45,95 +51,184 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc vrsSerialised(tx: Transaction): Result[array[65,byte],UtilsError]
+    {.inline.} =
+  ## Parts copied from `transaction.getSignature`.
+  var data: array[65,byte]
+  data[0..31] = tx.R.toByteArrayBE
+  data[32..63] = tx.S.toByteArrayBE
+
+  if tx.txType != TxLegacy:
+    data[64] = tx.V.byte
+  elif tx.V >= EIP155_CHAIN_ID_OFFSET:
+    data[64] = byte(1 - (tx.V and 1))
+  elif tx.V == 27 or tx.V == 28:
+    data[64] = byte(tx.V - 27)
+  else:
+    return err((errSigPrefixError,"")) # legacy error
+
+  ok(data)
+
 proc encodePreSealed(header: BlockHeader): seq[byte] {.inline.} =
-  ## Cut sigature off `extraData` header field and consider new `baseFee`
-  ## field for Eip1559.
-  doAssert EXTRA_SEAL < header.extraData.len
+  ## Cut sigature off `extraData` header field.
+  if header.extraData.len < EXTRA_SEAL:
+    return rlp.encode(header)
 
   var rlpHeader = header
   rlpHeader.extraData.setLen(header.extraData.len - EXTRA_SEAL)
   rlp.encode(rlpHeader)
-
 
 proc hashPreSealed(header: BlockHeader): Hash256 {.inline.} =
   ## Returns the hash of a block prior to it being sealed.
   keccak256.digest header.encodePreSealed
 
 
-proc ecRecover*(extraData: openArray[byte];
-                hash: Hash256): Result[EthAddress,UtilsError] {.inline.} =
+proc recoverImpl(rawSig: openArray[byte]; msg: Hash256): EcAddrResult =
   ## Extract account address from the last 65 bytes of the `extraData` argument
   ## (which is typically the bock header field with the same name.) The second
   ## argument `hash` is used to extract the intermediate public key. Typically,
   ## this would be the hash of the block header without the last 65 bytes of
   ## the `extraData` field reserved for the signature.
-  if extraData.len < EXTRA_SEAL:
+  if rawSig.len < EXTRA_SEAL:
     return err((errMissingSignature,""))
 
   let sig = Signature.fromRaw(
-    extraData.toOpenArray(extraData.len - EXTRA_SEAL, extraData.high))
+    rawSig.toOpenArray(rawSig.len - EXTRA_SEAL, rawSig.high))
   if sig.isErr:
     return err((errSkSigResult,$sig.error))
 
   # Recover the public key from signature and seal hash
-  let pubKey = recover(sig.value, SKMessage(hash.data))
+  let pubKey = recover(sig.value, SKMessage(msg.data))
   if pubKey.isErr:
     return err((errSkPubKeyResult,$pubKey.error))
 
   # Convert public key to address.
-  return ok(pubKey.value.toCanonicalAddress)
+  ok(pubKey.value.toCanonicalAddress)
 
 # ------------------------------------------------------------------------------
-# Public function: straight ecRecover version
+# Public function: straight ecRecover versions
 # ------------------------------------------------------------------------------
 
-proc ecRecover*(header: BlockHeader): Result[EthAddress,UtilsError] =
-  ## Extract account address from the `extraData` field (last 65 bytes) of the
-  ## argument header.
-  header.extraData.ecRecover(header.hashPreSealed)
+proc ecRecover*(header: BlockHeader): EcAddrResult =
+  ## Extracts account address from the `extraData` field (last 65 bytes) of
+  ## the argument header.
+  header.extraData.recoverImpl(header.hashPreSealed)
+
+proc ecRecover*(tx: var Transaction): EcAddrResult =
+  ## Extracts sender address from transaction. This function has similar
+  ## functionality as `transaction.getSender()`.
+  let txSig = tx.vrsSerialised
+  if txSig.isErr:
+    return err(txSig.error)
+  txSig.value.recoverImpl(tx.txHashNoSignature)
+
+proc ecRecover*(tx: Transaction): EcAddrResult {.inline.} =
+  ## Variant of `ecRecover()` for call-by-value header.
+  var ty = tx
+  ty.ecRecover
 
 # ------------------------------------------------------------------------------
 # Public constructor for caching ecRecover version
 # ------------------------------------------------------------------------------
 
-proc initEcRecover*(cache: var EcRecover; cacheSize = INMEMORY_SIGNATURES) =
+proc init*(er: var EcRecover; cacheSize = INMEMORY_SIGNATURES; initSize = 10) =
+  ## Inialise recover cache
+  er.size = cacheSize.uint
+  er.q.init(initSize)
 
-  var toKey: LruKey[BlockHeader,EcKey32] =
-    proc(header:BlockHeader): EcKey32 =
-      header.blockHash.data
-
-  cache.initCache(toKey, ecRecover, cacheSize)
-
-proc initEcRecover*: EcRecover {.gcsafe, raises: [Defect].} =
-  result.initEcRecover
+proc init*(T: type EcRecover;
+           cacheSize = INMEMORY_SIGNATURES; initSize = 10): T =
+  ## Inialise recover cache
+  result.init(cacheSize, initSize)
 
 # ------------------------------------------------------------------------------
-# Public function: caching ecRecover version
+# Public functions: miscellaneous
 # ------------------------------------------------------------------------------
 
-proc ecRecover*(addrCache: var EcRecover;
-                header: BlockHeader): Result[EthAddress,UtilsError]
-                  {.gcsafe, raises: [Defect,CatchableError].} =
+proc len*(er: var EcRecover): int =
+  ## Returns the current number of entries in the LRU cache.
+  er.q.len
+
+# ------------------------------------------------------------------------------
+# Public functions: caching ecRecover version
+# ------------------------------------------------------------------------------
+
+proc ecRecover*(er: var EcRecover; header: var BlockHeader): EcAddrResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
   ## Extract account address from `extraData` field (last 65 bytes) of the
   ## argument header. The result is kept in a LRU cache to re-purposed for
   ## improved result delivery avoiding calculations.
-  addrCache.getItem(header)
+  let key = header.blockHash.data
+  block:
+    let rc = er.q.lruFetch(key)
+    if rc.isOK:
+      return ok(rc.value)
+  block:
+    let rc = header.extraData.recoverImpl(header.hashPreSealed)
+    if rc.isOK:
+      return ok(er.q.lruAppend(key, rc.value, er.size.int))
+    err(rc.error)
 
+proc ecRecover*(er: var EcRecover; header: BlockHeader): EcAddrResult
+    {.inline, gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `ecRecover()` for call-by-value header
+  var hdr = header
+  er.ecRecover(hdr)
+
+proc ecRecover*(er: var EcRecover; hash: Hash256): EcAddrResult
+    {.inline, gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `ecRecover()` for hash only. Will only succeed it the
+  ## argument hash is uk the LRU queue.
+  let rc = er.q.lruFetch(hash.data)
+  if rc.isOK:
+    return ok(rc.value)
+  err((errItemNotFound,""))
+
+#[
+# not needed, functionality can be taken over by tx-pool wastebasket (if any)
+proc ecRecover*(er: var EcRecover; tx: var Transaction): EcAddrResult
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  ## Variant of `recover()` managing the sender addresses for transactions.
+  let txSig = tx.vrsSerialised
+  if txSig.isErr:
+    return err(txSig.error)
+  let key = (keccak256.digest tx.rlpEncode).data
+  block:
+    let rc = er.q.lruFetch(key)
+    if rc.isOK:
+      return ok(rc.value)
+  block:
+    let rc = txSig.value.recoverImpl(tx.txHashNoSignature)
+    if rc.isOK:
+      return ok(er.q.lruAppend(key, rc.value, er.size.int))
+    err(rc.error)
+]#
+  
 # ------------------------------------------------------------------------------
-# Public PLP mixin functions for caching version
+# Public RLP mixin functions for caching version
 # ------------------------------------------------------------------------------
 
-proc append*(rw: var RlpWriter; ecRec: EcRecover) {.
-             inline, raises: [Defect,KeyError].} =
-  ## Generic support for `rlp.encode(ecRec)`
-  rw.append(ecRec.data)
+proc append*(rw: var RlpWriter; data: EcRecover)
+    {.inline, raises: [Defect,KeyError].} =
+  ## Generic support for `rlp.encode()`
+  rw.append((data.size,data.q))
 
-proc read*(rlp: var Rlp; Q: type EcRecover): Q {.
-           inline, raises: [Defect,KeyError].} =
-  ## Generic support for `rlp.decode(bytes)` for loading the cache from a
+proc read*(rlp: var Rlp; Q: type EcRecover): Q
+    {.inline, raises: [Defect,KeyError].} =
+  ## Generic support for `rlp.decode()` for loading the cache from a
   ## serialised data stream.
-  result.initEcRecover
-  result.data = rlp.read(type result.data)
+  (result.size, result.q) = rlp.read((type result.size, type result.q))
+
+# ------------------------------------------------------------------------------
+# Debugging
+# ------------------------------------------------------------------------------
+
+iterator keyItemPairs*(er: var EcRecover): (EcKey,EthAddress)
+    {.gcsafe, raises: [Defect,CatchableError].} =
+  var rc = er.q.first
+  while rc.isOK:
+    yield (rc.value.key, rc.value.data)
+    rc = er.q.next(rc.value.key)
 
 # ------------------------------------------------------------------------------
 # End

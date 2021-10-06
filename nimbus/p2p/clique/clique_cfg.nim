@@ -102,7 +102,7 @@ proc newCliqueCfg*(db: BaseChainDB): CliqueCfg =
     ckpInterval: CHECKPOINT_INTERVAL,
     roThreshold: FULL_IMMUTABILITY_THRESHOLD,
     logInterval: SNAPS_LOG_INTERVAL_MICSECS,
-    signatures:  initEcRecover(),
+    signatures:  init(type EcRecover),
     prng:        initRand(prngSeed),
     prettyPrint: PrettyPrinters(
                    nonce:       proc(v:BlockNonce):                string = $v,

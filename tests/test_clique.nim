@@ -20,13 +20,14 @@ import
   ],
   ../nimbus/utils/ec_recover,
   ../nimbus/[config, utils, constants, context],
-  ./test_clique/[pool, undump],
+  ./test_clique/pool,
+  ./replay/undump,
   eth/[common, keys],
   stint, stew/byteutils,
   unittest2
 
 const
-  goerliCapture = "test_clique" / "goerli51840.txt.gz"
+  goerliCapture = "replay" / "goerli68161.txt.gz"
   groupReplayTransactions = 7
 
 # ------------------------------------------------------------------------------
@@ -237,14 +238,12 @@ proc runGoerliBaybySteps(noisy = true;
       test &"Runner stopped after reaching #{stopThreshold}":
         discard
 
-proc cliqueMiscTests() =
+proc cliqueMiscTests(dir = "tests") =
   suite "clique misc":
     test "signer func":
-      const
-        engineSigner = "658bdf435d810c91414ec09147daa6db62406379"
-        privateKey   = "tests" / "test_clique" / "private.key"
-
       let
+        engineSigner = "658bdf435d810c91414ec09147daa6db62406379"
+        privateKey   = dir / "test_clique" / "private.key"
         conf = makeConfig(@["--engine-signer:" & engineSigner, "--import-key:" & privateKey])
         ctx  = newEthContext()
 
@@ -307,9 +306,10 @@ when isMainModule:
   noisy.runCliqueSnapshot(true)
   noisy.runCliqueSnapshot(false)
   noisy.runGoerliBaybySteps(dir = ".")
-  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)]#
+  noisy.runGoerliReplay(dir = ".", startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 31100u64)
   #noisy.goerliReplay(startAtBlock = 194881u64, stopAfterBlock = 198912u64)
+  cliqueMiscTests(".")]#
   cliqueMiscTests()
 
 # ------------------------------------------------------------------------------
