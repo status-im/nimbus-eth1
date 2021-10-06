@@ -18,11 +18,12 @@ import
   chronos, json_rpc/rpcserver, chronicles,
   eth/p2p/rlpx_protocols/les_protocol,
   ./p2p/blockchain_sync, eth/net/nat, eth/p2p/peer_pool,
+  ./p2p/clique/[clique_desc, clique_sealer],
   ./sync/protocol_eth65,
   config, genesis, rpc/[common, p2p, debug, engine_api], p2p/chain,
   eth/trie/db, metrics, metrics/[chronos_httpserver, chronicles_support],
   graphql/ethapi, context,
-  "."/[conf_utils, sealer, constants]
+  "."/[conf_utils, sealer, constants, utils]
 
 ## TODO:
 ## * No IPv6 support
@@ -182,8 +183,16 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
       echo rs.error
       quit(QuitFailure)
 
+    proc signFunc(signer: EthAddress, message: openArray[byte]): Result[RawSignature, cstring] {.gcsafe.} =
+      let
+        hashData = keccakHash(message)
+        acc      = nimbus.ctx.am.getAccount(signer).tryGet()
+        rawSign  = sign(acc.privateKey, SkMessage(hashData.data)).toRaw
+
+      ok(rawSign)
+
     # TODO: There should be a better place to initialize this
-    nimbus.chainRef.clique.signer = conf.engineSigner
+    nimbus.chainRef.clique.authorize(conf.engineSigner, signFunc)
 
     let initialSealingEngineState =
       if conf.networkParams.config.terminalTotalDifficulty.isSome and
