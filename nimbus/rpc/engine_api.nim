@@ -12,7 +12,8 @@ import
   stew/[objects, results],
   json_rpc/[rpcserver, errors],
   web3/[conversions, engine_api_types],
-  ".."/p2p/chain/persist_blocks,
+  ".."/db/db_chain,
+  ".."/p2p/chain/[chain_desc, persist_blocks],
   ".."/[sealer, utils, constants]
 
 import eth/common/eth_types except BlockHeader
@@ -109,5 +110,13 @@ proc setupEngineAPI*(sealingEngine: SealingEngineRef, server: RpcServer) =
     discard
 
   server.rpc("engine_forkchoiceUpdated") do(update: ForkChoiceUpdate):
-    discard
+    let
+      db = sealingEngine.chain.db
+      newHead = update.headBlockHash.asEthHash
 
+    # TODO Use the finalized block information to prune any alterantive
+    #      histories that are no longer relevant
+    discard update.finalizedBlockHash
+
+    if not db.setHead(newHead):
+      raise (ref InvalidRequest)(code: UNKNOWN_HEADER, msg: "Uknown head block hash")
