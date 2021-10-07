@@ -329,6 +329,31 @@ proc fetch*(jq: TxJobRef): Result[TxJobPair,void]
 
   ok(kvp)
 
+proc dispose*(jq: TxJobRef; id: TxJobID) {.gcsafe,raises: [Defect,KeyError].} =
+  ## Delete or disable the job with the job ID passed as argument `id`. If the
+  ## job is the next in the *FIFO*, then it will be deleted as with `fetch()`
+  ## while ignoring the return value. Otherwise the job will be re-classified
+  ## as `txJobNone` while leaving it on the *FIFO* queue.
+  ##
+  ## The effect is that if priority jobs have been pushed before the current
+  ## one, they will be fetched and processed up until the current job is
+  ## re-visited, again. Eventually, this job becomes the next in the *FIFO*
+  ## and will be deleted as with `fetch()`.
+  ##
+  ## This handling is necessary for `waitLatest()` event signalling which must
+  ## not trigger before the related batch of jobs has fully been cleared.
+  ##
+  # check first item
+  let rc = jq.jobQueue.first
+  if rc.isOk:
+    if id == rc.value.key:
+      # just remove that item (this will update event triggers)
+      discard jq.fetch
+    else:
+      # re-pupose as idle job and leave it on the queue so it will probably be
+      # visited again and properly discarded
+      jq.jobQueue[id] = TxJobDataRef(kind: txJobNone)
+
 
 proc first*(jq: TxJobRef): Result[TxJobPair,void]
     {.gcsafe,raises: [Defect,KeyError].} =

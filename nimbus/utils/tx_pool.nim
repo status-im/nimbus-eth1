@@ -130,7 +130,7 @@ proc processJobs(xp: TxPoolRef): int
   ##
   ## Restrictions:
   ## * only one instance of `processJobs()` must be run at a time
-  ## * variable `xp.dirtyPending` must not be access outside this function
+  ## * variable `xp.dirtyPending` must not be accessed outside this function
 
   var rc: Result[TxJobPair,void]
   xp.byJobExclusively:
@@ -263,7 +263,7 @@ proc processJobs(xp: TxPoolRef): int
     # not be removed earlier because there might be the `jobCommit()`
     # funcion waiting for it to have finished.
     xp.byJobExclusively:
-      discard xp.byJob.fetch
+      xp.byJob.dispose(task.id)
       rc = xp.byJob.first
 
 
