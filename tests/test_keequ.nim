@@ -11,6 +11,7 @@
 import
   std/[algorithm, sequtils, strformat, strutils, tables],
   ../nimbus/utils/keequ,
+  ../nimbus/utils/keequ/[kq_debug, kq_rlp],
   eth/rlp,
   unittest2
 

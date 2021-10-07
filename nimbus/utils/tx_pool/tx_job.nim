@@ -15,6 +15,7 @@
 import
   std/[hashes, tables],
   ../keequ,
+  ../keequ/kq_debug,
   ./tx_info,
   ./tx_item,
   ./tx_tabs,

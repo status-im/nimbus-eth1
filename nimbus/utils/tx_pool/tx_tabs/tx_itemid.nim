@@ -15,6 +15,7 @@
 import
   std/[tables],
   ../../keequ,
+  ../../keequ/kq_debug,
   ../tx_info,
   ../tx_item,
   eth/common,

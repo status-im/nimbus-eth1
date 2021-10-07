@@ -14,6 +14,7 @@
 
 import
   ../../keequ,
+  ../../keequ/kq_debug,
   ../../slst,
   ../tx_info,
   ../tx_item,

@@ -21,6 +21,7 @@
 import
   ../constants,
   ./keequ,
+  ./keequ/kq_rlp,
   ./utils_defs,
   eth/[common, common/transaction, keys, rlp],
   nimcrypto,

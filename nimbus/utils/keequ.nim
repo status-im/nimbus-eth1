@@ -14,23 +14,32 @@
 ## This module provides a keyed fifo or stack data structure similar to
 ## `DoublyLinkedList` but with efficient random data access for fetching
 ## and deletion. The underlying data structure is a hash table with data
-## lookup and delete assumed to be O(1) in most cases (so long as the table
-## does not degrade into one-bucket linear mode, or some bucket-adjustment
-## algorithm takes over.)
+## lookup and delete assumed to be O(1) in most cases (so long as the
+## underlying hash table does not degrade into one-bucket linear mode, or
+## some bucket-adjustment algorithm takes over.)
 ##
 ## For consistency with  other data types in Nim the queue has value
 ## semantics, this means that `=` performs a deep copy of the allocated queue
 ## which is refered to the deep copy semantics of underlying table driver.
 ##
-## This module supports *RLP* serialisation. Note that the underlying RLP
-## driver does not support negative integers which cuses problems when
-## reading back. So these values should neither appear in any of the `K`
-## (for key) or `V` (for value) data types (best to avoid `int` altogether
-## if serialisation is needed.)
+## Rlp Support
+## -----------
+## This module supports *RLP* serialisation which needs to be enabled with
+## the extra include directive
+## ::
+##   include keequ/kq_rlp
 ##
+## This `kq_rlp` sub-module expects the RLP drivers configured/available and
+## they will be imported from `eth/rlp`.
+##
+## Note that the underlying RLP driver does not support negative integers
+## which causes problems when reading back. So these values should neither
+## appear in any of the `K` (for key) or `V` (for value) data types (best
+## to avoid `int` altogether if serialisation is needed.)
+##
+
 import
   std/[math, tables],
-  eth/rlp,
   stew/results
 
 export
@@ -50,27 +59,27 @@ type
     keeQuVfyPrvNxtExpected
     keeQuVfyFirstExpected
 
-  KeeQuItem[K,V] = object ##\
+  KeeQuItem*[K,V] = object ##\
     ## Data value container as stored in the queue.
     ## There is a special requirements for `KeeQuItem` terminal nodes:
     ## *prv == nxt* so that there is no dangling link. On the flip side,
     ## this requires some extra consideration when deleting the second node
     ## relative to either end.
-    data: V       ## Some data value, can freely be modified.
-    prv, nxt: K   ## Queue links, read-only.
+    data*: V         ## Some data value, can freely be modified.
+    kPrv*, kNxt*: K  ## Queue links, read-only.
 
   KeeQuPair*[K,V] = object ##\
     ## Key-value pair, typically used as return code.
     key: K      ## Sorter key (read-only for consistency with `SLstResult[K,V]`)
     data*: V    ## Some data value, to be modified freely
 
-  KeeQuTab[K,V] =
+  KeeQuTab*[K,V] =
     Table[K,KeeQuItem[K,V]]
 
   KeeQu*[K,V] = object ##\
     ## Data queue descriptor
-    tab: KeeQuTab[K,V] ## Data table
-    first, last: K     ## Doubly linked item list queue
+    tab*: KeeQuTab[K,V]   ## Data table
+    kFirst*, kLast*: K    ## Doubly linked item list queue
 
   BlindValue = ##\
     ## Type name is syntactic sugar, used for key-only queues
@@ -91,17 +100,17 @@ proc shiftImpl[K,V](rq: var KeeQu[K,V])
   ## Expects: rq.tab.len != 0
 
   # Unqueue first item
-  let item = rq.tab[rq.first] # yes, crashes if `rq.tab.len == 0`
-  rq.tab.del(rq.first)
+  let item = rq.tab[rq.kFirst] # yes, crashes if `rq.tab.len == 0`
+  rq.tab.del(rq.kFirst)
 
   if rq.tab.len == 0:
-    rq.first.reset
-    rq.last.reset
+    rq.kFirst.reset
+    rq.kLast.reset
   else:
-    rq.first = item.nxt
+    rq.kFirst = item.kNxt
     if rq.tab.len == 1:
-      rq.tab[rq.first].nxt = rq.first           # single node points to itself
-    rq.tab[rq.first].prv = rq.tab[rq.first].nxt # terminal node has: nxt == prv
+      rq.tab[rq.kFirst].kNxt = rq.kFirst            # node points to itself
+    rq.tab[rq.kFirst].kPrv = rq.tab[rq.kFirst].kNxt # term node has: nxt == prv
 
 
 proc popImpl[K,V](rq: var KeeQu[K,V])
@@ -109,43 +118,43 @@ proc popImpl[K,V](rq: var KeeQu[K,V])
   ## Expects: rq.tab.len != 0
 
   # Pop last item
-  let item = rq.tab[rq.last] # yes, crashes if `rq.tab.len == 0`
-  rq.tab.del(rq.last)
+  let item = rq.tab[rq.kLast] # yes, crashes if `rq.tab.len == 0`
+  rq.tab.del(rq.kLast)
 
   if rq.tab.len == 0:
-    rq.first.reset
-    rq.last.reset
+    rq.kFirst.reset
+    rq.kLast.reset
   else:
-    rq.last = item.prv
+    rq.kLast = item.kPrv
     if rq.tab.len == 1:
-      rq.tab[rq.last].prv = rq.last           # single node points to itself
-    rq.tab[rq.last].nxt = rq.tab[rq.last].prv # terminal node has: nxt == prv
+      rq.tab[rq.kLast].kPrv = rq.kLast            # single node points to itself
+    rq.tab[rq.kLast].kNxt = rq.tab[rq.kLast].kPrv # term node has: nxt == prv
 
 
 proc deleteImpl[K,V](rq: var KeeQu[K,V]; key: K)
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Expects: rq.tab.hesKey(key)
 
-  if rq.first == key:
+  if rq.kFirst == key:
     rq.shiftImpl
 
-  elif rq.last == key:
+  elif rq.kLast == key:
     rq.popImpl
 
   else:
     let item = rq.tab[key] # yes, crashes if `not rq.tab.hasKey(key)`
     rq.tab.del(key)
 
-    # now: 2 < rq.tab.len (otherwise rq.first == key or rq.last == key)
-    if rq.tab[rq.first].nxt == key:
+    # now: 2 < rq.tab.len (otherwise rq.kFirst == key or rq.kLast == key)
+    if rq.tab[rq.kFirst].kNxt == key:
       # item was the second one
-      rq.tab[rq.first].prv = item.nxt
-    if rq.tab[rq.last].prv == key:
+      rq.tab[rq.kFirst].kPrv = item.kNxt
+    if rq.tab[rq.kLast].kPrv == key:
       # item was one before last
-      rq.tab[rq.last].nxt = item.prv
+      rq.tab[rq.kLast].kNxt = item.kPrv
 
-    rq.tab[item.prv].nxt = item.nxt
-    rq.tab[item.nxt].prv = item.prv
+    rq.tab[item.kPrv].kNxt = item.kNxt
+    rq.tab[item.kNxt].kPrv = item.kPrv
 
 
 proc appendImpl[K,V](rq: var KeeQu[K,V]; key: K; val: V)
@@ -156,16 +165,16 @@ proc appendImpl[K,V](rq: var KeeQu[K,V]; key: K; val: V)
   var item = KeeQuItem[K,V](data: val)
 
   if rq.tab.len == 0:
-    rq.first = key
-    item.prv = key
+    rq.kFirst = key
+    item.kPrv = key
   else:
-    if rq.first == rq.last:
-      rq.tab[rq.first].prv = key # first terminal node
-    rq.tab[rq.last].nxt = key
-    item.prv = rq.last
+    if rq.kFirst == rq.kLast:
+      rq.tab[rq.kFirst].kPrv = key # first terminal node
+    rq.tab[rq.kLast].kNxt = key
+    item.kPrv = rq.kLast
 
-  rq.last = key
-  item.nxt = item.prv # terminal node
+  rq.kLast = key
+  item.kNxt = item.kPrv # terminal node
 
   rq.tab[key] = item # yes, makes `verify()` fail if `rq.tab.hasKey(key)`
 
@@ -178,16 +187,16 @@ proc prependImpl[K,V](rq: var KeeQu[K,V]; key: K; val: V)
   var item = KeeQuItem[K,V](data: val)
 
   if rq.tab.len == 0:
-    rq.last = key
-    item.nxt = key
+    rq.kLast = key
+    item.kNxt = key
   else:
-    if rq.first == rq.last:
-      rq.tab[rq.last].nxt = key # first terminal node
-    rq.tab[rq.first].prv = key
-    item.nxt = rq.first
+    if rq.kFirst == rq.kLast:
+      rq.tab[rq.kLast].kNxt = key # first terminal node
+    rq.tab[rq.kFirst].kPrv = key
+    item.kNxt = rq.kFirst
 
-  rq.first = key
-  item.prv = item.nxt # terminal node has: nxt == prv
+  rq.kFirst = key
+  item.kPrv = item.kNxt # terminal node has: nxt == prv
 
   rq.tab[key] = item # yes, makes `verify()` fail if `rq.tab.hasKey(key)`
 
@@ -196,7 +205,7 @@ proc prependImpl[K,V](rq: var KeeQu[K,V]; key: K; val: V)
 proc shiftKeyImpl[K,V](rq: var KeeQu[K,V]): Result[K,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   if 0 < rq.tab.len:
-    let key = rq.first
+    let key = rq.kFirst
     rq.shiftImpl
     return ok(key)
   err()
@@ -204,7 +213,7 @@ proc shiftKeyImpl[K,V](rq: var KeeQu[K,V]): Result[K,void]
 proc popKeyImpl[K,V](rq: var KeeQu[K,V]): Result[K,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   if 0 < rq.tab.len:
-    let key = rq.last
+    let key = rq.kLast
     rq.popImpl
     return ok(key)
   err()
@@ -214,36 +223,36 @@ proc popKeyImpl[K,V](rq: var KeeQu[K,V]): Result[K,void]
 proc firstKeyImpl[K,V](rq: var KeeQu[K,V]): Result[K,void] =
   if rq.tab.len == 0:
     return err()
-  ok(rq.first)
+  ok(rq.kFirst)
 
 proc secondKeyImpl[K,V](rq: var KeeQu[K,V]): Result[K,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   if rq.tab.len < 2:
     return err()
-  ok(rq.tab[rq.first].nxt)
+  ok(rq.tab[rq.kFirst].kNxt)
 
 proc beforeLastKeyImpl[K,V](rq: var KeeQu[K,V]): Result[K,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   if rq.tab.len < 2:
     return err()
-  ok(rq.tab[rq.last].prv)
+  ok(rq.tab[rq.kLast].kPrv)
 
 proc lastKeyImpl[K,V](rq: var KeeQu[K,V]): Result[K,void] =
   if rq.tab.len == 0:
     return err()
-  ok(rq.last)
+  ok(rq.kLast)
 
 proc nextKeyImpl[K,V](rq: var KeeQu[K,V]; key: K): Result[K,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  if not rq.tab.hasKey(key) or rq.last == key:
+  if not rq.tab.hasKey(key) or rq.kLast == key:
     return err()
-  ok(rq.tab[key].nxt)
+  ok(rq.tab[key].kNxt)
 
 proc prevKeyImpl[K,V](rq: var KeeQu[K,V]; key: K): Result[K,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  if not rq.tab.hasKey(key) or rq.first == key:
+  if not rq.tab.hasKey(key) or rq.kFirst == key:
     return err()
-  ok(rq.tab[key].prv)
+  ok(rq.tab[key].kPrv)
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -334,8 +343,8 @@ proc shift*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   ## item returned and deleted is the most *left hand* item.
   if 0 < rq.tab.len:
     let kvp = KeeQuPair[K,V](
-      key: rq.first,
-      data: rq.tab[rq.first].data)
+      key: rq.kFirst,
+      data: rq.tab[rq.kFirst].data)
     rq.shiftImpl
     return ok(KeeQuPair[K,V](kvp))
   err()
@@ -349,7 +358,7 @@ proc shiftValue*[K,V](rq: var KeeQu[K,V]):
                Result[V,void] {.gcsafe,raises: [Defect,KeyError].} =
   ## Similar to `shift()` but with different return value.
   if 0 < rq.tab.len:
-    let val = rq.tab[rq.first].data
+    let val = rq.tab[rq.kFirst].data
     rq.shiftImpl
     return ok(val)
   err()
@@ -365,8 +374,8 @@ proc pop*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   ## item returned and deleted is the most *right hand* item.
   if 0 < rq.tab.len:
     let kvp = KeeQuPair[K,V](
-      key: rq.last,
-      data: rq.tab[rq.last].data)
+      key: rq.kLast,
+      data: rq.tab[rq.kLast].data)
     rq.popImpl
     return ok(KeeQuPair[K,V](kvp))
   err()
@@ -380,7 +389,7 @@ proc popValue*[K,V](rq: var KeeQu[K,V]):
              Result[V,void] {.gcsafe,raises: [Defect,KeyError].} =
   ## Similar to `pop()` but with different return value.
   if 0 < rq.tab.len:
-    let val = rq.tab[rq.last].data
+    let val = rq.tab[rq.kLast].data
     rq.popImpl
     return ok(val)
   err()
@@ -624,7 +633,7 @@ proc first*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   ## Similar to `firstKey()` but with key-value item pair return value.
   if rq.tab.len == 0:
     return err()
-  let key = rq.first
+  let key = rq.kFirst
   ok(KeeQuPair[K,V](key: key, data: rq.tab[key].data))
 
 proc second*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
@@ -632,7 +641,7 @@ proc second*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   ## Similar to `secondKey()` but with key-value item pair return value.
   if rq.tab.len < 2:
     return err()
-  let key = rq.tab[rq.first].nxt
+  let key = rq.tab[rq.kFirst].kNxt
   ok(KeeQuPair[K,V](key: key, data: rq.tab[key].data))
 
 proc beforeLast*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
@@ -640,7 +649,7 @@ proc beforeLast*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   ## Similar to `beforeLastKey()` but with key-value item pair return value.
   if rq.tab.len < 2:
     return err()
-  let key = rq.tab[rq.last].prv
+  let key = rq.tab[rq.kLast].kPrv
   ok(KeeQuPair[K,V](key: key, data: rq.tab[key].data))
 
 proc last*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
@@ -648,23 +657,23 @@ proc last*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   ## Similar to `lastKey()` but with key-value item pair return value.
   if rq.tab.len == 0:
     return err()
-  let key = rq.last
+  let key = rq.kLast
   ok(KeeQuPair[K,V](key: key, data: rq.tab[key].data))
 
 proc next*[K,V](rq: var KeeQu[K,V]; key: K): Result[KeeQuPair[K,V],void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Similar to `nextKey()` but with key-value item pair return value.
-  if not rq.tab.hasKey(key) or rq.last == key:
+  if not rq.tab.hasKey(key) or rq.kLast == key:
     return err()
-  let nKey = rq.tab[key].nxt
+  let nKey = rq.tab[key].kNxt
   ok(KeeQuPair[K,V](key: nKey, data: rq.tab[nKey].data))
 
 proc prev*[K,V](rq: var KeeQu[K,V]; key: K): Result[KeeQuPair[K,V],void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Similar to `prevKey()` but with key-value item pair return value.
-  if not rq.tab.hasKey(key) or rq.first == key:
+  if not rq.tab.hasKey(key) or rq.kFirst == key:
     return err()
-  let pKey = rq.tab[key].prv
+  let pKey = rq.tab[key].kPrv
   ok(KeeQuPair[K,V](key: pKey, data: rq.tab[pKey].data))
 
 # ------------
@@ -709,7 +718,7 @@ proc firstValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## value item returned is the most *left hand* one.
   if rq.tab.len == 0:
     return err()
-  ok(rq.tab[rq.first].data)
+  ok(rq.tab[rq.kFirst].data)
 
 proc secondValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -720,7 +729,7 @@ proc secondValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## value item returned is the one to the right of the most *left hand* one.
   if rq.tab.len < 2:
     return err()
-  ok(rq.tab[rq.tab[rq.first].nxt].data)
+  ok(rq.tab[rq.tab[rq.kFirst].kNxt].data)
 
 proc beforeLastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -731,7 +740,7 @@ proc beforeLastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## value item returned is the one to the left of the most *right hand* one.
   if rq.tab.len < 2:
     return err()
-  ok(rq.tab[rq.tab[rq.last].prv].data)
+  ok(rq.tab[rq.tab[rq.kLast].kPrv].data)
 
 proc lastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -741,7 +750,7 @@ proc lastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## value item returned is the most *right hand* one.
   if rq.tab.len == 0:
     return err()
-  ok(rq.tab[rq.last].data)
+  ok(rq.tab[rq.kLast].data)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
@@ -751,13 +760,13 @@ proc `==`*[K,V](a, b: var KeeQu[K,V]): bool
     {.gcsafe, raises: [Defect,KeyError].} =
   ## Returns `true` if both argument queues contain the same data. Note that
   ## this is a slow operation as all `(key,data)` pairs will to be compared.
-  if a.tab.len == b.tab.len and a.first == b.first and a.last == b.last:
+  if a.tab.len == b.tab.len and a.kFirst == b.kFirst and a.kLast == b.kLast:
     for (k,av) in a.tab.pairs:
       if not b.tab.hasKey(k):
         return false
       let bv = b.tab[k]
       # bv.data might be a reference, so dive into it explicitely.
-      if av.prv != bv.prv or av.nxt != bv.nxt or bv.data != av.data:
+      if av.kPrv != bv.kPrv or av.kNxt != bv.kNxt or bv.data != av.data:
         return false
     return true
 
@@ -772,8 +781,8 @@ proc len*[K,V](rq: var KeeQu[K,V]): int {.inline.} =
 proc clear*[K,V](rq: var KeeQu[K,V]) {.inline.} =
   ## Clear the queue
   rq.tab.clear
-  rq.first.reset
-  rq.last.reset
+  rq.kFirst.reset
+  rq.kLast.reset
 
 proc toKeeQuResult*[K,V](key: K; data: V): Result[KeeQuPair[K,V],void] =
   ## Helper, chreate `ok()` result
@@ -785,39 +794,40 @@ proc toKeeQuResult*[K,V](key: K; data: V): Result[KeeQuPair[K,V],void] =
 
 iterator nextKeys*[K,V](rq: var KeeQu[K,V]): K
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Iterate over all keys in the queue starting with the
-  ## `rq.firstKey.value` key (if any). Using the notation introduced with
-  ## `rq.append` and `rq.prepend`, the iterator processes *left* to *right*.
+  ## Iterate over all keys in the queue starting with the `rq.firstKey.value`
+  ## key (if any). Using the notation introduced with `rq.append` and
+  ## `rq.prepend`, the iterator processes *left* to *right*.
   ##
-  ## Note: When running in a loop it is ok to delete the current item and the
-  ## all items already visited. Items not visited yet must not be deleted.
+  ## :Note:
+  ##    When running in a loop it is *ok* to delete the current item and all
+  ##    the items already visited. Items not visited yet must not be deleted
+  ##    as the loop would be come unpredictable, then.
   if 0 < rq.tab.len:
     var
-      key = rq.first
+      key = rq.kFirst
       loopOK = true
     while loopOK:
       let yKey = key
-      loopOK = key != rq.last
-      key = rq.tab[key].nxt
+      loopOK = key != rq.kLast
+      key = rq.tab[key].kNxt
       yield yKey
 
 iterator nextValues*[K,V](rq: var KeeQu[K,V]): V
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Iterate over all values in the queue starting with the
-  ## `rq.first.value.value` item value (if any). Using the notation introduced
+  ## `rq.kFirst.value.value` item value (if any). Using the notation introduced
   ## with `rq.append` and `rq.prepend`, the iterator processes *left* to
   ## *right*.
   ##
-  ## Note: When running in a loop it is ok to delete the current item and the
-  ## all items already visited. Items not visited yet must not be deleted.
+  ## See the note at the `nextKeys()` function comment about deleting items.
   if 0 < rq.tab.len:
     var
-      key = rq.first
+      key = rq.kFirst
       loopOK = true
     while loopOK:
       let item = rq.tab[key]
-      loopOK = key != rq.last
-      key = item.nxt
+      loopOK = key != rq.kLast
+      key = item.kNxt
       yield item.data
 
 iterator nextPairs*[K,V](rq: var KeeQu[K,V]): KeeQuPair[K,V]
@@ -827,18 +837,17 @@ iterator nextPairs*[K,V](rq: var KeeQu[K,V]): KeeQuPair[K,V]
   ## the notation introduced with `rq.append` and `rq.prepend`, the iterator
   ## processes *left* to *right*.
   ##
-  ## Note: When running in a loop it is ok to delete the current item and the
-  ## all items already visited. Items not visited yet must not be deleted.
+  ## See the note at the `nextKeys()` function comment about deleting items.
   if 0 < rq.tab.len:
     var
-      key = rq.first
+      key = rq.kFirst
       loopOK = true
     while loopOK:
       let
         yKey = key
         item = rq.tab[key]
-      loopOK = key != rq.last
-      key = item.nxt
+      loopOK = key != rq.kLast
+      key = item.kNxt
       yield KeeQuPair[K,V](key: yKey, data: item.data)
 
 iterator prevKeys*[K,V](rq: var KeeQu[K,V]): K
@@ -847,35 +856,33 @@ iterator prevKeys*[K,V](rq: var KeeQu[K,V]): K
   ## `rq.lastKey.value` key (if any). Using the notation introduced with
   ## `rq.append` and `rq.prepend`, the iterator processes *right* to *left*.
   ##
-  ## Note: When running in a loop it is ok to delete the current item and the
-  ## all items already visited. Items not visited yet must not be deleted.
+  ## See the note at the `nextKeys()` function comment about deleting items.
   if 0 < rq.tab.len:
     var
-      key = rq.last
+      key = rq.kLast
       loopOK = true
     while loopOK:
       let yKey = key
-      loopOK = key != rq.first
-      key = rq.tab[key].prv
+      loopOK = key != rq.kFirst
+      key = rq.tab[key].kPrv
       yield yKey
 
 iterator prevValues*[K,V](rq: var KeeQu[K,V]): V
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Reverse iterate over all values in the queue starting with the
-  ## `rq.last.value.value` item value (if any). Using the notation introduced
+  ## `rq.kLast.value.value` item value (if any). Using the notation introduced
   ## with `rq.append` and `rq.prepend`, the iterator processes *right* to
   ## *left*.
   ##
-  ## Note: When running in a loop it is ok to delete the current item and the
-  ## all items already visited. Items not visited yet must not be deleted.
+  ## See the note at the `nextKeys()` function comment about deleting items.
   if 0 < rq.tab.len:
     var
-      key = rq.last
+      key = rq.kLast
       loopOK = true
     while loopOK:
       let item = rq.tab[key]
-      loopOK = key != rq.first
-      key = item.prv
+      loopOK = key != rq.kFirst
+      key = item.kPrv
       yield item.data
 
 iterator prevPairs*[K,V](rq: var KeeQu[K,V]): KeeQuPair[K,V]
@@ -885,119 +892,18 @@ iterator prevPairs*[K,V](rq: var KeeQu[K,V]): KeeQuPair[K,V]
   ## the notation introduced with `rq.append` and `rq.prepend`, the iterator
   ## processes *right* to *left*.
   ##
-  ## Note: When running in a loop it is ok to delete the current item and the
-  ## all items already visited. Items not visited yet must not be deleted.
+  ## See the note at the `nextKeys()` function comment about deleting items.
   if 0 < rq.tab.len:
     var
-      key = rq.last
+      key = rq.kLast
       loopOK = true
     while loopOK:
       let
         yKey = key
         item = rq.tab[key]
-      loopOK = key != rq.first
-      key = item.prv
+      loopOK = key != rq.kFirst
+      key = item.kPrv
       yield KeeQuPair[K,V](key: yKey, data: item.data)
-
-# ------------------------------------------------------------------------------
-# Public functions, RLP support
-# ------------------------------------------------------------------------------
-
-proc append*[K,V](rw: var RlpWriter; data: KeeQu[K,V])
-    {.inline, raises: [Defect,KeyError].} =
-  ## Generic support for `rlp.encode(lru.data)` for serialising a queue.
-  ##
-  ## :CAVEAT:
-  ##   The underlying *RLP* driver has a problem with negative integers
-  ##   when reading. So it should neither appear in any of the `K` or `V`
-  ##   data types.
-  # store keys in increasing order
-  rw.startList(data.tab.len)
-  if 0 < data.tab.len:
-    var key = data.first
-    for _ in 1 .. data.tab.len:
-      var item = data.tab[key]
-      rw.append((key,item.data))
-      key = item.nxt
-    if data.tab[key].nxt != data.last:
-      raiseAssert "Garbled queue next/prv references"
-
-proc read*[K,V](rlp: var Rlp; Q: type KeeQu[K,V]): Q
-    {.inline, raises: [Defect,RlpError,KeyError].} =
-  ## Generic support for `rlp.decode(bytes)` for loading a queue
-  ## from a serialised data stream.
-  ##
-  ## :CAVEAT:
-  ##   The underlying *RLP* driver has a problem with negative integers
-  ##   when reading. So it should neither appear in any of the `K` or `V`
-  ##   data types.
-  for w in rlp.items:
-    let (key,value) = w.read((K,V))
-    result[key] = value
-
-# ------------------------------------------------------------------------------
-# Public functions, debugging
-# ------------------------------------------------------------------------------
-
-proc `$`*[K,V](item: KeeQuItem[K,V]): string =
-  ## Pretty print data container item.
-  ##
-  ## :CAVEAT:
-  ##   This function needs working definitions for the `key` and `value` items:
-  ##   ::
-  ##    proc `$`*[K](key: K): string {.gcsafe,raises:[Defect,CatchableError].}
-  ##    proc `$`*[V](value: V): string {.gcsafe,raises:[Defect,CatchableError].}
-  ##
-  if item.isNil:
-    "nil"
-  else:
-    "(" & $item.value & ", link[" & $item.prv & "," & $item.nxt & "])"
-
-proc verify*[K,V](rq: var KeeQu[K,V]): Result[void,(K,V,KeeQuInfo)]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Check for consistency. Returns an error unless the argument
-  ## queue `rq` is consistent.
-  let tabLen = rq.tab.len
-  if tabLen == 0:
-    return ok()
-
-  # Ckeck first and last items
-  if rq.tab[rq.first].prv != rq.tab[rq.first].nxt:
-    return err((rq.first, rq.tab[rq.first].data, keeQuVfyFirstInconsistent))
-
-  if rq.tab[rq.last].prv != rq.tab[rq.last].nxt:
-    return err((rq.last, rq.tab[rq.last].data, keeQuVfyLastInconsistent))
-
-  # Just a return value
-  var any: V
-
-  # Forward walk item list
-  var key = rq.first
-  for _ in 1 .. tabLen:
-    if not rq.tab.hasKey(key):
-      return err((key, any, keeQuVfyNoSuchTabItem))
-    if not rq.tab.hasKey(rq.tab[key].nxt):
-      return err((rq.tab[key].nxt, rq.tab[key].data, keeQuVfyNoNxtTabItem))
-    if key != rq.last and key != rq.tab[rq.tab[key].nxt].prv:
-      return err((key, rq.tab[rq.tab[key].nxt].data, keeQuVfyNxtPrvExpected))
-    key = rq.tab[key].nxt
-  if rq.tab[key].nxt != rq.last:
-    return err((key, rq.tab[key].data, keeQuVfyLastExpected))
-
-  # Backwards walk item list
-  key = rq.last
-  for _ in 1 .. tabLen:
-    if not rq.tab.hasKey(key):
-      return err((key, any, keeQuVfyNoSuchTabItem))
-    if not rq.tab.hasKey(rq.tab[key].prv):
-      return err((rq.tab[key].prv, rq.tab[key].data, keeQuVfyNoPrvTabItem))
-    if key != rq.first and key != rq.tab[rq.tab[key].prv].nxt:
-      return err((key, rq.tab[rq.tab[key].prv].data, keeQuVfyPrvNxtExpected))
-    key = rq.tab[key].prv
-  if rq.tab[key].prv != rq.first:
-    return err((key, rq.tab[key].data, keeQuVfyFirstExpected))
-
-  ok()
 
 # ------------------------------------------------------------------------------
 # End
