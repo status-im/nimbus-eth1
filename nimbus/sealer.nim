@@ -37,9 +37,12 @@ type
   SealingEngineObj = object of RootObj
     state: EngineState
     engineLoop: Future[void]
-    chain: Chain
+    chain*: Chain
     ctx: EthContext
     signer: EthAddress
+
+template asEthHash*(hash: Web3BlockHash): Hash256 =
+  Hash256(data: distinctBase(hash))
 
 proc validateSealer*(conf: NimbusConf, ctx: EthContext, chain: Chain): Result[void, string] =
   if conf.engineSigner == ZERO_ADDRESS:
@@ -136,8 +139,7 @@ proc generateBlock(engine: SealingEngineRef,
 
   debug "generated block",
         blockNumber = outBlock.header.blockNumber,
-        headerHash = blockHash(outBlock.header),
-        fullHash = rlpHash(outBlock)
+        blockHash = blockHash(outBlock.header)
 
   ok()
 
@@ -211,9 +213,6 @@ proc sealingLoop(engine: SealingEngineRef): Future[void] {.async.} =
 
     info "block generated", number=blk.header.blockNumber
 
-template asEthHash(hash: Web3BlockHash): Hash256 =
-  Hash256(data: distinctBase(hash))
-
 proc generateExecutionPayload*(engine: SealingEngineRef,
                                payloadAttrs: PayloadAttributes,
                                payloadRes: var ExecutionPayload): Result[void, string] =
@@ -242,7 +241,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   # TODO
   # res.extraData
   payloadRes.baseFeePerGas = blk.header.fee.get(UInt256.zero)
-  payloadRes.blockHash = Web3BlockHash rlpHash(blk).data
+  payloadRes.blockHash = Web3BlockHash rlpHash(blk.header).data
   # TODO
   # res.transactions*: seq[TypedTransaction]
 
