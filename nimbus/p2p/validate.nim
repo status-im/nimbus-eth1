@@ -21,12 +21,15 @@ import
   ./dao,
   ./validate/epoch_hash_cache,
   ./gaslimit,
+  stew/objects,
   chronicles,
   eth/[common, rlp, trie/trie_defs],
   ethash,
   nimcrypto,
   options,
   stew/[results, endians2]
+
+from web3/engine_api_types import BlockValidationStatus
 
 from stew/byteutils
   import nil
@@ -143,7 +146,7 @@ proc validateSeal(hashCache: var EpochHashCache;
            header.mixDigest, header.nonce, header.difficulty, hashCache)
 
 proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
-                    numTransactions: int; checkSealOK: bool;
+                    numTransactions: int; checkSealOK: bool; ttdReached: bool,
                     hashCache: var EpochHashCache): Result[void,string] =
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
@@ -165,15 +168,31 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
      header.extraData != daoForkBlockExtraData:
     return err("header extra data should be marked DAO")
 
-  let calcDiffc = db.config.calcDifficulty(header.timestamp, parentHeader)
-  if header.difficulty < calcDiffc:
-    return err("provided header difficulty is too low")
+  if ttdReached:
+    if not header.difficulty.isZero:
+      return err("Non-zero difficulty in a post-merge block")
 
-  if checkSealOK:
-    return hashCache.validateSeal(header)
+    if not header.mixDigest.isZeroMemory:
+      return err("Non-zero mix hash in a post-merge block")
+
+    if not header.nonce.isZeroMemory:
+      return err("Non-zero nonce in a post-merge block")
+
+    if header.ommersHash != EMPTY_UNCLE_HASH:
+      return err("Invalid ommers hash in a post-merge block")
+
+    let consensusStatus = db.getConsensusValidationStatus(header.rlpHash)
+    if consensusStatus.isNone or consensusStatus.get != BlockValidationStatus.valid:
+      return err("Block was not validated by consensus engine")
+  else:
+    let calcDiffc = db.config.calcDifficulty(header.timestamp, parentHeader)
+    if header.difficulty < calcDiffc:
+      return err("provided header difficulty is too low")
+
+    if checkSealOK:
+      return hashCache.validateSeal(header)
 
   result = ok()
-
 
 func validateUncle(currBlock, uncle, uncleParent: BlockHeader):
                                                Result[void,string] =
@@ -341,9 +360,14 @@ proc validateTransaction*(vmState: BaseVMState, tx: Transaction,
 # Public functions, extracted from test_blockchain_json
 # ------------------------------------------------------------------------------
 
-proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
-            uncles: seq[BlockHeader]; numTransactions: int; checkSealOK: bool;
-            hashCache: var EpochHashCache): Result[void,string] =
+proc validateHeaderAndKinship*(
+    chainDB: BaseChainDB;
+    header: BlockHeader;
+    uncles: seq[BlockHeader];
+    numTransactions: int;
+    checkSealOK: bool;
+    ttdReached: bool;
+    hashCache: var EpochHashCache): Result[void,string] =
   if header.isGenesis:
     if header.extraData.len > 32:
       return err("BlockHeader.extraData larger than 32 bytes")
@@ -351,7 +375,7 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
 
   let parent = chainDB.getBlockHeader(header.parentHash)
   result = chainDB.validateHeader(
-    header, parent, numTransactions, checkSealOK, hashCache)
+    header, parent, numTransactions, checkSealOK, ttdReached, hashCache)
   if result.isErr:
     return
 
@@ -361,22 +385,32 @@ proc validateHeaderAndKinship*(chainDB: BaseChainDB; header: BlockHeader;
   if not chainDB.exists(header.stateRoot):
     return err("`state_root` was not found in the db.")
 
-  result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
+  if not ttdReached:
+    result = chainDB.validateUncles(header, uncles, checkSealOK, hashCache)
+
   if result.isOk:
     result = chainDB.validateGasLimitOrBaseFee(header, parent)
 
-
-proc validateHeaderAndKinship*(chainDB: BaseChainDB;
-                      header: BlockHeader; body: BlockBody; checkSealOK: bool;
-                      hashCache: var EpochHashCache): Result[void,string] =
+proc validateHeaderAndKinship*(
+    chainDB: BaseChainDB;
+    header: BlockHeader;
+    body: BlockBody;
+    checkSealOK: bool;
+    ttdReached: bool;
+    hashCache: var EpochHashCache): Result[void,string] =
   chainDB.validateHeaderAndKinship(
-    header, body.uncles, body.transactions.len, checkSealOK, hashCache)
+    header, body.uncles, body.transactions.len,
+    checkSealOK, ttdReached, hashCache)
 
-
-proc validateHeaderAndKinship*(chainDB: BaseChainDB; ethBlock: EthBlock;
-        checkSealOK: bool; hashCache: var EpochHashCache): Result[void,string] =
+proc validateHeaderAndKinship*(
+    chainDB: BaseChainDB;
+    ethBlock: EthBlock;
+    checkSealOK: bool;
+    ttdReached: bool;
+    hashCache: var EpochHashCache): Result[void,string] =
   chainDB.validateHeaderAndKinship(
-    ethBlock.header, ethBlock.uncles, ethBlock.txs.len, checkSealOK, hashCache)
+    ethBlock.header, ethBlock.uncles, ethBlock.txs.len,
+    checkSealOK, ttdReached, hashCache)
 
 # ------------------------------------------------------------------------------
 # End

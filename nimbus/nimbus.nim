@@ -197,6 +197,7 @@ proc localServices(nimbus: NimbusNode, conf: NimbusConf,
     let initialSealingEngineState =
       if conf.networkParams.config.terminalTotalDifficulty.isSome and
          conf.networkParams.config.terminalTotalDifficulty.get.isZero:
+        nimbus.chainRef.ttdReachedAt = some(BlockNumber.zero)
         EnginePostMerge
       else:
         EngineStopped

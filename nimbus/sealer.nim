@@ -110,6 +110,9 @@ proc prepareHeader(engine: SealingEngineRef,
   if res.isErr:
     return err($res.error)
 
+  if engine.chain.isBlockAfterTtd(header.blockNumber):
+    header.difficulty = DifficultyInt.zero
+
   ok(header)
 
 proc generateBlock(engine: SealingEngineRef,
@@ -155,7 +158,6 @@ proc generateBlock(engine: SealingEngineRef,
     # This hack shouldn't be necessary if the database can find
     # the genesis block hash in `getBlockHeader`.
     let maybeGenesisBlock = engine.chain.currentBlock()
-    echo "GENESIS BLOCK HASH ", maybeGenesisBlock.blockHash
     if parentHash == maybeGenesisBlock.blockHash:
       generateBlock(engine, coinbase, maybeGenesisBlock, outBlock)
     else:

@@ -6,11 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  sequtils, algorithm,
+  std/[tables, sequtils, algorithm],
   stew/[byteutils], eth/trie/[hexary, db],
   eth/[common, rlp, p2p], chronicles,
   ../errors,  ../constants, ./storage_types,
   ../utils, ../chain_config
+
+from web3/engine_api_types import BlockValidationStatus
 
 type
   BaseChainDB* = ref object
@@ -25,6 +27,9 @@ type
     startingBlock*: BlockNumber
     currentBlock*: BlockNumber
     highestBlock*: BlockNumber
+
+    # TODO: Figure out where this data should live
+    blockValidationStatuses: Table[Hash256, BlockValidationStatus]
 
   TransactionKey = tuple
     blockNumber: BlockNumber
@@ -290,6 +295,20 @@ proc setHead*(self: BaseChainDB, header: BlockHeader, writeHeader = false) =
     self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
   self.addBlockNumberToHashLookup(header)
   self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
+
+proc setConsensusValidationStatus*(
+    self: BaseChainDB,
+    blockHash: Hash256,
+    status: BlockValidationStatus) =
+  self.blockValidationStatuses[blockHash] = status
+
+proc getConsensusValidationStatus*(
+    self: BaseChainDB,
+    blockHash: Hash256): Option[BlockValidationStatus] =
+  self.blockValidationStatuses.withValue(blockHash, value):
+    return some(value[])
+  do:
+    return none(BlockValidationStatus)
 
 proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]): Hash256 =
   var trie = initHexaryTrie(self.db)

@@ -58,6 +58,11 @@ type
       ## For non-PoA networks (when `db.config.poaEngine` is `false`),
       ## this descriptor is ignored.
 
+    ttdReachedAt*: Option[BlockNumber]
+      ## The first block which difficulty was above the terminal
+      ## total difficulty. In networks with TTD=0, this would be
+      ## the very first block.
+
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
@@ -69,6 +74,9 @@ func toNextFork(n: BlockNumber): uint64 =
     result = 0'u64
   else:
     result = n.truncate(uint64)
+
+func isBlockAfterTtd*(c: Chain, blockNum: BlockNumber): bool =
+  c.ttdReachedAt.isSome and blockNum > c.ttdReachedAt.get
 
 func getNextFork(c: ChainConfig, fork: ChainFork): uint64 =
   let next: array[ChainFork, uint64] = [
