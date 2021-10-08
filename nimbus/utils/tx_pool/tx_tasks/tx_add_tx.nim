@@ -38,6 +38,10 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Queue a transaction. Thetransaction is tested and moved to either of
   ## the `queued` or `pending` waiting queues, or into the waste basket.
+  let
+    param = TxClassify(
+      gasLimit: xp.dbHead.trgGasLimit,
+      baseFee: xp.dbHead.baseFee)
   var
     status = txItemQueued
     vetted = txInfoOk
@@ -62,12 +66,12 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
       item = rc.value
 
     # Verify transaction
-    vetted = xp.classifyTxValid(item)
+    vetted = xp.classifyTxValid(item,param)
     if vetted != txInfoOk:
       break txErrorFrame
 
     # Update initial state
-    if xp.classifyTxPending(item):
+    if xp.classifyTxPending(item,param):
       status = txItemPending
       item.status = status
 

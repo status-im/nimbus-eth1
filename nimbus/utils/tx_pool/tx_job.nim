@@ -39,17 +39,19 @@ type
     txJobApplyByStatus
     txJobEvictionInactive
     txJobFlushRejects
-    txJobItemSetStatus
     txJobMoveRemoteToLocals
-    txJobRejectItem
     txJobSetBaseFee
-    txJobSetGasPrice
     txJobSetHead
     txJobUpdatePending
+    txJobUpdateStaged
 
   TxJobItemApply* = ##\
     ## Generic item function used as apply function. If the function
     ## returns false, the apply loop is aborted
+    ##
+    ## :Note:
+    ##   This function must not use the `async`, `await`, `waitFor`
+    ##   directives. Synchronisation becomes unpredictable, otherwise.
     proc(item: TxItemRef): bool {.gcsafe,raises: [Defect].}
 
   TxJobDataRef* = ref object
@@ -109,36 +111,17 @@ type
       flushRejectsArgs*: tuple[
         maxItems: int]
 
-    of txJobItemSetStatus: ##\
-      ## Set/update status for particular item.
-      itemSetStatusArgs*: tuple[
-        item:   TxItemRef,
-        status: TxItemStatus]
-
     of txJobMoveRemoteToLocals: ##\
       ## For given account, remote transactions are migrated to local
       ## transactions.
       moveRemoteToLocalsArgs*: tuple[
         account: EthAddress]
 
-    of txJobRejectItem: ##\
-      ## Move argument `item` to waste basket
-      rejectItemArgs*: tuple[
-        item:   TxItemRef,
-        reason: TxInfo]
-
     of txJobSetBaseFee: ##\
       ## New base fee (implies database reorg). Note that after changing the
       ## `baseFee`, most probably a re-org should take place (e.g. invoking
       ## `txJobUpdatePending`)
       setBaseFeeArgs*: tuple[
-        price: uint64]
-
-    of txJobSetGasPrice: ##\
-      ## Set the minimum price required by the transaction pool for a new
-      ## transaction.  Increasing it will move all transactions below this
-      ## threshold to the waste basket.
-      setGasPriceArgs*: tuple[
         price: uint64]
 
     of txJobSetHead: ##\
@@ -152,6 +135,13 @@ type
       ## `force` flag is set, re-calculation is done even though the change
       ## flag hes remained unset.
       updatePendingArgs*: tuple[
+        force: bool]
+
+    of txJobUpdateStaged: ##\
+      ## Smartly collect `pending` items and label them `staged`. If the
+      ## `force` flag is set, re-calculation is done even though the change
+      ## flag hes remained unset.
+      updateStagedArgs*: tuple[
         force: bool]
 
   TxJobPair* = object
@@ -169,8 +159,7 @@ const
   txJobPriorityKind*: set[TxJobKind] = ##\
     ## Prioritised jobs, either small or important ones (as re-org)
     {txJobAbort,
-      txJobFlushRejects,
-      txJobRejectItem}
+      txJobFlushRejects}
 
   txJobIdMax* = ##\
     ## Wraps around to `1` after last ID

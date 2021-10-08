@@ -24,6 +24,16 @@ import
   chronicles,
   eth/[common, keys]
 
+type
+  TxClassify* = object ##\
+    ## Classifier arguments, typically cached values which might
+    ## be protected by semaphores
+    stageSelect*: set[TxPoolStageSelector] ## Packer strategy symbols
+    minFeePrice*: uint64  ## Gas price enforced by the pool, `gasFeeCap`
+    minTipPrice*: uint64  ## Desired tip-per-tx target, `estimatedGasTip`
+    gasLimit*: GasInt     ## Block size limit
+    baseFee*: uint64      ## Current base fee
+
 logScope:
   topics = "tx-pool classify transaction"
 
@@ -31,7 +41,8 @@ logScope:
 # Private transaction validation helpers
 # ------------------------------------------------------------------------------
 
-proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc checkTxBasic(xp: TxPoolRef;
+                  item: TxItemRef; param: TxClassify): bool {.inline.} =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Rejected transactions will go to the wastebasket
@@ -59,30 +70,31 @@ proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
 
   true
 
-proc checkTxFees(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc checkTxFees(xp: TxPoolRef;
+                 item: TxItemRef; param: TxClassify): bool {.inline.} =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Rejected transactions will go to the queue(1) waiting for a change
   ## of parameters `gasLimit` and `baseFee`
   ##
-  if xp.dbHead.trgGasLimit < item.tx.gasLimit:
+  if param.gasLimit < item.tx.gasLimit:
     debug "invalid tx: gasLimit exceeded",
-      maxLimit = xp.dbHead.trgGasLimit,
+      maxLimit = param.gasLimit,
       gasLimit = item.tx.gasLimit
     return false
 
   # ensure that the user was willing to at least pay the base fee
   if item.tx.txType == TxLegacy:
-    if item.tx.gasPrice < xp.dbHead.baseFee.int64:
+    if item.tx.gasPrice < param.baseFee.int64:
       debug "invalid tx: legacy gasPrice is smaller than baseFee",
         gasPrice = item.tx.gasPrice,
-        baseFee = xp.dbHead.baseFee
+        baseFee = param.baseFee
       return false
   else:
-    if item.tx.maxFee < xp.dbHead.baseFee.int64:
+    if item.tx.maxFee < param.baseFee.int64:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
-        baseFee = baseFee
+        baseFee = param.baseFee
       return false
     # The total must be the larger of the two
     if item.tx.maxFee < item.tx.maxPriorityFee:
@@ -93,7 +105,8 @@ proc checkTxFees(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
 
   true
 
-proc checkTxBalance(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
+proc checkTxBalance(xp: TxPoolRef;
+                    item: TxItemRef; param: TxClassify): bool {.inline.} =
   ## Inspired by `p2p/validate.validateTransaction()`
   ##
   ## Function currently unused.
@@ -121,25 +134,38 @@ proc checkTxBalance(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
 # Public functionss
 # ------------------------------------------------------------------------------
 
-proc classifyTxValid*(xp: TxPoolRef; item: TxItemRef): TxInfo =
+proc classifyTxValid*(xp: TxPoolRef;
+                      item: TxItemRef; param: TxClassify): TxInfo =
   ## Check a raw transaction whether it should be accepted at all or
   ## re-jected right away.
-  if not xp.checkTxBasic(item):
+  if not xp.checkTxBasic(item,param):
     return txInfoErrBasicValidatorFailed
 
   txInfoOk
 
 
-proc classifyTxPending*(xp: TxPoolRef; item: TxItemRef): bool =
+proc classifyTxPending*(xp: TxPoolRef;
+                        item: TxItemRef; param: TxClassify): bool =
   ## Check whether a valid transaction is ready to be set `pending`.
-  if item.tx.estimatedGasTip(xp.dbHead.baseFee) <= 0:
+  if item.tx.estimatedGasTip(param.baseFee) <= 0:
     return false
 
-  if not xp.checkTxFees(item):
+  if not xp.checkTxFees(item,param):
     return false
 
   #if not item.checkTxBalance(dbHead):
   #  return false
+
+  true
+
+proc classifyTxStaged*(xp: TxPoolRef;
+                       item: TxItemRef; param: TxClassify): bool =
+  ## Check whether a `pending` transaction is ready to be set `staged`.
+  if stageMinTip in param.stageSelect:
+    discard
+
+  if stageMinFee in param.stageSelect:
+    discard
 
   true
 

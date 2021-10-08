@@ -216,9 +216,7 @@ proc setItemStatusFromInfo*(xp: TxPoolRef) =
   for item in xp.toItems:
     # Re-define status from last character of info field
     let w = TxItemStatus.toSeq.filterIt(statusInfo[it][0] == item.info[^1])[0]
-    xp.pjaSetStatus(item, w)
-  xp.pjaFlushRejects
-  waitFor xp.jobCommit
+    xp.setStatus(item, w)
 
 # ------------------------------------------------------------------------------
 # End

@@ -24,18 +24,38 @@ import
 
 const
   txPoolLifeTime = initDuration(hours = 3)
-  txPriceLimit = 1
+  txMinFeePrice = 1
 
   # Journal:   "transactions.rlp",
   # Rejournal: time.Hour,
   # PriceBump:  10,
 
 type
-  TxPoolParam* = tuple
-    gasPrice: uint64     ## Gas price enforced by the pool
-    dirtyPending: bool   ## Pending queue needs update
-    commitLoop: bool     ## Sentinel, set while commit loop is running
-    jobExecRepeat: bool  ## Enable job processor (wrapping commit loop)
+  TxPoolStageSelector* = enum ##\
+    ## Strategy selector symbols for staging transactions
+
+    stageMinTip ##\
+      ## Include tx items which have a tip at least this `estimatedGasTip`
+
+    stageMinFee ##\
+      ## Include tx items which have at least this `gasFeeCap`, other
+      ## items are considered underpriced.
+
+
+  TxPoolSyncParam* = tuple    ## Synchronised access to these parameters
+    minFeePrice: uint64       ## Gas price enforced by the pool, `gasFeeCap`
+    prvFeePrice: uint64       ## Previous `minFeePrice` for detecting changes
+
+    minTipPrice: uint64       ## Desired tip-per-tx target, `estimatedGasTip`
+    prvTipPrice: uint64       ## Previous `minTipPrice` for detecting changes
+
+    commitLoop: bool          ## Sentinel, set while commit loop is running
+    dirtyPending: bool        ## Pending queue needs update
+    dirtyStaged: bool         ## Stage queue needs update
+    isCallBack: bool          ## set if a call back is currently activated
+
+    stageSelect: set[TxPoolStageSelector] ## Packer strategy symbols
+
 
   TxPoolRef* = ref object of RootObj ##\
     ## Transaction pool descriptor
@@ -49,7 +69,7 @@ type
     txDB: TxTabsRef           ## Transaction lists & tables
     txDBSync: AsyncLock       ## Serialise access to `txDB`
 
-    param: TxPoolParam
+    param: TxPoolSyncParam
     paramSync: AsyncLock      ## Serialise access to flags and parameters
 
     # locals: seq[EthAddress] ## Addresses treated as local by default
@@ -78,8 +98,29 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
   xp.byJobSync = newAsyncLock()
 
   xp.param.reset
-  xp.param.gasPrice = txPriceLimit
+  xp.param.minFeePrice = txMinFeePrice
   xp.paramSync = newAsyncLock()
+
+# ------------------------------------------------------------------------------
+# Private functions, semaphore/locks
+# ------------------------------------------------------------------------------
+
+proc paramLock(xp: TxPoolRef) {.inline, raises: [Defect,CatchableError].} =
+  ## Lock descriptor. This function should only be used implicitely by
+  ## template `paramExclusively()`
+  waitFor xp.paramSync.acquire
+
+proc paramUnLock(xp: TxPoolRef) {.inline, raises: [Defect,AsyncLockError].} =
+  ## Unlock descriptor. This function should only be used implicitely by
+  ## template `paramExclusively()`
+  xp.paramSync.release
+
+template paramExclusively(xp: TxPoolRef; action: untyped) =
+  ## Handy helperused to serialise access to various flags inside the `xp`
+  ## descriptor object.
+  xp.paramLock
+  action
+  xp.paramUnLock
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -111,6 +152,7 @@ template byJobExclusively*(xp: TxPoolRef; action: untyped) =
   action
   xp.byJobUnLock
 
+# -----------------------------
 
 proc txDBLock*(xp: TxPoolRef) {.inline, raises: [Defect,CatchableError].} =
   ## Lock sub-descriptor. This function should only be used implicitely by
@@ -128,23 +170,144 @@ template txDBExclusively*(xp: TxPoolRef; action: untyped) =
   action
   xp.txDBUnLock
 
+# -----------------------------
 
-proc paramLock*(xp: TxPoolRef) {.inline, raises: [Defect,CatchableError].} =
-  ## Lock descriptor. This function should only be used implicitely by
-  ## template `paramExclusively()`
-  waitFor xp.paramSync.acquire
+proc txRunCallBackSync*(xp: TxPoolRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ##Returns the value of the `isCallBack`
+  xp.paramExclusively:
+    result = xp.param.isCallBack
 
-proc paramUnLock*(xp: TxPoolRef) {.inline, raises: [Defect,AsyncLockError].} =
-  ## Unlock descriptor. This function should only be used implicitely by
-  ## template `paramExclusively()`
-  xp.paramSync.release
+proc txRunCallBackSync*(xp: TxPoolRef; val: bool): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Sets the `isCallBack` parameter and returns the previous value
+  xp.paramExclusively:
+    result = xp.param.isCallBack
+    xp.param.isCallBack = val
 
-template paramExclusively*(xp: TxPoolRef; action: untyped) =
-  ## Handy helperused to serialise access to various flags inside the `xp`
-  ## descriptor object.
-  xp.paramLock
+template txRunCallBack*(xp: TxPoolRef; action: untyped) =
+  ## Handy helper for wrapping a call back.
+  doAssert xp.txRunCallBackSync(true) == false
   action
-  xp.paramUnLock
+  doAssert xp.txRunCallBackSync(false) == true
+
+template txCallBackOrDBExclusively*(xp: TxPoolRef; action: untyped) =
+  ## Returns `true` if the `isCallBack` parameter is set
+  var isCallBack = xp.txRunCallBackSync
+  if not isCallBack:
+    xp.txDBLock
+  action
+  if not isCallBack:
+    xp.txDBUnLock
+
+# ------------------------------------------------------------------------------
+# Public functions, synchonised getters/setters
+# ------------------------------------------------------------------------------
+
+proc uniqueAccessCommitLoop*(xp: TxPoolRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Gain unique access, activate
+  xp.paramExclusively:
+    result = not xp.param.commitLoop
+    xp.param.commitLoop = true
+
+proc releaseAccessCommitLoop*(xp: TxPoolRef)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Gain unique access, unset
+  xp.paramExclusively:
+    xp.param.commitLoop = false
+
+# -----------------------------
+
+proc dirtyPending*(xp: TxPoolRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, pending queue needs update
+  xp.paramExclusively:
+    result = xp.param.dirtyPending
+
+proc `dirtyPending=`*(xp: TxPoolRef; val: bool)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter
+  xp.paramExclusively:
+    xp.param.dirtyPending = val
+
+# -----------------------------
+
+proc dirtyStaged*(xp: TxPoolRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, pending queue needs update
+  xp.paramExclusively:
+    result = xp.param.dirtyStaged
+
+proc `dirtyStaged=`*(xp: TxPoolRef; val: bool)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter
+  xp.paramExclusively:
+    xp.param.dirtyStaged = val
+
+# -----------------------------
+
+proc minFeePrice*(xp: TxPoolRef): uint64
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, synchronised access
+  xp.paramExclusively:
+    result = xp.param.minFeePrice
+
+proc `minFeePrice=`*(xp: TxPoolRef; val: uint64)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter, synchronised access
+  xp.paramExclusively:
+    if xp.param.minFeePrice != val:
+      xp.param.prvFeePrice = xp.param.minFeePrice
+      xp.param.minFeePrice = val
+
+proc minFeePriceChanged*(xp: TxPoolRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Returns `true` if there was a `nimFeePrice` change and resets
+  ## the change detection.
+  xp.paramExclusively:
+    if xp.param.minFeePrice != xp.param.prvFeePrice:
+      xp.param.prvFeePrice = xp.param.minFeePrice
+      result = true
+
+# -----------------------------
+
+proc minTipPrice*(xp: TxPoolRef): uint64
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, synchronised access
+  xp.paramExclusively:
+    result = xp.param.minTipPrice
+
+proc `minTipPrice=`*(xp: TxPoolRef; val: uint64)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter, synchronised access
+  xp.paramExclusively:
+    if xp.param.minTipPrice != val:
+      xp.param.prvTipPrice = xp.param.minTipPrice
+      xp.param.minTipPrice = val
+
+proc minTipPriceChanged*(xp: TxPoolRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Returns `true` if there was a `nimTipPrice` change and resets
+  ## the change detection.
+  xp.paramExclusively:
+    if xp.param.minTipPrice != xp.param.prvTipPrice:
+      xp.param.prvTipPrice = xp.param.minTipPrice
+      result = true
+
+# -----------------------------
+
+proc stageSelect*(xp: TxPoolRef): set[TxPoolStageSelector]
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Returns the set of strategy symbols for labelling items as`staged`
+  xp.paramExclusively:
+    result = xp.param.stageSelect
+
+proc `stageSelect=`*(xp: TxPoolRef; val: set[TxPoolStageSelector])
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Install a set of strategy symbols for labelling items as`staged`
+  xp.paramExclusively:
+    xp.param.stageSelect = val
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -165,34 +328,6 @@ proc byJob*(xp: TxPoolRef): TxJobRef {.inline.} =
 proc dbHead*(xp: TxPoolRef): TxDbHeadRef {.inline.} =
   ## Getter, block chain DB
   xp.dbHead
-
-proc gasPrice*(xp: TxPoolRef): uint64 {.inline.} =
-  ## Getter, as price enforced by the pool
-  xp.param.gasPrice
-
-proc commitLoop*(xp: TxPoolRef): bool {.inline.} =
-  ## Getter, sentinel, set while commit loop is running
-  xp.param.commitLoop
-
-proc dirtyPending*(xp: TxPoolRef): bool {.inline.} =
-  ## Getter, pending queue needs update
-  xp.param.dirtyPending
-
-# ------------------------------------------------------------------------------
-# Public functions, setters
-# ------------------------------------------------------------------------------
-
-proc `gasPrice=`*(xp: TxPoolRef; val: uint64) {.inline.} =
-  ## Setter,
-  xp.param.gasPrice = val
-
-proc `commitLoop=`*(xp: TxPoolRef; val: bool) {.inline.} =
-  ## Setter
-  xp.param.commitLoop = val
-
-proc `dirtyPending=`*(xp: TxPoolRef; val: bool) {.inline.} =
-  ## Setter
-  xp.param.dirtyPending = val
 
 # ------------------------------------------------------------------------------
 # Public functions, heplers (debugging only)

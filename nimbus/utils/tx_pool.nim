@@ -85,7 +85,7 @@ import
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tabs/[tx_itemid, tx_leaf],
   ./tx_pool/tx_tasks,
-  ./tx_pool/tx_tasks/[tx_add_tx, tx_update_pending],
+  ./tx_pool/tx_tasks/[tx_add_tx, tx_staged_items, tx_pending_items],
   chronicles,
   chronos,
   eth/[common, keys],
@@ -102,7 +102,6 @@ export
   TxTabsStatsCount,
   results,
   tx_desc.init,
-  tx_desc.gasPrice,
   tx_desc.startDate,
   tx_info,
   tx_item.effGasTip,
@@ -132,7 +131,11 @@ proc processJobs(xp: TxPoolRef): int
   ## * only one instance of `processJobs()` must be run at a time
   ## * variable `xp.dirtyPending` must not be accessed outside this function
 
-  var rc: Result[TxJobPair,void]
+  var
+    rc: Result[TxJobPair,void]
+    updatePending = xp.dirtyPending # locked parameter
+    updateStaged = xp.dirtyStaged   # locked parameter
+
   xp.byJobExclusively:
     rc = xp.byJob.first
 
@@ -155,42 +158,42 @@ proc processJobs(xp: TxPoolRef): int
       for tx in args.txs.mitems:
         xp.txDBExclusively:
           xp.addTx(tx, args.local, args.info)
-      xp.dirtyPending = true
+      updatePending = true # change may affect `pending` items
+      updateStaged = true  # change may affect `staged` items
 
     of txJobApplyByLocal:
       # Apply argument function to all `local` or `remote` items.
       let args = task.data.applyByLocalArgs
-      xp.txDBExclusively:
-        # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash ..
-        for item in xp.txDB.byItemID.eq(args.local).walkItems:
-          if not args.apply(item):
-            break
-      xp.dirtyPending = true
+      xp.txRunCallBack:
+        xp.txDBExclusively:
+          # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash ..
+          for item in xp.txDB.byItemID.eq(args.local).walkItems:
+            if not args.apply(item):
+              break
 
     of txJobApplyByStatus:
       # Apply argument function to all `status` items.
       let args = task.data.applyByStatusArgs
-      xp.txDBExclusively:
-        for itemList in xp.txDB.byStatus.incItemList(args.status):
-          for item in itemList.walkItems:
-            if not args.apply(item):
-              break
-      xp.dirtyPending = true
+      xp.txRunCallBack:
+        xp.txDBExclusively:
+          for itemList in xp.txDB.byStatus.incItemList(args.status):
+            for item in itemList.walkItems:
+              if not args.apply(item):
+                break
 
     of txJobApplyByRejected:
       # Apply argument function to all `rejected` items.
       let args = task.data.applyByRejectedArgs
-      xp.txDBExclusively:
-        for item in xp.txDB.byRejects.walkItems:
-          if not args.apply(item):
-            break
-      xp.dirtyPending = true
+      xp.txRunCallBack:
+        xp.txDBExclusively:
+          for item in xp.txDB.byRejects.walkItems:
+            if not args.apply(item):
+              break
 
     of txJobEvictionInactive:
       # Move transactions older than `xp.lifeTime` to the waste basket.
       xp.txDBExclusively:
         xp.deleteExpiredItems(xp.lifeTime)
-      xp.dirtyPending = true
 
     of txJobFlushRejects:
       # Deletes at most the `maxItems` oldest items from the waste basket.
@@ -198,27 +201,12 @@ proc processJobs(xp: TxPoolRef): int
       xp.txDBExclusively:
         discard xp.txDB.flushRejects(args.maxItems)
 
-    of txJobItemSetStatus:
-      # Set/update status for particular item.
-      let args = task.data.itemSetStatusArgs
-      xp.txDBExclusively:
-        discard xp.txDB.reassign(args.item, args.status)
-      xp.dirtyPending = true
-
     of txJobMoveRemoteToLocals:
       # For given account, remote transactions are migrated to local
       # transactions.
       let args = task.data.moveRemoteToLocalsArgs
       xp.txDBExclusively:
         discard xp.reassignRemoteToLocals(args.account)
-      xp.dirtyPending = true
-
-    of txJobRejectItem:
-      # Move argument `item` to waste basket
-      let args = task.data.rejectItemArgs
-      xp.txDBExclusively:
-        discard xp.txDB.reject(args.item, args.reason)
-      xp.dirtyPending = true
 
     of txJobSetBaseFee:
       # New base fee (implies database reorg). Note that after changing the
@@ -226,20 +214,10 @@ proc processJobs(xp: TxPoolRef): int
       # `txJobUpdatePending`)
       let args = task.data.setBaseFeeArgs
       xp.txDB.baseFee = args.price     # cached value, change implies re-org
-      xp.txDBExclusively:
+      xp.txDBExclusively:              # synchronised access
         xp.dbHead.baseFee = args.price # representative value
-      xp.dirtyPending = true
-
-    of txJobSetGasPrice:
-      # Set the minimum price required by the transaction pool for a new
-      # transaction. Increasing it will move all transactions below this
-      # threshold to the waste basket.
-      let args = task.data.setGasPriceArgs
-      var curPrice = xp.gasPrice
-      xp.txDBExclusively:
-        xp.updateGasPrice(curPrice = curPrice, newPrice = args.price)
-      xp.gasPrice = curPrice
-      xp.dirtyPending = true
+      updatePending = true # change may affect `pending` items
+      updateStaged = true  # change may affect `staged` items
 
     of txJobSetHead: # FIXME: tbd
       # Change the insertion block header. This call might imply
@@ -247,14 +225,35 @@ proc processJobs(xp: TxPoolRef): int
       discard
 
     of txJobUpdatePending:
-      # For all items, re-calculate `queued` and `pending` status. If the
-      # `force` flag is set, re-calculation is done even though the change
-      # flag hes remained unset.
+      # For all items `queued` and `pending` items, re-calculate the status. If
+      # the `force` flag is set, re-calculation is done even though the change
+      # flags remained unset.
       let args = task.data.updatePendingArgs
-      xp.txDBExclusively:
-        if xp.dirtyPending or args.force:
-          xp.updatePending
-          xp.dirtyPending = false
+      if updatePending or args.force or xp.dirtyPending:
+        xp.txDBExclusively:
+          xp.pendingItemsUpdate
+        xp.dirtyPending = false
+        updatePending = false # changes commited
+        updateStaged = true  # change may affect `staged` items
+
+    of txJobUpdateStaged:
+      # For all `pending` and `staged` items, re-calculate the status.  If
+      # the `force` flag is set, re-calculation is done even though the change
+      # flags remained unset. If there was no change in the `minTipPrice` and
+      # `minFeePrice`, only re-assign from `pending` and `staged`.
+      let args = task.data.updateStagedArgs
+      if args.force or xp.minFeePriceChanged or xp.minTipPriceChanged:
+        xp.txDBExclusively:
+          xp.stagedItemsReorg
+        discard xp.minFeePriceChanged # reset change detect
+        discard xp.minTipPriceChanged # reset change detect
+        xp.dirtyStaged = false
+        updateStaged = false
+      elif updateStaged or xp.dirtyStaged:
+        xp.txDBExclusively:
+          xp.stagedItemsAppend
+        xp.dirtyStaged = false
+        updateStaged = false
 
     # End case/switch
     result.inc
@@ -266,18 +265,13 @@ proc processJobs(xp: TxPoolRef): int
       xp.byJob.dispose(task.id)
       rc = xp.byJob.first
 
+  # End while
 
-proc grabJobsProcessor(xp: TxPoolRef): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Gain unique access to jobs processor
-  xp.paramExclusively:
-    result = not xp.commitLoop
-    xp.commitLoop = true
-
-proc releaseJobsProcessor(xp: TxPoolRef)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  xp.paramExclusively:
-    xp.commitLoop = false
+  # Update flags, will trigger jobs when loop is invoked next
+  if updatePending:
+    xp.dirtyPending = true
+  if updateStaged:
+    xp.dirtyStaged = true
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool action1 serialiser
@@ -307,12 +301,12 @@ proc jobCommit*(xp: TxPoolRef) {.async.} =
 
   # Run jobs processor. It does not matter if this fails. In that case, some
   # other `jobCommit()` is running processing at least the current batch.
-  if xp.grabJobsProcessor:
+  if xp.uniqueAccessCommitLoop:
     # all jobs will be processed in foreground, release afterwards
     let nJobs = xp.processJobs
     debug "processed jobs",
       nJobs
-    xp.releaseJobsProcessor
+    xp.releaseAccessCommitLoop
 
 # ------------------------------------------------------------------------------
 # Public functions, immediate actions (not queued as a job.)
@@ -323,47 +317,115 @@ proc jobCommit*(xp: TxPoolRef) {.async.} =
 # core/tx_pool.go(1737): func (t *txLookup) LocalCount() int {
 # core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
 proc count*(xp: TxPoolRef): TxTabsStatsCount
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+    {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the current pool stats: the number of local, remote,
   ## pending, queued, etc. transactions.
-  xp.txDBExclusively:
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
     result = xp.txDB.statsCount
+
 
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
 proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Returns a transaction if it is contained in the pool.
-  xp.txDBExclusively:
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
     result = xp.txDB.byItemID.eq(hash)
+
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the accounts currently considered `local` or `remote` (i.e.
   ## the have txs of that kind) depending on request arguments.
-  xp.txDBExclusively:
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
     result = xp.collectAccounts(local)
 
+
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-proc getGasPrice*(xp: TxPoolRef): uint64
+proc getMinFeePrice*(xp: TxPoolRef): uint64
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the current gas price enforced by the transaction pool.
-  xp.paramExclusively:
-    result = xp.gasPrice
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minFeePrice
+
+
+# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
+proc setMinFeePrice*(xp: TxPoolRef; val: uint64): uint64
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Set the minimum price required by the transaction pool for txs to be
+  ## staged. Increasing it will remove some transactions when the stage is
+  ## re-built.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minFeePrice = val
+  xp.dirtyStaged = false
+
+
+proc getMinTipPrice*(xp: TxPoolRef): uint64
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Similar to `getMinFeePrice`
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minTipPrice
+
+
+# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
+proc setMinTipPrice*(xp: TxPoolRef; val: uint64): uint64
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Similar to `setMinFeePrice`
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minTipPrice = val
+  xp.dirtyStaged = false
+
 
 proc getBaseFee*(xp: TxPoolRef): uint64
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the `baseFee` implying the price list valuation and order.
-  xp.paramExclusively:
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
     result = xp.txDB.baseFee
+
 
 proc setMaxRejects*(xp: TxPoolRef; size: int)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Set the size of the waste basket. This setting becomes effective with
   ## the next move of an item into the waste basket.
-  xp.txDBExclusively:
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
     xp.txDB.maxRejects = size
+
+
+proc setStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Change/update the status of the transaction item.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  if status != item.status:
+    xp.txCallBackOrDBExclusively:
+      discard xp.txDB.reassign(item, status)
+    if status == txItemPending or status == txItemPending:
+      xp.dirtyPending = true # change may affect `pending` items
+      xp.dirtyStaged = true  # change may affect `staged` items
+
+
+proc rejectItem*(xp: TxPoolRef; item: TxItemRef; reason: TxInfo)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Move item to wastebasket.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
+    discard xp.txDB.reject(item, reason)
 
 # ------------------------------------------------------------------------------
 # End

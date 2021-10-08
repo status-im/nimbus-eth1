@@ -37,18 +37,6 @@ proc pjaSetBaseFee*(xp: TxPoolRef; baseFee: uint64)
     setBaseFeeArgs: (
       price:  baseFee)))
 
-# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc pjaSetGasPrice*(xp: TxPoolRef; price: uint64)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Set the minimum price required by the transaction pool for a new
-  ## transaction. Increasing it will move all transactions below this
-  ## threshold to the waste basket.
-  discard xp.job(TxJobDataRef(
-    kind:     txJobSetGasPrice,
-    setGasPriceArgs: (
-      price:  price)))
-
-
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 proc pjaAddTxs*(xp: TxPoolRef;
@@ -129,28 +117,6 @@ proc pjaRejectsApply*(xp: TxPoolRef; apply: TxJobItemApply)
     kind:     txJobApplyByRejected,
     applyByRejectedArgs: (
       apply:  apply)))
-
-proc pjaRejectItem*(xp: TxPoolRef; item: TxItemRef; reason: TxInfo)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Move item to wastebasket
-  ##
-  ## :CAVEAT:
-  ##   This function must not be used inside a call back function as of
-  ##   `itemsApply()`. Add the job directly using the `job()` function.
-  discard xp.job(TxJobDataRef(
-    kind:      txJobRejectItem,
-    rejectItemArgs: (
-      item:    item,
-      reason:  reason)))
-
-proc pjaSetStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Change/update the status of the transaction item.
-  discard xp.job(TxJobDataRef(
-    kind:      txJobItemSetStatus,
-    itemSetStatusArgs: (
-      item:    item,
-      status:  status)))
 
 proc pjaUpdatePending*(xp: TxPoolRef; force = false)
     {.gcsafe,raises: [Defect,CatchableError].} =

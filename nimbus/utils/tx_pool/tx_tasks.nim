@@ -57,22 +57,6 @@ proc deleteExpiredItems*(xp: TxPoolRef; maxLifeTime: Duration)
     discard xp.txDB.reject(item,txInfoErrTxExpired)
     queuedEvictionMeter(1)
 
-
-# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc deleteUnderpricedItems*(xp: TxPoolRef; price: uint64)
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Drop all transactions below the argument threshold `price`, i.e.
-  ## move these items to the waste basket.
-  # Delete while walking the `gasFeeCap` table (it is ok to delete the
-  # current item). See also `remotesBelowTip()`.
-  if 0 < price:
-    let topOffOne = price - 1
-    for itemList in xp.txDB.byTipCap.decItemList(maxCap = topOffOne):
-      for item in itemList.walkItems:
-        if not item.local:
-          discard xp.txDB.reject(item,txInfoErrUnderpriced)
-
-
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc collectAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -108,20 +92,6 @@ proc getRemotesBelowTip*(xp: TxPoolRef; threshold: uint64): seq[Hash256]
       for item in itemList.walkItems:
         if not item.local:
           result.add item.itemID
-
-
-proc updateGasPrice*(xp: TxPoolRef; curPrice: var uint64; newPrice: uint64)
-    {.inline, raises: [Defect,KeyError].} =
-  let oldPrice = curPrice
-  curPrice = newPrice
-
-  # if min miner fee increased, remove txs below the new threshold
-  if oldPrice < newPrice:
-    xp.deleteUnderpricedItems(newPrice)
-
-  info "Price threshold updated",
-    oldPrice,
-    newPrice
 
 # ------------------------------------------------------------------------------
 # End
