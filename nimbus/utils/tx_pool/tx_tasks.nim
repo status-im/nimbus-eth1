@@ -84,10 +84,10 @@ proc reassignRemoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
 
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
-proc getRemotesBelowTip*(xp: TxPoolRef; threshold: uint64): seq[Hash256]
+proc getRemotesBelowTip*(xp: TxPoolRef; threshold: GasPrice): seq[Hash256]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Finds all remote transactions below the given tip threshold.
-  if 0 < threshold:
+  if 0.GasPrice < threshold:
     for itemList in xp.txDB.byTipCap.decItemList(maxCap = threshold - 1):
       for item in itemList.walkItems:
         if not item.local:

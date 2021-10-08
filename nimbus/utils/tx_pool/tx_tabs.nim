@@ -41,7 +41,7 @@ type
   TxTabsRef* = ref object ##\
     ## Base descriptor
     maxRejects: int           ## madximal number of items in waste basket
-    baseFee: uint64           ## `byGasTip` re-org when changing
+    baseFee: GasPrice         ## `byGasTip` re-org when changing
 
     byItemID*: TxItemIDTab    ## Primary table, queued by arrival event
     byGasTip*: TxPriceTab     ## Indexed by `effectiveGasTip` > `nonce`
@@ -96,7 +96,7 @@ proc insertImpl(xp: TxTabsRef; item: TxItemRef)
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type TxTabsRef; baseFee = 0u64): T =
+proc init*(T: type TxTabsRef; baseFee = 0.GasPrice): T =
   ## Constructor, returns new tx-pool descriptor.
   new result
   result.maxRejects = txTabMaxRejects
@@ -224,7 +224,7 @@ proc reject*(xp: TxTabsRef; tx: var Transaction; reason: TxInfo;
 # Public getters
 # ------------------------------------------------------------------------------
 
-proc baseFee*(xp: TxTabsRef): uint64 {.inline.} =
+proc baseFee*(xp: TxTabsRef): GasPrice {.inline.} =
   ## Get the `baseFee` implying the price list valuation and order. If
   ## this entry is disabled, the value `GasInt.low` is returnded.
   xp.baseFee
@@ -237,7 +237,7 @@ proc maxRejects*(xp: TxTabsRef): int {.inline.} =
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `baseFee=`*(xp: TxTabsRef; baseFee: uint64)
+proc `baseFee=`*(xp: TxTabsRef; baseFee: GasPrice)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Setter, new base fee (implies reorg). The argument `GasInt.low`
   ## disables the `baseFee`.
@@ -389,7 +389,7 @@ iterator walkItemList*(schedList: TxSenderSchedRef;
 # -----------------------------------------------------------------------------
 
 iterator incItemList*(priceTab: var TxPriceTab;
-                      minPrice = int64.low): TxLeafItemRef =
+                      minPrice = GasPriceEx.low): TxLeafItemRef =
   ## Starting at the lowest gas price, this function traverses increasing
   ## gas prices followed by nonces.
   ##
@@ -415,7 +415,7 @@ iterator incItemList*(priceTab: var TxPriceTab;
 
 
 iterator incNonceList*(priceTab: var TxPriceTab;
-                       minPrice = int64.low): TxPriceNonceRef =
+                       minPrice = GasPriceEx.low): TxPriceNonceRef =
   ## Starting at the lowest gas price, this iterator traverses increasing
   ## gas prices. Contrary to `incItem()`, this iterator does not
   ## descent into the none sub-list and rather returns it.
@@ -440,7 +440,7 @@ iterator incItemList*(nonceList: TxPriceNonceRef;
 
 
 iterator decItemList*(priceTab: var TxPriceTab;
-                      maxPrice = int64.high): TxLeafItemRef =
+                      maxPrice = GasPriceEx.high): TxLeafItemRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## See also the **Note* at the comment for `incItem()`.
@@ -457,7 +457,7 @@ iterator decItemList*(priceTab: var TxPriceTab;
     rcGas = priceTab.lt(gaskey)
 
 iterator decNonceList*(priceTab: var TxPriceTab;
-                       maxPrice = int64.high): TxPriceNonceRef =
+                       maxPrice = GasPriceEx.high): TxPriceNonceRef =
   ## Starting at the lowest gas price, this function traverses increasing
   ## gas prices. Contrary to `decItem()`, this iterator does not
   ## descent into the none sub-list and rather returns it.
@@ -485,40 +485,22 @@ iterator decItemList*(nonceList: TxPriceNonceRef;
 # -----------------------------------------------------------------------------
 
 iterator incItemList*(gasTab: var TxTipCapTab;
-                      minCap = 0u64): TxLeafItemRef =
+                      minCap = GasPrice.low): TxLeafItemRef =
   ## Starting at the lowest, this function traverses increasing gas prices.
   ##
   ## See also the **Note* at the comment for `byTipCap.incItem()`.
-  var bottom: int64
-
-  if minCap == 0u64:
-    bottom = int64.low
-  elif minCap < int64.high.uint64:
-    bottom = minCap.int64
-  else:
-    bottom = int64.high
-
-  var rc = gasTab.ge(bottom)
+  var rc = gasTab.ge(minCap)
   while rc.isOk:
     let gasKey = rc.value.key
     yield rc.value.data
     rc = gasTab.gt(gasKey)
 
 iterator decItemList*(gasTab: var TxTipCapTab;
-                      maxCap = uint64.high): TxLeafItemRef =
+                      maxCap = GasPrice.high): TxLeafItemRef =
   ## Starting at the highest, this function traverses decreasing gas prices.
   ##
   ## See also the **Note* at the comment for `byTipCap.incItem()`.
-  var top: int64
-
-  if maxCap == 0u64:
-    top = int64.low
-  elif maxCap < int64.high.uint64:
-    top = maxCap.int64
-  else:
-    top = int64.high
-
-  var rc = gasTab.le(top)
+  var rc = gasTab.le(maxCap)
   while rc.isOk:
     let gasKey = rc.value.key
     yield rc.value.data

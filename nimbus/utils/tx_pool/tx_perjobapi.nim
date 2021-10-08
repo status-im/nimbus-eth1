@@ -29,7 +29,7 @@ proc pjaInactiveItemsEviction*(xp: TxPoolRef)
   ## Move transactions older than `xp.lifeTime` to the waste basket.
   discard xp.job(TxJobDataRef(kind: txJobEvictionInactive))
 
-proc pjaSetBaseFee*(xp: TxPoolRef; baseFee: uint64)
+proc pjaSetBaseFee*(xp: TxPoolRef; baseFee: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, implies re-org
   discard xp.job(TxJobDataRef(

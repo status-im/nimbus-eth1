@@ -20,58 +20,67 @@ import
   eth/[common, keys]
 
 type
-  TxReorgClassify2nd* = ##\
+  TxReorgChooseRight* = ##\
     ## Function argument for `reorgTwoBuckets()` for classifying an item. It
     ## returns `true` if the item belongs to the second status passed
     ## as `reorgTwoBuckets()` function argument.
     proc(xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool
       {.gcsafe,raises: [Defect,CatchableError].}
 
+  TxReorgBuckets* = tuple
+    left: TxItemStatus    ## Left bucket/queue label
+    right: TxItemStatus   ## Right bucket/queue label
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc genericItemsReorg*(
-    xp: TxPoolRef;                          ## descriptor
-    firstStatus: TxItemStatus;              ## name of first bucket
-    secondStatus: TxItemStatus;             ## name of second bucket
-    isSecondFn: TxReorgClassify2nd;         ## decision function
-    fnParam: TxClassify;                      ## decision function parameters
+    xp: TxPoolRef;                       ## descriptor
+    inBuckets: TxReorgBuckets;           ## Re-distribute both buckets
+    outBuckets: TxReorgBuckets;          ## Redistribution target buckets
+    outRightFn: TxReorgChooseRight;      ## decision function
+    fnParam: TxClassify;                 ## decision function parameters
     ) {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Rebuild two queues/buckets by re-classifying its item arguments.
+  ## Rebuild the two `inBucket` argument queues/buckets by re-classifying its
+  ## item arguments. These queues are stored into the pair of `outBucket`
+  ## queues according to the value of the argument `outRightFn` filter
+  ## function.
+  ##
+  ## The bucket labels in `inBuckets` and `outBuckets` may overlap.
+  ##
+  ## If the `outRightFn` returns `true`, the corresponding item is re-assigned
+  ## to the `right` of `outBuckets` pair, otherwise to the `left`.
   var
     stashed: seq[TxItemRef]
-    stashStatus = firstStatus # default: 1st bucket is the smaller one
-    updateStatus = secondStatus
+    inStatus = inBuckets # default: left bucket is the smaller one
 
-  # prepare: stash smaller sub-list, update larger one
+  # prepare: stash smaller "left" sub-list, update larger one
   let
-    nFirst = xp.txDB.byStatus.eq(firstStatus).nItems
-    nSecond = xp.txDB.byStatus.eq(secondStatus).nItems
-  if nSecond < nFirst:
-    stashStatus = secondStatus
-    updateStatus = firstStatus
+    nLeft = xp.txDB.byStatus.eq(inBuckets.left).nItems
+    nRight = xp.txDB.byStatus.eq(inBuckets.right).nItems
+  if nRight < nLeft:
+    inStatus.left = inBuckets.right
+    inStatus.right = inBuckets.left
 
-  # action, first step: stash smaller sub-list
-  for itemList in xp.txDB.byStatus.incItemList(stashStatus):
+  # action, first step: stash smaller "left" sub-list
+  for itemList in xp.txDB.byStatus.incItemList(inStatus.left):
     for item in itemList.walkItems:
       stashed.add item
 
-  # action, second step: update larger sub-list
-  for itemList in xp.txDB.byStatus.incItemList(updateStatus):
+  # action, second step: update larger "right" sub-list
+  for itemList in xp.txDB.byStatus.incItemList(inStatus.right):
     for item in itemList.walkItems:
-      let newStatus =
-        if xp.isSecondFn(item,fnParam): secondStatus
-        else: firstStatus
-      if newStatus != updateStatus:
+      let newStatus = if xp.outRightFn(item,fnParam): outBuckets.right
+                      else:                           outBuckets.left
+      if newStatus != inStatus.right:
         discard xp.txDB.reassign(item, newStatus)
 
   # action, finalise: update smaller, stashed sup-list
   for item in stashed:
-    let newStatus =
-      if xp.isSecondFn(item,fnParam): secondStatus
-      else: firstStatus
-    if newStatus != stashStatus:
+    let newStatus = if xp.outRightFn(item,fnParam): outBuckets.right
+                    else:                           outBuckets.left
+    if newStatus != inStatus.left:
       discard xp.txDB.reassign(item, newStatus)
 
 # ------------------------------------------------------------------------------

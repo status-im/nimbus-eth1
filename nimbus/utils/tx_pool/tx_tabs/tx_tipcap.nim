@@ -28,7 +28,7 @@ type
   TxTipCapTab* = object ##\
     ## Generic item list indexed by gas price
     size: int
-    gasList: SLst[GasInt,TxLeafItemRef]
+    gasList: SLst[GasPrice,TxLeafItemRef]
 
 {.push raises: [Defect].}
 
@@ -86,7 +86,7 @@ proc txVerify*(gp: var TxTipCapTab): Result[void,TxInfo]
     if rc.isErr:
       return err(txInfoVfyTipCapList)
 
-  var rcGas = gp.gasList.ge(GasInt.low)
+  var rcGas = gp.gasList.ge(GasPrice.low)
   while rcGas.isOk:
     var (gasKey, itemData) = (rcGas.value.key, rcGas.value.data)
     rcGas = gp.gasList.gt(gasKey)
@@ -115,24 +115,24 @@ proc nItems*(gp: var TxTipCapTab): int {.inline.} =
 proc len*(gp: var TxTipCapTab): int {.inline.} =
   gp.gasList.len
 
-proc eq*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
+proc eq*(gp: var TxTipCapTab; key: GasPrice):
+       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.eq(key)
 
-proc ge*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
+proc ge*(gp: var TxTipCapTab; key: GasPrice):
+       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.ge(key)
 
-proc gt*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
+proc gt*(gp: var TxTipCapTab; key: GasPrice):
+       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.gt(key)
 
-proc le*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
+proc le*(gp: var TxTipCapTab; key: GasPrice):
+       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.le(key)
 
-proc lt*(gp: var TxTipCapTab; key: GasInt):
-       SLstResult[GasInt,TxLeafItemRef] {.inline.} =
+proc lt*(gp: var TxTipCapTab; key: GasPrice):
+       SLstResult[GasPrice,TxLeafItemRef] {.inline.} =
   gp.gasList.lt(key)
 
 # ------------------------------------------------------------------------------

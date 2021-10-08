@@ -63,8 +63,8 @@ var
   statCount: array[TxItemStatus,int] # ditto
 
   txList: seq[TxItemRef]
-  effGasTips: seq[GasInt]
-  gasTipCaps: seq[GasInt]
+  effGasTips: seq[GasPriceEx]
+  gasTipCaps: seq[GasPrice]
 
   # running block chain
   bcDB: BaseChainDB
@@ -135,12 +135,12 @@ proc addOrFlushGroupwise(xp: TxPoolRef;
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runTxLoader(noisy = true; baseFee = 0u64; capture = loadSpecs) =
+proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
   let
     elapNoisy = noisy
     veryNoisy = false # noisy
     fileInfo = capture.file.splitFile.name.split(".")[0]
-    suiteInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
+    suiteInfo = if 0.GasPrice < baseFee: &" with baseFee={baseFee}" else: ""
     file = capture.dir /  capture.file
 
   # Reset/initialise
@@ -246,11 +246,11 @@ proc runTxLoader(noisy = true; baseFee = 0u64; capture = loadSpecs) =
       check xp.verify.isOK
 
 
-proc runTxBaseTests(noisy = true; baseFee = 0u64) =
+proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
 
   let
     elapNoisy = false
-    baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
+    baseInfo = if 0.GasPrice < baseFee: &" with baseFee={baseFee}" else: ""
 
   suite &"TxPool: Play with queues and lists{baseInfo}":
 
@@ -328,7 +328,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
         block:
           var
             txCount = 0
-            gpList: seq[GasInt]
+            gpList: seq[GasPriceEx]
 
           elapNoisy.showElapsed("Increasing gas price transactions walk"):
             for nonceList in xq.txDB.byGasTip.incNonceList:
@@ -356,7 +356,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
         block:
           var
             txCount = 0
-            gpList: seq[GasInt]
+            gpList: seq[GasPriceEx]
 
           elapNoisy.showElapsed("Decreasing gas price transactions walk"):
             for nonceList in xq.txDB.byGasTip.decNonceList:
@@ -440,7 +440,8 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
       xq.setItemStatusFromInfo
 
       let
-        delLe = effGasTips[0] + ((effGasTips[^1] - effGasTips[0]) div 3)
+        delLe = (effGasTips[0].int64 +
+                   ((effGasTips[^1] - effGasTips[0]).int64 div 3)).GasPriceEx
         delMax = xq.txDB.byGasTip
                    .le(delLe).ge(AccountNonce.low).first.value.effGasTip
 
@@ -468,7 +469,8 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
       xq.setItemStatusFromInfo
 
       let
-        delGe = effGasTips[^1] - ((effGasTips[^1] - effGasTips[0]) div 3)
+        delGe = (effGasTips[^1].int64 -
+                   ((effGasTips[^1] - effGasTips[0]).int64 div 3)).GasPriceEx
         delMin = xq.txDB.byGasTip
                    .ge(delGe).ge(AccountNonce.low).first.value.effGasTip
 
@@ -488,7 +490,8 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
 
     block:
       let
-        newBaseFee = if baseFee == 0: 42u64 else: baseFee + 7
+        newBaseFee = if baseFee == 0.GasPrice: 42.GasPrice
+                     else:                      baseFee + 7.GasPrice
 
       test &"Adjust baseFee to {newBaseFee} and back":
         var
@@ -509,7 +512,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
         block:
           var
             seen: seq[Hash256]
-            tips: seq[GasInt]
+            tips: seq[GasPriceEx]
           for nonceList in xq.txDB.byGasTip.incNonceList:
             tips.add nonceList.ge(AccountNonce.low).first.value.effGasTip
             for itemList in nonceList.incItemList:
@@ -527,7 +530,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
         block:
           var
             seen: seq[Hash256]
-            tips: seq[GasInt]
+            tips: seq[GasPriceEx]
             nces: seq[AccountNonce]
           for nonceList in xq.txDB.byGasTip.incNonceList:
             tips.add nonceList.ge(AccountNonce.low).first.value.effGasTip
@@ -543,9 +546,9 @@ proc runTxBaseTests(noisy = true; baseFee = 0u64) =
           #       the same
 
 
-proc runTxPoolTests(noisy = true; baseFee = 0u64) =
+proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
   let
-    baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
+    baseInfo = if 0.GasPrice < baseFee: &" with baseFee={baseFee}" else: ""
 
   suite &"TxPool: Play with pool functions and primitives{baseInfo}":
 
@@ -788,32 +791,32 @@ proc runTxPackerTests(noisy = true) =
     let
       remList = txList.mapIt(it.toRemote) # remotes only list
     var
-      ntBaseFee = 0u64
-      ntNextFee = 0u64
+      ntBaseFee = 0.GasPrice
+      ntNextFee = 0.GasPrice
 
     test &"Calculate some non-trivial base fee":
       var
-        xq = bcDB.toTxPool(txList, 0, noisy = noisy)
+        xq = bcDB.toTxPool(txList, 0.GasPrice, noisy = noisy)
       let
-        minKey = max(0, xq.txDB.byGasTip.ge(GasInt.low).value.key)
-        lowKey = xq.txDB.byGasTip.gt(minKey).value.key.uint64
-        highKey = xq.txDB.byGasTip.le(GasInt.high).value.key.uint64
+        minKey = max(0, xq.txDB.byGasTip.ge(GasPriceEx.low).value.key.int64)
+        lowKey = xq.txDB.byGasTip.gt(minKey.GasPriceEx).value.key.uint64
+        highKey = xq.txDB.byGasTip.le(GasPriceEx.high).value.key.uint64
         keyRange = highKey - lowKey
         keyStep = max(1u64, keyRange div 500_000)
 
       # what follows is a rather crude partitioning so that
       # * ntBaseFee partititions non-zero numbers of queued and pending txs
       # * ntNextFee decreases the number of pending txs
-      ntBaseFee = lowKey + keyStep
+      ntBaseFee = (lowKey + keyStep).GasPrice
 
       # the following might throw an exception if the table is de-generated
       var nextKey = ntBaseFee
       for _ in [1, 2, 3]:
-        let rcNextKey = xq.txDB.byGasTip.gt(nextKey.int64)
+        let rcNextKey = xq.txDB.byGasTip.gt(nextKey.GasPriceEx)
         check rcNextKey.isOK
-        nextKey = rcNextKey.value.key.uint64
+        nextKey = rcNextKey.value.key.uint64.GasPrice
 
-      ntNextFee = nextKey + keyStep
+      ntNextFee = nextKey + keyStep.GasPrice
 
       # of course ...
       check ntBaseFee < ntNextFee
@@ -864,7 +867,7 @@ proc runTxPackerTests(noisy = true) =
 # ------------------------------------------------------------------------------
 
 proc txPoolMain*(noisy = defined(debug)) =
-  const baseFee = 42
+  const baseFee = 42.GasPrice
   noisy.runTxLoader(baseFee)
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
@@ -876,7 +879,7 @@ when isMainModule:
     result.dir = "."
   const
     noisy = defined(debug)
-    baseFee = 42
+    baseFee = 42.GasPrice
     capts0: CaptureSpecs =
                 goerliCapture.localDir
     capts1: CaptureSpecs = (

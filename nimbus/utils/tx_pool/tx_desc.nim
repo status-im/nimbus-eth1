@@ -17,20 +17,16 @@ import
   ../../db/db_chain,
   ./tx_dbhead,
   ./tx_info,
+  ./tx_item,
   ./tx_job,
   ./tx_tabs,
   chronos,
   eth/[common, keys]
 
-const
-  txPoolLifeTime = initDuration(hours = 3)
-  txMinFeePrice = 1
-
-  # Journal:   "transactions.rlp",
-  # Rejournal: time.Hour,
-  # PriceBump:  10,
-
 type
+  TxPoolCallBackRecursion* = object of Defect
+    ## Attempt to recurse a call back function
+
   TxPoolStageSelector* = enum ##\
     ## Strategy selector symbols for staging transactions
 
@@ -43,11 +39,11 @@ type
 
 
   TxPoolSyncParam* = tuple    ## Synchronised access to these parameters
-    minFeePrice: uint64       ## Gas price enforced by the pool, `gasFeeCap`
-    prvFeePrice: uint64       ## Previous `minFeePrice` for detecting changes
+    minFeePrice: GasPrice     ## Gas price enforced by the pool, `gasFeeCap`
+    prvFeePrice: GasPrice     ## Previous `minFeePrice` for detecting changes
 
-    minTipPrice: uint64       ## Desired tip-per-tx target, `estimatedGasTip`
-    prvTipPrice: uint64       ## Previous `minTipPrice` for detecting changes
+    minTipPrice: GasPrice     ## Desired tip-per-tx target, `estimatedGasTip`
+    prvTipPrice: GasPrice     ## Previous `minTipPrice` for detecting changes
 
     commitLoop: bool          ## Sentinel, set while commit loop is running
     dirtyPending: bool        ## Pending queue needs update
@@ -74,9 +70,18 @@ type
 
     # locals: seq[EthAddress] ## Addresses treated as local by default
     # noLocals: bool          ## May disable handling of locals
-    # priceLimit: GasInt      ## Min gas price for acceptance into the pool
-    # priceBump: uint64       ## Min price bump percentage to replace an already
+    # priceLimit: GasPrice    ## Min gas price for acceptance into the pool
+    # priceBump: GasPrice     ## Min price bump percentage to replace an already
     #                         ## existing transaction (nonce)
+
+const
+  txPoolLifeTime = initDuration(hours = 3)
+  txMinFeePrice = 1.GasPrice
+  txPoolStageStrategy = {stageMinTip, stageMinFee}
+
+  # Journal:   "transactions.rlp",
+  # Rejournal: time.Hour,
+  # PriceBump:  10,
 
 {.push raises: [Defect].}
 
@@ -99,6 +104,7 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
 
   xp.param.reset
   xp.param.minFeePrice = txMinFeePrice
+  xp.param.stageSelect = txPoolStageStrategy
   xp.paramSync = newAsyncLock()
 
 # ------------------------------------------------------------------------------
@@ -186,10 +192,14 @@ proc txRunCallBackSync*(xp: TxPoolRef; val: bool): bool
     xp.param.isCallBack = val
 
 template txRunCallBack*(xp: TxPoolRef; action: untyped) =
-  ## Handy helper for wrapping a call back.
-  doAssert xp.txRunCallBackSync(true) == false
+  ## Handy helper for wrapping a call back. This template will raise a
+  ## `TxPoolCallBackRecursion` exception on anu apttempt to recursively
+  ## re-invoke this directive.
+  if xp.txRunCallBackSync(true) != false:
+    raise newException(TxPoolCallBackRecursion, "Call back already active")
   action
-  doAssert xp.txRunCallBackSync(false) == true
+  if xp.txRunCallBackSync(false) != true:
+    raise newException(TxPoolCallBackRecursion, "Lost call back semaphore")
 
 template txCallBackOrDBExclusively*(xp: TxPoolRef; action: untyped) =
   ## Returns `true` if the `isCallBack` parameter is set
@@ -247,13 +257,13 @@ proc `dirtyStaged=`*(xp: TxPoolRef; val: bool)
 
 # -----------------------------
 
-proc minFeePrice*(xp: TxPoolRef): uint64
+proc minFeePrice*(xp: TxPoolRef): GasPrice
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, synchronised access
   xp.paramExclusively:
     result = xp.param.minFeePrice
 
-proc `minFeePrice=`*(xp: TxPoolRef; val: uint64)
+proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, synchronised access
   xp.paramExclusively:
@@ -272,13 +282,13 @@ proc minFeePriceChanged*(xp: TxPoolRef): bool
 
 # -----------------------------
 
-proc minTipPrice*(xp: TxPoolRef): uint64
+proc minTipPrice*(xp: TxPoolRef): GasPrice
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, synchronised access
   xp.paramExclusively:
     result = xp.param.minTipPrice
 
-proc `minTipPrice=`*(xp: TxPoolRef; val: uint64)
+proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, synchronised access
   xp.paramExclusively:

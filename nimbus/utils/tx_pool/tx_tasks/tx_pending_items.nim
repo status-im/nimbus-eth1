@@ -25,14 +25,19 @@ import
 proc pendingItemsUpdate*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Rebuild `pending` and `queued` queues/buckets
-  let param = TxClassify(
-    gasLimit: xp.dbHead.trgGasLimit,
-    baseFee: xp.dbHead.baseFee)
+  let
+    param = TxClassify(
+      gasLimit: xp.dbHead.trgGasLimit,
+      baseFee: xp.dbHead.baseFee)
+
+    buckets: TxReorgBuckets = (
+      left: txItemQueued,
+      right: txItemPending)
 
   xp.genericItemsReorg(
-    firstStatus = txItemQueued,
-    secondStatus = txItemPending,
-    isSecondFn = classifyTxPending,
+    inBuckets = buckets,
+    outBuckets = buckets,
+    outRightFn = classifyTxPending,
     fnParam = param)
 
 # ------------------------------------------------------------------------------

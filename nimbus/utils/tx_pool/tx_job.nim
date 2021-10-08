@@ -122,7 +122,7 @@ type
       ## `baseFee`, most probably a re-org should take place (e.g. invoking
       ## `txJobUpdatePending`)
       setBaseFeeArgs*: tuple[
-        price: uint64]
+        price: GasPrice]
 
     of txJobSetHead: ##\
       ## Change the insertion block header. This call might imply

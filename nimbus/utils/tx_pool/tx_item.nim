@@ -21,6 +21,15 @@ import
   stew/results
 
 type
+  GasPrice* = ##|
+    ## Handy definition distinct from `GasInt` which is a commodity while the
+    ## `GasPrice` is the value per unit of gas, similar to a kind of money.
+    distinct uint64
+
+  GasPriceEx* = ##\
+    ## Similar to `GasPrice` but is allowed to be negative.
+    distinct int64
+
   TxItemStatus* = enum ##\
     ## current status of a transaction as seen by the pool.
     txItemQueued = 0
@@ -37,7 +46,7 @@ type
     info:      string       ## Whatever
     local:     bool         ## Local or remote queue (setter available)
     status:    TxItemStatus ## Transaction status (setter available)
-    effGasTip: int64        ## EffectiveGasTipValue
+    effGasTip: GasPriceEx   ## Effective gas tip value
     reject:    TxInfo       ## Reason for moving to rejection queue
 
 # ------------------------------------------------------------------------------
@@ -92,8 +101,34 @@ proc `$`(q: seq[AccessPair]): string =
   "[" & q.mapIt($it).join(" ") & "]"
 
 # ------------------------------------------------------------------------------
+# Public helpers supporting distinct types
+# ------------------------------------------------------------------------------
+
+proc `$`*(a: GasPrice): string {.borrow.}
+proc `<`*(a, b: GasPrice): bool {.borrow.}
+proc `<=`*(a, b: GasPrice): bool {.borrow.}
+proc `==`*(a, b: GasPrice): bool {.borrow.}
+proc `+`*(a, b: GasPrice): GasPrice {.borrow.}
+proc `-`*(a, b: GasPrice): GasPrice {.borrow.}
+
+proc `-`*(a: GasPrice; b: int): GasPrice =
+  a - b.GasPrice # beware of underflow
+
+proc `$`*(a: GasPriceEx): string {.borrow.}
+proc `<`*(a, b: GasPriceEx): bool {.borrow.}
+proc `<=`*(a, b: GasPriceEx): bool {.borrow.}
+proc `==`*(a, b: GasPriceEx): bool {.borrow.}
+proc `+`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
+proc `-`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
+
+proc `<`*(a: GasPriceEx; b: GasPrice): bool =
+  if a < 0.GasPriceEx: true
+  else:                a.GasPrice < b
+
+# ------------------------------------------------------------------------------
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
+
 
 proc newTxItemRef*(tx: Transaction; itemID: Hash256;
                    local: bool; status: TxItemStatus; info: string):
@@ -167,34 +202,35 @@ proc gas*(tx: Transaction): GasInt {.inline.} =
   tx.gasLimit
 
 # core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
-proc gasTipCap*(tx: Transaction): GasInt {.inline.} =
+proc gasTipCap*(tx: Transaction): GasPrice {.inline.} =
   ## Getter (go/ref compat): the gasTipCap per gas of the transaction.
   if tx.txType == TxLegacy:
-    tx.gasPrice
+    tx.gasPrice.GasPrice
   else:
-    tx.maxPriorityFee
+    tx.maxPriorityFee.GasPrice
 
 # core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() *big.Int ..
-proc gasFeeCap*(tx: Transaction): GasInt {.inline.} =
+proc gasFeeCap*(tx: Transaction): GasPrice {.inline.} =
   ## Getter (go/ref compat): the fee cap per gas of the transaction.
   if tx.txType == TxLegacy:
-    tx.gasPrice
+    tx.gasPrice.GasPrice
   else:
-    tx.maxFee
+    tx.maxFee.GasPrice
 
 # core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
 proc cost*(tx: Transaction): UInt256 {.inline.} =
   ## Getter (go/ref compat): gas * gasPrice + value.
   (tx.gasPrice * tx.gasLimit).u256 + tx.value
 
-proc estimatedGasTip*(tx: Transaction; baseFee: uint64): int64 {.inline.} =
+proc estimatedGasTip*(tx: Transaction;
+                      baseFee: GasPrice): GasPriceEx {.inline.} =
   ## The effective miner gas tip for the globally argument `baseFee`. The
   ## result (which is a price per gas) might well be negative.
   if tx.txType == TxLegacy:
-    tx.gasPrice - baseFee.int64
+    (tx.gasPrice - baseFee.int64).GasPriceEx
   else:
     # London, EIP1559
-    min(tx.maxPriorityFee, tx.maxFee - baseFee.int64)
+    min(tx.maxPriorityFee, tx.maxFee - baseFee.int64).GasPriceEx
 
 # ------------------------------------------------------------------------------
 # Public functions, item getters
@@ -232,8 +268,9 @@ proc status*(item: TxItemRef): TxItemStatus {.inline.} =
   ## Getter
   item.status
 
-proc effGasTip*(item: TxItemRef): int64 {.inline.} =
-  ## Getter
+proc effGasTip*(item: TxItemRef): GasPriceEx {.inline.} =
+  ## Getter, this is typically the cached value of `estimatedGasTip()` for
+  ## a given `baseFee`
   item.effGasTip
 
 proc reject*(item: TxItemRef): TxInfo {.inline.} =
@@ -252,96 +289,13 @@ proc `status=`*(item: TxItemRef; val: TxItemStatus) {.inline.} =
   ## Setter
   item.status = val
 
-proc `effGasTip=`*(item: TxItemRef; val: int64) {.inline.} =
+proc `effGasTip=`*(item: TxItemRef; val: GasPriceEx) {.inline.} =
   ## Setter
   item.effGasTip = val
 
 proc `reject=`*(item: TxItemRef; val: TxInfo) {.inline.} =
   ## Setter
   item.reject = val
-
-# ------------------------------------------------------------------------------
-# Public functions, go like API -- Transactions
-# ------------------------------------------------------------------------------
-
-#[
-# core/types/transaction.go(310): func (tx *Transaction) GasFeeCapCmp(other ..
-proc gasFeeCapCmp*(tx, other: Transaction): int {.inline.} =
-  ## `gasFeeCapCmp()` compares the fee cap of two transactions.
-  tx.gasFeeCap.cmp(other.gasFeeCap)
-
-# core/types/transaction.go(315): .. *Transaction) GasFeeCapIntCmp(other ..
-proc gasFeeCapIntCmp*(tx: Transaction; other: GasInt): int {.inline.} =
-  ## `gasFeeCapIntCmp()` compares the fee cap of the transaction against the
-  ## given fee cap.
-  tx.gasFeeCap.cmp(other)
-
-# core/types/transaction.go(320): func (tx *Transaction) GasTipCapCmp(other ..
-proc gasTipCapCmp*(tx, other: Transaction; TxItemRef): int {.inline.} =
-  ## `gasTipCapCmp()` compares the `gasTipCap` of two transactions.
-  tx.gasTipCap.cmp(other.gasTipCap)
-
-# core/types/transaction.go(325): .. (tx *Transaction) GasTipCapIntCmp(other ..
-proc gasTipCapIntCmp*(tx: Transaction; other: GasInt): int {.inline.} =
-  ## `gasTipCapIntCmp()` compares the gasTipCap of the transaction against the
-  ## given gasTipCap.
-  tx.gasTipCap.cmp(other)
-]#
-
-#[
-# core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
-proc effectiveGasTip*(tx: Transaction;
-                      baseFee: GasInt): Result[GasInt,TxItemError] {.inline.} =
-  ## `effectiveGasTip()` returns the effective miner `gasTipCap` for the given
-  ## base fee.
-  ##
-  ## Note: if the effective `gasTipCap` is negative, this method returns the
-  ## error `TxItemErrGasFeeCapTooLow` and the actual negative value can be
-  ## retrieved via `effectiveGasTipValue()`.
-  # if baseFee == nil
-  #   return ok(it.gasTipCap)
-  if baseFee < tx.gasFeeCap:
-    return err(TxItemErrGasFeeCapTooLow)
-  ok(min(tx.gasTipCap, tx.gasFeeCap - baseFee))
-
-proc effectiveGasTip*(tx: Transaction): Result[GasInt,TxItemError] {.inline.} =
-  ok(tx.gasTipCap)
-
-# core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
-proc effectiveGasTipValue*(tx: Transaction;
-                           baseFee: GasInt): GasInt {.inline.} =
-  ## `effectiveGasTipValue()` is identical to `effectiveGasTip`, but does not
-  ## return an error in case the effective gasTipCap is negative
-  min(tx.gasTipCap, tx.gasFeeCap - baseFee)
-
-proc effectiveGasTipValue*(tx: Transaction): GasInt {.inline.} =
-  tx.gasTipCap
-
-# core/types/transaction.go(351): .. *Transaction) EffectiveGasTipCmp(other ..
-proc effectiveGasTipCmp*(tx, other: Transaction; baseFee: GasInt): int
-    {.inline.} =
-  ## `effectiveGasTipCmp()` compares the effective `gasTipCap` of two
-  ## transactions assuming the given base fee.
-  # if baseFee == nil
-  #   return tx.gasTipCapCmp(other)
-  tx.effectiveGasTipValue(baseFee).cmp(other.effectiveGasTipValue(baseFee))
-
-proc effectiveGasTipCmp*(tx, other: Transaction): int {.inline.} =
-  tx.gasTipCap.cmp(other.gasTipCap)
-
-
-# core/types/transaction.go(360): ..EffectiveGasTipIntCmp(other..
-proc effectiveGasTipIntCmp*(tx: Transaction; other, baseFee: GasInt): int
-    {.inline.} =
-  ## `effectiveGasTipIntCmp` compares the effective `gasTipCap` of a
-  ## transaction to the given `gasTipCap`.
-  # if baseFee == nil
-  #   return tx.gasTipCapIntCmp(other)
-  tx.effectiveGasTipValue(baseFee).cmp(other)
-
-proc effectiveGasTipIntCmp*(tx: Transaction; other: GasInt): int {.inline.} =
-  tx.gasTipCap.cmp(other)
-]#
 
 # ------------------------------------------------------------------------------
 # Public functions, pretty printing and debugging

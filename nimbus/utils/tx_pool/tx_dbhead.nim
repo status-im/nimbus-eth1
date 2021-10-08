@@ -16,6 +16,7 @@ import
   ../../chain_config,
   ../../db/[db_chain, accounts_cache],
   ../../forks,
+  ./tx_item,
   eth/[common, keys, p2p]
 
 type
@@ -27,7 +28,7 @@ type
     head*: BlockHeader     ## new block insertion point
     fork*: Fork            ## current fork relative to head
     accDB*: AccountsCache  ## sender accounts, etc.
-    baseFee*: uint64       ## current base fee derived from `head`
+    baseFee*: GasPrice     ## current base fee derived from `head`
     trgGasLimit*: GasInt   ## effective `gasLimit` for the packer
     maxGasLimit*: GasInt   ## may increase the `gasLimit` a bit
 
@@ -66,12 +67,12 @@ proc update*(dh: TxDbHeadRef; newHead: BlockHeader)
   dh.accDB = AccountsCache.init(dh.db.db, dh.head.stateRoot, dh.db.pruneTrie)
 
   if FkLondon <= dh.fork:
-    dh.baseFee = dh.head.baseFee.truncate(uint64)
+    dh.baseFee = dh.head.baseFee.truncate(uint64).GasPrice
     # https://ethereum.org/en/developers/docs/blocks/#block-size
     dh.trgGasLimit = 15_000_000_000.GasInt
     dh.trgGasLimit = 2 * dh.trgGasLimit
   else:
-    dh.baseFee = 0
+    dh.baseFee = 0.GasPrice
     dh.trgGasLimit = dh.head.gasLimit.GasInt
 
     # https://ethereum.stackexchange.com/questions/592/

@@ -29,10 +29,10 @@ type
     ## Classifier arguments, typically cached values which might
     ## be protected by semaphores
     stageSelect*: set[TxPoolStageSelector] ## Packer strategy symbols
-    minFeePrice*: uint64  ## Gas price enforced by the pool, `gasFeeCap`
-    minTipPrice*: uint64  ## Desired tip-per-tx target, `estimatedGasTip`
-    gasLimit*: GasInt     ## Block size limit
-    baseFee*: uint64      ## Current base fee
+    minFeePrice*: GasPrice ## Gas price enforced by the pool, `gasFeeCap`
+    minTipPrice*: GasPrice ## Desired tip-per-tx target, `estimatedGasTip`
+    gasLimit*: GasInt      ## Block size limit
+    baseFee*: GasPrice     ## Current base fee
 
 logScope:
   topics = "tx-pool classify transaction"
@@ -85,13 +85,13 @@ proc checkTxFees(xp: TxPoolRef;
 
   # ensure that the user was willing to at least pay the base fee
   if item.tx.txType == TxLegacy:
-    if item.tx.gasPrice < param.baseFee.int64:
+    if item.tx.gasPrice.GasPriceEx < param.baseFee:
       debug "invalid tx: legacy gasPrice is smaller than baseFee",
         gasPrice = item.tx.gasPrice,
         baseFee = param.baseFee
       return false
   else:
-    if item.tx.maxFee < param.baseFee.int64:
+    if item.tx.maxFee.GasPriceEx < param.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
         baseFee = param.baseFee
@@ -147,7 +147,7 @@ proc classifyTxValid*(xp: TxPoolRef;
 proc classifyTxPending*(xp: TxPoolRef;
                         item: TxItemRef; param: TxClassify): bool =
   ## Check whether a valid transaction is ready to be set `pending`.
-  if item.tx.estimatedGasTip(param.baseFee) <= 0:
+  if item.tx.estimatedGasTip(param.baseFee) <= 0.GasPriceEx:
     return false
 
   if not xp.checkTxFees(item,param):
@@ -158,14 +158,17 @@ proc classifyTxPending*(xp: TxPoolRef;
 
   true
 
+
 proc classifyTxStaged*(xp: TxPoolRef;
                        item: TxItemRef; param: TxClassify): bool =
   ## Check whether a `pending` transaction is ready to be set `staged`.
   if stageMinTip in param.stageSelect:
-    discard
+    if item.effGasTip < param.minTipPrice:
+      return false
 
   if stageMinFee in param.stageSelect:
-    discard
+    if item.tx.gasFeeCap < param.minFeePrice:
+      return false
 
   true
 

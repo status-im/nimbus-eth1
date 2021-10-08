@@ -26,22 +26,22 @@
 ##  .                   .                          .
 ##  .     <Job queue>   .   <Accounting system>    .   <Tip/waste disposal>
 ##  .                   .                          .
-##  .                   .         +-----------+    .
-##  .        +------------------> | queued(1) | -------------+
-##  .        |          .         +-----------+    .         |
-##  .        |          .            |   ^   ^     .         |
-##  .        |          .            V   |   |     .         |
+##  .                   .          +-----------+   .
+##  .        +-------------------> | queued(1) | ------------+
+##  .        |          .          +-----------+   .         |
+##  .        |          .            |  ^    ^     .         |
+##  .        |          .            V  |    |     .         |
 ##  .        |          .    +------------+  |     .         |
 ##  .  --> enter(0) -------> | pending(2) |  |     .         |
 ##  .        |          .    +------------+  |     .         |
-##  .        |          .     |     |        |     .         |
-##  .        |          .     |     V        |     .         |
-##  .        |          .     |   +-----------+    .         |
-##  .        |          .     |   | staged(3) | -----------+ |
-##  .        |          .     |   +-----------+    .       | |
-##  .        |          .     |                    .       v v
-##  .        |          .     |                    .   +----------------+
-##  .        |          .     +----------------------> |  rejected(4)   |
+##  .        |          .      |     |       |     .         |
+##  .        |          .      |     V       |     .         |
+##  .        |          .      |   +-----------+   .         |
+##  .        |          .      |   | staged(3) | ----------+ |
+##  .        |          .      |   +-----------+   .       | |
+##  .        |          .      |                   .       v v
+##  .        |          .      |                   .   +----------------+
+##  .        |          .      +---------------------> |  rejected(4)   |
 ##  .        +---------------------------------------> | (waste basket) |
 ##  .                   .                          .   +----------------+
 ##
@@ -104,6 +104,9 @@ export
   tx_desc.init,
   tx_desc.startDate,
   tx_info,
+  tx_item.GasPrice,
+  tx_item.`<`,
+  tx_item.`<=`,
   tx_item.effGasTip,
   tx_item.gasTipCap,
   tx_item.itemID,
@@ -248,12 +251,13 @@ proc processJobs(xp: TxPoolRef): int
         discard xp.minFeePriceChanged # reset change detect
         discard xp.minTipPriceChanged # reset change detect
         xp.dirtyStaged = false
-        updateStaged = false
+        updateStaged = false # changes commited
+        updatePending = true # change may affect `pending` items
       elif updateStaged or xp.dirtyStaged:
         xp.txDBExclusively:
           xp.stagedItemsAppend
         xp.dirtyStaged = false
-        updateStaged = false
+        updateStaged = false # changes commited
 
     # End case/switch
     result.inc
@@ -336,6 +340,26 @@ proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
   xp.txCallBackOrDBExclusively:
     result = xp.txDB.byItemID.eq(hash)
 
+proc setStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Change/update the status of the transaction item.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  if status != item.status:
+    xp.txCallBackOrDBExclusively:
+      discard xp.txDB.reassign(item, status)
+    if status == txItemPending or status == txItemPending:
+      xp.dirtyPending = true # change may affect `pending` items
+      xp.dirtyStaged = true  # change may affect `staged` items
+
+proc rejectItem*(xp: TxPoolRef; item: TxItemRef; reason: TxInfo)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Move item to wastebasket.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
+    discard xp.txDB.reject(item, reason)
+
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
@@ -349,16 +373,15 @@ proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
 
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-proc getMinFeePrice*(xp: TxPoolRef): uint64
+proc getMinFeePrice*(xp: TxPoolRef): GasPrice
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the current gas price enforced by the transaction pool.
   ##
   ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.minFeePrice
 
-
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc setMinFeePrice*(xp: TxPoolRef; val: uint64): uint64
+proc setMinFeePrice*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Set the minimum price required by the transaction pool for txs to be
   ## staged. Increasing it will remove some transactions when the stage is
@@ -369,16 +392,15 @@ proc setMinFeePrice*(xp: TxPoolRef; val: uint64): uint64
   xp.dirtyStaged = false
 
 
-proc getMinTipPrice*(xp: TxPoolRef): uint64
+proc getMinTipPrice*(xp: TxPoolRef): GasPrice
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Similar to `getMinFeePrice`
   ##
   ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.minTipPrice
 
-
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc setMinTipPrice*(xp: TxPoolRef; val: uint64): uint64
+proc setMinTipPrice*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Similar to `setMinFeePrice`
   ##
@@ -387,7 +409,7 @@ proc setMinTipPrice*(xp: TxPoolRef; val: uint64): uint64
   xp.dirtyStaged = false
 
 
-proc getBaseFee*(xp: TxPoolRef): uint64
+proc getBaseFee*(xp: TxPoolRef): GasPrice
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the `baseFee` implying the price list valuation and order.
   ##
@@ -406,26 +428,23 @@ proc setMaxRejects*(xp: TxPoolRef; size: int)
     xp.txDB.maxRejects = size
 
 
-proc setStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
+proc setStageSelector*(xp: TxPoolRef; strategy: varArgs[TxPoolStageSelector])
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Change/update the status of the transaction item.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  if status != item.status:
-    xp.txCallBackOrDBExclusively:
-      discard xp.txDB.reassign(item, status)
-    if status == txItemPending or status == txItemPending:
-      xp.dirtyPending = true # change may affect `pending` items
-      xp.dirtyStaged = true  # change may affect `staged` items
+  ## Set strategy symbols on how to stage items.
+  var args: set[TxPoolStageSelector]
+  for w in strategy:
+    args.incl(w)
+  xp.stageSelect = args
 
-
-proc rejectItem*(xp: TxPoolRef; item: TxItemRef; reason: TxInfo)
+proc setStageSelector*(xp: TxPoolRef; strategy: set[TxPoolStageSelector])
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Move item to wastebasket.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
-    discard xp.txDB.reject(item, reason)
+  ## Ditto
+  xp.stageSelect = strategy
+
+proc getStageSelector*(xp: TxPoolRef): set[TxPoolStageSelector]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Return strategy symbols on how to stage items.
+  xp.stageSelect
 
 # ------------------------------------------------------------------------------
 # End

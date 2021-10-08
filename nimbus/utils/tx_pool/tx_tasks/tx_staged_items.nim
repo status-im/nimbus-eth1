@@ -23,15 +23,26 @@ proc stagedItemsReorg*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Stage items to be included into a block. This function re-builds the
   ## `staged` bucket/queue.
-  let param = TxClassify(
-    stageSelect: xp.stageSelect,
-    minFeePrice: xp.minFeePrice,
-    minTipPrice: xp.minTipPrice)
+  let
+    param = TxClassify(
+      stageSelect: xp.stageSelect,
+      minFeePrice: xp.minFeePrice,
+      minTipPrice: xp.minTipPrice)
+
+    # re-org both, the union of `pending` + `staged` buckets
+    src: TxReorgBuckets = (
+      left: txItemPending,
+      right: txItemStaged)
+
+    # all non-`staged` results are fed back into the `queued` bucket
+    trg: TxReorgBuckets = (
+      left: txItemQueued,
+      right: txItemStaged)
 
   xp.genericItemsReorg(
-    firstStatus = txItemPending,
-    secondStatus = txItemStaged,
-    isSecondFn = classifyTxStaged,
+    inBuckets = src,
+    outBuckets = trg,
+    outRightFn = classifyTxStaged,
     fnParam = param)
 
 

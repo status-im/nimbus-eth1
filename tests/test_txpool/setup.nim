@@ -49,7 +49,7 @@ proc toTxPool*(
     getStatus: proc(): TxItemStatus;  ## input, random function
     loadBlocks: int;                  ## load at most this many blocks
     loadTxs: int;                     ## load at most this many transactions
-    baseFee = 0u64;                   ## initalise with `baseFee` (unless 0)
+    baseFee = 0.GasPrice;             ## initalise with `baseFee` (unless 0)
     noisy: bool): TxPoolRef =
 
   var
@@ -98,7 +98,7 @@ proc toTxPool*(
             #    " baseFee=", h.baseFee,
             #    " trgGasLimit=", h.trgGasLimit,
             #    " maxGasLimit=", h.maxGasLimit
-            if 0 < baseFee:
+            if 0.GasPrice < baseFee:
               result.pjaSetBaseFee(baseFee)
 
           # Load transactions, one-by-one
@@ -121,14 +121,14 @@ proc toTxPool*(
 proc toTxPool*(
     db: BaseChainDB;            ## to be modified, initialisier for `TxPool`
     itList: var seq[TxItemRef]; ## import items into new `TxPool` (read only)
-    baseFee = 0u64;             ## initalise with `baseFee` (unless 0)
+    baseFee = 0.GasPrice;       ## initalise with `baseFee` (unless 0)
     maxRejects = 0;             ## define size of waste basket (unless 0)
     noisy = true): TxPoolRef =
 
   doAssert not db.isNil
 
   result = init(type TxPoolRef, db)
-  if 0 < baseFee:
+  if 0.GasPrice < baseFee:
     result.pjaSetBaseFee(baseFee)
   if 0 < maxRejects:
     result.setMaxRejects(maxRejects)
@@ -146,7 +146,7 @@ proc toTxPool*(
 proc toTxPool*(
     db: BaseChainDB;
     itList: seq[TxItemRef];
-    baseFee = 0u64;
+    baseFee = 0.GasPrice;
     maxRejects = 0;
     noisy = true): TxPoolRef =
   var newList = itList
@@ -158,7 +158,7 @@ proc toTxPool*(
     timeGap: var Time;          ## to be set, time in the middle of time gap
     nRemoteGapItems: var int;   ## to be set, # items before time gap
     itList: var seq[TxItemRef]; ## import items into new `TxPool` (read only)
-    baseFee = 0u64;             ## initalise with `baseFee` (unless 0)
+    baseFee = 0.GasPrice;       ## initalise with `baseFee` (unless 0)
     remoteItemsPC = 30;         ## % number if items befor time gap
     delayMSecs = 200;           ## size of time vap
     noisy = true): TxPoolRef =
@@ -168,7 +168,7 @@ proc toTxPool*(
   doAssert 0 < remoteItemsPC and remoteItemsPC < 100
 
   result = init(type TxPoolRef, db)
-  if 0 < baseFee:
+  if 0.GasPrice < baseFee:
     result.pjaSetBaseFee(baseFee)
 
   var
