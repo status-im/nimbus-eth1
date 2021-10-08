@@ -12,6 +12,7 @@ import
   stew/[objects, results],
   json_rpc/[rpcserver, errors],
   web3/[conversions, engine_api_types],
+  eth/[trie, rlp, common, trie/db],
   ".."/db/db_chain,
   ".."/p2p/chain/[chain_desc, persist_blocks],
   ".."/[sealer, utils, constants]
@@ -33,15 +34,24 @@ template asEthHash*(hash: engine_api_types.BlockHash): Hash256 =
 template unsafeQuantityToInt64(q: Quantity): int64 =
   int64 q
 
-proc toBlockHeader(payload: ExecutionPayload): EthBlockHeader =
+proc calcRootHashRlp*(items: openArray[seq[byte]]): Hash256 =
+  var tr = initHexaryTrie(newMemoryDB())
+  for i, t in items:
+    tr.put(rlp.encode(i), t)
+  return tr.rootHash()
+
+proc toBlockHeader(payload: ExecutionPayload): eth_types.BlockHeader =
   discard payload.random # TODO: What should this be used for?
+
+  let transactions = seq[seq[byte]](payload.transactions)
+  let txRoot = calcRootHashRlp(transactions)
 
   EthBlockHeader(
     parentHash    : payload.parentHash.asEthHash,
     ommersHash    : EMPTY_UNCLE_HASH,
     coinbase      : EthAddress payload.coinbase,
     stateRoot     : payload.stateRoot.asEthHash,
-    txRoot        : BLANK_ROOT_HASH, # EMPTY_UNCLE_HASH, # TODO This should be computed correctly
+    txRoot        : txRoot,
     receiptRoot   : payload.receiptRoot.asEthHash,
     bloom         : distinctBase(payload.logsBloom),
     difficulty    : default(DifficultyInt),
