@@ -17,6 +17,7 @@ import
   eth/p2p/discoveryv5/node,
   ./conf, ./rpc/[eth_api, bridge_client, discovery_api],
   ./network/state/[state_network, state_content],
+  ./network/history/[history_network, history_content],
   ./content_db
 
 proc initializeBridgeClient(maybeUri: Option[string]): Option[BridgeClient] =
@@ -63,8 +64,12 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
     ContentDB.new(config.dataDir / "db" / "contentdb_" &
       d.localNode.id.toByteArrayBE().toOpenArray(0, 8).toHex())
 
-  let stateNetwork = StateNetwork.new(d, db,
-    bootstrapRecords = config.portalBootnodes)
+  let
+    stateNetwork = StateNetwork.new(d, db,
+      bootstrapRecords = config.portalBootnodes)
+    historyNetwork = HistoryNetwork.new(d, db,
+      bootstrapRecords = config.portalBootnodes)
+
 
   if config.metricsEnabled:
     let
@@ -91,6 +96,7 @@ proc run(config: PortalConf) {.raises: [CatchableError, Defect].} =
 
   d.start()
   stateNetwork.start()
+  historyNetwork.start()
 
   runForever()
 

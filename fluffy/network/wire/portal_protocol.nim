@@ -13,7 +13,7 @@ import
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
   ./messages
 
-export messages
+export messages, routing_table
 
 logScope:
   topics = "portal_wire"
@@ -51,7 +51,7 @@ type
 
   PortalProtocol* = ref object of TalkProtocol
     protocolId: seq[byte]
-    routingTable: RoutingTable
+    routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     dataRadius*: UInt256
     handleContentRequest: ContentHandler
@@ -287,11 +287,13 @@ proc recordsFromBytes(rawRecords: List[ByteList, 32]): seq[Record] =
 proc lookupWorker(p: PortalProtocol, destNode: Node, target: NodeId):
     Future[seq[Node]] {.async.} =
   var nodes: seq[Node]
+  # TODO: Distances are not correct here. Fix + tests
   let distances = lookupDistances(target, destNode.id)
 
   let nodesMessage = await p.findNode(destNode,  List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
+    # TODO: distance function is wrong inhere, fix + tests
     let verifiedNodes = verifyNodesRecords(records, destNode, EnrsResultLimit, distances)
     nodes.add(verifiedNodes)
 
@@ -348,7 +350,8 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
         # If it wasn't seen before, insert node while remaining sorted
         closestNodes.insert(n, closestNodes.lowerBound(n,
           proc(x: Node, n: Node): int =
-            cmp(distanceTo(x.id, target), distanceTo(n.id, target))
+            cmp(p.routingTable.distance(x.id, target),
+              p.routingTable.distance(n.id, target))
         ))
 
         if closestNodes.len > BUCKET_SIZE:
@@ -446,7 +449,8 @@ proc contentLookup*(p: PortalProtocol, target: ByteList, targetId: UInt256):
           # If it wasn't seen before, insert node while remaining sorted
           closestNodes.insert(n, closestNodes.lowerBound(n,
             proc(x: Node, n: Node): int =
-              cmp(distanceTo(x.id, targetId), distanceTo(n.id, targetId))
+              cmp(p.routingTable.distance(x.id, targetId),
+                p.routingTable.distance(n.id, targetId))
           ))
 
           if closestNodes.len > BUCKET_SIZE:
@@ -564,6 +568,7 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async.} =
       let nodes = await p.findNode(n, List[uint16, 256](@[0'u16]))
       if nodes.isOk():
         let records = recordsFromBytes(nodes.get().enrs)
+        # TODO: distance function is wrong inhere, fix + tests
         let verifiedNodes = verifyNodesRecords(records, n, EnrsResultLimit, @[0'u16])
         if verifiedNodes.len > 0:
           discard p.routingTable.addNode(verifiedNodes[0])

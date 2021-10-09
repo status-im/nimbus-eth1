@@ -11,18 +11,18 @@ import
   eth/p2p/discoveryv5/[protocol, node, enr],
   ../../content_db,
   ../wire/portal_protocol,
-  ./state_content,
-  ./state_distance
+  ./history_content
 
 const
-  StateProtocolId* = "portal:state".toBytes()
+  HistoryProtocolId* = "portal:history".toBytes()
 
-type StateNetwork* = ref object
+# TODO: Extract common parts from the different networks
+type HistoryNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB
 
 proc getHandler(contentDB: ContentDB): ContentHandler =
-    return (proc (contentKey: state_content.ByteList): ContentResult =
+    return (proc (contentKey: history_content.ByteList): ContentResult =
       let contentId = toContentId(contentKey)
       let maybeContent = contentDB.get(contentId)
       if (maybeContent.isSome()):
@@ -30,7 +30,7 @@ proc getHandler(contentDB: ContentDB): ContentHandler =
       else:
         ContentResult(kind: ContentMissing, contentId: contentId))
 
-proc getContent*(n: StateNetwork, key: ContentKey):
+proc getContent*(n: HistoryNetwork, key: ContentKey):
     Future[Option[seq[byte]]] {.async.} =
   let
     keyEncoded = encode(key)
@@ -56,17 +56,17 @@ proc getContent*(n: StateNetwork, key: ContentKey):
   # domain types.
   return content.map(x => x.asSeq())
 
-proc new*(T: type StateNetwork, baseProtocol: protocol.Protocol,
+proc new*(T: type HistoryNetwork, baseProtocol: protocol.Protocol,
     contentDB: ContentDB , dataRadius = UInt256.high(),
     bootstrapRecords: openarray[Record] = []): T =
   let portalProtocol = PortalProtocol.new(
-    baseProtocol, StateProtocolId, getHandler(contentDB), dataRadius,
-    bootstrapRecords, stateDistanceCalculator)
+    baseProtocol, HistoryProtocolId, getHandler(contentDB), dataRadius,
+    bootstrapRecords)
 
-  return StateNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
+  return HistoryNetwork(portalProtocol: portalProtocol, contentDB: contentDB)
 
-proc start*(n: StateNetwork) =
-  n.portalProtocol.start()
+proc start*(p: HistoryNetwork) =
+  p.portalProtocol.start()
 
-proc stop*(n: StateNetwork) =
-  n.portalProtocol.stop()
+proc stop*(p: HistoryNetwork) =
+  p.portalProtocol.stop()

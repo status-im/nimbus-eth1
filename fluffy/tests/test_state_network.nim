@@ -12,7 +12,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol, eth/p2p/discoveryv5/routing_table,
   ../../nimbus/[genesis, chain_config, config, db/db_chain],
   ../network/wire/portal_protocol,
-  ../network/state/[state_content, state_network, custom_distance],
+  ../network/state/[state_content, state_network],
   ../content_db,
   ./test_helpers
 
@@ -172,10 +172,11 @@ procSuite "State Content Network":
 
     proto2.portalProtocol.seedTable()
 
-    let distance = logDistance(node1.localNode.id, node2.localNode.id)
+    let distance = proto1.portalProtocol.routingTable.logDistance(
+      node1.localNode.id, node2.localNode.id)
 
-    let nodes = await proto1.portalProtocol.findNode(proto2.portalProtocol.localNode,
-        List[uint16, 256](@[distance]))
+    let nodes = await proto1.portalProtocol.findNode(
+        proto2.portalProtocol.localNode, List[uint16, 256](@[distance]))
 
     check:
       nodes.isOk()
