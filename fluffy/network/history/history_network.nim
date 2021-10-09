@@ -16,6 +16,7 @@ import
 const
   HistoryProtocolId* = "portal:history".toBytes()
 
+# TODO: Extract common parts from the different networks
 type HistoryNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentDB*: ContentDB

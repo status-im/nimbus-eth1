@@ -364,7 +364,6 @@ proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage,
     dst: Node, nodes: var seq[Node]): LookupResult =
   if (m.enrs.len() != 0 and m.payload.len() == 0):
     let records = recordsFromBytes(m.enrs)
-    # TODO: distance function is wrong inhere, fix + tests
     let verifiedNodes = verifyNodesRecords(records, dst, EnrsResultLimit)
     nodes.add(verifiedNodes)
 
