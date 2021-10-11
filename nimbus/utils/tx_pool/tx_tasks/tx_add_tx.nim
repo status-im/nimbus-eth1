@@ -36,8 +36,8 @@ logScope:
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Queue a transaction. Thetransaction is tested and moved to either of
-  ## the `queued` or `pending` waiting queues, or into the waste basket.
+  ## Classify a transaction. It is tested and moved to either of the `queued`
+  ## or `pending` buckets, or disposed o the waste basket.
   let
     param = TxClassify(
       gasLimit: xp.dbHead.trgGasLimit,
@@ -66,8 +66,8 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
       item = rc.value
 
     # Verify transaction
-    vetted = xp.classifyTxValid(item,param)
-    if vetted != txInfoOk:
+    if not xp.classifyTxValid(item,param):
+      vetted = txInfoErrBasicValidatorFailed
       break txErrorFrame
 
     # Update initial state

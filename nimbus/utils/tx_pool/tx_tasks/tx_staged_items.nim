@@ -4,8 +4,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool Tasklet: Update Staged Queue/Bucket
-## ====================================================
+## Transaction Pool Tasklet: Update Staged Bucket
+## ==============================================
 ##
 
 import
@@ -25,7 +25,8 @@ proc stagedItemsReorg*(xp: TxPoolRef)
   ## `staged` bucket/queue.
   let
     param = TxClassify(
-      stageSelect: xp.stageSelect,
+      stageSelect: xp.algoSelect,
+      minPlGasPrice: xp.minPlGasPrice,
       minFeePrice: xp.minFeePrice,
       minTipPrice: xp.minTipPrice)
 
@@ -48,10 +49,10 @@ proc stagedItemsReorg*(xp: TxPoolRef)
 
 proc stagedItemsAppend*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Collect more items from the `pending` bucket/queue and add them to the
+  ## Collect more items from the `pending` bucket and add them to the
   ## `staged` bucket.
   let param = TxClassify(
-    stageSelect: xp.stageSelect,
+    stageSelect: xp.algoSelect,
     minFeePrice: xp.minFeePrice,
     minTipPrice: xp.minTipPrice)
 

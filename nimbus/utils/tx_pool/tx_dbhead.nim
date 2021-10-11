@@ -33,7 +33,7 @@ type
     maxGasLimit*: GasInt   ## may increase the `gasLimit` a bit
 
 const
-  # currently implemented only fo some tesing
+  # currently implemented in Nimbus only to do some tesing
   londonBlock = 12_965_000.u256
 
 {.push raises: [Defect].}

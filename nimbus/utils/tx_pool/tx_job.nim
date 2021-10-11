@@ -40,6 +40,7 @@ type
     txJobEvictionInactive
     txJobFlushRejects
     txJobMoveRemoteToLocals
+    txJobPackBlock
     txJobSetBaseFee
     txJobSetHead
     txJobUpdatePending
@@ -116,6 +117,18 @@ type
       ## transactions.
       moveRemoteToLocalsArgs*: tuple[
         account: EthAddress]
+
+    of txJobPackBlock: ##\
+      ## Pack a block fetching items from the `staged` bucket. For included
+      ## txs, the item wrappers are moved to the waste basket.
+      ##
+      ## If the argument `sayReady` is set `true`, the event parameter
+      ## `waitReady` will be fired when the assembled block can be retrieved.
+      ## Waithing for `waitReady` to fire means it must have be initialised
+      ## as `newAsyncEvent()`.
+      packBlockArgs*: tuple[
+        sayReady: bool,
+        waitReady: AsyncEvent]
 
     of txJobSetBaseFee: ##\
       ## New base fee (implies database reorg). Note that after changing the

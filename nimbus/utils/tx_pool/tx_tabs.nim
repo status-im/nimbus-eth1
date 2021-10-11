@@ -36,7 +36,7 @@ type
     local, remote: int           ## sum => total
     queued, pending, staged: int ## sum => total
     total: int                   ## excluding rejects
-    rejected: int
+    disposed: int                ## waste basket
 
   TxTabsRef* = ref object ##\
     ## Base descriptor
@@ -201,7 +201,7 @@ proc flushRejects*(xp: TxTabsRef; maxItems = int.high): (int,int)
   result[1] = xp.byRejects.nItems
 
 
-proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
+proc dispose*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Move argument `item` to rejects queue (aka waste basket.)
   if xp.deleteImpl(item):
@@ -213,7 +213,8 @@ proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
 proc reject*(xp: TxTabsRef; tx: var Transaction; reason: TxInfo;
              local = false; status = txItemQueued; info = "")
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Import a transaction into the rejection queue (e.g. after it could not
+  ## Similar to dispose but for a tx without the item wrapper, the function
+  ## imports the tx into the waste basket (e.g. after it could not
   ## be inserted.)
   if xp.maxRejects <= xp.byRejects.nItems:
     discard xp.flushRejects(1 + xp.byRejects.nItems - xp.maxRejects)
@@ -272,7 +273,7 @@ proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
 
   result.total =  xp.byItemID.nItems
 
-  result.rejected = xp.byRejects.nItems
+  result.disposed = xp.byRejects.nItems
 
 # ------------------------------------------------------------------------------
 # Public iterators, `sender` > `local` > `nonce` > `item`

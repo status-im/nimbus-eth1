@@ -14,7 +14,7 @@ import
   ../../nimbus/db/db_chain,
   ../../nimbus/p2p/chain,
   ../../nimbus/utils/tx_pool,
-  ../../nimbus/utils/tx_pool/tx_perjobapi,
+  ../../nimbus/utils/tx_pool/[tx_item, tx_perjobapi],
   ./helpers,
   chronos,
   eth/[common, keys, p2p, trie/db],
@@ -98,8 +98,8 @@ proc toTxPool*(
             #    " baseFee=", h.baseFee,
             #    " trgGasLimit=", h.trgGasLimit,
             #    " maxGasLimit=", h.maxGasLimit
-            if 0.GasPrice < baseFee:
-              result.pjaSetBaseFee(baseFee)
+            if 0 < baseFee:
+              result.setBaseFee(baseFee)
 
           # Load transactions, one-by-one
           for n in 0 ..< txs.len:
@@ -128,8 +128,8 @@ proc toTxPool*(
   doAssert not db.isNil
 
   result = init(type TxPoolRef, db)
-  if 0.GasPrice < baseFee:
-    result.pjaSetBaseFee(baseFee)
+  if 0 < baseFee:
+    result.setBaseFee(baseFee)
   if 0 < maxRejects:
     result.setMaxRejects(maxRejects)
 
@@ -140,7 +140,7 @@ proc toTxPool*(
   result.pjaFlushRejects
   waitFor result.jobCommit
   doAssert result.count.total == itList.len
-  doAssert result.count.rejected == 0
+  doAssert result.count.disposed == 0
 
 
 proc toTxPool*(
@@ -168,8 +168,8 @@ proc toTxPool*(
   doAssert 0 < remoteItemsPC and remoteItemsPC < 100
 
   result = init(type TxPoolRef, db)
-  if 0.GasPrice < baseFee:
-    result.pjaSetBaseFee(baseFee)
+  if 0 < baseFee:
+    result.setBaseFee(baseFee)
 
   var
     nRemoteItems = 0
@@ -192,13 +192,13 @@ proc toTxPool*(
           noisy.say &"time gap after {remoteCount} remote transactions"
           let itemID = item.itemID
           waitFor result.jobCommit
-          doAssert result.count.rejected == 0
+          doAssert result.count.disposed == 0
           timeGap = result.getItem(itemID).value.timeStamp + middleOfTimeGap
           delayMSecs.sleep
 
   waitFor result.jobCommit
   doAssert result.count.total == itList.len
-  doAssert result.count.rejected == 0
+  doAssert result.count.disposed == 0
 
 
 proc toItems*(xp: TxPoolRef): seq[TxItemRef] =

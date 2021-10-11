@@ -24,7 +24,7 @@ import
 
 proc pendingItemsUpdate*(xp: TxPoolRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Rebuild `pending` and `queued` queues/buckets
+  ## Rebuild `pending` and `queued` buckets.
   let
     param = TxClassify(
       gasLimit: xp.dbHead.trgGasLimit,

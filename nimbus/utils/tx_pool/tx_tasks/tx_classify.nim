@@ -19,7 +19,6 @@ import
   ../../../transaction,
   ../tx_dbhead,
   ../tx_desc,
-  ../tx_info,
   ../tx_item,
   chronicles,
   eth/[common, keys]
@@ -28,11 +27,14 @@ type
   TxClassify* = object ##\
     ## Classifier arguments, typically cached values which might
     ## be protected by semaphores
-    stageSelect*: set[TxPoolStageSelector] ## Packer strategy symbols
-    minFeePrice*: GasPrice ## Gas price enforced by the pool, `gasFeeCap`
-    minTipPrice*: GasPrice ## Desired tip-per-tx target, `estimatedGasTip`
-    gasLimit*: GasInt      ## Block size limit
-    baseFee*: GasPrice     ## Current base fee
+    stageSelect*: set[TxPoolAlgoSelectorFlags] ## Packer strategy symbols
+
+    minFeePrice*: GasPrice   ## Gas price enforced by the pool, `gasFeeCap`
+    minTipPrice*: GasPrice   ## Desired tip-per-tx target, `estimatedGasTip`
+    minPlGasPrice*: GasPrice ## pre-London minimum gas prioce
+    baseFee*: GasPrice       ## Current base fee
+
+    gasLimit*: GasInt        ## Block size limit
 
 logScope:
   topics = "tx-pool classify transaction"
@@ -68,7 +70,17 @@ proc checkTxBasic(xp: TxPoolRef;
       require = item.tx.intrinsicGas(xp.dbHead.fork)
     return false
 
+  if item.tx.txType != TxLegacy:
+    # The total must be the larger of the two
+    if item.tx.maxFee < item.tx.maxPriorityFee:
+      debug "invalid tx: maxFee is smaller than maPriorityFee",
+        maxFee = item.tx.maxFee,
+        maxPriorityFee = item.tx.maxPriorityFee
+      return false
+
   true
+
+# ---------------------------
 
 proc checkTxFees(xp: TxPoolRef;
                  item: TxItemRef; param: TxClassify): bool {.inline.} =
@@ -84,26 +96,15 @@ proc checkTxFees(xp: TxPoolRef;
     return false
 
   # ensure that the user was willing to at least pay the base fee
-  if item.tx.txType == TxLegacy:
-    if item.tx.gasPrice.GasPriceEx < param.baseFee:
-      debug "invalid tx: legacy gasPrice is smaller than baseFee",
-        gasPrice = item.tx.gasPrice,
-        baseFee = param.baseFee
-      return false
-  else:
+  if item.tx.txType != TxLegacy:
     if item.tx.maxFee.GasPriceEx < param.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
         baseFee = param.baseFee
       return false
-    # The total must be the larger of the two
-    if item.tx.maxFee < item.tx.maxPriorityFee:
-      debug "invalid tx: maxFee is smaller than maPriorityFee",
-        maxFee = item.tx.maxFee,
-        maxPriorityFee = item.tx.maxPriorityFee
-      return false
 
   true
+
 
 proc checkTxBalance(xp: TxPoolRef;
                     item: TxItemRef; param: TxClassify): bool {.inline.} =
@@ -130,23 +131,52 @@ proc checkTxBalance(xp: TxPoolRef;
 
   true
 
+# ---------------------------
+
+proc txLegaAcceptableGasPrice(xp: TxPoolRef;
+                              item: TxItemRef; param: TxClassify):
+                                bool {.inline.}=
+  ## Helper for `classifyTxStaged()`
+  if algoStagedPlMinPrice in param.stageSelect:
+    if item.tx.gasPrice.GasPriceEx < param.minPlGasPrice:
+      return false
+
+  elif algoStaged1559MinTip in param.stageSelect:
+    # Fall back transaction selector scheme
+    if item.effGasTip < param.minTipPrice:
+      return false
+
+  true
+
+proc txAcceptableTipAndFees(xp: TxPoolRef;
+                            item: TxItemRef; param: TxClassify):
+                              bool {.inline.}=
+  ## Helper for `classifyTxStaged()`
+  if algoStaged1559MinTip in param.stageSelect:
+    if item.effGasTip < param.minTipPrice:
+      return false
+
+  if algoStaged1559MinFee in param.stageSelect:
+    if item.tx.maxFee.GasPriceEx < param.minFeePrice:
+      return false
+
+  true
+
 # ------------------------------------------------------------------------------
 # Public functionss
 # ------------------------------------------------------------------------------
 
 proc classifyTxValid*(xp: TxPoolRef;
-                      item: TxItemRef; param: TxClassify): TxInfo =
-  ## Check a raw transaction whether it should be accepted at all or
-  ## re-jected right away.
-  if not xp.checkTxBasic(item,param):
-    return txInfoErrBasicValidatorFailed
-
-  txInfoOk
+                      item: TxItemRef; param: TxClassify): bool =
+  ## Check a (typically new) transaction whether it should be accepted at all
+  ## or re-jected right away.
+  xp.checkTxBasic(item,param)
 
 
 proc classifyTxPending*(xp: TxPoolRef;
                         item: TxItemRef; param: TxClassify): bool =
-  ## Check whether a valid transaction is ready to be set `pending`.
+  ## Check whether a valid transaction is ready to be moved to the
+  ## `pending` bucket, otherwise it will go to the `queued` bucket.
   if item.tx.estimatedGasTip(param.baseFee) <= 0.GasPriceEx:
     return false
 
@@ -161,16 +191,13 @@ proc classifyTxPending*(xp: TxPoolRef;
 
 proc classifyTxStaged*(xp: TxPoolRef;
                        item: TxItemRef; param: TxClassify): bool =
-  ## Check whether a `pending` transaction is ready to be set `staged`.
-  if stageMinTip in param.stageSelect:
-    if item.effGasTip < param.minTipPrice:
-      return false
-
-  if stageMinFee in param.stageSelect:
-    if item.tx.gasFeeCap < param.minFeePrice:
-      return false
-
-  true
+  ## Check whether a `pending` transaction is ready to be moved to the
+  ## `staged` bucket, otherwise it will go to the `queued` bucket to start
+  ## all over.
+  if item.tx.txType == TxLegacy:
+    xp.txLegaAcceptableGasPrice(item, param)
+  else:
+    xp.txAcceptableTipAndFees(item, param)
 
 # ------------------------------------------------------------------------------
 # Public functionss

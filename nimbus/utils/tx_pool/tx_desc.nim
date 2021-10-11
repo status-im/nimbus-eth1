@@ -27,15 +27,39 @@ type
   TxPoolCallBackRecursion* = object of Defect
     ## Attempt to recurse a call back function
 
-  TxPoolStageSelector* = enum ##\
-    ## Strategy selector symbols for staging transactions
+  TxPoolAlgoSelectorFlags* = enum ##\
+    ## Algorithm strategy selector symbols for staging transactions
 
-    stageMinTip ##\
-      ## Include tx items which have a tip at least this `estimatedGasTip`
+    algoStaged1559MinFee ##\
+      ## Include tx items which have at least this `maxFee`, other items
+      ## are considered underpriced.
+      ##
+      ## This is post-London only strategy only applicable to post-London
+      ## transactions.
 
-    stageMinFee ##\
-      ## Include tx items which have at least this `gasFeeCap`, other
-      ## items are considered underpriced.
+    algoStaged1559MinTip ##\
+      ## Include tx items which have a tip at least this `estimatedGasTip`.
+      ##
+      ## This is post-London effecticve strategy with some legacy fall
+      ## back mode (see implementation of `estimatedGasTip`.)
+
+    algoStagedPlMinPrice ##\
+      ## Tx items are included where the gas proce is at least this `gasPrice`,
+      ## other items are considered underpriced.
+      ##
+      ## This is a legacy pre-London strategy to apply instead of
+      ## `stage1559MinTip`.
+
+    # -----------
+
+    algoPackTrgGasLimitMax ##\
+      ## When packing, do not exceed `xp.dbHead.trgGasLimit`, otherwise another
+      ## block exceeding the `xp.dbHead.trgGasLimit` is accepted if it stays
+      ## within the `xp.dbHead.trgMaxLimit`
+
+    algoPackTryHarder ##\
+      ## When packing, do not stop at the first failure to add another block,
+      ## rather ignore that error and keep on trying for all blocks
 
 
   TxPoolSyncParam* = tuple    ## Synchronised access to these parameters
@@ -45,19 +69,25 @@ type
     minTipPrice: GasPrice     ## Desired tip-per-tx target, `estimatedGasTip`
     prvTipPrice: GasPrice     ## Previous `minTipPrice` for detecting changes
 
+    minPlGasPrice: GasPrice   ## Desired pre-London min `gasPrice`
+    prvPlGasPrice: GasPrice   ## Previous `minPlGasPrice` for detecting changes
+
+    ethBlock: EthBlock        ## Assembled & cached new block
+    ethBlockSize: GasInt      ## Summed up `gasLimit` entries of `ethBlock`
+
     commitLoop: bool          ## Sentinel, set while commit loop is running
-    dirtyPending: bool        ## Pending queue needs update
-    dirtyStaged: bool         ## Stage queue needs update
+    dirtyPending: bool        ## Pending bucket needs update
+    dirtyStaged: bool         ## Stage bucket needs update
     isCallBack: bool          ## set if a call back is currently activated
 
-    stageSelect: set[TxPoolStageSelector] ## Packer strategy symbols
+    algoSelect: set[TxPoolAlgoSelectorFlags] ## Packer strategy symbols
 
 
   TxPoolRef* = ref object of RootObj ##\
     ## Transaction pool descriptor
     startDate: Time           ## Start date (read-only)
     dbHead: TxDbHeadRef       ## block chain state
-    lifeTime*: times.Duration ## Maximum fife time of a queued tx
+    lifeTime*: times.Duration ## Maximum fife time of a tx in the system
 
     byJob: TxJobRef           ## Job batch list
     byJobSync: AsyncLock      ## Serialise access to `byJob`
@@ -77,7 +107,10 @@ type
 const
   txPoolLifeTime = initDuration(hours = 3)
   txMinFeePrice = 1.GasPrice
-  txPoolStageStrategy = {stageMinTip, stageMinFee}
+  txMinTipPrice = 1.GasPrice
+  txPoolAlgoStrategy = {algoStaged1559MinTip,
+                         algoStaged1559MinFee,
+                         algoStagedPlMinPrice}
 
   # Journal:   "transactions.rlp",
   # Rejournal: time.Hour,
@@ -104,7 +137,8 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
 
   xp.param.reset
   xp.param.minFeePrice = txMinFeePrice
-  xp.param.stageSelect = txPoolStageStrategy
+  xp.param.minTipPrice = txMinTipPrice
+  xp.param.algoSelect = txPoolAlgoStrategy
   xp.paramSync = newAsyncLock()
 
 # ------------------------------------------------------------------------------
@@ -229,9 +263,35 @@ proc releaseAccessCommitLoop*(xp: TxPoolRef)
 
 # -----------------------------
 
+proc ethBlock*(xp: TxPoolRef): EthBlock
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, assembled & cached new block
+  xp.paramExclusively:
+    result = xp.param.ethBlock
+
+proc `ethBlock=`*(xp: TxPoolRef; val: EthBlock)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter
+  xp.paramExclusively:
+    xp.param.ethBlock = val
+
+proc ethBlockSize*(xp: TxPoolRef):GasInt
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, size of assembled & cached new block
+  xp.paramExclusively:
+    result = xp.param.ethBlockSize
+
+proc `ethBlockSize=`*(xp: TxPoolRef; val: GasInt)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter
+  xp.paramExclusively:
+    xp.param.ethBlockSize = val
+
+# -----------------------------
+
 proc dirtyPending*(xp: TxPoolRef): bool
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, pending queue needs update
+  ## Getter, `pending` bucket needs update
   xp.paramExclusively:
     result = xp.param.dirtyPending
 
@@ -245,7 +305,7 @@ proc `dirtyPending=`*(xp: TxPoolRef; val: bool)
 
 proc dirtyStaged*(xp: TxPoolRef): bool
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, pending queue needs update
+  ## Getter, `staged` bucket needs update
   xp.paramExclusively:
     result = xp.param.dirtyStaged
 
@@ -307,17 +367,43 @@ proc minTipPriceChanged*(xp: TxPoolRef): bool
 
 # -----------------------------
 
-proc stageSelect*(xp: TxPoolRef): set[TxPoolStageSelector]
+proc minPlGasPrice*(xp: TxPoolRef): GasPrice
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Returns the set of strategy symbols for labelling items as`staged`
+  ## Getter, synchronised access
   xp.paramExclusively:
-    result = xp.param.stageSelect
+    result = xp.param.minPlGasPrice
 
-proc `stageSelect=`*(xp: TxPoolRef; val: set[TxPoolStageSelector])
+proc `minPlGasPrice=`*(xp: TxPoolRef; val: GasPrice)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Install a set of strategy symbols for labelling items as`staged`
+  ## Setter, synchronised access
   xp.paramExclusively:
-    xp.param.stageSelect = val
+    if xp.param.minPlGasPrice != val:
+      xp.param.prvPlGasPrice = xp.param.minPlGasPrice
+      xp.param.minPlGasPrice = val
+
+proc minPlGasPriceChanged*(xp: TxPoolRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Returns `true` if there was a `nimTipPrice` change and resets
+  ## the change detection.
+  xp.paramExclusively:
+    if xp.param.minPlGasPrice != xp.param.prvPlGasPrice:
+      xp.param.prvPlGasPrice = xp.param.minPlGasPrice
+      result = true
+
+# -----------------------------
+
+proc algoSelect*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags]
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Returns the set of algorithm strategy symbols for labelling items
+  ## as`staged`
+  xp.paramExclusively:
+    result = xp.param.algoSelect
+
+proc `algoSelect=`*(xp: TxPoolRef; val: set[TxPoolAlgoSelectorFlags])
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Install a set of algorithm strategy symbols for labelling items as`staged`
+  xp.paramExclusively:
+    xp.param.algoSelect = val
 
 # ------------------------------------------------------------------------------
 # Public functions, getters

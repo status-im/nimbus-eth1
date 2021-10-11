@@ -16,6 +16,12 @@ type
     txInfoOk =
       (0, "no error")
 
+    txInfoStagedBlockIncluded = ##\
+      ## The transaction was disposed after packing into block
+      "not needed anymore"
+
+    # ------ Miscellaneous errors ------------------------------------
+
     txInfoErrUnspecified = ##\
       ## Some unspecified error occured
       "generic error"

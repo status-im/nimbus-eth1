@@ -29,13 +29,6 @@ proc pjaInactiveItemsEviction*(xp: TxPoolRef)
   ## Move transactions older than `xp.lifeTime` to the waste basket.
   discard xp.job(TxJobDataRef(kind: txJobEvictionInactive))
 
-proc pjaSetBaseFee*(xp: TxPoolRef; baseFee: GasPrice)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Setter, implies re-org
-  discard xp.job(TxJobDataRef(
-    kind:     txJobSetBaseFee,
-    setBaseFeeArgs: (
-      price:  baseFee)))
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
@@ -94,7 +87,7 @@ proc pjaFlushRejects*(xp: TxPoolRef; numItems = int.high)
 proc pjaItemsApply*(xp: TxPoolRef; apply: TxJobItemApply; local = false)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Apply argument function `apply` to all items of the `local` or `remote`
-  ## queue.
+  ## bucket.
   discard xp.job(TxJobDataRef(
     kind:     txJobApplyByLocal,
     applyByLocalArgs: (
@@ -103,7 +96,8 @@ proc pjaItemsApply*(xp: TxPoolRef; apply: TxJobItemApply; local = false)
 
 proc pjaItemsApply*(xp: TxPoolRef; apply: TxJobItemApply; status: TxItemStatus)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Apply argument function `apply` to all items of the `status` queue.
+  ## Apply argument function `apply` to all items of the bucket with label
+  ## matching the `status` argument.
   discard xp.job(TxJobDataRef(
     kind:      txJobApplyByStatus,
     applyByStatusArgs: (
@@ -120,10 +114,18 @@ proc pjaRejectsApply*(xp: TxPoolRef; apply: TxJobItemApply)
 
 proc pjaUpdatePending*(xp: TxPoolRef; force = false)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Update pending queue
+  ## Update pending bucket
   discard xp.job(TxJobDataRef(
     kind:     txJobUpdatePending,
     updatePendingArgs: (
+      force:  force)))
+
+proc pjaUpdateStaged*(xp: TxPoolRef; force = false)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Update pending bucket
+  discard xp.job(TxJobDataRef(
+    kind:     txJobUpdateStaged,
+    updateStagedArgs: (
       force:  force)))
 
 # ------------------------------------------------------------------------------

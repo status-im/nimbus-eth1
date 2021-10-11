@@ -28,8 +28,8 @@ type
       {.gcsafe,raises: [Defect,CatchableError].}
 
   TxReorgBuckets* = tuple
-    left: TxItemStatus    ## Left bucket/queue label
-    right: TxItemStatus   ## Right bucket/queue label
+    left: TxItemStatus    ## Label of left bucket
+    right: TxItemStatus   ## Label of right bucket
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -42,12 +42,12 @@ proc genericItemsReorg*(
     outRightFn: TxReorgChooseRight;      ## decision function
     fnParam: TxClassify;                 ## decision function parameters
     ) {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Rebuild the two `inBucket` argument queues/buckets by re-classifying its
-  ## item arguments. These queues are stored into the pair of `outBucket`
-  ## queues according to the value of the argument `outRightFn` filter
+  ## Rebuild the two `inBucket` argument labelled buckets by re-classifying its
+  ## items. These items are stored into the pair of `outBucket` labelled
+  ## buckets according to the value of the argument `outRightFn` filter
   ## function.
   ##
-  ## The bucket labels in `inBuckets` and `outBuckets` may overlap.
+  ## The bucket labels `inBuckets` and `outBuckets` may overlap.
   ##
   ## If the `outRightFn` returns `true`, the corresponding item is re-assigned
   ## to the `right` of `outBuckets` pair, otherwise to the `left`.

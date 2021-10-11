@@ -18,6 +18,12 @@
 ## * Redefining per account transactions with the same `nonce` is currently
 ##   unsupported. The old tx needs to be replaced by the new one while the old
 ##   one is moved to the waste basket.
+## * There is no handling of zero gas price transactions yet
+## * Clarify whether there are legacy transactions possible with post-London
+##   chain blocks.
+## * Automatically move jobs to the waste basket if their life time has expired.
+## * Implement re-positioning the current insertion point, typically the head
+##   of the block chain.
 ##
 ##
 ## Transaction state diagram:
@@ -45,39 +51,153 @@
 ##  .        +---------------------------------------> | (waste basket) |
 ##  .                   .                          .   +----------------+
 ##
+## Terminology
+## ----------
+## There are the job *queue* and the queued, pending, and stage *buckets*
+## and the *waste basket*. These names are (not completely) arbitrary. Even
+## though all are more or less implemented as queues with some sort of random
+## access the names *bucket* and *basket* should indicate some sort of usage.
 ##
 ## Job Queue
 ## ---------
-##
-## * Transactions enteringg the system (0):
-##    + txs are added to the job queue an processed sequentially
-##    + when processed, they are moved
+## * Transactions entering the system (0):
+##   + txs are added to the job queue an processed sequentially
+##   + when processed, they are moved
 ##
 ## Accounting system
 ## -----------------
+## * Queued transactions bucket (1):
+##   + holds txs tested all right but not ready to fit into a block
+##   + these txs are stored with meta-data and marked `txItemQueued`
 ##
-## * Queued transactions (1):
-##   + queue txs after testing all right but not ready to fit into a block
-##   + queued transactions are strored with meta-data and marked `txItemQueued`
-##
-## * Pending transactions (2):
+## * Pending transactions bucket (2):
 ##   + vetted txs that are ready to go into a block
 ##   + accepted against minimum fee check and other parameters (if any)
-##   + transactions are marked `txItemPending`
-##   + re-org or other events may send them back to queued
+##   + txs are marked `txItemPending`
+##   + re-org or other events may send them to queued(1) or pending(3) bucket
 ##
-## * Staged transactions (3):
-##   + all transactions to be placed and inclusded in block
+## * Staged transactions bucket (3):
+##   + all transactions to be placed and inclusded in a block
 ##   + transactions are marked `txItemStaged`
-##   + re-org or other events may send txs back to queued(1) state
+##   + re-org or other events may send txs back to queued(1) bucket
 ##
-## Tip
-## ---
-##
+## Tip/waste basket
+## ----------------
 ## * Rejected transactions (4):
 ##   + terminal state (waste basket), auto deleted (fifo with max size)
 ##   + accessible while not pushed out (by newer rejections) from the fifo
-##   + transactions are marked with non-zero `reason` code
+##   + txs are marked with non-zero `reason` code
+##
+## Interaction of components
+## -------------------------
+## The idea is that there are concurrent instances feeding transactions into
+## the job queue via `enter(0)`. The system uses the `{.async.}` paradigm,
+## threads are unsupported (mixing asyncs with threadsfailed in some test due
+## to unwanted duplication of *event* semaphores.) The job queue is processed
+## on demand, typically when a result is required.
+##
+## A piece of code using the pool would look as follows:
+## ::
+##    # see also unit test examples, e.g. "Staging and packing txs .."
+##    var db: BaseChainDB
+##    var tx: Transaction
+##    ..
+##
+##    var xq = init(type TxPoolRef, db)   # initialise tx-pool
+##    ..
+##
+##    xq.pjaAddTx(tx, info = "test data") # stash transactions and hold it
+##    ..                                  # .. on the job queue for a moment
+##
+##    xq.pjaUpdateStaged                  # stash task to assemble staged bucket
+##    ..
+##
+##    xq.nextBlock                        # assemble eth block
+##
+##    let newBlock = xq.getBlock          # new block with transactions
+##
+##
+## Discussion of example
+## ~~~~~~~~~~~~~~~~~~~~~
+## From the example, transactions are collected via `pjaAddTx()` and added to
+## a batch of jobs to be done some time later.
+##
+## Following, another job is added to the batch via `pjaUpdateStaged()`
+## requesting to fill the *staged* bucket after the added jobs have been
+## processed.
+##
+## In this example, not until `nextBlock()` is invoked, the batch of jobs in
+## the *job queue* will be processed. This directive will implicitly call
+## `jobCommit()` which invokes the job processor on the batch queue. So the
+## `nextBlock()` cleans up all of the job queue and pulls as many transactions
+## as possible from the *staged* bucket, packs them into the block up until it
+## is full and disposes the remaining transaction wrappers into the waste
+## basket (so they remain still accessible for a while.)
+##
+## Finally. `getBlock()` retrieves the last block stored in the descriptor
+## cache which will be overwritten not until `nextBlock()` is invoked, again.
+##
+## Processing the job queue
+## ~~~~~~~~~~~~~~~~~~~~~~~~
+## Although the job queue can be processed any time, a lazy approach is the
+## most convenient. nevertheless, the job processor can be triggered any time
+## concurrently with the  `jobCommit()` directive. The directive guarantees
+## that all jobs currently on the queue will be processed, but not the ones
+## added while processing. Also, processing might run on another async task.
+## So when `jobCommit()` returns, the job processor might still run.
+##
+## Transactions and buckets
+## ~~~~~~~~~~~~~~~~~~~~~~~~
+## Transactions are wrapped into metadata (called `item`) and kept in a
+## database. Any *bucket* or *waste basket* is represented by a pair of labels 
+## `(<status>,<reason>)` where `<status>` is a *bucket* label `queued`,
+## `pending`, or `staged`, and `<reason>` is sort of an error code. An `item`
+## with reason code different from `txInfoOk` (aka zero) is from the *waste
+## basket*, otherwise it is in one of the *buckets*.
+##
+## The management of the `items` is supported by the tables that make up the
+## database.
+##
+## Moving transactions around
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~
+## Transactions are *moved* between *buckets* and *waste basket* (which is a
+## terminal state). These movements take places asynchronously. Incoming
+## invalid transactions are immediately placed in the *waste basket*. All other
+## transactions are handled in tasks controlled by the following parameters
+## that affect how transactions are shuffled around.
+##
+## gasLimit
+##   Taken or derived from the current block chain head, incoming txs that
+##   exceed this gas limit are stored into the queued bucket (waiting for next
+##   cycle.) 
+##
+## baseFee
+##   Applicable to post-London only and compiled from the current header.
+##   Incoming txs with smaller `maxFee` are stored in the queued bucket
+##   (waiting for next cycle.) For pracical reasons, `baseFee` is zero for
+##   pre-London block chain states.
+##
+## minFeePrice, *optional*
+##   Applies no EIP-1559 txs only. Txs are staged if `maxFee` is at least
+##   that value.
+##
+## minTipPrice, *optional*
+##   For EIP-1559, txs are staged if the expected tip (see `estimatedGasTip()`)
+##   is at least that value. In compatibility mode for legacy txs, this
+##   degenerates to `gasPrice - baseFee`.
+##
+## minPlGasPrice, *optional*
+##   For pre-London or legacy txs, this parameter has precedence over
+##   `minTipPrice`. Txs are staged if the `gasPrice` is at least that value.
+##
+## trgGasLimit, maxGasLimit
+##   These parameters are derived from the current block chain head. They
+##   limit how many blocks from the staged bucket can be packed into the body
+##   of the new block.
+##
+## lifeTime
+##   Older job can be purged from the system.
+##
 ##
 
 import
@@ -85,7 +205,10 @@ import
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tabs/[tx_itemid, tx_leaf],
   ./tx_pool/tx_tasks,
-  ./tx_pool/tx_tasks/[tx_add_tx, tx_staged_items, tx_pending_items],
+  ./tx_pool/tx_tasks/[tx_add_tx,
+                      tx_staged_items,
+                      tx_pack_items,
+                      tx_pending_items],
   chronicles,
   chronos,
   eth/[common, keys],
@@ -98,6 +221,7 @@ export
   TxJobID,
   TxJobItemApply,
   TxJobKind,
+  TxPoolAlgoSelectorFlags,
   TxPoolRef,
   TxTabsStatsCount,
   results,
@@ -105,12 +229,12 @@ export
   tx_desc.startDate,
   tx_info,
   tx_item.GasPrice,
-  tx_item.`<`,
   tx_item.`<=`,
+  tx_item.`<`,
   tx_item.effGasTip,
   tx_item.gasTipCap,
-  tx_item.itemID,
   tx_item.info,
+  tx_item.itemID,
   tx_item.local,
   tx_item.sender,
   tx_item.status,
@@ -210,6 +334,13 @@ proc processJobs(xp: TxPoolRef): int
       let args = task.data.moveRemoteToLocalsArgs
       xp.txDBExclusively:
         discard xp.reassignRemoteToLocals(args.account)
+
+    of txJobPackBlock:
+      let args = task.data.packBlockArgs
+      xp.txDBExclusively:
+        xp.packItemsIntoBlock
+      if args.sayReady:
+        args.waitReady.fire
 
     of txJobSetBaseFee:
       # New base fee (implies database reorg). Note that after changing the
@@ -330,6 +461,161 @@ proc count*(xp: TxPoolRef): TxTabsStatsCount
     result = xp.txDB.statsCount
 
 
+# core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
+proc getMinFeePrice*(xp: TxPoolRef): GasPrice
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter for `minFeePrice`, the current gas fee enforced by the transaction
+  ## pool for txs to be staged. This is an EIP-1559 only parameter (see
+  ## `stage1559MinFee` strategy.)
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minFeePrice
+
+# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
+proc setMinFeePrice*(xp: TxPoolRef; val: GasPrice)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter for `minFeePrice`. Increasing it might remove some post-London
+  ## transactions when the `staged` bucket is re-built.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minFeePrice = val
+  xp.dirtyStaged = false
+
+
+proc getMinTipPrice*(xp: TxPoolRef): GasPrice
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter for `minTipPrice`, the current gas tip (or priority fee) enforced
+  ## by the transaction pool. This is an EIP-1559 parameter but with a fall
+  ## back legacy interpretation (see `stage1559MinTip` strategy.)
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minTipPrice
+
+# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
+proc setMinTipPrice*(xp: TxPoolRef; val: GasPrice)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter for `minTipPrice`. Increasing it might remove some transactions
+  ## when the `staged` bucket is re-built.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minTipPrice = val
+  xp.dirtyStaged = false
+
+
+proc getMinPlGasPrice*(xp: TxPoolRef): GasPrice
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter for `minPlGasPrice`, the current gas price enforced by the
+  ## transaction pool. This is a pre-London parameter (see `stagedPlMinPrice`
+  ## strategy.)
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minPlGasPrice
+
+# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
+proc setMinPlGasPrice*(xp: TxPoolRef; val: GasPrice)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter for `minPlGasPrice`.  Increasing it might remove some legacy
+  ## transactions when the `staged` bucket is re-built.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.minPlGasPrice = val
+  xp.dirtyStaged = false
+
+
+proc getBaseFee*(xp: TxPoolRef): GasPrice
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Get the `baseFee` implying the price list valuation and order.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
+    result = xp.txDB.baseFee
+
+proc setBaseFee*(xp: TxPoolRef; baseFee: GasPrice; force = false)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter, implies some re-org of the data base. If the argument `force` is
+  ## set `true`, the base fee is set immediately, otherwise it is queued
+  ## and execured when the next `jobCommit()` takes place
+  discard xp.job(TxJobDataRef(
+    kind:     txJobSetBaseFee,
+    setBaseFeeArgs: (
+      price:  baseFee)))
+  if force:
+    waitFor xp.jobCommit
+
+
+proc setAlgoSelector*(xp: TxPoolRef; strategy: varArgs[TxPoolAlgoSelectorFlags])
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Set strategy symbols on how to stage items.
+  var args: set[TxPoolAlgoSelectorFlags]
+  for w in strategy:
+    args.incl(w)
+  xp.algoSelect = args
+
+proc setAlgoSelector*(xp: TxPoolRef; strategy: set[TxPoolAlgoSelectorFlags])
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Ditto
+  xp.algoSelect = strategy
+
+proc getStageSelector*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Return strategy symbols on how to stage items.
+  xp.algoSelect
+
+
+proc getBlock*(xp: TxPoolRef): EthBlock
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, retrieves the last assembled block from the cache
+  xp.ethBlock
+
+proc nextBlock*(xp: TxPoolRef): GasInt
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Assembles a new block from the `staged` bucket and returns the maximum
+  ## block size retrieved by summing up `gasLimit` entries of the included
+  ## txs.
+  let req = TxJobDataRef(
+    kind:        txJobPackBlock,
+    packBlockArgs: (
+      sayReady:  true,
+      waitReady: newAsyncEvent()))
+  discard xp.job(req)
+
+  # Note that `xp.jobCommit` only guarantees that the job `req` will eventually
+  # be completed but as this happens asynchronously, it might happen somewhat
+  # later.
+  waitFor xp.jobCommit
+
+  # So waiting for an event makes sense.
+  waitFor req.packBlockArgs.waitReady.wait
+
+  xp.ethBlockSize
+
+# ------------------------------------------------------------------------------
+# Public functions, more immediate actions deemed not so important yet
+# ------------------------------------------------------------------------------
+
+proc setMaxRejects*(xp: TxPoolRef; size: int)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Set the size of the waste basket. This setting becomes effective with
+  ## the next move of an item into the waste basket.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
+    xp.txDB.maxRejects = size
+
+# core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
+proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Retrieves the accounts currently considered `local` or `remote` (i.e.
+  ## the have txs of that kind) depending on request arguments.
+  ##
+  ## It is safe to be used within a `TxJobItemApply` call back function.
+  xp.txCallBackOrDBExclusively:
+    result = xp.collectAccounts(local)
+
+# ------------------------------------------------------------------------------
+# Public functions, per-tx-item operations
+# ------------------------------------------------------------------------------
+
 # core/tx_pool.go(979): func (pool *TxPool) Get(hash common.Hash) ..
 # core/tx_pool.go(985): func (pool *TxPool) Has(hash common.Hash) bool {
 proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
@@ -358,93 +644,7 @@ proc rejectItem*(xp: TxPoolRef; item: TxItemRef; reason: TxInfo)
   ##
   ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.txCallBackOrDBExclusively:
-    discard xp.txDB.reject(item, reason)
-
-
-# core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
-proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Retrieves the accounts currently considered `local` or `remote` (i.e.
-  ## the have txs of that kind) depending on request arguments.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
-    result = xp.collectAccounts(local)
-
-
-# core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
-proc getMinFeePrice*(xp: TxPoolRef): GasPrice
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Get the current gas price enforced by the transaction pool.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.minFeePrice
-
-# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc setMinFeePrice*(xp: TxPoolRef; val: GasPrice)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Set the minimum price required by the transaction pool for txs to be
-  ## staged. Increasing it will remove some transactions when the stage is
-  ## re-built.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.minFeePrice = val
-  xp.dirtyStaged = false
-
-
-proc getMinTipPrice*(xp: TxPoolRef): GasPrice
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Similar to `getMinFeePrice`
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.minTipPrice
-
-# core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
-proc setMinTipPrice*(xp: TxPoolRef; val: GasPrice)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Similar to `setMinFeePrice`
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.minTipPrice = val
-  xp.dirtyStaged = false
-
-
-proc getBaseFee*(xp: TxPoolRef): GasPrice
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Get the `baseFee` implying the price list valuation and order.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
-    result = xp.txDB.baseFee
-
-
-proc setMaxRejects*(xp: TxPoolRef; size: int)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Set the size of the waste basket. This setting becomes effective with
-  ## the next move of an item into the waste basket.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
-    xp.txDB.maxRejects = size
-
-
-proc setStageSelector*(xp: TxPoolRef; strategy: varArgs[TxPoolStageSelector])
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Set strategy symbols on how to stage items.
-  var args: set[TxPoolStageSelector]
-  for w in strategy:
-    args.incl(w)
-  xp.stageSelect = args
-
-proc setStageSelector*(xp: TxPoolRef; strategy: set[TxPoolStageSelector])
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Ditto
-  xp.stageSelect = strategy
-
-proc getStageSelector*(xp: TxPoolRef): set[TxPoolStageSelector]
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Return strategy symbols on how to stage items.
-  xp.stageSelect
+    discard xp.txDB.dispose(item, reason)
 
 # ------------------------------------------------------------------------------
 # End

@@ -54,7 +54,7 @@ proc deleteExpiredItems*(xp: TxPoolRef; maxLifeTime: Duration)
     if deadLine < item.timeStamp:
       break
     rc = xp.txDB.byItemID.eq(local = false).next(item.itemID)
-    discard xp.txDB.reject(item,txInfoErrTxExpired)
+    discard xp.txDB.dispose(item,txInfoErrTxExpired)
     queuedEvictionMeter(1)
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {

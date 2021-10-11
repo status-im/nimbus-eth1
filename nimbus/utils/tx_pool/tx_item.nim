@@ -121,9 +121,8 @@ proc `==`*(a, b: GasPriceEx): bool {.borrow.}
 proc `+`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
 proc `-`*(a, b: GasPriceEx): GasPriceEx {.borrow.}
 
-proc `<`*(a: GasPriceEx; b: GasPrice): bool =
-  if a < 0.GasPriceEx: true
-  else:                a.GasPrice < b
+proc `<`*(a: GasPriceEx|int; b: GasPrice): bool =
+  if a.GasPriceEx < 0.GasPriceEx: true else: a.GasPrice < b
 
 # ------------------------------------------------------------------------------
 # Public functions, Constructor
@@ -196,10 +195,10 @@ proc eip155ChainID*(tx: Transaction): ChainID =
     return ((tx.V - 35) div 2).ChainID
   # otherwise 0
 
-# core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
-proc gas*(tx: Transaction): GasInt {.inline.} =
-  ## Getter (go/ref compat): the gas limit of the transaction
-  tx.gasLimit
+# # core/types/transaction.go(267): func (tx *Transaction) Gas() uint64 ..
+# proc gas*(tx: Transaction): GasInt {.inline.} =
+#   ## Getter (go/ref compat): the gas limit of the transaction
+#   tx.gasLimit
 
 # core/types/transaction.go(273): func (tx *Transaction) GasTipCap() *big.Int ..
 proc gasTipCap*(tx: Transaction): GasPrice {.inline.} =
@@ -209,13 +208,13 @@ proc gasTipCap*(tx: Transaction): GasPrice {.inline.} =
   else:
     tx.maxPriorityFee.GasPrice
 
-# core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() *big.Int ..
-proc gasFeeCap*(tx: Transaction): GasPrice {.inline.} =
-  ## Getter (go/ref compat): the fee cap per gas of the transaction.
-  if tx.txType == TxLegacy:
-    tx.gasPrice.GasPrice
-  else:
-    tx.maxFee.GasPrice
+# # core/types/transaction.go(276): func (tx *Transaction) GasFeeCap() ..
+# proc gasFeeCap*(tx: Transaction): GasPrice {.inline.} =
+#   ## Getter (go/ref compat): the fee cap per gas of the transaction.
+#   if tx.txType == TxLegacy:
+#     tx.gasPrice.GasPrice
+#   else:
+#     tx.maxFee.GasPrice
 
 # core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
 proc cost*(tx: Transaction): UInt256 {.inline.} =
