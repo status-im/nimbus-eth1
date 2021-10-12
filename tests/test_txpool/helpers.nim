@@ -12,7 +12,7 @@ import
   std/[strformat, sequtils, strutils, times],
   ../../nimbus/utils/keequ,
   ../../nimbus/utils/tx_pool/[tx_desc, tx_item, tx_tabs],
-  ../replay/undump, # borrow from clique tools
+  ../replay/undump,
   eth/[common, keys],
   stint
 

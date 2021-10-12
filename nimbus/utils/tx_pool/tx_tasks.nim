@@ -77,9 +77,8 @@ proc reassignRemoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
   let rc = xp.txDB.bySender.eq(signer).eq(local = false)
   if rc.isOK:
     let nRemotes = xp.txDB.byItemID.eq(local = false).nItems
-    for itemList in rc.value.data.walkItemList:
-      for item in itemList.walkItems:
-        discard xp.txDB.reassign(item, local = true)
+    for item in rc.value.data.walkItemList:
+      discard xp.txDB.reassign(item, local = true)
     return nRemotes - xp.txDB.byItemID.eq(local = false).nItems
 
 

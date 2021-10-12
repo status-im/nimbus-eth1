@@ -47,7 +47,7 @@ type
     local:     bool         ## Local or remote queue (setter available)
     status:    TxItemStatus ## Transaction status (setter available)
     effGasTip: GasPriceEx   ## Effective gas tip value
-    reject:    TxInfo       ## Reason for moving to rejection queue
+    reject:    TxInfo       ## Reason for moving to waste basket
 
 # ------------------------------------------------------------------------------
 # Private, helpers for debugging and pretty printing

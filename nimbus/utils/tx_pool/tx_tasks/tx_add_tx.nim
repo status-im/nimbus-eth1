@@ -26,6 +26,38 @@ logScope:
   topics = "tx-pool add transaction"
 
 # ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+
+  var current: TxItemRef
+
+  block:
+    let rc = xp.txDB.bySender.eq(item.sender).any.eq(item.tx.nonce)
+    if rc.isErr:
+      return err(txInfoErrUnspecified)
+    current = rc.value.data
+
+  # verify whether replacing is allowed, at all
+  let bumpPrice = (current.tx.gasPrice * xp.priceBump.GasInt + 99) div 100
+  if item.tx.gasPrice < current.tx.gasPrice + bumpPrice:
+    return err(txInfoErrReplaceUnderpriced)
+
+  # make space, delete item
+  if not xp.txDB.dispose(current, txInfoSenderNonceSuperseded):
+    return err(txInfoErrVoidDisposal)
+
+  # try again
+  block:
+    let rc = xp.txDB.insert(item)
+    if rc.isErr:
+      return err(rc.error)
+
+  return ok()
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -76,14 +108,20 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
       item.status = status
 
     # Insert into database
-    let rc = xp.txDB.insert(item)
-    if rc.isErr:
+    block:
+      let rc = xp.txDB.insert(item)
+      if rc.isOK:
+        validTxMeter(1)
+        return
       vetted = rc.error
-      break txErrorFrame
 
-    # All done, this time
-    validTxMeter(1)
-    return
+    # need to replace tx with same <sender/nonce> as the new item
+    if vetted == txInfoErrSenderNonceIndex:
+      let rc = xp.supersede(item)
+      if rc.isOK:
+        validTxMeter(1)
+        return
+      vetted = rc.error
 
     # Error processing below
 

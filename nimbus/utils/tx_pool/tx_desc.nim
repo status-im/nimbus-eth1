@@ -87,7 +87,8 @@ type
     ## Transaction pool descriptor
     startDate: Time           ## Start date (read-only)
     dbHead: TxDbHeadRef       ## block chain state
-    lifeTime*: times.Duration ## Maximum fife time of a tx in the system
+    lifeTime*: times.Duration ## Maximum life time of a tx in the system
+    priceBump*: uint          ## Min precentage price when superseding
 
     byJob: TxJobRef           ## Job batch list
     byJobSync: AsyncLock      ## Serialise access to `byJob`
@@ -105,7 +106,16 @@ type
     #                         ## existing transaction (nonce)
 
 const
-  txPoolLifeTime = initDuration(hours = 3)
+  txPoolLifeTime = ##\
+    ## Maximum amount of time non-executable transaction are queued,
+    ## default as set in core/tx_pool.go(184)
+    initDuration(hours = 3)
+
+  txPriceBump = ##\
+    ## Minimum price bump percentage to replace an already existing
+    ## transaction (nonce), default as set in core/tx_pool.go(177)
+    10u
+
   txMinFeePrice = 1.GasPrice
   txMinTipPrice = 1.GasPrice
   txPoolAlgoStrategy = {algoStaged1559MinTip,
@@ -128,6 +138,7 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
   xp.startDate = now().utc.toTime
   xp.dbHead = init(type TxDbHeadRef, db)
   xp.lifeTime = txPoolLifeTime
+  xp.priceBump = txPriceBump
 
   xp.txDB = init(type TxTabsRef, xp.dbHead.baseFee)
   xp.txDBSync = newAsyncLock()

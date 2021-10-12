@@ -15,9 +15,6 @@
 ## -----
 ## * Support `local` transactions (currently unsupported.) For now, all txs
 ##   are considered from `remote` accounts.
-## * Redefining per account transactions with the same `nonce` is currently
-##   unsupported. The old tx needs to be replaced by the new one while the old
-##   one is moved to the waste basket.
 ## * There is no handling of zero gas price transactions yet
 ## * Clarify whether there are legacy transactions possible with post-London
 ##   chain blocks.
@@ -92,7 +89,7 @@
 ## -------------------------
 ## The idea is that there are concurrent instances feeding transactions into
 ## the job queue via `enter(0)`. The system uses the `{.async.}` paradigm,
-## threads are unsupported (mixing asyncs with threadsfailed in some test due
+## threads are unsupported (mixing asyncs with threads failed in some test due
 ## to unwanted duplication of *event* semaphores.) The job queue is processed
 ## on demand, typically when a result is required.
 ##
@@ -103,7 +100,7 @@
 ##    var tx: Transaction
 ##    ..
 ##
-##    var xq = init(type TxPoolRef, db)   # initialise tx-pool
+##    var xq = TxPoolRef.init(db)         # initialise tx-pool
 ##    ..
 ##
 ##    xq.pjaAddTx(tx, info = "test data") # stash transactions and hold it
@@ -168,14 +165,14 @@
 ##
 ## gasLimit
 ##   Taken or derived from the current block chain head, incoming txs that
-##   exceed this gas limit are stored into the queued bucket (waiting for next
-##   cycle.) 
+##   exceed this gas limit are stored into the queued bucket (waiting for the
+##   next cycle.)
 ##
 ## baseFee
-##   Applicable to post-London only and compiled from the current header.
-##   Incoming txs with smaller `maxFee` are stored in the queued bucket
-##   (waiting for next cycle.) For pracical reasons, `baseFee` is zero for
-##   pre-London block chain states.
+##   Applicable to post-London only and compiled from the current block chain
+##   head. Incoming txs with smaller `maxFee` values are stored in the queued
+##   bucket (waiting for the next cycle.) For practical reasons, `baseFee` is
+##   zero for pre-London block chain states.
 ##
 ## minFeePrice, *optional*
 ##   Applies no EIP-1559 txs only. Txs are staged if `maxFee` is at least

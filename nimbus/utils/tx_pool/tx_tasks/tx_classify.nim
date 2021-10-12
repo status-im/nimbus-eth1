@@ -25,8 +25,8 @@ import
 
 type
   TxClassify* = object ##\
-    ## Classifier arguments, typically cached values which might
-    ## be protected by semaphores
+    ## Classifier arguments, typically cached values which might be
+    ## controlled somewhere else.
     stageSelect*: set[TxPoolAlgoSelectorFlags] ## Packer strategy symbols
 
     minFeePrice*: GasPrice   ## Gas price enforced by the pool, `gasFeeCap`

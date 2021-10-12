@@ -15,7 +15,7 @@ import
   ../nimbus/db/db_chain,
   ../nimbus/utils/[slst, tx_pool],
   ../nimbus/utils/tx_pool/[tx_item, tx_perjobapi],
-  ./test_txpool/[helpers, setup],
+  ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[common, keys, p2p],
   stint,
@@ -218,7 +218,8 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
 
           # just handy to calc min/max gas prices here
           for item in itemList.walkItems:
-            if item.tx.gasPrice.GasPriceEx < minGasPrice and 0 < item.tx.gasPrice:
+            if item.tx.gasPrice.GasPriceEx < minGasPrice and
+               0 < item.tx.gasPrice:
               minGasPrice = item.tx.gasPrice.GasPrice
             if maxGasPrice < item.tx.gasPrice.GasPrice:
               maxGasPrice = item.tx.gasPrice.GasPrice
@@ -256,6 +257,58 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       check xp.nJobsWaiting == 0
       check log == " wait-900-3 wait-1-3 wait-700-3 done-1 done-700 done-900"
       check xp.verify.isOK
+
+    test &"Superseding txs with sender and nonce variants":
+      var
+        xq = TxPoolRef.init(bcDB)
+        testTxs: array[5,(TxItemRef,Transaction,Transaction)]
+        testInx = 0
+      let
+        testBump = xp.priceBump
+        lastBump = testBump - 1 # implies underpriced item
+
+      # load a set of suitable txs into testTxs[]
+      for n in 0 ..< txList.len:
+        let
+          item = txList[n]
+          bump = if testInx < testTxs.high: testBump else: lastBump
+          rc = item.txModPair(bump.int)
+        if not rc[0].isNil:
+          testTxs[testInx] = rc
+          testInx.inc
+          if testTxs.high < testInx:
+            break
+
+      # verify that test does not degenerate
+      check testInx == testTxs.len
+      check 0 < lastBump # => 0 < testBump
+
+      # insert some txs
+      for triple in testTxs:
+        let item = triple[0]
+        var tx = triple[1]
+        xq.pjaAddTx(tx, item.local, item.info)
+      waitFor xq.jobCommit
+
+      check xq.count.total == testTxs.len
+      check xq.count.disposed == 0
+      let infoLst = testTxs.toSeq.mapIt(it[0].info).sorted
+      check infoLst == xq.toItems.toSeq.mapIt(it.info).sorted
+
+      # re-insert modified transactions
+      for triple in testTxs:
+        let item = triple[0]
+        var tx = triple[2]
+        xq.pjaAddTx(tx, item.local, "alt " & item.info)
+      waitFor xq.jobCommit
+
+      check xq.count.total == testTxs.len
+      check xq.count.disposed == testTxs.len
+
+      # last update item was underpriced, so it must not have been replaced
+      var altLst = testTxs.toSeq.mapIt("alt " & it[0].info)
+      altLst[^1] = testTxs[^1][0].info
+      check altLst.sorted == xq.toItems.toSeq.mapIt(it.info).sorted
 
 
 proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
@@ -630,7 +683,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           # find address with max number of transactions
           for schedList in xq.txDB.bySender.walkSchedList:
             if nAddrItems < schedList.nItems:
-              maxAddr = schedList.any.ge(AccountNonce.low).first.value.sender
+              maxAddr = schedList.any.ge(AccountNonce.low).value.data.sender
               nAddrItems = schedList.nItems
 
           # requite mimimum => there is a status queue with at least 2 entries
@@ -732,12 +785,11 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           var count = 0
           let ncList = xq.txDB.bySender.eq(maxAddr).eq(fromBucket).value.data
           block collect:
-            for itemList in ncList.walkItemList:
-              for item in itemList.walkItems:
-                count.inc
-                check xq.txDB.reassign(item, toBucket)
-                if moveNumItems <= count:
-                  break collect
+            for item in ncList.walkItemList:
+              count.inc
+              check xq.txDB.reassign(item, toBucket)
+              if moveNumItems <= count:
+                break collect
           check xq.txDB.verify.isOK
 
           case fromBucket
@@ -787,10 +839,9 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           var rejCount = 0
           let addrLocals = xq.txDB.bySender.eq(maxAddr)
                                            .eq(local = true).value.data
-          for itemList in addrLocals.walkItemList:
-            for item in itemList.walkItems:
-              check xq.txDB.dispose(item,txInfoErrUnspecified)
-              rejCount.inc
+          for item in addrLocals.walkItemList:
+            check xq.txDB.dispose(item,txInfoErrUnspecified)
+            rejCount.inc
 
           check nLocalAddrs == 1 + toSeq(xq.getAccounts(local = true)).len
           check xq.count.disposed == rejCount

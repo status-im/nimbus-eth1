@@ -84,13 +84,15 @@ proc deleteImpl(xp: TxTabsRef; item: TxItemRef): bool
     discard xp.byStatus.txDelete(item)
     return true
 
-proc insertImpl(xp: TxTabsRef; item: TxItemRef)
+proc insertImpl(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
+  if not xp.bySender.txInsert(item):
+    return err(txInfoErrSenderNonceIndex)
   xp.byItemID.txAppend(item)
   xp.byGasTip.txInsert(item)
   xp.byTipCap.txInsert(item)
-  xp.bySender.txInsert(item)
   xp.byStatus.txInsert(item)
+  return ok()
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -138,10 +140,16 @@ proc insert*(
   let itemID = tx.itemID
   if xp.byItemID.hasKey(itemID):
     return err(txInfoErrAlreadyKnown)
-  let rc = tx.newTxItemRef(itemID, local, status, info)
-  if rc.isErr:
-    return err(txInfoErrInvalidSender)
-  xp.insertImpl(rc.value)
+  var item: TxItemRef
+  block:
+    let rc = tx.newTxItemRef(itemID, local, status, info)
+    if rc.isErr:
+      return err(txInfoErrInvalidSender)
+    item = rc.value
+  block:
+    let rc = xp.insertImpl(item)
+    if rc.isErr:
+      return rc
   ok()
 
 proc insert*(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
@@ -149,8 +157,7 @@ proc insert*(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
   ## Variant of `insert()` with fully qualified `item` argument.
   if xp.byItemID.hasKey(item.itemID):
     return err(txInfoErrAlreadyKnown)
-  xp.insertImpl(item.dup)
-  ok()
+  return xp.insertImpl(item.dup)
 
 
 proc reassign*(xp: TxTabsRef; item: TxItemRef; local: bool): bool
@@ -167,7 +174,7 @@ proc reassign*(xp: TxTabsRef; item: TxItemRef; local: bool): bool
       discard xp.bySender.txDelete(realItem) # delete original
       discard xp.byItemID.txDelete(realItem)
       realItem.local = local
-      xp.bySender.txInsert(realItem)         # re-insert changed
+      discard xp.bySender.txInsert(realItem) # re-insert changed
       xp.byItemID.txAppend(realItem)
       return true
 
@@ -182,7 +189,7 @@ proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
       discard xp.bySender.txDelete(realItem) # delete original
       discard xp.byStatus.txDelete(realItem)
       realItem.status = status
-      xp.bySender.txInsert(realItem)         # re-insert changed
+      discard xp.bySender.txInsert(realItem) # re-insert changed
       xp.byStatus.txInsert(realItem)
       return true
 
@@ -279,7 +286,7 @@ proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
 # Public iterators, `sender` > `local` > `nonce` > `item`
 # ------------------------------------------------------------------------------
 
-iterator walkItemList*(senderTab: var TxSenderTab): TxLeafItemRef
+iterator walkItemList*(senderTab: var TxSenderTab): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Walk over item lists grouped by sender addresses.
   var rcAddr = senderTab.first
@@ -294,8 +301,8 @@ iterator walkItemList*(senderTab: var TxSenderTab): TxLeafItemRef
 
         var rcNonce = nonceList.ge(AccountNonce.low)
         while rcNonce.isOk:
-          let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
-          yield itemList
+          let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+          yield item
           rcNonce = nonceList.gt(nonceKey)
 
     rcAddr = senderTab.next(addrKey)
@@ -326,7 +333,7 @@ iterator walkNonceList*(senderTab: var TxSenderTab;
 
     rcAddr = senderTab.next(addrKey)
 
-iterator walkItemList*(nonceList: TxSenderNonceRef): TxLeafItemRef
+iterator walkItemList*(nonceList: TxSenderNonceRef): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Top level part to replace `xp.bySender.walkItem` with:
   ## ::
@@ -337,11 +344,11 @@ iterator walkItemList*(nonceList: TxSenderNonceRef): TxLeafItemRef
   ##
   var rcNonce = nonceList.ge(AccountNonce.low)
   while rcNonce.isOk:
-    let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
-    yield itemList
+    let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+    yield item
     rcNonce = nonceList.gt(nonceKey)
 
-iterator walkItemList*(schedList: TxSenderSchedRef): TxLeafItemRef
+iterator walkItemList*(schedList: TxSenderSchedRef): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Top level part to replace `xp.bySender.walkItem` with:
   ## ::
@@ -353,36 +360,36 @@ iterator walkItemList*(schedList: TxSenderSchedRef): TxLeafItemRef
   let nonceList = schedList.any.value.data
   var rcNonce = nonceList.ge(AccountNonce.low)
   while rcNonce.isOk:
-    let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
-    yield itemList
+    let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+    yield item
     rcNonce = nonceList.gt(nonceKey)
 
 #[
 # deprecated
 
 iterator walkItemList*(schedList: TxSenderSchedRef;
-                       sched: TxSenderSchedule): TxLeafItemRef
+                       sched: TxSenderSchedule): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = schedList.eq(sched)
   if rc.isOK:
     let nonceList = rc.value.data
     var rcNonce = nonceList.ge(AccountNonce.low)
     while rcNonce.isOk:
-      let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
-      yield itemList
+      let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+      yield item
       rcNonce = nonceList.gt(nonceKey)
 ]#
 
 iterator walkItemList*(schedList: TxSenderSchedRef;
-                       status: TxItemStatus): TxLeafItemRef
+                       status: TxItemStatus): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = schedList.eq(status)
   if rc.isOK:
     let nonceList = rc.value.data
     var rcNonce = nonceList.ge(AccountNonce.low)
     while rcNonce.isOk:
-      let (nonceKey, itemList) = (rcNonce.value.key, rcNonce.value.data)
-      yield itemList
+      let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+      yield item
       rcNonce = nonceList.gt(nonceKey)
 
 # ------------------------------------------------------------------------------

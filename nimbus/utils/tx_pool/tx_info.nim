@@ -20,15 +20,27 @@ type
       ## The transaction was disposed after packing into block
       "not needed anymore"
 
+    txInfoSenderNonceSuperseded = ##\
+      ## Tx superseded by another one with same <sender,nonce> index
+      "Sender/nonce index superseded"
+
     # ------ Miscellaneous errors ------------------------------------
 
     txInfoErrUnspecified = ##\
       ## Some unspecified error occured
       "generic error"
 
+    txInfoErrVoidDisposal = ##\
+      ## Cannot dispose non-existing item
+      "void disposal"
+
     txInfoErrAlreadyKnown = ##\
       ## The transactions is already contained within the pool
       "already known"
+
+    txInfoErrSenderNonceIndex = ##\
+      ## <sender,nonce> index for transaction exists, already.
+      "Sender/nonce index error"
 
     txInfoErrTxPoolOverflow = ##\
       ## The transaction pool is full and can't accpet another remote

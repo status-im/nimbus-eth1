@@ -13,11 +13,9 @@
 ##
 
 import
-  ../../keequ,
   ../../slst,
   ../tx_info,
   ../tx_item,
-  ./tx_leaf,
   eth/[common],
   stew/results
 
@@ -25,8 +23,7 @@ type
   TxSenderNonceRef* = ref object ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction
     ## item lists.
-    size: int
-    nonceList: Slst[AccountNonce,TxLeafItemRef]
+    nonceList: Slst[AccountNonce,TxItemRef]
 
   TxSenderSchedRef* = ref object ##\
     ## Chronologically ordered queue/fifo with random access. This is\
@@ -54,12 +51,8 @@ type
     ## Internal access data
     sAddr: TxSenderSchedRef
     localNonce: TxSenderNonceRef   ## exclusive sub-table: local or remote
-    localItem: TxLeafItemRef
     statusNonce: TxSenderNonceRef  ## by status items sub-list
-    statusItem: TxLeafItemRef
     anyNonce: TxSenderNonceRef     ## all items sub-list
-    anyItem: TxLeafItemRef
-
 
 const
   minEthAddress = block:
@@ -77,10 +70,6 @@ const
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc `$`(leaf: TxLeafItemRef): string =
-  ## Needed by `rq.verify()` for printing error messages
-  $leaf.nItems
 
 proc `$`(rq: TxSenderSchedRef): string =
   ## Needed by `rq.verify()` for printing error messages
@@ -120,93 +109,72 @@ proc toSenderSchedule(status: TxItemStatus): TxSenderSchedule {.inline.} =
     return txSenderStaged
 
 
-proc mkItemInx(sub: var TxSenderNonceRef; item: TxItemRef): TxLeafItemRef
+proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
     {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = sub.nonceList.insert(item.tx.nonce)
-  if rc.isErr:
-    return sub.nonceList.eq(item.tx.nonce).value.data
-  result = txNew(type TxLeafItemRef)
-  rc.value.data = result
-
-
-proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): TxSenderInx
-    {.gcsafe,raises: [Defect,KeyError].} =
+  var inxData: TxSenderInx
   block:
     let rc = gt.addrList.insert(item.sender)
     if rc.isOk:
-      new result.sAddr
-      rc.value.data = result.sAddr
+      new inxData.sAddr
+      rc.value.data = inxData.sAddr
     else:
-      result.sAddr = gt.addrList.eq(item.sender).value.data
-
-  # by local/remote items sub-list
-  block:
-    if result.sAddr.isLocalList[item.local].isNil:
-      new result.localNonce
-      result.localNonce.nonceList.init
-      result.sAddr.isLocalList[item.local] = result.localNonce
-    else:
-      result.localNonce = result.sAddr.isLocalList[item.local]
-    result.localItem = result.localNonce.mkItemInx(item)
-
-  # by status items sub-list
-  block:
-    if result.sAddr.statusList[item.status].isNil:
-      new result.statusNonce
-      result.statusNonce.nonceList.init
-      result.sAddr.statusList[item.status] = result.statusNonce
-    else:
-      result.statusNonce = result.sAddr.statusList[item.status]
-    result.statusItem = result.statusNonce.mkItemInx(item)
+      inxData.sAddr = gt.addrList.eq(item.sender).value.data
 
   # all items sub-list
+  if inxData.sAddr.allList.isNil:
+    new inxData.anyNonce
+    inxData.anyNonce.nonceList.init
+    inxData.sAddr.allList = inxData.anyNonce
+  else:
+    inxData.anyNonce = inxData.sAddr.allList
   block:
-    if result.sAddr.allList.isNil:
-      new result.anyNonce
-      result.anyNonce.nonceList.init
-      result.sAddr.allList = result.anyNonce
-    else:
-      result.anyNonce = result.sAddr.allList
-    result.anyItem = result.anyNonce.mkItemInx(item)
+    let rc = inxData.anyNonce.nonceList.insert(item.tx.nonce)
+    if rc.isErr:
+      return err()
+    rc.value.data = item
+
+  # by local/remote items sub-list
+  if inxData.sAddr.isLocalList[item.local].isNil:
+    new inxData.localNonce
+    inxData.localNonce.nonceList.init
+    inxData.sAddr.isLocalList[item.local] = inxData.localNonce
+  else:
+    inxData.localNonce = inxData.sAddr.isLocalList[item.local]
+  # this is a new item, checked at `all items sub-list` above
+  inxData.localNonce.nonceList.insert(item.tx.nonce).value.data = item
+
+  # by status items sub-list
+  if inxData.sAddr.statusList[item.status].isNil:
+    new inxData.statusNonce
+    inxData.statusNonce.nonceList.init
+    inxData.sAddr.statusList[item.status] = inxData.statusNonce
+  else:
+    inxData.statusNonce = inxData.sAddr.statusList[item.status]
+  # this is a new item, checked at `all items sub-list` above
+  inxData.statusNonce.nonceList.insert(item.tx.nonce).value.data = item
+
+  return ok(inxData)
 
 
 proc getInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  var inxData: TxSenderInx
 
-  block:
-    let rc = gt.addrList.eq(item.sender)
-    if rc.isOk:
-      inxData.sAddr = rc.value.data
-    else:
-      return err()
+  var inxData: TxSenderInx
+  let rc = gt.addrList.eq(item.sender)
+  if rc.isErr:
+    return err()
+
+  # Sub-lists are non-nil as `TxSenderSchedRef` cannot be empty
+  inxData.sAddr = rc.value.data
 
   # by local/remote items sub-list
-  block:
-    inxData.localNonce = inxData.sAddr.isLocalList[item.local]
-    if inxData.localNonce.isNil:
-      return err()
-    let rc = inxData.localNonce.nonceList.eq(item.tx.nonce)
-    if rc.isOk:
-      inxData.localItem = rc.value.data
-    else:
-      return err()
+  inxData.localNonce = inxData.sAddr.isLocalList[item.local]
 
   # by status items sub-list
-  block:
-    inxData.statusNonce = inxData.sAddr.statusList[item.status]
-    if inxData.localNonce.isNil:
-      return err()
-    let rc = inxData.statusNonce.nonceList.eq(item.tx.nonce)
-    if rc.isOk:
-      inxData.statusItem = rc.value.data
-    else:
-      return err()
+  inxData.statusNonce = inxData.sAddr.statusList[item.status]
 
   # all items sub-list
-  block:
-    inxData.anyNonce = inxData.sAddr.allList
-    inxData.anyItem = inxData.anyNonce.nonceList.eq(item.tx.nonce).value.data
+  inxData.anyNonce = inxData.sAddr.allList
 
   ok(inxData)
 
@@ -220,19 +188,16 @@ proc txInit*(gt: var TxSenderTab) =
   gt.addrList.init
 
 
-proc txInsert*(gt: var TxSenderTab; item: TxItemRef)
+proc txInsert*(gt: var TxSenderTab; item: TxItemRef): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Add transaction `item` to the list. The function has no effect if the
   ## transaction exists, already.
-  let inx = gt.mkInxImpl(item)
-  if inx.anyItem.txAppend(item):
-    discard inx.localItem.txAppend(item)
-    discard inx.statusItem.txAppend(item)
+  let rc = gt.mkInxImpl(item)
+  if rc.isOK:
+    let inx = rc.value
     gt.size.inc
     inx.sAddr.size.inc
-    inx.localNonce.size.inc
-    inx.statusNonce.size.inc
-    inx.anyNonce.size.inc
+    return true
 
 
 proc txDelete*(gt: var TxSenderTab; item: TxItemRef): bool
@@ -244,28 +209,19 @@ proc txDelete*(gt: var TxSenderTab; item: TxItemRef): bool
     gt.size.dec
     inx.sAddr.size.dec
 
-    discard inx.anyItem.txDelete(item)
-    if inx.anyItem.nItems == 0:
-      discard inx.anyNonce.nonceList.delete(item.tx.nonce)
-      if inx.anyNonce.nonceList.len == 0:
-        discard gt.addrList.delete(item.sender)
-        return true
+    discard inx.anyNonce.nonceList.delete(item.tx.nonce)
+    if inx.anyNonce.nonceList.len == 0:
+      # this was the last nonce for that sender account
+      discard gt.addrList.delete(item.sender)
+      return true
 
-    inx.localNonce.size.dec
-    inx.statusNonce.size.dec
-    inx.anyNonce.size.dec
+    discard inx.localNonce.nonceList.delete(item.tx.nonce)
+    if inx.localNonce.nonceList.len == 0:
+      inx.sAddr.isLocalList[item.local] = nil
 
-    discard inx.localItem.txDelete(item)
-    if inx.localItem.nItems == 0:
-      discard inx.localNonce.nonceList.delete(item.tx.nonce)
-      if inx.localNonce.nonceList.len == 0:
-        inx.sAddr.isLocalList[item.local] = nil
-
-    discard inx.statusItem.txDelete(item)
-    if inx.statusItem.nItems == 0:
-      discard inx.statusNonce.nonceList.delete(item.tx.nonce)
-      if inx.statusNonce.nonceList.len == 0:
-        inx.sAddr.statusList[item.status] = nil
+    discard inx.statusNonce.nonceList.delete(item.tx.nonce)
+    if inx.statusNonce.nonceList.len == 0:
+      inx.sAddr.statusList[item.status] = nil
 
     return true
 
@@ -303,26 +259,7 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
           if rc.isErr:
             return err(txInfoVfySenderRbTree)
 
-        var subCount = 0
-        var rcNonce = localData.nonceList.ge(AccountNonce.low)
-        while rcNonce.isOk:
-          let (nonceKey, itemData) = (rcNonce.value.key, rcNonce.value.data)
-          rcNonce = localData.nonceList.gt(nonceKey)
-
-          subCount += itemData.nItems
-
-          if itemData.nItems == 0:
-            return err(txInfoVfySenderLeafEmpty)
-
-          let rcItem = itemData.txVerify
-          if rcItem.isErr:
-            return err(txInfoVfySenderLeafQueue)
-
-        # end while
-        if subCount != localData.size:
-          return err(txInfoVfySenderTotal)
-
-        localCount += subCount
+        localCount += localData.nonceList.len
 
     # status list
     # ----------------------------------------------------------------
@@ -336,52 +273,20 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
           if rc.isErr:
             return err(txInfoVfySenderRbTree)
 
-        var subCount = 0
-        var rcNonce = statusData.nonceList.ge(AccountNonce.low)
-        while rcNonce.isOk:
-          let (nonceKey, itemData) = (rcNonce.value.key, rcNonce.value.data)
-          rcNonce = statusData.nonceList.gt(nonceKey)
-
-          subCount += itemData.nItems
-
-          if itemData.nItems == 0:
-            return err(txInfoVfySenderLeafEmpty)
-
-          let rcItem = itemData.txVerify
-          if rcItem.isErr:
-            return err(txInfoVfySenderLeafQueue)
-
-        # end while
-        if subCount != statusData.size:
-          return err(txInfoVfySenderTotal)
-
-        statusCount += subCount
+        statusCount += statusData.nonceList.len
 
     # allList
     # ----------------------------------------------------------------
     var allCount = 0
     block:
-      let rc = schedData.allList.nonceList.verify
-      if rc.isErr:
-        return err(txInfoVfySenderRbTree)
+      var allData = schedData.allList
 
-      var rcNonce =  schedData.allList.nonceList.ge(AccountNonce.low)
-      while rcNonce.isOk:
-        let (nonceKey, itemData) = (rcNonce.value.key, rcNonce.value.data)
-        rcNonce =  schedData.allList.nonceList.gt(nonceKey)
+      block:
+        let rc = allData.nonceList.verify
+        if rc.isErr:
+          return err(txInfoVfySenderRbTree)
 
-        allCount += itemData.nItems
-
-        if itemData.nItems == 0:
-          return err(txInfoVfySenderLeafEmpty)
-
-        let rcItem = itemData.txVerify
-        if rcItem.isErr:
-          return err(txInfoVfySenderLeafQueue)
-
-      # end while
-      if allCount != schedData.allList.size:
-        return err(txInfoVfySenderTotal)
+      allCount = allData.nonceList.len
 
     # end for
     if localCount != schedData.size:
@@ -431,7 +336,7 @@ proc prev*(gt: var TxSenderTab; key: EthAddress):
   gt.addrList.lt(key)
 
 # ------------------------------------------------------------------------------
-# Public array ops -- `TxSenderLocus` or any (level 1)
+# Public array ops -- `TxSenderSchedule` (level 1)
 # ------------------------------------------------------------------------------
 
 proc len*(schedData: TxSenderSchedRef): int {.inline.} =
@@ -529,7 +434,7 @@ proc len*(nonceData: TxSenderNonceRef): int {.inline.} =
 
 proc nItems*(nonceData: TxSenderNonceRef): int {.inline.} =
   ## Getter, total number of items in the sub-list
-  nonceData.size
+  nonceData.nonceList.len
 
 proc nItems*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef]):
            int {.inline.} =
@@ -539,59 +444,60 @@ proc nItems*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef]):
 
 
 proc eq*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.eq(nonce)
 
 proc eq*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+           SLstResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.eq(nonce)
   err(rc.error)
 
 
 proc ge*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.ge(nonce)
 
 proc ge*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+           SLstResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.ge(nonce)
   err(rc.error)
 
 
 proc gt*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.gt(nonce)
 
-proc gt*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef]; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+proc gt*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
+         nonce: AccountNonce):
+           SLstResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.gt(nonce)
   err(rc.error)
 
 
 proc le*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.le(nonce)
 
 proc le*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+           SLstResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.le(nonce)
   err(rc.error)
 
 
 proc lt*(nonceData: TxSenderNonceRef; nonce: AccountNonce):
-       SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+       SLstResult[AccountNonce,TxItemRef] {.inline.} =
   nonceData.nonceList.lt(nonce)
 
 proc lt*(rc: SLstResult[TxSenderSchedule,TxSenderNonceRef];
          nonce: AccountNonce):
-           SLstResult[AccountNonce,TxLeafItemRef] {.inline.} =
+           SLstResult[AccountNonce,TxItemRef] {.inline.} =
   if rc.isOK:
     return rc.value.data.lt(nonce)
   err(rc.error)

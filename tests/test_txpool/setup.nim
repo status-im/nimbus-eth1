@@ -91,7 +91,7 @@ proc toTxPool*(
               doAssert chainDB.persistBlocks(headers,bodies).isOK
               continue
             txPoolOk = true
-            result = init(type TxPoolRef, db)
+            result = TxPoolRef.init(db)
             #let h = result.dbHead
             #echo ">>> #", h.head.blockNumber,
             #    " fork=", h.fork,
@@ -127,7 +127,7 @@ proc toTxPool*(
 
   doAssert not db.isNil
 
-  result = init(type TxPoolRef, db)
+  result = TxPoolRef.init(db)
   if 0 < baseFee:
     result.setBaseFee(baseFee)
   if 0 < maxRejects:
@@ -167,7 +167,7 @@ proc toTxPool*(
   doAssert not db.isNil
   doAssert 0 < remoteItemsPC and remoteItemsPC < 100
 
-  result = init(type TxPoolRef, db)
+  result = TxPoolRef.init(db)
   if 0 < baseFee:
     result.setBaseFee(baseFee)
 
