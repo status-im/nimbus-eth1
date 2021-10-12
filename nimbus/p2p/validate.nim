@@ -145,6 +145,15 @@ proc validateSeal(hashCache: var EpochHashCache;
 proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
                     numTransactions: int; checkSealOK: bool;
                     hashCache: var EpochHashCache): Result[void,string] =
+
+  template inDAOExtraRange(blockNumber: BlockNumber): bool =
+    # EIP-799
+    # Blocks with block numbers in the range [1_920_000, 1_920_009]
+    # MUST have DAOForkBlockExtra
+    let DAOHigh = db.config.daoForkBlock + DAOForkExtraRange.u256
+    db.config.daoForkBlock <= blockNumber and
+      blockNumber < DAOHigh
+
   if header.extraData.len > 32:
     return err("BlockHeader.extraData larger than 32 bytes")
 
@@ -160,10 +169,9 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
   if header.timestamp.toUnix <= parentHeader.timestamp.toUnix:
     return err("timestamp must be strictly later than parent")
 
-  if db.config.daoForkSupport and
-     db.config.daoForkBlock <= header.blockNumber and
-     header.extraData != daoForkBlockExtraData:
-    return err("header extra data should be marked DAO")
+  if db.config.daoForkSupport and inDAOExtraRange(header.blockNumber):
+    if header.extraData != daoForkBlockExtraData:
+      return err("header extra data should be marked DAO")
 
   let calcDiffc = db.config.calcDifficulty(header.timestamp, parentHeader)
   if header.difficulty < calcDiffc:
