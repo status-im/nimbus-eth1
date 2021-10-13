@@ -25,6 +25,10 @@ type
   ContentKeysList* = List[ByteList, contentKeysLimit]
   ContentKeysBitList* = BitList[contentKeysLimit]
 
+  # TODO: should become part of the specific networks, considering it is custom.
+  CustomPayload* = object
+    dataRadius*: UInt256
+
   MessageKind* = enum
     unused = 0x00
 
@@ -33,17 +37,17 @@ type
     findnode = 0x03
     nodes = 0x04
     findcontent = 0x05
-    foundcontent = 0x06
+    content = 0x06
     offer = 0x07
     accept = 0x08
 
   PingMessage* = object
     enrSeq*: uint64
-    dataRadius*: UInt256
+    customPayload*: ByteList
 
   PongMessage* = object
     enrSeq*: uint64
-    dataRadius*: UInt256
+    customPayload*: ByteList
 
   FindNodeMessage* = object
     distances*: List[uint16, 256]
@@ -51,14 +55,16 @@ type
   NodesMessage* = object
     total*: uint8
     enrs*: List[ByteList, 32] # ByteList here is the rlp encoded ENR. This could
-    # also be limited to 300 bytes instead of 2048
+    # also be limited to ~300 bytes instead of 2048
 
   FindContentMessage* = object
     contentKey*: ByteList
 
-  FoundContentMessage* = object
+  # TODO: Must become an SSZ Union
+  ContentMessage* = object
+    connectionId*: Bytes2
+    content*: ByteList
     enrs*: List[ByteList, 32]
-    payload*: ByteList
 
   OfferMessage* = object
     contentKeys*: ContentKeysList
@@ -67,6 +73,7 @@ type
     connectionId*: Bytes2
     contentKeys*: ContentKeysBitList
 
+  # TODO: Needs to become an SSZ Union
   Message* = object
     case kind*: MessageKind
     of ping:
@@ -79,8 +86,8 @@ type
       nodes*: NodesMessage
     of findcontent:
       findcontent*: FindContentMessage
-    of foundcontent:
-      foundcontent*: FoundContentMessage
+    of content:
+      content*: ContentMessage
     of offer:
       offer*: OfferMessage
     of accept:
@@ -91,7 +98,7 @@ type
   SomeMessage* =
     PingMessage or PongMessage or
     FindNodeMessage or NodesMessage or
-    FindContentMessage or FoundContentMessage or
+    FindContentMessage or ContentMessage or
     OfferMessage or AcceptMessage
 
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
@@ -100,7 +107,7 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   elif T is FindNodeMessage: findNode
   elif T is NodesMessage: nodes
   elif T is FindContentMessage: findcontent
-  elif T is FoundContentMessage: foundcontent
+  elif T is ContentMessage: content
   elif T is OfferMessage: offer
   elif T is AcceptMessage: accept
 
@@ -144,8 +151,8 @@ proc decodeMessage*(body: openarray[byte]): Result[Message, cstring] =
       message.nodes = SSZ.decode(body.toOpenArray(1, body.high), NodesMessage)
     of findcontent:
       message.findcontent = SSZ.decode(body.toOpenArray(1, body.high), FindContentMessage)
-    of foundcontent:
-      message.foundcontent = SSZ.decode(body.toOpenArray(1, body.high), FoundContentMessage)
+    of content:
+      message.content = SSZ.decode(body.toOpenArray(1, body.high), ContentMessage)
     of offer:
       message.offer = SSZ.decode(body.toOpenArray(1, body.high), OfferMessage)
     of accept:

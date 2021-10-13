@@ -11,6 +11,7 @@ import
   std/[sequtils, sets, algorithm],
   stew/results, chronicles, chronos, nimcrypto/hash,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
+  eth/ssz/ssz_serialization,
   ./messages
 
 export messages, routing_table
@@ -94,8 +95,9 @@ proc neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
 
 proc handlePing(p: PortalProtocol, ping: PingMessage):
     seq[byte] =
+  let customPayload = CustomPayload(dataRadius: p.dataRadius)
   let p = PongMessage(enrSeq: p.baseProtocol.localNode.record.seqNum,
-    dataRadius: p.dataRadius)
+    customPayload: ByteList(SSZ.encode(customPayload)))
 
   encodeMessage(p)
 
@@ -126,32 +128,35 @@ proc handleFindNode(p: PortalProtocol, fn: FindNodeMessage): seq[byte] =
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
 
 proc handleFindContent(p: PortalProtocol, fc: FindContentMessage): seq[byte] =
+  # TODO: Should we first do a simple check on ContentId versus Radius?
+  # That would needs access to specific toContentId call, or we need to move it
+  # to handleContentRequest, which would need access to the Radius value.
   let contentHandlingResult = p.handleContentRequest(fc.contentKey)
-  # TODO: Need to check networkId, type, trie path
   case contentHandlingResult.kind
   of ContentFound:
+    # TODO: Need to provide uTP connectionId when content is too large for a
+    # single response.
     let content = contentHandlingResult.content
     let enrs = List[ByteList, 32](@[]) # Empty enrs when payload is send
-    encodeMessage(FoundContentMessage(
-      enrs: enrs, payload: ByteList(content)))
+    encodeMessage(ContentMessage(
+      enrs: enrs, content: ByteList(content)))
   of ContentMissing:
     let
       contentId = contentHandlingResult.contentId
-      # TODO: Should we first do a simple check on ContentId versus Radius?
       closestNodes = p.routingTable.neighbours(
         NodeId(contentId), seenOnly = true)
-      payload = ByteList(@[]) # Empty payload when enrs are send
+      content = ByteList(@[]) # Empty payload when enrs are send
       enrs =
         closestNodes.map(proc(x: Node): ByteList = ByteList(x.record.raw))
-    encodeMessage(FoundContentMessage(
-      enrs: List[ByteList, 32](List(enrs)), payload: payload))
+    encodeMessage(ContentMessage(
+      enrs: List[ByteList, 32](List(enrs)), content: content))
 
   of ContentKeyValidationFailure:
-    # Retrun empty response when content key validation fail
+    # Return empty response when content key validation fails
     let content = ByteList(@[])
     let enrs = List[ByteList, 32](@[]) # Empty enrs when payload is send
-    encodeMessage(FoundContentMessage(
-      enrs: enrs, payload: content))
+    encodeMessage(ContentMessage(
+      enrs: enrs, content: content))
 
 proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
   let
@@ -160,8 +165,12 @@ proc handleOffer(p: PortalProtocol, a: OfferMessage): seq[byte] =
     connectionId = Bytes2([byte 0x01, 0x02])
     # TODO: Not implemented: Based on the content radius and the content that is
     # already stored, interest in provided content keys needs to be indicated
-    # by setting bits in this BitList
+    # by setting bits in this BitList.
+    # Do we need some protection here on a peer offering lots (64x) of content
+    # that fits our Radius but is actually bogus?
     contentKeys = ContentKeysBitList.init(a.contentKeys.len)
+    # TODO: What if we don't want any of the content? Reply with empty bitlist
+    # and a connectionId of all zeroes?
   encodeMessage(
     AcceptMessage(connectionId: connectionId, contentKeys: contentKeys))
 
@@ -242,8 +251,9 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
 
 proc ping*(p: PortalProtocol, dst: Node):
     Future[PortalResult[PongMessage]] {.async.} =
+  let customPayload = CustomPayload(dataRadius: p.dataRadius)
   let ping = PingMessage(enrSeq: p.baseProtocol.localNode.record.seqNum,
-    dataRadius: p.dataRadius)
+    customPayload: ByteList(SSZ.encode(customPayload)))
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.ping
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
@@ -257,11 +267,11 @@ proc findNode*(p: PortalProtocol, dst: Node, distances: List[uint16, 256]):
   return await reqResponse[FindNodeMessage, NodesMessage](p, dst, fn)
 
 proc findContent*(p: PortalProtocol, dst: Node, contentKey: ByteList):
-    Future[PortalResult[FoundContentMessage]] {.async.} =
+    Future[PortalResult[ContentMessage]] {.async.} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   trace "Send message request", dstId = dst.id, kind = MessageKind.findcontent
-  return await reqResponse[FindContentMessage, FoundContentMessage](p, dst, fc)
+  return await reqResponse[FindContentMessage, ContentMessage](p, dst, fc)
 
 proc offer*(p: PortalProtocol, dst: Node, contentKeys: ContentKeysList):
     Future[PortalResult[AcceptMessage]] {.async.} =
@@ -360,9 +370,9 @@ proc lookup*(p: PortalProtocol, target: NodeId): Future[seq[Node]] {.async.} =
   p.lastLookup = now(chronos.Moment)
   return closestNodes
 
-proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage,
+proc handleFoundContentMessage(p: PortalProtocol, m: ContentMessage,
     dst: Node, nodes: var seq[Node]): LookupResult =
-  if (m.enrs.len() != 0 and m.payload.len() == 0):
+  if (m.enrs.len() != 0 and m.content.len() == 0):
     let records = recordsFromBytes(m.enrs)
     let verifiedNodes = verifyNodesRecords(records, dst, EnrsResultLimit)
     nodes.add(verifiedNodes)
@@ -372,10 +382,10 @@ proc handleFoundContentMessage(p: PortalProtocol, m: FoundContentMessage,
       discard p.routingTable.addNode(n)
 
     return LookupResult(kind: Nodes, nodes: nodes)
-  elif (m.payload.len() != 0 and m.enrs.len() == 0):
-    return LookupResult(kind: Content, content: m.payload)
-  elif ((m.payload.len() != 0 and m.enrs.len() != 0)):
-    # Both payload and enrs are filled, which means protocol breach. For now
+  elif (m.content.len() != 0 and m.enrs.len() == 0):
+    return LookupResult(kind: Content, content: m.content)
+  elif ((m.content.len() != 0 and m.enrs.len() != 0)):
+    # Both content and enrs are filled, which means protocol breach. For now
     # just logging offending node to quickly identify it
     warn "Invalid foundcontent response form node ", uri = toURI(dst.record)
     return LookupResult(kind: Nodes, nodes: nodes)
