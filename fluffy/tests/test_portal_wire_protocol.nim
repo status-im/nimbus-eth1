@@ -59,10 +59,12 @@ procSuite "Portal Wire Protocol Tests":
 
     let pong = await test.proto1.ping(test.proto2.localNode)
 
+    let customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
+
     check:
       pong.isOk()
       pong.get().enrSeq == 1'u64
-      pong.get().dataRadius == UInt256.high()
+      pong.get().customPayload == customPayload
 
     await test.stopTest()
 
@@ -110,7 +112,7 @@ procSuite "Portal Wire Protocol Tests":
     
     await test.stopTest()
 
-  asyncTest "FindContent/FoundContent - send enrs":
+  asyncTest "FindContent/Content - send enrs":
     let test = defaultTestCase(rng)
 
     # ping in one direction to add, ping in the other to update as seen.
@@ -125,13 +127,13 @@ procSuite "Portal Wire Protocol Tests":
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.
-    let foundContent = await test.proto1.findContent(test.proto2.localNode,
+    let content = await test.proto1.findContent(test.proto2.localNode,
       contentKey)
 
     check:
-      foundContent.isOk()
-      foundContent.get().enrs.len() == 1
-      foundContent.get().payload.len() == 0
+      content.isOk()
+      content.get().enrs.len() == 1
+      content.get().content.len() == 0
 
     await test.stopTest()
 

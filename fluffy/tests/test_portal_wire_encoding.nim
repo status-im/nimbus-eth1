@@ -16,11 +16,13 @@ suite "Portal Wire Protocol Message Encodings":
     var dataRadius: UInt256
     let
       enrSeq = 1'u64
-      p = PingMessage(enrSeq: enrSeq, dataRadius: dataRadius)
+      # Can be any custom payload, testing with just dataRadius here.
+      customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: dataRadius)))
+      p = PingMessage(enrSeq: enrSeq, customPayload: customPayload)
 
     let encoded = encodeMessage(p)
     check encoded.toHex ==
-      "0101000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      "0101000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -28,17 +30,19 @@ suite "Portal Wire Protocol Message Encodings":
     check:
       message.kind == ping
       message.ping.enrSeq == enrSeq
-      message.ping.dataRadius == dataRadius
+      message.ping.customPayload == customPayload
 
   test "Pong Response":
     var dataRadius: UInt256
     let
       enrSeq = 1'u64
-      p = PongMessage(enrSeq: enrSeq, dataRadius: dataRadius)
+      # Can be any custom payload, testing with just dataRadius here.
+      customPayload = ByteList(SSZ.encode(CustomPayload(dataRadius: dataRadius)))
+      p = PongMessage(enrSeq: enrSeq, customPayload: customPayload)
 
     let encoded = encodeMessage(p)
     check encoded.toHex ==
-      "0201000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      "0201000000000000000c0000000000000000000000000000000000000000000000000000000000000000000000"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -46,7 +50,7 @@ suite "Portal Wire Protocol Message Encodings":
     check:
       message.kind == pong
       message.pong.enrSeq == enrSeq
-      message.pong.dataRadius == dataRadius
+      message.pong.customPayload == customPayload
 
   test "FindNode Request":
     let
@@ -122,25 +126,25 @@ suite "Portal Wire Protocol Message Encodings":
       message.kind == findcontent
       message.findcontent.contentKey == contentEncoded
 
-  test "FoundContent Response - payload":
+  test "Content Response - payload":
     let
       enrs = List[ByteList, 32](@[])
-      payload = ByteList(@[byte 0x01, 0x02, 0x03])
-      n = FoundContentMessage(enrs: enrs, payload: payload)
+      content = ByteList(@[byte 0x01, 0x02, 0x03])
+      n = ContentMessage(enrs: enrs, content: content)
 
     let encoded = encodeMessage(n)
-    check encoded.toHex == "060800000008000000010203"
+    check encoded.toHex == "0600000a0000000d000000010203"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
     let message = decoded.get()
     check:
-      message.kind == foundcontent
-      message.foundcontent.enrs.len() == 0
-      message.foundcontent.payload == payload
+      message.kind == MessageKind.content
+      message.content.enrs.len() == 0
+      message.content.content == content
 
-  test "FoundContent Response - enrs":
+  test "Content Response - enrs":
     var e1, e2: Record
     check:
       e1.fromURI("enr:-HW4QBzimRxkmT18hMKaAL3IcZF1UcfTMPyi3Q1pxwZZbcZVRI8DC5infUAB_UauARLOJtYTxaagKoGmIjzQxO2qUygBgmlkgnY0iXNlY3AyNTZrMaEDymNMrg1JrLQB2KTGtv6MVbcNEVv0AHacwUAPMljNMTg")
@@ -148,22 +152,22 @@ suite "Portal Wire Protocol Message Encodings":
 
     let
       enrs = List[ByteList, 32](@[ByteList(e1.raw), ByteList(e2.raw)])
-      payload = ByteList(@[])
-      n = FoundContentMessage(enrs: enrs, payload: payload)
+      content = ByteList(@[])
+      n = ContentMessage(enrs: enrs, content: content)
 
     let encoded = encodeMessage(n)
-    check encoded.toHex == "0608000000fe000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
+    check encoded.toHex == "0600000a0000000a000000080000007f000000f875b8401ce2991c64993d7c84c29a00bdc871917551c7d330fca2dd0d69c706596dc655448f030b98a77d4001fd46ae0112ce26d613c5a6a02a81a6223cd0c4edaa53280182696482763489736563703235366b31a103ca634cae0d49acb401d8a4c6b6fe8c55b70d115bf400769cc1400f3258cd3138f875b840d7f1c39e376297f81d7297758c64cb37dcc5c3beea9f57f7ce9695d7d5a67553417d719539d6ae4b445946de4d99e680eb8063f29485b555d45b7df16a1850130182696482763489736563703235366b31a1030e2cb74241c0c4fc8e8166f1a79a05d5b0dd95813a74b094529f317d5c39d235"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
     let message = decoded.get()
     check:
-      message.kind == foundcontent
-      message.foundcontent.enrs.len() == 2
-      message.foundcontent.enrs[0] == ByteList(e1.raw)
-      message.foundcontent.enrs[1] == ByteList(e2.raw)
-      message.foundcontent.payload == payload
+      message.kind == MessageKind.content
+      message.content.enrs.len() == 2
+      message.content.enrs[0] == ByteList(e1.raw)
+      message.content.enrs[1] == ByteList(e2.raw)
+      message.content.content == content
 
   test "Offer Request":
     let
