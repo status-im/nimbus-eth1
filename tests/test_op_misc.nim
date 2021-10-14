@@ -4,8 +4,7 @@ import
 
 proc opMiscMain*() =
   suite "Misc Opcodes":
-    setup:
-      let (blockNumber, chainDB) = initDatabase()
+    let (vmState, chainDB) = initDatabase()
 
     assembler: # LOG0 OP
       title: "Log0"
@@ -20,7 +19,7 @@ proc opMiscMain*() =
         "0x1234"
       logs:
         (
-          address: "0xc669eaad75042be84daaf9b461b0e868b9ac1871",
+          address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
 
@@ -38,7 +37,7 @@ proc opMiscMain*() =
         "0x1234"
       logs:
         (
-          address: "0xc669eaad75042be84daaf9b461b0e868b9ac1871",
+          address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           topics: ["0x9999"],
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
@@ -58,7 +57,7 @@ proc opMiscMain*() =
         "0x1234"
       logs:
         (
-          address: "0xc669eaad75042be84daaf9b461b0e868b9ac1871",
+          address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           topics: ["0x6666", "0x9999"],
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
@@ -79,7 +78,7 @@ proc opMiscMain*() =
         "0x1234"
       logs:
         (
-          address: "0xc669eaad75042be84daaf9b461b0e868b9ac1871",
+          address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           topics: ["0x3333", "0x6666", "0x9999"],
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )
@@ -101,7 +100,7 @@ proc opMiscMain*() =
         "0x1234"
       logs:
         (
-          address: "0xc669eaad75042be84daaf9b461b0e868b9ac1871",
+          address: "0x460121576cc7df020759730751f92bd62fd78dd6",
           topics: ["0x5555", "0x3333", "0x6666", "0x9999"],
           data: "0x0000000000000000000000000000000000000000000000000000000000001234"
         )

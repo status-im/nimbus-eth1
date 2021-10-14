@@ -2,8 +2,7 @@ import macro_assembler, unittest2
 
 proc opArithMain*() =
   suite "Arithmetic Opcodes":
-    setup:
-      let (blockNumber, chainDB) = initDatabase()
+    let (vmState, chainDB) = initDatabase()
 
     assembler:
       title: "ADD_1"
@@ -439,3 +438,6 @@ proc opArithMain*() =
         PUSH1 "0x0F"
         SIGNEXTEND
       stack: "0x000000000000000000000000000000003f9b347132d29b62d161117bca8c7307"
+
+when isMainModule:
+  opArithMain()

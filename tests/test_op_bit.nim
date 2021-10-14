@@ -2,8 +2,7 @@ import macro_assembler, unittest2
 
 proc opBitMain*() =
   suite "Bitwise Opcodes":
-    setup:
-      let (blockNumber, chainDB) = initDatabase()
+    let (vmState, chainDB) = initDatabase()
 
     assembler: # AND OP
       title: "AND_1"
@@ -655,3 +654,7 @@ proc opBitMain*() =
         PUSH1 "0x00"
         NOT
       stack: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+
+when isMainModule:
+  opBitMain()
+

@@ -8,9 +8,9 @@
 
 import
   eth/common/eth_types, stint, options, stew/byteutils,
-  ".."/[vm_types, vm_state, vm_internals, vm_gas_costs, forks],
+  ".."/[vm_types, vm_state, vm_gas_costs, forks],
   ".."/[db/db_chain, db/accounts_cache, transaction], eth/trie/db,
-  ".."/[chain_config, utils, rpc/hexstrings],
+  ".."/[chain_config, rpc/hexstrings],
   ./call_common
 
 type
@@ -127,65 +127,6 @@ proc txCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork:
   if tx.txType > TxLegacy:
     shallowCopy(call.accessList, tx.accessList)
   return runComputation(call).gasUsed
-
-type
-  AsmResult* = object
-    isSuccess*:       bool
-    gasUsed*:         GasInt
-    output*:          seq[byte]
-    stack*:           Stack
-    memory*:          Memory
-    vmState*:         BaseVMState
-    contractAddress*: EthAddress
-
-proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byte], fork: Fork): AsmResult =
-  let
-    parentNumber = blockNumber - 1
-    parent = chainDB.getBlockHeader(parentNumber)
-    header = chainDB.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
-    body = chainDB.getBlockBody(headerHash)
-    vmState = newBaseVMState(parent.stateRoot, header, chainDB)
-    tx = body.transactions[0]
-    sender = transaction.getSender(tx)
-    gasLimit = 500000000
-    gasUsed = 0 #tx.payload.intrinsicGas.GasInt + gasFees[fork][GasTXCreate]
-
-  # This is an odd sort of test, where some fields are taken from
-  # `body.transactions[0]` but other fields (like `gasLimit`) are not.  Also it
-  # creates the new contract using `code` like `CREATE`, but then executes the
-  # contract like it's `CALL`.
-
-  doAssert tx.contractCreation
-  let contractAddress = generateAddress(sender, vmState.readOnlyStateDB.getNonce(sender))
-  vmState.mutateStateDB:
-    db.setCode(contractAddress, code)
-
-  let callResult = runComputation(CallParams(
-    vmState:      vmState,
-    forkOverride: some(fork),
-    gasPrice:     tx.gasPrice,
-    gasLimit:     gasLimit - gasUsed,
-    sender:       sender,
-    to:           contractAddress,
-    isCreate:     false,
-    value:        tx.value,
-    input:        data,
-    noIntrinsic:  true,               # Don't charge intrinsic gas.
-    noAccessList: true,               # Don't initialise EIP-2929 access list.
-    noGasCharge:  true,               # Don't charge sender account for gas.
-    noRefund:     true                # Don't apply gas refund/burn rule.
-  ))
-
-  # Some of these are extra returned state, for testing, that a normal EVMC API
-  # computation doesn't return.  We'll have to obtain them outside EVMC.
-  result.isSuccess       = not callResult.isError
-  result.gasUsed         = callResult.gasUsed
-  result.output          = callResult.output
-  result.stack           = callResult.stack
-  result.memory          = callResult.memory
-  result.vmState         = vmState
-  result.contractAddress = contractAddress
 
 proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallResult =
   var call = CallParams(

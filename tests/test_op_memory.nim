@@ -2,8 +2,7 @@ import macro_assembler, unittest2, macros, strutils
 
 proc opMemoryMain*() =
   suite "Memory Opcodes":
-    setup:
-      let (blockNumber, chainDB) = initDatabase()
+    let (vmState, chainDB) = initDatabase()
 
     assembler: # PUSH1 OP
       title: "PUSH1"
@@ -662,7 +661,7 @@ proc opMemoryMain*() =
       code:
         PUSH1 "0xAA"
         SLOAD
-      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      stack: "0x0000000000000000000000000000000000000000000000000000000000000022"
 
     assembler: # SLOAD OP
       title: "SLOAD_2"
@@ -708,7 +707,7 @@ proc opMemoryMain*() =
         SLOAD
         PC
       stack:
-        "0x00"
+        "0x0000000000000000000000000000000000000000000000000000000000000022"
         "0x0000000000000000000000000000000000000000000000000000000000000008"
       memory:
         "0x00"

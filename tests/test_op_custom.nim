@@ -4,8 +4,7 @@ import
 
 proc opCustomMain*() =
   suite "Custom Opcodes Test":
-    setup:
-      let (blockNumber, chainDB) = initDatabase()
+    let (vmState, chainDB) = initDatabase()
 
     assembler: # CALLDATASIZE OP
       title: "CALLDATASIZE_1"
@@ -178,41 +177,41 @@ proc opCustomMain*() =
       title: "ADDRESS_1"
       code:
         Address
-      stack: "0x000000000000000000000000c669eaad75042be84daaf9b461b0e868b9ac1871"
+      stack: "0x000000000000000000000000460121576cc7df020759730751f92bd62fd78dd6"
 
     assembler: # BALANCE OP
       title: "BALANCE_1"
       code:
         Address
         Balance
-      stack: "0x000000000000000000000000000000000000000000000000cff56a1b273a8000"
+      stack: "0x00000000000000000000000000000000000000000000000000000000000f4434"
 
     assembler: # EIP2929 BALANCE OP
       title: "EIP2929 BALANCE_1"
       code:
         Address
         Balance
-      stack: "0x000000000000000000000000000000000000000000000000cff56a1b273a8000"
+      stack: "0x00000000000000000000000000000000000000000000000000000000000f4434"
       fork: berlin
-      gasused: 2602
+      gasused: 102
 
     assembler: # ORIGIN OP
       title: "ORIGIN_1"
       code:
         Origin
-      stack: "0x000000000000000000000000fbe0afcd7658ba86be41922059dd879c192d4c73"
+      stack: "0x0000000000000000000000008aeeda4d805471df9b2a5b0f38a0c3bcba786b"
 
     assembler: # CALLER OP
       title: "CALLER_1"
       code:
         Caller
-      stack: "0x000000000000000000000000fbe0afcd7658ba86be41922059dd879c192d4c73"
+      stack: "0x0000000000000000000000008aeeda4d805471df9b2a5b0f38a0c3bcba786b"
 
     assembler: # CALLVALUE OP
       title: "CALLVALUE_1"
       code:
         CallValue
-      stack: "0xcff56a1b273a8000"
+      stack: "0x01f4"
 
     assembler: # SHA3 OP
       title: "SHA3_1"
@@ -253,9 +252,9 @@ proc opCustomMain*() =
     assembler: # BLOCKHASH OP
       title: "BLOCKHASH_1"
       code:
-        Push2 "0xb864" # 47204, parent header number
+        Push1 "0x00"
         Blockhash
-      stack: "0xa85842a20755232169db76c5bd4ad4672c1551fca4b07d0bd139cd0e6fef684d"
+      stack: "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
 
     # current block coinbase/miner
     assembler: # COINBASE OP
@@ -269,42 +268,42 @@ proc opCustomMain*() =
       title: "TIMESTAMP_1"
       code:
         TimeStamp
-      stack: "0x0000000000000000000000000000000000000000000000000000000055c46bba"
+      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     # current block number
     assembler: # NUMBER OP
       title: "NUMBER_1"
       code:
         Number
-      stack: "0x000000000000000000000000000000000000000000000000000000000000b865"
+      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
     # current difficulty
     assembler: # DIFFICULTY OP
       title: "DIFFICULTY_1"
       code:
         Difficulty
-      stack: "0x000000000000000000000000000000000000000000000000000001547c73822d"
+      stack: "0x0000000000000000000000000000000000000000000000000000000400800000"
 
-    # ??
+    # tx gas price
     assembler: # GASPRICE OP
       title: "GASPRICE_1"
       code:
         GasPrice
-      stack: "0x000000000000000000000000000000000000000000000000000000746a528800"
+      stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
 
-    # ??
+    # gas remaining
     assembler: # GAS OP
       title: "GAS_1"
       code:
         Gas
       stack: "0x000000000000000000000000000000000000000000000000000000001dcd64fe"
 
-    # ??
+    # block gas limit
     assembler: # GASLIMIT OP
       title: "GASLIMIT_1"
       code:
         GasLimit
-      stack: "0x000000000000000000000000000000000000000000000000000000000000a298"
+      stack: "0x00000000000000000000000000000000000000000000000000000000000186a0"
 
     assembler: # INVALID OP
       title: "INVALID_1"

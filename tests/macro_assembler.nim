@@ -1,13 +1,15 @@
 import
-  macrocache, strutils, sequtils, unittest2,
-  stew/byteutils, chronicles, eth/common,
+  macrocache, strutils, sequtils, unittest2, times,
+  stew/byteutils, chronicles, eth/[common, keys],
   stew/shims/macros
 
 import
-  options, json, os, eth/trie/[db, hexary],
+  options, eth/trie/[db, hexary],
   ../nimbus/db/[db_chain, accounts_cache],
   ../nimbus/vm_internals, ../nimbus/forks,
-  ../nimbus/transaction/call_evm
+  ../nimbus/transaction/call_evm,
+  ../nimbus/[transaction, chain_config, genesis, vm_types, vm_state],
+  ../nimbus/utils/difficulty
 
 export byteutils
 {.experimental: "dynamicBindSym".}
@@ -178,8 +180,8 @@ proc parseGasUsed(gas: NimNode): GasInt =
 proc generateVMProxy(boa: Assembler): NimNode =
   let
     vmProxy = genSym(nskProc, "vmProxy")
-    blockNumber = ident("blockNumber")
     chainDB = ident("chainDB")
+    vmState = ident("vmState")
     title = boa.title
     body = newLitFixed(boa)
 
@@ -187,34 +189,55 @@ proc generateVMProxy(boa: Assembler): NimNode =
     test `title`:
       proc `vmProxy`(): bool =
         let boa = `body`
-        runVM(`blockNumber`, `chainDB`, boa)
+        runVM(`vmState`, `chainDB`, boa)
       {.gcsafe.}:
         check `vmProxy`()
 
   when defined(macro_assembler_debug):
     echo result.toStrLit.strVal
 
-const
-  blockFile = "tests" / "fixtures" / "PersistBlockTests" / "block47205.json"
+proc initDatabase*(networkId = MainNet): (BaseVMState, BaseChainDB) =
+  let db = newBaseChainDB(newMemoryDB(), false, networkId, networkParams(networkId))
+  initializeEmptyDb(db)
 
-proc initDatabase*(): (Uint256, BaseChainDB) =
   let
-    node = json.parseFile(blockFile)
-    blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
-    memoryDB = newMemoryDB()
-    state = node["state"]
+    parent = getCanonicalHead(db)
+    coinbase = hexToByteArray[20]("bb7b8287f3f0a933474a79eae42cbca977791171")
+    timestamp = parent.timestamp + initDuration(seconds = 1)
+    header = BlockHeader(
+      blockNumber: 1.u256,
+      stateRoot: parent.stateRoot,
+      parentHash: parent.blockHash,
+      coinbase: coinbase,
+      timestamp: timestamp,
+      difficulty: db.config.calcDifficulty(timestamp, parent),
+      gasLimit: 100_000
+    )
+    vmState = newBaseVMState(parent.stateRoot, header, db)
 
-  for k, v in state:
-    let key = hexToSeqByte(k)
-    let value = hexToSeqByte(v.getStr())
-    memoryDB.put(key, value)
+  (vmState, db)
 
-  result = (blockNumber, newBaseChainDB(memoryDB, false))
+proc runVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler): bool =
+  const codeAddress = hexToByteArray[20]("460121576cc7df020759730751f92bd62fd78dd6")
+  let privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
 
-proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
-  var asmResult = asmCallEvm(blockNumber, chainDB, boa.code, boa.data, boa.fork)
+  vmState.mutateStateDB:
+    db.setCode(codeAddress, boa.code)
+    db.setBalance(codeAddress, 1_000_000.u256)
 
-  if asmResult.isSuccess:
+  let unsignedTx = Transaction(
+    txType: TxLegacy,
+    nonce: 0,
+    gasPrice: 1.GasInt,
+    gasLimit: 500_000_000.GasInt,
+    to: codeAddress.some,
+    value: 500.u256,
+    payload: boa.data
+  )
+  let tx = signTransaction(unsignedTx, privateKey, chainDB.config.chainId, false)
+  let asmResult = testCallEvm(tx, tx.getSender, vmState, boa.fork)
+
+  if not asmResult.isError:
     if boa.success == false:
       error "different success value", expected=boa.success, actual=true
       return false
@@ -253,11 +276,11 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
-  var stateDB = asmResult.vmState.accountDb
+  var stateDB = vmState.accountDb
   stateDB.persist()
 
   var
-    storageRoot = stateDB.getStorageRoot(asmResult.contractAddress)
+    storageRoot = stateDB.getStorageRoot(codeAddress)
     trie = initSecureHexaryTrie(chainDB.db, storageRoot)
 
   for kv in boa.storage:
@@ -271,7 +294,7 @@ proc runVM*(blockNumber: Uint256, chainDB: BaseChainDB, boa: Assembler): bool =
       error "storage has different value", key=key, expected=val, actual=value
       return false
 
-  let logs = asmResult.vmState.logEntries
+  let logs = vmState.logEntries
   if logs.len != boa.logs.len:
     error "different logs len", expected=boa.logs.len, actual=logs.len
     return false
