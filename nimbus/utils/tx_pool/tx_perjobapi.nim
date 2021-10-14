@@ -32,8 +32,7 @@ proc pjaInactiveItemsEviction*(xp: TxPoolRef)
 
 # core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-proc pjaAddTxs*(xp: TxPoolRef;
-             txs: openArray[Transaction]; local = false; info = "")
+proc pjaAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueue a batch of transactions into the pool if they are valid. If
   ## the senders are not among the locally tracked ones, full pricing
@@ -45,12 +44,11 @@ proc pjaAddTxs*(xp: TxPoolRef;
     kind:     txJobAddTxs,
     addTxsArgs: (
       txs:    toSeq(txs),
-      local:  local,
       info:   info)))
 
 # core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-proc pjaAddTx*(xp: TxPoolRef; tx: var Transaction; local = false; info = "")
+proc pjaAddTx*(xp: TxPoolRef; tx: var Transaction; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Enqueues a single transaction into the pool if it is valid.
   ## This is a convenience wrapper aroundd addTxs.
@@ -58,19 +56,7 @@ proc pjaAddTx*(xp: TxPoolRef; tx: var Transaction; local = false; info = "")
     kind:     txJobAddTxs,
     addTxsArgs: (
       txs:    @[tx],
-      local:  local,
       info:   info)))
-
-
-# core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
-proc pjaRemoteToLocals*(xp: TxPoolRef; signer: EthAddress)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## For given account, remote transactions are migrated to local transactions.
-  ## The function returns the number of transactions migrated.
-  discard xp.job(TxJobDataRef(
-    kind:      txJobMoveRemoteToLocals,
-    moveRemoteToLocalsArgs: (
-      account: signer)))
 
 # ----------------------------
 
@@ -84,14 +70,12 @@ proc pjaFlushRejects*(xp: TxPoolRef; numItems = int.high)
     flushRejectsArgs: (
       maxItems: numItems)))
 
-proc pjaItemsApply*(xp: TxPoolRef; apply: TxJobItemApply; local = false)
+proc pjaItemsApply*(xp: TxPoolRef; apply: TxJobItemApply)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Apply argument function `apply` to all items of the `local` or `remote`
-  ## bucket.
+  ## Apply argument function `apply` to all active items
   discard xp.job(TxJobDataRef(
-    kind:     txJobApplyByLocal,
-    applyByLocalArgs: (
-      local:  local,
+    kind:     txJobApply,
+    applyArgs: (
       apply:  apply)))
 
 proc pjaItemsApply*(xp: TxPoolRef; apply: TxJobItemApply; status: TxItemStatus)

@@ -448,8 +448,27 @@ proc verify*(xp: TxPoolRef): Result[void,TxInfo]
     let rc = xp.byJob.verify
     if rc.isErr:
       return rc
+  block:
+    let rc = xp.txDB.verify
+    if rc.isErr:
+      return rc
 
-  xp.txDB.verify
+  # verify consecutive nonces per sender
+  var
+    initOk = false
+    lastSender: EthAddress
+    lastNonce: AccountNonce
+  for item in xp.txDB.bySender.walkItems:
+    if not initOk or lastSender != item.sender:
+      initOk = true
+      lastSender = item.sender
+      lastNonce = item.tx.nonce
+    elif lastNonce + 1 == item.tx.nonce:
+      lastNonce = item.tx.nonce
+    else:
+      return err(txInfoVfyNonceChain)
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

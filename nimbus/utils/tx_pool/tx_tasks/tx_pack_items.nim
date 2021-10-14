@@ -36,48 +36,49 @@ proc packItemsIntoBlock*(xp: TxPoolRef) =
     packAlgo = xp.algoSelect
 
   block packerFrame:
-    for itemList in xp.txDB.byStatus.incItemList(txItemStaged):
-      for item in itemList.walkItems:
-        # FIXME: there must not be more than one item per sender per nonce
+    for item in xp.txDB.byStatus.incItemList(txItemStaged):
+      # FIXME: there must not be more than one item per sender per nonce
 
-        # Note: the following if/else clauses assume that
-        #       `xp.dbHead.trgGasLimit` <= `xp.dbHead.maxGasLimit `
-        #       which is not verified here
-        if xp.dbHead.trgGasLimit < gasTotal + item.tx.gasLimit:
+      # Note: the following if/else clauses assume that
+      #       `xp.dbHead.trgGasLimit` <= `xp.dbHead.maxGasLimit `
+      #       which is not verified here
+      if xp.dbHead.trgGasLimit < gasTotal + item.tx.gasLimit:
 
-          # curremt tx will exceed soft/target limit
-          if algoPackTrgGasLimitMax notin packAlgo:
-            # so this `trgGasLimit` is considered a hard limit
-            if algoPackTryHarder in packAlgo:
-              # try next one
-              continue
-            # done otherwise
-            break packerFrame
+        # curremt tx will exceed soft/target limit
+        if algoPackTrgGasLimitMax notin packAlgo:
+          # so this `trgGasLimit` is considered a hard limit
+          if algoPackTryHarder in packAlgo:
+            # try next one
+            continue
+          # done otherwise
+          break packerFrame
 
-          # otherwise, `trgGasLimit` might be slightly exceeded
-          if xp.dbHead.maxGasLimit < gasTotal + item.tx.gasLimit:
-            # curremt tx will exceed hard limit
-            if {algoPackTrgGasLimitMax,algoPackTryHarder} <= packAlgo:
-              # try the next one
-              continue
-            # done otherwise
-            break packerFrame
+        # otherwise, `trgGasLimit` might be slightly exceeded
+        if xp.dbHead.maxGasLimit < gasTotal + item.tx.gasLimit:
+          # curremt tx will exceed hard limit
+          if {algoPackTrgGasLimitMax,algoPackTryHarder} <= packAlgo:
+            # try the next one
+            continue
+          # done otherwise
+          break packerFrame
 
-        ethBlock.txs.add item.tx
-        gasTotal += item.tx.gasLimit
+      ethBlock.txs.add item.tx
+      gasTotal += item.tx.gasLimit
 
-        # dispose in waste basket
-        discard xp.txDB.dispose(item, txInfoStagedBlockIncluded)
+      # dispose in waste basket
+      discard xp.txDB.dispose(item, txInfoStagedBlockIncluded)
 
-  # derive block
-  ethBlock.header = xp.dbHead.head
-  ethBlock.header.blockNumber += 1.u256
+  # derive block header
+  ethBlock.header.blockNumber = xp.dbHead.head.blockNumber + 1.u256
   ethBlock.header.timestamp = now().utc.toTime
-  ethBlock.header.ommersHash.reset
-  # TODO ...
+  ethBlock.header.parentHash = xp.dbHead.head.blockHash
+  ethBlock.header.stateRoot = xp.dbHead.head.stateRoot
+  ethBlock.header.txRoot = xp.dbHead.head.txRoot
+  ethBlock.header.gasLimit = xp.dbHead.head.gasLimit
 
   if gasTotal < ethBlock.header.gasLimit:
     ethBlock.header.gasLimit = xp.dbHead.maxGasLimit
+  # TODO ...
 
   xp.ethBlock = ethBlock
   xp.ethBlockSize = gasTotal

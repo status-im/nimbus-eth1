@@ -24,6 +24,14 @@ type
       ## Tx superseded by another one with same <sender,nonce> index
       "Sender/nonce index superseded"
 
+    txInfoExplicitDisposal = ##\
+      ## Unspecified disposal reason (fallback value)
+      "on-demand disposal"
+
+    txInfoImpliedDisposal = ##\
+      ## Implied disposal, typically implied by hihger nonces (fallback value)
+      "implied disposal"
+
     # ------ Miscellaneous errors ------------------------------------
 
     txInfoErrUnspecified = ##\
@@ -128,12 +136,7 @@ type
     txInfoVfyGasTipTotal        ## Wrong number of leaves
 
     txInfoVfyItemIdList         ## Corrupted ID queue/fifo structure
-    txInfoVfyItemIdTotal        ## Wrong number of leaves
-
-    txInfoVfyNonceList          ## Corrupted nonce list structure
-    txInfoVfyNonceLeafEmpty     ## Empty nonce list leaf record
-    txInfoVfyNonceLeafQueue     ## Corrupted nonce leaf queue
-    txInfoVfyNonceTotal         ## Wrong number of leaves
+    txInfoVfyNonceChain         ## Non-consecutive nonces
 
     txInfoVfySenderRbTree       ## Corrupted sender list structure
     txInfoVfySenderLeafEmpty    ## Empty sender list leaf record
@@ -141,9 +144,9 @@ type
     txInfoVfySenderTotal        ## Wrong number of leaves
 
     txInfoVfyStatusRbTree       ## Corrupted status list structure
-    txInfoVfyStatusLeafEmpty    ## Empty status list leaf record
-    txInfoVfyStatusLeafQueue    ## Corrupted status leaf queue
     txInfoVfyStatusTotal        ## Wrong number of leaves
+    txInfoVfyStatusSenderList   ## Corrupted status-sender sub-list
+    txInfoVfyStatusNonceList    ## Corrupted status-nonce sub-list
 
     txInfoVfyStatusSenderTotal  ## Sender vs status table mismatch
 

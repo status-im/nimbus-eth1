@@ -12,14 +12,15 @@
 ## ===============================================
 ##
 
-
 import
   ../../../db/accounts_cache,
   ../../../forks,
   ../../../transaction,
+  ../../slst,
   ../tx_dbhead,
   ../tx_desc,
   ../tx_item,
+  ../tx_tabs,
   chronicles,
   eth/[common, keys]
 
@@ -35,6 +36,7 @@ type
     baseFee*: GasPrice       ## Current base fee
 
     gasLimit*: GasInt        ## Block size limit
+
 
 logScope:
   topics = "tx-pool classify transaction"
@@ -57,12 +59,29 @@ proc checkTxBasic(xp: TxPoolRef;
     debug "invalid tx: Eip1559 Tx type detected before London"
     return false
 
+  # get the next applicable nonce as registered on the account database
   let nonce = ReadOnlyStateDB(xp.dbHead.accDb).getNonce(item.sender)
   if item.tx.nonce < nonce:
-    debug "invalid tx: account nonce mismatch",
+    debug "invalid tx: account nonce too small",
       txNonce = item.tx.nonce,
       accountNonce = nonce
     return false
+
+  # for an existing account, nonces must come in increasing consecutive order
+  if nonce < item.tx.nonce:
+    let rc = xp.txDB.bySender.eq(item.sender)
+    if rc.isOK:
+      if rc.value.data.any.eq(item.tx.nonce - 1).isErr:
+        var latest: AccountNonce
+        let rc = xp.txDB.bySender.eq(item.sender).any.le(AccountNonce.high)
+        if rc.isOK:
+          latest = rc.value.key
+        #echo ">>> account nonce too large have=", item.tx.nonce,
+        #   " latest=", latest, " info=", item.info
+        debug "invalid tx: account nonces gap",
+           txNonce = item.tx.nonce,
+           accountNonce = nonce
+        return false
 
   if item.tx.gasLimit < item.tx.intrinsicGas(xp.dbHead.fork):
     debug "invalid tx: not enough gas to perform calculation",
@@ -109,9 +128,7 @@ proc checkTxFees(xp: TxPoolRef;
 proc checkTxBalance(xp: TxPoolRef;
                     item: TxItemRef; param: TxClassify): bool {.inline.} =
   ## Inspired by `p2p/validate.validateTransaction()`
-  ##
-  ## Function currently unused.
-  ##
+
   let
     balance = ReadOnlyStateDB(xp.dbHead.accDb).getBalance(item.sender)
     gasCost = item.tx.gasLimit.u256 * item.tx.gasPrice.u256
@@ -183,8 +200,13 @@ proc classifyTxPending*(xp: TxPoolRef;
   if not xp.checkTxFees(item,param):
     return false
 
-  #if not item.checkTxBalance(dbHead):
-  #  return false
+  # Tx is not for the pending bucket with a nonce to be used in the future.
+  let nonce = ReadOnlyStateDB(xp.dbHead.accDb).getNonce(item.sender)
+  if nonce < item.tx.nonce:
+    return false
+
+  if not xp.checkTxBalance(item,param):
+    return false
 
   true
 

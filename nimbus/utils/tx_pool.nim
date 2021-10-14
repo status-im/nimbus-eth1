@@ -13,8 +13,8 @@
 ##
 ## TODO:
 ## -----
-## * Support `local` transactions (currently unsupported.) For now, all txs
-##   are considered from `remote` accounts.
+## * Support `local` transactions (currently unsupported and ignored.) For
+##   now, all txs are considered from `remote` accounts.
 ## * There is no handling of zero gas price transactions yet
 ## * Clarify whether there are legacy transactions possible with post-London
 ##   chain blocks.
@@ -64,19 +64,23 @@
 ## Accounting system
 ## -----------------
 ## * Queued transactions bucket (1):
-##   + holds txs tested all right but not ready to fit into a block
-##   + these txs are stored with meta-data and marked `txItemQueued`
+##   + It holds txs tested all right but not ready to fit into a block
+##   + These txs are stored with meta-data and marked `txItemQueued`
+##   + Txs have a `nonce` which is not smaller than the nonce value of the tx
+##     sender account. If it is greater than the one of the tx sender account,
+##     the predecessor nonce, i.e. `nonce-1` is in the database.
 ##
 ## * Pending transactions bucket (2):
-##   + vetted txs that are ready to go into a block
-##   + accepted against minimum fee check and other parameters (if any)
-##   + txs are marked `txItemPending`
-##   + re-org or other events may send them to queued(1) or pending(3) bucket
+##   + It holds vetted txs that are ready to go into a block.
+##   + Txs are accepted against minimum fee check and other parameters (if any)
+##   + Txs are marked `txItemPending`
+##   + Txs have a `nonce` equal to the current value of the tx sender account.
+##   + Re-org or other events may send them to queued(1) or pending(3) bucket
 ##
 ## * Staged transactions bucket (3):
-##   + all transactions to be placed and inclusded in a block
-##   + transactions are marked `txItemStaged`
-##   + re-org or other events may send txs back to queued(1) bucket
+##   + All transactions are to be placed and inclusded in a block
+##   + Transactions are marked `txItemStaged`
+##   + Re-org or other events may send txs back to queued(1) bucket
 ##
 ## Tip/waste basket
 ## ----------------
@@ -163,6 +167,12 @@
 ## transactions are handled in tasks controlled by the following parameters
 ## that affect how transactions are shuffled around.
 ##
+## priceBump
+##   There can be only one transaction in the database for the same `sender`
+##   account and `nonce` value. When adding a transaction with the same
+##   (`sender`, `nonce`) pair, the new transaction will replace the current one
+##   if it has a gas price which is at least `priceBump` per cent higher.
+##
 ## gasLimit
 ##   Taken or derived from the current block chain head, incoming txs that
 ##   exceed this gas limit are stored into the queued bucket (waiting for the
@@ -198,9 +208,10 @@
 ##
 
 import
+  ./keequ,
   ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tabs/[tx_itemid, tx_leaf],
+  ./tx_pool/tx_tabs/tx_leaf,
   ./tx_pool/tx_tasks,
   ./tx_pool/tx_tasks/[tx_add_tx,
                       tx_staged_items,
@@ -281,17 +292,17 @@ proc processJobs(xp: TxPoolRef): int
       var args = task.data.addTxsArgs
       for tx in args.txs.mitems:
         xp.txDBExclusively:
-          xp.addTx(tx, args.local, args.info)
+          xp.addTx(tx, args.info)
       updatePending = true # change may affect `pending` items
       updateStaged = true  # change may affect `staged` items
 
-    of txJobApplyByLocal:
+    of txJobApply:
       # Apply argument function to all `local` or `remote` items.
-      let args = task.data.applyByLocalArgs
+      let args = task.data.applyArgs
       xp.txRunCallBack:
         xp.txDBExclusively:
           # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash ..
-          for item in xp.txDB.byItemID.eq(args.local).walkItems:
+          for item in xp.txDB.byItemID.nextValues:
             if not args.apply(item):
               break
 
@@ -300,10 +311,9 @@ proc processJobs(xp: TxPoolRef): int
       let args = task.data.applyByStatusArgs
       xp.txRunCallBack:
         xp.txDBExclusively:
-          for itemList in xp.txDB.byStatus.incItemList(args.status):
-            for item in itemList.walkItems:
-              if not args.apply(item):
-                break
+          for item in xp.txDB.byStatus.incItemList(args.status):
+            if not args.apply(item):
+              break
 
     of txJobApplyByRejected:
       # Apply argument function to all `rejected` items.
@@ -324,13 +334,6 @@ proc processJobs(xp: TxPoolRef): int
       let args = task.data.flushRejectsArgs
       xp.txDBExclusively:
         discard xp.txDB.flushRejects(args.maxItems)
-
-    of txJobMoveRemoteToLocals:
-      # For given account, remote transactions are migrated to local
-      # transactions.
-      let args = task.data.moveRemoteToLocalsArgs
-      xp.txDBExclusively:
-        discard xp.reassignRemoteToLocals(args.account)
 
     of txJobPackBlock:
       let args = task.data.packBlockArgs
@@ -607,7 +610,19 @@ proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
   ##
   ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.txCallBackOrDBExclusively:
-    result = xp.collectAccounts(local)
+    if local:
+      result = xp.txDB.locals
+    else:
+      result = xp.txDB.remotes
+
+# core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
+proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## For given account, remote transactions are migrated to local transactions.
+  ## The function returns the number of transactions migrated.
+  xp.txCallBackOrDBExclusively:
+    xp.txDB.setLocal(signer)
+    result = xp.txDB.bySender.eq(signer).nItems
 
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
@@ -635,13 +650,21 @@ proc setStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
       xp.dirtyPending = true # change may affect `pending` items
       xp.dirtyStaged = true  # change may affect `staged` items
 
-proc rejectItem*(xp: TxPoolRef; item: TxItemRef; reason: TxInfo)
+proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
+                   reason = txInfoExplicitDisposal;
+                   otherReason = txInfoImpliedDisposal)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Move item to wastebasket.
+  ## Move item to wastebasket. All items for the same sender with nonces
+  ## greater than the current one are deleted, as well.
   ##
   ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.txCallBackOrDBExclusively:
     discard xp.txDB.dispose(item, reason)
+    # delete all items with higher nonces
+    let rc = xp.txDB.bySender.eq(item.sender)
+    if rc.isOK:
+      for other in rc.value.data.walkItems(item.tx.nonce):
+        discard xp.txDB.dispose(other, otherReason)
 
 # ------------------------------------------------------------------------------
 # End

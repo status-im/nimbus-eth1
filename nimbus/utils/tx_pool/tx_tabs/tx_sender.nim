@@ -29,7 +29,6 @@ type
     ## Chronologically ordered queue/fifo with random access. This is\
     ## typically used when queuing items for the same key (e.g. gas price.)
     size: int
-    isLocalList: array[bool,TxSenderNonceRef]
     statusList: array[TxItemStatus,TxSenderNonceRef]
     allList: TxSenderNonceRef
 
@@ -40,9 +39,7 @@ type
 
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
-    txSenderLocal = 0   ## local sub-table
-    txSenderRemote      ## remote sub-table
-    txSenderAny         ## all entries
+    txSenderAny = 0     ## all entries
     txSenderQueued      ## by status ...
     txSenderPending
     txSenderStaged
@@ -50,7 +47,6 @@ type
   TxSenderInx = object ##\
     ## Internal access data
     sAddr: TxSenderSchedRef
-    localNonce: TxSenderNonceRef   ## exclusive sub-table: local or remote
     statusNonce: TxSenderNonceRef  ## by status items sub-list
     anyNonce: TxSenderNonceRef     ## all items sub-list
 
@@ -74,17 +70,16 @@ const
 proc `$`(rq: TxSenderSchedRef): string =
   ## Needed by `rq.verify()` for printing error messages
   var n = 0
-  if not rq.isLocalList[true].isNil: n.inc
-  if not rq.isLocalList[false].isNil: n.inc
+  for status in TxItemStatus:
+    if not rq.statusList[status].isNil:
+      n.inc
   $n
 
-
-proc nActive(gs: TxSenderSchedRef): int {.inline.} =
+proc nActive(rq: TxSenderSchedRef): int {.inline.} =
   ## Number of non-nil items
-  if not gs.isLocalList[true].isNil:
-    result.inc
-  if not gs.isLocalList[false].isNil:
-    result.inc
+  for status in TxItemStatus:
+    if not rq.statusList[status].isNil:
+      result.inc
 
 proc cmp(a,b: EthAddress): int {.inline.} =
   ## mixin for SLst
@@ -93,11 +88,6 @@ proc cmp(a,b: EthAddress): int {.inline.} =
       return -1
     if b[n] < a[n]:
       return 1
-
-
-proc toSenderSchedule(local: bool): TxSenderSchedule {.inline.} =
-  ## For query functions, eq()
-  if local: txSenderLocal else: txSenderLocal
 
 proc toSenderSchedule(status: TxItemStatus): TxSenderSchedule {.inline.} =
   case status
@@ -133,16 +123,6 @@ proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
       return err()
     rc.value.data = item
 
-  # by local/remote items sub-list
-  if inxData.sAddr.isLocalList[item.local].isNil:
-    new inxData.localNonce
-    inxData.localNonce.nonceList.init
-    inxData.sAddr.isLocalList[item.local] = inxData.localNonce
-  else:
-    inxData.localNonce = inxData.sAddr.isLocalList[item.local]
-  # this is a new item, checked at `all items sub-list` above
-  inxData.localNonce.nonceList.insert(item.tx.nonce).value.data = item
-
   # by status items sub-list
   if inxData.sAddr.statusList[item.status].isNil:
     new inxData.statusNonce
@@ -166,9 +146,6 @@ proc getInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
 
   # Sub-lists are non-nil as `TxSenderSchedRef` cannot be empty
   inxData.sAddr = rc.value.data
-
-  # by local/remote items sub-list
-  inxData.localNonce = inxData.sAddr.isLocalList[item.local]
 
   # by status items sub-list
   inxData.statusNonce = inxData.sAddr.statusList[item.status]
@@ -215,10 +192,6 @@ proc txDelete*(gt: var TxSenderTab; item: TxItemRef): bool
       discard gt.addrList.delete(item.sender)
       return true
 
-    discard inx.localNonce.nonceList.delete(item.tx.nonce)
-    if inx.localNonce.nonceList.len == 0:
-      inx.sAddr.isLocalList[item.local] = nil
-
     discard inx.statusNonce.nonceList.delete(item.tx.nonce)
     if inx.statusNonce.nonceList.len == 0:
       inx.sAddr.statusList[item.status] = nil
@@ -241,25 +214,11 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
     let (addrKey, schedData) = (rcAddr.value.key, rcAddr.value.data)
     rcAddr = gt.addrList.gt(addrKey)
 
-    # at lest ((local or remote) and merged) lists must be available
+    # at least one of status lists must be available
     if schedData.nActive == 0:
       return err(txInfoVfySenderLeafEmpty)
     if schedData.allList.isNil:
       return err(txInfoVfySenderLeafEmpty)
-
-    # local/remote list
-    # ----------------------------------------------------------------
-    var localCount = 0
-    for local in [true, false]:
-      let localData = schedData.isLocalList[local]
-
-      if not localData.isNil:
-        block:
-          let rc = localData.nonceList.verify
-          if rc.isErr:
-            return err(txInfoVfySenderRbTree)
-
-        localCount += localData.nonceList.len
 
     # status list
     # ----------------------------------------------------------------
@@ -289,14 +248,12 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
       allCount = allData.nonceList.len
 
     # end for
-    if localCount != schedData.size:
-      return err(txInfoVfySenderTotal)
     if statusCount != schedData.size:
       return err(txInfoVfySenderTotal)
     if allCount != schedData.size:
       return err(txInfoVfySenderTotal)
 
-    totalCount += localCount
+    totalCount += allCount
 
   # end while
   if totalCount != gt.size:
@@ -353,22 +310,6 @@ proc nItems*(rc: SLstResult[EthAddress,TxSenderSchedRef]): int {.inline.} =
   0
 
 
-proc eq*(schedData: TxSenderSchedRef; local: bool):
-       SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
-  ## Return local, or remote entries sub-lists
-  let nonceData = schedData.isLocalList[local]
-  if nonceData.isNil:
-    return err(rbNotFound)
-  toSLstResult(key = local.toSenderSchedule, data = nonceData)
-
-proc eq*(rc: SLstResult[EthAddress,TxSenderSchedRef]; local: bool):
-       SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
-  ## Return local, or remote entries sub-list
-  if rc.isOK:
-    return rc.value.data.eq(local)
-  err(rc.error)
-
-
 proc eq*(schedData: TxSenderSchedRef; status: TxItemStatus):
        SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
   ## Return by status sub-list
@@ -406,8 +347,6 @@ proc eq*(schedData: TxSenderSchedRef;
            SLstResult[TxSenderSchedule,TxSenderNonceRef] {.inline.} =
   ## Variant of `eq()` using unified key schedule
   case key
-  of txSenderLocal, txSenderRemote:
-    return schedData.eq(key == txSenderLocal)
   of txSenderAny:
     return schedData.any
   of txSenderQueued:

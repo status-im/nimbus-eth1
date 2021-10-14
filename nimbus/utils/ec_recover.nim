@@ -42,7 +42,7 @@ type
     array[32,byte]
 
   EcAddrResult* = ##\
-    ## Typical `EthAddress` result as returned bu `ecRecover()` functions.
+    ## Typical `EthAddress` result as returned by `ecRecover()` functions.
     Result[EthAddress,UtilsError]
 
   EcRecover* = object

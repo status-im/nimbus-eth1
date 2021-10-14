@@ -9,10 +9,10 @@
 # according to those terms.
 
 import
-   std/[sequtils, strformat, strutils],
   ../../nimbus/utils/ec_recover,
   ../../nimbus/utils/tx_pool/tx_item,
-   eth/[common, common/transaction, keys],
+  ./helpers,
+  eth/[common, common/transaction, keys],
   stew/results,
   stint
 
@@ -20,9 +20,6 @@ const
   # example from clique, signer: 658bdf435d810c91414ec09147daa6db62406379
   pubKey = "658bdf435d810c91414ec09147daa6db62406379"
   prvKey = "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
-
-proc toHex(sender: EthAddress): string =
-  sender.toSeq.mapIt(&"{it:02x}").join
 
 proc toPrvKey(pkhex: string): PrivateKey =
   let rc = PrivateKey.fromHex(pkhex)
@@ -59,13 +56,15 @@ proc sign*(tx: Transaction; key: PrivateKey): Transaction =
 
 # ------------
 
-proc txModPair*(item: TxItemRef; priceBump: int):
+proc txModPair*(item: TxItemRef; nonce: int; priceBump: int):
               (TxItemRef,Transaction,Transaction) =
   ## Produce pair of modified txs, might fail => so try another one
-  var
-    tx0 = item.tx
-    tx1 = item.tx
+  var tx0 = item.tx
+  tx0.nonce = nonce.AccountNonce
+
+  var tx1 = tx0
   tx1.gasPrice = (tx0.gasPrice * (100 + priceBump) + 99) div 100
+
   let
     tx0Signed = tx0.sign(prvKey.toPrvKey)
     tx1Signed = tx1.sign(prvKey.toPrvKey)

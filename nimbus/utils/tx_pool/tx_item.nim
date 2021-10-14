@@ -22,7 +22,7 @@ import
 
 type
   GasPrice* = ##|
-    ## Handy definition distinct from `GasInt` which is a commodity while the
+    ## Handy definition distinct from `GasInt` which is a commodity while the\
     ## `GasPrice` is the value per unit of gas, similar to a kind of money.
     distinct uint64
 
@@ -44,7 +44,6 @@ type
     timeStamp: Time         ## Time when added
     sender:    EthAddress   ## Sender account address
     info:      string       ## Whatever
-    local:     bool         ## Local or remote queue (setter available)
     status:    TxItemStatus ## Transaction status (setter available)
     effGasTip: GasPriceEx   ## Effective gas tip value
     reject:    TxInfo       ## Reason for moving to waste basket
@@ -129,8 +128,8 @@ proc `<`*(a: GasPriceEx|int; b: GasPrice): bool =
 # ------------------------------------------------------------------------------
 
 
-proc newTxItemRef*(tx: Transaction; itemID: Hash256;
-                   local: bool; status: TxItemStatus; info: string):
+proc newTxItemRef*(tx: Transaction;
+                   itemID: Hash256; status: TxItemStatus; info: string):
                  Result[TxItemRef,void] {.inline.} =
   ## Create item descriptor.
   let rc = tx.ecRecover
@@ -142,11 +141,10 @@ proc newTxItemRef*(tx: Transaction; itemID: Hash256;
     sender:    rc.value,
     timeStamp: now().utc.toTime,
     info:      info,
-    local:     local,
     status:    status))
 
-proc newTxItemRef*(tx: Transaction; reject: TxInfo;
-                   local: bool; status: TxItemStatus; info: string):
+proc newTxItemRef*(tx: Transaction;
+                   reject: TxInfo; status: TxItemStatus; info: string):
                      TxItemRef {.inline.} =
   ## Create incomplete item descriptor, so meta-data can be stored (e.g.
   ## for holding in the waste basket to be investigated later.)
@@ -154,7 +152,6 @@ proc newTxItemRef*(tx: Transaction; reject: TxInfo;
     tx:        tx,
     timeStamp: now().utc.toTime,
     info:      info,
-    local:     local,
     status:    status)
 
 # ------------------------------------------------------------------------------

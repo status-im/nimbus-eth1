@@ -34,12 +34,11 @@ type
     txJobNone = 0
     txJobAbort
     txJobAddTxs
-    txJobApplyByLocal
+    txJobApply
     txJobApplyByRejected
     txJobApplyByStatus
     txJobEvictionInactive
     txJobFlushRejects
-    txJobMoveRemoteToLocals
     txJobPackBlock
     txJobSetBaseFee
     txJobSetHead
@@ -68,22 +67,18 @@ type
       discard
 
     of txJobAddTxs: ##\
-      ## Enqueues a batch of transactions into the pool if they are valid,
-      ## marking the senders as `local` or `remote` ones depending on
-      ## the request arguments.
+      ## Enqueues a batch of transactions
       addTxsArgs*: tuple[
         txs:   seq[Transaction],
-        local: bool,
         info:  string]
 
-    of txJobApplyByLocal: ##\
-      ## Apply argument function to all `local` or `remote` items.
+    of txJobApply: ##\
+      ## Apply argument function to all items.
       ##
       ## :Note:
       ##    It is OK to request the current item to be moved to the waste
       ##    basket.
-      applyByLocalArgs*: tuple[
-        local: bool,
+      applyArgs*: tuple[
         apply: TxJobItemApply]
 
     of txJobApplyByStatus: ##\
@@ -111,12 +106,6 @@ type
       ## Out-of-band job (runs with priority)
       flushRejectsArgs*: tuple[
         maxItems: int]
-
-    of txJobMoveRemoteToLocals: ##\
-      ## For given account, remote transactions are migrated to local
-      ## transactions.
-      moveRemoteToLocalsArgs*: tuple[
-        account: EthAddress]
 
     of txJobPackBlock: ##\
       ## Pack a block fetching items from the `staged` bucket. For included

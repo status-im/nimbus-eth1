@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[algorithm, os, random, sequtils, strformat, strutils, times],
+  std/[algorithm, os, random, sequtils, strformat, strutils, tables, times],
   ../nimbus/chain_config,
   ../nimbus/config,
   ../nimbus/db/db_chain,
@@ -62,8 +62,7 @@ var
   prng = prngSeed.initRand
 
   # to be set up in runTxLoader()
-  okCount: array[bool,int]             # entries: [local,remote] entries
-  statCount: array[TxItemStatus,int] # ditto
+  statCount: array[TxItemStatus,int] # per status bucket
 
   txList: seq[TxItemRef]
   effGasTips: seq[GasPriceEx]
@@ -72,15 +71,12 @@ var
   # running block chain
   bcDB: BaseChainDB
 
+  # collected accounts from block chain database transactions
+  txAccounts: seq[EthAddress]
+
 # ------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------
-
-proc randOkRatio: int =
-  if okCount[false] == 0:
-    int.high
-  else:
-    (okCount[true] * 100 / okCount[false]).int
 
 proc randStatusRatios: seq[int] =
   for n in 1 .. statCount.len:
@@ -92,17 +88,9 @@ proc randStatusRatios: seq[int] =
     else:
       result.add (statCount[prv] * 100 / statCount[inx]).int
 
-proc randOk: bool =
-  result = prng.rand(1) > 0
-  okCount[result].inc
-
 proc randStatus: TxItemStatus =
   result = prng.rand(TxItemStatus.high.ord).TxItemStatus
   statCount[result].inc
-
-proc toRemote(item: TxItemRef): TxItemRef =
-  result = item
-  item.local = false
 
 template wrapException(info: string; action: untyped) =
   try:
@@ -147,7 +135,6 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
     file = capture.dir /  capture.file
 
   # Reset/initialise
-  okCount.reset
   statCount.reset
   txList.reset
   effGasTips.reset
@@ -161,8 +148,8 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
         &"and collect {capture.numTxs} txs":
 
       elapNoisy.showElapsed("Total collection time"):
-        xp = bcDB.toTxPool(file = file,
-                           getLocal = randOk,
+        xp = bcDB.toTxPool(accounts = txAccounts,
+                           file = file,
                            getStatus = randStatus,
                            loadBlocks = capture.numBlocks,
                            loadTxs = capture.numTxs,
@@ -173,32 +160,25 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       xp.setItemStatusFromInfo
 
       check txList.len == 0
-      check xp.txDB.verify.isOK
+      check xp.verify.isOK
       check xp.count.disposed == 0
 
       noisy.say "***",
-         "Latest items:",
-         " <", xp.txDB.byItemID.eq(local = true).last.value.data.info, ">",
-         " <", xp.txDB.byItemID.eq(local = false).last.value.data.info, ">"
+         "Latest item: <", xp.txDB.byItemID.last.value.data.info, ">"
 
       # make sure that the block chain was initialised
       check capture.numBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
 
-      check xp.count.total == foldl(okCount.toSeq, a+b)   # add okCount[] values
-      check xp.count.total == foldl(statCount.toSeq, a+b) # ditto statCount[]
+      check xp.count.total == foldl(statCount.toSeq, a+b)
+      #                       ^^^ sum up statCount[] values
 
       # make sure that PRNG did not go bonkers
-      let localRemoteRatio = randOkRatio()
-      check randInitRatioBandPC < localRemoteRatio
-      check localRemoteRatio < (10000 div randInitRatioBandPC)
-
       for statusRatio in randStatusRatios():
         check randInitRatioBandPC < statusRatio
         check statusRatio < (10000 div randInitRatioBandPC)
 
       # Note: expecting enough transactions in the `goerliCapture` file
       check xp.count.total == capture.numTxs
-      check xp.verify.isOk
 
       # Load txList[]
       txList = xp.toItems
@@ -258,58 +238,6 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       check log == " wait-900-3 wait-1-3 wait-700-3 done-1 done-700 done-900"
       check xp.verify.isOK
 
-    test &"Superseding txs with sender and nonce variants":
-      var
-        xq = TxPoolRef.init(bcDB)
-        testTxs: array[5,(TxItemRef,Transaction,Transaction)]
-        testInx = 0
-      let
-        testBump = xp.priceBump
-        lastBump = testBump - 1 # implies underpriced item
-
-      # load a set of suitable txs into testTxs[]
-      for n in 0 ..< txList.len:
-        let
-          item = txList[n]
-          bump = if testInx < testTxs.high: testBump else: lastBump
-          rc = item.txModPair(bump.int)
-        if not rc[0].isNil:
-          testTxs[testInx] = rc
-          testInx.inc
-          if testTxs.high < testInx:
-            break
-
-      # verify that test does not degenerate
-      check testInx == testTxs.len
-      check 0 < lastBump # => 0 < testBump
-
-      # insert some txs
-      for triple in testTxs:
-        let item = triple[0]
-        var tx = triple[1]
-        xq.pjaAddTx(tx, item.local, item.info)
-      waitFor xq.jobCommit
-
-      check xq.count.total == testTxs.len
-      check xq.count.disposed == 0
-      let infoLst = testTxs.toSeq.mapIt(it[0].info).sorted
-      check infoLst == xq.toItems.toSeq.mapIt(it.info).sorted
-
-      # re-insert modified transactions
-      for triple in testTxs:
-        let item = triple[0]
-        var tx = triple[2]
-        xq.pjaAddTx(tx, item.local, "alt " & item.info)
-      waitFor xq.jobCommit
-
-      check xq.count.total == testTxs.len
-      check xq.count.disposed == testTxs.len
-
-      # last update item was underpriced, so it must not have been replaced
-      var altLst = testTxs.toSeq.mapIt("alt " & it[0].info)
-      altLst[^1] = testTxs[^1][0].info
-      check altLst.sorted == xq.toItems.toSeq.mapIt(it.info).sorted
-
 
 proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
 
@@ -318,135 +246,6 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
     baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
 
   suite &"TxPool: Play with queues and lists{baseInfo}":
-
-    var xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
-
-    # Set txs to pseudo random status
-    xq.setItemStatusFromInfo
-
-    let
-      nLocal = xq.count.local
-      nRemote = xq.count.remote
-      txList0local = txList[0].local
-
-    test &"Swap local/remote ({nLocal}/{nRemote}) queues":
-      check nLocal + nRemote == txList.len
-
-      # Start with local queue
-      for w in [(true, 0, nLocal), (false, nLocal, txList.len)]:
-        let local = w[0]
-        for n in w[1] ..< w[2]:
-          check txList[n].local == local
-          check xq.txDB.reassign(txList[n], not local)
-          check txList[n].info == xq.txDB.byItemID
-                                         .eq(not local).last.value.data.info
-          check xq.txDB.verify.isOK
-
-      check nLocal == xq.count.remote
-      check nRemote == xq.count.local
-
-      # maks sure the list item was left unchanged
-      check txList0local == txList[0].local
-
-      # Verify sorting of swapped queue
-      var count, n: int
-
-      count = 0
-      for (local, start) in [(true, nLocal), (false, 0)]:
-        var rc = xq.txDB.byItemID.eq(local).first
-        n = start
-        while rc.isOK and n < txList.len:
-          check txList[n].info == rc.value.data.info
-          rc = xq.txDB.byItemID.eq(local).next(rc.value.data.itemID)
-          n.inc
-          count.inc
-      check count == txList.len
-      check n == nLocal
-
-      # And reverse
-      count = 0
-      for (local, top) in [(false, nLocal), (true, txList.len)]:
-        var rc = xq.txDB.byItemID.eq(local).last
-        n = top
-        while rc.isOK and 0 < n:
-          n.dec
-          check txList[n].info == rc.value.data.info
-          rc = xq.txDB.byItemID.eq(local).prev(rc.value.data.itemID)
-          count.inc
-      check count == txList.len
-      check n == nLocal
-
-    # ---------------------------------
-
-    block:
-      var xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
-
-      # Set txs to pseudo random status
-      xq.setItemStatusFromInfo
-
-      let
-        veryNoisy = noisy # and false
-        indent = " ".repeat(6)
-
-      test &"Walk {xq.txDB.byGasTip.len} gas prices "&
-          &"for {txList.len} transactions":
-        block:
-          var
-            txCount = 0
-            gpList: seq[GasPriceEx]
-
-          elapNoisy.showElapsed("Increasing gas price transactions walk"):
-            for nonceList in xq.txDB.byGasTip.incNonceList:
-              var
-                infoList: seq[string]
-                gasTxCount = 0
-              for itemList in nonceList.incItemList:
-                for item in itemList.walkItems:
-                  infoList.add item.info
-                gasTxCount += itemList.nItems
-
-              check gasTxCount == nonceList.nItems
-              txCount += gasTxCount
-
-              let gasTip = nonceList.ge(AccountNonce.low).first.value.effGasTip
-              gpList.add gasTip
-              veryNoisy.say &"gasTip={gasTip} for {infoList.len} entries:"
-              veryNoisy.say indent, infoList.join(&"\n{indent}")
-
-          check txCount == xq.count.total
-          check gpList.len == xq.txDB.byGasTip.len
-          check effGasTips.len == gpList.len
-          check effGasTips == gpList
-
-        block:
-          var
-            txCount = 0
-            gpList: seq[GasPriceEx]
-
-          elapNoisy.showElapsed("Decreasing gas price transactions walk"):
-            for nonceList in xq.txDB.byGasTip.decNonceList:
-              var
-                infoList: seq[string]
-                gasTxCount = 0
-              for itemList in nonceList.decItemList:
-                for item in itemList.walkItems:
-                  infoList.add item.info
-                gasTxCount += itemList.nItems
-
-              check gasTxCount == nonceList.nItems
-              txCount += gasTxCount
-
-              let gasTip = nonceList.ge(AccountNonce.low).first.value.effGasTip
-              gpList.add gasTip
-              veryNoisy.say &"gasPrice={gasTip} for {infoList.len} entries:"
-              veryNoisy.say indent, infoList.join(&"\n{indent}")
-
-          check txCount == xq.count.total
-          check gpList.len == xq.txDB.byGasTip.len
-          check effGasTips.len == gpList.len
-          check effGasTips == gpList.reversed
-
-    # ---------------------------------
 
     block:
       const groupLen = 13
@@ -465,8 +264,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
                      xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Forward delete-walk ID queue"):
-          xq.pjaItemsApply(itFn, local = true)
-          xq.pjaItemsApply(itFn, local = false)
+          xq.pjaItemsApply(itFn)
           waitFor xq.jobCommit
         check xq.txDB.verify.isOK
         check seen.len == xq.count.total
@@ -485,8 +283,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
                      xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Revese delete-walk ID queue"):
-          xq.pjaItemsApply(itFn, local = true)
-          xq.pjaItemsApply(itFn, local = false)
+          xq.pjaItemsApply(itFn)
           waitFor xq.jobCommit
         check xq.txDB.verify.isOK
         check seen.len == xq.count.total
@@ -497,10 +294,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
     block:
       var
         count = 0
-        xq = bcDB.toTxPool(itList = txList,
-                           baseFee = baseFee,
-                           maxRejects = txList.len,
-                           noisy = noisy)
+        xq = bcDB.toTxPool(txList, baseFee, noisy)
       # Set txs to pseudo random status
       xq.setItemStatusFromInfo
 
@@ -526,10 +320,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
     block:
       var
         count = 0
-        xq = bcDB.toTxPool(itList = txList,
-                           baseFee = baseFee,
-                           maxRejects = txList.len,
-                           noisy = noisy)
+        xq = bcDB.toTxPool(txList, baseFee, noisy)
       # Set txs to pseudo random status
       xq.setItemStatusFromInfo
 
@@ -583,7 +374,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
             for itemList in nonceList.incItemList:
               for item in itemList.walkItems:
                 seen.add item.itemID
-          check txList.len == xq.txDB.byItemID.nItems
+          check txList.len == xq.txDB.byItemID.len
           check txList.len == seen.len
           check tips != effGasTips              # values should have changed
           check seen != txList.mapIt(it.itemID) # order should have changed
@@ -603,7 +394,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
               nces.add itemList.first.value.tx.nonce
               for item in itemList.walkItems:
                 seen.add item.itemID
-          check txList.len == xq.txDB.byItemID.nItems
+          check txList.len == xq.txDB.byItemID.len
           check txList.len == seen.len
           check tips == effGasTips              # values restored
           check nces == baseNonces              # values restored
@@ -612,27 +403,101 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
 
 
 proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
-  let
-    baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
+  let baseInfo = if 0 < baseFee: &" with baseFee={baseFee}" else: ""
 
   suite &"TxPool: Play with pool functions and primitives{baseInfo}":
+
+    block:
+      var
+        xq = TxPoolRef.init(bcDB)
+        testTxs: array[5,(TxItemRef,Transaction,Transaction)]
+
+      test &"Superseding txs with sender and nonce variants":
+        var
+          testInx = 0
+        let
+          testBump = xq.priceBump
+          lastBump = testBump - 1 # implies underpriced item
+
+        # load a set of suitable txs into testTxs[]
+        for n in 0 ..< txList.len:
+          let
+            item = txList[n]
+            bump = if testInx < testTxs.high: testBump else: lastBump
+            rc = item.txModPair(testInx,bump.int)
+          if not rc[0].isNil:
+            testTxs[testInx] = rc
+            testInx.inc
+            if testTxs.high < testInx:
+              break
+
+        # verify that test does not degenerate
+        check testInx == testTxs.len
+        check 0 < lastBump # => 0 < testBump
+
+        # insert some txs
+        for triple in testTxs:
+          let item = triple[0]
+          var tx = triple[1]
+          xq.pjaAddTx(tx, item.info)
+        waitFor xq.jobCommit
+
+        check xq.count.total == testTxs.len
+        check xq.count.disposed == 0
+        let infoLst = testTxs.toSeq.mapIt(it[0].info).sorted
+        check infoLst == xq.toItems.toSeq.mapIt(it.info).sorted
+
+        # re-insert modified transactions
+        for triple in testTxs:
+          let item = triple[0]
+          var tx = triple[2]
+          xq.pjaAddTx(tx, "alt " & item.info)
+        waitFor xq.jobCommit
+
+        check xq.count.total == testTxs.len
+        check xq.count.disposed == testTxs.len
+
+        # last update item was underpriced, so it must not have been replaced
+        var altLst = testTxs.toSeq.mapIt("alt " & it[0].info)
+        altLst[^1] = testTxs[^1][0].info
+        check altLst.sorted == xq.toItems.toSeq.mapIt(it.info).sorted
+
+      test &"Deleting tx => also delete higher nonces":
+
+        let
+          # From the data base, get the one before last item. This was
+          # replaced earlier by the second transaction in the triple, i.e.
+          # testTxs[^2][2]. FYI, the last transaction is testTxs[^1][1] as
+          # it could not be replaced earlier by testTxs[^1][2].
+          item = xq.getItem(testTxs[^2][2].itemID).value
+
+          nWasteBasket = xq.count.disposed
+
+        # make sure the test makes sense, nonces were 0 ..< testTxs.len
+        check (item.tx.nonce + 2).int == testTxs.len
+
+        xq.disposeItems(item)
+
+        check xq.count.total + 2 == testTxs.len
+        check nWasteBasket + 2 == xq.count.disposed
+
+    # --------------------------
 
     block:
       var
         gap: Time
         nItems: int
         xq = bcDB.toTxPool(timeGap = gap,
-                           nRemoteGapItems = nItems,
+                           nGapItems = nItems,
                            itList = txList,
                            baseFee = baseFee,
-                           remoteItemsPC = 35, # arbitrary
+                           itemsPC = 35,       # arbitrary
                            delayMSecs = 100,   # large enough to process
                            noisy = noisy)
       # Set txs to pseudo random status
       xq.setItemStatusFromInfo
 
-      test &"Delete about {nItems} expired non-local transactions "&
-          &"out of {xq.count.remote}":
+      test &"Delete about {nItems} expired txs out of {xq.count.total}":
 
         check 0 < nItems
         xq.lifeTime = getTime() - gap
@@ -643,7 +508,6 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         waitFor xq.jobCommit
         let deletedItems = xq.count.disposed
 
-        check xq.count.local == okCount[true]
         check xq.verify.isOK # not: xq.txDB.verify
         check deletedItems == txList.len - xq.count.total
 
@@ -652,207 +516,116 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         check deletedItemsRatioBandPC < deleteExpextRatio
         check deleteExpextRatio < (10000 div deletedItemsRatioBandPC)
 
-    # ---------------------------------
+    # --------------------
 
     block:
       var
-        xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
+        xq = bcDB.toTxPool(txList, baseFee, noisy)
         maxAddr: EthAddress
         nAddrItems = 0
-
-        nAddrRemoteItems = 0
-        nAddrLocalItems = 0
 
         nAddrQueuedItems = 0
         nAddrPendingItems = 0
         nAddrStagedItems = 0
 
+        fromNumItems = nAddrQueuedItems
+        fromBucketInfo = "queued"
+        fromBucket = txItemQueued
+        toBucketInfo =  "pending"
+        toBucket = txItemPending
+
       # Set txs to pseudo random status
       xq.setItemStatusFromInfo
 
-      let
-        nLocalAddrs = toSeq(xq.getAccounts(local = true)).len
-        nRemoteAddrs = toSeq(xq.txDB.bySender.walkNonceList(local = false)).len
+      # find address with max number of transactions
+      for schedList in xq.txDB.bySender.walkSchedList:
+        if nAddrItems < schedList.nItems:
+          maxAddr = schedList.any.ge(AccountNonce.low).value.data.sender
+          nAddrItems = schedList.nItems
 
-      block:
-        test "About half of transactions in largest address group are remotes":
+      # count items
+      nAddrQueuedItems = xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
+      nAddrPendingItems = xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+      nAddrStagedItems = xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
 
-          check 0 < nLocalAddrs
-          check 0 < nRemoteAddrs
+      # find the largest from-bucket
+      if fromNumItems < nAddrPendingItems:
+        fromNumItems = nAddrPendingItems
+        fromBucketInfo = "pending"
+        fromBucket = txItemPending
+        toBucketInfo = "staged"
+        toBucket = txItemStaged
+      if fromNumItems < nAddrStagedItems:
+        fromNumItems = nAddrStagedItems
+        fromBucketInfo = "staged"
+        fromBucket = txItemStaged
+        toBucketInfo = "queued"
+        toBucket = txItemQueued
 
-          # find address with max number of transactions
-          for schedList in xq.txDB.bySender.walkSchedList:
-            if nAddrItems < schedList.nItems:
-              maxAddr = schedList.any.ge(AccountNonce.low).value.data.sender
-              nAddrItems = schedList.nItems
+      let moveNumItems = fromNumItems div 2
 
-          # requite mimimum => there is a status queue with at least 2 entries
-          check 3 < nAddrItems
+      test &"Reassign {moveNumItems} of {fromNumItems} items "&
+          &"from \"{fromBucketInfo}\" to \"{toBucketInfo}\"":
 
-          # count the number of locals and remotes for this address
-          nAddrRemoteItems =
-                  xq.txDB.bySender.eq(maxAddr).eq(local = false).nItems
-          nAddrLocalItems =
-                  xq.txDB.bySender.eq(maxAddr).eq(local = true).nItems
-          check nAddrRemoteItems + nAddrLocalItems == nAddrItems
+        # requite mimimum => there is a status queue with at least 2 entries
+        check 3 < nAddrItems
 
-          nAddrQueuedItems =
-                  xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-          nAddrPendingItems =
-                  xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-          nAddrStagedItems =
-                  xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
-          check nAddrQueuedItems +
-                  nAddrPendingItems +
-                  nAddrStagedItems == nAddrItems
+        check nAddrQueuedItems +
+                nAddrPendingItems +
+                nAddrStagedItems == nAddrItems
 
-          # make suke the random assignment made some sense
-          check 0 < nAddrQueuedItems
-          check 0 < nAddrPendingItems
-          check 0 < nAddrStagedItems
+        check 0 < moveNumItems
+        check 1 < fromNumItems
 
-          # make sure that local/remote ratio makes sense
-          let localRemoteRatio =
-             (((nAddrItems - nAddrRemoteItems) * 100) / nAddrRemoteItems).int
-          check addrGroupLocalRemotePC < localRemoteRatio
-          check localRemoteRatio < (10000 div addrGroupLocalRemotePC)
+        var count = 0
+        let ncList = xq.txDB.bySender.eq(maxAddr).eq(fromBucket).value.data
+        block collect:
+          for item in ncList.walkItems:
+            count.inc
+            check xq.txDB.reassign(item, toBucket)
+            if moveNumItems <= count:
+              break collect
+        check xq.txDB.verify.isOK
 
-      block:
-        test &"Reassign/move {nAddrRemoteItems} \"remote\" to " &
-            &"{nAddrLocalItems} \"local\" items in largest address group " &
-            &"with {nAddrItems} items":
-          let
-            nLocals = xq.count.local
-            nRemotes = xq.count.remote
-
-          xq.pjaRemoteToLocals(maxAddr)
-          waitFor xq.jobCommit
-
-          check xq.txDB.verify.isOK
-          check xq.txDB.bySender.eq(maxAddr).eq(local = false).isErr
-
-          check nLocals + nRemotes == xq.count.total
-          check xq.count.local + xq.count.remote == xq.count.total
-          check xq.count.local == nLocals + nAddrRemoteItems
-
-          check nRemoteAddrs ==
-            1 + toSeq(xq.txDB.bySender.walkNonceList(local = false)).len
-
-          if 0 < nAddrLocalItems:
-            check nLocalAddrs == toSeq(xq.getAccounts(local = true)).len
-          else:
-            check nLocalAddrs == 1 + toSeq(xq.getAccounts(local = true)).len
-
+        case fromBucket
+        of txItemQueued:
+          check nAddrQueuedItems - moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
+          check nAddrPendingItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+          check nAddrStagedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
+        of txItemPending:
+          check nAddrPendingItems - moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+          check nAddrStagedItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
           check nAddrQueuedItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-          check nAddrPendingItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+        else:
+          check nAddrStagedItems - moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
+          check nAddrQueuedItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
           check nAddrStagedItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
 
       # --------------------
 
-      block:
-        var
-          fromNumItems = nAddrQueuedItems
-          fromBucketInfo = "queued"
-          fromBucket = txItemQueued
-          toBucketInfo =  "pending"
-          toBucket = txItemPending
+      var expect: (int,int,int)
+      for schedList in xq.txDB.bySender.walkSchedList:
+        expect[0] += schedList.eq(txItemQueued).nItems
+        expect[1] += schedList.eq(txItemPending).nItems
+        expect[2] += schedList.eq(txItemStaged).nItems
 
-        # find the largest from-bucket
-        if fromNumItems < nAddrPendingItems:
-          fromNumItems = nAddrPendingItems
-          fromBucketInfo = "pending"
-          fromBucket = txItemPending
-          toBucketInfo = "staged"
-          toBucket = txItemStaged
-        if fromNumItems < nAddrStagedItems:
-          fromNumItems = nAddrStagedItems
-          fromBucketInfo = "staged"
-          fromBucket = txItemStaged
-          toBucketInfo = "queued"
-          toBucket = txItemQueued
-
-        let
-          moveNumItems = fromNumItems div 2
-
-        test &"Reassign {moveNumItems} of {fromNumItems} items "&
-            &"from \"{fromBucketInfo}\" to \"{toBucketInfo}\"":
-          check 0 < moveNumItems
-          check 1 < fromNumItems
-
-          var count = 0
-          let ncList = xq.txDB.bySender.eq(maxAddr).eq(fromBucket).value.data
-          block collect:
-            for item in ncList.walkItemList:
-              count.inc
-              check xq.txDB.reassign(item, toBucket)
-              if moveNumItems <= count:
-                break collect
-          check xq.txDB.verify.isOK
-
-          case fromBucket
-          of txItemQueued:
-            check nAddrQueuedItems - moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-            check nAddrPendingItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-            check nAddrStagedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
-          of txItemPending:
-            check nAddrPendingItems - moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-            check nAddrStagedItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
-            check nAddrQueuedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-          else:
-            check nAddrStagedItems - moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
-            check nAddrQueuedItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-            check nAddrStagedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
-
-      # --------------------
-
-      block:
-        var expect: (int,int)
-        for schedList in xq.txDB.bySender.walkSchedList:
-          expect[0] += schedList.eq(txItemPending).nItems
-          expect[1] += schedList.eq(txItemQueued).nItems
-
-        test &"Get global ({expect[0]},{expect[1]}) status via task manager":
-          let status = xq.count
-          check expect == (status.pending,status.queued)
-
-      # --------------------
-
-      block:
-        test &"Delete locals from largest address group so it becomes empty":
-
-          # clear waste basket
-          xq.pjaFlushRejects
-          waitFor xq.jobCommit
-
-          var rejCount = 0
-          let addrLocals = xq.txDB.bySender.eq(maxAddr)
-                                           .eq(local = true).value.data
-          for item in addrLocals.walkItemList:
-            check xq.txDB.dispose(item,txInfoErrUnspecified)
-            rejCount.inc
-
-          check nLocalAddrs == 1 + toSeq(xq.getAccounts(local = true)).len
-          check xq.count.disposed == rejCount
-          check xq.txDB.verify.isOK
+      test &"Verify #items per bucket ({expect[0]},{expect[1]},{expect[2]})":
+        let status = xq.count
+        check expect == (status.queued,status.pending,status.staged)
 
 
 proc runTxPackerTests(noisy = true) =
 
   suite &"TxPool: Block packer tests":
-    let
-      remList = txList.mapIt(it.toRemote) # remotes only list
     var
       ntBaseFee = 0.GasPrice
       ntNextFee = 0.GasPrice
@@ -886,19 +659,19 @@ proc runTxPackerTests(noisy = true) =
 
     block:
       var
-        xq = bcDB.toTxPool(remList, baseFee = ntBaseFee, noisy = noisy)
-        xr = bcDB.toTxPool(remList, baseFee = ntNextFee, noisy = noisy)
+        xq = bcDB.toTxPool(txList, ntBaseFee, noisy)
+        xr = bcDB.toTxPool(txList, ntNextFee, noisy)
       block:
         let
           queued = xq.count.queued
           pending = xq.count.pending
 
-        test &"Load \"remote\" txs with baseFee={ntBaseFee}, "&
+        test &"Load txs with baseFee={ntBaseFee}, "&
             &"queued/pending={queued}/{pending}":
 
           check 0 < queued
           check 0 < pending
-          check xq.count.remote == txList.len
+          check xq.count.total == txList.len
           check xq.count.disposed == 0
 
       block:
@@ -911,7 +684,7 @@ proc runTxPackerTests(noisy = true) =
 
           check 0 < queued
           check 0 < pending
-          check xr.count.remote == txList.len
+          check xr.count.total == txList.len
           check xr.count.disposed == 0
 
           check xq.getBaseFee == ntBaseFee
@@ -1005,9 +778,28 @@ proc txPoolMain*(noisy = defined(debug)) =
   noisy.runTxPackerTests
 
 when isMainModule:
+  import ../nimbus/db/accounts_cache
+
+  proc showAccounts =
+    var senders = txAccounts.mapIt((it,true)).toTable
+    for item in txList:
+      if not senders.hasKey(item.sender):
+        senders[item.sender] = false
+    let
+      header = bcDB.getCanonicalHead
+      cache = AccountsCache.init(bcDB.db, header.stateRoot, bcDB.pruneTrie)
+    for (sender,known) in senders.pairs:
+      let
+        isKnown = if known: " known" else: " new  "
+        id = sender.toHex[30..39]
+        nonce = cache.getNonce(sender)
+        balance = cache.getBalance(sender)
+      echo &">>> {id} {isKnown} balance={balance} nonce={nonce}"
+
   proc localDir(c: CaptureSpecs): CaptureSpecs =
     result = c
     result.dir = "."
+
   const
     noisy = defined(debug)
     baseFee = 42.GasPrice
@@ -1021,7 +813,7 @@ when isMainModule:
   noisy.runTxLoader(baseFee, capture = capts1)
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
-  true.runTxPackerTests
+  noisy.runTxPackerTests
 
   #noisy.runTxLoader(baseFee, dir = ".")
   #noisy.runTxPoolTests(baseFee)

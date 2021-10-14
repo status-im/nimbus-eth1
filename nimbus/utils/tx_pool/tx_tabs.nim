@@ -19,11 +19,13 @@
 ##
 
 import
+  std/[sequtils, tables],
   ../keequ,
+  ../keequ/kq_debug,
   ../slst,
   ./tx_info,
   ./tx_item,
-  ./tx_tabs/[tx_itemid, tx_leaf, tx_price, tx_sender, tx_status, tx_tipcap],
+  ./tx_tabs/[tx_leaf, tx_price, tx_sender, tx_status, tx_tipcap],
   eth/[common, keys],
   stew/results
 
@@ -33,22 +35,43 @@ export
 
 type
   TxTabsStatsCount* = tuple
-    local, remote: int           ## sum => total
     queued, pending, staged: int ## sum => total
     total: int                   ## excluding rejects
     disposed: int                ## waste basket
 
   TxTabsRef* = ref object ##\
     ## Base descriptor
-    maxRejects: int           ## madximal number of items in waste basket
-    baseFee: GasPrice         ## `byGasTip` re-org when changing
+    maxRejects: int ##\
+      ## madximal number of items in waste basket
 
-    byItemID*: TxItemIDTab    ## Primary table, queued by arrival event
-    byGasTip*: TxPriceTab     ## Indexed by `effectiveGasTip` > `nonce`
-    byTipCap*: TxTipCapTab    ## Indexed by `gasTipCap`
-    bySender*: TxSenderTab    ## Indexed by `sender` > `local/status` > `nonce`
-    byStatus*: TxStatusTab    ## Indexed by `status` > `nonce`
-    byRejects*: TxLeafItemRef ## Rejects queue, waste basket
+    baseFee: GasPrice##\
+      ## `byGasTip` re-org when changing
+
+    # ----- primary tables ------
+
+    byLocal*: Table[EthAddress,bool] ##\
+      ## List of local accounts
+
+    byRejects*: TxLeafItemRef ##\
+      ## Rejects queue, waste basket
+
+    byItemID*: KeeQu[Hash256,TxItemRef] ##\
+      ## Primary table, queued by arrival event
+
+    # ----- index tables ------
+
+    byGasTip*: TxPriceTab ##\
+      ## Index for byItemID, `effectiveGasTip` > `nonce`
+
+    byTipCap*: TxTipCapTab ##\
+      ## Index for byItemID, `gasTipCap`
+
+    bySender*: TxSenderTab ##\
+      ## Index for byItemID, `sender` > `status` > `nonce`
+
+    byStatus*: TxStatusTab ##\
+      ## Index for byItemID, `status` > `nonce`
+
 
 const
   txTabMaxRejects = ##\
@@ -56,6 +79,16 @@ const
     ## be automatically removed so that there are no more than this many items
     ## in the rejects queue.
     500
+
+  minEthAddress = block:
+    var rc: EthAddress
+    rc
+
+  maxEthAddress = block:
+    var rc: EthAddress
+    for n in 0 ..< rc.len:
+      rc[n] = 255
+    rc
 
 {.push raises: [Defect].}
 
@@ -77,7 +110,7 @@ proc deleteImpl(xp: TxTabsRef; item: TxItemRef): bool
   ## Delete transaction (and wrapping container) from the database. If
   ## successful, the function returns the wrapping container that was just
   ## removed.
-  if xp.byItemID.txDelete(item):
+  if xp.byItemID.delete(item.itemID).isOK:
     xp.byGasTip.txDelete(item)
     xp.byTipCap.txDelete(item)
     discard xp.bySender.txDelete(item)
@@ -88,7 +121,7 @@ proc insertImpl(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   if not xp.bySender.txInsert(item):
     return err(txInfoErrSenderNonceIndex)
-  xp.byItemID.txAppend(item)
+  discard xp.byItemID.append(item.itemID,item)
   xp.byGasTip.txInsert(item)
   xp.byTipCap.txInsert(item)
   xp.byStatus.txInsert(item)
@@ -104,12 +137,15 @@ proc init*(T: type TxTabsRef; baseFee = 0.GasPrice): T =
   result.maxRejects = txTabMaxRejects
   result.baseFee = baseFee
 
-  result.byItemID.txInit
+  # result.byLocal -- Table, no need to init
+  # result.byItemID -- KeeQu, no need to init
+  result.byRejects = TxLeafItemRef.txNew
+
+  # index tables
   result.byGasTip.txInit(update = result.updateEffectiveGasTip)
   result.byTipCap.txInit
   result.bySender.txInit
   result.byStatus.txInit
-  result.byRejects = txNew(type TxLeafItemRef, size = 100)
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
@@ -118,7 +154,6 @@ proc init*(T: type TxTabsRef; baseFee = 0.GasPrice): T =
 proc insert*(
     xp: TxTabsRef;
     tx: var Transaction;
-    local = false;
     status = txItemQueued;
     info = ""): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -142,7 +177,7 @@ proc insert*(
     return err(txInfoErrAlreadyKnown)
   var item: TxItemRef
   block:
-    let rc = tx.newTxItemRef(itemID, local, status, info)
+    let rc = tx.newTxItemRef(itemID, status, info)
     if rc.isErr:
       return err(txInfoErrInvalidSender)
     item = rc.value
@@ -159,24 +194,6 @@ proc insert*(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
     return err(txInfoErrAlreadyKnown)
   return xp.insertImpl(item.dup)
 
-
-proc reassign*(xp: TxTabsRef; item: TxItemRef; local: bool): bool
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Reassign transaction local/remote flag of a database entry. The function
-  ## succeeds returning the transaction item if the transaction was found with
-  ## a different local/remote flag than the argument `local` and subsequently
-  ## changed.
-  # make sure that the argument `item` is not some copy
-  let rc = xp.byItemID.eq(item.itemID)
-  if rc.isOK:
-    var realItem = rc.value
-    if realItem.local != local:
-      discard xp.bySender.txDelete(realItem) # delete original
-      discard xp.byItemID.txDelete(realItem)
-      realItem.local = local
-      discard xp.bySender.txInsert(realItem) # re-insert changed
-      xp.byItemID.txAppend(realItem)
-      return true
 
 proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -217,15 +234,15 @@ proc dispose*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
     item.reject = reason
     return xp.byRejects.txAppend(item)
 
-proc reject*(xp: TxTabsRef; tx: var Transaction; reason: TxInfo;
-             local = false; status = txItemQueued; info = "")
+proc reject*(xp: TxTabsRef; tx: var Transaction;
+             reason: TxInfo; status = txItemQueued; info = "")
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Similar to dispose but for a tx without the item wrapper, the function
   ## imports the tx into the waste basket (e.g. after it could not
   ## be inserted.)
   if xp.maxRejects <= xp.byRejects.nItems:
     discard xp.flushRejects(1 + xp.byRejects.nItems - xp.maxRejects)
-  let item = tx.newTxItemRef(reason, local, status, info)
+  let item = tx.newTxItemRef(reason, status, info)
   discard xp.byRejects.txAppend(item)
 
 # ------------------------------------------------------------------------------
@@ -275,35 +292,56 @@ proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
   result.pending = xp.byStatus.eq(txItemPending).nItems
   result.staged = xp.byStatus.eq(txItemStaged).nItems
 
-  result.local = xp.byItemID.eq(local = true).nItems
-  result.remote = xp.byItemID.eq(local = false).nItems
-
-  result.total =  xp.byItemID.nItems
+  result.total =  xp.byItemID.len
 
   result.disposed = xp.byRejects.nItems
 
 # ------------------------------------------------------------------------------
-# Public iterators, `sender` > `local` > `nonce` > `item`
+# Public functions: local/remote sender accounts
 # ------------------------------------------------------------------------------
 
-iterator walkItemList*(senderTab: var TxSenderTab): TxItemRef
+proc isLocal*(xp: TxTabsRef; sender: EthAddress): bool {.inline.} =
+  ## Returns `true` if account address is local
+  xp.byLocal.hasKey(sender)
+
+proc locals*(xp: TxTabsRef): seq[EthAddress] {.inline.} =
+  ## Returns  an unsorted list of addresses tagged *local*
+  toSeq(xp.byLocal.keys)
+
+proc remotes*(xp: TxTabsRef): seq[EthAddress] {.inline.} =
+  ## Returns  an unsorted list of untagged addresses
+  var rcAddr = xp.bySender.first
+  while rcAddr.isOK:
+    let sender = rcAddr.value.key
+    rcAddr = xp.bySender.next(sender)
+    if not xp.byLocal.hasKey(sender):
+      result.add sender
+
+proc setLocal*(xp: TxTabsRef; sender: EthAddress) {.inline.} =
+  ## Tag `sender` address argument *local*
+  xp.byLocal[sender] = true
+
+proc resLocal*(xp: TxTabsRef; sender: EthAddress) {.inline.} =
+  ## Untag *local* `sender` address argument.
+  xp.byLocal.del(sender)
+
+# ------------------------------------------------------------------------------
+# Public iterators, `sender` > `nonce` > `item`
+# ------------------------------------------------------------------------------
+
+iterator walkItems*(senderTab: var TxSenderTab): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Walk over item lists grouped by sender addresses.
+  ## Walk over item lists grouped by sender addresses with inceasing nonces
+  ## per sender.
   var rcAddr = senderTab.first
   while rcAddr.isOK:
-    let (addrKey, schedList) = (rcAddr.value.key, rcAddr.value.data)
+    let (addrKey, nonceList) = (rcAddr.value.key, rcAddr.any.value.data)
 
-    for local in [true, false]:
-      let rcSched = schedList.eq(local)
-
-      if rcSched.isOk:
-        let nonceList = rcSched.value.data
-
-        var rcNonce = nonceList.ge(AccountNonce.low)
-        while rcNonce.isOk:
-          let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
-          yield item
-          rcNonce = nonceList.gt(nonceKey)
+    var rcNonce = nonceList.ge(AccountNonce.low)
+    while rcNonce.isOk:
+      let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+      yield item
+      rcNonce = nonceList.gt(nonceKey)
 
     rcAddr = senderTab.next(addrKey)
 
@@ -317,71 +355,49 @@ iterator walkSchedList*(senderTab: var TxSenderTab): TxSenderSchedRef =
     rcAddr = senderTab.next(addrKey)
     yield schedList
 
-iterator walkNonceList*(senderTab: var TxSenderTab;
-                        local: varArgs[bool]): TxSenderNonceRef =
+iterator walkNonceList*(senderTab: var TxSenderTab): TxSenderNonceRef =
   ## Walk over item lists grouped by sender addresses and local/remote. This
   ## iterator stops at the `TxSenderNonceRef` level sub-list.
   var rcAddr = senderTab.first
   while rcAddr.isOK:
-    let (addrKey, schedList) = (rcAddr.value.key, rcAddr.value.data)
-
-    for isLocal in local:
-      let rcSched = schedList.eq(isLocal)
-      if rcSched.isOk:
-        let nonceList = rcSched.value.data
-        yield nonceList
+    let (addrKey, nonceList) = (rcAddr.value.key, rcAddr.any.value.data)
+    yield nonceList
 
     rcAddr = senderTab.next(addrKey)
 
-iterator walkItemList*(nonceList: TxSenderNonceRef): TxItemRef
+iterator walkItems*(nonceList: TxSenderNonceRef;
+                    nonce = AccountNonce.low): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Top level part to replace `xp.bySender.walkItem` with:
+  ## Top level part to replace `xp.bySender.walkItems` with:
   ## ::
-  ##  for nonceList in xp.bySender.walkNonceList(true,false):
-  ##    for itemList in nonceList.walkItemList:
-  ##      for item in itemList.walkItems:
-  ##        ...
+  ##  for nonceList in xp.bySender.walkNonceList:
+  ##    for item in nonceList.walkItems:
+  ##      ...
   ##
-  var rcNonce = nonceList.ge(AccountNonce.low)
+  var rcNonce = nonceList.ge(nonce)
   while rcNonce.isOk:
     let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
     yield item
     rcNonce = nonceList.gt(nonceKey)
 
-iterator walkItemList*(schedList: TxSenderSchedRef): TxItemRef
+iterator walkItems*(schedList: TxSenderSchedRef;
+                    nonce = AccountNonce.low): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Top level part to replace `xp.bySender.walkItem` with:
   ## ::
-  ##  for schedList in xp.bySender.walkSchedList(true,false):
-  ##    for schedList in nonceList.walkItemList:
-  ##      for item in itemList.walkItems:
-  ##        ...
+  ##  for schedList in xp.bySender.walkSchedList:
+  ##    for item in schedList.walkItems:
+  ##      ...
   ##
   let nonceList = schedList.any.value.data
-  var rcNonce = nonceList.ge(AccountNonce.low)
+  var rcNonce = nonceList.ge(nonce)
   while rcNonce.isOk:
     let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
     yield item
     rcNonce = nonceList.gt(nonceKey)
 
-#[
-# deprecated
-
-iterator walkItemList*(schedList: TxSenderSchedRef;
-                       sched: TxSenderSchedule): TxItemRef
-    {.gcsafe,raises: [Defect,KeyError].} =
-  let rc = schedList.eq(sched)
-  if rc.isOK:
-    let nonceList = rc.value.data
-    var rcNonce = nonceList.ge(AccountNonce.low)
-    while rcNonce.isOk:
-      let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
-      yield item
-      rcNonce = nonceList.gt(nonceKey)
-]#
-
-iterator walkItemList*(schedList: TxSenderSchedRef;
-                       status: TxItemStatus): TxItemRef
+iterator walkItems*(schedList: TxSenderSchedRef;
+                    status: TxItemStatus): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   let rc = schedList.eq(status)
   if rc.isOK:
@@ -518,25 +534,41 @@ iterator decItemList*(gasTab: var TxTipCapTab;
 # Public iterators, `TxItemStatus` > `item`
 # -----------------------------------------------------------------------------
 
-iterator incItemList*(stTab: var TxStatusTab;
-                      status: TxItemStatus): TxLeafItemRef
+iterator incItemList*(stTab: var TxStatusTab; status: TxItemStatus): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Ditto
-  var rc = stTab.eq(status).ge(AccountNonce.low)
-  while rc.isOK:
-    let nonceKey = rc.value.key
-    yield rc.value.data
-    rc = stTab.eq(status).gt(nonceKey)
+  ## For given status, walk: `EthAddress` > `AccountNonce` > item
+  let rcStatus = stTab.eq(status)
+  if rcStatus.isOK:
+    var rcAddr = rcStatus.ge(minEthAddress)
+    while rcAddr.isOK:
+      let (addrKey, nonceData) = (rcAddr.value.key, rcAddr.value.data)
 
-iterator decItemList*(stTab: var TxStatusTab;
-                      status: TxItemStatus): TxLeafItemRef
+      var rcNonce = nonceData.ge(AccountNonce.low)
+      while rcNonce.isOK:
+        let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+
+        yield item
+        rcNonce = nonceData.gt(nonceKey)
+
+      rcAddr = rcStatus.gt(addrKey)
+
+iterator decItemList*(stTab: var TxStatusTab; status: TxItemStatus): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
-  ## Ditto
-  var rc = stTab.eq(status).le(AccountNonce.high)
-  while rc.isOK:
-    let nonceKey = rc.value.key
-    yield rc.value.data
-    rc = stTab.eq(status).lt(nonceKey)
+  ## For given status, walk: `EthAddress` > `AccountNonce` > item
+  let rcStatus = stTab.eq(status)
+  if rcStatus.isOK:
+    var rcAddr = rcStatus.le(maxEthAddress)
+    while rcAddr.isOK:
+      let (addrKey, nonceData) = (rcAddr.value.key, rcAddr.value.data)
+
+      var rcNonce = nonceData.le(AccountNonce.high)
+      while rcNonce.isOK:
+        let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+
+        yield item
+        rcNonce = nonceData.lt(nonceKey)
+
+      rcAddr = rcStatus.lt(addrKey)
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
@@ -558,9 +590,9 @@ proc verify*(xp: TxTabsRef): Result[void,TxInfo]
     if rc.isErr:
       return rc
   block:
-    let rc = xp.byItemID.txVerify
+    let rc = xp.byItemID.verify
     if rc.isErr:
-      return rc
+      return err(txInfoVfyItemIdList)
   block:
     let rc = xp.byStatus.txVerify
     if rc.isErr:
@@ -577,16 +609,16 @@ proc verify*(xp: TxTabsRef): Result[void,TxInfo]
     if xp.byStatus.eq(status).nItems != senderCount:
       return err(txInfoVfyStatusSenderTotal)
 
-  if xp.byItemID.nItems != xp.bySender.nItems:
+  if xp.byItemID.len != xp.bySender.nItems:
      return err(txInfoVfySenderTotal)
 
-  if xp.byItemID.nItems != xp.byGasTip.nItems:
+  if xp.byItemID.len != xp.byGasTip.nItems:
      return err(txInfoVfyGasTipTotal)
 
-  if xp.byItemID.nItems != xp.byTipCap.nItems:
+  if xp.byItemID.len != xp.byTipCap.nItems:
      return err(txInfoVfyTipCapTotal)
 
-  if xp.byItemID.nItems != xp.byStatus.nItems:
+  if xp.byItemID.len != xp.byStatus.nItems:
      return err(txInfoVfyStatusTotal)
 
   # ---------------------

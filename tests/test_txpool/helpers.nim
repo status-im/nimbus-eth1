@@ -47,7 +47,6 @@ export
   tx_tabs.reassign,
   tx_tabs.reject,
   tx_tabs.verify,
-  tx_tabs.walkItemList,
   tx_tabs.walkItems,
   tx_tabs.walkNonceList,
   tx_tabs.walkSchedList,
@@ -67,6 +66,9 @@ const
     rc[txItemPending] = "P"
     rc[txItemStaged] = "S"
     rc
+
+proc toHex*(acc: EthAddress): string =
+  acc.toSeq.mapIt(&"{it:02x}").join
 
 proc pp*(txs: openArray[Transaction]; pfx = ""): string =
   let txt = block:

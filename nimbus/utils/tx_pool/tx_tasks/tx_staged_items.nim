@@ -56,10 +56,9 @@ proc stagedItemsAppend*(xp: TxPoolRef)
     minFeePrice: xp.minFeePrice,
     minTipPrice: xp.minTipPrice)
 
-  for itemList in xp.txDB.byStatus.incItemList(txItemPending):
-    for item in itemList.walkItems:
-      if xp.classifyTxStaged(item,param):
-        discard xp.txDB.reassign(item, txItemStaged)
+  for item in xp.txDB.byStatus.incItemList(txItemPending):
+    if xp.classifyTxStaged(item,param):
+      discard xp.txDB.reassign(item, txItemStaged)
 
 # ------------------------------------------------------------------------------
 # End

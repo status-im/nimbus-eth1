@@ -64,17 +64,15 @@ proc genericItemsReorg*(
     inStatus.right = inBuckets.left
 
   # action, first step: stash smaller "left" sub-list
-  for itemList in xp.txDB.byStatus.incItemList(inStatus.left):
-    for item in itemList.walkItems:
-      stashed.add item
+  for item in xp.txDB.byStatus.incItemList(inStatus.left):
+    stashed.add item
 
   # action, second step: update larger "right" sub-list
-  for itemList in xp.txDB.byStatus.incItemList(inStatus.right):
-    for item in itemList.walkItems:
-      let newStatus = if xp.outRightFn(item,fnParam): outBuckets.right
-                      else:                           outBuckets.left
-      if newStatus != inStatus.right:
-        discard xp.txDB.reassign(item, newStatus)
+  for item in xp.txDB.byStatus.incItemList(inStatus.right):
+    let newStatus = if xp.outRightFn(item,fnParam): outBuckets.right
+                    else:                           outBuckets.left
+    if newStatus != inStatus.right:
+      discard xp.txDB.reassign(item, newStatus)
 
   # action, finalise: update smaller, stashed sup-list
   for item in stashed:

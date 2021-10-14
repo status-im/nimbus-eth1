@@ -66,7 +66,7 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
 # core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
+proc addTx*(xp: TxPoolRef; tx: var Transaction; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Classify a transaction. It is tested and moved to either of the `queued`
   ## or `pending` buckets, or disposed o the waste basket.
@@ -91,7 +91,7 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
 
     # Create tx wrapper with meta data (status may be changed, later)
     block:
-      let rc = tx.newTxItemRef(itemID, local, status, info)
+      let rc = tx.newTxItemRef(itemID, status, info)
       if rc.isErr:
         vetted = txInfoErrInvalidSender
         break txErrorFrame
@@ -126,7 +126,7 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; local: bool;  info = "")
     # Error processing below
 
   # store tx in waste basket
-  xp.txDB.reject(tx, vetted, local, status, info)
+  xp.txDB.reject(tx, vetted, status, info)
 
   # update gauge
   case vetted:
