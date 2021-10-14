@@ -6,35 +6,43 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  unittest2, ../nimbus/vm_precompiles, json, stew/byteutils, test_helpers, os, tables,
-  strformat, strutils, eth/trie/db, eth/common, ../nimbus/db/db_chain, ../nimbus/constants,
-  ../nimbus/[vm_computation, vm_state, forks], macros,
-  test_allowed_to_fail,
-  ../nimbus/transaction/call_evm, options
+  std/[strformat, strutils, json, os, tables, macros, options],
+  unittest2, stew/byteutils,
+  eth/[trie/db, common, keys],
+
+  ../nimbus/[vm_computation,
+    vm_state,
+    forks,
+    constants,
+    vm_precompiles,
+    transaction,
+    db/db_chain,
+    transaction/call_evm
+    ],
+
+  ./test_helpers, ./test_allowed_to_fail
 
 proc initAddress(i: byte): EthAddress = result[19] = i
 
 template doTest(fixture: JsonNode, fork: Fork, address: PrecompileAddresses): untyped =
   for test in fixture:
     let
-      blockNum = 1.u256 # TODO: Check other forks
-      header = BlockHeader(blockNumber: blockNum)
       expectedErr = test.hasKey("ExpectedError")
       expected = if test.hasKey("Expected"): hexToSeqByte(test["Expected"].getStr) else: @[]
-      dataStr = test["Input"].getStr
-      vmState = newBaseVMState(header.stateRoot, header, newBaseChainDB(newMemoryDb()))
+      dataStr = test["Input"].getStr      
       gasExpected = if test.hasKey("Gas"): test["Gas"].getInt else: -1
 
-    var call: RpcCallData
-    call.source = ZERO_ADDRESS
-    call.to = initAddress(address.byte)
-    call.gas = 1_000_000_000.GasInt
-    call.gasPrice = 1.GasInt
-    call.value = 0.u256
-    call.data = if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
-    call.contractCreation = false
-
-    let fixtureResult = fixtureCallEvm(vmState, call, call.source, some(fork))
+    let unsignedTx = Transaction(
+      txType: TxLegacy,
+      nonce: 0,
+      gasPrice: 1.GasInt,
+      gasLimit: 1_000_000_000.GasInt,
+      to: initAddress(address.byte).some,
+      value: 0.u256,
+      payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
+    )
+    let tx = signTransaction(unsignedTx, privateKey, ChainId(1), false)
+    let fixtureResult = testCallEvm(tx, tx.getSender, vmState, fork)
 
     if expectedErr:
       check fixtureResult.isError
@@ -54,7 +62,10 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     label = fixtures["func"].getStr
     fork  = parseEnum[Fork](fixtures["fork"].getStr.toLowerAscii)
     data  = fixtures["data"]
-
+    privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
+    header = BlockHeader(blockNumber: 1.u256)
+    vmState = newBaseVMState(header.stateRoot, header, newBaseChainDB(newMemoryDb()))
+    
   case toLowerAscii(label)
   of "ecrecover": data.doTest(fork, paEcRecover)
   of "sha256"   : data.doTest(fork, paSha256)
@@ -82,11 +93,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
 proc precompilesMain*() =
   suite "Precompiles":
-    # TODO: For now, EVMC is incompatible with these tests.
-    when defined(evmc_enabled):
-      discard
-    else:
-      jsonTest("PrecompileTests", testFixture, skipPrecompilesTests)
+    jsonTest("PrecompileTests", testFixture, skipPrecompilesTests)
 
 when isMainModule:
   precompilesMain()

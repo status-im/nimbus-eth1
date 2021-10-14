@@ -187,40 +187,21 @@ proc asmCallEvm*(blockNumber: Uint256, chainDB: BaseChainDB, code, data: seq[byt
   result.vmState         = vmState
   result.contractAddress = contractAddress
 
-type
-  FixtureResult* = object
-    isError*:         bool
-    error*:           Error
-    gasUsed*:         GasInt
-    output*:          seq[byte]
-    vmState*:         BaseVMState
-    logEntries*:      seq[Log]
-
-proc fixtureCallEvm*(vmState: BaseVMState, call: RpcCallData,
-                     origin: EthAddress, forkOverride = none(Fork)): FixtureResult =
-  let callResult = runComputation(CallParams(
+proc testCallEvm*(tx: Transaction, sender: EthAddress, vmState: BaseVMState, fork: Fork): CallResult =
+  var call = CallParams(
     vmState:      vmState,
-    forkOverride: forkOverride,
-    origin:       some(origin),       # Differs from `rpcSetupComputation`.
-    gasPrice:     call.gasPrice,
-    gasLimit:     call.gas,           # Differs from `rpcSetupComputation`.
-    sender:       call.source,
-    to:           call.to,
-    isCreate:     call.contractCreation,
-    value:        call.value,
-    input:        call.data,
-    noIntrinsic:  true,               # Don't charge intrinsic gas.
-    noAccessList: true,               # Don't initialise EIP-2929 access list.
-    noGasCharge:  true,               # Don't charge sender account for gas.
-    noRefund:     true,               # Don't apply gas refund/burn rule.
-    noTransfer:   true,               # Don't update balances, nonces, code.
-  ))
+    forkOverride: some(fork),
+    gasPrice:     tx.gasPrice,
+    gasLimit:     tx.gasLimit,
+    sender:       sender,
+    to:           tx.destination,
+    isCreate:     tx.contractCreation,
+    value:        tx.value,
+    input:        tx.payload,
 
-  # Some of these are extra returned state, for testing, that a normal EVMC API
-  # computation doesn't return.  We'll have to obtain them outside EVMC.
-  result.isError         = callResult.isError
-  result.error           = callResult.error
-  result.gasUsed         = callResult.gasUsed
-  result.output          = callResult.output
-  result.vmState         = vmState
-  shallowCopy(result.logEntries, callResult.logEntries)
+    noIntrinsic:  true, # Don't charge intrinsic gas.
+    noRefund:     true, # Don't apply gas refund/burn rule.
+  )
+  if tx.txType > TxLegacy:
+    shallowCopy(call.accessList, tx.accessList)
+  runComputation(call)
