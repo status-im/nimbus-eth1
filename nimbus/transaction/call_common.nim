@@ -46,7 +46,6 @@ type
     logEntries*:      seq[Log]          # Output logs.
     stack*:           Stack             # EVM stack on return (for test only).
     memory*:          Memory            # EVM memory on return (for test only).
-    error*:           Error             # Error if `isError` (for test only).
 
 proc hostToComputationMessage*(msg: EvmcMessage): Message =
   Message(
@@ -222,4 +221,3 @@ proc runComputation*(call: CallParams): CallResult =
   shallowCopy(result.logEntries, c.logEntries)
   result.stack = c.stack
   result.memory = c.memory
-  result.error = c.error
