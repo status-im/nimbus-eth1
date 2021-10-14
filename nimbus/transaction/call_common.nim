@@ -15,6 +15,7 @@ import
 
 when defined(evmc_enabled):
   import ".."/[utils]
+  import ./host_services
 
 type
   # Standard call parameters.
@@ -34,7 +35,6 @@ type
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
     noRefund*:     bool                 # Don't apply gas refund/burn rule.
-    noTransfer*:   bool                 # Don't update balances, nonces, code.
 
   # Standard call result.  (Some fields are beyond what EVMC can return,
   # and must only be used from tests because they will not always be set).
@@ -175,26 +175,6 @@ proc setupHost(call: CallParams): TransactionHost =
 
   return host
 
-proc doExec(host: TransactionHost, call: CallParams) =
-  let c = host.computation
-  if call.noTransfer:
-    # TODO: This isn't doing `noTransfer` properly yet, just enough for
-    # fixtures tests.
-    executeOpcodes(c)
-    doAssert c.continuation.isNil
-    doAssert c.child.isNil
-  else:
-    execComputation(c)
-
-when defined(evmc_enabled):
-  import ./host_services
-  proc doExecEvmc(host: TransactionHost, call: CallParams) =
-    if call.noTransfer:
-      let c = host.computation
-      c.setError("Unable to perform noTransfer computations in EVMC mode", true)
-    else:
-      let callResult = evmcExecComputation(host)
-
 proc runComputation*(call: CallParams): CallResult =
   let host = setupHost(call)
   let c = host.computation
@@ -209,9 +189,9 @@ proc runComputation*(call: CallParams): CallResult =
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
   when defined(evmc_enabled):
-    doExecEvmc(host, call)
+    discard evmcExecComputation(host)
   else:
-    doExec(host, call)
+    execComputation(host.computation)
 
   # EIP-3529: Reduction in refunds
   let MaxRefundQuotient = if host.vmState.fork >= FkLondon:
