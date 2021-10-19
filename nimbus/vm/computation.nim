@@ -241,15 +241,19 @@ proc writeContract*(c: Computation, fork: Fork): bool {.gcsafe.} =
     debug "Contract code can't start with 0xEF byte"
     return false
 
-  let storageAddr = c.msg.contractAddress
-  if c.isSelfDestructed(storageAddr): return
+  # Charge gas and write the code even if the code address is self-destructed.
+  # Non-empty code in a newly created, self-destructed account is possible if
+  # the init code calls `DELEGATECALL` or `CALLCODE` to other code which uses
+  # `SELFDESTRUCT`.  This shows on Mainnet blocks 6001128..6001204, where the
+  # gas difference matters.  The new code can be called later in the
+  # transaction too, before self-destruction wipes the account at the end.
 
   let gasParams = GasParams(kind: Create, cr_memLength: contractCode.len)
   let codeCost = c.gasCosts[Create].c_handler(0.u256, gasParams).gasCost
   if c.gasMeter.gasRemaining >= codeCost:
     c.gasMeter.consumeGas(codeCost, reason = "Write contract code for CREATE")
     c.vmState.mutateStateDb:
-      db.setCode(storageAddr, contractCode)
+      db.setCode(c.msg.contractAddress, contractCode)
     result = true
   else:
     if fork < FkHomestead or fork >= FkByzantium: c.output = @[]
