@@ -15,7 +15,7 @@ import
   ./state_distance
 
 const
-  StateProtocolId* = "portal:state".toBytes()
+  StateProtocolId* = [byte 0x50, 0x0A]
 
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol

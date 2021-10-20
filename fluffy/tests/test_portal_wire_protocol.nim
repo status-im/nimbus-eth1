@@ -14,7 +14,7 @@ import
   ../network/wire/portal_protocol,
   ./test_helpers
 
-const protocolId = "portal".toBytes()
+const protocolId = [byte 0x50, 0x00]
 
 type Default2NodeTest = ref object
   node1: discv5_protocol.Protocol

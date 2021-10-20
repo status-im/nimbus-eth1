@@ -14,7 +14,7 @@ import
   ./history_content
 
 const
-  HistoryProtocolId* = "portal:history".toBytes()
+  HistoryProtocolId* = [byte 0x50, 0x0B]
 
 # TODO: Extract common parts from the different networks
 type HistoryNetwork* = ref object
