@@ -5,6 +5,9 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+## Implementation of the Portal wire protocol as specified at:
+## https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-protocol.md
+
 {.push raises: [Defect].}
 
 import
@@ -50,8 +53,10 @@ type
   ContentHandler* =
     proc(contentKey: ByteList): ContentResult {.raises: [Defect], gcsafe.}
 
+  PortalProtocolId* = array[2, byte]
+
   PortalProtocol* = ref object of TalkProtocol
-    protocolId: seq[byte]
+    protocolId: PortalProtocolId
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     dataRadius*: UInt256
@@ -200,7 +205,7 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
 
 proc new*(T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
-    protocolId: seq[byte],
+    protocolId: PortalProtocolId,
     contentHandler: ContentHandler,
     dataRadius = UInt256.high(),
     bootstrapRecords: openarray[Record] = [],
@@ -216,7 +221,7 @@ proc new*(T: type PortalProtocol,
     handleContentRequest: contentHandler,
     bootstrapRecords: @bootstrapRecords)
 
-  proto.baseProtocol.registerTalkProtocol(proto.protocolId, proto).expect(
+  proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
     "Only one protocol should have this id")
 
   return proto
@@ -229,7 +234,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     request: Request
     ): Future[PortalResult[Response]] {.async.} =
   let talkresp =
-    await talkreq(p.baseProtocol, toNode, p.protocolId, encodeMessage(request))
+    await talkreq(p.baseProtocol, toNode, @(p.protocolId), encodeMessage(request))
 
   # Note: Failure of `decodeMessage` might also simply mean that the peer is
   # not supporting the specific talk protocol, as according to specification

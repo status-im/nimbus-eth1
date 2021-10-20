@@ -5,8 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-# As per spec:
-# https://github.com/ethereum/stateless-ethereum-specs/blob/master/state-network.md#wire-protocol
+## Definitions and encoding of the messages of the Portal wire protocol:
+## https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-protocol.md#request---response-messages
 
 {.push raises: [Defect].}
 

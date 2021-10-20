@@ -182,7 +182,8 @@ proc run(config: DiscoveryConf) =
 
   d.open()
 
-  let portal = PortalProtocol.new(d, "portal".toBytes(), testHandler,
+  # TODO: Configurable protocol id
+  let portal = PortalProtocol.new(d, [byte 0x50, 0x0A], testHandler,
     bootstrapRecords = config.portalBootnodes)
 
   if config.metricsEnabled:
