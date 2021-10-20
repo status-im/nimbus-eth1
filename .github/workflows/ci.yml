@@ -164,7 +164,7 @@ jobs:
         uses: actions/cache@v1
         with:
           path: rocks-db-cache-${{ matrix.target.cpu }}
-          key: 'rocksdb-${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+          key: 'rocksdb-v1-${{ matrix.target.os }}-${{ matrix.target.cpu }}'
 
       - name: Build and install rocksdb (Linux i386)
         # no librocksdb-dev:i386
