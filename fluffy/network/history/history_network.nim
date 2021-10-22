@@ -7,7 +7,7 @@
 
 import
   std/[options, sugar],
-  stew/[results, byteutils],
+  stew/results,
   eth/p2p/discoveryv5/[protocol, node, enr],
   ../../content_db,
   ../wire/portal_protocol,
