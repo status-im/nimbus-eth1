@@ -180,10 +180,6 @@ proc validateHeader(db: BaseChainDB; header, parentHeader: BlockHeader;
 
     if header.ommersHash != EMPTY_UNCLE_HASH:
       return err("Invalid ommers hash in a post-merge block")
-
-    let consensusStatus = db.getConsensusValidationStatus(header.rlpHash)
-    if consensusStatus.isNone or consensusStatus.get != BlockValidationStatus.valid:
-      return err("Block was not validated by consensus engine")
   else:
     let calcDiffc = db.config.calcDifficulty(header.timestamp, parentHeader)
     if header.difficulty < calcDiffc:

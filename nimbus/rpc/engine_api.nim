@@ -55,7 +55,7 @@ proc toBlockHeader(payload: ExecutionPayload): eth_types.BlockHeader =
     receiptRoot   : payload.receiptRoot.asEthHash,
     bloom         : distinctBase(payload.logsBloom),
     difficulty    : default(DifficultyInt),
-    blockNumber   : payload.blockNumber,
+    blockNumber   : payload.blockNumber.distinctBase.u256,
     gasLimit      : payload.gasLimit.unsafeQuantityToInt64,
     gasUsed       : payload.gasUsed.unsafeQuantityToInt64,
     timestamp     : fromUnix payload.timestamp.unsafeQuantityToInt64,
@@ -111,22 +111,6 @@ proc setupEngineAPI*(sealingEngine: SealingEngineRef, server: RpcServer) =
       return ExecutePayloadResponse(status: $PayloadExecutionStatus.invalid)
 
     return ExecutePayloadResponse(status: $PayloadExecutionStatus.valid)
-
-  server.rpc("engine_consensusValidated") do(data: BlockValidationResult):
-    let
-      db = sealingEngine.chain.db
-
-    if not db.headerExists(data.blockHash.asEthHash):
-      raise (ref InvalidRequest)(code: UNKNOWN_HEADER, msg: "Uknown head block hash")
-
-    if data.status == "VALID":
-      db.setConsensusValidationStatus(data.blockHash.asEthHash,
-                                      BlockValidationStatus.valid)
-    elif data.status == "INVALID":
-      db.setConsensusValidationStatus(data.blockHash.asEthHash,
-                                      BlockValidationStatus.invalid)
-    else:
-      raise (ref CatchableError)(msg: "Invalid block status")
 
   server.rpc("engine_forkchoiceUpdated") do(update: ForkChoiceUpdate):
     let

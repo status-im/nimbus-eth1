@@ -28,9 +28,6 @@ type
     currentBlock*: BlockNumber
     highestBlock*: BlockNumber
 
-    # TODO: Figure out where this data should live
-    blockValidationStatuses: Table[Hash256, BlockValidationStatus]
-
   TransactionKey = tuple
     blockNumber: BlockNumber
     index: int
@@ -295,20 +292,6 @@ proc setHead*(self: BaseChainDB, header: BlockHeader, writeHeader = false) =
     self.db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header))
   self.addBlockNumberToHashLookup(header)
   self.db.put(canonicalHeadHashKey().toOpenArray, rlp.encode(headerHash))
-
-proc setConsensusValidationStatus*(
-    self: BaseChainDB,
-    blockHash: Hash256,
-    status: BlockValidationStatus) =
-  self.blockValidationStatuses[blockHash] = status
-
-proc getConsensusValidationStatus*(
-    self: BaseChainDB,
-    blockHash: Hash256): Option[BlockValidationStatus] =
-  self.blockValidationStatuses.withValue(blockHash, value):
-    return some(value[])
-  do:
-    return none(BlockValidationStatus)
 
 proc persistReceipts*(self: BaseChainDB, receipts: openArray[Receipt]): Hash256 =
   var trie = initHexaryTrie(self.db)

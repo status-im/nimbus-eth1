@@ -236,7 +236,7 @@ proc generateExecutionPayload*(engine: SealingEngineRef,
   payloadRes.receiptRoot = Web3BlockHash blk.header.receiptRoot.data
   payloadRes.logsBloom = Web3Bloom blk.header.bloom
   payloadRes.random = web3types.FixedBytes[32](payloadAttrs.random)
-  payloadRes.blockNumber = blk.header.blockNumber
+  payloadRes.blockNumber = Web3Quantity blk.header.blockNumber.truncate(uint64)
   payloadRes.gasLimit = Web3Quantity blk.header.gasLimit
   payloadRes.gasUsed = Web3Quantity blk.header.gasUsed
   payloadRes.timestamp = payloadAttrs.timestamp
