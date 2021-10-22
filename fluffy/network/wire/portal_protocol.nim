@@ -188,7 +188,7 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
   let decoded = decodeMessage(request)
   if decoded.isOk():
     let message = decoded.get()
-    trace "Received message response", kind = message.kind
+    trace "Received message request", srcId, srcUdpAddress, kind = message.kind
     case message.kind
     of MessageKind.ping:
       p.handlePing(message.ping)
@@ -199,8 +199,11 @@ proc messageHandler*(protocol: TalkProtocol, request: seq[byte],
     of MessageKind.offer:
       p.handleOffer(message.offer)
     else:
+      # This shouldn't occur as the 0 case is already covered in `decodedMessage`
+      debug "Packet decoding error: Invalid message type"
       @[]
   else:
+    debug "Packet decoding error", error = decoded.error, srcId, srcUdpAddress
     @[]
 
 proc new*(T: type PortalProtocol,
@@ -248,8 +251,12 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     )
 
   if messageResponse.isOk():
+    trace "Received message response", srcId = toNode.id,
+      srcAddress = toNode.address, kind = messageKind(Response)
     p.routingTable.setJustSeen(toNode)
   else:
+    debug "Error receiving message response", error = messageResponse.error,
+      srcId = toNode.id, srcAddress = toNode.address
     p.routingTable.replaceNode(toNode)
 
   return messageResponse
