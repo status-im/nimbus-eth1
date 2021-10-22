@@ -13,7 +13,7 @@
 import
   std/options,
   stint, stew/[results, objects],
-  eth/ssz/ssz_serialization,
+  ssz_serialization,
   ../../common/common_types
 
 export ssz_serialization, stint, common_types
@@ -113,9 +113,6 @@ template messageKind*(T: typedesc[SomeMessage]): MessageKind =
 
 template toSszType*(x: UInt256): array[32, byte] =
   toBytesLE(x)
-
-template toSszType*(x: auto): auto =
-  x
 
 func fromSszBytes*(T: type UInt256, data: openArray[byte]):
     T {.raises: [MalformedSszError, Defect].} =

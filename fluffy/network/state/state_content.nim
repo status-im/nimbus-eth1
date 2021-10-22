@@ -12,7 +12,7 @@
 import
   std/options,
   nimcrypto/[sha2, hash], stew/objects, stint,
-  eth/ssz/ssz_serialization,
+  ssz_serialization,
   ../../common/common_types
 
 export ssz_serialization, common_types

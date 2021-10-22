@@ -13,8 +13,8 @@
 import
   std/[sequtils, sets, algorithm],
   stew/results, chronicles, chronos, nimcrypto/hash,
+  ssz_serialization,
   eth/rlp, eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
-  eth/ssz/ssz_serialization,
   ./messages
 
 export messages, routing_table
