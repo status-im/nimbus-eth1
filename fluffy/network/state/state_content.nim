@@ -62,7 +62,7 @@ func fromSszBytes*(T: type ContentType, data: openArray[byte]):
   contentType
 
 func encode*(contentKey: ContentKey): ByteList =
-  List.init(SSZ.encode(contentKey), 2048)
+  ByteList.init(SSZ.encode(contentKey))
 
 # TODO consider if more powerfull error handling is necessary here.
 func decode*(contentKey: ByteList): Option[ContentKey] =

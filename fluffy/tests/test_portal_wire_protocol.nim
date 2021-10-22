@@ -123,7 +123,7 @@ procSuite "Portal Wire Protocol Tests":
     # table.
     test.proto2.start()
 
-    let contentKey = List.init(@[1'u8], 2048)
+    let contentKey = ByteList.init(@[1'u8])
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which is the only node in the routing table.

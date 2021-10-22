@@ -221,7 +221,7 @@ proc run(config: DiscoveryConf) =
       key
 
     # For now just some random bytes
-    let contentKey = List.init(@[1'u8], 2048)
+    let contentKey = ByteList.init(@[1'u8])
 
     let foundContent = waitFor portal.findContent(config.findContentTarget,
       contentKey)

@@ -111,8 +111,7 @@ suite "Portal Wire Protocol Message Encodings":
 
   test "FindContent Request":
     let
-      contentEncoded: ByteList = List.init(@[1'u8], 2048)
-      
+      contentEncoded  = ByteList.init(@[1'u8])
       fn = FindContentMessage(contentKey: contentEncoded)
 
     let encoded = encodeMessage(fn)
