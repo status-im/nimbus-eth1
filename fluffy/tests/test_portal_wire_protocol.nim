@@ -8,7 +8,7 @@
 {.used.}
 
 import
-  chronos, testutils/unittests, stew/shims/net, stew/byteutils,
+  chronos, testutils/unittests, stew/shims/net,
   eth/keys, eth/p2p/discoveryv5/routing_table, nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../network/wire/portal_protocol,

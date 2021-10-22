@@ -10,9 +10,9 @@
 {.push raises: [Defect].}
 
 import
-  std/[options, sugar],
+  std/options,
   nimcrypto/[sha2, hash], stew/objects, stint,
-  eth/ssz/ssz_serialization, eth/trie/[hexary, db],
+  eth/ssz/ssz_serialization,
   ../../common/common_types
 
 export ssz_serialization, common_types
@@ -80,28 +80,3 @@ func toContentId*(contentKey: ByteList): ContentId =
 
 func toContentId*(contentKey: ContentKey): ContentId =
   toContentId(encode(contentKey))
-
-type
-  ContentStorage* = object
-    # TODO: Quick implementation for now where we just use HexaryTrie, current
-    # idea is to move in here a more direct storage of the trie nodes, but have
-    # an `ContentProvider` "interface" that could provide the trie nodes via
-    # this direct storage, via the HexaryTrie (for full nodes), or also without
-    # storage, via json rpc client requesting data from a full eth1 client.
-    trie*: HexaryTrie
-
-proc get*(storage: ContentStorage, key: ContentKey): Option[seq[byte]] =
-  if storage.trie.db == nil: # TODO: for now...
-    return none(seq[byte])
-  let val = storage.trie.db.get(key.nodeHash.data)
-  if val.len > 0:
-    some(val)
-  else:
-    none(seq[byte])
-
-proc get*(storage: ContentStorage, contentKey: ByteList): Option[seq[byte]] =
-  decode(contentKey).flatMap((key: ContentKey) => get(storage, key))
-
-proc newEmptyInMemoryStorage*(): ContentStorage =
-  let trie = initHexaryTrie(newMemoryDb())
-  ContentStorage(trie: trie)
