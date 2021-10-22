@@ -6,13 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[tables, sequtils, algorithm],
+  std/[sequtils, algorithm],
   stew/[byteutils], eth/trie/[hexary, db],
   eth/[common, rlp, p2p], chronicles,
   ../errors,  ../constants, ./storage_types,
   ../utils, ../chain_config
-
-from web3/engine_api_types import BlockValidationStatus
 
 type
   BaseChainDB* = ref object

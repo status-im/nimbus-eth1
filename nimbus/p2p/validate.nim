@@ -29,8 +29,6 @@ import
   options,
   stew/[results, endians2]
 
-from web3/engine_api_types import BlockValidationStatus
-
 from stew/byteutils
   import nil
 
