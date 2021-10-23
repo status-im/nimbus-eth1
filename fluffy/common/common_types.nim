@@ -8,7 +8,7 @@
 {.push raises: [Defect].}
 
 import
-  eth/ssz/ssz_serialization
+  ssz_serialization/types
 
 type
   ByteList* = List[byte, 2048]
