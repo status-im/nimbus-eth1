@@ -1,3 +1,7 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
 #    http://opensource.org/licenses/MIT)
@@ -12,7 +16,6 @@
 import
   std/[times],
   ../tx_desc,
-  ../tx_info,
   ../tx_item,
   ../tx_tabs,
   chronicles,
@@ -30,9 +33,9 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc packItemsIntoBlock*(xp: TxPoolRef) =
+  ## Pack a new block and cache the components in the pool descriptor.
   var
-    ethBlock: EthBlock
-    gasTotal: GasInt
+    accu: TxPoolEthBlock # txs accumulator
     packAlgo = xp.algoSelect
 
   block packerFrame:
@@ -42,7 +45,7 @@ proc packItemsIntoBlock*(xp: TxPoolRef) =
       # Note: the following if/else clauses assume that
       #       `xp.dbHead.trgGasLimit` <= `xp.dbHead.maxGasLimit `
       #       which is not verified here
-      if xp.dbHead.trgGasLimit < gasTotal + item.tx.gasLimit:
+      if xp.dbHead.trgGasLimit < accu.blockSize + item.tx.gasLimit:
 
         # curremt tx will exceed soft/target limit
         if algoPackTrgGasLimitMax notin packAlgo:
@@ -54,7 +57,7 @@ proc packItemsIntoBlock*(xp: TxPoolRef) =
           break packerFrame
 
         # otherwise, `trgGasLimit` might be slightly exceeded
-        if xp.dbHead.maxGasLimit < gasTotal + item.tx.gasLimit:
+        if xp.dbHead.maxGasLimit < accu.blockSize + item.tx.gasLimit:
           # curremt tx will exceed hard limit
           if {algoPackTrgGasLimitMax,algoPackTryHarder} <= packAlgo:
             # try the next one
@@ -62,26 +65,22 @@ proc packItemsIntoBlock*(xp: TxPoolRef) =
           # done otherwise
           break packerFrame
 
-      ethBlock.txs.add item.tx
-      gasTotal += item.tx.gasLimit
-
-      # dispose in waste basket
-      discard xp.txDB.dispose(item, txInfoStagedBlockIncluded)
+      accu.blockItems.add item
+      accu.blockSize += item.tx.gasLimit
 
   # derive block header
-  ethBlock.header.blockNumber = xp.dbHead.head.blockNumber + 1.u256
-  ethBlock.header.timestamp = now().utc.toTime
-  ethBlock.header.parentHash = xp.dbHead.head.blockHash
-  ethBlock.header.stateRoot = xp.dbHead.head.stateRoot
-  ethBlock.header.txRoot = xp.dbHead.head.txRoot
-  ethBlock.header.gasLimit = xp.dbHead.head.gasLimit
+  accu.blockHeader.blockNumber = xp.dbHead.header.blockNumber + 1.u256
+  accu.blockHeader.timestamp = now().utc.toTime
+  accu.blockHeader.parentHash = xp.dbHead.header.blockHash
+  accu.blockHeader.stateRoot = xp.dbHead.header.stateRoot
+  accu.blockHeader.txRoot = xp.dbHead.header.txRoot
+  accu.blockHeader.gasLimit = xp.dbHead.header.gasLimit
 
-  if gasTotal < ethBlock.header.gasLimit:
-    ethBlock.header.gasLimit = xp.dbHead.maxGasLimit
+  if accu.blockHeader.gasLimit < accu.blockSize:
+    accu.blockHeader.gasLimit = xp.dbHead.maxGasLimit
   # TODO ...
 
-  xp.ethBlock = ethBlock
-  xp.ethBlockSize = gasTotal
+  xp.blockCache = accu
 
 # ------------------------------------------------------------------------------
 # End

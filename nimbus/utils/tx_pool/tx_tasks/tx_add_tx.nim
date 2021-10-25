@@ -13,6 +13,7 @@
 ##
 
 import
+  ../../keequ,
   ../tx_desc,
   ../tx_gauge,
   ../tx_info,
@@ -24,6 +25,11 @@ import
 
 logScope:
   topics = "tx-pool add transaction"
+
+var
+  nullSender = block:
+    var rc: EthAddress
+    rc
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -83,15 +89,30 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; info = "")
     var
       itemID = tx.itemID
       item: TxItemRef
+      itemInfo = info
+      itemRecovered = false
 
     # Create tx ID and check for dups
     if xp.txDB.byItemID.hasKey(itemID):
       vetted = txInfoErrAlreadyKnown
       break txErrorFrame
 
-    # Create tx wrapper with meta data (status may be changed, later)
+    # Check whether the tx can be re-cycled from waste basket
     block:
-      let rc = tx.newTxItemRef(itemID, status, info)
+      let rc = xp.txDB.byRejects.delete(itemID)
+      if rc.isOK:
+        item = rc.value.data
+        # must not be a waste tx without meta-data
+        if item.sender != nullSender:
+          itemRecovered = true
+          if itemInfo == "":
+            itemInfo = item.info
+
+    # Create tx wrapper with meta data (status may be changed, later)
+    if itemRecovered:
+      item.init(status, itemInfo)
+    else:
+      let rc = TxItemRef.init(tx, itemID, status, itemInfo)
       if rc.isErr:
         vetted = txInfoErrInvalidSender
         break txErrorFrame

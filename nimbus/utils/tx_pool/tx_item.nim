@@ -99,6 +99,10 @@ proc `$`(w: AccessPair): string =
 proc `$`(q: seq[AccessPair]): string =
   "[" & q.mapIt($it).join(" ") & "]"
 
+
+proc utcTime: Time {.inline.} =
+  getTime().utc.toTime
+
 # ------------------------------------------------------------------------------
 # Public helpers supporting distinct types
 # ------------------------------------------------------------------------------
@@ -127,30 +131,32 @@ proc `<`*(a: GasPriceEx|int; b: GasPrice): bool =
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
+proc init*(item: var TxItemRef; status: TxItemStatus; info: string) {.inline.} =
+  ## Update item descriptor.
+  item.info = info
+  item.status = status
+  item.timeStamp = utcTime()
+  item.reject = txInfoOk
 
-proc newTxItemRef*(tx: Transaction;
-                   itemID: Hash256; status: TxItemStatus; info: string):
-                 Result[TxItemRef,void] {.inline.} =
+proc init*(T: type TxItemRef; tx: Transaction; itemID: Hash256;
+            status: TxItemStatus; info: string): Result[T,void] {.inline.} =
   ## Create item descriptor.
   let rc = tx.ecRecover
   if rc.isErr:
     return err()
-  ok(TxItemRef(
-    itemID:    itemID,
-    tx:        tx,
-    sender:    rc.value,
-    timeStamp: now().utc.toTime,
-    info:      info,
-    status:    status))
+  ok(T(itemID:    itemID,
+       tx:        tx,
+       sender:    rc.value,
+       timeStamp: utcTime(),
+       info:      info,
+       status:    status))
 
-proc newTxItemRef*(tx: Transaction;
-                   reject: TxInfo; status: TxItemStatus; info: string):
-                     TxItemRef {.inline.} =
+proc init*(T: type TxItemRef; tx: Transaction;
+            reject: TxInfo; status: TxItemStatus; info: string): T {.inline.} =
   ## Create incomplete item descriptor, so meta-data can be stored (e.g.
   ## for holding in the waste basket to be investigated later.)
-  TxItemRef(
-    tx:        tx,
-    timeStamp: now().utc.toTime,
+  T(tx:        tx,
+    timeStamp: utcTime(),
     info:      info,
     status:    status)
 

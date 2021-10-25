@@ -62,23 +62,25 @@ type
       ## rather ignore that error and keep on trying for all blocks
 
 
-  TxPoolSyncParam* = tuple    ## Synchronised access to these parameters
-    minFeePrice: GasPrice     ## Gas price enforced by the pool, `gasFeeCap`
-    prvFeePrice: GasPrice     ## Previous `minFeePrice` for detecting changes
+  TxPoolEthBlock* = tuple      ## Sub-entry for `TxPoolSyncParam`
+    blockHeader: BlockHeader   ## Cached header for new block
+    blockItems: seq[TxItemRef] ## List opf transactions for new block
+    blockSize: GasInt          ## Summed up `gasLimit` entries of `blockItems[]`
 
-    minTipPrice: GasPrice     ## Desired tip-per-tx target, `estimatedGasTip`
-    prvTipPrice: GasPrice     ## Previous `minTipPrice` for detecting changes
+  TxPoolPrice = tuple          ## Sub-entry for `TxPoolSyncParam`
+    curPrice: GasPrice         ## Value to hold and track
+    prvPrice: GasPrice         ## Previous value for derecting changes
 
-    minPlGasPrice: GasPrice   ## Desired pre-London min `gasPrice`
-    prvPlGasPrice: GasPrice   ## Previous `minPlGasPrice` for detecting changes
+  TxPoolSyncParam* = tuple     ## Synchronised access to these parameters
+    minFee: TxPoolPrice        ## Gas price enforced by the pool, `gasFeeCap`
+    minTip: TxPoolPrice        ## Desired tip-per-tx target, `estimatedGasTip`
+    minPlGas: TxPoolPrice      ## Desired pre-London min `gasPrice`
+    blockCache: TxPoolEthBlock ## Cached header for new block
 
-    ethBlock: EthBlock        ## Assembled & cached new block
-    ethBlockSize: GasInt      ## Summed up `gasLimit` entries of `ethBlock`
-
-    commitLoop: bool          ## Sentinel, set while commit loop is running
-    dirtyPending: bool        ## Pending bucket needs update
-    dirtyStaged: bool         ## Stage bucket needs update
-    isCallBack: bool          ## set if a call back is currently activated
+    commitLoop: bool           ## Sentinel, set while commit loop is running
+    dirtyPending: bool         ## Pending bucket needs update
+    dirtyStaged: bool          ## Stage bucket needs update
+    isCallBack: bool           ## set if a call back is currently activated
 
     algoSelect: set[TxPoolAlgoSelectorFlags] ## Packer strategy symbols
 
@@ -135,20 +137,20 @@ const
 proc init(xp: TxPoolRef; db: BaseChainDB)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Constructor, returns new tx-pool descriptor.
-  xp.startDate = now().utc.toTime
-  xp.dbHead = init(type TxDbHeadRef, db)
+  xp.startDate = getTime().utc.toTime
+  xp.dbHead = TxDbHeadRef.init(db)
   xp.lifeTime = txPoolLifeTime
   xp.priceBump = txPriceBump
 
-  xp.txDB = init(type TxTabsRef, xp.dbHead.baseFee)
+  xp.txDB = TxTabsRef.init(xp.dbHead.baseFee)
   xp.txDBSync = newAsyncLock()
 
-  xp.byJob = init(type TxJobRef)
+  xp.byJob = TxJobRef.init
   xp.byJobSync = newAsyncLock()
 
   xp.param.reset
-  xp.param.minFeePrice = txMinFeePrice
-  xp.param.minTipPrice = txMinTipPrice
+  xp.param.minFee.curPrice = txMinFeePrice
+  xp.param.minTip.curPrice = txMinTipPrice
   xp.param.algoSelect = txPoolAlgoStrategy
   xp.paramSync = newAsyncLock()
 
@@ -170,8 +172,36 @@ template paramExclusively(xp: TxPoolRef; action: untyped) =
   ## Handy helperused to serialise access to various flags inside the `xp`
   ## descriptor object.
   xp.paramLock
-  action
-  xp.paramUnLock
+  try:
+    action
+  finally:
+    xp.paramUnLock
+
+# ------------------------------------------------------------------------------
+# Private functions, generic getter/setter
+# ------------------------------------------------------------------------------
+
+proc getPoolPrice(xp: TxPoolRef; param: var TxPoolPrice): GasPrice
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Generic getter
+  xp.paramExclusively:
+    result = param.curPrice
+
+proc setPoolPrice(xp: TxPoolRef; param: var TxPoolPrice; val: GasPrice)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Generic setter
+  xp.paramExclusively:
+    if param.curPrice != val:
+      param.prvPrice = param.curPrice
+      param.curPrice = val
+
+proc poolPriceChanged(xp: TxPoolRef; param: var TxPoolPrice): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Returns `true` if there was a change, and resets the change detector.
+  xp.paramExclusively:
+    if param.prvPrice != param.curPrice:
+      param.prvPrice = param.curPrice
+      result = true
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -200,8 +230,10 @@ proc byJobUnLock*(xp: TxPoolRef) {.inline, raises: [Defect,AsyncLockError].} =
 template byJobExclusively*(xp: TxPoolRef; action: untyped) =
   ## Handy helper used to serialise access to `xp.byJob` sub-descriptor
   xp.byJobLock
-  action
-  xp.byJobUnLock
+  try:
+    action
+  finally:
+    xp.byJobUnLock
 
 # -----------------------------
 
@@ -218,8 +250,10 @@ proc txDBUnLock*(xp: TxPoolRef) {.inline, raises: [Defect,AsyncLockError].} =
 template txDBExclusively*(xp: TxPoolRef; action: untyped) =
   ## Handy helper used to serialise access to `xp.txDB` sub-descriptor
   xp.txDBLock
-  action
-  xp.txDBUnLock
+  try:
+    action
+  finally:
+    xp.txDBUnLock
 
 # -----------------------------
 
@@ -238,7 +272,7 @@ proc txRunCallBackSync*(xp: TxPoolRef; val: bool): bool
 
 template txRunCallBack*(xp: TxPoolRef; action: untyped) =
   ## Handy helper for wrapping a call back. This template will raise a
-  ## `TxPoolCallBackRecursion` exception on anu apttempt to recursively
+  ## `TxPoolCallBackRecursion` exception on an attempt to recursively
   ## re-invoke this directive.
   if xp.txRunCallBackSync(true) != false:
     raise newException(TxPoolCallBackRecursion, "Call back already active")
@@ -251,9 +285,11 @@ template txCallBackOrDBExclusively*(xp: TxPoolRef; action: untyped) =
   var isCallBack = xp.txRunCallBackSync
   if not isCallBack:
     xp.txDBLock
-  action
-  if not isCallBack:
-    xp.txDBUnLock
+  try:
+    action
+  finally:
+    if not isCallBack:
+      xp.txDBUnLock
 
 # ------------------------------------------------------------------------------
 # Public functions, synchonised getters/setters
@@ -274,29 +310,23 @@ proc releaseAccessCommitLoop*(xp: TxPoolRef)
 
 # -----------------------------
 
-proc ethBlock*(xp: TxPoolRef): EthBlock
+proc blockCache*(xp: TxPoolRef): TxPoolEthBlock
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, assembled & cached new block
+  ## Getter, cached pieces of a block
   xp.paramExclusively:
-    result = xp.param.ethBlock
+    result = xp.param.blockCache
 
-proc `ethBlock=`*(xp: TxPoolRef; val: EthBlock)
+proc `blockCache=`*(xp: TxPoolRef; val: TxPoolEthBlock)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Setter
   xp.paramExclusively:
-    xp.param.ethBlock = val
+    xp.param.blockCache = val
 
-proc ethBlockSize*(xp: TxPoolRef):GasInt
+proc blockCacheReset*(xp: TxPoolRef)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, size of assembled & cached new block
+  ## Re-setter
   xp.paramExclusively:
-    result = xp.param.ethBlockSize
-
-proc `ethBlockSize=`*(xp: TxPoolRef; val: GasInt)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Setter
-  xp.paramExclusively:
-    xp.param.ethBlockSize = val
+    xp.param.blockCache.reset
 
 # -----------------------------
 
@@ -331,75 +361,54 @@ proc `dirtyStaged=`*(xp: TxPoolRef; val: bool)
 proc minFeePrice*(xp: TxPoolRef): GasPrice
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, synchronised access
-  xp.paramExclusively:
-    result = xp.param.minFeePrice
+  xp.getPoolPrice(xp.param.minFee)
 
 proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, synchronised access
-  xp.paramExclusively:
-    if xp.param.minFeePrice != val:
-      xp.param.prvFeePrice = xp.param.minFeePrice
-      xp.param.minFeePrice = val
+  xp.setPoolPrice(xp.param.minFee,val)
 
 proc minFeePriceChanged*(xp: TxPoolRef): bool
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Returns `true` if there was a `nimFeePrice` change and resets
   ## the change detection.
-  xp.paramExclusively:
-    if xp.param.minFeePrice != xp.param.prvFeePrice:
-      xp.param.prvFeePrice = xp.param.minFeePrice
-      result = true
+  xp.poolPriceChanged(xp.param.minFee)
 
 # -----------------------------
 
 proc minTipPrice*(xp: TxPoolRef): GasPrice
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, synchronised access
-  xp.paramExclusively:
-    result = xp.param.minTipPrice
+  xp.getPoolPrice(xp.param.minTip)
 
 proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, synchronised access
-  xp.paramExclusively:
-    if xp.param.minTipPrice != val:
-      xp.param.prvTipPrice = xp.param.minTipPrice
-      xp.param.minTipPrice = val
+  xp.setPoolPrice(xp.param.minTip,val)
 
 proc minTipPriceChanged*(xp: TxPoolRef): bool
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Returns `true` if there was a `nimTipPrice` change and resets
   ## the change detection.
-  xp.paramExclusively:
-    if xp.param.minTipPrice != xp.param.prvTipPrice:
-      xp.param.prvTipPrice = xp.param.minTipPrice
-      result = true
+  xp.poolPriceChanged(xp.param.minTip)
 
 # -----------------------------
 
 proc minPlGasPrice*(xp: TxPoolRef): GasPrice
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, synchronised access
-  xp.paramExclusively:
-    result = xp.param.minPlGasPrice
+  xp.getPoolPrice(xp.param.minPlGas)
 
 proc `minPlGasPrice=`*(xp: TxPoolRef; val: GasPrice)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, synchronised access
-  xp.paramExclusively:
-    if xp.param.minPlGasPrice != val:
-      xp.param.prvPlGasPrice = xp.param.minPlGasPrice
-      xp.param.minPlGasPrice = val
+  xp.setPoolPrice(xp.param.minPlGas,val)
 
 proc minPlGasPriceChanged*(xp: TxPoolRef): bool
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Returns `true` if there was a `nimTipPrice` change and resets
   ## the change detection.
-  xp.paramExclusively:
-    if xp.param.minPlGasPrice != xp.param.prvPlGasPrice:
-      xp.param.prvPlGasPrice = xp.param.minPlGasPrice
-      result = true
+  xp.poolPriceChanged(xp.param.minPlGas)
 
 # -----------------------------
 

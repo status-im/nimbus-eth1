@@ -52,7 +52,7 @@ type
     byLocal*: Table[EthAddress,bool] ##\
       ## List of local accounts
 
-    byRejects*: TxLeafItemRef ##\
+    byRejects*: KeeQu[Hash256,TxItemRef] ##\
       ## Rejects queue, waste basket
 
     byItemID*: KeeQu[Hash256,TxItemRef] ##\
@@ -139,7 +139,7 @@ proc init*(T: type TxTabsRef; baseFee = 0.GasPrice): T =
 
   # result.byLocal -- Table, no need to init
   # result.byItemID -- KeeQu, no need to init
-  result.byRejects = TxLeafItemRef.txNew
+  # result.byRejects -- KeeQu, no need to init
 
   # index tables
   result.byGasTip.txInit(update = result.updateEffectiveGasTip)
@@ -177,7 +177,7 @@ proc insert*(
     return err(txInfoErrAlreadyKnown)
   var item: TxItemRef
   block:
-    let rc = tx.newTxItemRef(itemID, status, info)
+    let rc = TxItemRef.init(tx, itemID, status, info)
     if rc.isErr:
       return err(txInfoErrInvalidSender)
     item = rc.value
@@ -216,23 +216,26 @@ proc flushRejects*(xp: TxTabsRef; maxItems = int.high): (int,int)
   ## Flush/delete at most `maxItems` oldest items from the waste basket and
   ## return the numbers of deleted and remaining items (a waste basket item
   ## is considered older if it was moved there earlier.)
-  if xp.byRejects.nItems <= maxItems:
-    return (xp.byRejects.txClear,0)
+  if xp.byRejects.len <= maxItems:
+    result[0] = xp.byRejects.len
+    xp.byRejects.clear
+    return # result
   while result[0] < maxItems:
-    if xp.byRejects.txFetch.isErr:
+    if xp.byRejects.shift.isErr:
       break
     result[0].inc
-  result[1] = xp.byRejects.nItems
+  result[1] = xp.byRejects.len
 
 
 proc dispose*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Move argument `item` to rejects queue (aka waste basket.)
   if xp.deleteImpl(item):
-    if xp.maxRejects <= xp.byRejects.nItems:
-      discard xp.flushRejects(1 + xp.byRejects.nItems - xp.maxRejects)
+    if xp.maxRejects <= xp.byRejects.len:
+      discard xp.flushRejects(1 + xp.byRejects.len - xp.maxRejects)
     item.reject = reason
-    return xp.byRejects.txAppend(item)
+    xp.byRejects[item.itemID] = item
+    return true
 
 proc reject*(xp: TxTabsRef; tx: var Transaction;
              reason: TxInfo; status = txItemQueued; info = "")
@@ -240,10 +243,10 @@ proc reject*(xp: TxTabsRef; tx: var Transaction;
   ## Similar to dispose but for a tx without the item wrapper, the function
   ## imports the tx into the waste basket (e.g. after it could not
   ## be inserted.)
-  if xp.maxRejects <= xp.byRejects.nItems:
-    discard xp.flushRejects(1 + xp.byRejects.nItems - xp.maxRejects)
-  let item = tx.newTxItemRef(reason, status, info)
-  discard xp.byRejects.txAppend(item)
+  if xp.maxRejects <= xp.byRejects.len:
+    discard xp.flushRejects(1 + xp.byRejects.len - xp.maxRejects)
+  let item = TxItemRef.init(tx, reason, status, info)
+  xp.byRejects[item.itemID] = item
 
 # ------------------------------------------------------------------------------
 # Public getters
@@ -293,8 +296,7 @@ proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
   result.staged = xp.byStatus.eq(txItemStaged).nItems
 
   result.total =  xp.byItemID.len
-
-  result.disposed = xp.byRejects.nItems
+  result.disposed = xp.byRejects.len
 
 # ------------------------------------------------------------------------------
 # Public functions: local/remote sender accounts
@@ -594,6 +596,10 @@ proc verify*(xp: TxTabsRef): Result[void,TxInfo]
     if rc.isErr:
       return err(txInfoVfyItemIdList)
   block:
+    let rc = xp.byRejects.verify
+    if rc.isErr:
+      return err(txInfoVfyRejectsList)
+  block:
     let rc = xp.byStatus.txVerify
     if rc.isErr:
       return rc
@@ -620,13 +626,6 @@ proc verify*(xp: TxTabsRef): Result[void,TxInfo]
 
   if xp.byItemID.len != xp.byStatus.nItems:
      return err(txInfoVfyStatusTotal)
-
-  # ---------------------
-
-  block:
-    let rc = xp.byRejects.txVerify
-    if rc.isErr:
-      return rc
 
   ok()
 

@@ -17,6 +17,20 @@ import
   ../keequ,
   stew/results
 
+type
+  KeeQuInfo* = enum ##\
+    ## Error messages as returned by `verify()`
+    keeQuOk = 0
+    keeQuVfyFirstInconsistent
+    keeQuVfyLastInconsistent
+    keeQuVfyNoSuchTabItem
+    keeQuVfyNoPrvTabItem
+    keeQuVfyNxtPrvExpected
+    keeQuVfyLastExpected
+    keeQuVfyNoNxtTabItem
+    keeQuVfyPrvNxtExpected
+    keeQuVfyFirstExpected
+
 # ------------------------------------------------------------------------------
 # Public functions, debugging
 # ------------------------------------------------------------------------------

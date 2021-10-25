@@ -622,6 +622,42 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         let status = xq.count
         check expect == (status.queued,status.pending,status.staged)
 
+      test "Recycling from waste basket":
+
+        let
+          basketPrefill = xq.count.disposed
+          numDisposed = min(50,txList.len)
+
+          # make sure to work on a copy of the pivot item (to see changes)
+          thisItem = xq.getItem(txList[^numDisposed].itemID).value.dup
+
+        # move to wastebasket
+        xq.setMaxRejects(txList.len)
+        for n in 1 .. numDisposed:
+          # use from top avoiding extra deletes (higer nonces per account)
+          xq.disposeItems(txList[^n])
+
+        # make sure that the pivot item is in the waste basket
+        check xq.getItem(thisItem.itemID).isErr
+        check xq.txDB.byRejects.hasKey(thisItem.itemID)
+        check basketPrefill + numDisposed == xq.count.disposed
+        check txList.len == xq.count.total + xq.count.disposed
+
+        # re-add item
+        var tx = thisItem.tx
+        xq.pjaAddTx(tx)
+        waitFor xq.jobCommit
+
+        # verify that the pivot item was moved out from the waste basket
+        check not xq.txDB.byRejects.hasKey(thisItem.itemID)
+        check basketPrefill + numDisposed == xq.count.disposed + 1
+        check txList.len == xq.count.total + xq.count.disposed
+
+        # verify that a new item was derived from the waste basket pivot item
+        let wbItem = xq.getItem(thisItem.itemID).value
+        check thisItem.info == wbItem.info
+        check thisItem.timestamp < wbItem.timestamp
+
 
 proc runTxPackerTests(noisy = true) =
 
@@ -730,13 +766,21 @@ proc runTxPackerTests(noisy = true) =
           noisy.say "*** status after 1st staging ", xq.count
 
           # assemble block
-          let total = xq.nextBlock
+          let
+            total = xq.nextBlock
+            cached = xq.getBlock
           noisy.say "*** 1st block generated, size=", total
           noisy.say "*** final status ", xq.count
 
           check 0 < total
+          check 0 < cached.txs.len
+          check xq.count.disposed == 0
+
+          # fetch block and clear cache
+          let fetched = xq.fetchBlock
+          check fetched.txs.len == cached.txs.len
           check 0 < xq.count.disposed # number of packed txs
-          check xq.count.disposed == xq.getBlock.txs.len
+          check xq.count.disposed == fetched.txs.len
 
         test &"Continue staging after lowering minPrice={lowerPrice}, "&
             "then pack txs for another block":
@@ -758,13 +802,20 @@ proc runTxPackerTests(noisy = true) =
           noisy.say "*** status after 2nd staging ", xq.count
 
           # assemble block
-          let total = xq.nextBlock
+          let
+            total = xq.nextBlock
+            cached = xq.getBlock
           noisy.say "*** 2nd block generated, size=", total
           noisy.say "*** final status ", xq.count
 
           check 0 < total
+          check 0 < xq.getBlock.txs.len
+          check xq.count.disposed == 0
+
+          let fetched = xq.fetchBlock
+          check fetched.txs.len == cached.txs.len
           check 0 < xq.count.disposed # number of packed txs
-          check xq.count.disposed == xq.getBlock.txs.len
+          check xq.count.disposed == fetched.txs.len
 
 # ------------------------------------------------------------------------------
 # Main function(s)

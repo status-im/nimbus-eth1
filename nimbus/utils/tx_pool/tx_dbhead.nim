@@ -25,10 +25,10 @@ type
     ## point for a new block. This state is typically the canonical head
     ## when updated.
     db*: BaseChainDB       ## block chain database
-    head*: BlockHeader     ## new block insertion point
-    fork*: Fork            ## current fork relative to head
+    header*: BlockHeader   ## new block insertion point
+    fork*: Fork            ## current fork relative to next header
     accDB*: AccountsCache  ## sender accounts, etc.
-    baseFee*: GasPrice     ## current base fee derived from `head`
+    baseFee*: GasPrice     ## current base fee derived from `header`
     trgGasLimit*: GasInt   ## effective `gasLimit` for the packer
     maxGasLimit*: GasInt   ## may increase the `gasLimit` a bit
 
@@ -62,18 +62,18 @@ proc update*(dh: TxDbHeadRef; newHead: BlockHeader)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Update by block header
 
-  dh.head = newHead
-  dh.fork = dh.db.toForkOrLondon(dh.head.blockNumber + 1)
-  dh.accDB = AccountsCache.init(dh.db.db, dh.head.stateRoot, dh.db.pruneTrie)
+  dh.header = newHead
+  dh.fork = dh.db.toForkOrLondon(dh.header.blockNumber + 1)
+  dh.accDB = AccountsCache.init(dh.db.db, dh.header.stateRoot, dh.db.pruneTrie)
 
   if FkLondon <= dh.fork:
-    dh.baseFee = dh.head.baseFee.truncate(uint64).GasPrice
+    dh.baseFee = dh.header.baseFee.truncate(uint64).GasPrice
     # https://ethereum.org/en/developers/docs/blocks/#block-size
     dh.trgGasLimit = 15_000_000_000.GasInt
     dh.trgGasLimit = 2 * dh.trgGasLimit
   else:
     dh.baseFee = 0.GasPrice
-    dh.trgGasLimit = dh.head.gasLimit.GasInt
+    dh.trgGasLimit = dh.header.gasLimit.GasInt
 
     # https://ethereum.stackexchange.com/questions/592/
     #           /why-was-frontiers-default-gaslimit-3141592/1092#1092

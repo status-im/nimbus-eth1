@@ -21,6 +21,9 @@
 ## * Automatically move jobs to the waste basket if their life time has expired.
 ## * Implement re-positioning the current insertion point, typically the head
 ##   of the block chain.
+## * Currently too much fuss about locks and events, simplify to what is really
+##   needed. It seems that pushing txs is the only async job which generalises
+##   to adding a job to the job queue. Question: what about `jobCommit()`?
 ##
 ##
 ## Transaction state diagram:
@@ -211,9 +214,9 @@ import
   ./keequ,
   ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tabs/tx_leaf,
   ./tx_pool/tx_tasks,
   ./tx_pool/tx_tasks/[tx_add_tx,
+                      tx_adjust_head,
                       tx_staged_items,
                       tx_pack_items,
                       tx_pending_items],
@@ -320,7 +323,7 @@ proc processJobs(xp: TxPoolRef): int
       let args = task.data.applyByRejectedArgs
       xp.txRunCallBack:
         xp.txDBExclusively:
-          for item in xp.txDB.byRejects.walkItems:
+          for item in xp.txDB.byRejects.nextValues:
             if not args.apply(item):
               break
 
@@ -565,7 +568,21 @@ proc getStageSelector*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags]
 proc getBlock*(xp: TxPoolRef): EthBlock
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, retrieves the last assembled block from the cache
-  xp.ethBlock
+  let cached = xp.blockCache
+  result.header = cached.blockHeader
+  for item in cached.blockItems:
+    result.txs.add item.tx
+
+proc fetchBlock*(xp: TxPoolRef): EthBlock
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Similar to `getBlock()`, only that it disposes of the txs included
+  ## in the assembled block. Also the cache will empty afterwards.
+  let cached = xp.blockCache
+  xp.blockCacheReset
+  result.header = cached.blockHeader
+  for item in cached.blockItems:
+    result.txs.add item.tx
+    discard xp.txDB.dispose(item, txInfoStagedBlockIncluded)
 
 proc nextBlock*(xp: TxPoolRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -587,7 +604,25 @@ proc nextBlock*(xp: TxPoolRef): GasInt
   # So waiting for an event makes sense.
   waitFor req.packBlockArgs.waitReady.wait
 
-  xp.ethBlockSize
+  xp.blockCache.blockSize
+
+# core/tx_pool.go(218): func (pool *TxPool) reset(oldHead, newHead ...
+proc setHead*(xp: TxPoolRef; newHeader: BlockHeader): bool
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## This function moves the cached block chain head to a new head implied by
+  ## the argument `newHeader`. On the way of moving there, txs will be added
+  ## to or removed from the pool.
+  ##
+  ## If successful, `true` is returned and the last block in the cache is
+  ## flushed and txs disposed. On error, `false` is returned which happens
+  ## only if there is a problem with the current and the new head on the block
+  ## chain (e.g. orphaned blocks.)
+  if xp.adjustHead(newHeader).isOk:
+    let cached = xp.blockCache
+    for item in cached.blockItems:
+      discard xp.txDB.dispose(item, txInfoStagedBlockIncluded)
+    xp.blockCacheReset
+    return true
 
 # ------------------------------------------------------------------------------
 # Public functions, more immediate actions deemed not so important yet

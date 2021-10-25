@@ -20,7 +20,7 @@
 ##
 ## For consistency with  other data types in Nim the queue has value
 ## semantics, this means that `=` performs a deep copy of the allocated queue
-## which is refered to the deep copy semantics of underlying table driver.
+## which is refered to the deep copy semantics of the underlying table driver.
 ##
 ## Rlp Support
 ## -----------
@@ -29,8 +29,8 @@
 ## ::
 ##   include keequ/kq_rlp
 ##
-## This `kq_rlp` sub-module expects the RLP drivers configured/available and
-## they will be imported from `eth/rlp`.
+## This `kq_rlp` sub-module expects the RLP drivers configured/available which
+## will be imported from `eth/rlp`.
 ##
 ## Note that the underlying RLP driver does not support negative integers
 ## which causes problems when reading back. So these values should neither
@@ -46,19 +46,6 @@ export
   results
 
 type
-  KeeQuInfo* = enum ##\
-    ## Error messages as returned by `keeQuVerify()`
-    keeQuOk = 0
-    keeQuVfyFirstInconsistent
-    keeQuVfyLastInconsistent
-    keeQuVfyNoSuchTabItem
-    keeQuVfyNoPrvTabItem
-    keeQuVfyNxtPrvExpected
-    keeQuVfyLastExpected
-    keeQuVfyNoNxtTabItem
-    keeQuVfyPrvNxtExpected
-    keeQuVfyFirstExpected
-
   KeeQuItem*[K,V] = object ##\
     ## Data value container as stored in the queue.
     ## There is a special requirements for `KeeQuItem` terminal nodes:
@@ -73,7 +60,8 @@ type
     key: K      ## Sorter key (read-only for consistency with `SLstResult[K,V]`)
     data*: V    ## Some data value, to be modified freely
 
-  KeeQuTab*[K,V] =
+  KeeQuTab*[K,V] = ##\
+    ## Internal table type exposed for debugging.
     Table[K,KeeQuItem[K,V]]
 
   KeeQu*[K,V] = object ##\
@@ -259,8 +247,8 @@ proc prevKeyImpl[K,V](rq: var KeeQu[K,V]; key: K): Result[K,void]
 # ------------------------------------------------------------------------------
 
 proc init*[K,V](rq: var KeeQu[K,V]; initSize = 10) =
-  ## Optional initaliser for queue setting inital size for underlying
-  ## table object.
+  ## Optional initaliser for the queue setting the inital size of the
+  ## underlying table object.
   rq.tab = initTable[K,KeeQuItem[K,V]](initSize.nextPowerOfTwo)
 
 proc init*[K,V](T: type KeeQu[K,V]; initSize = 10): T =
@@ -268,7 +256,7 @@ proc init*[K,V](T: type KeeQu[K,V]; initSize = 10): T =
   result.init(initSize)
 
 proc init*[K](rq: var KeeQuNV[K]; initSize = 10) =
-  ## Key only queue
+  ## Key-only queue, no explicit values
   rq.tab = initTable[K,KeeQuItem[K,BlindValue]](initSize.nextPowerOfTwo)
 
 proc init*[K](T: type KeeQuNV[K]; initSize = 10): T =
@@ -285,7 +273,8 @@ proc append*[K,V](rq: var KeeQu[K,V]; key: K; val: V): bool
   ## `key` argument exists in the queue,  already.
   ##
   ## All the items on the queue different from the one just added are
-  ## called *previous* or *left hand* items.
+  ## called *previous* or *left hand* items while the item just added
+  ## is the *right-most* item.
   if not rq.tab.hasKey(key):
     rq.appendImpl(key, val)
     return true
@@ -323,7 +312,8 @@ proc prepend*[K,V](rq: var KeeQu[K,V]; key: K; val: V): bool
   ## `key` argument exists in the queue, already.
   ##
   ## All the items on the queue different from the item just added are
-  ## called *following* or *right hand* items.
+  ## called *following* or *right hand* items while the item just added
+  ## is the *left-most* item.
   if not rq.tab.hasKey(key):
     rq.prependImpl(key, val)
     return true
@@ -340,7 +330,7 @@ proc shift*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   ## `rq.firstKey.value.delele`.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## item returned and deleted is the most *left hand* item.
+  ## item returned and deleted is the *left-most* item.
   if 0 < rq.tab.len:
     let kvp = KeeQuPair[K,V](
       key: rq.kFirst,
@@ -371,7 +361,7 @@ proc pop*[K,V](rq: var KeeQu[K,V]): Result[KeeQuPair[K,V],void]
   ## `rq.lastKey.value.delele`.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## item returned and deleted is the most *right hand* item.
+  ## item returned and deleted is the *right-most* item.
   if 0 < rq.tab.len:
     let kvp = KeeQuPair[K,V](
       key: rq.kLast,
@@ -425,7 +415,7 @@ template push*[K](rq: var KeeQuNV[K]; key: K): bool =
   rq.append(key)
 
 
-proc prepend*[K,V](rq: var KeeQu[K,V]; key: K): bool
+proc prepend*[K](rq: var KeeQuNV[K]; key: K): bool
     {.inline,gcsafe,raises: [Defect,KeyError].} =
   ## Key-only queue variant
   rq.prepend(key,BlindValue(0))
@@ -444,7 +434,6 @@ proc shiftKey*[K](rq: var KeeQuNV[K]): Result[K,void]
     {.inline,gcsafe,
       deprecated: "use shift() for key-only queue",
       raises: [Defect,KeyError].} =
-  ## Deprecated key-only queue variant (use `shift()`)
   rq.shiftKeyImpl
 
 
@@ -457,7 +446,6 @@ proc popKey*[K](rq: var KeeQuNV[K]): Result[K,void]
     {.inline,gcsafe,
       deprecated: "use pop() for key-only queue",
       raises: [Defect,KeyError].} =
-  ## Deprecated key-only queue variant (use `pop()`)
   rq.popKeyImpl
 
 # ------------------------------------------------------------------------------
@@ -491,8 +479,8 @@ proc `[]`*[K,V](rq: var KeeQu[K,V]; key: K): V
 proc lruFetch*[K,V](rq: var KeeQu[K,V]; key: K): Result[V,void]
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Fetch in *last-recently-used* mode: If the argument `key` exists in the
-  ## queue, move the key-value item pair to the right end of the queue and
-  ## return the value associated with the key.
+  ## queue, move the key-value item pair to the *right end* (see `append()`)
+  ## of the queue and return the value associated with the key.
   let rc = rq.delete(key)
   if rc.isErr:
     return err()
@@ -503,9 +491,9 @@ proc lruFetch*[K,V](rq: var KeeQu[K,V]; key: K): Result[V,void]
 proc lruAppend*[K,V](rq: var KeeQu[K,V]; key: K; val: V; maxItems: int): V
     {.gcsafe, raises: [Defect,CatchableError].} =
   ## Append in *last-recently-used* mode: If the queue has at least `maxItems`
-  ## item entries, do `shift()` out the left most one. Then append the key-value
-  ## argument pair `(key,val)` to the right end. Together with `lruFetch()` this
-  ## function can be used to build a *LRU cache*:
+  ## item entries, do `shift()` out the *left-most* one. Then `append()` the
+  ## key-value argument pair `(key,val)` to the *right end*. Together with
+  ## `lruFetch()` this function can be used to build a *LRU cache*:
   ## ::
   ##   const queueMax = 10
   ##
@@ -538,7 +526,7 @@ proc firstKey*[K,V](rq: var KeeQu[K,V]): Result[K,void] {.inline,gcsafe.} =
   ## Retrieve first key from the queue unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## key returned is the most *left hand* one.
+  ## key returned is the *left-most* one.
   rq.firstKeyImpl
 
 proc secondKey*[K,V](rq: var KeeQu[K,V]): Result[K,void]
@@ -546,7 +534,7 @@ proc secondKey*[K,V](rq: var KeeQu[K,V]): Result[K,void]
   ## Retrieve the key next after the first key from queue unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## key returned is the one ti the right of the most *left hand* one.
+  ## key returned is the one ti the right of the *left-most* one.
   rq.secondKeyImpl
 
 proc beforeLastKey*[K,V](rq: var KeeQu[K,V]): Result[K,void]
@@ -554,14 +542,14 @@ proc beforeLastKey*[K,V](rq: var KeeQu[K,V]): Result[K,void]
   ## Retrieve the key just before the last one from queue unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## key returned is the one to the left of the most *right hand* one.
+  ## key returned is the one to the left of the *right-most* one.
   rq.beforeLastKeyImpl
 
 proc lastKey*[K,V](rq: var KeeQu[K,V]): Result[K,void] {.inline,gcsafe.} =
   ## Retrieve last key from queue unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## key returned is the most *right hand* one.
+  ## key returned is the *right-most* one.
   rq.lastKeyImpl
 
 proc nextKey*[K,V](rq: var KeeQu[K,V]; key: K): Result[K,void]
@@ -587,41 +575,35 @@ proc prevKey*[K,V](rq: var KeeQu[K,V]; key: K): Result[K,void]
 proc firstKey*[K](rq: var KeeQuNV[K]): Result[K,void]
   {.inline,gcsafe,
     deprecated: "use first() for key-only queue".} =
-  ## Deprecated key-only queue variant (use `first()`)
   rq.firstKeyImpl
 
 proc secondKey*[K](rq: var KeeQuNV[K]): Result[K,void]
   {.inline,gcsafe,
     deprecated: "use second() for key-only queue",
     raises: [Defect,KeyError].} =
-  ## Deprecated key-only queue variant (use `second()`)
   rq.secondKeyImpl
 
 proc beforeLastKey*[K](rq: var KeeQuNV[K]): Result[K,void]
   {.inline,gcsafe,
     deprecated: "use beforeLast() for key-only queue",
     raises: [Defect,KeyError].} =
-  ## Deprecated key-only queue variant (use `beforeLast()`)
   rq.beforeLastKeyImpl
 
 proc lastKey*[K](rq: var KeeQuNV[K]): Result[K,void]
   {.inline,gcsafe,
     deprecated: "use last() for key-only queue".} =
-  ## Deprecated key-only queue variant (use `last()`)
   rq.lastKeyImpl
 
 proc nextKey*[K](rq: var KeeQuNV[K]; key: K): Result[K,void]
   {.inline,gcsafe,
     deprecated: "use next() for key-only queue",
     raises: [Defect,KeyError].} =
-  ## Deprecated key-only queue variant (use `next()`)
   rq.nextKeyImpl(key)
 
 proc prevKey*[K](rq: var KeeQuNV[K]; key: K): Result[K,void]
   {.inline,gcsafe,
     deprecated: "use prev() for key-only queue",
     raises: [Defect,KeyError].} =
-  ## Deprecated key-only queue variant (use `prev()`)
   rq.nextKeyImpl(key)
 
 # ------------------------------------------------------------------------------
@@ -715,7 +697,7 @@ proc firstValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## Retrieve first value item from the queue unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## value item returned is the most *left hand* one.
+  ## value item returned is the *left-most* one.
   if rq.tab.len == 0:
     return err()
   ok(rq.tab[rq.kFirst].data)
@@ -726,7 +708,7 @@ proc secondValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## value item returned is the one to the right of the most *left hand* one.
+  ## value item returned is the one to the *right* of the *left-most* one.
   if rq.tab.len < 2:
     return err()
   ok(rq.tab[rq.tab[rq.kFirst].kNxt].data)
@@ -737,7 +719,7 @@ proc beforeLastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## unless it is empty.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## value item returned is the one to the left of the most *right hand* one.
+  ## value item returned is the one to the *left* of the *right-most* one.
   if rq.tab.len < 2:
     return err()
   ok(rq.tab[rq.tab[rq.kLast].kPrv].data)
@@ -747,7 +729,7 @@ proc lastValue*[K,V](rq: var KeeQu[K,V]): Result[V,void]
   ## Retrieve the last value item from the queue if there is any.
   ##
   ## Using the notation introduced with `rq.append` and `rq.prepend`, the
-  ## value item returned is the most *right hand* one.
+  ## value item returned is the *right-most* one.
   if rq.tab.len == 0:
     return err()
   ok(rq.tab[rq.kLast].data)

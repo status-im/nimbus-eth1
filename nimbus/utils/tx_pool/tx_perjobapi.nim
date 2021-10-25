@@ -106,7 +106,7 @@ proc pjaUpdatePending*(xp: TxPoolRef; force = false)
 
 proc pjaUpdateStaged*(xp: TxPoolRef; force = false)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Update pending bucket
+  ## Update staged bucket
   discard xp.job(TxJobDataRef(
     kind:     txJobUpdateStaged,
     updateStagedArgs: (
