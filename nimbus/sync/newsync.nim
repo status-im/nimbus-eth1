@@ -70,6 +70,10 @@ proc onPeerDisconnected(ns: NewSync, protocolPeer: Peer) =
     sp.syncPeerStop()
 
 proc newSyncEarly*(ethNode: EthereumNode) =
+  info "** Using --new-sync experimental new sync algorithms"
+  info "** Note that fetched data is not currently stored"
+  info "** It's used for timing, behaviour and interop tests"
+
   let ns = NewSync()
   var po = PeerObserver(
     onPeerConnected:
