@@ -110,18 +110,18 @@ doAssert syncHuntBackwardExpandShift >= 1 and syncHuntBackwardExpandShift <= 8
 proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber, bestHash: Hash256) =
   ## Trace messages when peer canonical head is confirmed or updated.
   if sp.syncMode != SyncLocked:
-    trace "Sync: Peer sync locked at last",
+    debug "Sync: Confirmed and tracking peer's chain head",
       peer=sp, `block`=bestNumber, hash=($bestHash)
   elif bestNumber > sp.bestBlockNumber:
     if bestNumber == sp.bestBlockNumber + 1:
-      trace "Sync: Peer chain advanced one block",
+      debug "Sync: Peer's chain advanced one block",
         peer=sp, `block`=bestNumber, hash=($bestHash)
     else:
-      trace "Sync: Peer chain advanced multiple blocks",
+      debug "Sync: Peer's chain advanced multiple blocks",
         peer=sp, advance=(sp.bestBlockNumber - bestNumber),
         `block`=bestNumber, hash=($bestHash)
   elif bestNumber < sp.bestBlockNumber or bestHash != sp.bestBlockHash:
-    trace "Sync: Peer chain reorg detected",
+    debug "Sync: Peer's chain reorg detected",
       peer=sp, `block`=bestNumber, hash=($bestHash)
 
 proc setSyncLocked(sp: SyncPeer, bestNumber: BlockNumber, bestHash: Hash256) =
