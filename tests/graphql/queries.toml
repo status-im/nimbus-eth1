@@ -457,7 +457,7 @@
     "call":{
       "__typename":"CallResult",
       "data":"0x",
-      "gasUsed":0,
+      "gasUsed":21000,
       "status":1
     }
   }

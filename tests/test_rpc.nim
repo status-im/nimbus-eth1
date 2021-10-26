@@ -94,6 +94,9 @@ proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): T
     timeStamp   = date.toTime
     difficulty  = calcDifficulty(chainDB.config, timeStamp, parent)
 
+  # call persist() before we get the rootHash
+  vmState.stateDB.persist()
+  
   var header = BlockHeader(
     parentHash  : parentHash,
     #coinbase*:      EthAddress

@@ -62,7 +62,7 @@ proc hostToComputationMessage*(msg: EvmcMessage): Message =
     flags:           if msg.isStatic: emvcStatic else: emvcNoFlags
   )
 
-func intrinsicGas(call: CallParams, fork: Fork): GasInt {.inline.} =
+func intrinsicGas*(call: CallParams, fork: Fork): GasInt {.inline.} =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).

@@ -266,8 +266,9 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
     ## Returns the return value of executed contract.
     let
       header   = headerFromTag(chain, quantityTag)
-      callData = callData(call, true, chain)
-    result = rpcDoCall(callData, header, chain)
+      callData = callData(call)
+      res      = rpcCallEvm(callData, header, chain)
+    result = hexDataStr(res.output)
 
   server.rpc("eth_estimateGas") do(call: EthCall, quantityTag: string) -> HexQuantityStr:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
@@ -279,8 +280,9 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
     ## Returns the amount of gas used.
     let
       header   = chain.headerFromTag(quantityTag)
-      callData = callData(call, false, chain)
-      gasUsed  = rpcEstimateGas(callData, header, chain, call.gas.isSome)
+      callData = callData(call)
+      # TODO: DEFAULT_RPC_GAS_CAP should configurable
+      gasUsed  = rpcEstimateGas(callData, header, chain, DEFAULT_RPC_GAS_CAP)
     result = encodeQuantity(gasUsed.uint64)
 
   server.rpc("eth_getBlockByHash") do(data: EthHashStr, fullTransactions: bool) -> Option[BlockObject]:

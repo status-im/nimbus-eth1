@@ -68,4 +68,6 @@ const
     ## standard secp256k1 curve.
     65
 
+  DEFAULT_RPC_GAS_CAP* =                    50_000_000.GasInt
+
 # End

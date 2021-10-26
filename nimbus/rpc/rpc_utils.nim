@@ -87,32 +87,31 @@ proc unsignedTx*(tx: TxSend, chain: BaseChainDB, defaultNonce: AccountNonce): Tr
 
   result.payload = hexToSeqByte(tx.data.string)
 
-proc callData*(call: EthCall, callMode: bool = true, chain: BaseChainDB): RpcCallData =
-  if call.source.isSome:
-    result.source = toAddress(call.source.get)
+template optionalAddress(src, dst: untyped) =
+  if src.isSome:
+    dst = some(toAddress(src.get))
 
-  if call.to.isSome:
-    result.to = toAddress(call.to.get)
-  else:
-    if callMode:
-      raise newException(ValueError, "call.to required for eth_call operation")
-    else:
-      result.contractCreation = true
+template optionalGas(src, dst: untyped) =
+  if src.isSome:
+    dst = some(hexToInt(src.get.string, GasInt))
 
-  if call.gas.isSome:
-    result.gas = hexToInt(call.gas.get.string, GasInt)
+template optionalU256(src, dst: untyped) =
+  if src.isSome:
+    dst = some(UInt256.fromHex(src.get.string))
 
-  if call.gasPrice.isSome:
-    result.gasPrice = hexToInt(call.gasPrice.get.string, GasInt)
-  else:
-    if not callMode:
-      result.gasPrice = calculateMedianGasPrice(chain)
-
-  if call.value.isSome:
-    result.value = UInt256.fromHex(call.value.get.string)
-
-  if call.data.isSome:
-    result.data = hexToSeqByte(call.data.get.string)
+template optionalBytes(src, dst: untyped) =
+  if src.isSome:
+    dst = hexToSeqByte(src.get.string)
+    
+proc callData*(call: EthCall): RpcCallData =  
+  optionalAddress(call.source, result.source)
+  optionalAddress(call.to, result.to)
+  optionalGas(call.gas, result.gasLimit)
+  optionalGas(call.gasPrice, result.gasPrice)
+  optionalGas(call.maxFeePerGas, result.maxFee)
+  optionalGas(call.maxPriorityFeePerGas, result.maxPriorityFee)
+  optionalU256(call.value, result.value)
+  optionalBytes(call.data, result.data)
 
 proc populateTransactionObject*(tx: Transaction, header: BlockHeader, txIndex: int): TransactionObject =
   result.blockHash = some(header.hash)

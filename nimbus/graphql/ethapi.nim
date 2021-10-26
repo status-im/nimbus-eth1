@@ -15,8 +15,8 @@ import
   graphql, graphql/graphql as context,
   graphql/common/types, graphql/httpserver,
   graphql/instruments/query_complexity,
-  ../db/[db_chain, state_db], ../utils,
-  ../transaction, ../rpc/rpc_utils, ../vm_state, ../config,
+  ../db/[db_chain, state_db], ../rpc/rpc_utils,
+  ".."/[utils, transaction, vm_state, config, constants],
   ../transaction/call_evm
 
 from eth/p2p import EthereumNode
@@ -901,44 +901,64 @@ proc blockAccount(ud: RootRef, params: Args, parent: Node): RespResult {.apiPrag
   let address = hexToByteArray[20](params[0].val.stringVal)
   ctx.accountNode(h.header, address)
 
-proc toCallData(n: Node): (RpcCallData, bool) =
-  # phew, probably need to use macro here :)
-  var cd: RpcCallData
-  var gasLimit = false
-  if n[0][1].kind != nkEmpty:
-    cd.source = hextoByteArray[20](n[0][1].stringVal)
+const
+  fFrom     = 0
+  fTo       = 1
+  fGasLimit = 2
+  fGasPrice = 3
+  fMaxFee   = 4
+  fMaxPriorityFee = 5
+  fValue    = 6
+  fData     = 7
 
-  if n[1][1].kind != nkEmpty:
-    cd.to = hextoByteArray[20](n[1][1].stringVal)
-  else:
-    cd.contractCreation = true
+template isSome(n: Node, field: int): bool =
+  # [0] is the field's name node
+  # [1] is the field's value node
+  n[field][1].kind != nkEmpty
 
-  if n[2][1].kind != nkEmpty:
-    cd.gas = parseU64(n[2][1]).GasInt
-    gasLimit = true
-  else:
-    # TODO: this is globalGasCap in geth
-    cd.gas = GasInt(high(uint64) div 2)
+template fieldString(n: Node, field: int): string =
+  n[field][1].stringVal
 
-  if n[3][1].kind != nkEmpty:
-    let gasPrice = parse(n[3][1].stringVal, UInt256, radix = 16)
-    cd.gasPrice = gasPrice.truncate(GasInt)
+template optionalAddress(dstField: untyped, n: Node, field: int) =
+  if isSome(n, field):
+    var address: EthAddress
+    hexToByteArray(fieldString(n, field), address)
+    dstField = some(address)
 
-  if n[4][1].kind != nkEmpty:
-    cd.value = parse(n[4][1].stringVal, UInt256, radix = 16)
+template optionalGasInt(dstField: untyped, n: Node, field: int) =
+  if isSome(n, field):
+    dstField = some(parseU64(n[field][1]).GasInt)
 
-  if n[5][1].kind != nkEmpty:
-    cd.data = hexToSeqByte(n[5][1].stringVal)
+template optionalGasHex(dstField: untyped, n: Node, field: int) =
+  if isSome(n, field):
+    let gas = parse(fieldString(n, field), UInt256, radix = 16)
+    dstField = some(gas.truncate(GasInt))
 
-  (cd, gasLimit)
+template optionalHexU256(dstField: untyped, n: Node, field: int) =
+  if isSome(n, field):
+    dstField = some(parse(fieldString(n, field), UInt256, radix = 16))
+
+template optionalBytes(dstField: untyped, n: Node, field: int) =
+  if isSome(n, field):
+    dstField = hexToSeqByte(fieldString(n, field))
+
+proc toCallData(n: Node): RpcCallData =
+  optionalAddress(result.source, n, fFrom)
+  optionalAddress(result.to, n, fTo)
+  optionalGasInt(result.gasLimit, n, fGasLimit)
+  optionalGasHex(result.gasPrice, n, fGasPrice)
+  optionalGasHex(result.maxFee, n, fMaxFee)
+  optionalGasHex(result.maxPriorityFee, n, fMaxPriorityFee)
+  optionalHexU256(result.value, n, fValue)
+  optionalBytes(result.data, n, fData)
 
 proc makeCall(ctx: GraphqlContextRef, callData: RpcCallData,
               header: BlockHeader, chainDB: BaseChainDB): RespResult =
-  let (outputHex, gasUsed, isError) = rpcMakeCall(callData, header, chainDB)
+  let res = rpcCallEvm(callData, header, chainDB)
   var map = respMap(ctx.ids[ethCallResult])
-  map["data"]    = resp("0x" & outputHex)
-  map["gasUsed"] = longNode(gasUsed).get()
-  map["status"]  = longNode(if isError: 0 else: 1).get()
+  map["data"]    = resp("0x" & res.output.toHex)
+  map["gasUsed"] = longNode(res.gasUsed).get()
+  map["status"]  = longNode(if res.isError: 0 else: 1).get()
   ok(map)
 
 proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
@@ -946,7 +966,7 @@ proc blockCall(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
   let h = HeaderNode(parent)
   let param = params[0].val
   try:
-    let (callData, gasLimit) = toCallData(param)
+    let callData = toCallData(param)
     ctx.makeCall(callData, h.header, ctx.chainDB)
   except Exception as em:
     err("call error: " & em.msg)
@@ -956,8 +976,9 @@ proc blockEstimateGas(ud: RootRef, params: Args, parent: Node): RespResult {.api
   let h = HeaderNode(parent)
   let param = params[0].val
   try:
-    let (callData, gasLimit) = toCallData(param)
-    let gasUsed = rpcEstimateGas(callData, h.header, ctx.chainDB, gasLimit)
+    let callData = toCallData(param)
+    # TODO: DEFAULT_RPC_GAS_CAP should configurable
+    let gasUsed = rpcEstimateGas(callData, h.header, ctx.chainDB, DEFAULT_RPC_GAS_CAP)
     longNode(gasUsed)
   except Exception as em:
     err("estimateGas error: " & em.msg)
