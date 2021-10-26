@@ -110,19 +110,20 @@ doAssert syncHuntBackwardExpandShift >= 1 and syncHuntBackwardExpandShift <= 8
 proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber, bestHash: Hash256) =
   ## Trace messages when peer canonical head is confirmed or updated.
   if sp.syncMode != SyncLocked:
-    debug "Sync: Confirmed and tracking peer's chain head",
-      peer=sp, `block`=bestNumber, hash=($bestHash)
+    debug "Sync: Now tracking chain head of peer",
+      `block`=bestNumber, hash=($bestHash), peer=sp
   elif bestNumber > sp.bestBlockNumber:
     if bestNumber == sp.bestBlockNumber + 1:
-      debug "Sync: Peer's chain advanced one block",
-        peer=sp, `block`=bestNumber, hash=($bestHash)
+      debug "Sync: Peer chain head advanced one block",
+        advance=1, `block`=bestNumber, hash=($bestHash), peer=sp
     else:
-      debug "Sync: Peer's chain advanced multiple blocks",
-        peer=sp, advance=(sp.bestBlockNumber - bestNumber),
-        `block`=bestNumber, hash=($bestHash)
+      debug "Sync: Peer chain head advanced some blocks",
+        advance=(sp.bestBlockNumber - bestNumber),
+        `block`=bestNumber, hash=($bestHash), peer=sp
   elif bestNumber < sp.bestBlockNumber or bestHash != sp.bestBlockHash:
-    debug "Sync: Peer's chain reorg detected",
-      peer=sp, `block`=bestNumber, hash=($bestHash)
+    debug "Sync: Peer chain head reorg detected",
+      advance=(sp.bestBlockNumber - bestNumber),
+      `block`=bestNumber, hash=($bestHash), peer=sp
 
 proc setSyncLocked(sp: SyncPeer, bestNumber: BlockNumber, bestHash: Hash256) =
   ## Actions to take when peer canonical head is confirmed or updated.
@@ -185,7 +186,7 @@ proc peerSyncChainEmptyReply(sp: SyncPeer, request: BlocksRequest) =
   if sp.syncMode == SyncLocked or sp.syncMode == SyncOnlyHash:
     inc sp.stats.ok.reorgDetected
     trace "Sync: Peer reorg detected, best block disappeared",
-      peer=sp, `block`=request.startBlock
+      `block`=request.startBlock, peer=sp
 
   let lowestAbsent = request.startBlock.number
   case sp.syncMode:
@@ -409,9 +410,9 @@ proc peerSyncChainTrace(sp: SyncPeer) =
   case sp.syncMode:
     of SyncLocked:
       trace "Sync: SyncLocked",
-        best=sp.bestBlockNumber, bestHash=($sp.bestBlockHash)
+        bestBlock=sp.bestBlockNumber, bestBlockHash=($sp.bestBlockHash)
     of SyncOnlyHash:
-      trace "Sync: OnlyHash", bestHash=($sp.bestBlockHash)
+      trace "Sync: OnlyHash", bestBlockHash=($sp.bestBlockHash)
     of SyncHuntForward:
       template highMax(n: BlockNumber): string =
         if n == high(BlockNumber): "max" else: $n
@@ -451,30 +452,35 @@ proc peerHuntCanonical*(sp: SyncPeer) {.async.} =
   sp.peerSyncChainRequest(request)
 
   if tracePackets:
-    if request.startBlock.isHash:
-      trace ">> Sending GetBlockHeaders/Hash (0x03)", peer=sp,
-        `block`=request.startBlock, count=request.maxResults,
-        step=traceStep(request)
+    if request.maxResults == 1 and request.startBlock.isHash:
+      tracePacket ">> Sending eth.GetBlockHeaders/Hash (0x03)",
+        blockHash=($request.startBlock.hash), count=1, peer=sp
+    elif request.maxResults == 1:
+      tracePacket ">> Sending eth.GetBlockHeaders (0x03)",
+        `block`=request.startBlock, count=1, peer=sp
+    elif request.startBlock.isHash:
+      tracePacket ">> Sending eth.GetBlockHeaders/Hash (0x03)",
+        firstBlockHash=request.startBlock, count=request.maxResults,
+        step=traceStep(request), peer=sp
     else:
-      trace ">> Sending GetBlockHeaders/Num (0x03)", peer=sp,
-        `block`=request.startBlock, count=request.maxResults,
-        step=traceStep(request)
+      tracePacket ">> Sending eth.GetBlockHeaders (0x03)",
+        firstBlock=request.startBlock, count=request.maxResults,
+        step=traceStep(request), peer=sp
 
   inc sp.stats.ok.getBlockHeaders
   var reply: typeof await sp.peer.getBlockHeaders(request)
   try:
     reply = await sp.peer.getBlockHeaders(request)
   except CatchableError as e:
-    if traceNetworkErrors:
-      trace "<< Error waiting for reply to GetBlockHeaders (0x03)",
-        peer=sp, error=e.msg
+    traceNetworkError "<< Error waiting for reply to eth.GetBlockHeaders (0x03)",
+      error=e.msg, peer=sp
     inc sp.stats.major.networkErrors
     sp.stopped = true
     return
 
   if reply.isNone:
-    if traceTimeouts:
-      trace "<< Timeout waiting for reply to GetBlockHeaders (0x03)", peer=sp
+    traceTimeout "<< Timeout waiting for reply to eth.GetBlockHeaders (0x03)",
+      peer=sp
     # TODO: Should disconnect?
     inc sp.stats.minor.timeoutBlockHeaders
     return
@@ -482,18 +488,19 @@ proc peerHuntCanonical*(sp: SyncPeer) {.async.} =
   let len = reply.get.headers.len
   if tracePackets:
     if len == 0:
-      trace "<< Got EMPTY reply BlockHeaders (0x04)", peer=sp, count=len
+      tracePacket "<< Got EMPTY reply eth.BlockHeaders (0x04)",
+        got=0, requested=request.maxResults, peer=sp
     else:
-      let first = reply.get.headers[0].blockNumber
-      let last = reply.get.headers[len - 1].blockNumber
-      trace "<< Got reply BlockHeaders (0x04)", peer=sp, count=len, first, last
+      let firstBlock = reply.get.headers[0].blockNumber
+      let lastBlock = reply.get.headers[len - 1].blockNumber
+      tracePacket "<< Got reply eth.BlockHeaders (0x04)",
+        got=len, requested=request.maxResults, firstBlock, lastBlock, peer=sp
 
   sp.pendingGetBlockHeaders = false
 
   if len > request.maxResults.int:
-    if tracePacketErrors:
-      trace "<< Protocol violation, excess headers in BlockHeaders (0x03)",
-        peer=sp, maxResults=request.maxResults, got=len
+    tracePacketError "<< Protocol violation, excess headers in eth.BlockHeaders (0x04)",
+      got=len, requested=request.maxResults, peer=sp
     # TODO: Should disconnect.
     inc sp.stats.major.excessBlockHeaders
     return
