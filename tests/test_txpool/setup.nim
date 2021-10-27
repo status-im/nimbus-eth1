@@ -17,7 +17,6 @@ import
   ../../nimbus/utils/[ec_recover, tx_pool],
   ../../nimbus/utils/tx_pool/[tx_item, tx_perjobapi],
   ./helpers,
-  chronos,
   eth/[common, keys, p2p, trie/db],
   stint
 
@@ -116,7 +115,7 @@ proc toTxPool*(
             if loadTxs <= txCount:
               break allDone
 
-  waitFor result.jobCommit
+  result.jobCommit
   accounts = toSeq(senders.keys)
 
 
@@ -138,7 +137,7 @@ proc toTxPool*(
       var tx = item.tx
       result.pjaAddTx(tx, item.info)
   result.pjaFlushRejects
-  waitFor result.jobCommit
+  result.jobCommit
   doAssert result.count.total == itList.len
   doAssert result.count.disposed == 0
 
@@ -184,12 +183,12 @@ proc toTxPool*(
         nGapItems = n # pass back value
         noisy.say &"time gap after transactions"
         let itemID = item.itemID
-        waitFor result.jobCommit
+        result.jobCommit
         doAssert result.count.disposed == 0
         timeGap = result.getItem(itemID).value.timeStamp + middleOfTimeGap
         delayMSecs.sleep
 
-  waitFor result.jobCommit
+  result.jobCommit
   doAssert result.count.total == itList.len
   doAssert result.count.disposed == 0
 

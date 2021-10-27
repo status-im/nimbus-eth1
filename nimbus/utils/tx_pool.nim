@@ -24,9 +24,12 @@
 ## * Currently too much fuss about locks and events, simplify to what is really
 ##   needed. It seems that pushing txs is the only async job which generalises
 ##   to adding a job to the job queue. Question: what about `jobCommit()`?
-## * Current packing cycle results to one tx/address. Check whether it makes
-##   sense to sort of bundle all txs/address.
-##
+## * Packing blocks:
+##   + Incrementally update the assembled block cache (or better use a bucket?)
+##   + Current packing cycle results to one tx/address. Check whether it makes
+##     sense to sort of bundle all txs/address.
+## * There is no need for `txJobEvictionInactive` as expired txs can be
+##   deleted on the fly while processing jobs
 ##
 ## Transaction state diagram:
 ## --------------------------
@@ -223,16 +226,18 @@ import
                       tx_pack_items,
                       tx_pending_items],
   chronicles,
-  chronos,
   eth/[common, keys],
   stew/results
+
+# hide complexity unless really needed
+when JobWaitEnabled:
+  import chronos
 
 export
   TxItemRef,
   TxItemStatus,
   TxJobDataRef,
   TxJobID,
-  TxJobItemApply,
   TxJobKind,
   TxPoolAlgoSelectorFlags,
   TxPoolRef,
@@ -266,21 +271,12 @@ logScope:
 proc processJobs(xp: TxPoolRef): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Job queue processor
-  ##
-  ## Restrictions:
-  ## * only one instance of `processJobs()` must be run at a time
-  ## * variable `xp.dirtyPending` must not be accessed outside this function
-
-  var
-    rc: Result[TxJobPair,void]
-    updatePending = xp.dirtyPending # locked parameter
-    updateStaged = xp.dirtyStaged   # locked parameter
-
-  xp.byJobExclusively:
-    rc = xp.byJob.first
-
+  var rc = xp.byJob.fetch
   while rc.isOK:
     let task = rc.value
+    rc = xp.byJob.fetch
+    result.inc
+
     case task.data.kind
     of txJobNone:
       # No action
@@ -296,39 +292,23 @@ proc processJobs(xp: TxPoolRef): int
       # on top of this source file for details.)
       var args = task.data.addTxsArgs
       for tx in args.txs.mitems:
-        xp.txDBExclusively:
-          xp.addTx(tx, args.info)
-      updatePending = true # change may affect `pending` items
-      updateStaged = true  # change may affect `staged` items
+        xp.addTx(tx, args.info)
+      xp.dirtyPending = true # change may affect `pending` items
+      xp.dirtyStaged = true  # change may affect `staged` items
 
     of txJobEvictionInactive:
       # Move transactions older than `xp.lifeTime` to the waste basket.
-      xp.txDBExclusively:
-        xp.deleteExpiredItems(xp.lifeTime)
+      xp.deleteExpiredItems(xp.lifeTime)
 
     of txJobFlushRejects:
       # Deletes at most the `maxItems` oldest items from the waste basket.
       let args = task.data.flushRejectsArgs
-      xp.txDBExclusively:
-        discard xp.txDB.flushRejects(args.maxItems)
+      discard xp.txDB.flushRejects(args.maxItems)
 
     of txJobPackBlock:
-      let args = task.data.packBlockArgs
-      xp.txDBExclusively:
-        xp.packItemsIntoBlock
-      if args.sayReady:
-        args.waitReady.fire
-
-    of txJobSetBaseFee:
-      # New base fee (implies database reorg). Note that after changing the
-      # `baseFee`, most probably a re-org should take place (e.g. invoking
-      # `txJobUpdatePending`)
-      let args = task.data.setBaseFeeArgs
-      xp.txDB.baseFee = args.price     # cached value, change implies re-org
-      xp.txDBExclusively:              # synchronised access
-        xp.dbHead.baseFee = args.price # representative value
-      updatePending = true # change may affect `pending` items
-      updateStaged = true  # change may affect `staged` items
+      # Pack a block fetching items from the `staged` bucket. For included
+      # txs, the item wrappers are moved to the waste basket.
+      xp.packItemsIntoBlock
 
     of txJobSetHead: # FIXME: tbd
       # Change the insertion block header. This call might imply
@@ -340,12 +320,10 @@ proc processJobs(xp: TxPoolRef): int
       # the `force` flag is set, re-calculation is done even though the change
       # flags remained unset.
       let args = task.data.updatePendingArgs
-      if updatePending or args.force or xp.dirtyPending:
-        xp.txDBExclusively:
-          xp.pendingItemsUpdate
-        xp.dirtyPending = false
-        updatePending = false # changes commited
-        updateStaged = true  # change may affect `staged` items
+      if xp.dirtyPending or args.force or xp.dirtyPending:
+        xp.pendingItemsUpdate
+        xp.dirtyPending = false  # changes commited
+        xp.dirtyStaged = true    # change may affect `staged` items
 
     of txJobUpdateStaged:
       # For all `pending` and `staged` items, re-calculate the status.  If
@@ -354,36 +332,15 @@ proc processJobs(xp: TxPoolRef): int
       # `minFeePrice`, only re-assign from `pending` and `staged`.
       let args = task.data.updateStagedArgs
       if args.force or xp.minFeePriceChanged or xp.minTipPriceChanged:
-        xp.txDBExclusively:
-          xp.stagedItemsReorg
+        xp.stagedItemsReorg
         discard xp.minFeePriceChanged # reset change detect
         discard xp.minTipPriceChanged # reset change detect
+        xp.dirtyStaged = false        # changes commited
+        xp.dirtyPending = true        # change may affect `pending` items
+      elif xp.dirtyStaged or xp.dirtyStaged:
+        xp.stagedItemsAppend
         xp.dirtyStaged = false
-        updateStaged = false # changes commited
-        updatePending = true # change may affect `pending` items
-      elif updateStaged or xp.dirtyStaged:
-        xp.txDBExclusively:
-          xp.stagedItemsAppend
-        xp.dirtyStaged = false
-        updateStaged = false # changes commited
-
-    # End case/switch
-    result.inc
-
-    # Remove the current job and get the next one. The current job could
-    # not be removed earlier because there might be the `jobCommit()`
-    # funcion waiting for it to have finished.
-    xp.byJobExclusively:
-      xp.byJob.dispose(task.id)
-      rc = xp.byJob.first
-
-  # End while
-
-  # Update flags, will trigger jobs when loop is invoked next
-  if updatePending:
-    xp.dirtyPending = true
-  if updateStaged:
-    xp.dirtyStaged = true
+        xp.dirtyStaged = false        # changes commited
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool action1 serialiser
@@ -392,33 +349,26 @@ proc processJobs(xp: TxPoolRef): int
 proc nJobsWaiting*(xp: TxPoolRef): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Return the number of jobs currently unprocessed, waiting.
-  xp.byJobExclusively:
-    result = xp.byJob.len
+  xp.byJob.len
 
 proc job*(xp: TxPoolRef; job: TxJobDataRef): TxJobID
     {.discardable,gcsafe,raises: [Defect,CatchableError].} =
   ## Add a new job to the queue (but do not start the commit loop.)
-  xp.byJobExclusively:
-    result = xp.byJob.add(job)
+  xp.byJob.add(job)
 
-proc jobCommit*(xp: TxPoolRef) {.async.} =
-  ## This function processes all jobs currently on the queue. Jobs added
-  ## while this function is active are left on the queue and need to be
-  ## processed with another instance of `jobCommit()`.
+proc jobCommit*(xp: TxPoolRef)
+    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
+  ## This function processes all jobs currently on the queue.
+  let nJobs = xp.processJobs
+  debug "processed jobs", nJobs
 
-  # Wait until the next batch is ready. This needs to be waited for as
-  # there might be another job running running some older jobs. The event
-  # is activated when the latest chunk can be processed.
-  await xp.byJob.waitLatest
-
-  # Run jobs processor. It does not matter if this fails. In that case, some
-  # other `jobCommit()` is running processing at least the current batch.
-  if xp.uniqueAccessCommitLoop:
-    # all jobs will be processed in foreground, release afterwards
-    let nJobs = xp.processJobs
-    debug "processed jobs",
-      nJobs
-    xp.releaseAccessCommitLoop
+# hide complexity unless really needed
+when JobWaitEnabled:
+  proc jobWait*(xp: TxPoolRef) {.async,raises: [Defect,CatchableError].} =
+    ## Asynchronously wait until at least one job is available. This
+    ## function might be useful for testing (available only if the
+    ## `JobWaitEnabled` compiler flag is set.)
+    await xp.byJob.waitAvail
 
 # ------------------------------------------------------------------------------
 # Public functions, immediate actions (not queued as a job.)
@@ -430,10 +380,9 @@ proc jobCommit*(xp: TxPoolRef) {.async.} =
 # core/tx_pool.go(1745): func (t *txLookup) RemoteCount() int {
 proc count*(xp: TxPoolRef): TxTabsStatsCount
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Retrieves the current pool stats: the number of local, remote,
-  ## pending, queued, etc. transactions.
-  xp.txDBExclusively:
-    result = xp.txDB.statsCount
+  ## Retrieves the current pool stats: the number of transactions in the
+  ## database: *local*, *remote*, *pending*, *staged*, etc.
+  xp.txDB.statsCount
 
 
 # core/tx_pool.go(435): func (pool *TxPool) GasPrice() *big.Int {
@@ -488,20 +437,17 @@ proc setMinPlGasPrice*(xp: TxPoolRef; val: GasPrice)
 proc getBaseFee*(xp: TxPoolRef): GasPrice
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the `baseFee` implying the price list valuation and order.
-  xp.txDBExclusively:
-    result = xp.txDB.baseFee
+  xp.txDB.baseFee
 
-proc setBaseFee*(xp: TxPoolRef; baseFee: GasPrice; force = false)
+proc setBaseFee*(xp: TxPoolRef; baseFee: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Setter, implies some re-org of the data base. If the argument `force` is
-  ## set `true`, the base fee is set immediately, otherwise it is queued
-  ## and execured when the next `jobCommit()` takes place
-  discard xp.job(TxJobDataRef(
-    kind:     txJobSetBaseFee,
-    setBaseFeeArgs: (
-      price:  baseFee)))
-  if force:
-    waitFor xp.jobCommit
+  ## Setter, use new base fee. Note that after changing the `baseFee`
+  ## parameter, most probably a database re-org should take place (e.g.
+  ## invoking the job `txJobUpdatePending`)
+  xp.txDB.baseFee = baseFee      # cached value, change implies re-org
+  xp.dbHead.baseFee = baseFee    # representative value
+  xp.dirtyPending = true         # change may affect `pending` items
+  xp.dirtyStaged = true          # change may affect `staged` items
 
 
 proc setAlgoSelector*(xp: TxPoolRef; strategy: varArgs[TxPoolAlgoSelectorFlags])
@@ -536,7 +482,7 @@ proc fetchBlock*(xp: TxPoolRef): EthBlock
   ## Similar to `getBlock()`, only that it disposes of the txs included
   ## in the assembled block. Also the cache will empty afterwards.
   let cached = xp.blockCache
-  xp.blockCacheReset
+  xp.blockCache = TxPoolEthBlock.init
   result.header = cached.blockHeader
   for item in cached.blockItems:
     result.txs.add item.tx
@@ -547,21 +493,7 @@ proc nextBlock*(xp: TxPoolRef): GasInt
   ## Assembles a new block from the `staged` bucket and returns the maximum
   ## block size retrieved by summing up `gasLimit` entries of the included
   ## txs.
-  let req = TxJobDataRef(
-    kind:        txJobPackBlock,
-    packBlockArgs: (
-      sayReady:  true,
-      waitReady: newAsyncEvent()))
-  discard xp.job(req)
-
-  # Note that `xp.jobCommit` only guarantees that the job `req` will eventually
-  # be completed but as this happens asynchronously, it might happen somewhat
-  # later.
-  waitFor xp.jobCommit
-
-  # So waiting for an event makes sense.
-  waitFor req.packBlockArgs.waitReady.wait
-
+  xp.packItemsIntoBlock
   xp.blockCache.blockSize
 
 # core/tx_pool.go(218): func (pool *TxPool) reset(oldHead, newHead ...
@@ -579,7 +511,7 @@ proc setHead*(xp: TxPoolRef; newHeader: BlockHeader): bool
     let cached = xp.blockCache
     for item in cached.blockItems:
       discard xp.txDB.dispose(item, txInfoStagedBlockIncluded)
-    xp.blockCacheReset
+    xp.blockCache = TxPoolEthBlock.init
     return true
 
 # ------------------------------------------------------------------------------
@@ -590,28 +522,25 @@ proc setMaxRejects*(xp: TxPoolRef; size: int)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Set the size of the waste basket. This setting becomes effective with
   ## the next move of an item into the waste basket.
-  xp.txDBExclusively:
-    xp.txDB.maxRejects = size
+  xp.txDB.maxRejects = size
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
 proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the accounts currently considered `local` or `remote` (i.e.
   ## the have txs of that kind) depending on request arguments.
-  xp.txDBExclusively:
-    if local:
-      result = xp.txDB.locals
-    else:
-      result = xp.txDB.remotes
+  if local:
+    result = xp.txDB.locals
+  else:
+    result = xp.txDB.remotes
 
 # core/tx_pool.go(1797): func (t *txLookup) RemoteToLocals(locals ..
 proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## For given account, remote transactions are migrated to local transactions.
   ## The function returns the number of transactions migrated.
-  xp.txDBExclusively:
-    xp.txDB.setLocal(signer)
-    result = xp.txDB.bySender.eq(signer).nItems
+  xp.txDB.setLocal(signer)
+  xp.txDB.bySender.eq(signer).nItems
 
 # ------------------------------------------------------------------------------
 # Public functions, per-tx-item operations
@@ -622,15 +551,13 @@ proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
 proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Returns a transaction if it is contained in the pool.
-  xp.txDBExclusively:
-    result = xp.txDB.byItemID.eq(hash)
+  xp.txDB.byItemID.eq(hash)
 
 proc setStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Change/update the status of the transaction item.
   if status != item.status:
-    xp.txDBExclusively:
-      discard xp.txDB.reassign(item, status)
+    discard xp.txDB.reassign(item, status)
     if status == txItemPending or status == txItemPending:
       xp.dirtyPending = true # change may affect `pending` items
       xp.dirtyStaged = true  # change may affect `staged` items
@@ -641,13 +568,12 @@ proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Move item to wastebasket. All items for the same sender with nonces
   ## greater than the current one are deleted, as well.
-  xp.txDBExclusively:
-    discard xp.txDB.dispose(item, reason)
-    # delete all items with higher nonces
-    let rc = xp.txDB.bySender.eq(item.sender)
-    if rc.isOK:
-      for other in rc.value.data.walkItems(item.tx.nonce):
-        discard xp.txDB.dispose(other, otherReason)
+  discard xp.txDB.dispose(item, reason)
+  # delete all items with higher nonces
+  let rc = xp.txDB.bySender.eq(item.sender)
+  if rc.isOK:
+    for other in rc.value.data.walkItems(item.tx.nonce):
+      discard xp.txDB.dispose(other, otherReason)
 
 # ------------------------------------------------------------------------------
 # End

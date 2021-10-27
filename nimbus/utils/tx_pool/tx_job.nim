@@ -19,9 +19,20 @@ import
   ./tx_info,
   ./tx_item,
   ./tx_tabs,
-  chronos,
   eth/[common, keys],
   stew/results
+
+# hide complexity unless really needed
+const
+  jobWaitCompilerFlag = defined(job_wait_enabled) or defined(debug)
+
+  JobWaitEnabled* =  ##\
+    ## Compiler flag: fire *chronos* event if job queue becomes populated
+    jobWaitCompilerFlag
+
+when JobWaitEnabled:
+  import chronos
+
 
 type
   TxJobID* = ##\
@@ -30,112 +41,97 @@ type
     distinct uint
 
   TxJobKind* = enum ##\
-    ## Job types
-    txJobNone = 0
-    txJobAbort
-    txJobAddTxs
-    txJobEvictionInactive
-    txJobFlushRejects
-    txJobPackBlock
-    txJobSetBaseFee
-    txJobSetHead
-    txJobUpdatePending
-    txJobUpdateStaged
+    ## Types of batch job data. See `txJobPriorityKind` for the list of\
+    ## *out-of-band* jobs.
 
-  TxJobItemApply* = ##\
-    ## Generic item function used as apply function. If the function
-    ## returns false, the apply loop is aborted
-    ##
-    ## :Note:
-    ##   This function must not use the `async`, `await`, `waitFor`
-    ##   directives. Synchronisation becomes unpredictable, otherwise.
-    proc(item: TxItemRef): bool {.gcsafe,raises: [Defect].}
+    txJobNone = 0 ##\
+      ## no action
 
+    txJobAbort ##\
+      ## Stop processing and flush job queue.
+
+    txJobAddTxs ##\
+      ## Enqueues a batch of transactions
+
+    txJobEvictionInactive ##\
+      ## Move transactions older than `xp.lifeTime` to the waste basket.
+
+    txJobFlushRejects ##\
+      ## Deletes at most the `maxItems` oldest items from the waste basket.
+
+    txJobPackBlock ##\
+      ## Pack a block fetching items from the `staged` bucket. For included
+      ## txs, the item wrappers are moved to the waste basket.
+
+    txJobSetHead ##\
+      ## Change the insertion block header. This call might imply
+      ## re-calculating current transaction states.
+
+    txJobUpdatePending ##\
+      ## For all items, re-calculate `queued` and `pending` status. If the
+      ## `force` flag is set, re-calculation is done even though the change
+      ## flag hes remained unset.
+
+    txJobUpdateStaged ##\
+      ## Smartly collect `pending` items and label them `staged`. If the
+      ## `force` flag is set, re-calculation is done even though the change
+      ## flag hes remained unset.
+
+const
+  txJobPriorityKind*: set[TxJobKind] = ##\
+    ## Prioritised jobs, either small or important ones.
+    {txJobAbort,
+      txJobFlushRejects}
+
+type
   TxJobDataRef* = ref object
     case kind*: TxJobKind
-    of txJobNone: ##\
-      ## no action
+    of txJobNone, txJobAbort:
       discard
 
-    of txJobAbort: ##\
-      ## Stop processing and flush job queue
-      ##
-      ## Out-of-band job (runs with priority)
-      discard
-
-    of txJobAddTxs: ##\
-      ## Enqueues a batch of transactions
+    of txJobAddTxs:
       addTxsArgs*: tuple[
         txs:   seq[Transaction],
         info:  string]
 
-    of txJobEvictionInactive: ##\
-      ## Move transactions older than `xp.lifeTime` to the waste basket.
+    of txJobEvictionInactive:
       discard
 
-    of txJobFlushRejects: ##\
-      ## Deletes at most the `maxItems` oldest items from the waste basket.
-      ##
-      ## Out-of-band job (runs with priority)
+    of txJobFlushRejects:
       flushRejectsArgs*: tuple[
         maxItems: int]
 
-    of txJobPackBlock: ##\
-      ## Pack a block fetching items from the `staged` bucket. For included
-      ## txs, the item wrappers are moved to the waste basket.
-      ##
-      ## If the argument `sayReady` is set `true`, the event parameter
-      ## `waitReady` will be fired when the assembled block can be retrieved.
-      ## Waithing for `waitReady` to fire means it must have be initialised
-      ## as `newAsyncEvent()`.
-      packBlockArgs*: tuple[
-        sayReady: bool,
-        waitReady: AsyncEvent]
+    of txJobPackBlock:
+      discard
 
-    of txJobSetBaseFee: ##\
-      ## New base fee (implies database reorg). Note that after changing the
-      ## `baseFee`, most probably a re-org should take place (e.g. invoking
-      ## `txJobUpdatePending`)
-      setBaseFeeArgs*: tuple[
-        price: GasPrice]
-
-    of txJobSetHead: ##\
-      ## Change the insertion block header. This call might imply
-      ## re-calculating current transaction states.
+    of txJobSetHead:
       setHeadArgs*: tuple[
         head:  Hash256]
 
-    of txJobUpdatePending: ##\
-      ## For all items, re-calculate `queued` and `pending` status. If the
-      ## `force` flag is set, re-calculation is done even though the change
-      ## flag hes remained unset.
+    of txJobUpdatePending:
       updatePendingArgs*: tuple[
         force: bool]
 
-    of txJobUpdateStaged: ##\
-      ## Smartly collect `pending` items and label them `staged`. If the
-      ## `force` flag is set, re-calculation is done even though the change
-      ## flag hes remained unset.
+    of txJobUpdateStaged:
       updateStagedArgs*: tuple[
         force: bool]
 
-  TxJobPair* = object
-    id*: TxJobID
-    data*: TxJobDataRef
+  TxJobPair* = object     ## Responding to a job queue query
+    id*: TxJobID          ## Job ID, queue database key
+    data*: TxJobDataRef   ## Data record
+
 
   TxJobRef* = ref object ##\
     ## Job queue with increasing job *ID* numbers (wrapping around at
     ## `TxJobIdMax`.)
-    topID: TxJobID                             ## Next job will have `topID+1`
-    jobQueue: KeyedQueue[TxJobID,TxJobDataRef] ## Job queue
-    eventQueue: KeyedQueue[TxJobID,AsyncEvent] ## Can wait for some jobs
+    topID: TxJobID                         ## Next job will have `topID+1`
+    jobs: KeyedQueue[TxJobID,TxJobDataRef] ## Job queue
+
+    # hide complexity unless really needed
+    when JobWaitEnabled:
+      jobsAvail: AsyncEvent                ## Fired if there is a job available
 
 const
-  txJobPriorityKind*: set[TxJobKind] = ##\
-    ## Prioritised jobs, either small or important ones (as re-org)
-    {txJobAbort,
-      txJobFlushRejects}
-
   txJobIdMax* = ##\
     ## Wraps around to `1` after last ID
     999999.TxJobID
@@ -184,7 +180,7 @@ proc jobAppend(jq: TxJobRef; data: TxJobDataRef): TxJobID
     id = 1.TxJobID
   else:
     id = jq.topID + 1
-  if jq.jobQueue.append(id, data):
+  if jq.jobs.append(id, data):
     jq.topID = id
     return id
 
@@ -195,15 +191,15 @@ proc jobUnshift(jq: TxJobRef; data: TxJobDataRef): TxJobID
   ##
   ## See also the **Note* at the comment for `txAdd()`.
   var id: TxJobID
-  if jq.jobQueue.len == 0:
+  if jq.jobs.len == 0:
     if jq.topID == 0.TxJobID:
       jq.topID = txJobIdMax # must be non-zero after first use
     id = jq.topID
   else:
-    id = jq.jobQueue.firstKey.value - 1
+    id = jq.jobs.firstKey.value - 1
     if id == 0.TxJobID:
       id = txJobIdMax
-  if jq.jobQueue.unshift(id, data):
+  if jq.jobs.unshift(id, data):
     return id
 
 # ------------------------------------------------------------------------------
@@ -213,13 +209,20 @@ proc jobUnshift(jq: TxJobRef; data: TxJobDataRef): TxJobID
 proc init*(T: type TxJobRef; initSize = 10): T =
   ## Constructor variant
   new result
-  result.jobQueue.init(initSize)
-  result.eventQueue.init(1)
+  result.jobs.init(initSize)
+
+  # hide complexity unless really needed
+  when JobWaitEnabled:
+    result.jobsAvail = newAsyncEvent()
+
 
 proc clear*(jq: TxJobRef) =
   ## Re-initilaise variant
-  jq.jobQueue.clear
-  jq.eventQueue.clear
+  jq.jobs.clear
+
+  # hide complexity unless really needed
+  when JobWaitEnabled:
+    jq.jobsAvail.clear
 
 # ------------------------------------------------------------------------------
 # Public functions, add/remove entry
@@ -233,100 +236,42 @@ proc add*(jq: TxJobRef; data: TxJobDataRef): TxJobID
   else:
     result = jq.jobAppend(data)
 
-proc isWaitedFor*(jq: TxJobRef; id: TxJobID): bool
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Returns true if somebody waits for the job to have finished.
-  jq.eventQueue.hasKey(id)
-
-proc waitLatest*(jq: TxJobRef) {.async.} =
-  ## Wait for the currently latest job to have finished.
-  let rc = jq.eventQueue.lastKey
-  if rc.isErr:
-    return # nothing to wait for
-
-  # wait for the latest job ID to have finished
-  let id = rc.value
-
-  # event not in table yet?
-  if not jq.eventQueue.hasKey(id):
-    jq.eventQueue[id] = newAsyncEvent()
-
-    # fire immediately if this is the only one
-    if jq.eventQueue.len == 1:
-      jq.eventQueue[id].fire
-      return
-
-  # wait until event has fired
-  await jq.eventQueue[id].wait
+  # hide complexity unless really needed
+  when JobWaitEnabled:
+    # update event
+    jq.jobsAvail.fire
 
 
 proc fetch*(jq: TxJobRef): Result[TxJobPair,void]
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Fetches (and deletes) the next job from the *FIFO*.
-  var kvp: TxJobPair
 
   # first item from queue
-  block:
-    let rc = jq.jobQueue.shift
-    if rc.isErr:
-      return err()
-    kvp.id = rc.value.key
-    kvp.data = rc.value.data
-
-  # process event queue as follows:
-  #
-  #   on the event queue do for the job `kvp.id` of the current event
-  #
-  #   * if the first event has key `kvp.id`
-  #     => remove the first event
-  #     => fire the next event on the queue (if any)
-  #
-  block:
-    # check whether this is the first item, if so => trigger next
-    let rc1st = jq.eventQueue.first
-    if rc1st.isOK and rc1st.value.key == kvp.id:
-
-      jq.eventQueue.del(kvp.id) # not needed anymore
-      let rc2nd = jq.eventQueue.first
-      if rc2nd.isOK:
-        rc2nd.value.data.fire
-
-  ok(kvp)
-
-proc dispose*(jq: TxJobRef; id: TxJobID) {.gcsafe,raises: [Defect,KeyError].} =
-  ## Delete or disable the job with the job ID passed as argument `id`. If the
-  ## job is the next in the *FIFO*, then it will be deleted as with `fetch()`
-  ## while ignoring the return value. Otherwise the job will be re-classified
-  ## as `txJobNone` while leaving it on the *FIFO* queue.
-  ##
-  ## The effect is that if priority jobs have been pushed before the current
-  ## one, they will be fetched and processed up until the current job is
-  ## re-visited, again. Eventually, this job becomes the next in the *FIFO*
-  ## and will be deleted as with `fetch()`.
-  ##
-  ## This handling is necessary for `waitLatest()` event signalling which must
-  ## not trigger before the related batch of jobs has fully been cleared.
-  ##
-  # check first item
-  let rc = jq.jobQueue.first
-  if rc.isOk:
-    if id == rc.value.key:
-      # just remove that item (this will update event triggers)
-      discard jq.fetch
-    else:
-      # re-pupose as idle job and leave it on the queue so it will probably be
-      # visited again and properly discarded
-      jq.jobQueue[id] = TxJobDataRef(kind: txJobNone)
-
-
-proc first*(jq: TxJobRef): Result[TxJobPair,void]
-    {.gcsafe,raises: [Defect,KeyError].} =
-  ## Peek, get the next due job (like `fetch()`) but leave it in the
-  ## queue (unlike `fetch()`).
-  let rc = jq.jobQueue.first
+  let rc = jq.jobs.shift
   if rc.isErr:
     return err()
+
+  # hide complexity unless really needed
+  when JobWaitEnabled:
+    # update event
+    jq.jobsAvail.clear
+
+  # result
   ok(TxJobPair(id: rc.value.key, data: rc.value.data))
+
+
+# hide complexity unless really needed
+when JobWaitEnabled:
+  proc waitAvail*(jq: TxJobRef) {.async,raises: [Defect,CatchableError].} =
+    ## Asynchronously wait until at least one job is available (available
+    ## only if the `JobWaitEnabled` compiler flag is set.)
+    if jq.jobs.len == 0:
+      await jq.jobsAvail.wait
+else:
+  proc waitAvail*(jq: TxJobRef)
+    {.deprecated: "will raise exception unless JobWaitEnabled is set",
+      raises: [Defect,CatchableError].} =
+    raiseAssert "Must not be called unless JobWaitEnabled is set"
 
 # ------------------------------------------------------------------------------
 # Public queue/table ops
@@ -334,15 +279,15 @@ proc first*(jq: TxJobRef): Result[TxJobPair,void]
 
 proc`[]`*(jq: TxJobRef; id: TxJobID): TxJobDataRef
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  jq.jobQueue[id]
+  jq.jobs[id]
 
 proc hasKey*(jq: TxJobRef; id: TxJobID): bool
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  jq.jobQueue.hasKey(id)
+  jq.jobs.hasKey(id)
 
 proc len*(jq: TxJobRef): int
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  jq.jobQueue.len
+  jq.jobs.len
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
@@ -351,19 +296,9 @@ proc len*(jq: TxJobRef): int
 proc verify*(jq: TxJobRef): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,KeyError].} =
   block:
-    let rc = jq.jobQueue.verify
+    let rc = jq.jobs.verify
     if rc.isErr:
       return err(txInfoVfyJobQueue)
-
-  block:
-    var isFired = true
-    for kvp in jq.eventQueue.nextPairs:
-      if not jq.jobQueue.hasKey(kvp.key):
-        return err(txInfoVfyJobEvent)
-      # first id must have been fired and the other reset
-      if kvp.data.isSet != isFired:
-        return err(txInfoVfyJobEvent)
-      isFired = false
 
   ok()
 

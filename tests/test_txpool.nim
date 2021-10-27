@@ -207,23 +207,23 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       check minGasPrice <= maxGasPrice
       check gasTipCaps.len == xp.txDB.byTipCap.len
 
-    test &"Concurrent job processing, test for race conditions":
+    test &"Concurrent job processing example":
       var log = ""
 
-      proc delayJob(xp: TxPoolRef; tmo: int) {.async.} =
+      # This test does not verify anything but rather shows how the pool
+      # primitives could be used in an async context.
+
+      proc delayJob(xp: TxPoolRef; waitMs: int) {.async.} =
         let n = xp.nJobsWaiting
         xp.job(TxJobDataRef(kind: txJobNone))
         xp.job(TxJobDataRef(kind: txJobNone))
         xp.job(TxJobDataRef(kind: txJobNone))
-        log &= " wait-" & $tmo & "-" & $(xp.nJobsWaiting - n)
-        await chronos.milliseconds(tmo).sleepAsync
-        await xp.jobCommit
-        log &= " done-" & $tmo
+        log &= " wait-" & $waitMs & "-" & $(xp.nJobsWaiting - n)
+        await chronos.milliseconds(waitMs).sleepAsync
+        xp.jobCommit
+        log &= " done-" & $waitMs
 
       # run async jobs, completion should be sorted by timeout argument
-      #
-      # this proves, that the `jobCommit()` directive properly runs the
-      # latest batch of jobs -- maybe waiting for some other job to finish
       proc runJobs(xp: TxPoolRef) {.async.} =
         let
           p1 = xp.delayJob(900)
@@ -238,7 +238,7 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       check log == " wait-900-3 wait-1-3 wait-700-3 done-1 done-700 done-900"
       check xp.verify.isOK
 
-
+      
 proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
 
   let
@@ -438,7 +438,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           let item = triple[0]
           var tx = triple[1]
           xq.pjaAddTx(tx, item.info)
-        waitFor xq.jobCommit
+        xq.jobCommit
 
         check xq.count.total == testTxs.len
         check xq.count.disposed == 0
@@ -450,7 +450,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           let item = triple[0]
           var tx = triple[2]
           xq.pjaAddTx(tx, "alt " & item.info)
-        waitFor xq.jobCommit
+        xq.jobCommit
 
         check xq.count.total == testTxs.len
         check xq.count.disposed == testTxs.len
@@ -503,7 +503,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         # evict and pick items from the wastbasket
         xq.pjaFlushRejects
         xq.pjaInactiveItemsEviction
-        waitFor xq.jobCommit
+        xq.jobCommit
         let deletedItems = xq.count.disposed
 
         check xq.verify.isOK # not: xq.txDB.verify
@@ -644,7 +644,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         # re-add item
         var tx = thisItem.tx
         xq.pjaAddTx(tx)
-        waitFor xq.jobCommit
+        xq.jobCommit
 
         # verify that the pivot item was moved out from the waste basket
         check not xq.txDB.byRejects.hasKey(thisItem.itemID)
@@ -722,11 +722,11 @@ proc runTxPackerTests(noisy = true) =
           check xr.count.disposed == 0
 
           check xq.getBaseFee == ntBaseFee
-          xq.setBaseFee(ntNextFee, true)
+          xq.setBaseFee(ntNextFee)
           check xq.getBaseFee == ntNextFee
 
           xq.pjaUpdatePending(force = true)
-          waitFor xq.jobCommit
+          xq.jobCommit
 
           # now, xq should look like xr
           check xq.count == xr.count
@@ -745,7 +745,7 @@ proc runTxPackerTests(noisy = true) =
           check minGasPrice < maxGasPrice
 
           # ignore base limit so that the `packPrice` below becomes effective
-          xq.setBaseFee(0.GasPrice, true)
+          xq.setBaseFee(0.GasPrice)
           check xq.getBaseFee == 0.GasPrice
 
           # set minimum target price
@@ -755,7 +755,7 @@ proc runTxPackerTests(noisy = true) =
           noisy.say "*** status before 1st staging ", xq.count
 
           xq.pjaUpdateStaged
-          waitFor xq.jobCommit
+          xq.jobCommit
 
           # verify that the test does not degenerate
           check 0 < xq.count.staged
@@ -791,7 +791,7 @@ proc runTxPackerTests(noisy = true) =
           xq.setMinPlGasPrice(lowerPrice)
 
           xq.pjaUpdateStaged
-          waitFor xq.jobCommit
+          xq.jobCommit
 
           # verify that the test does not degenerate
           check 0 < xq.count.staged
