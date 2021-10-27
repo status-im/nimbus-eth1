@@ -10,6 +10,7 @@
 ## network sync processes.
 
 import
+  std/options,
   stint, stew/byteutils, chronicles,
   eth/[common/eth_types, p2p]
 
@@ -54,12 +55,16 @@ type
     stats*:                 SyncPeerStats
 
     # Peer canonical chain head ("best block") search state.
-    bestBlockHash*:         BlockHash
-    bestBlockNumber*:       BlockNumber
     syncMode*:              SyncPeerMode
+    bestBlockNumber*:       BlockNumber
+    bestBlockHash*:         BlockHash
     huntLow*:               BlockNumber # Recent highest known present block.
     huntHigh*:              BlockNumber # Recent lowest known absent block.
     huntStep*:              typeof(BlocksRequest.skip)
+
+    # State root to fetch state for.
+    # This changes during sync and is slightly different for each peer.
+    syncStateRoot*:         Option[TrieHash]
 
   SyncPeerMode* = enum
     ## The current state of tracking the peer's canonical chain head.
@@ -98,6 +103,9 @@ type
 
   TxHash* = Hash256
     ## Hash of a transaction.
+
+  TrieHash* = Hash256
+    ## Hash of a trie root: accounts, storage, receipts or transactions.
 
   NodeHash* = Hash256
     ## Hash of a trie node or other blob carried over `eth.NodeData`:

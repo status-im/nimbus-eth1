@@ -107,7 +107,23 @@ doAssert syncHuntQuerySize >= 1 and syncHuntQuerySize <= maxHeadersFetch
 doAssert syncHuntForwardExpandShift >= 1 and syncHuntForwardExpandShift <= 8
 doAssert syncHuntBackwardExpandShift >= 1 and syncHuntBackwardExpandShift <= 8
 
-proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber, bestHash: Hash256) =
+proc clearSyncStateRoot(sp: SyncPeer) =
+  if sp.syncStateRoot.isSome:
+    debug "Sync: Stopping state sync from this peer", peer=sp
+    sp.syncStateRoot = none(TrieHash)
+
+proc setSyncStateRoot(sp: SyncPeer, blockNumber: BlockNumber,
+                      blockHash: BlockHash, stateRoot: TrieHash) =
+  if sp.syncStateRoot.isNone:
+    debug "Sync: Starting state sync from this peer",
+      `block`=blockNumber, blockHash=($blockHash), stateRoot=($stateRoot), peer=sp
+  elif sp.syncStateRoot.unsafeGet != stateRoot:
+    trace "Sync: Adjusting state sync root from this peer",
+      `block`=blockNumber, blockHash=($blockHash), stateRoot=($stateRoot), peer=sp
+  sp.syncStateRoot = some(stateRoot)
+
+proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
+                     bestHash: BlockHash) =
   ## Trace messages when peer canonical head is confirmed or updated.
   if sp.syncMode != SyncLocked:
     debug "Sync: Now tracking chain head of peer",
@@ -125,7 +141,8 @@ proc traceSyncLocked(sp: SyncPeer, bestNumber: BlockNumber, bestHash: Hash256) =
       advance=(sp.bestBlockNumber - bestNumber),
       `block`=bestNumber, hash=($bestHash), peer=sp
 
-proc setSyncLocked(sp: SyncPeer, bestNumber: BlockNumber, bestHash: Hash256) =
+proc setSyncLocked(sp: SyncPeer, bestNumber: BlockNumber,
+                   bestHash: BlockHash) =
   ## Actions to take when peer canonical head is confirmed or updated.
   sp.traceSyncLocked(bestNumber, bestHash)
   sp.bestBlockNumber = bestNumber
@@ -140,6 +157,7 @@ proc setHuntBackward(sp: SyncPeer, lowestAbsent: BlockNumber) =
   sp.huntLow = 0.toBlockNumber
   # Zero `lowestAbsent` is never correct, but an incorrect peer could send it.
   sp.huntHigh = if lowestAbsent > 0: lowestAbsent else: 1.toBlockNumber
+  sp.clearSyncStateRoot()
 
 proc setHuntForward(sp: SyncPeer, highestPresent: BlockNumber) =
   ## Start exponential search mode forward due to new uncertainty.
@@ -147,6 +165,7 @@ proc setHuntForward(sp: SyncPeer, highestPresent: BlockNumber) =
   sp.huntStep = 0
   sp.huntLow = highestPresent
   sp.huntHigh = high(BlockNumber)
+  sp.clearSyncStateRoot()
 
 proc updateHuntAbsent(sp: SyncPeer, lowestAbsent: BlockNumber) =
   ## Converge uncertainty range backward.
@@ -157,6 +176,7 @@ proc updateHuntAbsent(sp: SyncPeer, lowestAbsent: BlockNumber) =
     # (empty range is `huntLow + 1 == huntHigh`).
     if sp.huntHigh <= sp.huntLow:
       sp.setHuntBackward(lowestAbsent)
+  sp.clearSyncStateRoot()
 
 proc updateHuntPresent(sp: SyncPeer, highestPresent: BlockNumber) =
   ## Converge uncertainty range forward.
@@ -167,6 +187,7 @@ proc updateHuntPresent(sp: SyncPeer, highestPresent: BlockNumber) =
     # (empty range is `huntLow + 1 == huntHigh`).
     if sp.huntLow >= sp.huntHigh:
       sp.setHuntForward(highestPresent)
+  sp.clearSyncStateRoot()
 
 proc peerSyncChainEmptyReply(sp: SyncPeer, request: BlocksRequest) =
   ## Handle empty `GetBlockHeaders` reply.  This means `request.startBlock` is
@@ -174,13 +195,15 @@ proc peerSyncChainEmptyReply(sp: SyncPeer, request: BlocksRequest) =
   ## and the previous canonical chain head has disappeared.  If hunting, this
   ## updates the range of uncertainty.
 
-  # Treat empty response from block 1 onwards as equivalent to length 1 from
-  # block 0 onwards in `peerSyncChainNonEmptyReply`.  We treat every peer as if
-  # it would send genesis for block 0, and don't actually ask for it.
+  # Treat empty response to a request starting from block 1 as equivalent to
+  # length 1 starting from block 0 in `peerSyncChainNonEmptyReply`.  We treat
+  # every peer as if it would send genesis for block 0, without asking for it.
   if request.skip == 0 and not request.reverse and
      not request.startBlock.isHash and
      request.startBlock.number == 1.toBlockNumber:
     sp.setSyncLocked(0.toBlockNumber, sp.peer.network.chain.genesisHash)
+    # Don't sync genesis state from peers.
+    sp.clearSyncStateRoot()
     return
 
   if sp.syncMode == SyncLocked or sp.syncMode == SyncOnlyHash:
@@ -234,8 +257,10 @@ proc peerSyncChainNonEmptyReply(sp: SyncPeer, request: BlocksRequest,
   if len < syncLockedMinimumReply and
      request.skip == 0 and not request.reverse and
      len.uint < request.maxResults:
-    sp.setSyncLocked(headers[highestIndex].blockNumber,
-                     headers[highestIndex].blockHash)
+    let blockHash = headers[highestIndex].blockHash
+    sp.setSyncLocked(headers[highestIndex].blockNumber, blockHash)
+    sp.setSyncStateRoot(headers[highestIndex].blockNumber, blockHash,
+                        headers[highestIndex].stateRoot)
     return
 
   # Be careful, this number is from externally supplied data and arithmetic
