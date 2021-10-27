@@ -70,32 +70,6 @@ proc pjaFlushRejects*(xp: TxPoolRef; numItems = int.high)
     flushRejectsArgs: (
       maxItems: numItems)))
 
-proc pjaItemsApply*(xp: TxPoolRef; apply: TxJobItemApply)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Apply argument function `apply` to all active items
-  discard xp.job(TxJobDataRef(
-    kind:     txJobApply,
-    applyArgs: (
-      apply:  apply)))
-
-proc pjaItemsApply*(xp: TxPoolRef; apply: TxJobItemApply; status: TxItemStatus)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Apply argument function `apply` to all items of the bucket with label
-  ## matching the `status` argument.
-  discard xp.job(TxJobDataRef(
-    kind:      txJobApplyByStatus,
-    applyByStatusArgs: (
-      status:  status,
-      apply:   apply)))
-
-proc pjaRejectsApply*(xp: TxPoolRef; apply: TxJobItemApply)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Apply argument function `apply` to all rejected items in the waste basket.
-  discard xp.job(TxJobDataRef(
-    kind:     txJobApplyByRejected,
-    applyByRejectedArgs: (
-      apply:  apply)))
-
 proc pjaUpdatePending*(xp: TxPoolRef; force = false)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Update pending bucket

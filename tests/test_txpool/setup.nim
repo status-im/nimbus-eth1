@@ -195,13 +195,7 @@ proc toTxPool*(
 
 
 proc toItems*(xp: TxPoolRef): seq[TxItemRef] =
-  var rList: seq[TxItemRef]
-  let itFn = proc(item: TxItemRef): bool =
-               rList.add item
-               true
-  xp.pjaItemsApply(itFn)
-  waitFor xp.jobCommit
-  result = rList
+  toSeq(xp.txDB.byItemID.nextValues)
 
 
 proc setItemStatusFromInfo*(xp: TxPoolRef) =

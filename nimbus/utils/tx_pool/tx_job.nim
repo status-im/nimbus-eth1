@@ -34,9 +34,6 @@ type
     txJobNone = 0
     txJobAbort
     txJobAddTxs
-    txJobApply
-    txJobApplyByRejected
-    txJobApplyByStatus
     txJobEvictionInactive
     txJobFlushRejects
     txJobPackBlock
@@ -71,30 +68,6 @@ type
       addTxsArgs*: tuple[
         txs:   seq[Transaction],
         info:  string]
-
-    of txJobApply: ##\
-      ## Apply argument function to all items.
-      ##
-      ## :Note:
-      ##    It is OK to request the current item to be moved to the waste
-      ##    basket.
-      applyArgs*: tuple[
-        apply: TxJobItemApply]
-
-    of txJobApplyByStatus: ##\
-      ## Apply argument function to all `status` items.
-      ##
-      ## :Note:
-      ##    It is OK to request the current item to be moved to the waste
-      ##    basket.
-      applyByStatusArgs*: tuple[
-        status: TxItemStatus,
-        apply:  TxJobItemApply]
-
-    of txJobApplyByRejected: ##\
-      ## Apply argument function to all `rejected` items.
-      applyByRejectedArgs*: tuple[
-        apply:  TxJobItemApply]
 
     of txJobEvictionInactive: ##\
       ## Move transactions older than `xp.lifeTime` to the waste basket.

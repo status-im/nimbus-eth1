@@ -80,7 +80,6 @@ type
     commitLoop: bool           ## Sentinel, set while commit loop is running
     dirtyPending: bool         ## Pending bucket needs update
     dirtyStaged: bool          ## Stage bucket needs update
-    isCallBack: bool           ## set if a call back is currently activated
 
     algoSelect: set[TxPoolAlgoSelectorFlags] ## Packer strategy symbols
 
@@ -254,42 +253,6 @@ template txDBExclusively*(xp: TxPoolRef; action: untyped) =
     action
   finally:
     xp.txDBUnLock
-
-# -----------------------------
-
-proc txRunCallBackSync*(xp: TxPoolRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ##Returns the value of the `isCallBack`
-  xp.paramExclusively:
-    result = xp.param.isCallBack
-
-proc txRunCallBackSync*(xp: TxPoolRef; val: bool): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Sets the `isCallBack` parameter and returns the previous value
-  xp.paramExclusively:
-    result = xp.param.isCallBack
-    xp.param.isCallBack = val
-
-template txRunCallBack*(xp: TxPoolRef; action: untyped) =
-  ## Handy helper for wrapping a call back. This template will raise a
-  ## `TxPoolCallBackRecursion` exception on an attempt to recursively
-  ## re-invoke this directive.
-  if xp.txRunCallBackSync(true) != false:
-    raise newException(TxPoolCallBackRecursion, "Call back already active")
-  action
-  if xp.txRunCallBackSync(false) != true:
-    raise newException(TxPoolCallBackRecursion, "Lost call back semaphore")
-
-template txCallBackOrDBExclusively*(xp: TxPoolRef; action: untyped) =
-  ## Returns `true` if the `isCallBack` parameter is set
-  var isCallBack = xp.txRunCallBackSync
-  if not isCallBack:
-    xp.txDBLock
-  try:
-    action
-  finally:
-    if not isCallBack:
-      xp.txDBUnLock
 
 # ------------------------------------------------------------------------------
 # Public functions, synchonised getters/setters

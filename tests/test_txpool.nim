@@ -260,12 +260,11 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
         # Set txs to pseudo random status
         xq.setItemStatusFromInfo
 
-        let itFn = proc(item: TxItemRef): bool =
-                     xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Forward delete-walk ID queue"):
-          xq.pjaItemsApply(itFn)
-          waitFor xq.jobCommit
+          for item in xq.txDB.byItemID.nextValues:
+            if not xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy):
+              break
         check xq.txDB.verify.isOK
         check seen.len == xq.count.total
         check seen.len < groupLen
@@ -279,12 +278,11 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
         # Set txs to pseudo random status
         xq.setItemStatusFromInfo
 
-        let itFn = proc(item: TxItemRef): bool =
-                     xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy)
         check xq.txDB.verify.isOK
         elapNoisy.showElapsed("Revese delete-walk ID queue"):
-          xq.pjaItemsApply(itFn)
-          waitFor xq.jobCommit
+          for item in xq.txDB.byItemID.nextValues:
+            if not xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy):
+              break
         check xq.txDB.verify.isOK
         check seen.len == xq.count.total
         check seen.len < groupLen

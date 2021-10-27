@@ -42,7 +42,7 @@ type
   TxTabsRef* = ref object ##\
     ## Base descriptor
     maxRejects: int ##\
-      ## madximal number of items in waste basket
+      ## maximal number of items in waste basket
 
     baseFee: GasPrice##\
       ## `byGasTip` re-org when changing

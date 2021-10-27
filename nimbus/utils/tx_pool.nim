@@ -24,6 +24,8 @@
 ## * Currently too much fuss about locks and events, simplify to what is really
 ##   needed. It seems that pushing txs is the only async job which generalises
 ##   to adding a job to the job queue. Question: what about `jobCommit()`?
+## * Current packing cycle results to one tx/address. Check whether it makes
+##   sense to sort of bundle all txs/address.
 ##
 ##
 ## Transaction state diagram:
@@ -299,34 +301,6 @@ proc processJobs(xp: TxPoolRef): int
       updatePending = true # change may affect `pending` items
       updateStaged = true  # change may affect `staged` items
 
-    of txJobApply:
-      # Apply argument function to all `local` or `remote` items.
-      let args = task.data.applyArgs
-      xp.txRunCallBack:
-        xp.txDBExclusively:
-          # core/tx_pool.go(1681): func (t *txLookup) Range(f func(hash ..
-          for item in xp.txDB.byItemID.nextValues:
-            if not args.apply(item):
-              break
-
-    of txJobApplyByStatus:
-      # Apply argument function to all `status` items.
-      let args = task.data.applyByStatusArgs
-      xp.txRunCallBack:
-        xp.txDBExclusively:
-          for item in xp.txDB.byStatus.incItemList(args.status):
-            if not args.apply(item):
-              break
-
-    of txJobApplyByRejected:
-      # Apply argument function to all `rejected` items.
-      let args = task.data.applyByRejectedArgs
-      xp.txRunCallBack:
-        xp.txDBExclusively:
-          for item in xp.txDB.byRejects.nextValues:
-            if not args.apply(item):
-              break
-
     of txJobEvictionInactive:
       # Move transactions older than `xp.lifeTime` to the waste basket.
       xp.txDBExclusively:
@@ -458,9 +432,7 @@ proc count*(xp: TxPoolRef): TxTabsStatsCount
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the current pool stats: the number of local, remote,
   ## pending, queued, etc. transactions.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
+  xp.txDBExclusively:
     result = xp.txDB.statsCount
 
 
@@ -470,8 +442,6 @@ proc getMinFeePrice*(xp: TxPoolRef): GasPrice
   ## Getter for `minFeePrice`, the current gas fee enforced by the transaction
   ## pool for txs to be staged. This is an EIP-1559 only parameter (see
   ## `stage1559MinFee` strategy.)
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.minFeePrice
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
@@ -479,8 +449,6 @@ proc setMinFeePrice*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter for `minFeePrice`. Increasing it might remove some post-London
   ## transactions when the `staged` bucket is re-built.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.minFeePrice = val
   xp.dirtyStaged = false
 
@@ -490,8 +458,6 @@ proc getMinTipPrice*(xp: TxPoolRef): GasPrice
   ## Getter for `minTipPrice`, the current gas tip (or priority fee) enforced
   ## by the transaction pool. This is an EIP-1559 parameter but with a fall
   ## back legacy interpretation (see `stage1559MinTip` strategy.)
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.minTipPrice
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
@@ -499,8 +465,6 @@ proc setMinTipPrice*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter for `minTipPrice`. Increasing it might remove some transactions
   ## when the `staged` bucket is re-built.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.minTipPrice = val
   xp.dirtyStaged = false
 
@@ -510,8 +474,6 @@ proc getMinPlGasPrice*(xp: TxPoolRef): GasPrice
   ## Getter for `minPlGasPrice`, the current gas price enforced by the
   ## transaction pool. This is a pre-London parameter (see `stagedPlMinPrice`
   ## strategy.)
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.minPlGasPrice
 
 # core/tx_pool.go(444): func (pool *TxPool) SetGasPrice(price *big.Int) {
@@ -519,8 +481,6 @@ proc setMinPlGasPrice*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter for `minPlGasPrice`.  Increasing it might remove some legacy
   ## transactions when the `staged` bucket is re-built.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
   xp.minPlGasPrice = val
   xp.dirtyStaged = false
 
@@ -528,9 +488,7 @@ proc setMinPlGasPrice*(xp: TxPoolRef; val: GasPrice)
 proc getBaseFee*(xp: TxPoolRef): GasPrice
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Get the `baseFee` implying the price list valuation and order.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
+  xp.txDBExclusively:
     result = xp.txDB.baseFee
 
 proc setBaseFee*(xp: TxPoolRef; baseFee: GasPrice; force = false)
@@ -632,9 +590,7 @@ proc setMaxRejects*(xp: TxPoolRef; size: int)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Set the size of the waste basket. This setting becomes effective with
   ## the next move of an item into the waste basket.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
+  xp.txDBExclusively:
     xp.txDB.maxRejects = size
 
 # core/tx_pool.go(561): func (pool *TxPool) Locals() []common.Address {
@@ -642,9 +598,7 @@ proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the accounts currently considered `local` or `remote` (i.e.
   ## the have txs of that kind) depending on request arguments.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
+  xp.txDBExclusively:
     if local:
       result = xp.txDB.locals
     else:
@@ -655,7 +609,7 @@ proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## For given account, remote transactions are migrated to local transactions.
   ## The function returns the number of transactions migrated.
-  xp.txCallBackOrDBExclusively:
+  xp.txDBExclusively:
     xp.txDB.setLocal(signer)
     result = xp.txDB.bySender.eq(signer).nItems
 
@@ -668,18 +622,14 @@ proc remoteToLocals*(xp: TxPoolRef; signer: EthAddress): int
 proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Returns a transaction if it is contained in the pool.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
+  xp.txDBExclusively:
     result = xp.txDB.byItemID.eq(hash)
 
 proc setStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Change/update the status of the transaction item.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
   if status != item.status:
-    xp.txCallBackOrDBExclusively:
+    xp.txDBExclusively:
       discard xp.txDB.reassign(item, status)
     if status == txItemPending or status == txItemPending:
       xp.dirtyPending = true # change may affect `pending` items
@@ -691,9 +641,7 @@ proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Move item to wastebasket. All items for the same sender with nonces
   ## greater than the current one are deleted, as well.
-  ##
-  ## It is safe to be used within a `TxJobItemApply` call back function.
-  xp.txCallBackOrDBExclusively:
+  xp.txDBExclusively:
     discard xp.txDB.dispose(item, reason)
     # delete all items with higher nonces
     let rc = xp.txDB.bySender.eq(item.sender)
