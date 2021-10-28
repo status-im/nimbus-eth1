@@ -16,7 +16,6 @@ else:
     ./vm2/types as vmt
 
 export
-  vmt.AccessLogs,
   vmt.BaseVMState,
   vmt.CallKind,
   vmt.Computation,

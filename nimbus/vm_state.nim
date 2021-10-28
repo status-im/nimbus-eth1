@@ -40,7 +40,6 @@ export
   vms.getTracingResult,
   vms.init,
   vms.mutateStateDB,
-  vms.newAccessLogs,
   vms.newBaseVMState,
   vms.readOnlyStateDB,
   vms.removeTracedAccounts,
@@ -49,7 +48,6 @@ export
   vms.timestamp,
   vms.tracedAccounts,
   vms.tracedAccountsPairs,
-  vms.update,
   vms.updateBlockHeader
 
 # End

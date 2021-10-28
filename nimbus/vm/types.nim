@@ -34,7 +34,6 @@ type
   BaseVMState* = ref object of RootObj
     prevHeaders*   : seq[BlockHeader]
     chaindb*       : BaseChainDB
-    accessLogs*    : AccessLogs
     blockHeader*   : BlockHeader
     name*          : string
     flags*         : set[VMFlag]
@@ -50,10 +49,6 @@ type
     gasCosts*      : GasCosts
     fork*          : Fork
     minerAddress*  : EthAddress
-
-  AccessLogs* = ref object
-    reads*: Table[string, string]
-    writes*: Table[string, string]
 
   TracerFlags* {.pure.} = enum
     EnableTracing

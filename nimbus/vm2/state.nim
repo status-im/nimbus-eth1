@@ -36,14 +36,6 @@ proc getMinerAddress(vmState: BaseVMState): EthAddress =
 
   account.value
 
-
-proc newAccessLogs*: AccessLogs =
-  AccessLogs(reads: initTable[string, string](), writes: initTable[string, string]())
-
-proc update*[K, V](t: var Table[K, V], elements: Table[K, V]) =
-  for k, v in elements:
-    t[k] = v
-
 proc `$`*(vmState: BaseVMState): string =
   if vmState.isNil:
     result = "nil"
@@ -54,7 +46,6 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
            chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}) =
   self.prevHeaders = @[]
   self.name = "BaseVM"
-  self.accessLogs = newAccessLogs()
   self.blockHeader = header
   self.chaindb = chainDB
   self.tracer.initTracer(tracerFlags)
