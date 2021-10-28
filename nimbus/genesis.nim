@@ -1,16 +1,14 @@
 import
   std/tables,
   eth/[common, rlp, trie, p2p],
-  chronicles, eth/trie/db,
+  chronicles, eth/trie/[db, trie_defs],
   ./db/[db_chain, state_db],
-  ./constants,
-  ./chain_config, ./forks, ./p2p/gaslimit
+  "."/[constants, chain_config, forks, p2p/gaslimit]
 
 proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
   let (tdb, pruneTrie) = if db.isNil: (newMemoryDB(), true)
                          else: (db.db, db.pruneTrie)
-  var trie = initHexaryTrie(tdb)
-  var sdb = newAccountStateDB(tdb, trie.rootHash, pruneTrie)
+  var sdb = newAccountStateDB(tdb, emptyRlpHash, pruneTrie)
 
   for address, account in g.alloc:
     sdb.setAccount(address, newAccount(account.nonce, account.balance))
