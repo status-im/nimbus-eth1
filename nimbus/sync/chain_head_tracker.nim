@@ -444,7 +444,8 @@ proc peerHuntCanonical*(sp: SyncPeer) {.async.} =
   # order, and prior to eth/66 there is no request-id.  We'll avoid this
   # problem by never sending overlapping `GetBlockHeaders` to the same peer.
   if sp.pendingGetBlockHeaders:
-    trace ">| Blocked overlapping GetBlockHeaders (0x03)", peer=sp
+    #trace ">| Blocked overlapping eth.GetBlockHeaders (0x03)", peer=sp
+    await sleepAsync(chronos.milliseconds(500))
     return
   sp.pendingGetBlockHeaders = true
 
