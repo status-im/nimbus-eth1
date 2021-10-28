@@ -13,7 +13,7 @@ import
   ../nimbus/utils/keyed_queue,
   ../nimbus/utils/keyed_queue/[kq_debug, kq_rlp],
   eth/rlp,
-  unittest
+  unittest2
 
 const
   usedStrutils = newSeq[string]().join(" ")

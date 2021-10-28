@@ -29,20 +29,20 @@ type
   TxPoolAlgoSelectorFlags* = enum ##\
     ## Algorithm strategy selector symbols for staging transactions
 
-    algoStaged1559MinFee ##\
+    algoPacked1559MinFee ##\
       ## Include tx items which have at least this `maxFee`, other items
       ## are considered underpriced.
       ##
       ## This is post-London only strategy only applicable to post-London
       ## transactions.
 
-    algoStaged1559MinTip ##\
+    algoPacked1559MinTip ##\
       ## Include tx items which have a tip at least this `estimatedGasTip`.
       ##
       ## This is post-London effecticve strategy with some legacy fall
       ## back mode (see implementation of `estimatedGasTip`.)
 
-    algoStagedPlMinPrice ##\
+    algoPackedPlMinPrice ##\
       ## Tx items are included where the gas proce is at least this `gasPrice`,
       ## other items are considered underpriced.
       ##
@@ -76,8 +76,8 @@ type
     minPlGas: TxPoolPrice      ## Desired pre-London min `gasPrice`
     blockCache: TxPoolEthBlock ## Cached header for new block
 
-    dirtyPending: bool         ## Pending bucket needs update
-    dirtyStaged: bool          ## Stage bucket needs update
+    dirtyStaged: bool          ## Staged bucket needs update
+    dirtyPacked: bool          ## Stage bucket needs update
 
     algoSelect: set[TxPoolAlgoSelectorFlags] ## Packer strategy symbols
 
@@ -96,20 +96,22 @@ type
 
 const
   txPoolLifeTime = ##\
-    ## Maximum amount of time non-executable transaction are queued,
-    ## default as set in core/tx_pool.go(184)
+    ## Maximum amount of time transactions can be held in the database\
+    ## unless they are packed already for a block. This default is chosen\
+    ## as found in core/tx_pool.go(184) of the geth implementation.
     initDuration(hours = 3)
 
   txPriceBump = ##\
-    ## Minimum price bump percentage to replace an already existing
-    ## transaction (nonce), default as set in core/tx_pool.go(177)
+    ## Minimum price bump percentage to replace an already existing\
+    ## transaction (nonce). This default is chosen as found in\
+    ## core/tx_pool.go(177) of the geth implementation.
     10u
 
   txMinFeePrice = 1.GasPrice
   txMinTipPrice = 1.GasPrice
-  txPoolAlgoStrategy = {algoStaged1559MinTip,
-                         algoStaged1559MinFee,
-                         algoStagedPlMinPrice}
+  txPoolAlgoStrategy = {algoPacked1559MinTip,
+                         algoPacked1559MinFee,
+                         algoPackedPlMinPrice}
 
 {.push raises: [Defect].}
 
@@ -196,15 +198,15 @@ proc blockCache*(xp: TxPoolRef): TxPoolEthBlock
   ## Getter, cached pieces of a block
   xp.param.blockCache
 
-proc dirtyPending*(xp: TxPoolRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, `pending` bucket needs update
-  xp.param.dirtyPending
-
 proc dirtyStaged*(xp: TxPoolRef): bool
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Getter, `staged` bucket needs update
   xp.param.dirtyStaged
+
+proc dirtyPacked*(xp: TxPoolRef): bool
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Getter, `packed` bucket needs update
+  xp.param.dirtyPacked
 
 proc minFeePrice*(xp: TxPoolRef): GasPrice
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
@@ -242,7 +244,7 @@ proc minPlGasPriceChanged*(xp: TxPoolRef): bool
 proc algoSelect*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags]
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Returns the set of algorithm strategy symbols for labelling items
-  ## as`staged`
+  ## as`packed`
   xp.param.algoSelect
 
 # ------------------------------------------------------------------------------
@@ -254,15 +256,15 @@ proc `blockCache=`*(xp: TxPoolRef; val: TxPoolEthBlock)
   ## Setter
   xp.param.blockCache = val
 
-proc `dirtyPending=`*(xp: TxPoolRef; val: bool)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Setter
-  xp.param.dirtyPending = val
-
 proc `dirtyStaged=`*(xp: TxPoolRef; val: bool)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   ## Setter
   xp.param.dirtyStaged = val
+
+proc `dirtyPacked=`*(xp: TxPoolRef; val: bool)
+    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Setter
+  xp.param.dirtyPacked = val
 
 proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
@@ -281,7 +283,7 @@ proc `minPlGasPrice=`*(xp: TxPoolRef; val: GasPrice)
 
 proc `algoSelect=`*(xp: TxPoolRef; val: set[TxPoolAlgoSelectorFlags])
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Install a set of algorithm strategy symbols for labelling items as`staged`
+  ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.algoSelect = val
 
 # ------------------------------------------------------------------------------

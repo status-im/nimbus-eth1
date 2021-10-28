@@ -11,12 +11,6 @@
 ## Transaction Pool Basic Primitives
 ## =================================
 ##
-## Current transaction data organisation:
-##
-## * All incoming transactions are queued (see `tx_queue` module)
-## * Transactions indexed/bucketed by *gas price* (see `tx_list` module)
-## * Transactions are grouped by sender address (see `tx_group`)
-##
 
 import
   std/[sequtils, tables],
@@ -35,7 +29,7 @@ export
 
 type
   TxTabsStatsCount* = tuple
-    queued, pending, staged: int ## sum => total
+    pending, staged, packed: int ## sum => total
     total: int                   ## excluding rejects
     disposed: int                ## waste basket
 
@@ -56,7 +50,7 @@ type
       ## Rejects queue, waste basket
 
     byItemID*: KeyedQueue[Hash256,TxItemRef] ##\
-      ## Primary table, queued by arrival event
+      ## Primary table, pending by arrival event
 
     # ----- index tables ------
 
@@ -154,7 +148,7 @@ proc init*(T: type TxTabsRef; baseFee = 0.GasPrice): T =
 proc insert*(
     xp: TxTabsRef;
     tx: var Transaction;
-    status = txItemQueued;
+    status = txItemPending;
     info = ""): Result[void,TxInfo]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Add new transaction argument `tx` to the database. If accepted and added
@@ -238,7 +232,7 @@ proc dispose*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
     return true
 
 proc reject*(xp: TxTabsRef; tx: var Transaction;
-             reason: TxInfo; status = txItemQueued; info = "")
+             reason: TxInfo; status = txItemPending; info = "")
     {.gcsafe,raises: [Defect,KeyError].} =
   ## Similar to dispose but for a tx without the item wrapper, the function
   ## imports the tx into the waste basket (e.g. after it could not
@@ -291,9 +285,9 @@ proc hasTx*(xp: TxTabsRef; tx: Transaction): bool {.inline.} =
 
 proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
     {.gcsafe,raises: [Defect,KeyError].} =
-  result.queued = xp.byStatus.eq(txItemQueued).nItems
   result.pending = xp.byStatus.eq(txItemPending).nItems
   result.staged = xp.byStatus.eq(txItemStaged).nItems
+  result.packed = xp.byStatus.eq(txItemPacked).nItems
 
   result.total =  xp.byItemID.len
   result.disposed = xp.byRejects.len

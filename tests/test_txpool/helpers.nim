@@ -62,9 +62,9 @@ const
 
   statusInfo* = block:
     var rc: array[TxItemStatus,string]
-    rc[txItemQueued] = "Q"
-    rc[txItemPending] = "P"
+    rc[txItemPending] = "*"
     rc[txItemStaged] = "S"
+    rc[txItemPacked] = "P"
     rc
 
 proc toHex*(acc: EthAddress): string =

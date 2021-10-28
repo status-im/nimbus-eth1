@@ -153,12 +153,12 @@ proc checkTxBalance(xp: TxPoolRef;
 proc txLegaAcceptableGasPrice(xp: TxPoolRef;
                               item: TxItemRef; param: TxClassify):
                                 bool {.inline.}=
-  ## Helper for `classifyTxStaged()`
-  if algoStagedPlMinPrice in param.stageSelect:
+  ## Helper for `classifyTxPacked()`
+  if algoPackedPlMinPrice in param.stageSelect:
     if item.tx.gasPrice.GasPriceEx < param.minPlGasPrice:
       return false
 
-  elif algoStaged1559MinTip in param.stageSelect:
+  elif algoPacked1559MinTip in param.stageSelect:
     # Fall back transaction selector scheme
     if item.effGasTip < param.minTipPrice:
       return false
@@ -168,12 +168,12 @@ proc txLegaAcceptableGasPrice(xp: TxPoolRef;
 proc txAcceptableTipAndFees(xp: TxPoolRef;
                             item: TxItemRef; param: TxClassify):
                               bool {.inline.}=
-  ## Helper for `classifyTxStaged()`
-  if algoStaged1559MinTip in param.stageSelect:
+  ## Helper for `classifyTxPacked()`
+  if algoPacked1559MinTip in param.stageSelect:
     if item.effGasTip < param.minTipPrice:
       return false
 
-  if algoStaged1559MinFee in param.stageSelect:
+  if algoPacked1559MinFee in param.stageSelect:
     if item.tx.maxFee.GasPriceEx < param.minFeePrice:
       return false
 
@@ -190,17 +190,17 @@ proc classifyTxValid*(xp: TxPoolRef;
   xp.checkTxBasic(item,param)
 
 
-proc classifyTxPending*(xp: TxPoolRef;
-                        item: TxItemRef; param: TxClassify): bool =
+proc classifyTxStaged*(xp: TxPoolRef;
+                       item: TxItemRef; param: TxClassify): bool =
   ## Check whether a valid transaction is ready to be moved to the
-  ## `pending` bucket, otherwise it will go to the `queued` bucket.
+  ## `staged` bucket, otherwise it will go to the `pending` bucket.
   if item.tx.estimatedGasTip(param.baseFee) <= 0.GasPriceEx:
     return false
 
   if not xp.checkTxFees(item,param):
     return false
 
-  # Tx is not for the pending bucket with a nonce to be used in the future.
+  # Tx is not for the staged bucket with a nonce to be used in the future.
   let nonce = ReadOnlyStateDB(xp.dbHead.accDb).getNonce(item.sender)
   if nonce < item.tx.nonce:
     return false
@@ -211,10 +211,10 @@ proc classifyTxPending*(xp: TxPoolRef;
   true
 
 
-proc classifyTxStaged*(xp: TxPoolRef;
+proc classifyTxPacked*(xp: TxPoolRef;
                        item: TxItemRef; param: TxClassify): bool =
-  ## Check whether a `pending` transaction is ready to be moved to the
-  ## `staged` bucket, otherwise it will go to the `queued` bucket to start
+  ## Check whether a `staged` transaction is ready to be moved to the
+  ## `packed` bucket, otherwise it will go to the `pending` bucket to start
   ## all over.
   if item.tx.txType == TxLegacy:
     xp.txLegaAcceptableGasPrice(item, param)

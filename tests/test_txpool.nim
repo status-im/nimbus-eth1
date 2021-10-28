@@ -522,15 +522,15 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         maxAddr: EthAddress
         nAddrItems = 0
 
-        nAddrQueuedItems = 0
         nAddrPendingItems = 0
         nAddrStagedItems = 0
+        nAddrPackedItems = 0
 
-        fromNumItems = nAddrQueuedItems
-        fromBucketInfo = "queued"
-        fromBucket = txItemQueued
-        toBucketInfo =  "pending"
-        toBucket = txItemPending
+        fromNumItems = nAddrPendingItems
+        fromBucketInfo = "pending"
+        fromBucket = txItemPending
+        toBucketInfo =  "staged"
+        toBucket = txItemStaged
 
       # Set txs to pseudo random status
       xq.setItemStatusFromInfo
@@ -542,23 +542,23 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           nAddrItems = schedList.nItems
 
       # count items
-      nAddrQueuedItems = xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
       nAddrPendingItems = xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
       nAddrStagedItems = xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
+      nAddrPackedItems = xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
 
       # find the largest from-bucket
-      if fromNumItems < nAddrPendingItems:
-        fromNumItems = nAddrPendingItems
-        fromBucketInfo = "pending"
-        fromBucket = txItemPending
-        toBucketInfo = "staged"
-        toBucket = txItemStaged
       if fromNumItems < nAddrStagedItems:
         fromNumItems = nAddrStagedItems
         fromBucketInfo = "staged"
         fromBucket = txItemStaged
-        toBucketInfo = "queued"
-        toBucket = txItemQueued
+        toBucketInfo = "packed"
+        toBucket = txItemPacked
+      if fromNumItems < nAddrPackedItems:
+        fromNumItems = nAddrPackedItems
+        fromBucketInfo = "packed"
+        fromBucket = txItemPacked
+        toBucketInfo = "pending"
+        toBucket = txItemPending
 
       let moveNumItems = fromNumItems div 2
 
@@ -568,9 +568,9 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         # requite mimimum => there is a status queue with at least 2 entries
         check 3 < nAddrItems
 
-        check nAddrQueuedItems +
-                nAddrPendingItems +
-                nAddrStagedItems == nAddrItems
+        check nAddrPendingItems +
+                nAddrStagedItems +
+                nAddrPackedItems == nAddrItems
 
         check 0 < moveNumItems
         check 1 < fromNumItems
@@ -586,39 +586,39 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         check xq.txDB.verify.isOK
 
         case fromBucket
-        of txItemQueued:
-          check nAddrQueuedItems - moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-          check nAddrPendingItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
-          check nAddrStagedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
         of txItemPending:
           check nAddrPendingItems - moveNumItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
           check nAddrStagedItems + moveNumItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
-          check nAddrQueuedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-        else:
+          check nAddrPackedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
+        of txItemStaged:
           check nAddrStagedItems - moveNumItems ==
                     xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
-          check nAddrQueuedItems + moveNumItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemQueued).nItems
-          check nAddrStagedItems ==
-                    xq.txDB.bySender.eq(maxAddr).eq(txItemStaged).nItems
+          check nAddrPackedItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
+          check nAddrPendingItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+        else:
+          check nAddrPackedItems - moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
+          check nAddrPendingItems + moveNumItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPending).nItems
+          check nAddrPackedItems ==
+                    xq.txDB.bySender.eq(maxAddr).eq(txItemPacked).nItems
 
       # --------------------
 
       var expect: (int,int,int)
       for schedList in xq.txDB.bySender.walkSchedList:
-        expect[0] += schedList.eq(txItemQueued).nItems
-        expect[1] += schedList.eq(txItemPending).nItems
-        expect[2] += schedList.eq(txItemStaged).nItems
+        expect[0] += schedList.eq(txItemPending).nItems
+        expect[1] += schedList.eq(txItemStaged).nItems
+        expect[2] += schedList.eq(txItemPacked).nItems
 
       test &"Verify #items per bucket ({expect[0]},{expect[1]},{expect[2]})":
         let status = xq.count
-        check expect == (status.queued,status.pending,status.staged)
+        check expect == (status.pending,status.staged,status.packed)
 
       test "Recycling from waste basket":
 
@@ -675,8 +675,8 @@ proc runTxPackerTests(noisy = true) =
         keyStep = max(1u64, keyRange div 500_000)
 
       # what follows is a rather crude partitioning so that
-      # * ntBaseFee partititions non-zero numbers of queued and pending txs
-      # * ntNextFee decreases the number of pending txs
+      # * ntBaseFee partititions non-zero numbers of pending and staged txs
+      # * ntNextFee decreases the number of staged txs
       ntBaseFee = (lowKey + keyStep).GasPrice
 
       # the following might throw an exception if the table is de-generated
@@ -697,27 +697,27 @@ proc runTxPackerTests(noisy = true) =
         xr = bcDB.toTxPool(txList, ntNextFee, noisy)
       block:
         let
-          queued = xq.count.queued
           pending = xq.count.pending
+          staged = xq.count.staged
 
         test &"Load txs with baseFee={ntBaseFee}, "&
-            &"queued/pending={queued}/{pending}":
+            &"pending/staged={pending}/{staged}":
 
-          check 0 < queued
           check 0 < pending
+          check 0 < staged
           check xq.count.total == txList.len
           check xq.count.disposed == 0
 
       block:
         let
-          queued = xr.count.queued
           pending = xr.count.pending
+          staged = xr.count.staged
 
         test &"Re-org txs queues setting baseFee={ntNextFee}, "&
-            &"queued/pending={queued}/{pending}":
+            &"pending/staged={pending}/{staged}":
 
-          check 0 < queued
           check 0 < pending
+          check 0 < staged
           check xr.count.total == txList.len
           check xr.count.disposed == 0
 
@@ -725,7 +725,7 @@ proc runTxPackerTests(noisy = true) =
           xq.setBaseFee(ntNextFee)
           check xq.getBaseFee == ntNextFee
 
-          xq.pjaUpdatePending(force = true)
+          xq.pjaUpdateStaged(force = true)
           xq.jobCommit
 
           # now, xq should look like xr
@@ -754,11 +754,11 @@ proc runTxPackerTests(noisy = true) =
 
           noisy.say "*** status before 1st staging ", xq.count
 
-          xq.pjaUpdateStaged
+          xq.pjaUpdatePacked
           xq.jobCommit
 
           # verify that the test does not degenerate
-          check 0 < xq.count.staged
+          check 0 < xq.count.packed
           check xq.txDB.flushRejects[1] == 0
 
           noisy.say "*** status after 1st staging ", xq.count
@@ -790,11 +790,11 @@ proc runTxPackerTests(noisy = true) =
           # set  minimum target price
           xq.setMinPlGasPrice(lowerPrice)
 
-          xq.pjaUpdateStaged
+          xq.pjaUpdatePacked
           xq.jobCommit
 
           # verify that the test does not degenerate
-          check 0 < xq.count.staged
+          check 0 < xq.count.packed
           check xq.txDB.flushRejects[1] == 0
 
           noisy.say "*** status after 2nd staging ", xq.count

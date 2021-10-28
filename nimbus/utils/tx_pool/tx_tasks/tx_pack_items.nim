@@ -39,7 +39,7 @@ proc packItemsIntoBlock*(xp: TxPoolRef) =
     packAlgo = xp.algoSelect
 
   block packerFrame:
-    for item in xp.txDB.byStatus.incItemList(txItemStaged):
+    for item in xp.txDB.byStatus.incItemList(txItemPacked):
       # FIXME: there must not be more than one item per sender per nonce
 
       # Note: the following if/else clauses assume that

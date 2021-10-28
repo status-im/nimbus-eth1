@@ -37,18 +37,18 @@
 ##  .                   .                          .
 ##  .     <Job queue>   .   <Accounting system>    .   <Tip/waste disposal>
 ##  .                   .                          .
-##  .                   .          +-----------+   .
-##  .        +-------------------> | queued(1) | ------------+
-##  .        |          .          +-----------+   .         |
+##  .                   .         +------------+   .
+##  .        +------------------> | pending(1) | ------------+
+##  .        |          .         +------------+   .         |
 ##  .        |          .            |  ^    ^     .         |
 ##  .        |          .            V  |    |     .         |
-##  .        |          .    +------------+  |     .         |
-##  .  --> enter(0) -------> | pending(2) |  |     .         |
-##  .        |          .    +------------+  |     .         |
+##  .        |          .    +-----------+   |     .         |
+##  .  --> enter(0) -------> | staged(2) |   |     .         |
+##  .        |          .    +-----------+   |     .         |
 ##  .        |          .      |     |       |     .         |
 ##  .        |          .      |     V       |     .         |
 ##  .        |          .      |   +-----------+   .         |
-##  .        |          .      |   | staged(3) | ----------+ |
+##  .        |          .      |   | packed(3) | ----------+ |
 ##  .        |          .      |   +-----------+   .       | |
 ##  .        |          .      |                   .       v v
 ##  .        |          .      |                   .   +----------------+
@@ -58,7 +58,7 @@
 ##
 ## Terminology
 ## ----------
-## There are the job *queue* and the queued, pending, and stage *buckets*
+## There are the job *queue* and the pending, staged, and stage *buckets*
 ## and the *waste basket*. These names are (not completely) arbitrary. Even
 ## though all are more or less implemented as queues with some sort of random
 ## access the names *bucket* and *basket* should indicate some sort of usage.
@@ -71,24 +71,24 @@
 ##
 ## Accounting system
 ## -----------------
-## * Queued transactions bucket (1):
+## * Pending transactions bucket (1):
 ##   + It holds txs tested all right but not ready to fit into a block
-##   + These txs are stored with meta-data and marked `txItemQueued`
+##   + These txs are stored with meta-data and marked `txItemPending`
 ##   + Txs have a `nonce` which is not smaller than the nonce value of the tx
 ##     sender account. If it is greater than the one of the tx sender account,
 ##     the predecessor nonce, i.e. `nonce-1` is in the database.
 ##
-## * Pending transactions bucket (2):
+## * Staged transactions bucket (2):
 ##   + It holds vetted txs that are ready to go into a block.
 ##   + Txs are accepted against minimum fee check and other parameters (if any)
-##   + Txs are marked `txItemPending`
+##   + Txs are marked `txItemStaged`
 ##   + Txs have a `nonce` equal to the current value of the tx sender account.
-##   + Re-org or other events may send them to queued(1) or pending(3) bucket
+##   + Re-org or other events may send them to pending(1) or staged(3) bucket
 ##
-## * Staged transactions bucket (3):
+## * Packed transactions bucket (3):
 ##   + All transactions are to be placed and inclusded in a block
-##   + Transactions are marked `txItemStaged`
-##   + Re-org or other events may send txs back to queued(1) bucket
+##   + Transactions are marked `txItemPacked`
+##   + Re-org or other events may send txs back to pending(1) bucket
 ##
 ## Tip/waste basket
 ## ----------------
@@ -118,7 +118,7 @@
 ##    xq.pjaAddTx(tx, info = "test data") # stash transactions and hold it
 ##    ..                                  # .. on the job queue for a moment
 ##
-##    xq.pjaUpdateStaged                  # stash task to assemble staged bucket
+##    xq.pjaUpdatePacked                  # stash task to assemble packed bucket
 ##    ..
 ##
 ##    xq.nextBlock                        # assemble eth block
@@ -131,15 +131,15 @@
 ## From the example, transactions are collected via `pjaAddTx()` and added to
 ## a batch of jobs to be done some time later.
 ##
-## Following, another job is added to the batch via `pjaUpdateStaged()`
-## requesting to fill the *staged* bucket after the added jobs have been
+## Following, another job is added to the batch via `pjaUpdatePacked()`
+## requesting to fill the *packed* bucket after the added jobs have been
 ## processed.
 ##
 ## In this example, not until `nextBlock()` is invoked, the batch of jobs in
 ## the *job queue* will be processed. This directive will implicitly call
 ## `jobCommit()` which invokes the job processor on the batch queue. So the
 ## `nextBlock()` cleans up all of the job queue and pulls as many transactions
-## as possible from the *staged* bucket, packs them into the block up until it
+## as possible from the *packed* bucket, packs them into the block up until it
 ## is full and disposes the remaining transaction wrappers into the waste
 ## basket (so they remain still accessible for a while.)
 ##
@@ -159,8 +159,8 @@
 ## ~~~~~~~~~~~~~~~~~~~~~~~~
 ## Transactions are wrapped into metadata (called `item`) and kept in a
 ## database. Any *bucket* or *waste basket* is represented by a pair of labels 
-## `(<status>,<reason>)` where `<status>` is a *bucket* label `queued`,
-## `pending`, or `staged`, and `<reason>` is sort of an error code. An `item`
+## `(<status>,<reason>)` where `<status>` is a *bucket* label `pending`,
+## `staged`, or `packed`, and `<reason>` is sort of an error code. An `item`
 ## with reason code different from `txInfoOk` (aka zero) is from the *waste
 ## basket*, otherwise it is in one of the *buckets*.
 ##
@@ -183,31 +183,31 @@
 ##
 ## gasLimit
 ##   Taken or derived from the current block chain head, incoming txs that
-##   exceed this gas limit are stored into the queued bucket (waiting for the
+##   exceed this gas limit are stored into the pending bucket (waiting for the
 ##   next cycle.)
 ##
 ## baseFee
 ##   Applicable to post-London only and compiled from the current block chain
-##   head. Incoming txs with smaller `maxFee` values are stored in the queued
+##   head. Incoming txs with smaller `maxFee` values are stored in the pending
 ##   bucket (waiting for the next cycle.) For practical reasons, `baseFee` is
 ##   zero for pre-London block chain states.
 ##
 ## minFeePrice, *optional*
-##   Applies no EIP-1559 txs only. Txs are staged if `maxFee` is at least
+##   Applies no EIP-1559 txs only. Txs are packed if `maxFee` is at least
 ##   that value.
 ##
 ## minTipPrice, *optional*
-##   For EIP-1559, txs are staged if the expected tip (see `estimatedGasTip()`)
+##   For EIP-1559, txs are packed if the expected tip (see `estimatedGasTip()`)
 ##   is at least that value. In compatibility mode for legacy txs, this
 ##   degenerates to `gasPrice - baseFee`.
 ##
 ## minPlGasPrice, *optional*
 ##   For pre-London or legacy txs, this parameter has precedence over
-##   `minTipPrice`. Txs are staged if the `gasPrice` is at least that value.
+##   `minTipPrice`. Txs are packed if the `gasPrice` is at least that value.
 ##
 ## trgGasLimit, maxGasLimit
 ##   These parameters are derived from the current block chain head. They
-##   limit how many blocks from the staged bucket can be packed into the body
+##   limit how many blocks from the packed bucket can be packed into the body
 ##   of the new block.
 ##
 ## lifeTime
@@ -222,9 +222,9 @@ import
   ./tx_pool/tx_tasks,
   ./tx_pool/tx_tasks/[tx_add_tx,
                       tx_adjust_head,
-                      tx_staged_items,
+                      tx_packed_items,
                       tx_pack_items,
-                      tx_pending_items],
+                      tx_staged_items],
   chronicles,
   eth/[common, keys],
   stew/results
@@ -288,13 +288,13 @@ proc processJobs(xp: TxPoolRef): int
       break
 
     of txJobAddTxs:
-      # Add txs => queued(1), pending(2), or rejected(4) (see comment
+      # Add txs => pending(1), staged(2), or rejected(4) (see comment
       # on top of this source file for details.)
       var args = task.data.addTxsArgs
       for tx in args.txs.mitems:
         xp.addTx(tx, args.info)
-      xp.dirtyPending = true # change may affect `pending` items
-      xp.dirtyStaged = true  # change may affect `staged` items
+      xp.dirtyStaged = true # change may affect `staged` items
+      xp.dirtyPacked = true  # change may affect `packed` items
 
     of txJobEvictionInactive:
       # Move transactions older than `xp.lifeTime` to the waste basket.
@@ -306,7 +306,7 @@ proc processJobs(xp: TxPoolRef): int
       discard xp.txDB.flushRejects(args.maxItems)
 
     of txJobPackBlock:
-      # Pack a block fetching items from the `staged` bucket. For included
+      # Pack a block fetching items from the `packed` bucket. For included
       # txs, the item wrappers are moved to the waste basket.
       xp.packItemsIntoBlock
 
@@ -315,32 +315,32 @@ proc processJobs(xp: TxPoolRef): int
       # re-calculating all current transaction states.
       discard
 
-    of txJobUpdatePending:
-      # For all items `queued` and `pending` items, re-calculate the status. If
+    of txJobUpdateStaged:
+      # For all items `pending` and `staged` items, re-calculate the status. If
       # the `force` flag is set, re-calculation is done even though the change
       # flags remained unset.
-      let args = task.data.updatePendingArgs
-      if xp.dirtyPending or args.force or xp.dirtyPending:
-        xp.pendingItemsUpdate
-        xp.dirtyPending = false  # changes commited
-        xp.dirtyStaged = true    # change may affect `staged` items
+      let args = task.data.updateStagedArgs
+      if xp.dirtyStaged or args.force or xp.dirtyStaged:
+        xp.stagedItemsUpdate
+        xp.dirtyStaged = false  # changes commited
+        xp.dirtyPacked = true    # change may affect `packed` items
 
-    of txJobUpdateStaged:
-      # For all `pending` and `staged` items, re-calculate the status.  If
+    of txJobUpdatePacked:
+      # For all `staged` and `packed` items, re-calculate the status.  If
       # the `force` flag is set, re-calculation is done even though the change
       # flags remained unset. If there was no change in the `minTipPrice` and
-      # `minFeePrice`, only re-assign from `pending` and `staged`.
-      let args = task.data.updateStagedArgs
+      # `minFeePrice`, only re-assign from `staged` and `packed`.
+      let args = task.data.updatePackedArgs
       if args.force or xp.minFeePriceChanged or xp.minTipPriceChanged:
-        xp.stagedItemsReorg
+        xp.packedItemsReorg
         discard xp.minFeePriceChanged # reset change detect
         discard xp.minTipPriceChanged # reset change detect
-        xp.dirtyStaged = false        # changes commited
-        xp.dirtyPending = true        # change may affect `pending` items
-      elif xp.dirtyStaged or xp.dirtyStaged:
-        xp.stagedItemsAppend
-        xp.dirtyStaged = false
-        xp.dirtyStaged = false        # changes commited
+        xp.dirtyPacked = false        # changes commited
+        xp.dirtyStaged = true         # change may affect `staged` items
+      elif xp.dirtyPacked or xp.dirtyPacked:
+        xp.packedItemsAppend
+        xp.dirtyPacked = false
+        xp.dirtyPacked = false        # changes commited
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool action1 serialiser
@@ -371,7 +371,7 @@ when JobWaitEnabled:
     await xp.byJob.waitAvail
 
 # ------------------------------------------------------------------------------
-# Public functions, immediate actions (not queued as a job.)
+# Public functions, immediate actions (not pending as a job.)
 # ------------------------------------------------------------------------------
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
@@ -381,7 +381,7 @@ when JobWaitEnabled:
 proc count*(xp: TxPoolRef): TxTabsStatsCount
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the current pool stats: the number of transactions in the
-  ## database: *local*, *remote*, *pending*, *staged*, etc.
+  ## database: *local*, *remote*, *staged*, *packed*, etc.
   xp.txDB.statsCount
 
 
@@ -389,7 +389,7 @@ proc count*(xp: TxPoolRef): TxTabsStatsCount
 proc getMinFeePrice*(xp: TxPoolRef): GasPrice
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter for `minFeePrice`, the current gas fee enforced by the transaction
-  ## pool for txs to be staged. This is an EIP-1559 only parameter (see
+  ## pool for txs to be packed. This is an EIP-1559 only parameter (see
   ## `stage1559MinFee` strategy.)
   xp.minFeePrice
 
@@ -397,9 +397,9 @@ proc getMinFeePrice*(xp: TxPoolRef): GasPrice
 proc setMinFeePrice*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter for `minFeePrice`. Increasing it might remove some post-London
-  ## transactions when the `staged` bucket is re-built.
+  ## transactions when the `packed` bucket is re-built.
   xp.minFeePrice = val
-  xp.dirtyStaged = false
+  xp.dirtyPacked = false
 
 
 proc getMinTipPrice*(xp: TxPoolRef): GasPrice
@@ -413,15 +413,15 @@ proc getMinTipPrice*(xp: TxPoolRef): GasPrice
 proc setMinTipPrice*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter for `minTipPrice`. Increasing it might remove some transactions
-  ## when the `staged` bucket is re-built.
+  ## when the `packed` bucket is re-built.
   xp.minTipPrice = val
-  xp.dirtyStaged = false
+  xp.dirtyPacked = false
 
 
 proc getMinPlGasPrice*(xp: TxPoolRef): GasPrice
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Getter for `minPlGasPrice`, the current gas price enforced by the
-  ## transaction pool. This is a pre-London parameter (see `stagedPlMinPrice`
+  ## transaction pool. This is a pre-London parameter (see `packedPlMinPrice`
   ## strategy.)
   xp.minPlGasPrice
 
@@ -429,9 +429,9 @@ proc getMinPlGasPrice*(xp: TxPoolRef): GasPrice
 proc setMinPlGasPrice*(xp: TxPoolRef; val: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter for `minPlGasPrice`.  Increasing it might remove some legacy
-  ## transactions when the `staged` bucket is re-built.
+  ## transactions when the `packed` bucket is re-built.
   xp.minPlGasPrice = val
-  xp.dirtyStaged = false
+  xp.dirtyPacked = false
 
 
 proc getBaseFee*(xp: TxPoolRef): GasPrice
@@ -443,11 +443,11 @@ proc setBaseFee*(xp: TxPoolRef; baseFee: GasPrice)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Setter, use new base fee. Note that after changing the `baseFee`
   ## parameter, most probably a database re-org should take place (e.g.
-  ## invoking the job `txJobUpdatePending`)
+  ## invoking the job `txJobUpdateStaged`)
   xp.txDB.baseFee = baseFee      # cached value, change implies re-org
   xp.dbHead.baseFee = baseFee    # representative value
-  xp.dirtyPending = true         # change may affect `pending` items
   xp.dirtyStaged = true          # change may affect `staged` items
+  xp.dirtyPacked = true          # change may affect `packed` items
 
 
 proc setAlgoSelector*(xp: TxPoolRef; strategy: varArgs[TxPoolAlgoSelectorFlags])
@@ -486,11 +486,11 @@ proc fetchBlock*(xp: TxPoolRef): EthBlock
   result.header = cached.blockHeader
   for item in cached.blockItems:
     result.txs.add item.tx
-    discard xp.txDB.dispose(item, txInfoStagedBlockIncluded)
+    discard xp.txDB.dispose(item, txInfoPackedBlockIncluded)
 
 proc nextBlock*(xp: TxPoolRef): GasInt
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Assembles a new block from the `staged` bucket and returns the maximum
+  ## Assembles a new block from the `packed` bucket and returns the maximum
   ## block size retrieved by summing up `gasLimit` entries of the included
   ## txs.
   xp.packItemsIntoBlock
@@ -510,7 +510,7 @@ proc setHead*(xp: TxPoolRef; newHeader: BlockHeader): bool
   if xp.adjustHead(newHeader).isOk:
     let cached = xp.blockCache
     for item in cached.blockItems:
-      discard xp.txDB.dispose(item, txInfoStagedBlockIncluded)
+      discard xp.txDB.dispose(item, txInfoPackedBlockIncluded)
     xp.blockCache = TxPoolEthBlock.init
     return true
 
@@ -528,7 +528,7 @@ proc setMaxRejects*(xp: TxPoolRef; size: int)
 proc getAccounts*(xp: TxPoolRef; local: bool): seq[EthAddress]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Retrieves the accounts currently considered `local` or `remote` (i.e.
-  ## the have txs of that kind) depending on request arguments.
+  ## the have txs of that kind) destaged on request arguments.
   if local:
     result = xp.txDB.locals
   else:
@@ -558,9 +558,9 @@ proc setStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
   ## Change/update the status of the transaction item.
   if status != item.status:
     discard xp.txDB.reassign(item, status)
-    if status == txItemPending or status == txItemPending:
-      xp.dirtyPending = true # change may affect `pending` items
+    if status == txItemStaged or status == txItemStaged:
       xp.dirtyStaged = true  # change may affect `staged` items
+      xp.dirtyPacked = true  # change may affect `packed` items
 
 proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
                    reason = txInfoExplicitDisposal;

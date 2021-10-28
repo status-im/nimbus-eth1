@@ -21,11 +21,12 @@ import
 
 type
   TxStatusNonceRef* = ref object ##\
-    ## Sub-list ordered by `AccountNonce` or `TxItemRef` insertion order
+    ## Sub-list ordered by `AccountNonce` or `TxItemRef` insertion order.
     nonceList: SortedSet[AccountNonce,TxItemRef]
 
   TxStatusSenderRef* = ref object ##\
-    ## Per address table
+    ## Per address table. This is provided as an ordered list so traversal\
+    ## is predictable.
     size: int
     addrList: SortedSet[EthAddress,TxStatusNonceRef]
 

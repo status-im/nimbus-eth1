@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool Table: `Sender` > `local/remote | status | all` > `nonce`
-## ==========================================================================
+## Transaction Pool Table: `Sender` > `status` | all > `nonce`
+## ===========================================================
 ##
 
 import
@@ -26,8 +26,7 @@ type
     nonceList: SortedSet[AccountNonce,TxItemRef]
 
   TxSenderSchedRef* = ref object ##\
-    ## Chronologically ordered queue/fifo with random access. This is\
-    ## typically used when queuing items for the same key (e.g. gas price.)
+    ## For a sender, items can be accessed by *nonce*, or *status,nonce*.
     size: int
     statusList: array[TxItemStatus,TxSenderNonceRef]
     allList: TxSenderNonceRef
@@ -40,9 +39,9 @@ type
   TxSenderSchedule* = enum ##\
     ## Generalised key for sub-list to be used in `TxSenderNoncePair`
     txSenderAny = 0     ## all entries
-    txSenderQueued      ## by status ...
-    txSenderPending
+    txSenderPending      ## by status ...
     txSenderStaged
+    txSenderPacked
 
   TxSenderInx = object ##\
     ## Internal access data
@@ -91,12 +90,12 @@ proc cmp(a,b: EthAddress): int {.inline.} =
 
 proc toSenderSchedule(status: TxItemStatus): TxSenderSchedule {.inline.} =
   case status
-  of txItemQueued:
-    return txSenderQueued
   of txItemPending:
     return txSenderPending
   of txItemStaged:
     return txSenderStaged
+  of txItemPacked:
+    return txSenderPacked
 
 
 proc mkInxImpl(gt: var TxSenderTab; item: TxItemRef): Result[TxSenderInx,void]
@@ -350,12 +349,12 @@ proc eq*(schedData: TxSenderSchedRef;
   case key
   of txSenderAny:
     return schedData.any
-  of txSenderQueued:
-    return schedData.eq(txItemQueued)
   of txSenderPending:
     return schedData.eq(txItemPending)
   of txSenderStaged:
     return schedData.eq(txItemStaged)
+  of txSenderPacked:
+    return schedData.eq(txItemPacked)
 
 proc eq*(rc: SortedSetResult[EthAddress,TxSenderSchedRef];
          key: TxSenderSchedule):

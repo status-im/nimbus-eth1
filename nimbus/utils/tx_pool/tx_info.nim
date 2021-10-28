@@ -16,7 +16,7 @@ type
     txInfoOk =
       (0, "no error")
 
-    txInfoStagedBlockIncluded = ##\
+    txInfoPackedBlockIncluded = ##\
       ## The transaction was disposed after packing into block
       "not needed anymore"
 

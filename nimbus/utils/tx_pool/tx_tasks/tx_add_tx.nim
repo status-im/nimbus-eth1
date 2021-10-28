@@ -74,14 +74,14 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
 # core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
 proc addTx*(xp: TxPoolRef; tx: var Transaction; info = "")
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Classify a transaction. It is tested and moved to either of the `queued`
-  ## or `pending` buckets, or disposed o the waste basket.
+  ## Classify a transaction. It is tested and moved to either of the `pending`
+  ## or `staged` buckets, or disposed o the waste basket.
   let
     param = TxClassify(
       gasLimit: xp.dbHead.trgGasLimit,
       baseFee: xp.dbHead.baseFee)
   var
-    status = txItemQueued
+    status = txItemPending
     vetted = txInfoOk
 
   # Leave this frame with `continue`, or proceeed with error
@@ -124,8 +124,8 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; info = "")
       break txErrorFrame
 
     # Update initial state
-    if xp.classifyTxPending(item,param):
-      status = txItemPending
+    if xp.classifyTxStaged(item,param):
+      status = txItemStaged
       item.status = status
 
     # Insert into database

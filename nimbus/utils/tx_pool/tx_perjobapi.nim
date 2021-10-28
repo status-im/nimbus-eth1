@@ -70,20 +70,20 @@ proc pjaFlushRejects*(xp: TxPoolRef; numItems = int.high)
     flushRejectsArgs: (
       maxItems: numItems)))
 
-proc pjaUpdatePending*(xp: TxPoolRef; force = false)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Update pending bucket
-  discard xp.job(TxJobDataRef(
-    kind:     txJobUpdatePending,
-    updatePendingArgs: (
-      force:  force)))
-
 proc pjaUpdateStaged*(xp: TxPoolRef; force = false)
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Update staged bucket
   discard xp.job(TxJobDataRef(
     kind:     txJobUpdateStaged,
     updateStagedArgs: (
+      force:  force)))
+
+proc pjaUpdatePacked*(xp: TxPoolRef; force = false)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Update packed bucket
+  discard xp.job(TxJobDataRef(
+    kind:     txJobUpdatePacked,
+    updatePackedArgs: (
       force:  force)))
 
 # ------------------------------------------------------------------------------

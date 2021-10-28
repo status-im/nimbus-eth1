@@ -60,20 +60,20 @@ type
       ## Deletes at most the `maxItems` oldest items from the waste basket.
 
     txJobPackBlock ##\
-      ## Pack a block fetching items from the `staged` bucket. For included
+      ## Pack a block fetching items from the `packed` bucket. For included
       ## txs, the item wrappers are moved to the waste basket.
 
     txJobSetHead ##\
       ## Change the insertion block header. This call might imply
       ## re-calculating current transaction states.
 
-    txJobUpdatePending ##\
-      ## For all items, re-calculate `queued` and `pending` status. If the
+    txJobUpdateStaged ##\
+      ## For all items, re-calculate `pending` and `staged` status. If the
       ## `force` flag is set, re-calculation is done even though the change
       ## flag hes remained unset.
 
-    txJobUpdateStaged ##\
-      ## Smartly collect `pending` items and label them `staged`. If the
+    txJobUpdatePacked ##\
+      ## Smartly collect `staged` items and label them `packed`. If the
       ## `force` flag is set, re-calculation is done even though the change
       ## flag hes remained unset.
 
@@ -108,12 +108,12 @@ type
       setHeadArgs*: tuple[
         head:  Hash256]
 
-    of txJobUpdatePending:
-      updatePendingArgs*: tuple[
-        force: bool]
-
     of txJobUpdateStaged:
       updateStagedArgs*: tuple[
+        force: bool]
+
+    of txJobUpdatePacked:
+      updatePackedArgs*: tuple[
         force: bool]
 
   TxJobPair* = object     ## Responding to a job queue query
@@ -169,10 +169,9 @@ proc jobAppend(jq: TxJobRef; data: TxJobDataRef): TxJobID
   ## successful.
   ##
   ## :Note:
-  ##   An error can only occur if
-  ##   the *ID* of the first job follows the *ID* of the last job (*modulo*
-  ##   `TxJobIdMax`.) This occurs when
-  ##   * there are `TxJobIdMax` jobs already queued
+  ##   An error can only occur if the *ID* of the first job follows the *ID*
+  ##   of the last job (*modulo* `TxJobIdMax`). This occurs when
+  ##   * there are `TxJobIdMax` jobs already on the queue
   ##   * some jobs were deleted in the middle of the queue and the *ID*
   ##     gap was not shifted out yet.
   var id: TxJobID

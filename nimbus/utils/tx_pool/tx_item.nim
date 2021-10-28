@@ -32,9 +32,9 @@ type
 
   TxItemStatus* = enum ##\
     ## current status of a transaction as seen by the pool.
-    txItemQueued = 0
-    txItemPending
+    txItemPending = 0
     txItemStaged
+    txItemPacked
 
   TxItemRef* = ref object of RootObj ##\
     ## Data container with transaction and meta data. Entries are *read-only*\
