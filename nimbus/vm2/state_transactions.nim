@@ -49,31 +49,6 @@ proc setupTxContext*(vmState: BaseVMState, origin: EthAddress, gasPrice: GasInt,
   vmState.gasCosts = vmState.fork.forkToSchedule
 
 
-proc setupComputation*(vmState: BaseVMState, tx: Transaction, sender: EthAddress, fork: Fork) : Computation =
-  var gas = tx.gasLimit - tx.intrinsicGas(fork)
-  assert gas >= 0
-
-  vmState.setupTxContext(
-    origin = sender,
-    gasPrice = tx.gasPrice,
-    forkOverride = some(fork)
-  )
-
-  let msg = Message(
-    kind: if tx.contractCreation: evmcCreate else: evmcCall,
-    depth: 0,
-    gas: gas,
-    sender: sender,
-    contractAddress: tx.getRecipient(sender),
-    codeAddress: tx.destination,
-    value: tx.value,
-    data: tx.payload
-    )
-
-  result = newComputation(vmState, msg)
-  doAssert result.isOriginComputation
-
-
 proc refundGas*(c: Computation, tx: Transaction, sender: EthAddress) =
   let maxRefund = (tx.gasLimit - c.gasMeter.gasRemaining) div 2
   c.gasMeter.returnGas min(c.getGasRefund(), maxRefund)
