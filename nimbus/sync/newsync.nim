@@ -1,4 +1,4 @@
-# Nimbus - New sync approach - simultaneous stateless Beam, stateful Snap, Trie
+# Nimbus - New sync approach - A fusion of snap, trie, beam and other methods
 #
 # Copyright (c) 2021 Status Research & Development GmbH
 # Licensed under either of
