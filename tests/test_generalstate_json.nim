@@ -36,9 +36,9 @@ proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
   for i in 0..<x.len: result[i] = x[i].byte
 
-proc newGST_VMState(prevStateRoot: Hash256, header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set[TracerFlags]): GST_VMState =
+proc newGST_VMState(ac: AccountsCache, header: BlockHeader, chainDB: BaseChainDB, tracerFlags: set[TracerFlags]): GST_VMState =
   new result
-  result.init(prevStateRoot, header, chainDB, tracerFlags)
+  result.init(ac, header, chainDB, tracerFlags)
 
 method getAncestorHash*(vmState: GST_VMState, blockNumber: BlockNumber): Hash256 {.gcsafe.} =
   if blockNumber >= vmState.blockNumber:
@@ -50,14 +50,14 @@ method getAncestorHash*(vmState: GST_VMState, blockNumber: BlockNumber): Hash256
   else:
     return keccakHash(toBytes($blockNumber))
 
-proc dumpAccount(accountDb: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
+proc dumpAccount(stateDB: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
   result = %{
     "name": %name,
     "address": %($address),
-    "nonce": %toHex(accountDb.getNonce(address)),
-    "balance": %accountDb.getBalance(address).toHex(),
-    "codehash": %($accountDb.getCodeHash(address)),
-    "storageRoot": %($accountDb.getStorageRoot(address))
+    "nonce": %toHex(stateDB.getNonce(address)),
+    "balance": %stateDB.getBalance(address).toHex(),
+    "codehash": %($stateDB.getCodeHash(address)),
+    "storageRoot": %($stateDB.getStorageRoot(address))
   }
 
 proc dumpDebugData(tester: Tester, vmState: BaseVMState, sender: EthAddress, gasUsed: GasInt, success: bool) =
@@ -90,7 +90,8 @@ proc testFixtureIndexes(tester: Tester, testStatusIMPL: var TestStatus) =
   var tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
 
   var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = getConfiguration().pruning)
-  var vmState = newGST_VMState(emptyRlpHash, tester.header, chainDB, tracerFlags)
+  chainDB.initStateDB(emptyRlpHash)
+  var vmState = newGST_VMState(chainDB.stateDB, tester.header, chainDB, tracerFlags)
   var gasUsed: GasInt
   let sender = tester.tx.getSender()
 

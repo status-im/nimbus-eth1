@@ -31,7 +31,7 @@ type
     tracer*        : TransactionTracer
     logEntries*    : seq[Log]
     receipts*      : seq[Receipt]
-    accountDb*     : AccountsCache
+    stateDB*       : AccountsCache
     cumulativeGasUsed*: GasInt
     touchedAccounts*: HashSet[EthAddress]
     selfDestructs* : HashSet[EthAddress]

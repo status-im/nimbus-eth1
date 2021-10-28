@@ -88,7 +88,7 @@ proc procBlkEpilogue(vmState: BaseVMState; dbTx: DbTransaction;
       db.collectWitnessData()
     db.persist(ClearCache in vmState.flags)
 
-  let stateDb = vmState.accountDb
+  let stateDb = vmState.stateDB
   if header.stateRoot != stateDb.rootHash:
     debug "wrong state root in block",
       blockNumber = header.blockNumber,

@@ -263,6 +263,8 @@ proc persistStorage(acc: RefAccount, db: TrieDatabaseRef, clearCache: bool) =
     else:
       accountTrie.del(slotAsKey)
 
+    # TODO: this can be disabled if we do not perform
+    #       accounts tracing
     # map slothash back to slot value
     # see iterator storage below
     # slotHash can be obtained from accountTrie.put?
@@ -440,7 +442,6 @@ proc persist*(ac: var AccountsCache, clearCache: bool = true) =
     of Remove:
       ac.trie.del address
       if not clearCache:
-        #
         cleanAccounts.incl address
     of DoNothing:
       discard

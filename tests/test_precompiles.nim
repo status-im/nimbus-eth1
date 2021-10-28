@@ -29,7 +29,7 @@ template doTest(fixture: JsonNode, fork: Fork, address: PrecompileAddresses): un
     let
       expectedErr = test.hasKey("ExpectedError")
       expected = if test.hasKey("Expected"): hexToSeqByte(test["Expected"].getStr) else: @[]
-      dataStr = test["Input"].getStr      
+      dataStr = test["Input"].getStr
       gasExpected = if test.hasKey("Gas"): test["Gas"].getInt else: -1
 
     let unsignedTx = Transaction(
@@ -64,8 +64,11 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
     header = BlockHeader(blockNumber: 1.u256)
-    vmState = newBaseVMState(header.stateRoot, header, newBaseChainDB(newMemoryDb()))
-    
+    chainDB = newBaseChainDB(newMemoryDb())
+
+  chainDB.initStateDB(header.stateRoot)
+  let vmState = newBaseVMState(chainDB.stateDB, header, chainDB)
+
   case toLowerAscii(label)
   of "ecrecover": data.doTest(fork, paEcRecover)
   of "sha256"   : data.doTest(fork, paSha256)

@@ -208,7 +208,7 @@ proc parseTester(fixture: JsonNode, testStatusIMPL: var TestStatus): Tester =
   result.network = fixture["network"].getStr
 
 proc blockWitness(vmState: BaseVMState, chainDB: BaseChainDB) =
-  let rootHash = vmState.accountDb.rootHash
+  let rootHash = vmState.stateDB.rootHash
   let witness = vmState.buildWitness()
   let fork = vmState.fork
   let flags = if fork >= FKSpurious: {wfEIP170} else: {}
@@ -240,8 +240,11 @@ proc importBlock(tester: var Tester, chainDB: BaseChainDB,
   )
 
   deepCopy(result, preminedBlock)
+  # we need to reinit the state if the stateRoot appear to be different
+  # with the one in stateDB
+  chainDB.initStateDB(parentHeader.stateRoot)
   let tracerFlags: set[TracerFlags] = if tester.trace: {TracerFlags.EnableTracing} else : {}
-  tester.vmState = newBaseVMState(parentHeader.stateRoot, baseHeaderForImport, chainDB, tracerFlags)
+  tester.vmState = newBaseVMState(chainDB.stateDB, baseHeaderForImport, chainDB, tracerFlags)
 
   let body = BlockBody(
     transactions: result.txs,
@@ -333,14 +336,14 @@ proc runTester(tester: var Tester, chainDB: BaseChainDB, testStatusIMPL: var Tes
     if tester.debugMode:
       tester.collectDebugData()
 
-proc dumpAccount(accountDb: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
+proc dumpAccount(stateDB: ReadOnlyStateDB, address: EthAddress, name: string): JsonNode =
   result = %{
     "name": %name,
     "address": %($address),
-    "nonce": %toHex(accountDb.getNonce(address)),
-    "balance": %accountDb.getBalance(address).toHex(),
-    "codehash": %($accountDb.getCodeHash(address)),
-    "storageRoot": %($accountDb.getStorageRoot(address))
+    "nonce": %toHex(stateDB.getNonce(address)),
+    "balance": %stateDB.getBalance(address).toHex(),
+    "codehash": %($stateDB.getCodeHash(address)),
+    "storageRoot": %($stateDB.getStorageRoot(address))
   }
 
 proc dumpDebugData(tester: Tester, vmState: BaseVMState, accountList: JsonNode): JsonNode =
@@ -384,18 +387,11 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus, debugMode = fal
 
     var tester = parseTester(fixture, testStatusIMPL)
     var chainDB = newBaseChainDB(newMemoryDb(), pruneTrie = test_config.getConfiguration().pruning)
+    chainDB.initStateDB(emptyRlpHash)
+    setupStateDB(fixture["pre"], chainDB.stateDB)
+    chainDB.stateDB.persist()
 
-    var vmState = newBaseVMState(emptyRlpHash,
-      tester.genesisHeader, chainDB)
-
-    vmState.generateWitness = true
-
-    vmState.mutateStateDB:
-      setupStateDB(fixture["pre"], db)
-      db.persist()
-
-    let obtainedHash = $(vmState.readOnlyStateDB.rootHash)
-    check obtainedHash == $(tester.genesisHeader.stateRoot)
+    check chainDB.stateDB.rootHash == tester.genesisHeader.stateRoot
 
     tester.debugMode = debugMode
     tester.trace = trace

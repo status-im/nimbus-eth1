@@ -213,7 +213,9 @@ proc initDatabase*(networkId = MainNet): (BaseVMState, BaseChainDB) =
       difficulty: db.config.calcDifficulty(timestamp, parent),
       gasLimit: 100_000
     )
-    vmState = newBaseVMState(parent.stateRoot, header, db)
+
+  db.initStateDB(parent.stateRoot)
+  let vmState = newBaseVMState(db.stateDB, header, db)
 
   (vmState, db)
 
@@ -276,7 +278,7 @@ proc runVM*(vmState: BaseVMState, chainDB: BaseChainDB, boa: Assembler): bool =
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
-  var stateDB = vmState.accountDb
+  var stateDB = vmState.stateDB
   stateDB.persist()
 
   var

@@ -77,7 +77,7 @@ proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt
   var rec: Receipt
   if vmState.getFork < FkByzantium:
     rec.isHash = true
-    rec.hash   = vmState.accountDb.rootHash
+    rec.hash   = vmState.stateDB.rootHash
   else:
     rec.isHash = false
     rec.status = vmState.status

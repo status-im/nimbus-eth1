@@ -88,9 +88,12 @@ proc traceTransaction*(chainDB: BaseChainDB, header: BlockHeader,
     captureTrieDB = trieDB captureDB
     networkParams = chainDB.networkParams
     captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams) # prune or not prune?
-    vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableAccount})
 
-  var stateDb = vmState.accountDb
+  captureChainDB.initStateDB(parent.stateRoot)
+  let
+    vmState = newBaseVMState(captureChainDB.stateDB, header, captureChainDB, tracerFlags + {EnableAccount})
+
+  var stateDb = vmState.stateDB
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
@@ -157,7 +160,10 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
     networkParams = db.networkParams
     captureChainDB = newBaseChainDB(captureTrieDB, false, db.networkId, networkParams)
     # we only need stack dump if we want to scan for internal transaction address
-    vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
+
+  captureChainDB.initStateDB(parent.stateRoot)
+  let
+    vmState = newBaseVMState(captureChainDB.stateDB, header, captureChainDB, {EnableTracing, DisableMemory, DisableStorage, EnableAccount})
     miner = vmState.coinbase()
 
   var
@@ -178,7 +184,7 @@ proc dumpBlockState*(db: BaseChainDB, header: BlockHeader, body: BlockBody, dump
 
   discard vmState.processBlockNotPoA(header, body)
 
-  var stateAfter = vmState.accountDb
+  var stateAfter = vmState.stateDB
 
   for idx, tx in body.transactions:
     let sender = tx.getSender
@@ -214,7 +220,10 @@ proc traceBlock*(chainDB: BaseChainDB, header: BlockHeader, body: BlockBody, tra
     captureTrieDB = trieDB captureDB
     networkParams = chainDB.networkParams
     captureChainDB = newBaseChainDB(captureTrieDB, false, chainDB.networkId, networkParams)
-    vmState = newBaseVMState(parent.stateRoot, header, captureChainDB, tracerFlags + {EnableTracing})
+
+  captureChainDB.initStateDB(parent.stateRoot)
+  let
+    vmState = newBaseVMState(captureChainDB.stateDB, header, captureChainDB, tracerFlags + {EnableTracing})
 
   if header.txRoot == BLANK_ROOT_HASH: return newJNull()
   doAssert(body.transactions.calcTxRoot == header.txRoot)
@@ -252,7 +261,7 @@ proc dumpDebuggingMetaData*(chainDB: BaseChainDB, header: BlockHeader,
 
   let blockSummary = %{
     "receiptsRoot": %("0x" & toHex(calcReceiptRoot(vmState.receipts).data)),
-    "stateRoot": %("0x" & toHex(vmState.accountDb.rootHash.data)),
+    "stateRoot": %("0x" & toHex(vmState.stateDB.rootHash.data)),
     "logsBloom": %("0x" & toHex(bloom))
   }
 

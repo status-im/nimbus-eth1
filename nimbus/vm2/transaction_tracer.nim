@@ -98,7 +98,7 @@ proc traceOpCodeEnded*(tracer: var TransactionTracer, c: Computation, op: Op, la
   if TracerFlags.DisableStorage notin tracer.flags:
     var storage = newJObject()
     if c.msg.depth < tracer.storageKeys.len:
-      var stateDB = c.vmState.accountDb
+      var stateDB = c.vmState.stateDB
       for key in tracer.storage(c.msg.depth):
         let value = stateDB.getStorage(c.msg.contractAddress, key)
         storage[key.dumpHex] = %(value.dumpHex)

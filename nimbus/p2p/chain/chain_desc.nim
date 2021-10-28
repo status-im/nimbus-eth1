@@ -42,6 +42,7 @@ type
     db: BaseChainDB
     forkIds: array[ChainFork, ForkID]
     blockZeroHash: KeccakHash
+    lastBlockHash: KeccakHash
 
     extraValidation: bool ##\
       ## Trigger extra validation, currently within `persistBlocks()`
@@ -222,6 +223,10 @@ proc verifyFrom*(c: Chain): auto {.inline.} =
   ## Getter
   c.verifyFrom
 
+proc lastBlockHash*(c: Chain): auto {.inline.} =
+  ## Getter
+  c.lastBlockHash
+
 proc currentBlock*(c: Chain): BlockHeader
   {.gcsafe, raises: [Defect,CatchableError].} =
   ## currentBlock retrieves the current head block of the canonical chain.
@@ -243,6 +248,10 @@ proc `verifyFrom=`*(c: Chain; verifyFrom: uint64) {.inline.} =
   ## validation should start if the `Clique` field `extraValidation` was set
   ## `true`.
   c.verifyFrom = verifyFrom.u256
+
+proc `lastBlockHash=`*(c: Chain; blockHash: KeccakHash) {.inline.} =
+  ## Setter.
+  c.lastBlockHash = blockHash
 
 # ------------------------------------------------------------------------------
 # End

@@ -59,10 +59,10 @@ proc processTransactionImpl(tx: Transaction, sender: EthAddress,
       # miner only receives the priority fee;
       # note that the base fee is not given to anyone (it is burned)
       let txFee = result.u256 * priorityFee.u256
-      vmState.accountDb.addBalance(miner, txFee)
+      vmState.stateDB.addBalance(miner, txFee)
     else:
       let txFee = result.u256 * tx.gasPrice.u256
-      vmState.accountDb.addBalance(miner, txFee)
+      vmState.stateDB.addBalance(miner, txFee)
 
   vmState.cumulativeGasUsed += result
 
@@ -79,8 +79,8 @@ proc processTransactionImpl(tx: Transaction, sender: EthAddress,
           db.deleteAccount(account)
 
   if vmState.generateWitness:
-    vmState.accountDb.collectWitnessData()
-  vmState.accountDb.persist(clearCache = false)
+    vmState.stateDB.collectWitnessData()
+  vmState.stateDB.persist(clearCache = false)
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -21,8 +21,10 @@ proc executeBlock(blockEnv: JsonNode, memoryDB: TrieDatabaseRef, blockNumber: Ui
 
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
+
+  chainDB.initStateDB(parent.stateRoot)
   let
-    vmState = newBaseVMState(parent.stateRoot, header, chainDB)
+    vmState = newBaseVMState(chainDB.stateDB, header, chainDB)
     validationResult = vmState.processBlockNotPoA(header, body)
 
   if validationResult != ValidationResult.OK:

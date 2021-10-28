@@ -118,9 +118,9 @@ proc aclNode(ctx: GraphqlContextRef, accessPair: AccessPair): Node =
     acl: accessPair
   )
 
-proc getAccountDb(chainDB: BaseChainDB, header: BlockHeader): ReadOnlyStateDB =
+proc getStateDB(chainDB: BaseChainDB, header: BlockHeader): ReadOnlyStateDB =
   ## Retrieves the account db from canonical head
-  ## we don't use accounst_cache here because it's only read operations
+  ## we don't use accounst_cache here because it's read only operations
   let ac = newAccountStateDB(chainDB.db, header.stateRoot, chainDB.pruneTrie)
   ReadOnlyStateDB(ac)
 
@@ -309,7 +309,7 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: Hash256): RespResult =
     err("can't get transaction by hash '$1': $2" % [hash.data.toHex, em.msg])
 
 proc accountNode(ctx: GraphqlContextRef, header: BlockHeader, address: EthAddress): RespResult =
-  let db = getAccountDb(ctx.chainDB, header)
+  let db = getStateDB(ctx.chainDB, header)
   when false:
     # EIP 1767 unclear about non existent account
     # but hive test case demand something
@@ -685,7 +685,7 @@ proc txCreatedContract(ud: RootRef, params: Args, parent: Node): RespResult {.ap
   if hres.isErr:
     return hres
   let h = HeaderNode(hres.get())
-  let db = getAccountDb(ctx.chainDB, h.header)
+  let db = getStateDB(ctx.chainDB, h.header)
   let contractAddress = generateAddress(sender, tx.tx.nonce)
   ctx.accountNode(h.header, contractAddress)
 

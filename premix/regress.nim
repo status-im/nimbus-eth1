@@ -17,6 +17,7 @@ proc validateBlock(chainDB: BaseChainDB, blockNumber: BlockNumber): BlockNumber 
     parent = chainDB.getBlockHeader(parentNumber)
     headers = newSeq[BlockHeader](numBlocks)
     bodies  = newSeq[BlockBody](numBlocks)
+    lastBlockHash: Hash256
 
   for i in 0 ..< numBlocks:
     headers[i] = chainDB.getBlockHeader(blockNumber + i.u256)
@@ -25,12 +26,13 @@ proc validateBlock(chainDB: BaseChainDB, blockNumber: BlockNumber): BlockNumber 
   let transaction = chainDB.db.beginTransaction()
   defer: transaction.dispose()
 
+  chainDB.initStateDB(parent.stateRoot)
   for i in 0 ..< numBlocks:
     stdout.write blockNumber + i.u256
     stdout.write "\r"
 
     let
-      vmState = newBaseVMState(parent.stateRoot, headers[i], chainDB)
+      vmState = newBaseVMState(chainDB.stateDB, headers[i], chainDB)
       validationResult = vmState.processBlockNotPoA(headers[i], bodies[i])
 
     if validationResult != ValidationResult.OK:

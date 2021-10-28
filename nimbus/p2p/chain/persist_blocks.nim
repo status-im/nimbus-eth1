@@ -48,10 +48,15 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
   defer: c.clique.cliqueRestore(cliqueState)
 
   for i in 0 ..< headers.len:
+    let (header, body) = (headers[i], bodies[i])
+
+    if header.parentHash != c.lastBlockHash:
+      # reinit the stateDB if there is some interruption
+      let parent = c.db.getBlockHeader(header.parentHash)
+      c.db.initStateDB(parent.stateRoot)
+
     let
-      (header, body) = (headers[i], bodies[i])
-      parentHeader = c.db.getBlockHeader(header.parentHash)
-      vmState = newBaseVMState(parentHeader.stateRoot, header, c.db)
+      vmState = newBaseVMState(c.db.stateDB, header, c.db)
       validationResult = vmState.processBlock(c.clique, header, body)
 
     when not defined(release):
@@ -95,6 +100,7 @@ proc persistBlocksImpl(c: Chain; headers: openarray[BlockHeader];
     # between eth_blockNumber and eth_syncing
     c.db.currentBlock = header.blockNumber
 
+  c.lastBlockHash = headers[^1].blockHash
   transaction.commit()
 
 # ------------------------------------------------------------------------------

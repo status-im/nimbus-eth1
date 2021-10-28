@@ -31,7 +31,7 @@ proc hostAccountExistsImpl(ctx: Computation, address: EthAddress): bool {.cdecl.
     db.accountExists(address)
 
 proc hostGetStorageImpl(ctx: Computation, address: EthAddress, key: var evmc_bytes32): evmc_bytes32 {.cdecl.} =
-  ctx.vmState.accountDB.getStorage(address, Uint256.fromEvmc(key)).toEvmc()
+  ctx.vmState.stateDB.getStorage(address, Uint256.fromEvmc(key)).toEvmc()
 
 proc sstoreNetGasMetering(ctx: Computation): bool {.inline.} =
   ctx.fork in {FkConstantinople, FkIstanbul, FkBerlin, FkLondon}

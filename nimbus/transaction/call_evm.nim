@@ -51,14 +51,13 @@ proc rpcDoCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): Hex
   # we use current header stateRoot, unlike block validation
   # which use previous block stateRoot
   # TODO: ^ Check it's correct to use current header stateRoot, not parent
-  let vmState    = newBaseVMState(header.stateRoot, header, chain)
+  let vmState    = newBaseVMState(chain.stateDB, header, chain)
   let callResult = rpcRunComputation(vmState, call, call.gas)
   return hexDataStr(callResult.output)
 
 proc rpcMakeCall*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB): (string, GasInt, bool) =
-  # TODO: handle revert
-  let parent     = chain.getBlockHeader(header.parentHash)
-  let vmState    = newBaseVMState(parent.stateRoot, header, chain)
+  # TODO: handle revert  
+  let vmState    = newBaseVMState(chain.stateDB, header, chain)
   let callResult = rpcRunComputation(vmState, call, call.gas)
   return (callResult.output.toHex, callResult.gasUsed, callResult.isError)
 
@@ -87,7 +86,7 @@ proc rpcEstimateGas*(call: RpcCallData, header: BlockHeader, chain: BaseChainDB,
   var
     # we use current header stateRoot, unlike block validation
     # which use previous block stateRoot
-    vmState = newBaseVMState(header.stateRoot, header, chain)
+    vmState = newBaseVMState(chain.stateDB, header, chain)
     fork    = toFork(chain.config, header.blockNumber)
     gasLimit = if haveGasLimit: call.gas else: header.gasLimit - vmState.cumulativeGasUsed
 

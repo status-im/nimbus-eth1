@@ -27,14 +27,14 @@ import
 
 proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , server: RpcServer) =
 
-  proc getAccountDb(header: BlockHeader): ReadOnlyStateDB =
+  proc getStateDB(header: BlockHeader): ReadOnlyStateDB =
     ## Retrieves the account db from canonical head
     # we don't use accounst_cache here because it's only read operations
     let ac = newAccountStateDB(chain.db, header.stateRoot, chain.pruneTrie)
     result = ReadOnlyStateDB(ac)
 
-  proc accountDbFromTag(tag: string, readOnly = true): ReadOnlyStateDB =
-    result = getAccountDb(chain.headerFromTag(tag))
+  proc stateDBFromTag(tag: string, readOnly = true): ReadOnlyStateDB =
+    result = getStateDB(chain.headerFromTag(tag))
 
   server.rpc("eth_protocolVersion") do() -> Option[string]:
     # Old Ethereum wiki documents this as returning a decimal string.
@@ -99,7 +99,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns integer of the current balance in wei.
     let
-      accDB   = accountDbFromTag(quantityTag)
+      accDB   = stateDBFromTag(quantityTag)
       address = data.toAddress
       balance = accDB.getBalance(address)
     result = encodeQuantity(balance)
@@ -112,7 +112,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns: the value at this storage position.
     let
-      accDB   = accountDbFromTag(quantityTag)
+      accDB   = stateDBFromTag(quantityTag)
       address = data.toAddress
       key     = fromHex(Uint256, quantity.string)
       value   = accDB.getStorage(address, key)[0]
@@ -126,7 +126,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
     ## Returns integer of the number of transactions send from this address.
     let
       address = data.toAddress
-      accDB   = accountDbFromTag(quantityTag)
+      accDB   = stateDBFromTag(quantityTag)
     result = encodeQuantity(accDB.getNonce(address))
 
   server.rpc("eth_getBlockTransactionCountByHash") do(data: EthHashStr) -> HexQuantityStr:
@@ -178,7 +178,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
     ## Returns the code from the given address.
     let
-      accDB   = accountDbFromTag(quantityTag)
+      accDB   = stateDBFromTag(quantityTag)
       address = data.toAddress
       storage = accDB.getCode(address)
     result = hexDataStr(storage)
@@ -217,7 +217,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      accDB    = accountDbFromTag("latest")
+      accDB    = stateDBFromTag("latest")
       tx       = unsignedTx(data, chain, accDB.getNonce(address) + 1)
       eip155   = chain.currentBlock >= chain.config.eip155Block
       signedTx = signTransaction(tx, acc.privateKey, chain.config.chainId, eip155)
@@ -240,7 +240,7 @@ proc setupEthRpc*(node: EthereumNode, ctx: EthContext, chain: BaseChainDB , serv
       raise newException(ValueError, "Account locked, please unlock it first")
 
     let
-      accDB    = accountDbFromTag("latest")
+      accDB    = stateDBFromTag("latest")
       tx       = unsignedTx(data, chain, accDB.getNonce(address) + 1)
       eip155   = chain.currentBlock >= chain.config.eip155Block
       signedTx = signTransaction(tx, acc.privateKey, chain.config.chainId, eip155)

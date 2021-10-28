@@ -211,17 +211,17 @@ proc isSelfDestructed*(c: Computation, address: EthAddress): bool =
   result = address in c.selfDestructs
 
 proc snapshot*(c: Computation) =
-  c.savePoint = c.vmState.accountDb.beginSavePoint()
+  c.savePoint = c.vmState.stateDB.beginSavePoint()
 
 proc commit*(c: Computation) =
-  c.vmState.accountDb.commit(c.savePoint)
+  c.vmState.stateDB.commit(c.savePoint)
 
 proc dispose*(c: Computation) {.inline.} =
-  c.vmState.accountDb.safeDispose(c.savePoint)
+  c.vmState.stateDB.safeDispose(c.savePoint)
   c.savePoint = nil
 
 proc rollback*(c: Computation) =
-  c.vmState.accountDb.rollback(c.savePoint)
+  c.vmState.stateDB.rollback(c.savePoint)
 
 proc setError*(c: Computation, msg: string, burnsGas = false) {.inline.} =
   c.error = Error(info: msg, burnsGas: burnsGas)

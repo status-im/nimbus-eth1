@@ -18,13 +18,18 @@ proc dumpDebug(chainDB: BaseChainDB, blockNumber: Uint256) =
 
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
+
+  
   let
     parentNumber = blockNumber - 1
     parent = captureChainDB.getBlockHeader(parentNumber)
     header = captureChainDB.getBlockHeader(blockNumber)
     headerHash = header.blockHash
     body = captureChainDB.getBlockBody(headerHash)
-    vmState = newBaseVMState(parent.stateRoot, header, captureChainDB)
+        
+  captureChainDB.initStateDB(parent.stateRoot)
+  let
+    vmState = newBaseVMState(captureChainDB.stateDB, header, captureChainDB)
 
   captureChainDB.setHead(parent, true)
   discard vmState.processBlockNotPoA(header, body)

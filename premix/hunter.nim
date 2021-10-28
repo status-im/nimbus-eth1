@@ -1,8 +1,13 @@
 import
-  json, downloader, stint, stew/byteutils, parser,
-  chronicles, ../nimbus/[tracer, vm_state, utils], eth/trie/[trie_defs, db],
-  ../nimbus/db/[db_chain, state_db], ../nimbus/p2p/executor, premixcore,
-  eth/common, configuration, tables, ../nimbus/vm_types, hashes
+  std/[json, tables, hashes],
+
+  eth/common, eth/trie/[trie_defs, db],
+  stint, stew/byteutils, chronicles,
+
+  ../nimbus/[tracer, vm_state, utils, vm_types],
+  ../nimbus/db/[db_chain, state_db, accounts_cache],
+  ../nimbus/p2p/executor, premixcore,
+  "."/configuration, downloader, parser
 
 const
   emptyCodeHash = blankStringHash
@@ -61,9 +66,9 @@ type
 proc hash*(x: Uint256): Hash =
   result = hash(x.toByteArrayBE)
 
-proc newHunterVMState(prevStateRoot: Hash256, header: BlockHeader, chainDB: BaseChainDB): HunterVMState =
+proc newHunterVMState(ac: AccountsCache, header: BlockHeader, chainDB: BaseChainDB): HunterVMState =
   new result
-  result.init(prevStateRoot, header, chainDB)
+  result.init(ac, header, chainDB)
   result.headers = initTable[BlockNumber, BlockHeader]()
 
 method getAncestorHash*(vmState: HunterVMState, blockNumber: BlockNumber): Hash256 {.gcsafe.} =
@@ -91,11 +96,12 @@ proc huntProblematicBlock(blockNumber: Uint256): ValidationResult =
     chainDB = newBaseChainDB(memoryDB, false)
 
   chainDB.setHead(parentBlock.header, true)
+  chainDB.initStateDB(parentBlock.header.stateRoot)
 
   let transaction = memoryDB.beginTransaction()
   defer: transaction.dispose()
   let
-    vmState = newHunterVMState(parentBlock.header.stateRoot, thisBlock.header, chainDB)
+    vmState = newHunterVMState(chainDB.stateDB, thisBlock.header, chainDB)
     validationResult = vmState.processBlockNotPoA(thisBlock.header, thisBlock.body)
 
   if validationResult != ValidationResult.OK:

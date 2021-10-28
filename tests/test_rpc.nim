@@ -12,7 +12,7 @@ import
   eth/[rlp, keys, trie/db, p2p/private/p2p_types],
   ../nimbus/rpc/[common, p2p, hexstrings, rpc_types, rpc_utils],
   ../nimbus/[constants, vm_state, config, genesis, utils, transaction],
-  ../nimbus/db/[accounts_cache, db_chain, state_db],
+  ../nimbus/db/[accounts_cache, db_chain],
   ../nimbus/p2p/[chain, executor, executor/executor_helpers],
   ../nimbus/sync/protocol_eth65,
   ../nimbus/utils/difficulty,
@@ -36,10 +36,9 @@ type
     txHash: Hash256
     blockHash: HAsh256
 
-proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
+proc setupEnv(chainDB: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): TestEnv =
   var
-    parent = chain.getCanonicalHead()
-    ac = newAccountStateDB(chain.db, parent.stateRoot, chain.pruneTrie)
+    parent = chainDB.getCanonicalHead()
     acc = ctx.am.getAccount(signer).tryGet()
     blockNumber = 1.toBlockNumber
     parentHash = parent.blockHash
@@ -52,10 +51,11 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): Tes
     PUSH1 "0x1C"        # RETURN OFFSET at 28
     RETURN
 
-  ac.setCode(ks2, code)
-  ac.addBalance(signer, 9_000_000_000.u256)
+  chainDB.initStateDB(parent.stateRoot)
+  chainDB.stateDB.setCode(ks2, code)
+  chainDB.stateDB.addBalance(signer, 9_000_000_000.u256)
   var
-    vmState = newBaseVMState(ac.rootHash, BlockHeader(parentHash: parentHash), chain)
+    vmState = newBaseVMState(chainDB.stateDB, BlockHeader(parentHash: parentHash), chainDB)
     zeroAddress: EthAddress
 
   let
@@ -75,11 +75,11 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): Tes
       value   : 2.u256,
       to      : some(zeroAddress)
     )
-    eip155    = chain.currentBlock >= chain.config.eip155Block
-    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, chain.config.chainId, eip155)
-    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, chain.config.chainId, eip155)
+    eip155    = chainDB.currentBlock >= chainDB.config.eip155Block
+    signedTx1 = signTransaction(unsignedTx1, acc.privateKey, chainDB.config.chainId, eip155)
+    signedTx2 = signTransaction(unsignedTx2, acc.privateKey, chainDB.config.chainId, eip155)
     txs = [signedTx1, signedTx2]
-    txRoot = chain.persistTransactions(blockNumber, txs)
+    txRoot = chainDB.persistTransactions(blockNumber, txs)
 
   vmState.receipts = newSeq[Receipt](txs.len)
   vmState.cumulativeGasUsed = 0
@@ -89,15 +89,15 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): Tes
     vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType)
 
   let
-    receiptRoot = chain.persistReceipts(vmState.receipts)
+    receiptRoot = chainDB.persistReceipts(vmState.receipts)
     date        = initDateTime(30, mMar, 2017, 00, 00, 00, 00, utc())
     timeStamp   = date.toTime
-    difficulty  = calcDifficulty(chain.config, timeStamp, parent)
+    difficulty  = calcDifficulty(chainDB.config, timeStamp, parent)
 
   var header = BlockHeader(
     parentHash  : parentHash,
     #coinbase*:      EthAddress
-    stateRoot   : vmState.accountDb.rootHash,
+    stateRoot   : vmState.stateDB.rootHash,
     txRoot      : txRoot,
     receiptRoot : receiptRoot,
     bloom       : createBloom(vmState.receipts),
@@ -112,9 +112,9 @@ proc setupEnv(chain: BaseChainDB, signer, ks2: EthAddress, ctx: EthContext): Tes
     )
 
   let uncles = [header]
-  header.ommersHash = chain.persistUncles(uncles)
+  header.ommersHash = chainDB.persistUncles(uncles)
 
-  discard chain.persistHeaderToDb(header)
+  discard chainDB.persistHeaderToDb(header)
   result = TestEnv(
     txHash: signedTx1.rlpHash,
     blockHash: header.hash

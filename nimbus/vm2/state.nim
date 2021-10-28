@@ -42,7 +42,7 @@ proc `$`*(vmState: BaseVMState): string =
   else:
     result = &"VMState {vmState.name}:\n  header: {vmState.blockHeader}\n  chaindb:  {vmState.chaindb}"
 
-proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
+proc init*(self: BaseVMState, ac: AccountsCache, header: BlockHeader,
            chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}) =
   self.prevHeaders = @[]
   self.name = "BaseVM"
@@ -50,21 +50,15 @@ proc init*(self: BaseVMState, prevStateRoot: Hash256, header: BlockHeader,
   self.chaindb = chainDB
   self.tracer.initTracer(tracerFlags)
   self.logEntries = @[]
-  self.accountDb = AccountsCache.init(chainDB.db, prevStateRoot, chainDB.pruneTrie)
+  self.stateDB = ac
   self.touchedAccounts = initHashSet[EthAddress]()
   {.gcsafe.}:
     self.minerAddress = self.getMinerAddress()
 
-proc newBaseVMState*(prevStateRoot: Hash256, header: BlockHeader,
+proc newBaseVMState*(ac: AccountsCache, header: BlockHeader,
                      chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
   new result
-  result.init(prevStateRoot, header, chainDB, tracerFlags)
-
-proc newBaseVMState*(prevStateRoot: Hash256,
-                     chainDB: BaseChainDB, tracerFlags: set[TracerFlags] = {}): BaseVMState =
-  new result
-  var header: BlockHeader
-  result.init(prevStateRoot, header, chainDB, tracerFlags)
+  result.init(ac, header, chainDB, tracerFlags)
 
 proc consensusEnginePoA*(vmState: BaseVMState): bool =
   # PoA consensus engine have no reward for miner
@@ -81,6 +75,7 @@ proc updateBlockHeader*(vmState: BaseVMState, header: BlockHeader) =
   vmState.logEntries = @[]
   vmState.receipts = @[]
   vmState.minerAddress = vmState.getMinerAddress()
+  vmState.cumulativeGasUsed = 0.GasInt
 
 method blockhash*(vmState: BaseVMState): Hash256 {.base, gcsafe.} =
   vmState.blockHeader.hash
@@ -131,11 +126,11 @@ method getAncestorHash*(vmState: BaseVMState, blockNumber: BlockNumber): Hash256
     result = header.hash
 
 proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
-  ReadOnlyStateDB(vmState.accountDb)
+  ReadOnlyStateDB(vmState.stateDB)
 
 template mutateStateDB*(vmState: BaseVMState, body: untyped) =
   block:
-    var db {.inject.} = vmState.accountDb
+    var db {.inject.} = vmState.stateDB
     body
 
 proc getTracingResult*(vmState: BaseVMState): JsonNode {.inline.} =
@@ -181,8 +176,8 @@ proc `generateWitness=`*(vmState: BaseVMState, status: bool) =
  else: vmState.flags.excl GenerateWitness
 
 proc buildWitness*(vmState: BaseVMState): seq[byte] =
-  let rootHash = vmState.accountDb.rootHash
-  let mkeys = vmState.accountDb.makeMultiKeys()
+  let rootHash = vmState.stateDB.rootHash
+  let mkeys = vmState.stateDB.makeMultiKeys()
   let flags = if vmState.fork >= FKSpurious: {wfEIP170} else: {}
 
   # build witness from tree
