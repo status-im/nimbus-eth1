@@ -60,6 +60,16 @@ type
       ## When packing, do not stop at the first failure to add another block,
       ## rather ignore that error and keep on trying for all blocks
 
+    # -----------
+
+    algoAutoDisposeUnpacked ##\
+      ## Automatically dispose *pending* or *staged* txs that were queued
+      ## at least `lifeTime` ago.
+
+    algoAutoDisposePacked ##\
+      ## Automatically dispose *packed* txs that were queued
+      ## at least `lifeTime` ago.
+
 
   TxPoolEthBlock* = tuple      ## Sub-entry for `TTxPoolParam`
     blockHeader: BlockHeader   ## Cached header for new block
@@ -111,7 +121,8 @@ const
   txMinTipPrice = 1.GasPrice
   txPoolAlgoStrategy = {algoPacked1559MinTip,
                          algoPacked1559MinFee,
-                         algoPackedPlMinPrice}
+                         algoPackedPlMinPrice,
+                         algoAutoDisposeUnpacked}
 
 {.push raises: [Defect].}
 
@@ -140,20 +151,18 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
 # Private functions, generic getter/setter
 # ------------------------------------------------------------------------------
 
-proc getPoolPrice(xp: TxPoolRef; param: var TxPoolPrice): GasPrice
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc getPoolPrice(xp: TxPoolRef; param: var TxPoolPrice): GasPrice {.inline.} =
   ## Generic getter
   param.curPrice
 
-proc setPoolPrice(xp: TxPoolRef; param: var TxPoolPrice; val: GasPrice)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc setPoolPrice(xp: TxPoolRef;
+                  param: var TxPoolPrice; val: GasPrice) {.inline.} =
   ## Generic setter
   if param.curPrice != val:
     param.prvPrice = param.curPrice
     param.curPrice = val
 
-proc poolPriceChanged(xp: TxPoolRef; param: var TxPoolPrice): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc poolPriceChanged(xp: TxPoolRef; param: var TxPoolPrice): bool {.inline.} =
   ## Returns `true` if there was a change, and resets the change detector.
   if param.prvPrice != param.curPrice:
     param.prvPrice = param.curPrice
@@ -193,18 +202,15 @@ proc dbHead*(xp: TxPoolRef): TxDbHeadRef {.inline.} =
   ## Getter, block chain DB
   xp.dbHead
 
-proc blockCache*(xp: TxPoolRef): TxPoolEthBlock
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc blockCache*(xp: TxPoolRef): TxPoolEthBlock {.inline.} =
   ## Getter, cached pieces of a block
   xp.param.blockCache
 
-proc dirtyStaged*(xp: TxPoolRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc dirtyStaged*(xp: TxPoolRef): bool {.inline.} =
   ## Getter, `staged` bucket needs update
   xp.param.dirtyStaged
 
-proc dirtyPacked*(xp: TxPoolRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc dirtyPacked*(xp: TxPoolRef): bool {.inline.} =
   ## Getter, `packed` bucket needs update
   xp.param.dirtyPacked
 
@@ -213,36 +219,30 @@ proc minFeePrice*(xp: TxPoolRef): GasPrice
   ## Getter, synchronised access
   xp.getPoolPrice(xp.param.minFee)
 
-proc minFeePriceChanged*(xp: TxPoolRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc minFeePriceChanged*(xp: TxPoolRef): bool {.inline.} =
   ## Returns `true` if there was a `nimFeePrice` change and resets
   ## the change detection.
   xp.poolPriceChanged(xp.param.minFee)
 
-proc minTipPrice*(xp: TxPoolRef): GasPrice
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc minTipPrice*(xp: TxPoolRef): GasPrice {.inline.} =
   ## Getter, synchronised access
   xp.getPoolPrice(xp.param.minTip)
 
-proc minTipPriceChanged*(xp: TxPoolRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc minTipPriceChanged*(xp: TxPoolRef): bool {.inline.} =
   ## Returns `true` if there was a `nimTipPrice` change and resets
   ## the change detection.
   xp.poolPriceChanged(xp.param.minTip)
 
-proc minPlGasPrice*(xp: TxPoolRef): GasPrice
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc minPlGasPrice*(xp: TxPoolRef): GasPrice {.inline.} =
   ## Getter, synchronised access
   xp.getPoolPrice(xp.param.minPlGas)
 
-proc minPlGasPriceChanged*(xp: TxPoolRef): bool
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc minPlGasPriceChanged*(xp: TxPoolRef): bool {.inline.} =
   ## Returns `true` if there was a `nimTipPrice` change and resets
   ## the change detection.
   xp.poolPriceChanged(xp.param.minPlGas)
 
-proc algoSelect*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags]
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc algoSelect*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags] {.inline.} =
   ## Returns the set of algorithm strategy symbols for labelling items
   ## as`packed`
   xp.param.algoSelect
@@ -251,38 +251,32 @@ proc algoSelect*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags]
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `blockCache=`*(xp: TxPoolRef; val: TxPoolEthBlock)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc `blockCache=`*(xp: TxPoolRef; val: TxPoolEthBlock) {.inline.} =
   ## Setter
   xp.param.blockCache = val
 
-proc `dirtyStaged=`*(xp: TxPoolRef; val: bool)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc `dirtyStaged=`*(xp: TxPoolRef; val: bool) {.inline.} =
   ## Setter
   xp.param.dirtyStaged = val
 
-proc `dirtyPacked=`*(xp: TxPoolRef; val: bool)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc `dirtyPacked=`*(xp: TxPoolRef; val: bool) {.inline.} =
   ## Setter
   xp.param.dirtyPacked = val
 
-proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
   ## Setter, synchronised access
   xp.setPoolPrice(xp.param.minFee,val)
 
-proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
   ## Setter, synchronised access
   xp.setPoolPrice(xp.param.minTip,val)
 
-proc `minPlGasPrice=`*(xp: TxPoolRef; val: GasPrice)
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc `minPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
   ## Setter, synchronised access
   xp.setPoolPrice(xp.param.minPlGas,val)
 
-proc `algoSelect=`*(xp: TxPoolRef; val: set[TxPoolAlgoSelectorFlags])
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
+proc `algoSelect=`*(xp: TxPoolRef;
+                    val: set[TxPoolAlgoSelectorFlags]){.inline.} =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
   xp.param.algoSelect = val
 

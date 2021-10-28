@@ -11,7 +11,7 @@
 import
   std/[strformat, sequtils, strutils, times],
   ../../nimbus/utils/keyed_queue,
-  ../../nimbus/utils/tx_pool/[tx_desc, tx_item, tx_tabs],
+  ../../nimbus/utils/tx_pool/[tx_desc, tx_gauge, tx_item, tx_tabs],
   ../replay/undump,
   eth/[common, keys],
   stint
@@ -23,6 +23,7 @@ export
   tx_desc.dbHead,
   tx_desc.txDB,
   tx_desc.verify,
+  tx_gauge,
   tx_tabs.TxTabsRef,
   tx_tabs.`baseFee=`,
   tx_tabs.any,

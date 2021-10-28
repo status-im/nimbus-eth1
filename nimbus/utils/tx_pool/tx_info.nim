@@ -29,7 +29,7 @@ type
       "on-demand disposal"
 
     txInfoImpliedDisposal = ##\
-      ## Implied disposal, typically implied by hihger nonces (fallback value)
+      ## Implied disposal, typically implied by greater nonces (fallback value)
       "implied disposal"
 
     # ------ Miscellaneous errors ------------------------------------
@@ -124,6 +124,11 @@ type
     txInfoErrTxExpired = ##\
       ## A transaction has been on the system for too long so it was removed.
       "Tx expired"
+
+    txInfoErrTxExpiredImplied = ##\
+     ## Implied disposal for greater nonces for the same sender when the base
+     ## tx was removed.
+     "Tx expired implied"
 
     # ------- update block chain head --------------------------------------
 

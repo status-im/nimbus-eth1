@@ -47,17 +47,8 @@ type
     txJobNone = 0 ##\
       ## no action
 
-    txJobAbort ##\
-      ## Stop processing and flush job queue.
-
     txJobAddTxs ##\
       ## Enqueues a batch of transactions
-
-    txJobEvictionInactive ##\
-      ## Move transactions older than `xp.lifeTime` to the waste basket.
-
-    txJobFlushRejects ##\
-      ## Deletes at most the `maxItems` oldest items from the waste basket.
 
     txJobPackBlock ##\
       ## Pack a block fetching items from the `packed` bucket. For included
@@ -80,26 +71,18 @@ type
 const
   txJobPriorityKind*: set[TxJobKind] = ##\
     ## Prioritised jobs, either small or important ones.
-    {txJobAbort,
-      txJobFlushRejects}
+    {}
 
 type
   TxJobDataRef* = ref object
     case kind*: TxJobKind
-    of txJobNone, txJobAbort:
+    of txJobNone:
       discard
 
     of txJobAddTxs:
       addTxsArgs*: tuple[
         txs:   seq[Transaction],
         info:  string]
-
-    of txJobEvictionInactive:
-      discard
-
-    of txJobFlushRejects:
-      flushRejectsArgs*: tuple[
-        maxItems: int]
 
     of txJobPackBlock:
       discard
@@ -263,7 +246,7 @@ proc fetch*(jq: TxJobRef): Result[TxJobPair,void]
 when JobWaitEnabled:
   proc waitAvail*(jq: TxJobRef) {.async,raises: [Defect,CatchableError].} =
     ## Asynchronously wait until at least one job is available (available
-    ## only if the `JobWaitEnabled` compiler flag is set.)
+    ## only if the `JobWaitEnabled` compile time constant is set.)
     if jq.jobs.len == 0:
       await jq.jobsAvail.wait
 else:

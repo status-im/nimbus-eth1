@@ -17,13 +17,10 @@
 ##   now, all txs are considered from `remote` accounts.
 ## * There is no handling of zero gas price transactions yet
 ## * Clarify whether there are legacy transactions possible with post-London
-##   chain blocks.
+##   chain blocks -- *yes, there are*.
 ## * Automatically move jobs to the waste basket if their life time has expired.
 ## * Implement re-positioning the current insertion point, typically the head
 ##   of the block chain.
-## * Currently too much fuss about locks and events, simplify to what is really
-##   needed. It seems that pushing txs is the only async job which generalises
-##   to adding a job to the job queue. Question: what about `jobCommit()`?
 ## * Packing blocks:
 ##   + Incrementally update the assembled block cache (or better use a bucket?)
 ##   + Current packing cycle results to one tx/address. Check whether it makes
@@ -66,7 +63,8 @@
 ## Job Queue
 ## ---------
 ## * Transactions entering the system (0):
-##   + txs are added to the job queue an processed sequentially
+##   + txs are added to the job queue an processed sequentially by the
+##     job processor `jobCommit()`
 ##   + when processed, they are moved
 ##
 ## Accounting system
@@ -216,12 +214,13 @@
 ##
 
 import
+  std/[sequtils],
   ./keyed_queue,
   ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
-  ./tx_pool/tx_tasks,
   ./tx_pool/tx_tasks/[tx_add_tx,
                       tx_adjust_head,
+                      tx_dispose_expired,
                       tx_packed_items,
                       tx_pack_items,
                       tx_staged_items],
@@ -268,6 +267,17 @@ logScope:
 # Private functions: tasks processor
 # ------------------------------------------------------------------------------
 
+proc maintenanceProcessing(xp: TxPoolRef)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Tasks to be done after job processing
+
+  # Purge expired items
+  const autoDispose = {algoAutoDisposeUnpacked} + {algoAutoDisposePacked}
+  if 0 < (autoDispose * xp.algoSelect).card:
+    # Move transactions older than `xp.lifeTime` to the waste basket.
+    xp.disposeExpiredItems
+
+
 proc processJobs(xp: TxPoolRef): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Job queue processor
@@ -282,11 +292,6 @@ proc processJobs(xp: TxPoolRef): int
       # No action
       discard
 
-    of txJobAbort:
-      # Stop processing and flush job queue (including the current one)
-      xp.byJob.clear
-      break
-
     of txJobAddTxs:
       # Add txs => pending(1), staged(2), or rejected(4) (see comment
       # on top of this source file for details.)
@@ -295,15 +300,6 @@ proc processJobs(xp: TxPoolRef): int
         xp.addTx(tx, args.info)
       xp.dirtyStaged = true # change may affect `staged` items
       xp.dirtyPacked = true  # change may affect `packed` items
-
-    of txJobEvictionInactive:
-      # Move transactions older than `xp.lifeTime` to the waste basket.
-      xp.deleteExpiredItems(xp.lifeTime)
-
-    of txJobFlushRejects:
-      # Deletes at most the `maxItems` oldest items from the waste basket.
-      let args = task.data.flushRejectsArgs
-      discard xp.txDB.flushRejects(args.maxItems)
 
     of txJobPackBlock:
       # Pack a block fetching items from the `packed` bucket. For included
@@ -343,31 +339,68 @@ proc processJobs(xp: TxPoolRef): int
         xp.dirtyPacked = false        # changes commited
 
 # ------------------------------------------------------------------------------
-# Public functions, task manager, pool action1 serialiser
+# Public functions, task manager, pool action serialiser
 # ------------------------------------------------------------------------------
+
+proc job*(xp: TxPoolRef; job: TxJobDataRef): TxJobID
+    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Queue a new generic job (does not run `jobCommit()`.)
+  xp.byJob.add(job)
+
+# core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
+# core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
+proc jobAddTxs*(xp: TxPoolRef; txs: openArray[Transaction]; info = ""): TxJobID
+    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Queues a batch of transactions jobs to be processed in due course
+  ## (does not run `jobCommit()`.)
+  xp.job(TxJobDataRef(
+    kind:     txJobAddTxs,
+    addTxsArgs: (
+      txs:    toSeq(txs),
+      info:   info)))
+
+# core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
+# core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
+proc jobAddTx*(xp: TxPoolRef; tx: var Transaction; info = ""): TxJobID
+    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Variant of `jobAddTxs()` but for a single transaction.
+  xp.job(TxJobDataRef(
+    kind:     txJobAddTxs,
+    addTxsArgs: (
+      txs:    @[tx],
+      info:   info)))
+
+proc jobAddTx*(xp: TxPoolRef; tx: Transaction; info = ""): TxJobID
+    {.discardable,inline,gcsafe,raises: [Defect,CatchableError].} =
+  ## Variant of `jobAddTxs()` but for a single transaction.
+  xp.job(TxJobDataRef(
+    kind:     txJobAddTxs,
+    addTxsArgs: (
+      txs:    @[tx],
+      info:   info)))
+
+
+proc jobCommit*(xp: TxPoolRef; forceMaintenance = false)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## This function processes all jobs currently queued. If the the argument
+  ## `forceMaintenance` is set `true`, mainenance processing is always run.
+  ## Otherwise it is only run if there were active jobs.
+  let nJobs = xp.processJobs
+  if 0 < nJobs or forceMaintenance:
+    xp.maintenanceProcessing
+  debug "processed jobs", nJobs
 
 proc nJobsWaiting*(xp: TxPoolRef): int
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Return the number of jobs currently unprocessed, waiting.
   xp.byJob.len
 
-proc job*(xp: TxPoolRef; job: TxJobDataRef): TxJobID
-    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
-  ## Add a new job to the queue (but do not start the commit loop.)
-  xp.byJob.add(job)
-
-proc jobCommit*(xp: TxPoolRef)
-    {.discardable,gcsafe,raises: [Defect,CatchableError].} =
-  ## This function processes all jobs currently on the queue.
-  let nJobs = xp.processJobs
-  debug "processed jobs", nJobs
-
 # hide complexity unless really needed
 when JobWaitEnabled:
   proc jobWait*(xp: TxPoolRef) {.async,raises: [Defect,CatchableError].} =
-    ## Asynchronously wait until at least one job is available. This
-    ## function might be useful for testing (available only if the
-    ## `JobWaitEnabled` compiler flag is set.)
+    ## Asynchronously wait until at least one job is queued and available.
+    ## This function might be useful for testing (available only if the
+    ## `JobWaitEnabled` compile time constant is set.)
     await xp.byJob.waitAvail
 
 # ------------------------------------------------------------------------------
@@ -450,21 +483,12 @@ proc setBaseFee*(xp: TxPoolRef; baseFee: GasPrice)
   xp.dirtyPacked = true          # change may affect `packed` items
 
 
-proc setAlgoSelector*(xp: TxPoolRef; strategy: varArgs[TxPoolAlgoSelectorFlags])
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Set strategy symbols on how to stage items.
-  var args: set[TxPoolAlgoSelectorFlags]
-  for w in strategy:
-    args.incl(w)
-  xp.algoSelect = args
-
-proc setAlgoSelector*(xp: TxPoolRef; strategy: set[TxPoolAlgoSelectorFlags])
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Ditto
+proc setAlgoSelector*(xp: TxPoolRef;
+                      strategy: set[TxPoolAlgoSelectorFlags]) {.inline.} =
+  ## Set strategy symbols for how handle items and buckets.
   xp.algoSelect = strategy
 
-proc getStageSelector*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags]
-    {.gcsafe,raises: [Defect,CatchableError].} =
+proc getAlgoSelector*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags] {.inline.} =
   ## Return strategy symbols on how to stage items.
   xp.algoSelect
 
@@ -569,7 +593,7 @@ proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
   ## Move item to wastebasket. All items for the same sender with nonces
   ## greater than the current one are deleted, as well.
   discard xp.txDB.dispose(item, reason)
-  # delete all items with higher nonces
+  # also delete all items with higher nonces
   let rc = xp.txDB.bySender.eq(item.sender)
   if rc.isOK:
     for other in rc.value.data.walkItems(item.tx.nonce):

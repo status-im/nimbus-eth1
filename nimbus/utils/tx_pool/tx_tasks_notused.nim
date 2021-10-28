@@ -29,30 +29,8 @@ logScope:
   topics = "tx-pool tasks"
 
 # ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc utcNow: Time =
-  getTime().utc.toTime
-
-#proc pp(t: Time): string =
-#  t.format("yyyy-MM-dd'T'HH:mm:ss'.'fff", utc())
-
-# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-# core/tx_pool.go(384): for addr := range pool.queue {
-proc deleteExpiredItems*(xp: TxPoolRef; maxLifeTime: Duration)
-    {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Any non-local transaction old enough will be removed
-  let deadLine = utcNow() - maxLifeTime
-  for item in xp.txDB.byItemID.nextValues:
-    if deadLine < item.timeStamp:
-      break
-    # deleting the current item is ok
-    discard xp.txDB.dispose(item,txInfoErrTxExpired)
-    queuedEvictionMeter(1)
 
 # core/tx_pool.go(1813): func (t *txLookup) RemotesBelowTip(threshold ..
 proc getRemotesBelowTip*(xp: TxPoolRef; threshold: GasPrice): seq[Hash256]

@@ -15,6 +15,16 @@
 import
   metrics
 
+const
+  # Provide some fall-back counters available for unit tests
+  FallBackMetrics4Debugging = not defined(metrics)
+
+when FallBackMetrics4Debugging:
+  {.warning: "Debugging fall back mode for some gauges".}
+  type
+    DummyCounter* = ref object
+      value: float64
+
 # ------------------------------------------------------------------------------
 # Private settings
 # ------------------------------------------------------------------------------
@@ -35,8 +45,12 @@ declareGauge queuedDiscard, "n/a"
 declareGauge queuedReplace, "n/a"
 declareGauge queuedRateLimit, "n/a" # Dropped due to rate limiting
 declareGauge queuedNofunds, "n/a"   # Dropped due to out-of-funds
-declareGauge queuedEviction, "na"   # Dropped due to lifetime
 
+declareGauge evictionGauge,
+  "A transaction has been on the system for too long so it was removed"
+
+declareGauge impliedEvictionGauge,
+  "Implied disposal for greater nonces (same sender) when base tx was removed"
 
 # General tx metrics
 
@@ -75,7 +89,23 @@ declareGauge unspecifiedError,
     "stay zero."
 
 # ------------------------------------------------------------------------------
-# Global functions (publishing private setting sabove)
+# Exports
+# ------------------------------------------------------------------------------
+
+when FallBackMetrics4Debugging:
+  let
+    evictionMeter* = DummyCounter()
+    impliedEvictionMeter* = DummyCounter()
+
+  proc inc(w: DummyCounter; val: int64|float64 = 1,) =
+    w.value = w.value + val.float64
+else:
+  let
+    evictionMeter* = evictionGauge
+    impliedEvictionMeter* = impliedEvictionGauge
+
+# ------------------------------------------------------------------------------
+# Global functions -- deprecated
 # ------------------------------------------------------------------------------
 
 proc pendingDiscardMeter*(n = 1i64)       = pendingDiscard.inc(n)
@@ -87,7 +117,6 @@ proc queuedDiscardMeter*(n = 1i64)        = queuedDiscard.inc(n)
 proc queuedReplaceMeter*(n = 1i64)        = queuedReplace.inc(n)
 proc queuedRateLimitMeter*(n = 1i64)      = queuedRateLimit.inc(n)
 proc queuedNofundsMeter*(n = 1i64)        = queuedNofunds.inc(n)
-proc queuedEvictionMeter*(n = 1i64)       = queuedEviction.inc(n)
 
 proc knownTxMeter*(n = 1i64)              = knownTransactions.inc(n)
 proc invalidTxMeter*(n = 1i64)            = invalidTransactions.inc(n)

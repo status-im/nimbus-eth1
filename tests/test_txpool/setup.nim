@@ -15,7 +15,7 @@ import
   ../../nimbus/p2p/chain,
   ../../nimbus/transaction,
   ../../nimbus/utils/[ec_recover, tx_pool],
-  ../../nimbus/utils/tx_pool/[tx_item, tx_perjobapi],
+  ../../nimbus/utils/tx_pool/tx_item,
   ./helpers,
   eth/[common, keys, p2p, trie/db],
   stint
@@ -81,7 +81,8 @@ proc toTxPool*(
       elif leadBlkNum < loadBlocks.u256:
         # Import into block chain
         let (headers,bodies) = (chain[0],chain[1])
-        doAssert chainDB.persistBlocks(headers,bodies).isOK
+        if not chainDB.persistBlocks(headers,bodies).isOK:
+          raiseAssert "persistBlocks() failed at block #" & $leadBlkNum
         chain[1].collectAccounts
       else:
         # Import transactions
@@ -110,8 +111,7 @@ proc toTxPool*(
               info = &"{txCount} #{blkNum}({chainNo}) "&
                      &"{n}/{txs.len} {statusInfo[status]}"
             noisy.showElapsed(&"insert: {info}"):
-              var tx = txs[n]
-              result.pjaAddTx(tx, info)
+              result.jobAddTx(txs[n], info)
             if loadTxs <= txCount:
               break allDone
 
@@ -134,12 +134,9 @@ proc toTxPool*(
 
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for item in itList:
-      var tx = item.tx
-      result.pjaAddTx(tx, item.info)
-  result.pjaFlushRejects
+      result.jobAddTx(item.tx, item.info)
   result.jobCommit
   doAssert result.count.total == itList.len
-  doAssert result.count.disposed == 0
 
 
 proc toTxPool*(
@@ -177,8 +174,7 @@ proc toTxPool*(
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for n in 0 ..< itList.len:
       let item = itList[n]
-      var tx = item.tx
-      result.pjaAddTx(tx, item.info)
+      result.jobAddTx(item.tx, item.info)
       if delayAt == n:
         nGapItems = n # pass back value
         noisy.say &"time gap after transactions"

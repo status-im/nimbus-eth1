@@ -437,7 +437,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         for triple in testTxs:
           let item = triple[0]
           var tx = triple[1]
-          xq.pjaAddTx(tx, item.info)
+          xq.jobAddTx(tx, item.info)
         xq.jobCommit
 
         check xq.count.total == testTxs.len
@@ -449,7 +449,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         for triple in testTxs:
           let item = triple[0]
           var tx = triple[2]
-          xq.pjaAddTx(tx, "alt " & item.info)
+          xq.jobAddTx(tx, "alt " & item.info)
         xq.jobCommit
 
         check xq.count.total == testTxs.len
@@ -499,18 +499,28 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
 
         check 0 < nItems
         xq.lifeTime = getTime() - gap
+        let autoDispose = {algoAutoDisposeUnpacked} + {algoAutoDisposePacked}
+        xq.setAlgoSelector(xq.getAlgoSelector + autoDispose)
 
         # evict and pick items from the wastbasket
-        xq.pjaFlushRejects
-        xq.pjaInactiveItemsEviction
-        xq.jobCommit
-        let deletedItems = xq.count.disposed
+        let
+          disposedBase = xq.count.disposed
+          evictedBase = evictionMeter.value
+          impliedBase = impliedEvictionMeter.value
+        xq.jobCommit(true)
+        let
+          disposedItems = xq.count.disposed - disposedBase
+          evictedItems = (evictionMeter.value - evictedBase).int
+          impliedItems = (impliedEvictionMeter.value - impliedBase).int
 
         check xq.verify.isOK # not: xq.txDB.verify
-        check deletedItems == txList.len - xq.count.total
+        check disposedItems + disposedBase + xq.count.total == txList.len
+        check 0 < evictedItems
+        check evictedItems <= disposedItems
+        check disposedItems == evictedItems + impliedItems
 
         # make sure that deletion was sort of expected
-        let deleteExpextRatio = (deletedItems * 100 / nItems).int
+        let deleteExpextRatio = (evictedItems * 100 / nItems).int
         check deletedItemsRatioBandPC < deleteExpextRatio
         check deleteExpextRatio < (10000 div deletedItemsRatioBandPC)
 
@@ -642,8 +652,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         check txList.len == xq.count.total + xq.count.disposed
 
         # re-add item
-        var tx = thisItem.tx
-        xq.pjaAddTx(tx)
+        xq.jobAddTx(thisItem.tx)
         xq.jobCommit
 
         # verify that the pivot item was moved out from the waste basket
@@ -750,7 +759,7 @@ proc runTxPackerTests(noisy = true) =
 
           # set minimum target price
           xq.setMinPlGasPrice(packPrice)
-          xq.setAlgoSelector(algoPackTryHarder) # try setting some strategy
+          xq.setAlgoSelector({algoPackTryHarder}) # try setting some strategy
 
           noisy.say "*** status before 1st staging ", xq.count
 
