@@ -27,6 +27,12 @@ import
 proc isOK(rc: ValidationResult): bool =
   rc == ValidationResult.OK
 
+proc setStatus(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Change/update the status of the transaction item.
+  if status != item.status:
+    discard xp.txDB.reassign(item, status)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -192,10 +198,10 @@ proc toTxPool*(
 proc toItems*(xp: TxPoolRef): seq[TxItemRef] =
   toSeq(xp.txDB.byItemID.nextValues)
 
-
 proc setItemStatusFromInfo*(xp: TxPoolRef) =
+  ## Re-define status from last character of info field. Note that this might
+  ## violate boundary conditions regarding nonces.
   for item in xp.toItems:
-    # Re-define status from last character of info field
     let w = TxItemStatus.toSeq.filterIt(statusInfo[it][0] == item.info[^1])[0]
     xp.setStatus(item, w)
 

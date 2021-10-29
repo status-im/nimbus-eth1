@@ -10,7 +10,7 @@
 
 import
   std/[strformat, sequtils, strutils, times],
-  ../../nimbus/utils/keyed_queue,
+  ../../nimbus/utils/[keyed_queue, sorted_set],
   ../../nimbus/utils/tx_pool/[tx_desc, tx_gauge, tx_item, tx_tabs],
   ../replay/undump,
   eth/[common, keys],
@@ -68,31 +68,44 @@ const
     rc[txItemPacked] = "P"
     rc
 
-proc toHex*(acc: EthAddress): string =
-  acc.toSeq.mapIt(&"{it:02x}").join
-
-proc pp*(txs: openArray[Transaction]; pfx = ""): string =
-  let txt = block:
-    var rc = ""
-    if 0 < txs.len:
-      rc = "[" & txs[0].pp
-      for n in 1 ..< txs.len:
-        rc &= ";" & txs[n].pp
-      rc &= "]"
+  minEthAddress = block:
+    var rc: EthAddress
     rc
-  txt.multiReplace([
-    (",", &",\n   {pfx}"),
-    (";", &",\n  {pfx}")])
 
-proc pp*(txs: openArray[Transaction]; pfxLen: int): string =
-  txs.pp(" ".repeat(pfxLen))
+# ------------------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------------------
 
-proc pp*(it: TxItemRef): string =
-  result = it.info.split[0]
-  if it.local:
-    result &= "L"
+proc joinXX(s: string): string =
+  if s.len <= 30:
+    return s
+  if (s.len and 1) == 0:
+    result = s[0 ..< 8]
   else:
-    result &= "R"
+    result = "0" & s[0 ..< 7]
+  result &= "..(" & $((s.len + 1) div 2) & ").." & s[s.len-16 ..< s.len]
+
+proc joinXX(q: seq[string]): string =
+  q.join("").joinXX
+
+proc toXX[T](s: T): string =
+  s.toHex.strip(leading=true,chars={'0'}).toLowerAscii
+
+proc toXX(q: Blob): string =
+  q.mapIt(it.toHex(2)).join(":")
+
+proc toXX(a: EthAddress): string =
+  a.mapIt(it.toHex(2)).joinXX
+
+proc toXX(h: Hash256): string =
+  h.data.mapIt(it.toHex(2)).joinXX
+
+proc toXX(v: int64; r,s: UInt256): string =
+  v.toXX & ":" & ($r).joinXX & ":" & ($s).joinXX
+
+# ------------------------------------------------------------------------------
+# Public functions, units pretty printer
+# ------------------------------------------------------------------------------
 
 proc ppMs*(elapsed: Duration): string =
   result = $elapsed.inMilliSeconds
@@ -123,6 +136,78 @@ proc toKMG*[T](s: T): string =
     if not result.subst(w[0],w[1]):
       return
 
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc toHex*(acc: EthAddress): string =
+  acc.toSeq.mapIt(&"{it:02x}").join
+
+proc pp*(q: seq[(EthAddress,int)]): string =
+  "[" & q.mapIt(&"{it[0].toHex[14..19]}:{it[1]:03d}").join(",") & "]"
+
+proc pp*(w: TxItemStatus): string =
+  ($w).replace("txItem")
+
+proc pp*(tx: Transaction): string =
+  ## Pretty print transaction (use for debugging)
+  result = "(txType=" & $tx.txType
+
+  if tx.chainId.uint64 != 0:
+    result &= ",chainId=" & $tx.chainId.uint64
+
+  result &= ",nonce=" & tx.nonce.toXX
+  if tx.gasPrice != 0:
+    result &= ",gasPrice=" & tx.gasPrice.toKMG
+  if tx.maxPriorityFee != 0:
+    result &= ",maxPrioFee=" & tx.maxPriorityFee.toKMG
+  if tx.maxFee != 0:
+    result &= ",maxFee=" & tx.maxFee.toKMG
+  if tx.gasLimit != 0:
+    result &= ",gasLimit=" & tx.gasLimit.toKMG
+  if tx.to.isSome:
+    result &= ",to=" & tx.to.get.toXX
+  if tx.value != 0:
+    result &= ",value=" & tx.value.toKMG
+  if 0 < tx.payload.len:
+    result &= ",payload=" & tx.payload.toXX
+  if 0 < tx.accessList.len:
+    result &= ",accessList=" & $tx.accessList
+
+  result &= ",VRS=" & tx.V.toXX(tx.R,tx.S)
+  result &= ")"
+
+proc pp*(w: TxItemRef): string =
+  ## Pretty print item (use for debugging)
+  let s = w.tx.pp
+  result = "(timeStamp=" & ($w.timeStamp).replace(' ','_') &
+    ",hash=" & w.itemID.toXX &
+    ",status=" & w.status.pp &
+    "," & s[1 ..< s.len]
+
+proc pp*(txs: openArray[Transaction]; pfx = ""): string =
+  let txt = block:
+    var rc = ""
+    if 0 < txs.len:
+      rc = "[" & txs[0].pp
+      for n in 1 ..< txs.len:
+        rc &= ";" & txs[n].pp
+      rc &= "]"
+    rc
+  txt.multiReplace([
+    (",", &",\n   {pfx}"),
+    (";", &",\n  {pfx}")])
+
+proc pp*(txs: openArray[Transaction]; pfxLen: int): string =
+  txs.pp(" ".repeat(pfxLen))
+
+proc pp*(it: TxItemRef): string =
+  result = it.info.split[0]
+  if it.local:
+    result &= "L"
+  else:
+    result &= "R"
+
 template showElapsed*(noisy: bool; info: string; code: untyped) =
   let start = getTime()
   code
@@ -142,4 +227,15 @@ proc say*(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
+proc bucketPart*(xp: TxPoolRef; label: TxItemStatus): seq[(EthAddress,int)] =
+  let rcBucket = xp.txDB.byStatus.eq(label)
+  if rcBucket.isOK:
+    var rcAcc = rcBucket.ge(minEthAddress)
+    while rcAcc.isOK:
+      let (sender, nonceList) = (rcAcc.value.key, rcAcc.value.data)
+      result.add (sender, nonceList.nItems)
+      rcAcc = rcBucket.gt(sender)
+
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------

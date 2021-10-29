@@ -53,6 +53,7 @@ type
 # ------------------------------------------------------------------------------
 
 proc joinXX(s: string): string =
+  ## Pretty printer, for debugging
   if s.len <= 30:
     return s
   if (s.len and 1) == 0:
@@ -60,44 +61,6 @@ proc joinXX(s: string): string =
   else:
     result = "0" & s[0 ..< 7]
   result &= "..(" & $((s.len + 1) div 2) & ").." & s[s.len-16 ..< s.len]
-
-proc joinXX(q: seq[string]): string =
-  q.join("").joinXX
-
-proc toXX[T](s: T): string =
-  s.toHex.strip(leading=true,chars={'0'}).toLowerAscii
-
-proc toXX(q: Blob): string =
-  q.mapIt(it.toHex(2)).join(":")
-
-proc toXX(a: EthAddress): string =
-  a.mapIt(it.toHex(2)).joinXX
-
-proc toXX(h: Hash256): string =
-  h.data.mapIt(it.toHex(2)).joinXX
-
-proc toXX(v: int64; r,s: UInt256): string =
-  v.toXX & ":" & ($r).joinXX & ":" & ($s).joinXX
-
-proc toKMG[T](s: T): string =
-  proc subst(s: var string; tag, new: string): bool =
-    if tag.len < s.len and s[s.len - tag.len ..< s.len] == tag:
-      s = s[0 ..< s.len - tag.len] & new
-      return true
-  result = $s
-  for w in [("000", "K"),("000K","M"),("000M","G"),("000G","T"),
-            ("000T","P"),("000P","E"),("000E","Z"),("000Z","Y")]:
-    if not result.subst(w[0],w[1]):
-      return
-
-proc pp(w: TxItemStatus): string =
-  ($w).replace("txItem")
-
-proc `$`(w: AccessPair): string =
-  "(" & $w.address & "," & "#" & $w.storageKeys.len & ")"
-
-proc `$`(q: seq[AccessPair]): string =
-  "[" & q.mapIt($it).join(" ") & "]"
 
 
 proc utcTime: Time {.inline.} =
@@ -131,7 +94,7 @@ proc `<`*(a: GasPriceEx|int; b: GasPrice): bool =
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc init*(item: var TxItemRef; status: TxItemStatus; info: string) {.inline.} =
+proc init*(item: TxItemRef; status: TxItemStatus; info: string) {.inline.} =
   ## Update item descriptor.
   item.info = info
   item.status = status
@@ -224,6 +187,8 @@ proc cost*(tx: Transaction): UInt256 {.inline.} =
   ## Getter (go/ref compat): gas * gasPrice + value.
   (tx.gasPrice * tx.gasLimit).u256 + tx.value
 
+# core/types/transaction.go(332): .. *Transaction) EffectiveGasTip(baseFee ..
+# core/types/transaction.go(346): .. EffectiveGasTipValue(baseFee ..
 proc estimatedGasTip*(tx: Transaction;
                       baseFee: GasPrice): GasPriceEx {.inline.} =
   ## The effective miner gas tip for the globally argument `baseFee`. The
@@ -303,45 +268,9 @@ proc `reject=`*(item: TxItemRef; val: TxInfo) {.inline.} =
 # Public functions, pretty printing and debugging
 # ------------------------------------------------------------------------------
 
-proc pp*(tx: Transaction): string =
-  ## Pretty print transaction (use for debugging)
-  result = "(txType=" & $tx.txType
-
-  if tx.chainId.uint64 != 0:
-    result &= ",chainId=" & $tx.chainId.uint64
-
-  result &= ",nonce=" & tx.nonce.toXX
-  if tx.gasPrice != 0:
-    result &= ",gasPrice=" & tx.gasPrice.toKMG
-  if tx.maxPriorityFee != 0:
-    result &= ",maxPrioFee=" & tx.maxPriorityFee.toKMG
-  if tx.maxFee != 0:
-    result &= ",maxFee=" & tx.maxFee.toKMG
-  if tx.gasLimit != 0:
-    result &= ",gasLimit=" & tx.gasLimit.toKMG
-  if tx.to.isSome:
-    result &= ",to=" & tx.to.get.toXX
-  if tx.value != 0:
-    result &= ",value=" & tx.value.toKMG
-  if 0 < tx.payload.len:
-    result &= ",payload=" & tx.payload.toXX
-  if 0 < tx.accessList.len:
-    result &= ",accessList=" & $tx.accessList
-
-  result &= ",VRS=" & tx.V.toXX(tx.R,tx.S)
-  result &= ")"
-
-proc pp*(w: TxItemRef): string =
-  ## Pretty print item (use for debugging)
-  let s = w.tx.pp
-  result = "(timeStamp=" & ($w.timeStamp).replace(' ','_') &
-    ",hash=" & w.itemID.toXX &
-    ",status=" & w.status.pp &
-    "," & s[1 ..< s.len]
-
 proc `$`*(w: TxItemRef): string =
   ## Visualise item ID (use for debugging)
-  "<" & w.itemID.toXX & ">"
+  "<" & w.itemID.data.mapIt(it.toHex(2)).join("").joinXX & ">"
 
 # ------------------------------------------------------------------------------
 # End

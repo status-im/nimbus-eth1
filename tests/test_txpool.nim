@@ -157,10 +157,14 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
                            noisy = veryNoisy)
 
       # Set txs to pseudo random status
+      check xp.verify.isOK
       xp.setItemStatusFromInfo
 
+      # Boundary conditions regarding nonces might be violated by running
+      # setItemStatusFromInfo() => xp.txDB.verify() rather than xp.verify()
+      check xp.txDB.verify.isOK
+
       check txList.len == 0
-      check xp.verify.isOK
       check xp.count.disposed == 0
 
       noisy.say "***",
@@ -236,7 +240,10 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       waitFor xp.runJobs
       check xp.nJobsWaiting == 0
       check log == " wait-900-3 wait-1-3 wait-700-3 done-1 done-700 done-900"
-      check xp.verify.isOK
+
+      # Cannot rely on boundary conditions regarding nonces. So xp.verify()
+      # will not work here => xp.txDB.verify()
+      check xp.txDB.verify.isOK
 
       
 proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
@@ -455,7 +462,8 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         check xq.count.total == testTxs.len
         check xq.count.disposed == testTxs.len
 
-        # last update item was underpriced, so it must not have been replaced
+        # last update item was underpriced, so it must not have been
+        # replaced
         var altLst = testTxs.toSeq.mapIt("alt " & it[0].info)
         altLst[^1] = testTxs[^1][0].info
         check altLst.sorted == xq.toItems.toSeq.mapIt(it.info).sorted
@@ -492,7 +500,9 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
                            itemsPC = 35,       # arbitrary
                            delayMSecs = 100,   # large enough to process
                            noisy = noisy)
-      # Set txs to pseudo random status
+      # Set txs to pseudo random status. Note that this functon will cause
+      # a violation of boundary conditions regarding nonces. So database
+      # integrily check needs xq.txDB.verify() rather than xq.verify().
       xq.setItemStatusFromInfo
 
       test &"Delete about {nItems} expired txs out of {xq.count.total}":
@@ -513,7 +523,7 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           evictedItems = (evictionMeter.value - evictedBase).int
           impliedItems = (impliedEvictionMeter.value - impliedBase).int
 
-        check xq.verify.isOK # not: xq.txDB.verify
+        check xq.txDB.verify.isOK
         check disposedItems + disposedBase + xq.count.total == txList.len
         check 0 < evictedItems
         check evictedItems <= disposedItems
@@ -722,7 +732,7 @@ proc runTxPackerTests(noisy = true) =
           pending = xr.count.pending
           staged = xr.count.staged
 
-        test &"Re-org txs queues setting baseFee={ntNextFee}, "&
+        test &"Re-org txs previous buckets setting baseFee={ntNextFee}, "&
             &"pending/staged={pending}/{staged}":
 
           check 0 < pending
@@ -734,10 +744,14 @@ proc runTxPackerTests(noisy = true) =
           xq.setBaseFee(ntNextFee)
           check xq.getBaseFee == ntNextFee
 
+          # having the same set of txs, setting the xq database to the same
+          # base fee as the xr one, the bucket fills of both database must
+          # be the same after re-org
           xq.pjaUpdateStaged(force = true)
           xq.jobCommit
 
           # now, xq should look like xr
+          check xq.verify.isOK
           check xq.count == xr.count
 
       block:

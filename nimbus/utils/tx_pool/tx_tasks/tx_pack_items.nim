@@ -24,6 +24,8 @@ import
 logScope:
   topics = "tx-pool pack block"
 
+{.push raises: [Defect].}
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -32,7 +34,7 @@ logScope:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc packItemsIntoBlock*(xp: TxPoolRef) =
+proc packItemsIntoBlock*(xp: TxPoolRef) {.gcsafe,raises: [Defect,KeyError].} =
   ## Pack a new block and cache the components in the pool descriptor.
   var
     accu: TxPoolEthBlock # txs accumulator

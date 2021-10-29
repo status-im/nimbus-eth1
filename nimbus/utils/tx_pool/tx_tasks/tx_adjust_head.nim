@@ -43,6 +43,7 @@ logScope:
 proc collect(xp: TxPoolRef; kq: var UpdateTxs; blockHash: Hash256)
     {.inline,gcsafe,raises: [Defect,CatchableError].} =
   for tx in xp.dbhead.db.getBlockBody(blockHash).transactions:
+    # TODO: use items rether than txs => top nonce/sender
     discard kq.addTxs.prepend(tx.itemID,tx)
 
 proc remove(xp: TxPoolRef; kq: var UpdateTxs; blockHash: Hash256)
@@ -216,12 +217,17 @@ proc adjustHead*(xp: TxPoolRef; newHeader: BlockHeader): Result[void,TxInfo]
 
   # re-inject transactions
   for kqp in update.addTxs.nextPairs:
+    # Order makes sure that txs are added with correct nonce order. Note
+    # that the database might end up with gaps between the sequence of newly
+    # added and chain already on the system.
     var tx = kqp.data
     xp.addTx(tx)
 
   # delete already *mined* transactions
   for item in update.remItems.nextKeys:
     discard xp.txDB.dispose(item, reason = txInfoChainHeadUpdate)
+
+  # TODO: verify the nonces
 
   ok()
 

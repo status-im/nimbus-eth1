@@ -13,87 +13,165 @@
 ##
 ## TODO:
 ## -----
-## * Support `local` transactions (currently unsupported and ignored.) For
+## * Support `local` txs (currently unsupported and ignored.) For
 ##   now, all txs are considered from `remote` accounts.
-## * There is no handling of zero gas price transactions yet
-## * Clarify whether there are legacy transactions possible with post-London
+##
+## * There is no handling of *zero gas price* transactions yet
+##
+## * Clarify whether there are legacy txs possible with post-London
 ##   chain blocks -- *yes, there are*.
-## * Automatically move jobs to the waste basket if their life time has expired.
+##
 ## * Implement re-positioning the current insertion point, typically the head
 ##   of the block chain.
+##
 ## * Packing blocks:
 ##   + Incrementally update the assembled block cache (or better use a bucket?)
 ##   + Current packing cycle results to one tx/address. Check whether it makes
 ##     sense to sort of bundle all txs/address.
-## * There is no need for `txJobEvictionInactive` as expired txs can be
-##   deleted on the fly while processing jobs
+##
 ##
 ## Transaction state diagram:
 ## --------------------------
 ## ::
-##  .                   .                          .
-##  .     <Job queue>   .   <Accounting system>    .   <Tip/waste disposal>
-##  .                   .                          .
-##  .                   .         +------------+   .
-##  .        +------------------> | pending(1) | ------------+
-##  .        |          .         +------------+   .         |
-##  .        |          .            |  ^    ^     .         |
-##  .        |          .            V  |    |     .         |
-##  .        |          .    +-----------+   |     .         |
-##  .  --> enter(0) -------> | staged(2) |   |     .         |
-##  .        |          .    +-----------+   |     .         |
-##  .        |          .      |     |       |     .         |
-##  .        |          .      |     V       |     .         |
-##  .        |          .      |   +-----------+   .         |
-##  .        |          .      |   | packed(3) | ----------+ |
-##  .        |          .      |   +-----------+   .       | |
-##  .        |          .      |                   .       v v
-##  .        |          .      |                   .   +----------------+
-##  .        |          .      +---------------------> |  rejected(4)   |
-##  .        +---------------------------------------> | (waste basket) |
-##  .                   .                          .   +----------------+
+##  .     <Batch queue>  .   <State buckets>           .    <Terminal state>
+##  .                    .                             .
+##  .                    .                             .    +----------+
+##  .  --> txJobAddTxs -----------------------------------> |          |
+##  .              |     .         +---------------+   .    | disposed |
+##  .              +-------------> | txItemPending | -----> |          |
+##  .                    .         +---------------+   .    |          |
+##  .                    .           |  ^     ^        .    |  waste   |
+##  .                    .           v  |     |        .    |  basket  |
+##  .                    .  +--------------+  |        .    |          |
+##  .                    .  | txItemStaged |  |        .    |          |
+##  .                    .  +--------------+  |        .    |          |
+##  .                    .     |     |  ^     |        .    |          |
+##  .                    .     |     v  |     |        .    |          |
+##  .                    .     |   +--------------+    .    |          |
+##  .                    .     |   | txItemPacked | ------> |          |
+##  .                    .     |   +--------------+    .    |          |
+##  .                    .     +--------------------------> |          |
+##  .                    .                             .    +----------+
 ##
-## Terminology
-## ----------
-## There are the job *queue* and the pending, staged, and stage *buckets*
-## and the *waste basket*. These names are (not completely) arbitrary. Even
-## though all are more or less implemented as queues with some sort of random
-## access the names *bucket* and *basket* should indicate some sort of usage.
+## Discussion of transaction state diagram
+## =======================================
+## The three section *Job queue*, *State bucket*, and *Terminal state*
+## represent three different accounting (or database) systems. Transactions
+## are bundled with meta data which holds the full state and cached information
+## like the sender account.
 ##
-## Job Queue
-## ---------
-## * Transactions entering the system (0):
-##   + txs are added to the job queue an processed sequentially by the
-##     job processor `jobCommit()`
-##   + when processed, they are moved
+## Batch Queue
+## -----------
+## There is batch queue of type `TxJobRef` which collects different types of
+## jobs to be run in a serialised manner. When the queue worker `jobCommit()`
+## is invoked, all jobs are exeuted in *FIFO* mode until the queue is empty.
 ##
-## Accounting system
-## -----------------
-## * Pending transactions bucket (1):
-##   + It holds txs tested all right but not ready to fit into a block
-##   + These txs are stored with meta-data and marked `txItemPending`
-##   + Txs have a `nonce` which is not smaller than the nonce value of the tx
-##     sender account. If it is greater than the one of the tx sender account,
-##     the predecessor nonce, i.e. `nonce-1` is in the database.
+## New transactions are entered into the pool by adding them to the batch
+## queue as a job of type `txJobAddTxs`. This job is to bundle a transaction
+## with meta data and forward it as a `TxItemRef` type data item to
 ##
-## * Staged transactions bucket (2):
-##   + It holds vetted txs that are ready to go into a block.
-##   + Txs are accepted against minimum fee check and other parameters (if any)
-##   + Txs are marked `txItemStaged`
-##   + Txs have a `nonce` equal to the current value of the tx sender account.
-##   + Re-org or other events may send them to pending(1) or staged(3) bucket
+## * the `txItemPending` bucket if the transaction is valid and would not
+##   supersede an existing transaction
+## * the waste basket if the transaction is invalid
 ##
-## * Packed transactions bucket (3):
-##   + All transactions are to be placed and inclusded in a block
-##   + Transactions are marked `txItemPacked`
-##   + Re-org or other events may send txs back to pending(1) bucket
+## If a valid transaction supersedes an existing one, the existing transaction
+## is moved to the waste basket and the new transaction replaces the existing
+## one.
 ##
-## Tip/waste basket
-## ----------------
-## * Rejected transactions (4):
-##   + terminal state (waste basket), auto deleted (fifo with max size)
-##   + accessible while not pushed out (by newer rejections) from the fifo
-##   + txs are marked with non-zero `reason` code
+## State buckets
+## -------------
+## Here, a transaction bundled with meta data of type `TxItemRef` is called an
+## `item`. So, state bucket membership is encoded as
+##
+## * the `item.status` field indicates the particular bucket
+## * the `item.reject` field is reset/unset and has value `txInfoOk`
+##
+## The following boundary conditions hold for the set of all transactions (or
+## items) held in one of the buckets:
+##
+## * Let **T** be the set of transactions from all the buckets and **Q** be
+##   the set of *(sender,nonce)* pairs derived from the transactions. Then
+##   **T** and **Q** are isomorphic, i.e. for each pair *(sender,nonce)* from
+##   **Q** there is exactly one transaction from **T**.
+##
+## * For each *(sender0,nonce0)* from **Q**, either *(sender0,nonce0-1)* is in
+##   **Q** or *nonce0* is the current nonce as registered with the *sender
+##   account* (implied by the block chain),
+##
+## Note that the latter boundary condition involves the *sender account* which
+## depends on the current state of the block chain and the cached head (i.e.
+## insertion point) where a new block is to be appended.
+##
+## The following notation us used to describe the sets *(sender,nonce)* pairs
+## derived from the transactions of the buckets.
+##
+## * **Qpending** denotes the set of *(sender,nonce)* pairs for the bucket
+##   labelled `txItemPending`
+##
+## * **Qstaged** denotes the set of *(sender,nonce)* pairs for the bucket
+##   labelled `txItemStaged`
+##
+## * **Qpacked** denotes the set of *(sender,nonce)* pairs for the bucket
+##   labelled `txItemPacked`
+##
+## The pending transactions bucket
+## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+## This bucket of `txItemPending` state items hold valid transactions that are
+## not in any of the other buckets. All transactions -- or rather the items
+## that wrap the transactions -- are promoted form here into other buckets.
+##
+## The staged transactions bucket
+## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+## This bucket of `txItemStaged` state items contains transactions that are
+## ready to be added to a new block. These transactions are checked for
+## expected reward when mined.
+##
+## The following boundary conditions holds:
+##
+## * For any *(sender0,nonce0)* pair from **Qstaged**, the pair
+##   *(sender0,nonce0-1)* is not in **Qpending**.
+##
+## The latter condition implies that nonces per sender in the `txItemPending`
+## bucket the have the higher values.
+##
+## The packed transactions bucket
+## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+## tbd ...
+##
+##
+## The following boundary conditions holds:
+##
+## * For any *(sender0,nonce0)* pair from **Qpacked**, the pair
+##   *(sender0,nonce0-1)* is not in **Qpending** and not in **Qstaged**.
+##
+## The latter condition implies that nonces per sender in the `txItemPending`
+## and  `txItemStaged` buckets the have the higher values.
+##
+##
+## Terminal state
+## --------------
+## All transactions are disposed into a waste basket *FIFO* of a defined
+## maximal length. If this length is reached, the oldest item is deleted.
+## The transactions in the waste basket are stored with meta of type
+## `TxItemRef` is called an similar to the ones in the buckets (and
+## called `item`).
+##
+## Any waste basket item has
+##
+## * the `item.reject` field has a value different from `txInfoOk`
+##
+## Thus it is clearly distinguishable from an active `item` in one of the
+## buckets described above.
+##
+## The items in the waste basket are used as a cache in the case that a
+## previously discarded transaction needs to re-enter the system. Recovering
+## from the waste basket saves the effort of recovering the sender account
+## from signature.
+##
+##
+## =====================================================================
+##
+## xxxxxxxxxxx to be updated, below xxxxxxxxxxxxxxxxx
 ##
 ## Interaction of components
 ## -------------------------
@@ -576,15 +654,6 @@ proc getItem*(xp: TxPoolRef; hash: Hash256): Result[TxItemRef,void]
     {.gcsafe,raises: [Defect,CatchableError].} =
   ## Returns a transaction if it is contained in the pool.
   xp.txDB.byItemID.eq(hash)
-
-proc setStatus*(xp: TxPoolRef; item: TxItemRef; status: TxItemStatus)
-    {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Change/update the status of the transaction item.
-  if status != item.status:
-    discard xp.txDB.reassign(item, status)
-    if status == txItemStaged or status == txItemStaged:
-      xp.dirtyStaged = true  # change may affect `staged` items
-      xp.dirtyPacked = true  # change may affect `packed` items
 
 proc disposeItems*(xp: TxPoolRef; item: TxItemRef;
                    reason = txInfoExplicitDisposal;

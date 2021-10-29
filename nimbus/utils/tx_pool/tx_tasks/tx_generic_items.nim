@@ -31,6 +31,8 @@ type
     left: TxItemStatus    ## Label of left bucket
     right: TxItemStatus   ## Label of right bucket
 
+{.push raises: [Defect].}
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------

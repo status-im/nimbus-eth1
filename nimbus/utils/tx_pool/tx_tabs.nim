@@ -242,6 +242,13 @@ proc reject*(xp: TxTabsRef; tx: var Transaction;
   let item = TxItemRef.init(tx, reason, status, info)
   xp.byRejects[item.itemID] = item
 
+proc reject*(xp: TxTabsRef; tx: Transaction;
+             reason: TxInfo; status = txItemPending; info = "")
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Variant of `reject()`
+  var ty = tx
+  xp.reject(ty, reason, status)
+
 # ------------------------------------------------------------------------------
 # Public getters
 # ------------------------------------------------------------------------------

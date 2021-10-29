@@ -1,0 +1,70 @@
+# Nimbus
+# Copyright (c) 2018 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+## Transaction Pool Tasklet: Recover From Waste Basket or Create
+## =============================================================
+##
+
+import
+  ../../keyed_queue,
+  ../tx_desc,
+  ../tx_info,
+  ../tx_item,
+  ../tx_tabs,
+  chronicles,
+  eth/[common, keys]
+
+logScope:
+  topics = "tx-pool recover item"
+
+{.push raises: [Defect].}
+
+let
+  nullSender = block:
+    var rc: EthAddress
+    rc
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc recoverItem*(xp: TxPoolRef; tx: var Transaction;
+                  status = txItemPending; info = ""): Result[TxItemRef,TxInfo]
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Recover item from waste basket or create new. It is an error if the item
+  ## is in the buckets database, already.
+  let itemID = tx.itemID
+
+  # Test whether the item is in the database, already
+  if xp.txDB.byItemID.hasKey(itemID):
+    return err(txInfoErrAlreadyKnown)
+
+  # Check whether the tx can be re-cycled from waste basket
+  block:
+    let rc = xp.txDB.byRejects.delete(itemID)
+    if rc.isOK:
+      let item = rc.value.data
+      # must not be a waste tx without meta-data
+      if item.sender != nullSender:
+        let itemInfo = if info != "": info else: item.info
+        item.init(status, itemInfo)
+        return ok(item)
+
+  # New item generated from scratch
+  block:
+    let rc = TxItemRef.init(tx, itemID, status, info)
+    if rc.isOk:
+      return ok(rc.value)
+
+  err(txInfoErrInvalidSender)
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------

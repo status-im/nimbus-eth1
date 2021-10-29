@@ -20,16 +20,14 @@ import
   ../tx_item,
   ../tx_tabs,
   ./tx_classify,
+  ./tx_recover_item,
   chronicles,
   eth/[common, keys]
 
 logScope:
   topics = "tx-pool add transaction"
 
-var
-  nullSender = block:
-    var rc: EthAddress
-    rc
+{.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -67,66 +65,33 @@ proc supersede(xp: TxPoolRef; item: TxItemRef): Result[void,TxInfo]
 # Public functions
 # ------------------------------------------------------------------------------
 
-# core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
-# core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
-# core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
-# core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
-# core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
-proc addTx*(xp: TxPoolRef; tx: var Transaction; info = "")
+proc addTx*(xp: TxPoolRef; item: TxItemRef)
     {.gcsafe,raises: [Defect,CatchableError].} =
-  ## Classify a transaction. It is tested and moved to either of the `pending`
-  ## or `staged` buckets, or disposed o the waste basket.
+  ## Add a transaction item. It is tested and stored in either of the `pending`
+  ## or `staged` buckets, or disposed into the waste basket.
   let
     param = TxClassify(
       gasLimit: xp.dbHead.trgGasLimit,
       baseFee: xp.dbHead.baseFee)
   var
-    status = txItemPending
     vetted = txInfoOk
 
-  # Leave this frame with `continue`, or proceeed with error
+  # Leave this frame with `return`, or proceeed with error
   block txErrorFrame:
-    var
-      itemID = tx.itemID
-      item: TxItemRef
-      itemInfo = info
-      itemRecovered = false
-
     # Create tx ID and check for dups
-    if xp.txDB.byItemID.hasKey(itemID):
+    if xp.txDB.byItemID.hasKey(item.itemID):
       vetted = txInfoErrAlreadyKnown
       break txErrorFrame
-
-    # Check whether the tx can be re-cycled from waste basket
-    block:
-      let rc = xp.txDB.byRejects.delete(itemID)
-      if rc.isOK:
-        item = rc.value.data
-        # must not be a waste tx without meta-data
-        if item.sender != nullSender:
-          itemRecovered = true
-          if itemInfo == "":
-            itemInfo = item.info
-
-    # Create tx wrapper with meta data (status may be changed, later)
-    if itemRecovered:
-      item.init(status, itemInfo)
-    else:
-      let rc = TxItemRef.init(tx, itemID, status, itemInfo)
-      if rc.isErr:
-        vetted = txInfoErrInvalidSender
-        break txErrorFrame
-      item = rc.value
 
     # Verify transaction
     if not xp.classifyTxValid(item,param):
       vetted = txInfoErrBasicValidatorFailed
       break txErrorFrame
 
-    # Update initial state
-    if xp.classifyTxStaged(item,param):
-      status = txItemStaged
-      item.status = status
+    # Update initial state bucket
+    item.status =
+        if xp.classifyTxStaged(item,param): txItemStaged
+        else:                               txItemPending
 
     # Insert into database
     block:
@@ -146,11 +111,40 @@ proc addTx*(xp: TxPoolRef; tx: var Transaction; info = "")
 
     # Error processing below
 
-  # store tx in waste basket
-  xp.txDB.reject(tx, vetted, status, info)
+  # Error => store in waste basket
+  xp.txDB.reject(item.tx, vetted, item.status, item.info)
 
   # update gauge
   case vetted:
+  of txInfoErrAlreadyKnown:
+    knownTxMeter(1)
+  of txInfoErrInvalidSender:
+    invalidTxMeter(1)
+  else:
+    unspecifiedErrorMeter(1)
+
+
+# core/tx_pool.go(848): func (pool *TxPool) AddLocals(txs []..
+# core/tx_pool.go(854): func (pool *TxPool) AddLocals(txs []..
+# core/tx_pool.go(864): func (pool *TxPool) AddRemotes(txs []..
+# core/tx_pool.go(883): func (pool *TxPool) AddRemotes(txs []..
+# core/tx_pool.go(889): func (pool *TxPool) addTxs(txs []*types.Transaction, ..
+proc addTx*(xp: TxPoolRef; tx: var Transaction; info = "")
+    {.gcsafe,raises: [Defect,CatchableError].} =
+  ## Add a transaction. It is tested and stored into either of the `pending`
+  ## or `staged` buckets, or disposed o the waste basket.
+
+  # Create tx item wrapper, preferably recovered from waste basket
+  let rc = xp.recoverItem(tx, txItemPending, info)
+  if rc.isOk:
+    xp.addTx(rc.value)
+    return
+
+  # Error => store tx in waste basket
+  xp.txDB.reject(tx, rc.error, txItemPending, info)
+
+  # update gauge
+  case rc.error:
   of txInfoErrAlreadyKnown:
     knownTxMeter(1)
   of txInfoErrInvalidSender:
