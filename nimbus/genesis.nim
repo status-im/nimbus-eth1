@@ -8,6 +8,7 @@ import
 proc toBlock*(g: Genesis, db: BaseChainDB = nil): BlockHeader =
   let (tdb, pruneTrie) = if db.isNil: (newMemoryDB(), true)
                          else: (db.db, db.pruneTrie)
+  tdb.put(emptyRlpHash.data, emptyRlp)
   var sdb = newAccountStateDB(tdb, emptyRlpHash, pruneTrie)
 
   for address, account in g.alloc:
