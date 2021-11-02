@@ -25,40 +25,22 @@ import
   eth/[common, keys]
 
 type
-  TxClassify* = object ##\
-    ## Classifier arguments, typically cached values which might be
-    ## controlled somewhere else.
-    stageSelect*: set[TxPoolAlgoSelectorFlags] ## Packer strategy symbols
-
-    minFeePrice*: GasPrice   ## Gas price enforced by the pool, `gasFeeCap`
-    minTipPrice*: GasPrice   ## Desired tip-per-tx target, `estimatedGasTip`
-    minPlGasPrice*: GasPrice ## pre-London minimum gas prioce
-    baseFee*: GasPrice       ## Current base fee
-
-    gasLimit*: GasInt        ## Block size limit
-
-#[
-const
-  dedicatedSender* = block:
-    var rc: EthAddress
-    const
-      a = [140,30,30,91,71,152,13,33,73,101,243,189,142,163,76,65,62,18,10,228]
-    for n in 0 ..< rc.len:
-      rc[n] = a[n].byte
-    rc
-]#
+  TxPackRc* = enum ##\
+    ## Return code for the item packer classifier.
+    rcStopPacking     ## done, no more transactions
+    rcDoAcceptTx      ## pack this transaction
+    rcSkipTx          ## ignore this transaction
 
 logScope:
-  topics = "tx-pool classify transaction"
+  topics = "tx-pool classify"
 
 {.push raises: [Defect].}
 
 # ------------------------------------------------------------------------------
-# Private function: validity check helpers
+# Private function: tx validity check helpers
 # ------------------------------------------------------------------------------
 
-proc checkTxBasic(
-    xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool {.inline.} =
+proc checkTxBasic(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Inspired by `p2p/validate.validateTransaction()`
   if item.tx.txType == TxEip2930 and xp.dbHead.fork < FkBerlin:
     debug "invalid tx: Eip2930 Tx type detected before Berlin"
@@ -84,8 +66,7 @@ proc checkTxBasic(
 
   true
 
-proc checkTxNonce(
-    xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool {.inline.} =
+proc checkTxNonce(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Make sure that there is only one contiuous sequence of nonces (per
   ## sender) starting at the account nonce.
 
@@ -111,11 +92,10 @@ proc checkTxNonce(
   true
 
 # ------------------------------------------------------------------------------
-# Private function: staged classifier check helpers
+# Private function: active tx classifier check helpers
 # ------------------------------------------------------------------------------
 
-proc txNonceInStagedSequence(
-    xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool {.inline.} =
+proc txNonceActive(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Make sure that nonces appear as a contiuous sequence in `staged` bucket
   ## probably preceeded in `packed` bucket.
   let rc = xp.txDB.bySender.eq(item.sender)
@@ -126,44 +106,28 @@ proc txNonceInStagedSequence(
     return false
   true
 
-proc txNonceInPackedSequence(
-    xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool {.inline.} =
-  ## Make sure that nonces appear as a contiuous sequence in `packed` bucket.
-  let rc = xp.txDB.bySender.eq(item.sender)
-  if rc.isErr:
-    return true
-  # Must neither be in `pending` nor `staged` bucket.
-  if rc.value.data.eq(txItemPending).eq(item.tx.nonce - 1).isOk:
-    return false
-  if rc.value.data.eq(txItemStaged).eq(item.tx.nonce - 1).isOk:
-    return false
-  true
 
-
-proc txGasCovered(
-    xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool {.inline.} =
+proc txGasCovered(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Check whether the max gas consumption is within the gas limit (aka block
   ## size).
-  if param.gasLimit < item.tx.gasLimit:
+  if xp.dbHead.trgGasLimit < item.tx.gasLimit:
     debug "invalid tx: gasLimit exceeded",
-      maxLimit = param.gasLimit,
+      maxLimit = xp.dbHead.trgGasLimit,
       gasLimit = item.tx.gasLimit
     return false
   true
 
-proc txFeesCovered(
-    xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool {.inline.} =
+proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Ensure that the user was willing to at least pay the base fee
   if item.tx.txType != TxLegacy:
-    if item.tx.maxFee.GasPriceEx < param.baseFee:
+    if item.tx.maxFee.GasPriceEx < xp.dbHead.baseFee:
       debug "invalid tx: maxFee is smaller than baseFee",
         maxFee = item.tx.maxFee,
-        baseFee = param.baseFee
+        baseFee = xp.dbHead.baseFee
       return false
   true
 
-proc txCostInBudget(
-    xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool {.inline.} =
+proc txCostInBudget(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## Check whether the worst case expense is covered by the price budget,
   let
     balance = ReadOnlyStateDB(xp.dbHead.accDb).getBalance(item.sender)
@@ -183,33 +147,31 @@ proc txCostInBudget(
   true
 
 
-proc txLegaAcceptableGasPrice(
-    xp: TxPoolRef; item: TxItemRef; param: TxClassify): bool {.inline.} =
+proc txLegaAcceptableGasPrice(xp: TxPoolRef; item: TxItemRef): bool {.inline.} =
   ## For legacy transactions check whether minimum gas price and tip are
   ## high enough. These checks are optional.
   if item.tx.txType == TxLegacy:
 
-    if algoPackedPlMinPrice in param.stageSelect:
-      if item.tx.gasPrice.GasPriceEx < param.minPlGasPrice:
+    if algoPackedPlMinPrice in xp.pAlgoFlags:
+      if item.tx.gasPrice.GasPriceEx < xp.pMinPlGasPrice:
         return false
 
-    elif algoPacked1559MinTip in param.stageSelect:
+    elif algoPacked1559MinTip in xp.pAlgoFlags:
       # Fall back transaction selector scheme
-       if item.effGasTip < param.minTipPrice:
+       if item.effGasTip < xp.pMinTipPrice:
          return false
   true
 
-proc txAcceptableTipAndFees(
-     xp: TxPoolRef; item: TxItemRef; param: TxClassify):  bool {.inline.}=
+proc txAcceptableTipAndFees(xp: TxPoolRef; item: TxItemRef):  bool {.inline.}=
   ## Helper for `classifyTxPacked()`
   if item.tx.txType != TxLegacy:
 
-    if algoPacked1559MinTip in param.stageSelect:
-      if item.effGasTip < param.minTipPrice:
+    if algoPacked1559MinTip in xp.pAlgoFlags:
+      if item.effGasTip < xp.pMinTipPrice:
         return false
 
-    if algoPacked1559MinFee in param.stageSelect:
-      if item.tx.maxFee.GasPriceEx < param.minFeePrice:
+    if algoPacked1559MinFee in xp.pAlgoFlags:
+      if item.tx.maxFee.GasPriceEx < xp.pMinFeePrice:
         return false
   true
 
@@ -217,60 +179,83 @@ proc txAcceptableTipAndFees(
 # Public functionss
 # ------------------------------------------------------------------------------
 
-proc classifyTxValid*(xp: TxPoolRef;
-                      item: TxItemRef; param: TxClassify): bool =
+proc classifyValid*(xp: TxPoolRef; item: TxItemRef): bool =
   ## Check a (typically new) transaction whether it should be accepted at all
   ## or re-jected right away.
 
-  if not xp.checkTxBasic(item,param):
+  if not xp.checkTxBasic(item):
     return false
 
-  if not xp.checkTxNonce(item,param):
-    return false
-
-  true
-
-
-proc classifyTxStaged*(xp: TxPoolRef;
-                       item: TxItemRef; param: TxClassify): bool =
-  ## Check whether a valid transaction is ready to be moved to the
-  ## `staged` bucket, otherwise it will go to the `pending` bucket.
-
-  if not xp.txNonceInStagedSequence(item,param):
-    return false
-
-  if item.tx.estimatedGasTip(param.baseFee) <= 0.GasPriceEx:
-    return false
-
-  if not xp.txGasCovered(item,param):
-    return false
-
-  if not xp.txFeesCovered(item,param):
-    return false
-
-  if not xp.txCostInBudget(item,param):
-    return false
-
-  if not xp.txLegaAcceptableGasPrice(item, param):
-    return false
-
-  if not xp.txAcceptableTipAndFees(item, param):
+  if not xp.checkTxNonce(item):
     return false
 
   true
 
 
-# ---- obsolete ----
+proc classifyActive*(xp: TxPoolRef; item: TxItemRef): bool =
+  ## Check whether a valid transaction is ready to be held in the
+  ## `staged` bucket in which case the function returns `true`. 
 
-proc classifyTxPacked*(xp: TxPoolRef;
-                       item: TxItemRef; param: TxClassify): bool =
-  ## Check whether a `staged` transaction is ready to be moved to the
-  ## `packed` bucket, otherwise it will go to the `pending` bucket to start
-  ## all over.
-  if item.tx.txType == TxLegacy:
-    xp.txLegaAcceptableGasPrice(item, param)
-  else:
-    xp.txAcceptableTipAndFees(item, param)
+  if not xp.txNonceActive(item):
+    return false
+
+  if item.tx.estimatedGasTip(xp.dbHead.baseFee) <= 0.GasPriceEx:
+    return false
+
+  if not xp.txGasCovered(item):
+    return false
+
+  if not xp.txFeesCovered(item):
+    return false
+
+  if not xp.txCostInBudget(item):
+    return false
+
+  if not xp.txLegaAcceptableGasPrice(item):
+    return false
+
+  if not xp.txAcceptableTipAndFees(item):
+    return false
+
+  true
+
+
+proc classifyForPacking*(xp: TxPoolRef;
+                         item: TxItemRef; gasOffset: GasInt): TxPackRc
+    {.gcsafe,raises: [Defect,KeyError].} =
+  ## Simple classifier for incremental packing.
+  let newTotal = gasOffset + item.tx.gasLimit
+
+  # Note: the following if/else clauses requires that
+  #       `xp.dbHead.trgGasLimit` <= `xp.dbHead.maxGasLimit `
+  #       which is not verified here
+  if newTotal <= xp.dbHead.trgGasLimit:
+    return rcDoAcceptTx
+
+  # So the current tx will exceed the soft limit.
+  if algoPackTrgGasLimitMax notin xp.pAlgoFlags:
+    # Required to consider the soft limit `trgGasLimit` as a hard one.
+    if algoPackTryHarder in xp.pAlgoFlags:
+      # Try next one
+      return rcSkipTx
+    # Done otherwise
+    return rcStopPacking
+
+  # So, `algoPackTrgGasLimitMax` is anabled and the soft limit `trgGasLimit`
+  # may be exceeded up until the hard limit `maxGasLimit`.
+  if newTotal <= xp.dbHead.maxGasLimit:
+    # Accept the first first block exceeding `trgGasLimit`.
+    if item.tx.gasLimit <= xp.dbHead.trgGasLimit:
+      return rcDoAcceptTx
+    # Done otherwise
+    return rcStopPacking
+
+  # Otherwise, this block exceeds the hard limit.
+  if algoPackTryHarder in xp.pAlgoFlags:
+    # Try next one
+    return rcSkipTx
+  # Done otherwise
+  return rcStopPacking
 
 # ------------------------------------------------------------------------------
 # Public functionss

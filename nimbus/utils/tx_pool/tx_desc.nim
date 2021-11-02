@@ -27,8 +27,8 @@ type
   TxPoolCallBackRecursion* = object of Defect
     ## Attempt to recurse a call back function
 
-  TxPoolAlgoSelectorFlags* = enum ##\
-    ## Algorithm strategy selector symbols for staging transactions
+  TxPoolFlags* = enum ##\
+    ## Processing strategy selector symbols
 
     algoPacked1559MinFee ##\
       ## Include tx items which have at least this `maxFee`, other items
@@ -53,9 +53,10 @@ type
     # -----------
 
     algoPackTrgGasLimitMax ##\
-      ## When packing, do not exceed `xp.dbHead.trgGasLimit`, otherwise another
-      ## block exceeding the `xp.dbHead.trgGasLimit` is accepted if it stays
-      ## within the `xp.dbHead.trgMaxLimit`
+      ## If unset, the packer must not exceed `xp.dbHead.trgGasLimit` when
+      ## collecting txs for a new block. Otherwise another tx exceeding the
+      ## `xp.dbHead.trgGasLimit` is accepted if it stays within the
+      ## `xp.dbHead.trgMaxLimit`.
 
     algoPackTryHarder ##\
       ## When packing, do not stop at the first failure to add another block,
@@ -71,42 +72,41 @@ type
       ## Automatically dispose *packed* txs that were queued
       ## at least `lifeTime` ago.
 
+    algoAutoUpdateBuckets ##\
+      ## Automatically update buckets if the `dirtyBuckets` flag is set. For
+      ## the `packed` bucket this means that txs that do not fit the boundary
+      ## conditions anymore are moved out into one of the other buckets. The
+      ## `dirtyBuckets` flag will be reset after processing.
 
-  TxPoolEthBlock* = tuple      ## Sub-entry for `TTxPoolParam`
-    blockHeader: BlockHeader   ## Cached header for new block
-    blockItems: seq[TxItemRef] ## List opf transactions for new block
-    blockSize: GasInt          ## Summed up `gasLimit` entries of `blockItems[]`
+    algoAutoTxsPacker ##\
+      ## Automatically pack transactions if the `xp.stagedItems` flag is set.
+      ## This flag will be reset after processing.
 
-  TxPoolPrice = tuple          ## Sub-entry for `TxPoolParam`
-    curPrice: GasPrice         ## Value to hold and track
-    prvPrice: GasPrice         ## Previous value for derecting changes
 
-  TxPoolParam* = tuple         ## Getter/setter accessible parameters
-    minFee: TxPoolPrice        ## Gas price enforced by the pool, `gasFeeCap`
-    minTip: TxPoolPrice        ## Desired tip-per-tx target, `estimatedGasTip`
-    minPlGas: TxPoolPrice      ## Desired pre-London min `gasPrice`
-    blockCache: TxPoolEthBlock ## Cached header for new block
-
-    dirtyStaged: bool          ## Staged bucket needs update
-    dirtyPacked: bool          ## Stage bucket needs update
-
-    algoSelect: set[TxPoolAlgoSelectorFlags] ## Packer strategy symbols
+  TxPoolParam* = tuple          ## Getter/setter accessible parameters
+    minFeePrice: GasPrice       ## Gas price enforced by the pool, `gasFeeCap`
+    minTipPrice: GasPrice       ## Desired tip-per-tx target, `estimatedGasTip`
+    minPlGasPrice: GasPrice     ## Desired pre-London min `gasPrice`
+    stagedItems: bool           ## Some items were staged (since last check)
+    dirtyBuckets: bool          ## Buckets need to be updated
+    algoFlags: set[TxPoolFlags] ## Packer strategy symbols
 
 
   TxPoolRef* = ref object of RootObj ##\
     ## Transaction pool descriptor
-    startDate: Time            ## Start date (read-only)
+    startDate: Time             ## Start date (read-only)
 
-    dbHead: TxDbHeadRef        ## block chain state
-    byJob: TxJobRef            ## Job batch list
-    txDB: TxTabsRef            ## Transaction lists & tables
+    dbHead: TxDbHeadRef         ## block chain state
+    byJob: TxJobRef             ## Job batch list
+    txDB: TxTabsRef             ## Transaction lists & tables
 
-    lifeTime*: times.Duration  ## Maximum life time of a tx in the system
-    priceBump*: uint           ## Min precentage price when superseding
-    param: TxPoolParam         ## Getter/setter accessible parameters
+    lifeTime*: times.Duration   ## Maximum life time of a tx in the system
+    priceBump*: uint            ## Min precentage price when superseding
+
+    param: TxPoolParam          ## Getter/Setter parameters
 
 const
-  txPoolLifeTime = ##\
+  txItemLifeTime = ##\
     ## Maximum amount of time transactions can be held in the database\
     ## unless they are packed already for a block. This default is chosen\
     ## as found in core/tx_pool.go(184) of the geth implementation.
@@ -140,42 +140,17 @@ proc init(xp: TxPoolRef; db: BaseChainDB)
   xp.txDB = TxTabsRef.init(xp.dbHead.baseFee)
   xp.byJob = TxJobRef.init
 
-  xp.lifeTime = txPoolLifeTime
+  xp.lifeTime = txItemLifeTime
   xp.priceBump = txPriceBump
 
   xp.param.reset
-  xp.param.minFee.curPrice = txMinFeePrice
-  xp.param.minTip.curPrice = txMinTipPrice
-  xp.param.algoSelect = txPoolAlgoStrategy
-
-# ------------------------------------------------------------------------------
-# Private functions, generic getter/setter
-# ------------------------------------------------------------------------------
-
-proc getPoolPrice(xp: TxPoolRef; param: var TxPoolPrice): GasPrice {.inline.} =
-  ## Generic getter
-  param.curPrice
-
-proc setPoolPrice(xp: TxPoolRef;
-                  param: var TxPoolPrice; val: GasPrice) {.inline.} =
-  ## Generic setter
-  if param.curPrice != val:
-    param.prvPrice = param.curPrice
-    param.curPrice = val
-
-proc poolPriceChanged(xp: TxPoolRef; param: var TxPoolPrice): bool {.inline.} =
-  ## Returns `true` if there was a change, and resets the change detector.
-  if param.prvPrice != param.curPrice:
-    param.prvPrice = param.curPrice
-    result = true
+  xp.param.minFeePrice = txMinFeePrice
+  xp.param.minTipPrice = txMinTipPrice
+  xp.param.algoFlags = txPoolAlgoStrategy
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
 # ------------------------------------------------------------------------------
-
-proc init*(T: type TxPoolEthBlock): T {.inline.}=
-  ## Syntactic sugar for reset value to be used in setter
-  discard
 
 proc init*(T: type TxPoolRef; db: BaseChainDB): T
     {.gcsafe,raises: [Defect,CatchableError].} =
@@ -203,83 +178,58 @@ proc dbHead*(xp: TxPoolRef): TxDbHeadRef {.inline.} =
   ## Getter, block chain DB
   xp.dbHead
 
-proc blockCache*(xp: TxPoolRef): TxPoolEthBlock {.inline.} =
-  ## Getter, cached pieces of a block
-  xp.param.blockCache
+proc pDirtyBuckets*(xp: TxPoolRef): bool {.inline.} =
+  ## Getter, buckets need update
+  xp.param.dirtyBuckets
 
-proc dirtyStaged*(xp: TxPoolRef): bool {.inline.} =
-  ## Getter, `staged` bucket needs update
-  xp.param.dirtyStaged
+proc pStagedItems*(xp: TxPoolRef): bool {.inline.} =
+  ## Getter, some updates since last check
+  xp.param.stagedItems
 
-proc dirtyPacked*(xp: TxPoolRef): bool {.inline.} =
-  ## Getter, `packed` bucket needs update
-  xp.param.dirtyPacked
+proc pMinFeePrice*(xp: TxPoolRef): GasPrice {.inline.} =
+  ## Getter
+  xp.param.minFeePrice
 
-proc minFeePrice*(xp: TxPoolRef): GasPrice
-    {.inline,gcsafe,raises: [Defect,CatchableError].} =
-  ## Getter, synchronised access
-  xp.getPoolPrice(xp.param.minFee)
+proc pMinTipPrice*(xp: TxPoolRef): GasPrice {.inline.} =
+  ## Getter
+  xp.param.minTipPrice
 
-proc minFeePriceChanged*(xp: TxPoolRef): bool {.inline.} =
-  ## Returns `true` if there was a `nimFeePrice` change and resets
-  ## the change detection.
-  xp.poolPriceChanged(xp.param.minFee)
+proc pMinPlGasPrice*(xp: TxPoolRef): GasPrice {.inline.} =
+  ## Getter
+  xp.param.minPlGasPrice
 
-proc minTipPrice*(xp: TxPoolRef): GasPrice {.inline.} =
-  ## Getter, synchronised access
-  xp.getPoolPrice(xp.param.minTip)
-
-proc minTipPriceChanged*(xp: TxPoolRef): bool {.inline.} =
-  ## Returns `true` if there was a `nimTipPrice` change and resets
-  ## the change detection.
-  xp.poolPriceChanged(xp.param.minTip)
-
-proc minPlGasPrice*(xp: TxPoolRef): GasPrice {.inline.} =
-  ## Getter, synchronised access
-  xp.getPoolPrice(xp.param.minPlGas)
-
-proc minPlGasPriceChanged*(xp: TxPoolRef): bool {.inline.} =
-  ## Returns `true` if there was a `nimTipPrice` change and resets
-  ## the change detection.
-  xp.poolPriceChanged(xp.param.minPlGas)
-
-proc algoSelect*(xp: TxPoolRef): set[TxPoolAlgoSelectorFlags] {.inline.} =
+proc pAlgoFlags*(xp: TxPoolRef): set[TxPoolFlags] {.inline.} =
   ## Returns the set of algorithm strategy symbols for labelling items
   ## as`packed`
-  xp.param.algoSelect
+  xp.param.algoFlags
 
 # ------------------------------------------------------------------------------
 # Public functions, setters
 # ------------------------------------------------------------------------------
 
-proc `blockCache=`*(xp: TxPoolRef; val: TxPoolEthBlock) {.inline.} =
+proc `pDirtyBuckets=`*(xp: TxPoolRef; val: bool) {.inline.} =
   ## Setter
-  xp.param.blockCache = val
+  xp.param.dirtyBuckets = val
 
-proc `dirtyStaged=`*(xp: TxPoolRef; val: bool) {.inline.} =
+proc `pStagedItems=`*(xp: TxPoolRef; val: bool) {.inline.} =
   ## Setter
-  xp.param.dirtyStaged = val
+  xp.param.stagedItems = val
 
-proc `dirtyPacked=`*(xp: TxPoolRef; val: bool) {.inline.} =
+proc `pMinFeePrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
   ## Setter
-  xp.param.dirtyPacked = val
+  xp.param.minFeePrice = val
 
-proc `minFeePrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
-  ## Setter, synchronised access
-  xp.setPoolPrice(xp.param.minFee,val)
+proc `pMinTipPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
+  ## Setter
+  xp.param.minTipPrice = val
 
-proc `minTipPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
-  ## Setter, synchronised access
-  xp.setPoolPrice(xp.param.minTip,val)
+proc `pMinPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
+  ## Setter
+  xp.param.minPlGasPrice = val
 
-proc `minPlGasPrice=`*(xp: TxPoolRef; val: GasPrice) {.inline.} =
-  ## Setter, synchronised access
-  xp.setPoolPrice(xp.param.minPlGas,val)
-
-proc `algoSelect=`*(xp: TxPoolRef;
-                    val: set[TxPoolAlgoSelectorFlags]){.inline.} =
+proc `pAlgoFlags=`*(xp: TxPoolRef; val: set[TxPoolFlags]) {.inline.} =
   ## Install a set of algorithm strategy symbols for labelling items as`packed`
-  xp.param.algoSelect = val
+  xp.param.algoFlags = val
 
 # ------------------------------------------------------------------------------
 # Public functions, heplers (debugging only)

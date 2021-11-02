@@ -156,39 +156,42 @@ type
       ## Tx becomes obsolete as it is in a mined block, already
       "Tx obsoleted"
 
-    # ------- debugging error codes as used in verification function -------
+    # ------- debugging error codes as used in verifier functions -------
 
     # failed verifier codes
-    txInfoVfyLeafQueue          ## Corrupted leaf item queue
+    txInfoVfyLeafQueue             ## Corrupted leaf item queue
 
-    txInfoVfyGasTipList         ## Corrupted gas price list structure
-    txInfoVfyGasTipLeafEmpty    ## Empty gas price list leaf record
-    txInfoVfyGasTipLeafQueue    ## Corrupted gas price leaf queue
-    txInfoVfyGasTipTotal        ## Wrong number of leaves
+    txInfoVfyGasTipList            ## Corrupted gas price list structure
+    txInfoVfyGasTipLeafEmpty       ## Empty gas price list leaf record
+    txInfoVfyGasTipLeafQueue       ## Corrupted gas price leaf queue
+    txInfoVfyGasTipTotal           ## Wrong number of leaves
 
-    txInfoVfyItemIdList         ## Corrupted ID queue/fifo structure
-    txInfoVfyRejectsList        ## Corrupted waste basket queue/fifo structure
-    txInfoVfyNonceChain         ## Non-consecutive nonces
+    txInfoVfyItemIdList            ## Corrupted ID queue/fifo structure
+    txInfoVfyRejectsList           ## Corrupted waste basket structure
+    txInfoVfyNonceChain            ## Non-consecutive nonces
 
-    txInfoVfySenderRbTree       ## Corrupted sender list structure
-    txInfoVfySenderLeafEmpty    ## Empty sender list leaf record
-    txInfoVfySenderLeafQueue    ## Corrupted sender leaf queue
-    txInfoVfySenderTotal        ## Wrong number of leaves
+    txInfoVfySenderRbTree          ## Corrupted sender list structure
+    txInfoVfySenderLeafEmpty       ## Empty sender list leaf record
+    txInfoVfySenderLeafQueue       ## Corrupted sender leaf queue
+    txInfoVfySenderTotal           ## Wrong number of leaves
+    txInfoVfySenderGasLimits       ## Wrong gas accu values
 
-    txInfoVfyStatusRbTree       ## Corrupted status list structure
-    txInfoVfyStatusTotal        ## Wrong number of leaves
-    txInfoVfyStatusSenderList   ## Corrupted status-sender sub-list
-    txInfoVfyStatusNonceList    ## Corrupted status-nonce sub-list
+    txInfoVfyStatusRbTree          ## Corrupted status list structure
+    txInfoVfyStatusTotal           ## Wrong number of leaves
+    txInfoVfyStatusGasLimits       ## Wrong gas accu values
+    txInfoVfyStatusSenderList      ## Corrupted status-sender sub-list
+    txInfoVfyStatusNonceList       ## Corrupted status-nonce sub-list
 
-    txInfoVfyStatusSenderTotal  ## Sender vs status table mismatch
+    txInfoVfyStatusSenderTotal     ## Sender vs status table mismatch
+    txInfoVfyStatusSenderGasLimits ## Wrong gas accu values
 
-    txInfoVfyTipCapList         ## Corrupted gas price list structure
-    txInfoVfyTipCapLeafEmpty    ## Empty gas price list leaf record
-    txInfoVfyTipCapLeafQueue    ## Corrupted gas price leaf queue
-    txInfoVfyTipCapTotal        ## Wrong number of leaves
+    txInfoVfyTipCapList            ## Corrupted gas price list structure
+    txInfoVfyTipCapLeafEmpty       ## Empty gas price list leaf record
+    txInfoVfyTipCapLeafQueue       ## Corrupted gas price leaf queue
+    txInfoVfyTipCapTotal           ## Wrong number of leaves
 
     # codes provided for other modules
-    txInfoVfyJobQueue           ## Corrupted jobs queue/fifo structure
-    txInfoVfyJobEvent           ## Event table sync error
+    txInfoVfyJobQueue              ## Corrupted jobs queue/fifo structure
+    txInfoVfyJobEvent              ## Event table sync error
 
 # End

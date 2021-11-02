@@ -50,23 +50,9 @@ type
     txJobAddTxs ##\
       ## Enqueues a batch of transactions
 
-    txJobPackBlock ##\
-      ## Pack a block fetching items from the `packed` bucket. For included
-      ## txs, the item wrappers are moved to the waste basket.
-
     txJobSetHead ##\
       ## Change the insertion block header. This call might imply
       ## re-calculating current transaction states.
-
-    txJobUpdateStaged ##\
-      ## For all items, re-calculate `pending` and `staged` status. If the
-      ## `force` flag is set, re-calculation is done even though the change
-      ## flag hes remained unset.
-
-    txJobUpdatePacked ##\
-      ## Smartly collect `staged` items and label them `packed`. If the
-      ## `force` flag is set, re-calculation is done even though the change
-      ## flag hes remained unset.
 
 const
   txJobPriorityKind*: set[TxJobKind] = ##\
@@ -84,20 +70,10 @@ type
         txs:   seq[Transaction],
         info:  string]
 
-    of txJobPackBlock:
-      discard
-
     of txJobSetHead:
       setHeadArgs*: tuple[
         head:  Hash256]
 
-    of txJobUpdateStaged:
-      updateStagedArgs*: tuple[
-        force: bool]
-
-    of txJobUpdatePacked:
-      updatePackedArgs*: tuple[
-        force: bool]
 
   TxJobPair* = object     ## Responding to a job queue query
     id*: TxJobID          ## Job ID, queue database key

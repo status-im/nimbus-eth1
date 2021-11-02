@@ -25,13 +25,16 @@ import
 
 export
   any, eq, first, ge, gt, hasKey, last, le, len, lt,
-  nItems, next, prev, walkItems
+  nItems, gasLimits, next, prev, walkItems
 
 type
-  TxTabsStatsCount* = tuple
+  TxTabsItemsCount* = tuple
     pending, staged, packed: int ## sum => total
     total: int                   ## excluding rejects
     disposed: int                ## waste basket
+
+  TxTabsGasTotals* = tuple
+    pending, staged, packed: GasInt ## sum => total
 
   TxTabsRef* = ref object ##\
     ## Base descriptor
@@ -268,11 +271,9 @@ proc maxRejects*(xp: TxTabsRef): int {.inline.} =
 
 proc `baseFee=`*(xp: TxTabsRef; baseFee: GasPrice)
     {.inline,gcsafe,raises: [Defect,KeyError].} =
-  ## Setter, new base fee (implies reorg). The argument `GasInt.low`
-  ## disables the `baseFee`.
-  if xp.baseFee != baseFee:
-    xp.baseFee = baseFee
-    xp.byGasTip.update = xp.updateEffectiveGasTip
+  ## Setter, new base fee (implies reorg).
+  xp.baseFee = baseFee
+  xp.byGasTip.update = xp.updateEffectiveGasTip
 
 proc `maxRejects=`*(xp: TxTabsRef; val: int) {.inline.} =
   ## Setter, applicable with next `reject()` invocation.
@@ -290,14 +291,19 @@ proc hasTx*(xp: TxTabsRef; tx: Transaction): bool {.inline.} =
   ## paradigm for accessing a transaction container.
   xp.byItemID.hasKey(tx.itemID)
 
-proc statsCount*(xp: TxTabsRef): TxTabsStatsCount
-    {.gcsafe,raises: [Defect,KeyError].} =
+proc nItems*(xp: TxTabsRef): TxTabsItemsCount
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
   result.pending = xp.byStatus.eq(txItemPending).nItems
   result.staged = xp.byStatus.eq(txItemStaged).nItems
   result.packed = xp.byStatus.eq(txItemPacked).nItems
-
   result.total =  xp.byItemID.len
   result.disposed = xp.byRejects.len
+
+proc gasTotals*(xp: TxTabsRef): TxTabsGasTotals
+    {.inline,gcsafe,raises: [Defect,KeyError].} =
+  result.pending = xp.byStatus.eq(txItemPending).gasLimits
+  result.staged = xp.byStatus.eq(txItemStaged).gasLimits
+  result.packed = xp.byStatus.eq(txItemPacked).gasLimits
 
 # ------------------------------------------------------------------------------
 # Public functions: local/remote sender accounts
@@ -537,6 +543,27 @@ iterator decItemList*(gasTab: var TxTipCapTab;
 # Public iterators, `TxItemStatus` > `item`
 # -----------------------------------------------------------------------------
 
+iterator walkAccountPair*(stTab: var TxStatusTab; status: TxItemStatus):
+         (EthAddress,TxStatusNonceRef) {.gcsafe,raises: [Defect,KeyError].} =
+  ## For given status, walk: `EthAddress` > (sender,nonceList)
+  let rcBucket = stTab.eq(status)
+  if rcBucket.isOK:
+    var rcAcc = rcBucket.ge(minEthAddress)
+    while rcAcc.isOK:
+      let (sender, nonceList) = (rcAcc.value.key, rcAcc.value.data)
+      yield (sender, nonceList)
+      rcAcc = rcBucket.gt(sender) # potenially modified database
+
+iterator incItemList*(nonceList: TxStatusNonceRef;
+                      nonceFrom = AccountNonce.low): TxItemRef =
+  ## For given nonce list, visit all items with increasing nonce order.
+  var rc = nonceList.ge(nonceFrom)
+  while rc.isOK:
+    let (nonceKey, item) = (rc.value.key, rc.value.data)
+    yield item
+    rc = nonceList.gt(nonceKey) # potenially modified database
+
+
 iterator incItemList*(stTab: var TxStatusTab; status: TxItemStatus): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
   ## For given status, walk: `EthAddress` > `AccountNonce` > item
@@ -544,16 +571,15 @@ iterator incItemList*(stTab: var TxStatusTab; status: TxItemStatus): TxItemRef
   if rcStatus.isOK:
     var rcAddr = rcStatus.ge(minEthAddress)
     while rcAddr.isOK:
-      let (addrKey, nonceData) = (rcAddr.value.key, rcAddr.value.data)
+      let (addrKey, nonceList) = (rcAddr.value.key, rcAddr.value.data)
 
-      var rcNonce = nonceData.ge(AccountNonce.low)
+      var rcNonce = nonceList.ge(AccountNonce.low)
       while rcNonce.isOK:
         let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
-
         yield item
-        rcNonce = nonceData.gt(nonceKey)
+        rcNonce = nonceList.gt(nonceKey) # potenially modified database
 
-      rcAddr = rcStatus.gt(addrKey)
+      rcAddr = rcStatus.gt(addrKey)      # potenially modified database
 
 iterator decItemList*(stTab: var TxStatusTab; status: TxItemStatus): TxItemRef
     {.gcsafe,raises: [Defect,KeyError].} =
@@ -562,16 +588,15 @@ iterator decItemList*(stTab: var TxStatusTab; status: TxItemStatus): TxItemRef
   if rcStatus.isOK:
     var rcAddr = rcStatus.le(maxEthAddress)
     while rcAddr.isOK:
-      let (addrKey, nonceData) = (rcAddr.value.key, rcAddr.value.data)
+      let (addrKey, nonceList) = (rcAddr.value.key, rcAddr.value.data)
 
-      var rcNonce = nonceData.le(AccountNonce.high)
+      var rcNonce = nonceList.le(AccountNonce.high)
       while rcNonce.isOK:
         let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
-
         yield item
-        rcNonce = nonceData.lt(nonceKey)
+        rcNonce = nonceList.lt(nonceKey)   # potenially modified database
 
-      rcAddr = rcStatus.lt(addrKey)
+      rcAddr = rcStatus.lt(addrKey)        # potenially modified database
 
 # ------------------------------------------------------------------------------
 # Public functions, debugging
@@ -607,14 +632,19 @@ proc verify*(xp: TxTabsRef): Result[void,TxInfo]
 
   for status in TxItemStatus:
     var
-      senderCount = 0
+      statusCount = 0
+      statusAllGas = 0.GasInt
       rcAddr = xp.bySender.first
     while rcAddr.isOk:
       let (addrKey, schedData) = (rcAddr.value.key, rcAddr.value.data)
       rcAddr = xp.bySender.next(addrKey)
-      senderCount += schedData.eq(status).nItems
-    if xp.byStatus.eq(status).nItems != senderCount:
+      statusCount += schedData.eq(status).nItems
+      statusAllGas += schedData.eq(status).gasLimits
+
+    if xp.byStatus.eq(status).nItems != statusCount:
       return err(txInfoVfyStatusSenderTotal)
+    if xp.byStatus.eq(status).gasLimits != statusAllGas:
+      return err(txInfoVfyStatusSenderGasLimits)
 
   if xp.byItemID.len != xp.bySender.nItems:
      return err(txInfoVfySenderTotal)

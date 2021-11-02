@@ -68,8 +68,14 @@ const
     rc[txItemPacked] = "P"
     rc
 
-  minEthAddress = block:
+  minEthAddress* = block:
     var rc: EthAddress
+    rc
+
+  maxEthAddress* = block:
+    var rc: EthAddress
+    for n in 0 ..< rc.len:
+      rc[n] = 255
     rc
 
 # ------------------------------------------------------------------------------
@@ -207,6 +213,12 @@ proc pp*(it: TxItemRef): string =
     result &= "L"
   else:
     result &= "R"
+
+proc pp*(w: TxTabsItemsCount): string =
+  &"{w.pending}/{w.staged}/{w.packed}:{w.total}/{w.disposed}"
+
+proc pp*(w: TxTabsGasTotals): string =
+  &"{w.pending}/{w.staged}/{w.packed}"
 
 template showElapsed*(noisy: bool; info: string; code: untyped) =
   let start = getTime()

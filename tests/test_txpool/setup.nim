@@ -107,7 +107,7 @@ proc toTxPool*(
             txPoolOk = true
             result = TxPoolRef.init(db)
             if 0 < baseFee:
-              result.setBaseFee(baseFee)
+              result.baseFee = baseFee
 
           # Load transactions, one-by-one
           for n in 0 ..< txs.len:
@@ -135,14 +135,14 @@ proc toTxPool*(
 
   result = TxPoolRef.init(db)
   if 0 < baseFee:
-    result.setBaseFee(baseFee)
-  result.setMaxRejects(itList.len)
+    result.baseFee = baseFee
+  result.maxRejects = itList.len
 
   noisy.showElapsed(&"Loading {itList.len} transactions"):
     for item in itList:
       result.jobAddTx(item.tx, item.info)
   result.jobCommit
-  doAssert result.count.total == itList.len
+  doAssert result.nItems.total == itList.len
 
 
 proc toTxPool*(
@@ -170,8 +170,8 @@ proc toTxPool*(
 
   result = TxPoolRef.init(db)
   if 0 < baseFee:
-    result.setBaseFee(baseFee)
-  result.setMaxRejects(itList.len)
+    result.baseFee = baseFee
+  result.maxRejects = itList.len
 
   let
     delayAt = itList.len * itemsPC div 100
@@ -186,13 +186,13 @@ proc toTxPool*(
         noisy.say &"time gap after transactions"
         let itemID = item.itemID
         result.jobCommit
-        doAssert result.count.disposed == 0
+        doAssert result.nItems.disposed == 0
         timeGap = result.getItem(itemID).value.timeStamp + middleOfTimeGap
         delayMSecs.sleep
 
   result.jobCommit
-  doAssert result.count.total == itList.len
-  doAssert result.count.disposed == 0
+  doAssert result.nItems.total == itList.len
+  doAssert result.nItems.disposed == 0
 
 
 proc toItems*(xp: TxPoolRef): seq[TxItemRef] =

@@ -21,7 +21,7 @@ import
   ../tx_info,
   ../tx_item,
   ../tx_tabs,
-  ./tx_add_tx,
+  ./tx_add,
   chronicles,
   eth/[common, keys]
 

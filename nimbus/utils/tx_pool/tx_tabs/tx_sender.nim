@@ -23,6 +23,7 @@ type
   TxSenderNonceRef* = ref object ##\
     ## Sub-list ordered by `AccountNonce` values containing transaction
     ## item lists.
+    gasLimits: GasInt
     nonceList: SortedSet[AccountNonce,TxItemRef]
 
   TxSenderSchedRef* = ref object ##\
@@ -173,6 +174,8 @@ proc txInsert*(gt: var TxSenderTab; item: TxItemRef): bool
     let inx = rc.value
     gt.size.inc
     inx.sAddr.size.inc
+    inx.statusNonce.gasLimits += item.tx.gasLimit
+    inx.anyNonce.gasLimits += item.tx.gasLimit
     return true
 
 
@@ -191,10 +194,14 @@ proc txDelete*(gt: var TxSenderTab; item: TxItemRef): bool
       discard gt.addrList.delete(item.sender)
       return true
 
+    inx.anyNonce.gasLimits -= item.tx.gasLimit
+
     discard inx.statusNonce.nonceList.delete(item.tx.nonce)
     if inx.statusNonce.nonceList.len == 0:
       inx.sAddr.statusList[item.status] = nil
+      return true
 
+    inx.statusNonce.gasLimits -= item.tx.gasLimit
     return true
 
 
@@ -221,7 +228,9 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
 
     # status list
     # ----------------------------------------------------------------
-    var statusCount = 0
+    var
+      statusCount = 0
+      statusGas = 0.GasInt
     for status in TxItemStatus:
       let statusData = schedData.statusList[status]
 
@@ -231,11 +240,19 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
           if rc.isErr:
             return err(txInfoVfySenderRbTree)
 
-        statusCount += statusData.nonceList.len
+        var rcNonce = statusData.nonceList.ge(AccountNonce.low)
+        while rcNonce.isOK:
+          let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+          rcNonce = statusData.nonceList.gt(nonceKey)
+
+          statusGas += item.tx.gasLimit
+          statusCount.inc
 
     # allList
     # ----------------------------------------------------------------
-    var allCount = 0
+    var
+      allCount = 0
+      allGas = 0.GasInt
     block:
       var allData = schedData.allList
 
@@ -244,9 +261,16 @@ proc txVerify*(gt: var TxSenderTab): Result[void,TxInfo]
         if rc.isErr:
           return err(txInfoVfySenderRbTree)
 
-      allCount = allData.nonceList.len
+        var rcNonce = allData.nonceList.ge(AccountNonce.low)
+        while rcNonce.isOK:
+          let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
+          rcNonce = allData.nonceList.gt(nonceKey)
 
-    # end for
+          allGas += item.tx.gasLimit
+          allCount.inc
+
+    if allGas != statusGas:
+      return err(txInfoVfySenderTotal)
     if statusCount != schedData.size:
       return err(txInfoVfySenderTotal)
     if allCount != schedData.size:
@@ -375,10 +399,21 @@ proc nItems*(nonceData: TxSenderNonceRef): int {.inline.} =
   ## Getter, total number of items in the sub-list
   nonceData.nonceList.len
 
-proc nItems*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]):
-           int {.inline.} =
+proc nItems*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]): int
+    {.inline.} =
   if rc.isOK:
     return rc.value.data.nItems
+  0
+
+
+proc gasLimits*(nonceData: TxSenderNonceRef): GasInt {.inline.} =
+  ## Getter, total number of items in the sub-list
+  nonceData.gasLimits
+
+proc gasLimits*(rc: SortedSetResult[TxSenderSchedule,TxSenderNonceRef]): GasInt
+    {.inline.} =
+  if rc.isOK:
+    return rc.value.data.gasLimits
   0
 
 

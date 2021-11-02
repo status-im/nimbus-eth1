@@ -14,7 +14,7 @@ import
   ../nimbus/config,
   ../nimbus/db/db_chain,
   ../nimbus/utils/[sorted_set, tx_pool],
-  ../nimbus/utils/tx_pool/[tx_item, tx_perjobapi],
+  ../nimbus/utils/tx_pool/tx_item,
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[common, keys, p2p],
@@ -33,9 +33,9 @@ const
   goerliCapture: CaptureSpecs = (
     network: GoerliNet,
     dir: "tests",
-    file: "replay" / "goerli68161.txt.gz",
-    numBlocks: 20000,
-    numTxs: 900)
+    file: "replay" / "goerli51840.txt.gz",
+    numBlocks: 18000,
+    numTxs: 728) # maximum that can be used from this dump
 
   loadSpecs = goerliCapture
 
@@ -109,12 +109,12 @@ proc addOrFlushGroupwise(xp: TxPoolRef;
       discard xp.txDB.flushRejects
 
       # flush group-wise
-      let xpLen = xp.count.total
+      let xpLen = xp.nItems.total
       noisy.say "*** updateSeen: deleting ", seen.mapIt($it.itemID).join(" ")
       for item in seen:
         doAssert xp.txDB.dispose(item,txInfoErrUnspecified)
-      doAssert xpLen == seen.len + xp.count.total
-      doAssert seen.len == xp.count.disposed
+      doAssert xpLen == seen.len + xp.nItems.total
+      doAssert seen.len == xp.nItems.disposed
       seen.setLen(0)
 
       # clear waste basket
@@ -165,7 +165,7 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       check xp.txDB.verify.isOK
 
       check txList.len == 0
-      check xp.count.disposed == 0
+      check xp.nItems.disposed == 0
 
       noisy.say "***",
          "Latest item: <", xp.txDB.byItemID.last.value.data.info, ">"
@@ -173,8 +173,8 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       # make sure that the block chain was initialised
       check capture.numBlocks.u256 <= bcDB.getCanonicalHead.blockNumber
 
-      check xp.count.total == foldl(statCount.toSeq, a+b)
-      #                       ^^^ sum up statCount[] values
+      check xp.nItems.total == foldl(statCount.toSeq, a+b)
+      #                        ^^^ sum up statCount[] values
 
       # make sure that PRNG did not go bonkers
       for statusRatio in randStatusRatios():
@@ -182,11 +182,11 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
         check statusRatio < (10000 div randInitRatioBandPC)
 
       # Note: expecting enough transactions in the `goerliCapture` file
-      check xp.count.total == capture.numTxs
+      check xp.nItems.total == capture.numTxs
 
       # Load txList[]
       txList = xp.toItems
-      check txList.len == xp.count.total
+      check txList.len == xp.nItems.total
 
     test "Load gas prices and priority fees":
 
@@ -245,7 +245,7 @@ proc runTxLoader(noisy = true; baseFee = 0.GasPrice; capture = loadSpecs) =
       # will not work here => xp.txDB.verify()
       check xp.txDB.verify.isOK
 
-      
+
 proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
 
   let
@@ -273,7 +273,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
             if not xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy):
               break
         check xq.txDB.verify.isOK
-        check seen.len == xq.count.total
+        check seen.len == xq.nItems.total
         check seen.len < groupLen
 
       test &"Load/reverse walk ID queue, " &
@@ -291,7 +291,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
             if not xq.addOrFlushGroupwise(groupLen, seen, item, veryNoisy):
               break
         check xq.txDB.verify.isOK
-        check seen.len == xq.count.total
+        check seen.len == xq.nItems.total
         check seen.len < groupLen
 
     # ---------------------------------
@@ -318,9 +318,9 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
               check xq.txDB.dispose(item,txInfoErrUnspecified)
               check xq.txDB.verify.isOK
         check 0 < count
-        check 0 < xq.count.total
-        check count + xq.count.total == txList.len
-        check xq.count.disposed == count
+        check 0 < xq.nItems.total
+        check count + xq.nItems.total == txList.len
+        check xq.nItems.disposed == count
 
     block:
       var
@@ -345,9 +345,9 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
               check xq.txDB.dispose(item,txInfoErrUnspecified)
               check xq.txDB.verify.isOK
         check 0 < count
-        check 0 < xq.count.total
-        check count + xq.count.total == txList.len
-        check xq.count.disposed == count
+        check 0 < xq.nItems.total
+        check count + xq.nItems.total == txList.len
+        check xq.nItems.disposed == count
 
     block:
       let
@@ -359,7 +359,8 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
           xq = bcDB.toTxPool(txList, baseFee, noisy = noisy)
           baseNonces: seq[AccountNonce] # second level sequence
 
-        # Set txs to pseudo random status
+        # Set txs to pseudo random status (database will violate
+        # boundary contitions on nonces)
         xq.setItemStatusFromInfo
 
         # register sequence of nonces
@@ -367,7 +368,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
           for itemList in nonceList.incItemList:
             baseNonces.add itemList.first.value.tx.nonce
 
-        xq.txDB.baseFee = newBaseFee
+        xq.baseFee = newBaseFee
         check xq.txDB.verify.isOK
 
         block:
@@ -385,7 +386,7 @@ proc runTxBaseTests(noisy = true; baseFee = 0.GasPrice) =
           check seen != txList.mapIt(it.itemID) # order should have changed
 
         # change back
-        xq.txDB.baseFee = baseFee
+        xq.baseFee = baseFee
         check xq.txDB.verify.isOK
 
         block:
@@ -447,8 +448,8 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           xq.jobAddTx(tx, item.info)
         xq.jobCommit
 
-        check xq.count.total == testTxs.len
-        check xq.count.disposed == 0
+        check xq.nItems.total == testTxs.len
+        check xq.nItems.disposed == 0
         let infoLst = testTxs.toSeq.mapIt(it[0].info).sorted
         check infoLst == xq.toItems.toSeq.mapIt(it.info).sorted
 
@@ -459,8 +460,8 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           xq.jobAddTx(tx, "alt " & item.info)
         xq.jobCommit
 
-        check xq.count.total == testTxs.len
-        check xq.count.disposed == testTxs.len
+        check xq.nItems.total == testTxs.len
+        check xq.nItems.disposed == testTxs.len
 
         # last update item was underpriced, so it must not have been
         # replaced
@@ -477,15 +478,15 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
           # it could not be replaced earlier by testTxs[^1][2].
           item = xq.getItem(testTxs[^2][2].itemID).value
 
-          nWasteBasket = xq.count.disposed
+          nWasteBasket = xq.nItems.disposed
 
         # make sure the test makes sense, nonces were 0 ..< testTxs.len
         check (item.tx.nonce + 2).int == testTxs.len
 
         xq.disposeItems(item)
 
-        check xq.count.total + 2 == testTxs.len
-        check nWasteBasket + 2 == xq.count.disposed
+        check xq.nItems.total + 2 == testTxs.len
+        check nWasteBasket + 2 == xq.nItems.disposed
 
     # --------------------------
 
@@ -505,26 +506,25 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
       # integrily check needs xq.txDB.verify() rather than xq.verify().
       xq.setItemStatusFromInfo
 
-      test &"Delete about {nItems} expired txs out of {xq.count.total}":
+      test &"Delete about {nItems} expired txs out of {xq.nItems.total}":
 
         check 0 < nItems
         xq.lifeTime = getTime() - gap
-        let autoDispose = {algoAutoDisposeUnpacked} + {algoAutoDisposePacked}
-        xq.setAlgoSelector(xq.getAlgoSelector + autoDispose)
+        xq.flags = xq.flags + {algoAutoDisposeUnpacked, algoAutoDisposePacked}
 
         # evict and pick items from the wastbasket
         let
-          disposedBase = xq.count.disposed
+          disposedBase = xq.nItems.disposed
           evictedBase = evictionMeter.value
           impliedBase = impliedEvictionMeter.value
         xq.jobCommit(true)
         let
-          disposedItems = xq.count.disposed - disposedBase
+          disposedItems = xq.nItems.disposed - disposedBase
           evictedItems = (evictionMeter.value - evictedBase).int
           impliedItems = (impliedEvictionMeter.value - impliedBase).int
 
         check xq.txDB.verify.isOK
-        check disposedItems + disposedBase + xq.count.total == txList.len
+        check disposedItems + disposedBase + xq.nItems.total == txList.len
         check 0 < evictedItems
         check evictedItems <= disposedItems
         check disposedItems == evictedItems + impliedItems
@@ -637,20 +637,20 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         expect[2] += schedList.eq(txItemPacked).nItems
 
       test &"Verify #items per bucket ({expect[0]},{expect[1]},{expect[2]})":
-        let status = xq.count
+        let status = xq.nItems
         check expect == (status.pending,status.staged,status.packed)
 
       test "Recycling from waste basket":
 
         let
-          basketPrefill = xq.count.disposed
+          basketPrefill = xq.nItems.disposed
           numDisposed = min(50,txList.len)
 
           # make sure to work on a copy of the pivot item (to see changes)
           thisItem = xq.getItem(txList[^numDisposed].itemID).value.dup
 
         # move to wastebasket
-        xq.setMaxRejects(txList.len)
+        xq.maxRejects = txList.len
         for n in 1 .. numDisposed:
           # use from top avoiding extra deletes (higer nonces per account)
           xq.disposeItems(txList[^n])
@@ -658,8 +658,8 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
         # make sure that the pivot item is in the waste basket
         check xq.getItem(thisItem.itemID).isErr
         check xq.txDB.byRejects.hasKey(thisItem.itemID)
-        check basketPrefill + numDisposed == xq.count.disposed
-        check txList.len == xq.count.total + xq.count.disposed
+        check basketPrefill + numDisposed == xq.nItems.disposed
+        check txList.len == xq.nItems.total + xq.nItems.disposed
 
         # re-add item
         xq.jobAddTx(thisItem.tx)
@@ -667,8 +667,8 @@ proc runTxPoolTests(noisy = true; baseFee = 0.GasPrice) =
 
         # verify that the pivot item was moved out from the waste basket
         check not xq.txDB.byRejects.hasKey(thisItem.itemID)
-        check basketPrefill + numDisposed == xq.count.disposed + 1
-        check txList.len == xq.count.total + xq.count.disposed
+        check basketPrefill + numDisposed == xq.nItems.disposed + 1
+        check txList.len == xq.nItems.total + xq.nItems.disposed
 
         # verify that a new item was derived from the waste basket pivot item
         let wbItem = xq.getItem(thisItem.itemID).value
@@ -716,43 +716,45 @@ proc runTxPackerTests(noisy = true) =
         xr = bcDB.toTxPool(txList, ntNextFee, noisy)
       block:
         let
-          pending = xq.count.pending
-          staged = xq.count.staged
+          pending = xq.nItems.pending
+          staged = xq.nItems.staged
+          packed = xr.nItems.packed
 
         test &"Load txs with baseFee={ntBaseFee}, "&
-            &"pending/staged={pending}/{staged}":
+          &"buckets={pending}/{staged}/{packed}":
 
           check 0 < pending
           check 0 < staged
-          check xq.count.total == txList.len
-          check xq.count.disposed == 0
+          check xq.nItems.total == txList.len
+          check xq.nItems.disposed == 0
 
       block:
         let
-          pending = xr.count.pending
-          staged = xr.count.staged
+          pending = xr.nItems.pending
+          staged = xr.nItems.staged
+          packed = xr.nItems.packed
 
         test &"Re-org txs previous buckets setting baseFee={ntNextFee}, "&
-            &"pending/staged={pending}/{staged}":
+            &"buckets={pending}/{staged}/{packed}":
 
           check 0 < pending
           check 0 < staged
-          check xr.count.total == txList.len
-          check xr.count.disposed == 0
+          check xr.nItems.total == txList.len
+          check xr.nItems.disposed == 0
 
-          check xq.getBaseFee == ntBaseFee
-          xq.setBaseFee(ntNextFee)
-          check xq.getBaseFee == ntNextFee
+          check xq.baseFee == ntBaseFee
+          xq.baseFee = ntNextFee
+          check xq.baseFee == ntNextFee
 
           # having the same set of txs, setting the xq database to the same
           # base fee as the xr one, the bucket fills of both database must
           # be the same after re-org
-          xq.pjaUpdateStaged(force = true)
-          xq.jobCommit
+          xq.flags = xq.flags + {algoAutoUpdateBuckets}
+          xq.jobCommit(forceMaintenance = true)
 
           # now, xq should look like xr
           check xq.verify.isOK
-          check xq.count == xr.count
+          check xq.nItems == xr.nItems
 
       block:
         # get some value below the middle
@@ -760,7 +762,7 @@ proc runTxPackerTests(noisy = true) =
           packPrice = ((minGasPrice + maxGasPrice).uint64 div 3).GasPrice
           lowerPrice = minGasPrice + 1.GasPrice
 
-        test &"Staging and packing txs, baseFee=0 minPrice={packPrice} "&
+        test &"Packing txs, baseFee=0 minPrice={packPrice} "&
             &"targetBlockSize={xq.dbHead.trgGasLimit}":
 
           # verify that the test does not degenerate
@@ -768,75 +770,87 @@ proc runTxPackerTests(noisy = true) =
           check minGasPrice < maxGasPrice
 
           # ignore base limit so that the `packPrice` below becomes effective
-          xq.setBaseFee(0.GasPrice)
-          check xq.getBaseFee == 0.GasPrice
+          xq.baseFee = 0.GasPrice
+          check xq.baseFee == 0.GasPrice
+          check xq.nItems.disposed == 0
 
           # set minimum target price
-          xq.setMinPlGasPrice(packPrice)
-          xq.setAlgoSelector({algoPackTryHarder}) # try setting some strategy
+          xq.minPreLondonGasPrice = packPrice
+          check xq.minPreLondonGasPrice == packPrice
 
-          noisy.say "*** status before 1st staging ", xq.count
+          # employ packer
+          xq.flags = xq.flags + {algoPackTryHarder, algoAutoTxsPacker}
+          xq.jobCommit(forceMaintenance = true)
+          check xq.verify.isOK
 
-          xq.pjaUpdatePacked
-          xq.jobCommit
+          # verify that the test did not degenerate
+          check 0 < xq.gasTotals.packed
+          check xq.nItems.disposed == 0
 
-          # verify that the test does not degenerate
-          check 0 < xq.count.packed
-          check xq.txDB.flushRejects[1] == 0
+          # assemble block from `packed` bucket
+          let total = foldl(xq.ethBlock.txs.mapIt(it.gasLimit), a+b)
+          check xq.gasTotals.packed == total
 
-          noisy.say "*** status after 1st staging ", xq.count
+          noisy.say "***", "1st bLock size=", total, " stats=", xq.nItems.pp
 
-          # assemble block
-          let
-            total = xq.nextBlock
-            cached = xq.getBlock
-          noisy.say "*** 1st block generated, size=", total
-          noisy.say "*** final status ", xq.count
+        test &"Clear and re-pack bucket":
+          let saveState = xq.ethBlock.txs.mapIt((it.nonce,it.gasLimit))
+          check 0 < saveState.len
+          check 0 < xq.nItems.packed
 
-          check 0 < total
-          check 0 < cached.txs.len
-          check xq.count.disposed == 0
+          # flush packed bucket and trigger re-pack
+          xq.triggerPacker(clear = true)
+          check xq.nItems.packed == 0
+          check xq.verify.isOK
 
-          # fetch block and clear cache
-          let fetched = xq.fetchBlock
-          check fetched.txs.len == cached.txs.len
-          check 0 < xq.count.disposed # number of packed txs
-          check xq.count.disposed == fetched.txs.len
+          # re-pack bucket
+          xq.jobCommit(forceMaintenance = true)
+          check xq.verify.isOK
 
-        test &"Continue staging after lowering minPrice={lowerPrice}, "&
-            "then pack txs for another block":
+          check saveState == xq.ethBlock.txs.mapIt((it.nonce,it.gasLimit))
 
+        test &"Delete item and re-pack bucket/w lower minPrice={lowerPrice}":
           # verify that the test does not degenerate
           check 0 < lowerPrice
           check lowerPrice < packPrice
+          check 0 < xq.nItems.packed
 
-          # set  minimum target price
-          xq.setMinPlGasPrice(lowerPrice)
-
-          xq.pjaUpdatePacked
-          xq.jobCommit
-
-          # verify that the test does not degenerate
-          check 0 < xq.count.packed
-          check xq.txDB.flushRejects[1] == 0
-
-          noisy.say "*** status after 2nd staging ", xq.count
-
-          # assemble block
           let
-            total = xq.nextBlock
-            cached = xq.getBlock
-          noisy.say "*** 2nd block generated, size=", total
-          noisy.say "*** final status ", xq.count
+            saveStats = xq.nItems
+            lastItem = xq.txDB.byStatus
+              .eq(txItemPacked).le(maxEthAddress).le(AccountNonce.high)
+              .value.data
 
-          check 0 < total
-          check 0 < xq.getBlock.txs.len
-          check xq.count.disposed == 0
+          # delete last item from packed bucket
+          xq.disposeItems(lastItem)
+          check xq.verify.isOK
 
-          let fetched = xq.fetchBlock
-          check fetched.txs.len == cached.txs.len
-          check 0 < xq.count.disposed # number of packed txs
-          check xq.count.disposed == fetched.txs.len
+          # set new minimum target price
+          xq.minPreLondonGasPrice = lowerPrice
+          check xq.minPreLondonGasPrice == lowerPrice
+
+          # re-pack bucket, packer needs extra trigger because there is
+          # not necessarily a buckets re-org resulting in a change
+          xq.triggerPacker
+          xq.jobCommit(forceMaintenance = true)
+          check xq.verify.isOK
+
+          let
+            newTotal = foldl(xq.ethBlock.txs.mapIt(it.gasLimit), a+b)
+            newStats = xq.nItems
+            newItem = xq.txDB.byStatus
+              .eq(txItemPacked).le(maxEthAddress).le(AccountNonce.high)
+              .value.data
+
+          # for sanity assert the obvoius
+          check 0 < xq.gasTotals.packed
+          check xq.gasTotals.packed == newTotal
+
+          # verify incremental packing
+          check lastItem.info != newItem.info
+          check saveStats.packed <= newStats.packed
+
+          noisy.say "***", "2st bLock size=", newTotal, " stats=", newStats.pp
 
 # ------------------------------------------------------------------------------
 # Main function(s)
@@ -882,7 +896,7 @@ when isMainModule:
     capts2: CaptureSpecs = (
                 MainNet, "/status", "mainnet843841.txt.gz", 30000, 1500)
 
-  noisy.runTxLoader(baseFee, capture = capts1)
+  noisy.runTxLoader(baseFee, capture = capts0)
   noisy.runTxBaseTests(baseFee)
   noisy.runTxPoolTests(baseFee)
   noisy.runTxPackerTests

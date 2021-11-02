@@ -28,6 +28,7 @@ type
     ## Per address table. This is provided as an ordered list so traversal\
     ## is predictable.
     size: int
+    gasLimits: GasInt
     addrList: SortedSet[EthAddress,TxStatusNonceRef]
 
   TxStatusTab* = object ##\
@@ -43,12 +44,6 @@ type
 const
   minEthAddress = block:
     var rc: EthAddress
-    rc
-
-  maxEthAddress = block:
-    var rc: EthAddress
-    for n in 0 ..< rc.len:
-      rc[n] = 255
     rc
 
 {.push raises: [Defect].}
@@ -142,6 +137,7 @@ proc txInsert*(sq: var TxStatusTab; item: TxItemRef)
     let inx = rc.value
     sq.size.inc
     inx.addrData.size.inc
+    inx.addrData.gasLimits += item.tx.gasLimit
 
 
 proc txDelete*(sq: var TxStatusTab; item: TxItemRef): bool
@@ -152,6 +148,7 @@ proc txDelete*(sq: var TxStatusTab; item: TxItemRef): bool
 
     sq.size.dec
     inx.addrData.size.dec
+    inx.addrData.gasLimits -= item.tx.gasLimit
 
     discard inx.nonceData.nonceList.delete(item.tx.nonce)
     if inx.nonceData.nonceList.len == 0:
@@ -178,6 +175,7 @@ proc txVerify*(sq: var TxStatusTab): Result[void,TxInfo]
           return err(txInfoVfyStatusSenderList)
       var
         addrCount = 0
+        gasLimits = 0.GasInt
         rcAddr = addrData.addrList.ge(minEthAddress)
       while rcAddr.isOK:
         let (addrKey, nonceData) = (rcAddr.value.key, rcAddr.value.data)
@@ -187,15 +185,19 @@ proc txVerify*(sq: var TxStatusTab): Result[void,TxInfo]
           let rc = nonceData.nonceList.verify
           if rc.isErr:
             return err(txInfoVfyStatusNonceList)
+
         var rcNonce = nonceData.nonceList.ge(AccountNonce.low)
         while rcNonce.isOK:
           let (nonceKey, item) = (rcNonce.value.key, rcNonce.value.data)
           rcNonce = nonceData.nonceList.gt(nonceKey)
 
-        addrCount += nonceData.nonceList.len
+          gasLimits += item.tx.gasLimit
+          addrCount.inc
 
       if addrCount != addrData.size:
         return err(txInfoVfyStatusTotal)
+      if gasLimits != addrData.gasLimits:
+        return err(txInfoVfyStatusGasLimits)
 
       totalCount += addrCount
 
@@ -238,6 +240,17 @@ proc nItems*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): int
   0
 
 
+proc gasLimits*(addrData: TxStatusSenderRef): GasInt {.inline.} =
+  ## Getter, accumulated `gasLimit` values
+  addrData.gasLimits
+
+proc gasLimits*(rc: SortedSetResult[TxItemStatus,TxStatusSenderRef]): GasInt
+    {.inline.} =
+  if rc.isOK:
+    return rc.value.data.gasLimits
+  0
+
+ 
 proc eq*(addrData: TxStatusSenderRef; sender: EthAddress):
        SortedSetResult[EthAddress,TxStatusNonceRef] {.inline.} =
   addrData.addrList.eq(sender)
