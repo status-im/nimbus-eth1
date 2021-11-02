@@ -66,6 +66,8 @@ type
     # This changes during sync and is slightly different for each peer.
     syncStateRoot*:         Option[TrieHash]
 
+    nodeDataRequests:       NodeDataRequestQueue    # Exported via templates.
+
   SyncPeerMode* = enum
     ## The current state of tracking the peer's canonical chain head.
     ## `bestBlockNumber` is only valid when this is `SyncLocked`.
@@ -86,6 +88,7 @@ type
   SyncPeerStatsOk = object
     reorgDetected*:         Stat
     getBlockHeaders*:       Stat
+    getNodeData*:           Stat
 
   SyncPeerStatsMinor = object
     timeoutBlockHeaders*:   Stat
@@ -125,7 +128,15 @@ type
     ## numerical properties: ordering, intervals and meaningful difference.
     number: UInt256
 
+  # Use `import get_nodedata` to access the real type's methods.
+  NodeDataRequestQueue {.inheritable, pure.} = ref object
+
 proc inc(stat: var Stat) {.borrow.}
+
+template nodeDataRequestsBase*(sp: SyncPeer): auto =
+  sp.nodeDataRequests
+template `nodeDataRequests=`*(sp: SyncPeer, value: auto) =
+  sp.nodeDataRequests = value
 
 ## `InteriorPath` methods.
 
