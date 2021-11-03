@@ -10,7 +10,7 @@
 ## network sync processes.
 
 import
-  stint, stew/byteutils,
+  stint, stew/byteutils, chronicles,
   eth/[common/eth_types, p2p]
 
 const
@@ -107,3 +107,6 @@ template `$`*(hashOrNum: HashOrNum): string =
   else: $hashOrNum.number
 
 export Blob, Hash256, toHex
+
+# The files and lines clutter more useful details when sync tracing is enabled.
+publicLogScope: chroniclesLineNumbers=false
