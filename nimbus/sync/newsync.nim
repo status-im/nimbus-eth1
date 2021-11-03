@@ -24,7 +24,7 @@ proc syncPeerLoop(sp: SyncPeer) {.async.} =
     await sleepAsync(chronos.milliseconds(delayMs))
 
 proc syncPeerStart(sp: SyncPeer) =
-  discard sp.syncPeerLoop()
+  asyncSpawn sp.syncPeerLoop()
 
 proc syncPeerStop(sp: SyncPeer) =
   trace "Sync: Peer disconnected", peer=sp
