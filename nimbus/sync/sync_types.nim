@@ -16,7 +16,7 @@ import
 const
   tracePackets*         = true
     ## Whether to `trace` log each sync network message.
-  traceGossips*         = true
+  traceGossips*         = false
     ## Whether to `trace` log each gossip network message.
   traceHandshakes*      = true
     ## Whether to `trace` log each network handshake message.
