@@ -272,6 +272,30 @@ proc getSlice(sp: SyncPeer, leafRange: var LeafRange): bool =
     sharedFetch.leafRanges[0].leafHigh = leafRange.leafHigh + 1
   return true
 
+proc probeGetNodeData(sp: SyncPeer, stateRoot: TrieHash): Future[bool] {.async.} =
+  # Before doing real trie traversal on this peer, send a probe request for
+  # `stateRoot` to see if it's worth pursuing at all.  We will avoid reserving
+  # a slice of leafspace, even temporarily, if no traversal will take place.
+  #
+  # Possible outcomes:
+  #
+  # - Trie root is returned.  Peers supporting `GetNodeData` do this as long as
+  #   `stateRoot` is still in their pruning window, and isn't on a superceded
+  #   chain branch.
+  #
+  # - Empty reply, meaning "I don't have the data".  Peers supporting
+  #   `GetNodeData` do this when `stateRoot` is no longer available.
+  #   OpenEthereum does this for all nodes from version 3.3.0-rc.8.
+  #
+  # - No reply at all (which is out of spec).  Erigon does this.  It should
+  #   send an empty reply.  We don't want to cut off a peer for other purposes
+  #   such as a source of blocks and transactions, just because it doesn't
+  #   reply to `GetNodeData`.
+  let reply = await sp.getNodeData(@[stateRoot],
+                                   leafLow.toInteriorPath,
+                                   leafHigh.toInteriorPath)
+  return not reply.isNil and reply.hashVerifiedData.len == 1
+
 proc trieFetch*(sp: SyncPeer) {.async.} =
   let stateRoot = sp.syncStateRoot.get
   trace "Sync: Looking at stateRoot", stateRoot=($stateRoot)
