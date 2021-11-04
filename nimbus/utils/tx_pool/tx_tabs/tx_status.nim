@@ -13,11 +13,10 @@
 ##
 
 import
-  ../../sorted_set,
   ../tx_info,
   ../tx_item,
   eth/[common],
-  stew/results
+  stew/[results, sorted_set]
 
 type
   TxStatusNonceRef* = ref object ##\

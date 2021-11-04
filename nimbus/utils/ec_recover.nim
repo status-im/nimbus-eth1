@@ -20,12 +20,11 @@
 
 import
   ../constants,
-  ./keyed_queue,
   ./keyed_queue/kq_rlp,
   ./utils_defs,
   eth/[common, common/transaction, keys, rlp],
   nimcrypto,
-  stew/results,
+  stew/[keyed_queue, results],
   stint
 
 export

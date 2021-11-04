@@ -14,7 +14,6 @@
 
 import
   std/[tables],
-  ../../sorted_set,
   ../tx_desc,
   ../tx_item,
   ../tx_tabs,

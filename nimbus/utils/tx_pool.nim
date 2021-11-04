@@ -303,13 +303,12 @@
 
 import
   std/[sequtils, times],
-  ./keyed_queue,
   ./tx_pool/[tx_dbhead, tx_desc, tx_info, tx_item, tx_job],
   ./tx_pool/tx_tabs,
   ./tx_pool/tx_tasks/[tx_add, tx_adjust_head, tx_buckets, tx_dispose],
   chronicles,
   eth/[common, keys],
-  stew/results
+  stew/[keyed_queue, results]
 
 # hide complexity unless really needed
 when JobWaitEnabled:

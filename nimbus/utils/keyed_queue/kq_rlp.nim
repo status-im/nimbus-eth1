@@ -18,8 +18,8 @@
 
 import
   std/tables,
-  ../keyed_queue,
-  eth/rlp
+  eth/rlp,
+  stew/keyed_queue
 
 # ------------------------------------------------------------------------------
 # Public functions, RLP support

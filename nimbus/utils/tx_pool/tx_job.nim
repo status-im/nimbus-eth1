@@ -14,13 +14,11 @@
 
 import
   std/[hashes, tables],
-  ../keyed_queue,
-  ../keyed_queue/kq_debug,
   ./tx_info,
   ./tx_item,
   ./tx_tabs,
   eth/[common, keys],
-  stew/results
+  stew/[keyed_queue, keyed_queue/kq_debug, results]
 
 # hide complexity unless really needed
 const

@@ -14,14 +14,11 @@
 
 import
   std/[sequtils, tables],
-  ../keyed_queue,
-  ../keyed_queue/kq_debug,
-  ../sorted_set,
   ./tx_info,
   ./tx_item,
   ./tx_tabs/[tx_leaf, tx_price, tx_sender, tx_status, tx_tipcap],
   eth/[common, keys],
-  stew/results
+  stew/[keyed_queue, keyed_queue/kq_debug, results, sorted_set]
 
 export
   any, eq, first, ge, gt, hasKey, last, le, len, lt,

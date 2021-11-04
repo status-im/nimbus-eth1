@@ -13,13 +13,10 @@
 ##
 
 import
-  ../../keyed_queue,
-  ../../keyed_queue/kq_debug,
-  ../../sorted_set,
   ../tx_info,
   ../tx_item,
   eth/common,
-  stew/results
+  stew/[keyed_queue, keyed_queue/kq_debug, results, sorted_set]
 
 type
   TxLeafItemRef* = ref object ##\

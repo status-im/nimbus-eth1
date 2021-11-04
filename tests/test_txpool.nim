@@ -13,11 +13,12 @@ import
   ../nimbus/chain_config,
   ../nimbus/config,
   ../nimbus/db/db_chain,
-  ../nimbus/utils/[sorted_set, tx_pool],
+  ../nimbus/utils/tx_pool,
   ../nimbus/utils/tx_pool/tx_item,
   ./test_txpool/[helpers, setup, sign_helper],
   chronos,
   eth/[common, keys, p2p],
+  stew/sorted_set,
   stint,
   unittest2
 

@@ -13,13 +13,13 @@
 ##
 
 import
-  ../../keyed_queue,
   ../tx_desc,
   ../tx_info,
   ../tx_item,
   ../tx_tabs,
   chronicles,
-  eth/[common, keys]
+  eth/[common, keys],
+  stew/keyed_queue
 
 logScope:
   topics = "tx-pool recover item"

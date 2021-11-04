@@ -16,13 +16,13 @@ import
   ../../../db/accounts_cache,
   ../../../forks,
   ../../../transaction,
-  ../../sorted_set,
   ../tx_dbhead,
   ../tx_desc,
   ../tx_item,
   ../tx_tabs,
   chronicles,
   eth/[common, keys]
+
 
 type
   TxPackRc* = enum ##\

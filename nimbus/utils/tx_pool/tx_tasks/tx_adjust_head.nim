@@ -15,7 +15,6 @@
 
 import
   ../../../db/db_chain,
-  ../../keyed_queue,
   ../tx_dbhead,
   ../tx_desc,
   ../tx_info,
@@ -23,7 +22,8 @@ import
   ../tx_tabs,
   ./tx_add,
   chronicles,
-  eth/[common, keys]
+  eth/[common, keys],
+  stew/keyed_queue
 
 type
   UpdateTxs = object

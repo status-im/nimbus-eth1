@@ -15,13 +15,11 @@
 ##
 
 import
-  # ../../keyed_queue,
-  ../../sorted_set,
   ../tx_info,
   ../tx_item,
   ./tx_leaf,
   eth/common,
-  stew/results
+  stew/[results, sorted_set]
 
 type
   TxPriceItemMap* = ##\

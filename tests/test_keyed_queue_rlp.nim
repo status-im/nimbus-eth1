@@ -10,9 +10,9 @@
 
 import
   std/[sequtils, strformat, strutils, tables],
-  ../nimbus/utils/keyed_queue,
-  ../nimbus/utils/keyed_queue/[kq_debug, kq_rlp],
+  ../nimbus/utils/keyed_queue/kq_rlp,
   eth/rlp,
+  stew/[keyed_queue, keyed_queue/kq_debug],
   unittest2
 
 const

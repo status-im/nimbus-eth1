@@ -10,10 +10,10 @@
 
 import
   std/[strformat, sequtils, strutils, times],
-  ../../nimbus/utils/[keyed_queue, sorted_set],
   ../../nimbus/utils/tx_pool/[tx_desc, tx_gauge, tx_item, tx_tabs],
   ../replay/undump,
   eth/[common, keys],
+  stew/[keyed_queue, sorted_set],
   stint
 
 # Make sure that the runner can stay on public view without the need
